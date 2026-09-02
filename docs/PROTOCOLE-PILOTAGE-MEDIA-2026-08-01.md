@@ -15,7 +15,7 @@ soumise, aucune publication sans accord explicite et daté de Patrice.**
 | Flow / Veo (Google AI Ultra) | pas d'API — CDP uniquement : `flow-daily.py` (≤50 crédits/j), `flow-veo-mission.py` (plafond + réserve lus sur compteur live), `broll-batch.py`, `lisa-clip-batch.py`. État : `media-video/flow-daily-state.json` | timer systemd `codebuddy-flow-daily.timer` **non installé/inactif** → aucune dépense automatique en cours | facturant (15 crédits/plan Agent) |
 | Epidemic Sound | pas d'API. Bibliothèque locale `~/.codebuddy/media-audio/music/<mood>/` déjà constituée ; preuves de licence à archiver | bibliothèque en place | abonnement ; téléchargement humain |
 | Krea | aucune clé ni driver trouvé | à décider | facturant |
-| Darkstar (2× 3090) | éteint ; `propositions/PLAN-DARKSTAR-INSTALL-2026-05-02.md` (ComfyUI CUDA, LTX) | plan prêt, machine froide | électricité uniquement |
+| GPU node (2× 3090) | éteint ; `propositions/PLAN-GPU_NODE-INSTALL-2026-05-02.md` (ComfyUI CUDA, LTX) | plan prêt, machine froide | électricité uniquement |
 | Local Ministar (gratuit) | ffmpeg/ffprobe, ImageMagick, Piper TTS, faster-whisper, ComfyUI CPU, `video_delivery_qc.py`, `visual-gate.py`, contrôle `controle-technique.json` (LUFS/true peak/format), planches-contact | tout vérifié présent | zéro |
 
 Les capacités d'abonnement consignées dans les documents du projet ne valent
@@ -72,7 +72,7 @@ mêmes règles que le code (un propriétaire par zone, pas de nettoyage,
    (les agents tiennent le registre, ne téléchargent pas).
 4. **Décisions éditoriales en attente** (inchangées) : kimono Japon,
    sort des Shorts 02/03, format inaugural LISA, chaînes/titres/miniatures/URL.
-5. **Darkstar** : allumage et exécution du plan d'install.
+5. **GPU node** : allumage et exécution du plan d'install.
 6. **Krea** : choisir le mode — session CDP partagée comme Flow, ou usage
    humain seul.
 7. Optionnel : OAuth du connecteur MCP HeyGen dans la session Fable si cette

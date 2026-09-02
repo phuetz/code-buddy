@@ -1212,7 +1212,7 @@ Commands:
   repair-voice-incident [options]                 Quarantine a bounded acoustic-feedback incident; dry-run unless --apply is explicit
   replay-voice [options]                          Replay a voice JSONL offline to audit feedback-loop suppression (never speaks)
   quality [options]                               Evaluate recent user/Lisa exchanges without exposing their raw content
-  benchmark [options]                             Run the reproducible Lisa conversation suite (Darkstar/Ollama or current provider)
+  benchmark [options]                             Run the reproducible Lisa conversation suite (GPU node/Ollama or current provider)
   relational-benchmark [options]                  Run the deterministic raw-free relational detector self-test
   corpus-init [options]                           Create Lisa’s private annotated pilot corpus (mode 0600)
   compare [options]                               Compare 2-12 Lisa models with anonymized responses and a private review packet
@@ -2333,13 +2333,13 @@ Usage: buddy gpu-worker [options]
 Run the authenticated PanoWorld/LongCat GPU job worker
 
 Options:
-  --host <host>              Bind host (use a Tailscale address on Darkstar)
+  --host <host>              Bind host (use a Tailscale address on GPU node)
                              (default: "127.0.0.1")
   --port <port>              Bind port (default: "4310")
   --state-dir <path>         Persistent queue and job artifacts (default:
                              "/home/patrice/.codebuddy/gpu-worker")
   --root <path...>           Allowed input/output roots
-  --worker-id <id>           Worker identifier (default: "darkstar")
+  --worker-id <id>           Worker identifier (default: "gpuNode")
   --max-concurrency <count>  Concurrent jobs (1–2) (default: "1")
   -h, --help                 display help for command
 ```

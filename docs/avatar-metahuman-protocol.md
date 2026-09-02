@@ -1,6 +1,6 @@
 # Pont Code Buddy ↔ Unreal/MetaHuman
 
-Ce document est le contrat d'intégration V1 pour le projet Unreal Engine 5.8 installé sur Darkstar.
+Ce document est le contrat d'intégration V1 pour le projet Unreal Engine 5.8 installé sur GPU node.
 Le renderer reçoit la voix et les intentions de Lisa, anime le MetaHuman, puis renvoie son état réel à
 Code Buddy. Il ne décide jamais du contenu conversationnel.
 
@@ -10,13 +10,13 @@ Le client Unreal ouvre `/ws` sur le même hôte et le même port que le serveur 
 l'instance Lisa actuelle, le serveur écoute uniquement sur Ministar à
 `ws://127.0.0.1:3055/ws`. N'exposez pas ce port directement sur Internet.
 
-Depuis Darkstar, la voie la plus sûre est un tunnel SSH sur Tailscale :
+Depuis GPU node, la voie la plus sûre est un tunnel SSH sur Tailscale :
 
 ```powershell
-ssh -N -L 3055:127.0.0.1:3055 patrice@100.98.18.76
+ssh -N -L 3055:127.0.0.1:3055 patrice@203.0.113.10
 ```
 
-Unreal se connecte alors à `ws://127.0.0.1:3055/ws` sur Darkstar. Le serveur de développement actuel
+Unreal se connecte alors à `ws://127.0.0.1:3055/ws` sur GPU node. Le serveur de développement actuel
 est sans authentification mais reste inaccessible hors de la boucle locale et du tunnel. Pour une
 liaison réseau directe ou une instance de production, activez l'authentification et utilisez un JWT
 court avec les scopes `avatar:read` et `avatar:write`.
@@ -31,8 +31,8 @@ Après `authenticated`, le renderer s'enregistre puis demande une synchronisatio
 {
   "type": "avatar.renderer.hello",
   "payload": {
-    "rendererId": "darkstar-metahuman-lisa",
-    "displayName": "Lisa MetaHuman on Darkstar",
+    "rendererId": "gpuNode-metahuman-lisa",
+    "displayName": "Lisa MetaHuman on GPU node",
     "protocolVersion": 1,
     "runtime": "unreal",
     "runtimeVersion": "5.8",
@@ -114,7 +114,7 @@ Après 45 secondes sans heartbeat, Code Buddy considère le renderer déconnect�
 {
   "type": "avatar.renderer.status",
   "payload": {
-    "rendererId": "darkstar-metahuman-lisa",
+    "rendererId": "gpuNode-metahuman-lisa",
     "phase": "playing",
     "activeTurnId": "turn-uuid",
     "lastSequence": 42,
@@ -159,6 +159,6 @@ couper sur barge-in et publier un heartbeat stable sans perdre de chunk.
 
 L'implémentation de référence Split A v6 se trouve dans
 `integrations/unreal/CodeBuddyAvatar`. Elle peut être vérifiée localement avec
-`npm run verify:avatar-unreal`, puis préparée, compilée et testée sur Darkstar avec
+`npm run verify:avatar-unreal`, puis préparée, compilée et testée sur GPU node avec
 `scripts/unreal/Invoke-CodeBuddyAvatarV6.ps1`. La promotion dans `AvatarStudio/Plugins` reste une
 opération explicite et refuse de s'exécuter pendant qu'Unreal Editor est ouvert.

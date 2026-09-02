@@ -70,11 +70,11 @@ describe('peer-rpc — Phase (d).13', () => {
 
     it('peer.describe honors CODEBUDDY_FLEET_HOSTNAME env override', async () => {
       const orig = process.env.CODEBUDDY_FLEET_HOSTNAME;
-      process.env.CODEBUDDY_FLEET_HOSTNAME = 'darkstar-test';
+      process.env.CODEBUDDY_FLEET_HOSTNAME = 'gpuNode-test';
       try {
         const r = await dispatchPeerRequest({ id: '1', method: 'peer.describe' }, ctx);
         const payload = r.payload as { hostname: string };
-        expect(payload.hostname).toBe('darkstar-test');
+        expect(payload.hostname).toBe('gpuNode-test');
       } finally {
         if (orig === undefined) delete process.env.CODEBUDDY_FLEET_HOSTNAME;
         else process.env.CODEBUDDY_FLEET_HOSTNAME = orig;

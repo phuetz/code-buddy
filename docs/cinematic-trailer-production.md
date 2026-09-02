@@ -124,8 +124,8 @@ sur l'infrastructure locale (voir `hybrid-video-router.ts`).
 
 - **Google Flow / Veo 3.1** (`browser-assisted`) — plans safe, hero-shots
   premium (Veo Quality), variations en volume (Veo Lite). Coût en crédits Flow.
-- **Darkstar LongCat** — lip-sync et continuité d'identité localisée.
-- **Darkstar / Ministar ComfyUI** — repli local, contenu privé, recettes
+- **GPU node LongCat** — lip-sync et continuité d'identité localisée.
+- **GPU node / Ministar ComfyUI** — repli local, contenu privé, recettes
   contrôlées.
 
 Le routage effectif est décidé par `routeHybridVideo` ; ce socle ne le
@@ -160,10 +160,10 @@ mais n'est pas artificiellement exigé d'un personnage entièrement synthétique
 Dans tous les cas, `evidenceReviewed` et `identityApproved` restent des portes
 humaines distinctes et fail-closed.
 
-### 6.1 Recette Darkstar de continuité d'identité
+### 6.1 Recette GPU node de continuité d'identité
 
-Le pilote reproductible utilise `scripts/darkstar/generate-krea2-identity-dataset.ts`
-contre le service ComfyUI privé de Darkstar :
+Le pilote reproductible utilise `scripts/gpuNode/generate-krea2-identity-dataset.ts`
+contre le service ComfyUI privé de GPU node :
 
 1. choisir un portrait neutre dont la provenance et le SHA-256 sont connus ;
 2. produire d'abord huit candidats Krea 2 Identity Edit (face, deux ¾, profil,
@@ -177,16 +177,16 @@ contre le service ComfyUI privé de Darkstar :
 Exemple :
 
 ```bash
-npx tsx scripts/darkstar/generate-krea2-identity-dataset.ts \
+npx tsx scripts/gpuNode/generate-krea2-identity-dataset.ts \
   --count 8 --subject-id lisa --trigger-token ohwx \
   --rights-basis synthetic-owned
 ```
 
-L'étape 5 est outillée par `scripts/darkstar/build-identity-manifest.ts`, qui
+L'étape 5 est outillée par `scripts/gpuNode/build-identity-manifest.ts`, qui
 assemble le manifeste depuis les sidecars et exécute les deux gates :
 
 ```bash
-npx tsx scripts/darkstar/build-identity-manifest.ts \
+npx tsx scripts/gpuNode/build-identity-manifest.ts \
   [--dir .codebuddy/lora/lisa-hq-v2/identity-candidates] \
   [--include lisa_identity_010] [--apparent-age 25] \
   [--license-cleared] [--evidence-reviewed-by <nom>] [--identity-approved-by <nom>]

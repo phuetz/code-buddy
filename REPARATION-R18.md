@@ -82,7 +82,7 @@ réel n’est utilisé.
 ## Preuves
 
 Vérifications supplémentaires : `npm run typecheck` exit 0 (typecheck racine et
-Darkstar) ; `npx eslint` sur les trois providers et les deux fichiers de tests
+GPU node) ; `npx eslint` sur les trois providers et les deux fichiers de tests
 exit 0, avec 5 warnings `any` préexistants et 0 erreur ; `git diff --check`
 exit 0. Le commit final est celui créé sur la branche indiquée ci-dessus ; aucun
 push n’a été effectué.

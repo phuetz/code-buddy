@@ -30,7 +30,7 @@ async function fixture() {
     sourcePlanSha256: 'f'.repeat(64),
     batchId: 'pilot', model: 'fast', locale: 'fr-FR', durationSeconds: 4,
     aspectRatio: '9:16', upscale4k: false,
-    capacity: { darkstar: true, ministar: true, googleFlow: true, remainingFlowCredits: 100, maxFlowCreditsPerBatch: 100 },
+    capacity: { gpuNode: true, ministar: true, googleFlow: true, remainingFlowCredits: 100, maxFlowCreditsPerBatch: 100 },
   });
   const handoffBytes = Buffer.from(JSON.stringify(handoff));
   return { resultsRoot, outputRoot, handoff, handoffBytes };

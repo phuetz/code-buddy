@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": true,
+    "outDir": "./dist-gpuNode-identity",
+    "rootDir": "."
+  },
+  "include": [
+    "scripts/gpuNode/generate-krea2-identity-dataset.ts",
+    "scripts/gpuNode/generate-identity-dataset-v3.ts",
+    "scripts/gpuNode/generate-location-plates.ts",
+    "scripts/gpuNode/build-identity-manifest.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

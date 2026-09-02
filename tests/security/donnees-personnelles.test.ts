@@ -25,7 +25,7 @@ import { join } from 'path';
 
 const RACINE = join(__dirname, '..', '..');
 
-/** Ce qui identifie la situation personnelle de l'auteur, et n'a rien à faire ici. */
+/** Ce qui identifie la situation personnelle ou l'infrastructure privée de l'auteur. */
 const INTERDITS = [
   'france travail',
   'pôle emploi',
@@ -35,10 +35,12 @@ const INTERDITS = [
   'cumul are',
   'prestataire de la ccas',
   'demandeur d\'emploi',
+  '100.73.',
+  'darkstar',
 ];
 
 /** Ce fichier cite forcément les termes : c'est son objet. */
-const EXEMPTS = new Set(['tests/security/donnees-personnelles.test.ts']);
+const EXEMPTS = new Set(['CHANGELOG.md', 'tests/security/donnees-personnelles.test.ts']);
 
 function fichiersSuivis(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: RACINE, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
@@ -50,7 +52,7 @@ function fichiersSuivis(): string[] {
 }
 
 describe('aucune donnée personnelle dans un dépôt public', () => {
-  it('aucun fichier suivi ne nomme la situation administrative de l’auteur', () => {
+  it('aucun fichier suivi ne nomme la situation ou l’infrastructure privée de l’auteur', () => {
     const fautifs: string[] = [];
 
     for (const fichier of fichiersSuivis()) {
@@ -61,6 +63,12 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
         continue; // fichier supprimé ou illisible : rien à inspecter
       }
       const trouves = INTERDITS.filter((terme) => contenu.includes(terme));
+      const cheminNormalise = fichier.toLowerCase();
+      for (const terme of INTERDITS) {
+        if (cheminNormalise.includes(terme) && !trouves.includes(terme)) {
+          trouves.push(terme);
+        }
+      }
       if (trouves.length > 0) {
         fautifs.push(`${fichier} → ${trouves.join(', ')}`);
       }
@@ -68,7 +76,7 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
 
     expect(
       fautifs,
-      'Ce dépôt est public. Ces termes désignent la situation personnelle de son auteur et ' +
+      'Ce dépôt est public. Ces termes désignent la situation ou l’infrastructure privée de son auteur et ' +
         'ne doivent pas y figurer — pas même comme sujet d’essai dans un test.\n' +
         'Pour un test : utiliser « organisme témoin » et poser INFLUENCER_EXCLUDED_TOPICS ' +
         'dans le test lui-même.\n' +

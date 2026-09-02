@@ -43,10 +43,10 @@ Suite globale de quelque 27 000 tests non lancée, conformément à la consigne 
 ```text
 $ npm run typecheck
 > @phuetz/code-buddy@1.8.0 typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
+> tsc --noEmit && npm run typecheck:gpuNode-identity
 
-> @phuetz/code-buddy@1.8.0 typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> @phuetz/code-buddy@1.8.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 ```
 
 Résultat : exit 0.

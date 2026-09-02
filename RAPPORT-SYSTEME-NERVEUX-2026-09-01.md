@@ -11,7 +11,7 @@ Les neuf modules prioritaires ont été relus, ainsi que leurs tests et leurs co
 - référence avant modification : `tests/sensory/` — **40 fichiers, 457 tests verts** ;
 - suite sensorielle finale : `tests/sensory/` — **41 fichiers, 480 tests verts** ;
 - vérification intégrée finale : **44 fichiers, 505 tests verts** ;
-- `npm run typecheck` : vert, y compris `typecheck:darkstar-identity` ;
+- `npm run typecheck` : vert, y compris `typecheck:gpuNode-identity` ;
 - ESLint ciblé sur les treize fichiers TypeScript touchés : vert, aucune sortie ;
 - `git diff --check` : vert.
 
@@ -162,7 +162,7 @@ npx vitest run tests/sensory/ tests/companion-percepts.test.ts tests/companion/r
 => 44 fichiers, 505 tests verts
 
 npm run typecheck
-=> tsc --noEmit + tsc --project tsconfig.darkstar-identity.json, verts
+=> tsc --noEmit + tsc --project tsconfig.gpuNode-identity.json, verts
 
 npx eslint <13 fichiers TypeScript touchés>
 => code 0, aucune sortie

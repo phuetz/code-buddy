@@ -108,13 +108,13 @@ vers 3114 / SOS Amitié / 15-112. **Ce correctif est sur `main` depuis le 16 jui
 existe sur `main` et son historique porte exactement le commit `9542c896 feat(companion): route acute
 distress to crisis resources` du 2026-07-16.
 La PR elle-même est en réalité la branche parapluie `feat/mysoulmate-media-pipeline` : pipeline média
-MySoulmate, LoRA d'identité Lisa, scripts influenceur/darkstar, outils vidéo, commandes CLI, 62 études.
+MySoulmate, LoRA d'identité Lisa, scripts influenceur/gpuNode, outils vidéo, commandes CLI, 62 études.
 
 **État réel.** 622 fichiers déclarés par GitHub, +110 179/−2 576. Créée le 29/07, mise à jour le 23/08
 21:26 (la branche a absorbé `main` ce soir-là). `CONFLICTING` / `DIRTY`.
 **CI : 6 jobs de test sur 8 en échec** (dernier run du 10/08), build « skipping », security audit verte.
 Comparaison d'arbres avec `main` : 750 fichiers diffèrent, dont **354 présents dans la PR et absents
-de `main`**, concentrés sur `scripts/influencer` (52), `scripts/darkstar` (45), `docs/studies` (28),
+de `main`**, concentrés sur `scripts/influencer` (52), `scripts/gpuNode` (45), `docs/studies` (28),
 `scripts` (26), `src/lora` (13).
 
 **Nature du conflit.** 26 fichiers, dont `CLAUDE.md`, `README.md`, `docs/FABLE5-CODEX-COORDINATION.md`
@@ -129,7 +129,7 @@ quality gates, plans long-form), #121 (câblage des outils video studio), #145 (
 `src/commands/explain.ts|cost.ts|changelog.ts|import.ts` sont présents.
 
 **Ce qui reste vraiment.** Les 354 fichiers absents de `main` sont massivement des **artefacts de
-production média** (scripts influenceur/darkstar/trailers/lisa-studio, `src/lora/*`, études `docs/studies`,
+production média** (scripts influenceur/gpuNode/trailers/lisa-studio, `src/lora/*`, études `docs/studies`,
 docs de lancement de chaînes) — pas du cœur produit. Le dernier commentaire déposé sur la PR par
 l'auteur du portage l'énonce : « 19 portés dans #145, 121 déjà sur main, 482 hors périmètre
 (artefacts/duplications) […] Cette PR peut être fermée (décision Patrice). »

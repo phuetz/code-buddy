@@ -115,7 +115,7 @@ export function parseEnum<T extends string>(
 export function parseHybridCapacity(value: unknown): HybridVideoCapacity {
   const record = requireRecord(value, 'capacity');
   return {
-    darkstar: pickBoolean(record, ['darkstar'], 'capacity.darkstar'),
+    gpuNode: pickBoolean(record, ['gpuNode'], 'capacity.gpuNode'),
     ministar: pickBoolean(record, ['ministar'], 'capacity.ministar'),
     googleFlow: pickBoolean(record, ['google_flow', 'googleFlow'], 'capacity.google_flow'),
     remainingFlowCredits: pickFiniteNumber(

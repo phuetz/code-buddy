@@ -63,7 +63,7 @@ Le correctif d'import par défaut de `fast-glob` dans l'analyseur de complexité
 
 ### Contrats et tests
 
-- `npm run typecheck` : succès, compilateur principal puis `typecheck:darkstar-identity`, zéro erreur.
+- `npm run typecheck` : succès, compilateur principal puis `typecheck:gpuNode-identity`, zéro erreur.
 - Tests ciblés : **10 fichiers, 167 tests réussis, 0 échec**.
   - explainer pur et rendus ;
   - commande et dépôt minimal ;

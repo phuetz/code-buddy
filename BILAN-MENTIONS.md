@@ -32,8 +32,8 @@ Suite complète d'environ 27 000 tests non lancée, conformément à la consigne
 
 ```text
 $ npm run typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> tsc --noEmit && npm run typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 exit 0
 ```
 

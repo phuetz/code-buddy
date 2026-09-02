@@ -9,7 +9,7 @@ import unittest
 SCRIPT = (
     Path(__file__).resolve().parents[2]
     / 'scripts'
-    / 'darkstar'
+    / 'gpuNode'
     / 'measure-visual-gates.py'
 )
 SPEC = importlib.util.spec_from_file_location('measure_visual_gates', SCRIPT)

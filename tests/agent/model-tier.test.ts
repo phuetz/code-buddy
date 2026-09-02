@@ -12,15 +12,15 @@ vi.mock('../../src/integrations/tailscale.js', () => ({
     getInstance: () => ({
       discoverOllamaPeers: vi.fn(async () => [
         {
-          hostname: 'darkstar',
-          ip: '100.73.222.64',
-          baseURL: 'http://100.73.222.64:11434/v1',
+          hostname: 'gpuNode',
+          ip: '192.0.2.42',
+          baseURL: 'http://192.0.2.42:11434/v1',
           models: ['qwen3.6:35b-a3b-q4_K_M', 'phi4:latest'],
         },
         {
           hostname: 'ministar-linux',
-          ip: '100.98.18.76',
-          baseURL: 'http://100.98.18.76:11434/v1',
+          ip: '203.0.113.10',
+          baseURL: 'http://203.0.113.10:11434/v1',
           models: ['qwen3.6:27b'],
         },
       ]),
@@ -37,23 +37,23 @@ vi.mock('../../src/fleet/model-inventory.js', () => ({
         runtimeProvider: 'ollama',
         provider: 'ollama',
         model: 'qwen3.6:35b-a3b-q4_K_M',
-        baseURL: 'http://100.73.222.64:11434/v1',
-        machineLabel: 'darkstar',
+        baseURL: 'http://192.0.2.42:11434/v1',
+        machineLabel: 'gpuNode',
         executionLocation: 'lan',
       },
       {
         runtimeProvider: 'ollama',
         provider: 'ollama',
         model: 'phi4:latest',
-        baseURL: 'http://100.73.222.64:11434/v1',
-        machineLabel: 'darkstar',
+        baseURL: 'http://192.0.2.42:11434/v1',
+        machineLabel: 'gpuNode',
         executionLocation: 'lan',
       },
       {
         runtimeProvider: 'ollama',
         provider: 'ollama',
         model: 'qwen3.6:27b',
-        baseURL: 'http://100.98.18.76:11434/v1',
+        baseURL: 'http://203.0.113.10:11434/v1',
         machineLabel: 'ministar-linux',
         executionLocation: 'lan',
       },
@@ -71,9 +71,9 @@ vi.mock('../../src/fleet/model-inventory.js', () => ({
 
 vi.mock('../../src/agent/model-benchmark.js', () => ({
   loadBenchmarkScoreMap: vi.fn(async () => new Map<string, number>([
-    ['http://100.73.222.64:11434/v1::qwen3.6:35b-a3b-q4_K_M', 950],
-    ['http://100.73.222.64:11434/v1::phi4:latest', 850],
-    ['http://100.98.18.76:11434/v1::qwen3.6:27b', 900],
+    ['http://192.0.2.42:11434/v1::qwen3.6:35b-a3b-q4_K_M', 950],
+    ['http://192.0.2.42:11434/v1::phi4:latest', 850],
+    ['http://203.0.113.10:11434/v1::qwen3.6:27b', 900],
     ['http://g7:11434/v1::devstral', 100],
   ])),
 }));
@@ -91,13 +91,13 @@ describe('resolveModelTierConfig', () => {
     const cfg = resolveModelTierConfig({
       CODEBUDDY_LOCAL_MODEL: 'qwen2.5:7b-instruct',
       OLLAMA_BASE_URL: 'http://127.0.0.1:11434/v1/',
-      CODEBUDDY_NETWORK_MODELS: 'qwen3.6:27b@http://darkstar:11434/v1, devstral@http://g7:11434/v1/',
+      CODEBUDDY_NETWORK_MODELS: 'qwen3.6:27b@http://gpuNode:11434/v1, devstral@http://g7:11434/v1/',
       CODEBUDDY_ESCALATION_MODEL: 'claude-opus-4-8',
     });
     expect(cfg.localModel).toBe('qwen2.5:7b-instruct');
     expect(cfg.localBaseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(cfg.networkModels).toEqual([
-      { model: 'qwen3.6:27b', baseUrl: 'http://darkstar:11434/v1' },
+      { model: 'qwen3.6:27b', baseUrl: 'http://gpuNode:11434/v1' },
       { model: 'devstral', baseUrl: 'http://g7:11434/v1' },
     ]);
     expect(cfg.escalationModel).toBe('claude-opus-4-8');
@@ -135,18 +135,18 @@ describe('resolveLiveModelTierConfig', () => {
     expect(cfg.networkModels).toEqual([
       {
         model: 'qwen3.6:35b-a3b-q4_K_M',
-        baseUrl: 'http://100.73.222.64:11434/v1',
-        label: 'darkstar',
+        baseUrl: 'http://192.0.2.42:11434/v1',
+        label: 'gpuNode',
       },
       {
         model: 'qwen3.6:27b',
-        baseUrl: 'http://100.98.18.76:11434/v1',
+        baseUrl: 'http://203.0.113.10:11434/v1',
         label: 'ministar-linux',
       },
       {
         model: 'phi4:latest',
-        baseUrl: 'http://100.73.222.64:11434/v1',
-        label: 'darkstar',
+        baseUrl: 'http://192.0.2.42:11434/v1',
+        label: 'gpuNode',
       },
       { model: 'devstral', baseUrl: 'http://g7:11434/v1' },
     ]);
@@ -157,7 +157,7 @@ describe('chooseAutonomousModel (free-first ladder)', () => {
   const cfg: ModelTierConfig = {
     localModel: 'qwen2.5:7b-instruct',
     localBaseUrl: 'http://localhost:11434/v1',
-    networkModels: [{ model: 'qwen3.6:27b', baseUrl: 'http://darkstar:11434/v1' }],
+    networkModels: [{ model: 'qwen3.6:27b', baseUrl: 'http://gpuNode:11434/v1' }],
     escalationModel: 'claude-opus-4-8',
   };
 
@@ -173,7 +173,7 @@ describe('chooseAutonomousModel (free-first ladder)', () => {
     expect(c.tier).toBe('network');
     expect(c.paid).toBe(false);
     expect(c.model).toBe('qwen3.6:27b');
-    expect(c.baseUrl).toBe('http://darkstar:11434/v1');
+    expect(c.baseUrl).toBe('http://gpuNode:11434/v1');
   });
 
   it('escalates to the paid model only at the top rung', () => {

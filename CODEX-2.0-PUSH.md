@@ -17,20 +17,20 @@ AVANT — sortie réelle, exit 0 :
 
 ```text
 > @phuetz/code-buddy@2.0.0 typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
+> tsc --noEmit && npm run typecheck:gpuNode-identity
 
-> @phuetz/code-buddy@2.0.0 typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> @phuetz/code-buddy@2.0.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 ```
 
 APRÈS — sortie réelle, exit 0 :
 
 ```text
 > @phuetz/code-buddy@2.0.0 typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
+> tsc --noEmit && npm run typecheck:gpuNode-identity
 
-> @phuetz/code-buddy@2.0.0 typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> @phuetz/code-buddy@2.0.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 ```
 
 Fichiers corrigés : aucun.

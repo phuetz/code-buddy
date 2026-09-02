@@ -224,12 +224,12 @@ const HELP_OVERRIDES: Record<string, string> = {
     'Garde le modèle Pocket chargé entre les phrases pour supprimer son coût de redémarrage.',
   CODEBUDDY_POCKET_URL: 'Endpoint local du serveur Pocket persistant.',
   CODEBUDDY_VOICEBOX_URL:
-    'Endpoint REST Voicebox, local ou sur Darkstar via le réseau Tailscale de confiance.',
+    'Endpoint REST Voicebox, local ou sur GPU node via le réseau Tailscale de confiance.',
   CODEBUDDY_VOICEBOX_PROFILE: 'Nom ou identifiant du profil vocal de Lisa dans Voicebox.',
   CODEBUDDY_VOICEBOX_ENGINE: 'Backend de rendu choisi par Voicebox.',
   CODEBUDDY_VOICEBOX_LANGUAGE: 'Code de langue transmis au rendu Voicebox.',
   CODEBUDDY_VOICEBOX_MODEL_SIZE:
-    '1.7B privilégie la qualité sur Darkstar ; 0.6B réduit la latence.',
+    '1.7B privilégie la qualité sur GPU node ; 0.6B réduit la latence.',
   CODEBUDDY_VOICEBOX_INSTRUCT:
     'Décrit seulement le ton, le rythme et la chaleur. Voicebox ne réécrit jamais les paroles de Lisa.',
   CODEBUDDY_VOICEBOX_AUDIO_STREAM:
@@ -613,7 +613,7 @@ function VoiceboxStudioPanel({
     const api = window.electronAPI?.assistant;
     if (!api?.voiceboxModel) return;
     const confirmed = action !== 'delete' || window.confirm(
-      `Supprimer ${model.display_name} de Darkstar${model.size_mb ? ` (${(model.size_mb / 1024).toFixed(1)} Gio)` : ''} ?`
+      `Supprimer ${model.display_name} de GPU node${model.size_mb ? ` (${(model.size_mb / 1024).toFixed(1)} Gio)` : ''} ?`
     );
     if (!confirmed) return;
     setModelBusy(model.model_name);

@@ -50,7 +50,7 @@ commits :
 | `17f8b299` | Approbations UUID liées à l'identité, routage A/B et nettoyage des canaux, HKDF v2/v1, rotation atomique avec recovery, verrou et contrôle d'instance stale. |
 
 Preuves finales : 17 fichiers de test ciblés, **451/451 réussis** ; typecheck
-principal et Darkstar réussis ; lint global sans erreur (avertissements
+principal et GPU node réussis ; lint global sans erreur (avertissements
 préexistants seulement) ; `git diff --check` propre. Trois contre-revues
 indépendantes ont donné **GO** sur environnement/audit, SSRF/Guardian et
 crypto/approbations. La branche active `feat/mysoulmate-media-pipeline` est
@@ -77,7 +77,7 @@ Deux sous-lots indépendants ont été adaptés depuis `fix/tools-audit` sur
 | `fe04829f` | Enregistrement des outils externes idempotent, fréquences/IDF recalculées et cache invalidé ; index BM25 réutilisé à corpus équivalent, signature JSON déterministe et termes obsolètes purgés. |
 
 Preuves : **559/559** tests Tools/Bash élargis pour le premier sous-lot ;
-**136/136** tests Tools/RAG pour le second ; typecheck principal et Darkstar,
+**136/136** tests Tools/RAG pour le second ; typecheck principal et GPU node,
 lint ciblé sans erreur et `git diff --check` réussis. Deux contre-revues
 indépendantes ont donné **GO**. Le vrai flux stdout/stderr Bash reste une dette
 fonctionnelle explicite : il ne devra être réintroduit qu'à travers la voie
@@ -97,7 +97,7 @@ Le sous-lot autonome est commité sur
 | `5d0e1589` | Les pongs WebSocket rafraîchissent l'activité des listeners passifs ; une fermeture inattendue rejette immédiatement les requêtes pendantes avec `DISCONNECTED` ; les chunks tardifs sont couverts et ignorés après résolution. |
 
 Preuves : **49/49** tests Fleet/lifecycle directs puis **95/95** tests WebSocket
-élargis ; typecheck principal et Darkstar, lint ciblé et diff-check réussis.
+élargis ; typecheck principal et GPU node, lint ciblé et diff-check réussis.
 Contre-revue indépendante : **GO**, sans double rejet, fuite de requête vers un
 socket reconnecté, changement d'auth/scopes ou fuite de ressource de test.
 
@@ -114,7 +114,7 @@ Le sous-lot autonome est commité sur
 | `029c53e1` | Conservation ordonnée de tous les messages système pendant la compression, comptage multimodal des images une seule fois et résultats synthétiques de réparation portant le nom de l'outil. |
 
 Preuves : **593/593** tests context/provider élargis ; typecheck principal et
-Darkstar, lint ciblé et diff-check réussis. Contre-revue indépendante : **GO**.
+GPU node, lint ciblé et diff-check réussis. Contre-revue indépendante : **GO**.
 Réserves non bloquantes : estimation fixe de 1 100 tokens par image, ventilation
 multimodale approximative dans le diagnostic de budget et possibilité qu'un
 prompt uniquement système dépasse un budget artificiellement minuscule.
@@ -132,7 +132,7 @@ L'activation réelle des deux moteurs est commitée sur
 | `09e07313` | LM-Resizer activé par défaut avec opt-out et repli brut ; Code Explorer canonique sélectionné pour les questions de relations, résolution sûre du dépôt multi-index, chargement MCP headless borné et durci contre les commandes de dépôt usurpées. |
 
 Preuves : **542/542** tests ciblés sur 17 fichiers ; typecheck principal et
-Darkstar ; lint global sans erreur ; diff-check propre ; handshake réel du
+GPU node ; lint global sans erreur ; diff-check propre ; handshake réel du
 serveur canonique avec **31 outils**. Trois contre-revues indépendantes ont
 donné **GO** sur LM-Resizer, la barrière MCP headless et le routage multi-index.
 Le nom `gitnexus` ne subsiste que comme alias d'exécutable/préfixe historique de

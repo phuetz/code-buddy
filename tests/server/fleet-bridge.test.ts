@@ -46,10 +46,10 @@ describe('fleet-bridge — Phase (d).1 V0.4.1', () => {
     });
 
     it('honors CODEBUDDY_FLEET_HOSTNAME env override', () => {
-      process.env.CODEBUDDY_FLEET_HOSTNAME = 'darkstar-test';
+      process.env.CODEBUDDY_FLEET_HOSTNAME = 'gpuNode-test';
       broadcastFleetEvent('fleet:workflow:event', { kind: 'task_started' });
       const msg = broadcastMock.mock.calls[0][0] as { payload: { source: { hostname: string } } };
-      expect(msg.payload.source.hostname).toBe('darkstar-test');
+      expect(msg.payload.source.hostname).toBe('gpuNode-test');
     });
 
     it('attaches optional agentId when provided', () => {

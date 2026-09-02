@@ -21,7 +21,7 @@ The immediate parent directory name IS the category (must be a COCO class name
 the perceiver knows: person, chair, couch, tv, laptop, bottle, cup, ...).
 
 GPU: tries CUDA then HIP (AMD) then falls back to CPU automatically, so this runs
-on DARKSTAR's 3090s (fast) AND on the AMD box (slow but works). Setup on the GPU
+on GPU_NODE's 3090s (fast) AND on the AMD box (slow but works). Setup on the GPU
 host:  pip install blenderproc   (BlenderProc downloads its own Blender).
 """
 

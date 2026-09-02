@@ -109,8 +109,8 @@ Test Files  58 passed (58)
 Tests  1523 passed (1523)
 
 npm run typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> tsc --noEmit && npm run typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 exit 0
 
 npx eslint src/widgets/widget-image-renderer.ts src/channels/core.ts src/channels/telegram/client.ts src/commands/handlers/channel-handlers.ts src/widgets/widget-matcher.ts src/index.ts tests/channels/telegram.test.ts tests/widgets/auto-widget.test.ts tests/widgets/widget-matcher.test.ts tests/cli/headless-exit-code.test.ts

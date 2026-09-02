@@ -31,7 +31,7 @@ Les nombres peuvent varier si un outil conditionnel est activé par la plateform
 ```text
 $ npm run typecheck
 tsc --noEmit
-tsc --project tsconfig.darkstar-identity.json
+tsc --project tsconfig.gpuNode-identity.json
 Résultat : succès (code 0)
 
 $ npm run build

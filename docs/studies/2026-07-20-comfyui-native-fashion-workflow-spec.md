@@ -1,6 +1,6 @@
 # Étude — Spec workflow ComfyUI clips fashion 1080×1920/30fps/~12s (2026-07-20)
 
-**Cible** : clips fashion verticaux très haute qualité sur darkstar (2× RTX 3090
+**Cible** : clips fashion verticaux très haute qualité sur gpuNode (2× RTX 3090
 24 Go). Étude web sourcée (docs ComfyUI, dépôts HF lightx2v/Comfy-Org/Kijai/
 numz, issues GitHub). Le 1080 natif Wan 14B est hors de portée d'une 3090 : la
 chaîne est **720×1280 → SeedVR2 1080×1920 → RIFE 30 fps**.
@@ -63,7 +63,7 @@ RIFE VFI (rife49, ensemble, ×2) → encode 30 fps H.264 CRF 17             ~2-4
   est UI-only. Suivi : `/history/{id}`, WS `/ws`, `/view` (même mécanique que
   le provider ComfyUI existant `src/tools/media-generation-tool.ts`).
 
-## Téléchargements pour compléter darkstar (~34 Go chemin recommandé)
+## Téléchargements pour compléter gpuNode (~34 Go chemin recommandé)
 
 | Fichier | Dossier | Taille |
 |---|---|---|

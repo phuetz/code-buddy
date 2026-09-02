@@ -126,9 +126,9 @@ Duration  1.09s
 
 npm run typecheck
 > @phuetz/code-buddy@2.0.0 typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
-> @phuetz/code-buddy@2.0.0 typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> tsc --noEmit && npm run typecheck:gpuNode-identity
+> @phuetz/code-buddy@2.0.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 exit 0
 
 npx eslint src/security/skill-scanner.ts src/skills/skill-importer.ts src/skills/hub.ts src/commands/skills-cli/index.ts src/commands/cli/native-engine-commands.ts tests/security/skill-scanner.test.ts tests/skills/skill-importer.test.ts tests/skills/skill-import-command-lifecycle.test.ts

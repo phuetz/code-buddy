@@ -144,7 +144,7 @@ Les 21 autres sont écartées :
 - **continuité architecturale, lumineuse ou narrative insuffisante — 5 :**
   `ambre-002`, `ambre-015`, `ambre-016`, `ambre-021`, `ambre-038`.
 
-Deux essais de décor ont été calculés sur Darkstar, sans interrompre ni tuer de
+Deux essais de décor ont été calculés sur GPU node, sans interrompre ni tuer de
 processus. L’un contenait Ambre et n’était donc pas un B-roll ; l’autre était
 une variante trop lisse et redondante du salon déjà disponible. Aucun média
 nouvellement généré n’est monté dans le master : les plaques exactes donnent un
@@ -334,7 +334,7 @@ plan 11/13 devait être reconstruit, la commande déterministe utilisée est :
 
 ```bash
 /tmp/codebuddy-visual-gate-20260801/bin/python3 \
-  scripts/darkstar/restore-canonical-face.py \
+  scripts/gpuNode/restore-canonical-face.py \
   --source /home/patrice/.codebuddy/personas/ambre/wardrobe-automne/ambre-velours-cognac-echarpe.png \
   --composite /home/patrice/Videos/personas/ambre-scenes/automne-composites/ambre-024-salon-cocooning-velours.png \
   --output /home/patrice/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct.png \
@@ -343,7 +343,7 @@ plan 11/13 devait être reconstruit, la commande déterministe utilisée est :
 ```
 
 Les six sources uniques sont ensuite scorées contre l’unique référence V3 avec
-`scripts/darkstar/score-arcface-images.py`; le JSON obtenu est conservé dans
+`scripts/gpuNode/score-arcface-images.py`; le JSON obtenu est conservé dans
 `qc-v02/arcface/ambre-v3-preview-v02.json`. Le rendu complet et toutes ses
 portes sont relancés par :
 

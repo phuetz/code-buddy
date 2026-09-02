@@ -199,7 +199,7 @@ export class SensorExperienceSource implements ExperienceSource {
  *       "predictionError": 0.42, "tsMs": 1760000000000,
  *       "detail": "...", "context": "..." } ] }
  *
- * The DARKSTAR world-model spoke (encoder ONNX + dynamics) serves this; any
+ * The GPU_NODE world-model spoke (encoder ONNX + dynamics) serves this; any
  * error/timeout (3 s) yields [] so a dead spoke never blocks the engine.
  */
 export function createDefaultSensorExperienceSource(

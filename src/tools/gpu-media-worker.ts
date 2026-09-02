@@ -1,7 +1,7 @@
 /**
  * Client for heavyweight media/world-model workers (PanoWorld, LongCat).
  *
- * The model runtimes stay outside the Node/Electron process. A Darkstar worker
+ * The model runtimes stay outside the Node/Electron process. A GPU node worker
  * exposes this small authenticated HTTP protocol and owns CUDA, queueing and
  * output files. Code Buddy only validates contracts and submits bounded jobs.
  */
@@ -202,7 +202,7 @@ export function parseAvatarVideoPayload(value: unknown): AvatarVideoPayload {
   }
   const input = value as Record<string, unknown>;
   if (input.resolution !== undefined && input.resolution !== '480p') {
-    throw new Error('Only the measured 480p profile is enabled for Darkstar');
+    throw new Error('Only the measured 480p profile is enabled for GPU node');
   }
   let channelTarget: AvatarVideoPayload['channelTarget'];
   const rawChannelTarget = input.channel_target ?? input.channelTarget;

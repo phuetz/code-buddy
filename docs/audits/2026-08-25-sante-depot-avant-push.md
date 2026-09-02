@@ -31,7 +31,7 @@ Le geste à faire avant de pousser est donc **une intégration de `main` (rebase
 
 | Mesure | Commande | Résultat | Durée |
 |---|---|---|---|
-| Typage | `npm run typecheck` | ✅ **0 erreur** (`tsc --noEmit` + projet `darkstar-identity`) | **18,0 s** |
+| Typage | `npm run typecheck` | ✅ **0 erreur** (`tsc --noEmit` + projet `gpuNode-identity`) | **18,0 s** |
 | Lint | `npm run lint` | ✅ **0 erreur**, ⚠️ 2 445 warnings (7 auto-corrigeables) | **38,8 s** |
 | Build | `npm run build` | ✅ **succès** — `tsc` + 8 skills copiés + manifeste runtime généré | **20,7 s** |
 | Dépendances circulaires | `npm run check:circular` | ✅ **6 cycles, tous connus et acceptés** | **14,6 s** |
@@ -89,7 +89,7 @@ Mesuré depuis la **base de fusion** `f9a31a7e` (et non depuis `origin/main`, qu
 | `cowork/` | 41 |
 | `buddy-vision/` | 6 |
 | `examples/` | 2 |
-| racine | `package.json`, `README.md`, `.gitignore`, `tsconfig.darkstar-identity.json` |
+| racine | `package.json`, `README.md`, `.gitignore`, `tsconfig.gpuNode-identity.json` |
 | `scratch/` | 1 |
 
 ### Les 15 fichiers les plus volumineux
@@ -122,8 +122,8 @@ Minimale et bénigne :
 
 ```diff
 -    "typecheck": "tsc --noEmit",
-+    "typecheck": "tsc --noEmit && npm run typecheck:darkstar-identity",
-+    "typecheck:darkstar-identity": "tsc --project tsconfig.darkstar-identity.json",
++    "typecheck": "tsc --noEmit && npm run typecheck:gpuNode-identity",
++    "typecheck:gpuNode-identity": "tsc --project tsconfig.gpuNode-identity.json",
 ...
    "files": [
      "dist",
@@ -303,15 +303,15 @@ Deux problèmes distincts :
 
 **206 des 669 fichiers (31 %) sont dans `scripts/`**, et l'essentiel du volume (les 14 plus gros
 fichiers, ~24 000 lignes) est un pipeline de production vidéo personnel : `scripts/influencer/`,
-`scripts/mysoulmate/`, `scripts/darkstar/`, `scripts/lisa-studio/`, `scripts/chaine-controle.py`.
+`scripts/mysoulmate/`, `scripts/gpuNode/`, `scripts/lisa-studio/`, `scripts/chaine-controle.py`.
 S'y ajoutent :
 
 - **44 chemins absolus `/home/patrice`** figés dans ces scripts — ils ne tourneront que sur
   ministar. Les plus concernés :
-  `scripts/darkstar/repair-wardrobe-qwen.mjs` (9), `scripts/darkstar/rerender-ghost-contour-clips.sh` (5),
+  `scripts/gpuNode/repair-wardrobe-qwen.mjs` (9), `scripts/gpuNode/rerender-ghost-contour-clips.sh` (5),
   `scripts/influencer/publication-manifest.example.json` (4), `scripts/overnight-lisa-pipeline.sh` (3),
-  `scripts/darkstar/replay-identity-composites.ts` (3), `scripts/darkstar/repair-ambre-shorts-residuals-qwen.mjs` (3),
-  `scripts/darkstar/benchmark-krea2-local.mjs` (3), puis 8 fichiers à 1–2 occurrences.
+  `scripts/gpuNode/replay-identity-composites.ts` (3), `scripts/gpuNode/repair-ambre-shorts-residuals-qwen.mjs` (3),
+  `scripts/gpuNode/benchmark-krea2-local.mjs` (3), puis 8 fichiers à 1–2 occurrences.
   Exemples : `'/home/patrice/Videos/personas/garde-robe-reparee'`,
   `'/home/patrice/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png'`,
   `ROOT = Path("/home/patrice/Videos/personas")`.
@@ -359,7 +359,7 @@ dans le prochain `git add -A`.
    tombent à 0 (les correctifs sont déjà sur `main`). Si ce n'est pas le cas, la mesure aura
    révélé un vrai conflit sémantique.
 3. **Décider** du sort de `DEFAULT_AVATAR_PREVIEW_TOKEN` et des identifiants de comptes.
-4. **Décider** du périmètre : `scripts/influencer|mysoulmate|darkstar|lisa-studio` et `scratch/`
+4. **Décider** du périmètre : `scripts/influencer|mysoulmate|gpuNode|lisa-studio` et `scratch/`
    restent-ils dans le dépôt public ?
 
 ---

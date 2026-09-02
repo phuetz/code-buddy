@@ -321,7 +321,7 @@ def controler_identite(
     ]
     executer([
         str(ARCFACE_PYTHON),
-        str(racine_depot / 'scripts/darkstar/score-arcface-images.py'),
+        str(racine_depot / 'scripts/gpuNode/score-arcface-images.py'),
         '--reference', str(IDENTITE / 'lisa-avatar-800.png'),
         '--output', str(rapport),
         *(str(image) for image in images),

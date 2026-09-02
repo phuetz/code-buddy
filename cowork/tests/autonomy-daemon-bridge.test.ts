@@ -178,7 +178,7 @@ describe('autonomy model tier', () => {
       resolveModelTierConfig: () => ({
         localModel: 'qwen2.5:7b-instruct',
         localBaseUrl: 'http://localhost:11434/v1',
-        networkModels: [{ model: 'qwen3.6:27b', baseUrl: 'http://darkstar:11434/v1' }],
+        networkModels: [{ model: 'qwen3.6:27b', baseUrl: 'http://gpuNode:11434/v1' }],
         escalationModel: 'grok-4',
       }),
       chooseAutonomousModel: () => ({

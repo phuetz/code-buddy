@@ -195,8 +195,8 @@ describe('companion IPC', () => {
   it('exposes raw-free live avatar readiness without requiring an active project', async () => {
     const renderers = [
       {
-        rendererId: 'darkstar-metahuman-lisa',
-        displayName: 'Lisa MetaHuman on Darkstar',
+        rendererId: 'gpuNode-metahuman-lisa',
+        displayName: 'Lisa MetaHuman on GPU node',
         protocolVersion: 1,
         runtime: 'unreal',
         runtimeVersion: '5.8',
@@ -250,7 +250,7 @@ describe('companion IPC', () => {
         connectionCredentialsIncluded: false,
       },
     });
-    expect(response.snapshot?.renderers[0]?.rendererId).toBe('darkstar-metahuman-lisa');
+    expect(response.snapshot?.renderers[0]?.rendererId).toBe('gpuNode-metahuman-lisa');
     expect(list).toHaveBeenCalledOnce();
     expect(shouldStreamAvatarAudio).toHaveBeenCalledWith(process.env, renderers);
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith(

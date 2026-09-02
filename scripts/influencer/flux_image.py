@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Génération d'images locale $0 via Flux dev fp8 (ComfyUI).
 
-Pipeline validé le 2026-08-29 sur darkstar (2x RTX 3090). Le VAE Flux doit être
+Pipeline validé le 2026-08-29 sur gpuNode (2x RTX 3090). Le VAE Flux doit être
 un miroir NON-gated (Black Forest Labs a fermé FLUX.1-schnell) — voir
 `flux_ae_real.safetensors` (335 Mo, depuis huggingface.co/ffxvs/vae-flux).
 

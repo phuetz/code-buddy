@@ -51,7 +51,7 @@ describe('Ollama local runtime context discovery', () => {
 
     await expect(probeLocalRuntimeContext({
       model: 'qwen3.8:27b',
-      baseURL: 'http://darkstar:11434/v1',
+      baseURL: 'http://gpuNode:11434/v1',
       fetchImpl,
     })).resolves.toEqual({
       runtime: 'ollama',

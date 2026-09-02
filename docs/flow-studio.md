@@ -55,8 +55,8 @@ Audit de parité et backlog vérifié :
 
 La production commerciale n'utilise pas un moteur unique :
 
-- LongCat sur Darkstar anime les avatars parlants et synchronise chaque langue ;
-- ComfyUI sur Darkstar produit le volume, avec Minstar comme secours ;
+- LongCat sur GPU node anime les avatars parlants et synchronise chaque langue ;
+- ComfyUI sur GPU node produit le volume, avec Minstar comme secours ;
 - Google Flow/Veo est réservé aux plans publics `safe` sans parole : variations,
   plans cinématiques et quelques plans premium ;
 - les médias `sensual` et `explicit` restent sur l'infrastructure contrôlée par le

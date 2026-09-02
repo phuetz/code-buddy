@@ -27,7 +27,7 @@ publication.
 ## Re-scoring des douze plans du chalet
 
 Le re-scoring a été exécuté avant montage avec
-`scripts/darkstar/score-arcface-images.py`. Le script n’accepte qu’un fichier de
+`scripts/gpuNode/score-arcface-images.py`. Le script n’accepte qu’un fichier de
 référence, pas un dossier. La référence utilisée est donc l’image canonique V3
 du kit, et jamais un composite généré :
 

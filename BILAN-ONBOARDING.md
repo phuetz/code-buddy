@@ -54,7 +54,7 @@ TypeScript :
 ```text
 npm run typecheck
 tsc --noEmit
-tsc --project tsconfig.darkstar-identity.json
+tsc --project tsconfig.gpuNode-identity.json
 exit 0
 ```
 

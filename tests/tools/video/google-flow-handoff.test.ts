@@ -32,7 +32,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '9:16',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
@@ -70,7 +70,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '16:9',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
@@ -86,7 +86,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '16:9',
       upscale4k: true,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
@@ -113,7 +113,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '9:16',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
@@ -132,7 +132,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '9:16',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 100,
@@ -151,7 +151,7 @@ describe('Google Flow handoff', () => {
       aspectRatio: '9:16',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 100,

@@ -1015,7 +1015,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'media',
     keywords: [
       'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
-      'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+      'gpuNode', 'ministar', 'credits', 'engine', 'routage', 'moteur',
     ],
     priority: 8,
     description:
@@ -1031,7 +1031,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'gpu_media_job',
     category: 'media',
-    keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
+    keywords: ['gpuNode', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
     priority: 8,
     description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker'
   },

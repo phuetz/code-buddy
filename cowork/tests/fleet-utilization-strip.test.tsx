@@ -59,7 +59,7 @@ afterEach(() => {
 describe('fleetUtilization aggregate', () => {
   it('aggregates only over peers that declared a capacity', () => {
     const rows = buildPeerLoadRows([
-      peer('darkstar', { models: [], machineLabel: 'DARKSTAR', activeRequests: 3, maxConcurrency: 4 }),
+      peer('gpuNode', { models: [], machineLabel: 'GPU_NODE', activeRequests: 3, maxConcurrency: 4 }),
       peer('ministar', { models: [], machineLabel: 'Ministar', activeRequests: 1, maxConcurrency: 4 }),
       peer('mystery', { models: [], machineLabel: 'Mystery', activeRequests: 9 }), // no capacity
     ]);
@@ -77,14 +77,14 @@ describe('fleetUtilization aggregate', () => {
 describe('FleetUtilizationStrip', () => {
   it('renders the fleet rate and one load bar per actor', async () => {
     await render([
-      peer('darkstar', { models: [], machineLabel: 'DARKSTAR', activeRequests: 3, maxConcurrency: 4 }),
+      peer('gpuNode', { models: [], machineLabel: 'GPU_NODE', activeRequests: 3, maxConcurrency: 4 }),
       peer('ministar', { models: [], machineLabel: 'Ministar', activeRequests: 0, maxConcurrency: 2 }),
     ]);
 
     expect(container!.querySelector('[data-testid="fleet-utilization-rate"]')?.textContent).toBe('50%');
     const rows = container!.querySelectorAll('[data-testid="fleet-utilization-row"]');
     expect(rows.length).toBe(2);
-    expect(rows[0].textContent).toContain('DARKSTAR');
+    expect(rows[0].textContent).toContain('GPU_NODE');
     expect(rows[0].textContent).toContain('3/4');
     expect(rows[1].textContent).toContain('0/2');
   });

@@ -57,12 +57,12 @@ describe('model benchmark', () => {
       const responses: Record<string, string[]> = {
         winner: [
           'OK',
-          '{"model":"darkstar","status":"ok"}',
+          '{"model":"gpuNode","status":"ok"}',
           'export function dedupeById(items: Array<{ id: string }>) { const seen = new Map<string, boolean>(); return items; }',
         ],
         loser: [
           'sure thing',
-          '{"model":"darkstar","status":"nope"}',
+          '{"model":"gpuNode","status":"nope"}',
           'here is some text without the right shape',
         ],
       };

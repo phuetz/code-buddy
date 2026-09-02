@@ -72,7 +72,7 @@ describe('list_peers tool', () => {
   });
 
   it('lists multiple peers with full status', async () => {
-    registerPeer('darkstar', {
+    registerPeer('gpuNode', {
       lastSeenAgeMs: 1500,
       lastSeenReason: 'heartbeat',
       compactionActive: false,
@@ -91,15 +91,15 @@ describe('list_peers tool', () => {
     const data = result.data as { peers: ListedPeer[] };
     expect(data.peers).toHaveLength(2);
 
-    const darkstar = data.peers.find((p) => p.id === 'darkstar')!;
-    expect(darkstar.url).toBe('ws://example/darkstar');
-    expect(darkstar.eventCount).toBe(5);
-    expect(darkstar.lastSeenAgeMs).toBe(1500);
-    expect(darkstar.lastSeenReason).toBe('heartbeat');
-    expect(darkstar.compacting).toBe(false);
-    expect(darkstar.stale).toBe(false);
-    expect(darkstar.peerChatLikelyAvailable).toBe(true);
-    expect(darkstar.connectedSince).toBe('2026-05-08T10:00:00.000Z');
+    const gpuNode = data.peers.find((p) => p.id === 'gpuNode')!;
+    expect(gpuNode.url).toBe('ws://example/gpuNode');
+    expect(gpuNode.eventCount).toBe(5);
+    expect(gpuNode.lastSeenAgeMs).toBe(1500);
+    expect(gpuNode.lastSeenReason).toBe('heartbeat');
+    expect(gpuNode.compacting).toBe(false);
+    expect(gpuNode.stale).toBe(false);
+    expect(gpuNode.peerChatLikelyAvailable).toBe(true);
+    expect(gpuNode.connectedSince).toBe('2026-05-08T10:00:00.000Z');
 
     // Output is JSON-pretty.
     expect(typeof result.output).toBe('string');

@@ -53,7 +53,7 @@ function makeApi() {
           ladder: [],
           currentChoice: {
             model: 'qwen3.6:27b',
-            baseUrl: 'http://darkstar:11434/v1',
+            baseUrl: 'http://gpuNode:11434/v1',
             tier: 'network',
             paid: false,
             reason: 'free',
@@ -150,7 +150,7 @@ describe('LiveLauncherPanel', () => {
       prompt: 'état de l art des agents locaux',
       model: 'qwen3.6:27b',
       provider: 'ollama',
-      ollamaUrl: 'http://darkstar:11434/v1',
+      ollamaUrl: 'http://gpuNode:11434/v1',
     });
     expect(query('live-launcher-status')?.textContent).toBe('running');
     expect(query('live-launcher-cancel')).not.toBeNull();

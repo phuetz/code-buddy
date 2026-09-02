@@ -93,12 +93,12 @@ export const BENCHMARK_PROMPT_SETS: Record<BenchmarkPromptSetName, ModelBenchmar
     },
     {
       name: 'json-object',
-      prompt: 'Return exactly this JSON object and nothing else: {"model":"darkstar","status":"ok"}',
+      prompt: 'Return exactly this JSON object and nothing else: {"model":"gpuNode","status":"ok"}',
       maxTokens: 32,
       validate: (output) => {
         try {
           const parsed = JSON.parse(stripCodeFences(output));
-          return parsed?.model === 'darkstar' && parsed?.status === 'ok';
+          return parsed?.model === 'gpuNode' && parsed?.status === 'ok';
         } catch {
           return false;
         }
@@ -114,12 +114,12 @@ export const BENCHMARK_PROMPT_SETS: Record<BenchmarkPromptSetName, ModelBenchmar
   coding: [
     {
       name: 'json-object',
-      prompt: 'Return exactly this JSON object and nothing else: {"model":"darkstar","status":"ok"}',
+      prompt: 'Return exactly this JSON object and nothing else: {"model":"gpuNode","status":"ok"}',
       maxTokens: 32,
       validate: (output) => {
         try {
           const parsed = JSON.parse(stripCodeFences(output));
-          return parsed?.model === 'darkstar' && parsed?.status === 'ok';
+          return parsed?.model === 'gpuNode' && parsed?.status === 'ok';
         } catch {
           return false;
         }

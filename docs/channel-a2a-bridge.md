@@ -125,7 +125,7 @@ treated as plain text and routed via the default skill.
 |---|---|
 | `/help`, `/start` | Reply locally with a capability summary, no hub call. |
 | `/skill <id> <text>` | Route via an explicit A2A skill (e.g. `/skill ollama-gemma4-26b raconte une blague`). |
-| `/agent <name> <text>` | Route via an explicit spoke agent (e.g. `/agent ollama-darkstar /think profond le sens de la vie`). |
+| `/agent <name> <text>` | Route via an explicit spoke agent (e.g. `/agent ollama-gpuNode /think profond le sens de la vie`). |
 | Anything else | Plain text → default skill, smart skill selection picks the spoke. |
 
 ## Other channels
@@ -151,7 +151,7 @@ Example multi-channel config:
 ## Migration from `scripts/telegram_a2a_spoke.py`
 
 The old Python wrapper is deprecated but kept around for hosts that
-can't run the Code Buddy server itself (e.g. DARKSTAR is currently
+can't run the Code Buddy server itself (e.g. GPU_NODE is currently
 blocked on `better-sqlite3` for Node 24). Migration steps:
 
 1. Stop the old wrapper (or its scheduled task `TelegramA2ASpoke`).
@@ -163,7 +163,7 @@ blocked on `better-sqlite3` for Node 24). Migration steps:
 
 The user-facing behaviour is the same except:
 - The bridge now lives inside the always-on hub on Ministar Linux
-  rather than DARKSTAR's session — survives DARKSTAR sleep / reboot.
+  rather than GPU_NODE's session — survives GPU_NODE sleep / reboot.
 - Bonus: Discord, Slack, etc. work via the same path.
 
 ## Implementation notes

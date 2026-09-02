@@ -2027,7 +2027,7 @@ export async function* streamCompanionReply(
 /**
  * Default synth for the assistant's voice. Active engine picked from
  * Pocket TTS is the realtime default. Voicebox can render a more expressive
- * voice locally or on Darkstar; Pocket and Piper remain fail-open fallbacks.
+ * voice locally or on GPU node; Pocket and Piper remain fail-open fallbacks.
  */
 function resolveBaseCacheVoice(
   engine: LocalTtsEngine,

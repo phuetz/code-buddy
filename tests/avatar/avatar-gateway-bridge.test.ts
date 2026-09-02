@@ -69,7 +69,7 @@ describe('avatar Gateway bridge', () => {
     });
     const sync = buildAvatarSyncMessage(bus.history(), new Date('2026-07-13T12:00:00Z'), [
       {
-        rendererId: 'darkstar',
+        rendererId: 'gpuNode',
         protocolVersion: 1,
         runtime: 'unreal',
         capabilities: {
@@ -90,6 +90,6 @@ describe('avatar Gateway bridge', () => {
     ]);
     expect(sync.payload.events).toEqual([started, completed]);
     expect(sync.payload.ignoredTurnIds).toEqual([]);
-    expect(sync.payload.renderers[0]).toMatchObject({ rendererId: 'darkstar', phase: 'ready' });
+    expect(sync.payload.renderers[0]).toMatchObject({ rendererId: 'gpuNode', phase: 'ready' });
   });
 });

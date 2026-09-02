@@ -3,11 +3,11 @@
 Ollama A2A Spoke — Transform Ollama into a fleet participant
 
 Exposes Ollama models as A2A-compatible skills to the Code Buddy hub.
-Registers as a spoke at hub (100.98.18.76:3000) and routes task requests to Ollama.
+Registers as a spoke at hub (203.0.113.10:3000) and routes task requests to Ollama.
 
 Usage:
   python ollama_a2a_spoke.py
-  or: python ollama_a2a_spoke.py --hub http://100.98.18.76:3000 --port 3002
+  or: python ollama_a2a_spoke.py --hub http://203.0.113.10:3000 --port 3002
 """
 
 import os
@@ -26,7 +26,7 @@ def detect_hostname() -> str:
     """Cross-platform short hostname (lowercase). On Linux/macOS use
     `hostname -s`; on Windows fall back to socket.gethostname() because
     `hostname -s` is not a valid option there (was failing the wrapper
-    on MINISTAR/DARKSTAR Windows hosts)."""
+    on MINISTAR/GPU_NODE Windows hosts)."""
     try:
         return subprocess.check_output(['hostname', '-s'], stderr=subprocess.DEVNULL).decode().strip().lower()
     except Exception:
@@ -39,7 +39,7 @@ def _extract_text(value) -> str:
     The hub may pass a plain string (correct, post Phase-B fix
     code-buddy commit 8a9f5f4) OR a nested A2A message object
     {role, parts:[{type:'text', text:'...'}]} (pre-fix bug — observed
-    on DARKSTAR 2026-05-03 when hub on Ministar Linux had not yet
+    on GPU_NODE 2026-05-03 when hub on Ministar Linux had not yet
     pulled the fix). Recursively unwrap until we get a string."""
     if isinstance(value, str):
         return value
@@ -60,7 +60,7 @@ except ImportError:
 
 class OllamaSpoke:
     def __init__(self, ollama_url: str = "http://127.0.0.1:11434",
-                 hub_url: str = "http://100.98.18.76:3000",
+                 hub_url: str = "http://203.0.113.10:3000",
                  port: int = 3002,
                  host: str = "0.0.0.0",
                  name: Optional[str] = None,
@@ -329,8 +329,8 @@ def main():
     parser = argparse.ArgumentParser(description="Ollama A2A Spoke")
     parser.add_argument("--ollama", default="http://127.0.0.1:11434",
                        help="Ollama URL (default: http://127.0.0.1:11434)")
-    parser.add_argument("--hub", default="http://100.98.18.76:3000",
-                       help="Hub URL (default: http://100.98.18.76:3000)")
+    parser.add_argument("--hub", default="http://203.0.113.10:3000",
+                       help="Hub URL (default: http://203.0.113.10:3000)")
     parser.add_argument("--port", type=int, default=3002,
                        help="Port to listen on (default: 3002)")
     parser.add_argument("--host", default="0.0.0.0",

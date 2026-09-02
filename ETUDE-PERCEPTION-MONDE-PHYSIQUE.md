@@ -191,26 +191,26 @@ Le pipeline automatisé passe par **`bpy` / BlenderProc2 scripté en sous-proces
 
 ROCm ~7.2 supporte officiellement PyTorch sur Strix Halo depuis début 2026, **mais citoyen de seconde zone** (kernels 2–6× plus lents, piège MIOpen, plantages gros modèles). **Vulkan (llama.cpp/RADV) reste le chemin le plus fiable** — cohérent avec les choix déjà faits (Ollama/Vulkan, Moondream2, MediaPipe/YOLO CPU). Rien dans l'étude ne remet en cause ces choix.
 
-## 4.8 Topologie de calcul — MINISTAR + DARKSTAR + fleet (le point qui débloque tout)
+## 4.8 Topologie de calcul — MINISTAR + GPU_NODE + fleet (le point qui débloque tout)
 
-L'analyse « CUDA-only = hors de portée » n'est vraie que **localement sur MINISTAR**. Le parc réel est **hétérogène et déjà en réseau** (tailnet, hub A2A `100.98.18.76:3000`) :
+L'analyse « CUDA-only = hors de portée » n'est vraie que **localement sur MINISTAR**. Le parc réel est **hétérogène et déjà en réseau** (tailnet, hub A2A `203.0.113.10:3000`) :
 
 - **MINISTAR** — mini-PC **AMD Ryzen AI / Strix Halo**, Linux, où tourne le robot **24/7** (`buddy-sense`, `buddy-vision`, réactions). Perception temps réel, local, autonome. iGPU ROCm/Vulkan.
-- **DARKSTAR** — machine **2× RTX 3090** (là où le world model a été entraîné ; référencée dans `world-model/scripts/ollama_a2a_spoke.py`). **CUDA disponible.**
+- **GPU_NODE** — machine **2× RTX 3090** (là où le world model a été entraîné ; référencée dans `world-model/scripts/ollama_a2a_spoke.py`). **CUDA disponible.**
 - **Fleet / A2A** — canal déjà en place (`ollama_a2a_spoke.py` s'enregistre au hub Code Buddy ; Code Buddy expose `/api/a2a/*`).
 
-**Conséquence** : tout le « 🔴 CUDA-only » (Isaac Sim, Habitat, 3DGS temps réel, TRELLIS/Hunyuan3D, DreamerV3 pleine échelle, V-JEPA predictor complet, rendu BlenderProc **GPU**) est **exécutable sur DARKSTAR** et rapatriable vers MINISTAR par le fleet. Métaphore cérébrale : **MINISTAR = tronc cérébral** (sens + réflexes, temps réel), **DARKSTAR = cortex/imagination** (simulation + rêve/entraînement lourd, à la demande), **fleet A2A = corps calleux**.
+**Conséquence** : tout le « 🔴 CUDA-only » (Isaac Sim, Habitat, 3DGS temps réel, TRELLIS/Hunyuan3D, DreamerV3 pleine échelle, V-JEPA predictor complet, rendu BlenderProc **GPU**) est **exécutable sur GPU_NODE** et rapatriable vers MINISTAR par le fleet. Métaphore cérébrale : **MINISTAR = tronc cérébral** (sens + réflexes, temps réel), **GPU_NODE = cortex/imagination** (simulation + rêve/entraînement lourd, à la demande), **fleet A2A = corps calleux**.
 
 **Deux façons d'amener du GPU au robot** :
 
-| | A) Offload → DARKSTAR (fleet/A2A) | B) eGPU OcuLink sur MINISTAR |
+| | A) Offload → GPU_NODE (fleet/A2A) | B) eGPU OcuLink sur MINISTAR |
 |---|---|---|
 | Coût | **0 € (déjà là)** | dock OcuLink + PSU + GPU |
 | Rôle | imagination/entraînement **batch/offline** | GPU **temps réel embarqué** |
 | Latence | réseau (⭕ offline, ✗ réflexe 30 fps) | locale (✓ SLAM/3DGS temps réel d'un robot **mobile**) |
-| Note | DARKSTAR doit être allumée | OcuLink = PCIe 4.0 ×4 (~7,9 Go/s, suffisant pour du compute) ; NVIDIA eGPU + iGPU AMD cohabitent en **compute headless** (`CUDA_VISIBLE_DEVICES`, affichage sur iGPU) ; pas hot-plug ; 350 W/chaleur/bruit sur la machine 24/7 ; **port OcuLink à confirmer sur le boîtier MINISTAR** |
+| Note | GPU_NODE doit être allumée | OcuLink = PCIe 4.0 ×4 (~7,9 Go/s, suffisant pour du compute) ; NVIDIA eGPU + iGPU AMD cohabitent en **compute headless** (`CUDA_VISIBLE_DEVICES`, affichage sur iGPU) ; pas hot-plug ; 350 W/chaleur/bruit sur la machine 24/7 ; **port OcuLink à confirmer sur le boîtier MINISTAR** |
 
-**Reco** : pour la feuille de route (Boucle A rendu + Boucle B entraînement JEPA), **router les jobs lourds vers DARKSTAR via le fleet** (zéro matériel, architecture déjà amorcée). Réserver l'**eGPU OcuLink** au seul cas que le réseau ne peut servir : un robot **mobile** avec GPU temps réel **on-board**.
+**Reco** : pour la feuille de route (Boucle A rendu + Boucle B entraînement JEPA), **router les jobs lourds vers GPU_NODE via le fleet** (zéro matériel, architecture déjà amorcée). Réserver l'**eGPU OcuLink** au seul cas que le réseau ne peut servir : un robot **mobile** avec GPU temps réel **on-board**.
 
 > Note de nommage : **gitnexus a été renommé « Code Explorer »** (nom canonique). Le code tolère les deux noms de binaire (`code-explorer`/`gitnexus`) → pas d'urgence à renommer binaire/repo/index, mais les **docs** doivent dire « Code Explorer » (inclus dans le backlog A1).
 

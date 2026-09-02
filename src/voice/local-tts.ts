@@ -792,7 +792,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
         ...(options.signal ? { signal: options.signal } : {}),
       });
       // Voicebox is expressive but may be running on another machine. Pocket
-      // keeps voice notes available when Darkstar is offline or still loading.
+      // keeps voice notes available when GPU node is offline or still loading.
       if (!rendered && !options.signal?.aborted) {
         rendered = await synthesizePocketWav(clean, wav, process.env, timeoutMs, options.signal);
       }

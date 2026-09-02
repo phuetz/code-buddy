@@ -15,12 +15,12 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
     client = new A2AAgentClient();
 
     // Register two remote spokes with different skills
-    client.registerRemoteCard('ollama-darkstar', {
-      url: 'http://100.73.222.64:11434',
+    client.registerRemoteCard('ollama-gpuNode', {
+      url: 'http://192.0.2.42:11434',
       card: {
-        name: 'Ollama DARKSTAR',
-        description: 'GPU-heavy Ollama on DARKSTAR',
-        url: 'http://100.73.222.64:11434',
+        name: 'Ollama GPU_NODE',
+        description: 'GPU-heavy Ollama on GPU_NODE',
+        url: 'http://192.0.2.42:11434',
         version: '0.2.0',
         skills: [
           { id: 'chat-qwen3.6-35b', name: 'Chat (qwen3.6)', description: 'Heavy LLM', inputModes: ['text/plain'], outputModes: ['text/plain'] },
@@ -32,11 +32,11 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
     });
 
     client.registerRemoteCard('ollama-ministar', {
-      url: 'http://100.98.18.76:3002',
+      url: 'http://203.0.113.10:3002',
       card: {
         name: 'Ollama Ministar',
         description: 'Always-on Ollama on Ministar Linux',
-        url: 'http://100.98.18.76:3002',
+        url: 'http://203.0.113.10:3002',
         version: '0.2.0',
         skills: [
           { id: 'chat-qwen3.6-35b', name: 'Chat (qwen3.6)', description: 'Heavy LLM', inputModes: ['text/plain'], outputModes: ['text/plain'] },
@@ -55,9 +55,9 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
   });
 
   it('should find best spoke for unique skill', () => {
-    // Only ollama-darkstar has image-gen
+    // Only ollama-gpuNode has image-gen
     const best = client.findBestSpokeForSkill('image-gen');
-    expect(best).toBe('ollama-darkstar');
+    expect(best).toBe('ollama-gpuNode');
   });
 
   it('should return null for unknown skill', () => {
@@ -71,12 +71,12 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
   });
 
   it('should prefer explicit agent over skill resolution', () => {
-    const resolved = client.resolveTarget({ agent: 'ollama-darkstar' });
-    expect(resolved).toEqual({ agentKey: 'ollama-darkstar' });
+    const resolved = client.resolveTarget({ agent: 'ollama-gpuNode' });
+    expect(resolved).toEqual({ agentKey: 'ollama-gpuNode' });
   });
 
   it('should error on skill + agent both provided', () => {
-    const resolved = client.resolveTarget({ agent: 'ollama-darkstar', skill: 'chat-qwen3.6-35b' });
+    const resolved = client.resolveTarget({ agent: 'ollama-gpuNode', skill: 'chat-qwen3.6-35b' });
     expect(resolved).toHaveProperty('error');
     expect((resolved as any).status).toBe(400);
   });

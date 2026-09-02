@@ -100,7 +100,7 @@ Résultat : exit 0.
 
 Commande : `npm run typecheck`
 
-Résultat : exit 0 ; `tsc --noEmit` et `tsc --project tsconfig.darkstar-identity.json` terminés sans erreur.
+Résultat : exit 0 ; `tsc --noEmit` et `tsc --project tsconfig.gpuNode-identity.json` terminés sans erreur.
 
 Commande : `npx eslint src/skills/skill-importer.ts src/skills/skill-sources.ts src/skills/skill-exchange.ts src/commands/skills-cli/index.ts tests/skills/skill-importer.test.ts tests/skills/skill-sources.test.ts tests/skills/skill-exchange.test.ts`
 

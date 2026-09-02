@@ -304,7 +304,7 @@ describe('TTSBridge — Voicebox expressive path', () => {
       pocketSynthesizer,
     });
 
-    const result = await bridge.synthesize('Darkstar est temporairement indisponible');
+    const result = await bridge.synthesize('GPU node est temporairement indisponible');
 
     expect(result.provider).toBe('pocket');
     expect(voiceboxSynthesizer).toHaveBeenCalledOnce();

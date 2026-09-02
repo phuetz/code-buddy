@@ -11,15 +11,15 @@ export type HybridVideoUseCase =
   | 'long-form-b-roll'
   | 'transition';
 export type HybridVideoEngine =
-  | 'darkstar-longcat'
-  | 'darkstar-comfyui'
+  | 'gpuNode-longcat'
+  | 'gpuNode-comfyui'
   | 'ministar-comfyui'
   | 'google-flow-veo31-lite'
   | 'google-flow-veo31-fast'
   | 'google-flow-veo31-quality';
 
 export interface HybridVideoCapacity {
-  darkstar: boolean;
+  gpuNode: boolean;
   ministar: boolean;
   googleFlow: boolean;
   remainingFlowCredits: number;
@@ -53,7 +53,7 @@ const FLOW_CREDITS = {
 
 function localFallbacks(capacity: HybridVideoCapacity): HybridVideoEngine[] {
   return [
-    ...(capacity.darkstar ? (['darkstar-comfyui'] as const) : []),
+    ...(capacity.gpuNode ? (['gpuNode-comfyui'] as const) : []),
     ...(capacity.ministar ? (['ministar-comfyui'] as const) : []),
   ];
 }
@@ -80,8 +80,8 @@ export function routeHybridVideo(
   // Adult media is kept on infrastructure controlled by the project. Flow is
   // reserved for advertiser-safe YouTube and public companion assets.
   if (request.contentTier !== 'safe') {
-    const primary = capacity.darkstar ? 'darkstar-comfyui' : 'ministar-comfyui';
-    if (!capacity.darkstar && !capacity.ministar) throw new Error('No local engine is available for private media');
+    const primary = capacity.gpuNode ? 'gpuNode-comfyui' : 'ministar-comfyui';
+    if (!capacity.gpuNode && !capacity.ministar) throw new Error('No local engine is available for private media');
     return {
       requestId: request.id,
       primary,
@@ -93,7 +93,7 @@ export function routeHybridVideo(
   }
 
   if (request.requiresLipSync || request.useCase === 'avatar-lipsync') {
-    if (!capacity.darkstar) {
+    if (!capacity.gpuNode) {
       if (!capacity.ministar) throw new Error('No avatar-capable local engine is available');
       return {
         requestId: request.id,
@@ -101,12 +101,12 @@ export function routeHybridVideo(
         fallbacks: [],
         executionMode: 'automatic-local',
         estimatedFlowCredits: 0,
-        reason: 'Lip synchronization uses the local fallback while Darkstar is unavailable',
+        reason: 'Lip synchronization uses the local fallback while GPU node is unavailable',
       };
     }
     return {
       requestId: request.id,
-      primary: 'darkstar-longcat',
+      primary: 'gpuNode-longcat',
       fallbacks,
       executionMode: 'automatic-local',
       estimatedFlowCredits: 0,

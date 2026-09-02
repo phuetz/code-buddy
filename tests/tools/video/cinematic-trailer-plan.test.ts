@@ -12,7 +12,7 @@ import type { HybridVideoCapacity } from '../../../src/tools/video/hybrid-video-
 const SHA = 'a'.repeat(64);
 
 const capacity: HybridVideoCapacity = {
-  darkstar: true,
+  gpuNode: true,
   ministar: true,
   googleFlow: true,
   remainingFlowCredits: 25_000,
@@ -354,7 +354,7 @@ describe('compileTrailerPreview', () => {
 
   it('never throws when the router has no available engine — surfaces a diagnostic blocker', () => {
     const noEngines: HybridVideoCapacity = {
-      darkstar: false,
+      gpuNode: false,
       ministar: false,
       googleFlow: false,
       remainingFlowCredits: 0,

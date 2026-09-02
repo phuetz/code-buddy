@@ -26,9 +26,9 @@ describe('voice → Gateway → MetaHuman reference renderer → feedback', () =
       });
       await handler('Lisa, explique-moi cette idée.');
 
-      const simulator = new AvatarRendererSimulator('darkstar-metahuman');
+      const simulator = new AvatarRendererSimulator('gpuNode-metahuman');
       const registry = new AvatarRendererRegistry();
-      expect(registry.register('ws-darkstar', simulator.hello()).ok).toBe(true);
+      expect(registry.register('ws-gpuNode', simulator.hello()).ok).toBe(true);
       for (const event of events) {
         simulator.consumeGatewayMessage({
           type: 'avatar:event',
@@ -41,10 +41,10 @@ describe('voice → Gateway → MetaHuman reference renderer → feedback', () =
       expect(rendered).toHaveLength(1);
       expect(rendered[0]?.audio).toEqual(wav);
       expect(simulator.snapshot().phase).toBe('idle');
-      expect(registry.report('ws-darkstar', simulator.status())).toMatchObject({
+      expect(registry.report('ws-gpuNode', simulator.status())).toMatchObject({
         ok: true,
         renderer: {
-          rendererId: 'darkstar-metahuman',
+          rendererId: 'gpuNode-metahuman',
           phase: 'ready',
           connected: true,
           droppedAudioChunks: 0,

@@ -28,7 +28,7 @@ const defaultProps = {
   privacyTag: 'public' as const,
   parallelism: 1,
   council: false,
-  targetPeerIds: ['darkstar/repo'],
+  targetPeerIds: ['gpuNode/repo'],
 };
 
 async function renderPreview(routePreview: ReturnType<typeof vi.fn>, props = {}) {
@@ -73,7 +73,7 @@ describe('FleetRoutePreview', () => {
       ok: true,
       privacyTag: 'public',
       rationale: 'best free local match',
-      primary: { peerId: 'darkstar/repo', model: 'qwen3.6:27b', score: 0.91 },
+      primary: { peerId: 'gpuNode/repo', model: 'qwen3.6:27b', score: 0.91 },
       fallback: { peerId: 'ministar/repo', model: 'qwen2.5:7b', score: 0.6 },
     });
     await renderPreview(routePreview);
@@ -84,11 +84,11 @@ describe('FleetRoutePreview', () => {
       goal: 'refactor the parser',
       privacyTag: 'public',
       dispatchProfile: 'code',
-      targetPeerIds: ['darkstar/repo'],
+      targetPeerIds: ['gpuNode/repo'],
     });
     const lanes = container!.querySelectorAll('[data-testid="fleet-route-preview-lane"]');
     expect(lanes.length).toBe(2);
-    expect(lanes[0].textContent).toContain('darkstar/repo');
+    expect(lanes[0].textContent).toContain('gpuNode/repo');
     expect(lanes[0].textContent).toContain('91%');
     expect(query('fleet-route-preview-rationale')?.textContent).toContain('best free local match');
   });

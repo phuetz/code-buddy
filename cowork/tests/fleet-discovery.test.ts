@@ -19,13 +19,13 @@ describe('fleet/discovery — parseManualYaml', () => {
   it('parses a single peer with label + url', () => {
     const yaml = `
 peers:
-  - label: darkstar
-    url: ws://100.65.42.7:3001/ws
+  - label: gpuNode
+    url: ws://203.0.113.11:3001/ws
 `;
     expect(parseManualYaml(yaml)).toEqual([
       {
-        label: 'darkstar',
-        url: 'ws://100.65.42.7:3001/ws',
+        label: 'gpuNode',
+        url: 'ws://203.0.113.11:3001/ws',
         source: 'manual',
         apiKey: undefined,
       },
@@ -36,16 +36,16 @@ peers:
     const yaml = `
 peers:
   - label: ministar
-    url: ws://100.98.18.76:3001/ws
-  - label: darkstar
-    url: ws://100.65.42.7:3001/ws
+    url: ws://203.0.113.10:3001/ws
+  - label: gpuNode
+    url: ws://203.0.113.11:3001/ws
     apiKey: secret-token
 `;
     const peers = parseManualYaml(yaml);
     expect(peers).toHaveLength(2);
     expect(peers[0].label).toBe('ministar');
     expect(peers[0].apiKey).toBeUndefined();
-    expect(peers[1].label).toBe('darkstar');
+    expect(peers[1].label).toBe('gpuNode');
     expect(peers[1].apiKey).toBe('secret-token');
   });
 
@@ -84,12 +84,12 @@ peers:
     const yaml = `
 # fleet config
 peers:
-  # darkstar is the heavy machine
-  - label: darkstar  # 2x 3090
-    url: ws://100.65.42.7:3001/ws
+  # gpuNode is the heavy machine
+  - label: gpuNode  # 2x 3090
+    url: ws://203.0.113.11:3001/ws
 `;
     const peers = parseManualYaml(yaml);
     expect(peers).toHaveLength(1);
-    expect(peers[0].label).toBe('darkstar');
+    expect(peers[0].label).toBe('gpuNode');
   });
 });

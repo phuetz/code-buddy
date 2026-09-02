@@ -35,7 +35,7 @@ Les serveurs MCP sont fusionnés dans `.codebuddy/mcp.json`. La configuration Co
 
 - `npm test -- tests/commands/import.test.ts` : 1 fichier, 5/5 tests réussis ;
 - `npm test -- tests/cli/command-routing.test.ts tests/commands/import.test.ts` : 2 fichiers, 8/8 tests réussis ;
-- `npm run typecheck` : TypeScript principal puis `typecheck:darkstar-identity`, exit 0 ;
+- `npm run typecheck` : TypeScript principal puis `typecheck:gpuNode-identity`, exit 0 ;
 - `npx eslint src/commands/import.ts tests/commands/import.test.ts` : exit 0 ;
 - `git diff --check` : exit 0 ;
 - `npx tsx src/index.ts import --help` : aide de la vraie commande affichée, exit 0 ;

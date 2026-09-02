@@ -216,7 +216,7 @@ describe('CognitiveBusClient', () => {
     expect(
       () =>
         new CognitiveBusClient({
-          wsUrl: 'ws://darkstar.example:3000/ws',
+          wsUrl: 'ws://gpuNode.example:3000/ws',
         })
     ).toThrowError(expect.objectContaining({ code: 'COGNITION_INSECURE_TRANSPORT' }));
   });

@@ -77,7 +77,7 @@ const HELP = `Usage: /fleet <action> [args]
 Actions:
   listen <ws-url> [--api-key <key>]   Connect to a peer Code Buddy's WS
          [--name <id>]                and stream fleet:* events live.
-         [--auto-reconnect]           Example: /fleet listen ws://100.98.18.76:3000/ws
+         [--auto-reconnect]           Example: /fleet listen ws://203.0.113.10:3000/ws
          [--max-attempts <n>]         apiKey from --api-key flag or
                                       CODEBUDDY_FLEET_API_KEY env. Must
                                       have fleet:listen scope on the peer.
@@ -115,7 +115,7 @@ Actions:
                                       list_directory, search}. With
                                       --stream, prints peer:chunk frames
                                       live (uses peer.tool.invoke.stream).
-                                      Example: /fleet tool darkstar
+                                      Example: /fleet tool gpuNode
                                       view_file {"file_path":"README.md"}
   route <prompt>                      Choose the best peer/model for a task
             [--privacy public|sensitive]
@@ -323,7 +323,7 @@ function formatHistorySource(record: { hostname?: string; agentId?: string }): s
 
 /**
  * Phase (d).12 — derive a default peer id from the WS URL (host:port).
- * `ws://100.98.18.76:3000/ws` → `100-98-18-76:3000` (dots → dashes for
+ * `ws://203.0.113.10:3000/ws` → `203-0-113-10:3000` (dots → dashes for
  * easier shell typing in /fleet stop / --peer).
  */
 function deriveDefaultPeerId(url: string): string {

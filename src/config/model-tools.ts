@@ -948,7 +948,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     promptProfile: 'lite',
   },
   // Qwen3.8-27B — dense multimodal, 262k native context, Apache 2.0 (released
-  // 2026-08 ; Patrice rates it near Opus 5). Served LOCALLY (darkstar 2×RTX3090:
+  // 2026-08 ; Patrice rates it near Opus 5). Served LOCALLY (gpuNode 2×RTX3090:
   // FP8 ~28 GB tensor-parallel, or Q4 ~16 GB on a single 3090). Full-capability
   // entry placed BEFORE the conservative `qwen3*` glob (first-match-wins, l.65) —
   // unlike the small local qwen3 builds, the 27B drives the agent loop, does
@@ -965,7 +965,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },
-  // Ornith 1.5 35B — Qwen3.5 MoE lineage served on Darkstar. Ollama
+  // Ornith 1.5 35B — Qwen3.5 MoE lineage served on GPU node. Ollama
   // `/api/show` reports `qwen35moe.context_length: 262144` and the runtime
   // advertises completion, vision, tools and thinking (measured 2026-08-26).
   {

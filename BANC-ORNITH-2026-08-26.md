@@ -4,7 +4,7 @@
 
 Banc W5 sur dix symptômes issus de l'historique Git et des rapports `DEFAUTS-*.md` de ce dépôt. Les prompts injectent uniquement des extraits de travail réels ; chaque réponse est scorée par présence/absence d'identifiants, valeurs ou fichiers, avec un cas de format à exactement trois phrases. Le score `JUSTE` signifie que tous les critères codés du cas sont satisfaits ; il ne mesure pas la qualité stylistique.
 
-Endpoint : `http://100.73.222.64:11434/api/generate`, `stream:false`, température `0.2`, `num_predict:512`. Chaque modèle a été exécuté seul ; le script décharge les deux autres modèles cibles par `keep_alive:0` avant chaque bascule, sans arrêter Ollama. Les trois répétitions de chaque cas ont été résumées par médiane. `eval_count / eval_duration` donne le débit ; `total_duration` Ollama donne la latence totale. Résultats bruts : [`BANC-ORNITH-RAW-2026-08-26-v2.json`](BANC-ORNITH-RAW-2026-08-26-v2.json).
+Endpoint : `http://192.0.2.42:11434/api/generate`, `stream:false`, température `0.2`, `num_predict:512`. Chaque modèle a été exécuté seul ; le script décharge les deux autres modèles cibles par `keep_alive:0` avant chaque bascule, sans arrêter Ollama. Les trois répétitions de chaque cas ont été résumées par médiane. `eval_count / eval_duration` donne le débit ; `total_duration` Ollama donne la latence totale. Résultats bruts : [`BANC-ORNITH-RAW-2026-08-26-v2.json`](BANC-ORNITH-RAW-2026-08-26-v2.json).
 
 ## Les dix cas
 

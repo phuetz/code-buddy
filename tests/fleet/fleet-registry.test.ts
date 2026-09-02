@@ -65,12 +65,12 @@ describe('FleetRegistry', () => {
 
   it('register/get/has', () => {
     const reg = getFleetRegistry();
-    const entry = makeEntry('darkstar');
+    const entry = makeEntry('gpuNode');
     reg.register(entry);
     expect(reg.size()).toBe(1);
-    expect(reg.has('darkstar')).toBe(true);
+    expect(reg.has('gpuNode')).toBe(true);
     expect(reg.has('ministar')).toBe(false);
-    expect(reg.get('darkstar')).toBe(entry);
+    expect(reg.get('gpuNode')).toBe(entry);
     expect(reg.get('ministar')).toBeUndefined();
   });
 
@@ -86,9 +86,9 @@ describe('FleetRegistry', () => {
 
   it('unregister returns true on hit, false on miss', () => {
     const reg = getFleetRegistry();
-    reg.register(makeEntry('darkstar'));
-    expect(reg.unregister('darkstar')).toBe(true);
-    expect(reg.unregister('darkstar')).toBe(false);
+    reg.register(makeEntry('gpuNode'));
+    expect(reg.unregister('gpuNode')).toBe(true);
+    expect(reg.unregister('gpuNode')).toBe(false);
     expect(reg.size()).toBe(0);
   });
 

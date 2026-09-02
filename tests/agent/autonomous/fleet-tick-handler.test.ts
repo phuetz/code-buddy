@@ -156,7 +156,7 @@ describe('pickTask', () => {
     expect(pickTask([])).toBeNull();
   });
   it('skips claimed tasks', () => {
-    const t = makeTask({ claimedBy: 'darkstar/grok-cli' });
+    const t = makeTask({ claimedBy: 'gpuNode/grok-cli' });
     expect(pickTask([t])).toBeNull();
   });
   it('skips completed tasks', () => {
@@ -265,7 +265,7 @@ describe('buildTaskPrompt', () => {
       filesToModify: ['journal/x.md'],
       acceptanceCriteria: ['signed', 'short'],
     });
-    const prompt = buildTaskPrompt('darkstar/grok-cli', t);
+    const prompt = buildTaskPrompt('gpuNode/grok-cli', t);
     expect(prompt).toContain('Write a haiku');
     expect(prompt).toContain('About the robot');
     expect(prompt).toContain('journal/x.md');
@@ -335,7 +335,7 @@ describe('runFleetTick — outcomes', () => {
     setupVirtualFs({
       tasks: {
         version: '0.1',
-        tasks: [makeTask({ claimedBy: 'darkstar/grok-cli', status: 'in_progress' })],
+        tasks: [makeTask({ claimedBy: 'gpuNode/grok-cli', status: 'in_progress' })],
       },
       worklog: { version: '0.1', entries: [] },
     });

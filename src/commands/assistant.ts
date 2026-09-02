@@ -684,9 +684,9 @@ export function registerAssistantCommand(program: Command): void {
 
   assistant
     .command('benchmark')
-    .description('Run the reproducible Lisa conversation suite (Darkstar/Ollama or current provider)')
+    .description('Run the reproducible Lisa conversation suite (GPU node/Ollama or current provider)')
     .option('--model <name>', 'Model to evaluate')
-    .option('--base-url <url>', 'Ollama host, for example http://darkstar:11434')
+    .option('--base-url <url>', 'Ollama host, for example http://gpuNode:11434')
     .option('--runs <n>', 'Repeat every scenario N times', '1')
     .option('--concurrency <n>', 'Concurrent generations (1-4)', '1')
     .option('--timeout <ms>', 'Timeout for each generation', '120000')
@@ -761,7 +761,7 @@ export function registerAssistantCommand(program: Command): void {
           });
           if (!resolved) {
             console.error(
-              'Aucun modèle disponible. Fournis --base-url pour Darkstar, lance `buddy login`, ou configure un fournisseur.'
+              'Aucun modèle disponible. Fournis --base-url pour GPU node, lance `buddy login`, ou configure un fournisseur.'
             );
             process.exitCode = 1;
             return;
@@ -893,7 +893,7 @@ export function registerAssistantCommand(program: Command): void {
     .command('compare')
     .description('Compare 2-12 Lisa models with anonymized responses and a private review packet')
     .requiredOption('--models <csv>', 'Comma-separated model names')
-    .option('--base-url <url>', 'Shared Ollama host, for example http://darkstar:11434')
+    .option('--base-url <url>', 'Shared Ollama host, for example http://gpuNode:11434')
     .option('--corpus <file>', 'Private annotated corpus path')
     .option('--runs <n>', 'Repeat every scenario N times', '1')
     .option('--concurrency <n>', 'Global concurrent generations (1-8)', '2')

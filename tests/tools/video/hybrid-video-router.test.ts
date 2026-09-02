@@ -7,7 +7,7 @@ import {
 } from '../../../src/tools/video/hybrid-video-router.js';
 
 const capacity: HybridVideoCapacity = {
-  darkstar: true,
+  gpuNode: true,
   ministar: true,
   googleFlow: true,
   remainingFlowCredits: 25_000,
@@ -24,7 +24,7 @@ describe('routeHybridVideo', () => {
       requiresLipSync: true,
       premium: false,
     }, capacity)).toMatchObject({
-      primary: 'darkstar-longcat',
+      primary: 'gpuNode-longcat',
       estimatedFlowCredits: 0,
       executionMode: 'automatic-local',
     });
@@ -50,7 +50,7 @@ describe('routeHybridVideo', () => {
       quantity: 10,
       requiresLipSync: false,
       premium: false,
-    }, capacity).primary).toBe('darkstar-comfyui');
+    }, capacity).primary).toBe('gpuNode-comfyui');
     expect(routeHybridVideo({
       id: 'too-many-heroes',
       useCase: 'hero-shot',
@@ -59,7 +59,7 @@ describe('routeHybridVideo', () => {
       requiresLipSync: false,
       premium: true,
     }, capacity)).toMatchObject({
-      primary: 'darkstar-comfyui',
+      primary: 'gpuNode-comfyui',
       estimatedFlowCredits: 0,
     });
   });
@@ -86,7 +86,7 @@ describe('routeHybridVideo', () => {
     expect(result.estimatedFlowCredits).toBe(300);
     expect(result.routes.map((route) => route.primary)).toEqual([
       'google-flow-veo31-quality',
-      'darkstar-comfyui',
+      'gpuNode-comfyui',
     ]);
   });
 });

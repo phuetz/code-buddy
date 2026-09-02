@@ -1,6 +1,6 @@
 # Étude — MetaHuman / UE 5.8 pour l'influenceuse AI (2026-07-21)
 
-Darkstar : **UE 5.8 confirmé installé** (`D:\Program Files\Epic Games\UE_5.8`,
+GPU node : **UE 5.8 confirmé installé** (`D:\Program Files\Epic Games\UE_5.8`,
 35,7 Go, éditeur + `UnrealEditor-Cmd.exe` headless + plugin MetaHuman + Quixel
 Bridge + Fab). ⚠️ D: n'a que 5 Go libres — projet + rendus sur C: (173 Go).
 
@@ -58,7 +58,7 @@ Voie complémentaire, pas un remplacement. Le full-diffusion (rapide) reste le
 défaut pour la cadence ; l'hybride 3D devient l'option « contrôle parfait » pour
 les plans signature / lieux récurrents / futurs clips parlés lip-syncés. À
 lancer APRÈS les priorités actuelles (LoRA v3 en prod, lieux signature, voix).
-Prérequis : libérer de l'espace disque darkstar.
+Prérequis : libérer de l'espace disque gpuNode.
 
 *Sources vérifiées : dev.epicgames (MetaHuman Animator, Mesh-to-MetaHuman,
 Movie Render Queue), move.ai, rokoko.com. Licence/réalisme : à re-confirmer

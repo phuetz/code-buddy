@@ -24,7 +24,7 @@ npx tsx scripts/lisa-studio/generer-clip.ts \
 ```
 
 Valeurs par défaut : `N=4`, seuil ArcFace `0.5`, durée demandée `5 s`, Krea 2
-sur `http://darkstar:8188` et MiniMax H3 sur `http://darkstar:8190`. La
+sur `http://gpuNode:8188` et MiniMax H3 sur `http://gpuNode:8190`. La
 contrainte `plan fixe verrouillé, visage net et centré` est ajoutée au prompt
 d'animation si elle n'y figure pas déjà.
 
@@ -52,16 +52,16 @@ npx tsx scripts/lisa-studio/generer-clip.ts \
 La référence doit tout de même être un fichier régulier existant : le mode
 d'essai teste volontairement le préflight réel.
 
-## Prérequis darkstar
+## Prérequis gpuNode
 
 Deux instances distinctes sont attendues :
 
-- `darkstar:8188` — Krea 2 avec
+- `gpuNode:8188` — Krea 2 avec
   `krea2_turbo_fp8_scaled.safetensors`,
   `qwen3vl_4b_fp8_scaled.safetensors`,
   `qwen_image_vae.safetensors` et
   `models/loras/lisa-krea2.safetensors` ;
-- `darkstar:8190` — MiniMax H3 avec le nœud
+- `gpuNode:8190` — MiniMax H3 avec le nœud
   `MiniMaxH3ImageToVideo`,
   `minimax_h3_fl2va_pruned_int8_convrot.safetensors`,
   `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` et
@@ -70,8 +70,8 @@ Deux instances distinctes sont attendues :
 Les probes suivants ne lancent aucun rendu :
 
 ```bash
-curl --fail http://darkstar:8188/system_stats
-curl --fail http://darkstar:8190/object_info/MiniMaxH3ImageToVideo
+curl --fail http://gpuNode:8188/system_stats
+curl --fail http://gpuNode:8190/object_info/MiniMaxH3ImageToVideo
 ```
 
 Le graphe H3 est fixé à `768×1344`, 24 fps, 8 pas, sampler `euler`, scheduler
@@ -164,4 +164,4 @@ npx tsc -p scripts/lisa-studio/tsconfig.json
 ```
 
 Les tests injectent `fetch`, l'exécuteur Python et l'horloge ; ils ne contactent
-ni darkstar ni InsightFace.
+ni gpuNode ni InsightFace.

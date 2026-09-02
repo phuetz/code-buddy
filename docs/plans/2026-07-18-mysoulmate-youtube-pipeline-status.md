@@ -53,8 +53,8 @@
 
 ## Gates mesurés
 
-- `scripts/darkstar/measure-visual-gates.py` produit un rapport JSON V1 lié au
-  SHA-256 du clip. Dans un venv Python 3.10+ sur darkstar, installer exactement
+- `scripts/gpuNode/measure-visual-gates.py` produit un rapport JSON V1 lié au
+  SHA-256 du clip. Dans un venv Python 3.10+ sur gpuNode, installer exactement
   `opencv-python`, `numpy`, `insightface`, `onnxruntime-gpu` et `mediapipe`, et
   rendre `ffprobe` disponible dans le `PATH`.
 - Le mesureur compare les embeddings ArcFace au centroïde des références Lisa,

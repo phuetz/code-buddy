@@ -197,8 +197,8 @@ Test Files  6 passed (6)
 Tests  9 passed (9)
 
 $ npm run typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> tsc --noEmit && npm run typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 EXIT_CODE=0
 
 $ npx eslint src/server/routes/webhooks.ts src/server/webhook-agent-queue.ts src/server/routes/sessions.ts src/memory/persistent-memory.ts src/server/routes/memory.ts src/server/routes/chat.ts src/server/routes/health.ts tests/server/webhooks-routes.test.ts tests/server/webhook-agent-queue.test.ts tests/server/sessions-routes-persistence.test.ts tests/server/memory-routes-persistence-error.test.ts tests/server/chat-stream-mid-error.test.ts tests/server/health-ready.test.ts

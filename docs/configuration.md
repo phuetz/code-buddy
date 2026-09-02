@@ -32,6 +32,7 @@
 | `GITHUB_COPILOT_TOKEN` / `COPILOT_GITHUB_TOKEN` | GitHub Copilot |
 | `OLLAMA_HOST` | Ollama (default: localhost:11434) |
 | `VLLM_BASE_URL` | vLLM server URL |
+| `CODEBUDDY_NETWORK_MODELS` | Liste explicite de modèles réseau au format `modele@https://hote/v1,…`; aucun hôte réseau n'est découvert ou présélectionné |
 | `AWS_BEDROCK_REGION` / `AWS_REGION` | AWS Bedrock region |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | AWS Bedrock credentials |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint |
@@ -103,7 +104,7 @@ Doc LoRA : [krea-lora.md](./krea-lora.md).
 | `CODEBUDDY_TTS_ENGINE` | Renderer selection: `pocket`, `voicebox`, or `piper` | `pocket` |
 | `CODEBUDDY_POCKET_VOICE` / `_LANG` | Realtime Pocket voice and language | `estelle` / `french` |
 | `CODEBUDDY_POCKET_URL` / `_SERVER` | Resident Pocket endpoint and auto-start toggle | `http://127.0.0.1:8766` / `true` |
-| `CODEBUDDY_VOICEBOX_URL` | Trusted Voicebox REST endpoint; prefer Tailscale for Darkstar | `http://127.0.0.1:17493` |
+| `CODEBUDDY_VOICEBOX_URL` | Trusted Voicebox REST endpoint; prefer Tailscale for GPU node | `http://127.0.0.1:17493` |
 | `CODEBUDDY_VOICEBOX_PROFILE` | Required Voicebox profile name or id | unset |
 | `CODEBUDDY_VOICEBOX_ENGINE` | Voicebox backend (`qwen`, `qwen_custom_voice`, `luxtts`, `chatterbox`, `chatterbox_turbo`, `tada`, `kokoro`) | `qwen` |
 | `CODEBUDDY_VOICEBOX_LANGUAGE` / `_MODEL_SIZE` | Voicebox language and model size | `fr` / `1.7B` |

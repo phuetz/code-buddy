@@ -144,7 +144,7 @@ async function detectNvidiaGpus(): Promise<Pick<GpuMediaWorkerCapabilities, 'gpu
 export function createGpuWorkerCommand(): Command {
   const command = new Command('gpu-worker')
     .description('Run the authenticated PanoWorld/LongCat GPU job worker')
-    .option('--host <host>', 'Bind host (use a Tailscale address on Darkstar)', '127.0.0.1')
+    .option('--host <host>', 'Bind host (use a Tailscale address on GPU node)', '127.0.0.1')
     .option('--port <port>', 'Bind port', '4310')
     .option(
       '--state-dir <path>',
@@ -152,7 +152,7 @@ export function createGpuWorkerCommand(): Command {
       join(homedir(), '.codebuddy', 'gpu-worker')
     )
     .option('--root <path...>', 'Allowed input/output roots')
-    .option('--worker-id <id>', 'Worker identifier', 'darkstar')
+    .option('--worker-id <id>', 'Worker identifier', 'gpuNode')
     .option('--max-concurrency <count>', 'Concurrent jobs (1–2)', '1')
     .action(async (options: GpuWorkerCommandOptions) => {
       const config = buildGpuWorkerConfig(options);

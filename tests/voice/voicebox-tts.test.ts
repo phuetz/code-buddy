@@ -41,12 +41,12 @@ afterEach(() => resetVoiceboxProfileCache());
 
 describe('Voicebox config', () => {
   it('uses safe defaults and rejects credential-bearing endpoint URLs', () => {
-    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'ftp://darkstar/voice' }))
+    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'ftp://gpuNode/voice' }))
       .toBe('http://127.0.0.1:17493');
-    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://user:pass@darkstar:17493' }))
+    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://user:pass@gpuNode:17493' }))
       .toBe('http://127.0.0.1:17493');
-    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://darkstar:17493/' }))
-      .toBe('http://darkstar:17493');
+    expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://gpuNode:17493/' }))
+      .toBe('http://gpuNode:17493');
   });
 
   it('bounds delivery instructions and validates renderer enums', () => {
@@ -64,7 +64,7 @@ describe('Voicebox config', () => {
 
   it('explains the loopback-only default only for remote endpoints', () => {
     expect(voiceboxReachabilityHint('http://127.0.0.1:17493')).toBeUndefined();
-    expect(voiceboxReachabilityHint('http://100.73.222.64:17493')).toContain(
+    expect(voiceboxReachabilityHint('http://192.0.2.42:17493')).toContain(
       'tailscale serve --bg --tcp=17493'
     );
   });
@@ -88,7 +88,7 @@ describe('Voicebox synthesis', () => {
     const stream = await openVoiceboxAudioStream(
       'Bonjour Patrice.',
       {
-        CODEBUDDY_VOICEBOX_URL: 'http://darkstar:17493',
+        CODEBUDDY_VOICEBOX_URL: 'http://gpuNode:17493',
         CODEBUDDY_VOICEBOX_PROFILE: 'lisa',
         CODEBUDDY_VOICEBOX_PERSONALITY: 'true',
         CODEBUDDY_VOICEBOX_ENGINE: 'qwen',
@@ -99,7 +99,7 @@ describe('Voicebox synthesis', () => {
     );
     expect(stream).not.toBeNull();
     expect(requests).toHaveLength(2);
-    expect(requests[1]?.url).toBe('http://darkstar:17493/generate/stream');
+    expect(requests[1]?.url).toBe('http://gpuNode:17493/generate/stream');
     expect(requests[1]?.body).toMatchObject({
       profile_id: 'lisa-id',
       text: 'Bonjour Patrice.',
@@ -168,7 +168,7 @@ describe('Voicebox synthesis', () => {
   it('returns an actionable remote binding hint when the endpoint is unreachable', async () => {
     const report = await probeVoicebox(
       {
-        CODEBUDDY_VOICEBOX_URL: 'http://100.73.222.64:17493',
+        CODEBUDDY_VOICEBOX_URL: 'http://192.0.2.42:17493',
         CODEBUDDY_VOICEBOX_PROFILE: 'Lisa',
       },
       { fetchImpl: vi.fn(async () => { throw new Error('connect timeout'); }) }

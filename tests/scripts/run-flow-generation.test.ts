@@ -60,7 +60,7 @@ function handoff(jobCount = 2, consumerPrefix = 'trailer'): GoogleFlowHandoff {
       aspectRatio: '16:9',
       upscale4k: false,
       capacity: {
-        darkstar: true,
+        gpuNode: true,
         ministar: true,
         googleFlow: true,
         remainingFlowCredits: 1_000,

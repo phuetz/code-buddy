@@ -133,7 +133,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     type: 'text',
     default: 'http://127.0.0.1:17493',
     envFile: 'both',
-    help: 'Voicebox REST endpoint. On Darkstar, expose it only through the trusted Tailscale network.',
+    help: 'Voicebox REST endpoint. On GPU node, expose it only through the trusted Tailscale network.',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_PROFILE',
@@ -183,7 +183,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     options: ['0.6B', '1.7B', '1B', '3B'],
     default: '1.7B',
     envFile: 'both',
-    help: 'Renderer size. 1.7B favors quality on Darkstar; 0.6B is the lower-latency option.',
+    help: 'Renderer size. 1.7B favors quality on GPU node; 0.6B is the lower-latency option.',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_INSTRUCT',

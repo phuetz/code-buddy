@@ -68,7 +68,7 @@ The rust LSP server "rust-analyzer" could not be started or initialized. Check t
 
 ## Vérifications
 
-- `npm run typecheck` : succès (`tsc --noEmit` + `typecheck:darkstar-identity`).
+- `npm run typecheck` : succès (`tsc --noEmit` + `typecheck:gpuNode-identity`).
 - Tests ciblés : 8 fichiers, 277 tests réussis, 0 échec :
   - `tests/tools/lsp-navigation-tools.test.ts`
   - `tests/tools/tool-surface.test.ts`

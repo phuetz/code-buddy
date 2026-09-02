@@ -46,7 +46,7 @@ Publication distante : aucune
 ```text
 npm run typecheck
   tsc --noEmit
-  tsc --project tsconfig.darkstar-identity.json
+  tsc --project tsconfig.gpuNode-identity.json
   résultat : succès, 0 erreur
 
 npm test -- tests/analytics/cost-report.test.ts tests/commands/cost.test.ts tests/config/model-pricing.test.ts

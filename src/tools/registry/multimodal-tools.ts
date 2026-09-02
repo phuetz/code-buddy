@@ -701,13 +701,13 @@ export class UnderstandVideoTool implements ITool {
 }
 
 // ============================================================================
-// GpuMediaJobTool — isolated Darkstar jobs (PanoWorld / LongCat)
+// GpuMediaJobTool — isolated GPU node jobs (PanoWorld / LongCat)
 // ============================================================================
 
 export class GpuMediaJobTool implements ITool {
   readonly name = 'gpu_media_job';
   readonly description =
-    'Inspect, submit, monitor, or cancel isolated GPU media jobs on the configured Darkstar worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.';
+    'Inspect, submit, monitor, or cancel isolated GPU media jobs on the configured GPU node worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     try {
@@ -797,7 +797,7 @@ export class GpuMediaJobTool implements ITool {
       name: this.name,
       description: this.description,
       category: 'media',
-      keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model'],
+      keywords: ['gpuNode', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model'],
       priority: 8,
       requiresConfirmation: true,
       modifiesFiles: true,

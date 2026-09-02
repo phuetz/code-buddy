@@ -14,7 +14,7 @@ import {
   type GenerateLocationPlateInput,
   type LocationPlateComfyClient,
   type LocationPlateOptions,
-} from '../../scripts/darkstar/generate-location-plates.js';
+} from '../../scripts/gpuNode/generate-location-plates.js';
 import { buildPlatePrompt, SIGNATURE_LOCATIONS } from '../../src/companion/signature-locations.js';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);

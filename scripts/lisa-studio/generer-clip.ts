@@ -24,8 +24,8 @@ Options :
   --duree <secondes>         Durée H3 demandée, défaut 5 (5..15)
   --seed <entier>            Seed de base reproductible
   --racine <répertoire>      Racine des sorties, défaut cwd
-  --image-url <url>          ComfyUI Krea 2, défaut http://darkstar:8188
-  --video-url <url>          ComfyUI MiniMax H3, défaut http://darkstar:8190
+  --image-url <url>          ComfyUI Krea 2, défaut http://gpuNode:8188
+  --video-url <url>          ComfyUI MiniMax H3, défaut http://gpuNode:8190
   --python <exécutable>      Python QC, défaut ~/.venvs/tri-outils-qc/bin/python
   --essai                    Stub local : aucun appel réseau/Python
   --aide, --help             Afficher cette aide

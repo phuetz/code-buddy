@@ -568,8 +568,8 @@ describe('evidence-backed companion model routing', () => {
 
   it.each([
     'Cherche les erreurs puis corrige-les',
-    'Déploie la version sur Darkstar et redémarre le service',
-    'Utilise Darkstar pour faire les calculs',
+    'Déploie la version sur GPU node et redémarre le service',
+    'Utilise GPU node pour faire les calculs',
     'Fais une sauvegarde puis pousse sur main',
     'Peux-tu envoyer le résultat sur Telegram ?',
   ])('keeps operational French requests on the action lane: %s', (text) => {

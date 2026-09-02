@@ -47,7 +47,7 @@ const ASPECTS = ['9:16', '16:9'] as const;
 const ROLES = ['hero', 'b-roll', 'transition'] as const;
 
 const CAPACITY_PROPERTIES = {
-  darkstar: { type: 'boolean', description: 'Darkstar local GPU worker is available.' },
+  gpuNode: { type: 'boolean', description: 'GPU node local GPU worker is available.' },
   ministar: { type: 'boolean', description: 'Ministar local GPU worker is available.' },
   google_flow: { type: 'boolean', description: 'Google Flow (browser-assisted) is available.' },
   remaining_flow_credits: { type: 'number', description: 'Remaining Google Flow credits.' },
@@ -166,7 +166,7 @@ export const VIDEO_FLOW_HANDOFF_PARAMETERS = {
       type: 'object',
       description: 'Engine availability and Flow credits (create).',
       properties: { ...CAPACITY_PROPERTIES },
-      required: ['darkstar', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
+      required: ['gpuNode', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
       additionalProperties: false,
     },
     source_plan_sha256: { type: 'string', description: 'Canonical SHA-256 of the V3 source plan (create).' },
@@ -181,7 +181,7 @@ export const VIDEO_FLOW_HANDOFF_PARAMETERS = {
     include_all_shorts: { type: 'boolean', description: 'Export every Short in the plan.' },
     remaining_flow_credits: { type: 'number', description: 'Remaining Flow credits (export).' },
     max_flow_credits_per_batch: { type: 'number', description: 'Batch credit ceiling (export).' },
-    darkstar_available: { type: 'boolean', description: 'Darkstar available (export).' },
+    gpu_node_available: { type: 'boolean', description: 'GPU node available (export).' },
     ministar_available: { type: 'boolean', description: 'Ministar available (export).' },
     expected_receipt_sha256: { type: 'string', description: 'Expected import receipt digest (review_import).' },
     reviewer: { type: 'string', description: 'Reviewer name (review_import).' },
@@ -257,7 +257,7 @@ export class VideoFlowHandoffTool implements ITool {
             ['max_flow_credits_per_batch', 'maxFlowCreditsPerBatch'],
             'max_flow_credits_per_batch',
           ),
-          darkstarAvailable: pickBoolean(input, ['darkstar_available', 'darkstarAvailable'], 'darkstar_available'),
+          gpuNodeAvailable: pickBoolean(input, ['gpu_node_available', 'gpuNodeAvailable'], 'gpu_node_available'),
           ministarAvailable: pickBoolean(input, ['ministar_available', 'ministarAvailable'], 'ministar_available'),
         }));
       }

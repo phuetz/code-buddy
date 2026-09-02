@@ -26,7 +26,7 @@ function installApi(options: { withCharacter?: boolean; longCat?: boolean } = {}
   const gpuMedia = {
     capabilities: vi.fn(async () => ({
       protocolVersion: 1 as const,
-      workerId: 'darkstar',
+      workerId: 'gpuNode',
       jobs: options.longCat ? ['avatar_video_render' as const] : [],
     })),
     submitAvatar: vi.fn(async () => ({ id: 'gpu-longcat-1', kind: 'avatar_video_render' as const, status: 'running' as const })),

@@ -234,7 +234,7 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
 
       fake.receive({
         type: 'fleet:agent:tool_started',
-        payload: { toolName: 'view_file', source: { hostname: 'darkstar' } },
+        payload: { toolName: 'view_file', source: { hostname: 'gpuNode' } },
       });
 
       expect(events).toHaveLength(1);
@@ -788,7 +788,7 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       const { l, fake } = await authenticatedListenerWithCapacity();
       fake.receive({
         type: 'fleet:agent:tool_started',
-        payload: { tool: 'view_file', source: { hostname: 'darkstar', agentId: 'abc12345' } },
+        payload: { tool: 'view_file', source: { hostname: 'gpuNode', agentId: 'abc12345' } },
       });
       fake.receive({
         type: 'fleet:workflow:start',
@@ -798,7 +798,7 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       const hist = l.getEventHistory();
       expect(hist).toHaveLength(2);
       expect(hist[0].type).toBe('fleet:agent:tool_started');
-      expect(hist[0].hostname).toBe('darkstar');
+      expect(hist[0].hostname).toBe('gpuNode');
       expect(hist[0].agentId).toBe('abc12345');
       expect(hist[0].at).toBeGreaterThan(0);
       expect(hist[1].type).toBe('fleet:workflow:start');

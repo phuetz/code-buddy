@@ -9,7 +9,7 @@ import { createMultimodalTools } from '../../src/tools/registry/multimodal-tools
 import { VideoRouteTool } from '../../src/tools/video-route-tool.js';
 
 const capacity = {
-  darkstar: true,
+  gpuNode: true,
   ministar: true,
   google_flow: true,
   remaining_flow_credits: 25_000,

@@ -278,7 +278,6 @@ import {
   getAutonomyModelTierForReview,
   getAutonomyServiceLogsForReview,
 } from './autonomy/autonomy-daemon-bridge';
-import { bootstrapDarkstarNetworkModel } from './config/darkstar-network-model';
 import {
   addColabTaskForReview,
   blockColabTaskForReview,
@@ -1629,13 +1628,6 @@ app
     // labelled concat). Runs regardless of the embedded engine: the Council
     // executes in this main process via saga-runner. Best-effort.
     void wireFleetAggregator(configStore);
-    const darkstarBootstrap = await bootstrapDarkstarNetworkModel(process.env);
-    if (darkstarBootstrap.applied) {
-      log('[main] Darkstar network model bootstrapped:', darkstarBootstrap.model, darkstarBootstrap.baseUrl);
-    } else {
-      log('[main] Darkstar network model bootstrap skipped:', darkstarBootstrap.reason);
-    }
-
     // Single source of truth for which runtime is in use. Logged AFTER
     // the load attempt so it never contradicts the engine init log
     // above (an earlier "[Runtime] Using pi-coding-agent SDK..." line

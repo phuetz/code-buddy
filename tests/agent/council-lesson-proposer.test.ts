@@ -26,7 +26,7 @@ function input(overrides: Partial<CouncilOutcomeInput> = {}): CouncilOutcomeInpu
       score: 0.4,
       threshold: 0.7,
       total: 3,
-      disagreements: [{ peerId: 'darkstar', model: 'qwen', preview: 'use JWT' }],
+      disagreements: [{ peerId: 'gpuNode', model: 'qwen', preview: 'use JWT' }],
     },
     ...overrides,
   };

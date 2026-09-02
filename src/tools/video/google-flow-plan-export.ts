@@ -87,7 +87,7 @@ export interface GoogleFlowPlanExportOptions {
   upscale4k: boolean;
   remainingFlowCredits: number;
   maxFlowCreditsPerBatch: number;
-  darkstarAvailable: boolean;
+  gpuNodeAvailable: boolean;
   ministarAvailable: boolean;
 }
 
@@ -200,7 +200,7 @@ export async function exportGoogleFlowHandoffFromPlan(
     aspectRatio: options.aspectRatio,
     upscale4k: options.upscale4k,
     capacity: {
-      darkstar: options.darkstarAvailable,
+      gpuNode: options.gpuNodeAvailable,
       ministar: options.ministarAvailable,
       googleFlow: true,
       remainingFlowCredits: options.remainingFlowCredits,

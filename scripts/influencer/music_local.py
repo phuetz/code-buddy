@@ -5,7 +5,7 @@ Soumet un graphe API à une instance ComfyUI, attend le rendu, télécharge l'au
 Aucune dépendance hors stdlib (comme grok_imagine.py).
 
 Usage:
-    python3 music_local.py jobs.json [--url http://darkstar:8190] [--out DIR]
+    python3 music_local.py jobs.json [--url http://gpuNode:8190] [--out DIR]
 
 Format d'un job:
     {
@@ -35,7 +35,7 @@ from pathlib import Path
 
 TIMEOUT = 30
 
-# Poids MiniMax Music 3 disponibles sur darkstar (cf. inventaire 2026-09-01).
+# Poids MiniMax Music 3 disponibles sur gpuNode (cf. inventaire 2026-09-01).
 MINIMAX_WEIGHTS = {
     "fp16": {
         "unet": "minimax_music3_dit_fp16.safetensors",
@@ -288,7 +288,7 @@ def run_job(url: str, job: dict, out_dir: Path, poll: int, budget_s: int) -> dic
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("jobs", help="fichier JSON de jobs")
-    ap.add_argument("--url", default="http://darkstar:8190")
+    ap.add_argument("--url", default="http://gpuNode:8190")
     ap.add_argument("--out", default=str(Path.home() / ".codebuddy/media-generation/music"))
     ap.add_argument("--poll", type=int, default=10)
     ap.add_argument("--budget", type=int, default=1800, help="budget par job en secondes")

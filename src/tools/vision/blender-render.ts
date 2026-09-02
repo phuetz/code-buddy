@@ -15,7 +15,7 @@
  *
  * The companion Python scene script lives at `scripts/blenderproc/scene.py`; it
  * tries GPU (CUDA→HIP) then falls back to CPU automatically, so this works on the
- * AMD box too (slower) and on DARKSTAR's CUDA (fast). Every OS-touching bit is
+ * AMD box too (slower) and on GPU_NODE's CUDA (fast). Every OS-touching bit is
  * injectable and any hard failure returns `{ ok:false, error }` — never throws.
  *
  * @module tools/vision/blender-render
@@ -52,7 +52,7 @@ export interface BlenderRenderOptions {
 export interface BlenderRenderDeps {
   /** Injectable spawn (tests). */
   spawn?: typeof realSpawn;
-  /** BlenderProc CLI (default `blenderproc`; on DARKSTAR/Windows may be `blenderproc.exe`). */
+  /** BlenderProc CLI (default `blenderproc`; on GPU_NODE/Windows may be `blenderproc.exe`). */
   blenderprocBin?: string;
   /** Injectable "does this path exist" (default fs.access). */
   exists?: (p: string) => Promise<boolean>;

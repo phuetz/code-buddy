@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rejoue le banc W5 sur l'endpoint Ollama local de Darkstar.
+"""Rejoue le banc W5 sur l'endpoint Ollama local de GPU node.
 
 Le script est volontairement séquentiel : il termine toutes les requêtes d'un
 modèle avant de demander le modèle suivant. Les cas et les critères sont
@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_ENDPOINT = "http://100.73.222.64:11434"
+DEFAULT_ENDPOINT = "http://192.0.2.42:11434"
 MODELS = ("ornith-1.5:35b", "qwen3.8:27b", "deepseek-r1:32b")
 RAW_PATH = ROOT / "BANC-ORNITH-RAW-2026-08-26-v2.json"
 
@@ -461,7 +461,7 @@ def run_bench(endpoint: str, repetitions: int, selected_models: list[str], selec
     }
     runs = raw.setdefault("runs", [])
     for model in selected_models:
-        # OLLAMA_KEEP_ALIVE est long sur Darkstar. Décharger les autres modèles
+        # OLLAMA_KEEP_ALIVE est long sur GPU node. Décharger les autres modèles
         # cibles avant chaque changement garantit qu'un rejeu ne charge jamais
         # deux gros modèles simultanément.
         for other_model in selected_models:

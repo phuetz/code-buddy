@@ -205,7 +205,7 @@ describe('TaskRouter — privacy veto', () => {
   });
 
   it('keeps a local model on a mixed local/cloud peer for sensitive work', () => {
-    const peers = [peer('darkstar', {
+    const peers = [peer('gpuNode', {
       egress: 'cloud',
       models: [
         model('qwen-local', { provider: 'ollama', egress: 'local' }),

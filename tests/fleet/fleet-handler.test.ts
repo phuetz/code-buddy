@@ -450,15 +450,15 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         {
           at: t0,
           type: 'fleet:agent:tool_started',
-          payload: { tool: 'view_file', source: { hostname: 'darkstar', agentId: 'abcdef0123' } },
-          hostname: 'darkstar',
+          payload: { tool: 'view_file', source: { hostname: 'gpuNode', agentId: 'abcdef0123' } },
+          hostname: 'gpuNode',
           agentId: 'abcdef0123',
         },
         {
           at: t0 + 2000,
           type: 'fleet:peer:heartbeat',
-          payload: { source: { hostname: 'darkstar' } },
-          hostname: 'darkstar',
+          payload: { source: { hostname: 'gpuNode' } },
+          hostname: 'gpuNode',
         },
         {
           at: t0 + 4000,
@@ -472,7 +472,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(out).toContain('Fleet event history for "peer:3000" — last 3 of 3');
       expect(out).toContain('fleet:agent:tool_started');
       expect(out).toContain('tool=view_file');
-      expect(out).toContain('[darkstar:abcdef01]');
+      expect(out).toContain('[gpuNode:abcdef01]');
       expect(out).toContain('fleet:peer:heartbeat');
       expect(out).toContain('(heartbeat)');
       expect(out).toContain('fleet:workflow:start');
@@ -551,7 +551,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
           at: t0,
           type: 'fleet:agent:tool_started',
           payload: { tool: 'view_file' },
-          hostname: 'darkstar',
+          hostname: 'gpuNode',
           agentId: 'abc',
         },
       ]);
@@ -562,7 +562,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         peer: 'peer:3000',
         at: t0,
         type: 'fleet:agent:tool_started',
-        hostname: 'darkstar',
+        hostname: 'gpuNode',
         agentId: 'abc',
       });
       expect(parsed[0].payload.tool).toBe('view_file');

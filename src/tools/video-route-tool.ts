@@ -21,7 +21,7 @@ import {
 } from './video-studio-tool-helpers.js';
 
 const CAPACITY_PROPERTIES = {
-  darkstar: { type: 'boolean', description: 'Darkstar local GPU worker is available.' },
+  gpuNode: { type: 'boolean', description: 'GPU node local GPU worker is available.' },
   ministar: { type: 'boolean', description: 'Ministar local GPU worker is available.' },
   google_flow: { type: 'boolean', description: 'Google Flow (browser-assisted) is available.' },
   remaining_flow_credits: { type: 'number', description: 'Remaining Google Flow credits.' },
@@ -70,7 +70,7 @@ export const VIDEO_ROUTE_PARAMETERS = {
       type: 'object',
       description: 'Available engines and Flow credit budget.',
       properties: { ...CAPACITY_PROPERTIES },
-      required: ['darkstar', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
+      required: ['gpuNode', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
       additionalProperties: false,
     },
   },
@@ -81,7 +81,7 @@ export const VIDEO_ROUTE_PARAMETERS = {
 export class VideoRouteTool implements ITool {
   readonly name = 'video_route';
   readonly description =
-    'Route hybrid image/video production requests to a local engine (Darkstar/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.';
+    'Route hybrid image/video production requests to a local engine (GPU node/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.';
 
   async execute(input: Record<string, unknown>, _context?: IToolExecutionContext): Promise<ToolResult> {
     try {
@@ -133,7 +133,7 @@ export class VideoRouteTool implements ITool {
       category: 'media' as ToolCategoryType,
       keywords: [
         'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
-        'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+        'gpuNode', 'ministar', 'credits', 'engine', 'routage', 'moteur',
       ],
       priority: 8,
       modifiesFiles: false,

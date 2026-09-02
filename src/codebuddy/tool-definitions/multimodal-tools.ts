@@ -343,7 +343,7 @@ export const GPU_MEDIA_JOB_TOOL: CodeBuddyTool = {
   function: {
     name: 'gpu_media_job',
     description:
-      'Inspect, submit, monitor, or cancel isolated GPU jobs on the configured Darkstar worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.',
+      'Inspect, submit, monitor, or cancel isolated GPU jobs on the configured GPU node worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.',
     parameters: {
       type: 'object',
       properties: {
@@ -512,7 +512,7 @@ export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
 };
 
 const HYBRID_CAPACITY_PROPERTIES = {
-  darkstar: { type: "boolean", description: "Darkstar local GPU worker is available." },
+  gpuNode: { type: "boolean", description: "GPU node local GPU worker is available." },
   ministar: { type: "boolean", description: "Ministar local GPU worker is available." },
   google_flow: { type: "boolean", description: "Google Flow (browser-assisted) is available." },
   remaining_flow_credits: { type: "number", description: "Remaining Google Flow credits." },
@@ -653,7 +653,7 @@ export const VIDEO_TRAILER_PLAN_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Required for preview: available engines and Flow credit budget.",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
       },
@@ -690,7 +690,7 @@ export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Engine availability and Flow credits (create).",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
         source_plan_sha256: { type: "string", description: "Canonical SHA-256 of the V3 source plan (create)." },
@@ -705,7 +705,7 @@ export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
         include_all_shorts: { type: "boolean", description: "Export every Short in the plan." },
         remaining_flow_credits: { type: "number", description: "Remaining Flow credits (export)." },
         max_flow_credits_per_batch: { type: "number", description: "Batch credit ceiling (export)." },
-        darkstar_available: { type: "boolean", description: "Darkstar available (export)." },
+        gpu_node_available: { type: "boolean", description: "GPU node available (export)." },
         ministar_available: { type: "boolean", description: "Ministar available (export)." },
         expected_receipt_sha256: { type: "string", description: "Expected import receipt digest (review_import)." },
         reviewer: { type: "string", description: "Reviewer name (review_import)." },
@@ -737,7 +737,7 @@ export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   function: {
     name: "video_route",
     description:
-      "Route hybrid image/video production requests to a local engine (Darkstar/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
+      "Route hybrid image/video production requests to a local engine (GPU node/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
     parameters: {
       type: "object",
       properties: {
@@ -762,7 +762,7 @@ export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Available engines and Flow credit budget.",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
       },

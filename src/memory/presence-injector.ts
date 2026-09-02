@@ -12,7 +12,7 @@
  * core agent run in *different Node processes*. A file is the simplest
  * cross-process channel that works across spawn modes (in-process /
  * subprocess / detached) and across hosts (the file can sit on a shared
- * mount when we move parts of the agent to DARKSTAR). IPC sockets would
+ * mount when we move parts of the agent to GPU_NODE). IPC sockets would
  * require coupling the agent to Electron or to a specific transport.
  *
  * Stale file handling: if `updatedAt` is older than `STALE_AFTER_MS`,

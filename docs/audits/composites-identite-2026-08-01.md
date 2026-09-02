@@ -93,7 +93,7 @@ sortie.
 ## Protocole de mesure
 
 Les colonnes « avant canonique » et « après canonique » proviennent de
-`scripts/darkstar/score-arcface-images.py`, avec la même image canonique de tenue
+`scripts/gpuNode/score-arcface-images.py`, avec la même image canonique de tenue
 comme référence. La colonne « QC historique » est conservée pour relier le
 tableau aux sidecars demandés, mais utilisait l’ancienne référence générée et ne
 doit pas servir au calcul du gain. Le gate final est exécuté séparément par
@@ -164,7 +164,7 @@ jq -s '{total:length,
   /home/patrice/Videos/personas/ambre-scenes/automne-composites/ambre-0{01..38}-*.png.qc.json
 
 /tmp/codebuddy-visual-gate-20260801/bin/python \
-  scripts/darkstar/score-arcface-images.py \
+  scripts/gpuNode/score-arcface-images.py \
   --reference ~/.codebuddy/personas/ambre/wardrobe-automne/ambre-cocooning-flanelle-sapin.png \
   --output /home/patrice/Videos/personas/composites-identite-2026-08-01/mesures/ambre-030-v3-score.json \
   /home/patrice/Videos/personas/composites-identite-2026-08-01/replays-v3/ambre-030-salon-dore-flanelle/composite.png

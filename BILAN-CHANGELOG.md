@@ -28,7 +28,7 @@
 
 ## Vérifications exécutées
 
-- `npm run typecheck` : succès (`tsc --noEmit` puis `typecheck:darkstar-identity`).
+- `npm run typecheck` : succès (`tsc --noEmit` puis `typecheck:gpuNode-identity`).
 - `npm test -- tests/git/changelog.test.ts tests/commands/changelog.test.ts tests/cli/command-routing.test.ts tests/cli/help-output.test.ts` : 4 fichiers, 19 tests réussis.
 - ESLint ciblé sur le module, la commande et leurs tests : succès, 0 erreur.
 - Prettier ciblé : tous les fichiers correspondent au style attendu.

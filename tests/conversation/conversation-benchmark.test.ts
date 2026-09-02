@@ -356,7 +356,7 @@ describe('Lisa conversation benchmark', () => {
       );
     });
     const generate = createOllamaConversationGenerator({
-      host: 'http://darkstar.invalid:11434/v1',
+      host: 'http://gpuNode.invalid:11434/v1',
       model: 'qwen-test',
       fetchImpl: fetchImpl as typeof fetch,
     });
@@ -370,7 +370,7 @@ describe('Lisa conversation benchmark', () => {
 
     expect(output).toBe('Réponse déterministe.');
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://darkstar.invalid:11434/api/chat',
+      'http://gpuNode.invalid:11434/api/chat',
       expect.any(Object)
     );
   });
@@ -390,7 +390,7 @@ describe('Lisa conversation benchmark', () => {
       scenarios: [simpleScenario()],
       personaPrompt: 'Tu es Lisa.',
       generate: createOllamaConversationGenerator({
-        host: 'http://darkstar.invalid:11434',
+        host: 'http://gpuNode.invalid:11434',
         model: 'qwen-test',
         includeUsage: true,
         fetchImpl: fetchImpl as typeof fetch,

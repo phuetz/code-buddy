@@ -4,7 +4,7 @@
  * Resumable MySoulmate Short renderer.
  *
  * Default mode is read-only planning. `--execute` is required before the
- * script synthesizes audio, stages files on Darkstar, submits LongCat jobs or
+ * script synthesizes audio, stages files on GPU node, submits LongCat jobs or
  * writes a final film.
  */
 
@@ -1184,13 +1184,13 @@ async function main(): Promise<void> {
     if (!baseUrl || !token) throw new Error('GPU worker URL and token are required');
     client = new GpuMediaWorkerClient({ baseUrl, token: token.replace(/^\uFEFF/u, ''), timeoutMs: 120_000 });
     const capabilities = await client.capabilities();
-    if (!capabilities.jobs.includes('avatar_video_render')) throw new Error('Darkstar LongCat runner is unavailable');
+    if (!capabilities.jobs.includes('avatar_video_render')) throw new Error('GPU node LongCat runner is unavailable');
     if ((capabilities.queueDepth ?? 0) > 0 || (capabilities.activeJobs ?? 0) > 0 || capabilities.availableSlots === 0) {
-      throw new Error('Darkstar GPU worker has no immediately available render slot');
+      throw new Error('GPU node GPU worker has no immediately available render slot');
     }
     const revision = capabilities.runnerRevisions?.avatar_video_render;
     if (!revision || !/^[a-f0-9]{64}$/u.test(revision)) {
-      throw new Error('Darkstar worker does not expose a valid LongCat runner revision');
+      throw new Error('GPU node worker does not expose a valid LongCat runner revision');
     }
     workerRevision = revision;
     workerQueueDepth = capabilities.queueDepth ?? 0;

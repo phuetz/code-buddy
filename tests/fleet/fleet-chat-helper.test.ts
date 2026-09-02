@@ -101,8 +101,8 @@ describe('/fleet chat start', () => {
   });
 
   it('--name override gives a custom alias', async () => {
-    registerPeer('darkstar', vi.fn(async () => ({ sessionId: 'sess_xyz' })));
-    const result = await handleFleet(['chat', 'start', 'darkstar', '--name', 'rust-coach']);
+    registerPeer('gpuNode', vi.fn(async () => ({ sessionId: 'sess_xyz' })));
+    const result = await handleFleet(['chat', 'start', 'gpuNode', '--name', 'rust-coach']);
     expect(content(result)).toContain('Chat session "rust-coach" opened');
   });
 
@@ -222,9 +222,9 @@ describe('/fleet chat say', () => {
 
   it('asks for --session when multiple sessions are active', async () => {
     registerPeer('ministar-linux', vi.fn(async () => ({ sessionId: 'sess_a' })));
-    registerPeer('darkstar', vi.fn(async () => ({ sessionId: 'sess_b' })));
+    registerPeer('gpuNode', vi.fn(async () => ({ sessionId: 'sess_b' })));
     await handleFleet(['chat', 'start', 'ministar-linux', '--name', 'a']);
-    await handleFleet(['chat', 'start', 'darkstar', '--name', 'b']);
+    await handleFleet(['chat', 'start', 'gpuNode', '--name', 'b']);
 
     // activeAlias = 'b' (last started) so resolveChatAlias picks it.
     // Force the ambiguity by clearing activeAlias via a simulated
@@ -296,13 +296,13 @@ describe('/fleet chat end', () => {
       if (method === 'peer.chat-session.end') return { closed: true };
       throw new Error('unexpected');
     }));
-    registerPeer('darkstar', vi.fn(async (method: string) => {
+    registerPeer('gpuNode', vi.fn(async (method: string) => {
       if (method === 'peer.chat-session.start') return { sessionId: 'sess_b' };
       if (method === 'peer.chat-session.end') return { closed: true };
       throw new Error('unexpected');
     }));
     await handleFleet(['chat', 'start', 'ministar-linux']);
-    await handleFleet(['chat', 'start', 'darkstar']);
+    await handleFleet(['chat', 'start', 'gpuNode']);
 
     const result = await handleFleet(['chat', 'end', '--all']);
     expect(content(result)).toContain('Closed 2 chat session(s)');
@@ -372,9 +372,9 @@ describe('/fleet stop auto-cleanup', () => {
 
   it('--all drops chat sessions across every peer', async () => {
     registerPeer('ministar-linux', vi.fn(async () => ({ sessionId: 'sess_a' })));
-    registerPeer('darkstar', vi.fn(async () => ({ sessionId: 'sess_b' })));
+    registerPeer('gpuNode', vi.fn(async () => ({ sessionId: 'sess_b' })));
     await handleFleet(['chat', 'start', 'ministar-linux']);
-    await handleFleet(['chat', 'start', 'darkstar']);
+    await handleFleet(['chat', 'start', 'gpuNode']);
 
     const result = await handleFleet(['stop', '--all']);
     expect(content(result)).toContain('Dropped 2 chat session(s)');

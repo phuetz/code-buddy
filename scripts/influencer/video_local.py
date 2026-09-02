@@ -2,10 +2,10 @@
 """Pilote vidéo locale ComfyUI ($0) — MiniMax H3 (texte→vidéo et image→vidéo, son natif).
 
 Complète `music_local.py` (audio) et `flux_image.py` (image) : le troisième moteur
-local de darkstar, sans quota ni clé d'API.
+local de gpuNode, sans quota ni clé d'API.
 
 Usage:
-    python3 video_local.py jobs.json [--url http://darkstar:8190] [--out DIR]
+    python3 video_local.py jobs.json [--url http://gpuNode:8190] [--out DIR]
 
 Format d'un job:
     {
@@ -21,7 +21,7 @@ Format d'un job:
 ⚠️ `length` DOIT tomber sur la grille 17k+5 (5, 22, 39, …, 124, …) : le script
 arrondit vers le haut et le signale.
 
-⚠️ Un seul gros job vidéo à la fois sur darkstar : deux instances qui chargent
+⚠️ Un seul gros job vidéo à la fois sur gpuNode : deux instances qui chargent
 chacune leurs poids saturent les 64 Go de RAM et font tomber le serveur.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ from pathlib import Path
 
 TIMEOUT = 60
 
-# Poids MiniMax H3 présents sur darkstar (inventaire 2026-09-01).
+# Poids MiniMax H3 présents sur gpuNode (inventaire 2026-09-01).
 H3_UNET_I2V = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
 H3_UNET_REF = "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
 H3_CLIP = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
@@ -257,7 +257,7 @@ def run_job(url: str, job: dict, out_dir: Path, poll: int, budget_s: int) -> dic
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("jobs")
-    ap.add_argument("--url", default="http://darkstar:8190")
+    ap.add_argument("--url", default="http://gpuNode:8190")
     ap.add_argument("--out", default=str(Path.home() / ".codebuddy/media-generation/videos"))
     ap.add_argument("--poll", type=int, default=15)
     ap.add_argument("--budget", type=int, default=3600)

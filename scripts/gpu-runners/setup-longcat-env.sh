@@ -22,7 +22,7 @@ fi
 
 # TorchInductor/Triton builds a tiny CUDA driver extension on first use. Keep
 # the compiler inside the isolated environment instead of depending on WSL's
-# system packages, which are absent on a clean Darkstar installation.
+# system packages, which are absent on a clean GPU node installation.
 "$CONDA_BIN" install --yes --prefix "$ENV_DIR" \
   'gcc_linux-64=11.2.0' \
   'gxx_linux-64=11.2.0'

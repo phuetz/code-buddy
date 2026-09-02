@@ -16,7 +16,7 @@ qui *ressemble* à » vers « simuler un monde puis l'observer ».
 
 ## Runbook
 
-### Sur la machine GPU (DARKSTAR, 2×3090) — le rendu
+### Sur la machine GPU (GPU_NODE, 2×3090) — le rendu
 
 ```bash
 # 1. BlenderProc (télécharge son propre Blender ~1 Go la 1re fois)
@@ -36,7 +36,7 @@ blenderproc run scripts/blenderproc/scene.py -- \
 ### Sur MINISTAR — le scoring de la perception réelle
 
 ```bash
-# Rapatrier ./boucle-a-out depuis DARKSTAR (tailscale/scp), puis :
+# Rapatrier ./boucle-a-out depuis GPU_NODE (tailscale/scp), puis :
 CODEBUDDY_VISION_TRAIN=true buddy vision-train \
   --images ./boucle-a-out/images --coco ./boucle-a-out/coco_annotations.json
 # → rapport .codebuddy/vision-train/ avec les weak-spots (précision/rappel par label)
@@ -55,5 +55,5 @@ injecté), pour intégrer la boucle dans un tour d'agent plus tard.
 - **scorer.ts** ne fait que du **comptage** par label (pas d'IoU bbox) — la
   vérité-terrain géométrique exacte est là, mais pas encore exploitée en matching
   IoU (extension future, non bloquante).
-- `scene.py` est **à valider en live sur DARKSTAR** (l'API BlenderProc varie un
+- `scene.py` est **à valider en live sur GPU_NODE** (l'API BlenderProc varie un
   peu selon versions) — le reste de la chaîne est testé unitairement.

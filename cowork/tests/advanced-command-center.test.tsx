@@ -77,7 +77,7 @@ function makeHarness(initialRuns: LiveLauncherRunView[] = []) {
         ladder: [],
         currentChoice: {
           model: 'qwen3.6:27b',
-          baseUrl: 'http://darkstar:11434/v1',
+          baseUrl: 'http://gpuNode:11434/v1',
           tier: 'network',
           paid: false,
           reason: 'free',
@@ -99,7 +99,7 @@ function makeHarness(initialRuns: LiveLauncherRunView[] = []) {
     gpuMedia: {
       capabilities: vi.fn().mockResolvedValue({
         protocolVersion: 1,
-        workerId: 'darkstar-test',
+        workerId: 'gpuNode-test',
         jobs: ['panoworld_reconstruct', 'avatar_video_render'],
         queueDepth: 0,
       }),
@@ -233,7 +233,7 @@ describe('AdvancedCommandCenter launcher', () => {
       prompt: 'objectif précis',
       model: 'qwen3.6:27b',
       provider: 'ollama',
-      ollamaUrl: 'http://darkstar:11434/v1',
+      ollamaUrl: 'http://gpuNode:11434/v1',
     });
     expect(query('advanced-run-detail')).not.toBeNull();
   });
@@ -275,7 +275,7 @@ describe('AdvancedCommandCenter launcher', () => {
 });
 
 describe('AdvancedCommandCenter administration', () => {
-  it('opens the GPU Darkstar administration surface', async () => {
+  it('opens the GPU GPU node administration surface', async () => {
     const harness = makeHarness();
     await renderCenter(harness.api);
 

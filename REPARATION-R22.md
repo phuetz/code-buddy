@@ -106,9 +106,9 @@ Tests  1264 passed | 3 skipped (1267)
 
 $ npm run typecheck
 > @phuetz/code-buddy@2.0.0 typecheck
-> tsc --noEmit && npm run typecheck:darkstar-identity
-> @phuetz/code-buddy@2.0.0 typecheck:darkstar-identity
-> tsc --project tsconfig.darkstar-identity.json
+> tsc --noEmit && npm run typecheck:gpuNode-identity
+> @phuetz/code-buddy@2.0.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
 exit 0
 
 $ npx eslint src/security/write-policy.ts src/agent/tool-handler.ts tests/security/write-policy.test.ts src/utils/confirmation-service.ts src/security/permission-modes.ts tests/utils/confirmation-service.test.ts tests/security/permission-modes.test.ts
