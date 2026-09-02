@@ -42,14 +42,34 @@
     Duration  1.53s
   ```
   HYPOTHÈSE 1 dans `tests/sensory/revue-voix-falsification.test.ts` passe également au VERT.
-- **Commit :** (En cours de création)
+- **Commit :** `79c8ad61d` (`feat(voice): tampon de gigue initial dans makeDefaultStreamSpeak (Point 1)`)
 
 ## 3. Point 2 — Tampon de tête conservé avec gain figé (`Pcm16WavStreamGain`)
-- Hypothèse et anomalie constatée :
-- Test rouge :
-- Implémentation :
-- Test vert :
-- Commit :
+- **Hypothèse et anomalie constatée :**
+  Dans `Pcm16WavStreamGain` (`src/voice/tts-volume.ts`), lorsque `frozenFactor !== undefined` (cas des phrases 2+ d'un tour où le gain a déjà été mesuré sur la première phrase), le code court-circuitait le buffering de tête :
+  `if (this.frozenFactor !== undefined) { this.mode = 'gain'; return [header, ...this.transformPayload(payload)]; }`.
+  La phrase 2 et suivantes démarraient donc avec 0 ms de tampon d'absorption dans le processeur de volume.
+- **Test rouge :**
+  Exécuté sur `tests/sensory/revue-voix-falsification.test.ts` :
+  ```
+  FAIL HYPOTHÈSE 2 (ROUGE) : Pcm16WavStreamGain avec frozenFactor n’accumule aucun buffer de tête
+  AssertionError: expected 2400 to be +0 // Object.is equality
+  - Expected: 0
+  + Received: 2400
+  ```
+- **Implémentation :**
+  - Dans `push()` de `Pcm16WavStreamGain`, suppression du passage anticipé en `this.mode = 'gain'` quand `frozenFactor !== undefined`. Le flux reste en `this.mode = 'buffering'` avec `this.headBytes` (400 ms par défaut).
+  - Dans `releaseHead()`, seul le calcul de normalisation (`planNormalization(paired, ...)`) est sauté si `this.frozenFactor !== undefined`, conservant le facteur figé et le plafond de crête précalculé. L'accumulation des échantillons est préservée.
+  - Ajout d'un test dédié dans `tests/voice/tts-volume.test.ts` (`retains head buffer accumulation even when the factor is externally frozen`).
+- **Test vert :**
+  ```
+  npx vitest run tests/voice/tts-volume.test.ts
+  Test Files  1 passed (1)
+       Tests  18 passed (18)
+  ```
+  Et dans `tests/sensory/revue-voix-falsification.test.ts` :
+  HYPOTHÈSE 2 passe au VERT (0 underrun, buffer de tête bien accumulé).
+- **Commit :** (En cours de création)
 
 ## 4. Point 3 — Arguments player audio (`aplay --buffer-time`, `ffplay`)
 - Options retenues :

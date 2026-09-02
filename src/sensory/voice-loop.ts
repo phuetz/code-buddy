@@ -2557,7 +2557,8 @@ function makeDefaultStreamSpeak(
     const targetJitterBytes = (): number =>
       Math.round((detectedByteRate * jitterBufferMs) / 1_000);
 
-    const flushJitterBuffer = (): boolean => {
+    const flushJitterBuffer = (force = false): boolean => {
+      if (!force && jitterAudioBytes === 0) return true;
       if (jitterReleaseTimer) {
         clearTimeout(jitterReleaseTimer);
         jitterReleaseTimer = undefined;
@@ -2567,6 +2568,19 @@ function makeDefaultStreamSpeak(
       let accepted = true;
       const partsToWrite = jitterQueue;
       jitterQueue = [];
+      jitterAudioBytes = 0;
+      if (
+        partsToWrite.length > 1 &&
+        partsToWrite[0].length <= 1024 &&
+        partsToWrite[0].length >= 12 &&
+        partsToWrite[0].subarray(0, 4).toString('ascii') === 'RIFF'
+      ) {
+        const probe = probePcm16Wav(partsToWrite[0]);
+        if (probe.status === 'ready' && partsToWrite[0].length === probe.layout.dataOffset) {
+          const header = partsToWrite.shift()!;
+          partsToWrite[0] = Buffer.concat([header, partsToWrite[0]]);
+        }
+      }
       for (const part of partsToWrite) {
         opts.onAudioChunk?.(part);
         accepted = stdin.write(part) && accepted;
@@ -2612,12 +2626,12 @@ function makeDefaultStreamSpeak(
         return flushJitterBuffer();
       }
 
-      if (!jitterReleaseTimer && jitterBufferMs > 0) {
+      if (!jitterReleaseTimer && jitterBufferMs > 0 && jitterAudioBytes > 0) {
         jitterReleaseTimer = setTimeout(() => {
           jitterReleaseTimer = undefined;
           if (settled || signal?.aborted) return;
           try {
-            flushJitterBuffer();
+            flushJitterBuffer(true);
           } catch {
             /* best effort */
           }
