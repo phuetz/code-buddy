@@ -68,6 +68,8 @@ const EDIT_TOOLS = new Set([
   'edit_file',
   'apply_patch',
   'multi_edit',
+  // `remind` writes only the bounded private reminders store, like an edit.
+  'remind',
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([

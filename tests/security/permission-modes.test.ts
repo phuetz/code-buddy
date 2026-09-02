@@ -244,6 +244,14 @@ describe('PermissionModeManager — Phase T1', () => {
       expect(d.prompted).toBe(false);
     });
 
+    it('auto-approves remind as a bounded local edit', () => {
+      expect(m.checkPermission('any', 'remind')).toEqual({
+        allowed: true,
+        reason: 'Edit tool auto-approved in acceptEdits mode',
+        prompted: false,
+      });
+    });
+
     it('prompts on destructive tools', () => {
       const d = m.checkPermission('any', 'bash');
       expect(d.allowed).toBe(true);
