@@ -16,6 +16,7 @@ let speakingUntilMs = 0;
 
 /** Echo tail after playback ends, ms (room reverberation + buffered audio). */
 export const DEFAULT_VOICE_ECHO_TAIL_MS = 1_200;
+export const SENSORY_AEC_TRUST_ENV = 'CODEBUDDY_SENSORY_AEC_TRUST';
 const configuredTailRaw = process.env.CODEBUDDY_SENSORY_ECHO_TAIL_MS?.trim();
 const configuredTailMs = configuredTailRaw ? Number(configuredTailRaw) : Number.NaN;
 const TAIL_MS = Number.isFinite(configuredTailMs) && configuredTailMs >= 0
@@ -62,6 +63,18 @@ let currentPlayback: VoicePlaybackInterval | undefined;
 
 function finiteClock(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * Treat the capture-side AEC flag as a half-duplex bypass only after an explicit
+ * operator opt-in. Merely advertising AEC is not evidence that loudspeaker echo
+ * was removed from the actual microphone signal.
+ */
+export function isSensoryAecTrusted(
+  aecActive: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return aecActive && env[SENSORY_AEC_TRUST_ENV]?.trim().toLowerCase() === 'true';
 }
 
 function normalizeSpokenText(value: string): string {

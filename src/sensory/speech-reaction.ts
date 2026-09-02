@@ -23,6 +23,7 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import {
   classifyRecentVoiceEcho,
+  isSensoryAecTrusted,
   isSpeaking,
   measureVoiceResumeTiming,
 } from './voice-activity.js';
@@ -277,14 +278,14 @@ function realSpeechCapture(
   return { durationMs, rms };
 }
 
-/** Explicit wake/stop always works; AEC additionally permits sustained natural speech. */
+/** Explicit wake/stop always works; explicitly trusted AEC permits sustained natural speech. */
 export function shouldTriggerVoiceBargeIn(
   text: string,
   payload: Record<string, unknown> = {},
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (isBargeInTranscript(text)) return true;
-  if (payload.aecActive !== true) return false;
+  if (!isSensoryAecTrusted(payload.aecActive === true, env)) return false;
   return (capturedSpeechMs(payload) ?? 0) >= resolveVoiceBargeInMinMs(env);
 }
 
@@ -1464,9 +1465,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const voiceResume = job.speechStartedAtMs !== undefined
       ? measureVoiceResumeTiming(job.speechStartedAtMs)
       : undefined;
-    const quickPostPlaybackResume = voiceResume?.kind === 'echo_tail';
     const aecActive = (job.p.payload as Record<string, unknown> | undefined)?.aecActive === true;
-    if (isSpeaking(t) && !quickPostPlaybackResume && !aecActive) {
+    const aecTrusted = isSensoryAecTrusted(aecActive);
+    if (isSpeaking(t) && !aecTrusted) {
       void cleanupSpeechJob(job);
       return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
     }
@@ -1676,7 +1677,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               playbackCaptureKind,
               echoClassification,
               explicitBargeIn,
-              payload.aecActive === true,
+              isSensoryAecTrusted(payload.aecActive === true),
             )
           : false;
         if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {

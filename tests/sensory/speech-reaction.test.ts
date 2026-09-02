@@ -290,17 +290,21 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(isBargeInTranscript('le ciel est bleu')).toBe(false);
   });
 
-  it('allows sustained natural speech only when AEC is active', () => {
+  it('allows sustained natural speech only when AEC is explicitly trusted', () => {
     expect(resolveVoiceBargeInMinMs({})).toBe(500);
     expect(resolveVoiceBargeInMinMs({ CODEBUDDY_VOICE_BARGEIN_MIN_MS: '650' })).toBe(650);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: true,
       audioMs: 700,
-    })).toBe(true);
+    }, {})).toBe(false);
+    expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
+      aecActive: true,
+      audioMs: 700,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(true);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: true,
       audioMs: 300,
-    })).toBe(false);
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(false);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: false,
       audioMs: 900,
@@ -311,7 +315,44 @@ describe('speech reaction — speech_end → STT → percept', () => {
     })).toBe(true);
   });
 
+  it('keeps the half-duplex guard closed when AEC is announced but not explicitly trusted', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-aec-untrusted-'));
+    const heard: string[] = [];
+    let clock = 1_100;
+    _resetVoiceActivityForTests();
+    beginSpeaking(1_000);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('résidu du haut-parleur', {
+        aecActive: true,
+        audioMs: 900,
+        startedAtMs: 1_100,
+      });
+      interruptSpeaking(1_200);
+      clock = 3_000;
+      transcriptFinal('Lisa, vraie question humaine', { startedAtMs: 3_000 });
+      await waitFor(() => expect(heard).toContain('Lisa, vraie question humaine'));
+      expect(heard).toEqual(['Lisa, vraie question humaine']);
+    } finally {
+      unwire();
+      _resetVoiceActivityForTests();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
+    }
+  });
+
   it('interrupts an in-flight turn on sustained AEC speech without a wake word', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-aec-barge-in-'));
     let releaseFirst!: () => void;
     const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -345,6 +386,8 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       releaseFirst();
       unwire();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
     }
   });
 
@@ -991,6 +1034,8 @@ describe('speech reaction — speech_end → STT → percept', () => {
   });
 
   it('accepts a distinct human reply that starts inside the acoustic echo tail', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-quick-resume-'));
     const heard: string[] = [];
     _resetVoiceActivityForTests();
@@ -1011,7 +1056,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       }),
     });
     try {
-      transcriptFinal('Et la réciprocité alors ?', { startedAtMs: 2_400 });
+      transcriptFinal('Et la réciprocité alors ?', { aecActive: true, startedAtMs: 2_400 });
       await waitFor(() => expect(heard).toEqual(['Et la réciprocité alors ?']));
       const raw = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
@@ -1029,10 +1074,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       unwire();
       _resetVoiceActivityForTests();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
     }
   });
 
-  it('suppresses a matching loudspeaker echo during the same tail without storing it', async () => {
+  it('drops a matching loudspeaker echo during the guarded tail before storing it', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-echo-tail-'));
     const heard: string[] = [];
     _resetVoiceActivityForTests();
@@ -1049,25 +1096,10 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Voici la réponse que Lisa vient de prononcer.', { startedAtMs: 4_250 });
-      const raw = await waitForPercept(
-        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-        'Likely loudspeaker echo suppressed',
-      );
+      await new Promise(resolve => setTimeout(resolve, 20));
       expect(heard).toEqual([]);
-      expect(raw).not.toContain('Voici la réponse que Lisa vient de prononcer.');
-      const percept = JSON.parse(raw.trim()) as {
-        summary: string;
-        payload: Record<string, unknown>;
-      };
-      expect(percept.summary).toBe('Likely loudspeaker echo suppressed');
-      expect(percept.payload).toMatchObject({
-        playbackEcho: true,
-        echoClassification: 'echo',
-        turnTaking: {
-          kind: 'echo_tail',
-          resumeAfterPlaybackMs: 250,
-        },
-      });
+      expect(await fileExists(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl')))
+        .toBe(false);
     } finally {
       unwire();
       _resetVoiceActivityForTests();
