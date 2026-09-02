@@ -12,7 +12,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 | D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `0130f30f5` |
 | D9 | Test registre/GitHub rouge : `--check` ne consultait pas npm, fabriquait la date avec `new Date()` et construisait encore `phuetz/grok-cli` | `--check` lit le nom/version de `package.json`, interroge le dist-tag npm réel avec timeout, refuse une réponse incomplète et corrige le dépôt GitHub | Test ciblé 14/14 PASS ; registre réel : `@phuetz/code-buddy` latest `1.6.1`, date `2026-06-25T13:14:01.864Z` ; CLI exit 0 et affiche ces valeurs | `6e910e76f` |
 | D10 | Rouge historique non reproductible sur ce HEAD : `e077e4c4f` contient déjà la gestion d’erreur Fleet | Ajout d’une régression ciblée qui verrouille le message, le conseil `buddy server` et `process.exitCode = 1` | Test ciblé 8/8 PASS ; port local non utilisé : message exact et CLI exit 1 | À faire |
-| D11 | À établir | À faire | À faire | À faire |
+| D11 | Test de sélection rouge : les helpers de validation d’un `defaultModel` Ollama n’existaient pas | `doctor` compare les deux champs persistés aux tags réellement annoncés par Ollama ; `--fix` sélectionne un tag joignable et le réécrit dans `model` et `defaultModel` | Test ciblé 2/2 PASS ; `doctor --fix` headless écrit `gemma4-moe-rag:latest`, puis `/api/tags` confirme `reachable=true` | À faire |
 
 ## Défauts non réglés
 
@@ -22,6 +22,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 - D8 réglé côté commande et documentation ; commit dédié `0130f30f5`.
 - D9 réglé : `--check` ne fabrique plus de version/date et le dépôt/package sont ceux de Code Buddy.
 - D10 était déjà corrigé dans le HEAD E18 par `e077e4c4f` ; la régression ciblée et la preuve CLI sont ajoutées ici.
+- D11 réglé : `doctor --fix` ne conserve plus un modèle par défaut absent d’Ollama.
 
 ## Commandes, sorties et commits
 
@@ -211,3 +212,35 @@ exit=1
 ```
 
 Le port `39991` n’a pas été démarré ; aucun service existant n’a été arrêté ou modifié. Le contrôle verrouille ainsi le comportement demandé pour un serveur Fleet absent.
+
+### D11 — `doctor --fix` et modèle Ollama obsolète
+
+Rouge :
+
+```text
+$ npx vitest run tests/doctor/ollama-selection.test.ts
+FAIL  tests/doctor/ollama-selection.test.ts (2 tests | 2 failed)
+TypeError: isOllamaSelectionCurrent is not a function
+```
+
+Le défaut venait de la logique de readiness : la présence de `OLLAMA_HOST` et d’un nombre de modèles suffisait à déclarer la configuration prête, même si `defaultModel` restait `grok-code-fast-1`.
+
+Vert :
+
+```text
+$ npx vitest run tests/doctor/ollama-selection.test.ts
+Test Files  1 passed (1)
+Tests       2 passed (2)
+
+$ ... buddy doctor --fix  # cwd=_e18/d11-cwd, homedir préchargé vers _e18/home-d11
+⚠️  Not ready to chat yet — Ollama is running (22 models) but saved model grok-code-fast-1 is not currently advertised — --fix to select gemma4-moe-rag:latest ($0)
+✅ [select-running-ollama] Selected local Ollama model gemma4-moe-rag:latest (written to user-settings.json) — try: buddy try
+Fix summary: 2 fixed, 0 failed
+exit 0
+
+$ node -e '... lire _e18/home-d11/.codebuddy/user-settings.json ...'; curl --fail --silent --show-error --max-time 3 http://localhost:11434/api/tags | node -e '...'
+{"provider":"ollama","model":"gemma4-moe-rag:latest","defaultModel":"gemma4-moe-rag:latest","baseURL":"http://localhost:11434/v1"}
+reachable=true model=gemma4-moe-rag:latest
+```
+
+Le choix vient des tags servis par Ollama, pas d’une valeur codée en dur. Aucun appel à un fournisseur payant ni modification d’un service n’a été effectué.

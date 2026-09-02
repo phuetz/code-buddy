@@ -14,6 +14,7 @@ import { getFreeSpaceInfo } from '../utils/disk-guard.js';
 import { SERVER_CONFIG } from '../config/constants.js';
 import { diagnoseServerExposure } from '../server/exposure-diagnostic.js';
 import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
+import type { UserSettings } from '../utils/settings-manager.js';
 
 export interface FixResult {
   success: boolean;
@@ -567,6 +568,36 @@ async function fixStaleLockFiles(lockFiles: string[]): Promise<FixResult> {
 // Provider readiness — the ONE thing a newcomer needs answered
 // ============================================================================
 
+export type OllamaSelectionSettings = Pick<UserSettings, 'model' | 'defaultModel'>;
+
+function advertisedModel(models: readonly string[], requested: string | undefined): string | undefined {
+  const normalized = requested?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return models.find((model) => model.trim().toLowerCase() === normalized);
+}
+
+/** Pick a model that Ollama actually advertised, preserving its tag spelling. */
+export function resolveOllamaModel(
+  models: readonly string[],
+  settings: OllamaSelectionSettings = {},
+): string | undefined {
+  return (
+    advertisedModel(models, settings.model) ??
+    advertisedModel(models, settings.defaultModel) ??
+    models.find((model) => model.trim())
+  );
+}
+
+/** Both persisted model fields must point at a model currently served by Ollama. */
+export function isOllamaSelectionCurrent(
+  models: readonly string[],
+  settings: OllamaSelectionSettings = {},
+): boolean {
+  return Boolean(
+    advertisedModel(models, settings.model) && advertisedModel(models, settings.defaultModel),
+  );
+}
+
 /**
  * Answer "can `buddy` actually talk to a model on the next run?" — the single
  * most important diagnostic for someone who just installed. It distinguishes
@@ -584,15 +615,37 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
   const ollama = snap.capabilities.find((c) => c.id === 'ollama');
   const ollamaModels = ollama?.models?.length ?? 0;
 
-  let onboardedLocal = false;
+  let userSettings: (UserSettings & OllamaSelectionSettings) | undefined;
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
-    const p = (getSettingsManager().loadUserSettings().provider || '').toLowerCase();
-    onboardedLocal = p === 'ollama' || p === 'lmstudio';
+    userSettings = getSettingsManager().loadUserSettings();
   } catch {
     /* settings unreadable — treat as not onboarded */
   }
+  const p = (userSettings?.provider || '').toLowerCase();
+  const onboardedLocal = p === 'ollama' || p === 'lmstudio';
   const envLocal = Boolean(process.env.OLLAMA_HOST || process.env.LMSTUDIO_HOST);
+  const ollamaExplicitlySelected = Boolean(process.env.OLLAMA_HOST) || p === 'ollama';
+  const liveOllamaModel = ollama?.available && ollama.baseURL
+    ? resolveOllamaModel(ollama.models ?? [], userSettings)
+    : undefined;
+
+  if (
+    ollamaExplicitlySelected &&
+    liveOllamaModel &&
+    ollama?.baseURL &&
+    !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)
+  ) {
+    const savedModel = userSettings?.defaultModel ?? userSettings?.model ?? 'none';
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but saved model ${savedModel} is not currently advertised — --fix to select ${liveOllamaModel} ($0)`,
+      fixable: true,
+      fix: async () => fixSelectRunningOllama(ollama.baseURL!, liveOllamaModel),
+    };
+  }
+
   const configured = oauthOrKey || ((envLocal || onboardedLocal) && ollamaModels > 0);
 
   if (configured) {
