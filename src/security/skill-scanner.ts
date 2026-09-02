@@ -56,6 +56,29 @@ interface DangerousPattern {
   name: string;
 }
 
+const SCRIPT_EXTENSIONS = new Set([
+  '.bash',
+  '.bat',
+  '.cmd',
+  '.cjs',
+  '.js',
+  '.mjs',
+  '.php',
+  '.ps1',
+  '.py',
+  '.rb',
+  '.sh',
+  '.ts',
+  '.zsh',
+]);
+
+function isScannableSkillFile(fileName: string): boolean {
+  const lowerName = fileName.toLowerCase();
+  return lowerName.endsWith('.skill.md')
+    || lowerName === 'skill.md'
+    || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
+}
+
 const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Code execution
   { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
@@ -98,15 +121,6 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /`\$\{.*\}`/, severity: 'medium', description: 'Template literal with interpolation (potential injection)', name: 'template-injection', capability: 'shell' },
   { pattern: /\$\(.*\)/, severity: 'medium', description: 'Shell command substitution', name: 'shell-subst', capability: 'shell' },
 ];
-
-const SCRIPT_EXTENSIONS = new Set(['.bash', '.bat', '.cmd', '.cjs', '.js', '.mjs', '.ps1', '.sh', '.ts', '.zsh']);
-
-function isScannableSkillFile(fileName: string): boolean {
-  const lowerName = fileName.toLowerCase();
-  return lowerName.endsWith('.skill.md')
-    || lowerName === 'skill.md'
-    || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
-}
 
 /**
  * Scan a single file for dangerous patterns.
