@@ -442,6 +442,38 @@ export class ContextManagerV2 {
     );
   }
 
+  /** Diagnostics must describe the transcript actually sent, not a rejected attempt. */
+  private recordLegacyCompressionResult(
+    messages: CodeBuddyMessage[],
+    originalTokens: number,
+  ): void {
+    const finalTokens = this.countTokens(messages);
+    this.lastEnhancedResult = {
+      compressed: originalTokens > finalTokens,
+      messages,
+      tokensReduced: originalTokens - finalTokens,
+      strategy: 'sliding_window',
+      metrics: {
+        originalTokens,
+        finalTokens,
+        compressionRatio: originalTokens / Math.max(1, finalTokens),
+        messagesRemoved: 0,
+        messagesSummarized: this.summaries.length > 0 ? 1 : 0,
+        toolResultsTruncated: 0,
+        compressionTimeMs: 0,
+        estimatedRetention: finalTokens / Math.max(1, originalTokens),
+        strategiesApplied: ['legacy_auto_compact'],
+      },
+      preservedInfo: {
+        decisions: [],
+        errors: [],
+        modifiedFiles: [],
+        codeSnippets: [],
+        toolCalls: [],
+      },
+    };
+  }
+
   /**
    * Count tokens in messages
    */
@@ -640,9 +672,6 @@ export class ContextManagerV2 {
       this.sessionId
     );
 
-    // Store result for later access
-    this.lastEnhancedResult = result;
-
     // Guardrail: if enhanced compression cannot produce a usable result,
     // fall back to legacy deterministic strategies.
     const finalTokens = result.metrics.finalTokens;
@@ -667,6 +696,8 @@ export class ContextManagerV2 {
       logger.debug('Enhanced compression fallback to legacy strategy');
       return this.prepareMessagesLegacy(messages, stats);
     }
+
+    this.lastEnhancedResult = result;
 
     // Track metrics
     if (result.compressed) {
@@ -748,6 +779,7 @@ export class ContextManagerV2 {
       this.lastCompressionTime = new Date();
     }
 
+    this.recordLegacyCompressionResult(optimizedMsgs, stats.totalTokens);
     this.lastTokenCount = newStats.totalTokens;
     return optimizedMsgs;
   }

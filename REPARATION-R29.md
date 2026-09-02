@@ -88,6 +88,32 @@ Tests  2 passed (2)
 `tests/context/` après D2 : **41 passed, 600 passed**. `tsc --noEmit` exit 0.
 `eslint src/context/context-manager-v2.ts tests/context/compaction-limit.test.ts` : exit 0.
 
+### D3 — statistiques du résultat réellement envoyé
+
+Test rouge avant correctif (`tests/context/compaction-stats.test.ts`) :
+
+```text
+❯ tests/context/compaction-stats.test.ts (1 test | 1 failed) 98ms
+     × does not keep rejected enhanced metrics after a successful legacy fallback
+AssertionError: expected 876 to be 201
+Tests  1 failed (1)
+```
+
+Correctif : `lastEnhancedResult` n'est plus affecté avant le garde de repli.
+Le chemin legacy enregistre des métriques `legacy_auto_compact` calées sur le
+tableau réellement renvoyé (`finalTokens` = jetons envoyés).
+
+Test vert :
+
+```text
+npx vitest run tests/context/compaction-stats.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+```
+
+`tests/context/` après D3 : **42 passed, 601 passed**. `tsc --noEmit` exit 0.
+`eslint src/context/context-manager-v2.ts tests/context/compaction-stats.test.ts` : exit 0.
+
 ## Bilan
 
 (à compléter en fin de mission)
