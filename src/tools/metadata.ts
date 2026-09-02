@@ -942,6 +942,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate a video through the configured video backend and cache returned media when possible'
   },
   {
+    name: 'markdown_convert',
+    category: 'document',
+    keywords: ['markdown', 'convert', 'convertir', 'pdf', 'docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'html', 'csv', 'json', 'xml', 'zip', 'epub', 'ocr', 'transcription', 'table', 'tableau', 'structure', 'extract', 'extraire', 'lire', 'document', 'markitdown'],
+    priority: 8,
+    description: 'Convert any document (Office, PDF, HTML, CSV, ZIP, EPub, image, audio, URL) to structured Markdown for the model — preserves headings, lists and tables. Optional MarkItDown sidecar; falls back cleanly with install instructions when absent'
+  },
+  {
     name: 'video_stitch',
     category: 'media',
     keywords: ['video', 'stitch', 'montage', 'film', 'concatenate', 'concat', 'chain', 'transition', 'xfade', 'crossfade', 'enchainer', 'assembler', 'monter', 'clip', 'produire', 'production', 'long', 'music', 'voiceover'],

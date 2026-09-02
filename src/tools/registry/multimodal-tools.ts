@@ -896,6 +896,52 @@ export class VideoGenerateTool implements ITool {
 }
 
 // ============================================================================
+// MarkdownConvertTool — any document → Markdown for the model, via MarkItDown
+export class MarkdownConvertTool implements ITool {
+  readonly name = 'markdown_convert';
+  readonly description =
+    'Convert a document (PDF, Word, Excel, PowerPoint, HTML, CSV, JSON, XML, ZIP, EPub, image, audio, or a URL) to structured Markdown for the model — keeps headings, lists and TABLES instead of flattening them. Requires MarkItDown (pip install markitdown[all]).';
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            description:
+              'Local file path, or an http(s)/YouTube URL. Handles PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPub, images (OCR) and audio (transcription).',
+          },
+          output_path: {
+            type: 'string',
+            description:
+              'Write the Markdown to this file instead of returning it inline. Use it for long documents.',
+          },
+          max_chars: {
+            type: 'number',
+            description: 'Inline truncation budget (default 60000 characters).',
+          },
+        },
+        required: ['source'],
+      },
+    };
+  }
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    const { MarkdownConvertTool: Impl } = await import('../markdown-convert.js');
+    const source = optionalString(input, 'source') ?? optionalString(input, 'path') ?? '';
+    const outputPath = optionalString(input, 'output_path');
+    const maxChars = optionalNumber(input, 'max_chars');
+    return new Impl().convert({
+      source,
+      ...(outputPath ? { outputPath } : {}),
+      ...(maxChars !== undefined ? { maxChars } : {}),
+    });
+  }
+}
+
 // VideoStitchTool — chain clips into a longer film with transitions
 // ============================================================================
 
@@ -1771,6 +1817,7 @@ export function createMultimodalTools(): ITool[] {
     new GpuMediaJobTool(),
     new VideoGenerateTool(),
     new VideoStitchTool(),
+    new MarkdownConvertTool(),
     ...createVideoStudioTools(),
     new VideoExecuteTool(),
     new PDFExecuteTool(),
