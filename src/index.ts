@@ -1708,10 +1708,14 @@ program
 
     try {
       // Get API key from options, environment, or user settings
+      // The OAuth-aware variant, NOT the sync one: naming a model on the command
+      // line must not throw away a subscription login. The sync resolver is blind
+      // to `buddy login xai`, so `--model grok-4.3` used to fall back to an
+      // ambient XAI_API_KEY — dead, in the case measured on 2026-09-02.
       const explicitProvider = options.model && !options.apiKey && !options.baseUrl
-        ? (await import('./commands/llm-provider-resolution.js')).resolveCommandProvider({
-            explicitModel: options.model,
-          })
+        ? await (
+            await import('./commands/llm-provider-resolution.js')
+          ).resolveCommandProviderWithOAuth({ explicitModel: options.model })
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();

@@ -111,19 +111,12 @@ export async function resolveCommandProviderWithOAuth(
 ): Promise<ResolvedCommandProvider | null> {
   const explicitModel = options.explicitModel?.trim();
   if (explicitModel && inferProvider(explicitModel) === 'xai') {
-    const catalogProvider = resolveProviderFromCatalog({
-      providerOverride: 'grok',
-      hasChatGptOAuth: hasCodexCredentials(),
-      requireConfigured: true,
-    });
-    if (catalogProvider) {
-      return {
-        apiKey: catalogProvider.apiKey,
-        baseURL: catalogProvider.baseURL,
-        model: explicitModel,
-        providerLabel: catalogProvider.provider,
-      };
-    }
+    // The subscription login is tried FIRST. `buddy login xai` is an explicit act
+    // meaning "bill my SuperGrok plan"; an XAI_API_KEY in a .env file is passive
+    // configuration that may be stale. Measured on 2026-09-02: the ambient key was
+    // out of credits (403 permission-denied) while the subscription answered
+    // normally, so preferring the key silently swapped a working credential for a
+    // dead one. This mirrors the ChatGPT-login precedence in index.ts.
     try {
       const { getValidXaiAccessToken, hasXaiCredentials, XAI_OAUTH_BASE_URL } = await import(
         '../providers/xai-oauth.js'
@@ -140,7 +133,20 @@ export async function resolveCommandProviderWithOAuth(
         }
       }
     } catch {
-      /* Fall through to the normal resolver and its existing diagnostics. */
+      /* Fall through: a broken login must never strand a working API key. */
+    }
+    const catalogProvider = resolveProviderFromCatalog({
+      providerOverride: 'grok',
+      hasChatGptOAuth: hasCodexCredentials(),
+      requireConfigured: true,
+    });
+    if (catalogProvider) {
+      return {
+        apiKey: catalogProvider.apiKey,
+        baseURL: catalogProvider.baseURL,
+        model: explicitModel,
+        providerLabel: catalogProvider.provider,
+      };
     }
   }
   return resolveCommandProvider(options);
