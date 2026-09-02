@@ -81,6 +81,8 @@ type ReasoningCompatiblePayload = {
   max_completion_tokens?: number | null;
 };
 
+const EMPTY_PROVIDER_RESPONSE_ERROR = 'réponse vide du fournisseur';
+
 function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
   payload: T,
   baseURL: string,
@@ -673,10 +675,19 @@ export class OpenAICompatProvider implements Provider {
     );
   }
 
+  private isEmptyProviderResponse(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const choices = (value as { choices?: unknown }).choices;
+    return Array.isArray(choices) && choices.length === 0;
+  }
+
   private *nonStreamingResponseToChunks(
     response: CodeBuddyResponse,
     searchOmitted = false,
   ): Generator<ChatCompletionChunk, void, unknown> {
+    if (!Array.isArray(response?.choices) || response.choices.length === 0) {
+      throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+    }
     const created = Math.floor(Date.now() / 1000);
 
     for (const [index, choice] of response.choices.entries()) {
@@ -903,6 +914,10 @@ export class OpenAICompatProvider implements Provider {
           // Non-critical
         }
 
+        const choices = (response as unknown as { choices?: unknown } | null)?.choices;
+        if (!Array.isArray(choices) || choices.length === 0) {
+          throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+        }
         const codeBuddyResponse = response as unknown as CodeBuddyResponse;
         const rawUsage = (response as unknown as Record<string, unknown>).usage as Record<string, unknown> | undefined;
         if (rawUsage) {
@@ -1061,7 +1076,11 @@ export class OpenAICompatProvider implements Provider {
           return;
         }
 
-        logger.debug('Streaming request returned no async iterator; retrying as non-streaming chat', {
+        if (this.isEmptyProviderResponse(stream)) {
+          throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+        }
+
+        logger.warn('Streaming request returned no async iterator; retrying as non-streaming chat', {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
@@ -1076,7 +1095,7 @@ export class OpenAICompatProvider implements Provider {
       }
 
       if (yieldedChunks === 0) {
-        logger.debug('Streaming request yielded zero chunks; retrying as non-streaming chat', {
+        logger.warn('Streaming request yielded zero chunks; retrying as non-streaming chat', {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);

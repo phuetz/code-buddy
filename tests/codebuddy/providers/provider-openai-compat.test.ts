@@ -62,6 +62,11 @@ async function* successStream() {
   };
 }
 
+async function* emptyStream() {
+  // Deliberately empty: simulates a 200 response whose async iterator closes
+  // without producing an assistant chunk.
+}
+
 beforeEach(() => {
   providerMocks.create.mockReset();
   providerMocks.getModelInfo.mockReset().mockReturnValue({ provider: 'xai' });
@@ -72,6 +77,30 @@ afterEach(() => {
 });
 
 describe('OpenAICompatProvider request payloads', () => {
+  it('rejects a non-streaming response with empty choices', async () => {
+    providerMocks.create.mockResolvedValueOnce({ choices: [] });
+
+    await expect(createProvider().chat([{ role: 'user', content: 'hello' }], []))
+      .rejects.toThrow('réponse vide du fournisseur');
+  });
+
+  it('rejects an empty stream when its non-streaming fallback is also empty', async () => {
+    providerMocks.create
+      .mockResolvedValueOnce(emptyStream())
+      .mockResolvedValueOnce({ choices: [] });
+
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of createProvider().chatStream(
+        [{ role: 'user', content: 'hello' }],
+        [],
+      )) {
+        /* drain */
+      }
+    };
+
+    await expect(drain()).rejects.toThrow('réponse vide du fournisseur');
+  });
+
   it('warns and marks an xAI response when requested search is not honored', async () => {
     const warnSpy = vi.spyOn(logger, 'warn');
     providerMocks.create.mockResolvedValueOnce(successResponse());
