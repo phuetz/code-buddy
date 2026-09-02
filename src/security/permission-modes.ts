@@ -46,6 +46,8 @@ const READ_ONLY_TOOLS = new Set([
   // deliberately separate from `fleetSafe`: peers must not restore local
   // session transcripts.
   'restore_context',
+  // Exact recovery of archived conversation segments is a read-only operation.
+  'context_expand',
 ]);
 
 // The registry's `fleetSafe: true` flag is the MAINTAINED read-only source of

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
 import { countTokens } from '../../src/context/token-counter.js';
 import { SegmentArchive } from '../../src/context/segment-archive.js';
+import { PermissionModeManager } from '../../src/security/permission-modes.js';
 import { ContextExpandTool } from '../../src/tools/context-expand-tool.js';
 
 const tempHomes: string[] = [];
@@ -104,5 +105,20 @@ describe('context_expand', () => {
     process.env.CODEBUDDY_CONTEXT_ZOOM = 'true';
     const enabledNames = (await getAllCodeBuddyTools()).map(tool => tool.function.name);
     expect(enabledNames).toContain('context_expand');
+  });
+
+  it('gates the inspector and interactive registry, and allows plan-mode reads', async () => {
+    const { getBuiltinToolNames } = await import('../../src/codebuddy/tools.js');
+    const { createInteractiveToolAdapters } = await import('../../src/tools/registry/interactive-adapters.js');
+
+    delete process.env.CODEBUDDY_CONTEXT_ZOOM;
+    expect(getBuiltinToolNames()).not.toContain('context_expand');
+    expect(createInteractiveToolAdapters().map(tool => tool.name)).not.toContain('context_expand');
+
+    process.env.CODEBUDDY_CONTEXT_ZOOM = 'true';
+    expect(getBuiltinToolNames()).toContain('context_expand');
+    expect(createInteractiveToolAdapters().map(tool => tool.name)).toContain('context_expand');
+    expect(new PermissionModeManager({ mode: 'plan' }).checkPermission('context_expand', 'context_expand'))
+      .toMatchObject({ allowed: true });
   });
 });

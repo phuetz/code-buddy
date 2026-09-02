@@ -77,6 +77,7 @@ import {
   WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
+import { isContextZoomEnabled } from '../context/segment-archive.js';
 
 // 20 pre-authored tool definitions (wired into the registry as AUTHORED_EXTRA_TOOLS).
 // Loosely-typed literal definitions → cast the group to CodeBuddyTool[] below.
@@ -225,9 +226,13 @@ export function getBuiltinToolNames(): string[] {
     [CONTEXT_EXPAND_TOOL],
   ];
 
-  return filterToolNamesForSurface(Array.from(new Set(
+  const names = Array.from(new Set(
     groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
-  )));
+  ));
+  const surfaceNames = isContextZoomEnabled()
+    ? names
+    : names.filter((name) => name !== 'context_expand');
+  return filterToolNamesForSurface(surfaceNames);
 }
 
 // ============================================================================

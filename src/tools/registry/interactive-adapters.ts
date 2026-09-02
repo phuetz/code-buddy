@@ -96,6 +96,7 @@ import { createAuthoredExtraTools } from './authored-extra-tools.js';
 import { createExtensionForgeTools } from '../extension-forge-tool.js';
 import { createRegisterToolTool } from '../register-tool-handler.js';
 import { ToolSearchTool } from '../tool-search.js';
+import { isContextZoomEnabled } from '../../context/segment-archive.js';
 
 export interface InteractiveAdapterOptions {
   /** Include the Windows-only tools. Default: `process.platform === 'win32'`. */
@@ -116,7 +117,7 @@ export function createInteractiveToolAdapters(options: InteractiveAdapterOptions
 
   const allTools: ITool[] = [
     new ToolSearchTool(),
-    ...createContextExpandTools(),
+    ...(isContextZoomEnabled() ? createContextExpandTools() : []),
     ...createDesignTools(),
     ...createTextEditorTools(),
     ...createBashTools(),
