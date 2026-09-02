@@ -99,7 +99,7 @@ describe('voice-activity — half-duplex speaking guard', () => {
     expect(classifyRecentVoiceEcho('ecoute cette phrase prononcee', 91_001)).toBe('unknown');
   });
 
-  it('uses at least 60% of the latest spoken phrase words for echo detection', () => {
+  it('uses at least 60% of each recent spoken phrase for echo detection', () => {
     noteSpokenText('Voici une phrase vraiment courte.', 1_000);
 
     expect(classifyRecentVoiceEcho('voici phrase', 1_100)).toBe('distinct'); // 2/5
