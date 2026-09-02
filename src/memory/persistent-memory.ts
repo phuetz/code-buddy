@@ -6,7 +6,13 @@ import { getHooksManager } from "../hooks/lifecycle-hooks.js";
 import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
-import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
+import {
+  decideForgets,
+  isProtectedMemory,
+  resolveForgettingConfig,
+  type ForgetCandidate,
+  type ForgettingConfig,
+} from "./memory-forgetting.js";
 import { withSessionLock } from "../persistence/session-lock.js";
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
@@ -185,6 +191,30 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
       tags: memory.tags ? [...memory.tags] : undefined,
     },
   ]));
+}
+
+function mergeMemoryTags(
+  priorTags: string[] | undefined,
+  factSource: string | undefined,
+  fallbackTags: string[] | undefined,
+): string[] | undefined {
+  const sourceTags = factSource
+    ?.split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0) ?? fallbackTags ?? [];
+  const tags = [...new Set([...(priorTags ?? []), ...sourceTags])];
+  return tags.length > 0 ? tags : undefined;
+}
+
+function normalizeMemoryCategory(category: string): MemoryCategory {
+  switch (category.trim().toLowerCase()) {
+    case 'project': return 'project';
+    case 'preferences': return 'preferences';
+    case 'decisions': return 'decisions';
+    case 'patterns': return 'patterns';
+    case 'context': return 'context';
+    default: return 'custom';
+  }
 }
 
 function memoryEquals(left: Memory | undefined, right: Memory | undefined): boolean {
@@ -593,7 +623,7 @@ export class PersistentMemoryManager extends EventEmitter {
             updatedAt: fact.updatedAt || new Date(),
             ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
             accessCount: prior?.accessCount || 0,
-            tags: fact.source ? [fact.source] : tags
+            tags: mergeMemoryTags(prior?.tags, fact.source, tags)
           });
         }
 
@@ -732,7 +762,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const memory: Memory = {
       key,
       value,
-      category,
+      category: normalizeMemoryCategory(category),
       createdAt: existing?.createdAt || new Date(),
       updatedAt: new Date(),
       ...(existing?.lastAccessedAt ? { lastAccessedAt: existing.lastAccessedAt } : {}),
@@ -1255,10 +1285,11 @@ export class PersistentMemoryManager extends EventEmitter {
     this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const forgettingConfig = resolveForgettingConfig();
     let count = 0;
 
     for (const [key, memory] of memories) {
-      if (memory.updatedAt < cutoff) {
+      if (memory.updatedAt < cutoff && !isProtectedMemory(memory, forgettingConfig)) {
         memories.delete(key);
         count++;
       }
@@ -1516,7 +1547,7 @@ export class PersistentMemoryManager extends EventEmitter {
           updatedAt: fact.updatedAt || new Date(),
           ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
           accessCount: prior?.accessCount || 0,
-          tags: fact.source ? [fact.source] : ['auto-captured']
+          tags: mergeMemoryTags(prior?.tags, fact.source, ['auto-captured'])
         });
       }
 

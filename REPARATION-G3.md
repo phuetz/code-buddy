@@ -70,6 +70,16 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications : `npm run typecheck` — **exit 0** ; ESLint ciblé — **exit 0**, avec 2 avertissements `no-explicit-any` déjà présents dans le test rouge.
 - Commit : à compléter.
 
+### Trou 4 — oubli d'une préférence protégée
+
+- Test relu : `tests/memory/revue-gemini-forgetting-pinned.test.ts`.
+- Rouge (`npx vitest run tests/memory/revue-gemini-forgetting-pinned.test.ts`, exit 1) : 2 tests rouges — une catégorie `Preferences` n'était pas reconnue comme protégée et `forgetOlderThan(30)` supprimait une préférence portant le tag `pinned`.
+- Diagnostic source lu : `decideForgets` comparait catégorie et tags sans normalisation ; `forgetOlderThan` supprimait toute entrée dépassant le cutoff sans appliquer les mêmes protections. La réconciliation reconstruisait aussi les tags depuis `fact.source`, sans conserver les tags de l'entrée précédente.
+- Correctif : `isProtectedMemory` normalise catégories et tags avant comparaison ; `forgetOlderThan` réutilise cette protection. Les chemins de réconciliation (`remember` et `autoCapture`) fusionnent les tags de la mémoire précédente avec la source courante, au lieu de perdre `pinned`; l'écriture directe normalise aussi les catégories reçues à l'exécution.
+- Vert et tests voisins : `npx vitest run tests/memory/revue-gemini-forgetting-pinned.test.ts tests/memory/memory-forgetting.test.ts tests/memory/persistent-memory.test.ts tests/memory/archive-restore.test.ts` — **4 fichiers, 38 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé avec `--quiet` — **exit 0** ; `git diff --check` — **exit 0**.
+- Commit : à compléter.
+
 ## Bilan final
 
 À compléter — dix lignes maximum.
