@@ -496,6 +496,20 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(caught!.message).toContain('Slow down');
   });
 
+  it.each([
+    ['empty stream', []],
+    ['malformed event', ['data: not-json\n\n']],
+    ['error event', ['data: {"type":"error","code":"rate_limited","message":"Slow down"}\n\n']],
+  ])('rejects a %s instead of fabricating a successful stop', async (_label, events) => {
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of parseSseStream(makeSseStream(events), 'gpt-5.5')) {
+        /* drain */
+      }
+    };
+
+    await expect(drain()).rejects.toThrow(/ChatGPT Responses/);
+  });
+
   it('ignores unknown event types silently (response.in_progress, etc.)', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.in_progress"}\n\n',

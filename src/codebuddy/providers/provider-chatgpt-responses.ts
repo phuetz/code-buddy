@@ -359,7 +359,7 @@ export class ChatGptResponsesProvider implements Provider {
     // Non-streaming consumes the streaming path and aggregates.
     let content = '';
     const toolCalls: CodeBuddyToolCall[] = [];
-    let finishReason = 'stop';
+    let finishReason: string | undefined;
     let usage: CodeBuddyResponse['usage'];
 
     for await (const chunk of this.chatStream(messages, tools, opts)) {
@@ -395,6 +395,10 @@ export class ChatGptResponsesProvider implements Provider {
             : {}),
         };
       }
+    }
+
+    if (!finishReason) {
+      throw new Error('ChatGPT Responses stream ended without a terminal finish reason');
     }
 
     return {
@@ -986,6 +990,7 @@ export async function* parseSseStream(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let terminalEventSeen = false;
   let chunkIndex = 0;
   // Monotonic index per function_call so the downstream message-reducer keeps
   // parallel tool calls in separate slots. Hardcoding 0 made every parallel
@@ -1054,6 +1059,7 @@ export async function* parseSseStream(
         if (dataLines.length === 0) continue;
         const dataStr = dataLines.join('\n');
         if (dataStr === '[DONE]') {
+          terminalEventSeen = true;
           yield makeChunk({}, 'stop');
           return;
         }
@@ -1061,8 +1067,11 @@ export async function* parseSseStream(
         let parsed: {
           type?: string;
           delta?: string;
+          code?: string;
+          message?: string;
           item_id?: string;
           call_id?: string;
+          error?: { code?: string; message?: string };
           item?: {
             type?: string;
             id?: string;
@@ -1086,10 +1095,17 @@ export async function* parseSseStream(
         try {
           parsed = JSON.parse(dataStr);
         } catch {
-          continue; // malformed event, skip
+          throw new Error('ChatGPT Responses stream contained malformed SSE data');
         }
 
         const type = parsed.type;
+
+        if (type === 'error') {
+          throw new Error(
+            `ChatGPT Responses backend failure (${parsed.code ?? parsed.error?.code ?? 'unknown'}): ` +
+            `${parsed.message ?? parsed.error?.message ?? 'no message'}`,
+          );
+        }
 
         if (type === 'response.output_item.added' && parsed.item?.type === 'custom_tool_call') {
           const key = parsed.item.id ?? parsed.item.call_id;
@@ -1214,6 +1230,7 @@ export async function* parseSseStream(
         }
 
         if (type === 'response.completed') {
+          terminalEventSeen = true;
           const responseUsage = parsed.response?.usage;
           let chunkUsage: ChunkUsage | undefined;
           if (responseUsage) {
@@ -1241,6 +1258,11 @@ export async function* parseSseStream(
         // Other events (response.created, response.in_progress,
         // response.reasoning_text.delta, etc.) are ignored.
       }
+
+    }
+
+    if (!terminalEventSeen) {
+      throw new Error('ChatGPT Responses stream ended without a terminal event');
     }
   } finally {
     try { reader.releaseLock(); } catch { /* ignore */ }
