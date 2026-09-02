@@ -1126,7 +1126,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const sessionKey = message.sessionKey || 'default-global';
 
       // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
-      // Photo goes exclusively to CODEBUDDY_SENSORY_ALERT_CHAT via sendTelegramAlert.
+      // The photo sender is scoped to the requesting chat, not the global alert chat.
       if (channel.type === 'telegram') {
         try {
           const { maybeHandleCameraShareRequest } = await import('../../companion/camera-share.js');
@@ -1134,6 +1134,42 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             surface: 'telegram',
             inboundChatId: message.channel.id,
             rootDir: process.cwd(),
+            sendPhoto: async (caption, imagePath) => {
+              const imageChannel = channel as {
+                sendImageFile?: (channelId: string, imagePath: string, caption?: string) => Promise<void>;
+                send: (outbound: {
+                  channelId: string;
+                  content: string;
+                  replyTo?: string;
+                  attachments?: Array<{
+                    type: 'image';
+                    filePath?: string;
+                    fileName?: string;
+                    mimeType?: string;
+                  }>;
+                }) => Promise<{ success: boolean }>;
+              };
+              if (typeof imageChannel.sendImageFile === 'function') {
+                await imageChannel.sendImageFile(message.channel.id, imagePath, caption);
+                return true;
+              }
+              const path = await import('node:path');
+              const extension = path.extname(imagePath).slice(1).toLowerCase();
+              const sent = await imageChannel.send({
+                channelId: message.channel.id,
+                content: caption,
+                replyTo: message.id,
+                attachments: [{
+                  type: 'image',
+                  filePath: imagePath,
+                  fileName: path.basename(imagePath),
+                  mimeType: extension === 'jpg' || extension === 'jpeg'
+                    ? 'image/jpeg'
+                    : `image/${extension || 'png'}`,
+                }],
+              });
+              return Boolean(sent?.success);
+            },
           });
           if (share) {
             await channel.send({

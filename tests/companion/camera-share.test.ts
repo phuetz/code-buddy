@@ -155,17 +155,14 @@ describe('camera-share — capture factice + faux Telegram', () => {
 
   it('refuse d’envoyer vers un autre chat que CODEBUDDY_SENSORY_ALERT_CHAT', async () => {
     const frame = await fakeFrame();
-    const sendPhoto = vi.fn(async () => true);
     const result = await maybeHandleCameraShareRequest('envoie-moi une photo de la pièce', {
       surface: 'telegram',
       inboundChatId: OTHER_CHAT,
       env: env(),
       capture: async () => ({ success: true, path: frame }),
       analyze: async () => 'Un salon.',
-      sendPhoto,
     });
     expect(result!.telegramSent).toBe(false);
-    expect(sendPhoto).not.toHaveBeenCalled();
     expect(result!.spokenReply).toBeTruthy();
     await fs.rm(path.dirname(frame), { recursive: true, force: true });
   });
@@ -225,7 +222,7 @@ describe('camera-share — capture factice + faux Telegram', () => {
     await fs.rm(path.dirname(frame), { recursive: true, force: true });
   });
 
-  it('sur la voix, envoie au chat configuré si on le demande explicitement', async () => {
+  it('sur la voix, ne joint pas la photo sans chat Telegram demandeur', async () => {
     const frame = await fakeFrame();
     const sendPhoto = vi.fn(async () => true);
     const result = await maybeHandleCameraShareRequest(
@@ -238,8 +235,8 @@ describe('camera-share — capture factice + faux Telegram', () => {
         sendPhoto,
       },
     );
-    expect(result!.telegramSent).toBe(true);
-    expect(sendPhoto).toHaveBeenCalledOnce();
+    expect(result!.telegramSent).toBe(false);
+    expect(sendPhoto).not.toHaveBeenCalled();
     await fs.rm(path.dirname(frame), { recursive: true, force: true });
   });
 

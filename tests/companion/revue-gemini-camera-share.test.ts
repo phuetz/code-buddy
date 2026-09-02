@@ -19,7 +19,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   maybeHandleCameraShareRequest,
-  type CameraShareDeps,
+  type CameraShareOptions,
 } from '../../src/companion/camera-share.js';
 
 describe('Revue G3 — Partage Caméra : fuite de photo vers un chat tiers non demandeur', () => {
@@ -32,11 +32,12 @@ describe('Revue G3 — Partage Caméra : fuite de photo vers un chat tiers non d
       CODEBUDDY_VISION_TELEGRAM_PHOTO: 'true',
     };
 
-    const deps: CameraShareDeps = {
+    const deps: CameraShareOptions = {
       env,
       // Requête vocale ou CLI locale : aucun chatId Telegram n'est spécifié
       inboundChatId: undefined,
-      takeSnapshot: async () => ({
+      capture: async () => ({
+        success: true,
         path: '/tmp/private-camera-room.jpg',
         timestamp: Date.now(),
         format: 'jpeg',
@@ -68,10 +69,12 @@ describe('Revue G3 — Partage Caméra : fuite de photo vers un chat tiers non d
       CODEBUDDY_VISION_TELEGRAM_PHOTO: 'true',
     };
 
-    const deps: CameraShareDeps = {
+    const deps: CameraShareOptions = {
       env,
+      surface: 'telegram',
       inboundChatId: 'chat-bureau-prive-2', // Le bureau demande sa photo
-      takeSnapshot: async () => ({
+      capture: async () => ({
+        success: true,
         path: '/tmp/private-camera-room.jpg',
         timestamp: Date.now(),
         format: 'jpeg',

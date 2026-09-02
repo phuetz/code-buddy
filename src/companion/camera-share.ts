@@ -55,7 +55,7 @@ export type CameraShareSurface = 'telegram' | 'voice';
 
 export interface CameraShareOptions {
   surface?: CameraShareSurface;
-  /** Inbound Telegram chat id. Photo is sent only when this matches the alert chat. */
+  /** Inbound Telegram chat id. A photo is sent only to this requester's chat. */
   inboundChatId?: string;
   cwd?: string;
   rootDir?: string;
@@ -64,7 +64,8 @@ export interface CameraShareOptions {
   sendTelegram?: boolean;
   capture?: (options: CameraSnapshotOptions) => Promise<CameraSnapshotResult>;
   analyze?: (imagePath: string) => Promise<string>;
-  sendPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
+  /** Sends to the requester's chat when provided by a channel adapter. */
+  sendPhoto?: (caption: string, imagePath: string, destinationChatId?: string) => Promise<boolean>;
   now?: () => Date;
 }
 
@@ -159,9 +160,7 @@ function alertChatId(env: NodeJS.ProcessEnv): string {
 
 function isConfiguredAlertChat(inboundChatId: string | undefined, env: NodeJS.ProcessEnv): boolean {
   const alert = alertChatId(env);
-  if (!alert) return false;
-  if (!inboundChatId) return true;
-  return inboundChatId === alert;
+  return Boolean(alert && inboundChatId?.trim() && inboundChatId.trim() === alert);
 }
 
 function visionEndpointAllowed(env: NodeJS.ProcessEnv): boolean {
@@ -298,12 +297,16 @@ export async function maybeHandleCameraShareRequest(
   const surface = options.surface ?? 'voice';
   const wantSend = wantsTelegramSend(heard, options);
   const photoEnabled = isPhotoSendEnabled(env);
-  const allowedChat = isConfiguredAlertChat(
-    surface === 'telegram' ? options.inboundChatId : undefined,
-    env,
-  );
+  const inboundChatId = surface === 'telegram' ? options.inboundChatId?.trim() : undefined;
+  const hasRequesterDestination = Boolean(inboundChatId);
+  const canUseInjectedSender = hasRequesterDestination && Boolean(options.sendPhoto);
+  const allowedChat = canUseInjectedSender || isConfiguredAlertChat(inboundChatId, env);
 
-  if (surface === 'telegram' && !isConfiguredAlertChat(options.inboundChatId, env)) {
+  if (
+    surface === 'telegram' &&
+    !isConfiguredAlertChat(inboundChatId, env) &&
+    !canUseInjectedSender
+  ) {
     return {
       success: true,
       telegramSent: false,
@@ -359,7 +362,7 @@ export async function maybeHandleCameraShareRequest(
               const { sendTelegramAlert } = await import('../sensory/alert.js');
               return sendTelegramAlert(text, imagePath);
             });
-          telegramSent = await sendPhoto(caption, snapshot.path);
+          telegramSent = await sendPhoto(caption, snapshot.path, inboundChatId);
           if (telegramSent) lastPhotoSendAt = nowMs;
         } catch (err) {
           logger.warn(
