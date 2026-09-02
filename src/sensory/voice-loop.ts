@@ -2223,12 +2223,12 @@ async function resolveVoiceAudioPlayer(): Promise<VoiceAudioPlayer | null> {
   const candidates: VoiceAudioPlayer[] = [
     {
       cmd: 'aplay',
-      stdinArgs: ['-q', '-'],
+      stdinArgs: ['-q', '--buffer-time=300000', '-'],
       fileArgs: (file) => ['-q', file],
     },
     {
       cmd: 'ffplay',
-      stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-i', 'pipe:0'],
+      stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-infbuf', '-buffer_size', '300000', '-i', 'pipe:0'],
       fileArgs: (file) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', file],
     },
   ];
@@ -2569,16 +2569,19 @@ function makeDefaultStreamSpeak(
       const partsToWrite = jitterQueue;
       jitterQueue = [];
       jitterAudioBytes = 0;
+      const firstPart = partsToWrite[0];
+      const secondPart = partsToWrite[1];
       if (
-        partsToWrite.length > 1 &&
-        partsToWrite[0].length <= 1024 &&
-        partsToWrite[0].length >= 12 &&
-        partsToWrite[0].subarray(0, 4).toString('ascii') === 'RIFF'
+        firstPart &&
+        secondPart &&
+        firstPart.length <= 1024 &&
+        firstPart.length >= 12 &&
+        firstPart.subarray(0, 4).toString('ascii') === 'RIFF'
       ) {
-        const probe = probePcm16Wav(partsToWrite[0]);
-        if (probe.status === 'ready' && partsToWrite[0].length === probe.layout.dataOffset) {
-          const header = partsToWrite.shift()!;
-          partsToWrite[0] = Buffer.concat([header, partsToWrite[0]]);
+        const probe = probePcm16Wav(firstPart);
+        if (probe.status === 'ready' && firstPart.length === probe.layout.dataOffset) {
+          partsToWrite.shift();
+          partsToWrite[0] = Buffer.concat([firstPart, secondPart]);
         }
       }
       for (const part of partsToWrite) {

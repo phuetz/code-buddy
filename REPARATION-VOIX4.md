@@ -69,20 +69,54 @@
   ```
   Et dans `tests/sensory/revue-voix-falsification.test.ts` :
   HYPOTHÈSE 2 passe au VERT (0 underrun, buffer de tête bien accumulé).
-- **Commit :** (En cours de création)
+- **Commit :** `8c2ef897e` (`fix(voice): conserver le tampon de tête dans Pcm16WavStreamGain avec gain figé (Point 2)`)
 
 ## 4. Point 3 — Arguments player audio (`aplay --buffer-time`, `ffplay`)
-- Options retenues :
-- Test rouge :
-- Implémentation :
-- Test vert :
-- Commit :
+- **Options retenues :**
+  - Pour `aplay` : `stdinArgs: ['-q', '--buffer-time=300000', '-']` (marge explicite de 300 000 µs = 300 ms dans le ring buffer ALSA pour absorber les à-coups d'alimentation).
+  - Pour `ffplay` : `stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-infbuf', '-buffer_size', '300000', '-i', 'pipe:0']` (`-infbuf` évite la limitation artificielle de la file d'entrée en flux temps réel et `-buffer_size 300000` alloue un tampon d'entrée équivalent pour le protocole pipe).
+- **Test rouge :**
+  Exécuté sur `tests/sensory/revue-voix-falsification.test.ts` :
+  ```
+  FAIL HYPOTHÈSE 4 (ROUGE) : la configuration aplay n’impose aucun buffer-time pour absorber les goulots d’étranglement de stdin
+  AssertionError: expected false to be true // Object.is equality
+  - Expected: true
+  + Received: false
+  ```
+- **Implémentation :**
+  - Mise à jour des `stdinArgs` de `aplay` et `ffplay` dans `resolveVoiceAudioPlayer` (`src/sensory/voice-loop.ts`).
+  - Ajout des assertions unitaires dans `tests/voice/voice-audio-player.test.ts`.
+- **Test vert :**
+  ```
+  npx vitest run tests/voice/voice-audio-player.test.ts
+  Test Files  1 passed (1)
+       Tests  3 passed (3)
+  ```
+  Et dans `tests/sensory/revue-voix-falsification.test.ts` :
+  HYPOTHÈSE 4 passe au VERT.
+- **Commit :** `fix(voice): arguments explicites de tampon pour aplay et ffplay (Point 3)`
 
 ## 5. Examen de `Pcm16WavStreamEdges` (H3)
-- Vérification expérimentale :
-- Conclusion :
+- **Vérification expérimentale :**
+  Dans `Pcm16WavStreamEdges` (`src/voice/pcm-edges.ts`), `bufferTail` retient temporairement les échantillons sous le seuil d'amplitude (-50 dBFS) en fin de chunk dans `this.tail`.
+  Le test multi-chunks dans `tests/sensory/revue-voix-falsification.test.ts` démontre que :
+  1. Lors de la réception du chunk 1 se terminant par une occlusive (40 ms de silence), ce silence est effectivement mis en réserve dans `this.tail`.
+  2. Dès la réception du chunk 2 (reprise de parole sonore), `Buffer.concat([this.tail, payload])` restitue l'intégralité du silence occlusif dans le flux audio délivré au lecteur, sans la moindre perte d'échantillon.
+  3. En fin de flux, `edges.flush()` applique le fondu de sortie sur le silence terminal naturel.
+  4. Avec le tampon de gigue de 250 ms (Point 1) et le buffer de tête (Point 2), cette retenue temporaire de ~40 ms est totalement invisible pour le DAC et ne provoque aucune rupture de continuité sonore.
+- **Conclusion :**
+  `Pcm16WavStreamEdges` est conservé tel quel. L'hypothèse H3 (qui supposait un défaut de coupure) est infirmée : le comportement de rétention de queue est inhérent et indispensable au fenêtrage de bordure en flux continu.
 
 ## 6. Synthèse des tests et validations
-- `tests/sensory` et `tests/voice` :
-- `npx tsc --noEmit -p .` :
-- ESLint :
+- **`tests/sensory` et `tests/voice` :**
+  64 fichiers de tests exécutés avec succès, 739 tests passés, 1 sauté (skip conditionnel), 0 échec.
+  Commande : `npx vitest run tests/sensory tests/voice`
+- **`npx tsc --noEmit -p .` :**
+  Code retour : 0. Aucune erreur de compilation TypeScript.
+- **ESLint :**
+  Code retour : 0. Aucun avertissement ni erreur sur les fichiers modifiés (`src/sensory/voice-loop.ts`, `src/voice/tts-volume.ts`, `tests/sensory/voice-jitter-buffer.test.ts`, `tests/voice/tts-volume.test.ts`, `tests/voice/voice-audio-player.test.ts`, `tests/sensory/revue-voix-falsification.test.ts`).
+  Commande : `npx eslint <fichiers>`
+- **Commits réalisés :**
+  1. Point 1 : `79c8ad61d` (`feat(voice): tampon de gigue initial dans makeDefaultStreamSpeak (Point 1)`)
+  2. Point 2 : `8c2ef897e` (`fix(voice): conserver le tampon de tête dans Pcm16WavStreamGain avec gain figé (Point 2)`)
+  3. Point 3 : `fix(voice): arguments explicites de tampon pour aplay et ffplay (Point 3)` (HEAD)
