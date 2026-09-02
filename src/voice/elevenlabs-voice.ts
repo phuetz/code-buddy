@@ -50,6 +50,40 @@ export interface ElevenLabsVoiceSynthesisOptions {
   usagePath?: string;
 }
 
+/**
+ * Réglages de rendu ElevenLabs de la voix du robot, depuis l'environnement
+ * (voix plus douce, plus stable, plus lente…). Aucune variable ⇒ `undefined`
+ * ⇒ le corps de requête reste identique à avant (byte-identical).
+ */
+export function resolveElevenLabsVoiceSettings(
+  env: NodeJS.ProcessEnv = process.env,
+): { stability?: number; similarityBoost?: number; style?: number; useSpeakerBoost?: boolean; speed?: number } | undefined {
+  const num = (key: string, min: number, max: number): number | undefined => {
+    const raw = env[key]?.trim();
+    if (!raw) return undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined;
+  };
+  const boolRaw = env.CODEBUDDY_ELEVENLABS_SPEAKER_BOOST?.trim().toLowerCase();
+  const useSpeakerBoost = boolRaw === undefined || boolRaw === '' ? undefined : boolRaw !== 'false' && boolRaw !== '0';
+  const settings = {
+    stability: num('CODEBUDDY_ELEVENLABS_STABILITY', 0, 1),
+    similarityBoost: num('CODEBUDDY_ELEVENLABS_SIMILARITY', 0, 1),
+    style: num('CODEBUDDY_ELEVENLABS_STYLE', 0, 1),
+    useSpeakerBoost,
+    speed: num('CODEBUDDY_ELEVENLABS_SPEED', 0.7, 1.2),
+  };
+  const defined = Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined));
+  return Object.keys(defined).length > 0 ? defined : undefined;
+}
+
+/** Signature courte des réglages, pour que le cache TTS distingue deux rendus. */
+export function elevenLabsVoiceSettingsSignature(env: NodeJS.ProcessEnv = process.env): string {
+  const s = resolveElevenLabsVoiceSettings(env);
+  if (!s) return '';
+  return Object.entries(s).map(([k, v]) => `${k}=${v}`).join(',');
+}
+
 const inFlightCharacters = new Map<string, number>();
 const warnedMonths = new Set<string>();
 const unwritableLedgers = new Set<string>();
@@ -373,6 +407,7 @@ export async function synthesizeElevenLabsPcm24k(
       text,
       modelId: env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL,
       outputFormat: ELEVENLABS_VOICE_OUTPUT_FORMAT,
+      ...(resolveElevenLabsVoiceSettings(env) ? { voiceSettings: resolveElevenLabsVoiceSettings(env) } : {}),
       signal,
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     });
@@ -442,6 +477,7 @@ export async function openElevenLabsPcm24kStream(
       text,
       modelId: env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL,
       outputFormat: ELEVENLABS_VOICE_OUTPUT_FORMAT,
+      ...(resolveElevenLabsVoiceSettings(env) ? { voiceSettings: resolveElevenLabsVoiceSettings(env) } : {}),
       signal: controller.signal,
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     });

@@ -26,6 +26,7 @@ import {
   openElevenLabsPcm24kStream,
   synthesizeElevenLabsPcm24k,
   type ElevenLabsVoiceSynthesisOptions,
+  elevenLabsVoiceSettingsSignature,
 } from './elevenlabs-voice.js';
 
 export type LocalTtsEngine = 'elevenlabs' | 'pocket' | 'voicebox' | 'piper';
@@ -72,7 +73,8 @@ export function resolveElevenLabsCacheVoice(
 ): string {
   const selectedVoice = env.CODEBUDDY_TTS_VOICE?.trim() || 'elevenlabs:missing';
   const model = env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL;
-  return `${selectedVoice}:model=${model}:format=pcm_24000`;
+  const settings = elevenLabsVoiceSettingsSignature(env);
+  return `${selectedVoice}:model=${model}:format=pcm_24000${settings ? `:settings=${settings}` : ''}`;
 }
 
 /** Local Pocket server URL. Port 8766 avoids the common AudioReader port 8000. */

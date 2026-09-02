@@ -19,6 +19,8 @@ export interface ElevenLabsSpeechRequest {
     similarityBoost?: number;
     style?: number;
     useSpeakerBoost?: boolean;
+    /** 0.7 (lent) → 1.2 (rapide) ; non envoyé si absent. */
+    speed?: number;
   };
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
@@ -66,6 +68,7 @@ export async function requestElevenLabsSpeech(
               similarity_boost: request.voiceSettings.similarityBoost ?? 0.75,
               style: request.voiceSettings.style ?? 0,
               use_speaker_boost: request.voiceSettings.useSpeakerBoost ?? true,
+              ...(request.voiceSettings.speed !== undefined ? { speed: request.voiceSettings.speed } : {}),
             },
           }
         : {}),
@@ -132,6 +135,7 @@ export async function requestElevenLabsSpeechStream(
               similarity_boost: request.voiceSettings.similarityBoost ?? 0.75,
               style: request.voiceSettings.style ?? 0,
               use_speaker_boost: request.voiceSettings.useSpeakerBoost ?? true,
+              ...(request.voiceSettings.speed !== undefined ? { speed: request.voiceSettings.speed } : {}),
             },
           }
         : {}),
