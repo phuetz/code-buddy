@@ -13,7 +13,7 @@ describe('suggestTemplate', () => {
   });
 
   it('defaults to React for product UI prompts', () => {
-    expect(suggestTemplate('une todo app React')).toBe('react-ts');
-    expect(suggestTemplate('une landing page')).toBe('react-ts');
+    expect(suggestTemplate('une todo app React')).toBe('react-tailwind');
+    expect(suggestTemplate('une landing page')).toBe('react-tailwind');
   });
 });

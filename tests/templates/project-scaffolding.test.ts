@@ -13,7 +13,7 @@ async function makeTmpDir(): Promise<string> {
 }
 
 async function generateProject(options: {
-  template: 'react-ts' | 'express-api' | 'node-cli';
+  template: 'react-ts' | 'react-tailwind' | 'express-api' | 'node-cli';
   projectName: string;
   variables?: Record<string, string | boolean>;
   designSystem?: string;
@@ -32,6 +32,24 @@ async function generateProject(options: {
 
 async function readPackageJson(projectPath: string): Promise<Record<string, unknown>> {
   return JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8')) as Record<string, unknown>;
+}
+
+function cssRgbToken(block: string, name: string): [number, number, number] {
+  const match = block.match(new RegExp(`${name}:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)`));
+  if (!match?.[1] || !match[2] || !match[3]) throw new Error(`Missing CSS RGB token: ${name}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function contrastRatio(first: [number, number, number], second: [number, number, number]): number {
+  const luminance = (rgb: [number, number, number]) => {
+    const [red, green, blue] = rgb.map((channel) => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (red ?? 0) + 0.7152 * (green ?? 0) + 0.0722 * (blue ?? 0);
+  };
+  const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return ((values[0] ?? 0) + 0.05) / ((values[1] ?? 0) + 0.05);
 }
 
 afterEach(async () => {
@@ -60,6 +78,58 @@ describe('TemplateEngine real scaffolding', () => {
 
     const packageJson = await readPackageJson(result.projectPath);
     expect(packageJson.name).toBe('real-react-app');
+  });
+
+  it('generates a styled react-tailwind project with centralized tokens and reusable components', async () => {
+    await makeTmpDir();
+
+    const result = await generateProject({
+      template: 'react-tailwind',
+      projectName: 'studio-ready-app',
+      variables: { description: 'A polished product workspace' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.filesCreated).toEqual(expect.arrayContaining([
+      'tailwind.config.ts',
+      'postcss.config.cjs',
+      'src/styles/tokens.css',
+      'src/components/ui/Button.tsx',
+      'src/components/ui/Card.tsx',
+      'src/components/ui/Badge.tsx',
+      'src/components/ThemeToggle.tsx',
+    ]));
+
+    const packageJson = await readPackageJson(result.projectPath) as {
+      devDependencies?: Record<string, string>;
+    };
+    expect(packageJson.devDependencies).toMatchObject({
+      tailwindcss: expect.any(String),
+      postcss: expect.any(String),
+      autoprefixer: expect.any(String),
+    });
+
+    const tokens = await fs.readFile(path.join(result.projectPath, 'src', 'styles', 'tokens.css'), 'utf8');
+    expect(tokens).toContain(':root');
+    expect(tokens).toContain('.dark');
+    expect(tokens).toContain('--color-accent');
+    expect(tokens).toContain('--font-display');
+    expect(tokens).toContain('--text-display');
+    expect(tokens).toContain('--space-section');
+    const lightTokens = tokens.slice(tokens.indexOf(':root'), tokens.indexOf('.dark'));
+    const darkTokens = tokens.slice(tokens.indexOf('.dark'));
+    expect(contrastRatio(cssRgbToken(lightTokens, '--color-ink'), cssRgbToken(lightTokens, '--color-canvas'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(cssRgbToken(lightTokens, '--color-muted'), cssRgbToken(lightTokens, '--color-canvas'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(cssRgbToken(lightTokens, '--color-action-contrast'), cssRgbToken(lightTokens, '--color-action'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(cssRgbToken(darkTokens, '--color-ink'), cssRgbToken(darkTokens, '--color-canvas'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(cssRgbToken(darkTokens, '--color-muted'), cssRgbToken(darkTokens, '--color-canvas'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(cssRgbToken(darkTokens, '--color-action-contrast'), cssRgbToken(darkTokens, '--color-action'))).toBeGreaterThanOrEqual(4.5);
+
+    const app = await fs.readFile(path.join(result.projectPath, 'src', 'App.tsx'), 'utf8');
+    expect(app).toContain('<ThemeToggle />');
+    expect(app).toContain('<Button');
+    expect(app).toContain('<Card');
+    expect(tokens).not.toMatch(/\bInter\b/);
   });
 
   it('generates express-api and node-cli projects with their key files', async () => {
@@ -140,6 +210,11 @@ describe('TemplateEngine real scaffolding', () => {
     expect(result.filesCreated).not.toContain('DESIGN.md');
     expect(existsSync(path.join(result.projectPath, 'src', 'design-system.css'))).toBe(false);
     expect(existsSync(path.join(result.projectPath, 'DESIGN.md'))).toBe(false);
+
+    const packageJson = await readPackageJson(result.projectPath) as {
+      devDependencies?: Record<string, string>;
+    };
+    expect(packageJson.devDependencies).not.toHaveProperty('tailwindcss');
   });
 
   it('does not create node_modules or .git when skipInstall and skipGit are true', async () => {

@@ -16,8 +16,13 @@ describe('ScaffoldService', () => {
   it('lists the built-in App Studio templates', () => {
     const service = new ScaffoldService();
 
-    expect(service.listTemplates().map((template) => template.id)).toEqual(['react-ts', 'express-api', 'node-cli']);
-    expect(service.listTemplates().length).toBeGreaterThanOrEqual(3);
+    expect(service.listTemplates().map((template) => template.id)).toEqual([
+      'react-tailwind',
+      'react-ts',
+      'express-api',
+      'node-cli',
+    ]);
+    expect(service.listTemplates().length).toBeGreaterThanOrEqual(4);
   });
 
   it('delegates generation to the core TemplateEngine', async () => {
