@@ -1275,6 +1275,18 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Replace an existing persistent memory entry under the memory char budget'
   },
   {
+    name: 'remind',
+    category: 'utility',
+    keywords: [
+      'remind', 'reminder', 'rappel', 'rappelle-moi', 'rappelle moi', 'remind me',
+      'alarm', 'alarme', 'notify me', 'préviens-moi', 'previens moi', 'schedule',
+      'todo', 'tâche', 'one-shot', 'dated',
+    ],
+    priority: 6,
+    description:
+      'Set a dated one-shot or daily recurring reminder without shelling buddy remind add',
+  },
+  {
     name: 'memory_propose',
     category: 'utility',
     keywords: ['memory', 'candidate', 'propose', 'review', 'long-term', 'persist'],

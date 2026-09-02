@@ -146,6 +146,8 @@ reason
 recall
 relationship_context
 remember
+remind
+replace_memory
 resolve_conflicts
 restore_context
 route_peer

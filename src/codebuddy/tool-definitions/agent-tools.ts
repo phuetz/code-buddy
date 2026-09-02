@@ -648,6 +648,76 @@ export const REMEMBER_TOOL: CodeBuddyTool = {
   },
 };
 
+export const REPLACE_MEMORY_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'replace_memory',
+    description:
+      'Replace an existing persistent memory entry. Use when a stored fact is obsolete or too verbose and must be rewritten under the memory char budget. No-op (success) if the key is missing — it does not create a new entry.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'Existing memory key to replace',
+        },
+        value: {
+          type: 'string',
+          description: 'New concise memory value',
+        },
+        scope: {
+          type: 'string',
+          enum: ['project', 'user'],
+          description: 'Memory scope to replace in (default: project)',
+        },
+        category: {
+          type: 'string',
+          enum: ['project', 'preferences', 'decisions', 'patterns', 'context', 'custom'],
+          description: 'Optional replacement category',
+        },
+      },
+      required: ['key', 'value'],
+    },
+  },
+};
+
+export const REMIND_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'remind',
+    description:
+      "Set a reminder for the user. PREFER this over running `buddy remind add` in the shell. For a ONE-TIME event, pass `date` (YYYY-MM-DD) — it fires once at `time` on that day, then retires. Omit `date` for a DAILY recurring reminder. Idempotent: an identical reminder is not stacked. Requires CODEBUDDY_REMINDERS for the runner to announce due items.",
+    parameters: {
+      type: 'object',
+      properties: {
+        label: {
+          type: 'string',
+          description: 'What to be reminded of, e.g. "prendre le train"',
+        },
+        time: {
+          type: 'string',
+          description: 'Local time of day HH:MM (24h), e.g. "10:38"',
+        },
+        date: {
+          type: 'string',
+          description:
+            'One-shot date YYYY-MM-DD — fires once then retires. OMIT for a daily recurring reminder.',
+        },
+        leadMinutes: {
+          type: 'number',
+          description:
+            'Fire this many minutes BEFORE `time` (for "remind me N before the event"). `time` is the EVENT time; the reminder fires at time − leadMinutes.',
+        },
+        message: {
+          type: 'string',
+          description: 'Optional custom spoken/sent text',
+        },
+      },
+      required: ['label', 'time'],
+    },
+  },
+};
+
 // Audit 2026-09-02 : le prompt système (prompt-builder.ts) ordonne d'utiliser
 // memory_propose pour les faits inférés/ambigus et tool-selection-strategy.ts
 // le force-inclut — mais aucune définition LLM n'existait : la boucle « agent
@@ -1434,6 +1504,8 @@ export const AGENT_TOOLS: CodeBuddyTool[] = [
   DEVICE_MANAGE_TOOL,
   SPAWN_PARALLEL_AGENTS_TOOL,
   REMEMBER_TOOL,
+  REPLACE_MEMORY_TOOL,
+  REMIND_TOOL,
   MEMORY_PROPOSE_TOOL,
   RECALL_TOOL,
   FORGET_TOOL,
