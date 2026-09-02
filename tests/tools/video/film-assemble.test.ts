@@ -77,6 +77,7 @@ function makeFakeSpawn(
     glAvailable?: boolean;
     versionCode?: number;
     renderCode?: number;
+    renderWritesOutput?: boolean;
     seen?: string[][];
   } = {}
 ): typeof spawn {
@@ -132,7 +133,15 @@ function makeFakeSpawn(
         );
       } else if (isRender) {
         child.stderr.emit('data', Buffer.from('frame=  100 fps= 30'));
-        child.emit('close', opts.renderCode ?? 0);
+        if (opts.renderWritesOutput !== false) {
+          const destination = args.at(-1)!;
+          void writeFile(destination, 'rendered').then(
+            () => child.emit('close', opts.renderCode ?? 0),
+            () => child.emit('close', 1),
+          );
+        } else {
+          child.emit('close', opts.renderCode ?? 0);
+        }
       } else {
         child.emit('close', 0);
       }
@@ -639,7 +648,10 @@ describe('assembleFilm — orchestration (injected)', () => {
     );
     expect(res.success, res.error).toBe(true);
     const finish = seen.find((args) => args.includes('-vf'));
-    expect(finish).toEqual(expect.arrayContaining(['-i', res.outputPath, '-vf', buildLut3dFilter(lutPath)]));
+    expect(finish).toEqual(expect.arrayContaining(['-vf', buildLut3dFilter(lutPath)]));
+    const finishInput = finish?.[finish.indexOf('-i') + 1];
+    expect(finishInput).toMatch(/-render\.mp4$/);
+    expect(finishInput).not.toBe(res.outputPath);
   });
 
   it('runs both loudnorm passes against the assembled output', async () => {
@@ -655,7 +667,8 @@ describe('assembleFilm — orchestration (injected)', () => {
     expect(renderIndex).toBeGreaterThanOrEqual(0);
     expect(measureIndex).toBeGreaterThan(renderIndex);
     expect(finishIndex).toBeGreaterThan(measureIndex);
-    expect(seen[measureIndex]).toContain(res.outputPath);
+    expect(seen[measureIndex]?.some((arg) => /-render\.mp4$/.test(arg))).toBe(true);
+    expect(seen[measureIndex]).not.toContain(res.outputPath);
   });
 
   it('surfaces the ffmpeg stderr tail on a render failure', async () => {
@@ -665,6 +678,21 @@ describe('assembleFilm — orchestration (injected)', () => {
     );
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/film render failed/i);
+  });
+
+  it('fails when ffmpeg exits successfully without replacing a stale output', async () => {
+    const output = join(root, 'stale.mp4');
+    await writeFile(output, 'old render');
+    const res = await assembleFilm(
+      { clips: ['/a.mp4'], output: 'stale.mp4', rootDir: root },
+      {
+        spawn: makeFakeSpawn({ renderWritesOutput: false }),
+        probeClips: async (p) => p.map((x) => clip(x, 4)),
+      },
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/output|render|artifact|probe/i);
+    expect(await readFile(output, 'utf8')).toBe('old render');
   });
 });
 

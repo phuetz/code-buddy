@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
+import { EventEmitter } from 'events';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, sep } from 'path';
@@ -256,6 +257,59 @@ describe('reduceQuality', () => {
     });
     expect(r.silent).toBe(false);
     expect(r.pass).toBe(true);
+  });
+
+  it('fails when an audio track has no measured mean volume', () => {
+    const r = reduceQuality({
+      probedDuration: 10,
+      expectedDuration: 10,
+      hasAudio: true,
+      meanDb: null,
+      maxDb: null,
+      blackIntervals: [],
+    });
+    expect(r.pass).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/mean volume/i);
+  });
+});
+
+describe('assessFilmQuality — injected failures', () => {
+  it('fails when the ffmpeg analysis exits non-zero without statistics', async () => {
+    const fakeSpawn = ((cmd: string, args: string[]) => {
+      const child = new EventEmitter() as unknown as {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        kill: () => void;
+        on: EventEmitter['on'];
+      };
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => undefined;
+      setImmediate(() => {
+        if (cmd.includes('ffprobe')) {
+          child.stdout.emit(
+            'data',
+            Buffer.from(
+              JSON.stringify({
+                format: { duration: '10' },
+                streams: [{ codec_type: 'video' }, { codec_type: 'audio' }],
+              }),
+            ),
+          );
+          child.emit('close', 0);
+        } else if (args.includes('-f') && args.includes('null')) {
+          child.stderr.emit('data', Buffer.from('analysis failed'));
+          child.emit('close', 1);
+        } else {
+          child.emit('close', 0);
+        }
+      });
+      return child;
+    }) as never;
+
+    const r = await assessFilmQuality('/film.mp4', { expectedDuration: 10 }, { spawn: fakeSpawn });
+    expect(r.pass).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/analysis/i);
   });
 });
 

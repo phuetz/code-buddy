@@ -3,7 +3,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
-import { mkdtemp, rm, stat, writeFile } from 'fs/promises';
+import { mkdtemp, rm, stat, mkdir } from 'fs/promises';
+import { EventEmitter } from 'events';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -186,4 +187,80 @@ describe.runIf(hasFfmpeg)('renderScene — real', () => {
       .trim();
     expect(hasAudio).toBe('audio');
   }, 60_000);
+});
+
+describe('renderScene — injected artifact guards', () => {
+  it('fails when ffmpeg exits 0 without creating the scene clip', async () => {
+    const dir = await mkdtemp(join(process.cwd(), '.scene-render-'));
+    try {
+      const fakeSpawn = ((_cmd: string) => {
+        const child = new EventEmitter() as unknown as {
+          stdout: EventEmitter;
+          stderr: EventEmitter;
+          kill: () => void;
+          on: EventEmitter['on'];
+        };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => undefined;
+        setImmediate(() => child.emit('close', 0));
+        return child;
+      }) as never;
+      const outPath = join(dir, 'missing.mp4');
+      const result = await renderScene(
+        {
+          id: 'missing',
+          title: 'Missing',
+          duration: 3,
+          visual: { kind: 'text' },
+          outPath,
+        },
+        { noImageMagick: true, workDir: dir, spawn: fakeSpawn },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/output|artifact|clip/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when requested subtitles cannot be written', async () => {
+    const dir = await mkdtemp(join(process.cwd(), '.scene-subtitles-'));
+    try {
+      await mkdir(join(dir, 'captions.ass'));
+      const seen: string[][] = [];
+      const fakeSpawn = ((_cmd: string, args: string[]) => {
+        seen.push(args);
+        const child = new EventEmitter() as unknown as {
+          stdout: EventEmitter;
+          stderr: EventEmitter;
+          kill: () => void;
+          on: EventEmitter['on'];
+        };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => undefined;
+        setImmediate(() => child.emit('close', 0));
+        return child;
+      }) as never;
+      const result = await renderScene(
+        {
+          id: 'captions',
+          title: 'Captions',
+          narrationText: 'A caption that must be present',
+          narrationWav: join(dir, 'narration.wav'),
+          subtitles: true,
+          duration: 3,
+          visual: { kind: 'text' },
+          outPath: join(dir, 'scene.mp4'),
+        },
+        { noImageMagick: true, workDir: dir, spawn: fakeSpawn },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/subtitle|caption/i);
+      expect(seen.some((args) => args.includes('-filter_complex'))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

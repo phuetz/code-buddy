@@ -42,6 +42,7 @@ export interface RenderSceneInput {
 export interface RenderSceneDeps {
   spawn?: typeof realSpawn;
   ffmpegBin?: string;
+  ffprobeBin?: string;
   convertBin?: string;
   identifyBin?: string;
   /** Working dir for intermediate stills / ass (default: alongside outPath). */
@@ -252,6 +253,40 @@ function run(
 async function hasBinary(spawn: typeof realSpawn, bin: string): Promise<boolean> {
   const { code } = await run(spawn, bin, ['-version'], 10_000);
   return code === 0;
+}
+
+async function verifyVideoArtifact(
+  spawn: typeof realSpawn,
+  ffprobeBin: string,
+  file: string,
+): Promise<boolean> {
+  try {
+    const metadata = await fs.lstat(file);
+    if (!metadata.isFile() || metadata.size <= 0) return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[scene-render] could not inspect ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return false;
+  }
+  const probe = await run(
+    spawn,
+    ffprobeBin,
+    ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
+    30_000,
+  );
+  if (probe.code !== 0) return false;
+  try {
+    const json = JSON.parse(probe.stdout) as {
+      format?: { duration?: string };
+      streams?: Array<{ codec_type?: string }>;
+    };
+    const duration = json.format?.duration ? Number(json.format.duration) : NaN;
+    return Number.isFinite(duration) && duration > 0 && !!json.streams?.some((s) => s.codec_type === 'video');
+  } catch (error) {
+    logger.warn(`[scene-render] invalid ffprobe metadata for ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
 }
 
 // ============================================================================
@@ -479,6 +514,7 @@ export async function renderScene(
   }
 
   let assPath: string | undefined;
+  let subtitleError: string | undefined;
   const wantSubs = input.subtitles ?? !!input.narrationText;
   if (wantSubs && input.narrationText && input.narrationWav) {
     assPath = path.join(workDir, `${input.id}.ass`);
@@ -492,9 +528,20 @@ export async function renderScene(
           playResY: h,
         })
       )
-      .catch(() => {
+      .catch((error: unknown) => {
         assPath = undefined;
+        subtitleError = error instanceof Error ? error.message : String(error);
       });
+  }
+
+  if (subtitleError) {
+    await fs.rm(stillPath, { force: true }).catch(() => undefined);
+    logger.warn(`[scene-render] ${input.id} subtitles could not be written: ${subtitleError}`);
+    return {
+      ok: false,
+      outPath: input.outPath,
+      error: `subtitle file could not be written: ${subtitleError}`,
+    };
   }
 
   const args = buildSceneVideoArgs({
@@ -515,6 +562,14 @@ export async function renderScene(
       `[scene-render] ${input.id} ffmpeg failed: ${stderr.trim().split('\n').slice(-3).join(' ')}`
     );
     return { ok: false, outPath: input.outPath, error: `ffmpeg render failed (exit ${code})` };
+  }
+  if (!(await verifyVideoArtifact(spawn, deps.ffprobeBin ?? 'ffprobe', input.outPath))) {
+    logger.warn(`[scene-render] ${input.id} ffmpeg exited 0 but produced no valid non-empty video artifact`);
+    return {
+      ok: false,
+      outPath: input.outPath,
+      error: 'ffmpeg render reported success but produced no valid non-empty video artifact',
+    };
   }
   return { ok: true, outPath: input.outPath };
 }

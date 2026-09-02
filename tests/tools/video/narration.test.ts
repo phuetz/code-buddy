@@ -5,7 +5,7 @@
  * spawn/fetch, proving the fail-open contract (provider errors → local fallback
  * or null, never throws).
  */
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,11 +20,12 @@ import {
   buildMuxNarrationArgs,
   synthesizeNarration,
   synthesizeLocalizedNarration,
+  muxNarration,
 } from '../../../src/tools/video/narration.js';
 import { logger } from '../../../src/utils/logger.js';
 
 function makeSpawn(
-  opts: { piperCode?: number; probeDur?: string; seen?: string[][] } = {}
+  opts: { piperCode?: number; piperWrites?: boolean; probeDur?: string; seen?: string[][] } = {}
 ): typeof spawn {
   return ((cmd: string, args: string[]) => {
     opts.seen?.push([cmd, ...args]);
@@ -40,11 +41,16 @@ function makeSpawn(
     child.kill = () => undefined;
     const isProbe = cmd.includes('ffprobe');
     const isFfmpeg = cmd.includes('ffmpeg');
+    const isPiper = !isProbe && !isFfmpeg;
     if (isFfmpeg) {
       const input = args[args.indexOf('-i') + 1]!;
       copyFileSync(input, args[args.length - 1]!);
     }
     setImmediate(() => {
+      if (isPiper && opts.piperWrites !== false) {
+        const output = args[args.indexOf('--output_file') + 1];
+        if (output) writeFileSync(output, 'new wav');
+      }
       if (isProbe) {
         child.stdout.emit('data', Buffer.from(`${opts.probeDur ?? '4.20'}\n`));
         child.emit('close', 0);
@@ -121,6 +127,9 @@ describe('synthesizeNarration (injected)', () => {
     expect(r).toEqual({ path: '/tmp/n.wav', duration: 4.2 });
     // Piper was invoked with the resolved voice + output file.
     expect(seen.some((a) => a.includes('--model') && a.includes('/voice.onnx'))).toBe(true);
+    expect(
+      seen.some((a) => a[a.indexOf('--output_file') + 1] === '/tmp/n.wav'),
+    ).toBe(false);
   });
 
   it('fail-open: empty text → null (no spawn)', async () => {
@@ -140,6 +149,22 @@ describe('synthesizeNarration (injected)', () => {
     expect(
       await synthesizeNarration('hello', '/tmp/n.wav', { spawn: makeSpawn({ piperCode: 1 }), env })
     ).toBeNull();
+  });
+
+  it('rejects a successful Piper exit that leaves an old WAV untouched', async () => {
+    const temporary = await mkdtemp(join(process.cwd(), '.narration-stale-'));
+    try {
+      const outputPath = join(temporary, 'narration.wav');
+      await writeFile(outputPath, 'old wav');
+      const result = await synthesizeNarration('new text', outputPath, {
+        spawn: makeSpawn({ piperWrites: false }),
+        env,
+      });
+      expect(result).toBeNull();
+      expect(await readFile(outputPath, 'utf8')).toBe('old wav');
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   });
 
   it('never selects paid ElevenLabs in auto mode', async () => {
@@ -389,5 +414,65 @@ describe('synthesizeLocalizedNarration', () => {
       }),
     ).toBeNull();
     expect(await synthesizeLocalizedNarration(request)).toBeNull();
+  });
+
+  it('rejects a localized Piper exit that leaves an old WAV untouched', async () => {
+    const temporary = await mkdtemp(join(process.cwd(), '.narration-localized-stale-'));
+    try {
+      const outputPath = join(temporary, 'localized.wav');
+      await writeFile(outputPath, 'old localized wav');
+      const result = await synthesizeLocalizedNarration(
+        {
+          text: 'New localized text',
+          outputPath,
+          locale: 'en-US',
+          voiceProfileId: 'voice-v1',
+          fallbackPolicy: 'none',
+        },
+        {
+          spawn: makeSpawn({ piperWrites: false }),
+          resolveVoiceProfile: async () => ({
+            id: 'voice-v1',
+            locale: 'en-US',
+            provider: 'piper',
+            modelPath: '/voice.onnx',
+            commercialUseApproved: true,
+            provenanceRef: 'rights/voice-v1',
+          }),
+        },
+      );
+      expect(result).toBeNull();
+      expect(await readFile(outputPath, 'utf8')).toBe('old localized wav');
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('muxNarration', () => {
+  it('rejects a successful ffmpeg exit when no muxed file exists', async () => {
+    const temporary = await mkdtemp(join(process.cwd(), '.narration-mux-'));
+    try {
+      const outPath = join(temporary, 'muxed.mp4');
+      const fakeSpawn = ((cmd: string) => {
+        const child = new EventEmitter() as unknown as {
+          stdout: EventEmitter;
+          stderr: EventEmitter;
+          kill: () => void;
+          on: EventEmitter['on'];
+        };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => undefined;
+        setImmediate(() => child.emit('close', cmd.includes('ffmpeg') ? 0 : 0));
+        return child;
+      }) as never;
+      const result = await muxNarration('/clip.mp4', '/narration.wav', outPath, 4, 0.6, {
+        spawn: fakeSpawn,
+      });
+      expect(result).toBe(false);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   });
 });

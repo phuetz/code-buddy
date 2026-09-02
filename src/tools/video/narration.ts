@@ -15,7 +15,8 @@
  */
 
 import { spawn as realSpawn } from 'child_process';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { lstat, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join } from 'node:path';
 import { logger } from '../../utils/logger.js';
@@ -229,6 +230,102 @@ async function probeDuration(
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
 
+async function isRegularNonEmptyFile(file: string): Promise<boolean> {
+  try {
+    const metadata = await lstat(file);
+    return metadata.isFile() && metadata.size > 0;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[narration] could not inspect generated artifact ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return false;
+  }
+}
+
+async function removeTemporaryFile(file: string): Promise<void> {
+  try {
+    await rm(file, { force: true });
+  } catch (error) {
+    logger.warn(`[narration] could not clean temporary artifact ${file}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function synthesizePiperOutput(
+  model: string,
+  text: string,
+  outPath: string,
+  piperBin: string,
+  ffprobeBin: string,
+  spawn: typeof realSpawn,
+  timeoutMs: number,
+  label: string,
+): Promise<number | null> {
+  const temporaryPath = `${outPath}.${randomUUID()}.tmp.wav`;
+  try {
+    const { code, stderr } = await run(
+      spawn,
+      piperBin,
+      buildPiperArgs(model, temporaryPath),
+      timeoutMs,
+      `${text}\n`,
+    );
+    if (code !== 0) {
+      logger.warn(
+        `[narration] ${label} synthesis failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+      );
+      return null;
+    }
+    if (!(await isRegularNonEmptyFile(temporaryPath))) {
+      logger.warn(`[narration] ${label} exited 0 but produced no non-empty WAV artifact`);
+      return null;
+    }
+    const duration = await probeDuration(spawn, ffprobeBin, temporaryPath);
+    if (duration == null) {
+      logger.warn(`[narration] could not probe ${label} narration duration`);
+      return null;
+    }
+    try {
+      await rename(temporaryPath, outPath);
+    } catch (error) {
+      logger.warn(
+        `[narration] could not install ${label} narration: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+    return duration;
+  } finally {
+    await removeTemporaryFile(temporaryPath);
+  }
+}
+
+async function verifyMuxedNarration(
+  spawn: typeof realSpawn,
+  ffprobeBin: string,
+  file: string,
+): Promise<boolean> {
+  if (!(await isRegularNonEmptyFile(file))) return false;
+  const probe = await run(
+    spawn,
+    ffprobeBin,
+    ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
+    30_000,
+  );
+  if (probe.code !== 0) return false;
+  try {
+    const json = JSON.parse(probe.stdout) as {
+      format?: { duration?: string };
+      streams?: Array<{ codec_type?: string }>;
+    };
+    const duration = json.format?.duration ? Number(json.format.duration) : NaN;
+    const hasVideo = !!json.streams?.some((stream) => stream.codec_type === 'video');
+    const hasAudio = !!json.streams?.some((stream) => stream.codec_type === 'audio');
+    return Number.isFinite(duration) && duration > 0 && hasVideo && hasAudio;
+  } catch (error) {
+    logger.warn(`[narration] invalid ffprobe metadata for muxed narration: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
 function resolveNarrationProvider(
   explicit: NarrationProvider | undefined,
   env: NodeJS.ProcessEnv,
@@ -407,24 +504,17 @@ export async function synthesizeNarration(
     return null;
   }
 
-  const { code, stderr } = await run(
-    spawn,
+  const duration = await synthesizePiperOutput(
+    voice,
+    trimmed,
+    outPath,
     piperBin,
-    buildPiperArgs(voice, outPath),
+    ffprobeBin,
+    spawn,
     deps.timeoutMs ?? 60_000,
-    `${trimmed}\n`
+    'Piper',
   );
-  if (code !== 0) {
-    logger.warn(
-      `[narration] Piper synthesis failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' ')}`
-    );
-    return null;
-  }
-  const duration = await probeDuration(spawn, ffprobeBin, outPath);
-  if (duration == null) {
-    logger.warn('[narration] could not probe synthesized narration duration');
-    return null;
-  }
+  if (duration == null) return null;
   return { path: outPath, duration };
 }
 
@@ -502,19 +592,24 @@ export async function synthesizeLocalizedNarration(
     }
   } else {
     const piperBin = deps.piperBin ?? deps.env?.CODEBUDDY_PIPER_BIN ?? 'piper';
-    const { code, stderr } = await run(
-      spawn,
+    const duration = await synthesizePiperOutput(
+      profile.modelPath,
+      trimmed,
+      request.outputPath,
       piperBin,
-      buildPiperArgs(profile.modelPath, request.outputPath),
+      ffprobeBin,
+      spawn,
       deps.timeoutMs ?? 60_000,
-      `${trimmed}\n`,
+      `Piper profile ${request.voiceProfileId}`,
     );
-    if (code !== 0) {
-      logger.warn(
-        `[narration] Piper profile ${request.voiceProfileId} failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' ')}`,
-      );
-      return null;
-    }
+    if (duration == null) return null;
+    return {
+      path: request.outputPath,
+      duration,
+      locale,
+      voiceProfileId: request.voiceProfileId,
+      provider: profile.provider,
+    };
   }
 
   const duration = await probeDuration(spawn, ffprobeBin, request.outputPath);
@@ -581,5 +676,6 @@ export async function muxNarration(
     buildMuxNarrationArgs(clipPath, wavPath, outPath, duration, leadSec),
     deps.timeoutMs ?? 5 * 60 * 1000
   );
-  return code === 0;
+  if (code !== 0) return false;
+  return verifyMuxedNarration(spawn, deps.ffprobeBin ?? 'ffprobe', outPath);
 }

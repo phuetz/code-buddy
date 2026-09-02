@@ -16,6 +16,7 @@
 
 import { spawn as realSpawn } from 'child_process';
 import { existsSync as realExistsSync } from 'fs';
+import { lstat } from 'node:fs/promises';
 import { execFileSync } from 'child_process';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -193,6 +194,18 @@ interface AttemptOutcome {
   stderr: string;
 }
 
+async function isRegularNonEmptyFile(file: string): Promise<boolean> {
+  try {
+    const metadata = await lstat(file);
+    return metadata.isFile() && metadata.size > 0;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[video] could not inspect downloaded artifact ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return false;
+  }
+}
+
 /**
  * Run yt-dlp once. Never throws, never rejects: spawn failures, non-zero exits and
  * timeouts all come back as `{ ok: false }`.
@@ -270,6 +283,7 @@ async function runWithClientFallbacks(
   invocation: YtdlpInvocation,
   buildArgs: (playerClient?: string) => string[],
   deps: MediaFetchDeps,
+  expectedArtifact: { path: string; label: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const spawn = deps.spawn ?? realSpawn;
   const timeoutMs = deps.timeoutMs ?? 10 * 60 * 1000;
@@ -282,7 +296,15 @@ async function runWithClientFallbacks(
       logger.info(`[video] yt-dlp retry with player_client=${playerClient}: ${source}`);
     }
     const outcome = await runYtdlpOnce(invocation, args, spawn, timeoutMs);
-    if (outcome.ok) return { ok: true };
+    if (outcome.ok) {
+      if (!(await isRegularNonEmptyFile(expectedArtifact.path))) {
+        return {
+          ok: false,
+          error: `yt-dlp exited with code 0 but did not create a non-empty ${expectedArtifact.label}: ${expectedArtifact.path}`,
+        };
+      }
+      return { ok: true };
+    }
     lastError = outcome.error ?? 'yt-dlp failed';
     const isLast = index === chain.length - 1;
     if (isLast || !isRetryableYoutubeFailure(`${lastError}\n${outcome.stderr}`)) {
@@ -320,6 +342,7 @@ export async function downloadAudioWav(
     invocation,
     (playerClient) => buildYtdlpArgs(source, outputTemplate, playerClient),
     deps,
+    { path: wavPath, label: 'WAV artifact' },
   );
   return result.ok ? { wavPath } : { error: result.error };
 }
@@ -394,6 +417,7 @@ export async function downloadVideoFile(
     invocation,
     (playerClient) => buildVideoYtdlpArgs(source, outputTemplate, playerClient),
     deps,
+    { path: videoPath, label: 'MP4 artifact' },
   );
   return result.ok ? { videoPath } : { error: result.error };
 }
