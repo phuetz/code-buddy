@@ -65,3 +65,58 @@ Tests  46 passed (46)
 ```
 
 Commit D3 : ce lot thématique.
+
+## D1 — journalisation de `WritePolicy.confirm`
+
+Constat confirmé : le mode `confirm` annonçait un événement de décision dans la documentation et dans le paramètre `runId`, mais `gate()` ignorait ce paramètre et aucun appel RunStore n’existait sur le chemin de production.
+
+Correctif retenu : journalisation réelle dans `RunStore` avant le retour `allowed: true`, avec un événement `decision` contenant le mode, l’outil, les chemins, l’autorisation et la description éventuelle. Sans `runId`, aucun run artificiel n’est créé ; les listeners existants restent notifiés.
+
+Preuve rouge puis verte :
+
+```text
+$ npx vitest run tests/security/write-policy.test.ts
+...
+FAIL ... should record the decision in RunStore when a run ID is supplied
+AssertionError: expected "vi.fn()" to be called with arguments
+Number of calls: 0
+Tests  1 failed | 20 passed (21)
+
+$ npx vitest run tests/security/write-policy.test.ts
+...
+Test Files  1 passed (1)
+Tests  21 passed (21)
+```
+
+Commit D1 : ce lot thématique.
+
+## Verdicts et vérifications finales
+
+- D2 : **vrai**, corrigé dans `5bff5833b`.
+- D3 : **vrai**, corrigé dans `bb3df519d`.
+- D1 : **vrai**, corrigé dans le commit qui porte cette mise à jour du rapport.
+- Aucun D n’est faux sur l’état actuel de la branche.
+
+Vérifications finales exécutées après les trois corrections :
+
+```text
+$ npx vitest run tests/security/ tests/utils/
+Test Files  63 passed (63)
+Tests  1264 passed | 3 skipped (1267)
+
+$ npm run typecheck
+> @phuetz/code-buddy@2.0.0 typecheck
+> tsc --noEmit && npm run typecheck:darkstar-identity
+> @phuetz/code-buddy@2.0.0 typecheck:darkstar-identity
+> tsc --project tsconfig.darkstar-identity.json
+exit 0
+
+$ npx eslint src/security/write-policy.ts src/agent/tool-handler.ts tests/security/write-policy.test.ts src/utils/confirmation-service.ts src/security/permission-modes.ts tests/utils/confirmation-service.test.ts tests/security/permission-modes.test.ts
+0 errors, 10 warnings
+exit 0
+
+$ git diff --check
+exit 0
+```
+
+Les 10 avertissements ESLint sont préexistants dans les tests ciblés (`vi` inutilisé dans `permission-modes.test.ts` et neuf `any` dans `confirmation-service.test.ts`) ; aucune erreur n’a été introduite. Aucun réseau, LLM, push, service ou fichier de coordination n’a été touché. `AUDIT-A-REPARER.md` et `node_modules` restent non suivis et hors des commits.

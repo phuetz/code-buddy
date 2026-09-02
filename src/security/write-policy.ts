@@ -11,6 +11,7 @@
 
 import { logger } from '../utils/logger.js';
 import { toLegacyName } from '../tools/registry/tool-aliases.js';
+import { RunStore } from '../observability/run-store.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -115,6 +116,7 @@ export class WritePolicy {
       case 'confirm': {
         // In confirm mode, direct writes are allowed but we log the decision
         const result: GateResult = { allowed: true, requiresPatch: false };
+        this.recordDecision(_runId, operation, result);
         this.notifyListeners(operation, result);
         return result;
       }
@@ -162,5 +164,23 @@ export class WritePolicy {
         // Ignore listener errors
       }
     }
+  }
+
+  private recordDecision(runId: string | undefined, operation: WriteOperation, result: GateResult): void {
+    if (!runId) return;
+
+    RunStore.getInstance().emit(runId, {
+      type: 'decision',
+      data: {
+        kind: 'write_policy',
+        mode: this.mode,
+        allowed: result.allowed,
+        requiresPatch: result.requiresPatch,
+        toolName: operation.toolName,
+        paths: [...operation.paths],
+        ...(operation.description ? { description: operation.description } : {}),
+        ...(result.reason ? { reason: result.reason } : {}),
+      },
+    });
   }
 }

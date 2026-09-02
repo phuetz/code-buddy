@@ -4,6 +4,15 @@
 
 import { WritePolicy, WRITE_TOOL_NAMES } from '../../src/security/write-policy.js';
 import { TOOL_ALIASES, toLegacyName } from '../../src/tools/registry/tool-aliases.js';
+import { vi } from 'vitest';
+
+const { runStoreEmit } = vi.hoisted(() => ({ runStoreEmit: vi.fn() }));
+
+vi.mock('../../src/observability/run-store.js', () => ({
+  RunStore: {
+    getInstance: () => ({ emit: runStoreEmit }),
+  },
+}));
 
 describe('WritePolicy', () => {
   let policy: WritePolicy;
@@ -64,6 +73,31 @@ describe('WritePolicy', () => {
     it('should always allow apply_patch', async () => {
       const result = await policy.gate({ toolName: 'apply_patch', paths: [] });
       expect(result.allowed).toBe(true);
+    });
+
+    it('should record the decision in RunStore when a run ID is supplied', async () => {
+      runStoreEmit.mockClear();
+      const operation = {
+        toolName: 'str_replace_editor',
+        paths: ['/workspace/file.ts'],
+        description: 'Update file',
+      };
+
+      const result = await policy.gate(operation, 'run-r22');
+
+      expect(result.allowed).toBe(true);
+      expect(runStoreEmit).toHaveBeenCalledWith('run-r22', {
+        type: 'decision',
+        data: {
+          kind: 'write_policy',
+          mode: 'confirm',
+          allowed: true,
+          requiresPatch: false,
+          toolName: operation.toolName,
+          paths: operation.paths,
+          description: operation.description,
+        },
+      });
     });
   });
 
