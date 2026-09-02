@@ -35,7 +35,12 @@ function makeApi() {
   return {
     listeners,
     api: {
-      onEvent: vi.fn((cb: EventListenerFn) => {
+      onEvent: vi.fn((
+        typesOrCallback: string | string[] | EventListenerFn,
+        typedCallback?: EventListenerFn,
+      ) => {
+        const cb = typeof typesOrCallback === 'function' ? typesOrCallback : typedCallback;
+        if (!cb) return () => undefined;
         listeners.push(cb);
         return () => {
           const index = listeners.indexOf(cb);
@@ -188,6 +193,10 @@ describe('LiveLauncherPanel', () => {
     await setValue('live-launcher-prompt', 'topic');
     await click('live-launcher-start');
 
+    expect(harness.api.onEvent).toHaveBeenCalledWith(
+      'liveLauncher.event',
+      expect.any(Function),
+    );
     await pushEvent(harness, {
       type: 'liveLauncher.event',
       payload: { runId: 'll_1', kind: 'log', stream: 'stdout', lines: ['📋 Subtopics (3):'] },
