@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
 import { getHooksManager } from "../hooks/lifecycle-hooks.js";
-import { Fact, FactCategory } from "./facts-memory.js";
+import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
 import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
@@ -1432,8 +1432,12 @@ export class PersistentMemoryManager extends EventEmitter {
 
       await this.saveMemories("project");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`[FactsMemory] Failed to autoCapture facts, falling back to pattern matching: ${message}`);
+      const reason = err instanceof Error ? err.message : String(err);
+      if (err instanceof FactsExtractionError) {
+        logger.warn(`[FactsMemory] Failed to autoCapture facts: ${reason}`);
+        return;
+      }
+      logger.warn(`[FactsMemory] Failed to autoCapture facts, falling back to pattern matching: ${reason}`);
       // Fallback: Detect project context
       const projectPatterns = [
         /this (?:is|project) (?:a|an) ([^.]+)/i,
