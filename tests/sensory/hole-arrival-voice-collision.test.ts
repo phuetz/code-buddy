@@ -3,7 +3,7 @@ import { wireSemanticVisionReaction } from '../../src/sensory/semantic-vision-re
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { beginSpeaking, endSpeaking, _resetVoiceActivityForTests } from '../../src/sensory/voice-activity.js';
 
-describe('Mission SENSE2 — Trou 4 : Course et collision entre accueil vidéo et parole vocale active', () => {
+describe('Mission SENSE3 — Trou 4 : Course et collision entre accueil vidéo et parole vocale active', () => {
   beforeEach(() => {
     _resetVoiceActivityForTests();
     delete process.env.CODEBUDDY_SENSORY_GREET;

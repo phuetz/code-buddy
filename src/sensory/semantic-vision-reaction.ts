@@ -15,6 +15,7 @@ import { sendTelegramAlert } from './alert.js';
 import { getCompanionConductor, type Conductor } from '../companion/orchestrator.js';
 import { resolveCurrentHomeInteractionPolicy } from '../companion/home-interaction-policy.js';
 import type { HomeModeStore } from '../life-rhythm/home-mode-store.js';
+import { isSpeaking } from './voice-activity.js';
 import {
   buildArrivalOpener,
   buildLlmArrivalOpener,
@@ -243,6 +244,10 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
         });
         if (!homePolicy.allowed) {
           logger.info(`[vision] arrival greeting skipped by home policy: ${homePolicy.reason}`);
+          return;
+        }
+        if (isSpeaking(t)) {
+          logger.info('[vision] arrival greeting skipped: voice active');
           return;
         }
         if (!conductor.claim('arrival')) {

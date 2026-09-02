@@ -58,7 +58,14 @@ Installation nécessaire au rejeu : `npm ci --ignore-scripts` dans le clone, exi
 - Correctif : la surface `arrival` est maintenant couverte par `HomeInteractionPolicy` ; les modes `silent`, `focus`, `rest` et `guests` refusent l’accueil vocal avec un journal `[vision] arrival greeting skipped by home policy: ...`. Le store est injectable pour éviter tout état partagé entre surfaces et tests. L’accueil ne réclame le conducteur qu’après l’accord de la politique.
 - Test de régression étendu aux quatre modes interdits.
 - Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-home-policy.test.ts tests/companion/home-interaction-policy.test.ts tests/sensory/arrival-greeting.test.ts` → `Test Files 3 passed (3)`, `Tests 15 passed (15)` ; `git diff --check` vert.
-- Commit à créer : `fix(sensory): honor home policy for arrival greetings`.
+- Commit réalisé : `6b6bad53d` — `fix(sensory): honor home policy for arrival greetings`.
+
+### Trou 4 — accueil vidéo et parole active
+
+- Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-voice-collision.test.ts` → exit 1, `1 test | 1 failed`, l’accueil appelait `greet` pendant `beginSpeaking`.
+- Correctif : après l’accord de la politique Maison et avant toute claim du conducteur, `semantic-vision-reaction` vérifie `isSpeaking(t)`. Une arrivée concurrente est abandonnée et journalisée (`[vision] arrival greeting skipped: voice active`) ; elle n’est pas empilée dans la bouche.
+- Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-voice-collision.test.ts tests/sensory/voice-activity.test.ts tests/sensory/arrival-greeting.test.ts` → `Test Files 3 passed (3)`, `Tests 14 passed (14)` ; `git diff --check` vert.
+- Commit à créer : `fix(sensory): skip arrival greeting during active speech`.
 
 ## Commits
 
