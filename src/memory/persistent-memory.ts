@@ -480,9 +480,18 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // New saves prefix continuation lines with `  |` so their original
+      // indentation and any literal `Tags:` text remain unambiguous.
+      if (inMemoryBlock && line.startsWith("  |")) {
+        currentValue += "\n" + line.slice(3);
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
-        currentValue += "\n" + line.trim();
+        // Legacy files used two transport spaces without a marker. Remove
+        // only that transport prefix; do not destroy content indentation.
+        currentValue += "\n" + line.slice(2);
       } else if (inMemoryBlock && line.trim() === "") {
         // End of memory block
         pushCurrent();
@@ -1347,15 +1356,13 @@ export class PersistentMemoryManager extends EventEmitter {
         content += `<!-- No memories in this category -->\n`;
       } else {
         for (const memory of categoryMemories) {
-          // Audit 2026-09-02 : indenter les lignes de continuation (2 espaces)
-          // pour que le parseur (branche « line.startsWith('  ') ») les refonde
-          // dans la valeur au reload — sinon tout sauf la 1re ligne est perdu
-          // au redémarrage. Une ligne vide interne devient « deux espaces »
-          // pour ne pas terminer le bloc.
+          // Prefix continuation lines with an explicit transport marker so
+          // their original indentation and literal metadata-like text survive
+          // a reload. `  |` also encodes an empty internal line as `  |\n`.
           const [first = '', ...rest] = memory.value.split('\n');
           content += `- **${memory.key}**: ${first}\n`;
           for (const cont of rest) {
-            content += `  ${cont}\n`;
+            content += `  |${cont}\n`;
           }
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;

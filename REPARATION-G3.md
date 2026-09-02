@@ -33,6 +33,15 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications avant commit : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé sur les fichiers touchés — **exit 0**.
 - Commit : à compléter.
 
+### Trou 1 — fidélité du souvenir après relecture
+
+- Test relu : `tests/memory/revue-gemini-roundtrip.test.ts`.
+- Rouge (`npx vitest run tests/memory/revue-gemini-roundtrip.test.ts`, exit 1) : indentation supprimée (`  let` relu `let`) et ligne de contenu `  Tags: ...` consommée comme métadonnée.
+- Correctif : les continuations nouvellement écrites utilisent le marqueur non ambigu `  |`; le parseur enlève seulement le préfixe de transport et garde un repli compatible pour l’ancien format, y compris les anciens tags.
+- Vert voisin : `npx vitest run tests/memory/revue-gemini-roundtrip.test.ts tests/memory/memory-multiline-roundtrip.test.ts tests/memory/persistent-memory.test.ts` — **3 fichiers, 20 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** ; ESLint ciblé avec `--quiet` — **exit 0**.
+- Commit : à compléter.
+
 ### Trou 6 — course entre processus sur le fichier mémoire
 
 - Test relu : `tests/memory/revue-gemini-concurrency.test.ts`.
