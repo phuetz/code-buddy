@@ -1273,6 +1273,8 @@ export class ContextManagerV2 {
     this.summaries = [];
     this.triggeredWarnings.clear();
     this.lastTokenCount = 0;
+    this.lastEnhancedResult = null;
+    this.enhancedCompressor?.clearArchives();
   }
 
   /**
@@ -1325,7 +1327,11 @@ export class ContextManagerV2 {
    */
   forceCleanup(): { summariesRemoved: number; tokensFreed: number } {
     const summariesRemoved = this.summaries.length;
-    const tokensFreed = this.summaries.reduce((total, s) => total + s.tokenCount, 0);
+    const summaryTokens = this.summaries.reduce((total, s) => total + s.tokenCount, 0);
+    const archiveTokens = this.lastEnhancedResult?.fullContextArchive?.tokenCount
+      ?? this.lastEnhancedResult?.metrics.originalTokens
+      ?? 0;
+    const tokensFreed = summaryTokens + archiveTokens;
 
     // Clear all summaries
     this.summaries = [];
@@ -1338,6 +1344,10 @@ export class ContextManagerV2 {
     if (this.enhancedCompressor) {
       this.enhancedCompressor.clearArchives();
     }
+
+    // Drop the strong reference to the last full context — listArchives()
+    // alone does not make the heap-held transcript collectable.
+    this.lastEnhancedResult = null;
 
     logger.info(`Force cleanup: removed ${summariesRemoved} summaries, freed ~${tokensFreed} tokens`);
 

@@ -114,6 +114,32 @@ Tests  1 passed (1)
 `tests/context/` après D3 : **42 passed, 601 passed**. `tsc --noEmit` exit 0.
 `eslint src/context/context-manager-v2.ts tests/context/compaction-stats.test.ts` : exit 0.
 
+### D4 — forceCleanup libère le dernier contexte complet
+
+Test rouge avant correctif (`tests/context/force-cleanup-archive.test.ts`) :
+
+```text
+❯ tests/context/force-cleanup-archive.test.ts (1 test | 1 failed) 80ms
+     × nulls lastEnhancedResult and drops retained archive size
+expected { compressed: true, fullContextArchive: { messages: [11 items], … } } to be null
+Tests  1 failed (1)
+```
+
+`listContextArchives()` était déjà vide ; `getLastCompressionResult()` retenait
+encore les 11 messages. Correctif : `lastEnhancedResult = null` dans
+`forceCleanup()` et `dispose()` ; `tokensFreed` inclut `fullContextArchive.tokenCount`.
+
+Test vert :
+
+```text
+npx vitest run tests/context/force-cleanup-archive.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+```
+
+`tests/context/` après D4 : **43 passed, 602 passed**. `tsc --noEmit` exit 0.
+`eslint src/context/context-manager-v2.ts tests/context/force-cleanup-archive.test.ts` : exit 0.
+
 ## Bilan
 
 (à compléter en fin de mission)
