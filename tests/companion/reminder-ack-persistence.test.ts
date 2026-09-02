@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { whenRemindersPersisted } from '../../src/companion/reminders.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import {
   openAck,
   pendingAcks,
@@ -75,7 +75,16 @@ describe('pending-ack persistence — survive a restart mid-window (health safet
     expect(pendingAcks(later.getTime(), 10_000)).toHaveLength(0); // expired
   });
 
-  it('never throws when the pending file is absent/corrupt', async () => {
-    await expect(loadPendingAcks()).resolves.toBeUndefined(); // no file yet
+  it('never throws when the pending file is absent', async () => {
+    await expect(loadPendingAcks()).resolves.toBeUndefined();
+  });
+
+  it('does not treat a corrupt pending-ack store as empty (jumeau D2)', async () => {
+    const file = process.env.CODEBUDDY_REMINDER_PENDING_FILE!;
+    await mkdir(dir, { recursive: true });
+    await writeFile(file, '{this is not json', 'utf8');
+
+    await expect(loadPendingAcks()).rejects.toThrow();
+    expect(pendingAcks(1000, 999_999)).toHaveLength(0);
   });
 });

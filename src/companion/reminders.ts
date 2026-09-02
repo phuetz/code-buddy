@@ -396,7 +396,9 @@ async function savePendingAcksNow(): Promise<void> {
   try {
     const file = pendingAcksFile();
     await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, JSON.stringify([...pending.values()]), 'utf8');
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, JSON.stringify([...pending.values()]), 'utf8');
+    await rename(tmp, file);
   } catch (err) {
     logger.warn(
       `[reminders] could not persist pending acks: ${err instanceof Error ? err.message : String(err)}`
@@ -404,30 +406,52 @@ async function savePendingAcksNow(): Promise<void> {
   }
 }
 
-/** Restore the pending-ack registry from disk (call at runner start). Never-throws. */
+/** Restore the pending-ack registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadPendingAcks(): Promise<void> {
+  const file = pendingAcksFile();
+  let raw: string;
   try {
-    const raw = (await readFile(pendingAcksFile(), 'utf8')).trim();
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return;
-    for (const a of list) {
-      if (a && typeof a.id === 'string' && Number.isFinite(a.firedAt)) {
-        pending.set(a.id, {
-          id: a.id,
-          label: typeof a.label === 'string' ? a.label : a.id,
-          firedAt: a.firedAt,
-          nags: Number.isFinite(a.nags) ? a.nags : 0,
-        });
-      }
-    }
+    raw = (await readFile(file, 'utf8')).trim();
   } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not load pending acks: ${err instanceof Error ? err.message : String(err)}`
-      );
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return;
+    logger.warn(
+      `[reminders] could not read pending acks: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!raw) {
+    const msg = `[reminders] pending acks store exists but is empty: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    logger.warn(
+      `[reminders] could not parse pending acks: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!Array.isArray(parsed)) {
+    const msg = `[reminders] pending acks store is not a list: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  const loaded = new Map<string, PendingAck>();
+  for (const a of parsed) {
+    if (a && typeof (a as PendingAck).id === 'string' && Number.isFinite((a as PendingAck).firedAt)) {
+      const ack = a as PendingAck;
+      loaded.set(ack.id, {
+        id: ack.id,
+        label: typeof ack.label === 'string' ? ack.label : ack.id,
+        firedAt: ack.firedAt,
+        nags: Number.isFinite(ack.nags) ? ack.nags : 0,
+      });
     }
   }
+  pending.clear();
+  for (const [id, ack] of loaded) pending.set(id, ack);
 }
 
 // ── the safety-critical matcher ───────────────────────────────────────
@@ -926,7 +950,9 @@ async function saveSnoozesNow(): Promise<boolean> {
   try {
     const file = snoozesFile();
     await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, JSON.stringify([...snoozes.values()]), 'utf8');
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, JSON.stringify([...snoozes.values()]), 'utf8');
+    await rename(tmp, file);
     return true;
   } catch (err) {
     logger.warn(
@@ -936,29 +962,51 @@ async function saveSnoozesNow(): Promise<boolean> {
   }
 }
 
-/** Restore the snooze registry from disk (call at runner start). Never-throws. */
+/** Restore the snooze registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadSnoozes(): Promise<void> {
+  const file = snoozesFile();
+  let raw: string;
   try {
-    const raw = (await readFile(snoozesFile(), 'utf8')).trim();
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return;
-    for (const s of list) {
-      if (s && typeof s.id === 'string' && Number.isFinite(s.fireAt)) {
-        snoozes.set(s.id, {
-          id: s.id,
-          label: typeof s.label === 'string' ? s.label : s.id,
-          fireAt: s.fireAt,
-        });
-      }
-    }
+    raw = (await readFile(file, 'utf8')).trim();
   } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not load snoozes: ${err instanceof Error ? err.message : String(err)}`
-      );
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return;
+    logger.warn(
+      `[reminders] could not read snoozes: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!raw) {
+    const msg = `[reminders] snooze store exists but is empty: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    logger.warn(
+      `[reminders] could not parse snoozes: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!Array.isArray(parsed)) {
+    const msg = `[reminders] snooze store is not a list: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  const loaded = new Map<string, SnoozedReminder>();
+  for (const s of parsed) {
+    if (s && typeof (s as SnoozedReminder).id === 'string' && Number.isFinite((s as SnoozedReminder).fireAt)) {
+      const snooze = s as SnoozedReminder;
+      loaded.set(snooze.id, {
+        id: snooze.id,
+        label: typeof snooze.label === 'string' ? snooze.label : snooze.id,
+        fireAt: snooze.fireAt,
+      });
     }
   }
+  snoozes.clear();
+  for (const [id, snooze] of loaded) snoozes.set(id, snooze);
 }
 
 /** Schedule a reminder to re-announce at `fireAtMs`. */
@@ -966,12 +1014,24 @@ export function snoozeReminder(id: string, label: string, fireAtMs: number): voi
   snoozes.set(id, { id, label, fireAt: fireAtMs });
   void saveSnoozes();
 }
-/** Snoozed reminders now due to re-announce (returned + removed). */
+/** Snoozed reminders now due to re-announce (peek — consume only after a successful announcement). */
 export function dueSnoozes(nowMs: number): Array<{ id: string; label: string }> {
-  const due = [...snoozes.values()].filter((s) => nowMs >= s.fireAt);
-  for (const s of due) snoozes.delete(s.id);
-  if (due.length) void saveSnoozes();
-  return due.map((s) => ({ id: s.id, label: s.label }));
+  return [...snoozes.values()]
+    .filter((s) => nowMs >= s.fireAt)
+    .map((s) => ({ id: s.id, label: s.label }));
+}
+/** Drop a snooze after it was actually announced. Restores it if the durable write fails. */
+export async function consumeSnooze(id: string): Promise<boolean> {
+  const existing = snoozes.get(id);
+  if (!existing) return true;
+  snoozes.delete(id);
+  const persisted = await saveSnoozesNow();
+  if (!persisted) {
+    snoozes.set(id, existing);
+    logger.warn(`[reminders] snooze consume not durable for ${id}; restoring`);
+    return false;
+  }
+  return true;
 }
 /** Test seam. */
 export function resetSnoozes(): void {

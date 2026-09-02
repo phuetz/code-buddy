@@ -20,6 +20,7 @@ import {
   pendingAcks,
   expireAcks,
   dueSnoozes,
+  consumeSnooze,
   loadReminders,
   reminderMessage,
   logReminderEvent,
@@ -149,6 +150,10 @@ export async function runReminderTick(now: Date, deps: ReminderRunnerDeps = {}):
         notify,
       );
       await logReminderEvent('fired', { id: s.id, label: s.label }, { snoozed: true }, now);
+      const consumed = await consumeSnooze(s.id);
+      if (!consumed) {
+        logger.warn(`[reminders] snooze re-fire '${s.label}' announced but not consumed durably`);
+      }
       logger.info(`[reminders] snoozed reminder re-fired '${s.label}'`);
     } catch (err) {
       logger.warn(`[reminders] snooze re-fire '${s.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -199,9 +204,15 @@ export function wireReminderRunner(deps: ReminderRunnerDeps = {}): () => void {
   // Restore pending acks first: a reminder that fired before a restart must still be re-nagged or
   // escalated to a logged 'missed' — never silently dropped (health safety).
   void (async () => {
-    const { loadPendingAcks, loadSnoozes } = await import('./reminders.js');
-    await loadPendingAcks();
-    await loadSnoozes(); // restore deferred reminders so a restart mid-snooze still re-announces
+    try {
+      const { loadPendingAcks, loadSnoozes } = await import('./reminders.js');
+      await loadPendingAcks();
+      await loadSnoozes(); // restore deferred reminders so a restart mid-snooze still re-announces
+    } catch (err) {
+      logger.warn(
+        `[reminders] could not restore pending acks/snoozes: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   })();
   const timer = setInterval(() => {
     void runReminderTick(new Date(), deps);

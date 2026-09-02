@@ -85,7 +85,7 @@ describe('snoozePending / isSnoozeCommand', () => {
     expect(pendingAcks(1000)).toHaveLength(1);
 
     resetSnoozes();
-    await loadSnoozes();
+    await expect(loadSnoozes()).rejects.toThrow();
     expect(dueSnoozes(1000 + 10 * 60_000)).toHaveLength(0);
   });
 });
@@ -105,15 +105,27 @@ describe('snooze persistence — survive a restart mid-deferral (health safety)'
   it('loadSnoozes never throws when the file is absent', async () => {
     await expect(loadSnoozes()).resolves.toBeUndefined();
   });
+
+  it('does not treat a corrupt snooze store as empty (jumeau D2)', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    await mkdir(dir, { recursive: true });
+    await writeFile(process.env.CODEBUDDY_REMINDER_SNOOZE_FILE!, '{this is not json', 'utf8');
+
+    await expect(loadSnoozes()).rejects.toThrow();
+    expect(dueSnoozes(10_000)).toHaveLength(0);
+  });
 });
 
 describe('dueSnoozes', () => {
-  it('returns and removes only the due ones', () => {
+  it('does not consume due snoozes until they are delivered (jumeau D6)', () => {
     snoozeReminder('a', 'A', 1000);
     snoozeReminder('b', 'B', 5000);
     expect(dueSnoozes(2000)).toEqual([{ id: 'a', label: 'A' }]);
-    expect(dueSnoozes(2000)).toEqual([]); // 'a' was removed
-    expect(dueSnoozes(6000)).toEqual([{ id: 'b', label: 'B' }]);
+    expect(dueSnoozes(2000)).toEqual([{ id: 'a', label: 'A' }]);
+    expect(dueSnoozes(6000)).toEqual([
+      { id: 'a', label: 'A' },
+      { id: 'b', label: 'B' },
+    ]);
   });
 });
 
@@ -130,5 +142,21 @@ describe('runReminderTick re-announces a due snooze', () => {
     await runReminderTick(new Date(1500), deps); // after → re-announced
     expect(spoken.some((s) => /médicaments/i.test(s))).toBe(true);
     expect(pendingAcks(1500)).toHaveLength(1); // a fresh ack cycle opened
+    expect(dueSnoozes(1500)).toHaveLength(0); // consumed only after the announcement
+  });
+
+  it('puts the snooze back when the re-announce fails (jumeau D6)', async () => {
+    const r = await addReminder({ label: 'médicaments', time: '23:59' });
+    snoozeReminder(r.id, r.label, 1000);
+    const deps = {
+      say: async () => {
+        throw new Error('speaker down');
+      },
+      notify: async () => {},
+    };
+
+    await runReminderTick(new Date(1500), deps);
+
+    expect(dueSnoozes(1500)).toEqual([{ id: r.id, label: r.label }]);
   });
 });
