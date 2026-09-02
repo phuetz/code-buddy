@@ -364,6 +364,28 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(send.mock.calls[0][0].content).toContain('pair');
   });
 
+  it('replies to a blocked sender instead of staying silent (jumeau D3)', async () => {
+    hoisted.checkDMPairing.mockResolvedValue({
+      approved: false,
+      blocked: true,
+      senderId: 'user-42',
+      channelType: 'telegram',
+    });
+    hoisted.getDMPairing.mockReturnValue({
+      getPairingMessage: () => 'This sender is temporarily blocked after too many pairing attempts.',
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('hello'), { send });
+
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].content).toMatch(/blocked/i);
+  });
+
   it('reuses the same session across follow-up messages (no re-create)', async () => {
     const manager = makeManager();
     await registerAIMessageHandler(manager as any);

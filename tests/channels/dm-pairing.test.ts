@@ -292,7 +292,7 @@ describe('DMPairingManager', () => {
       });
 
       const message = makeMessage();
-      await shortManager.checkSender(message);
+      const firstTurn = await shortManager.checkSender(message);
       const blockedTurn = await shortManager.checkSender(message);
 
       expect(blockedTurn.approved).toBe(false);
@@ -300,6 +300,10 @@ describe('DMPairingManager', () => {
       expect(blockedTurn.blockedUntil).toEqual(expect.any(Number));
       expect(blockedTurn.code).toBeUndefined();
       expect(shortManager.isBlocked('telegram:user-42')).toBe(true);
+      const blockedMessage = shortManager.getPairingMessage(blockedTurn);
+      expect(blockedMessage.length).toBeGreaterThan(0);
+      expect(blockedMessage).not.toContain(firstTurn.code ?? 'never');
+      expect(blockedMessage.toLowerCase()).toMatch(/block/);
 
       shortManager.dispose();
     });
@@ -494,6 +498,26 @@ describe('DMPairingManager', () => {
 
       pairing.dispose();
     });
+
+    it('D2: checkSender recharge l\'allowlist persistée sans loadAllowlist explicite', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const status = await pairing.checkSender(makeMessage());
+      await pairing.approve('telegram', status.code!);
+      pairing.dispose();
+
+      const restarted = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const live = await restarted.checkSender(makeMessage());
+      expect(live.approved).toBe(true);
+      restarted.dispose();
+    });
   });
 
   // =========================================================================
@@ -545,6 +569,37 @@ describe('DMPairingManager', () => {
 
       pairing.dispose();
       warnSpy.mockRestore();
+    });
+
+    it('D4: une entrée d\'allowlist mal typée n\'est pas fusionnée', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '["bad"]');
+      await expect(pairing.loadAllowlist()).rejects.toThrow();
+      expect(pairing.listApproved()).toEqual([]);
+
+      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), JSON.stringify([{}]));
+      await expect(pairing.loadAllowlist()).rejects.toThrow();
+      expect(pairing.listApproved()).toEqual([]);
+      pairing.dispose();
+    });
+
+    it('D4: un second chargement remplace l\'état au lieu de fusionner', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      await pairing.approveDirectly('telegram', 'user-42');
+      expect(pairing.listApproved()).toHaveLength(1);
+
+      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '[]');
+      await pairing.loadAllowlist();
+      expect(pairing.listApproved()).toEqual([]);
+      pairing.dispose();
     });
   });
 });

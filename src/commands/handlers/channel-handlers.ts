@@ -1099,9 +1099,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
       const pairingStatus = await checkDMPairing(message);
       if (!pairingStatus.approved) {
-        if (pairingStatus.code) {
-          const pairing = getDMPairing();
-          const pairingMsg = pairing.getPairingMessage(pairingStatus);
+        const pairing = getDMPairing();
+        const pairingMsg = pairing.getPairingMessage(pairingStatus);
+        if (pairingMsg) {
           await channel.send({
             channelId: message.channel.id,
             content: pairingMsg,

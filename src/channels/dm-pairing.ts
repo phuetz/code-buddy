@@ -158,20 +158,46 @@ function isEnoent(err: unknown): boolean {
 // DM Pairing Manager
 // ============================================================================
 
+function isApprovedSenderEntry(value: unknown): value is ApprovedSender {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const sender = value as Record<string, unknown>;
+  if (typeof sender.senderId !== 'string' || sender.senderId.length === 0) return false;
+  if (typeof sender.channelType !== 'string' || sender.channelType.length === 0) return false;
+  const approvedAt = new Date(sender.approvedAt as string | number | Date);
+  return !Number.isNaN(approvedAt.getTime());
+}
+
 export class DMPairingManager extends EventEmitter {
   private config: DMPairingConfig;
   private allowlist: Map<string, ApprovedSender> = new Map();
   private pending: Map<string, PairingRequest> = new Map();
   private blocked: Map<string, number> = new Map(); // senderId -> unblock timestamp
+  private allowlistReady = false;
+  private allowlistLoad: Promise<void> | null = null;
 
   constructor(config: Partial<DMPairingConfig> = {}) {
     super();
     this.config = {
       ...DEFAULT_DM_PAIRING_CONFIG,
       ...config,
-      allowlistPath: config.allowlistPath ??
-        path.join(homedir(), '.codebuddy', 'credentials'),
+      allowlistPath: Object.prototype.hasOwnProperty.call(config, 'allowlistPath')
+        ? config.allowlistPath
+        : path.join(homedir(), '.codebuddy', 'credentials'),
     };
+  }
+
+  private async ensureAllowlistLoaded(): Promise<void> {
+    if (this.allowlistReady) return;
+    if (!this.allowlistLoad) {
+      this.allowlistLoad = this.loadAllowlist()
+        .then(() => {
+          this.allowlistReady = true;
+        })
+        .finally(() => {
+          this.allowlistLoad = null;
+        });
+    }
+    await this.allowlistLoad;
   }
 
   // ==========================================================================
@@ -183,6 +209,7 @@ export class DMPairingManager extends EventEmitter {
    * If not, generates a pairing code.
    */
   async checkSender(message: InboundMessage): Promise<PairingStatus> {
+    await this.ensureAllowlistLoaded();
     const channelType = message.channel.type;
     const senderId = message.sender.id;
 
@@ -265,7 +292,11 @@ export class DMPairingManager extends EventEmitter {
    * Get the pairing message for an unapproved sender
    */
   getPairingMessage(status: PairingStatus): string {
-    if (status.approved || !status.code) return '';
+    if (status.approved) return '';
+    if (status.blocked) {
+      return 'This assistant has temporarily blocked this sender after too many pairing attempts. Try again later.';
+    }
+    if (!status.code) return '';
 
     return this.config.pairingMessage
       .replace('{code}', status.code)
@@ -581,15 +612,31 @@ export class DMPairingManager extends EventEmitter {
         throw error;
       }
       for (const sender of senders) {
-        sender.approvedAt = new Date(sender.approvedAt);
-        const key = this.makeAllowlistKey(sender.channelType, sender.senderId);
-        loaded.set(key, sender);
+        if (!isApprovedSenderEntry(sender)) {
+          const error = new Error(`Allowlist entry is invalid: ${filePath}`);
+          logger.warn('Corrupt DM pairing allowlist file', {
+            path: filePath,
+            error: error.message,
+          });
+          throw error;
+        }
+        const approved: ApprovedSender = {
+          channelType: sender.channelType,
+          senderId: sender.senderId,
+          approvedAt: new Date(sender.approvedAt),
+          approvedBy: typeof sender.approvedBy === 'string' ? sender.approvedBy : 'owner',
+          ...(typeof sender.displayName === 'string' ? { displayName: sender.displayName } : {}),
+          ...(typeof sender.notes === 'string' ? { notes: sender.notes } : {}),
+        };
+        loaded.set(this.makeAllowlistKey(approved.channelType, approved.senderId), approved);
       }
     }
 
+    this.allowlist.clear();
     for (const [key, sender] of loaded) {
       this.allowlist.set(key, sender);
     }
+    this.allowlistReady = true;
   }
 
   // ==========================================================================
@@ -626,6 +673,8 @@ export class DMPairingManager extends EventEmitter {
     this.allowlist.clear();
     this.pending.clear();
     this.blocked.clear();
+    this.allowlistReady = false;
+    this.allowlistLoad = null;
     this.removeAllListeners();
   }
 }

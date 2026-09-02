@@ -149,11 +149,7 @@ async function loadPairing(): Promise<DMPairingManagerLike | null> {
   const mod = await loadCoreModule<PairingModule>('channels/dm-pairing.js');
   if (!mod?.getDMPairing) return null;
   const mgr = mod.getDMPairing();
-  try {
-    await mgr.loadAllowlist();
-  } catch (error) {
-    logError('[pairing] loadAllowlist failed:', error);
-  }
+  await mgr.loadAllowlist();
   return mgr;
 }
 
