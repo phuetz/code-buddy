@@ -607,8 +607,9 @@ export class ContextManagerV2 {
       // delegate directly to engine.assemble() (Native Engine v2026.3.13-1)
       if (this.contextEngine.ownsCompaction) {
         const result = this.contextEngine.assemble(messages, this.effectiveLimit);
-        this.lastTokenCount = result.tokenCount;
         this.assertLastUserPreserved(messages, result.messages);
+        this.assertFitsTokenLimit(result.messages);
+        this.lastTokenCount = this.countTokens(result.messages);
         return result.messages;
       }
 
@@ -697,14 +698,23 @@ export class ContextManagerV2 {
       return this.prepareMessagesLegacy(messages, stats);
     }
 
-    this.lastEnhancedResult = result;
+    const recounted = this.countTokens(result.messages);
+    this.lastEnhancedResult = {
+      ...result,
+      tokensReduced: stats.totalTokens - recounted,
+      metrics: {
+        ...result.metrics,
+        finalTokens: recounted,
+        compressionRatio: stats.totalTokens / Math.max(1, recounted),
+      },
+    };
 
     // Track metrics
     if (result.compressed) {
-      const tokensReduced = result.tokensReduced;
+      const tokensReduced = this.lastEnhancedResult.tokensReduced;
       logger.info(
         `Enhanced compression: Reduced ${tokensReduced.toLocaleString()} tokens ` +
-        `(${stats.totalTokens.toLocaleString()} -> ${result.metrics.finalTokens.toLocaleString()}) ` +
+        `(${stats.totalTokens.toLocaleString()} -> ${recounted.toLocaleString()}) ` +
         `using ${result.metrics.strategiesApplied.join(', ')}`
       );
 
@@ -728,7 +738,7 @@ export class ContextManagerV2 {
       this.lastCompressionTime = new Date();
     }
 
-    this.lastTokenCount = finalTokens;
+    this.lastTokenCount = recounted;
     return result.messages;
   }
 
