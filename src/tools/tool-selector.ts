@@ -53,7 +53,7 @@ interface CacheEntry<T> {
 }
 
 import { LRUCache } from '../utils/lru-cache.js';
-import { TOOL_METADATA, CATEGORY_KEYWORDS } from "./metadata.js";
+import { CATEGORY_KEYWORDS, getActiveToolMetadata } from "./metadata.js";
 
 /**
  * RAG-based Tool Selector.
@@ -92,7 +92,8 @@ export class ToolSelector {
     this.toolIndex = new Map();
     this.idfScores = new Map();
     this.documentFrequency = new Map();
-    this.totalDocuments = TOOL_METADATA.length;
+    const metadata = getActiveToolMetadata();
+    this.totalDocuments = metadata.length;
 
     // Initialize metrics
     this.metrics = {
@@ -115,14 +116,15 @@ export class ToolSelector {
    * Build the TF-IDF index from tool metadata
    */
   private buildIndex(): void {
+    const catalog = getActiveToolMetadata();
     // Register tools
-    for (const metadata of TOOL_METADATA) {
+    for (const metadata of catalog) {
       this.toolIndex.set(metadata.name, metadata);
     }
 
     // Calculate document frequency for each keyword (folded, so IDF lookups
     // from folded query tokens hit the same keys)
-    for (const metadata of TOOL_METADATA) {
+    for (const metadata of catalog) {
       const uniqueKeywords = new Set(metadata.keywords.map(k => ToolSelector.foldDiacritics(k.toLowerCase())));
       for (const keyword of uniqueKeywords) {
         this.documentFrequency.set(
@@ -402,7 +404,7 @@ export class ToolSelector {
     // If we have very few tools, add some based on category
     if (selectedToolNames.length < 5) {
       for (const category of classification.categories) {
-        const categoryTools = TOOL_METADATA
+        const categoryTools = getActiveToolMetadata()
           .filter(m => m.category === category)
           .map(m => m.name);
 

@@ -1841,6 +1841,12 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
 ];
 
+/** Metadata visible to RAG / BM25. Gated tools stay out of the index when disabled. */
+export function getActiveToolMetadata(): ToolMetadata[] {
+  if (process.env.CODEBUDDY_CONTEXT_ZOOM === 'true') return TOOL_METADATA;
+  return TOOL_METADATA.filter((metadata) => metadata.name !== 'context_expand');
+}
+
 /**
  * Category keyword mappings for query classification
  */
