@@ -45,6 +45,30 @@ describe.skipIf(process.platform === 'win32' || isRoot)('mémoire persistante �
     }
   });
 
+  it('refuse d\'écraser un fichier encore illisible même s\'il reste inscriptible', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-amnesia-writable-'));
+    const userPath = path.join(dir, 'U.md');
+    const cfg = { projectMemoryPath: path.join(dir, 'P.md'), userMemoryPath: userPath };
+    try {
+      const seed = new PersistentMemoryManager(cfg);
+      await seed.initialize();
+      await seed.remember('precieux', 'souvenir historique irremplaçable', { scope: 'user' });
+      const before = fs.readFileSync(userPath, 'utf8');
+
+      fs.writeFileSync(userPath, 'this is not canonical memory markdown\n');
+      const b = new PersistentMemoryManager(cfg);
+      await b.initialize();
+      await expect(b.remember('nouveau', 'valeur récente', { scope: 'user' })).rejects.toThrow();
+
+      const after = fs.readFileSync(userPath, 'utf8');
+      expect(after).toBe('this is not canonical memory markdown\n');
+      expect(after).not.toContain('valeur récente');
+      expect(before).toContain('souvenir historique irremplaçable');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('si le fichier reste illisible, le save refuse d\'écraser (fail-closed)', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-amnesia2-'));
     const userPath = path.join(dir, 'U.md');
