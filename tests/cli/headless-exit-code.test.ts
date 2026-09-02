@@ -160,7 +160,7 @@ describe('headless CLI exit codes', () => {
             index: 0,
             message: {
               role: 'assistant',
-              content: options.responseContent ?? 'HEADLESS_JSON_CONTRACT_OK',
+              content: 'HEADLESS_JSON_CONTRACT_OK',
             },
             finish_reason: 'stop',
           },
