@@ -85,6 +85,7 @@ ha_list_services
 http_probe
 image_edit
 image_generate
+interactive_shell
 internet_scout_plan
 internet_scout_run
 js_repl

@@ -312,6 +312,33 @@ export const APPLY_PATCH_TOOL: CodeBuddyTool = {
 /**
  * Core tools array (without Morph - that's added conditionally)
  */
+// PTY hand-off — dispatch: src/tools/interactive-shell-tool.ts.
+// The streaming runner intercepts __INTERACTIVE_SHELL_REQUEST__ and pauses
+// the agentic loop until the user types "exit".
+export const INTERACTIVE_SHELL_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "interactive_shell",
+    description:
+      "Launch an interactive PTY shell and hand over control to the user. Use this ONLY when a command requires manual user intervention (answering prompts, editing in Vim, resolving git conflicts) or when you are stuck and need the user to run commands manually. The agentic loop PAUSES until the user types \"exit\". Not a substitute for bash.",
+    parameters: {
+      type: "object",
+      properties: {
+        initial_command: {
+          type: "string",
+          description:
+            "Optional command to pre-fill or execute immediately when the interactive shell opens (e.g. \"npm init\" or \"git rebase -i HEAD~3\").",
+        },
+        reason: {
+          type: "string",
+          description: "Explain to the user why you are handing over control.",
+        },
+      },
+      required: ["reason"],
+    },
+  },
+};
+
 export const CORE_TOOLS: CodeBuddyTool[] = [
   VIEW_FILE_TOOL,
   READ_FILE_TOOL,
@@ -323,6 +350,7 @@ export const CORE_TOOLS: CodeBuddyTool[] = [
   LIST_DIRECTORY_TOOL,
   BASH_TOOL,
   TERMINAL_TOOL,
+  INTERACTIVE_SHELL_TOOL,
 ];
 
 /**

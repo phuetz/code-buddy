@@ -175,6 +175,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Execute shell commands through the existing bash safety checks',
   },
   {
+    name: 'interactive_shell',
+    category: 'system',
+    keywords: [
+      'interactive', 'pty', 'handoff', 'vim', 'rebase', 'prompt', 'manual',
+      'shell', 'terminal', 'user', 'intervention', 'conflict',
+    ],
+    priority: 6,
+    description:
+      'Hand control of an interactive PTY shell to the user until they type exit',
+  },
+  {
     name: 'process',
     category: 'system',
     keywords: ['process', 'spawn', 'kill', 'list', 'logs', 'pid', 'monitor'],
