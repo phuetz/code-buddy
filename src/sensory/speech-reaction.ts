@@ -40,11 +40,18 @@ import { resolveUserName } from '../companion/user-name.js';
 import {
   isLikelyIncompleteVoiceTurn,
   joinVoiceTurnFragments,
+  resolveConversationalTurnEndSilenceMs,
   resolveIncompleteTurnHoldMs,
 } from './voice-turn-taking.js';
 import type { VoiceDeliveryProfile, VoiceTurnContext } from './voice-entrainment.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { assessAudioScene, type AudioSceneAssessment } from './audio-scene.js';
+import {
+  createConversationCueController,
+  shouldRepairTranscript,
+  type ConversationCueHandle,
+  type ConversationCuePlayer,
+} from './conversation-cues.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
@@ -82,6 +89,8 @@ export interface SpeechReactionOptions {
   incompleteTurnHoldMs?: number;
   cwd?: string;
   now?: () => number;
+  /** Injectable environment for opt-in conversational policies. */
+  env?: NodeJS.ProcessEnv;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string, context?: VoiceTurnContext) => void | Promise<void>;
   /**
@@ -101,6 +110,10 @@ export interface SpeechReactionOptions {
    * It must never trigger a reply, tool, memory write, or response decision.
    */
   onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
+  /** Local cached-cue player; never a TTS or model callback. */
+  onConversationCue?: ConversationCuePlayer;
+  /** Stateless name/address probe for empty-final repair; must not invoke an LLM. */
+  isAddressed?: (text: string) => boolean | Promise<boolean>;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
   /**
@@ -1385,11 +1398,18 @@ export async function transcribeWav(
 
 export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs();
-  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs();
+  const env = options.env ?? process.env;
+  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs(env);
+  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs(env);
   const now = options.now ?? (() => Date.now());
   const transcribe = options.transcriber ?? transcribeWavRaw;
   const turnCoordinator = getVoiceTurnCoordinator();
+  const sensoryBackchannelEnabled =
+    env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true' && Boolean(options.onConversationCue);
+  const conversationCues = createConversationCueController({
+    env,
+    ...(options.onConversationCue ? { player: options.onConversationCue } : {}),
+  });
   let lastAt = Number.NEGATIVE_INFINITY;
   let lastSttFailureReplyAt = Number.NEGATIVE_INFINITY;
   let sttFailureCount = 0;
@@ -1402,6 +1422,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let turnSeq = 0;
   let pendingSpeechStartedAtMs: number | undefined;
   let pendingSpeechTurnId: string | undefined;
+  let pendingSpeechPartialText: string | undefined;
   let bargedSpeechTurnId: string | undefined;
   type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
@@ -1409,6 +1430,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     presetText?: string;
     speechStartedAtMs?: number;
     turnId?: string;
+    repairAddressHint?: string;
   };
   let pendingSpeech: SpeechJob | null = null;
   let heldLiveTurn: {
@@ -1523,7 +1545,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         // buddy-sense. Report its payload timing instead of the near-zero cost of
         // copying preset text into the brain.
         sttMs = job.presetText !== undefined && decodeMs !== undefined ? decodeMs : ingestMs;
-        const { recordCompanionPercept } = await import('../companion/percepts.js');
+        const perceptModule = import('../companion/percepts.js');
         const latencyPayload = {
           ...(captureStartedAtMs !== undefined ? { captureStartedAtMs } : {}),
           ...(captureEndedAtMs !== undefined ? { captureEndedAtMs } : {}),
@@ -1607,7 +1629,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             `[speech] STT failed (#${sttFailureCount}): ${cause}`
             + (signal ? `; local recovery spoke=${recoverySpoke}` : '; no real speech capture for local recovery'),
           );
-          await recordCompanionPercept(
+          await (await perceptModule).recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
@@ -1633,13 +1655,34 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           return;
         }
         if (!text) {
-          turnCoordinator.transition(turnId, 'suppressed', {
-            suppressionReason: normalizedText.filteredReason ?? 'stt-empty',
+          let repairAddressed = false;
+          if (env.CODEBUDDY_SENSORY_REPAIR === 'true' && options.onConversationCue) {
+            if (job.repairAddressHint && options.isAddressed) {
+              try {
+                repairAddressed = await options.isAddressed(job.repairAddressHint);
+              } catch {
+                repairAddressed = false;
+              }
+            }
+            const attention = options.getAttentionSnapshot?.();
+            repairAddressed ||= attention?.engaged === true && attention.source === 'addressed';
+          }
+          const repairStartedAt = now();
+          const repairSpoke = repairAddressed
+            ? await conversationCues.playRepair(turnId)
+            : false;
+          actionMs = repairAddressed ? elapsedSince(repairStartedAt, now) : 0;
+          spoke = repairSpoke;
+          turnCoordinator.transition(turnId, repairSpoke ? 'completed' : 'suppressed', {
+            suppressionReason: repairAddressed
+              ? repairSpoke ? undefined : 'repair-cue-unavailable'
+              : normalizedText.filteredReason ?? 'stt-empty',
             sttMs,
+            spoke: repairSpoke,
           });
           const emptyReason = normalizedText.filteredReason ?? 'empty';
           logger.info(`[speech] empty transcript (${sttMs}ms STT, ${emptyReason})`);
-          await recordCompanionPercept(
+          await (await perceptModule).recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
@@ -1647,10 +1690,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               confidence: 0.25,
               payload: {
                 text: '',
-                wav: job.wav,
-                responded: false,
+                ...(job.presetText !== undefined ? { live: true } : { wav: job.wav }),
+                responded: repairSpoke,
                 sttEmpty: true,
                 sttEmptyReason: emptyReason,
+                ...(repairAddressed ? { repairTriggered: true, repairSpoke } : {}),
                 ...(normalizedText.filteredReason ? { rawText: rawText.trim().slice(0, 240) } : {}),
                 latency: latencyPayload,
                 capture: capturePayload,
@@ -1694,7 +1738,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             scene: 'assistant_playback',
             sceneConfidence: echoClassification === 'echo' ? 0.98 : 0.8,
           });
-          await recordCompanionPercept(
+          await (await perceptModule).recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
@@ -1741,6 +1785,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${text}`
         );
 
+        let backchannel: ConversationCueHandle | null = null;
         const turnContext: VoiceTurnContext = {
           turnId,
           ...(finiteTimestamp(payload.audioMs) !== undefined
@@ -1751,9 +1796,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             : {}),
           ...(captureStartedAtMs !== undefined ? { speechStartedAtMs: captureStartedAtMs } : {}),
           ...(captureEndedAtMs !== undefined ? { speechEndedAtMs: captureEndedAtMs } : {}),
+          ...(sensoryBackchannelEnabled
+            ? { onResponseAudioStart: () => backchannel?.cancel() }
+            : {}),
         };
         let acceptedForSemanticIngress = true;
         let responded = Boolean(options.onHeard);
+        let repaired = false;
+        let repairReason: 'short' | 'low-confidence' | undefined;
         turnCoordinator.transition(turnId, 'deciding', {
           sttMs,
           wordCount: text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0,
@@ -1802,6 +1852,25 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           sttMs,
         });
 
+        const confidence = finiteTimestamp(payload.confidence);
+        if (
+          acceptedForSemanticIngress
+          && decisionReason === 'addressed'
+          && env.CODEBUDDY_SENSORY_REPAIR === 'true'
+          && options.onConversationCue
+          && shouldRepairTranscript(text, confidence)
+        ) {
+          repairReason = (text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) <= 2
+            ? 'short'
+            : 'low-confidence';
+          const repairStartedAt = now();
+          spoke = await conversationCues.playRepair(turnId);
+          actionMs = elapsedSince(repairStartedAt, now);
+          repaired = true;
+          responded = spoke;
+          acceptedForSemanticIngress = false;
+        }
+
         if (acceptedForSemanticIngress && options.onRecognizedTurn) {
           try {
             const ingress = options.onRecognizedTurn({ turnId, text, context: turnContext });
@@ -1821,13 +1890,27 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           }
         }
 
-        if (responded) {
+        if (repaired) {
+          turnCoordinator.transition(turnId, spoke ? 'completed' : 'suppressed', {
+            decisionReason,
+            suppressionReason: spoke ? undefined : 'repair-cue-unavailable',
+            spoke,
+            totalMs: elapsedSince(transcribeStartMs, now),
+          });
+        } else if (responded) {
+          if (sensoryBackchannelEnabled && decisionReason === 'addressed') {
+            backchannel = conversationCues.armBackchannel(turnId);
+          }
           turnCoordinator.transition(turnId, 'thinking', {
             decisionReason,
             decisionMs,
           });
           const actionStartMs = now();
-          await options.onHeard?.(text, turnContext);
+          try {
+            await options.onHeard?.(text, turnContext);
+          } finally {
+            backchannel?.cancel();
+          }
           actionMs = elapsedSince(actionStartMs, now);
           responseTiming = options.getResponseTiming?.();
           // The voice handler publishes the same fact through getResponseTiming or its
@@ -1860,7 +1943,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           responseTiming?.firstContentAudioMs !== undefined
             ? inputReadyMs + decisionMs + responseTiming.firstContentAudioMs
             : undefined;
-        await recordCompanionPercept(
+        await (await perceptModule).recordCompanionPercept(
           {
             modality: 'hearing',
             source: 'sensory_speech_reaction',
@@ -1884,6 +1967,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
                   : {}),
               },
               ...(decisionReason ? { decisionReason } : {}),
+              ...(repaired ? { repairTriggered: true, repairReason } : {}),
               latency: {
                 ...latencyPayload,
                 decisionMs,
@@ -2000,6 +2084,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         ?? finiteTimestamp(p.receivedAt)
         ?? now();
       pendingSpeechTurnId = `voice_${pendingSpeechStartedAtMs}_${++turnSeq}`;
+      pendingSpeechPartialText = undefined;
       bargedSpeechTurnId = undefined;
       turnCoordinator.transition(pendingSpeechTurnId, 'listening', {
         aecActive: payload.aecActive === true,
@@ -2018,6 +2103,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
       if (!text) return;
+      pendingSpeechPartialText = text;
       if (
         inFlight &&
         options.onBargeIn &&
@@ -2052,15 +2138,21 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     // and carried in the payload — drive the same cognition with the text directly,
     // no WAV / no STT. Keyed on a synthetic id since there's no file to dedup on.
     if (p.kind === 'transcript_final') {
-      const livePayload = p.payload as { text?: string; turnDetector?: string } | undefined;
+      const livePayload = p.payload as {
+        text?: string;
+        turnDetector?: string;
+        endpointWaitMs?: number;
+      } | undefined;
       let speechStartedAtMs = finiteTimestamp(
         (p.payload as Record<string, unknown> | undefined)?.startedAtMs,
       ) ?? pendingSpeechStartedAtMs;
       let turnId = pendingSpeechTurnId;
+      const repairAddressHint = pendingSpeechPartialText;
       pendingSpeechStartedAtMs = undefined;
       pendingSpeechTurnId = undefined;
-      let text = livePayload?.text?.trim();
-      if (!text) return;
+      pendingSpeechPartialText = undefined;
+      let text = livePayload?.text?.trim() ?? '';
+      if (!text && env.CODEBUDDY_SENSORY_REPAIR !== 'true') return;
       const key = `live:${liveSeq++}`;
       if (heldLiveTurn) {
         clearTimeout(heldLiveTurn.timer);
@@ -2071,9 +2163,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       }
       // Smart Turn has already considered prosody and the complete audio. The
       // text heuristic is only a fail-open fallback for VAD-only sources.
+      const conversationalEndSilenceMs = resolveConversationalTurnEndSilenceMs(text, env);
+      const endpointWaitMs = finiteTimestamp(livePayload?.endpointWaitMs) ?? 0;
+      const remainingIncompleteHoldMs = conversationalEndSilenceMs === null
+        ? incompleteTurnHoldMs
+        : Math.max(0, conversationalEndSilenceMs - endpointWaitMs);
       if (
         !livePayload?.turnDetector &&
-        incompleteTurnHoldMs > 0 &&
+        remainingIncompleteHoldMs > 0 &&
         isLikelyIncompleteVoiceTurn(text)
       ) {
         const timer = setTimeout(() => {
@@ -2088,10 +2185,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               ? { speechStartedAtMs: held.speechStartedAtMs }
               : {}),
             ...(held.turnId ? { turnId: held.turnId } : {}),
+            ...(repairAddressHint ? { repairAddressHint } : {}),
           };
           if (inFlight) queuePendingSpeech(job);
           else startSpeechJob(job);
-        }, incompleteTurnHoldMs);
+        }, remainingIncompleteHoldMs);
         heldLiveTurn = {
           p,
           text,
@@ -2100,7 +2198,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
           ...(turnId ? { turnId } : {}),
         };
-        logger.debug(`[speech] holding likely incomplete turn for ${incompleteTurnHoldMs}ms → ${text}`);
+        logger.debug(
+          `[speech] holding likely incomplete turn for ${remainingIncompleteHoldMs}ms → ${text}`,
+        );
         return;
       }
       if (inFlight) {
@@ -2125,6 +2225,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             presetText: text,
             ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
             ...(turnId ? { turnId } : {}),
+            ...(repairAddressHint ? { repairAddressHint } : {}),
           });
         }
         return;
@@ -2135,6 +2236,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         presetText: text,
         ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
         ...(turnId ? { turnId } : {}),
+        ...(repairAddressHint ? { repairAddressHint } : {}),
       });
       return;
     }
@@ -2171,6 +2273,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
   return () => {
     disposed = true;
+    conversationCues.dispose();
     if (heldLiveTurn) clearTimeout(heldLiveTurn.timer);
     heldLiveTurn = null;
     const abandonedSpeech = pendingSpeech;

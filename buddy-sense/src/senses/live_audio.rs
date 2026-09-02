@@ -10,7 +10,7 @@
 //! no WAV round-trip and no python.
 //!
 //! The recognizer model is OFFLINE (NeMo Parakeet-TDT). For a long utterance we
-//! optionally decode one bounded early snapshot and emit `transcript_partial` so
+//! optionally decode bounded early snapshots and emit `transcript_partial` so
 //! the brain can select/prewarm the right route while the human is still talking.
 //! That unstable text is never an authority to reply or act; `transcript_final`
 //! remains the only committed utterance.
@@ -44,6 +44,16 @@ pub const DEFAULT_MIC_THRESHOLD: f64 = 0.02;
 /// close to the 400 ms low-latency starting point used by mature realtime
 /// voice stacks, while retaining a little margin for French hesitations.
 pub const DEFAULT_MIC_ENDPOINT_MS: u64 = 420;
+
+/// Resolve the conversational end-silence endpoint. The new name is preferred,
+/// while the legacy microphone-specific knob remains a compatibility fallback.
+/// With neither variable set, the measured 420 ms default is unchanged.
+pub fn resolve_end_silence_ms(configured: Option<&str>, legacy: Option<&str>) -> u64 {
+    configured
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .or_else(|| legacy.and_then(|value| value.trim().parse::<u64>().ok()))
+        .unwrap_or(DEFAULT_MIC_ENDPOINT_MS)
+}
 /// Keep a tiny acoustic tail for the recognizer, but do not make STT decode the
 /// whole endpoint silence after the endpointer has already classified it.
 const STT_TAIL_PADDING_MS: u64 = 80;
@@ -73,6 +83,42 @@ const ADAPTIVE_OPEN_MULTIPLIER: f64 = 2.0;
 const ADAPTIVE_CLOSE_MULTIPLIER: f64 = 1.2;
 const MAX_EFFECTIVE_THRESHOLD: f64 = 0.95;
 static DELEGATED_WAV_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Decode schedule for predictive transcripts. Explicit sherpa mode repeats
+/// at the configured cadence; compatibility modes retain their single slot.
+struct PartialTranscriptCadence {
+    interval_ms: u64,
+    next_due_ms: u64,
+    repeating: bool,
+}
+
+impl PartialTranscriptCadence {
+    fn new(interval_ms: u64, repeating: bool) -> Self {
+        Self {
+            interval_ms,
+            next_due_ms: interval_ms,
+            repeating,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.next_due_ms = self.interval_ms;
+    }
+
+    fn take_due(&mut self, audio_ms: u64) -> bool {
+        if self.interval_ms == 0 || audio_ms < self.next_due_ms {
+            return false;
+        }
+        if self.repeating {
+            while self.next_due_ms <= audio_ms {
+                self.next_due_ms = self.next_due_ms.saturating_add(self.interval_ms);
+            }
+        } else {
+            self.next_due_ms = u64::MAX;
+        }
+        true
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum LiveSttDecision {
@@ -117,6 +163,10 @@ fn env_enabled(value: Option<&str>, default_value: bool) -> bool {
         value.to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     )
+}
+
+fn should_forward_empty_transcript_for_repair(value: Option<&str>) -> bool {
+    env_enabled(value, false)
 }
 
 fn normalized_engine(value: Option<&str>) -> String {
@@ -981,7 +1031,15 @@ fn capture_loop(
         DEFAULT_SMART_TURN_MAX_HOLD_MS,
     ));
     let partial_ms = env_u64("BUDDY_SENSE_MIC_PARTIAL_MS", DEFAULT_PARTIAL_TRANSCRIPT_MS);
-    let mut partial_emitted = false;
+    let repeat_partials = matches!(
+        &transcriber,
+        LiveTranscriber::InProcessParakeet {
+            requested_engine,
+            ..
+        } if requested_engine.eq_ignore_ascii_case("sherpa-rs")
+    );
+    let mut partial_cadence = PartialTranscriptCadence::new(partial_ms, repeat_partials);
+    let mut last_partial_text = String::new();
     eprintln!(
         "[buddy-sense] live-audio: listening (pulse:{source}, aec:{})",
         if capture.aec_active {
@@ -1003,31 +1061,34 @@ fn capture_loop(
         let frame_rms = rms_i16(&frame);
         let segment = seg.push(&frame);
         if !was_speaking && seg.is_speaking() {
-            partial_emitted = false;
+            partial_cadence.reset();
+            last_partial_text.clear();
             let event =
                 speech_start_event(frame_rms, seg.effective_thresholds(), adaptive, &capture);
             if tx.blocking_send(event).is_err() {
                 break;
             }
         }
-        if !partial_emitted && partial_ms > 0 {
+        if partial_ms > 0 {
             if let Some(samples) = seg.partial_samples() {
                 let audio_ms = (samples.len() as u64 * 1000) / SAMPLE_RATE as u64;
-                if audio_ms >= partial_ms {
-                    // Exactly one speculative decode per utterance. Blocking for
-                    // ~120 ms is bounded and ffmpeg's pipe buffers the live PCM.
-                    partial_emitted = true;
+                if partial_cadence.take_due(audio_ms) {
+                    // Explicit sherpa mode retargets preparation as the utterance
+                    // grows. Each bounded ~120 ms decode stays off the async
+                    // runtime, while ffmpeg's pipe buffers incoming PCM.
                     if let LiveTranscriber::InProcessParakeet { stt, .. } = &mut transcriber {
                         let decode_started = Instant::now();
                         let text = stt.transcribe_pcm(SAMPLE_RATE, samples);
                         let decode_ms = decode_started.elapsed().as_millis() as u64;
                         if !text.is_empty()
+                            && text != last_partial_text
                             && tx
                                 .blocking_send(partial_transcript_event(&text, audio_ms, decode_ms))
                                 .is_err()
                         {
                             break;
                         }
+                        last_partial_text = text;
                     }
                 }
             }
@@ -1258,7 +1319,11 @@ fn emit_utterance(
             let decode_started = Instant::now();
             let text = stt.transcribe_pcm(SAMPLE_RATE, &utt);
             let decode_ms = decode_started.elapsed().as_millis() as u64;
-            if text.is_empty() {
+            if text.is_empty()
+                && !should_forward_empty_transcript_for_repair(
+                    std::env::var("CODEBUDDY_SENSORY_REPAIR").ok().as_deref(),
+                )
+            {
                 return true; // silence / non-speech that slipped the gate
             }
             if std::env::var("BUDDY_SENSE_MIC_DEBUG").is_ok() {
@@ -1341,6 +1406,33 @@ mod tests {
     fn frames_of(level: i16, count: usize) -> Vec<Vec<i16>> {
         let n = frame_samples();
         (0..count).map(|_| vec![level; n]).collect()
+    }
+
+    #[test]
+    fn end_silence_env_preserves_the_measured_default_and_overrides_legacy_config() {
+        assert_eq!(resolve_end_silence_ms(None, None), DEFAULT_MIC_ENDPOINT_MS);
+        assert_eq!(resolve_end_silence_ms(Some("350"), Some("800")), 350);
+        assert_eq!(resolve_end_silence_ms(Some("invalid"), Some("640")), 640);
+    }
+
+    #[test]
+    fn explicit_sherpa_streams_repeated_partial_decode_slots() {
+        let mut streaming = PartialTranscriptCadence::new(1_200, true);
+        assert!(!streaming.take_due(1_199));
+        assert!(streaming.take_due(1_200));
+        assert!(!streaming.take_due(1_800));
+        assert!(streaming.take_due(2_400));
+
+        let mut legacy = PartialTranscriptCadence::new(1_200, false);
+        assert!(legacy.take_due(1_200));
+        assert!(!legacy.take_due(2_400));
+    }
+
+    #[test]
+    fn empty_final_is_forwarded_only_for_the_repair_pilot() {
+        assert!(!should_forward_empty_transcript_for_repair(None));
+        assert!(!should_forward_empty_transcript_for_repair(Some("false")));
+        assert!(should_forward_empty_transcript_for_repair(Some("true")));
     }
 
     #[test]

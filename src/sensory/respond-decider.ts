@@ -138,6 +138,8 @@ export interface ResponseDeciderOptions {
 
 export interface ResponseDecider {
   decide(transcript: string): Promise<ResponseDecision>;
+  /** Stateless direct-address probe used by non-generative repair handling. */
+  isAddressed(transcript: string): Promise<boolean>;
   /** Open the engagement window as if just addressed. `decide` calls this on a name match;
    *  expose it so a caller can explicitly start a conversation (e.g. a wake-word from another
    *  channel). NOTE: do NOT call this after every reply — that would make the window slide on
@@ -583,16 +585,16 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
 
       // Tier 0 — addressed by name (fuzzy, no LLM). ONLY an explicit address anchors the
       // engagement window — so it decays from the address, NOT from whatever was said next.
-      const robotName = await resolveRobotNameForTurn();
+      const addressed = await isAddressed(text);
       const closing = isConversationClosing(text);
       if (closing && (
-        isVocativeAddress(text, robotName, nameMatch)
+        addressed
         || now() - lastEngagedAt < engageWindowMs
       )) {
         close('human-closing');
         return { respond: true, reason: 'conversation-close', conversationAction: 'close' };
       }
-      if (isVocativeAddress(text, robotName, nameMatch)) {
+      if (addressed) {
         markEngaged('addressed');
         return { respond: true, reason: 'addressed' };
       }
@@ -691,5 +693,11 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     }
   }
 
-  return { decide, markEngaged, close, snapshot };
+  async function isAddressed(transcript: string): Promise<boolean> {
+    const text = (transcript ?? '').trim();
+    if (!text) return false;
+    return isVocativeAddress(text, await resolveRobotNameForTurn(), nameMatch);
+  }
+
+  return { decide, isAddressed, markEngaged, close, snapshot };
 }

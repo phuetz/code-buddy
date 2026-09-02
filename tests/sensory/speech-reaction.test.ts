@@ -124,7 +124,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(shouldSuppressPlaybackCapture('echo_tail', 'distinct', false)).toBe(false);
   });
 
-  it('uses a partial transcript only for preparation and waits for the final before cognition', async () => {
+  it('uses repeated partial transcripts only for preparation and the final for cognition', async () => {
     const partials: Array<{ text: string; audioMs?: number; decodeMs?: number }> = [];
     const heard: string[] = [];
     const unwire = wireSpeechReaction({
@@ -139,10 +139,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     try {
       speechStart({ rms: 0.08 });
       transcriptPartial('cherche les actualités', { audioMs: 1200, decodeMs: 95 });
+      transcriptPartial('cherche les actualités en Europe', { audioMs: 2400, decodeMs: 91 });
       await waitFor(() => expect(partials).toEqual([{
         text: 'cherche les actualités',
         audioMs: 1200,
         decodeMs: 95,
+      }, {
+        text: 'cherche les actualités en Europe',
+        audioMs: 2400,
+        decodeMs: 91,
       }]));
       expect(heard).toEqual([]);
 
@@ -170,6 +175,110 @@ describe('speech reaction — speech_end → STT → percept', () => {
       await waitFor(() => expect(starts).toEqual([{ rms: 0.08, rmsOn: 0.04, adaptiveVad: true }]));
       expect(heard).toEqual([]);
     } finally {
+      unwire();
+    }
+  });
+
+  it('repairs a short low-confidence addressed final without calling the reply', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-short-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      transcriptFinal('Lisa', { confidence: 0.2 });
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
+  it('repairs an empty final only when a retained partial proves address', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-empty-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      isAddressed: async (text) => text.startsWith('Lisa'),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      speechStart();
+      transcriptPartial('Lisa, je voulais');
+      transcriptFinal('');
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
+  it('cancels an addressed sensory backchannel when the reply completes first', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-cancel-'));
+    const cues: string[] = [];
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, question rapide ?');
+      await waitFor(() => expect(heard).toEqual(['Lisa, question rapide ?']));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      expect(cues).toEqual([]);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('arms the sensory backchannel only after the addressed gate accepts the turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-addressed-'));
+    let releaseReply!: () => void;
+    const replyHeld = new Promise<void>((resolve) => {
+      releaseReply = resolve;
+    });
+    const cues: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async () => replyHeld,
+    });
+    try {
+      transcriptFinal('Lisa, question plus longue ?');
+      await waitFor(() => expect(cues).toEqual(['mhm']));
+    } finally {
+      releaseReply();
       unwire();
     }
   });
@@ -399,6 +508,27 @@ describe('speech reaction — speech_end → STT → percept', () => {
       expect(heard).toEqual([]);
       transcriptFinal('le test est terminé.');
       await waitFor(() => expect(heard).toEqual(['Lisa, je voulais te dire que le test est terminé.']));
+    } finally {
+      unwire();
+    }
+  });
+
+  it('adds only the missing silence up to 900 ms for a suspended opt-in turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-turn-target-'));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_TURN_HEURISTIC: 'true' },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, je pensais donc', { endpointWaitMs: 350 });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(heard).toEqual([]);
+      await waitFor(() => expect(heard).toEqual(['Lisa, je pensais donc']));
     } finally {
       unwire();
     }
