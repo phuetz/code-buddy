@@ -12,7 +12,7 @@
 | Diagnostic | Verdict | Preuve / correction |
 |---|---|---|
 | D3 | Confirmé | `POST /:source` précédait les POST statiques ; route dynamique déplacée après `/triggers` et `/test`. |
-| D1 | À vérifier | — |
+| D1 | Confirmé | Les quatre handlers mutaient après la dernière sauvegarde ; chaque mutation est désormais suivie de `saveSession()`. |
 | D2 | À vérifier | — |
 | D4 | À vérifier | — |
 | D5 | À vérifier | — |
@@ -44,6 +44,31 @@ $ git diff --check
 EXIT_CODE=0
 ```
 
+### D1 — persistance des sessions
+
+Rouge, avant correction :
+
+```text
+$ npx vitest run tests/server/sessions-routes-persistence.test.ts
+Test Files  1 failed (1)
+Tests  1 failed (1)
+Expected: name="R21 renommée", description et message
+Received: name="R21 initiale", messages=[]
+EXIT_CODE=1
+```
+
+Vert, après correction et relecture par un second `SessionStore` :
+
+```text
+$ npx vitest run tests/server/sessions-routes-persistence.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+$ npx eslint src/server/routes/sessions.ts tests/server/sessions-routes-persistence.test.ts
+EXIT_CODE=0
+$ git diff --check
+EXIT_CODE=0
+```
+
 ## Commits
 
-Un commit français `fix(server): …` sera créé pour chaque diagnostic confirmé.
+- D3 : `c59c9b20f` — `fix(server): rétablir les routes statiques des webhooks`
