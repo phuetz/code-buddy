@@ -2332,6 +2332,25 @@ export class AgentExecutor {
               });
               continue;
             }
+            if (streamFinishReason === 'length') {
+              assistantEntry.truncated = true;
+              const notice = lengthContinuations > 0
+                ? `Réponse tronquée après ${lengthContinuations} continuation(s) (limite de longueur atteinte).`
+                : 'Réponse tronquée (limite de longueur atteinte).';
+              logger.warn('[agent-executor] length-truncated response', {
+                continuations: lengthContinuations,
+                max: maxLengthContinuations,
+              });
+              assistantEntry.content = assistantEntry.content
+                ? `${assistantEntry.content}\n\n${notice}`
+                : notice;
+              const lastMessage = messages[messages.length - 1];
+              if (lastMessage?.role === 'assistant') {
+                lastMessage.content = assistantEntry.content;
+              }
+              yield { type: 'content', content: `\n${notice}\n` };
+              break;
+            }
             // Post-tool empty responses are handled before persist (D1) so an
             // empty assistant message is never written to the transcript.
           }

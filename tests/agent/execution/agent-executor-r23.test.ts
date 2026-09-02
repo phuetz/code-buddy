@@ -257,4 +257,41 @@ describe('R23 AgentExecutor — faux succès', () => {
       expect(deps.client.chatStream).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('D3 — épuisement des continuations length', () => {
+    it('ne conclut pas comme un stop une réponse encore tronquée', async () => {
+      process.env.CODEBUDDY_MAX_LENGTH_CONTINUATIONS = '1';
+      setupLLMFlow(deps, [
+        { content: 'DEBUT_INCOMPLET', finishReason: 'length' },
+        { content: 'SUITE_ENCORE_INCOMPLETE', finishReason: 'length' },
+      ]);
+
+      const history: ChatEntry[] = [];
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Hello', history, [], null),
+      );
+      const text = visibleText(chunks);
+      const assistants = history.filter((entry) => entry.type === 'assistant');
+
+      expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
+      expect(assistants.some((entry) => entry.content.includes('DEBUT_INCOMPLET'))).toBe(true);
+      expect(assistants.some((entry) => entry.content.includes('SUITE_ENCORE_INCOMPLETE'))).toBe(true);
+      expect(assistants.some((entry) => entry.truncated === true)).toBe(true);
+      expect(text).toMatch(/tronquée/i);
+      expect(history.some((entry) => /tronquée/i.test(entry.content))).toBe(true);
+    });
+
+    it('marque aussi une troncature length sans nouveau token', async () => {
+      process.env.CODEBUDDY_MAX_LENGTH_CONTINUATIONS = '3';
+      setupLLMFlow(deps, [{ content: '', finishReason: 'length' }]);
+
+      const history: ChatEntry[] = [];
+      const entries = await executor.processUserMessage('Hello', history, []);
+
+      expect(deps.client.chatStream).toHaveBeenCalledTimes(1);
+      expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/réponse vide du fournisseur/i);
+      expect(history.some((entry) => entry.truncated === true)).toBe(true);
+      expect(entries.map((entry) => entry.content).join('\n')).toMatch(/tronquée/i);
+    });
+  });
 });
