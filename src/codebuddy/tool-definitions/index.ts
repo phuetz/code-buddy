@@ -369,6 +369,7 @@ export {
 // ExitPlanMode tool (request approval to leave plan mode)
 export {
   EXIT_PLAN_MODE_TOOL,
+  SUBMIT_PLAN_TOOL,
   EXIT_PLAN_MODE_TOOLS,
 } from './exit-plan-mode-tools.js';
 

@@ -58,4 +58,29 @@ export const EXIT_PLAN_MODE_TOOL: CodeBuddyTool = {
   },
 };
 
-export const EXIT_PLAN_MODE_TOOLS: CodeBuddyTool[] = [EXIT_PLAN_MODE_TOOL];
+// Write the plan file and request approval. Complementary to exit_plan_mode:
+// this tool persists `.codebuddy/plans/current.md` and emits
+// __PLAN_APPROVAL_REQUEST__ (consumed by the streaming runner). Already on
+// the plan-mode allowlist (src/agent/plan-mode.ts) — without this schema the
+// allowlist name was dead. Dispatch: src/tools/submit-plan-tool.ts.
+export const SUBMIT_PLAN_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'submit_plan',
+    description:
+      'Submit a completed research/execution plan for user approval. Writes `.codebuddy/plans/current.md` and pauses for approval. Use in Plan Mode when research is complete: once approved you exit Plan Mode and gain write permissions. Prefer this over shelling a plan file. Distinct from exit_plan_mode, which requests to leave Plan Mode (optionally with an inline summary) without writing current.md.',
+    parameters: {
+      type: 'object',
+      properties: {
+        plan_content: {
+          type: 'string',
+          description:
+            'The detailed markdown content of your plan: what will change, which files will be modified, and which commands will run.',
+        },
+      },
+      required: ['plan_content'],
+    },
+  },
+};
+
+export const EXIT_PLAN_MODE_TOOLS: CodeBuddyTool[] = [EXIT_PLAN_MODE_TOOL, SUBMIT_PLAN_TOOL];

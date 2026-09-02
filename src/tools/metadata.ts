@@ -1599,6 +1599,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 7,
     description: 'Request user approval to leave plan mode and start executing'
   },
+  {
+    name: 'submit_plan',
+    category: 'planning' as ToolCategory,
+    keywords: [
+      'plan', 'submit', 'approval', 'approve', 'research', 'execution plan',
+      'current.md', 'plan mode', 'sign-off',
+    ],
+    priority: 7,
+    description:
+      'Write .codebuddy/plans/current.md and request user approval to leave plan mode',
+  },
 
   // Codebase replace
   {

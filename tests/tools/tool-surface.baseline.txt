@@ -184,6 +184,7 @@ spotify_queue
 spotify_search
 stock_quote
 str_replace_editor
+submit_plan
 task_verify
 terminal
 test_runner
