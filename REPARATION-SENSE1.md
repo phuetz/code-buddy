@@ -303,16 +303,64 @@ Tests  8 passed | 1 skipped (9)
 EXIT_CODE=0
 ```
 
-Le tuple de configuration du repli (`requested`, `effective`, langue, raison, nombre de hotwords) est mémorisé en processus; une répétition identique ne rejournalise pas l'avertissement.
+La cause `parakeet-language-pin-unsupported` est mémorisée en processus; toute répétition du même repli, même si le contexte d'appel varie, ne rejournalise pas l'avertissement.
 
 ### Commit
 
-Prévu : `fix(sensory): log STT fallback once per process`.
+`29656429e` — `fix(sensory): log STT fallback once per process`.
 
 ## Vérifications finales
 
-_À compléter._
+Toutes les vérifications ci-dessous ont été exécutées au sommet fonctionnel `29656429e`, sans API ni matériel externe :
+
+```text
+npx vitest run tests/sensory/speech-reaction.test.ts tests/sensory/voice-activity.test.ts tests/sensory/sherpa-rs-stt.test.ts tests/sensory/speech-engine-config.test.ts tests/sensory/arrival-greeting.test.ts tests/sensory/vision-reaction.test.ts
+Test Files  6 passed (6)
+Tests  82 passed | 1 skipped (83)
+EXIT_CODE=0
+
+cd buddy-vision && python3 -m unittest test_watch.py
+..................
+Ran 18 tests in 0.025s
+OK
+EXIT_CODE=0
+
+cd buddy-vision && python3 -m py_compile watch.py test_watch.py
+EXIT_CODE=0
+
+npm run typecheck
+tsc --noEmit && npm run typecheck:gpuNode-identity
+tsc --project tsconfig.gpuNode-identity.json
+EXIT_CODE=0
+
+npx eslint src/sensory/speech-reaction.ts src/sensory/voice-activity.ts src/sensory/semantic-vision-reaction.ts src/sensory/vision-reaction.ts tests/sensory/speech-reaction.test.ts tests/sensory/voice-activity.test.ts tests/sensory/sherpa-rs-stt.test.ts tests/sensory/arrival-greeting.test.ts tests/sensory/vision-reaction.test.ts
+(aucune sortie)
+EXIT_CODE=0
+
+npm run lint
+✖ 2466 problems (0 errors, 2466 warnings)
+EXIT_CODE=0
+
+npx vitest run tests/security/donnees-personnelles.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+EXIT_CODE=0
+```
+
+Le test ignoré est le test STT dépendant d'un modèle/matériel réel déjà conditionnel. Le lint global conserve 2 466 avertissements préexistants hors périmètre mais ne produit aucune erreur; le lint strictement ciblé est silencieux. `git diff --check` sera rejoué après la clôture documentaire. Aucun service n'a été touché, aucune API appelée, aucun push effectué et aucune écriture réalisée hors du clone.
 
 ## Variables à copier dans `vision.env`
 
-_À compléter en fin de mission._
+Valeurs par défaut explicites des nouvelles portes, plus le seuil de mouvement existant conservé comme base du seuil adaptatif :
+
+```dotenv
+CODEBUDDY_SENSORY_AEC_TRUST=false
+BUDDY_VISION_MOTION=0.02
+BUDDY_VISION_MIN_LUMA=12
+BUDDY_VISION_NOISE_WINDOW=120
+BUDDY_VISION_PERSON_LOST_SECS=20
+CODEBUDDY_SENSORY_REGREET_MIN_MS=300000
+CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN=4
+```
+
+`BUDDY_VISION_MOTION` n'est pas nouvelle : sa valeur reste `0.02`, désormais utilisée dans `max(BUDDY_VISION_MOTION, 2.5 × noiseFloor)`. Les six autres lignes sont les variables ajoutées par cette mission.
