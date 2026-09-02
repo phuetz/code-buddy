@@ -117,7 +117,14 @@ describe('ContextCompressor', () => {
 
   it('should truncate tool outputs', () => {
     const hugeToolOutput = 'The quick brown fox jumps over the lazy dog. '.repeat(100);
+    // R36 (2026-09-02) : un tool_result sans son tool_call est un orphelin et
+    // n'est plus conservé ; le résultat doit répondre à un appel réel.
     const messages: CodeBuddyMessage[] = [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ id: 'call_123', type: 'function', function: { name: 'bash', arguments: '{}' } }],
+      } as CodeBuddyMessage,
       { role: 'tool', content: hugeToolOutput, tool_call_id: 'call_123' }
     ];
 
@@ -128,6 +135,8 @@ describe('ContextCompressor', () => {
     
     expect(result.compressed).toBe(true);
     expect(result.strategy).toBe('tool_truncation');
-    expect((result.messages[0].content as string).endsWith('[truncated]')).toBe(true);
+    const toolMessage = result.messages.find((m) => m.role === 'tool');
+    expect(toolMessage).toBeDefined();
+    expect((toolMessage!.content as string).endsWith('[truncated]')).toBe(true);
   });
 });
