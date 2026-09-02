@@ -13,10 +13,12 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 import { createTokenCounter, TokenCounter } from './token-counter.js';
 import { ContextCompressor } from './compression.js';
 import { ContextManagerConfig, ContextStats, ContextWarning } from './types.js';
 import { logger } from '../utils/logger.js';
+import { ContextCompactionError, findLastUserMessage } from './context-manager-v2.js';
 
 /**
  * Advanced manager for handling conversation context.
@@ -142,6 +144,7 @@ export class ContextManagerV3 {
   prepareMessages(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
     const stats = this.getStats(messages);
     const effectiveLimit = this.config.maxContextTokens - this.config.responseReserveTokens;
+    this.rejectIfCurrentRequestExceedsBudget(messages, effectiveLimit);
 
     if (stats.totalTokens <= effectiveLimit) {
       return messages;
@@ -158,7 +161,61 @@ export class ContextManagerV3 {
       logger.info(`Context compressed: ${result.tokensReduced} tokens removed using ${result.strategy}.`);
     }
 
+    this.assertLastUserPreserved(messages, result.messages, effectiveLimit);
+    this.assertFitsTokenLimit(result.messages, effectiveLimit);
     return result.messages;
+  }
+
+  private countMessageTokens(messages: CodeBuddyMessage[]): number {
+    const tokenMessages = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : null,
+      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
+    }));
+    return this.tokenCounter.countMessageTokens(tokenMessages);
+  }
+
+  private rejectIfCurrentRequestExceedsBudget(
+    messages: CodeBuddyMessage[],
+    effectiveLimit: number,
+  ): void {
+    const lastUser = findLastUserMessage(messages);
+    if (!lastUser) return;
+    const tokens = this.countMessageTokens([lastUser]);
+    if (tokens > effectiveLimit) {
+      throw new ContextCompactionError(
+        'CURRENT_REQUEST_EXCEEDS_BUDGET',
+        tokens,
+        effectiveLimit,
+      );
+    }
+  }
+
+  private assertLastUserPreserved(
+    original: CodeBuddyMessage[],
+    prepared: CodeBuddyMessage[],
+    effectiveLimit: number,
+  ): void {
+    const lastUser = findLastUserMessage(original);
+    if (!lastUser) return;
+    if (prepared.includes(lastUser)) return;
+    const intact = prepared.some((message) => (
+      message.role === 'user'
+      && message.content === lastUser.content
+    ));
+    if (intact) return;
+    throw new ContextCompactionError(
+      'CURRENT_REQUEST_EXCEEDS_BUDGET',
+      this.countMessageTokens([lastUser]),
+      effectiveLimit,
+      'Current user request was dropped during context compaction. The request was not sent to the model.',
+    );
+  }
+
+  private assertFitsTokenLimit(prepared: CodeBuddyMessage[], effectiveLimit: number): void {
+    const tokens = this.countMessageTokens(prepared);
+    if (tokens <= effectiveLimit) return;
+    throw new ContextCompactionError('COMPACTION_EXCEEDS_LIMIT', tokens, effectiveLimit);
   }
 
   /**
@@ -177,6 +234,10 @@ export class ContextManagerV3 {
  * @returns A new ContextManagerV3 instance.
  */
 export function createContextManager(model: string, maxTokens?: number): ContextManagerV3 {
-  const config = { model, ...(maxTokens ? { maxContextTokens: maxTokens } : {}) };
+  const declaredWindow = getModelToolConfig(model).contextWindow;
+  const config = {
+    model,
+    maxContextTokens: maxTokens ?? declaredWindow ?? ContextManagerV3.DEFAULT_CONFIG.maxContextTokens,
+  };
   return new ContextManagerV3(config);
 }
