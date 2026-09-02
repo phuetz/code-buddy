@@ -2,6 +2,10 @@
 
 Rapport initialisé avant toute inspection du dépôt, conformément à la mission E18.
 
+## Fichiers lus et lignes de référence
+
+Le rapport a été créé avant l’inspection. Après son initialisation, les défauts E14 ont été relus avec `git show audit/cli-inconnu-2026-09-02:RAPPORT-E14.md` (section `Défauts`, lignes 418–432). Les sources examinées pour cette réparation sont : `package.json:58–86`, `src/commands/try.ts:102–218`, `src/doctor/index.ts:329–343 et 577–718`, `src/commands/changelog.ts:107–119 et 276–303`, `src/commands/update.ts:17–158`, `src/commands/cli/fleet-commands.ts:38–140`, `src/wizard/environment-detection.ts:64–89`, `src/utils/settings-manager.ts:142–225`, `docs/getting-started.md:76–103`, et les tests ciblés correspondants sous `tests/`.
+
 ## Journal de vérification
 
 | Point | Rouge | Correctif | Vert | Commit |
@@ -9,19 +13,19 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 | D5 | `npx vitest run tests/scripts/package-lifecycle.test.ts` : 1 échec ; clone frais : `ENOENT ... codebuddy-runtime.json`, exit 1 | `package.json` : `prepack` exécute `npm run build`, retire les sourcemaps puis génère le manifeste | Test ciblé PASS ; clone neuf issu de `726d29587` : `npm pack` exit 0, manifeste et tarball produits | `726d29587` |
 | D6 | Test Commander rouge et route réelle initialement ChatGPT OAuth malgré `CODEBUDDY_PROVIDER=ollama`; démos locales 1.5B/4B non vertes | `try` accepte `--model`/`--base-url` après le sous-commande, transmet les options injectables et respecte `CODEBUDDY_PROVIDER=ollama` ; sélection exacte du tag Ollama | Tests ciblés 14/14 PASS ; headless affiche `Ollama local (qwen2.5:1.5b-instruct)` puis échoue honnêtement sur la qualité du petit modèle ; qwen3.8:27b atteint timeout 180 s | `050626bd4` |
 | D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | `10ae7977f` |
-| D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `0130f30f5` |
-| D9 | Test registre/GitHub rouge : `--check` ne consultait pas npm, fabriquait la date avec `new Date()` et construisait encore `phuetz/grok-cli` | `--check` lit le nom/version de `package.json`, interroge le dist-tag npm réel avec timeout, refuse une réponse incomplète et corrige le dépôt GitHub | Test ciblé 14/14 PASS ; registre réel : `@phuetz/code-buddy` latest `1.6.1`, date `2026-06-25T13:14:01.864Z` ; CLI exit 0 et affiche ces valeurs | `6e910e76f` |
-| D10 | Rouge historique non reproductible sur ce HEAD : `e077e4c4f` contient déjà la gestion d’erreur Fleet | Ajout d’une régression ciblée qui verrouille le message, le conseil `buddy server` et `process.exitCode = 1` | Test ciblé 8/8 PASS ; port local non utilisé : message exact et CLI exit 1 | À faire |
-| D11 | Test de sélection rouge : les helpers de validation d’un `defaultModel` Ollama n’existaient pas | `doctor` compare les deux champs persistés aux tags réellement annoncés par Ollama ; `--fix` sélectionne un tag joignable et le réécrit dans `model` et `defaultModel` | Test ciblé 2/2 PASS ; `doctor --fix` headless écrit `gemma4-moe-rag:latest`, puis `/api/tags` confirme `reachable=true` | À faire |
+| D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `e68ec3fd0` |
+| D9 | Test registre/GitHub rouge : `--check` ne consultait pas npm, fabriquait la date avec `new Date()` et construisait encore `phuetz/grok-cli` | `--check` lit le nom/version de `package.json`, interroge le dist-tag npm réel avec timeout, refuse une réponse incomplète et corrige le dépôt GitHub | Test ciblé 14/14 PASS ; registre réel : `@phuetz/code-buddy` latest `1.6.1`, date `2026-06-25T13:14:01.864Z` ; CLI exit 0 et affiche ces valeurs | `7ce5ce9df` |
+| D10 | Rouge historique non reproductible sur ce HEAD : `e077e4c4f` contient déjà la gestion d’erreur Fleet | Ajout d’une régression ciblée qui verrouille le message, le conseil `buddy server` et `process.exitCode = 1` | Test ciblé 8/8 PASS ; port local non utilisé : message exact et CLI exit 1 | `e6bf208fd` |
+| D11 | Test de sélection rouge : les helpers de validation d’un `defaultModel` Ollama n’existaient pas | `doctor` compare les deux champs persistés aux tags réellement annoncés par Ollama ; `--fix` sélectionne un tag joignable et le réécrit dans `model` et `defaultModel` | Test ciblé 2/2 PASS ; `doctor --fix` headless écrit `gemma4-moe-rag:latest`, puis `/api/tags` confirme `reachable=true` | `367bda01a` |
 
 ## Défauts non réglés
 
 - D5 réglé et prouvé sur clone neuf issu de `726d29587`.
 - D6 réglé côté routage/options ; la démo locale complète reste limitée par les modèles Ollama testés, détail ci-dessous.
 - D7 réglé : diagnostic TTS aligné sur Pocket/ElevenLabs ; absence de moteur = message clair et exit 1.
-- D8 réglé côté commande et documentation ; commit dédié `0130f30f5`.
+- D8 réglé côté commande et documentation ; commit dédié `e68ec3fd0`.
 - D9 réglé : `--check` ne fabrique plus de version/date et le dépôt/package sont ceux de Code Buddy.
-- D10 était déjà corrigé dans le HEAD E18 par `e077e4c4f` ; la régression ciblée et la preuve CLI sont ajoutées ici.
+- D10 était déjà corrigé dans le HEAD E18 par `e077e4c4f` ; la régression ciblée et la preuve CLI sont ajoutées dans `e6bf208fd`.
 - D11 réglé : `doctor --fix` ne conserve plus un modèle par défaut absent d’Ollama.
 
 ## Commandes, sorties et commits
@@ -150,7 +154,7 @@ caught: buddy.changelog
 
 Le second contrôle force Git à ne pas utiliser le dépôt parent ; l’action Commander reçoit bien `exitCode: 1`. Le message et la documentation ne promettent donc pas un changelog depuis un paquet npm sans historique Git.
 
-Commit D8 : `0130f30f5` (`fix(changelog): explain Git requirement outside a checkout`).
+Commit D8 : `e68ec3fd0` (`fix(changelog): explain Git requirement outside a checkout`).
 
 ### D9 — `update --check` et registre npm
 
@@ -193,7 +197,7 @@ exit 0
 
 La commande constate ici que la version locale est supérieure et ne conseille pas de rétrograder.
 
-Commit D9 : `6e910e76f` (`fix(update): check the npm registry for releases`).
+Commit D9 : `7ce5ce9df` (`fix(update): check the npm registry for releases`).
 
 ### D10 — `fleet status` sans serveur
 
@@ -244,3 +248,28 @@ reachable=true model=gemma4-moe-rag:latest
 ```
 
 Le choix vient des tags servis par Ollama, pas d’une valeur codée en dur. Aucun appel à un fournisseur payant ni modification d’un service n’a été effectué.
+
+## Contrôles finaux
+
+```text
+$ TMPDIR="$PWD/_e18/tmp-final" npx vitest run tests/scripts/package-lifecycle.test.ts tests/commands/try.test.ts tests/doctor/tts-guidance.test.ts tests/commands/changelog.test.ts tests/unit/update-tag.test.ts tests/commands/fleet-commands.test.ts tests/doctor/ollama-selection.test.ts
+Test Files  7 passed (7)
+Tests       46 passed (46)
+exit 0
+
+$ npx tsc --noEmit -p .
+exit 0
+
+$ npx eslint src/commands/update.ts src/commands/changelog.ts src/doctor/index.ts src/commands/cli/fleet-commands.ts tests/unit/update-tag.test.ts tests/commands/changelog.test.ts tests/commands/fleet-commands.test.ts tests/doctor/tts-guidance.test.ts tests/doctor/ollama-selection.test.ts tests/scripts/package-lifecycle.test.ts
+exit 0
+
+$ npm run lint
+✖ 7775 problems (5254 errors, 2521 warnings)
+exit 1
+
+$ npx eslint . --ext .js,.jsx,.ts,.tsx --ignore-pattern '_e14/**' --ignore-pattern '_e18/**'
+✖ 2466 problems (0 errors, 2466 warnings)
+exit 0
+```
+
+Le `npm run lint` exact reste ouvert comme contrôle global parce qu’il descend dans les clones et scripts générés non suivis de `_e18/fresh-d5-green`; les erreurs citées proviennent de ces artefacts de démonstration. Le lint des fichiers touchés et le parcours du dépôt hors artefacts n’ont aucune erreur. La suite complète Vitest n’a pas été lancée ; seuls les sept fichiers ciblés ci-dessus ont été vérifiés.
