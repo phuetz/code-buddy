@@ -367,5 +367,7 @@ Installation : **OK**, pins vérifiés ; poids/caches dans le clone et exclus.
 Banc : **OK**, 20 énoncés, 6 conditions, CPU-only, aucune lecture audio.
 Licence : **lue et synthétisée**, LiveKit Model License respectée dans le plan.
 Intégration : **opt-in uniquement**, aucun service lancé et aucune API payante.
-Tests : **rouge puis vert** pour le faux service ; vérifications finales à
-reporter avec le hash du commit de livraison.
+Tests : **rouge puis vert** pour le faux service ; commit fonctionnel
+`8d0acf4f7` (`feat(sensory): add opt-in LiveKit turn decision`).
+Vérifications finales : test sensory 47/47, typecheck racine + GPU identity
+exit 0, ESLint ciblé exit 0 et `git diff --check` exit 0.
