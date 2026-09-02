@@ -10,7 +10,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 | D6 | Test Commander rouge et route réelle initialement ChatGPT OAuth malgré `CODEBUDDY_PROVIDER=ollama`; démos locales 1.5B/4B non vertes | `try` accepte `--model`/`--base-url` après le sous-commande, transmet les options injectables et respecte `CODEBUDDY_PROVIDER=ollama` ; sélection exacte du tag Ollama | Tests ciblés 14/14 PASS ; headless affiche `Ollama local (qwen2.5:1.5b-instruct)` puis échoue honnêtement sur la qualité du petit modèle ; qwen3.8:27b atteint timeout 180 s | `050626bd4` |
 | D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | `10ae7977f` |
 | D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `0130f30f5` |
-| D9 | À établir | À faire | À faire | À faire |
+| D9 | Test registre/GitHub rouge : `--check` ne consultait pas npm, fabriquait la date avec `new Date()` et construisait encore `phuetz/grok-cli` | `--check` lit le nom/version de `package.json`, interroge le dist-tag npm réel avec timeout, refuse une réponse incomplète et corrige le dépôt GitHub | Test ciblé 14/14 PASS ; registre réel : `@phuetz/code-buddy` latest `1.6.1`, date `2026-06-25T13:14:01.864Z` ; CLI exit 0 et affiche ces valeurs | `6e910e76f` |
 | D10 | À établir | À faire | À faire | À faire |
 | D11 | À établir | À faire | À faire | À faire |
 
@@ -20,6 +20,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 - D6 réglé côté routage/options ; la démo locale complète reste limitée par les modèles Ollama testés, détail ci-dessous.
 - D7 réglé : diagnostic TTS aligné sur Pocket/ElevenLabs ; absence de moteur = message clair et exit 1.
 - D8 réglé côté commande et documentation ; commit dédié `0130f30f5`.
+- D9 réglé : `--check` ne fabrique plus de version/date et le dépôt/package sont ceux de Code Buddy.
 
 ## Commandes, sorties et commits
 
@@ -148,3 +149,46 @@ caught: buddy.changelog
 Le second contrôle force Git à ne pas utiliser le dépôt parent ; l’action Commander reçoit bien `exitCode: 1`. Le message et la documentation ne promettent donc pas un changelog depuis un paquet npm sans historique Git.
 
 Commit D8 : `0130f30f5` (`fix(changelog): explain Git requirement outside a checkout`).
+
+### D9 — `update --check` et registre npm
+
+Rouge :
+
+```text
+$ npx vitest run tests/unit/update-tag.test.ts
+FAIL  tests/unit/update-tag.test.ts (13 tests | 8 failed)
+× constructs correct command for main branch
+× constructs correct command for a version tag
+× constructs correct command for an arbitrary branch
+× --tag main calls execSync with GitHub install command
+× --tag v2.0.0 calls execSync with the correct ref
+× --from-source maps to --tag main
+× uses the registry version and publication date
+× reports an unreachable registry without inventing a release
+```
+
+Correctif : `--check` utilise le nom réel lu dans `package.json`, appelle `https://registry.npmjs.org/<package>` et ne passe plus par `UpdateChannelManager.getLatestVersion()`, qui pouvait dériver une date courante. Les installations GitHub utilisent aussi `phuetz/code-buddy`.
+
+Vert :
+
+```text
+$ npx vitest run tests/unit/update-tag.test.ts
+Test Files  1 passed (1)
+Tests       14 passed (14)
+
+$ set -o pipefail; curl --fail --silent --show-error --max-time 10 'https://registry.npmjs.org/%40phuetz%2Fcode-buddy' | node -e '...'
+registry=npm package=@phuetz/code-buddy latest=1.6.1 date=2026-06-25T13:14:01.864Z
+
+$ LOG_LEVEL=error timeout 15s npx tsx src/index.ts update --check
+Channel: stable
+Registry: npm
+Package: @phuetz/code-buddy
+Latest:  1.6.1 (2026-06-25T13:14:01.864Z)
+Current: 2.0.0
+Registry release is older than the current version: 2.0.0 > 1.6.1
+exit 0
+```
+
+La commande constate ici que la version locale est supérieure et ne conseille pas de rétrograder.
+
+Commit D9 : `6e910e76f` (`fix(update): check the npm registry for releases`).
