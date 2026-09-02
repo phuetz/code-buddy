@@ -26,53 +26,6 @@ async function getManager() {
 }
 
 // ============================================================================
-// POST /api/webhooks/:source — Receive a webhook
-// ============================================================================
-
-router.post('/:source', asyncHandler(async (req: Request, res: Response) => {
-  const source = String(req.params.source || '');
-  if (!source) {
-    res.status(400).json({ error: 'Source parameter is required' });
-    return;
-  }
-
-  const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (typeof value === 'string') {
-      headers[key] = value;
-    } else if (Array.isArray(value)) {
-      headers[key] = value[0] || '';
-    }
-  }
-
-  const manager = await getManager();
-  const result = await manager.handleWebhook(source, headers, req.body);
-
-  if (result.fired) {
-    logger.info(`Webhook from ${source} triggered: ${result.triggerId} (${result.eventType})`);
-    res.status(200).json({
-      status: 'triggered',
-      triggerId: result.triggerId,
-      eventType: result.eventType,
-      prompt: result.prompt,
-    });
-  } else if (result.error) {
-    logger.warn(`Webhook from ${source} failed: ${result.error}`);
-    res.status(400).json({
-      status: 'error',
-      error: result.error,
-      eventType: result.eventType,
-    });
-  } else {
-    // No matching trigger — acknowledge receipt
-    res.status(200).json({
-      status: 'no_match',
-      eventType: result.eventType,
-    });
-  }
-}));
-
-// ============================================================================
 // GET /api/webhooks/triggers — List all triggers
 // ============================================================================
 
@@ -196,6 +149,54 @@ router.post('/test', asyncHandler(async (req: Request, res: Response) => {
     testResult: result,
     note: 'This was a test invocation. No agent actions were dispatched.',
   });
+}));
+
+// ============================================================================
+// POST /api/webhooks/:source — Receive a webhook
+// Keep this parameterized route after every static POST endpoint.
+// ============================================================================
+
+router.post('/:source', asyncHandler(async (req: Request, res: Response) => {
+  const source = String(req.params.source || '');
+  if (!source) {
+    res.status(400).json({ error: 'Source parameter is required' });
+    return;
+  }
+
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (typeof value === 'string') {
+      headers[key] = value;
+    } else if (Array.isArray(value)) {
+      headers[key] = value[0] || '';
+    }
+  }
+
+  const manager = await getManager();
+  const result = await manager.handleWebhook(source, headers, req.body);
+
+  if (result.fired) {
+    logger.info(`Webhook from ${source} triggered: ${result.triggerId} (${result.eventType})`);
+    res.status(200).json({
+      status: 'triggered',
+      triggerId: result.triggerId,
+      eventType: result.eventType,
+      prompt: result.prompt,
+    });
+  } else if (result.error) {
+    logger.warn(`Webhook from ${source} failed: ${result.error}`);
+    res.status(400).json({
+      status: 'error',
+      error: result.error,
+      eventType: result.eventType,
+    });
+  } else {
+    // No matching trigger — acknowledge receipt
+    res.status(200).json({
+      status: 'no_match',
+      eventType: result.eventType,
+    });
+  }
 }));
 
 // ============================================================================
