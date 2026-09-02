@@ -62,32 +62,53 @@ function logFile(): string {
 // ── store ─────────────────────────────────────────────────────────────
 
 export async function loadReminders(): Promise<Reminder[]> {
+  const file = remindersFile();
+  let raw: string;
   try {
-    const raw = (await readFile(remindersFile(), 'utf8')).trim();
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.reminders)
-        ? parsed.reminders
-        : [];
-    return list.filter(
-      (r: unknown): r is Reminder => !!r && typeof (r as Reminder).id === 'string'
-    );
+    raw = (await readFile(file, 'utf8')).trim();
   } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not read store: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    return [];
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
+    logger.warn(
+      `[reminders] could not read store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
   }
+  if (!raw) {
+    const msg = `[reminders] store exists but is empty: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    logger.warn(
+      `[reminders] could not parse store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  const record = parsed as { reminders?: unknown } | null;
+  const list = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(record?.reminders)
+      ? record.reminders
+      : null;
+  if (!Array.isArray(list)) {
+    const msg = `[reminders] store is not a reminder list: ${file}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  return list.filter(
+    (r: unknown): r is Reminder => !!r && typeof (r as Reminder).id === 'string'
+  );
 }
 
 export async function saveReminders(list: Reminder[]): Promise<void> {
   const file = remindersFile();
   await mkdir(join(file, '..'), { recursive: true });
-  await writeFile(file, JSON.stringify(list, null, 2), 'utf8');
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
+  await rename(tmp, file);
 }
 
 /** 'HH:MM' validator. */

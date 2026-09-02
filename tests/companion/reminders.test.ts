@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { whenRemindersPersisted } from '../../src/companion/reminders.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import {
   addReminder,
   listReminders,
@@ -48,6 +48,50 @@ describe('reminders — store', () => {
 
   it('rejects an invalid time', async () => {
     await expect(addReminder({ label: 'x', time: '25:00' })).rejects.toThrow();
+  });
+
+  it('does not treat a corrupt store as empty, and addReminder does not wipe it (D2)', async () => {
+    const file = process.env.CODEBUDDY_REMINDERS_FILE!;
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify(
+        [
+          {
+            id: 'r-meds',
+            label: 'médicaments',
+            time: '09:00',
+            enabled: true,
+            createdAt: '2026-06-26T00:00:00.000Z',
+          },
+          {
+            id: 'r-train',
+            label: 'train',
+            time: '18:00',
+            enabled: true,
+            createdAt: '2026-06-26T00:00:00.000Z',
+          },
+        ],
+        null,
+        2
+      ),
+      'utf8'
+    );
+    await writeFile(file, '{this is not json', 'utf8');
+
+    await expect(listReminders()).rejects.toThrow();
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).rejects.toThrow();
+    expect(await readFile(file, 'utf8')).toBe('{this is not json');
+  });
+
+  it('does not treat an existing empty store as a new empty list (D2)', async () => {
+    const file = process.env.CODEBUDDY_REMINDERS_FILE!;
+    await mkdir(dir, { recursive: true });
+    await writeFile(file, '', 'utf8');
+
+    await expect(listReminders()).rejects.toThrow();
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).rejects.toThrow();
+    expect(await readFile(file, 'utf8')).toBe('');
   });
 });
 
