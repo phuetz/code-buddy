@@ -24,6 +24,8 @@ process.env.CODEBUDDY_LOAD_AUTHORED_TOOLS = 'false';
 const { initializeToolRegistry } = await import('../../src/codebuddy/tools.js');
 const { getToolRegistry } = await import('../../src/tools/registry.js');
 const { createInteractiveToolAdapters } = await import('../../src/tools/registry/interactive-adapters.js');
+const { TOOL_METADATA } = await import('../../src/tools/metadata.js');
+const { TOOL_ALIASES } = await import('../../src/tools/registry/tool-aliases.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -107,6 +109,114 @@ describe('tool surface (exposition ↔ dispatch)', () => {
       missing,
       `Noms forcés par alwaysInclude mais ABSENTS de la surface exposée au LLM ` +
         `(le sélecteur les ignore en silence) : ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * Audit 2026-09-02 (R9 / never-tools) — invariant inverse de
+ * « dispatch ⊇ exposed » : un adaptateur enregistré AVEC métadonnées RAG
+ * doit avoir une définition OpenAI, sinon le modèle ne peut jamais
+ * l'appeler (toolMap du sélecteur ignore le nom). Les seules exceptions
+ * sont cette allowlist EXPLICITE et commentée — ne pas y ajouter un
+ * nouvel adaptateur pour faire taire le test : écrire la définition.
+ *
+ * Gates d'environnement (`context_expand`, `edit_file`, `firecrawl_*`,
+ * `office_macro_execute`, `workspace_*`) ont déjà une définition au
+ * catalogue (`getAllTools`) : elles ne figurent pas ici.
+ * Les alias Codex (`TOOL_ALIASES`) héritent schéma + M de la cible : ils
+ * ne sont pas des définitions primaires, vérifiés à part.
+ * Les surfaces legacy (`browser_action`, `gui_control`, `ocr_extract`, …)
+ * n'ont pas d'entrée M centrale — la capacité est exposée sous le nom
+ * unifié (`browser`, `computer_control`, `ocr`).
+ */
+const ADAPTER_WITH_METADATA_WITHOUT_DEFINITION = new Set<string>([
+  // Dynamic: schema injected only when the App Studio prompt marker is present
+  // (src/agent/execution/tool-selection-strategy.ts). Not in the default catalog.
+  'design_system',
+]);
+
+/** TOOL_METADATA names with neither adapter nor schema. Cleanup is out of R9. */
+const ORPHAN_METADATA_WITHOUT_ADAPTER = new Set<string>([
+  'csv_analyze',
+  'terminate',
+]);
+
+describe('tool surface (adapter + metadata ⇒ definition)', () => {
+  const catalog = () => new Set(exposed);
+  const dispatchable = () => {
+    const names = new Set(
+      createInteractiveToolAdapters({
+        includeWindowsTools: true,
+        includeSelfImproveTools: true,
+      }).map((t) => t.name),
+    );
+    names.add('edit_file');
+    return names;
+  };
+  const metadata = () => new Set(TOOL_METADATA.map((entry) => entry.name));
+
+  it('every LLM-exposed tool has TOOL_METADATA (exposed ⊆ M)', () => {
+    const missing = exposed.filter((name) => !metadata().has(name));
+    expect(
+      missing,
+      `Outils exposés au LLM SANS entrée TOOL_METADATA (RAG/BM25 muet) : ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('every adapter with metadata has an OpenAI definition, except the explicit allowlist', () => {
+    const cat = catalog();
+    const meta = metadata();
+    const missing = [...dispatchable()].filter(
+      (name) =>
+        meta.has(name) &&
+        !cat.has(name) &&
+        !ADAPTER_WITH_METADATA_WITHOUT_DEFINITION.has(name),
+    ).sort();
+    expect(
+      missing,
+      `Adaptateurs dispatchables AVEC métadonnées mais SANS définition OpenAI ` +
+        `(le modèle ne peut jamais les appeler ; famille apply_patch/R9) : ${missing.join(', ')}\n` +
+        `Écrire une définition dans src/codebuddy/tool-definitions/ — ne pas élargir l'allowlist.`,
+    ).toEqual([]);
+  });
+
+  it('allowlist names stay metadata-only (drop them once they gain a definition)', () => {
+    const cat = catalog();
+    const meta = metadata();
+    const stale = [...ADAPTER_WITH_METADATA_WITHOUT_DEFINITION]
+      .filter((name) => !meta.has(name) || cat.has(name))
+      .sort();
+    expect(
+      stale,
+      `Allowlist périmée (plus dans M, ou désormais au catalogue) : ${stale.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('orphan TOOL_METADATA names are exactly the reviewed list (M ⊆ X except orphans)', () => {
+    const names = dispatchable();
+    const unexpected = [...metadata()]
+      .filter((name) => !names.has(name) && !ORPHAN_METADATA_WITHOUT_ADAPTER.has(name))
+      .sort();
+    const stale = [...ORPHAN_METADATA_WITHOUT_ADAPTER]
+      .filter((name) => names.has(name) || !metadata().has(name))
+      .sort();
+    expect(
+      { unexpected, stale },
+      `Métadonnées sans adaptateur hors allowlist, ou allowlist orpheline périmée.\n` +
+        `unexpected: ${unexpected.join(', ') || '(none)'}\n` +
+        `stale: ${stale.join(', ') || '(none)'}`,
+    ).toEqual({ unexpected: [], stale: [] });
+  });
+
+  it('every Codex alias and its target is dispatchable', () => {
+    const names = dispatchable();
+    const broken = Object.entries(TOOL_ALIASES)
+      .filter(([alias, target]) => !names.has(alias) || !names.has(target))
+      .map(([alias, target]) => `${alias}→${target}`);
+    expect(
+      broken,
+      `Alias Codex dont l'alias ou la cible n'est pas dispatchable : ${broken.join(', ')}`,
     ).toEqual([]);
   });
 });
