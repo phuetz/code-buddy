@@ -8,6 +8,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { findUnexecutedProseToolCall } from '../../cli/headless-options.js';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 
 /* ── Types ── */
@@ -51,12 +52,25 @@ export interface ExecutionPlan {
  * The CLI flow agent is chat-only (`client.chat` with no tools), so this
  * markup means the step did not actually create files or run commands.
  */
+const FLOW_KNOWN_TOOLS = [
+  'create_file',
+  'str_replace_editor',
+  'bash',
+  'apply_patch',
+  'write_file',
+  'view_file',
+  'search',
+];
+
 export function looksLikeUnexecutedToolMarkup(text: string): boolean {
-  return (
+  if (
     /<tool_call\b/i.test(text) ||
     /<function\s*=/i.test(text) ||
     /<(?:invoke|function|tool)\b[^>]*\bname\s*=/i.test(text)
-  );
+  ) {
+    return true;
+  }
+  return findUnexecutedProseToolCall(text, FLOW_KNOWN_TOOLS, []) !== null;
 }
 
 /** Minimal agent interface for flow execution */
