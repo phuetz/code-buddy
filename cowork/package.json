@@ -36,7 +36,7 @@
     "commitlint": "commitlint --config commitlint.config.cjs",
     "download:node": "node scripts/download-node.js",
     "postinstall": "node scripts/download-node.js && npm run rebuild",
-    "prepare": "husky",
+    "prepare": "node scripts/prepare-husky.cjs",
     "prepare:gui-tools": "node scripts/prepare-gui-tools.js",
     "prepare:core-runtime": "node scripts/prepare-core-runtime.js",
     "prepare:python": "node scripts/prepare-python.js",
