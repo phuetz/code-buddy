@@ -253,6 +253,181 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 8192,
     patchFormat: 'search_replace',
   },
+  // ─── Poids ouverts servis par des passerelles (NVIDIA Build, OpenRouter, GMI Cloud, Together…) ───
+  //
+  // Motifs sur le nom NU (voir `bareModelName`) : `moonshotai/kimi-k3` → `kimi-k3`,
+  // `nvidia/nemotron-3-super-120b-a12b` → `nemotron-3-super-120b-a12b`. Une passerelle qui ne
+  // publie aucune fenêtre dans son catalogue (NVIDIA Build ne rend que `id`/`owned_by`) laissait
+  // ces modèles sur le repli de 32 768 : prompt système tronqué à 14 336 tokens pour un modèle
+  // qui en tient un million. Fenêtres = valeurs publiées par les catalogues OpenRouter
+  // (`context_length` / `top_provider.context_length`) et GMI, relevées le 02/09/2026, en prenant
+  // le plus petit des fournisseurs quand ils divergent. Un catalogue qui publie moins l'emporte
+  // (découverte `/v1/models`, voir local-runtime-context.ts).
+  {
+    model: 'kimi-k3*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
+  {
+    model: 'kimi-k2',
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
+  {
+    model: 'kimi-k2*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
+  {
+    model: 'minimax-m3*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'minimax-m2*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 204800,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'nemotron-3*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 256000,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'glm-5*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 196608,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'glm-4.7*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 196608,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'gemma-4-*',
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 262144,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    strengths: ['french'],
+  },
+  {
+    model: 'deepseek-v4*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 1024000,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+    strengths: ['code'],
+  },
+  {
+    model: 'deepseek-v3*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code'],
+  },
+  {
+    model: 'llama-4*',
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 128000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'gpt-oss-*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'mistral-large*',
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 128000,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['french'],
+  },
+  // Qwen 3.5 → 3.7 hébergés (262 144 chez tous les fournisseurs OpenRouter). Un runtime local
+  // qui en sert moins abaisse la valeur via la découverte Ollama/LM Studio.
+  {
+    model: 'qwen3.5*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
+  {
+    model: 'qwen3.6*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
+  {
+    model: 'qwen3.7*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'french'],
+  },
   // GPT-4.1 (1M context)
   {
     model: 'gpt-4.1*',
@@ -899,6 +1074,39 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
 /**
  * Match a model name against a pattern with glob-like wildcards.
  */
+/** Tags de routage que les passerelles accolent au nom (`:free`, `:batch`…) — ce n'est pas une taille. */
+const ROUTING_TAGS = /:(free|batch|nitro|floor|online|exacto|latest)$/i;
+
+/**
+ * Nom « nu » d'un modèle : sans préfixe fournisseur (`moonshotai/kimi-k3` → `kimi-k3`) ni tag
+ * de routage (`minimax/minimax-m3:free` → `minimax-m3`). Les passerelles servent les mêmes poids
+ * sous des préfixes différents ; c'est le second essai de `getModelToolConfig` quand le nom
+ * complet ne correspond à aucun motif. Un tag de taille Ollama (`qwen3.8:27b`) est conservé.
+ */
+export function bareModelName(modelName: string): string {
+  const trimmed = modelName.trim();
+  const bare = trimmed.slice(trimmed.lastIndexOf('/') + 1).replace(ROUTING_TAGS, '');
+  return bare || trimmed;
+}
+
+interface ModelConfigMatch {
+  config: ModelToolConfig;
+  /** Le motif a été trouvé sur le nom NU : la fenêtre déclarée est une estimation de famille. */
+  byFamily: boolean;
+}
+
+function findConfigMatch(modelName: string, configs: ModelToolConfig[]): ModelConfigMatch | null {
+  for (const config of configs) {
+    if (matchModel(modelName, config.model)) return { config, byFamily: false };
+  }
+  const bare = bareModelName(modelName);
+  if (bare.toLowerCase() === modelName.trim().toLowerCase()) return null;
+  for (const config of configs) {
+    if (matchModel(bare, config.model)) return { config, byFamily: true };
+  }
+  return null;
+}
+
 function matchModel(modelName: string, pattern: string): boolean {
   // Escape regex metacharacters FIRST (except the glob wildcards * and ?), THEN
   // expand the wildcards. Without escaping, a literal '.' in a version pattern
@@ -906,7 +1114,12 @@ function matchModel(modelName: string, pattern: string): boolean {
   // wrong family (e.g. `gpt-4.1` matching `gpt-4o1`), assigning a model the
   // wrong context/output caps.
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+  // `*` never crosses a `/`: a generic family such as `deepseek*` or `mistral*`
+  // must not swallow `deepseek/deepseek-v4-pro` or `mistralai/mistral-large` on
+  // the FULL name with its conservative local-runtime caps. Vendor-prefixed
+  // names are matched on their bare name in a second pass (see findConfigMatch),
+  // where the hosted families declared above take precedence.
+  const regex = new RegExp('^' + escaped.replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$', 'i');
   return regex.test(modelName);
 }
 
@@ -925,17 +1138,33 @@ function modelCacheKey(modelName: string): string {
 function applyRuntimeContextWindow(
   modelName: string,
   config: ModelToolConfig,
+  byFamily = false,
 ): ModelToolConfig {
   const runtimeContextWindow = _runtimeContextWindows.get(modelCacheKey(modelName));
   if (runtimeContextWindow === undefined) return config;
 
-  // A declaration is an intentional ceiling, not merely documentation. The
-  // runtime can reveal that less context is actually served, but can never
-  // enlarge a configured cap (for example the deliberately conservative
-  // Gemma profiles above).
-  const contextWindow = config.contextWindow === undefined
+  // A declaration matched on the FULL name is an intentional ceiling, not merely
+  // documentation. The runtime can reveal that less context is actually served,
+  // but can never enlarge a configured cap (for example the deliberately
+  // conservative Gemma profiles above). A FAMILY match (bare name, see
+  // `bareModelName`) is only an estimate of the weights: what the serving
+  // catalogue publishes for this exact model replaces it, in both directions.
+  const contextWindow = config.contextWindow === undefined || byFamily
     ? runtimeContextWindow
     : Math.min(config.contextWindow, runtimeContextWindow);
+  return contextWindow === config.contextWindow ? config : { ...config, contextWindow };
+}
+
+/**
+ * `CODEBUDDY_MAX_CONTEXT` is the user's explicit override: it wins over the
+ * declared table AND over discovery, for every consumer (context manager and
+ * system-prompt budget alike). Read at call time, never cached, so a test or a
+ * wrapper can set it after the first lookup.
+ */
+function applyEnvContextOverride(config: ModelToolConfig): ModelToolConfig {
+  const envMaxContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
+  if (!Number.isFinite(envMaxContext) || envMaxContext <= 0) return config;
+  const contextWindow = Math.floor(envMaxContext);
   return contextWindow === config.contextWindow ? config : { ...config, contextWindow };
 }
 
@@ -974,10 +1203,7 @@ export function findModelToolConfig(
   modelName: string,
   customConfigs?: ModelToolConfig[],
 ): ModelToolConfig | null {
-  for (const config of [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS]) {
-    if (matchModel(modelName, config.model)) return config;
-  }
-  return null;
+  return findConfigMatch(modelName, [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS])?.config ?? null;
 }
 
 export function getModelToolConfig(
@@ -986,18 +1212,20 @@ export function getModelToolConfig(
 ): ModelToolConfig {
   // Use cache for default config lookups (hot path)
   if (!customConfigs && _configCache.has(modelName)) {
-    return _configCache.get(modelName)!;
+    return applyEnvContextOverride(_configCache.get(modelName)!);
   }
 
   const configs = [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS];
-
-  for (const config of configs) {
-    if (matchModel(modelName, config.model)) {
-      logger.debug('Model tool config matched', { model: modelName, pattern: config.model });
-      const resolved = applyRuntimeContextWindow(modelName, config);
-      if (!customConfigs) _configCache.set(modelName, resolved);
-      return resolved;
-    }
+  const match = findConfigMatch(modelName, configs);
+  if (match) {
+    logger.debug('Model tool config matched', {
+      model: modelName,
+      pattern: match.config.model,
+      byFamily: match.byFamily,
+    });
+    const resolved = applyRuntimeContextWindow(modelName, match.config, match.byFamily);
+    if (!customConfigs) _configCache.set(modelName, resolved);
+    return applyEnvContextOverride(resolved);
   }
 
   // Permissive fallback
@@ -1012,7 +1240,7 @@ export function getModelToolConfig(
     patchFormat: 'search_replace',
   };
   if (!customConfigs) _configCache.set(modelName, fallback);
-  return fallback;
+  return applyEnvContextOverride(fallback);
 }
 
 // ─── Model strengths (single source of truth) ───────────────────────
@@ -1035,9 +1263,8 @@ const NAME_VISION_FALLBACK = /vision|gpt-4o|gpt-5|gemini/i;
 const NAME_LONG_CONTEXT_FALLBACK = /gemini|pro|opus|sonnet|long|1m|200k|128k/i;
 
 function matchModelConfig(modelName: string): { cfg: ModelToolConfig; matched: boolean } {
-  for (const config of DEFAULT_MODEL_CONFIGS) {
-    if (matchModel(modelName, config.model)) return { cfg: config, matched: true };
-  }
+  const match = findConfigMatch(modelName, DEFAULT_MODEL_CONFIGS);
+  if (match) return { cfg: match.config, matched: true };
   return { cfg: getModelToolConfig(modelName), matched: false };
 }
 

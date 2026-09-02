@@ -1,5 +1,12 @@
 /**
- * Best-effort context discovery for local inference runtimes.
+ * Best-effort context discovery for inference runtimes.
+ *
+ * Local runtimes (Ollama, LM Studio, vLLM) expose what they actually serve;
+ * hosted OpenAI-compatible gateways (OpenRouter, GMI Cloud, Together, vLLM
+ * behind a domain…) publish a `context_length` in their `/v1/models`
+ * catalogue. Both feed the same synchronous cache, so a model reached through
+ * a gateway gets the context window the gateway actually serves instead of the
+ * 32 768 fallback that truncated its system prompt to 14 336 tokens.
  *
  * Network I/O stays out of `getModelToolConfig()` itself: startup awaits this
  * probe once, then primes the synchronous model-config cache. Every error is a
@@ -8,11 +15,11 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { cacheRuntimeModelContextWindow } from './model-tools.js';
+import { bareModelName, cacheRuntimeModelContextWindow } from './model-tools.js';
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
 
-export type LocalRuntimeKind = 'ollama' | 'lmstudio' | 'vllm';
+export type LocalRuntimeKind = 'ollama' | 'lmstudio' | 'vllm' | 'catalog';
 
 export interface LocalRuntimeContextInfo {
   runtime: LocalRuntimeKind;
@@ -334,16 +341,87 @@ async function probeVllm(
   };
 }
 
+/**
+ * Where a gateway's catalogue lives. The OpenAI convention is `<baseURL>/models`
+ * with a base that already ends in `/v1` (`https://openrouter.ai/api/v1`,
+ * `https://api.gmi-serving.com/v1`); a bare origin gets `/v1/models`.
+ */
+function catalogCandidates(url: URL, root: string): string[] {
+  const base = `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+  const candidates = [`${base}/models`, endpoint(root, '/v1/models')];
+  return [...new Set(candidates)];
+}
+
+/** `/v1/models` entry for this model, tolerant to a gateway prefix or routing tag on either side. */
+function findCatalogRecord(value: unknown, model: string): Record<string, unknown> | null {
+  const exact = findModelRecord(value, model);
+  if (exact) return exact;
+  const bare = bareModelName(model).toLowerCase();
+  const candidates = responseModels(value).map(asRecord).filter((entry): entry is Record<string, unknown> => entry !== null);
+  return candidates.find((entry) => {
+    const id = typeof entry.id === 'string' ? entry.id : typeof entry.name === 'string' ? entry.name : null;
+    return id !== null && bareModelName(id).toLowerCase() === bare;
+  }) ?? null;
+}
+
+/** Context keys published by hosted catalogues (OpenRouter, GMI, Together, Fireworks, Groq, vLLM). */
+const CATALOG_CONTEXT_KEYS = new Set([
+  'context_length',
+  'context_window',
+  'max_context_length',
+  'max_model_len',
+  'max_input_tokens',
+]);
+
+/**
+ * Hosted OpenAI-compatible catalogue. One GET, read-only, bounded. OpenRouter
+ * nests the serving provider's smaller limit under `top_provider`; the
+ * recursive collection takes the minimum so the value cached is what will be
+ * accepted, not the model card's theoretical maximum. A catalogue that lists
+ * the model without any length (NVIDIA Build) yields `null`, and the family
+ * table in model-tools.ts stays in charge.
+ */
+async function probeCatalog(
+  catalogURLs: string[],
+  model: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+  apiKey: string | undefined,
+): Promise<LocalRuntimeContextInfo | null> {
+  const init: RequestInit = {
+    headers: {
+      ...(bearerHeaders(apiKey) as Record<string, string> | undefined),
+      // Some gateways sit behind Cloudflare rules that reject a bare client UA.
+      'user-agent': 'Mozilla/5.0 (compatible; CodeBuddy context discovery)',
+    },
+  };
+  let record: Record<string, unknown> | null = null;
+  for (const url of catalogURLs) {
+    record = findCatalogRecord(await fetchJson(fetchImpl, url, timeoutMs, init), model);
+    if (record) break;
+  }
+  if (!record) return null;
+  const contextWindow = minPositive(collectNumericFields(record, (key) => CATALOG_CONTEXT_KEYS.has(key)));
+  if (contextWindow === null) return null;
+  return { runtime: 'catalog', advertisedContextWindow: contextWindow, contextWindow };
+}
+
 /** Probe metadata without mutating the synchronous model-config cache. */
 export async function probeLocalRuntimeContext(
   options: LocalRuntimeContextProbeOptions,
 ): Promise<LocalRuntimeContextInfo | null> {
   const url = normalizeRuntimeURL(options.baseURL);
-  if (!url || !options.model.trim() || !isLocalRuntimeURL(options.baseURL)) return null;
+  if (!url || !options.model.trim() || !['http:', 'https:'].includes(url.protocol)) return null;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== 'function') return null;
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   const root = runtimeRoot(url);
+
+  // A hosted gateway only gets the read-only catalogue GET — never the
+  // Ollama/LM Studio/vLLM endpoints, which do not exist there.
+  if (!isLocalRuntimeURL(options.baseURL)) {
+    return probeCatalog(catalogCandidates(url, root), options.model, fetchImpl, timeoutMs, options.apiKey);
+  }
   const hint = options.runtimeHint ?? runtimeHintFromURL(url);
 
   if (hint === 'ollama') return probeOllama(root, options.model, fetchImpl, timeoutMs);
@@ -358,6 +436,7 @@ export async function probeLocalRuntimeContext(
     probeOllama(root, options.model, fetchImpl, timeoutMs),
     probeLMStudio(root, options.model, fetchImpl, timeoutMs, options.apiKey),
     probeVllm(root, options.model, fetchImpl, timeoutMs, options.apiKey),
+    probeCatalog(catalogCandidates(url, root), options.model, fetchImpl, timeoutMs, options.apiKey),
   ]);
   return results.find((result) => result !== null) ?? null;
 }
@@ -367,7 +446,7 @@ export async function primeLocalRuntimeModelConfig(
   options: LocalRuntimeContextProbeOptions,
 ): Promise<LocalRuntimeContextInfo | null> {
   const url = normalizeRuntimeURL(options.baseURL);
-  if (!url || !isLocalRuntimeURL(options.baseURL) || !options.model.trim()) return null;
+  if (!url || !options.model.trim()) return null;
   const cacheKey = `${url.origin}${url.pathname}|${options.model.trim().toLowerCase()}`;
   let pending = probeCache.get(cacheKey);
   if (!pending) {
@@ -377,7 +456,7 @@ export async function primeLocalRuntimeModelConfig(
   const info = await pending;
   if (info) {
     cacheRuntimeModelContextWindow(options.model, info.contextWindow);
-    logger.debug('Local runtime context detected', {
+    logger.debug('Runtime context detected', {
       model: options.model,
       runtime: info.runtime,
       advertised: info.advertisedContextWindow,
