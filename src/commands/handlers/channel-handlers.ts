@@ -91,6 +91,7 @@ export interface ChannelStatusReport {
       connected: boolean;
       authenticated: boolean;
       lastActivity?: string;
+      lastSuccessfulPoll?: string;
       error?: string;
       info?: Record<string, unknown>;
     }>;
@@ -369,6 +370,9 @@ export function buildChannelStatusReport(
       connected: status.connected,
       authenticated: status.authenticated,
       ...(status.lastActivity ? { lastActivity: status.lastActivity.toISOString() } : {}),
+      ...(status.lastSuccessfulPoll
+        ? { lastSuccessfulPoll: status.lastSuccessfulPoll.toISOString() }
+        : {}),
       ...(status.error ? { error: status.error } : {}),
       ...(status.info ? { info: status.info } : {}),
     }))
@@ -444,7 +448,10 @@ export async function handleChannels(action: string, options: ChannelOptions): P
       }
       console.log('Channel Status:\n');
       for (const [type, status] of Object.entries(allStatus)) {
-        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${status.error ? ` (error: ${status.error})` : ''}`);
+        const pollStatus = type === 'telegram'
+          ? `, last successful poll: ${status.lastSuccessfulPoll?.toISOString() ?? 'never'}`
+          : '';
+        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${pollStatus}${status.error ? ` (error: ${status.error})` : ''}`);
       }
       if (Object.keys(allStatus).length === 0) {
         console.log('  No channels registered.');

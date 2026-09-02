@@ -257,6 +257,8 @@ export interface ChannelStatus {
   authenticated: boolean;
   /** Last activity time */
   lastActivity?: Date;
+  /** Last successful long-poll request, for polling-based channels */
+  lastSuccessfulPoll?: Date;
   /** Error if any */
   error?: string;
   /** Additional info */
