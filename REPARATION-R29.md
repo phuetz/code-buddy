@@ -62,6 +62,32 @@ Tests  3 passed (3)
 
 `tsc --noEmit` : exit 0. `eslint src/context/context-manager-v2.ts src/agent/execution/agent-executor.ts tests/context/compaction-current-request.test.ts` : exit 0.
 
+### D2 — compaction hors limite refusée
+
+Test rouge avant correctif (`tests/context/compaction-limit.test.ts`) :
+
+```text
+❯ tests/context/compaction-limit.test.ts (2 tests | 1 failed) 165ms
+     × throws when even the pinned request plus system prompts exceed the budget
+AssertionError: expected undefined to be an instance of ContextCompactionError
+Tests  1 failed | 1 passed (2)
+```
+
+Correctif : `applyStrategies()` est budgété hors messages `system` ; si le tableau
+reconstruit dépasse encore `effectiveLimit`, `ContextCompactionError`
+(`COMPACTION_EXCEEDS_LIMIT`, `ok: false`) — aucun journal « Auto-compact: Reduced ».
+
+Test vert :
+
+```text
+npx vitest run tests/context/compaction-limit.test.ts
+Test Files  1 passed (1)
+Tests  2 passed (2)
+```
+
+`tests/context/` après D2 : **41 passed, 600 passed**. `tsc --noEmit` exit 0.
+`eslint src/context/context-manager-v2.ts tests/context/compaction-limit.test.ts` : exit 0.
+
 ## Bilan
 
 (à compléter en fin de mission)

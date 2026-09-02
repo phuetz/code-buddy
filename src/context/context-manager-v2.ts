@@ -370,6 +370,7 @@ export class ContextManagerV2 {
     }
 
     this.assertLastUserPreserved(messages, compacted);
+    this.assertFitsTokenLimit(compacted);
 
     const newStats = this.getStats(compacted);
     if (newStats.totalTokens < stats.totalTokens) {
@@ -428,6 +429,16 @@ export class ContextManagerV2 {
       this.countTokens([lastUser]),
       this.effectiveLimit,
       'Current user request was dropped during context compaction. The request was not sent to the model.',
+    );
+  }
+
+  private assertFitsTokenLimit(prepared: CodeBuddyMessage[]): void {
+    const tokens = this.countTokens(prepared);
+    if (tokens <= this.effectiveLimit) return;
+    throw new ContextCompactionError(
+      'COMPACTION_EXCEEDS_LIMIT',
+      tokens,
+      this.effectiveLimit,
     );
   }
 
@@ -704,9 +715,11 @@ export class ContextManagerV2 {
     const systemMsgs = messages.filter(m => m.role === 'system');
     const conversationMsgs = messages.filter(m => m.role !== 'system');
     const lastUser = findLastUserMessage(conversationMsgs);
+    const systemTokens = this.countTokens(systemMsgs);
+    const conversationBudget = this.effectiveLimit - systemTokens;
 
-    // Apply compression strategies, never truncating the current user request.
-    let optimizedMsgs = this.applyStrategies(conversationMsgs, lastUser);
+    // Apply compression strategies against the room left after system prompts.
+    let optimizedMsgs = this.applyStrategies(conversationMsgs, lastUser, conversationBudget);
     if (lastUser && !preparedContainsLastUser(optimizedMsgs, lastUser)) {
       optimizedMsgs = this.reinsertLastUser(optimizedMsgs, conversationMsgs, lastUser);
     }
@@ -716,8 +729,15 @@ export class ContextManagerV2 {
       optimizedMsgs = [...systemMsgs, ...optimizedMsgs];
     }
 
-    // Track token reduction for metrics
+    // Track token reduction for metrics — only if the result actually fits.
     const newStats = this.getStats(optimizedMsgs);
+    if (newStats.totalTokens > this.effectiveLimit) {
+      throw new ContextCompactionError(
+        'COMPACTION_EXCEEDS_LIMIT',
+        newStats.totalTokens,
+        this.effectiveLimit,
+      );
+    }
     const tokensReduced = stats.totalTokens - newStats.totalTokens;
     if (tokensReduced > 0) {
       logger.info(`Auto-compact: Reduced ${tokensReduced.toLocaleString()} tokens (${stats.totalTokens.toLocaleString()} -> ${newStats.totalTokens.toLocaleString()})`);
@@ -738,6 +758,7 @@ export class ContextManagerV2 {
   private applyStrategies(
     messages: CodeBuddyMessage[],
     pinnedLastUser?: CodeBuddyMessage,
+    tokenLimit: number = this.effectiveLimit,
   ): CodeBuddyMessage[] {
     let result = [...messages];
     let currentTokens = this.countTokens(result);
@@ -747,26 +768,26 @@ export class ContextManagerV2 {
       result.length > this.config.recentMessagesCount * 2;
 
     // Strategy 1: Keep only recent messages (Sliding Window)
-    if (currentTokens > this.effectiveLimit) {
+    if (currentTokens > tokenLimit) {
       result = this.applySlidingWindow(result);
       currentTokens = this.countTokens(result);
     }
 
     // Strategy 2: Truncate tool results (they can be verbose)
-    if (currentTokens > this.effectiveLimit) {
+    if (currentTokens > tokenLimit) {
       result = this.truncateToolResults(result);
       currentTokens = this.countTokens(result);
     }
 
     // Strategy 3: Summarize old conversations
-    if ((currentTokens > this.effectiveLimit || shouldSoftSummarize) && this.config.enableSummarization) {
+    if ((currentTokens > tokenLimit || shouldSoftSummarize) && this.config.enableSummarization) {
       result = this.applySummarization(result);
       currentTokens = this.countTokens(result);
     }
 
     // Strategy 4: Hard truncation as last resort
-    if (currentTokens > this.effectiveLimit) {
-      result = this.hardTruncate(result, pinnedLastUser);
+    if (currentTokens > tokenLimit) {
+      result = this.hardTruncate(result, pinnedLastUser, tokenLimit);
     }
 
     return result;
@@ -989,12 +1010,13 @@ export class ContextManagerV2 {
   private hardTruncate(
     messages: CodeBuddyMessage[],
     pinnedLastUser?: CodeBuddyMessage,
+    tokenLimit: number = this.effectiveLimit,
   ): CodeBuddyMessage[] {
     let result = [...messages];
     let currentTokens = this.countTokens(result);
 
     // Remove oldest messages, preserving tool-call/tool-result pairs
-    while (currentTokens > this.effectiveLimit && result.length > 2) {
+    while (currentTokens > tokenLimit && result.length > 2) {
       const first = result[0];
       // result.length > 2 (loop guard above) guarantees result[0] exists; guard for type-safety
       if (first === undefined) break;
@@ -1022,7 +1044,7 @@ export class ContextManagerV2 {
     }
 
     // If still over limit, truncate message content — never the current user request.
-    if (currentTokens > this.effectiveLimit) {
+    if (currentTokens > tokenLimit) {
       result = result.map(msg => {
         if (pinnedLastUser && isIntactUserMessage(msg, pinnedLastUser)) return msg;
         if (typeof msg.content === 'string' && msg.content.length > 200) {
