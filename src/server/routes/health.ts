@@ -104,16 +104,35 @@ function getGrokModelsUrl(baseURL: string): string {
   return `${baseURL.replace(/\/+$/, '')}/models`;
 }
 
-async function probeGrokApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
+function isLocalRuntimeProvider(provider: string | undefined): boolean {
+  return provider === 'ollama'
+    || provider === 'lmstudio'
+    || provider === 'vllm'
+    || provider === 'lemonade'
+    || provider === 'omniroute';
+}
+
+async function probeProviderApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
   const provider = detectProviderFromEnv();
   const apiKey = process.env.GROK_API_KEY?.trim()
     || provider?.apiKey?.trim()
     || undefined;
-  if (!apiKey) return undefined;
+  if (!apiKey) {
+    const configured = process.env.CODEBUDDY_PROVIDER?.trim() || provider?.provider;
+    if (!configured || isLocalRuntimeProvider(configured)) {
+      return undefined;
+    }
+    return {
+      ready: false,
+      message: `No API key for provider ${configured}`,
+      latencyMs: 0,
+    };
+  }
   const baseURL = process.env.GROK_BASE_URL?.trim()
     || provider?.baseURL
     || 'https://api.x.ai/v1';
   const apiStart = Date.now();
+  const label = provider?.provider ?? 'provider';
   try {
     const response = await fetch(getGrokModelsUrl(baseURL), {
       method: 'GET',
@@ -128,13 +147,13 @@ async function probeGrokApi(): Promise<{ ready: boolean; message: string; latenc
     }
     return {
       ready: response.ok,
-      message: response.ok ? 'Grok API reachable' : `Grok API returned ${response.status}`,
+      message: response.ok ? `${label} API reachable` : `${label} API returned ${response.status}`,
       latencyMs: apiLatency,
     };
   } catch (error) {
     return {
       ready: false,
-      message: `Grok API unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      message: `${label} API unreachable: ${error instanceof Error ? error.message : String(error)}`,
       latencyMs: Date.now() - apiStart,
     };
   }
@@ -315,9 +334,9 @@ router.get(
       };
     }
 
-    const grokApi = await probeGrokApi();
-    if (grokApi) {
-      checks.grokApi = grokApi;
+    const providerApi = await probeProviderApi();
+    if (providerApi) {
+      checks.providerApi = providerApi;
     }
 
     const allPassing = Object.values(checks).every((c) => c.ready);
@@ -326,7 +345,7 @@ router.get(
       checks.database.ready &&
       checks.memory.ready &&
       (checks.sensoryBridge?.ready ?? true) &&
-      (checks.grokApi?.ready ?? true);
+      (checks.providerApi?.ready ?? true);
 
     const response = {
       ready: criticalPassing,
@@ -618,16 +637,16 @@ export function createK8sHealthAliases(): Router {
     const providerOk = getConfiguredProviderStatus().ready;
     const databaseOk = checkDatabase() === 'ok';
     const memOk = process.memoryUsage().heapUsed < 1024 * 1024 * 1024;
-    const grokApi = await probeGrokApi();
-    const grokApiOk = grokApi?.ready ?? true;
-    const ready = providerOk && databaseOk && memOk && grokApiOk;
+    const providerApi = await probeProviderApi();
+    const providerApiOk = providerApi?.ready ?? true;
+    const ready = providerOk && databaseOk && memOk && providerApiOk;
     res.status(ready ? 200 : 503).json({
       ready,
       checks: {
         provider: providerOk,
         database: databaseOk,
         memory: memOk,
-        ...(grokApi ? { grokApi: grokApi.ready } : {}),
+        ...(providerApi ? { providerApi: providerApi.ready } : {}),
       },
     });
   }));

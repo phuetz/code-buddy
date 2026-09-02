@@ -77,7 +77,7 @@ describe('health readiness probe', () => {
     const response = await getJson(port, '/api/health/ready');
     const checks = response.body.checks as Record<string, { ready?: boolean }>;
 
-    expect(checks.grokApi?.ready).toBe(false);
+    expect(checks.providerApi?.ready).toBe(false);
     expect(response.status).toBe(503);
     expect(response.body.ready).toBe(false);
   });

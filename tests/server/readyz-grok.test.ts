@@ -32,7 +32,7 @@ function getJson(port: number, pathname: string): Promise<{
   });
 }
 
-describe('/readyz grokApi', () => {
+describe('/readyz providerApi', () => {
   let server: Server;
   let port: number;
   let previousProvider: string | undefined;
@@ -74,10 +74,10 @@ describe('/readyz grokApi', () => {
     });
   });
 
-  it('exposes grokApi on /readyz and returns 503 when the probe fails', async () => {
+  it('exposes providerApi on /readyz and returns 503 when the probe fails', async () => {
     const response = await getJson(port, '/readyz');
     const checks = response.body.checks as Record<string, boolean>;
-    expect(checks.grokApi).toBe(false);
+    expect(checks.providerApi).toBe(false);
     expect(response.status).toBe(503);
     expect(response.body.ready).toBe(false);
   });
@@ -91,7 +91,7 @@ describe('/readyz grokApi', () => {
     try {
       const response = await getJson(port, '/readyz');
       const checks = response.body.checks as Record<string, boolean>;
-      expect(checks.grokApi).toBe(false);
+      expect(checks.providerApi).toBe(false);
       expect(response.status).toBe(503);
       expect(response.body.ready).toBe(false);
     } finally {
