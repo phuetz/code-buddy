@@ -612,11 +612,14 @@ export class CollectiveKnowledgeGraph {
   }
 
   /** A `<collective_knowledge>` system block for prompt injection (token-budgeted).
-   *  Uses hybrid (semantic+keyword) retrieval; degrades to keyword if embeddings are unavailable. */
-  async formatCollectiveContext(query: string, maxChars = 600, timeoutMs = 3_000): Promise<string> {
-    let hits: CkgRecallResult[];
+   *  Uses the same retrieval as `buddy research recall` (`recallHybrid`) plus
+   *  keyword `recall()` so a title buried in a long prompt is not drowned by a
+   *  recent off-topic node. Bound in size; each line is truncated so one blob
+   *  cannot fill the budget alone. */
+  async formatCollectiveContext(query: string, maxChars = 1_600, timeoutMs = 3_000): Promise<string> {
+    let hybrid: CkgRecallResult[] = [];
     try {
-      hits = await withTimeout(
+      hybrid = await withTimeout(
         this.recallHybrid(query, { limit: 8 }),
         timeoutMs,
         'Collective knowledge recall timed out',
@@ -627,18 +630,9 @@ export class CollectiveKnowledgeGraph {
       );
       return '';
     }
-    if (hits.length === 0) return '';
-    const lines: string[] = [];
-    let used = 0;
-    for (const h of hits) {
-      const who = h.agentId ? ` (par ${h.agentId})` : '';
-      const line = `- [${h.type}] ${h.text}${who}`;
-      if (used + line.length > maxChars) break;
-      lines.push(line);
-      used += line.length;
-    }
-    if (lines.length === 0) return '';
-    return `<collective_knowledge>\n${lines.join('\n')}\n</collective_knowledge>`;
+    const lexical = this.recall(query, { limit: 8 });
+    const hits = selectCollectiveContextHits(query, lexical, hybrid);
+    return packCollectiveContext(hits, maxChars);
   }
 
   /** Invalidated (superseded) versions, for audit / bi-temporal queries. */
@@ -1324,6 +1318,76 @@ export class CollectiveKnowledgeGraph {
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0.8));
+}
+
+/** Query tokens of length ≥ 6 that also appear in the candidate (topical core). */
+function topicalTokenSet(query: string, text: string): Set<string> {
+  const q = tokenize(query);
+  const cand = tokenize(text);
+  const out = new Set<string>();
+  for (const t of q) {
+    if (t.length >= 6 && cand.has(t)) out.add(t);
+  }
+  return out;
+}
+
+/**
+ * Prefer keyword hits (`research recall` fallback) when the query names a
+ * topic; drop hybrid-only neighbours that only match wrapper words
+ * ("mémoire collective") or recency. Paraphrases with no keyword hit still
+ * use `recallHybrid` alone.
+ */
+export function selectCollectiveContextHits(
+  query: string,
+  lexical: CkgRecallResult[],
+  hybrid: CkgRecallResult[],
+): CkgRecallResult[] {
+  if (lexical.length === 0) return hybrid;
+  const best = lexical[0]!;
+  const bestTokens = topicalTokenSet(query, `${best.name} ${best.text}`);
+  const allowed = lexical.filter((h) => {
+    if (h.id === best.id) return true;
+    if (bestTokens.size === 0) return h.salience >= best.salience * 0.75;
+    const tokens = topicalTokenSet(query, `${h.name} ${h.text}`);
+    for (const t of tokens) {
+      if (bestTokens.has(t)) return true;
+    }
+    return false;
+  });
+  const allowedIds = new Set(allowed.map((h) => h.id));
+  const ordered: CkgRecallResult[] = [];
+  const seen = new Set<string>();
+  for (const h of [...hybrid, ...allowed]) {
+    if (!allowedIds.has(h.id) || seen.has(h.id)) continue;
+    seen.add(h.id);
+    ordered.push(h);
+  }
+  return ordered;
+}
+
+/** Pack recall hits into a bounded prompt block; truncate per line, never skip the first fit. */
+export function packCollectiveContext(hits: CkgRecallResult[], maxChars: number): string {
+  if (hits.length === 0 || maxChars <= 0) return '';
+  const lines: string[] = [];
+  let used = 0;
+  const perLine = Math.min(280, Math.max(120, Math.floor(maxChars / 2)));
+  for (const h of hits) {
+    const who = h.agentId ? ` (par ${h.agentId})` : '';
+    let body = h.text.replace(/\s+/g, ' ').trim();
+    if (body.length > perLine) body = `${body.slice(0, perLine - 1)}…`;
+    const line = `- [${h.type}] ${body}${who}`;
+    if (used + line.length + 1 > maxChars) {
+      if (lines.length === 0) {
+        const room = maxChars - 1;
+        if (room > 48) lines.push(`${line.slice(0, room - 1)}…`);
+      }
+      break;
+    }
+    lines.push(line);
+    used += line.length + 1;
+  }
+  if (lines.length === 0) return '';
+  return `<collective_knowledge>\n${lines.join('\n')}\n</collective_knowledge>`;
 }
 
 function parseEmbeddingCacheEvent(line: string): EmbeddingCacheEvent | null {

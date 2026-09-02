@@ -82,6 +82,18 @@ vi.mock('../../src/memory/coding-style-analyzer.js', () => ({
   }),
 }));
 
+const ckgMock = vi.hoisted(() => ({
+  formatCollectiveContextMock: vi.fn(async () =>
+    '<collective_knowledge>\n- [discovery] Diffusion-Based Audio Inpainting\n</collective_knowledge>',
+  ),
+}));
+
+vi.mock('../../src/memory/collective-knowledge-graph.js', () => ({
+  getCollectiveKnowledgeGraph: () => ({
+    formatCollectiveContext: ckgMock.formatCollectiveContextMock,
+  }),
+}));
+
 // ---- imports under test (after mocks) --------------------------------
 
 import {
@@ -210,6 +222,8 @@ describe('PromptBuilder — Phase T4', () => {
 
   afterEach(() => {
     resetToolFilter();
+    vi.unstubAllEnvs();
+    ckgMock.formatCollectiveContextMock.mockClear();
   });
 
   describe('construction + updateConfig', () => {
@@ -717,6 +731,30 @@ describe('PromptBuilder — Phase T4', () => {
   });
 
   describe('budget truncation', () => {
+    it('keeps the reserved collective-knowledge section when the system prompt is truncated', async () => {
+      vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', 'true');
+      ckgMock.formatCollectiveContextMock.mockClear();
+      modelToolsMock.getModelToolConfigMock.mockReturnValueOnce({
+        contextWindow: 100,
+        maxOutputTokens: 10,
+      });
+      promptMocks.getSystemPromptForModeMock.mockReturnValueOnce('A'.repeat(500));
+
+      const { builder } = buildBuilder();
+      const prompt = await builder.buildSystemPrompt(
+        undefined,
+        'grok-3',
+        null,
+        undefined,
+        'La memoire collective contient-elle Diffusion-Based Audio Inpainting ?',
+      );
+
+      expect(ckgMock.formatCollectiveContextMock).toHaveBeenCalled();
+      expect(prompt).toContain('<collective_knowledge>');
+      expect(prompt).toContain('Diffusion-Based Audio Inpainting');
+      expect(prompt.endsWith('...')).toBe(false);
+    });
+
     it('truncates a system prompt longer than the model budget and appends "..."', async () => {
       // Force a tiny budget so the LEGACY_PROMPT_BODY ALONE overshoots.
       // budget = floor((contextWindow - maxOutputTokens) * 0.5) tokens

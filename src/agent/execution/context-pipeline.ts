@@ -249,6 +249,19 @@ export async function injectInitialContext(
   // time-to-first-token the sum of all provider latencies. Promise.all preserves
   // this array order, keeping the model-facing context deterministic.
   const blocks = await Promise.all([
+    // Collective Knowledge Graph first among extras so compaction of later
+    // optional blocks cannot drop the relevance-ranked recall.
+    buildOptionalContextBlock(
+      allowMutableSharedContext &&
+        deps.ctxLevel.collectiveGraph &&
+        process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true',
+      async () => {
+        const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
+        const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 1_600);
+        return ckgBlock ? { role: 'system', content: ckgBlock } : null;
+      }
+    ),
+
     buildOptionalContextBlock(!readOnlySelfInspection && deps.ctxLevel.workspace, async () => {
       const wsCtx = await deps.loadWorkspaceContext(deps.cwd);
       return wsCtx ? { role: 'system', content: wsCtx } : null;
@@ -316,18 +329,6 @@ export async function injectInitialContext(
       const kgBlock = kg.formatContextBlockSmart(deps.message, 600);
       return kgBlock ? { role: 'system', content: kgBlock } : null;
     }),
-
-    // Collective Knowledge Graph — shared cross-agent memory (opt-in).
-    buildOptionalContextBlock(
-      allowMutableSharedContext &&
-        deps.ctxLevel.collectiveGraph &&
-        process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true',
-      async () => {
-        const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
-        const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 600);
-        return ckgBlock ? { role: 'system', content: ckgBlock } : null;
-      }
-    ),
 
     buildOptionalContextBlock(
       allowMutableSharedContext &&

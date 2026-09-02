@@ -93,6 +93,40 @@ const EXTERNAL_PROMPT_MANAGER_TOOLS = [
   'reason',
 ] as const;
 
+const COLLECTIVE_KNOWLEDGE_START = '<collective_knowledge>';
+const COLLECTIVE_KNOWLEDGE_END = '</collective_knowledge>';
+
+/**
+ * Head-truncation that never drops a reserved `<collective_knowledge>` block.
+ * Optional tail (after the block) is discarded first; the prefix is trimmed
+ * only if the reserved section would not fit otherwise.
+ */
+export function truncateSystemPromptPreservingReserved(
+  systemPrompt: string,
+  budgetChars: number,
+): string {
+  if (budgetChars <= 0) return '';
+  if (systemPrompt.length <= budgetChars) return systemPrompt;
+  const start = systemPrompt.indexOf(COLLECTIVE_KNOWLEDGE_START);
+  const end = systemPrompt.indexOf(COLLECTIVE_KNOWLEDGE_END);
+  if (start < 0 || end < start) {
+    return systemPrompt.slice(0, Math.max(0, budgetChars - 3)) + '...';
+  }
+  const reservedEnd = end + COLLECTIVE_KNOWLEDGE_END.length;
+  const reserved = systemPrompt.slice(start, reservedEnd);
+  if (reserved.length >= budgetChars) {
+    return reserved.slice(0, Math.max(0, budgetChars - 3)) + '...';
+  }
+  const before = systemPrompt.slice(0, start);
+  const after = systemPrompt.slice(reservedEnd);
+  const room = Math.max(0, budgetChars - reserved.length - 3);
+  if (before.length <= room) {
+    const tail = after.slice(0, room - before.length);
+    return before + reserved + tail + '...';
+  }
+  return before.slice(0, room) + '...' + reserved;
+}
+
 function hasActiveToolFilter(config: ToolFilterConfig): boolean {
   return config.enabledPatterns.length > 0 || config.disabledPatterns.length > 0;
 }
@@ -146,7 +180,8 @@ export class PromptBuilder {
     systemPromptId: string | undefined,
     modelName: string,
     customInstructions: string | null,
-    options?: BuildOptions
+    options?: BuildOptions,
+    query?: string,
   ): Promise<string> {
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
     // When the model can't actually call tools (Ollama small/medium without
@@ -330,6 +365,20 @@ export class PromptBuilder {
         } catch (err) {
           logger.warn('Failed to inject execution-discipline block', { error: getErrorMessage(err) });
         }
+      }
+
+      // Collective Knowledge Graph — relevance-ranked on the current query.
+      // Placed BEFORE optional blocks (knowledge/docs/skills/identity/…) so
+      // head-truncation does not drop it first; truncation also reserves it.
+      if (query && process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true') {
+        try {
+          const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
+          const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(query, 1_600);
+          if (ckgBlock) {
+            systemPrompt += `\n\n${ckgBlock}`;
+            logger.debug('Injected collective knowledge into system prompt', { chars: ckgBlock.length });
+          }
+        } catch { /* collective graph optional */ }
       }
 
       // Inject project-instruction context (AGENTS.md / CODEBUDDY.md / CLAUDE.md
@@ -775,7 +824,7 @@ Output formatting discipline:
       const budgetChars = budgetTokens * 4; // ~4 chars per token
       if (systemPrompt.length > budgetChars) {
         logger.warn(`System prompt truncated for ${modelName}: ${systemPrompt.length} chars → ${budgetChars} (budget: ${budgetTokens} tokens, 32K hard cap)`);
-        systemPrompt = systemPrompt.slice(0, Math.max(0, budgetChars - 3)) + '...';
+        systemPrompt = truncateSystemPromptPreservingReserved(systemPrompt, budgetChars);
       }
 
       // Cache system prompt for optimization
@@ -844,7 +893,7 @@ Output formatting discipline:
       messageLen: message.length,
       gatesOff: Object.entries(gates).filter(([, v]) => !v).map(([k]) => k),
     });
-    return this.buildSystemPrompt(systemPromptId, modelName, customInstructions, gates);
+    return this.buildSystemPrompt(systemPromptId, modelName, customInstructions, gates, message);
   }
 
   /**
