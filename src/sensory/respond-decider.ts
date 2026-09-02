@@ -347,12 +347,12 @@ const CONTINUATION =
 
 /**
  * Is a follow-up (inside a live conversation) directed at the robot rather than ambient cross-talk?
- * A question, a 2nd-person/imperative cue, or a continuation opener ("et …", "ok", "attends") counts;
- * a plain 3rd-person statement does not. Pure.
+ * A direct request or second-person cue counts; a bare question mark or a continuation opener
+ * does not, because those are common in human-human and broadcast speech. Name-addressed turns
+ * are handled separately by `isVocativeAddress`. Pure.
  */
 export function isDirectedFollowUp(text: string): boolean {
   if (!(text ?? '').trim()) return false;
-  if (text.includes('?')) return true;
   const t = normWords(text);
   const words = t.split(' ').filter(Boolean);
   // Broadcast narration frequently starts with a first-person statement and
@@ -367,8 +367,12 @@ export function isDirectedFollowUp(text: string): boolean {
   ) {
     return false;
   }
-  if (IMPERATIVE.test(t) || hasResponseCue(text)) return true;
-  if (CONTINUATION.test(t)) return true;
+  if (IMPERATIVE.test(t) || hasNonQuestionResponseCue(t)) return true;
+  // "et …", "ok …" and similar openers are not an address on their own. They
+  // can still qualify when followed by a direct request (handled above).
+  if (CONTINUATION.test(t)) return false;
+  // A generic question has no acoustic direction in a resident microphone.
+  if (text.includes('?')) return false;
   // A long radio/TV sentence often contains a generic "vous" without being
   // addressed to the robot. Inside an open engagement window that used to be
   // enough to trigger an expensive grounded turn. Keep second-person-only
@@ -382,8 +386,12 @@ export function isDirectedFollowUp(text: string): boolean {
 function hasResponseCue(text: string): boolean {
   if (text.includes('?')) return true;
   const t = normWords(text);
+  return hasNonQuestionResponseCue(t);
+}
+
+function hasNonQuestionResponseCue(normalizedText: string): boolean {
   return /\b(aide|help|peux tu|pouvez vous|pourrais tu|pourriez vous|tu peux|vous pouvez|comment|pourquoi|qu est|quel|quelle|quels|ou|quand|combien|explique|montre|fais|lance|cherche|trouve|rappelle|dis|donne|what|why|how|where|when|who|which|can you|could you|would you|will you|do you|are you|have you|did you)\b/.test(
-    t
+    normalizedText
   );
 }
 
@@ -430,6 +438,13 @@ function isDirectGreeting(text: string): boolean {
     /^(bonjour|bonsoir|salut|coucou|hello|hey|yo)$/.test(t) ||
     /^(bonjour|bonsoir|salut|coucou|hello|hey|yo) (ça|ca) va$/.test(t)
   );
+}
+
+function isDirectCheckIn(text: string): boolean {
+  const t = normalizeForCheapSpeechRules(text);
+  return /^(?:tu vas|vous allez) bien$/.test(t)
+    || /^(?:tu es|vous etes) la$/.test(t)
+    || /^(?:tu m entends|vous m entendez)$/.test(t);
 }
 
 /** A human closing ends continuity after one final answer. */
@@ -615,7 +630,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
           // conversation becomes explicitly engaged and normal long follow-ups work.
           return staySilent('ambient-in-window');
         }
-        if (isDirectedFollowUp(text)) {
+        if (isDirectedFollowUp(text) || isDirectGreeting(text) || isDirectCheckIn(text)) {
           // A follow-up aimed at the robot → respond, and (conversation mode) keep the dialogue
           // alive by extending the window, up to the total cap (re-address required past it).
           if (conversationMode && now() - dialogueStartedAt < conversationMaxMs) {

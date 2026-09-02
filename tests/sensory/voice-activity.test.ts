@@ -99,6 +99,17 @@ describe('voice-activity — half-duplex speaking guard', () => {
     expect(classifyRecentVoiceEcho('ecoute cette phrase prononcee', 91_001)).toBe('unknown');
   });
 
+  it('uses at least 60% of the latest spoken phrase words for echo detection', () => {
+    noteSpokenText('Voici une phrase vraiment courte.', 1_000);
+
+    expect(classifyRecentVoiceEcho('voici phrase', 1_100)).toBe('distinct'); // 2/5
+    expect(classifyRecentVoiceEcho('voici phrase courte', 1_100)).toBe('echo'); // 3/5
+
+    noteSpokenText('Nouveau message vocal.', 1_200);
+    expect(classifyRecentVoiceEcho('voici phrase courte', 1_300)).toBe('echo');
+    expect(classifyRecentVoiceEcho('nouveau message vocal', 1_300)).toBe('echo');
+  });
+
   it('classifies barge-in during playback and never re-arms a tail after interruption', () => {
     beginSpeaking(5_000);
     expect(measureVoiceResumeTiming(5_300)).toMatchObject({

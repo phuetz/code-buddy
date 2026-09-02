@@ -1819,50 +1819,50 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
-        if (classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs) === 'echo') {
-          logger.info('[speech] dropped own echo');
-          turnCoordinator.transition(turnId, 'suppressed', {
-            suppressionReason: 'own_echo',
-            sttMs,
-            scene: 'assistant_playback',
-            sceneConfidence: 0.98,
-          });
-          return;
-        }
         const playbackCaptureKind = voiceResume?.kind === 'during_playback'
           || voiceResume?.kind === 'echo_tail'
           ? voiceResume.kind
           : undefined;
-        const echoClassification = playbackCaptureKind
-          ? classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs)
-          : undefined;
+        const echoClassification = classifyRecentVoiceEcho(
+          text,
+          captureStartedAtMs ?? transcribeStartMs,
+        );
         const explicitBargeIn = playbackCaptureKind
           ? shouldTriggerVoiceBargeIn(text, payload)
             // A turn that already cut the playback acoustically (CONV2 speech_start barge-in)
             // counts as an explicit interruption: the robot is no longer speaking over it.
             || (job.turnId !== undefined && bargedSpeechTurnId === job.turnId)
           : false;
-        const suppressPlaybackCapture = playbackCaptureKind && echoClassification
-          ? shouldSuppressPlaybackCapture(
-              playbackCaptureKind,
-              echoClassification,
-              explicitBargeIn,
-              isSensoryAecTrusted(payload.aecActive === true),
-            )
-          : false;
-        if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {
-          const suppressionReason = playbackCaptureKind === 'during_playback'
-            ? echoClassification === 'echo'
-              ? 'during_playback_echo'
-              : 'during_playback_non_explicit'
-            : `echo_tail_${echoClassification}`;
-          logger.info(
-            `[speech] suppressed playback capture reason=${suppressionReason}`,
-          );
+        const ownEcho = echoClassification === 'echo';
+        const suppressPlaybackCapture = ownEcho || (
+          playbackCaptureKind !== undefined && echoClassification !== 'unknown'
+            ? shouldSuppressPlaybackCapture(
+                playbackCaptureKind,
+                echoClassification,
+                explicitBargeIn,
+                isSensoryAecTrusted(payload.aecActive === true),
+              )
+            : false
+        );
+        if (suppressPlaybackCapture) {
+          const suppressionReason = ownEcho && playbackCaptureKind === undefined
+            ? 'own_echo'
+            : playbackCaptureKind === 'during_playback'
+              ? ownEcho
+                ? 'during_playback_echo'
+                : 'during_playback_non_explicit'
+              : `echo_tail_${echoClassification}`;
+          if (ownEcho) {
+            logger.info('[speech] dropped own echo');
+          } else {
+            logger.info(
+              `[speech] suppressed playback capture reason=${suppressionReason}`,
+            );
+          }
           turnCoordinator.transition(turnId, 'suppressed', {
             suppressionReason,
             sttMs,
-            scene: 'assistant_playback',
+            scene: playbackCaptureKind ? 'assistant_playback' : 'assistant_echo',
             sceneConfidence: echoClassification === 'echo' ? 0.98 : 0.8,
           });
           await (await perceptModule).recordCompanionPercept(
@@ -1879,7 +1879,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
                 playbackCaptureSuppressed: true,
                 suppressionReason,
                 echoClassification,
-                turnTaking: voiceResume,
+                ...(voiceResume ? { turnTaking: voiceResume } : {}),
                 latency: latencyPayload,
                 capture: capturePayload,
               },

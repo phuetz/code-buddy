@@ -1410,13 +1410,13 @@ describe('speech reaction — speech_end → STT → percept', () => {
       // 1) Addressed by name → speaks.
       speechEnd('/tmp/decider-addressed.wav');
       await waitFor(() => expect(spoken).toEqual(['Buddy, quelle heure est-il ?']));
-      // 2) In-window follow-up without the name → speaks (continuity).
+      // 2) In-window direct follow-up without the name → speaks (continuity).
       clock += 5000;
-      transcript = 'et demain ?';
+      transcript = 'raconte encore';
       speechEnd('/tmp/decider-follow-up.wav');
       await waitFor(() => expect(spoken).toEqual([
         'Buddy, quelle heure est-il ?',
-        'et demain ?',
+        'raconte encore',
       ]));
       // 3) Much later, ambient human-human chatter → silent.
       clock += 60_000;
@@ -1427,7 +1427,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
         'il fait beau aujourd’hui',
       );
 
-      expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'et demain ?']);
+      expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'raconte encore']);
     } finally {
       unwire();
     }
