@@ -598,9 +598,14 @@ describe('companion gateway', () => {
       },
     });
 
+    const manager = new ChannelManager();
+    const telegramChannel = new MockChannel({ type: 'telegram', enabled: true });
+    manager.registerChannel(telegramChannel);
+    await telegramChannel.connect();
     const report = await buildCompanionGatewayLifecycleReport({
       cwd: tempDir,
       now: new Date('2026-05-24T16:06:00.000Z'),
+      channelManager: manager,
     });
 
     expect(report).toMatchObject({
@@ -882,5 +887,74 @@ describe('companion gateway', () => {
       }, { cwd: tempDir }),
     ).rejects.toThrow();
     expect(await readFile(inboxPath, 'utf8')).toBe('{this is not json');
+  });
+
+  it('marks start failed when the adapter was skipped (D3)', async () => {
+    await updateCompanionGatewayChannel('telegram', {
+      cwd: tempDir,
+      enabled: true,
+      mode: 'act',
+      allowOutbound: true,
+      now: new Date('2026-05-24T18:20:00.000Z'),
+    });
+    const manager = new ChannelManager();
+    const result = await executeCompanionGatewayAdminAction({
+      action: 'start',
+      channel: 'telegram',
+      approvedBy: 'Patrice',
+      liveAdminConfirmed: true,
+    }, {
+      cwd: tempDir,
+      channelManager: manager,
+      createId: () => 'admin-exec-start-skipped-1',
+      now: new Date('2026-05-24T18:21:00.000Z'),
+      startConfiguredChannels: async () => ({
+        registered: [],
+        skipped: ['telegram'],
+        failed: [],
+        noConfig: false,
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.record.status).toBe('failed');
+    expect(result.record.result.skipped).toEqual(['telegram']);
+    expect(result.record.result.registered).toEqual([]);
+    expect(manager.getChannel('telegram')).toBeUndefined();
+  });
+
+  it('does not report lifecycle ready without a running adapter (D7)', async () => {
+    await updateCompanionGatewayChannel('telegram', {
+      cwd: tempDir,
+      enabled: true,
+      mode: 'act',
+      allowOutbound: true,
+      now: new Date('2026-05-24T16:00:00.000Z'),
+    });
+    const empty = await buildCompanionGatewayLifecycleReport({
+      cwd: tempDir,
+      now: new Date('2026-05-24T16:06:00.000Z'),
+      channelManager: new ChannelManager(),
+    });
+    const telegram = empty.channels.find(channel => channel.channel === 'telegram');
+    expect(telegram?.state).toBe('needs_attention');
+    expect(telegram?.issues).toContain('adapter not running');
+    expect(empty.summary.readyChannelCount).toBe(0);
+    expect(empty.summary.attentionChannelCount).toBeGreaterThanOrEqual(1);
+
+    const manager = new ChannelManager();
+    const channel = new MockChannel({ type: 'telegram', enabled: true });
+    manager.registerChannel(channel);
+    await channel.connect();
+    const ready = await buildCompanionGatewayLifecycleReport({
+      cwd: tempDir,
+      now: new Date('2026-05-24T16:07:00.000Z'),
+      channelManager: manager,
+    });
+    expect(ready.channels.find(item => item.channel === 'telegram')).toMatchObject({
+      state: 'ready',
+      issues: [],
+    });
+    expect(ready.summary.readyChannelCount).toBe(1);
   });
 });
