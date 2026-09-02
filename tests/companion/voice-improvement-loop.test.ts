@@ -183,3 +183,67 @@ describe('runVoiceImprovementCycle', () => {
     expect(reflectTwice).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * The dedupe cursor was persisted only after a SUCCESSFUL reflection, so an
+ * unreachable provider left the fingerprint unmatched forever: the loop re-asked
+ * the very same question every heartbeat. Observed live on 2026-09-02 — 289
+ * identical 403 failures in six hours, three ERROR lines each, against a provider
+ * that had been out of credits all night. These tests bound that retry.
+ */
+describe('reflection failure is bounded', () => {
+  it('stops re-asking the same dialogue once the provider keeps failing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vil-fail-'));
+    const dedupeStatePath = join(dir, 'cursor.json');
+    const heard = ['On regarde le rapport ?', 'Oui, vas-y.'];
+    let attempts = 0;
+    const reflect = async (): Promise<VoiceReflection | null> => {
+      attempts += 1;
+      return null; // provider down
+    };
+
+    // Ten heartbeats over the SAME unchanged dialogue.
+    for (let i = 0; i < 10; i += 1) {
+      await runVoiceImprovementCycle({
+        cwd: dir,
+        dedupeStatePath,
+        guidancePath: join(dir, 'guidance.json'),
+        relationshipStatePath: join(dir, 'rel.json'),
+        readHeard: async () => heard,
+        reflect,
+      });
+    }
+
+    // A few retries are legitimate (a transient blip); ten are not.
+    expect(attempts).toBeGreaterThan(0);
+    expect(attempts).toBeLessThanOrEqual(3);
+  });
+
+  it('still reflects on a NEW dialogue after giving up on the old one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vil-recover-'));
+    const dedupeStatePath = join(dir, 'cursor.json');
+    let heard = ['Première conversation.', 'Deuxième phrase.'];
+    let attempts = 0;
+    const reflect = async (): Promise<VoiceReflection | null> => {
+      attempts += 1;
+      return null;
+    };
+    const run = (): Promise<unknown> =>
+      runVoiceImprovementCycle({
+        cwd: dir,
+        dedupeStatePath,
+        guidancePath: join(dir, 'guidance.json'),
+        relationshipStatePath: join(dir, 'rel.json'),
+        readHeard: async () => heard,
+        reflect,
+      });
+
+    for (let i = 0; i < 5; i += 1) await run();
+    const afterGivingUp = attempts;
+
+    // Giving up on one dialogue must not disable the loop: new speech deserves a try.
+    heard = ['Tout autre sujet maintenant.', 'On parle du rapport.'];
+    await run();
+    expect(attempts).toBeGreaterThan(afterGivingUp);
+  });
+});
