@@ -469,6 +469,30 @@ describe('ContextManagerV2', () => {
 
       tinyManager.dispose();
     });
+
+    it('names CURRENT_REQUEST_EXCEEDS_BUDGET when the last user turn cannot fit alone', () => {
+      const tinyManager = new ContextManagerV2({
+        maxContextTokens: 15,
+        responseReserveTokens: 1,
+        recentMessagesCount: 5,
+        enableSummarization: false,
+      });
+      const messages: CodeBuddyMessage[] = [
+        { role: 'user', content: 'A'.repeat(500) },
+        { role: 'assistant', content: 'B'.repeat(500) },
+      ];
+
+      try {
+        tinyManager.prepareMessages(messages);
+        throw new Error('expected ContextCompactionError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ContextCompactionError);
+        expect((err as ContextCompactionError).code).toBe('CURRENT_REQUEST_EXCEEDS_BUDGET');
+        expect((err as Error).message).toMatch(/exceeds the context budget/u);
+      }
+
+      tinyManager.dispose();
+    });
   });
 
   describe('Warning System', () => {
