@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
 import { EnhancedContextCompressor } from '../../src/context/enhanced-compression.js';
@@ -93,5 +94,15 @@ describe('EnhancedContextCompressor', () => {
     expect(result.messages.some((message) => (
       message.role === 'user' && message.content === lastUser.content
     ))).toBe(true);
+  });
+
+  it('hardTruncate always reinserts the last user even when a later assistant fills the budget', () => {
+    const source = readFileSync(new URL('../../src/context/enhanced-compression.ts', import.meta.url), 'utf8');
+    const start = source.indexOf('private hardTruncate(');
+    const end = source.indexOf('private classifyMessages(', start);
+    const hardTruncate = source.slice(start, end);
+    expect(hardTruncate).toContain('lastUser');
+    expect(hardTruncate).toMatch(/result\.push\(lastUser\)|result\.unshift\(msg\)/);
+    expect(hardTruncate).not.toMatch(/else \{\s*break;/);
   });
 });

@@ -34,6 +34,13 @@ describe('gpu media worker contracts', () => {
     expect(validateGpuWorkerUrl('https://gpu.example.com').protocol).toBe('https:');
   });
 
+  it('accepts a single-label LAN hostname and .local/.lan suffixes over HTTP', () => {
+    expect(validateGpuWorkerUrl('http://gpunode:4310').hostname).toBe('gpunode');
+    expect(validateGpuWorkerUrl('http://gpunode.local:4310').hostname).toBe('gpunode.local');
+    expect(validateGpuWorkerUrl('http://gpunode.lan:4310').hostname).toBe('gpunode.lan');
+    expect(() => validateGpuWorkerUrl('http://example.com:4310')).toThrow(/Unencrypted/);
+  });
+
   it('bounds PanoWorld profiles to the measured GPU node targets', () => {
     const single = parsePanoWorldPayload({
       scene_id: 'kitchen',
