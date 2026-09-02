@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import statistics
 import time
 from dataclasses import asdict, dataclass
@@ -29,6 +30,7 @@ EOT_MIN_DELAY_MS = 300
 EOT_MAX_DELAY_MS = 2_500
 VAD_SILENCE_MS = (300, 500, 800)
 FRENCH_EOT_THRESHOLD = 0.285
+SYNTHESIS_SEED = 20260903
 
 
 @dataclass(frozen=True)
@@ -129,9 +131,12 @@ def _load_wav(path: Path) -> np.ndarray:
 
 def synthesize(output_dir: Path) -> dict[str, Any]:
     from pocket_tts import TTSModel
+    import torch
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    t0 = time.perf_counter()
+    random.seed(SYNTHESIS_SEED)
+    np.random.seed(SYNTHESIS_SEED)
+    torch.manual_seed(SYNTHESIS_SEED)
     model = TTSModel.load_model(language="french_24l")
     voice_state = model.get_state_for_audio_prompt("estelle")
     manifest: dict[str, Any] = {
@@ -139,6 +144,7 @@ def synthesize(output_dir: Path) -> dict[str, Any]:
         "tts_sample_rate": model.sample_rate,
         "voice": "estelle",
         "language": "french_24l",
+        "seed": SYNTHESIS_SEED,
         "generated_with": "pocket-tts",
         "utterances": [],
     }
@@ -177,7 +183,6 @@ def synthesize(output_dir: Path) -> dict[str, Any]:
             "duration_ms": round(len(pcm) / SAMPLE_RATE * 1_000, 3),
         })
 
-    manifest["synthesis_elapsed_ms"] = round((time.perf_counter() - t0) * 1_000, 3)
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return manifest
 
