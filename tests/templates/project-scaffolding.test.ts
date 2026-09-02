@@ -107,7 +107,10 @@ describe('TemplateEngine real scaffolding', () => {
       tailwindcss: expect.any(String),
       postcss: expect.any(String),
       autoprefixer: expect.any(String),
+      vite: '^6.4.3',
     });
+    expect(packageJson.devDependencies).not.toHaveProperty('vitest');
+    expect(packageJson.devDependencies).not.toHaveProperty('eslint');
 
     const tokens = await fs.readFile(path.join(result.projectPath, 'src', 'styles', 'tokens.css'), 'utf8');
     expect(tokens).toContain(':root');
