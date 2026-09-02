@@ -539,9 +539,9 @@ export class LessonsTracker {
     this.load();
     const item = this.items.find(i => i.id === id);
     if (!item) return undefined;
-    // The line format is `- [id] content <!-- date source[:context] -->`: the
-    // parser cuts content at the first `<!--`, and context is matched by
-    // `[^-]+` so it cannot contain hyphens; both must stay single-line.
+    // The line format is `- [id] content <!-- date source[:context] -->`:
+    // the parser cuts content at the first `<!--`; context is a single
+    // token (hyphens allowed, e.g. audit-execution) and must stay one line.
     if (patch.content !== undefined) {
       const content = patch.content.trim();
       if (!content) throw new Error('lesson content cannot be empty');
@@ -553,8 +553,8 @@ export class LessonsTracker {
     if (patch.category !== undefined) item.category = patch.category;
     if (patch.context !== undefined) {
       const context = patch.context === null ? '' : patch.context.trim();
-      if (/[-\r\n]/.test(context)) {
-        throw new Error('lesson context cannot contain hyphens or newlines (markdown metadata format)');
+      if (/[\r\n]/.test(context) || /\s/.test(context) || context.includes('<!--') || context.includes('-->')) {
+        throw new Error('lesson context must be a single token without whitespace or HTML comment markers');
       }
       if (context) item.context = context;
       else delete item.context;
@@ -991,8 +991,11 @@ export class LessonsTracker {
         continue;
       }
 
-      // Item: - [id] content <!-- date source:context -->
-      const itemMatch = rawLine.match(/^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::([^-]+))? -->/);
+      // Item: - [id] content <!-- date source[:context] -->
+      // Context is a single token (hyphens allowed: audit-execution).
+      const itemMatch = rawLine.match(
+        /^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::(\S+))? -->\s*$/,
+      );
       if (itemMatch) {
         const [, id, rawContent, dateStr, sourceStr, ctx] = itemMatch;
         if (id === undefined || rawContent === undefined || dateStr === undefined || sourceStr === undefined) continue;
@@ -1003,6 +1006,23 @@ export class LessonsTracker {
           createdAt: new Date(dateStr).getTime() || 0,
           source: (sourceStr as LessonItem['source']) ?? 'manual',
           context: ctx?.trim() || undefined,
+        });
+        continue;
+      }
+
+      // Tagged fallback: keep a stored [id] even if the metadata comment is missing
+      // or slightly off — never invent a new id for a line that already has one.
+      const taggedMatch = rawLine.match(/^- \[([^\]]+)\] (.+)$/);
+      if (taggedMatch) {
+        const taggedId = taggedMatch[1];
+        const taggedContent = taggedMatch[2];
+        if (taggedId === undefined || taggedContent === undefined) continue;
+        items.push({
+          id: taggedId,
+          content: taggedContent.trim(),
+          category: currentCategory,
+          createdAt: 0,
+          source: 'manual',
         });
         continue;
       }

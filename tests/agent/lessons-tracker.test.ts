@@ -499,5 +499,34 @@ describe('LessonsTracker', () => {
       expect(rule!.source).toBe('user_correction');
       expect(rule!.context).toBeUndefined();
     });
+
+    it('round-trips add → list → search → remove with a hyphenated context (stable id and date)', async () => {
+      const tracker = new LessonsTracker(tmpDir);
+      const added = tracker.add(
+        'INSIGHT',
+        'AUDIT-E1 leçon réelle: toujours exiger un artefact daté pour un PASS.',
+        'manual',
+        'audit-execution',
+      );
+      await tracker.save();
+
+      const fresh = new LessonsTracker(tmpDir);
+      const listed = fresh.list();
+      expect(listed).toHaveLength(1);
+      expect(listed[0]!.id).toBe(added.id);
+      expect(listed[0]!.content).toBe(added.content);
+      expect(listed[0]!.context).toBe('audit-execution');
+      expect(listed[0]!.source).toBe('manual');
+      expect(listed[0]!.createdAt).toBeGreaterThan(0);
+      expect(new Date(listed[0]!.createdAt).toISOString().slice(0, 10)).not.toBe('1970-01-01');
+
+      const found = fresh.search('AUDIT-E1');
+      expect(found).toHaveLength(1);
+      expect(found[0]!.id).toBe(added.id);
+
+      const removed = await fresh.removeWithReport(added.id);
+      expect(removed.removed).toBe(true);
+      expect(new LessonsTracker(tmpDir).search('AUDIT-E1')).toHaveLength(0);
+    });
   });
 });
