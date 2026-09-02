@@ -1,10 +1,13 @@
 import unittest
 
+import numpy as np
+
 from watch import (
     AnonymousMultiTracker,
     MOTION_FRAME_SLOTS,
     SEMANTIC_FRAME_SLOTS,
     CameraLivenessState,
+    MotionGate,
     MotionEventState,
     PersonState,
     VisionSample,
@@ -275,6 +278,45 @@ class MotionEventTests(unittest.TestCase):
         self.assertLessEqual(MOTION_FRAME_SLOTS, 128)
         self.assertGreaterEqual(SEMANTIC_FRAME_SLOTS, 64)
         self.assertLessEqual(SEMANTIC_FRAME_SLOTS, 256)
+
+    def test_dark_gaussian_sensor_noise_never_emits_motion(self):
+        rng = np.random.default_rng(42)
+        gate = MotionGate(motion_threshold=0.02, min_luma=12, noise_window=16)
+        events = MotionEventState(cooldown_secs=2)
+        emitted = 0
+        darkness_logs = 0
+
+        for index in range(20):
+            frame = np.clip(rng.normal(6, 5, size=(120, 160)), 0, 255).astype(np.uint8)
+            decision = gate.update(frame, at=float(index))
+            emitted += int(events.should_emit(decision["moved"], at=float(index)))
+            darkness_logs += int(decision["logDarkness"])
+
+        self.assertEqual(emitted, 0)
+        self.assertLessEqual(darkness_logs, 1)
+        self.assertLess(decision["meanLuma"], 12)
+        self.assertIn("noiseFloor", decision)
+
+    def test_moving_rectangle_emits_exactly_one_motion_event(self):
+        gate = MotionGate(motion_threshold=0.02, min_luma=12, noise_window=16)
+        events = MotionEventState(cooldown_secs=2)
+        base = np.full((120, 160), 80, dtype=np.uint8)
+        moved = base.copy()
+        moved[30:80, 40:100] = 220
+
+        decisions = [
+            gate.update(base, at=0),
+            gate.update(moved, at=1),
+            gate.update(moved, at=2),
+        ]
+        emitted = sum(
+            events.should_emit(decision["moved"], at=float(index))
+            for index, decision in enumerate(decisions)
+        )
+
+        self.assertEqual(emitted, 1)
+        self.assertGreater(decisions[1]["score"], decisions[1]["effectiveThreshold"])
+        self.assertGreaterEqual(decisions[1]["meanLuma"], 12)
 
 
 if __name__ == "__main__":

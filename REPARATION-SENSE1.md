@@ -131,21 +131,48 @@ Implémentation : anneau mémoire de 8 phrases effectivement envoyées au TTS, f
 
 ### Commit
 
-Prévu : `fix(sensory): drop recent spoken phrases from STT`.
+`3af9d4155` — `fix(sensory): drop recent spoken phrases from STT`.
 
 ## Correctif 3 — porte de mouvement de l'œil
 
 ### Test rouge
 
-_À compléter._
+Commande :
+
+```text
+cd buddy-vision
+python3 -m unittest test_watch.py
+```
+
+Sortie rouge utile :
+
+```text
+ImportError: cannot import name 'MotionGate' from 'watch'
+Ran 1 test in 0.000s
+FAILED (errors=1)
+EXIT_CODE=1
+```
+
+Les nouveaux tests construisent vingt images de bruit gaussien sombre (aucun événement, journal d'obscurité au plus une fois) puis un rectangle clair en déplacement (exactement un événement).
 
 ### Test vert
 
-_À compléter._
+Commande et sortie :
+
+```text
+cd buddy-vision
+python3 -m unittest test_watch.py
+..................
+Ran 18 tests in 0.140s
+OK
+EXIT_CODE=0
+```
+
+Implémentation : score sur images 5×5 floutées = fraction des pixels dont `absdiff > 25`; médiane glissante des scores stables et seuil `max(BUDDY_VISION_MOTION, 2.5 × noiseFloor)`; obscurité sous `BUDDY_VISION_MIN_LUMA=12` sans événement et journal au plus une fois par minute. Les événements `motion` portent désormais `meanLuma` et `noiseFloor`.
 
 ### Commit
 
-_À compléter._
+Prévu : `fix(vision): reject dark sensor noise as motion`.
 
 ## Correctif 4 — hystérésis de présence
 

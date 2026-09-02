@@ -17,6 +17,8 @@ import os
 import secrets
 import sys
 import time
+from collections import deque
+from statistics import median
 
 import cv2
 import numpy as np
@@ -34,6 +36,12 @@ EVENTS_LOG_MAX_BYTES = min(
 MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "face_landmarker.task")
 FPS = float(os.environ.get("BUDDY_VISION_FPS", "4"))
 MOTION_THRESH = float(os.environ.get("BUDDY_VISION_MOTION", "0.02"))
+MOTION_MIN_LUMA = min(255.0, max(0.0, float(os.environ.get("BUDDY_VISION_MIN_LUMA", "12"))))
+MOTION_PIXEL_DIFF = 25
+MOTION_NOISE_WINDOW = min(
+    600,
+    max(8, int(os.environ.get("BUDDY_VISION_NOISE_WINDOW", "120"))),
+)
 PERSON_BACKEND = os.environ.get("BUDDY_VISION_PERSON_BACKEND", "mediapipe").strip().lower()
 YOLO_MODEL = os.environ.get("BUDDY_VISION_YOLO_MODEL", "").strip()
 YOLO_CONF = float(os.environ.get("BUDDY_VISION_YOLO_CONF", "0.35"))
@@ -572,6 +580,53 @@ class MotionEventState:
         return True
 
 
+class MotionGate:
+    """Adaptive, darkness-aware motion measurement on grayscale frames."""
+
+    def __init__(
+        self,
+        motion_threshold: float = MOTION_THRESH,
+        min_luma: float = MOTION_MIN_LUMA,
+        noise_window: int = MOTION_NOISE_WINDOW,
+    ):
+        self.motion_threshold = max(0.0, float(motion_threshold))
+        self.min_luma = min(255.0, max(0.0, float(min_luma)))
+        self.noise_scores = deque(maxlen=min(600, max(8, int(noise_window))))
+        self.previous = None
+        self.last_darkness_log_at = float("-inf")
+
+    def update(self, gray, at: float | None = None) -> dict:
+        current = time.monotonic() if at is None else at
+        has_previous = self.previous is not None and self.previous.shape == gray.shape
+        score = motion_score(self.previous, gray)
+        mean_luma = float(np.mean(gray)) if gray.size else 0.0
+        noise_floor = float(median(self.noise_scores)) if self.noise_scores else 0.0
+        effective_threshold = max(self.motion_threshold, 2.5 * noise_floor)
+        dark = mean_luma < self.min_luma
+        moved = has_previous and not dark and score >= effective_threshold
+
+        # Only stable/dark frames teach the rolling sensor floor; a detected
+        # foreground change must not raise the threshold that is meant to catch it.
+        if has_previous and not moved:
+            self.noise_scores.append(score)
+            noise_floor = float(median(self.noise_scores))
+            effective_threshold = max(self.motion_threshold, 2.5 * noise_floor)
+
+        log_darkness = dark and current - self.last_darkness_log_at >= 60.0
+        if log_darkness:
+            self.last_darkness_log_at = current
+        self.previous = gray.copy()
+        return {
+            "moved": moved,
+            "score": score,
+            "meanLuma": mean_luma,
+            "noiseFloor": noise_floor,
+            "effectiveThreshold": effective_threshold,
+            "dark": dark,
+            "logDarkness": log_darkness,
+        }
+
+
 class DrowsyState:
     """Vigil pattern: eyes closed (eyeBlink blendshape ≥ thresh) for `secs` → drowsy.
     Re-arms when the eyes reopen (hysteresis). `eye_closed` is 0..1 or None (no face)."""
@@ -602,7 +657,10 @@ class DrowsyState:
 def motion_score(prev, gray) -> float:
     if prev is None or prev.shape != gray.shape:
         return 0.0
-    return float(np.mean(cv2.absdiff(prev, gray))) / 255.0
+    previous_blurred = cv2.GaussianBlur(prev, (5, 5), 0)
+    current_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    changed = cv2.absdiff(previous_blurred, current_blurred) > MOTION_PIXEL_DIFF
+    return float(np.mean(changed))
 
 
 def parse_enabled_detectors() -> set[str]:
@@ -673,6 +731,7 @@ def main() -> None:
     drowsy = DrowsyState() if "drowsy" in enabled else None
     liveness = CameraLivenessState()
     motion_events = MotionEventState()
+    motion_gate = MotionGate()
     observation_secs = min(
         10.0,
         max(0.25, float(os.environ.get("BUDDY_VISION_OBSERVATION_SECS", "1"))),
@@ -727,7 +786,6 @@ def main() -> None:
         flush=True,
     )
 
-    prev_gray = None
     interval = 1.0 / max(FPS, 0.5)
     while True:
         t0 = time.time()
@@ -756,9 +814,15 @@ def main() -> None:
                 },
             )
         gray = cv2.cvtColor(cv2.resize(frame, (160, 120)), cv2.COLOR_BGR2GRAY)
-        score = motion_score(prev_gray, gray)
-        moved = score >= MOTION_THRESH
-        prev_gray = gray
+        motion = motion_gate.update(gray)
+        score = motion["score"]
+        moved = motion["moved"]
+        if motion["logDarkness"]:
+            print(
+                f"[vision] darkness gate: meanLuma={motion['meanLuma']:.2f} "
+                f"< minLuma={motion_gate.min_luma:.2f}; motion suppressed",
+                flush=True,
+            )
         if motion_events.should_emit(moved):
             keyframe = save_motion_keyframe(frame)
             if keyframe:
@@ -766,6 +830,8 @@ def main() -> None:
                     "camera": CAMERA_NAME,
                     "imagePath": keyframe,
                     "motionScore": round(score, 4),
+                    "meanLuma": round(motion["meanLuma"], 2),
+                    "noiseFloor": round(motion["noiseFloor"], 4),
                     "frameWidth": width,
                     "frameHeight": height,
                 }
