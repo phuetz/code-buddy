@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -12,6 +12,7 @@ import {
 } from '../../src/skills/skill-importer.js';
 import { parseSkillFile } from '../../src/skills/parser.js';
 import { registerSkillsCommands } from '../../src/commands/skills-cli/index.js';
+import { logger } from '../../src/utils/logger.js';
 
 const reloadAllMock = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
 vi.mock('../../src/skills/registry.js', () => ({
@@ -58,6 +59,10 @@ beforeEach(() => {
   dest = tmp();
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('skill-importer — discovery', () => {
   it('finds nested skills (depth 1-3) and skips operational dirs', () => {
     writeSkill(path.join(src, 'dev', 'git-helper'), BENIGN_FM, BENIGN_BODY); // depth 2
@@ -86,6 +91,57 @@ describe('skill-importer — discovery', () => {
       else process.env.HOME = originalHome;
       fs.rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it('imports a discovered manifest using its actual filename casing', async () => {
+    const skillDir = path.join(src, 'case-mismatch');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'Skill.md'), `---\n${BENIGN_FM}\n---\n\n${BENIGN_BODY}\n`, 'utf-8');
+
+    const report = await importSkills(src, { destRoot: dest, source: 'test' });
+
+    expect(report.imported.map((skill) => skill.name)).toEqual(['imported-git-helper']);
+    expect(fs.existsSync(path.join(dest, 'imported-git-helper', 'SKILL.md'))).toBe(true);
+  });
+
+  it('skips a discovered skill whose manifest cannot be read', async () => {
+    const skillDir = path.join(src, 'unreadable');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'skill.md'), `---\n${BENIGN_FM}\n---\n\n${BENIGN_BODY}\n`, 'utf-8');
+    const readError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    vi.spyOn(fs, 'readFileSync')
+      .mockImplementationOnce(() => {
+        throw readError;
+      })
+      .mockImplementationOnce(() => {
+        throw readError;
+      });
+
+    const report = await importSkills(src, { destRoot: dest, source: 'test' });
+
+    expect(report.imported).toHaveLength(0);
+    expect(report.skipped).toEqual([
+      expect.objectContaining({
+        sourcePath: 'unreadable',
+        reason: expect.stringMatching(/read error.*permission denied/i),
+      }),
+    ]);
+  });
+
+  it('throws an explicit error when the source root is absent', () => {
+    expect(() => findSkillDirs(path.join(src, 'missing-root'))).toThrow(
+      /skill source root does not exist/i,
+    );
+  });
+
+  it('warns and throws when the source root cannot be read', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.spyOn(fs, 'readdirSync').mockImplementationOnce(() => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    });
+
+    expect(() => findSkillDirs(src)).toThrow(/permission denied/i);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/could not read skill directory/i));
   });
 
   it('waits for the registry reload before resolving', async () => {

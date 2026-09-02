@@ -73,8 +73,15 @@ export function findSkillDirs(root: string): string[] {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (dir === root && code === 'ENOENT') {
+        throw new Error(`Skill source root does not exist: ${root}`);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[skills] could not read skill directory ${dir}: ${message}`);
+      if (error instanceof Error) throw error;
+      throw new Error(message);
     }
     if (entries.some((e) => e.isFile() && e.name.toLowerCase() === 'skill.md')) {
       out.push(dir);
@@ -90,6 +97,13 @@ export function findSkillDirs(root: string): string[] {
   return out;
 }
 
+function resolveSkillFile(skillDir: string): string {
+  const entries = fs.readdirSync(skillDir, { withFileTypes: true });
+  const skillFile = entries.find((entry) => entry.isFile() && entry.name.toLowerCase() === 'skill.md');
+  if (!skillFile) throw new Error(`No skill manifest found in ${skillDir}`);
+  return path.join(skillDir, skillFile.name);
+}
+
 function slugify(raw: string): string {
   const base = String(raw).trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
   return base.startsWith(IMPORTED_PREFIX) ? base : `${IMPORTED_PREFIX}${base || 'skill'}`;
@@ -97,10 +111,8 @@ function slugify(raw: string): string {
 
 /** Base slug a skill dir maps to (frontmatter name, else dir basename). */
 function baseSlugForDir(skillDir: string): string {
-  const md = fs.existsSync(path.join(skillDir, 'SKILL.md'))
-    ? path.join(skillDir, 'SKILL.md')
-    : path.join(skillDir, 'skill.md');
   try {
+    const md = resolveSkillFile(skillDir);
     const m = fs.readFileSync(md, 'utf-8').match(FRONTMATTER_RE);
     const name = m ? ((yaml.parse(m[1]!) ?? {}) as Record<string, unknown>).name : undefined;
     return slugify(String(name ?? path.basename(skillDir)));
@@ -258,10 +270,15 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
       report.skipped.push({ sourcePath: rel, reason: 'filtered by --category' });
       continue;
     }
-    const skillMd = fs.existsSync(path.join(skillDir, 'SKILL.md'))
-      ? path.join(skillDir, 'SKILL.md')
-      : path.join(skillDir, 'skill.md');
-    const content = fs.readFileSync(skillMd, 'utf-8');
+    let skillMd: string;
+    let content: string;
+    try {
+      skillMd = resolveSkillFile(skillDir);
+      content = fs.readFileSync(skillMd, 'utf-8');
+    } catch (err) {
+      report.skipped.push({ sourcePath: rel, reason: `read error: ${err instanceof Error ? err.message : String(err)}` });
+      continue;
+    }
 
     // Compatibility check.
     try {
