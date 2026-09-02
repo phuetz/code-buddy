@@ -224,6 +224,7 @@ export function isDue(r: Reminder, now: Date): boolean {
   const occ = new Date(now);
   occ.setHours(h, m, 0, 0);
   if (now < occ) return false; // not yet time today
+  if (isOneShot(r) && r.lastFiredAt) return false; // a dated occurrence is consumed permanently
   if (r.lastFiredAt) {
     const lf = new Date(r.lastFiredAt);
     if (sameDay(lf, occ) && lf >= occ) return false; // already fired this occurrence
@@ -486,11 +487,23 @@ const DONE_PHRASE = new RegExp(
 /**
  * Does this transcript acknowledge a pending reminder? Returns the reminder id to mark done, or
  * null. PURE (no mutation): binds ONLY when an explicit done-phrase is heard AND a reminder is
- * pending in its window. Multiple pending → the most-recently-fired (read-back disambiguates).
+ * pending in its window. An explicitly mentioned label wins; otherwise multiple pending reminders
+ * retain the most-recently-fired fallback and the caller reads the bind back.
  */
 export function matchAck(text: string, nowMs: number, windowMs = ackWindowMs()): string | null {
   if (!text || !DONE_PHRASE.test(text)) return null;
   const candidates = pendingAcks(nowMs, windowMs);
+  const words = normLabel(text).split(' ').filter(Boolean);
+  const mentionsLabel = (label: string): boolean => {
+    const labelWords = normLabel(label).split(' ').filter(Boolean);
+    if (labelWords.length === 0 || labelWords.length > words.length) return false;
+    return words.some((_, start) =>
+      start + labelWords.length <= words.length &&
+      labelWords.every((word, offset) => words[start + offset] === word),
+    );
+  };
+  const explicitlyNamed = candidates.find((candidate) => mentionsLabel(candidate.label));
+  if (explicitlyNamed) return explicitlyNamed.id;
   return candidates[0]?.id ?? null;
 }
 

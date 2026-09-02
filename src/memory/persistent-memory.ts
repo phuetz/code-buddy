@@ -6,7 +6,14 @@ import { getHooksManager } from "../hooks/lifecycle-hooks.js";
 import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
-import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
+import {
+  decideForgets,
+  isProtectedMemory,
+  resolveForgettingConfig,
+  type ForgetCandidate,
+  type ForgettingConfig,
+} from "./memory-forgetting.js";
+import { withSessionLock } from "../persistence/session-lock.js";
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -186,6 +193,71 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
   ]));
 }
 
+function mergeMemoryTags(
+  priorTags: string[] | undefined,
+  factSource: string | undefined,
+  fallbackTags: string[] | undefined,
+): string[] | undefined {
+  const sourceTags = factSource
+    ?.split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0) ?? fallbackTags ?? [];
+  const tags = [...new Set([...(priorTags ?? []), ...sourceTags])];
+  return tags.length > 0 ? tags : undefined;
+}
+
+function normalizeMemoryCategory(category: string): MemoryCategory {
+  switch (category.trim().toLowerCase()) {
+    case 'project': return 'project';
+    case 'preferences': return 'preferences';
+    case 'decisions': return 'decisions';
+    case 'patterns': return 'patterns';
+    case 'context': return 'context';
+    default: return 'custom';
+  }
+}
+
+function memoryEquals(left: Memory | undefined, right: Memory | undefined): boolean {
+  if (!left || !right) return left === right;
+  const leftTags = left.tags ?? [];
+  const rightTags = right.tags ?? [];
+  return left.key === right.key
+    && left.value === right.value
+    && left.category === right.category
+    && left.createdAt.getTime() === right.createdAt.getTime()
+    && left.updatedAt.getTime() === right.updatedAt.getTime()
+    && left.lastAccessedAt?.getTime() === right.lastAccessedAt?.getTime()
+    && left.accessCount === right.accessCount
+    && leftTags.length === rightTags.length
+    && leftTags.every((tag, index) => tag === rightTags[index]);
+}
+
+function mergeMemoryMaps(
+  diskMemories: Map<string, Memory>,
+  localMemories: Map<string, Memory>,
+  persistedSnapshot: Map<string, Memory>,
+): Map<string, Memory> {
+  const merged = cloneMemoryMap(diskMemories);
+
+  // Apply only local additions/updates. Unchanged entries were loaded from
+  // the same snapshot and must not overwrite a newer process' changes.
+  for (const [key, memory] of localMemories) {
+    if (!memoryEquals(memory, persistedSnapshot.get(key))) {
+      merged.set(key, cloneMemoryMap(new Map([[key, memory]])).get(key)!);
+    }
+  }
+
+  // Propagate local deletions only when the disk entry is still the version
+  // this manager loaded. A concurrent update wins over a stale deletion.
+  for (const [key, persisted] of persistedSnapshot) {
+    if (!localMemories.has(key) && memoryEquals(merged.get(key), persisted)) {
+      merged.delete(key);
+    }
+  }
+
+  return merged;
+}
+
 const MEMORY_TEMPLATE = `# Code Buddy Memory
 
 This file stores persistent memory for the Code Buddy agent.
@@ -218,6 +290,8 @@ export class PersistentMemoryManager extends EventEmitter {
   private config: MemoryConfig;
   private projectMemories: Map<string, Memory> = new Map();
   private userMemories: Map<string, Memory> = new Map();
+  /** Last disk snapshot used to distinguish local changes from stale state. */
+  private persistedMemorySnapshots: Map<MemoryScope, Map<string, Memory>> = new Map();
   /** Audit 2026-09-02 — garde anti-amnésie : scopes dont le chargement a
    * échoué pour une raison AUTRE que l'absence du fichier. Tant qu'un scope
    * est dégradé, saveMemories refuse la réécriture destructrice (il retente
@@ -307,9 +381,11 @@ export class PersistentMemoryManager extends EventEmitter {
         throw new Error('non-canonical memory markdown contains no recoverable entries');
       }
 
+      memories.clear();
       for (const memory of parsed) {
         memories.set(memory.key, memory);
       }
+      this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
       this.degradedScopes.delete(scope);
     } catch (error) {
       // File doesn't exist -> start fresh (légitime). Toute AUTRE erreur
@@ -321,6 +397,8 @@ export class PersistentMemoryManager extends EventEmitter {
         logger.warn(
           `[persistent-memory] could not load ${scope} memory (${reason}) — destructive saves are blocked until a successful reload`,
         );
+      } else {
+        this.persistedMemorySnapshots.set(scope, new Map());
       }
     }
   }
@@ -432,9 +510,18 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // New saves prefix continuation lines with `  |` so their original
+      // indentation and any literal `Tags:` text remain unambiguous.
+      if (inMemoryBlock && line.startsWith("  |")) {
+        currentValue += "\n" + line.slice(3);
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
-        currentValue += "\n" + line.trim();
+        // Legacy files used two transport spaces without a marker. Remove
+        // only that transport prefix; do not destroy content indentation.
+        currentValue += "\n" + line.slice(2);
       } else if (inMemoryBlock && line.trim() === "") {
         // End of memory block
         pushCurrent();
@@ -536,7 +623,7 @@ export class PersistentMemoryManager extends EventEmitter {
             updatedAt: fact.updatedAt || new Date(),
             ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
             accessCount: prior?.accessCount || 0,
-            tags: fact.source ? [fact.source] : tags
+            tags: mergeMemoryTags(prior?.tags, fact.source, tags)
           });
         }
 
@@ -675,7 +762,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const memory: Memory = {
       key,
       value,
-      category,
+      category: normalizeMemoryCategory(category),
       createdAt: existing?.createdAt || new Date(),
       updatedAt: new Date(),
       ...(existing?.lastAccessedAt ? { lastAccessedAt: existing.lastAccessedAt } : {}),
@@ -1198,10 +1285,11 @@ export class PersistentMemoryManager extends EventEmitter {
     this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const forgettingConfig = resolveForgettingConfig();
     let count = 0;
 
     for (const [key, memory] of memories) {
-      if (memory.updatedAt < cutoff) {
+      if (memory.updatedAt < cutoff && !isProtectedMemory(memory, forgettingConfig)) {
         memories.delete(key);
         count++;
       }
@@ -1242,13 +1330,40 @@ export class PersistentMemoryManager extends EventEmitter {
       }
     }
 
-    // Group by category
-    const byCategory = new Map<MemoryCategory, Memory[]>();
-    for (const memory of memories.values()) {
-      const list = byCategory.get(memory.category) || [];
-      list.push(memory);
-      byCategory.set(memory.category, list);
-    }
+    await withSessionLock(filePath, async () => {
+      const diskMemories = new Map<string, Memory>();
+      try {
+        const diskContent = await fs.readFile(filePath, "utf-8");
+        const parsed = this.parseMemoryFile(diskContent);
+        if (
+          parsed.length === 0 &&
+          diskContent.trim() !== '' &&
+          !this.isCanonicalEmptyMemoryFile(diskContent)
+        ) {
+          throw new Error('non-canonical memory markdown contains no recoverable entries');
+        }
+        for (const memory of parsed) diskMemories.set(memory.key, memory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw new MemoryPersistenceError(
+            scope,
+            `could not reload ${scope} memory before save: ${(error as Error)?.message ?? String(error)}`,
+          );
+        }
+      }
+
+      const persistedSnapshot = this.persistedMemorySnapshots.get(scope) ?? new Map();
+      const mergedMemories = mergeMemoryMaps(diskMemories, memories, persistedSnapshot);
+      memories.clear();
+      for (const [key, memory] of mergedMemories) memories.set(key, memory);
+
+      // Group by category
+      const byCategory = new Map<MemoryCategory, Memory[]>();
+      for (const memory of memories.values()) {
+        const list = byCategory.get(memory.category) || [];
+        list.push(memory);
+        byCategory.set(memory.category, list);
+      }
 
     // Generate markdown
     let content = `# Code Buddy Memory\n\n`;
@@ -1272,15 +1387,13 @@ export class PersistentMemoryManager extends EventEmitter {
         content += `<!-- No memories in this category -->\n`;
       } else {
         for (const memory of categoryMemories) {
-          // Audit 2026-09-02 : indenter les lignes de continuation (2 espaces)
-          // pour que le parseur (branche « line.startsWith('  ') ») les refonde
-          // dans la valeur au reload — sinon tout sauf la 1re ligne est perdu
-          // au redémarrage. Une ligne vide interne devient « deux espaces »
-          // pour ne pas terminer le bloc.
+          // Prefix continuation lines with an explicit transport marker so
+          // their original indentation and literal metadata-like text survive
+          // a reload. `  |` also encodes an empty internal line as `  |\n`.
           const [first = '', ...rest] = memory.value.split('\n');
           content += `- **${memory.key}**: ${first}\n`;
           for (const cont of rest) {
-            content += `  ${cont}\n`;
+            content += `  |${cont}\n`;
           }
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
@@ -1321,8 +1434,16 @@ export class PersistentMemoryManager extends EventEmitter {
       // Ignored
     }
 
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content);
+      await fs.ensureDir(path.dirname(filePath));
+      const temporaryPath = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
+      try {
+        await fs.writeFile(temporaryPath, content);
+        await fs.rename(temporaryPath, filePath);
+        this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
+      } finally {
+        await fs.remove(temporaryPath).catch(() => undefined);
+      }
+    });
   }
 
   /**
@@ -1398,7 +1519,10 @@ export class PersistentMemoryManager extends EventEmitter {
       }));
 
       // 2. Extract facts from the conversation turn
-      const extractedFacts = await service.extractFacts(`User: ${message}\nAssistant: ${response}`);
+      // Only user-authored text is eligible for durable facts. The assistant's
+      // response may contain hypotheses or hallucinations, so it must never
+      // become evidence for the persistent memory store.
+      const extractedFacts = await service.extractFacts(`User: ${message}`);
       if (extractedFacts.length === 0) return;
 
       // 3. Reconcile facts
@@ -1426,7 +1550,7 @@ export class PersistentMemoryManager extends EventEmitter {
           updatedAt: fact.updatedAt || new Date(),
           ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
           accessCount: prior?.accessCount || 0,
-          tags: fact.source ? [fact.source] : ['auto-captured']
+          tags: mergeMemoryTags(prior?.tags, fact.source, ['auto-captured'])
         });
       }
 
@@ -1446,7 +1570,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of projectPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`auto-${Date.now()}`, match[0], {
             category: "project",
@@ -1458,7 +1582,7 @@ export class PersistentMemoryManager extends EventEmitter {
       // Detect preferences
       const prefPatterns = [
         /(?:i |we )prefer ([^.]+)/i,
-        /(?:always |never )([^.]+)/i,
+        /(?:i |we )(?:(?:always|never) (?:use|choose|write|format|keep|avoid|run|work with) )([^.]+)/i,
         /use ([^.]+) (?:style|convention|format)/i,
       ];
 
@@ -1479,7 +1603,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of decisionPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`decision-${Date.now()}`, match[0], {
             category: "decisions",
