@@ -7,6 +7,7 @@ import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { recordCompanionPercept } from '../../src/companion/percepts.js';
 import { CompanionConductor, _resetConductorForTests } from '../../src/companion/orchestrator.js';
+import { HomeModeStore } from '../../src/life-rhythm/home-mode-store.js';
 
 let tmp: string;
 const tick = () => new Promise((r) => setTimeout(r, 60));
@@ -73,9 +74,11 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     process.env.CODEBUDDY_USER_NAME = 'Patrice';
     const greet = vi.fn(async () => {});
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
     const unwire = wireSemanticVisionReaction({
       greet,
       cwd: tmp,
+      homeModeStore,
       now: () => new Date(2026, 5, 30, 8, 0, 0).getTime(),
     });
     try {
@@ -99,7 +102,15 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const onEngage = vi.fn();
     let clock = 1000;
     const conductor = new CompanionConductor(45_000, () => clock);
-    const unwire = wireSemanticVisionReaction({ greet, onEngage, now: () => clock, conductor, cwd: tmp });
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({
+      greet,
+      onEngage,
+      now: () => clock,
+      conductor,
+      homeModeStore,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet, 1);
@@ -163,11 +174,13 @@ describe('arrival greeting — the robot notices and engages when someone arrive
 
     const greet = vi.fn(async () => {});
     const conductor = new CompanionConductor(45_000, () => clock);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
     const unwire = wireSemanticVisionReaction({
       greet,
       onEngage: () => decider.markEngaged('arrival'), // exactly how server/index.ts wires it
       now: () => clock,
       conductor,
+      homeModeStore,
       cwd: tmp,
     });
     try {
@@ -205,11 +218,13 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const llmChat = vi.fn(async () => 'Tiens, te revoilà — content de te voir.');
     let clock = 1000;
     const conductor1 = new CompanionConductor(45_000, () => clock);
+    const homeModeStore1 = new HomeModeStore({ filePath: path.join(tmp, 'home-mode-1.json') });
     const unwire1 = wireSemanticVisionReaction({
       greet: greet1,
       llmChat,
       now: () => clock,
       conductor: conductor1,
+      homeModeStore: homeModeStore1,
       cwd: tmp,
     });
     try {
@@ -227,11 +242,13 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const nullChat = vi.fn(async () => null);
     clock += 200_000; // fresh temp cwd anyway; new wiring has its own cooldown clock
     const conductor2 = new CompanionConductor(45_000, () => clock);
+    const homeModeStore2 = new HomeModeStore({ filePath: path.join(tmp, 'home-mode-2.json') });
     const unwire2 = wireSemanticVisionReaction({
       greet: greet2,
       llmChat: nullChat,
       now: () => clock,
       conductor: conductor2,
+      homeModeStore: homeModeStore2,
       cwd: tmp,
     });
     try {
@@ -280,7 +297,8 @@ describe('arrival greeting — the robot notices and engages when someone arrive
 
     const greet = vi.fn(async () => {});
     const llmChat = vi.fn(async () => 'Content de reprendre PanoWorld avec toi.');
-    const unwire = wireSemanticVisionReaction({ greet, llmChat, cwd: tmp });
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({ greet, llmChat, homeModeStore, cwd: tmp });
     try {
       personEntered();
       await waitForCalls(greet, 1);

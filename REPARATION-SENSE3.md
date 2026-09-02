@@ -50,7 +50,15 @@ Installation nécessaire au rejeu : `npm ci --ignore-scripts` dans le clone, exi
 - Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-conductor-race.test.ts` → exit 1, `1 test | 1 failed`, l’accueil appelait `greet` malgré une claim `presence` cinq secondes plus tôt.
 - Correctif : `wireSemanticVisionReaction` consulte le conducteur compagnon partagé et ne consomme le cooldown local qu’après `conductor.claim('arrival')`. Les tests d’accueil existants injectent un conducteur à horloge simulée afin de conserver leur déterminisme.
 - Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-conductor-race.test.ts tests/sensory/arrival-greeting.test.ts tests/companion/orchestrator.test.ts` → `Test Files 3 passed (3)`, `Tests 10 passed (10)`.
-- Commit à créer : `fix(sensory): arbitrate arrival greetings with conductor`.
+- Commit réalisé : `3bbbf039a` — `fix(sensory): arbitrate arrival greetings with conductor`.
+
+### Trou 3 — accueil vidéo et politique Maison
+
+- Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-home-policy.test.ts` → exit 1, `1 test | 1 failed`, l’accueil appelait `greet` en mode `silent`.
+- Correctif : la surface `arrival` est maintenant couverte par `HomeInteractionPolicy` ; les modes `silent`, `focus`, `rest` et `guests` refusent l’accueil vocal avec un journal `[vision] arrival greeting skipped by home policy: ...`. Le store est injectable pour éviter tout état partagé entre surfaces et tests. L’accueil ne réclame le conducteur qu’après l’accord de la politique.
+- Test de régression étendu aux quatre modes interdits.
+- Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-home-policy.test.ts tests/companion/home-interaction-policy.test.ts tests/sensory/arrival-greeting.test.ts` → `Test Files 3 passed (3)`, `Tests 15 passed (15)` ; `git diff --check` vert.
+- Commit à créer : `fix(sensory): honor home policy for arrival greetings`.
 
 ## Commits
 

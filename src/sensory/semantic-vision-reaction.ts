@@ -13,6 +13,8 @@ import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
 import { getCompanionConductor, type Conductor } from '../companion/orchestrator.js';
+import { resolveCurrentHomeInteractionPolicy } from '../companion/home-interaction-policy.js';
+import type { HomeModeStore } from '../life-rhythm/home-mode-store.js';
 import {
   buildArrivalOpener,
   buildLlmArrivalOpener,
@@ -96,6 +98,8 @@ export interface SemanticVisionOptions {
   onIdentityChange?: (recognizedUserPresent: boolean) => void;
   /** Shared companion speech arbiter; injectable for deterministic tests. */
   conductor?: Conductor;
+  /** Household posture store; injectable to isolate callers and tests. */
+  homeModeStore?: HomeModeStore;
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -234,6 +238,13 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       ) {
         const t = now();
         if (t - lastGreetAt < greetCooldownMs) return;
+        const homePolicy = await resolveCurrentHomeInteractionPolicy('arrival', {
+          ...(options.homeModeStore ? { homeModeStore: options.homeModeStore } : {}),
+        });
+        if (!homePolicy.allowed) {
+          logger.info(`[vision] arrival greeting skipped by home policy: ${homePolicy.reason}`);
+          return;
+        }
         if (!conductor.claim('arrival')) {
           logger.info('[vision] arrival greeting skipped: conductor gap');
           return;
