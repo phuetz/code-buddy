@@ -466,9 +466,9 @@ export async function buildCompanionGatewayLifecycleReport(
     const fleetDraftCount = items.filter(item => Boolean(item.draft?.fleet)).length;
     const replyDraftCount = items.filter(item => Boolean(item.draft?.fleet?.outboundReply)).length;
     const lastSendStatus = items.map(lastSendStatusFor).find(Boolean);
-    const runtime = runtimeSnapshot(manager, channel.channel);
+    const adapterRunning = Boolean(manager.getChannel(channel.channel));
     const issues: string[] = [];
-    if (channel.enabled && channel.mode !== 'observe' && !runtime.registered) {
+    if (channel.enabled && channel.mode !== 'observe' && !adapterRunning) {
       issues.push('adapter not running');
     }
     if (channel.enabled && channel.mode !== 'observe' && queueCount > 0) {

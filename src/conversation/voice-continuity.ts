@@ -5,7 +5,7 @@ import {
 import { prepareSpeech } from '../sensory/speech-sanitizer.js';
 import { logger } from '../utils/logger.js';
 
-export type CanonicalVoiceSpeaker = (content: string) => Promise<void>;
+export type CanonicalVoiceSpeaker = (content: string) => Promise<void | boolean>;
 
 /**
  * Build a speaker for a deterministic spoken shortcut. The first call records

@@ -17,7 +17,7 @@ export type MaisonVoiceCommand =
   | { kind: 'meal-next' };
 
 export interface MaisonVoiceActionDeps {
-  speak: (text: string) => Promise<void>;
+  speak: (text: string) => Promise<void | boolean>;
   now?: () => Date;
   timeZone?: string;
   homeModeStore?: Pick<HomeModeStore, 'setMode'>;

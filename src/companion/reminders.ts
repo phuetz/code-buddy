@@ -822,7 +822,7 @@ export function describeRemindersForSpeech(reminders: Reminder[]): string {
 
 export interface ReminderVoiceDeps {
   /** Speak a line aloud (required). */
-  speak: (text: string) => Promise<void>;
+  speak: (text: string) => Promise<void | boolean>;
   /** Store ops — default to the real store; injectable for tests. */
   list?: () => Promise<Reminder[]>;
   remove?: (id: string) => Promise<boolean>;
