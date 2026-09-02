@@ -32,6 +32,7 @@ import { logger } from '../../utils/logger.js';
 import { ProFeatures } from '../pro/pro-features.js';
 import type { MessageButton as ProMessageButton } from '../pro/types.js';
 import { TelegramProFormatter } from './pro-formatter.js';
+import { renderWidgetDataToPng, renderWidgetHtmlToPng } from '../../widgets/widget-image-renderer.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
@@ -305,6 +306,36 @@ export class TelegramChannel extends BaseChannel {
         disable_notification: message.silent ?? this.telegramConfig.disableNotification,
         disable_web_page_preview: message.disablePreview,
       };
+
+      const widget = message.channelData?.telegram;
+      if (widget?.widgetHtml || widget?.data !== undefined) {
+        let png: Buffer | null = null;
+        try {
+          png = widget.widgetHtml
+            ? await renderWidgetHtmlToPng(widget.widgetHtml)
+            : await renderWidgetDataToPng(widget.data);
+        } catch (error) {
+          logger.warn('[telegram] widget PNG render failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        if (png) {
+          return this.sendWithAttachments({
+            ...message,
+            content: message.content.slice(0, 1024),
+            attachments: [{
+              type: 'image',
+              data: png.toString('base64'),
+              fileName: 'code-buddy-widget.png',
+              mimeType: 'image/png',
+            }],
+          });
+        }
+        // Do not claim that a card was delivered when Chromium failed. The
+        // text remains useful and explicitly tells the recipient what happened.
+        params.text = `${message.content}\n\n[Carte visuelle indisponible : réponse texte envoyée.]`;
+        params.parse_mode = undefined;
+      }
 
       // Add reply
       if (message.replyTo) {

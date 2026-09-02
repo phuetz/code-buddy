@@ -204,6 +204,12 @@ export interface OutboundMessage {
   buttons?: MessageButton[];
   /** Channel-specific data passthrough (Native Engine v2026.3.12 alignment) */
   channelData?: {
+    telegram?: {
+      /** Full inert widget document to render locally before sendPhoto. */
+      widgetHtml?: string;
+      /** Structured widget payload, rendered through the shared widget registry. */
+      data?: unknown;
+    };
     slack?: {
       blocks?: unknown[];
     };

@@ -197,6 +197,44 @@ describe('TelegramChannel', () => {
       expect(result.messageId).toBe('1');
     });
 
+    it('should render a curated widget payload and upload a non-empty PNG photo', async () => {
+      await channel.disconnect();
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            result: { message_id: 4 },
+          }),
+      });
+
+      const result = await channel.send({
+        channelId: '12345',
+        content: 'Apple (AAPL) : 324,85 USD',
+        channelData: {
+          telegram: {
+            data: {
+              type: 'stock',
+              symbol: 'AAPL',
+              name: 'Apple Inc.',
+              price: 324.85,
+              currency: 'USD',
+            },
+          },
+        },
+      });
+
+      expect(result).toMatchObject({ success: true, messageId: '4' });
+      const lastCall = mockFetch.mock.calls.at(-1);
+      expect(String(lastCall?.[0])).toContain('/sendPhoto');
+      const form = lastCall?.[1]?.body as FormData;
+      expect(form).toBeInstanceOf(FormData);
+      expect(form.get('chat_id')).toBe('12345');
+      expect(form.get('caption')).toContain('Apple (AAPL)');
+      const photo = form.get('photo');
+      expect(photo).toBeInstanceOf(Blob);
+      expect((photo as Blob).size).toBeGreaterThan(0);
+    }, 15_000);
+
     it('should send message with buttons', async () => {
       mockFetch.mockResolvedValueOnce({
         json: () =>

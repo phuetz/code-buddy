@@ -1682,6 +1682,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       let hasGeneratedResponse = false;
       let successfulLisaSelfieToolResult = false;
       let shouldPersistChannelSession = true;
+      let telegramWidget: { widgetHtml?: string; data?: unknown } | undefined;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
         if (!agent.recordTrustedExternalConversationTurn(agentInput, response)) {
@@ -1715,6 +1716,21 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         turn.throwIfAborted();
         const lastEntry = entries[entries.length - 1];
         response = lastEntry ? String(lastEntry.content) : '';
+        if (channel.type === 'telegram') {
+          const { autoWidget } = await import('../../widgets/auto-widget.js');
+          const widget = await autoWidget(
+            response,
+            entries
+              .filter((entry) => entry.type === 'tool_result')
+              .map((entry) => entry.toolResult ?? { output: entry.content }),
+          );
+          if (widget.widgetHtml || widget.candidate) {
+            telegramWidget = {
+              ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
+              ...(widget.candidate?.kind === 'payload' ? { data: widget.candidate.data } : {}),
+            };
+          }
+        }
         rawAgentFailure = isAgentFailureResponse(response);
         hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
       }
@@ -1865,7 +1881,20 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       turn.throwIfAborted();
       turn.phase('delivery');
       deliveryState = 'started';
-      if (channel.type === 'telegram' && response.trim()) {
+      if (channel.type === 'telegram' && response.trim() && telegramWidget) {
+        const result = await channel.send({
+          channelId: message.channel.id,
+          content: response,
+          parseMode: 'plain',
+          replyTo: message.id,
+          channelData: { telegram: telegramWidget },
+        });
+        delivered = result?.success === true;
+        deliveredChunks = delivered ? 1 : 0;
+        if (delivered) deliveredAssistantContent = response;
+        if (delivered) deliveryMode = 'telegram-widget';
+        else deliveryMode = 'failed';
+      } else if (channel.type === 'telegram' && response.trim()) {
         const {
           renderTelegramHtml,
           renderPlain,
