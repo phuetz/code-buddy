@@ -44,8 +44,12 @@ describe('Main process window/config behavior', () => {
 
     expect(indexSource).toContain("ipcMain.handle('config.get'");
     expect(indexSource).toContain('return configStore.getAllRedacted();');
-    expect(indexSource).not.toContain('config: configStore.getAll(),');
-    expect(windowSource).not.toContain('config: configStore.getAll(),');
-    expect(windowSource).toContain('config: configStore.getAllRedacted(),');
+    const rendererConfigGetters = Array.from(
+      indexSource.matchAll(/config:\s*configStore\.(getAll(?:Redacted)?)\(\)/g),
+      (match) => match[1]
+    );
+    expect(rendererConfigGetters.length).toBeGreaterThan(0);
+    expect(new Set(rendererConfigGetters)).toEqual(new Set(['getAllRedacted']));
+    expect(windowSource).not.toContain('configStore');
   });
 });
