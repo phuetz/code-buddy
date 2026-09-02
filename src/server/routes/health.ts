@@ -559,31 +559,12 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { status: string; latency?: number; error?: string }> = {};
 
-    // Check Grok API
-    const grokStart = Date.now();
-    try {
-      const response = await fetch('https://api.x.ai/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${process.env.GROK_API_KEY || ''}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      const grokLatency = Date.now() - grokStart;
-
-      if (response.ok) {
-        updateApiHeartbeat(grokLatency);
-      }
-
-      checks.grokApi = {
-        status: response.ok ? 'healthy' : 'degraded',
-        latency: grokLatency,
-      };
-    } catch (error) {
-      checks.grokApi = {
-        status: 'unhealthy',
-        latency: Date.now() - grokStart,
-        error: error instanceof Error ? error.message : String(error),
+    const providerApi = await probeProviderApi();
+    if (providerApi) {
+      checks.providerApi = {
+        status: providerApi.ready ? 'healthy' : 'unhealthy',
+        latency: providerApi.latencyMs,
+        error: providerApi.ready ? undefined : providerApi.message,
       };
     }
 
