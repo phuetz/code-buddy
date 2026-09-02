@@ -994,7 +994,7 @@ export class LessonsTracker {
       // Item: - [id] content <!-- date source[:context] -->
       // Context is a single token (hyphens allowed: audit-execution).
       const itemMatch = rawLine.match(
-        /^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::(\S+))? -->\s*$/,
+        /^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::(.+?))? -->\s*$/,
       );
       if (itemMatch) {
         const [, id, rawContent, dateStr, sourceStr, ctx] = itemMatch;
