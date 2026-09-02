@@ -3,8 +3,9 @@
  *   pick an uncovered tool scenario → propose (redacted view) → tool gate
  *   (static scan → visible → held-out) → keep+archive (auto-apply) or report.
  *
- * Autonomy is the same fail-safe toggle: 'propose-only' (default) validates and
- * reports; 'auto-apply' (CODEBUDDY_SELF_IMPROVE=true) keeps only tools that pass
+ * Autonomy is the same fail-safe toggle: 'propose-only' (default, including
+ * CODEBUDDY_SELF_IMPROVE=true) validates and reports; 'auto-apply'
+ * (CODEBUDDY_SELF_IMPROVE=auto-apply or `--apply`) keeps only tools that pass
  * the behavioural held-out gate, and archives them (reversible — un-registerable).
  *
  * @module agent/self-improvement/tool-engine

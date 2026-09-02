@@ -136,7 +136,7 @@ export interface SelfImprovementCycleResult {
   scoreAfter: BenchmarkScore;
   /** True only when an empirically-validated improvement was kept. */
   applied: boolean;
-  /** 'propose-only' (default) or 'auto-apply' (CODEBUDDY_SELF_IMPROVE=true). */
+  /** 'propose-only' (default, including CODEBUDDY_SELF_IMPROVE=true) or 'auto-apply' (literal auto-apply / --apply). */
   autonomy: 'propose-only' | 'auto-apply';
   notes: string[];
 }

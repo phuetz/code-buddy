@@ -4,7 +4,7 @@
  * The engine improves the agent's reversible learnable layer (lessons today)
  * only when a deterministic capability benchmark empirically improves with zero
  * regressions, snapshot/rollback always. It is propose-only by default; pass
- * `--apply` (or set CODEBUDDY_SELF_IMPROVE=true) to keep validated improvements.
+ * `--apply` (or set CODEBUDDY_SELF_IMPROVE=auto-apply) to keep validated improvements.
  *
  * @module commands/cli/improve-command
  */
