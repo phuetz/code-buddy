@@ -1396,6 +1396,15 @@ export class SkillsHub extends EventEmitter {
   }
 
   private enforceSignaturePolicy(skillName: string, verification: SkillSignatureVerification): void {
+    // A supplied signature is an explicit trust claim. Never downgrade a bad
+    // or unknown signer to the same posture as an intentionally unsigned local
+    // skill, even when signed installs are optional.
+    if (verification.status === 'invalid' || verification.status === 'untrusted') {
+      throw new Error(
+        `Refusing to install '${skillName}': signature is '${verification.status}'`
+          + (verification.reason ? ` (${verification.reason})` : ''),
+      );
+    }
     if (!this.config.requireSignedInstalls) {
       return;
     }
