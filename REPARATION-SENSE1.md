@@ -83,21 +83,55 @@ Implémentation : `aecActive` ne contourne la garde que si `CODEBUDDY_SENSORY_AE
 
 ### Commit
 
-Prévu : `fix(sensory): require explicit trust for AEC bypass`.
+`a9056300a` — `fix(sensory): require explicit trust for AEC bypass`.
 
 ## Correctif 2 — filtre de propre écho
 
 ### Test rouge
 
-_À compléter._
+Commande :
+
+```text
+npx vitest run tests/sensory/speech-reaction.test.ts -t "drops the four measured robot phrases as own echo for 90 seconds without relying on AEC"
+```
+
+Sortie rouge utile :
+
+```text
+FAIL tests/sensory/speech-reaction.test.ts > ... > drops the four measured robot phrases as own echo for 90 seconds without relying on AEC
+AssertionError: expected [] to have a length of 1 but got +0
+- Expected
++ Received
+- 1
++ 0
+Test Files  1 failed (1)
+Tests  1 failed | 46 skipped (47)
+EXIT_CODE=1
+```
+
+Le test exerce les quatre phrases sans donnée personnelle issues du Fait 1, à 89,999 s, avec `aecActive: false`, et attend le journal exact `[speech] dropped own echo`.
 
 ### Test vert
 
-_À compléter._
+Commandes et sorties :
+
+```text
+npx vitest run tests/sensory/speech-reaction.test.ts -t "drops the four measured robot phrases as own echo for 90 seconds without relying on AEC"
+Test Files  1 passed (1)
+Tests  1 passed | 46 skipped (47)
+EXIT_CODE=0
+
+npx vitest run tests/sensory/speech-reaction.test.ts tests/sensory/voice-activity.test.ts
+Test Files  2 passed (2)
+Tests  54 passed (54)
+EXIT_CODE=0
+```
+
+Implémentation : anneau mémoire de 8 phrases effectivement envoyées au TTS, fenêtre 90 s, normalisation casse/accents/ponctuation, détection par sous-chaîne ou couverture d'au moins 60 % des mots de la phrase prononcée. Le rejet intervient avant toute décision ou mémoire et journalise exactement `[speech] dropped own echo`, sans dépendre de l'AEC ni de l'état de playback.
 
 ### Commit
 
-_À compléter._
+Prévu : `fix(sensory): drop recent spoken phrases from STT`.
 
 ## Correctif 3 — porte de mouvement de l'œil
 

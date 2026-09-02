@@ -17,6 +17,7 @@ import {
 } from '../../src/sensory/speech-reaction.js';
 import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
+import { logger } from '../../src/utils/logger.js';
 import {
   _resetVoiceActivityForTests,
   beginSpeaking,
@@ -1106,6 +1107,50 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('drops the four measured robot phrases as own echo for 90 seconds without relying on AEC', async () => {
+    const phrases = [
+      'De te voir dans les yeux.',
+      'Tu veux que je te vois dans les yeux ?',
+      'Alors je reste là dans chaque message, chaque pause, chaque coucou.',
+      "Chaque coucou n'est pas un mot.",
+    ];
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-own-echo-'));
+    const heard: string[] = [];
+    let clock = 1_000;
+    _resetVoiceActivityForTests();
+    phrases.forEach((phrase, index) => noteSpokenText(phrase, clock + index));
+    clock = 90_999;
+    const info = vi.spyOn(logger, 'info');
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      for (let index = 0; index < phrases.length; index += 1) {
+        transcriptFinal(phrases[index]!, {
+          aecActive: false,
+          startedAtMs: clock,
+        });
+        await waitFor(() => {
+          const ownEchoLogs = info.mock.calls.filter(
+            ([message]) => message === '[speech] dropped own echo',
+          );
+          expect(ownEchoLogs).toHaveLength(index + 1);
+        });
+        clock += 1;
+      }
+      expect(heard).toEqual([]);
+    } finally {
+      unwire();
+      info.mockRestore();
+      _resetVoiceActivityForTests();
+    }
+  });
+
   it('suppresses a queued transcript captured during playback after the tail expires', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-delayed-playback-echo-'));
     let clock = 1_000;
@@ -1114,6 +1159,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     const heard: string[] = [];
     const recognized: string[] = [];
     const decisions: string[] = [];
+    const info = vi.spyOn(logger, 'info');
     _resetVoiceActivityForTests();
     const unwire = wireSpeechReaction({
       debounceMs: 0,
@@ -1148,13 +1194,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       // after generation/housekeeping, once the acoustic tail has expired.
       clock = 3_500;
       releaseFirst();
-      await vi.waitFor(async () => {
-        const raw = await readFile(
-          path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-          'utf8',
-        );
-        expect(raw).toContain('during_playback_echo');
-      });
+      await vi.waitFor(() => expect(info).toHaveBeenCalledWith('[speech] dropped own echo'));
 
       expect(heard).toEqual(['Lisa, explique le filtre anti-écho.']);
       expect(recognized).toEqual(['Lisa, explique le filtre anti-écho.']);
@@ -1167,6 +1207,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       releaseFirst();
       unwire();
+      info.mockRestore();
       _resetVoiceActivityForTests();
     }
   });

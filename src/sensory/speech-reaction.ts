@@ -1662,6 +1662,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
+        if (classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs) === 'echo') {
+          logger.info('[speech] dropped own echo');
+          turnCoordinator.transition(turnId, 'suppressed', {
+            suppressionReason: 'own_echo',
+            sttMs,
+            scene: 'assistant_playback',
+            sceneConfidence: 0.98,
+          });
+          return;
+        }
         const playbackCaptureKind = voiceResume?.kind === 'during_playback'
           || voiceResume?.kind === 'echo_tail'
           ? voiceResume.kind
