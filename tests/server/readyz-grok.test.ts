@@ -81,4 +81,23 @@ describe('/readyz grokApi', () => {
     expect(response.status).toBe(503);
     expect(response.body.ready).toBe(false);
   });
+
+  it('probes the configured OpenAI endpoint even when CODEBUDDY_PROVIDER is not grok', async () => {
+    delete process.env.GROK_API_KEY;
+    process.env.CODEBUDDY_PROVIDER = 'openai';
+    process.env.OPENAI_API_KEY = 'fake-openai-key';
+    const previousOpenAi = process.env.OPENAI_BASE_URL;
+    process.env.OPENAI_BASE_URL = 'http://probe.invalid/v1';
+    try {
+      const response = await getJson(port, '/readyz');
+      const checks = response.body.checks as Record<string, boolean>;
+      expect(checks.grokApi).toBe(false);
+      expect(response.status).toBe(503);
+      expect(response.body.ready).toBe(false);
+    } finally {
+      delete process.env.OPENAI_API_KEY;
+      if (previousOpenAi === undefined) delete process.env.OPENAI_BASE_URL;
+      else process.env.OPENAI_BASE_URL = previousOpenAi;
+    }
+  });
 });

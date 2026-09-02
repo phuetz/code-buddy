@@ -107,10 +107,12 @@ function getGrokModelsUrl(baseURL: string): string {
 async function probeGrokApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
   const provider = detectProviderFromEnv();
   const apiKey = process.env.GROK_API_KEY?.trim()
-    || (provider?.provider === 'grok' ? provider.apiKey : undefined);
+    || provider?.apiKey?.trim()
+    || undefined;
   if (!apiKey) return undefined;
   const baseURL = process.env.GROK_BASE_URL?.trim()
-    || (provider?.provider === 'grok' ? provider.baseURL : 'https://api.x.ai/v1');
+    || provider?.baseURL
+    || 'https://api.x.ai/v1';
   const apiStart = Date.now();
   try {
     const response = await fetch(getGrokModelsUrl(baseURL), {
