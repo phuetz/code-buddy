@@ -897,15 +897,20 @@ export function registerSkillsCommands(program: Command): void {
     .option('--out <dir>', 'package registry/output directory', path.join(process.cwd(), 'skill-exchange'))
     .option('--json', 'output JSON')
     .action(async (name: string, opts: { json?: boolean; out: string }) => {
-      const { exportSkill } = await import('../../skills/skill-exchange.js');
-      const manifest = exportSkill(name, expandHome(opts.out));
-      const packagePath = path.resolve(expandHome(opts.out), name);
-      if (opts.json) {
-        console.log(JSON.stringify({ manifest, path: packagePath }, null, 2));
-        return;
+      try {
+        const { exportSkill } = await import('../../skills/skill-exchange.js');
+        const manifest = exportSkill(name, expandHome(opts.out));
+        const packagePath = path.resolve(expandHome(opts.out), name);
+        if (opts.json) {
+          console.log(JSON.stringify({ manifest, path: packagePath }, null, 2));
+          return;
+        }
+        console.log(`Exported ${manifest.name} v${manifest.version} → ${packagePath}`);
+        console.log(`Author: ${manifest.author}`);
+      } catch (error) {
+        logger.error(`skills exchange export failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Exported ${manifest.name} v${manifest.version} → ${packagePath}`);
-      console.log(`Author: ${manifest.author}`);
     });
 
   exchange
@@ -914,26 +919,31 @@ export function registerSkillsCommands(program: Command): void {
     .option('--trust', 'explicitly trust an unknown author key (TOFU)')
     .option('--json', 'output JSON')
     .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
-      const { installSkill } = await import('../../skills/skill-exchange.js');
-      const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
-      // Keep the exchange install visible to `skills delete`, which consumes
-      // the Skills Hub lockfile in a subsequent CLI process.
-      const { getSkillsHub } = await import('../../skills/hub.js');
-      getSkillsHub().registerLocalSkillFile(
-        result.name,
-        path.join(result.path, 'SKILL.md'),
-        'local',
-      );
-      // `installSkill` reloads the registry so the package is immediately
-      // visible. The CLI is a one-shot process, so close the reload watchers
-      // before returning to avoid keeping the command alive indefinitely.
-      const { getSkillRegistry } = await import('../../skills/registry.js');
-      getSkillRegistry().stopWatching();
-      if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
+      try {
+        const { installSkill } = await import('../../skills/skill-exchange.js');
+        const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
+        // Keep the exchange install visible to `skills delete`, which consumes
+        // the Skills Hub lockfile in a subsequent CLI process.
+        const { getSkillsHub } = await import('../../skills/hub.js');
+        getSkillsHub().registerLocalSkillFile(
+          result.name,
+          path.join(result.path, 'SKILL.md'),
+          'local',
+        );
+        // `installSkill` reloads the registry so the package is immediately
+        // visible. The CLI is a one-shot process, so close the reload watchers
+        // before returning to avoid keeping the command alive indefinitely.
+        const { getSkillRegistry } = await import('../../skills/registry.js');
+        getSkillRegistry().stopWatching();
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        console.log(`Installed ${result.name} v${result.version} from author ${result.author}`);
+      } catch (error) {
+        logger.error(`skills exchange install failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Installed ${result.name} v${result.version} from author ${result.author}`);
     });
 
   exchange
@@ -941,14 +951,19 @@ export function registerSkillsCommands(program: Command): void {
     .description('Verify a signed package without installing it')
     .option('--json', 'output JSON')
     .action(async (dir: string, opts: { json?: boolean }) => {
-      const { verifySkill } = await import('../../skills/skill-exchange.js');
-      const result = verifySkill(expandHome(dir));
-      if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
+      try {
+        const { verifySkill } = await import('../../skills/skill-exchange.js');
+        const result = verifySkill(expandHome(dir));
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        console.log(`Valid signed package: ${result.name} v${result.version}`);
+        console.log(`Author: ${result.author} (${result.trusted ? 'trusted' : 'not trusted'})`);
+      } catch (error) {
+        logger.error(`skills exchange verify failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Valid signed package: ${result.name} v${result.version}`);
-      console.log(`Author: ${result.author} (${result.trusted ? 'trusted' : 'not trusted'})`);
     });
 
   exchange

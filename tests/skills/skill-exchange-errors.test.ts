@@ -22,3 +22,21 @@ describe('R17 skill exchange errors', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Skill exchange is disabled'));
   });
 });
+
+describe('skill exchange business rejections', () => {
+  it.each(['export', 'install', 'verify'] as const)(
+    'reports a disabled exchange %s as a clean CLI error',
+    async (subcommand) => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const command = new Command();
+      command.exitOverride();
+      registerSkillsCommands(command);
+      const args = ['node', 'buddy', 'skills', 'exchange', subcommand, 'sample'];
+
+      await expect(command.parseAsync(args)).resolves.toBeDefined();
+
+      expect(process.exitCode).toBe(1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Skill exchange is disabled'));
+    },
+  );
+});
