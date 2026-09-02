@@ -599,7 +599,7 @@ const VALID_PAIRING_CHANNELS: ChannelType[] = [
  *   /pairing revoke <channel> <userId> - Revoke a paired sender
  *   /pairing status                    - Show pairing system status
  */
-export function handlePairing(args: string[]): CommandHandlerResult {
+export async function handlePairing(args: string[]): Promise<CommandHandlerResult> {
   const pairing = getDMPairing();
   const action = args[0]?.toLowerCase();
 
@@ -620,7 +620,7 @@ export function handlePairing(args: string[]): CommandHandlerResult {
         break;
       }
 
-      const sender = pairing.approve(channel, code);
+      const sender = await pairing.approve(channel, code);
       if (sender) {
         content = `Pairing approved!\n\nChannel: ${sender.channelType}\nUser: ${sender.displayName || sender.senderId}\nID: ${sender.senderId}`;
       } else {
@@ -673,7 +673,7 @@ export function handlePairing(args: string[]): CommandHandlerResult {
         break;
       }
 
-      const revoked = pairing.revoke(channel, userId);
+      const revoked = await pairing.revoke(channel, userId);
       if (revoked) {
         content = `Access revoked for ${userId} on ${channel}.`;
       } else {
