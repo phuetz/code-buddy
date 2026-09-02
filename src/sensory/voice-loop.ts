@@ -169,6 +169,8 @@ export interface VoiceStepOptions {
   delivery?: VoiceDeliveryProfile;
   /** Internal handoff: an outer reply router already applied relational drift for this turn. */
   relationshipEvolutionHandled?: boolean;
+  /** The previous spoken answer was cut; use it to continue without repeating it. */
+  interruption?: VoiceInterruptionContext;
   /**
    * Route-aware, transactional cognitive context. The caller is responsible
    * for enforcing the route's real egress clearance before returning a lease.
@@ -237,6 +239,14 @@ export interface VoiceCognitiveContextLease {
   release(): void;
 }
 
+export interface VoiceInterruptionContext {
+  interruptedTurnId: string;
+  /** One-based phrase number active when Lisa was cut. */
+  phraseNumber: number;
+  /** Only the phrases that fully reached the player; bounded and ephemeral. */
+  spokenText: string;
+}
+
 /** Think: turn what was heard into a short spoken reply ('' → stay silent). */
 export type ReplyFn = (heard: string, opts?: VoiceStepOptions) => Promise<string>;
 /**
@@ -274,6 +284,8 @@ export type StreamSpeakFn = ((text: string, opts?: StreamSpeakOptions) => Promis
 
 export interface VoiceReplyTiming {
   mode: 'streamed' | 'blocking' | 'silent' | 'interrupted' | 'failed';
+  /** One-based phrase number that was active when barge-in interrupted playback. */
+  interruptedAtSentence?: number;
   /** Delay until routing, persona and prompt augmentation are ready for the provider. */
   promptReadyMs?: number;
   /** True provider TTFT, measured before any semantic buffering or safety release. */
@@ -1444,6 +1456,47 @@ export interface SpokenPromptAugmentationOptions {
   env?: NodeJS.ProcessEnv;
   /** Injectable latency-bounded relational snapshot. */
   relationalContext?: () => Promise<string>;
+  /** Ephemeral context from the previous interrupted spoken turn. */
+  interruption?: VoiceInterruptionContext;
+}
+
+function normalizedVoiceInterruptionText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Only continuation/correction requests deserve an explicit interruption acknowledgement. */
+export function shouldAcknowledgeVoiceInterruption(heard: string): boolean {
+  const normalized = normalizedVoiceInterruptionText(heard);
+  return /^(continue|reprends|ou en etais tu|tu m as coupee|tu m as interrompue|attends|non attends|je voulais dire|je disais|non je)/.test(normalized);
+}
+
+export function buildVoiceInterruptionGuidance(
+  heard: string,
+  interruption?: VoiceInterruptionContext,
+): string {
+  if (!interruption) return '';
+  const spoken = interruption.spokenText.trim().slice(0, 1_000);
+  const lines = [
+    '<interrupted_voice_turn>',
+    `Ta réponse précédente a été interrompue pendant la phrase ${Math.max(1, Math.round(interruption.phraseNumber))}.`,
+    spoken
+      ? `Les phrases déjà entendues étaient : « ${spoken} ».`
+      : 'Aucune phrase complète de cette réponse n’a été confirmée comme entièrement entendue.',
+    'Ne répète pas les phrases déjà entendues : reprends directement avec la prochaine idée utile.',
+  ];
+  if (shouldAcknowledgeVoiceInterruption(heard)) {
+    lines.push('Si c’est pertinent pour cette demande, reconnais brièvement : « Tu m\'as coupée, je disais… » puis poursuis sans recommencer.');
+  } else {
+    lines.push('N’évoque pas l’interruption si la nouvelle demande porte sur un autre sujet.');
+  }
+  lines.push('</interrupted_voice_turn>');
+  return lines.join('\n');
 }
 
 /** Explicit override, otherwise expressive text follows the existing relational opt-in. */
@@ -1618,6 +1671,7 @@ export async function buildSpokenPromptAugmentation(
     emotionGuidance(emotion),
     isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
+    buildVoiceInterruptionGuidance(heard, options.interruption),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
       : '',
@@ -1683,7 +1737,9 @@ async function prepareSpokenTurn(
     import('../codebuddy/client.js'),
     import('../personas/persona-manager.js').then((m) => m.getActivePersonaVoiceAsync()),
     resolvedRoute ?? resolveVoiceModel(heard, { history }),
-    buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery),
+    buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery, {
+      ...(replyOpts?.interruption ? { interruption: replyOpts.interruption } : {}),
+    }),
   ]);
   const basePrompt = personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT;
   // Re-anchor xAI/Lisa character + progressive intimacy on every spoken turn
@@ -1861,7 +1917,11 @@ export async function defaultSpokenPrefix(
       history,
       undefined,
       delivery,
-      { signal: replyOpts?.signal, delivery },
+      {
+        signal: replyOpts?.signal,
+        delivery,
+        ...(replyOpts?.interruption ? { interruption: replyOpts.interruption } : {}),
+      },
     );
     const { CodeBuddyClient, route } = prepared;
     replyOpts?.onProviderResolved?.(route);
@@ -3013,6 +3073,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const visualConsent = new VisualConsentGate();
   const turnCoordinator = getVoiceTurnCoordinator();
   const env = options.env ?? process.env;
+  const interruptionContextEnabled = env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
   const shortSegmentCache = new Map<string, Uint8Array>();
   let shortSegmentTempSequence = 0;
 
@@ -3042,10 +3103,13 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   // of letting the newest turn overwrite the previous controller.
   const activeAborts = new Map<string, AbortController>();
   let latestTurnId: string | undefined;
+  let pendingInterruption: VoiceInterruptionContext | undefined;
 
   const handler = async (heard: string, context?: VoiceTurnContext): Promise<void> => {
     const controller = new AbortController();
     const voiceTurnId = context?.turnId ?? createAvatarTurnId();
+    const interruption = pendingInterruption;
+    pendingInterruption = undefined;
     activeAborts.set(voiceTurnId, controller);
     latestTurnId = voiceTurnId;
     const { signal } = controller;
@@ -3104,6 +3168,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       }
     };
     let streamFallbackSegments = 0;
+    let interruptedAtSentence: number | undefined;
     let streamRouteRemote = false;
     let semanticCorrectionPromise: Promise<string> | undefined;
     let mode: VoiceReplyTiming['mode'] = 'silent';
@@ -3499,6 +3564,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               const candidate = await spokenPrefixFn(heard, {
                 signal,
                 delivery,
+                ...(interruption ? { interruption } : {}),
                 onReplyTimingPhase: markReplyTimingPhase,
                 onSpokenPrefixTelemetry: noteSpokenPrefixCause,
               });
@@ -3527,6 +3593,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             for await (const delta of streamFn(heard, {
               signal,
               delivery,
+              ...(interruption ? { interruption } : {}),
               ...(spokenPrefix ? { spokenPrefix } : {}),
               onReplyTimingPhase: markReplyTimingPhase,
               onProviderResolved: (route) => {
@@ -3609,6 +3676,14 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           });
           streamFallbackSegments = result.fallbackSegments ?? 0;
           if (signal.aborted) {
+            if (interruptionContextEnabled) {
+              interruptedAtSentence = result.interruptedSentence ?? Math.max(1, result.sentences.length + 1);
+              pendingInterruption = {
+                interruptedTurnId: voiceTurnId,
+                phraseNumber: interruptedAtSentence,
+                spokenText: result.spoken,
+              };
+            }
             // Preserve only sentences whose playback completed before the
             // interruption. The partial in-flight segment is deliberately
             // absent from `result.spoken` and must not enter continuity.
@@ -3662,6 +3737,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         rawReply = await replyFn(heard, {
           signal,
           delivery,
+          ...(interruption ? { interruption } : {}),
           onReplyTimingPhase: markReplyTimingPhase,
           onSemanticCorrection: (correction) => {
             semanticCorrectionPromise = correction.catch(() => '');
@@ -3786,6 +3862,14 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
       // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
       // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
+      if (signal.aborted && interruptionContextEnabled) {
+        interruptedAtSentence ??= 1;
+        pendingInterruption ??= {
+          interruptedTurnId: voiceTurnId,
+          phraseNumber: interruptedAtSentence,
+          spokenText: '',
+        };
+      }
       if (signal.aborted) {
         mode = 'interrupted';
         spoke = false;
@@ -3798,6 +3882,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       if (signal.aborted) {
         turnCoordinator.transition(avatarTurnId, 'interrupted', {
           suppressionReason: 'barge-in',
+          ...(interruptedAtSentence !== undefined ? { interruptedAtSentence } : {}),
           totalMs: Date.now() - startedAt,
         });
         emitAvatarEvent({
@@ -3845,6 +3930,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         continuationSemanticReviewCompleteMs !== undefined;
       const timing: VoiceReplyTiming = {
         mode,
+        ...(interruptedAtSentence !== undefined ? { interruptedAtSentence } : {}),
         totalMs: Date.now() - startedAt,
         spoke,
         delivery,

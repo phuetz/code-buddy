@@ -43,6 +43,8 @@ export interface VoiceTurnTransitionDetails {
   firstAudioMs?: number;
   totalMs?: number;
   wordCount?: number;
+  /** One-based phrase that was active when a spoken turn was interrupted. */
+  interruptedAtSentence?: number;
   spoke?: boolean;
   aecActive?: boolean;
   errorCategory?: 'capture' | 'stt' | 'decision' | 'generation' | 'synthesis' | 'playback' | 'unknown';
@@ -200,6 +202,9 @@ function sanitizeDetails(details: VoiceTurnTransitionDetails): VoiceTurnTransiti
       : {}),
     ...(finiteNonNegative(details.wordCount) !== undefined
       ? { wordCount: finiteNonNegative(details.wordCount) }
+      : {}),
+    ...(finiteNonNegative(details.interruptedAtSentence) !== undefined
+      ? { interruptedAtSentence: finiteNonNegative(details.interruptedAtSentence) }
       : {}),
     ...(details.spoke !== undefined ? { spoke: details.spoke } : {}),
     ...(details.aecActive !== undefined ? { aecActive: details.aecActive } : {}),

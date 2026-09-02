@@ -319,6 +319,11 @@ class AsyncQueue<T> {
     return rest;
   }
 
+  /** Drop queued items immediately when an abort races a producer. */
+  clear(): void {
+    this.items = [];
+  }
+
   private wake(): void {
     const w = this.waiters;
     this.waiters = [];
@@ -364,6 +369,8 @@ export interface StreamToSpeechResult {
   spoken: string;
   /** True when the turn was interrupted mid-way. */
   aborted: boolean;
+  /** One-based phrase number that was in flight when the turn was interrupted. */
+  interruptedSentence?: number;
   /** Each sentence that was spoken, in order. */
   sentences: string[];
   /** Segments recovered through WAV synthesis after the native audio stream failed. */
@@ -406,6 +413,8 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const onAbort = (): void => {
     sentenceQ.close();
     wavQ.close();
+    sentenceQ.clear();
+    wavQ.clear();
   };
   if (signal) {
     if (signal.aborted) onAbort();
@@ -416,6 +425,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const producer = (async (): Promise<void> => {
     const assembler = new SentenceAssembler(cap);
     const enqueue = (raw: string): void => {
+      if (stop()) return;
       const clean = sanitize(raw);
       if (clean) sentenceQ.push(clean);
     };
@@ -552,6 +562,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
       played,
       spoken: spoken.join(' '),
       aborted: stop(),
+      ...(stop() ? { interruptedSentence: Math.max(1, spoken.length + 1) } : {}),
       sentences: [...spoken],
       ...(fallbackSegments > 0 ? { fallbackSegments } : {}),
     };
@@ -625,5 +636,11 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
     await unlink(wav);
   }
 
-  return { played, spoken: spoken.join(' '), aborted: stop(), sentences: [...spoken] };
+  return {
+    played,
+    spoken: spoken.join(' '),
+    aborted: stop(),
+    ...(stop() ? { interruptedSentence: Math.max(1, spoken.length + 1) } : {}),
+    sentences: [...spoken],
+  };
 }

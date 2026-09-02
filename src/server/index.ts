@@ -1783,6 +1783,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 // MCP set. It is never published, remembered, or treated as a
                 // committed request; only transcript_final can enter cognition.
                 onSpeechPartial: ({ text }) => replyFn.prewarm(text),
+                onBargeInStart: (_payload, interruptedTurnId) => {
+                  reply.interrupt(interruptedTurnId);
+                  if (interruptedTurnId) {
+                    embodiedCognition.mesh.cancelCorrelation(interruptedTurnId);
+                  }
+                },
                 onBargeIn: (_text, interruptedTurnId) => {
                   reply.interrupt(interruptedTurnId);
                   if (interruptedTurnId) {
