@@ -7,9 +7,9 @@
  * file…" to point Cowork at it. The main process validates magic bytes
  * + size and copies it to <userData>/models/buffalo_s.onnx.
  *
- * The dialog auto-mounts (App.tsx renders it unconditionally) and
- * decides for itself whether to show: it polls `presence.hasModel()`
- * on mount and only renders if `installed: false`.
+ * The dialog is mounted from App.tsx but stays hidden until a trigger
+ * sets `showModelInstallDialog`. First-run chat must not be blocked by a
+ * face-recognition model the user never asked for.
  *
  * Trigger surfaces:
  *   - User clicks "Enroll" → EnrollmentDialog tries presence.encode →
@@ -103,18 +103,9 @@ export function ModelInstallDialog() {
     };
   }, []);
 
-  // The dialog stays invisible when the model is already installed AND
-  // the user hasn't explicitly opened it. Once the explicit open flag
-  // flips on, we always show — even with the model present — so the
-  // user can replace the file or read the install instructions.
-  if (installed === true && !showModelInstallDialog) {
-    return null;
-  }
-  if (installed === null && !showModelInstallDialog) {
-    // First check still in flight, model presence unknown — stay quiet.
-    return null;
-  }
-  if (installed === false && !showModelInstallDialog && dismissedForSession) {
+  // Never auto-popup. A missing Buffalo_S model is optional companion
+  // vision, not a prerequisite for chat / settings / onboarding.
+  if (!showModelInstallDialog) {
     return null;
   }
 
