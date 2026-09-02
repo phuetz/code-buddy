@@ -20,6 +20,7 @@
 #   local  ollama sur la machine        — aucun quota, aucun réseau
 #   agy    Gemini (Antigravity)         — abonnement AI Ultra ; ⚠️ PLAFOND DUR
 #                                         de ~305 s : découper les missions
+#   groq / cerebras paliers gratuits directs — GROQ_MODELE / CEREBRAS_MODELE
 #   omniroute passerelle locale OmniRoute — des centaines de modèles, un endpoint ;
 #                                         OMNIROUTE_MODELE=<id> (défaut auto/best-free)
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
@@ -197,6 +198,21 @@ case "$MOTEUR" in
     # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  groq|cerebras)
+    # Paliers GRATUITS directs (clés régénérées le 02/09/2026, dans ~/.codebuddy/media.env) :
+    #   groq     ~1000 req/j, 483 tok/s — GROQ_MODELE (défaut qwen/qwen3.8-27b ; Llama 3.3 retiré du catalogue Groq)
+    #   cerebras 1581 tok/s            — CEREBRAS_MODELE (défaut gpt-oss-120b)
+    # Lignées différentes des abonnements (Llama, GLM, gpt-oss) : utiles en vérification croisée.
+    # Prompts → fournisseur tiers : rien de confidentiel.
+    UPPER=$(echo "$MOTEUR" | tr a-z A-Z)
+    PKEY=$(grep -E "^(export )?${UPPER}_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$PKEY" ] || { echo "${UPPER}_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    if [ "$MOTEUR" = groq ]; then PMODEL=${GROQ_MODELE:-qwen/qwen3.8-27b}; else PMODEL=${CEREBRAS_MODELE:-gpt-oss-120b}; fi
+    (cd "$DEPOT" && env "CODEBUDDY_PROVIDER=$MOTEUR" "${UPPER}_API_KEY=$PKEY" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "$PMODEL" \
        --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   omniroute)
