@@ -16,6 +16,23 @@ import { logger } from '../utils/logger.js';
 import type { Perception } from './reactions.js';
 
 const SALIENT_THRESHOLD = 128;
+export const DARK_SCENE_SALIENCE = 64;
+
+/** A scene description from an effectively black, nearly motionless frame is not reliable enough
+ * to become durable memory. Keep the event in the short-term stream for diagnosis, but do not let
+ * a local vision model's guess become a remembered fact. */
+export function isDarkScenePerception(
+  perception: Pick<Perception, 'modality' | 'kind' | 'payload'>,
+): boolean {
+  if (perception.modality !== 'vision' || perception.kind !== 'scene_described') return false;
+  const payload = perception.payload;
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false;
+  const values = payload as Record<string, unknown>;
+  const meanLuma = values.meanLuma;
+  if (typeof meanLuma === 'number' && Number.isFinite(meanLuma)) return meanLuma < 12;
+  const motionScore = values.motionScore;
+  return typeof motionScore === 'number' && Number.isFinite(motionScore) && motionScore < 0.05;
+}
 
 export interface DreamSummary {
   dreamedAt: number;
@@ -40,7 +57,7 @@ export function consolidate(perceptions: Perception[], now: number): DreamSummar
   for (const p of perceptions) {
     const key = `${p.modality}/${p.kind}`;
     byKind[key] = (byKind[key] ?? 0) + 1;
-    if ((p.salience ?? 0) >= SALIENT_THRESHOLD) {
+    if ((p.salience ?? 0) >= SALIENT_THRESHOLD && !isDarkScenePerception(p)) {
       salient.push({ modality: p.modality, kind: p.kind, salience: p.salience, tsMs: p.tsMs });
     }
     const load = (p.payload as { load1?: unknown } | undefined)?.load1;

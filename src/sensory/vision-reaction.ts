@@ -22,6 +22,7 @@ import {
   telegramVisionPhotoPath,
 } from './camera-keyframe-policy.js';
 import { redactVisionDescriptionForEgress } from './vision-description-safety.js';
+import { DARK_SCENE_SALIENCE, isDarkScenePerception } from './dreaming.js';
 
 /** Varied prefixes for the motion Telegram caption (the `${desc}` suffix already
  *  varies with the scene) so the notification isn't the exact same opening
@@ -195,6 +196,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
       imagePath?: string;
       camera?: string;
       meanLuma?: unknown;
+      motionScore?: unknown;
     };
     const meanLuma = typeof payload.meanLuma === 'number' && Number.isFinite(payload.meanLuma)
       ? payload.meanLuma
@@ -239,6 +241,15 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
         }
         const alertDescription = redactVisionDescriptionForEgress(desc, 900) ?? '(description indisponible)';
         const frame = await safeCameraKeyframePath(res.imagePath ?? suppliedFrame);
+        const scenePayload = {
+          meanLuma: payload.meanLuma,
+          motionScore: payload.motionScore,
+        };
+        const darkScene = isDarkScenePerception({
+          modality: 'vision',
+          kind: 'scene_described',
+          payload: scenePayload,
+        });
         // Publish perception before optional journaling/notification work. A
         // filesystem or channel failure must not make Lisa cognitively blind.
         const describedAt = now();
@@ -248,11 +259,13 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
             modality: 'vision',
             kind: 'scene_described',
             tsMs: describedAt,
-            salience: 150,
+            salience: darkScene ? DARK_SCENE_SALIENCE : 150,
             payload: {
               camera: payload.camera,
               description: desc,
               confidence: 0.9,
+              ...(payload.meanLuma !== undefined ? { meanLuma: payload.meanLuma } : {}),
+              ...(payload.motionScore !== undefined ? { motionScore: payload.motionScore } : {}),
             },
           },
         });
@@ -263,7 +276,13 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
             source: 'sensory_motion_reaction',
             summary: `Motion → ${desc}`,
             confidence: 0.9,
-            payload: { description: desc, imagePath: frame, camera: payload.camera },
+            payload: {
+              description: desc,
+              imagePath: frame,
+              camera: payload.camera,
+              ...(payload.meanLuma !== undefined ? { meanLuma: payload.meanLuma } : {}),
+              ...(payload.motionScore !== undefined ? { motionScore: payload.motionScore } : {}),
+            },
             tags: ['motion', 'camera', 'vision'],
           },
           options.cwd ? { cwd: options.cwd } : {},

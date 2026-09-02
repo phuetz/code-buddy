@@ -6,7 +6,7 @@ import { getSensoryMemory } from '../../src/sensory/sensory-memory.js';
 import { runDreamingPass } from '../../src/sensory/dreaming.js';
 import { getMemoryManager, resetMemoryManagerForTests } from '../../src/memory/persistent-memory.js';
 
-describe('Mission SENSE2 — Trou 5 : Promotion des perceptions inventées du noir en mémoire permanente (CODEBUDDY_MEMORY.md)', () => {
+describe('Mission SENSE3 — Trou 5 : Promotion des perceptions inventées du noir en mémoire permanente (CODEBUDDY_MEMORY.md)', () => {
   let tmp: string;
 
   beforeEach(async () => {
@@ -28,8 +28,7 @@ describe('Mission SENSE2 — Trou 5 : Promotion des perceptions inventées du no
       userMemoryPath: path.join(tmp, 'user-memory.md'),
     });
 
-    // Simuler l'injection faite par vision-reaction.ts (l. 217) après analyse moondream d'une image noire :
-    // vision-reaction.ts injecte systématiquement kind='scene_described' avec salience: 150
+    // Simuler l'injection faite par vision-reaction.ts après analyse moondream d'une image noire.
     getSensoryMemory().push({
       modality: 'vision',
       kind: 'scene_described',
@@ -40,6 +39,7 @@ describe('Mission SENSE2 — Trou 5 : Promotion des perceptions inventées du no
         camera: 'brio',
         description: 'feux d artifice dans un ciel nocturne', // hallucination moondream sur image noire
         confidence: 0.9,
+        motionScore: 0.03,
       },
     });
 
@@ -47,14 +47,17 @@ describe('Mission SENSE2 — Trou 5 : Promotion des perceptions inventées du no
     const summary = await runDreamingPass({ cwd: tmp, now: 105_000 });
     expect(summary).not.toBeNull();
 
-    // Lire le fichier CODEBUDDY_MEMORY.md généré
-    const memoryContent = await readFile(memoryPath, 'utf8');
+    // Une scène sombre ne déclenche aucune écriture de mémoire permanente.
+    let memoryContent = '';
+    try {
+      memoryContent = await readFile(memoryPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const dreamJournal = await readFile(path.join(tmp, '.codebuddy', 'companion', 'dreams.jsonl'), 'utf8');
 
-    // TROU PROUVÉ : dreaming.ts promeut systématiquement tout événement de salience >= 128 vers la mémoire persistante.
-    // L'hallucination "feux d artifice" (issue du bruit vidéo dans le noir) est promue dans CODEBUDDY_MEMORY.md !
-    // Pour préserver l'intégrité cognitive du robot, une hallucination d'obscurité ne devrait pas être promue.
-    // Dans le code actuel, memoryContent contient "vision/scene_described" sous dream:recent,
-    // donc cette assertion échoue en ROUGE.
+    // Pour préserver l'intégrité cognitive du robot, une hallucination d'obscurité ne doit pas être promue.
+    expect(dreamJournal).toContain('vision/scene_described');
     expect(memoryContent).not.toContain('vision/scene_described');
   });
 });

@@ -65,7 +65,15 @@ Installation nécessaire au rejeu : `npm ci --ignore-scripts` dans le clone, exi
 - Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-voice-collision.test.ts` → exit 1, `1 test | 1 failed`, l’accueil appelait `greet` pendant `beginSpeaking`.
 - Correctif : après l’accord de la politique Maison et avant toute claim du conducteur, `semantic-vision-reaction` vérifie `isSpeaking(t)`. Une arrivée concurrente est abandonnée et journalisée (`[vision] arrival greeting skipped: voice active`) ; elle n’est pas empilée dans la bouche.
 - Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-arrival-voice-collision.test.ts tests/sensory/voice-activity.test.ts tests/sensory/arrival-greeting.test.ts` → `Test Files 3 passed (3)`, `Tests 14 passed (14)` ; `git diff --check` vert.
-- Commit à créer : `fix(sensory): skip arrival greeting during active speech`.
+- Commit réalisé : `d97d8983e` — `fix(sensory): skip arrival greeting during active speech`.
+
+### Trou 5 — perceptions visuelles sombres et mémoire de rêve
+
+- Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-dreaming-hallucination-memory.test.ts` → exit 1, `1 test | 1 failed`, `vision/scene_described` était promu sous `dream:recent`.
+- Correctif : `isDarkScenePerception` reconnaît `meanLuma < 12`, ou l’absence de `meanLuma` avec `motionScore < 0.05`. `vision-reaction` transporte ces mesures et émet alors une salience `64` (donc `< 128`). `dreaming` exclut ces scènes de `salient` et les laisse dans `byKind`/`dreams.jsonl`, qui constitue la trace courte auditable.
+- Le test de trou encode désormais explicitement le cas contractuel `motionScore: 0.03`, accepte l’absence normale du fichier mémoire et vérifie la présence de la trace dans le journal de rêve.
+- Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-dreaming-hallucination-memory.test.ts tests/sensory/dreaming.test.ts tests/sensory/vision-reaction.test.ts` → `Test Files 3 passed (3)`, `Tests 18 passed (18)`.
+- Commit à créer : `fix(sensory): quarantine dark vision perceptions from dream memory`.
 
 ## Commits
 
