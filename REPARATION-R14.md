@@ -87,4 +87,37 @@ Tests  26 passed (26)
 `npx tsc --noEmit -p tsconfig.json` exit 0  
 `npx eslint src/council/council-engine.ts src/council/types.ts src/commands/council.ts tests/council/council-engine.test.ts tests/commands/council-conductor.test.ts` exit 0
 
+### 3. `research` simple sans source — FAIT
+
+**Cause.** Le mode non-interactif (`timeout` ⇒ pas de TTY) appelle `runDirectResearch` : un seul `client.chat` **sans recherche web**, donc 8 060 octets et 0 URL. `--deep` a un pipeline search→scrape→citations.
+
+**Correctif.** La recherche simple consulte `WebSearchTool.searchStructured`, passe les URL au modèle, et ajoute toujours une section `## Sources` en fin de rapport (URL dédupliquées).
+
+**Tests rouge → vert**
+
+```
+# avant
+TypeError: appendDirectResearchSources is not a function
+TypeError: runDirectResearch is not a function
+Tests  4 failed
+
+# après
+npx vitest run tests/commands/research/direct-sources.test.ts tests/commands/research/deep-flag.test.ts tests/commands/research/integer-options.test.ts
+Test Files  3 passed (3)
+Tests  13 passed (13)
+```
+
+`npx tsc --noEmit -p tsconfig.json` exit 0  
+`npx eslint src/commands/research/index.ts tests/commands/research/direct-sources.test.ts` exit 0
+
+## Commits
+
+1. `080b19068` `fix(memory): injecter la mémoire collective par pertinence`
+2. `efb951398` `fix(council): honorer --models provider/modèle et expliquer un siège unique`
+3. `fix(research): conserver les URL consultées en recherche simple`
+
+## Ouvert
+
+Rien de bloquant dans le périmètre R14. Un `council` sans `--count 1` siège jusqu’à 3 IA (défaut) sur le pool de 37. Le mode `--deep` est inchangé.
+
 ---

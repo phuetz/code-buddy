@@ -31,37 +31,125 @@ import {
   writeWideResearchTextAtomicSync,
 } from '../../agent/wide-research-files.js';
 
-async function runDirectResearch(
-  topic: string,
+export interface DirectResearchSource {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface DirectResearchDeps {
+  timeoutMs: number;
+  search?: (query: string, k: number) => Promise<DirectResearchSource[]>;
+  chat?: (messages: Array<{ role: 'system' | 'user'; content: string }>) => Promise<string>;
+  apiKey?: string;
+  providerConfig?: { model?: string; baseURL?: string };
+}
+
+/** Append a trailing "## Sources" section with the URLs actually consulted. */
+export function appendDirectResearchSources(
+  report: string,
+  sources: DirectResearchSource[],
+): string {
+  const unique: Array<{ title: string; url: string }> = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    const url = (source.url || '').trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    unique.push({ title: (source.title || url).trim() || url, url });
+  }
+  const body = report.trimEnd();
+  if (/(?:^|\n)##\s+Sources\b/i.test(body)) {
+    const missing = unique.filter((s) => !body.includes(s.url));
+    if (missing.length === 0) return `${body}\n`;
+    const extra = missing.map((s, i) => `[${unique.length - missing.length + i + 1}] ${s.title} — ${s.url}`);
+    return `${body}\n\n${extra.join('\n')}\n`;
+  }
+  if (unique.length === 0) {
+    return `${body}\n\n## Sources\n\nAucune URL consultée.\n`;
+  }
+  const lines = unique.map((s, i) => `[${i + 1}] ${s.title} — ${s.url}`);
+  return `${body}\n\n## Sources\n\n${lines.join('\n')}\n`;
+}
+
+async function defaultDirectSearch(topic: string, k: number): Promise<DirectResearchSource[]> {
+  const { WebSearchTool } = await import('../../tools/web-search.js');
+  const hits = await new WebSearchTool().searchStructured(topic, { maxResults: k });
+  return hits
+    .filter((h) => typeof h.url === 'string' && h.url.trim().length > 0)
+    .map((h) => ({
+      title: (h.title || h.url).trim(),
+      url: h.url.trim(),
+      ...(h.snippet ? { snippet: h.snippet } : {}),
+    }));
+}
+
+async function defaultDirectChat(
+  messages: Array<{ role: 'system' | 'user'; content: string }>,
   apiKey: string,
   providerConfig: { model?: string; baseURL?: string },
-  timeoutMs: number
 ): Promise<string> {
   const { CodeBuddyClient } = await import('../../codebuddy/client.js');
   const client = new CodeBuddyClient(apiKey, providerConfig.model, providerConfig.baseURL);
-
-  const response = await Promise.race([
-    client.chat([
-      {
-        role: 'system',
-        content:
-          'You are a senior research analyst. Produce a concise but complete Markdown research report with: executive summary, key findings, practical recommendations, and known uncertainties.',
-      },
-      {
-        role: 'user',
-        content: `Research topic: ${topic}\n\nProvide a structured report in Markdown.`,
-      },
-    ]),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs)
-    ),
-  ]);
-
+  const response = await client.chat(messages);
   const content = response?.choices?.[0]?.message?.content;
-  if (typeof content === 'string' && content.trim().length > 0) {
-    return content;
+  return typeof content === 'string' ? content : '';
+}
+
+export async function runDirectResearch(topic: string, deps: DirectResearchDeps): Promise<string> {
+  const timeoutMs = deps.timeoutMs;
+  let sources: DirectResearchSource[] = [];
+  try {
+    const search = deps.search ?? ((query, k) => defaultDirectSearch(query, k));
+    const hits = await search(topic, 8);
+    sources = Array.isArray(hits) ? hits.filter((h) => h.url?.trim()) : [];
+  } catch {
+    sources = [];
   }
-  return `# Research Report: ${topic}\n\nNo content returned by provider.`;
+
+  const sourceBlock = sources.length
+    ? sources
+        .map((s, i) => {
+          const snippet = s.snippet ? `\n    ${s.snippet.trim().slice(0, 240)}` : '';
+          return `[${i + 1}] ${s.title} — ${s.url}${snippet}`;
+        })
+        .join('\n')
+    : '(no URLs retrieved)';
+
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    {
+      role: 'system',
+      content:
+        'You are a senior research analyst. Produce a concise but complete Markdown research report with: executive summary, key findings, practical recommendations, and known uncertainties. Cite the consulted sources as [n]. Do not invent URLs.',
+    },
+    {
+      role: 'user',
+      content:
+        `Research topic: ${topic}\n\nConsulted sources:\n${sourceBlock}\n\nProvide a structured report in Markdown.`,
+    },
+  ];
+
+  const chat =
+    deps.chat ??
+    ((msgs) => defaultDirectChat(msgs, deps.apiKey ?? '', deps.providerConfig ?? {}));
+
+  let body = '';
+  try {
+    body = await Promise.race([
+      chat(messages),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+  } catch (err) {
+    if (!body) {
+      body = `# Research Report: ${topic}\n\n${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+  if (!body.trim()) {
+    body = `# Research Report: ${topic}\n\nNo content returned by provider.`;
+  }
+  return appendDirectResearchSources(body, sources);
 }
 
 function detectReportPathFromArgv(argv: string[]): string | undefined {
@@ -309,7 +397,11 @@ export function createResearchCommand(): Command {
         console.log('ℹ️ Non-interactive mode detected, using direct research mode.');
         try {
           const report = redactWideResearchText(
-            await runDirectResearch(topic, apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000)),
+            await runDirectResearch(topic, {
+              timeoutMs: Math.min(overallTimeoutMs, 120_000),
+              apiKey,
+              providerConfig,
+            }),
             [apiKey],
           );
           const reportContent = [
