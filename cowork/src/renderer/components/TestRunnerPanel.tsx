@@ -374,7 +374,7 @@ const functionalCoverage: FunctionalCoverageItem[] = [
     surface: 'Chat view',
     level: 'real',
     status: 'passed',
-    proof: 'Chat IPC mock + appel reel ChatGPT gpt-5.5 via Electron',
+    proof: 'Chat local OpenAI-compatible via Electron + diagnostic ChatGPT payant opt-in separe',
     evidence: 'chat-flow.spec.ts, chat-real-gpt55.spec.ts',
   },
   {

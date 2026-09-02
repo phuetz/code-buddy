@@ -5,7 +5,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import electronBinary from 'electron';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,15 +18,14 @@ type CoworkFixtures = {
 
 export const test = base.extend<CoworkFixtures>({
   userDataDir: async ({}, use) => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'cowork-e2e-'));
+    const configuredRoot = process.env.COWORK_E2E_TMP_ROOT?.trim();
+    const tempRoot = configuredRoot ? path.resolve(configuredRoot) : os.tmpdir();
+    mkdirSync(tempRoot, { recursive: true });
+    const tempDir = mkdtempSync(path.join(tempRoot, 'cowork-e2e-'));
     await use(tempDir);
     rmSync(tempDir, { recursive: true, force: true });
   },
   electronApp: async ({ userDataDir }, use) => {
-    const modelPath = path.join(userDataDir, 'models', 'buffalo_s.onnx');
-    mkdirSync(path.dirname(modelPath), { recursive: true });
-    writeFileSync(modelPath, '');
-
     const electronApp = await electron.launch({
       executablePath: electronBinary,
       cwd: process.cwd(),

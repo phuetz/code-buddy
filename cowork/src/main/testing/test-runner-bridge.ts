@@ -373,9 +373,9 @@ export class TestRunnerBridge extends EventEmitter {
         items,
         {
           id: 'code-buddy-cowork-ipc-chat-flow',
-          label: 'Cowork / IPC chat flow',
+          label: 'Cowork / local OpenAI chat flow',
           group: 'Chat',
-          description: 'Playwright demarre une session chat via IPC Electron puis continue la conversation',
+          description: 'Playwright demarre un serveur OpenAI-compatible local et verifie la bulle assistant rendue',
           command: 'npx',
           args: ['playwright', 'test', 'e2e/chat-flow.spec.ts', '--reporter=list', '--timeout=120000'],
           cwd: coworkDir,
