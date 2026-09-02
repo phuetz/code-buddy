@@ -48,7 +48,6 @@ const CLI_OPTIONS: CompletionOption[] = [
 const SLASH_COMMANDS: CompletionOption[] = [
   { name: '/help', description: 'Show help' },
   { name: '/clear', description: 'Clear chat history' },
-  { name: '/reset', description: 'Reset session' },
   { name: '/exit', description: 'Exit CLI' },
   { name: '/quit', description: 'Quit CLI' },
   { name: '/model', description: 'Change model' },
@@ -58,15 +57,13 @@ const SLASH_COMMANDS: CompletionOption[] = [
   { name: '/compact', description: 'Toggle compact mode' },
   { name: '/undo', description: 'Undo last change' },
   { name: '/redo', description: 'Redo last change' },
-  { name: '/checkpoint', description: 'Create checkpoint' },
+  { name: '/checkpoints', description: 'List checkpoints' },
   { name: '/restore', description: 'Restore checkpoint' },
   { name: '/theme', description: 'Change theme' },
   { name: '/config', description: 'Show configuration' },
   { name: '/tools', description: 'List available tools' },
   { name: '/status', description: 'Show status' },
   { name: '/think', description: 'Enable thinking mode' },
-  { name: '/megathink', description: 'Enable deep thinking' },
-  { name: '/ultrathink', description: 'Enable exhaustive thinking' },
 ];
 
 const MODELS = [

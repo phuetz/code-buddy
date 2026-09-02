@@ -230,17 +230,20 @@ const checkpointCommands: SlashCommand[] = [
   },
   {
     name: 'redo',
-    description: 'Redo previously undone changes (restore forward in ghost snapshot timeline)',
+    description: 'Redo previously undone changes from checkpoint history',
     prompt: '__REDO__',
     filePath: '',
     isBuiltin: true
   },
   {
     name: 'timeline',
-    description: 'Show ghost snapshot timeline with current position',
+    description: 'Show the persisted session timeline (requires CODEBUDDY_TIMELINE=true)',
     prompt: '__TIMELINE__',
     filePath: '',
-    isBuiltin: true
+    isBuiltin: true,
+    arguments: [
+      { name: 'session-id', description: 'Session ID (current session by default)', required: false }
+    ]
   },
   {
     name: 'diff',
@@ -802,12 +805,12 @@ const memoryCommands: SlashCommand[] = [
   },
   {
     name: 'knowledge-graph',
-    description: 'View and manage the persistent knowledge graph (memU-style memory)',
+    description: 'View persistent knowledge graph stats and recall (requires CODEBUDDY_COLLECTIVE_MEMORY=true)',
     prompt: '__KNOWLEDGE_GRAPH__',
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'action', description: 'stats, entities [type], relations [entity], query <name>, decay, clear', required: false }
+      { name: 'action', description: 'stats, entities, recall <query>', required: false }
     ]
   }
 ];
@@ -896,13 +899,10 @@ const autonomyCommands: SlashCommand[] = [
   },
   {
     name: 'approvals',
-    description: 'Manage approval pattern learning (patterns, clear, threshold)',
+    description: 'Show approval flags, rules, and learned patterns (read-only)',
     prompt: '__APPROVALS__',
     filePath: '',
-    isBuiltin: true,
-    arguments: [
-      { name: 'action', description: 'patterns (list), clear (reset all), threshold <n>', required: false }
-    ]
+    isBuiltin: true
   },
   {
     name: 'heal',
@@ -914,16 +914,6 @@ const autonomyCommands: SlashCommand[] = [
       { name: 'action', description: 'on, off, status, or stats', required: false }
     ]
   },
-  {
-    name: 'batch-review',
-    description: 'Toggle batch review mode for multi-file changes (consolidate approve/reject)',
-    prompt: '__BATCH_REVIEW__',
-    filePath: '',
-    isBuiltin: true,
-    arguments: [
-      { name: 'action', description: 'on, off, status, show (view pending)', required: false }
-    ]
-  }
 ];
 
 // ============================================================================
