@@ -38,6 +38,8 @@ Commandes exécutées avec `HOME` et `TMPDIR` redirigés vers `.sense3-runtime/`
 
 Installation nécessaire au rejeu : `npm ci --ignore-scripts` dans le clone, exit 0 (`added 1848 packages`; npm signale 48 vulnérabilités de dépendances existantes, aucune commande d’audit correctif lancée). Aucun service ni fichier hors clone touché.
 
+Vérification Rust intermédiaire : `cargo` sans toolchain explicite a refusé de démarrer (`rustup` n’avait pas de défaut exploitable dans l’environnement redirigé) ; la commande finale a utilisé le toolchain déjà listé `stable` explicitement.
+
 ### Trou 1 — ambient-in-window et écho propre
 
 - Correctif : `respond-decider.ts` ne classe plus une question nue ou un préfixe de continuation comme suivi dirigé ; une demande explicite, une adresse par nom et les réponses de salutation/check-in étroites restent admises. L’extension de fenêtre ne se fait plus sur le simple cas ambient. `speech-reaction.ts` compare désormais toute transcription à la dernière phrase vocalisée, supprime un recouvrement d’au moins 60 % et journalise exactement `[speech] dropped own echo`. `voice-activity.ts` retient seulement la référence la plus récente et utilise le nombre de mots de cette phrase comme dénominateur.
@@ -73,7 +75,17 @@ Installation nécessaire au rejeu : `npm ci --ignore-scripts` dans le clone, exi
 - Correctif : `isDarkScenePerception` reconnaît `meanLuma < 12`, ou l’absence de `meanLuma` avec `motionScore < 0.05`. `vision-reaction` transporte ces mesures et émet alors une salience `64` (donc `< 128`). `dreaming` exclut ces scènes de `salient` et les laisse dans `byKind`/`dreams.jsonl`, qui constitue la trace courte auditable.
 - Le test de trou encode désormais explicitement le cas contractuel `motionScore: 0.03`, accepte l’absence normale du fichier mémoire et vérifie la présence de la trace dans le journal de rêve.
 - Vert local : `./node_modules/.bin/vitest run tests/sensory/hole-dreaming-hallucination-memory.test.ts tests/sensory/dreaming.test.ts tests/sensory/vision-reaction.test.ts` → `Test Files 3 passed (3)`, `Tests 18 passed (18)`.
-- Commit à créer : `fix(sensory): quarantine dark vision perceptions from dream memory`.
+- Commit réalisé : `6dec31b1a` — `fix(sensory): quarantine dark vision perceptions from dream memory`.
+
+### Trou 6 — VAD sous bruit et plafond d’utterance
+
+- Rouge local : `./node_modules/.bin/vitest run tests/sensory/hole-vad-noise-cap.test.ts` → exit 1, `1 test | 1 failed`, le bruit `0.007` restait au-dessus de l’ancien `off = 0.006` et poussait jusqu’à `cap`.
+- Correctif TypeScript de preuve : le test simule le plancher adaptatif et `off = max(0.6 × on, 1.5 × noiseFloor)`, ce qui ferme sur silence après environ 500 ms.
+- Correctif Rust dans `buddy-sense/src/senses/live_audio.rs` : même formule recalculée depuis le plancher adaptatif ; le hard-cap remet le segmenter à l’état silencieux, efface le pré-roll et arme 1 s de réfractaire avant toute nouvelle ouverture. La raison de clôture `cap` reste exposée dans les métadonnées pour le diagnostic.
+- Tests Rust ajoutés pour la formule du plancher et le réfractaire ; les seuils fixes existants restent inchangés.
+- Vert TypeScript : `./node_modules/.bin/vitest run tests/sensory/hole-vad-noise-cap.test.ts` → `Test Files 1 passed (1)`, `Tests 1 passed (1)`.
+- Vert Rust ciblé : `RUSTUP_TOOLCHAIN=stable cargo test --manifest-path buddy-sense/Cargo.toml --features live-audio senses::live_audio` (caches et cible redirigées dans `.sense3-runtime/`) → `23 passed; 0 failed; 35 filtered out`.
+- Commit à créer : `fix(sensory): harden adaptive vad noise closure and cap recovery`.
 
 ## Commits
 

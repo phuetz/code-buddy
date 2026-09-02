@@ -80,7 +80,8 @@ const ADAPTIVE_NOISE_PERCENTILE: f64 = 0.10;
 /// Speech must stand clearly above the learned floor to open; it may then fall
 /// closer to that floor before closing (hysteresis preserves word endings).
 const ADAPTIVE_OPEN_MULTIPLIER: f64 = 2.0;
-const ADAPTIVE_CLOSE_MULTIPLIER: f64 = 1.2;
+const ADAPTIVE_CLOSE_NOISE_MULTIPLIER: f64 = 1.5;
+const CAP_REFRACTORY_MS: u64 = 1_000;
 const MAX_EFFECTIVE_THRESHOLD: f64 = 0.95;
 static DELEGATED_WAV_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -392,10 +393,7 @@ impl AdaptiveNoiseGate {
         let on = (noise_floor * ADAPTIVE_OPEN_MULTIPLIER)
             .max(self.threshold_floor)
             .min(MAX_EFFECTIVE_THRESHOLD);
-        let off = (noise_floor * ADAPTIVE_CLOSE_MULTIPLIER)
-            .max(self.threshold_floor * 0.6)
-            // Keep real hysteresis even when the open threshold is clamped.
-            .min(on * 0.9);
+        let off = (noise_floor * ADAPTIVE_CLOSE_NOISE_MULTIPLIER).max(on * 0.6);
         self.thresholds = GateThresholds {
             on,
             off,
@@ -471,6 +469,8 @@ pub struct Segmenter {
     speaking: bool,
     silence_run: u32,
     voiced_frames: u32,
+    cap_refractory_frames: u32,
+    refractory_frames: u32,
     buf: Vec<i16>,
     preroll: std::collections::VecDeque<Vec<i16>>,
 }
@@ -495,6 +495,8 @@ impl Segmenter {
             speaking: false,
             silence_run: 0,
             voiced_frames: 0,
+            cap_refractory_frames: per(CAP_REFRACTORY_MS),
+            refractory_frames: 0,
             buf: Vec::new(),
             preroll: std::collections::VecDeque::new(),
         }
@@ -502,6 +504,11 @@ impl Segmenter {
 
     /// Push one frame. Returns the finished utterance when one closes.
     fn push(&mut self, frame: &[i16]) -> Option<SegmentedUtterance> {
+        if self.refractory_frames > 0 {
+            self.refractory_frames -= 1;
+            self.preroll.clear();
+            return None;
+        }
         let rms = rms_i16(frame);
         if !self.speaking {
             // Keep a short rolling lead-in so the first phoneme isn't clipped.
@@ -540,6 +547,11 @@ impl Segmenter {
         let capped = frames >= self.max_frames;
         if ended || capped {
             let accepted = self.voiced_frames >= self.min_voiced_frames;
+            let reason = if ended {
+                EndpointReason::Silence
+            } else {
+                EndpointReason::Cap
+            };
             let mut utt = std::mem::take(&mut self.buf);
             // Remove confirmed endpoint silence before inference. Preserve a
             // short tail so word-final acoustics are not clipped.
@@ -552,12 +564,10 @@ impl Segmenter {
             self.silence_run = 0;
             self.voiced_frames = 0;
             self.preroll.clear();
+            if reason == EndpointReason::Cap {
+                self.refractory_frames = self.cap_refractory_frames;
+            }
             return if accepted {
-                let reason = if ended {
-                    EndpointReason::Silence
-                } else {
-                    EndpointReason::Cap
-                };
                 Some(SegmentedUtterance {
                     samples: utt,
                     endpoint: EndpointMetadata {
@@ -1727,6 +1737,20 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_close_threshold_uses_the_noise_floor_multiplier() {
+        let mut seg = Segmenter::with_adaptive(0.02, FRAME_MS, 100, true);
+        for frame in frames_of(3_000, 60) {
+            assert!(seg.push(&frame).is_none());
+        }
+        let thresholds = seg.effective_thresholds();
+        let noise_floor = thresholds
+            .noise_floor
+            .expect("calibration should learn a floor");
+        let expected = (thresholds.on * 0.6).max(noise_floor * ADAPTIVE_CLOSE_NOISE_MULTIPLIER);
+        assert!((thresholds.off - expected).abs() < 1e-12);
+    }
+
+    #[test]
     fn adaptive_continuous_noise_does_not_open_or_hit_the_cap() {
         let mut seg = Segmenter::with_adaptive(0.02, FRAME_MS, 100, true);
         // 20 seconds of steady amplified room noise: calibration learns it,
@@ -1800,6 +1824,37 @@ mod tests {
         assert_eq!(payload["adaptiveVad"], false);
         assert_eq!(payload["hardCap"], true);
         assert_eq!(payload["hardCapCount"], 1);
+    }
+
+    #[test]
+    fn hard_cap_resets_silence_and_arms_a_refractory_period() {
+        let mut seg = Segmenter::new(0.05, FRAME_MS, 100);
+        let loud = frames_of(12_000, 1);
+        let mut capped = false;
+        for _ in 0..(MAX_UTTERANCE_MS / FRAME_MS) {
+            if seg.push(&loud[0]).is_some() {
+                capped = true;
+                break;
+            }
+        }
+        assert!(capped, "continuous speech should reach the hard cap");
+        assert!(
+            !seg.is_speaking(),
+            "the cap must return the segmenter to silence"
+        );
+
+        for _ in 0..(CAP_REFRACTORY_MS / FRAME_MS) {
+            assert!(
+                seg.push(&loud[0]).is_none(),
+                "refractory frames must be ignored"
+            );
+            assert!(!seg.is_speaking());
+        }
+        assert!(seg.push(&loud[0]).is_none());
+        assert!(
+            seg.is_speaking(),
+            "speech may reopen after the refractory period"
+        );
     }
 
     // End-to-end proof of the Phase-2 pipeline MINUS the ffmpeg mic capture:
