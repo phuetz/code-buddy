@@ -15,7 +15,7 @@ import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
 import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
 import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
-import { ContextManagerV2 } from "../../context/context-manager-v2.js";
+import { ContextCompactionError, ContextManagerV2 } from "../../context/context-manager-v2.js";
 import { TokenCounter } from "../../utils/token-counter.js";
 import { logger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../errors/index.js";
@@ -1484,9 +1484,24 @@ export class AgentExecutor {
             }
           : undefined;
 
-        const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
-          isolatedSharedHost,
-        });
+        let preparedMessages: CodeBuddyMessage[];
+        try {
+          preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
+            isolatedSharedHost,
+          });
+        } catch (error) {
+          if (error instanceof ContextCompactionError) {
+            logger.error('Context compaction refused the provider call', {
+              code: error.code,
+              tokens: error.tokens,
+              limit: error.limit,
+            });
+            yield { type: 'content', content: `\n\n${error.message}` };
+            yield { type: 'done' };
+            return;
+          }
+          throw error;
+        }
         preparedMessages.push(...contextBlocks);
         if (emotionalPresenceContext) {
           preparedMessages.push({
