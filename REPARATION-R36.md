@@ -302,15 +302,64 @@ undefined
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 54 passed, 2 failed (restants : trous 7 et 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_6]
+- **Commit** : `077c7ab22`
 
 ### Trou 7
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-missing-system.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-missing-system.test.ts > Mission G1 — Trou 7 : gestion défaillante des messages système > ContextCompressor doit préserver l'intégralité des messages système multiples lors de la compression
+AssertionError: ContextCompressor kept only 1 system messages out of 3; subsequent system prompts were discarded: expected 1 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 1
+
+ ❯ tests/context/revue-gemini-missing-system.test.ts:34:7
+     32|       survivingSystemMessages.length,
+     33|       `ContextCompressor kept only ${survivingSystemMessages.length} s…
+     34|     ).toBe(3);
+       |       ^
+     35|   });
+     36|
+
+ FAIL  tests/context/revue-gemini-missing-system.test.ts > Mission G1 — Trou 7 : gestion défaillante des messages système > ContextManagerV2 ne doit pas injecter un message rôle system dans une conversation qui n'en a aucun
+AssertionError: ContextManagerV2 injected synthetic role:system messages into a system-less conversation: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/context/revue-gemini-missing-system.test.ts:68:7
+     66|       systemMessagesInPrepared.length,
+     67|       'ContextManagerV2 injected synthetic role:system messages into a…
+     68|     ).toBe(0);
+       |       ^
+     69|
+     70|     manager.dispose();
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/compression.ts:63-87,117-122,188-216` : dans `ContextCompressor.compress` et `hardTruncate`, remplacer le filtrage conservant uniquement le premier message système par la préservation intégrale de tous les messages système (`filter(m => m.role === 'system')`) en maintenant leur ordre initial.
+  - `src/context/context-manager-v2.ts:787,830,897,930` : propager `hasOriginalSystem` depuis `prepareMessagesLegacy` à `applyStrategies` et `applySlidingWindow`, et n'émettre le marqueur synthétique `{ role: 'system', content: '[Previous ...]' }` que si la conversation comportait originellement des messages système.
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:50:30
+   Duration  1.58s (transform 868ms, setup 43ms, import 1.11s, tests 258ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/context/segment-archive.test.ts tests/context-manager-v2.test.ts` : 28 passed (2 files)
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 55 passed, 1 failed (restant : trou 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_7]
 
 ### Trou 8
 - **Fichier de test** : 

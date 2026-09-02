@@ -795,7 +795,12 @@ export class ContextManagerV2 {
     const conversationBudget = this.effectiveLimit - systemTokens;
 
     // Apply compression strategies against the room left after system prompts.
-    let optimizedMsgs = this.applyStrategies(conversationMsgs, lastUser, conversationBudget);
+    let optimizedMsgs = this.applyStrategies(
+      conversationMsgs,
+      lastUser,
+      conversationBudget,
+      systemMsgs.length > 0,
+    );
     if (lastUser && !preparedContainsLastUser(optimizedMsgs, lastUser)) {
       optimizedMsgs = this.reinsertLastUser(optimizedMsgs, conversationMsgs, lastUser);
     }
@@ -836,6 +841,7 @@ export class ContextManagerV2 {
     messages: CodeBuddyMessage[],
     pinnedLastUser?: CodeBuddyMessage,
     tokenLimit: number = this.effectiveLimit,
+    hasOriginalSystem: boolean = true,
   ): CodeBuddyMessage[] {
     let result = [...messages];
     let currentTokens = this.countTokens(result);
@@ -846,7 +852,7 @@ export class ContextManagerV2 {
 
     // Strategy 1: Keep only recent messages (Sliding Window)
     if (currentTokens > tokenLimit) {
-      result = this.applySlidingWindow(result);
+      result = this.applySlidingWindow(result, hasOriginalSystem);
       currentTokens = this.countTokens(result);
     }
 
@@ -902,7 +908,10 @@ export class ContextManagerV2 {
    * Strategy 1: Sliding Window - Keep N most recent messages
    * Uses ImportanceScorer to preserve high-importance messages outside the window.
    */
-  private applySlidingWindow(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+  private applySlidingWindow(
+    messages: CodeBuddyMessage[],
+    hasOriginalSystem: boolean = true,
+  ): CodeBuddyMessage[] {
     const keepCount = this.config.recentMessagesCount;
 
     if (messages.length <= keepCount) {
@@ -929,11 +938,11 @@ export class ContextManagerV2 {
       }
     }
 
-    // Create a summary marker for removed messages
+    // Create a summary marker for removed messages only if system messages originally existed
     const removedCount = messages.length - keepCount - importantOldMessages.length;
     const parts: CodeBuddyMessage[] = [];
 
-    if (removedCount > 0) {
+    if (removedCount > 0 && hasOriginalSystem) {
       const marker = `[Previous ${removedCount} messages summarized due to context limits]`;
       parts.push({
         role: 'system',
