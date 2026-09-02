@@ -278,7 +278,9 @@ export function resolveGoalsConfig(): GoalsConfig {
     judgeModel,
     plannerModel,
     judgeMaxTokens: positiveInt(raw.judgeMaxTokens, DEFAULT_JUDGE_MAX_TOKENS),
-    judgeTimeoutMs: positiveInt(raw.judgeTimeoutMs, DEFAULT_JUDGE_TIMEOUT_MS),
+    judgeTimeoutMs:
+      positiveInt(process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS, 0) ||
+      positiveInt(raw.judgeTimeoutMs, DEFAULT_JUDGE_TIMEOUT_MS),
   };
 }
 
