@@ -10,6 +10,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { toLegacyName } from '../tools/registry/tool-aliases.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -141,7 +142,7 @@ export class WritePolicy {
    * Returns true if the tool name is subject to write-policy gating.
    */
   isWriteTool(toolName: string): boolean {
-    return WRITE_TOOL_NAMES.has(toolName);
+    return WRITE_TOOL_NAMES.has(toLegacyName(toolName));
   }
 
   // ── Observability ─────────────────────────────────────────────

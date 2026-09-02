@@ -52,7 +52,7 @@ import {
   type ToolHookResult,
   type LLMProvider,
 } from "../tools/hooks/index.js";
-import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
+import { WritePolicy } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
 import { isToolNameAllowed } from "../utils/tool-filter.js";
 import { isToolVisibleForSurface } from '../config/feature-surface.js';
@@ -1000,7 +1000,8 @@ export class ToolHandler {
       toolName === 'meeting_notes' &&
       typeof args.output_prefix === 'string' &&
       args.output_prefix.trim().length > 0;
-    if (WRITE_TOOL_NAMES.has(toolName) && (toolName !== 'meeting_notes' || isConditionalMeetingWrite)) {
+    const writePolicy = WritePolicy.getInstance();
+    if (writePolicy.isWriteTool(toolName) && (toolName !== 'meeting_notes' || isConditionalMeetingWrite)) {
       const paths: string[] = [];
       if (typeof args.path === 'string') paths.push(args.path);
       if (typeof args.file_path === 'string') paths.push(args.file_path);
@@ -1013,7 +1014,7 @@ export class ToolHandler {
         }
       }
 
-      const gateResult = await WritePolicy.getInstance().gate(
+      const gateResult = await writePolicy.gate(
         { toolName, paths, description: args.description as string | undefined },
         this.currentRunId,
       );

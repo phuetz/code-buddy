@@ -3,6 +3,7 @@
  */
 
 import { WritePolicy, WRITE_TOOL_NAMES } from '../../src/security/write-policy.js';
+import { TOOL_ALIASES, toLegacyName } from '../../src/tools/registry/tool-aliases.js';
 
 describe('WritePolicy', () => {
   let policy: WritePolicy;
@@ -114,6 +115,17 @@ describe('WritePolicy', () => {
       expect(policy.isWriteTool('bash')).toBe(false);
       expect(policy.isWriteTool('view_file')).toBe(false);
       expect(policy.isWriteTool('search')).toBe(false);
+    });
+
+    it('should identify every alias targeting a write tool', () => {
+      const writeAliases = Object.entries(TOOL_ALIASES)
+        .filter(([, target]) => WRITE_TOOL_NAMES.has(target));
+
+      expect(writeAliases.length).toBeGreaterThan(0);
+      for (const [alias, target] of writeAliases) {
+        expect(toLegacyName(alias)).toBe(target);
+        expect(policy.isWriteTool(alias), alias).toBe(true);
+      }
     });
   });
 
