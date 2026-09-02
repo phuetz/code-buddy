@@ -9,6 +9,8 @@
  * - Model names
  */
 
+import { findRuntimeProvider } from '../providers/provider-catalog.js';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -66,13 +68,7 @@ const SLASH_COMMANDS: CompletionOption[] = [
   { name: '/think', description: 'Enable thinking mode' },
 ];
 
-const MODELS = [
-  'grok-3',
-  'grok-3-latest',
-  'grok-2-latest',
-  'grok-2-mini',
-  'grok-2-vision',
-];
+const MODELS = findRuntimeProvider('grok')?.models ?? [];
 
 const APPROVAL_MODES = ['read-only', 'auto', 'full-access'];
 
@@ -143,8 +139,7 @@ _codebuddy_completions() {
 }
 
 # Register completion
-complete -F _codebuddy_completions grok
-complete -F _codebuddy_completions code-buddy
+complete -F _codebuddy_completions buddy
 
 # Mode completion helper
 _codebuddy_mode_completions() {
@@ -184,7 +179,7 @@ function generateZshCompletion(): string {
   const modes = APPROVAL_MODES.join(' ');
   const themes = THEMES.join(' ');
 
-  return `#compdef grok code-buddy
+  return `#compdef buddy
 # Code Buddy Zsh Completion
 # Save to ~/.zsh/completions/_codebuddy or /usr/local/share/zsh/site-functions/_codebuddy
 
@@ -253,7 +248,7 @@ function generateFishCompletion(): string {
     const longOpt = o.name.startsWith('--') ? o.name.slice(2) : '';
     const desc = o.description.replace(/'/g, "\\'");
 
-    let line = "complete -c grok";
+    let line = "complete -c buddy";
     if (shortOpt) line += ` -s ${shortOpt}`;
     if (longOpt) line += ` -l ${longOpt}`;
     line += ` -d '${desc}'`;
@@ -269,11 +264,11 @@ function generateFishCompletion(): string {
 
   const slashCompletions = SLASH_COMMANDS.map((c) => {
     const desc = c.description.replace(/'/g, "\\'");
-    return `complete -c grok -n '__fish_codebuddy_in_prompt' -a '${c.name}' -d '${desc}'`;
+    return `complete -c buddy -n '__fish_codebuddy_in_prompt' -a '${c.name}' -d '${desc}'`;
   }).join('\n');
 
   return `# Code Buddy Fish Completion
-# Save to ~/.config/fish/completions/grok.fish
+# Save to ~/.config/fish/completions/buddy.fish
 
 # Helper function to detect if we're in the prompt context
 function __fish_codebuddy_in_prompt
@@ -283,8 +278,8 @@ function __fish_codebuddy_in_prompt
     string match -q '/*' -- "$current"
 end
 
-# Disable file completion by default for grok
-complete -c grok -f
+# Disable file completion by default for buddy
+complete -c buddy -f
 
 # CLI options
 ${optionCompletions}
@@ -293,16 +288,16 @@ ${optionCompletions}
 ${slashCompletions}
 
 # Model completion
-complete -c grok -n '__fish_seen_subcommand_from -m --model' -a '${MODELS.join(' ')}' -d 'Model'
+complete -c buddy -n '__fish_seen_subcommand_from -m --model' -a '${MODELS.join(' ')}' -d 'Model'
 
 # Mode completion
-complete -c grok -n '__fish_codebuddy_mode_arg' -a '${APPROVAL_MODES.join(' ')}' -d 'Mode'
+complete -c buddy -n '__fish_codebuddy_mode_arg' -a '${APPROVAL_MODES.join(' ')}' -d 'Mode'
 
 # Theme completion
-complete -c grok -n '__fish_codebuddy_theme_arg' -a '${THEMES.join(' ')}' -d 'Theme'
+complete -c buddy -n '__fish_codebuddy_theme_arg' -a '${THEMES.join(' ')}' -d 'Theme'
 
 # Default to file completion after options
-complete -c grok -n 'not __fish_codebuddy_in_prompt' -a '(__fish_complete_path)'
+complete -c buddy -n 'not __fish_codebuddy_in_prompt' -a '(__fish_complete_path)'
 `;
 }
 
@@ -326,7 +321,7 @@ function generatePowerShellCompletion(): string {
   const themes = THEMES.map(t => `'${t}'`).join(', ');
 
   return `# Code Buddy PowerShell Completion
-# Save to $PROFILE or run: grok --completions powershell | Out-File -Append $PROFILE
+# Save to $PROFILE or run: buddy --completions powershell | Out-File -Append $PROFILE
 
 $_codebuddyOptions = @(${CLI_OPTIONS.map(o => `'${o.name}'`).join(', ')})
 $_codebuddySlashCommands = @(${SLASH_COMMANDS.map(c => `'${c.name}'`).join(', ')})
@@ -350,7 +345,7 @@ ${slashCommandCompletions}
     }
 }
 
-Register-ArgumentCompleter -Native -CommandName grok, code-buddy -ScriptBlock {
+Register-ArgumentCompleter -Native -CommandName buddy -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
     $tokens = $commandAst.CommandElements
@@ -443,10 +438,10 @@ export function getInstallInstructions(shell: ShellType): string {
 # Bash completion installation:
 
 # Option 1: Add to ~/.bashrc
-echo 'source <(grok --completions bash)' >> ~/.bashrc
+echo 'source <(buddy --completions bash)' >> ~/.bashrc
 
 # Option 2: Save to completions directory
-grok --completions bash > /etc/bash_completion.d/grok
+buddy --completions bash > /etc/bash_completion.d/buddy
 
 # Apply immediately:
 source ~/.bashrc
@@ -457,11 +452,11 @@ source ~/.bashrc
 # Zsh completion installation:
 
 # Option 1: Add to ~/.zshrc
-echo 'source <(grok --completions zsh)' >> ~/.zshrc
+echo 'source <(buddy --completions zsh)' >> ~/.zshrc
 
 # Option 2: Save to completions directory
 mkdir -p ~/.zsh/completions
-grok --completions zsh > ~/.zsh/completions/_codebuddy
+buddy --completions zsh > ~/.zsh/completions/_codebuddy
 echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
 echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
 
@@ -475,10 +470,10 @@ source ~/.zshrc
 
 # Save to completions directory
 mkdir -p ~/.config/fish/completions
-grok --completions fish > ~/.config/fish/completions/grok.fish
+buddy --completions fish > ~/.config/fish/completions/buddy.fish
 
 # Apply immediately (or restart fish):
-source ~/.config/fish/completions/grok.fish
+source ~/.config/fish/completions/buddy.fish
 `.trim();
 
     case 'powershell':
@@ -486,11 +481,11 @@ source ~/.config/fish/completions/grok.fish
 # PowerShell completion installation:
 
 # Option 1: Add to your PowerShell profile
-grok --completions powershell | Out-File -Append $PROFILE -Encoding UTF8
+buddy --completions powershell | Out-File -Append $PROFILE -Encoding UTF8
 
 # Option 2: Save to a separate file and source it
-$completionFile = Join-Path (Split-Path $PROFILE) "grok-completions.ps1"
-grok --completions powershell | Out-File $completionFile -Encoding UTF8
+$completionFile = Join-Path (Split-Path $PROFILE) "buddy-completions.ps1"
+buddy --completions powershell | Out-File $completionFile -Encoding UTF8
 Add-Content $PROFILE ". '$completionFile'"
 
 # Apply immediately:
