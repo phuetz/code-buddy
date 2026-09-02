@@ -487,10 +487,8 @@ export class CodeBuddyMCPServer {
     if (this.agentInitPromise) return this.agentInitPromise;
 
     this.agentInitPromise = (async () => {
-      const apiKey = process.env.GROK_API_KEY
-        || process.env.OPENAI_API_KEY
-        || process.env.ANTHROPIC_API_KEY
-        || '';
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey() || '';
 
       if (!apiKey) {
         throw new Error(

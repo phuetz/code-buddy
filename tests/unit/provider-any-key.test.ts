@@ -6,6 +6,9 @@ const SOURCES = [
   new URL('../../src/integrations/mcp/mcp-server.ts', import.meta.url),
   new URL('../../src/integrations/json-rpc/server.ts', import.meta.url),
   new URL('../../src/interpreter/computer/skills.ts', import.meta.url),
+  new URL('../../src/mcp/mcp-server.ts', import.meta.url),
+  new URL('../../src/tools/ocr-tool.ts', import.meta.url),
+  new URL('../../src/agent/prompt-suggestions.ts', import.meta.url),
 ];
 
 describe('any configured provider key is enough', () => {
