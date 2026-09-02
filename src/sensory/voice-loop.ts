@@ -2092,6 +2092,21 @@ function makeDefaultSynth(
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
       : baseCacheVoice;
+    // Paid ElevenLabs library FIRST: 6 400+ short replies were synthesized once in
+    // Lisa's real voice and are shared with MySoulmate and the phone assistant.
+    // Playing one costs nothing and sounds better than any local engine. Read-only
+    // and copy-on-hit — the caller unlinks what it plays, and those files were paid for.
+    try {
+      const { getVoiceLibrary } = await import('./elevenlabs-library.js');
+      const paid = getVoiceLibrary().copyForPlayback(text);
+      if (paid) {
+        logger.info('[voice] paid ElevenLabs library hit');
+        return paid;
+      }
+    } catch {
+      /* best-effort: an unavailable library must never delay or break speaking */
+    }
+
     let cache: TtsCache;
     try {
       const { getTtsCache } = await import('./tts-cache.js');
