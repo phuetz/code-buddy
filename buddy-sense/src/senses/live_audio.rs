@@ -165,6 +165,10 @@ fn env_enabled(value: Option<&str>, default_value: bool) -> bool {
     )
 }
 
+fn should_forward_empty_transcript_for_repair(value: Option<&str>) -> bool {
+    env_enabled(value, false)
+}
+
 fn normalized_engine(value: Option<&str>) -> String {
     match value
         .map(str::trim)
@@ -1315,7 +1319,11 @@ fn emit_utterance(
             let decode_started = Instant::now();
             let text = stt.transcribe_pcm(SAMPLE_RATE, &utt);
             let decode_ms = decode_started.elapsed().as_millis() as u64;
-            if text.is_empty() {
+            if text.is_empty()
+                && !should_forward_empty_transcript_for_repair(
+                    std::env::var("CODEBUDDY_SENSORY_REPAIR").ok().as_deref(),
+                )
+            {
                 return true; // silence / non-speech that slipped the gate
             }
             if std::env::var("BUDDY_SENSE_MIC_DEBUG").is_ok() {
@@ -1418,6 +1426,13 @@ mod tests {
         let mut legacy = PartialTranscriptCadence::new(1_200, false);
         assert!(legacy.take_due(1_200));
         assert!(!legacy.take_due(2_400));
+    }
+
+    #[test]
+    fn empty_final_is_forwarded_only_for_the_repair_pilot() {
+        assert!(!should_forward_empty_transcript_for_repair(None));
+        assert!(!should_forward_empty_transcript_for_repair(Some("false")));
+        assert!(should_forward_empty_transcript_for_repair(Some("true")));
     }
 
     #[test]

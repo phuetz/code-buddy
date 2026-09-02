@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BACKCHANNEL_GAIN_DB,
   BACKCHANNEL_START_DELAY_MS,
+  REPAIR_PROMPT,
   createConversationCueController,
   type ConversationCueRequest,
 } from '../../src/sensory/conversation-cues.js';
@@ -70,5 +71,31 @@ describe('conversation cues — sensory backchannel', () => {
     expect(controller.armBackchannel('turn-off')).toBeNull();
     await vi.advanceTimersByTimeAsync(500);
     expect(player).not.toHaveBeenCalled();
+  });
+
+  it('plays the local repair prompt immediately and at most once per turn', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const played: Array<ConversationCueRequest & { atMs: number }> = [];
+    const controller = createConversationCueController({
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      player: async (cue) => {
+        played.push({ ...cue, atMs: Date.now() });
+        return true;
+      },
+    });
+
+    await controller.playRepair('turn-repair');
+    await controller.playRepair('turn-repair');
+
+    expect(played).toHaveLength(1);
+    expect(played[0]).toMatchObject({
+      kind: 'repair',
+      cue: 'repair',
+      turnId: 'turn-repair',
+      text: REPAIR_PROMPT,
+      atMs: 1_000,
+    });
+    expect(played[0]!.assetPath).toMatch(/assets\/voice\/conversation\/repair\.wav$/);
   });
 });

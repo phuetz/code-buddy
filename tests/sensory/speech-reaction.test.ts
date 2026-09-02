@@ -179,6 +179,56 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('repairs a short low-confidence addressed final without calling the reply', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-short-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      transcriptFinal('Lisa', { confidence: 0.2 });
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
+  it('repairs an empty final only when a retained partial proves address', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-empty-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      isAddressed: async (text) => text.startsWith('Lisa'),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      speechStart();
+      transcriptPartial('Lisa, je voulais');
+      transcriptFinal('');
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
   it('cancels an addressed sensory backchannel when the reply completes first', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-cancel-'));
     const cues: string[] = [];

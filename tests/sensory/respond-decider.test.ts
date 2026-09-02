@@ -165,6 +165,14 @@ describe('isDirectedFollowUp', () => {
 });
 
 describe('respond-decider — addressed + engagement window (no LLM)', () => {
+  it('exposes a deterministic address probe for repair without opening dialogue', async () => {
+    const d = createResponseDecider({ robotName: 'Lisa', now: () => 0 });
+
+    expect(await d.isAddressed('Lisa, tu m’entends ?')).toBe(true);
+    expect(await d.isAddressed("J'ai vu Lisa hier.")).toBe(false);
+    expect(d.snapshot().engaged).toBe(false);
+  });
+
   it('answers a human closing once and immediately closes continuity', async () => {
     let t = 1_000;
     const d = createResponseDecider({

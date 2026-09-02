@@ -1795,8 +1795,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   return timing;
                 },
                 getAttentionSnapshot: () => responseDecider.snapshot(),
+                isAddressed: (text) => responseDecider.isAddressed(text),
               };
-              if (process.env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true') {
+              if (
+                process.env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true'
+                || process.env.CODEBUDDY_SENSORY_REPAIR === 'true'
+              ) {
                 wireOpts.onConversationCue = playCachedConversationCue;
               }
               if (responsePolicy.gateEnabled) {
