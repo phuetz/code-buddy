@@ -380,3 +380,11 @@ export {
 
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';
+
+// R5 slash handlers backed by existing read-only/session/checkpoint services
+export {
+  handleRedo,
+  handleTimeline,
+  handleKnowledgeGraph,
+  handleApprovals,
+} from './slash-r5-handlers.js';

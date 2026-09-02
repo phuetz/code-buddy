@@ -174,6 +174,11 @@ import {
   handleTrigger,
   // Infra handlers (TurboQuant health dashboard)
   handleInfra,
+  // R5 handlers backed by existing services
+  handleRedo,
+  handleTimeline,
+  handleKnowledgeGraph,
+  handleApprovals,
 } from "./handlers/index.js";
 
 import { handleLessonsCommand } from "./handlers/index.js";
@@ -280,6 +285,7 @@ export interface AgentContextProxy {
   getContextStats: () => unknown;
   formatContextStats: () => string;
   getCurrentModel: () => string;
+  getCurrentSessionId?: () => string | null;
   getContextMemoryMetrics?: () => {
     summaryCount: number;
     summaryTokens: number;
@@ -423,6 +429,10 @@ export class EnhancedCommandHandler {
     ['__DIFF_CHECKPOINTS__', (args) => handleDiffCheckpoints(args)],
 
     // Extra UX commands
+    ['__REDO__', (args) => handleRedo(args)],
+    ['__TIMELINE__', (args) => handleTimeline(args, this.agentProxy?.getCurrentSessionId?.())],
+    ['__KNOWLEDGE_GRAPH__', (args) => handleKnowledgeGraph(args)],
+    ['__APPROVALS__', (args) => handleApprovals(args)],
     ['__UNDO__', (args) => handleUndo(args)],
     ['__DIFF__', (args) => args.length > 0 ? handleDiffCheckpoints(args) : handleDiff(args)],
     ['__SEARCH__', (args) => handleSearch(args)],

@@ -129,6 +129,7 @@ export class CheckpointManager extends TypedEventEmitter<CheckpointEvents> {
   private workingDirectory: string;
   private autoCheckpointTimer: NodeJS.Timeout | null = null;
   private dmp: InstanceType<typeof diff_match_patch>;
+  private readonly initialization: Promise<void>;
 
   constructor(workingDirectory: string, config: Partial<CheckpointConfig> = {}) {
     super();
@@ -140,7 +141,12 @@ export class CheckpointManager extends TypedEventEmitter<CheckpointEvents> {
       this.hashPath(workingDirectory)
     );
     this.dmp = new diff_match_patch();
-    this.initialize();
+    this.initialization = this.initialize();
+  }
+
+  /** Wait until persisted checkpoints are available to a command handler. */
+  async waitUntilReady(): Promise<void> {
+    await this.initialization;
   }
 
   /**

@@ -1618,6 +1618,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.codebuddyClient.getCurrentModel();
   }
 
+  getCurrentSessionId(): string | null {
+    return this.sessionStore.getCurrentSessionId();
+  }
+
   getClient(): CodeBuddyClient {
     return this.codebuddyClient;
   }
