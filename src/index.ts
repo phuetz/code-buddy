@@ -38,6 +38,7 @@ import {
   resolveHeadlessTurnExitCode,
 } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
+import { registerBackupCommand } from './commands/cli/backup-command.js';
 import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
@@ -3892,24 +3893,7 @@ addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations
 });
 
 // Backup — local backup management (Native Engine v2026.3.8 alignment)
-program
-  .command('backup [subcommand] [args...]')
-  .description('Manage .codebuddy/ backups (create, verify, list, restore)')
-  .option('--only-config', 'Only backup configuration files')
-  .option('--no-include-workspace', 'Exclude workspace data')
-  .option('--output <path>', 'Custom output directory')
-  .action(async (subcommand: string | undefined, args: string[], opts: Record<string, unknown>) => {
-    const { handleBackup } = await import('./commands/handlers/backup-handlers.js');
-    const flags: string[] = [];
-    if (opts.onlyConfig) flags.push('--only-config');
-    if (opts.includeWorkspace === false) flags.push('--no-include-workspace');
-    if (opts.output) flags.push('--output', opts.output as string);
-    const fullArgs = [subcommand || 'list', ...(args || []), ...flags].join(' ');
-    const result = await handleBackup(fullArgs);
-    // Backup command output is pipeable (scripts often capture it).
-    if (result.response) cli.stdout(result.response);
-    if (result.exitCode) process.exitCode = result.exitCode;
-  });
+registerBackupCommand(program, (msg) => cli.stdout(msg));
 
 // Cloud — background agent tasks (Cursor/Codex parity)
 program
