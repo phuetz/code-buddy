@@ -32,6 +32,11 @@ interface BackupManifest {
   };
 }
 
+interface BackupArchiveFile {
+  path: string;
+  content: string;
+}
+
 /**
  * Handle `buddy backup <subcommand>` / `/backup`
  */
@@ -48,7 +53,7 @@ export async function handleBackup(
     case 'verify':
       return handleBackupVerify(parts.slice(1));
     case 'list':
-      return handleBackupList();
+      return handleBackupList(parts.slice(1));
     case 'restore':
       return handleBackupRestore(parts.slice(1));
     default:
@@ -113,6 +118,7 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
   // Write backup as JSON (portable, no tar dependency needed)
   const backupData = {
     manifest,
+    files: files.map(f => ({ path: f.relativePath, content: f.content.toString('base64') })),
     totalSize: files.reduce((sum, f) => sum + f.size, 0),
     fileCount: files.length,
   };
@@ -168,6 +174,31 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
       };
     }
 
+    const archiveFiles = data.files as BackupArchiveFile[] | undefined;
+    if (manifest.files.length === 0 || !Array.isArray(archiveFiles) || archiveFiles.length === 0) {
+      throw new Error('archive is empty: no file payloads found');
+    }
+    if (archiveFiles.length !== manifest.files.length) {
+      throw new Error('archive payload does not match the manifest');
+    }
+    for (const manifestFile of manifest.files) {
+      const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
+      if (!archiveFile || typeof archiveFile.content !== 'string') {
+        throw new Error(`archive payload is missing ${manifestFile.path}`);
+      }
+      const content = Buffer.from(archiveFile.content, 'base64');
+      if (content.toString('base64') !== archiveFile.content) {
+        throw new Error(`archive payload is not valid base64: ${manifestFile.path}`);
+      }
+      if (content.length !== manifestFile.size) {
+        throw new Error(`archive size mismatch: ${manifestFile.path}`);
+      }
+      const checksum = createHash('sha256').update(content).digest('hex').slice(0, 16);
+      if (checksum !== manifestFile.checksum) {
+        throw new Error(`archive checksum mismatch: ${manifestFile.path}`);
+      }
+    }
+
     return {
       handled: true,
       response: [
@@ -191,15 +222,21 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
 /**
  * List available backups
  */
-async function handleBackupList(): Promise<CommandHandlerResult> {
-  if (!existsSync(BACKUP_DIR)) {
+async function handleBackupList(args: string[] = []): Promise<CommandHandlerResult> {
+  const outputIdx = args.indexOf('--output');
+  const customOutput = outputIdx >= 0 ? args[outputIdx + 1] : undefined;
+  const backupDir = customOutput
+    ? join(customOutput)
+    : BACKUP_DIR;
+
+  if (!existsSync(backupDir)) {
     return {
       handled: true,
       response: 'No backups found.',
     };
   }
 
-  const files = readdirSync(BACKUP_DIR)
+  const files = readdirSync(backupDir)
     .filter(f => f.startsWith('codebuddy-backup-') && f.endsWith('.json'))
     .sort()
     .reverse();
@@ -212,7 +249,7 @@ async function handleBackupList(): Promise<CommandHandlerResult> {
   }
 
   const lines = files.map(f => {
-    const fullPath = join(BACKUP_DIR, f);
+    const fullPath = join(backupDir, f);
     const stat = statSync(fullPath);
     const sizeKB = Math.round(stat.size / 1024);
     return `  ${f}  (${sizeKB} KB, ${stat.mtime.toLocaleDateString()})`;
@@ -220,7 +257,7 @@ async function handleBackupList(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
-    response: `Backups in ${BACKUP_DIR}:\n${lines.join('\n')}`,
+    response: `Backups in ${backupDir}:\n${lines.join('\n')}`,
   };
 }
 
@@ -284,6 +321,7 @@ interface CollectedFile {
   relativePath: string;
   size: number;
   checksum: string;
+  content: Buffer;
 }
 
 function collectFiles(
@@ -331,6 +369,7 @@ function collectFiles(
             relativePath,
             size: stat.size,
             checksum,
+            content,
           });
         } catch {
           // Skip unreadable files

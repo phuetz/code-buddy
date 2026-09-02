@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 
 // Mock fs module
 vi.mock('fs', async (importOriginal) => {
@@ -92,13 +93,19 @@ describe('Backup Handlers', () => {
     it('should verify valid backup', async () => {
       const { existsSync, readFileSync } = await import('fs');
       vi.mocked(existsSync).mockReturnValue(true);
+      const payload = Buffer.from('test');
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
         manifest: {
           version: '1.0.0',
           createdAt: '2026-03-18T00:00:00Z',
-          files: [{ path: 'settings.json', size: 100, checksum: 'abc123' }],
+          files: [{
+            path: 'settings.json',
+            size: payload.length,
+            checksum: createHash('sha256').update(payload).digest('hex').slice(0, 16),
+          }],
           flags: { onlyConfig: false, includeWorkspace: true },
         },
+        files: [{ path: 'settings.json', content: payload.toString('base64') }],
       }));
 
       const result = await handleBackup('verify test-backup.json');
