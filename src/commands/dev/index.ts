@@ -10,6 +10,7 @@
  */
 
 import type { Command } from 'commander';
+import type { CodeBuddyAgent } from '../../agent/codebuddy-agent.js';
 import { logger } from '../../utils/logger.js';
 
 /** Create an agent through the shared OAuth/local/API provider resolver. */
@@ -27,6 +28,33 @@ async function createAgent() {
   }
 
   return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.model);
+}
+
+/** Release one-shot resources used by commands that stream a plan. */
+async function disposePlanResources(agent: CodeBuddyAgent): Promise<void> {
+  try {
+    agent.dispose({ skipSessionLearning: true });
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan agent', { error: String(error) });
+  }
+  try {
+    const { resetSkillRegistry } = await import('../../skills/registry.js');
+    resetSkillRegistry();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan skill registry', { error: String(error) });
+  }
+  try {
+    const { resetMCPClient } = await import('../../mcp/mcp-client.js');
+    await resetMCPClient();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan MCP client', { error: String(error) });
+  }
+  try {
+    const { getActiveRunStore } = await import('../../observability/run-store.js');
+    getActiveRunStore()?.dispose();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan run store', { error: String(error) });
+  }
 }
 
 export function registerDevCommands(program: Command): void {
@@ -50,6 +78,7 @@ export function registerDevCommands(program: Command): void {
 
       const agent = await createAgent();
       await agent.systemPromptReady;
+      await agent.getSkillsReady();
 
       const prompt = `Repo context: ${profile.contextPack}
 
@@ -62,14 +91,17 @@ Produce a numbered implementation plan. For each step list:
 
 Do NOT implement yet. Plan only.`;
 
-      console.log(`Planning: ${objective}\n`);
-      for await (const chunk of agent.processUserMessageStream(prompt)) {
-        if (chunk.type === 'content' && chunk.content) {
-          process.stdout.write(chunk.content);
+      try {
+        console.log(`Planning: ${objective}\n`);
+        for await (const chunk of agent.processUserMessageStream(prompt)) {
+          if (chunk.type === 'content' && chunk.content) {
+            process.stdout.write(chunk.content);
+          }
         }
+        console.log('');
+      } finally {
+        await disposePlanResources(agent);
       }
-      console.log('');
-      agent.dispose?.();
     });
 
   // ── buddy dev run ──────────────────────────────────────────────

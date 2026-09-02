@@ -518,8 +518,12 @@ export class CodeBuddyAgent extends BaseAgent {
     }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
 
     // Load SKILL.md skills so findSkill() returns results
-    import('../skills/index.js').then(({ initializeSkills }) => {
-      initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
+    this.skillsReady = import('../skills/index.js').then(async ({ initializeSkills }) => {
+      try {
+        await initializeSkills();
+      } catch (e) {
+        logger.debug('Skills initialization failed (optional)', { error: String(e) });
+      }
     }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
 
     // Initialize MCP servers if configured (can be disabled for headless/one-shot runs).
@@ -633,6 +637,12 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
   public systemPromptReady: Promise<void>;
+  /** Resolves when the asynchronous skill registry startup has settled. */
+  private skillsReady: Promise<void> = Promise.resolve();
+
+  public getSkillsReady(): Promise<void> {
+    return this.skillsReady;
+  }
 
   /**
    * Set the model override to use specifically for visual grounding fallback calls.
