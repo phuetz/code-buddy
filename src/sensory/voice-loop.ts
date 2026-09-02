@@ -631,19 +631,41 @@ export function isFactualVoiceQuestion(heard: string): boolean {
   );
 }
 
+/**
+ * How many tokens the spoken reply may use.
+ *
+ * `CODEBUDDY_VOICE_MAX_TOKENS` is the operator saying how long the robot should
+ * talk, so an explicit value is the CEILING. It used to be only a lower bound
+ * outside the 'concise' style: `Math.max(64, min(512, max(base, planned)))` turned
+ * a deliberate 48 into at least 64 and, on any real exchange, into the 512 cap.
+ *
+ * Measured on Patrice's robot, 2026-09-02: he had set 48 and heard replies with a
+ * 479-character median, delivered as a dozen phrases with a silence between each
+ * — the gaps are what a listener calls choppy. Every one of those turns took the
+ * chitchat route, so this function, not the agent summary, is the one he hears.
+ *
+ * Unset, both the style handling and the automatic budget behave exactly as before.
+ */
 function voiceMaxTokens(
   heard: string,
   history: VoiceHistoryTurn[] = [],
   env: NodeJS.ProcessEnv = process.env
 ): number {
-  const configured = Number(env.CODEBUDDY_VOICE_MAX_TOKENS);
-  const base = Number.isFinite(configured) ? Math.floor(configured) : 48;
+  const raw = env.CODEBUDDY_VOICE_MAX_TOKENS?.trim();
+  const configured = raw ? Number(raw) : NaN;
+  if (Number.isFinite(configured) && configured > 0) {
+    // Clamped only against absurd input; the operator's number is respected.
+    return Math.max(16, Math.min(512, Math.floor(configured)));
+  }
   const style = (env.CODEBUDDY_VOICE_RESPONSE_STYLE ?? 'natural').toLowerCase();
-  if (style === 'concise') return Math.max(32, Math.min(256, base));
+  if (style === 'concise') return Math.max(32, Math.min(256, 48));
   const planned = conversationTokenBudget(heard, history);
   const multiplier = style === 'developed' ? 1.35 : 1;
-  return Math.max(64, Math.min(512, Math.round(Math.max(base, planned) * multiplier)));
+  return Math.max(64, Math.min(512, Math.round(Math.max(48, planned) * multiplier)));
 }
+
+/** Exposed for tests: the spoken-length budget is a user-visible contract. */
+export const __testVoiceMaxTokens = voiceMaxTokens;
 
 function voiceTemperature(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.CODEBUDDY_VOICE_TEMPERATURE);
