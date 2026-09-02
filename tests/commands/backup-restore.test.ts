@@ -7,7 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { handleBackup } from '../../src/commands/handlers/backup-handlers.js';
+import {
+  handleBackup,
+  resolveRestoreDestination,
+} from '../../src/commands/handlers/backup-handlers.js';
 import { makeTmpDir, removeTmpDir } from '../helpers/tmp.js';
 
 describe('backup restore writes verified bytes', () => {
@@ -98,5 +101,38 @@ describe('backup restore writes verified bytes', () => {
     expect(restored.response).toMatch(/escapes destination|path traversal|\.\./i);
     expect(fs.existsSync(escaped)).toBe(false);
     expect(fs.existsSync(path.join(workspace, '.codebuddy', 'etc', 'x'))).toBe(false);
+  });
+
+  it('refuses an absolute restore path, a NUL, and a win32-separator escape', async () => {
+    const destRoot = path.join(workspace, '.codebuddy');
+    const outside = path.join(workspace, 'outside.txt');
+    expect(resolveRestoreDestination(destRoot, outside)).toBeNull();
+    expect(resolveRestoreDestination(destRoot, 'C:\\Windows\\x')).toBeNull();
+    expect(resolveRestoreDestination(destRoot, '\\\\gpu\\share\\x')).toBeNull();
+    expect(resolveRestoreDestination(destRoot, 'settings.json\0.txt')).toBeNull();
+    expect(resolveRestoreDestination(destRoot, '..\\..\\etc\\x')).toBeNull();
+    expect(fs.existsSync(outside)).toBe(false);
+
+    const payload = Buffer.from('pwned-win32');
+    const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+    const archivePath = path.join(workspace, 'win32-backup.json');
+    fs.writeFileSync(
+      archivePath,
+      JSON.stringify({
+        manifest: {
+          version: '1.0.0',
+          createdAt: '2026-09-02T00:00:00.000Z',
+          files: [{ path: '..\\..\\etc\\x', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: false },
+        },
+        files: [{ path: '..\\..\\etc\\x', content: payload.toString('base64') }],
+      }),
+    );
+
+    const restored = await handleBackup(`restore ${archivePath} --confirm`);
+    expect(restored.exitCode).toBe(1);
+    expect(restored.response).toMatch(/escapes destination|path traversal|\.\./i);
+    expect(fs.existsSync(path.join(destRoot, '..\\..\\etc\\x'))).toBe(false);
+    expect(fs.existsSync(path.resolve(workspace, '..', 'etc', 'x'))).toBe(false);
   });
 });

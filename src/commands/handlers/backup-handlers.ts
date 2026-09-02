@@ -384,15 +384,21 @@ function isInsideDestRoot(destRoot: string, candidate: string): boolean {
 
 /**
  * Resolve an archive entry against destRoot. Returns null when the path
- * is absolute, contains a NUL, or walks outside destRoot after resolution
- * (the `../../etc/x` class of restores).
+ * is absolute, contains a NUL, uses win32 separators to walk out, or
+ * resolves outside destRoot (the `../../etc/x` class of restores).
  */
 export function resolveRestoreDestination(destRoot: string, archivePath: string): string | null {
   if (typeof archivePath !== 'string' || archivePath.length === 0) return null;
   if (archivePath.includes('\0')) return null;
   if (isAbsolute(archivePath) || win32.isAbsolute(archivePath)) return null;
+  // Archives may carry Windows separators. Treat `\` as `/` so `..\..\etc\x`
+  // cannot land as a literal filename on POSIX or a traversal on win32.
+  const normalized = archivePath.replace(/\\/g, '/');
+  if (normalized !== archivePath && (isAbsolute(normalized) || win32.isAbsolute(normalized))) {
+    return null;
+  }
   const root = resolve(destRoot);
-  const dest = resolve(root, archivePath);
+  const dest = resolve(root, normalized);
   if (!isInsideDestRoot(root, dest)) return null;
   return dest;
 }
