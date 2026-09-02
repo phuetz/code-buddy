@@ -33,6 +33,15 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications avant commit : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé sur les fichiers touchés — **exit 0**.
 - Commit : à compléter.
 
+### Trou 3 — acquittement lié au mauvais rappel
+
+- Test relu : `tests/companion/revue-gemini-reminders-ack.test.ts`.
+- Rouge (`npx vitest run tests/companion/revue-gemini-reminders-ack.test.ts`, exit 1) : les deux acquittements explicites (`médicaments`, `billet de train`) retournaient le rappel plus récent (`dentiste`, `pause café`).
+- Correctif : `matchAck` normalise le transcript et les libellés, cherche une séquence de mots correspondant à un rappel en attente, puis conserve le dernier rappel comme repli pour les formules génériques.
+- Vert voisin : `npx vitest run tests/companion/revue-gemini-reminders-ack.test.ts tests/companion/reminders.test.ts tests/companion/reminder-runner.test.ts` — **3 fichiers, 24 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** ; ESLint ciblé avec `--quiet` — **exit 0**.
+- Commit : à compléter.
+
 ### Trou 2 — rappel one-shot qui refire
 
 - Test relu : `tests/companion/revue-gemini-reminders-oneshot.test.ts`.
