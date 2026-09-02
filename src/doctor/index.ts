@@ -326,18 +326,20 @@ function checkStaleLockFiles(cwd: string): DoctorCheck[] {
   return checks;
 }
 
-function checkTtsProviders(): DoctorCheck[] {
-  const providers: Array<{ cmd: string; label: string }> = [
-    { cmd: 'edge-tts', label: 'edge-tts' },
-    { cmd: 'espeak', label: 'espeak' },
-  ];
-
-  const found = providers.filter(p => commandExists(p.cmd));
+export function checkTtsProviders(): DoctorCheck[] {
+  const pocketLauncher = ['pocket-tts', 'uvx'].find((command) => commandExists(command));
+  const available: string[] = [];
+  if (pocketLauncher) available.push(`Pocket TTS (via ${pocketLauncher})`);
+  if (process.env.ELEVENLABS_API_KEY?.trim()) {
+    available.push('ElevenLabs (ELEVENLABS_API_KEY)');
+  }
 
   return [{
     name: 'TTS providers',
-    status: found.length > 0 ? 'ok' : 'warn',
-    message: found.length > 0 ? `available: ${found.map(p => p.label).join(', ')}` : 'none found (install edge-tts, espeak)',
+    status: available.length > 0 ? 'ok' : 'warn',
+    message: available.length > 0
+      ? `available: ${available.join(', ')}`
+      : 'none found — use `buddy speak --engine pocket` with Pocket TTS (pip install pocket-tts), or configure ElevenLabs with ELEVENLABS_API_KEY',
   }];
 }
 

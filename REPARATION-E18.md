@@ -8,7 +8,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 |---|---|---|---|---|
 | D5 | `npx vitest run tests/scripts/package-lifecycle.test.ts` : 1 échec ; clone frais : `ENOENT ... codebuddy-runtime.json`, exit 1 | `package.json` : `prepack` exécute `npm run build`, retire les sourcemaps puis génère le manifeste | Test ciblé PASS ; clone neuf issu de `726d29587` : `npm pack` exit 0, manifeste et tarball produits | `726d29587` |
 | D6 | Test Commander rouge et route réelle initialement ChatGPT OAuth malgré `CODEBUDDY_PROVIDER=ollama`; démos locales 1.5B/4B non vertes | `try` accepte `--model`/`--base-url` après le sous-commande, transmet les options injectables et respecte `CODEBUDDY_PROVIDER=ollama` ; sélection exacte du tag Ollama | Tests ciblés 14/14 PASS ; headless affiche `Ollama local (qwen2.5:1.5b-instruct)` puis échoue honnêtement sur la qualité du petit modèle ; qwen3.8:27b atteint timeout 180 s | À faire |
-| D7 | À établir | À faire | À faire | À faire |
+| D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | À faire |
 | D8 | À établir | À faire | À faire | À faire |
 | D9 | À établir | À faire | À faire | À faire |
 | D10 | À établir | À faire | À faire | À faire |
@@ -18,6 +18,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 
 - D5 réglé et prouvé sur clone neuf issu de `726d29587`.
 - D6 réglé côté routage/options ; la démo locale complète reste limitée par les modèles Ollama testés, détail ci-dessous.
+- D7 réglé : diagnostic TTS aligné sur Pocket/ElevenLabs ; absence de moteur = message clair et exit 1.
 
 ## Commandes, sorties et commits
 
@@ -96,3 +97,28 @@ exit 1
 ```
 
 Le routage et le modèle demandé sont donc prouvés ; la démonstration complète n’est pas déclarée verte avec ce modèle. `qwen3:4b-instruct` a produit un fichier invalide (export ESM), et `qwen3.8:27b` a atteint `timeout 180s`.
+
+### D7 — TTS local absent
+
+Rouge :
+
+```text
+$ npx vitest run tests/doctor/tts-guidance.test.ts
+FAIL — TypeError: checkTtsProviders is not a function
+```
+
+Vert :
+
+```text
+$ npx vitest run tests/doctor/tts-guidance.test.ts
+Test Files  1 passed (1)
+Tests       1 passed (1)
+
+$ TMPDIR="$PWD/_e18/tmp-d7" CODEBUDDY_TTS_ENGINE=audioreader LOG_LEVEL=error timeout 20s npx tsx src/index.ts speak --out _e18/d7-no-tts.wav Bonjour E18
+AudioReader is not running at http://localhost:8000
+Start the AudioReader HTTP service (default http://localhost:8000), or use --engine pocket.
+Tip: use `--engine pocket` for the on-CPU realtime voice, or `--engine voicebox` for the expressive GPU voice.
+exit 1
+```
+
+Le code conseille désormais Pocket TTS ou ElevenLabs ; `espeak` et `edge-tts` ne sont plus proposés par `doctor` pour cette surface.
