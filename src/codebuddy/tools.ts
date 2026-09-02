@@ -22,7 +22,7 @@ import { getToolRegistry } from "../tools/registry.js";
 import { createRegisterToolTool } from "../tools/register-tool-handler.js";
 import { loadAuthoredTools } from "../agent/self-improvement/tool-skill-mutator.js";
 import { applyToolFilter } from "../utils/tool-filter.js";
-import { TOOL_METADATA } from "../tools/metadata.js";
+import { getActiveToolMetadata } from "../tools/metadata.js";
 import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getWorkspace } from '../workspace/workspace-config.js';
 import {
@@ -248,7 +248,7 @@ export function initializeToolRegistry(): void {
   if (isRegistryInitialized) return;
 
   const registry = getToolRegistry();
-  const metadataMap = new Map(TOOL_METADATA.map(m => [m.name, m]));
+  const metadataMap = new Map(getActiveToolMetadata().map(m => [m.name, m]));
 
   const registerGroup = (tools: CodeBuddyTool[], isEnabled: () => boolean = () => true) => {
     for (const tool of tools) {
