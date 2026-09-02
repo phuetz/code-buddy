@@ -444,7 +444,7 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
     const previousMemories = cloneMemoryMap(memories);
-    const status: MemoryWriteStatus = existing ? 'updated' : 'stored';
+    let resultKey = normalizedKey;
 
     try {
       const { FactsMemoryService } = await import('./facts-memory.js');
@@ -472,7 +472,7 @@ export class PersistentMemoryManager extends EventEmitter {
           let fKey = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           let fValue = fact.text;
           const colonIdx = fact.text.indexOf(': ');
-          if (colonIdx > 0 && colonIdx < 50) {
+          if (colonIdx > 0) {
             fKey = fact.text.substring(0, colonIdx).trim();
             fValue = fact.text.substring(colonIdx + 2).trim();
           }
@@ -489,6 +489,15 @@ export class PersistentMemoryManager extends EventEmitter {
             accessCount: prior?.accessCount || 0,
             tags: fact.source ? [fact.source] : tags
           });
+        }
+
+        if (!memories.has(normalizedKey)) {
+          const newKeys = Array.from(memories.keys()).filter((memoryKey) => !previousMemories.has(memoryKey));
+          const reconciledKey = newKeys[newKeys.length - 1];
+          if (!reconciledKey) {
+            throw new Error(`Reconciliation did not retain the new memory "${normalizedKey}"`);
+          }
+          resultKey = reconciledKey;
         }
       } else {
         // Fallback to default direct write
@@ -524,16 +533,24 @@ export class PersistentMemoryManager extends EventEmitter {
       throw error;
     }
 
-    this.emit("memory:remembered", { key: normalizedKey, scope, category });
+    const persistedMemory = memories.get(resultKey);
+    if (!persistedMemory) {
+      throw new MemoryPersistenceError(
+        scope,
+        `Memory reconciliation reported key "${resultKey}" but did not retain it`,
+      );
+    }
+    const status: MemoryWriteStatus = previousMemories.has(resultKey) ? 'updated' : 'stored';
+    this.emit("memory:remembered", { key: resultKey, scope, category: persistedMemory.category });
     return {
       status,
-      key: normalizedKey,
+      key: resultKey,
       scope,
-      category,
+      category: persistedMemory.category,
       usage: this.getMemoryUsage(scope),
       message: status === 'updated'
-        ? `Updated "${normalizedKey}" in ${scope} memory.`
-        : `Stored "${normalizedKey}" in ${scope} memory.`,
+        ? `Updated "${resultKey}" in ${scope} memory.`
+        : `Stored "${resultKey}" in ${scope} memory.`,
     };
   }
 
