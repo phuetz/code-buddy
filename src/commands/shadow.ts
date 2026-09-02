@@ -3,6 +3,10 @@
 import { Command } from 'commander';
 import { ShadowWorkspace } from '../speculative/shadow-workspace.js';
 
+interface ShadowStatusOptions {
+  directory?: string;
+}
+
 export function createShadowCommand(): Command {
   const command = new Command('shadow')
     .description('Inspect or run speculative validation in the persistent shadow worktree');
@@ -10,8 +14,9 @@ export function createShadowCommand(): Command {
   command
     .command('status')
     .description('Show shadow worktree state and effective configuration')
-    .action(async () => {
-      const status = await new ShadowWorkspace(process.cwd()).getStatus();
+    .option('-d, --directory <dir>', 'repository directory to inspect')
+    .action(async (options: ShadowStatusOptions) => {
+      const status = await new ShadowWorkspace(options.directory ?? process.cwd()).getStatus();
       console.log(`Enabled: ${status.enabled ? 'yes' : 'no'}`);
       console.log(`Repository: ${status.repoRoot ?? status.repoPath}`);
       console.log(`Shadow: ${status.shadowPath ?? 'unavailable'}`);
