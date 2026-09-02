@@ -59,6 +59,10 @@ export interface PairingStatus {
   senderId: string;
   /** Channel type */
   channelType: ChannelType;
+  /** Sender is temporarily blocked after too many attempts */
+  blocked?: boolean;
+  /** Timestamp (ms) until which the sender remains blocked */
+  blockedUntil?: number;
 }
 
 /**
@@ -193,8 +197,15 @@ export class DMPairingManager extends EventEmitter {
     }
 
     // Check if blocked (per-channel)
-    if (this.isBlocked(`${channelType}:${senderId}`)) {
-      return { approved: false, senderId, channelType };
+    const blockKey = `${channelType}:${senderId}`;
+    if (this.isBlocked(blockKey)) {
+      return {
+        approved: false,
+        blocked: true,
+        blockedUntil: this.blocked.get(blockKey),
+        senderId,
+        channelType,
+      };
     }
 
     // Check allowlist
@@ -228,9 +239,17 @@ export class DMPairingManager extends EventEmitter {
 
     // Block if too many attempts
     if (request.attempts > this.config.maxAttempts) {
-      this.blocked.set(pairingKey, Date.now() + this.config.blockDurationMs);
+      const blockedUntil = Date.now() + this.config.blockDurationMs;
+      this.blocked.set(pairingKey, blockedUntil);
       this.pending.delete(pairingKey);
       this.emit('pairing:blocked', senderId, channelType);
+      return {
+        approved: false,
+        blocked: true,
+        blockedUntil,
+        senderId,
+        channelType,
+      };
     }
 
     return {

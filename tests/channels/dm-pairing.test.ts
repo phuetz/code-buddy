@@ -282,6 +282,28 @@ describe('DMPairingManager', () => {
       shortManager.dispose();
     });
 
+    it('D3: au blocage, checkSender ne renvoie pas le code', async () => {
+      const shortManager = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        maxAttempts: 1,
+        blockDurationMs: 60 * 1000,
+        allowlistPath: undefined,
+      });
+
+      const message = makeMessage();
+      await shortManager.checkSender(message);
+      const blockedTurn = await shortManager.checkSender(message);
+
+      expect(blockedTurn.approved).toBe(false);
+      expect(blockedTurn.blocked).toBe(true);
+      expect(blockedTurn.blockedUntil).toEqual(expect.any(Number));
+      expect(blockedTurn.code).toBeUndefined();
+      expect(shortManager.isBlocked('telegram:user-42')).toBe(true);
+
+      shortManager.dispose();
+    });
+
     it('should return unapproved for blocked senders without a code', async () => {
       const shortManager = new DMPairingManager({
         enabled: true,
