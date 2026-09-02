@@ -71,13 +71,18 @@ Vert :
 ```text
 $ npx vitest run tests/sensory/conversation-conv2-adaptive.test.ts
 Test Files  1 passed (1)
-     Tests  1 passed (1)
+     Tests  2 passed (2)
 ```
 
 Le banc prouve qu’une fuite à 0,015 contre une référence 0,01 ne coupe pas à 6 dB, tandis que
-0,035 coupe ; il vérifie aussi la marge configurable à 9 dB.
+0,035 coupe lorsqu’elle est comparée à 0,01 ; il vérifie aussi que 0,025 contre 0,015 reste
+sous la marge, ainsi que la configuration à 9 dB et
+le déclenchement immédiat sur un `speech_start` fort avec `noiseFloorRms`. Une première fixture
+intermédiaire annonçait à tort 0,035 contre 0,015 comme sous 6 dB ; le test a rougi, puis a été
+corrigé à 0,025 avant le commit vert.
 
-Commit : `562c3a6a fix(sensory): gate barge-in with adaptive leakage energy`.
+Commits : `562c3a6a fix(sensory): gate barge-in with adaptive leakage energy` puis
+`45c8b1845 fix(sensory): use calibrated floor for immediate barge-in`.
 
 ### Brique 3 — reprise sans répétition et fenêtre d’engagement
 
@@ -102,7 +107,7 @@ Commits : `1daf4b19 fix(sensory): resume after an interrupted spoken phrase` pui
 ```text
 $ npx vitest run tests/sensory/conversation-conv2.test.ts tests/sensory/conversation-conv2-adaptive.test.ts tests/sensory/conversation-conv2-resume.test.ts tests/sensory/voice-activity.test.ts tests/sensory/voice-streaming.test.ts tests/sensory/speech-reaction-workers.test.ts tests/sensory/voice-loop.test.ts tests/sensory/speech-reaction.test.ts tests/sensory/voice-turn-coordinator.test.ts
 Test Files  9 passed (9)
-     Tests  202 passed (202)
+     Tests  203 passed (203)
 
 $ npx tsc --noEmit -p .
 exit code 0, sortie vide
@@ -133,10 +138,11 @@ exit code 0 — 0 erreur, 2466 avertissements préexistants du dépôt
 ## Commits et coordination
 
 Branche : `feat/conversation-luna-2026-09-03`. Base annoncée : `facea9864`. Aucun push et aucune
-écriture dans `~/code-buddy`.
+écriture dans `~/code-buddy`. Les commits de clôture documentaire sont `52f71b69b` puis
+`1d99522ec`.
 
 Le tableau de `docs/FABLE5-CODEX-COORDINATION.md` est clôturé avec le dernier commit
-fonctionnel/documentaire `52f71b69b` et les vérifications ci-dessus avant passation.
+fonctionnel `45c8b1845` et les vérifications ci-dessus avant passation.
 
 ## Bilan
 
