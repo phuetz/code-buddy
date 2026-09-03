@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { withSessionLock } from '../../persistence/session-lock.js';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 
 export interface AcpPersistedSession {
   sessionId: string;
@@ -56,8 +57,13 @@ export class AcpSessionStore {
     const file = this.fileFor(sessionId);
     if (!fs.existsSync(file)) return null;
     try {
-      const raw = await fs.promises.readFile(file, 'utf-8');
-      return JSON.parse(raw) as AcpPersistedSession;
+      return await readJsonAtomic<AcpPersistedSession | null>(file, null, {
+        mode: 0o600,
+        isValid: (value): value is AcpPersistedSession => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          typeof (value as AcpPersistedSession).sessionId === 'string',
+        ),
+      });
     } catch (err) {
       logger.warn?.('[acp-session-store] failed to read session', {
         sessionId,
@@ -91,14 +97,7 @@ export class AcpSessionStore {
 
   private async writeUnlocked(session: AcpPersistedSession): Promise<void> {
     const file = this.fileFor(session.sessionId);
-    const temp = `${file}.tmp.${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    await fs.promises.writeFile(temp, JSON.stringify(session, null, 2), 'utf-8');
-    try {
-      await renameWithRetry(temp, file);
-    } catch (err) {
-      await fs.promises.rm(temp, { force: true }).catch(() => {});
-      throw err;
-    }
+    await writeJsonAtomic(file, session, { mode: 0o600 });
   }
 
   private fileFor(sessionId: string): string {

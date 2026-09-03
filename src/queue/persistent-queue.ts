@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { PriorityQueue, PriorityItem, PriorityQueueOptions, PriorityLevel } from './priority-queue.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface PersistentQueueOptions extends PriorityQueueOptions {
   /** Directory to store queue data */
@@ -107,12 +108,15 @@ export class PersistentQueue<T = unknown> extends PriorityQueue<T> {
    */
   load(): boolean {
     try {
-      if (!fs.existsSync(this.storageFilePath)) {
-        return false;
-      }
-
-      const content = fs.readFileSync(this.storageFilePath, 'utf-8');
-      const data: SerializedQueue<T> = JSON.parse(content);
+      const data = readJsonAtomicSync<SerializedQueue<T> | null>(this.storageFilePath, null, {
+        mode: 0o600,
+        isValid: (value): value is SerializedQueue<T> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          Array.isArray((value as SerializedQueue<T>).items) &&
+          (value as SerializedQueue<T>).stats && typeof (value as SerializedQueue<T>).stats === 'object',
+        ),
+      });
+      if (!data) return false;
 
       if (data.version !== QUEUE_VERSION) {
         // Handle migration in future if needed
@@ -169,8 +173,7 @@ export class PersistentQueue<T = unknown> extends PriorityQueue<T> {
         },
       };
 
-      const content = JSON.stringify(data, null, 2);
-      fs.writeFileSync(this.storageFilePath, content);
+      writeJsonAtomicSync(this.storageFilePath, data, { mode: 0o600 });
 
       this.dirty = false;
       this.emit('saved', { itemCount: this.items.length });

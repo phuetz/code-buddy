@@ -41,6 +41,7 @@ import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import {
   resolveProviderFromEnv,
   type PeerChatProviderId,
@@ -498,13 +499,11 @@ async function defaultAgentRun(
 }
 
 async function readJsonFile<T>(p: string): Promise<T> {
-  const raw = await fs.readFile(p, 'utf-8');
-  return JSON.parse(raw) as T;
+  return readJsonAtomic<T>(p, {} as T, { mode: 0o600 });
 }
 
 async function writeJsonFile(p: string, data: unknown): Promise<void> {
-  const json = `${JSON.stringify(data, null, 2)}\n`;
-  await fs.writeFile(p, json, 'utf-8');
+  await writeJsonAtomic(p, data, { mode: 0o600 });
 }
 
 async function appendWorklog(repoPath: string, entry: WorklogFileEntry): Promise<void> {

@@ -23,9 +23,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomBytes } from 'crypto';
 import { withSessionLock } from '../persistence/session-lock.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import type { FleetHermesToolsetDescriptor } from './dispatch-profile.js';
 import type { DispatchPlan } from './task-router.js';
@@ -200,8 +200,12 @@ export class SagaStore {
     const file = this.fileFor(sagaId);
     if (!fs.existsSync(file)) return null;
     try {
-      const raw = await fs.promises.readFile(file, 'utf-8');
-      return JSON.parse(raw) as SagaRecord;
+      return await readJsonAtomic<SagaRecord | null>(file, null, {
+        mode: 0o600,
+        isValid: (value): value is SagaRecord => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch (err) {
       logger.warn?.('[saga-store] failed to read saga', {
         sagaId,
@@ -430,16 +434,9 @@ export class SagaStore {
 
   private async writeUnlocked(record: SagaRecord): Promise<void> {
     const file = this.fileFor(record.id);
-    // Unique per write (pid + random): a bare `.tmp.<pid>` could collide with
-    // a leaked temp from a previous crashed run that recycled the same PID,
-    // and rename would then clobber an unrelated file.
-    const tmp = `${file}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`;
     try {
-      await fs.promises.writeFile(tmp, JSON.stringify(record, null, 2));
-      await fs.promises.rename(tmp, file);
+      await writeJsonAtomic(file, record, { mode: 0o600 });
     } catch (err) {
-      // Never leak the staging file when the write/rename fails.
-      await fs.promises.unlink(tmp).catch(() => {});
       throw err;
     }
   }

@@ -29,6 +29,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import type {
   ExecutionPlan,
   AgentExecutionResult,
@@ -67,7 +68,6 @@ export interface PersistedWorkflow {
 
 const PERSIST_DIR = path.join(os.homedir(), '.codebuddy', 'agents');
 const CURRENT_PATH = path.join(PERSIST_DIR, 'current.json');
-const TMP_PATH = `${CURRENT_PATH}.tmp`;
 
 async function ensureDir(): Promise<void> {
   await fs.mkdir(PERSIST_DIR, { recursive: true });
@@ -87,9 +87,7 @@ export async function saveWorkflow(state: PersistedWorkflow): Promise<void> {
       schemaVersion: state.schemaVersion ?? 'v0.3',
       completedTaskIds: state.completedTaskIds ?? state.results.map(([id]) => id),
     };
-    const json = JSON.stringify(enriched, null, 2);
-    await fs.writeFile(TMP_PATH, json, 'utf8');
-    await fs.rename(TMP_PATH, CURRENT_PATH);
+    await writeJsonAtomic(CURRENT_PATH, enriched, { mode: 0o600 });
   } catch (err) {
     // Persistence is best-effort — never fail the workflow over a write error.
     logger.warn('Workflow persistence save failed', { error: String(err) });
@@ -106,8 +104,14 @@ export async function saveWorkflow(state: PersistedWorkflow): Promise<void> {
  */
 export async function loadWorkflow(): Promise<PersistedWorkflow | null> {
   try {
-    const raw = await fs.readFile(CURRENT_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as PersistedWorkflow;
+    const parsed = await readJsonAtomic<PersistedWorkflow | null>(CURRENT_PATH, null, {
+      mode: 0o600,
+      isValid: (value): value is PersistedWorkflow => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value) &&
+        Array.isArray((value as PersistedWorkflow).results),
+      ),
+    });
+    if (!parsed) return null;
     // Phase J — auto-migrate pre-v0.3 saves. Workflows persisted by
     // V0.2 (Phase G) lacked `schemaVersion` — treat as v0.1 and derive
     // completedTaskIds from results so /agents resume can still skip them.

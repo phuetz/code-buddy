@@ -11,6 +11,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -52,6 +53,11 @@ export interface SessionMessage {
   /** Task state for cross-session continuity */
   taskState?: Record<string, unknown>;
 }
+
+type PersistedSession = Omit<Session, 'createdAt' | 'lastAccessedAt'> & {
+  createdAt: string;
+  lastAccessedAt: string;
+};
 
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codebuddy', 'sessions');
 const FALLBACK_SESSIONS_DIR = path.join(os.tmpdir(), 'codebuddy', 'sessions');
@@ -226,7 +232,7 @@ export class SessionStore {
       createdAt: session.createdAt.toISOString(),
       lastAccessedAt: new Date().toISOString(),
     };
-    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2));
+    await writeJsonAtomic(filePath, data, { mode: 0o600 });
   }
 
   /**
@@ -245,8 +251,13 @@ export class SessionStore {
 
     try {
       await fsPromises.access(filePath);
-      const content = await fsPromises.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content);
+      const data = await readJsonAtomic<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
 
       if (typeof data !== 'object' || data === null) {
         logger.warn(`[session-store] invalid session file (not an object): ${sessionId}`);
@@ -256,15 +267,16 @@ export class SessionStore {
         logger.warn(`[session-store] invalid session file (messages is not an array): ${sessionId}`);
         return null;
       }
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         logger.warn(`[session-store] invalid session file (bad timestamps): ${sessionId}`);
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
         createdAt,
         lastAccessedAt,
       };
@@ -970,13 +982,18 @@ export class SessionStore {
         const filePath = path.join(sessionsDir, fileName);
 
         try {
-          const raw = _fs.readFileSync(filePath, 'utf-8');
-          const data = JSON.parse(raw);
+          const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
           if (data && typeof data.id === 'string') {
+            const persisted = data as unknown as PersistedSession;
             sessions.push({
-              ...data,
-              createdAt: new Date(data.createdAt),
-              lastAccessedAt: new Date(data.lastAccessedAt),
+              ...persisted,
+              createdAt: new Date(persisted.createdAt),
+              lastAccessedAt: new Date(persisted.lastAccessedAt),
             });
           }
         } catch {
@@ -994,20 +1011,26 @@ export class SessionStore {
     const filePath = this.getSessionFilePath(sessionId);
 
     try {
-      const raw = _fs.readFileSync(filePath, 'utf-8');
-      const data = JSON.parse(raw);
+      const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
       if (typeof data !== 'object' || data === null || !Array.isArray(data.messages)) {
         return null;
       }
 
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
         createdAt,
         lastAccessedAt,
       };

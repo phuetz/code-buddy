@@ -4,6 +4,7 @@ import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, ChildProcess } from 'child_process';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type TaskPriority = 'low' | 'normal' | 'high';
@@ -132,7 +133,14 @@ export class BackgroundTaskManager extends EventEmitter {
 
         try {
           const taskPath = path.join(this.tasksDir, file);
-          const task: BackgroundTask = JSON.parse(fs.readFileSync(taskPath, 'utf-8'));
+          const task = readJsonAtomicSync<BackgroundTask | null>(taskPath, null, {
+            mode: 0o600,
+            isValid: (value): value is BackgroundTask => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value) &&
+              typeof (value as BackgroundTask).id === 'string',
+            ),
+          });
+          if (!task) continue;
           task.createdAt = new Date(task.createdAt);
           if (task.startedAt) task.startedAt = new Date(task.startedAt);
           if (task.completedAt) task.completedAt = new Date(task.completedAt);
@@ -157,7 +165,7 @@ export class BackgroundTaskManager extends EventEmitter {
    */
   private saveTask(task: BackgroundTask): void {
     const taskPath = path.join(this.tasksDir, `${task.id}.json`);
-    fs.writeFileSync(taskPath, JSON.stringify(task, null, 2));
+    writeJsonAtomicSync(taskPath, task, { mode: 0o600 });
   }
 
   /**

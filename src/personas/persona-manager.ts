@@ -20,6 +20,7 @@ import {
   LISA_COMPANION_SYSTEM_PROMPT,
 } from '../identity/companion-identity.js';
 import { resolveUserName } from '../companion/user-name.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface Persona {
   id: string;
@@ -574,17 +575,10 @@ export class PersonaManager extends EventEmitter {
 
   private persistActiveId(id: string): void {
     const file = this.stateFile();
-    const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
     try {
-      fs.ensureDirSync(path.dirname(file));
-      fs.writeFileSync(tmp, `${JSON.stringify({ activePersonaId: id })}\n`, 'utf8');
-      fs.renameSync(tmp, file);
+      writeJsonAtomicSync(file, { activePersonaId: id }, { mode: 0o600 });
     } catch {
-      try {
-        fs.removeSync(tmp);
-      } catch {
-        /* best-effort cleanup */
-      }
+      /* best-effort persistence */
     }
   }
 

@@ -9,15 +9,8 @@
  */
 
 import { createHash } from 'crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'fs';
-import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   CollectiveKnowledgeGraph,
   getCollectiveKnowledgeGraph,
@@ -25,6 +18,7 @@ import {
 } from '../memory/collective-knowledge-graph.js';
 import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { getFleetRegistry } from './fleet-registry.js';
 import { defangPeerKnowledgeText } from './peer-text-sanitizer.js';
 import {
@@ -509,17 +503,15 @@ function toPeerRememberInput(
 }
 
 function loadSyncState(statePath: string): CkgSyncState {
-  if (!existsSync(statePath)) return { version: 1, peers: emptyPeerCursors() };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(statePath, 'utf8')) as unknown;
-  } catch (error) {
-    throw new Error(
-      `CKG_SYNC_STATE_INVALID: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const parsed = readJsonAtomicSync<{ version?: unknown; peers?: unknown } | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is { version?: unknown; peers?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!parsed) return { version: 1, peers: emptyPeerCursors() };
   if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.peers)) {
-    throw new Error('CKG_SYNC_STATE_INVALID: expected version 1 with a peers object');
+    return { version: 1, peers: emptyPeerCursors() };
   }
   const peers = emptyPeerCursors();
   for (const [peerId, rawCursor] of Object.entries(parsed.peers)) {
@@ -531,7 +523,7 @@ function loadSyncState(statePath: string): CkgSyncState {
       !Array.isArray(rawCursor.seenEntryIds) ||
       !rawCursor.seenEntryIds.every((id) => typeof id === 'string')
     ) {
-      throw new Error(`CKG_SYNC_STATE_INVALID: invalid cursor for peer ${peerId}`);
+      continue;
     }
     peers[peerId] = {
       sinceTs: rawCursor.sinceTs,
@@ -546,18 +538,9 @@ function emptyPeerCursors(): Record<string, PeerSyncCursor> {
 }
 
 function saveSyncState(statePath: string, state: CkgSyncState): void {
-  const directory = dirname(statePath);
-  mkdirSync(directory, { recursive: true });
-  const temporary = `${statePath}.${process.pid}.tmp`;
   try {
-    writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-    renameSync(temporary, statePath);
+    writeJsonAtomicSync(statePath, state, { mode: 0o600 });
   } catch (error) {
-    try {
-      unlinkSync(temporary);
-    } catch {
-      /* best effort cleanup */
-    }
     throw new Error(
       `CKG_SYNC_STATE_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}`,
     );

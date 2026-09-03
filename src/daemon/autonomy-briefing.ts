@@ -20,6 +20,7 @@ import type {
 import { FleetColabStore as DefaultFleetColabStore } from '../fleet/colab-store.js';
 import { scrubSecrets } from '../security/secret-scrubber.js';
 import type { TickResult } from './autonomous-loop.js';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 
 const EVENING_ROLLOVER_HOUR = 18;
 const MAX_LEDGER_EVENTS = 2_000;
@@ -498,12 +499,9 @@ export class AutonomyBriefingJournal {
   }
 
   private atomicWrite(file: string, content: string): void {
-    const temp = `${file}.${process.pid}.tmp`;
     try {
-      fs.writeFileSync(temp, content, { encoding: 'utf-8', mode: 0o600 });
-      fs.renameSync(temp, file);
+      writeFileAtomicSync(file, content, { mode: 0o600 });
     } catch (error) {
-      try { fs.rmSync(temp, { force: true }); } catch { /* best effort */ }
       throw error;
     }
   }

@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
+import { readJsonLinesAtomic } from '../utils/atomic-write.js';
 
 export interface TimelineToolCall {
   name: string;
@@ -89,6 +90,7 @@ export class SessionTimeline {
       await fs.appendFile(this.filePath(this.sessionId), `${JSON.stringify(normalized)}\n`, {
         encoding: 'utf8',
         flag: 'a',
+        mode: 0o600,
       });
     } catch (error) {
       logger.warn('[session-timeline] failed to append timeline entry', {
@@ -99,33 +101,8 @@ export class SessionTimeline {
   }
 
   async list(sessionId: string): Promise<TimelineEntry[]> {
-    try {
-      const raw = await fs.readFile(this.filePath(sessionId), 'utf8');
-      const entries: TimelineEntry[] = [];
-      for (const line of raw.split('\n')) {
-        if (!line.trim()) continue;
-        try {
-          const parsed: unknown = JSON.parse(line);
-          if (isTimelineEntry(parsed)) entries.push(parsed);
-          else logger.warn('[session-timeline] ignored invalid timeline entry', { sessionId });
-        } catch (error) {
-          logger.warn('[session-timeline] ignored malformed timeline entry', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      return entries.sort((left, right) => left.turn - right.turn);
-    } catch (error) {
-      const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-      if (code !== 'ENOENT') {
-        logger.warn('[session-timeline] failed to read timeline', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-      return [];
-    }
+    const entries = await readJsonLinesAtomic(this.filePath(sessionId), [], isTimelineEntry);
+    return entries.sort((left, right) => left.turn - right.turn);
   }
 
   async get(sessionId: string, turn: number): Promise<TimelineEntry | undefined> {
