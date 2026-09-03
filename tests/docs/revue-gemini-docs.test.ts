@@ -34,7 +34,7 @@ function runCli(args: string[]): { stdout: string; stderr: string; exitCode: num
   }
 }
 
-describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () => {
+describe('DOC1 — concordance entre la documentation et les contrats exécutables', () => {
   describe('1. Valeurs par défaut CLI vs Documentation', () => {
     it('CLAUDE.md:50 et docs/getting-started.md:298 promettent un défaut de 50 tool calls (400 en YOLO)', () => {
       // Documentation claim: "Tool calls (max 50, YOLO 400)" / "up to 50, or 400 in YOLO mode"
@@ -112,7 +112,7 @@ describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () 
     });
   });
 
-  describe('3. Commandes CLI promises dans la documentation mais absentes du binaire', () => {
+  describe('3. Commandes CLI documentées et réellement exposées', () => {
     it('route les tâches goal-mode par buddy autonomy plutôt que buddy fleet', () => {
       const fleetGuide = readRepoFile('docs', 'fleet-guide.md');
       const parity = readRepoFile('docs', 'hermes-openclaw-parity.md');
@@ -126,76 +126,142 @@ describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () 
       expect(res.stdout).toContain('--goal-mode');
     });
 
-    it('CLAUDE.md:334 promet buddy nodes reject', () => {
-      // Documentation claim: "buddy nodes list|status|approve|reject"
-      // Reality: subcommands are list, pair, approve, describe, remove, invoke, pending (no reject)
-      const res = runCli(['nodes', 'reject', 'node-123']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'reject'" (exitCode 1)
+    it('confirme les sous-commandes nodes et dément la promesse reject attribuée à CLAUDE.md', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy nodes list|status|approve|reject');
+      const res = runCli(['nodes', '--help']);
       expect(res.exitCode).toBe(0);
+      for (const command of ['list', 'pair', 'approve', 'describe', 'remove', 'invoke', 'pending']) {
+        expect(res.stdout).toContain(command);
+      }
+      expect(res.stdout).not.toContain('reject');
     });
 
-    it('CLAUDE.md:333 promet buddy todo complete', () => {
-      // Documentation claim: "buddy todo [list|add|complete]"
-      // Reality in src/commands/todo.ts: the subcommand is "done", not "complete"
-      const res = runCli(['todo', 'complete', '1']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'complete'" (exitCode 1)
+    it('confirme todo done et dément la promesse complete attribuée à CLAUDE.md', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy todo [list|add|complete]');
+      const res = runCli(['todo', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('done <id>');
+      expect(res.stdout).not.toContain('complete <id>');
     });
 
-    it('CLAUDE.md:335 promet buddy secrets delete', () => {
-      // Documentation claim: "buddy secrets list|set|delete"
-      // Reality in src/commands/cli/secrets-command.ts: the subcommand is "remove", not "delete"
-      const res = runCli(['secrets', 'delete', 'TEST_KEY']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'delete'" (exitCode 1)
+    it('confirme secrets remove et dément la promesse delete attribuée à CLAUDE.md', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy secrets list|set|delete');
+      const res = runCli(['secrets', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('remove <name>');
+      expect(res.stdout).not.toContain('delete <name>');
     });
 
-    it('CLAUDE.md:336 promet buddy approvals revoke', () => {
-      // Documentation claim: "buddy approvals list|revoke|grant"
-      // Reality in src/commands/approvals.ts: subcommands are list, approve, deny, policy (no revoke)
-      const res = runCli(['approvals', 'revoke', 'appr-123']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'revoke'" (exitCode 1)
+    it('confirme approvals approve/deny/policy et dément revoke/grant dans CLAUDE.md', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy approvals list|revoke|grant');
+      const res = runCli(['approvals', '--help']);
       expect(res.exitCode).toBe(0);
+      for (const command of ['approve <id>', 'deny <id>', 'policy [action] [mode]']) {
+        expect(res.stdout).toContain(command);
+      }
+      expect(res.stdout).not.toMatch(/\b(revoke|grant)\b/);
     });
 
-    it('CLAUDE.md:343 promet buddy tunnel stop', () => {
-      // Documentation claim: "buddy tunnel [start|stop|status]"
-      // Reality in src/index.ts: only "start" exists
-      const res = runCli(['tunnel', 'stop']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'stop'" (exitCode 1)
+    it('confirme que tunnel expose seulement start', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy tunnel [start|stop|status]');
+      const res = runCli(['tunnel', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('start [options]');
+      expect(res.stdout).not.toMatch(/^\s+(stop|status)\b/m);
     });
 
-    it('CLAUDE.md:345 promet buddy completions uninstall', () => {
-      // Documentation claim: "buddy completions [install|uninstall]"
-      // Reality in src/commands/completions.ts: prints "Unsupported shell: uninstall"
-      const res = runCli(['completions', 'uninstall']);
-      // Ce test ROUGE échoue car la commande refuse "uninstall"
-      expect(res.stdout).not.toContain('Unsupported shell: uninstall');
+    it('confirme les shells de completions sans promettre uninstall', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy completions [install|uninstall]');
+      const res = runCli(['completions', '--help']);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('Generate or install shell completion scripts');
+      expect(res.stdout).not.toContain('uninstall');
     });
 
-    it('CLAUDE.md:344 promet buddy lsp start', () => {
-      // Documentation claim: "buddy lsp [start|status|stop]"
-      // Reality in src/index.ts: only "status" and "diagnostics" exist
-      const res = runCli(['lsp', 'start']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'start'" (exitCode 1)
+    it('confirme lsp status et diagnostics sans start/stop', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy lsp [start|status|stop]');
+      const res = runCli(['lsp', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('status [options]');
+      expect(res.stdout).toContain('diagnostics [options] <file>');
+      expect(res.stdout).not.toMatch(/^\s+(start|stop)\b/m);
     });
 
-    it('CLAUDE.md:345 promet buddy deploy preview', () => {
-      // Documentation claim: "buddy deploy [init|preview|apply]"
-      // Reality in src/index.ts: only "platforms", "init", "nix" exist
-      const res = runCli(['deploy', 'preview']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'preview'" (exitCode 1)
+    it('confirme deploy platforms/init/nix sans preview/apply', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy deploy [init|preview|apply]');
+      const res = runCli(['deploy', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('platforms');
+      expect(res.stdout).toContain('init [options] <platform>');
+      expect(res.stdout).toContain('nix [options]');
+      expect(res.stdout).not.toMatch(/^\s+(preview|apply)\b/m);
     });
 
-    it('CLAUDE.md:333 promet buddy execpolicy clear', () => {
-      // Documentation claim: "buddy execpolicy [check|list|clear]"
-      // Reality in src/commands/execpolicy.ts: no "clear" subcommand
-      const res = runCli(['execpolicy', 'clear']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'clear'" (exitCode 1)
+    it('confirme les commandes execpolicy sans clear', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy execpolicy [check|list|clear]');
+      const res = runCli(['execpolicy', '--help']);
       expect(res.exitCode).toBe(0);
+      for (const command of ['check', 'check-argv', 'list', 'list-prefix', 'add-prefix', 'show-dangerous', 'dashboard']) {
+        expect(res.stdout).toContain(command);
+      }
+      expect(res.stdout).not.toMatch(/^\s+clear\b/m);
+    });
+
+    it('documente correctement buddy import', () => {
+      const guide = readRepoFile('docs', 'getting-started.md');
+      expect(guide).toContain('Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code');
+      expect(guide).not.toMatch(/`buddy import`[^\n]+(?:memory|history)/i);
+      const res = runCli(['import', '--help']);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('règles et serveurs MCP');
+    });
+
+    it('documente buddy explain comme analyse de dépôt', () => {
+      const guide = readRepoFile('docs', 'getting-started.md');
+      expect(guide).toMatch(/`buddy explain`[^\n]+repository explanation report/);
+      const res = runCli(['explain', '--help']);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('Dossier du dépôt à analyser');
+    });
+
+    it('documente buddy dev explain sans argument fichier', () => {
+      const guide = readRepoFile('docs', 'getting-started.md');
+      expect(guide).toMatch(/`buddy dev explain`[^\n]+Summarise repository conventions/);
+      expect(guide).not.toContain('buddy dev explain <file>');
+      const res = runCli(['dev', 'explain', '--help']);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('Usage: buddy dev explain [options]');
+    });
+
+    it('confirme que proxy et desktop sont des commandes directes avec options', () => {
+      const proxy = runCli(['proxy', '--help']);
+      const desktop = runCli(['desktop', '--help']);
+      expect(proxy.exitCode).toBe(0);
+      expect(desktop.exitCode).toBe(0);
+      expect(proxy.stdout).toContain('Usage: buddy proxy [options]');
+      expect(proxy.stdout).not.toContain('Commands:');
+      expect(desktop.stdout).toContain("Alias for 'buddy gui'");
+      expect(desktop.stdout).not.toContain('Commands:');
+      expect(readRepoFile('CLAUDE.md')).not.toMatch(/buddy (?:proxy|desktop) \[(?:start|stop|status|logs|install)/);
+    });
+
+    it('confirme cloud submit/status/list/cancel/logs/delete', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy cloud [status|sync]');
+      const handler = readRepoFile('src', 'commands', 'handlers', 'cloud-handlers.ts');
+      for (const command of ['submit', 'status', 'list', 'cancel', 'logs', 'delete']) {
+        expect(handler).toContain(`case '${command}':`);
+      }
+      expect(handler).not.toContain("case 'sync':");
+    });
+
+    it('confirme bundles list/create/show/remove', () => {
+      expect(readRepoFile('CLAUDE.md')).not.toContain('buddy bundles list|pack|unpack|verify');
+      const res = runCli(['bundles', '--help']);
+      expect(res.exitCode).toBe(0);
+      for (const command of ['list [options]', 'create [options]', 'show [options]', 'remove [options]']) {
+        expect(res.stdout).toContain(command);
+      }
+      expect(res.stdout).not.toMatch(/^\s+(pack|unpack|verify)\b/m);
     });
   });
 });
