@@ -138,7 +138,7 @@ L'inspection de `4478d1ea1..HEAD` montre l'introduction non contrôlée de nombr
 3. **18 fichiers de compte-rendu committés à la racine** :
    - `RAPPORT-GK1.md`, `RAPPORT-GK4.md`, `RAPPORT-GK5.md`, `RAPPORT-GK6.md`, `RAPPORT-GK10.md`, `RAPPORT-GK12.md`, `RAPPORT-GK14.md`, `RAPPORT-GK16.md`, `RAPPORT-GK17.md`, `RAPPORT-GK18.md`, `RAPPORT-GK20.md`, `RAPPORT-GK21.md`, `RAPPORT-GK22.md`, `RAPPORT-GK23.md`, `RAPPORT-GK25.md`, `RAPPORT-GK27.md`, `RAPPORT-GK28.md`, `RAPPORT-GK29.md`.
 4. **Violation de sécurité des données d'infrastructure (test `donnees-personnelles.test.ts`)** :
-   - Le terme désignant l'infrastructure privée de l'auteur (`darkstar`) a été commité dans `RAPPORT-GK5.md`, `docs/FABLE5-CODEX-COORDINATION.md` et `src/companion/assistant-config.ts`.
+   - Un identifiant désignant l'infrastructure privée de l'auteur a été commité dans `RAPPORT-GK5.md`, `docs/FABLE5-CODEX-COORDINATION.md` et `src/companion/assistant-config.ts`.
 
 ---
 
@@ -173,4 +173,4 @@ npx vitest run tests/fusion/revue-gf1-fusions.test.ts
 | `2cb4bb7b5` (GT2) | Disparition de la couverture du VAD sous bruit ambiant | `tests/sensory/hole-vad-noise-cap.test.ts` | Rétablir le test d'hystérésis du VAD dans `hole-vad-noise-cap.test.ts` avec les nouvelles constantes adaptatives au lieu de `it.todo` |
 | `0ec542f37` (DOC1) | 16 tests de documentation échouent en ENOENT car ils tentent d'exécuter `dist/index.js` absent | `tests/docs/revue-gemini-docs.test.ts` | Compiler `dist/` dans le script de test ou faire exécuter `runCli` via `tsx src/index.ts` |
 | Multiples (`6409b24e2`, etc.) | 52 fichiers de travail `_qa/` et 18 `RAPPORT-GK*.md` polluent le dépôt | `git ls-files _qa/` | Déplacer les rapports dans un dossier dédié (ex. `docs/reports/`) et ajouter `_qa/` à `.gitignore` en nettoyant l'arbre git |
-| `13f878cec` (GK5) | Fuite d'infrastructure privée (`darkstar`) dans des documents commités | `tests/security/donnees-personnelles.test.ts` | Remplacer `darkstar` par un nom fictif neutre dans `RAPPORT-GK5.md`, `docs/FABLE5-CODEX-COORDINATION.md` et `src/companion/assistant-config.ts` |
+| `13f878cec` (GK5) | Fuite d'un identifiant d'infrastructure privée dans des documents commités | `tests/security/donnees-personnelles.test.ts` | Remplacer l'identifiant par un nom fictif neutre dans `RAPPORT-GK5.md`, `docs/FABLE5-CODEX-COORDINATION.md` et `src/companion/assistant-config.ts` |

@@ -114,6 +114,18 @@ ROUGE — baseline GF1 : ancien chemin détecté ; public-screenshots : ENOENT c
 VERT — GF1 complet + docs publiques : 3 fichiers, 26/26.
 ```
 
+## Régression 6 — GK5/DARK3 × dépôt public, infrastructure privée publiée
+
+GK5 et DARK3 doivent conserver la topologie fonctionnelle Kyutai → replis, le choix `n_q` et un
+exemple de configuration utilisable. Le garde public interdit les noms et adresses de
+l'infrastructure réelle. Les textes et aides utilisent donc « serveur GPU privé/local » et
+`gpu-voice.example`, sans changer aucune clé de configuration ni le comportement TTS.
+
+```text
+ROUGE — donnees-personnelles : 1/1 échec, cinq fichiers suivis signalés.
+VERT — donnees-personnelles : 1/1 ; assistant-config : 12/12.
+```
+
 ## Vérifications finales
 
 À compléter.
