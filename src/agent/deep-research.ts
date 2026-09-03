@@ -589,9 +589,76 @@ export function renderReferences(sources: SourceRef[]): string {
   return lines.join('\n');
 }
 
-/** Strip a trailing references/sources heading the LLM may have added (we own that section). */
-function stripTrailingReferences(body: string): string {
-  return body.replace(/\n+#{1,6}\s*(références|references|sources|bibliographie)\b[\s\S]*$/i, '').trimEnd();
+/**
+ * Strip a trailing references/sources heading the LLM may have added (we own
+ * that section). Accepts ATX headings and the bold `**Références**` dump seen
+ * live in GK33, so the deterministic `## Références` is the only one left.
+ */
+export function stripTrailingReferences(body: string): string {
+  if (typeof body !== 'string' || body.length === 0) return typeof body === 'string' ? body : '';
+  return body
+    .replace(
+      /\n+(?:#{1,6}\s*|\*{1,2}\s*)?(?:références|references|sources|bibliographie)\b[\s*]*[\s\S]*$/i,
+      '',
+    )
+    .trimEnd();
+}
+
+const CITE_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'are', 'was',
+  'were', 'been', 'will', 'would', 'could', 'should', 'into', 'over', 'under', 'than',
+  'then', 'them', 'they', 'their', 'there', 'when', 'what', 'which', 'while', 'about',
+  'after', 'before', 'between', 'also', 'only', 'just', 'more', 'some', 'such', 'very',
+  'dans', 'cette', 'pour', 'avec', 'plus', 'moins', 'comme', 'sont', 'etre', 'elle',
+  'elles', 'nous', 'vous', 'leur', 'leurs', 'dont', 'ainsi', 'aussi', 'alors', 'donc',
+  'mais', 'une', 'des', 'les', 'est', 'pas', 'que', 'qui', 'par', 'sur', 'aux', 'ces',
+  'cet', 'not', 'but', 'had', 'its', 'can', 'may', 'our', 'out', 'all', 'any',
+]);
+
+function foldCiteText(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+function significantCiteTokens(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const token of foldCiteText(text).match(/[a-z0-9]{3,}/g) ?? []) {
+    if (!CITE_STOPWORDS.has(token)) out.add(token);
+  }
+  return out;
+}
+
+function citationOverlapsSource(sentence: string, source: CollectedSource): boolean {
+  const sent = sentence.replace(/\[\d{1,5}\]/g, ' ');
+  const haystack = `${source.title} ${source.content}`;
+  const sentTokens = significantCiteTokens(sent);
+  const srcTokens = significantCiteTokens(haystack);
+  let overlap = 0;
+  for (const token of sentTokens) {
+    if (srcTokens.has(token)) overlap++;
+  }
+  return overlap >= 1;
+}
+
+/**
+ * Drop `[n]` markers whose surrounding sentence is not actually supported by
+ * source `n`. Phantom numbers are already gone (see
+ * {@link stripInvalidCitationMarkers}); this catches the GK33 live failure
+ * where a real id was cited for an idea the page does not contain.
+ * Pure; never throws.
+ */
+export function groundCitedClaims(body: string, sources: CollectedSource[]): string {
+  if (typeof body !== 'string' || body.length === 0) return typeof body === 'string' ? body : '';
+  if (!Array.isArray(sources) || sources.length === 0) return body;
+  const byId = new Map<number, CollectedSource>();
+  for (const source of sources) byId.set(source.id, source);
+  return body.replace(/[^.!?\n]+(?:[.!?]+|$)/g, (sentence) =>
+    sentence.replace(/\[(\d{1,5})\]/g, (full, num: string) => {
+      const id = Number(num);
+      const source = byId.get(id);
+      if (!source) return '';
+      return citationOverlapsSource(sentence, source) ? full : '';
+    }),
+  );
 }
 
 /**
@@ -676,7 +743,11 @@ export async function synthesize(
     ]);
     // Strip the LLM's own references heading, THEN drop any fabricated `[n]` beyond the real
     // source count so every surviving marker resolves in the deterministic References section.
-    const body = stripInvalidCitationMarkers(stripTrailingReferences((raw || '').trim()), sources.length);
+    const stripped = stripInvalidCitationMarkers(
+      stripTrailingReferences((raw || '').trim()),
+      sources.length,
+    );
+    const body = groundCitedClaims(stripped, sources);
     if (body.length > 0) {
       return { report: `${body}\n\n${references}`, llmUsed: true };
     }

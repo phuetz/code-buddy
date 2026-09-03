@@ -53,6 +53,8 @@ import {
   toSourceRegistry,
   renderReferences,
   stripInvalidCitationMarkers,
+  stripTrailingReferences,
+  groundCitedClaims,
   resolveDeepResearchOptions,
   type DeepResearchBoundaries,
   type DeepResearchOptions,
@@ -736,7 +738,10 @@ async function coWriteArticle(
   });
   // Drop any fabricated `[n]` beyond the shared registry so no co-written section leaves a phantom
   // citation the single renumbered "## Références" (rendered from `registry`) can't resolve.
-  const body = stripInvalidCitationMarkers(stripSectionReferences(parts.join('\n')), registry.length);
+  const body = groundCitedClaims(
+    stripInvalidCitationMarkers(stripSectionReferences(parts.join('\n')), registry.length),
+    sources,
+  );
   emit({ stage: 'written', sections: usableOutline.sections.length, coWritten: true });
   return {
     report: `${body}\n\n${references}`,
@@ -864,7 +869,7 @@ function extractJsonObject(raw: string): string | null {
 
 /** Strip a trailing references/sources heading a section writer may have added. */
 function stripSectionReferences(body: string): string {
-  return body.replace(/\n+#{1,6}\s*(références|references|sources|bibliographie)\b[\s\S]*$/i, '').trimEnd();
+  return stripTrailingReferences(body);
 }
 
 function tokenize(text: string): string[] {
