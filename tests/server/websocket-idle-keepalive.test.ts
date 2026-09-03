@@ -6,6 +6,7 @@ import { FleetListener } from '../../src/fleet/fleet-listener.js';
 import { createApiKey, deleteApiKey } from '../../src/server/auth/api-keys.js';
 import { DEFAULT_SERVER_CONFIG } from '../../src/server/types.js';
 import {
+  PEER_REQUEST_LANE_TIMEOUT_MS,
   resolveWsHeartbeatIntervalMs,
   resolveWsIdleTimeoutMs,
   setupWebSocket,
@@ -118,5 +119,6 @@ describe('WebSocket idle keepalive for fleet listeners', () => {
         800,
       ),
     ).toBe(true);
+    expect(PEER_REQUEST_LANE_TIMEOUT_MS).toBeGreaterThan(120_000);
   });
 });

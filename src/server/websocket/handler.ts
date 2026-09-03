@@ -35,6 +35,9 @@ export function resolveWsIdleTimeoutMs(
 }
 
 /** True when the heartbeat sweeper should kill this socket as idle. */
+/** Lane timeout for peer:* RPCs. Longer than the 120s channel default so a local LLM can finish. */
+export const PEER_REQUEST_LANE_TIMEOUT_MS = 15 * 60 * 1000;
+
 export function shouldTerminateIdleWs(
   state: {
     lastActivity: number;
@@ -1140,7 +1143,11 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
       await enqueuePeerHandler(state, () => enqueueMessage(
         `${sessionKey}:peer:${peerRequestId}`,
         () => handler(ws, state, payload ?? {}, envelope),
-        { parallel: true },
+        {
+          parallel: true,
+          // Channel default is 120s; cold local Ollama peer.chat exceeded it (GK17).
+          timeout: PEER_REQUEST_LANE_TIMEOUT_MS,
+        },
       ));
     } else {
       await enqueueMessage(sessionKey, () => handler(ws, state, payload ?? {}, envelope));
