@@ -110,7 +110,15 @@ expected undefined to be 1  // create vide annonçait Backup created
 
 Correctif : `handleBackupCreate` refuse si `files.length === 0` (exit 1, pas d'archive écrite).
 
-Vert : 5 fichiers / 23 tests backup ciblés.
+Vert : 5 fichiers / 23 tests backup ciblés. Commit `7f9920a47`.
+
+### Lot B — disque plein / EACCES (rouge → vert)
+
+Rouge collé : create lançait `Error EACCES` (crash) ; restore écrivait « Failed to read backup … EACCES ».
+
+Correctif : `describeBackupIoError` (ENOSPC/EACCES/ENOTDIR) autour de mkdir/write create et des écritures restore.
+
+Vert : 6 fichiers / 27 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

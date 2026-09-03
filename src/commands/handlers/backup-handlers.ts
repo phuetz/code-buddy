@@ -96,8 +96,16 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
 
   // Ensure backup directory exists
   const backupDir = outputPath ? join(outputPath) : BACKUP_DIR;
-  if (!existsSync(backupDir)) {
-    mkdirSync(backupDir, { recursive: true });
+  try {
+    if (!existsSync(backupDir)) {
+      mkdirSync(backupDir, { recursive: true });
+    }
+  } catch (err) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response: describeBackupIoError(err, `create the backup directory ${backupDir}`),
+    };
   }
 
   // Collect files to backup
@@ -141,7 +149,15 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     fileCount: files.length,
   };
 
-  writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
+  try {
+    writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
+  } catch (err) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response: describeBackupIoError(err, `write backup ${backupPath}`),
+    };
+  }
 
   const totalSizeKB = Math.round(backupData.totalSize / 1024);
 
@@ -318,75 +334,84 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
 
     const archiveFiles = data.files as BackupArchiveFile[];
     const destRoot = resolve(join(process.cwd(), '.codebuddy'));
-    mkdirSync(destRoot, { recursive: true });
 
-    const destinations = new Map<string, string>();
-    for (const manifestFile of manifest.files) {
-      const dest = resolveRestoreDestination(destRoot, manifestFile.path);
-      if (!dest) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
-        };
+    try {
+      mkdirSync(destRoot, { recursive: true });
+
+      const destinations = new Map<string, string>();
+      for (const manifestFile of manifest.files) {
+        const dest = resolveRestoreDestination(destRoot, manifestFile.path);
+        if (!dest) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
+          };
+        }
+        destinations.set(manifestFile.path, dest);
       }
-      destinations.set(manifestFile.path, dest);
+
+      for (const [archivePath, dest] of destinations) {
+        const safetyError = getRestorePathSafetyError(destRoot, dest);
+        if (safetyError) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
+          };
+        }
+      }
+
+      const restored: string[] = [];
+      for (const manifestFile of manifest.files) {
+        const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
+        if (!archiveFile) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
+          };
+        }
+        const content = Buffer.from(archiveFile.content, 'base64');
+        const dest = destinations.get(manifestFile.path)!;
+        mkdirSync(dirname(dest), { recursive: true });
+        const safetyError = getRestorePathSafetyError(destRoot, dest);
+        if (safetyError) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
+          };
+        }
+        writeFileSync(dest, content);
+        const reread = readFileSync(dest);
+        const expectedChecksum = fileChecksum(content);
+        const actualChecksum = fileChecksum(reread);
+        if (actualChecksum !== expectedChecksum || actualChecksum !== manifestFile.checksum) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Restore verification failed for ${manifestFile.path}: on-disk hash does not match the archive`,
+          };
+        }
+        restored.push(manifestFile.path);
+      }
+
+      return {
+        handled: true,
+        response: [
+          `Restored backup: ${basename(fullPath)}`,
+          `Files: ${restored.length}`,
+          `Verified: sha256 match for ${restored.length} file(s)`,
+        ].join('\n'),
+      };
+    } catch (err) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response: describeBackupIoError(err, `write restored files from ${fullPath}`),
+      };
     }
-
-    for (const [archivePath, dest] of destinations) {
-      const safetyError = getRestorePathSafetyError(destRoot, dest);
-      if (safetyError) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
-        };
-      }
-    }
-
-    const restored: string[] = [];
-    for (const manifestFile of manifest.files) {
-      const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
-      if (!archiveFile) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
-        };
-      }
-      const content = Buffer.from(archiveFile.content, 'base64');
-      const dest = destinations.get(manifestFile.path)!;
-      mkdirSync(dirname(dest), { recursive: true });
-      const safetyError = getRestorePathSafetyError(destRoot, dest);
-      if (safetyError) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
-        };
-      }
-      writeFileSync(dest, content);
-      const reread = readFileSync(dest);
-      const expectedChecksum = fileChecksum(content);
-      const actualChecksum = fileChecksum(reread);
-      if (actualChecksum !== expectedChecksum || actualChecksum !== manifestFile.checksum) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Restore verification failed for ${manifestFile.path}: on-disk hash does not match the archive`,
-        };
-      }
-      restored.push(manifestFile.path);
-    }
-
-    return {
-      handled: true,
-      response: [
-        `Restored backup: ${basename(fullPath)}`,
-        `Files: ${restored.length}`,
-        `Verified: sha256 match for ${restored.length} file(s)`,
-      ].join('\n'),
-    };
   } catch (err) {
     return {
       handled: true,
@@ -407,6 +432,24 @@ interface CollectedFile {
 
 function fileChecksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
+}
+
+function describeBackupIoError(err: unknown, action: string): string {
+  const e = err as NodeJS.ErrnoException;
+  const target = e.path ? ` (${e.path})` : '';
+  if (e.code === 'ENOSPC') {
+    return `Cannot ${action}: no space left on the device${target}.`;
+  }
+  if (e.code === 'EACCES' || e.code === 'EPERM') {
+    return `Cannot ${action}: permission denied${target}.`;
+  }
+  if (e.code === 'ENOTDIR') {
+    return `Cannot ${action}: the output path is not a directory${target}.`;
+  }
+  if (e.code === 'EISDIR') {
+    return `Cannot ${action}: expected a file, got a directory${target}.`;
+  }
+  return `Cannot ${action}: ${e.message ?? String(err)}`;
 }
 
 /** True when `candidate` is destRoot itself or a file/dir under it. */
