@@ -1,5 +1,31 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DELEG1 — sous-agents légers multiplexés (3 septembre 2026)
+
+`src/agent/delegation/thread-delegation.ts` : un délégué léger par sous-agent
+(contexte borné, canal d'entrée asynchrone, flux de sortie étiqueté et
+multiplexé vers le parent, budgets hérités mais réduits, annulation
+descendante). `/batch` lance désormais des agents complets par unité au lieu
+d'un simple `chat()` ; concurrence configurable, défaut inchangé à 1. Prouvé
+sur Ollama local : deux agents en parallèle, 25,7 s de chevauchement, un seul
+modèle chargé. Coût honnête : 31 s par agent complet contre 1,5 s en complétion
+simple. Le Verifier ne confirme plus depuis la prose du modèle sans oracle
+(fail-closed), test aligné.
+
+### PRIV1 — plus rien de privé dans le dépôt public (3 septembre 2026)
+
+200 fichiers assainis : chemins de home en `~/…`, `$HOME` ou `os.homedir()`,
+noms de dépôts privés remplacés par des désignations neutres, test de
+documentation MCP généralisé. Le garde-fou `donnees-personnelles` couvre
+désormais les chemins de home et ces noms (rouge sur 196 fichiers avant, vert
+après).
+
+### TAUTFIX1 — trois tests qui ne pouvaient plus rougir (3 septembre 2026)
+
+La porte de sécurité relationnelle du compagnon est exercée sur le raffinement
+LLM, la garde « pas de done sans fichier modifié » de `/batch` décide seule, et
+le rendu `▶` du thème actif est assertionné. Chaque contrat prouvé par mutation.
+
 ### SERV1 — le serveur branché par un inconnu (3 septembre 2026)
 
 `/v1/chat/completions` renvoie des erreurs honnêtes (`max_tokens` absurde, `tools`
