@@ -40,13 +40,14 @@ import {
 import { useAppStore } from '../store';
 import { useConfigModalState } from '../store/selectors';
 import { APP_NAME } from '../brand';
+import type { ProviderType } from '../types';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 type TestState = 'idle' | 'testing' | 'ok' | 'fail';
 
 interface OnboardingWizardProps {
   onClose: () => void;
-  onOpenApiSettings: () => void;
+  onOpenApiSettings: (provider?: ProviderType) => void;
   /** Opens the companion panel from the step-3 permission cards. */
   onOpenCompanion: () => void;
   /** True while the API settings modal is stacked on top of the wizard — the
@@ -155,6 +156,10 @@ export function OnboardingWizard({
         await window.electronAPI?.config?.save?.({
           defaultWorkdir: folder,
         });
+        window.electronAPI?.send?.({
+          type: 'workdir.set',
+          payload: { path: folder },
+        });
       }
     } catch {
       /* ignore */
@@ -188,7 +193,7 @@ export function OnboardingWizard({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={onOpenApiSettings}
+          onClick={() => onOpenApiSettings()}
           className="px-3 py-1.5 rounded-md border border-border-subtle text-xs hover:bg-surface-hover"
           data-testid="onboarding-open-api"
         >
@@ -408,6 +413,7 @@ export function OnboardingWizard({
                   {
                     icon: BrainCircuit,
                     testId: 'onboarding-brain-codebuddy',
+                    providerHint: 'chatgpt' as const,
                     title: t('onboarding.brainCodeBuddyTitle', 'Code Buddy brain'),
                     desc: t(
                       'onboarding.brainCodeBuddyDesc',
@@ -417,6 +423,7 @@ export function OnboardingWizard({
                   {
                     icon: Server,
                     testId: 'onboarding-brain-local',
+                    providerHint: 'ollama' as const,
                     title: t('onboarding.brainLocalTitle', 'Local runtimes'),
                     desc: t(
                       'onboarding.brainLocalDesc',
@@ -426,17 +433,18 @@ export function OnboardingWizard({
                   {
                     icon: Key,
                     testId: 'onboarding-brain-custom',
+                    providerHint: 'custom' as const,
                     title: t('onboarding.brainCustomTitle', 'Custom endpoint'),
                     desc: t(
                       'onboarding.brainCustomDesc',
                       'OpenAI-compatible servers can coexist as named configs.'
                     ),
                   },
-                ].map(({ icon: Icon, testId, title, desc }) => (
+                ].map(({ icon: Icon, testId, providerHint, title, desc }) => (
                   <button
                     type="button"
                     key={testId}
-                    onClick={onOpenApiSettings}
+                    onClick={() => onOpenApiSettings(providerHint)}
                     className="rounded-lg border border-border-subtle bg-surface/40 p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent/30"
                     data-testid={testId}
                   >

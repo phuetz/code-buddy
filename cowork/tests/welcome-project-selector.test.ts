@@ -35,4 +35,13 @@ describe('welcome project selector', () => {
     expect(onboarding).toContain('defaultWorkdir: folder');
     expect(onboarding).not.toContain('defaultWorkspacePath');
   });
+
+  it('applies the onboarding folder as the live workdir for the next chat', () => {
+    const onboarding = fs.readFileSync(onboardingPath, 'utf8');
+    // Proven GK1: saving defaultWorkdir alone left new sessions on
+    // userData/default_working_dir, so the first write was rejected as
+    // outside the workspace.
+    expect(onboarding).toContain("type: 'workdir.set'");
+    expect(onboarding).toContain('path: folder');
+  });
 });

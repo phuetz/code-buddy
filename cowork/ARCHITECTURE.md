@@ -170,6 +170,6 @@ level if anyone ever reintroduces the same shape.
 - **Vite-only** (`npx vite build`): the production bundle for
   `dist/` (renderer) + `dist-electron/main` + `dist-electron/preload`,
   ~30 s, no Python download. **Use this for iterative dev on Linux**
-  — see `docs/dev-linux.md`.
+  — see `DEV-LINUX.md`.
 - **Full build** (`npm run build`): vite + `electron-builder` package.
   Required only for shipping installers.

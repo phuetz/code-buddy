@@ -23,6 +23,7 @@ package.json.backup
 tmp/
 tmp_*/
 _test-*/
+_gk1/
 test-app/
 test-scripts/
 C\:Users*/
