@@ -44,6 +44,11 @@ _qa/gk25/*.png
 _qa/gk25/*.jpg
 _qa/gk25/*.jsonl
 _qa/gk27/
+_qa/gk32/home/
+_qa/gk32/work/
+_qa/gk32/logs/
+_qa/gk32/*.jsonl
+_qa/gk32/npm-registry/
 test-app/
 test-scripts/
 C\:Users*/
