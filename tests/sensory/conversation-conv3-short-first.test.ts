@@ -105,7 +105,7 @@ describe('CONV3 — short-first chitchat stream', () => {
     expect(prompt).toContain('Ne dépasse pas 3 phrases au total');
   });
 
-  it('plays the first useful sentence as soon as the first stable segment arrives and caps the continuation', async () => {
+  it('plays the first useful sentence after safety look-ahead and caps the continuation', async () => {
     process.env.CODEBUDDY_SENSORY_SHORT_FIRST = 'true';
     const logs: string[] = [];
     vi.spyOn(logger, 'info').mockImplementation((message) => {
@@ -115,7 +115,7 @@ describe('CONV3 — short-first chitchat stream', () => {
 
     await harness.voice('Lisa, raconte-moi quelque chose de simple.');
 
-    expect(harness.firstAudioProviderCount()).toBe(1);
+    expect(harness.firstAudioProviderCount()).toBe(2);
     expect(harness.spoken).toEqual(STREAMED_SENTENCES.slice(0, 3));
     expect(harness.spoken[0]?.trim().split(/\s+/u)).toHaveLength(5);
     expect(logs).toContainEqual(

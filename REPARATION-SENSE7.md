@@ -39,6 +39,14 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 - Correctif bouche : le contrôleur de cues revalide au moment de jouer que `isSpeaking()` est faux. Cette garde couvre le timer du backchannel et la réparation immédiate ; l’admission antérieure du tour ne suffit jamais à superposer un cue à la voix du robot.
 - Vert ciblé : trous 1, 2, 7 + `conversation-cues`, `voice-activity`, `speech-reaction` → **6 fichiers, 75 tests réussis**.
 
+### Trou 4 — short-first avant décision
+
+- Rouge initial : **2/2 échecs** ; la garde libérait `J’ai une…` sans la phrase suivante et le premier audio précédait le jalon simulé de revue.
+- Correctif garde : le paramètre historique `releaseFirstImmediately` ne peut plus désactiver la rétention obligatoire d’une phrase d’avance dans `RelationshipSafetyStreamGuard`.
+- Correctif revue : lorsqu’un tour `short-first` requiert réellement la revue sémantique, le brouillon complet et borné reste muet jusqu’au résultat ; seule la réponse approuvée/révisée est ensuite segmentée et livrée dans le plafond CONV3.
+- Fixture fausse corrigée avec preuve : le test n’injectait aucun reviewer, et la revue par défaut est désactivée sous `NODE_ENV=test`; « Dis-moi quelque chose » ne créait en outre aucune obligation sémantique. Il injecte maintenant une revue réelle sur une question qui la déclenche et marque son achèvement dans le reviewer.
+- Vert : trou 4 + CONV3 + garde relationnelle + `hybrid-reply` → **4 fichiers, 80 tests réussis** ; voisin `voice-streaming` + CONV3 + trou 4 → **3 fichiers, 53 tests réussis**.
+
 ## Grille de traçabilité
 
 | Trou | Correctif | Invariant préservé | Commit |
@@ -47,7 +55,7 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 | 3 | Exiger AEC active + marge de fuite mesurée avant tout barge-in sans transcript ; durée seule refusée | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | Ce commit |
 | 2 | Étendre l’empreinte aux fragments contenus de 1–3 mots et bloquer la réparation vide près d’une voix récente | Filtre de propre voix, y compris fragments courts de moins de 90 s | Ce commit |
 | 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | Ce commit |
-| 4 | À établir | Aucune première phrase CONV3 avant décision | À venir |
+| 4 | Rétablir la phrase d’avance et bufferiser short-first jusqu’à la revue lorsqu’elle est requise | Aucune première phrase CONV3 avant décision | Ce commit |
 | 6 | À établir | Repli ElevenLabs au segment interrompu, jamais au début | À venir |
 | 5 | À établir | Grâce d’hésitation de 550–900 ms pour mots suspensifs | À venir |
 

@@ -59,9 +59,17 @@ describe('Mission SENSE6 — Trou 4 : Première phrase CONV3 émise avant la dé
         yield 'Première phrase utile immédiatement audible. ';
         await new Promise((resolve) => setTimeout(resolve, 50));
         yield 'Deuxième phrase complétant la réponse.';
-        reviewCompleted = true;
       },
       agentReply: async () => 'Réponse agent.',
+      semanticReview: async ({ draft }) => {
+        reviewCompleted = true;
+        return {
+          response: draft,
+          outcome: 'accepted',
+          reason: 'audit_passed',
+          revisionAttempts: 0,
+        };
+      },
     });
 
     const voice = makeVoiceReply({
@@ -78,7 +86,7 @@ describe('Mission SENSE6 — Trou 4 : Première phrase CONV3 émise avant la dé
       avatarEnabled: false,
     });
 
-    await voice('Dis-moi quelque chose.');
+    await voice("Penses-tu qu'une IA peut aimer ?");
 
     // TROU PROUVÉ :
     // streamSpeak est appelé dès que le premier segment arrive (reviewCompleted est encore false).

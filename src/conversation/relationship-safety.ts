@@ -448,17 +448,10 @@ export class RelationshipSafetyStreamGuard {
   private buffer = '';
   private pending = '';
   private readonly issueSet = new Set<RelationshipSafetyIssue>();
-  private firstSegmentReleased = false;
 
-  constructor(
-    private readonly releaseFirstImmediately: boolean | (() => boolean) = false,
-  ) {}
-
-  private shouldReleaseFirstImmediately(): boolean {
-    return typeof this.releaseFirstImmediately === 'function'
-      ? this.releaseFirstImmediately()
-      : this.releaseFirstImmediately;
-  }
+  // The legacy argument remains source-compatible, but can no longer disable
+  // the mandatory one-sentence safety look-ahead.
+  constructor(_releaseFirstImmediately: boolean | (() => boolean) = false) {}
 
   push(delta: string): string[] {
     if (!delta) return [];
@@ -468,13 +461,6 @@ export class RelationshipSafetyStreamGuard {
     const released: string[] = [];
     for (const segment of segments) {
       if (!this.pending) {
-        if (!this.firstSegmentReleased && this.shouldReleaseFirstImmediately()) {
-          const guarded = guardRelationshipReply(segment);
-          for (const issue of guarded.issues) this.issueSet.add(issue);
-          if (guarded.response) released.push(`${guarded.response} `);
-          this.firstSegmentReleased = true;
-          continue;
-        }
         this.pending = segment;
         continue;
       }

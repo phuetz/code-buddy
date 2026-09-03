@@ -1231,6 +1231,9 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       const shortFirst = sensoryShortFirstEnabled()
         ? { maxSentences: sensoryReplyMaxSentences() }
         : undefined;
+      const reviewShortFirstBeforeDelivery = Boolean(
+        shortFirst && shouldReviewPlan(prepared.plan, heard),
+      );
       let shortFirstSentenceCount = 0;
       const streamOptions: VoiceStepOptions = {
         ...(replyOpts ?? {}),
@@ -1264,7 +1267,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           if (typeof delta !== 'string' || delta.length === 0) continue;
           if (shortFirst) shortFirstSentenceCount += 1;
           full += delta;
-          if (!prefixBuffer) yield delta;
+          if (!prefixBuffer && !reviewShortFirstBeforeDelivery) yield delta;
         }
       } catch (error) {
         if (!replyOpts?.signal?.aborted) {
@@ -1293,12 +1296,38 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           removeRepeatedPrefix(replyOpts?.spokenPrefix ?? '', completed),
         );
       }
-      if (completed && prefixBuffer && !replyOpts?.signal?.aborted) {
+      if (completed && reviewShortFirstBeforeDelivery && !replyOpts?.signal?.aborted) {
+        const reviewed = await reviewBeforeDelivery({
+          request: heard,
+          draft: completed,
+          plan: prepared.plan,
+          history: replyOpts?.spokenPrefix
+            ? [...recent, { role: 'assistant', content: replyOpts.spokenPrefix }]
+            : recent,
+          ...(cognitiveEvidence ? { evidence: cognitiveEvidence } : {}),
+          ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
+          ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
+        }, streamOptions);
+        if (replyOpts?.signal?.aborted) return;
+        const approved = guardBeforeMemory(reviewed?.response.trim() || completed);
+        const approvedParts: string[] = [];
+        for await (const delta of shortFirstSentenceStream(
+          singleTextStream(approved),
+          shortFirst!.maxSentences,
+          replyOpts?.signal,
+        )) {
+          approvedParts.push(delta.trim());
+          yield delta;
+        }
+        completed = approvedParts.join(' ');
+        shortFirstSentenceCount = approvedParts.length;
+      } else if (completed && prefixBuffer && !replyOpts?.signal?.aborted) {
         yield completed;
       }
       let correction = '';
       if (
         completed &&
+        !reviewShortFirstBeforeDelivery &&
         shouldReviewPlan(prepared.plan, heard) &&
         (!shortFirst || shortFirstSentenceCount < shortFirst.maxSentences) &&
         !replyOpts?.signal?.aborted
