@@ -246,6 +246,43 @@ Verifier Science attend `NEEDS REVIEW` sans oracle. Ils repassent ensemble à
 utilise `GIT_CEILING_DIRECTORIES=$PWD/.deleg1-tmp`, un `package.json` temporaire
 CommonJS dans ce `TMPDIR`, et le cache Playwright existant en lecture seule.
 
+Résultats finaux :
+
+```text
+$ npx vitest run tests/agent tests/commands tests/orchestration
+Test Files  330 passed (330)
+Tests       3947 passed (3947)
+EXIT_CODE=0
+
+$ npx vitest run tests/security/donnees-personnelles.test.ts
+Test Files  1 passed (1)
+Tests       1 passed (1)
+EXIT_CODE=0
+
+$ npx tsc --noEmit -p .
+EXIT_CODE=0
+
+$ npx eslint <7 fichiers TypeScript modifiés> --max-warnings=0
+EXIT_CODE=0
+
+$ git diff --check
+EXIT_CODE=0
+```
+
+Commits du chantier, dans l'ordre : `04448a96d`, `132c7b346`, `bc120ba1b`,
+`42dfecd67`, `30b4dc205`, `3aacfd3d8`, `1666f47b1`, `9ad6e50d8`, puis lot de
+passation documentaire sur HEAD. Aucun push.
+
 ## Points ouverts
 
-À compléter.
+- Le défaut reste volontairement à une exécution concurrente ; la preuve à deux
+  agents passe explicitement `concurrency: 2`. Les machines locales peuvent
+  relever `CODEBUDDY_BATCH_CONCURRENCY` selon leur VRAM.
+- Sur le micro-cas de création de deux fichiers, l'agent complet est 21,5 fois
+  plus lent que l'ancienne complétion directe. Il apporte l'autonomie d'outils,
+  pas une accélération brute.
+- La preuve couvre le fournisseur Ollama local et le chemin `/batch`, pas les
+  autres surfaces de délégation (`/swarm`, `/team`, QualityGate, Verifier).
+- Les répertoires temporaires, clones jouets et faux binaires créés par les
+  tests ont été supprimés ; ils n'étaient pas suivis et ne sont pas récupérables.
+  Le `node_modules` non suivi, présent avant la mission, est laissé intact.
