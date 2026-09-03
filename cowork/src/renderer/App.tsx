@@ -206,8 +206,9 @@ function App() {
   useBargeInTurnCancel(activeSessionId, stopSession);
   const initialized = useRef(false);
   const sidebarBeforeSettings = useRef(false);
-  // P1.6 — first-run onboarding wizard. Shows when no provider key is set
-  // and the user hasn't already completed (or skipped) onboarding.
+  // P1.6 — first-run onboarding wizard. Stays until the user finishes or
+  // skips (onboardingCompleted). Saving a provider must not hide it, or the
+  // workspace step is skipped and the first write lands outside the sandbox.
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [configProviderHint, setConfigProviderHint] = useState<ProviderType | undefined>();
   // P2.6 — Sub-agent dashboard (Cmd+Shift+A)
@@ -219,9 +220,9 @@ function App() {
   const [shortcutRevision, setShortcutRevision] = useState(0);
   useEffect(() => {
     if (!appConfig) return;
-    const config = appConfig as unknown as { onboardingCompleted?: boolean; apiKey?: string };
-    setShowOnboarding(!config.onboardingCompleted && !config.apiKey && !isConfigured);
-  }, [appConfig, isConfigured]);
+    const config = appConfig as unknown as { onboardingCompleted?: boolean };
+    setShowOnboarding(!config.onboardingCompleted);
+  }, [appConfig]);
 
   useEffect(() => {
     // Only run once on mount
