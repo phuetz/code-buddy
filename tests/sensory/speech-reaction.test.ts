@@ -1283,7 +1283,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
-  it('drops a matching loudspeaker echo during the guarded tail before storing it', async () => {
+  it('drops a matching loudspeaker echo during the guarded tail without storing its text', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-echo-tail-'));
     const heard: string[] = [];
     _resetVoiceActivityForTests();
@@ -1300,10 +1300,13 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Voici la réponse que Lisa vient de prononcer.', { startedAtMs: 4_250 });
-      await new Promise(resolve => setTimeout(resolve, 20));
+      const raw = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'echo_tail_echo',
+      );
       expect(heard).toEqual([]);
-      expect(await fileExists(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl')))
-        .toBe(false);
+      expect(raw).toContain('playbackCaptureSuppressed');
+      expect(raw).not.toContain('Voici la réponse que Lisa vient de prononcer.');
     } finally {
       unwire();
       _resetVoiceActivityForTests();

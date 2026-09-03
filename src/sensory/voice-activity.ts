@@ -219,13 +219,19 @@ export function classifyRecentVoiceEcho(
       && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
   );
   if (references.length === 0) return 'unknown';
-  const transcriptTokens = new Set(normalized.split(' ').filter(Boolean));
+  // SENSE7 (substring containment) and GT2 (every-token-is-robot fragment) both apply.
+  const transcriptTokens = [...new Set(normalized.split(' ').filter(Boolean))];
   const boundedTranscript = ` ${normalized} `;
   for (const reference of [...references].reverse()) {
     if (` ${reference.normalized} `.includes(boundedTranscript)) return 'echo';
     if (reference.tokens.length > 0) {
-      const overlap = reference.tokens.filter(token => transcriptTokens.has(token)).length;
-      if (overlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE) return 'echo';
+      const referenceTokens = new Set(reference.tokens);
+      const referenceOverlap = reference.tokens.filter(token => transcriptTokens.includes(token)).length;
+      const transcriptIsRobotFragment = transcriptTokens.every(token => referenceTokens.has(token));
+      if (
+        transcriptIsRobotFragment
+        || referenceOverlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE
+      ) return 'echo';
     }
   }
   return 'distinct';

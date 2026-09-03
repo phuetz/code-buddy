@@ -66,7 +66,11 @@ export function evaluateHomeInteractionPolicy(
     };
   }
 
-  if (input.mode === 'away' && input.surface !== 'proactive-remote') {
+  if (
+    input.mode === 'away'
+    && input.surface !== 'proactive-remote'
+    && input.surface !== 'arrival'
+  ) {
     return {
       allowed: false,
       spontaneousDailyLimit: 0,
@@ -83,7 +87,9 @@ export function evaluateHomeInteractionPolicy(
     allowed: true,
     spontaneousDailyLimit,
     privateContentAllowed,
-    reason: freeDay
+    reason: input.mode === 'away' && input.surface === 'arrival'
+      ? 'A physical arrival is a transition signal even while the stored posture is away.'
+      : freeDay
       ? 'Free days allow at most two gentle invitations, without creating obligations.'
       : 'Normal household rhythm with a bounded daily initiative budget.',
   };

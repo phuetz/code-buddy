@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile } from 'fs/promises';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdtemp, readFile, rm } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { wireScreenReaction, type ScreenAnalyzer } from '../../src/sensory/screen-reaction.js';
@@ -13,6 +13,17 @@ function change(score = 0.3): void {
 }
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
+
+async function waitForPerceptCount(tmp: string, expected: number): Promise<string> {
+  const perceptPath = path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl');
+  let raw = '';
+  await vi.waitFor(async () => {
+    raw = await readFile(perceptPath, 'utf8');
+    expect(raw.trim().split('\n').filter(Boolean)).toHaveLength(expected);
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  return raw;
+}
 
 describe('screen reaction — screen/change → percept (debounced)', () => {
   it('records a percept once on change, runs the analyzer, and debounces', async () => {
@@ -28,7 +39,7 @@ describe('screen reaction — screen/change → percept (debounced)', () => {
     const unwire = wireScreenReaction({ analyzer, debounceMs: 4000, cwd: tmp, now: () => clock });
     try {
       change();
-      await tick();
+      await waitForPerceptCount(tmp, 1);
       expect(calls).toBe(1);
 
       change();
@@ -37,16 +48,16 @@ describe('screen reaction — screen/change → percept (debounced)', () => {
 
       clock += 5000;
       change();
-      await tick();
+      const percepts = await waitForPerceptCount(tmp, 2);
       expect(calls).toBe(2);
 
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
       const lines = percepts.trim().split('\n').filter(Boolean);
       expect(lines.length).toBe(2);
       expect(percepts).toContain('an editor with code');
       expect(percepts).toContain('sensory_screen_reaction');
     } finally {
       unwire();
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 

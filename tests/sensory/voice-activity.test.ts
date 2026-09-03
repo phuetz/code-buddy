@@ -101,11 +101,12 @@ describe('voice-activity — half-duplex speaking guard', () => {
     expect(classifyRecentVoiceEcho('ecoute cette phrase prononcee', 91_001)).toBe('unknown');
   });
 
-  it('uses at least 60% of each recent spoken phrase for echo detection', () => {
+  it('detects both a complete robot fragment and 60% of a recent spoken phrase', () => {
     noteSpokenText('Voici une phrase vraiment courte.', 1_000);
 
-    expect(classifyRecentVoiceEcho('voici phrase', 1_100)).toBe('echo'); // short contained fragment
+    expect(classifyRecentVoiceEcho('voici phrase', 1_100)).toBe('echo'); // short contained fragment, pure 2/5 robot tokens
     expect(classifyRecentVoiceEcho('voici phrase courte', 1_100)).toBe('echo'); // 3/5
+    expect(classifyRecentVoiceEcho('voici question humaine', 1_100)).toBe('distinct');
 
     noteSpokenText('Nouveau message vocal.', 1_200);
     expect(classifyRecentVoiceEcho('voici phrase courte', 1_300)).toBe('echo');

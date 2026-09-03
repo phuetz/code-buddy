@@ -71,9 +71,13 @@ describe('signature location catalog', () => {
 
   it('is deterministic for every location and angle', () => {
     for (const location of Object.values(SIGNATURE_LOCATIONS)) {
-      for (const angle of location.angles) {
-        expect(buildPlatePrompt(location.locationId, angle)).toBe(buildPlatePrompt(location.locationId, angle));
-      }
+      const firstPass = location.angles.map((angle) =>
+        buildPlatePrompt(location.locationId, angle));
+      const secondPass = location.angles.map((angle) =>
+        buildPlatePrompt(location.locationId, angle));
+      expect(secondPass).toEqual(firstPass);
+      expect(new Set(firstPass).size).toBe(location.angles.length);
+      expect(firstPass.every((prompt) => prompt.length > 200)).toBe(true);
     }
   });
 });
