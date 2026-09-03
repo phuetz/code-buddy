@@ -280,3 +280,5 @@ _gk14/
 # Artefact généré par `buddy --init` (importe CLAUDE.md) — ne pas versionner
 /CODEBUDDY.md
 .env.sauvegarde-*
+_qa/gk10/
+_qa/gk23/
