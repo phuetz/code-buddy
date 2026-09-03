@@ -1243,12 +1243,11 @@ export class WideResearchOrchestrator extends EventEmitter {
         return response.choices[0]?.message?.content ?? '';
       },
       search: async (query: string, k: number): Promise<SearchHit[]> => {
-        const results = await webSearch.searchStructured(query, { maxResults: k });
+        const { results, attempts } = await webSearch.searchStructuredTraced(query, { maxResults: k });
         const usable = results.filter((r) => typeof r.url === 'string' && r.url.trim().length > 0);
         if (usable.length > 0) {
           return usable.map((r) => ({ title: r.title || r.url, url: r.url, snippet: r.snippet || '' }));
         }
-        const attempts = webSearch.getLastStructuredAttempts();
         if (attempts.length > 0) {
           const summary = attempts
             .map((a) => `${a.provider}: ${a.error ?? `${a.usableUrls}/${a.hitsIn} urls`}`)
