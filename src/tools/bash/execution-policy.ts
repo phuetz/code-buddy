@@ -19,8 +19,22 @@ import { executableCandidates } from '../../utils/command-exists.js';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import type { DockerReadOnlyMount } from '../../sandbox/docker-sandbox.js';
 
 const LOCAL_WORKSPACE_SANDBOX_IMAGE = 'codebuddy-workspace-sandbox:1';
+
+function resolveReadOnlyNodeModulesMount(cwd: string): DockerReadOnlyMount[] {
+  const nodeModulesPath = path.join(cwd, 'node_modules');
+  try {
+    if (!fs.lstatSync(nodeModulesPath).isSymbolicLink()) return [];
+    const source = fs.realpathSync(nodeModulesPath);
+    if (path.basename(source) !== 'node_modules' || !fs.statSync(source).isDirectory()) return [];
+    return [{ source, target: source }];
+  } catch {
+    return [];
+  }
+}
 
 const SHELL_BUILTINS = new Set([
   'alias', 'bg', 'bind', 'break', 'builtin', 'caller', 'cd', 'command', 'compgen',
@@ -265,6 +279,7 @@ export async function executeInWorkspaceSandbox(
       (hasDedicatedImage
         ? LOCAL_WORKSPACE_SANDBOX_IMAGE
         : 'node:22-slim');
+    const readOnlyDependencyMounts = resolveReadOnlyNodeModulesMount(cwd);
     const docker = new DockerSandbox({
       image,
       workspaceMount: cwd,
@@ -284,6 +299,10 @@ export async function executeInWorkspaceSandbox(
         NPM_CONFIG_CACHE: '/tmp/codebuddy-npm-cache',
         XDG_CACHE_HOME: '/tmp/codebuddy-cache',
       },
+      readOnlyMounts: readOnlyDependencyMounts,
+      tmpfsMounts: readOnlyDependencyMounts.map(({ target }) =>
+        path.posix.join(target, '.vite-temp'),
+      ),
       timeout,
     });
     if (!dockerAvailable) {
