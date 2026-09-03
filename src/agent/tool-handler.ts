@@ -1026,6 +1026,25 @@ export class ToolHandler {
       }
     }
 
+    const shellCommand =
+      typeof args.command === 'string'
+        ? args.command
+        : typeof args.cmd === 'string'
+          ? args.cmd
+          : '';
+    if (
+      shellCommand &&
+      (toolName === 'bash' || toolName === 'shell_exec' || toolName === 'shell')
+    ) {
+      const shellGate = await writePolicy.gateShell(shellCommand);
+      if (!shellGate.allowed) {
+        return {
+          success: false,
+          error: shellGate.reason || `WritePolicy blocked tool "${toolName}"`,
+        };
+      }
+    }
+
     // Shell adapters own a more precise full-expression policy followed by a
     // workspace sandbox. Prompting here would happen before that safer attempt.
     // All deterministic trust/write gates above intentionally run first.

@@ -360,17 +360,4 @@ export async function loadCiLogContent(opts: {
   throw new Error('Provide --log <file> or pipe CI output via stdin.');
 }
 
-export function isShellWriteCommand(command: string): boolean {
-  const c = command.trim();
-  if (!c) return false;
-  if (/(?:^|\s)(?:tee|install|cp|mv|rm|touch|mkdir|dd|truncate)\b/.test(c)) return true;
-  if (/(?:^|&&|\|\||;)\s*(?:cat|printf|echo)\b[\s\S]*[>\u003e]/.test(c)) return true;
-  if (/[>\u003e]{1,2}\s*\/|[>\u003e]{1,2}\s*\S/.test(c) && !/\b2>\s*\/dev\/null\b/.test(c.split('>')[0] ?? '')) {
-    if (/(?:^|\s)(?:grep|rg|find|ls|head|tail|wc|git|npm|node|python)\b/.test(c) && !/[>\u003e]/.test(c)) {
-      return false;
-    }
-    if (/[>\u003e]/.test(c) && !/2>\s*\/dev\/null/.test(c)) return true;
-  }
-  if (/<<['"]?\w+/.test(c)) return true;
-  return false;
-}
+export { isShellWriteCommand } from '../../security/write-policy.js';
