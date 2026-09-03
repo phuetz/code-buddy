@@ -31,7 +31,8 @@ Rapport créé **avant toute inspection** du code des canaux, des alertes, des c
 | 2026-09-03 (inspection) | Lecture de la doc canaux, du client Telegram, des alertes, des handlers CLI et des tests existants. |
 | 2026-09-03 (lot 1) | Écart E1 : `TELEGRAM_API_BASE` n’existait pas (constante figée `https://api.telegram.org`). Test rouge 3/3, correctif, vert 5/5 + 38 ciblés. Commit `73d8f7915`. |
 | 2026-09-03 (lot 2) | Faux Bot API `_qa/gk10/fake-telegram.mjs` : getMe, getUpdates (long poll), sendMessage, sendVoice, sendPhoto, answerCallbackQuery, journal avec jeton masqué. 3/3 tests HTTP verts. Commit `526df0c61`. |
-| 2026-09-03 (lot 3) | E2 chemin documenté : `TELEGRAM_BOT_TOKEN`, `settings.json` objet, `buddy --channel telegram`. Rouge 5, vert 21. |
+| 2026-09-03 (lot 3) | E2 chemin documenté : `TELEGRAM_BOT_TOKEN`, `settings.json` objet, `buddy --channel telegram`. Rouge 5, vert 21. Commit `676b4d96a`. |
+| 2026-09-03 (lots 4–8) | E3 offset `a20913125` ; E4 /help `74884532b` ; E5 média/sayNow `72015f575` ; E6 jeton technique `000681dd9` ; parcours Ollama `bcb7d5f97`. |
 
 ## Plan d’exécution (annoncé avant lecture)
 
@@ -80,50 +81,85 @@ Le client (`src/channels/telegram/client.ts`) et les alertes (`src/sensory/alert
 - Correctif : env + settings.json + synthèse telegram ; flag racine `--channel` ; doc daemon clarifiée (`CODEBUDDY_SERVER_CHANNEL_INTAKE`)
 - Vert : 21 tests (stranger-config + secret + channel-intake)
 
-### E3 — offset de polling non persisté (ouvert)
+### E3 — offset de polling non persisté — FERMÉ
 
-`lastUpdateId` est un champ mémoire. Un redémarrage rappelle `getUpdates` avec `offset=1` et retraiterait les anciens messages encore en file Telegram.
+`lastUpdateId` était un champ mémoire. Un redémarrage rappelait `getUpdates` avec `offset=1`.
 
-### E4 — `/help` et `/status` annoncés, non routés (ouvert)
+- Rouge : `tests/channels/telegram-offset.test.ts` rejouait « ne me duplique pas »
+- Correctif : `~/.codebuddy/telegram-offset-<botId>.json` (surcharge `CODEBUDDY_TELEGRAM_OFFSET_DIR`)
+- Vert : 1/1 + régression Telegram 28/28. Commit `a20913125`
 
-`getCommandList()` enregistre `start`, `help`, `status` auprès de BotFather. `routeCommand()` ne gère que `repo|branch|pr|task|yolo|runs|run|pins`. `/help` tombe dans le LLM.
+### E4 — `/help` et `/status` annoncés, non routés — FERMÉ
 
-### E5 — `sayNow` / `CODEBUDDY_VOICE_TO_TELEGRAM` (à éprouver)
+- Rouge : `/help` ne produisait aucune liste `/repo`
+- Correctif : `routeCommand` gère `help|start|status`
+- Vert : 2/2 help + 31 avec pro-features/offset. Commit `74884532b`
 
-Les alertes vocale utilisent `CODEBUDDY_SENSORY_ALERT_TOKEN`/`_CHAT`, pas le jeton du canal compagnon. À vérifier pendant le parcours `sayNow`.
+### E5 — jetons `sayNow` / photo / vocal — FERMÉ
+
+- Vocal illisible : excuse française, pas de crash
+- Photo : message actionable, pas de crash
+- `sendTelegramVoice` : `TELEGRAM_BOT_TOKEN` si `CODEBUDDY_SENSORY_ALERT_TOKEN` absent ; `CODEBUDDY_SENSORY_ALERT_CHAT` reste obligatoire
+- Commit `72015f575`
+
+### E6 — jeton technique `[transcription vocale échouée]` émis vers le LLM — FERMÉ
+
+Après l’excuse, le bot émettait encore le marqueur interne. Plus d’émission. Commit `000681dd9`
+
+### E7 — parcours inconnu (Ollama local + faux Bot API) — FERMÉ côté tests
+
+`tests/channels/telegram-inconnu-journey.test.ts` : config env, start, texte Ollama `qwen2.5:1.5b-instruct`, `/help`, `/pins`, photo, vocal, note vocale, restart sans doublon. 1/1 en 103 s. Commit `bcb7d5f97`
 
 ## Tableau étape → écart → correctif → commit
 
 | Étape | Écart | Correctif | Commit |
 |---|---|---|---|
-| Faux Bot API local | E1 constante `api.telegram.org` | `TELEGRAM_API_BASE` + `resolveTelegramApiBase()` | `73d8f7915` |
-| Configurer le canal | E2 `TELEGRAM_BOT_TOKEN` / settings.json ignorés | env + objet settings.json | *(lot 3)* |
-| Démarrer | E2 `buddy --channel telegram` absent | flag racine `--channel` | *(lot 3)* |
-| Premier texte / Ollama | à éprouver après E2 | | |
-| `/help` + 2 commandes | E4 `/help` `/status` non gérés | *(à faire)* | |
-| Photo | à éprouver | | |
-| Vocal OGG | à éprouver | | |
-| `sayNow` Piper | E5 jetons distincts | *(à éprouver)* | |
-| Stop + restart sans doublon | E3 offset mémoire | *(à faire)* | |
+| Faux Bot API local | E1 constante `api.telegram.org` | `TELEGRAM_API_BASE` | `73d8f7915` |
+| Faux serveur HTTP | (infra GK10) | `_qa/gk10/fake-telegram.mjs` | `526df0c61` |
+| Configurer le canal | E2 `TELEGRAM_BOT_TOKEN` / settings.json | env + objet settings.json | `676b4d96a` |
+| Démarrer | E2 `buddy --channel telegram` absent | flag racine `--channel` | `676b4d96a` |
+| Premier texte / Ollama | handler lent / pas de réponse | parcours réel 1.5b, ~100 s | `bcb7d5f97` |
+| `/help` + `/pins` + `/status` | E4 non routés | `routeCommand` local | `74884532b` |
+| Photo | crash / silence | pas de crash, contenu actionnable | `72015f575` |
+| Vocal OGG | E6 jeton technique + STT absent | excuse FR, pas d’émission LLM | `000681dd9` |
+| `sayNow` / note vocale | E5 jeton alerte distinct | repli `TELEGRAM_BOT_TOKEN` | `72015f575` |
+| Stop + restart | E3 offset mémoire | fichier d’offset | `a20913125` |
 
 ## Ce qui bloque encore un inconnu
 
-Un inconnu qui suit uniquement `docs/channels.md` ne démarre pas Telegram : le flag documenté n’existe pas, `TELEGRAM_BOT_TOKEN` n’est pas lu, et le JSON documenté n’est pas le fichier chargé. Même après un démarrage réussi, un redémarrage peut redupliquer les messages (offset non persisté).
+- `buddy daemon start` ne démarre Telegram que si `CODEBUDDY_SERVER_CHANNEL_INTAKE=true`. La doc le dit maintenant ; un lecteur pressé du daemon sera surpris.
+- `CODEBUDDY_SENSORY_ALERT_CHAT` (id numérique du chat) reste obligatoire pour les notes vocales `sayNow`. Le jeton du canal suffit, pas l’id.
+- Premier tour LLM via le handler canal : ~100 s à froid sur `qwen2.5:1.5b-instruct` (prompt + outils). Un inconnu peut croire que le bot est mort.
+- `sayNow` sans `synth` injecté appelle Piper/Pocket pour un second rendu ; sans modèle TTS configuré, la voie téléphone peut rester muette ou très lente.
+- Whisper résout encore `os.homedir()`, pas `HOME` : un test isolé peut toucher le venv réel.
+- Le client Cowork Telegram (`cowork/src/main/remote/channels/telegram/`) hardcode encore `api.telegram.org` (hors périmètre CLI).
+- Un fichier d’offset de test `~/.codebuddy/telegram-offset-123456.json` a été créé puis **supprimé** pendant E4 ; plus de fuite constatée ensuite.
 
 ## Preuves de vérification
 
 ```text
-# Rouge (avant correctif E1)
-npm test -- tests/channels/telegram-api-base.test.ts
-Test Files  1 failed (1)
-Tests       3 failed (3)
+# Union ciblée (hors parcours Ollama 103 s déjà vert)
+npm test -- tests/channels/telegram-api-base.test.ts \
+  tests/channels/fake-telegram-server.test.ts \
+  tests/channels/telegram-stranger-config.test.ts \
+  tests/channels/telegram-offset.test.ts \
+  tests/channels/telegram-help.test.ts \
+  tests/channels/telegram-media-saynow.test.ts \
+  tests/channels/telegram.test.ts \
+  tests/channels/telegram-polling-resilience.test.ts \
+  tests/channels/resolve-channel-secret.test.ts \
+  tests/sensory/telegram-voice.test.ts \
+  tests/server/channel-intake.test.ts \
+  tests/sensory/say-now-phone-policy.test.ts
+Test Files  12 passed (12)
+Tests      75 passed (75)
 
-# Vert (après E1)
-npm test -- tests/channels/telegram-api-base.test.ts tests/sensory/telegram-voice.test.ts tests/channels/telegram.test.ts
-Test Files  3 passed (3)
-Tests      38 passed (38)
+npm test -- tests/channels/telegram-inconnu-journey.test.ts
+Test Files  1 passed (1)
+Tests      1 passed (1)
+Duration   103.39s
 
 npm run typecheck   # exit 0
-npx eslint src/utils/telegram-api-base.ts tests/channels/telegram-api-base.test.ts src/sensory/alert.ts --max-warnings=0  # exit 0
-# client.ts : 2 warnings préexistants (EventEmitter, ChannelStatus unused)
 ```
+
+HEAD fonctionnel : `bcb7d5f97`. Aucun push. `package-lock.json` touché par `npm install` du clone, non commité. `_qa/gk10/home/` non suivi.
