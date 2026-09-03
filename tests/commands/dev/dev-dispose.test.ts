@@ -22,6 +22,8 @@ describe('dev plan resource disposal', () => {
     const prBlock = source.slice(source.indexOf(prNeedle), source.indexOf(".command('fix-ci')"));
     expect(runBlock).toContain('resolveRunObjective');
     expect(runBlock).toContain('workflowExitCode');
+    expect(runBlock).toContain('conventionalCommitNamedFiles');
+    expect(runBlock).toContain('buildConventionalCommitMessage');
     expect(runBlock).toContain('disposePlanResources(agent)');
     expect(prBlock).toContain('disposePlanResources(agent)');
   });

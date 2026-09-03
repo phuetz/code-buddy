@@ -128,7 +128,12 @@ Do NOT implement yet. Plan only.`;
     .option('-y, --yes', 'skip confirmation prompts (non-interactive)', false)
     .option('--write-policy <mode>', 'write policy: strict|confirm|off', 'strict')
     .action(async (objective: string | undefined, opts: { type: string; yes: boolean; writePolicy: string }) => {
-      const { resolveRunObjective, workflowExitCode } = await import('./golden-path.js');
+      const {
+        resolveRunObjective,
+        workflowExitCode,
+        buildConventionalCommitMessage,
+        conventionalCommitNamedFiles,
+      } = await import('./golden-path.js');
       let resolved;
       try {
         resolved = resolveRunObjective(objective, process.cwd());
@@ -171,6 +176,19 @@ Do NOT implement yet. Plan only.`;
           }
         }
         console.log(`\nView run: buddy run show ${result.runId}`);
+        if (result.status === 'completed') {
+          const commitType = workflowType === 'add-feature' ? 'feat' : 'fix';
+          const message = buildConventionalCommitMessage(commitType, resolved.objective);
+          const commit = conventionalCommitNamedFiles(process.cwd(), message);
+          if (commit.committed) {
+            console.log(`Committed ${commit.hash}: ${message}`);
+            console.log(`Files: ${commit.files.join(', ')}`);
+          } else if (commit.error) {
+            console.error(`Commit skipped: ${commit.error}`);
+          } else {
+            console.log('No named source files to commit.');
+          }
+        }
         process.exitCode = workflowExitCode(result.status);
       } finally {
         await disposePlanResources(agent);
