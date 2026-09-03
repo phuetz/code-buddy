@@ -93,12 +93,28 @@ Do NOT implement yet. Plan only.`;
 
       try {
         console.log(`Planning: ${objective}\n`);
+        const { isMeaningfulPlan, stripGuardNoise, writeDevPlan } = await import('./golden-path.js');
+        let planOutput = '';
+        let thinkingHint = false;
         for await (const chunk of agent.processUserMessageStream(prompt)) {
+          if (chunk.type === 'reasoning' && !thinkingHint) {
+            thinkingHint = true;
+            process.stderr.write('Thinking…\n');
+          }
           if (chunk.type === 'content' && chunk.content) {
             process.stdout.write(chunk.content);
+            planOutput += chunk.content;
           }
         }
         console.log('');
+        const cleaned = stripGuardNoise(planOutput);
+        if (!isMeaningfulPlan(cleaned)) {
+          console.error('Plan is empty — refusing to report success. No PLAN.md written.');
+          process.exitCode = 1;
+          return;
+        }
+        const planPath = writeDevPlan(process.cwd(), objective, cleaned);
+        console.log(`Wrote plan: ${planPath}`);
       } finally {
         await disposePlanResources(agent);
       }
