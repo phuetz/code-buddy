@@ -123,6 +123,7 @@ coverage/
 # Temporary folders
 tmp/
 temp/
+.gk6-work/
 
 # Editor directories and files
 .vscode/*

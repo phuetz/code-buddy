@@ -67,6 +67,7 @@ import {
   type StructuredFact,
 } from './ckg-fact-reconciliation.js';
 import { redactRememberInput } from './ckg-redaction.js';
+import { chooseCkgEngine, isCkgSnapshotLoadable, snapshotPathFor } from './ckg-engine-policy.js';
 
 /** Multilingual embeddings — all-MiniLM (the global default) is English-leaning and misses
  *  French synonyms (measured: it failed paraphrase recall); this model discriminates French
@@ -273,8 +274,9 @@ export class CollectiveKnowledgeGraph {
   private embeddingCacheLoaded = false;
   private readonly embeddingModel: string;
   private embedder: CkgEmbedder | null = null;
-  /** Rust engine client (lazy) — used only when CODEBUDDY_CKG_ENGINE=rust and the binary exists.
-   *  Writes go to the SAME ledger, so the TS path stays consistent and falls back transparently. */
+  /** Rust engine client (lazy) — selected by `chooseCkgEngine` (explicit rust, or auto when the
+   *  binary exists and the snapshot is loadable). Writes go to the SAME ledger, so the TS path
+   *  stays consistent and falls back transparently. */
   private engine: import('./buddy-memory-client.js').BuddyMemoryClient | null = null;
   private engineTried = false;
 
@@ -294,16 +296,30 @@ export class CollectiveKnowledgeGraph {
           });
   }
 
-  /** The Rust engine client when opted-in (CODEBUDDY_CKG_ENGINE=rust) and available, else null.
-   *  Lazy + cached; any failure → null so callers use the in-process TS implementation. */
+  /** The Rust engine client when selected and available, else null.
+   *  Lazy + cached; any failure → null so callers use the in-process TS implementation.
+   *  Default (unset/`auto`): rust only if the binary exists on disk and the snapshot is loadable. */
   private async engineClient(): Promise<import('./buddy-memory-client.js').BuddyMemoryClient | null> {
-    if (process.env.CODEBUDDY_CKG_ENGINE !== 'rust') return null;
     if (this.engineTried) return this.engine;
     this.engineTried = true;
     try {
-      const { BuddyMemoryClient } = await import('./buddy-memory-client.js');
+      const { BuddyMemoryClient, resolveBuddyMemoryBin } = await import('./buddy-memory-client.js');
+      const preference = chooseCkgEngine({
+        env: process.env.CODEBUDDY_CKG_ENGINE,
+        binaryPath: resolveBuddyMemoryBin(),
+        snapshotLoadable: isCkgSnapshotLoadable(snapshotPathFor(this.ledgerPath)),
+      });
+      if (preference !== 'rust') {
+        this.engine = null;
+        return null;
+      }
       const c = new BuddyMemoryClient({ ledgerPath: this.ledgerPath, agentId: this.agentId });
-      this.engine = c.available() ? c : null;
+      if (!c.available()) {
+        this.engine = null;
+        return null;
+      }
+      await c.call('ping');
+      this.engine = c;
     } catch (err) {
       logger.debug(`[ckg] engine unavailable: ${err instanceof Error ? err.message : String(err)}`);
       this.engine = null;
