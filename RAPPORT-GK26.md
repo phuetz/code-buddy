@@ -135,4 +135,4 @@ Ledger agent apply_patch :
 | `95317aa71` | fix(review): cap maxTokens 1024 (D2) |
 | `7f9836982` | fix(review): lentilles sérielles (D3) |
 | `d7b30a78e` | style(review): prettier |
-| *(lot documentaire en tête)* | ce rapport + coordination |
+| `27764ba83` | docs(gk26): consigner le parcours réel |
