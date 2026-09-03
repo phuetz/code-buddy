@@ -341,6 +341,25 @@ export async function readStdinIfPiped(
   });
 }
 
+export async function loadCiLogContent(opts: {
+  log?: string;
+  stdin?: NodeJS.ReadStream;
+}): Promise<string> {
+  if (opts.log) {
+    if (!fs.existsSync(opts.log)) {
+      throw new Error(`Log file not found: ${opts.log}`);
+    }
+    const content = fs.readFileSync(opts.log, 'utf8');
+    if (!content.trim()) {
+      throw new Error('CI log is empty.');
+    }
+    return content;
+  }
+  const piped = await readStdinIfPiped(opts.stdin ?? process.stdin);
+  if (piped && piped.trim()) return piped;
+  throw new Error('Provide --log <file> or pipe CI output via stdin.');
+}
+
 export function isShellWriteCommand(command: string): boolean {
   const c = command.trim();
   if (!c) return false;

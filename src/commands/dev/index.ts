@@ -263,24 +263,12 @@ Do NOT implement yet. Plan only.`;
             process.exit(1);
           }
         } else {
-          // Read log from --log file or stdin
+          const { loadCiLogContent } = await import('./golden-path.js');
           let logContent = '';
-          if (opts.log) {
-            const fs = await import('fs');
-            if (!fs.default.existsSync(opts.log)) {
-              console.error(`Log file not found: ${opts.log}`);
-              await disposePlanResources(agent);
-              process.exit(1);
-            }
-            logContent = fs.default.readFileSync(opts.log, 'utf-8');
-          } else if (!process.stdin.isTTY) {
-            const chunks: Buffer[] = [];
-            for await (const chunk of process.stdin) {
-              chunks.push(chunk as Buffer);
-            }
-            logContent = Buffer.concat(chunks).toString('utf-8');
-          } else {
-            console.error('Auto-fix requires --run <id>, --log <file>, or piped CI output via stdin.');
+          try {
+            logContent = await loadCiLogContent({ log: opts.log });
+          } catch (err) {
+            console.error(err instanceof Error ? err.message : String(err));
             await disposePlanResources(agent);
             process.exit(1);
           }
@@ -341,25 +329,14 @@ Do NOT implement yet. Plan only.`;
       }
 
       // ── Original interactive path ────────────────────────────
+      const { loadCiLogContent, workflowExitCode } = await import('./golden-path.js');
       let logContent = '';
-
-      if (opts.log) {
-        const fs = await import('fs');
-        if (!fs.default.existsSync(opts.log)) {
-          console.error(`Log file not found: ${opts.log}`);
-          process.exit(1);
-        }
-        logContent = fs.default.readFileSync(opts.log, 'utf-8');
-      } else if (!process.stdin.isTTY) {
-        // Read from stdin
-        const chunks: Buffer[] = [];
-        for await (const chunk of process.stdin) {
-          chunks.push(chunk as Buffer);
-        }
-        logContent = Buffer.concat(chunks).toString('utf-8');
-      } else {
-        console.error('Provide --log <file> or pipe CI output via stdin.');
-        process.exit(1);
+      try {
+        logContent = await loadCiLogContent({ log: opts.log });
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
       }
 
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
@@ -388,6 +365,7 @@ Repo context: ${profile.contextPack}`;
       });
 
       console.log(`\nRun ${result.runId}: ${result.status}`);
+      process.exitCode = workflowExitCode(result.status);
       await disposePlanResources(agent);
     });
 
