@@ -113,7 +113,8 @@ npx eslint src/sandbox/execpolicy.ts src/sandbox/docker-sandbox.ts \
   src/tools/bash/command-validator.ts src/tools/bash/execution-policy.ts \
   tests/tools/bash-execution-policy.test.ts \
   tests/bash/command-validator-security-regression.test.ts \
-  tests/sandbox/docker-sandbox.test.ts        exit 0
+  tests/sandbox/docker-sandbox.test.ts
+exit 0
 git diff --check                              exit 0
 ```
 
