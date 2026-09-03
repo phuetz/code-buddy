@@ -21,6 +21,9 @@ export const SEED_TOOL_SCENARIOS: ToolBenchmarkScenario[] = [
     heldOutCases: [
       { input: { text: 'The Quick Brown' }, expectIncludes: ['the-quick-brown'] },
       { input: { text: 'A B C' }, expectIncludes: ['a-b-c'] },
+      // Capability says "runs of spaces" — a tool that only replace(' ','-')
+      // would otherwise pass G4 on the single-space held-out pairs above.
+      { input: { text: 'Hello  World' }, expectIncludes: ['hello-world'] },
     ],
   },
   {
