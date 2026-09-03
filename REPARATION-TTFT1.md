@@ -13,6 +13,18 @@ Date : 2026-09-03
 
 Rapport créé avant toute inspection du code, conformément à la mission.
 
+## Incident de confinement corrigé
+
+Le `node_modules` non suivi du clone est un lien symbolique vers
+`/home/patrice/code-buddy/node_modules`. Les premières commandes avaient placé
+leur `HOME`/`TMPDIR` sous ce lien et ont donc créé uniquement
+`.ttft1-home/` et `.ttft1-tmp/` dans le `node_modules` de l’original. L’écart a
+été détecté avant le test CLI, inventorié, puis ces deux répertoires exactement
+ont été supprimés avec `find -delete` (aucun autre chemin touché). Vérification :
+les deux chemins n’existent plus. Tous les rejoués suivants utilisent
+`_qa/ttft1/{home,tmp}` dont `readlink -f` reste dans le clone. `_qa/ttft1/` est
+désormais explicitement ignoré.
+
 ## Défauts et réparations
 
 ### D1 — aucune mesure TTFT/TTFM persistable et agrégée
@@ -103,6 +115,37 @@ Tests  150 passed (150)
 $ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/codebuddy/providers/provider-openai-compat.test.ts tests/agent/execution/turn-metrics-wiring.test.ts
 Test Files  2 passed (2)
 Tests  11 passed (11)
+```
+
+### D4 — aucune surface CLI ne rend les percentiles exploitables
+
+Après inspection de `src/commands/`, `buddy cost --latency` est le choix
+cohérent : `cost` est déjà la commande analytique read-only, contrairement à
+`run` qui expose le cycle de vie des exécutions. Les trois tests exigent la vue
+humaine, le JSON et le journal vide, sans charger les sessions de coût.
+
+```text
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/commands/cost-latency.test.ts
+error: unknown option '--latency'
+FAIL  tests/commands/cost-latency.test.ts (3 tests | 3 failed)
+Test Files  1 failed (1)
+Tests  3 failed (3)
+```
+
+Cette reproduction précède la découverte du lien symbolique documentée plus
+haut ; les preuves suivantes sont rejouées sous `_qa/ttft1` dans le clone.
+
+Correctif : `cost` court-circuite la lecture des sessions sous `--latency`, lit
+le journal TTFT1 et rend provider/modèle/tours, p50/p95 TTFT, p50/p95 TTFM et
+jetons. `--json` expose les agrégats typés. La documentation de démarrage
+annonce le nouveau drapeau.
+
+```text
+$ HOME="$PWD/_qa/ttft1/home" TMPDIR="$PWD/_qa/ttft1/tmp" npx vitest run tests/commands/cost-latency.test.ts tests/commands/cost.test.ts
+Test Files  2 passed (2)
+Tests  10 passed (10)
+$ HOME="$PWD/_qa/ttft1/home" TMPDIR="$PWD/_qa/ttft1/tmp" npx tsx src/index.ts cost --latency --json
+{"metric":"turn-latency","models":[]}
 ```
 
 ## Tour réel Ollama local à 0 €
