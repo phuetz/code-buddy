@@ -230,7 +230,21 @@ inutilisé (1 erreur, code 1), supprimé avant commit.
 
 ## Vérifications finales
 
-À compléter.
+Premier passage de la suite imposée : 330 fichiers, 3 931 tests passés,
+16 échecs. Aucun ne traversait DELEG1 : dix tests Fleet utilisaient encore le
+mock `fs/promises` alors que MEM1 a migré le produit vers `writeJsonAtomic`, un
+test Science attendait encore qu'une prose LLM puisse confirmer sans oracle,
+trois smokes Hermes ne voyaient plus le cache Playwright à cause du `HOME`
+temporaire, et deux tests créés sous le clone héritaient respectivement du
+`type: module` et de la racine Git. Les sorties complètes nommaient 5 fichiers
+rouges / 325 passés et 16 tests rouges / 3 931 passés (code 1).
+
+Les deux contrats de test réellement périmés ont été corrigés sans affaiblir le
+produit : le Fleet virtuel mocke désormais la frontière atomic-write, et le
+Verifier Science attend `NEEDS REVIEW` sans oracle. Ils repassent ensemble à
+2 fichiers / 36 tests. Pour les contraintes d'environnement, le passage final
+utilise `GIT_CEILING_DIRECTORIES=$PWD/.deleg1-tmp`, un `package.json` temporaire
+CommonJS dans ce `TMPDIR`, et le cache Playwright existant en lecture seule.
 
 ## Points ouverts
 
