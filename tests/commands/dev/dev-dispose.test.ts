@@ -12,8 +12,16 @@ describe('dev plan resource disposal', () => {
 
   it('uses the same cleanup for plan, run and pr', () => {
     const source = readFileSync(new URL('../../../src/commands/dev/index.ts', import.meta.url), 'utf8');
-    const runBlock = source.slice(source.indexOf(".command('run <objective>')"), source.indexOf(".command('pr <objective>')"));
-    const prBlock = source.slice(source.indexOf(".command('pr <objective>')"), source.indexOf(".command('fix-ci')"));
+    const runNeedle = source.includes(".command('run [objective]')")
+      ? ".command('run [objective]')"
+      : ".command('run <objective>')";
+    const prNeedle = source.includes(".command('pr [objective]')")
+      ? ".command('pr [objective]')"
+      : ".command('pr <objective>')";
+    const runBlock = source.slice(source.indexOf(runNeedle), source.indexOf(prNeedle));
+    const prBlock = source.slice(source.indexOf(prNeedle), source.indexOf(".command('fix-ci')"));
+    expect(runBlock).toContain('resolveRunObjective');
+    expect(runBlock).toContain('workflowExitCode');
     expect(runBlock).toContain('disposePlanResources(agent)');
     expect(prBlock).toContain('disposePlanResources(agent)');
   });

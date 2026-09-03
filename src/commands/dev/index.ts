@@ -122,12 +122,22 @@ Do NOT implement yet. Plan only.`;
 
   // ── buddy dev run ──────────────────────────────────────────────
   dev
-    .command('run <objective>')
-    .description('Plan + implement + test + save artifacts in RunStore')
+    .command('run [objective]')
+    .description('Plan + implement + test + save artifacts in RunStore (resumes PLAN.md if objective omitted)')
     .option('-t, --type <type>', 'workflow type: add-feature|fix-tests|refactor|security-audit', 'add-feature')
     .option('-y, --yes', 'skip confirmation prompts (non-interactive)', false)
     .option('--write-policy <mode>', 'write policy: strict|confirm|off', 'strict')
-    .action(async (objective: string, opts: { type: string; yes: boolean; writePolicy: string }) => {
+    .action(async (objective: string | undefined, opts: { type: string; yes: boolean; writePolicy: string }) => {
+      const { resolveRunObjective, workflowExitCode } = await import('./golden-path.js');
+      let resolved;
+      try {
+        resolved = resolveRunObjective(objective, process.cwd());
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
+      }
+
       const { runWorkflow } = await import('./workflows.js');
       type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
 
@@ -145,12 +155,15 @@ Do NOT implement yet. Plan only.`;
       await agent.systemPromptReady;
 
       try {
-        const result = await runWorkflow(workflowType, objective, agent, {
+        const result = await runWorkflow(workflowType, resolved.objective, agent, {
           nonInteractive: opts.yes,
           writePolicyMode: policyMode,
         });
 
         console.log(`\nRun ${result.runId}: ${result.status}`);
+        if (resolved.source === 'plan') {
+          console.log(`Objective (from PLAN.md): ${resolved.objective}`);
+        }
         if (result.artifactPaths.length > 0) {
           console.log('Artifacts:');
           for (const p of result.artifactPaths) {
@@ -158,6 +171,7 @@ Do NOT implement yet. Plan only.`;
           }
         }
         console.log(`\nView run: buddy run show ${result.runId}`);
+        process.exitCode = workflowExitCode(result.status);
       } finally {
         await disposePlanResources(agent);
       }
