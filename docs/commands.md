@@ -141,7 +141,7 @@ buddy dev explain                  # Summarize repo conventions
 ```bash
 buddy cost [--last] [--session <id>] [--since <7d|YYYY-MM-DD>] [--by <model|provider|day>] [--json] # Read-only cost & token dashboard
 buddy changelog [--since <tag|YYYY-MM-DD|ref>] [--to <ref>] [--out <CHANGELOG.md>] [--json]         # Grouped release notes from Conventional Commits
-buddy import [--from <path>] [--dry-run]                                                             # Import Cursor/Cline/Copilot/Claude Code rules & MCP servers
+buddy import [--from <path>] [--dry-run]                                                             # Import Cursor/Cline/Copilot/Claude Code rules & MCP (`.mcp.json`, `settings.json`)
 buddy explain [path] [--out <f.md|.html>] [--depth <quick|deep>] [--html]                          # One-shot repository explanation report
 ```
 
@@ -689,12 +689,12 @@ buddy run mobile-pairing-acceptance-plan <query>
                                   # Build no-network pairing acceptance plan
 buddy run mobile-approval-queue <query>
                                   # Build local-only approval queue state
-buddy run tail [--follow]           # Tail the active run; --follow streams as it grows
-buddy run replay <run-id>           # Replay a run's tool events for debugging
+buddy run tail <run-id>             # Stream events of a running or completed run
+buddy run replay <run-id>           # Re-execute recorded view_file reads and test commands
 ```
 
-Runs are persisted as JSONL in `.codebuddy/runs/`. Each run captures
-the message thread, tool calls, results, errors, and timing. Combine
+Runs are persisted as JSONL under `CODEBUDDY_RUNS_DIR` (default `~/.codebuddy/runs`).
+Each run captures the message thread, tool calls, results, errors, and timing. Combine
 with `OTEL_EXPORTER_OTLP_ENDPOINT` for remote traces or `SENTRY_DSN`
 for error reporting (see `docs/configuration.md`).
 
