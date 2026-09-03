@@ -5,7 +5,7 @@ Agent : Grok 4.6
 Clone : `/home/patrice/DEV/cb-repar-heure-2026-09-02`
 Branche : `fix/gk32-onboard-doctor-2026-09-03`
 HEAD au départ : `345bb4f87` (`Merge GK27 (conseil de modèles et routage en vrai) into codex/audit-systeme-nerveux-2026-09-01`)
-HEAD produit : (lot documentaire en tête)
+HEAD produit : `d0f4ee187` (`docs(gk32): consigner onboard/doctor/login/update en vrai et libérer le chantier`)
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)
 Rapport créé **avant toute inspection** des commandes (réservation `56d7fbb61`).
 Buddy invoqué depuis le clone : `_qa/gk32/buddy.sh` → `node_modules/tsx/dist/cli.mjs src/index.ts`
