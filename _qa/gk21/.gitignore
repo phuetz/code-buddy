@@ -1,0 +1,5 @@
+home/
+artifacts/*.png
+artifacts/*.log
+artifacts/*.txt
+!artifacts/.gitkeep
