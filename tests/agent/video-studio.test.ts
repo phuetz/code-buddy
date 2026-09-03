@@ -96,6 +96,24 @@ describe('produceVideoFromPrompt', () => {
     expect(scene1.narrationWav).toBeDefined();
   });
 
+  it('rewrites flowchart LR to TD when rendering a 9:16 short', async () => {
+    const d = deps({ noMusic: true });
+    await produceVideoFromPrompt('x', { count: 2, resolution: '1080x1920' }, d);
+    expect(d.renderMermaid).toHaveBeenCalledWith(
+      expect.stringMatching(/^flowchart TD\b/),
+      expect.any(String)
+    );
+  });
+
+  it('keeps flowchart LR on a landscape frame', async () => {
+    const d = deps({ noMusic: true });
+    await produceVideoFromPrompt('x', { count: 2, resolution: '1920x1080' }, d);
+    expect(d.renderMermaid).toHaveBeenCalledWith(
+      expect.stringMatching(/^flowchart LR\b/),
+      expect.any(String)
+    );
+  });
+
   it('falls back to a text card when the diagram cannot be rendered (no mmdc)', async () => {
     const d = deps({ noMusic: true, renderMermaid: vi.fn(async () => null) });
     const res = await produceVideoFromPrompt('x', { count: 2 }, d);

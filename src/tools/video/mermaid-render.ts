@@ -24,6 +24,16 @@ export interface MermaidRenderDeps {
   timeoutMs?: number;
 }
 
+/**
+ * Vertical (9:16) shorts cannot host a left-to-right flowchart: the boxes
+ * collide with the scene title. Flip LR/RL graphs to top-down (pure).
+ */
+export function orientMermaidForPortrait(src: string): string {
+  return src
+    .replace(/^(\s*(?:flowchart|graph)\s+)LR\b/im, '$1TD')
+    .replace(/^(\s*(?:flowchart|graph)\s+)RL\b/im, '$1TD');
+}
+
 /** Puppeteer launch config JSON for mmdc (pure). */
 export function buildPuppeteerConfig(chromiumPath?: string): string {
   const cfg: Record<string, unknown> = {
