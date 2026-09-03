@@ -47,6 +47,13 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 - Fixture fausse corrigée avec preuve : le test n’injectait aucun reviewer, et la revue par défaut est désactivée sous `NODE_ENV=test`; « Dis-moi quelque chose » ne créait en outre aucune obligation sémantique. Il injecte maintenant une revue réelle sur une question qui la déclenche et marque son achèvement dans le reviewer.
 - Vert : trou 4 + CONV3 + garde relationnelle + `hybrid-reply` → **4 fichiers, 80 tests réussis** ; voisin `voice-streaming` + CONV3 + trou 4 → **3 fichiers, 53 tests réussis**.
 
+### Trou 6 — rejeu du repli deux vitesses
+
+- Rouge initial : ElevenLabs recevait la phrase complète après l’échec Kyutai.
+- Instrumentation : le lecteur publie maintenant le nombre cumulé d’octets PCM réellement acceptés et leur débit, hors en-tête WAV. Le routeur estime le préfixe déjà audible et reprend à la frontière lexicale suivante ; le même reste est conservé si ElevenLabs échoue puis cède à Pocket. Sans PCM accepté, le texte complet reste utilisé.
+- Fixture fausse corrigée avec preuve : `controller.error()` était appelé dans `start()` après deux `enqueue`, ce qui ne garantissait pas leur lecture ; de plus la tête de gain par défaut retenait 400 ms alors que la fixture n’en fournissait que 200. Le test utilise désormais une troncature EOF de 200 ms, une tête de 50 ms, un premier lecteur en échec et vérifie qu’au moins du PCM local a précédé l’ouverture ElevenLabs. Le test DARK3 voisin conserve explicitement le texte intact lorsque le flux coupe avant toute sortie PCM.
+- Vert ciblé : trou 6 + routage Kyutai + flux/jitter/falsification + lecteurs voix → **8 fichiers, 47 tests réussis** ; contrôle court trou 6 + DARK3 → **2 fichiers, 6 tests réussis**.
+
 ## Grille de traçabilité
 
 | Trou | Correctif | Invariant préservé | Commit |
@@ -56,7 +63,7 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 | 2 | Étendre l’empreinte aux fragments contenus de 1–3 mots et bloquer la réparation vide près d’une voix récente | Filtre de propre voix, y compris fragments courts de moins de 90 s | Ce commit |
 | 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | Ce commit |
 | 4 | Rétablir la phrase d’avance et bufferiser short-first jusqu’à la revue lorsqu’elle est requise | Aucune première phrase CONV3 avant décision | Ce commit |
-| 6 | À établir | Repli ElevenLabs au segment interrompu, jamais au début | À venir |
+| 6 | Mesurer le PCM accepté et reprendre ElevenLabs/Pocket à la frontière lexicale non jouée | Repli ElevenLabs au segment interrompu, jamais au début | Ce commit |
 | 5 | À établir | Grâce d’hésitation de 550–900 ms pour mots suspensifs | À venir |
 
 ## Vérifications finales

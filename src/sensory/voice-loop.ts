@@ -285,6 +285,8 @@ export interface StreamSpeakOptions extends VoiceStepOptions {
   onFirstAudio?: () => void;
   /** Optional live copy of normalized WAV bytes for a remote avatar renderer. */
   onAudioChunk?: (chunk: Uint8Array) => void;
+  /** Cumulative PCM accepted by the local player, excluding the WAV header. */
+  onAudioProgress?: (progress: { pcmBytes: number; byteRate: number }) => void;
   /** Publishes the first measured gain so WAV fallback can preserve the turn level. */
   onTtsNormalizationFactor?: (factor: number) => void;
 }
@@ -2764,6 +2766,27 @@ function makeDefaultStreamSpeak(
     let jitterAudioBytes = 0;
     let detectedByteRate = 48_000;
     let jitterReleaseTimer: NodeJS.Timeout | undefined;
+    let playerSawWavHeader = false;
+    let playerPcmBytes = 0;
+
+    const writePlayerChunk = (part: Buffer): boolean => {
+      opts.onAudioChunk?.(part);
+      const accepted = stdin.write(part);
+      if (part.length >= 12 && part.subarray(0, 4).toString('ascii') === 'RIFF') {
+        const probe = probePcm16Wav(part);
+        if (probe.status === 'ready') {
+          playerSawWavHeader = true;
+          detectedByteRate = probe.layout.byteRate;
+          playerPcmBytes += Math.max(0, part.length - probe.layout.dataOffset);
+        }
+      } else if (playerSawWavHeader) {
+        playerPcmBytes += part.length;
+      }
+      if (playerPcmBytes > 0) {
+        opts.onAudioProgress?.({ pcmBytes: playerPcmBytes, byteRate: detectedByteRate });
+      }
+      return accepted;
+    };
 
     const targetJitterBytes = (): number =>
       Math.round((detectedByteRate * jitterBufferMs) / 1_000);
@@ -2796,8 +2819,7 @@ function makeDefaultStreamSpeak(
         }
       }
       for (const part of partsToWrite) {
-        opts.onAudioChunk?.(part);
-        accepted = stdin.write(part) && accepted;
+        accepted = writePlayerChunk(part) && accepted;
       }
       if (!firstAudio && edges.hasOutputAudio()) {
         firstAudio = true;
@@ -2810,8 +2832,7 @@ function makeDefaultStreamSpeak(
       if (jitterPrimed) {
         let accepted = true;
         for (const part of parts) {
-          opts.onAudioChunk?.(part);
-          accepted = stdin.write(part) && accepted;
+          accepted = writePlayerChunk(part) && accepted;
         }
         if (!firstAudio && edges.hasOutputAudio()) {
           firstAudio = true;
@@ -2961,6 +2982,22 @@ function makeDefaultStreamSpeak(
   return engine === 'elevenlabs' ? Object.assign(speak, { prefetch }) : speak;
 }
 
+const ESTIMATED_TTS_WORD_MS = 400;
+
+/** Resume on a lexical boundary after the PCM duration already accepted by the player. */
+function resumeTextAfterStreamFailure(
+  text: string,
+  progress: { pcmBytes: number; byteRate: number } | undefined,
+): string {
+  if (!progress || progress.pcmBytes <= 0 || progress.byteRate <= 0) return text;
+  const words = [...text.matchAll(/\S+/gu)];
+  if (words.length <= 1) return '';
+  const playedMs = progress.pcmBytes / progress.byteRate * 1_000;
+  const completedWords = Math.max(1, Math.floor(playedMs / ESTIMATED_TTS_WORD_MS));
+  const resumeAt = words[Math.min(completedWords, words.length - 1)]?.index;
+  return resumeAt === undefined ? '' : text.slice(resumeAt).trimStart();
+}
+
 /** Select one provider per segment while retaining the pre-DARK3 path verbatim when disabled. */
 function makeRoutedSynth(
   voice?: string,
@@ -2983,7 +3020,7 @@ function makeRoutedSynth(
   };
 }
 
-/** Progressive Kyutai → ElevenLabs → Pocket chain, with the exact text reused at every hop. */
+/** Progressive Kyutai → ElevenLabs → Pocket chain without replaying accepted local PCM. */
 function makeRoutedStreamSpeak(
   playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
   engine: LocalTtsEngine = resolveTtsEngine(),
@@ -3011,13 +3048,30 @@ function makeRoutedStreamSpeak(
       logger.warn('[voice] ElevenLabs stream failed — falling back to Pocket for this phrase');
       return await pocket?.(text, opts) ?? false;
     }
-    if (await local?.(text, opts)) return true;
+    let localProgress: { pcmBytes: number; byteRate: number } | undefined;
+    const localOptions: StreamSpeakOptions = {
+      ...opts,
+      onAudioProgress: (progress) => {
+        localProgress = progress;
+        opts.onAudioProgress?.(progress);
+      },
+    };
+    if (await local?.(text, localOptions)) return true;
     if (opts.signal?.aborted) return false;
-    logger.warn('[voice] Kyutai stream failed — falling back to ElevenLabs for this phrase');
-    if (await cloud?.(text, opts)) return true;
+    const fallbackText = resumeTextAfterStreamFailure(text, localProgress);
+    if (!fallbackText) {
+      logger.warn('[voice] Kyutai stream failed after partial playback — no safe text remains');
+      return localProgress !== undefined;
+    }
+    logger.warn(
+      localProgress
+        ? '[voice] Kyutai stream failed — resuming with ElevenLabs after played audio'
+        : '[voice] Kyutai stream failed — falling back to ElevenLabs for this phrase',
+    );
+    if (await cloud?.(fallbackText, opts)) return true;
     if (opts.signal?.aborted) return false;
     logger.warn('[voice] Kyutai/ElevenLabs stream failed — falling back to Pocket for this phrase');
-    return await pocket?.(text, opts) ?? false;
+    return await pocket?.(fallbackText, opts) ?? false;
   };
   speak.prefetch = (text, opts = {}) => {
     const decision = twoSpeedTtsEnabled(env)
@@ -3107,6 +3161,7 @@ export const __voiceAudioPlayerTest = {
   makeDefaultStreamSpeak,
   makeRoutedSynth,
   makeRoutedStreamSpeak,
+  resumeTextAfterStreamFailure,
   defaultPlay,
 };
 

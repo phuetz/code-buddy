@@ -104,7 +104,7 @@ describe('Kyutai production two-speed stream routing', () => {
     expect(info).toHaveBeenCalledWith('[voice] route=local reason=short<=20');
   });
 
-  it('retries the unchanged phrase on ElevenLabs after a mid-stream Kyutai cut', async () => {
+  it('retries the unchanged phrase when Kyutai cuts before PCM reaches the player', async () => {
     streams.kyutai.mockResolvedValue(cutWavStream());
     streams.elevenlabs.mockResolvedValue(healthyWavStream());
     const phrase = 'Phrase courte intacte.';
