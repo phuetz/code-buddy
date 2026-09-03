@@ -32,7 +32,7 @@ export function isStrongReviewerModel(model: string): boolean {
 
 function matchPoolModel(
   pool: ActiveLlmModelPoolEntry[],
-  wanted: string,
+  wanted: string
 ): ActiveLlmModelPoolEntry | undefined {
   const needle = wanted.toLowerCase();
   return (
@@ -44,7 +44,7 @@ function matchPoolModel(
 
 function isAlive(
   entry: ActiveLlmModelPoolEntry,
-  consecutiveRecentFailures: (model: string) => number,
+  consecutiveRecentFailures: (model: string) => number
 ): boolean {
   return Boolean(entry.apiKey) && consecutiveRecentFailures(entry.model) < DEAD_AFTER_FAILURES;
 }
@@ -56,7 +56,7 @@ function isAlive(
 export function pickReviewerPoolEntry(
   pool: ActiveLlmModelPoolEntry[],
   env: NodeJS.ProcessEnv = process.env,
-  consecutiveRecentFailures: (model: string) => number = () => 0,
+  consecutiveRecentFailures: (model: string) => number = () => 0
 ): ActiveLlmModelPoolEntry | null {
   const alive = pool.filter((p) => isAlive(p, consecutiveRecentFailures));
   const pin = env.CODEBUDDY_DIFF_REVIEW_MODEL?.trim();
@@ -84,15 +84,16 @@ export function pickReviewerPoolEntry(
 
 export async function resolveDefaultReviewClient(): Promise<CouncilChatClient | null> {
   try {
-    const [{ listActiveLlmModelPool }, { CodeBuddyClient }, { getModelScoreboard }] = await Promise.all([
-      import('../providers/active-llm-model-pool.js'),
-      import('../codebuddy/client.js'),
-      import('../fleet/model-scoreboard.js'),
-    ]);
+    const [{ listActiveLlmModelPool }, { CodeBuddyClient }, { getModelScoreboard }] =
+      await Promise.all([
+        import('../providers/active-llm-model-pool.js'),
+        import('../codebuddy/client.js'),
+        import('../fleet/model-scoreboard.js'),
+      ]);
     const pool = await listActiveLlmModelPool();
     const scoreboard = getModelScoreboard();
     const pick = pickReviewerPoolEntry(pool, process.env, (model) =>
-      scoreboard.consecutiveRecentFailures(model),
+      scoreboard.consecutiveRecentFailures(model)
     );
     if (!pick?.apiKey) return null;
 

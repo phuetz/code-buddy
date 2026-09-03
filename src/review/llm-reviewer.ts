@@ -85,25 +85,38 @@ function buildReviewPrompt(lens: ReviewLens, diff: ProposedDiff): { system: stri
   return { system, user };
 }
 
-function normalizeAnnotations(raw: ReviewerJson['annotations'], knownPaths: Set<string>): ReviewAnnotation[] {
+function normalizeAnnotations(
+  raw: ReviewerJson['annotations'],
+  knownPaths: Set<string>
+): ReviewAnnotation[] {
   const out: ReviewAnnotation[] = [];
   for (const a of raw ?? []) {
     if (!a || typeof a.message !== 'string' || !a.message.trim()) continue;
-    const severity = VALID_SEVERITIES.has(String(a.severity)) ? (a.severity as AnnotationSeverity) : 'warning';
-    const path = typeof a.path === 'string' && knownPaths.has(a.path) ? a.path : [...knownPaths][0]!;
+    const severity = VALID_SEVERITIES.has(String(a.severity))
+      ? (a.severity as AnnotationSeverity)
+      : 'warning';
+    const path =
+      typeof a.path === 'string' && knownPaths.has(a.path) ? a.path : [...knownPaths][0]!;
     out.push({
       path,
-      ...(Number.isFinite(a.line) && (a.line as number) > 0 ? { line: Math.floor(a.line as number) } : {}),
+      ...(Number.isFinite(a.line) && (a.line as number) > 0
+        ? { line: Math.floor(a.line as number) }
+        : {}),
       severity,
       message: a.message.trim(),
-      ...(typeof a.suggestedFix === 'string' && a.suggestedFix.trim() ? { suggestedFix: a.suggestedFix.trim() } : {}),
+      ...(typeof a.suggestedFix === 'string' && a.suggestedFix.trim()
+        ? { suggestedFix: a.suggestedFix.trim() }
+        : {}),
     });
   }
   return out;
 }
 
 /** Consistency guard: the decision can never be laxer than the annotations. */
-function reconcileDecision(decision: ReviewDecision, annotations: ReviewAnnotation[]): ReviewDecision {
+function reconcileDecision(
+  decision: ReviewDecision,
+  annotations: ReviewAnnotation[]
+): ReviewDecision {
   if (annotations.some((a) => a.severity === 'blocker')) return 'reject';
   if (decision === 'accept' && annotations.some((a) => a.severity === 'warning')) return 'annotate';
   return decision;
@@ -113,7 +126,7 @@ export async function reviewWithLens(
   client: CouncilChatClient,
   lens: ReviewLens,
   diff: ProposedDiff,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<ReviewerReport> {
   const failClosed = (reason: string): ReviewerReport => ({
     reviewer: lens.id,
@@ -137,7 +150,7 @@ export async function reviewWithLens(
         { role: 'user', content: prompt.user },
       ]),
       timeoutMs,
-      `review:${lens.id}`,
+      `review:${lens.id}`
     );
     content = resp.content;
   } catch (err) {

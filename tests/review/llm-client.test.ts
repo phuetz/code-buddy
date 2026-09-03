@@ -27,7 +27,10 @@ vi.mock('../../src/codebuddy/client.js', () => ({
   CodeBuddyClient: class {
     async chat(_messages: unknown, _tools: unknown, options?: unknown) {
       chatCalls.push(options);
-      return { choices: [{ message: { content: '{"decision":"accept"}' } }], usage: { prompt_tokens: 1, total_tokens: 1 } };
+      return {
+        choices: [{ message: { content: '{"decision":"accept"}' } }],
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      };
     }
   },
 }));
@@ -40,7 +43,7 @@ import { pickReviewerPoolEntry, resolveDefaultReviewClient } from '../../src/rev
 import type { ActiveLlmModelPoolEntry } from '../../src/providers/active-llm-model-pool.js';
 
 function entry(
-  over: Partial<ActiveLlmModelPoolEntry> & Pick<ActiveLlmModelPoolEntry, 'provider' | 'model'>,
+  over: Partial<ActiveLlmModelPoolEntry> & Pick<ActiveLlmModelPoolEntry, 'provider' | 'model'>
 ): ActiveLlmModelPoolEntry {
   return {
     apiKey: 'ollama',
@@ -52,7 +55,13 @@ function entry(
 }
 
 const LOCAL_ONLY_POOL: ActiveLlmModelPoolEntry[] = [
-  entry({ provider: 'omniroute', model: 'auto/best-free', apiKey: 'omniroute', baseURL: 'http://localhost:20128/v1', egress: 'cloud' }),
+  entry({
+    provider: 'omniroute',
+    model: 'auto/best-free',
+    apiKey: 'omniroute',
+    baseURL: 'http://localhost:20128/v1',
+    egress: 'cloud',
+  }),
   entry({ provider: 'ollama', model: 'gemma4-moe-rag:latest' }),
   entry({ provider: 'ollama', model: 'nomic-embed-text:latest' }),
   entry({ provider: 'ollama', model: 'qwen3.8-ctx32k:latest' }),
@@ -73,7 +82,7 @@ describe('pickReviewerPoolEntry', () => {
     const pick = pickReviewerPoolEntry(
       LOCAL_ONLY_POOL,
       { CODEBUDDY_DIFF_REVIEW_MODEL: 'qwen3.8:27b', GROK_MODEL: 'qwen3.8-ctx32k:latest' },
-      () => 0,
+      () => 0
     );
     expect(pick?.model).toBe('qwen3.8:27b');
   });
@@ -88,7 +97,7 @@ describe('pickReviewerPoolEntry', () => {
     const pick = pickReviewerPoolEntry(
       truncated,
       { CODEBUDDY_DIFF_REVIEW_MODEL: 'qwen3.8:27b' },
-      () => 0,
+      () => 0
     );
     expect(pick?.model).toBe('qwen3.8:27b');
     expect(pick?.provider).toBe('ollama');
@@ -102,15 +111,17 @@ describe('pickReviewerPoolEntry', () => {
   });
 
   it('skips a dead model (trailing failure streak) and still fail-closes if nothing remains', () => {
-    const skipped = pickReviewerPoolEntry(LOCAL_ONLY_POOL, { CODEBUDDY_DIFF_REVIEW_MODEL: 'qwen3.8:27b' }, (m) =>
-      m === 'qwen3.8:27b' ? 2 : 0,
+    const skipped = pickReviewerPoolEntry(
+      LOCAL_ONLY_POOL,
+      { CODEBUDDY_DIFF_REVIEW_MODEL: 'qwen3.8:27b' },
+      (m) => (m === 'qwen3.8:27b' ? 2 : 0)
     );
     expect(skipped?.model).not.toBe('qwen3.8:27b');
 
     const empty = pickReviewerPoolEntry(
       [entry({ provider: 'ollama', model: 'llama3:latest' })],
       {},
-      () => 0,
+      () => 0
     );
     expect(empty).toBeNull();
   });

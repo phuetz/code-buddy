@@ -45,8 +45,14 @@ function jsonClient(byLens: Record<string, string>): CouncilChatClient {
   return {
     async chat(messages) {
       const system = messages[0]!.content;
-      const lens = Object.keys(byLens).find((id) => system.includes(`the ${id}`) || system.toLowerCase().includes(id));
-      return { content: byLens[lens ?? ''] ?? '{"decision":"accept","annotations":[],"why":"ok"}', promptTokens: 1, totalTokens: 2 };
+      const lens = Object.keys(byLens).find(
+        (id) => system.includes(`the ${id}`) || system.toLowerCase().includes(id)
+      );
+      return {
+        content: byLens[lens ?? ''] ?? '{"decision":"accept","annotations":[],"why":"ok"}',
+        promptTokens: 1,
+        totalTokens: 2,
+      };
     },
   };
 }
@@ -65,7 +71,12 @@ describe('resolveReviewMode', () => {
 describe('reviewProposedDiff', () => {
   it('static mode accepts a clean diff without any LLM', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'bump', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'bump',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
 
     const verdict = await reviewProposedDiff(diff, { mode: 'static' });
 
@@ -76,11 +87,19 @@ describe('reviewProposedDiff', () => {
 
   it('conflicts short-circuit everything (merit reject, not fail-closed)', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
     write('a.ts', 'raced\n');
 
     const client = { chat: vi.fn() };
-    const verdict = await reviewProposedDiff(diff, { mode: 'full', client: client as unknown as CouncilChatClient });
+    const verdict = await reviewProposedDiff(diff, {
+      mode: 'full',
+      client: client as unknown as CouncilChatClient,
+    });
 
     expect(verdict.decision).toBe('reject');
     expect(verdict.failClosed).toBe(false);
@@ -98,7 +117,10 @@ describe('reviewProposedDiff', () => {
     });
     const client = { chat: vi.fn() };
 
-    const verdict = await reviewProposedDiff(diff, { mode: 'full', client: client as unknown as CouncilChatClient });
+    const verdict = await reviewProposedDiff(diff, {
+      mode: 'full',
+      client: client as unknown as CouncilChatClient,
+    });
 
     expect(verdict.decision).toBe('reject');
     expect(client.chat).not.toHaveBeenCalled();
@@ -106,10 +128,16 @@ describe('reviewProposedDiff', () => {
 
   it('full mode aggregates lenses with AND semantics — one blocker vetoes', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
     const client = jsonClient({
       correctness: ACCEPT_JSON,
-      security: '{"decision":"reject","annotations":[{"path":"a.ts","severity":"blocker","message":"widens permissions"}],"why":"unsafe"}',
+      security:
+        '{"decision":"reject","annotations":[{"path":"a.ts","severity":"blocker","message":"widens permissions"}],"why":"unsafe"}',
     });
 
     const verdict = await reviewProposedDiff(diff, { mode: 'full', client });
@@ -117,14 +145,24 @@ describe('reviewProposedDiff', () => {
     expect(verdict.decision).toBe('reject');
     expect(verdict.failClosed).toBe(false); // merit reject
     expect(verdict.annotations.some((a) => a.message.includes('widens permissions'))).toBe(true);
-    expect(verdict.reviewers.map((r) => r.reviewer)).toEqual(['static-gate', 'correctness', 'security']);
+    expect(verdict.reviewers.map((r) => r.reviewer)).toEqual([
+      'static-gate',
+      'correctness',
+      'security',
+    ]);
   });
 
   it('warnings without blockers aggregate to annotate', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
     const client = jsonClient({
-      correctness: '{"decision":"annotate","annotations":[{"path":"a.ts","severity":"warning","message":"missing test"}],"why":"revise"}',
+      correctness:
+        '{"decision":"annotate","annotations":[{"path":"a.ts","severity":"warning","message":"missing test"}],"why":"revise"}',
       security: ACCEPT_JSON,
     });
 
@@ -134,7 +172,12 @@ describe('reviewProposedDiff', () => {
 
   it('full mode without a client fails CLOSED (reject, failClosed=true)', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
 
     const verdict = await reviewProposedDiff(diff, { mode: 'full', client: null });
 
@@ -144,7 +187,12 @@ describe('reviewProposedDiff', () => {
 
   it('a dead reviewer fails CLOSED while a merit finding stays merit', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
 
     const bothDead: CouncilChatClient = {
       async chat() {
@@ -157,7 +205,8 @@ describe('reviewProposedDiff', () => {
 
     const oneDeadOneMerit = jsonClient({
       correctness: 'not json at all',
-      security: '{"decision":"reject","annotations":[{"path":"a.ts","severity":"blocker","message":"real issue"}],"why":"no"}',
+      security:
+        '{"decision":"reject","annotations":[{"path":"a.ts","severity":"blocker","message":"real issue"}],"why":"no"}',
     });
     const merit = await reviewProposedDiff(diff, { mode: 'full', client: oneDeadOneMerit });
     expect(merit.decision).toBe('reject');
@@ -166,7 +215,12 @@ describe('reviewProposedDiff', () => {
 
   it('runs lenses serially so a local runtime that cannot overlap generations still finishes both', async () => {
     write('a.ts', 'v1\n');
-    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    const diff = buildProposedDiff({
+      workDir,
+      intent: 'x',
+      origin: ORIGIN,
+      changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+    });
     let inflight = 0;
     let maxInflight = 0;
     let chain: Promise<void> = Promise.resolve();
@@ -188,31 +242,50 @@ describe('reviewProposedDiff', () => {
       { id: 'security', label: 'Security reviewer', focus: 'injection' },
     ];
 
-    const verdict = await reviewProposedDiff(diff, { mode: 'full', client: serial, timeoutMs: 120, lenses });
+    const verdict = await reviewProposedDiff(diff, {
+      mode: 'full',
+      client: serial,
+      timeoutMs: 120,
+      lenses,
+    });
 
     expect(maxInflight).toBe(1);
     expect(verdict.decision).toBe('accept');
     expect(verdict.failClosed).toBe(false);
-    expect(verdict.reviewers.map((r) => r.reviewer)).toEqual(['static-gate', 'correctness', 'security']);
+    expect(verdict.reviewers.map((r) => r.reviewer)).toEqual([
+      'static-gate',
+      'correctness',
+      'security',
+    ]);
   });
 });
 
 describe('reviewAndApply (facade, end to end)', () => {
-  const lenses: ReviewLens[] = [{ id: 'correctness', label: 'Correctness reviewer', focus: 'bugs' }];
+  const lenses: ReviewLens[] = [
+    { id: 'correctness', label: 'Correctness reviewer', focus: 'bugs' },
+  ];
 
   it('accept → applies transactionally and journals to the ledger', async () => {
     write('a.ts', 'v1\n');
 
     const result = await reviewAndApply(
-      { workDir, intent: 'bump a', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] },
-      { mode: 'full', client: jsonClient({ correctness: ACCEPT_JSON }), lenses },
+      {
+        workDir,
+        intent: 'bump a',
+        origin: ORIGIN,
+        changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+      },
+      { mode: 'full', client: jsonClient({ correctness: ACCEPT_JSON }), lenses }
     );
 
     expect(result.verdict.decision).toBe('accept');
     expect(result.apply?.applied).toBe(true);
     expect(fs.readFileSync(path.join(workDir, 'a.ts'), 'utf-8')).toBe('v2\n');
 
-    const ledger = fs.readFileSync(path.join(workDir, '.codebuddy', 'diff-reviews.jsonl'), 'utf-8').trim().split('\n');
+    const ledger = fs
+      .readFileSync(path.join(workDir, '.codebuddy', 'diff-reviews.jsonl'), 'utf-8')
+      .trim()
+      .split('\n');
     expect(ledger).toHaveLength(1);
     const record = JSON.parse(ledger[0]!);
     expect(record.decision).toBe('accept');
@@ -224,19 +297,27 @@ describe('reviewAndApply (facade, end to end)', () => {
   it('annotate (atomic) → nothing applied, annotations returned for revision', async () => {
     write('a.ts', 'v1\n');
     const client = jsonClient({
-      correctness: '{"decision":"annotate","annotations":[{"path":"a.ts","severity":"warning","message":"add a test"}],"why":"revise"}',
+      correctness:
+        '{"decision":"annotate","annotations":[{"path":"a.ts","severity":"warning","message":"add a test"}],"why":"revise"}',
     });
 
     const result = await reviewAndApply(
-      { workDir, intent: 'bump a', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] },
-      { mode: 'full', client, lenses },
+      {
+        workDir,
+        intent: 'bump a',
+        origin: ORIGIN,
+        changes: [{ path: 'a.ts', newContent: 'v2\n' }],
+      },
+      { mode: 'full', client, lenses }
     );
 
     expect(result.verdict.decision).toBe('annotate');
     expect(result.apply).toBeNull();
     expect(result.verdict.annotations[0]!.message).toBe('add a test');
     expect(fs.readFileSync(path.join(workDir, 'a.ts'), 'utf-8')).toBe('v1\n');
-    const record = JSON.parse(fs.readFileSync(path.join(workDir, '.codebuddy', 'diff-reviews.jsonl'), 'utf-8').trim());
+    const record = JSON.parse(
+      fs.readFileSync(path.join(workDir, '.codebuddy', 'diff-reviews.jsonl'), 'utf-8').trim()
+    );
     expect(record.decision).toBe('annotate');
     expect(record.applied).toBe(false);
   });
@@ -245,8 +326,13 @@ describe('reviewAndApply (facade, end to end)', () => {
     write('a.ts', 'v1\n');
 
     const result = await reviewAndApply(
-      { workDir, intent: 'sneak a key in', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'const k = "AKIAABCDEFGHIJKLMNOP";\n' }] },
-      { mode: 'static' },
+      {
+        workDir,
+        intent: 'sneak a key in',
+        origin: ORIGIN,
+        changes: [{ path: 'a.ts', newContent: 'const k = "AKIAABCDEFGHIJKLMNOP";\n' }],
+      },
+      { mode: 'static' }
     );
 
     expect(result.verdict.decision).toBe('reject');
