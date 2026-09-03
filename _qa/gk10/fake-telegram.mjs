@@ -454,6 +454,9 @@ export function listenFakeTelegram(options = {}) {
         base,
         close: () => new Promise((done, fail) => {
           wakeWaiters(state);
+          if (typeof server.closeAllConnections === 'function') {
+            server.closeAllConnections();
+          }
           server.close((err) => (err ? fail(err) : done()));
         }),
       });

@@ -6,6 +6,9 @@
  */
 
 import { EventEmitter } from 'events';
+import fs from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
 import type {
   TelegramConfig,
   TelegramUpdate,
@@ -75,6 +78,36 @@ export class TelegramChannel extends BaseChannel {
 
   private get apiUrl(): string {
     return `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}`;
+  }
+
+  private offsetFilePath(): string {
+    const home = process.env.HOME || process.env.USERPROFILE || homedir();
+    return path.join(home, '.codebuddy', `telegram-offset-${this.botId}.json`);
+  }
+
+  private loadPersistedOffset(): void {
+    try {
+      const raw = fs.readFileSync(this.offsetFilePath(), 'utf8');
+      const parsed = JSON.parse(raw) as { lastUpdateId?: unknown };
+      const value = Number(parsed.lastUpdateId);
+      if (Number.isFinite(value) && value > 0) {
+        this.lastUpdateId = value;
+      }
+    } catch {
+      // Missing or unreadable file: first run, keep lastUpdateId at 0.
+    }
+  }
+
+  private persistOffset(): void {
+    try {
+      const file = this.offsetFilePath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `${JSON.stringify({ lastUpdateId: this.lastUpdateId })}\n`, 'utf8');
+    } catch (error) {
+      logger.warn('Telegram offset persist failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -508,6 +541,7 @@ export class TelegramChannel extends BaseChannel {
   private async startPolling(): Promise<void> {
     // Delete any existing webhook
     await this.apiRequest('deleteWebhook');
+    this.loadPersistedOffset();
 
     this.pollingActive = true;
     this.consecutiveErrors = 0;
@@ -538,6 +572,7 @@ export class TelegramChannel extends BaseChannel {
       for (const update of updates) {
         this.lastUpdateId = update.update_id;
         await this.handleUpdate(update);
+        this.persistOffset();
       }
     } catch (error) {
       if (!this.isCurrentPoll(generation)) return;
