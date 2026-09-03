@@ -17,7 +17,7 @@ import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import type { SessionStore } from "../persistence/session-store.js";
+import type { Session, SessionStore } from "../persistence/session-store.js";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
@@ -1580,6 +1580,22 @@ Look at the screenshot and find the element matching the user's intent. Output o
   setWorkingDirectory(dir: string | undefined): void {
     this.toolHandler.setWorkingDirectory(dir);
     this.promptBuilder.updateConfig({ cwd: dir || process.cwd() });
+  }
+
+  /** Rehydrate chat and LLM history from a persisted session (headless --resume). */
+  hydratePersistedSession(session: Session): void {
+    const entries = this.sessionStore.convertMessagesToChatEntries(session.messages);
+    const llmMessages: CodeBuddyMessage[] = [];
+    for (const entry of entries) {
+      if (entry.type === 'user' || entry.type === 'assistant') {
+        llmMessages.push({ role: entry.type, content: entry.content });
+      }
+    }
+    this.historyManager.setChatHistory(entries);
+    this.historyManager.setMessages(llmMessages);
+    if (session.workingDirectory) {
+      this.setWorkingDirectory(session.workingDirectory);
+    }
   }
 
   setSystemPromptAppend(append: string | undefined): void {
