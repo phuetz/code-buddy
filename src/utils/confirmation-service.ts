@@ -111,6 +111,7 @@ export class ConfirmationService extends EventEmitter {
   // Remote approval service (for non-interactive fallback)
   private remoteApproval: RemoteApprovalService | null = null;
   private interactiveBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null = null;
+  private mcpApprovalBridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null = null;
 
   static getInstance(): ConfirmationService {
     if (!ConfirmationService.instance) {
@@ -141,6 +142,21 @@ export class ConfirmationService extends EventEmitter {
     bridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null
   ): void {
     this.interactiveBridge = bridge;
+  }
+
+  /**
+   * Register an MCP server approval bridge. When Code Buddy operates as an
+   * MCP server, confirmation requests are routed to the connected MCP client
+   * via structured elicitation (`elicitation/create`).
+   */
+  setMcpApprovalBridge(
+    bridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null
+  ): void {
+    this.mcpApprovalBridge = bridge;
+  }
+
+  getMcpApprovalBridge(): ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null {
+    return this.mcpApprovalBridge;
   }
 
   /** Isolate exact grants between concurrent desktop/voice/CLI sessions. */
@@ -449,6 +465,22 @@ export class ConfirmationService extends EventEmitter {
         `Diff preview:${magnitude}\n${preview}`;
     }
 
+    // MCP Server approval bridge: when running in MCP server mode, route
+    // confirmation requests through structured elicitation to the connected client.
+    if (this.mcpApprovalBridge) {
+      const bridged = await this.mcpApprovalBridge(options, operationType);
+      if (!forcePrompt && bridged.dontAskAgain && bridged.confirmed) {
+        if (options.approvalKey) {
+          this.scopedSessionApprovals.add(this.scopedApprovalKey(options.approvalKey));
+        } else if (operationType === 'file') {
+          this.sessionFlags.fileOperations = true;
+        } else if (operationType === 'bash') {
+          this.sessionFlags.bashCommands = true;
+        }
+      }
+      return this.auditGate('mcp-elicitation', false, options, bridged);
+    }
+
     // Interactive GUI bridge (Cowork permission dialog): the desktop app is
     // the interactive surface, so it takes precedence over the TTY check.
     if (this.interactiveBridge) {
@@ -574,6 +606,7 @@ export class ConfirmationService extends EventEmitter {
       allOperations: false,
     };
     this.scopedSessionApprovals.clear();
+    this.mcpApprovalBridge = null;
   }
 
   getSessionFlags() {
@@ -591,6 +624,7 @@ export class ConfirmationService extends EventEmitter {
     this.pendingConfirmation = null;
     this.resolveConfirmation = null;
     this.scopedSessionApprovals.clear();
+    this.mcpApprovalBridge = null;
     this.removeAllListeners();
   }
 }
