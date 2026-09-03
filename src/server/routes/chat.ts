@@ -271,6 +271,53 @@ function openAIErrorType(error: ApiServerError): string {
   return 'server_error';
 }
 
+function writeOpenAIError(
+  res: Response,
+  status: number,
+  message: string,
+  code: string | null = null,
+  type = 'invalid_request_error',
+): void {
+  res.status(status).json({
+    error: { message, type, code },
+  });
+}
+
+function rejectOpenAICompletionsRequest(body: {
+  tools?: unknown;
+  tool_choice?: unknown;
+  functions?: unknown;
+  max_tokens?: unknown;
+}): { status: number; message: string; code: string | null } | null {
+  if (body.tools !== undefined || body.tool_choice !== undefined || body.functions !== undefined) {
+    return {
+      status: 400,
+      code: 'unsupported_parameter',
+      message:
+        'This endpoint does not accept OpenAI tools, tool_choice, or functions. It does not return tool_calls.',
+    };
+  }
+  if (body.max_tokens !== undefined) {
+    const maxTok = Number(body.max_tokens);
+    if (!Number.isInteger(maxTok) || maxTok < 1 || maxTok > 200000) {
+      return {
+        status: 400,
+        code: null,
+        message: 'max_tokens must be an integer between 1 and 200000',
+      };
+    }
+  }
+  return null;
+}
+
+function openaiModelNotFound(content: string): { model: string } | null {
+  const match = content.match(/404 model ['"]([^'"]+)['"] not found/i);
+  if (!match || match[1] === undefined) {
+    return null;
+  }
+  return { model: match[1] };
+}
+
 /**
  * POST /api/chat
  * Send a chat message and get a response
@@ -638,6 +685,12 @@ router.post(
       return;
     }
 
+    const rejected = rejectOpenAICompletionsRequest(body);
+    if (rejected) {
+      writeOpenAIError(res, rejected.status, rejected.message, rejected.code);
+      return;
+    }
+
     // Convert to our format
     const chatRequest: ChatRequest = {
       messages: body.messages,
@@ -675,11 +728,21 @@ router.post(
         };
       }, messages.slice(0, -1));
       const { result } = completed;
+      const completionText = result.content || '';
+      const missingModel = openaiModelNotFound(completionText);
+      if (missingModel) {
+        writeOpenAIError(
+          res,
+          404,
+          `The model '${missingModel.model}' does not exist or you do not have access to it`,
+          'model_not_found',
+        );
+        return;
+      }
 
       // Estimate token counts when the provider doesn't return them
       const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
       const estimatedPromptTokens = Math.ceil(promptText.length / 4);
-      const completionText = result.content || '';
       const estimatedCompletionTokens = Math.ceil(completionText.length / 4);
 
       // Return OpenAI-compatible response

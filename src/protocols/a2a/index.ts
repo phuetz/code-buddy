@@ -162,6 +162,16 @@ export class A2AAgentServer extends EventEmitter {
 
     try {
       const completed = await this.executor(task);
+      if (
+        completed.status.status === TaskStatus.FAILED ||
+        completed.status.status === TaskStatus.CANCELED
+      ) {
+        this.emit('task:failed', {
+          taskId: task.id,
+          error: completed.status.message || completed.status.status,
+        });
+        return completed;
+      }
       this.updateTaskStatus(completed, TaskStatus.COMPLETED);
       this.emit('task:completed', { taskId: task.id });
       return completed;
@@ -251,6 +261,16 @@ export class A2AAgentServer extends EventEmitter {
 
     try {
       const completed = await this.executor(task);
+      if (
+        completed.status.status === TaskStatus.FAILED ||
+        completed.status.status === TaskStatus.CANCELED
+      ) {
+        this.emit('task:failed', {
+          taskId,
+          error: completed.status.message || completed.status.status,
+        });
+        return completed;
+      }
       this.updateTaskStatus(completed, TaskStatus.COMPLETED);
       this.emit('task:completed', { taskId });
       return completed;
@@ -372,7 +392,7 @@ export class A2AAgentClient {
   }
 
   /** Score a spoke for a given skill (higher = better) */
-  private scoreSpokeForSkill(spokeName: string, skillId: string): number {
+  private scoreSpokeForSkill(spokeName: string, _skillId: string): number {
     const remote = this.remoteCards.get(spokeName);
     if (!remote) return 0;
 

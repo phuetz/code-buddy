@@ -65,6 +65,11 @@ function extractToken(req: Request): string | null {
  */
 export function createAuthMiddleware(config: ServerConfig) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    // AgentCard discovery is public (Google A2A well-known). Tasks still require auth.
+    if (req.method === 'GET' && req.path === '/api/a2a/.well-known/agent.json') {
+      return next();
+    }
+
     // Skip auth if disabled
     if (!config.authEnabled) {
       req.auth = {
