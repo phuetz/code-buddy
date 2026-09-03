@@ -17,7 +17,6 @@ import {
   PROJECT_FOLDER_QUESTION,
   renderCapabilitiesFooter,
   persistProviderSelection,
-  getProviderGuide,
   OnboardingResult,
 } from '../../src/wizard/onboarding.js';
 import { SettingsManager } from '../../src/utils/settings-manager.js';

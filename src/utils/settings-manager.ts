@@ -20,7 +20,6 @@ import {
   ConnectionProfile,
   ResolvedConfig,
   CLIOverrides,
-  ModernUserSettings,
   needsMigration,
   migrateSettings,
   mergeWithDefaults,
