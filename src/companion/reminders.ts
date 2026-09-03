@@ -16,7 +16,7 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { readFile, writeFile, mkdir, appendFile, stat, rename } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
 import { resolveUserName } from './user-name.js';
@@ -52,11 +52,21 @@ export type ReminderLogEvent = 'fired' | 'done' | 'missed' | 'renag';
 function remindersFile(): string {
   return process.env.CODEBUDDY_REMINDERS_FILE || join(homedir(), '.codebuddy', 'reminders.json');
 }
+
+/**
+ * Companion stores (log / pending acks / snoozes) follow the reminders file
+ * unless an explicit env override is set. Default layout is unchanged:
+ * `~/.codebuddy/reminders.json` + `~/.codebuddy/companion/<name>`. A custom
+ * `CODEBUDDY_REMINDERS_FILE` must not leak into the operator home.
+ */
+function companionStore(envKey: string, name: string): string {
+  const override = process.env[envKey];
+  if (override) return override;
+  return join(dirname(remindersFile()), 'companion', name);
+}
+
 function logFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_LOG_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'reminder-log.jsonl')
-  );
+  return companionStore('CODEBUDDY_REMINDER_LOG_FILE', 'reminder-log.jsonl');
 }
 
 // ── store ─────────────────────────────────────────────────────────────
@@ -366,10 +376,7 @@ export function resetAcks(): void {
 // every mutation and reloaded at runner start, so a fired-but-unacked dose still escalates.
 
 function pendingAcksFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_PENDING_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'pending-acks.json')
-  );
+  return companionStore('CODEBUDDY_REMINDER_PENDING_FILE', 'pending-acks.json');
 }
 
 /**
@@ -951,10 +958,7 @@ const snoozes = new Map<string, SnoozedReminder>();
 // deferral and its re-announce must NOT silently drop the reminder — for a meds dose that's a missed
 // dose. Mirrored to disk on every mutation and reloaded at runner start.
 function snoozesFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_SNOOZE_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'snoozes.json')
-  );
+  return companionStore('CODEBUDDY_REMINDER_SNOOZE_FILE', 'snoozes.json');
 }
 function saveSnoozes(): Promise<void> {
   return trackWrite(saveSnoozesNow());
