@@ -61,7 +61,7 @@ MISSION=$2
 MOTEUR=${3:-luna}
 [ -f "$MISSION" ] || { echo "mission introuvable : $MISSION" >&2; exit 2; }
 
-JOURNAUX=~/.codebuddy/delegations
+JOURNAUX=${CODEBUDDY_DELEGATIONS_DIR:-"$HOME/.codebuddy/delegations"}
 mkdir -p "$JOURNAUX"
 NOM=$(basename "$MISSION" .md)
 LOG="$JOURNAUX/$(date +%Y-%m-%dT%H%M%S)-$MOTEUR-$NOM.log"
@@ -109,6 +109,14 @@ empreinte_depot() {
 }
 
 AVANT=$(empreinte_depot "$DEPOT")
+
+# Le journal de lane reste strictement opt-in : sans ce drapeau, le chemin
+# historique ci-dessous ne fait aucun appel Git ou cryptographique supplémentaire.
+if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
+  LANE_HEAD_AVANT=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
+  LANE_BRANCHE=$(git -C "$DEPOT" branch --show-current 2>/dev/null || true)
+  LANE_MISSION_SHA=$(sha256sum "$MISSION" | cut -d' ' -f1)
+fi
 
 case "$MOTEUR" in
   luna|sol)
@@ -345,4 +353,37 @@ grep -oE '`?(~/|/)?[A-Za-zÀ-ÿ0-9_][A-Za-zÀ-ÿ0-9_.-]*(/[A-Za-zÀ-ÿ0-9_.-]+)+
   esac
   [ -e "$chemin" ] || echo "⚠️  livrable annoncé mais ABSENT : $chemin"
 done
+
+if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
+  LANE_HEAD_APRES=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
+  [ -n "$LANE_BRANCHE" ] || LANE_BRANCHE="detached-${LANE_HEAD_APRES:0:12}"
+  LANE_RAPPORT=$(find "$DEPOT" \
+    -path "$DEPOT/.git" -prune -o \
+    -path "$DEPOT/node_modules" -prune -o \
+    -path "$DEPOT/test-scripts" -prune -o \
+    -type f \( -name 'RAPPORT-*' -o -name 'REPARATION-*' -o -name 'REVUE-*' \) \
+    -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+  LANE_LEDGER_ARGS=(
+    append delegation
+    --engine "$MOTEUR"
+    --lane "$NOM"
+    --repository "$DEPOT"
+    --branch "$LANE_BRANCHE"
+    --head-before "$LANE_HEAD_AVANT"
+    --head-after "$LANE_HEAD_APRES"
+    --exit-code "$CODE"
+    --mission-sha256 "$LANE_MISSION_SHA"
+  )
+  if [ -n "$LANE_RAPPORT" ]; then
+    LANE_LEDGER_ARGS+=(
+      --report "${LANE_RAPPORT#"$DEPOT"/}"
+      --report-sha256 "$(sha256sum "$LANE_RAPPORT" | cut -d' ' -f1)"
+    )
+  fi
+  LANE_LEDGER_SCRIPT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lane-ledger.sh
+  if ! LANE_LEDGER_RESULT=$("$LANE_LEDGER_SCRIPT" "${LANE_LEDGER_ARGS[@]}" 2>&1); then
+    echo "⚠️  journal de lane non écrit : $LANE_LEDGER_RESULT" >&2
+    [ "$CODE" -ne 0 ] || CODE=4
+  fi
+fi
 exit "$CODE"
