@@ -415,8 +415,8 @@ describe('buildAudioMixGraph', () => {
     });
     expect(finalLabel).toBe('aout');
     const graph = segments.join(';');
-    expect(graph).toContain('[filmA]apad=whole_dur=11.45,atrim=0:11.45,asetpts=PTS-STARTPTS[prog_pad]');
-    expect(graph).toContain('apad=whole_dur=11.45');
+    expect(graph).toContain('[filmA]apad=pad_dur=11.45,atrim=0:11.45,asetpts=PTS-STARTPTS[prog_pad]');
+    expect(graph).toContain('apad=pad_dur=11.45');
     expect(graph).toContain('duration=longest');
     expect(graph).toContain('dropout_transition=0');
     expect(graph).not.toMatch(/duration=first/);
@@ -459,10 +459,11 @@ describe('buildFilmArgs', () => {
       '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,' +
         'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,' +
         'format=yuv420p,setpts=PTS-STARTPTS[v0];' +
-        '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a0]',
-      '-map', '[v0]', '-map', '[a0]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+        '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a0];' +
+        '[a0]apad=pad_dur=5[aoutp]',
+      '-map', '[v0]', '-map', '[aoutp]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
-      '/out/film.mp4',
+      '-shortest', '/out/film.mp4',
     ]);
   });
 
@@ -509,7 +510,9 @@ describe('buildFilmArgs', () => {
     );
     expect(plan.args).toEqual(expect.arrayContaining(['-stream_loop', '-1', '-i', '/music.mp3']));
     expect(plan.filterComplex).toContain('sidechaincompress');
-    expect(plan.audioLabel).toBe('aout');
+    expect(plan.filterComplex).toContain('[aout]apad=pad_dur=');
+    expect(plan.audioLabel).toBe('aoutp');
+    expect(plan.args).toContain('-shortest');
   });
 });
 
@@ -784,6 +787,78 @@ describe.runIf(hasFfmpeg)('assembleFilm — real ffmpeg render', () => {
     expect(res.probedDuration).toBeLessThan(5.6);
     expect(res.targetWidth).toBe(480);
     expect(res.hasAudio).toBe(true);
+  }, 120_000);
+
+  it('pads ducked music when clip audio is shorter than the video', async () => {
+    const mismatched: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const out = join(root, `shorta${i}.mp4`);
+      const r = spawnSync('ffmpeg', [
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-f',
+        'lavfi',
+        '-i',
+        `color=c=${i ? 'blue' : 'red'}:size=320x240:rate=30:duration=4`,
+        '-f',
+        'lavfi',
+        '-i',
+        'sine=frequency=330:duration=3.2',
+        '-c:v',
+        'libx264',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        out,
+      ]);
+      expect(r.status).toBe(0);
+      mismatched.push(out);
+    }
+    const bed = join(root, 'bed-short.m4a');
+    expect(
+      spawnSync('ffmpeg', [
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-f',
+        'lavfi',
+        '-i',
+        'sine=frequency=220:duration=12',
+        '-c:a',
+        'aac',
+        bed,
+      ]).status
+    ).toBe(0);
+    const res = await assembleFilm({
+      clips: mismatched,
+      transitions: 'fade',
+      transitionDuration: 0.6,
+      resolution: '320x240',
+      music: bed,
+      ducking: true,
+      musicVolume: 0.16,
+      rootDir: root,
+      name: 'short-audio',
+    });
+    expect(res.success, res.error).toBe(true);
+    const probe = spawnSync('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'stream=codec_type,duration',
+      '-of',
+      'csv=p=0',
+      res.outputPath!,
+    ]);
+    const lines = probe.stdout.toString().trim().split('\n');
+    const videoDur = Number(lines.find((l) => l.startsWith('video,'))?.split(',')[1]);
+    const audioDur = Number(lines.find((l) => l.startsWith('audio,'))?.split(',')[1]);
+    expect(videoDur).toBeGreaterThan(6);
+    expect(Math.abs(videoDur - audioDur)).toBeLessThan(0.25);
   }, 120_000);
 
   it('keeps mixed-in music as long as the video (no 0.6s audio truncate)', async () => {
