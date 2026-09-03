@@ -13,6 +13,7 @@ premier 403 contenant ``personal-team-blocked:spending-limit``.
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import mimetypes
@@ -33,6 +34,15 @@ CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
 MIN_COMPLETE_BYTES = 50_000
 QUOTA_SENTINEL = "personal-team-blocked:spending-limit"
 SAFE_HEADER_MARKERS = ("rate", "limit", "quota", "remaining", "retry-after")
+SAFE_RESPONSE_HEADER_NAMES = frozenset(
+    {"date", "request-id", "retry-after", "x-correlation-id", "x-request-id"}
+)
+SAFE_RESPONSE_HEADER_PREFIXES = (
+    "ratelimit-",
+    "x-quota-",
+    "x-rate-limit-",
+    "x-ratelimit-",
+)
 
 
 class ApiFailure(RuntimeError):
@@ -94,6 +104,20 @@ def safe_quota_headers(headers: Any) -> dict[str, str]:
     }
 
 
+def safe_response_headers(headers: Any) -> dict[str, str]:
+    """Conserve uniquement les en-têtes utiles et non sensibles du fournisseur."""
+    if headers is None:
+        return {}
+    safe: dict[str, str] = {}
+    for key, value in headers.items():
+        normalized = key.lower()
+        if normalized in SAFE_RESPONSE_HEADER_NAMES or normalized.startswith(
+            SAFE_RESPONSE_HEADER_PREFIXES
+        ):
+            safe[normalized] = str(value)[:500]
+    return safe
+
+
 def safe_error_message(payload: Any, fallback: str) -> str:
     error = payload.get("error", payload) if isinstance(payload, dict) else payload
     if isinstance(error, dict):
@@ -141,17 +165,7 @@ def api(
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=80) as response:
-            payload = json.load(response)
-            meta = {
-                "method": method,
-                "path": event_path(path),
-                "http": response.status,
-                "elapsed_s": round(time.monotonic() - started, 3),
-                "quota_headers": safe_quota_headers(response.headers),
-            }
-            append_log({"kind": "api", **meta})
-            return payload, meta
+        response = urllib.request.urlopen(request, timeout=80)
     except urllib.error.HTTPError as error:
         raw = error.read().decode("utf-8", errors="replace")
         try:
@@ -159,16 +173,21 @@ def api(
         except json.JSONDecodeError:
             payload = {}
         message = safe_error_message(payload, raw or f"HTTP {error.code}")
+        response_headers = safe_response_headers(error.headers)
         meta = {
             "method": method,
             "path": event_path(path),
             "http": error.code,
             "elapsed_s": round(time.monotonic() - started, 3),
-            "quota_headers": safe_quota_headers(error.headers),
+            "response_headers": response_headers,
             "error": message,
         }
         append_log({"kind": "api", **meta})
-        if error.code == 403 and QUOTA_SENTINEL in raw.lower():
+        header_values = " ".join(
+            str(value) for _, value in (error.headers.items() if error.headers else [])
+        )
+        quota_evidence = " ".join((raw, str(error.reason), header_values)).lower()
+        if error.code == 403 and QUOTA_SENTINEL in quota_evidence:
             raise QuotaExhausted(error.code, QUOTA_SENTINEL) from None
         refresh_enabled = os.environ.get("GROK_IMAGINE_REFRESH", "1") != "0"
         if error.code in (401, 403) and retry and refresh_enabled:
@@ -181,7 +200,34 @@ def api(
             "path": event_path(path),
             "http": None,
             "elapsed_s": round(time.monotonic() - started, 3),
-            "quota_headers": {},
+            "response_headers": {},
+            "error": type(error).__name__,
+        }
+        append_log({"kind": "api", **meta})
+        if isinstance(error, ApiFailure):
+            raise
+        raise ApiFailure(None, type(error).__name__) from error
+
+    response_headers = safe_response_headers(response.headers)
+    try:
+        with response:
+            payload = json.load(response)
+            meta = {
+                "method": method,
+                "path": event_path(path),
+                "http": response.status,
+                "elapsed_s": round(time.monotonic() - started, 3),
+                "response_headers": response_headers,
+            }
+            append_log({"kind": "api", **meta})
+            return payload, meta
+    except Exception as error:
+        meta = {
+            "method": method,
+            "path": event_path(path),
+            "http": getattr(response, "status", None),
+            "elapsed_s": round(time.monotonic() - started, 3),
+            "response_headers": response_headers,
             "error": type(error).__name__,
         }
         append_log({"kind": "api", **meta})
@@ -325,8 +371,38 @@ def probe(path: Path) -> dict[str, Any]:
     }
 
 
-def main() -> int:
-    jobs_path = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else None
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("jobs", nargs="?", help="manifeste JSON (stdin si absent)")
+    parser.add_argument(
+        "--model",
+        help="remplace le modèle de chaque job (ex. grok-imagine-video-1.5)",
+    )
+    parser.add_argument(
+        "--resolution",
+        choices=("480p", "720p", "1080p"),
+        help="remplace la résolution de chaque job vidéo (ex. 1080p)",
+    )
+    return parser.parse_args(argv)
+
+
+def apply_cli_overrides(
+    jobs: list[dict[str, Any]], model: str | None, resolution: str | None
+) -> list[dict[str, Any]]:
+    overridden: list[dict[str, Any]] = []
+    for source in jobs:
+        job = dict(source)
+        if model:
+            job["model"] = model
+        if resolution and job.get("mode", "video") == "video":
+            job["resolution"] = resolution
+        overridden.append(job)
+    return overridden
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    jobs_path = Path(args.jobs).resolve() if args.jobs else None
     if jobs_path:
         with jobs_path.open(encoding="utf-8") as handle:
             jobs = json.load(handle)
@@ -334,6 +410,9 @@ def main() -> int:
     else:
         jobs = json.load(sys.stdin)
         base_dir = Path.cwd()
+    if not isinstance(jobs, list) or not all(isinstance(job, dict) for job in jobs):
+        raise SystemExit("Le manifeste doit être une liste de jobs JSON.")
+    jobs = apply_cli_overrides(jobs, args.model, args.resolution)
 
     output = Path(
         os.path.expanduser(
@@ -345,6 +424,10 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     completed: list[Path] = []
     stopped_for_quota = False
+    stopped_at: str | None = None
+    generated_count = 0
+    skipped_count = 0
+    failed_count = 0
 
     for job in jobs:
         started = time.monotonic()
@@ -365,6 +448,7 @@ def main() -> int:
                 }
             )
             completed.append(destination)
+            skipped_count += 1
             continue
 
         reference = job.get("image_path") or job.get("ref_url") or job.get("ref_pexels")
@@ -392,6 +476,7 @@ def main() -> int:
                 }
             )
             stopped_for_quota = True
+            stopped_at = name
             break
         except ApiFailure as error:
             elapsed = round(time.monotonic() - started, 3)
@@ -406,6 +491,7 @@ def main() -> int:
                     "error": str(error),
                 }
             )
+            failed_count += 1
             continue
 
         elapsed = round(time.monotonic() - started, 3)
@@ -428,6 +514,7 @@ def main() -> int:
             }
         )
         completed.append(result)
+        generated_count += 1
 
     backup = os.environ.get("GROK_IMAGINE_BACKUP", "").strip()
     if completed and backup:
@@ -439,7 +526,22 @@ def main() -> int:
         )
 
     state = "ARRÊT QUOTA" if stopped_for_quota else "TERMINÉ"
-    print(f"\n=== {state} : {len(completed)}/{len(jobs)} ===")
+    summary = {
+        "kind": "batch",
+        "status": "stopped_quota" if stopped_for_quota else "done",
+        "jobs_total": len(jobs),
+        "completed": len(completed),
+        "generated": generated_count,
+        "skipped_existing": skipped_count,
+        "failed": failed_count,
+        "stopped_at": stopped_at,
+    }
+    append_log(summary)
+    print(
+        f"\n=== {state} : acquis={len(completed)}/{len(jobs)}, "
+        f"générés={generated_count}, existants={skipped_count}, "
+        f"échecs={failed_count} ==="
+    )
     for path in completed:
         print(" ", path)
     return 0
