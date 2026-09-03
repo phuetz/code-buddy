@@ -30,6 +30,7 @@ _qa/gk20/work/
 _qa/gk20/rules.json
 _qa/gk20/runs.jsonl
 _qa/gk20/*.jsonl
+_gk18/
 test-app/
 test-scripts/
 C\:Users*/

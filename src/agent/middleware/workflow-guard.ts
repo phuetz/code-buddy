@@ -184,6 +184,16 @@ export class WorkflowGuardMiddleware implements ConversationMiddleware {
           }).join(' ')
         : '';
 
+    // `buddy dev plan` already IS the plan step — do not nag it to create PLAN.md.
+    const lower = text.toLowerCase();
+    if (
+      /do not implement yet/.test(lower) ||
+      /\bplan only\b/.test(lower) ||
+      /start with plan only/.test(lower)
+    ) {
+      return { action: 'continue' };
+    }
+
     // Detect empty project and suggest starter pack
     if (getRepoProfiler().isEmptyProject()) {
       const starterHint = detectStarterIntent(text);

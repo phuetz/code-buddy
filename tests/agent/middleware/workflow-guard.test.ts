@@ -114,6 +114,14 @@ describe('WorkflowGuardMiddleware', () => {
   // PLAN.md check
   // --------------------------------------------------------------------------
 
+  it('does not warn on golden-path plan-only prompts even without PLAN.md', () => {
+    const ctx = makeUserContext(
+      'Objective: corrige le bug\n\nProduce a numbered implementation plan.\nDo NOT implement yet. Plan only.',
+    );
+    const result = mw.beforeTurn(ctx);
+    expect(result.action).toBe('continue');
+  });
+
   it('should return continue when PLAN.md exists in cwd', () => {
     fs.writeFileSync(path.join(tmpDir, 'PLAN.md'), '# Plan\n', 'utf-8');
     const ctx = makeUserContext('create a module, fix the tests, and update the docs');

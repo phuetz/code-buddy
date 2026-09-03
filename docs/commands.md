@@ -128,10 +128,10 @@ sont jamais imprimées par `status` sans `--reveal`.
 ### Dev Workflows
 
 ```bash
-buddy dev plan "<objective>"       # Profile repo + produce task plan
-buddy dev run "<objective>"        # Plan + implement + test + artifacts
-buddy dev pr "<objective>"         # Dev run + generate PR summary
-buddy dev fix-ci [--log <file>]    # Read CI logs + propose patch
+buddy dev plan "<objective>"       # Profile repo + write PLAN.md (exit 1 if the plan is empty)
+buddy dev run [objective]          # Resume PLAN.md if omitted; WritePolicy.strict / apply_patch; test; conventional commit
+buddy dev pr [objective]           # Print title/body, gh pr create (fail-closed without gh); local remotes are pushed
+buddy dev fix-ci [--log <file>]    # Requires --log or piped CI output (does not hang on an empty pipe)
 buddy dev issue <url-or-number>    # GitHub issue -> branch -> code -> tests -> PR
 buddy dev explain                  # Summarize repo conventions
 ```

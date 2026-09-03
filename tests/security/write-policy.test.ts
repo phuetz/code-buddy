@@ -126,6 +126,14 @@ describe('WritePolicy', () => {
       expect(result.allowed).toBe(true);
     });
 
+    it('blocks bash redirects and allows read-only shell in strict mode', async () => {
+      const blocked = await policy.gateShell('echo x > src/add.js');
+      expect(blocked.allowed).toBe(false);
+      expect(blocked.reason).toMatch(/apply_patch/);
+      const allowed = await policy.gateShell('npm test');
+      expect(allowed.allowed).toBe(true);
+    });
+
     it('should allow write tools when patch is provided', async () => {
       const result = await policy.gate({
         toolName: 'str_replace_editor',

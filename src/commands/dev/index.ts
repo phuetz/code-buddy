@@ -93,12 +93,28 @@ Do NOT implement yet. Plan only.`;
 
       try {
         console.log(`Planning: ${objective}\n`);
+        const { isMeaningfulPlan, stripGuardNoise, writeDevPlan } = await import('./golden-path.js');
+        let planOutput = '';
+        let thinkingHint = false;
         for await (const chunk of agent.processUserMessageStream(prompt)) {
+          if (chunk.type === 'reasoning' && !thinkingHint) {
+            thinkingHint = true;
+            process.stderr.write('Thinking…\n');
+          }
           if (chunk.type === 'content' && chunk.content) {
             process.stdout.write(chunk.content);
+            planOutput += chunk.content;
           }
         }
         console.log('');
+        const cleaned = stripGuardNoise(planOutput);
+        if (!isMeaningfulPlan(cleaned)) {
+          console.error('Plan is empty — refusing to report success. No PLAN.md written.');
+          process.exitCode = 1;
+          return;
+        }
+        const planPath = writeDevPlan(process.cwd(), objective, cleaned);
+        console.log(`Wrote plan: ${planPath}`);
       } finally {
         await disposePlanResources(agent);
       }
@@ -106,12 +122,27 @@ Do NOT implement yet. Plan only.`;
 
   // ── buddy dev run ──────────────────────────────────────────────
   dev
-    .command('run <objective>')
-    .description('Plan + implement + test + save artifacts in RunStore')
+    .command('run [objective]')
+    .description('Plan + implement + test + save artifacts in RunStore (resumes PLAN.md if objective omitted)')
     .option('-t, --type <type>', 'workflow type: add-feature|fix-tests|refactor|security-audit', 'add-feature')
     .option('-y, --yes', 'skip confirmation prompts (non-interactive)', false)
     .option('--write-policy <mode>', 'write policy: strict|confirm|off', 'strict')
-    .action(async (objective: string, opts: { type: string; yes: boolean; writePolicy: string }) => {
+    .action(async (objective: string | undefined, opts: { type: string; yes: boolean; writePolicy: string }) => {
+      const {
+        resolveRunObjective,
+        workflowExitCode,
+        buildConventionalCommitMessage,
+        conventionalCommitNamedFiles,
+      } = await import('./golden-path.js');
+      let resolved;
+      try {
+        resolved = resolveRunObjective(objective, process.cwd());
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
+      }
+
       const { runWorkflow } = await import('./workflows.js');
       type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
 
@@ -129,12 +160,15 @@ Do NOT implement yet. Plan only.`;
       await agent.systemPromptReady;
 
       try {
-        const result = await runWorkflow(workflowType, objective, agent, {
+        const result = await runWorkflow(workflowType, resolved.objective, agent, {
           nonInteractive: opts.yes,
           writePolicyMode: policyMode,
         });
 
         console.log(`\nRun ${result.runId}: ${result.status}`);
+        if (resolved.source === 'plan') {
+          console.log(`Objective (from PLAN.md): ${resolved.objective}`);
+        }
         if (result.artifactPaths.length > 0) {
           console.log('Artifacts:');
           for (const p of result.artifactPaths) {
@@ -142,6 +176,20 @@ Do NOT implement yet. Plan only.`;
           }
         }
         console.log(`\nView run: buddy run show ${result.runId}`);
+        if (result.status === 'completed') {
+          const commitType = workflowType === 'add-feature' ? 'feat' : 'fix';
+          const message = buildConventionalCommitMessage(commitType, resolved.objective);
+          const commit = conventionalCommitNamedFiles(process.cwd(), message);
+          if (commit.committed) {
+            console.log(`Committed ${commit.hash}: ${message}`);
+            console.log(`Files: ${commit.files.join(', ')}`);
+          } else if (commit.error) {
+            console.error(`Commit skipped: ${commit.error}`);
+          } else {
+            console.log('No named source files to commit.');
+          }
+        }
+        process.exitCode = workflowExitCode(result.status);
       } finally {
         await disposePlanResources(agent);
       }
@@ -149,66 +197,29 @@ Do NOT implement yet. Plan only.`;
 
   // ── buddy dev pr ───────────────────────────────────────────────
   dev
-    .command('pr <objective>')
-    .description('Run a workflow then generate a PR summary')
-    .option('-t, --type <type>', 'workflow type', 'add-feature')
+    .command('pr [objective]')
+    .description('Print a PR title/body and create a PR (fail-closed without gh; local remotes are pushed)')
     .option('-y, --yes', 'skip confirmation prompts', false)
-    .action(async (objective: string, opts: { type: string; yes: boolean }) => {
-      const { runWorkflow } = await import('./workflows.js');
-      type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
+    .action(async (objective: string | undefined) => {
+      const { buildPrTitleAndBody, attemptPullRequest } = await import('./golden-path.js');
+      const { title, body } = buildPrTitleAndBody(process.cwd(), objective);
+      console.log('\n── PR ──────────────────────────────────');
+      console.log(`Title: ${title}`);
+      console.log('');
+      console.log(body);
+      console.log('');
 
-      const validTypes: WFType[] = ['add-feature', 'fix-tests', 'refactor', 'security-audit'];
-      const workflowType = validTypes.includes(opts.type as WFType)
-        ? (opts.type as WFType)
-        : 'add-feature';
-
-      const agent = await createAgent();
-      await agent.systemPromptReady;
-
-      try {
-        const result = await runWorkflow(workflowType, objective, agent, {
-          nonInteractive: opts.yes,
-          tags: ['pr'],
-        });
-
-        if (result.status === 'completed') {
-          console.log('\n── PR Summary ──────────────────────────');
-          const prPrompt = `Based on what was just implemented, write a GitHub Pull Request description:
-- Title (max 70 chars)
-- Summary (bullet points of what changed)
-- Test plan (what to verify)
-Keep it concise and professional.`;
-
-          for await (const chunk of agent.processUserMessageStream(prPrompt)) {
-            if (chunk.type === 'content' && chunk.content) {
-              process.stdout.write(chunk.content);
-            }
-          }
-          console.log('');
-
-          // Generate full PR description using LLM
-          try {
-            const { GitHubIntegration } = await import('../../integrations/github-integration.js');
-            const gh = new GitHubIntegration();
-            const prDescription = await gh.generatePRDescriptionWithLLM(
-              undefined,
-              async (prompt: string) => {
-                let response = '';
-                for await (const chunk of agent.processUserMessageStream(prompt)) {
-                  if (chunk.type === 'content' && chunk.content) response += chunk.content;
-                }
-                return response;
-              },
-            );
-            console.log('\n── Full PR Description ─────────────────');
-            console.log(prDescription);
-          } catch {
-            // Non-critical: PR summary was already printed above
-          }
-        }
-      } finally {
-        await disposePlanResources(agent);
+      const attempt = attemptPullRequest(process.cwd(), title, body);
+      if (attempt.created) {
+        console.log(`PR created: ${attempt.url}`);
+        return;
       }
+      if (attempt.pushed) {
+        console.log('Pushed to local origin (no GitHub PR: gh is not authenticated).');
+        return;
+      }
+      console.error(`PR not created: ${attempt.error || 'gh not authenticated'}`);
+      process.exitCode = 1;
     });
 
   // ── buddy dev fix-ci ───────────────────────────────────────────
@@ -252,24 +263,12 @@ Keep it concise and professional.`;
             process.exit(1);
           }
         } else {
-          // Read log from --log file or stdin
+          const { loadCiLogContent } = await import('./golden-path.js');
           let logContent = '';
-          if (opts.log) {
-            const fs = await import('fs');
-            if (!fs.default.existsSync(opts.log)) {
-              console.error(`Log file not found: ${opts.log}`);
-              await disposePlanResources(agent);
-              process.exit(1);
-            }
-            logContent = fs.default.readFileSync(opts.log, 'utf-8');
-          } else if (!process.stdin.isTTY) {
-            const chunks: Buffer[] = [];
-            for await (const chunk of process.stdin) {
-              chunks.push(chunk as Buffer);
-            }
-            logContent = Buffer.concat(chunks).toString('utf-8');
-          } else {
-            console.error('Auto-fix requires --run <id>, --log <file>, or piped CI output via stdin.');
+          try {
+            logContent = await loadCiLogContent({ log: opts.log });
+          } catch (err) {
+            console.error(err instanceof Error ? err.message : String(err));
             await disposePlanResources(agent);
             process.exit(1);
           }
@@ -330,25 +329,14 @@ Keep it concise and professional.`;
       }
 
       // ── Original interactive path ────────────────────────────
+      const { loadCiLogContent, workflowExitCode } = await import('./golden-path.js');
       let logContent = '';
-
-      if (opts.log) {
-        const fs = await import('fs');
-        if (!fs.default.existsSync(opts.log)) {
-          console.error(`Log file not found: ${opts.log}`);
-          process.exit(1);
-        }
-        logContent = fs.default.readFileSync(opts.log, 'utf-8');
-      } else if (!process.stdin.isTTY) {
-        // Read from stdin
-        const chunks: Buffer[] = [];
-        for await (const chunk of process.stdin) {
-          chunks.push(chunk as Buffer);
-        }
-        logContent = Buffer.concat(chunks).toString('utf-8');
-      } else {
-        console.error('Provide --log <file> or pipe CI output via stdin.');
-        process.exit(1);
+      try {
+        logContent = await loadCiLogContent({ log: opts.log });
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
       }
 
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
@@ -377,6 +365,7 @@ Repo context: ${profile.contextPack}`;
       });
 
       console.log(`\nRun ${result.runId}: ${result.status}`);
+      process.exitCode = workflowExitCode(result.status);
       await disposePlanResources(agent);
     });
 
