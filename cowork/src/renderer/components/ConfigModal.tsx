@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, CheckCircle, Key, Loader2, Plug, Save, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { AppConfig, ApiTestResult } from '../types';
+import type { AppConfig, ApiTestResult, ProviderType } from '../types';
 import { useApiConfigState } from '../hooks/useApiConfigState';
 import { useIPC } from '../hooks/useIPC';
 import { ApiConfigSetManager } from './ApiConfigSetManager';
@@ -14,6 +14,7 @@ interface ConfigModalProps {
   onSave: (config: Partial<AppConfig>) => Promise<AppConfig | void>;
   initialConfig?: AppConfig | null;
   isFirstRun?: boolean;
+  preferredProvider?: ProviderType;
 }
 
 export function ConfigModal({
@@ -22,12 +23,14 @@ export function ConfigModal({
   onSave,
   initialConfig,
   isFirstRun,
+  preferredProvider,
 }: ConfigModalProps) {
   const { t } = useTranslation();
   const apiConfig = useApiConfigState({
     enabled: isOpen,
     initialConfig,
     onSave,
+    preferredProvider,
   });
   const { geminiOauthLogin, geminiOauthClear, codexOauthLogin, codexOauthClear, codexOauthStatus } =
     useIPC();

@@ -16,6 +16,7 @@ import {
   useUpdateInfo,
 } from './store/selectors';
 import { useIPC } from './hooks/useIPC';
+import type { ProviderType } from './types';
 import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { useAutoBargeIn } from './hooks/useAutoBargeIn';
@@ -208,6 +209,7 @@ function App() {
   // P1.6 — first-run onboarding wizard. Shows when no provider key is set
   // and the user hasn't already completed (or skipped) onboarding.
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [configProviderHint, setConfigProviderHint] = useState<ProviderType | undefined>();
   // P2.6 — Sub-agent dashboard (Cmd+Shift+A)
   const [showSubAgentDashboard, setShowSubAgentDashboard] = useState(false);
   // P3.4 — security diagnostics panel
@@ -319,6 +321,7 @@ function App() {
 
   // Handle config modal close
   const handleConfigClose = useCallback(() => {
+    setConfigProviderHint(undefined);
     setShowConfigModal(false);
   }, [setShowConfigModal]);
 
@@ -575,9 +578,11 @@ function App() {
         <OnboardingWizard
           onClose={() => setShowOnboarding(false)}
           apiSettingsOpen={showConfigModal}
-          onOpenApiSettings={() => {
+          onOpenApiSettings={(provider) => {
             // Keep the wizard mounted underneath so the user returns to it
             // (and sees the now-connected status / can verify) after saving.
+            // Local runtimes must land on Ollama, not the OpenRouter default.
+            setConfigProviderHint(provider);
             setShowConfigModal(true);
           }}
           onOpenCompanion={() => {
@@ -614,6 +619,7 @@ function App() {
             onSave={handleConfigSave}
             initialConfig={appConfig}
             isFirstRun={!isConfigured}
+            preferredProvider={configProviderHint}
           />
         </Suspense>
       </PanelErrorBoundary>
