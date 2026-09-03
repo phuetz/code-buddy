@@ -150,7 +150,15 @@ Rouge collé : preview « This will overwrite current .codebuddy/ configuration.
 
 Correctif : fusion nommée (fichiers extra listés, preview + succès). Pas un refus : les extras restent.
 
-Vert : 6 fichiers / 33 tests.
+Vert : 6 fichiers / 33 tests. Commit `7af07e409`.
+
+### Lot G — taille 0 KB, JSON brut, ancien format (rouge → vert)
+
+Rouge collé : `Size: 0 KB` pour 208 o ; restore tronqué `Failed to read backup … Expected double-quoted property name` ; v0.9 `archive size mismatch`.
+
+Correctif : taille en B/KB/MB ; « not a readable Code Buddy backup (truncated or not JSON) » ; version 1.x exigée.
+
+Vert : 6 fichiers / 36 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

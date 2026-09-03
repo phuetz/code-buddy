@@ -160,8 +160,6 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     };
   }
 
-  const totalSizeKB = Math.round(backupData.totalSize / 1024);
-
   const fileList = files.length <= 12
     ? ` (${files.map((file) => file.relativePath).join(', ')})`
     : '';
@@ -174,7 +172,7 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     response: [
       `Backup created: ${backupPath}`,
       `Files: ${files.length}${fileList}`,
-      `Size: ${totalSizeKB} KB`,
+      `Size: ${formatBackupSize(backupData.totalSize)}`,
       skippedLine,
       onlyConfig ? '(config only)' : '',
       noWorkspace ? '(workspace excluded)' : '',
@@ -215,6 +213,14 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
     }
+    if (!isSupportedBackupVersion(manifest.version)) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response:
+          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x), got ${manifest.version}`,
+      };
+    }
 
     const payloadError = verifyArchivePayloads(manifest, data.files);
     if (payloadError) {
@@ -240,7 +246,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
     return {
       handled: true,
       exitCode: 1,
-      response: `Backup corrupt or unreadable: ${fullPath}: ${(err as Error).message}`,
+      response: describeUnreadableBackup(fullPath, err),
     };
   }
 }
@@ -277,8 +283,7 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
   const lines = files.map(f => {
     const fullPath = join(backupDir, f);
     const stat = statSync(fullPath);
-    const sizeKB = Math.round(stat.size / 1024);
-    return `  ${f}  (${sizeKB} KB, ${stat.mtime.toLocaleDateString()})`;
+    return `  ${f}  (${formatBackupSize(stat.size)}, ${stat.mtime.toLocaleDateString()})`;
   });
 
   return {
@@ -319,6 +324,14 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
         handled: true,
         exitCode: 1,
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
+      };
+    }
+    if (!isSupportedBackupVersion(manifest.version)) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response:
+          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x), got ${String(manifest.version)}`,
       };
     }
 
@@ -443,7 +456,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     return {
       handled: true,
       exitCode: 1,
-      response: `Failed to read backup ${fullPath}: ${(err as Error).message}`,
+      response: describeUnreadableBackup(fullPath, err),
     };
   }
 }
@@ -468,6 +481,28 @@ function fileChecksum(content: Buffer): string {
 
 /** Dummy dest used only to decide whether an archive path would escape on restore. */
 const VERIFY_PATH_ROOT = resolve('/codebuddy-backup-dest');
+
+function isSupportedBackupVersion(version: unknown): boolean {
+  return typeof version === 'string' && /^1(\.|$)/.test(version);
+}
+
+function formatBackupSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    const kb = bytes / 1024;
+    return kb < 10 ? `${kb.toFixed(1)} KB` : `${Math.round(kb)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function describeUnreadableBackup(fullPath: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/JSON|Unexpected token|Unterminated|not valid JSON/i.test(message)) {
+    return `This file is not a readable Code Buddy backup (truncated or not JSON): ${fullPath}`;
+  }
+  return `Cannot read backup ${fullPath}: ${message}`;
+}
 
 function describeBackupIoError(err: unknown, action: string): string {
   const e = err as NodeJS.ErrnoException;

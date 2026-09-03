@@ -273,3 +273,62 @@ describe('GK16 restore into a non-empty profile is an explicit merge', () => {
     expect(fs.readFileSync(path.join(workspace, '.codebuddy', 'settings.json'), 'utf8')).toBe('{"theme":"dark"}\n');
   });
 });
+
+describe('GK16 backup size and unreadable archives are honest', () => {
+  let workspace: string;
+  let previousCwd: string;
+
+  beforeEach(() => {
+    previousCwd = process.cwd();
+    workspace = makeTmpDir('gk16-backup-ux-', path.join(previousCwd, 'tmp'));
+    process.chdir(workspace);
+    fs.mkdirSync(path.join(workspace, '.codebuddy'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'settings.json'), '{"ok":true}\n');
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    removeTmpDir(workspace);
+  });
+
+  it('reports create size in bytes when the payload is under 1 KB', async () => {
+    const created = await handleBackup(`create --output ${path.join(workspace, 'backups')}`);
+    expect(created.exitCode ?? 0).toBe(0);
+    expect(created.response).toMatch(/Size: \d+ B\b/);
+    expect(created.response ?? '').not.toMatch(/Size: 0 KB/);
+  });
+
+  it('describes a truncated file as an unreadable backup, not a raw JSON parse error', async () => {
+    const file = path.join(workspace, 'truncated.json');
+    fs.writeFileSync(file, '{"manifest":{"version":"1.0.0",');
+    const verified = await handleBackup(`verify ${file}`);
+    expect(verified.exitCode).toBe(1);
+    expect(verified.response).toMatch(/not a readable Code Buddy backup|truncated/i);
+    expect(verified.response ?? '').not.toMatch(/Unterminated string in JSON/i);
+
+    const restored = await handleBackup(`restore ${file} --confirm`);
+    expect(restored.exitCode).toBe(1);
+    expect(restored.response).toMatch(/not a readable Code Buddy backup|truncated/i);
+    expect(restored.response ?? '').not.toMatch(/Failed to read backup/i);
+  });
+
+  it('rejects an older backup format with an explicit version error', async () => {
+    const file = path.join(workspace, 'old-v0.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        manifest: {
+          version: '0.9.0',
+          createdAt: '2025-06-01T00:00:00Z',
+          files: [{ path: 'settings.json', size: 11, checksum: 'deadbeefdeadbeef' }],
+          flags: { onlyConfig: true, includeWorkspace: false },
+        },
+        files: [{ path: 'settings.json', content: Buffer.from('{"old":true}\n').toString('base64') }],
+      }),
+    );
+    const verified = await handleBackup(`verify ${file}`);
+    expect(verified.exitCode).toBe(1);
+    expect(verified.response).toMatch(/unsupported backup format|version 1/i);
+    expect(verified.response ?? '').not.toMatch(/Backup valid/i);
+  });
+});
