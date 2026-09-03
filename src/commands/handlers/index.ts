@@ -233,6 +233,10 @@ export {
   executeBatchPlan,
   formatBatchPlan,
   formatBatchResults,
+  parseNumberedBatchUnits,
+  unitsShareFiles,
+  createBatchChatFn,
+  createDefaultBatchSpawnFn,
 } from './batch-handlers.js';
 
 // Starter pack handlers
