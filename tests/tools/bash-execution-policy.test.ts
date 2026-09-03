@@ -50,6 +50,18 @@ describe('Bash runtime execution policy', () => {
     });
   });
 
+  it.each([
+    '.',
+    process.cwd(),
+    '~/DEV/cb-headless2-2026-09-03',
+  ])('keeps a read-only git -C %s chain sandboxed in dontAsk mode', async (gitRoot) => {
+    getPermissionModeManager().setMode('dontAsk');
+
+    await expect(
+      evaluateShellExecution(`pwd && git -C ${gitRoot} status -sb | head -3`, process.cwd()),
+    ).resolves.toMatchObject({ action: 'sandbox' });
+  });
+
   it('asks for exact authority when an operation crosses the sandbox boundary', async () => {
     await expect(evaluateShellExecution('npm install', process.cwd())).resolves.toMatchObject({
       action: 'ask',
