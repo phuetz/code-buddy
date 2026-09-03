@@ -298,6 +298,7 @@ export async function buildLlmArrivalOpener(ctx: LlmArrivalContext): Promise<str
     heard.length ? `Dernières choses qu'il t'a dites (tu peux y faire référence en douceur, sans forcer) : ${heard.map((h) => `« ${h} »`).join(' ; ')}.` : '',
     avoid.length ? `N'utilise PAS ces formulations récentes : ${avoid.map((a) => `« ${a} »`).join(' ; ')}.` : '',
     `Réponds en français, UNE phrase, sans guillemets, sans emoji superflu, sans préambule.`,
+    `N'utilise jamais de balises XML, de scores /100, ni de notes d'évolution internes. Ne mentionne pas ce qui a changé chez toi sauf si on te le demande explicitement.`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -318,7 +319,9 @@ export async function buildLlmArrivalOpener(ctx: LlmArrivalContext): Promise<str
     const guarded = guardRelationshipReply(cleaned);
     // Null selects the reviewed deterministic opener; a generic policy repair
     // would sound unnatural as an arrival greeting.
-    return guarded.intervened ? null : guarded.response;
+    if (guarded.intervened) return null;
+    if (isJargonArrivalLine(guarded.response)) return null;
+    return guarded.response;
   } catch {
     return null;
   }

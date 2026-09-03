@@ -343,7 +343,10 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
               if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
                 try {
                   const { buildRelationalContext } = await import('../companion/relational-context.js');
-                  relationalContext = await buildRelationalContext(options.cwd ? { cwd: options.cwd } : {});
+                  relationalContext = await buildRelationalContext({
+                    ...(options.cwd ? { cwd: options.cwd } : {}),
+                    includeSelfEvolution: false,
+                  });
                 } catch {
                   /* relational context optional */
                 }
