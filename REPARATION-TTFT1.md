@@ -150,8 +150,51 @@ $ HOME="$PWD/_qa/ttft1/home" TMPDIR="$PWD/_qa/ttft1/tmp" npx tsx src/index.ts co
 
 ## Tour réel Ollama local à 0 €
 
-À effectuer après l’implémentation, sous réserve que l’instance Ollama locale soit disponible et non occupée.
+`ollama ps` juste avant le tour ne listait aucun modèle chargé. Le modèle demandé
+était installé (`ollama list` : `qwen3:4b-instruct`, ID `0edcdef34593`). Le tour
+headless éphémère a utilisé l’endpoint local `http://127.0.0.1:11434/v1`, un
+`HOME`/`TMPDIR` sous `_qa/ttft1`, 32 tokens de sortie maximum et aucun outil.
+
+```text
+$ ollama ps
+NAME    ID    SIZE    PROCESSOR    CONTEXT    UNTIL
+$ HOME="$PWD/_qa/ttft1/home" TMPDIR="$PWD/_qa/ttft1/tmp" GROK_API_KEY=ollama GROK_BASE_URL=http://127.0.0.1:11434/v1 GROK_MODEL=qwen3:4b-instruct CODEBUDDY_MAX_TOKENS=32 npx tsx src/index.ts --ephemeral --plain --no-color --no-emoji --system-prompt-override 'Réponds exactement avec le texte demandé, sans outil.' --prompt 'Réponds exactement TTFT1-OK'
+[2026-09-03T16:21:02.893Z] INFO Token usage: [tokens: 3,625 in / 2 out | cost: $0.0000]
+{"result":"TTFT1-OK","cost":{"total":0},"model":"qwen3:4b-instruct",...}
+```
+
+Journal produit, sans prompt ni réponse :
+
+```json
+{"version":1,"at":"2026-09-03T16:20:51.164Z","provider":"ollama","model":"qwen3:4b-instruct","ttftMs":11513.096774,"ttfmMs":11725.439301,"totalMs":11725.678048,"inputTokens":3625,"outputTokens":2,"totalTokens":3627}
+```
+
+La commande humaine affiche donc TTFT p50/p95 `11513ms`, TTFM p50/p95
+`11725ms` (un seul échantillon). `ollama ps` après le tour ne listait qu’un seul
+modèle : `qwen3:4b-instruct`, 100 % GPU.
 
 ## Vérifications finales
 
-À compléter.
+Toutes les commandes npm ci-dessous utilisent `HOME="$PWD/_qa/ttft1/home"` et
+`TMPDIR="$PWD/_qa/ttft1/tmp"`.
+
+```text
+$ npx vitest run tests/observability tests/fleet tests/council
+Test Files  59 passed (59)
+Tests  799 passed (799)
+
+$ npx vitest run tests/security/donnees-personnelles.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+
+$ npx tsc --noEmit -p .
+exit 0
+
+$ npx eslint src/agent/execution/agent-executor.ts src/codebuddy/client.ts src/codebuddy/providers/provider-openai-compat.ts src/commands/cost.ts src/fleet/model-scoreboard.ts src/fleet/model-selector.ts src/observability/turn-metrics.ts tests/agent/execution/turn-metrics-wiring.test.ts tests/codebuddy/providers/provider-openai-compat.test.ts tests/commands/cost-latency.test.ts tests/fleet/model-selector.test.ts tests/observability/turn-metrics.test.ts --max-warnings=0
+exit 0, aucune sortie
+```
+
+Le contrôle `git diff --check` final est consigné dans la coordination. Aucun
+push, aucune API payante, aucun service, robot ou ComfyUI n’a été touché. Le
+code de référence Apache 2.0 a servi à distinguer un événement porteur de token
+d’un événement de protocole vide ; aucune implémentation n’a été copiée.
