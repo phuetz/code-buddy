@@ -35,6 +35,24 @@ import type {
 
 // We mock node:fs/promises so we can simulate the .codebuddy files.
 vi.mock('fs/promises');
+// The production store now persists through the atomic-write helper. Keep this
+// unit test's virtual filesystem boundary instead of falling through to /fake.
+vi.mock('../../../src/utils/atomic-write.js', async () => {
+  const mockedFs = await import('fs/promises');
+  return {
+    readJsonAtomic: async <T>(filePath: string, fallback: T): Promise<T> => {
+      try {
+        return JSON.parse(await mockedFs.readFile(filePath, 'utf8')) as T;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fallback;
+        throw error;
+      }
+    },
+    writeJsonAtomic: async (filePath: string, value: unknown): Promise<void> => {
+      await mockedFs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    },
+  };
+});
 
 // Mock saga-store's lesson recall — Phase F injection should never
 // touch real user memory in tests. The default returns no lessons so
@@ -350,7 +368,7 @@ describe('runFleetTick — outcomes', () => {
     expect(fsMock.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('presence.json'),
       expect.any(String),
-      'utf-8',
+      'utf8',
     );
   });
 

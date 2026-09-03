@@ -10,10 +10,18 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { logger } from '../../utils/logger.js';
 import { CodeBuddyClient } from '../../codebuddy/client.js';
+import type { StreamingChunk } from '../../agent/types.js';
+import {
+  ThreadDelegation,
+  type ThreadDelegateAgent,
+  type ThreadDelegateAgentFactory,
+  type ThreadDelegationEvent,
+  type ThreadParentBudget,
+} from '../../agent/delegation/thread-delegation.js';
+import { getModelToolConfig } from '../../config/model-tools.js';
+import { getPermissionModeManager } from '../../security/permission-modes.js';
 
 // ============================================================================
 // Types
@@ -52,10 +60,15 @@ export interface BatchResult {
   filesChanged?: string[];
 }
 
-export type BatchSpawnFn = (
-  label: string,
-  instruction: string,
-) => Promise<BatchResult>;
+export interface BatchSpawnFn {
+  (
+    label: string,
+    instruction: string,
+    filePatterns?: readonly string[],
+  ): Promise<BatchResult>;
+  /** Release the shared thread scheduler after the complete batch plan. */
+  close?: () => Promise<void>;
+}
 
 const SOURCE_FILE_EXT = new Set([
   'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx',
@@ -292,64 +305,75 @@ export async function executeBatchPlan(
   // two agents never write the same path in the same Promise.all wave.
   const remaining = withFileOverlapDeps(plan.units);
 
-  while (remaining.length > 0) {
-    // Find units whose dependencies are satisfied
-    const ready = remaining.filter(u =>
-      !u.dependsOn?.length || u.dependsOn.every(dep => completed.has(dep))
-    );
+  try {
+    while (remaining.length > 0) {
+      // Find units whose dependencies are satisfied
+      const ready = remaining.filter(u =>
+        !u.dependsOn?.length || u.dependsOn.every(dep => completed.has(dep))
+      );
 
-    if (ready.length === 0) {
-      // Circular dependency or unresolvable — execute all remaining
-      logger.debug('Batch: unresolvable dependencies, executing remaining units');
-      for (const unit of remaining) {
-        ready.push(unit);
-      }
-      remaining.length = 0;
-    }
-
-    // Remove ready units from remaining
-    for (const unit of ready) {
-      const idx = remaining.indexOf(unit);
-      if (idx >= 0) remaining.splice(idx, 1);
-    }
-
-    // Execute ready units in parallel
-    const batchResults = await Promise.allSettled(
-      ready.map((unit) => {
-        const instruction = unit.filePatterns?.length
-          ? `${unit.instruction}\n\nOnly modify these files: ${unit.filePatterns.join(', ')}. Do not touch any other file.`
-          : unit.instruction;
-        return spawnFn(unit.label, instruction);
-      }),
-    );
-
-    for (let i = 0; i < batchResults.length; i++) {
-      const unit = ready[i];
-      const settled = batchResults[i];
-      if (unit === undefined || settled === undefined) continue;
-
-      if (settled.status === 'fulfilled') {
-        const value = settled.value;
-        if (value.success && value.filesChanged && value.filesChanged.length === 0) {
-          results.push({
-            ...value,
-            success: false,
-            summary: value.summary?.trim() ? value.summary : 'No files changed',
-          });
-        } else {
-          results.push(value);
+      if (ready.length === 0) {
+        // Circular dependency or unresolvable — execute all remaining
+        logger.debug('Batch: unresolvable dependencies, executing remaining units');
+        for (const unit of remaining) {
+          ready.push(unit);
         }
-        completed.add(unit.label);
-      } else {
-        results.push({
-          label: unit.label,
-          success: false,
-          summary: `Error: ${settled.reason}`,
-          durationMs: 0,
-        });
-        completed.add(unit.label); // Mark as done even on failure
+        remaining.length = 0;
+      }
+
+      // Remove ready units from remaining
+      for (const unit of ready) {
+        const idx = remaining.indexOf(unit);
+        if (idx >= 0) remaining.splice(idx, 1);
+      }
+
+      // Execute ready units in parallel. The spawn function owns the bounded
+      // thread scheduler; Promise.allSettled only submits this dependency wave.
+      const batchResults = await Promise.allSettled(
+        ready.map((unit) => {
+          const instruction = unit.filePatterns?.length
+            ? [
+              unit.instruction,
+              '',
+              `Only create or modify these files: ${unit.filePatterns.join(', ')}. Do not touch any other file.`,
+              'You are explicitly authorized to create any named target that does not exist.',
+              'If a target is absent, use create_file or apply_patch; absence is expected and does not require confirmation.',
+            ].join('\n')
+            : unit.instruction;
+          return spawnFn(unit.label, instruction, unit.filePatterns);
+        }),
+      );
+
+      for (let i = 0; i < batchResults.length; i++) {
+        const unit = ready[i];
+        const settled = batchResults[i];
+        if (unit === undefined || settled === undefined) continue;
+
+        if (settled.status === 'fulfilled') {
+          const value = settled.value;
+          if (value.success && value.filesChanged && value.filesChanged.length === 0) {
+            results.push({
+              ...value,
+              success: false,
+              summary: value.summary?.trim() ? value.summary : 'No files changed',
+            });
+          } else {
+            results.push(value);
+          }
+          completed.add(unit.label);
+        } else {
+          results.push({
+            label: unit.label,
+            success: false,
+            summary: `Error: ${settled.reason}`,
+            durationMs: 0,
+          });
+          completed.add(unit.label); // Mark as done even on failure
+        }
       }
     }
+  } finally {
+    await spawnFn.close?.();
   }
 
   return results;
@@ -414,8 +438,16 @@ export interface BatchSpawnOptions {
   maxToolRounds?: number;
   /** Max concurrent Code Buddy agents (default 1 — local Ollama cannot prefill two large contexts). */
   concurrency?: number;
-  /** Injected chat for tests and file-scoped writes. */
+  /** @deprecated Regression seam only: production spawning never calls chat directly. */
   chatFn?: (prompt: string) => Promise<string>;
+  /** Inject a complete streaming agent for tests or embedding hosts. */
+  agentFactory?: ThreadDelegateAgentFactory<StreamingChunk>;
+  /** Receive every tagged multiplexed event. Defaults to JSON lines on stdout. */
+  eventSink?: (event: ThreadDelegationEvent<StreamingChunk>) => void;
+  /** Abort all child agents when the owning parent turn is cancelled. */
+  parentSignal?: AbortSignal;
+  /** Override the inherited parent allowance before DELEG1 reduces it. */
+  parentBudget?: Partial<ThreadParentBudget>;
 }
 
 function gitPorcelain(cwd: string): string {
@@ -430,22 +462,6 @@ function gitPorcelain(cwd: string): string {
   }
 }
 
-function stripCodeFence(text: string): string {
-  const fenced = text.match(/```(?:[\w.+-]*)\r?\n([\s\S]*?)```/);
-  const body = (fenced?.[1] ?? text).replace(/^\uFEFF/, '');
-  return body.endsWith('\n') ? body : `${body}\n`;
-}
-
-function resolveInsideCwd(cwd: string, rel: string): string {
-  const root = resolve(cwd);
-  const abs = resolve(root, rel);
-  const prefix = root.endsWith('/') ? root : `${root}/`;
-  if (abs !== root && !abs.startsWith(prefix)) {
-    throw new Error(`Refusing to write outside workspace: ${rel}`);
-  }
-  return abs;
-}
-
 function porcelainPaths(status: string): string[] {
   return status
     .split('\n')
@@ -453,7 +469,26 @@ function porcelainPaths(status: string): string[] {
     .filter(Boolean);
 }
 
-function listChangedFiles(cwd: string, before: string): string[] {
+function filterBatchChangedFiles(
+  paths: string[],
+  filePatterns?: readonly string[],
+): string[] {
+  const visible = paths.filter((changedPath) => {
+    const normalized = normalizeBatchFile(changedPath);
+    return normalized !== '.codebuddy' && !normalized.startsWith('.codebuddy/');
+  });
+  if (!filePatterns?.length) return visible;
+  const matchers = filePatterns.map(globToRegExp);
+  return visible.filter((changedPath) =>
+    matchers.some((matcher) => matcher.test(normalizeBatchFile(changedPath))),
+  );
+}
+
+function listChangedFiles(
+  cwd: string,
+  before: string,
+  filePatterns?: readonly string[],
+): string[] {
   const after = gitPorcelain(cwd);
   const beforeSet = new Set(porcelainPaths(before));
   const afterPaths = porcelainPaths(after);
@@ -464,16 +499,43 @@ function listChangedFiles(cwd: string, before: string): string[] {
     return beforeLine !== afterLine;
   });
   const unique = [...new Set([...added, ...statusChanged])];
-  if (unique.length > 0) return unique;
+  if (unique.length > 0) return filterBatchChangedFiles(unique, filePatterns);
   try {
     const diff = execFileSync('git', ['diff', '--name-only', 'HEAD'], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    return diff.split('\n').map((s) => s.trim()).filter(Boolean);
+    return filterBatchChangedFiles(
+      diff.split('\n').map((s) => s.trim()).filter(Boolean),
+      filePatterns,
+    );
   } catch {
     return [];
+  }
+}
+
+async function* streamWithSubagentPermissionMode<TOutput>(
+  agent: ThreadDelegateAgent<TOutput>,
+  input: string,
+): AsyncGenerator<TOutput> {
+  const permissionManager = getPermissionModeManager();
+  const mode = permissionManager.getSubagentMode();
+  const iterator = agent.processUserMessageStream(input)[Symbol.asyncIterator]();
+  let completed = false;
+  try {
+    while (true) {
+      const next = await permissionManager.withModeAsync(mode, () => iterator.next());
+      if (next.done) {
+        completed = true;
+        return;
+      }
+      yield next.value;
+    }
+  } finally {
+    if (!completed && iterator.return) {
+      await permissionManager.withModeAsync(mode, () => iterator.return!());
+    }
   }
 }
 
@@ -481,91 +543,109 @@ function listChangedFiles(cwd: string, before: string): string[] {
  * Spawn one Code Buddy agent per unit. Success requires a real file diff.
  */
 export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn {
-  const concurrency = Math.max(1, opts.concurrency ?? Number(process.env.CODEBUDDY_BATCH_CONCURRENCY || 1));
-  let active = 0;
-  const waiters: Array<() => void> = [];
-  const acquire = (): Promise<void> => {
-    if (active < concurrency) {
-      active += 1;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      waiters.push(() => {
-        active += 1;
-        resolve();
+  const envConcurrency = Number(process.env.CODEBUDDY_BATCH_CONCURRENCY || 1);
+  const concurrency = Math.max(
+    1,
+    Number.isFinite(opts.concurrency ?? envConcurrency)
+      ? Math.floor(opts.concurrency ?? envConcurrency)
+      : ThreadDelegation.DEFAULT_CONCURRENCY,
+  );
+  const configuredChildRounds = opts.maxToolRounds
+    ?? Number(process.env.CODEBUDDY_BATCH_MAX_ROUNDS || 6);
+  const childRounds = Number.isFinite(configuredChildRounds) && configuredChildRounds > 0
+    ? Math.floor(configuredChildRounds)
+    : 6;
+  const envCost = Number(process.env.MAX_COST);
+  const modelContext = opts.model
+    ? getModelToolConfig(opts.model).contextWindow
+    : undefined;
+  const envContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
+  const parentBudget: ThreadParentBudget = {
+    // Preserve the historical /batch child ceiling (6) while expressing it as
+    // a reduced allowance inherited from a finite parent ceiling (12).
+    maxTurns: opts.parentBudget?.maxTurns ?? childRounds * 2,
+    maxCostUsd: opts.parentBudget?.maxCostUsd
+      ?? (Number.isFinite(envCost) && envCost > 0 ? envCost : 10),
+    maxContextTokens: opts.parentBudget?.maxContextTokens
+      ?? (Number.isFinite(envContext) && envContext > 0
+        ? envContext
+        : modelContext ?? 128_000),
+  };
+  const rawCreateAgent: ThreadDelegateAgentFactory<StreamingChunk> = opts.agentFactory
+    ?? (async ({ budget }) => {
+      const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
+      const { ConfirmationService } = await import('../../utils/confirmation-service.js');
+      ConfirmationService.getInstance().setSessionFlag('allOperations', true);
+      ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
+      const agent = new CodeBuddyAgent(
+        opts.apiKey,
+        opts.baseURL,
+        opts.model,
+        budget.maxTurns,
+        true,
+        undefined,
+        opts.cwd ?? process.cwd(),
+      );
+      agent.updateContextConfig({
+        maxContextTokens: budget.maxContextTokens,
+        responseReserveTokens: Math.max(256, Math.floor(budget.maxContextTokens * 0.125)),
       });
+      agent.setSessionCostLimit(budget.maxCostUsd);
+      // Delegates keep their own bounded turn history and must not pull or write
+      // cross-session persistent memory behind the parent's back.
+      agent.setMemoryEnabled(false);
+      await agent.systemPromptReady;
+      return {
+        processUserMessageStream: (input: string) =>
+          agent.processUserMessageStream(input, { surface: 'cli' }),
+        abortCurrentOperation: () => agent.abortCurrentOperation(),
+        dispose: () => agent.dispose({ skipSessionLearning: true }),
+        getSessionCost: () => agent.getSessionCost(),
+      };
     });
+  const createAgent: ThreadDelegateAgentFactory<StreamingChunk> = async (context) => {
+    const agent = await rawCreateAgent(context);
+    return {
+      processUserMessageStream: (input) => streamWithSubagentPermissionMode(agent, input),
+      abortCurrentOperation: () => agent.abortCurrentOperation(),
+      dispose: () => agent.dispose(),
+      getSessionCost: agent.getSessionCost ? () => agent.getSessionCost!() : undefined,
+    };
   };
-  const release = (): void => {
-    active = Math.max(0, active - 1);
-    const next = waiters.shift();
-    if (next) next();
-  };
+  const delegation = new ThreadDelegation<StreamingChunk>({
+    createAgent,
+    parentBudget,
+    concurrency,
+    parentSignal: opts.parentSignal,
+  });
+  const eventPump = (async () => {
+    for await (const event of delegation.events()) {
+      if (opts.eventSink) {
+        opts.eventSink(event);
+        continue;
+      }
+      process.stdout.write(
+        `[batch:${event.agentId}:${event.kind}] ${formatBatchEventPayload(event.payload)}\n`,
+      );
+    }
+  })();
 
-  return async (label, instruction) => {
+  const spawn: BatchSpawnFn = async (label, instruction, filePatterns) => {
     const started = Date.now();
     const cwd = opts.cwd ?? process.cwd();
-    await acquire();
     const before = gitPorcelain(cwd);
+    let child: ReturnType<typeof delegation.spawn> | null = null;
     try {
-      process.stdout.write(`[batch] start ${label}\n`);
-      const targets = extractBatchFilePatterns(instruction);
-      const chat = opts.chatFn ?? (async (prompt: string) => {
-        const client = new CodeBuddyClient(opts.apiKey, opts.model, opts.baseURL);
-        const response = await client.chat([{ role: 'user', content: prompt }]);
-        return response.choices[0]?.message?.content ?? '';
-      });
-
-      if (targets.length > 0) {
-        for (const rel of targets) {
-          const abs = resolveInsideCwd(cwd, rel);
-          let current = '';
-          try {
-            current = readFileSync(abs, 'utf8');
-          } catch {
-            current = '';
-          }
-          const prompt = [
-            `You are editing exactly one file: ${rel}`,
-            `Instruction: ${instruction}`,
-            'Current contents:',
-            '```',
-            current || '(file does not exist yet)',
-            '```',
-            'Return the COMPLETE new file contents. No commentary. A single markdown fence is allowed.',
-          ].join('\n');
-          const raw = await chat(prompt);
-          const next = stripCodeFence(raw);
-          if (!next.trim()) {
-            throw new Error(`Empty model output for ${rel}`);
-          }
-          mkdirSync(dirname(abs), { recursive: true });
-          writeFileSync(abs, next, 'utf8');
-        }
-      } else {
-        const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-        const { ConfirmationService } = await import('../../utils/confirmation-service.js');
-        ConfirmationService.getInstance().setSessionFlag('allOperations', true);
-        ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
-        const maxRounds = opts.maxToolRounds
-          ?? Number(process.env.CODEBUDDY_BATCH_MAX_ROUNDS || 6);
-        const agent = new CodeBuddyAgent(
-          opts.apiKey,
-          opts.baseURL,
-          opts.model,
-          Number.isFinite(maxRounds) && maxRounds > 0 ? maxRounds : 6,
-          false,
-          undefined,
-          cwd,
-        );
-        await agent.systemPromptReady;
-        await agent.processUserMessage(instruction, { surface: 'cli' });
+      child = delegation.spawn(label);
+      const turn = child.submit(instruction);
+      child.closeInput();
+      const outcome = await turn;
+      await child.done;
+      if (!outcome.success) {
+        throw new Error(outcome.message ?? outcome.reason ?? 'Delegate failed');
       }
 
-      const filesChanged = listChangedFiles(cwd, before);
-      process.stdout.write(
-        `[batch] done ${label} files=${filesChanged.join(',') || '(none)'} ${((Date.now() - started) / 1000).toFixed(1)}s\n`,
-      );
+      const filesChanged = listChangedFiles(cwd, before, filePatterns);
       if (filesChanged.length === 0) {
         return {
           label,
@@ -583,18 +663,30 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         filesChanged,
       };
     } catch (err) {
-      process.stdout.write(`[batch] error ${label}: ${err instanceof Error ? err.message : String(err)}\n`);
       return {
         label,
         success: false,
         summary: `Error: ${err instanceof Error ? err.message : String(err)}`,
         durationMs: Date.now() - started,
-        filesChanged: listChangedFiles(cwd, before),
+        filesChanged: listChangedFiles(cwd, before, filePatterns),
       };
-    } finally {
-      release();
     }
   };
+  spawn.close = async () => {
+    await delegation.close();
+    await eventPump;
+  };
+  return spawn;
+}
+
+function formatBatchEventPayload(payload: unknown): string {
+  try {
+    const encoded = JSON.stringify(payload);
+    if (encoded !== undefined) return encoded.slice(0, 2_000);
+  } catch {
+    // Fall through to a safe string conversion.
+  }
+  return String(payload).replace(/\r?\n/g, '\\n').slice(0, 2_000);
 }
 
 // ============================================================================
