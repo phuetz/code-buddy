@@ -21,6 +21,11 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { logger } from '../utils/logger.js';
 import { readJsonLinesAtomicSync, readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
+import {
+  defaultTurnMetricsJournalPath,
+  readTurnMetricsAggregates,
+  type TurnMetricsAggregate,
+} from '../observability/turn-metrics.js';
 
 export interface OutcomeRecord {
   /** ISO timestamp of the run. */
@@ -80,6 +85,16 @@ export interface RoleModelStat {
   avgQuality: number;
 }
 
+export interface MeasuredTurnLatency {
+  latencyMs: number;
+  samples: number;
+  metric: 'ttfm-p50';
+}
+
+export interface ModelScoreboardOptions {
+  turnMetricsJournalPath?: string;
+}
+
 function defaultLedgerPath(): string {
   return path.join(os.homedir(), '.codebuddy', 'fleet-model-performance.jsonl');
 }
@@ -99,8 +114,17 @@ const HISTORY_WEIGHT_K = 5;
 export class ModelScoreboard {
   private records: OutcomeRecord[] = [];
   private cachedMtimeMs = -1;
+  private readonly file: string;
+  private readonly turnMetricsJournalPath: string;
+  private turnMetricsMtimeMs = -1;
+  private turnMetricsAggregates: TurnMetricsAggregate[] = [];
 
-  constructor(private readonly file: string = defaultLedgerPath()) {
+  constructor(
+    file: string = defaultLedgerPath(),
+    options: ModelScoreboardOptions = {},
+  ) {
+    this.file = file;
+    this.turnMetricsJournalPath = options.turnMetricsJournalPath ?? defaultTurnMetricsJournalPath();
     this.load();
   }
 
@@ -115,6 +139,51 @@ export class ModelScoreboard {
     } catch {
       return -1;
     }
+  }
+
+  private measuredTurnAggregates(): TurnMetricsAggregate[] {
+    let mtimeMs = -1;
+    try {
+      mtimeMs = fs.statSync(this.turnMetricsJournalPath).mtimeMs;
+    } catch {
+      // A missing journal is the normal cold-start state.
+    }
+    if (mtimeMs !== this.turnMetricsMtimeMs) {
+      this.turnMetricsAggregates = readTurnMetricsAggregates(this.turnMetricsJournalPath);
+      this.turnMetricsMtimeMs = mtimeMs;
+    }
+    return this.turnMetricsAggregates;
+  }
+
+  /**
+   * Precise streamed-turn latency for routing. TTFM p50 is used only after
+   * enough complete messages exist; failed/no-message turns cannot create a
+   * deceptively fast routing signal.
+   */
+  measuredTurnLatency(
+    provider: string,
+    model: string,
+    minimumSamples = 3,
+  ): MeasuredTurnLatency | null {
+    const wantedProvider = provider.toLowerCase();
+    const wantedModel = model.toLowerCase();
+    const aggregate = this.measuredTurnAggregates().find(
+      (item) =>
+        item.provider.toLowerCase() === wantedProvider
+        && item.model.toLowerCase() === wantedModel,
+    );
+    if (
+      !aggregate
+      || aggregate.ttfmSamples < minimumSamples
+      || aggregate.ttfmP50Ms === undefined
+    ) {
+      return null;
+    }
+    return {
+      latencyMs: aggregate.ttfmP50Ms,
+      samples: aggregate.ttfmSamples,
+      metric: 'ttfm-p50',
+    };
   }
 
   /** Pick up records appended by OTHER processes since our last read. */

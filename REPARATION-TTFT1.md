@@ -44,6 +44,33 @@ Test Files  1 passed (1)
 Tests  6 passed (6)
 ```
 
+### D2 — le routeur ignore les mesures précises et accepte une seule mesure grossière
+
+Le test de consommation donne à `gemma4:31b` trois TTFM réels (700/800/900 ms).
+Malgré ce p50 à 800 ms, le sélecteur conserve l’heuristique de taille et choisit
+le Qwen 7B. Deux contrats voisins imposent le seuil de trois tours et figent la
+sortie complète obtenue avec un journal vide.
+
+```text
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/fleet/model-selector.test.ts
+FAIL  tests/fleet/model-selector.test.ts > model-selector — latency-aware selection > prefers measured TTFM p50 after three real streamed turns
+AssertionError: expected 'qwen2.5:7b-instruct' to be 'gemma4:31b'
+Test Files  1 failed (1)
+Tests  1 failed | 11 passed (12)
+```
+
+Correctif : `ModelScoreboard.measuredTurnLatency()` charge les agrégats du
+journal avec cache par `mtime`, exige trois TTFM complets et expose leur p50.
+`selectFastestModel` préfère ce signal précis, conserve ensuite l’ancienne
+moyenne council, puis l’heuristique. Un journal vide conserve l’objet de sortie
+complet à l’octet JSON près.
+
+```text
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/fleet/model-selector.test.ts tests/fleet/model-scoreboard.test.ts
+Test Files  2 passed (2)
+Tests  33 passed (33)
+```
+
 ## Tour réel Ollama local à 0 €
 
 À effectuer après l’implémentation, sous réserve que l’instance Ollama locale soit disponible et non occupée.
