@@ -15,6 +15,7 @@ const QA_HOME_ROOT = path.join(process.cwd(), '_qa', 'gk10', 'home');
 describe('Telegram polling offset persistence', () => {
   const previousHome = process.env.HOME;
   const previousBase = process.env.TELEGRAM_API_BASE;
+  const previousOffsetDir = process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR;
   let home: string;
   let fake: Awaited<ReturnType<typeof listenFakeTelegram>> | undefined;
 
@@ -22,6 +23,7 @@ describe('Telegram polling offset persistence', () => {
     fs.mkdirSync(QA_HOME_ROOT, { recursive: true });
     home = fs.mkdtempSync(path.join(QA_HOME_ROOT, 'e3-'));
     process.env.HOME = home;
+    process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR = home;
   });
 
   afterEach(async () => {
@@ -31,6 +33,8 @@ describe('Telegram polling offset persistence', () => {
     else process.env.HOME = previousHome;
     if (previousBase === undefined) delete process.env.TELEGRAM_API_BASE;
     else process.env.TELEGRAM_API_BASE = previousBase;
+    if (previousOffsetDir === undefined) delete process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR;
+    else process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR = previousOffsetDir;
   });
 
   it('does not re-emit an already handled message after restart', async () => {

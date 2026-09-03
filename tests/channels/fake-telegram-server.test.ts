@@ -3,6 +3,8 @@
  * These tests speak HTTP to 127.0.0.1 only. They must never call api.telegram.org.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TelegramChannel } from '../../src/channels/telegram/index.js';
 import {
@@ -14,6 +16,9 @@ const TOKEN = '123456:gk10-fake-token';
 
 describe('fake Telegram Bot API (_qa/gk10/fake-telegram.mjs)', () => {
   const previousBase = process.env.TELEGRAM_API_BASE;
+  const previousHome = process.env.HOME;
+  const previousOffsetDir = process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR;
+  const qaHomeRoot = path.join(process.cwd(), '_qa', 'gk10', 'home');
   let fake: Awaited<ReturnType<typeof listenFakeTelegram>> | undefined;
   let originalFetch: typeof fetch;
 
@@ -21,12 +26,20 @@ describe('fake Telegram Bot API (_qa/gk10/fake-telegram.mjs)', () => {
     if (originalFetch) globalThis.fetch = originalFetch;
     if (previousBase === undefined) delete process.env.TELEGRAM_API_BASE;
     else process.env.TELEGRAM_API_BASE = previousBase;
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousOffsetDir === undefined) delete process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR;
+    else process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR = previousOffsetDir;
     await fake?.close();
     fake = undefined;
   });
 
   async function start() {
     originalFetch = globalThis.fetch;
+    fs.mkdirSync(qaHomeRoot, { recursive: true });
+    const home = fs.mkdtempSync(path.join(qaHomeRoot, 'fake-'));
+    process.env.HOME = home;
+    process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR = home;
     fake = await listenFakeTelegram({ token: TOKEN, port: 0 });
     process.env.TELEGRAM_API_BASE = fake.base;
     return fake;

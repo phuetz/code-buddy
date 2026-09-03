@@ -81,8 +81,12 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private offsetFilePath(): string {
-    const home = process.env.HOME || process.env.USERPROFILE || homedir();
-    return path.join(home, '.codebuddy', `telegram-offset-${this.botId}.json`);
+    const override = process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR?.trim();
+    const root = override
+      || process.env.HOME
+      || process.env.USERPROFILE
+      || homedir();
+    return path.join(root, '.codebuddy', `telegram-offset-${this.botId}.json`);
   }
 
   private loadPersistedOffset(): void {
