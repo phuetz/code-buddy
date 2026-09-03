@@ -35,6 +35,7 @@ import { conversationTokenBudget } from '../conversation/discourse-planner.js';
 import {
   classifyLisaIntrospection,
   guardLisaOperationalSelfInspectionReply,
+  isLisaEvolutionRequest,
 } from '../identity/lisa-introspection.js';
 
 /** Run a full agent turn for the transcript, return the assistant's final text.
@@ -207,6 +208,20 @@ export function prepareSelfInspectionVoiceReply(
   return guardLisaOperationalSelfInspectionReply(body, request)
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Keep the self-evolution answer grounded and short on the spoken path. */
+export function prepareEvolutionVoiceReply(output: string): string {
+  const lines = output
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+    .replace(/^\s*(?:#{1,6}|[-*+]|\d+[.)]|>)\s*/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return (lines.length > 0 ? lines : ['Je n’ai pas de note de version récente à partager.']).join(' ').slice(0, 720).trim();
 }
 
 type SummaryPath = 'skipped' | 'fallback';
@@ -728,6 +743,11 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
       const introspectionIntent = classifyLisaIntrospection(
         replyOpts?.introspectionText ?? heard,
       );
+      if (isLisaEvolutionRequest(replyOpts?.introspectionText ?? heard)) {
+        logSpeechResultTiming(agentMs, 0, 'skipped');
+        publishProvider(agentProvider);
+        return prepareEvolutionVoiceReply(output);
+      }
       if (introspectionIntent === 'describe' || introspectionIntent === 'inspect') {
         logSpeechResultTiming(agentMs, 0, 'skipped');
         publishProvider(agentProvider);

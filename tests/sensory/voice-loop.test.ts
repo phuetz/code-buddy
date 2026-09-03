@@ -807,6 +807,14 @@ describe('voice loop — emotional prompt defaults', () => {
     expect(prompt).not.toContain('<expressive_spoken_text>');
   });
 
+  it('keeps evolution context silent unless the user explicitly asks for it', async () => {
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    const prompt = await buildSpokenPromptAugmentation('bonjour Lisa', [], undefined, undefined, {
+      relationalContext: async () => '<lisa_evolution>\nJ’ai appris à mieux écouter.\n</lisa_evolution>',
+    });
+    expect(prompt).toContain('ne les mentionne que si la personne te demande explicitement');
+  });
+
   it('enables expressive text by default only with relational context, with an explicit override', async () => {
     delete process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
     process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';

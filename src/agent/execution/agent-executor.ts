@@ -74,6 +74,7 @@ import {
 import {
   classifyLisaIntrospection,
   guardLisaOperationalSelfInspectionReply,
+  isLisaEvolutionRequest,
   renderLisaOperationalSelfResponse,
 } from '../../identity/lisa-introspection.js';
 import type { TimelineToolCall } from '../../sessions/timeline.js';
@@ -1187,6 +1188,37 @@ export class AgentExecutor {
     }
 
     if (readOnlySelfInspection) {
+      if (isLisaEvolutionRequest(introspectionTextForTurn)) {
+        const {
+          formatEvolutionNotesForVoice,
+          queryEvolutionNotes,
+          readEvolutionNotes,
+        } = await import('../../self-model/evolution-notes.js');
+        const since = introspectionTextForTurn.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];
+        const notes = queryEvolutionNotes(await readEvolutionNotes({ workDir: turnCwd }), {
+          ...(since ? { since } : {}),
+          limit: 3,
+        });
+        const content = sanitizeAssistantOutput(formatEvolutionNotesForVoice(notes));
+        history.push({ type: 'assistant', content, timestamp: new Date() });
+        messages.push({ role: 'assistant', content });
+        yield { type: 'content', content };
+        yield {
+          type: 'token_count',
+          tokenCount: this.deps.tokenCounter.countTokens(content),
+        };
+        if (timelineEnabled) {
+          await this.recordCompletedTimelineTurn(
+            timelineHistoryStart,
+            timelineTurn,
+            history,
+            message,
+          );
+        }
+        yield { type: 'done' };
+        return;
+      }
+
       // A provider can ignore an optional tool schema, and free-form prose
       // cannot provide a hard postcondition against invented inner experience.
       // Build the complete report locally from the attested, curated core on

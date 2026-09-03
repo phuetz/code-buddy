@@ -10,6 +10,7 @@ import {
   makeHybridReply,
   type HybridTurn,
 } from '../../src/sensory/hybrid-reply.js';
+import { isLisaEvolutionRequest } from '../../src/identity/lisa-introspection.js';
 
 const TECHNICAL_SELF_INSPECTION_REQUESTS = [
   'étudie ton propre code',
@@ -126,6 +127,13 @@ describe('hybrid reply — intent classifier (isSubstantiveQuery)', () => {
     expect(classifyLisaIntrospection('comment fonctionnes-tu ?')).toBe('describe');
     expect(classifyLisaIntrospection('étudie ton propre code')).toBe('inspect');
     expect(classifyLisaIntrospection('améliore-toi')).toBe('improve');
+  });
+
+  it('recognizes the explicit evolution invitation without broadening ordinary chat', () => {
+    expect(isLisaEvolutionRequest("qu'est-ce qui a changé chez toi ?")).toBe(true);
+    expect(classifyLisaIntrospection("qu'est-ce qui a changé chez toi ?")).toBe('describe');
+    expect(isLisaEvolutionRequest('qu’est-ce qui a changé dans le projet ?')).toBe(false);
+    expect(isSubstantiveQuery("qu'est-ce qui a changé chez toi ?")).toBe(true);
   });
 
   it('does not confuse the user\'s personal introspection with Lisa inspecting herself', () => {
