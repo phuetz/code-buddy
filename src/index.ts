@@ -3136,23 +3136,45 @@ program
   .command("whoami")
   .description("Show current authentication status (email, plan, OAuth model)")
   .action(async () => {
+    const { formatWhoamiStatus } = await import("./commands/whoami-status.js");
     const { hasCodexCredentials, getChatGptAuth } = await import(
       "./providers/codex-oauth.js"
     );
+
+    let local: { provider: string; model?: string; baseURL?: string } | null = null;
+    try {
+      const { getSettingsManager } = await import("./utils/settings-manager.js");
+      const settings = getSettingsManager().readUserSettingsIfPresent();
+      if (settings?.provider) {
+        local = {
+          provider: settings.provider,
+          ...(settings.model || settings.defaultModel
+            ? { model: settings.model || settings.defaultModel }
+            : {}),
+          ...(settings.baseURL ? { baseURL: settings.baseURL } : {}),
+        };
+      }
+    } catch {
+      /* profile unreadable — ChatGPT status still prints */
+    }
+
     if (!hasCodexCredentials()) {
-      cli.stdout("ChatGPT: not connected (run `buddy login` to authenticate)");
+      for (const line of formatWhoamiStatus({ chatgpt: null, local })) {
+        cli.stdout(line);
+      }
       return;
     }
     try {
       const auth = await getChatGptAuth();
       if (!auth) {
         cli.stdout("ChatGPT: token unreadable. Run `buddy logout` then `buddy login`.");
+        if (local) {
+          for (const line of formatWhoamiStatus({ chatgpt: null, local }).filter((line) => line.startsWith('Local:'))) {
+            cli.stdout(line);
+          }
+        }
         return;
       }
-      cli.stdout("ChatGPT: ✅ connected");
-      if (auth.email) cli.stdout(`  Account:    ${auth.email}`);
-      if (auth.plan_type) cli.stdout(`  Plan:       ${auth.plan_type}`);
-      if (auth.is_fedramp) cli.stdout(`  FedRAMP:    yes`);
       const {
         CHATGPT_OAUTH_DEFAULT_MODEL,
         CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
@@ -3160,8 +3182,18 @@ program
         selectChatGptOAuthModel,
       } = await import('./providers/chatgpt-models.js');
       const catalog = await discoverChatGptModels(auth);
-      cli.stdout(`  Model:      ${selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog)}`);
-      if (!catalog) cli.stdout(`  Safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
+      for (const line of formatWhoamiStatus({
+        chatgpt: {
+          email: auth.email,
+          plan: auth.plan_type,
+          model: selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog),
+          fedramp: auth.is_fedramp,
+          ...(catalog ? {} : { fallback: CHATGPT_OAUTH_SAFE_FALLBACK_MODEL }),
+        },
+        local,
+      })) {
+        cli.stdout(line);
+      }
     } catch (err) {
       cli.error(`Error reading credentials: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
