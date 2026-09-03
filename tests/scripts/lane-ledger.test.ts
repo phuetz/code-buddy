@@ -20,12 +20,16 @@ interface CommandResult {
 function run(
   script: string,
   args: string[],
-  env: Record<string, string> = {}
+  env: Record<string, string | undefined> = {}
 ): CommandResult {
+  const childEnv = { ...process.env, ...env };
+  for (const [name, value] of Object.entries(childEnv)) {
+    if (value === undefined) delete childEnv[name];
+  }
   const result = spawnSync(script, args, {
     cwd: repositoryRoot,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: childEnv,
   });
   if (result.error) {
     throw result.error;
@@ -254,6 +258,29 @@ describe('lane ledger', () => {
     expect(human.status).toBe(3);
     expect(human.stderr).toContain('Chaîne cassée à la ligne 1');
   });
+
+  it('rejects an altered Ed25519 signature', async () => {
+    const ledgerDir = path.join(scratchRoot, 'delegations');
+    const fixture = await createLaneFixture(scratchRoot);
+    expect((await appendDelegation(ledgerDir, fixture)).status).toBe(0);
+    const ledgerPath = path.join(ledgerDir, 'ledger.jsonl');
+    const entry = JSON.parse((await fs.readFile(ledgerPath, 'utf8')).trim()) as Record<
+      string,
+      unknown
+    >;
+    const signature = entry.signature as string;
+    entry.signature = `${signature.startsWith('A') ? 'B' : 'A'}${signature.slice(1)}`;
+    await fs.writeFile(ledgerPath, `${JSON.stringify(entry)}\n`);
+
+    const verified = run(ledgerScript, ['verify', '--json'], {
+      CODEBUDDY_DELEGATIONS_DIR: ledgerDir,
+    });
+    expect(verified.status).toBe(3);
+    expect(JSON.parse(verified.stderr)).toMatchObject({
+      error: 'chain_broken',
+      line: 1,
+    });
+  });
 });
 
 describe('deleguer.sh ledger opt-in', () => {
@@ -291,11 +318,13 @@ describe('deleguer.sh ledger opt-in', () => {
     const fixture = await prepareDelegation();
     const result = run(delegateScript, [fixture.repository, fixture.mission, 'local'], {
       CODEBUDDY_DELEGATIONS_DIR: fixture.ledgerDir,
+      CODEBUDDY_LANE_LEDGER: undefined,
       HOME: scratchRoot,
       PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
       TMPDIR: fixture.tmpDir,
     });
     expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain('journal de lane');
     await expect(fs.stat(path.join(fixture.ledgerDir, 'ledger.jsonl'))).rejects.toThrow();
   });
 
