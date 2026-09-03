@@ -20,6 +20,7 @@ import { auditLogger } from '../../src/security/audit-logger.js';
 describe('PeerToolBridge', () => {
   let tempWorkspace: string;
   let defaultCtx: PeerMethodContext;
+  type InvokePayload = { output: string; truncated?: boolean };
 
   beforeEach(async () => {
     // Set up temp workspace directory
@@ -143,7 +144,11 @@ describe('PeerToolBridge', () => {
   describe('scope validation', () => {
     it('allows invocation if scopes is undefined (defaults to *)', async () => {
       await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'hello');
-      const ctxWithUndefinedScopes = { ...defaultCtx, scopes: undefined as any };
+      const ctxWithUndefinedScopes: PeerMethodContext = {
+        connectionId: defaultCtx.connectionId,
+        traceId: defaultCtx.traceId,
+        depth: defaultCtx.depth,
+      };
 
       const frame = {
         id: 'req-scope-1',
@@ -156,7 +161,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, ctxWithUndefinedScopes);
       expect(res.ok).toBe(true);
-      expect((res.payload as any).output).toBe('hello');
+      expect((res.payload as InvokePayload).output).toBe('hello');
     });
 
     it('rejects invocation if scopes is empty list []', async () => {
@@ -210,7 +215,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, ctxWithToolScope);
       expect(res.ok).toBe(true);
-      expect((res.payload as any).output).toBe('hello');
+      expect((res.payload as InvokePayload).output).toBe('hello');
     });
 
     it('allows invocation if scopes has tool:*', async () => {
@@ -249,7 +254,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(true);
-      const payload = res.payload as any;
+      const payload = res.payload as InvokePayload;
       expect(payload.truncated).toBe(true);
       expect(payload.output.length).toBe(256 * 1024);
     });
@@ -273,7 +278,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(true);
-      const payload = res.payload as any;
+      const payload = res.payload as InvokePayload;
       expect(payload.truncated).toBe(true);
       const lines = payload.output.split('\n');
       // 256 list entries + 1 truncated footer message = 257 lines
@@ -297,7 +302,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(true);
-      const payload = res.payload as any;
+      const payload = res.payload as InvokePayload;
       expect(payload.output).toBe('Red Alert\nBold text');
     });
   });
@@ -323,7 +328,7 @@ describe('PeerToolBridge', () => {
       expect(res.error?.message).toContain('Policy Engine block');
     });
 
-    it('does not open a human prompt on needs_approval: the three fleet gates already passed (GK17, headless server)', async () => {
+    it('honors needs_approval instead of executing after a rejected confirmation', async () => {
       await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'approved_data');
 
       vi.spyOn(PolicyEngine.getInstance(), 'evaluate').mockReturnValue({
@@ -331,9 +336,6 @@ describe('PeerToolBridge', () => {
         reason: 'Approval required',
       });
 
-      // On a headless `buddy server` a ConfirmationService prompt auto-rejects in milliseconds,
-      // which made peer.tool.invoke unusable in real use (GK17). needs_approval is not a second
-      // human gate: allowlist + fleetSafe + workspace root + JWT scope already decided.
       const confirmSpy = vi
         .spyOn(ConfirmationService.getInstance(), 'requestConfirmation')
         .mockResolvedValue({ confirmed: false });
@@ -348,9 +350,9 @@ describe('PeerToolBridge', () => {
       };
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
-      expect(res.ok).toBe(true);
-      expect((res.payload as any).output).toBe('approved_data');
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(res.ok).toBe(false);
+      expect(res.error?.message).toContain('Human approval was rejected or timed out');
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
     });
 
     it('still blocks when PolicyEngine decides deny', async () => {
@@ -395,7 +397,7 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(true);
-      expect((res.payload as any).output).toBe('direct_data');
+      expect((res.payload as InvokePayload).output).toBe('direct_data');
       expect(confirmSpy).not.toHaveBeenCalled();
     });
   });

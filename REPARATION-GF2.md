@@ -59,6 +59,26 @@ VERT — GF1 SENSE1 corrigé : 3/3 ; voisins CONV2/speech-reaction/TV/GT2 :
 6 fichiers, 67/67 ; gardes SENSE6 + engagement + Maison : 10 fichiers, 18/18.
 ```
 
+## Régression 3 — GK17 × PolicyEngine, approbation flotte ignorée
+
+GK17 doit garder les trois outils de lecture utilisables sans TTY après allowlist, métadonnée
+`fleetSafe`, scope JWT et workspace explicite. La lane sécurité exige que `PolicyEngine` reste
+l'autorité et qu'une décision `needs_approval` ne soit jamais transformée en autorisation.
+
+Le profil borné est maintenant présenté à `PolicyEngine` comme faible risque et autorisé par lui ;
+toute autre décision `needs_approval` repasse par `ConfirmationService` et échoue fermée en
+headless. Aucun nouveau drapeau : `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` reste l'unique activation.
+
+```text
+ROUGE — test flotte « honors needs_approval » : 1 failed | 15 skipped ; reçu ok=true.
+VERT — bridge flotte + PolicyEngine : 2 fichiers, 28/28 ; bridge serveur : 26/26.
+```
+
+Le voisin `tests/server/peer-tool-bridge.test.ts` utilisait `hello.txt`. Sous le confinement GF2,
+`TMPDIR` vit dans le clone et le `*.txt` du `.gitignore` est honoré par ripgrep : le test attendait
+donc à tort un fichier volontairement ignoré. La fixture est devenue `hello.md`, avec les mêmes
+octets et les mêmes assertions de lecture/recherche.
+
 ## Vérifications finales
 
 À compléter.
