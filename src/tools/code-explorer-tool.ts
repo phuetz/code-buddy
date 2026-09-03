@@ -90,18 +90,19 @@ export class CodeExplorerTool {
   /**
    * Lecture seule : interroge CodeExplorer pour une tâche/texte. Dégrade proprement si indisponible.
    */
-  async ask(query: string): Promise<CodeExplorerContext> {
+  async ask(query: string, repo?: string): Promise<CodeExplorerContext> {
     const redactedQuery = redactSecrets(query);
     logger.debug(`CodeExplorer.ask called with query: ${redactedQuery}`);
 
     // Prefer the LIVE MCP code-graph (Code Explorer / gitnexus) when connected — real answers
     // from the indexed graph. Falls through to the (legacy) HTTP endpoint otherwise.
     try {
-      const { getCodeExplorerClient } = await import('../plugins/code-explorer/code-explorer-client.js');
+      const { getCodeExplorerClient, resolveCodeExplorerRepo } = await import('../plugins/code-explorer/code-explorer-client.js');
       const client = getCodeExplorerClient();
       if (await client.available()) {
-        const answer = await client.query(query);
-        if (answer) {
+        const resolvedRepo = await resolveCodeExplorerRepo(client, repo);
+        const answer = await client.query(query, resolvedRepo);
+        if (answer && !/Multiple repos indexed/i.test(answer)) {
           return { likelyFiles: [], dependentSymbols: [], testsToWatch: [], notes: answer };
         }
       }

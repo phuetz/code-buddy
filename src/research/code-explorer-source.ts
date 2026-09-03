@@ -12,7 +12,10 @@
 
 import { logger } from '../utils/logger.js';
 import type { Publication } from './publication-sources.js';
-import type { CodeExplorerClient } from '../plugins/code-explorer/code-explorer-client.js';
+import {
+  resolveCodeExplorerRepo,
+  type CodeExplorerClient,
+} from '../plugins/code-explorer/code-explorer-client.js';
 
 /** Insight ops to pull by default (each → one discovery). All read-only Code Explorer tools. */
 const DEFAULT_OPS = ['hotspots', 'find_cycles', 'get_insights'] as const;
@@ -55,7 +58,7 @@ export async function fetchCodeExplorerInsights(opts: CodeInsightOptions = {}): 
   }
   // The insight ops return EMPTY without a `repo` arg — resolve it (explicit → list_repos
   // best-match on cwd → first indexed repo).
-  const repo = await resolveRepo(client, opts.repo);
+  const repo = await resolveCodeExplorerRepo(client, opts.repo);
   const ops = opts.ops ?? [...DEFAULT_OPS];
   const repoArgs = repo ? { repo } : {};
   const pubs: Publication[] = [];
@@ -73,22 +76,4 @@ export async function fetchCodeExplorerInsights(opts: CodeInsightOptions = {}): 
   return pubs;
 }
 
-/** Resolve the repo path to pass to insight ops: explicit, else best cwd-match from list_repos,
- *  else the first indexed repo. Returns undefined when none can be determined. */
-async function resolveRepo(client: CodeExplorerClient, explicit?: string): Promise<string | undefined> {
-  if (explicit) return explicit;
-  try {
-    const txt = await client.listRepos();
-    if (!txt.trim()) return undefined;
-    const arr = JSON.parse(txt) as Array<{ path?: string; id?: string }>;
-    if (!Array.isArray(arr) || arr.length === 0) return undefined;
-    const cwd = process.cwd();
-    const match =
-      arr.find((r) => typeof r.path === 'string' && cwd.startsWith(r.path)) ??
-      arr.find((r) => r.path) ??
-      arr[0];
-    return match?.path ?? match?.id;
-  } catch {
-    return undefined;
-  }
-}
+
