@@ -11,6 +11,7 @@ import {
 import { PolicyEngine } from '../../src/security/policy-engine.js';
 import {
   evaluateShellExecution,
+  executeInWorkspaceSandbox,
   executableIdentitiesStillMatch,
   isSandboxBoundaryFailure,
 } from '../../src/tools/bash/execution-policy.js';
@@ -60,6 +61,14 @@ describe('Bash runtime execution policy', () => {
     await expect(
       evaluateShellExecution(`pwd && git -C ${gitRoot} status -sb | head -3`, process.cwd()),
     ).resolves.toMatchObject({ action: 'sandbox' });
+  });
+
+  it('keeps the caller HOME spelling available to the Docker workspace sandbox', async () => {
+    const sandboxed = await executeInWorkspaceSandbox('printf %s "$HOME"', process.cwd(), 30000);
+
+    if (!sandboxed.available || sandboxed.result?.backend !== 'docker') return;
+
+    expect(sandboxed.result.stdout.trim()).toBe(os.homedir());
   });
 
   it('asks for exact authority when an operation crosses the sandbox boundary', async () => {

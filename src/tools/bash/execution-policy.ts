@@ -18,6 +18,7 @@ import { CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { executableCandidates } from '../../utils/command-exists.js';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 
 const LOCAL_WORKSPACE_SANDBOX_IMAGE = 'codebuddy-workspace-sandbox:1';
 
@@ -275,7 +276,11 @@ export async function executeInWorkspaceSandbox(
       cpuLimit: process.env.CODEBUDDY_SANDBOX_CPUS || '4.0',
       environment: {
         ...CONTROLLED_SUBPROCESS_ENV,
-        HOME: '/tmp/codebuddy-home',
+        // Preserve the caller's home spelling so `~/<workspace>` resolves to
+        // the same mounted path inside Docker. The host home itself is not
+        // mounted: only `cwd` is, and protected paths are rejected before this
+        // point by the command validator.
+        HOME: os.homedir(),
         NPM_CONFIG_CACHE: '/tmp/codebuddy-npm-cache',
         XDG_CACHE_HOME: '/tmp/codebuddy-cache',
       },
