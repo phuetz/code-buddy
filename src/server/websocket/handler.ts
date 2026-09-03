@@ -15,6 +15,41 @@ import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } from '../../gateway/device-pairing.js';
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
+
+function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function resolveWsHeartbeatIntervalMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return parsePositiveMsEnv(env.CODEBUDDY_WS_HEARTBEAT_INTERVAL_MS, TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+}
+
+export function resolveWsIdleTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return parsePositiveMsEnv(env.CODEBUDDY_WS_IDLE_TIMEOUT_MS, TIMEOUT_CONFIG.WS_IDLE_TIMEOUT);
+}
+
+/** True when the heartbeat sweeper should kill this socket as idle. */
+export function shouldTerminateIdleWs(
+  state: {
+    lastActivity: number;
+    peerHandlersActive: number;
+    streaming: boolean;
+    activeTurn?: unknown;
+  },
+  now: number,
+  idleTimeoutMs: number,
+): boolean {
+  if (state.peerHandlersActive > 0 || state.streaming || state.activeTurn) {
+    return false;
+  }
+  return now - state.lastActivity > idleTimeoutMs;
+}
 import {
   createServerAgent,
   streamAgentDeltas,
@@ -1231,6 +1266,13 @@ export async function setupWebSocket(
       await processMessage(ws, state, data);
     });
 
+    // Protocol pings must count as activity. /fleet listen is receive-only
+    // after auth; a slow peer.chat also sends no application frames. Without
+    // this, WS_IDLE_TIMEOUT (60s) kills live fleet sockets (GK17).
+    ws.on('pong', () => {
+      state.lastActivity = Date.now();
+    });
+
     ws.on('close', () => {
       rejectQueuedPeerHandlers(state, 'WebSocket closed before peer request execution');
       abortActiveTurn(state);
@@ -1250,11 +1292,13 @@ export async function setupWebSocket(
   });
 
   // Heartbeat to detect stale connections
+  const heartbeatIntervalMs = resolveWsHeartbeatIntervalMs();
+  const idleTimeoutMs = resolveWsIdleTimeoutMs();
   const heartbeatInterval = setInterval(() => {
     const now = Date.now();
 
     for (const [ws, state] of connections.entries()) {
-      if (now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
+      if (shouldTerminateIdleWs(state, now, idleTimeoutMs)) {
         abortActiveTurn(state);
         cleanupWebSocketExtensions(state);
         ws.terminate();
@@ -1265,7 +1309,7 @@ export async function setupWebSocket(
         }
       }
     }
-  }, TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+  }, heartbeatIntervalMs);
 
   wss.on('close', () => {
     clearInterval(heartbeatInterval);
