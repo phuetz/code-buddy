@@ -236,6 +236,9 @@ __pycache__/
 # Le dépôt est public — elles sont sauvegardées hors dépôt dans ~/Sauvegardes-git/.
 docs/audits/**/evidence/
 
+# Artefacts GK14 (HOME isolé, journaux, expériences) — ne pas versionner
+_gk14/
+
 # Artefact généré par `buddy --init` (importe CLAUDE.md) — ne pas versionner
 /CODEBUDDY.md
 .env.sauvegarde-*

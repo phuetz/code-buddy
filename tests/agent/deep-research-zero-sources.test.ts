@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collectSources,
+  formatZeroSourceFailure,
   runDeepResearchPipeline,
   resolveDeepResearchOptions,
   type DeepResearchBoundaries,
+  type DeepResearchResult,
   type SearchHit,
 } from '../../src/agent/deep-research.js';
 
@@ -105,5 +107,43 @@ describe('runDeepResearchPipeline — 5 hits / empty scrape', () => {
     expect(result.trace?.scrapeAttempted).toBe(5);
     expect(result.trace?.scrapeNonEmpty).toBe(0);
     expect(result.trace?.emptyDropped).toBe(5);
+  });
+});
+
+describe('formatZeroSourceFailure — does not dump mixed parallel attempts', () => {
+  it('clips and dedupes searchErrors so a 0-source CLI report stays readable', () => {
+    const repeated =
+      'Vitest TypeScript: no usable URLs (searxng: 0/0 urls; duckduckgo: DuckDuckGo returned a CAPTCHA challenge (bot detection). Add a BRAVE_API_KEY or SERPER_API_KEY environment variable to enable reliable web search.)';
+    const result: DeepResearchResult = {
+      question: 'Q',
+      plan: { question: 'Q', subQuestions: [] },
+      sources: [],
+      report: 'empty',
+      durationMs: 1,
+      plannerLlmUsed: false,
+      synthesisLlmUsed: false,
+      duplicatesDropped: 0,
+      trace: {
+        queries: 12,
+        searchHits: 0,
+        hitsWithUrl: 0,
+        uniqueUrls: 0,
+        scrapeAttempted: 0,
+        scrapeNonEmpty: 0,
+        snippetFallbacks: 0,
+        emptyDropped: 0,
+        dedupKept: 0,
+        dedupDropped: 0,
+        searchErrors: Array.from({ length: 12 }, () => repeated),
+        scrapeErrors: [],
+        providerNotes: Array.from({ length: 12 }, (_, i) => `query "q${i}": search failed (${repeated})`),
+      },
+    };
+    const msg = formatZeroSourceFailure(result);
+    expect(msg).toContain('refusing to report success');
+    expect(msg.length).toBeLessThan(4_000);
+    const captchaHits = msg.split('CAPTCHA').length - 1;
+    expect(captchaHits).toBeLessThanOrEqual(8);
+    expect(captchaHits).toBeGreaterThan(0);
   });
 });

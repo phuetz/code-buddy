@@ -186,6 +186,19 @@ export function emptyDeepResearchTrace(): DeepResearchTrace {
  * Explicit failure copy when Deep Research would otherwise announce a
  * "successful" report with an empty citation registry.
  */
+function uniqueClipped(items: string[], maxItems: number, maxChars: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const t = typeof raw === 'string' ? raw.trim() : '';
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t.length <= maxChars ? t : `${t.slice(0, maxChars)}…`);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
 export function formatZeroSourceFailure(result: DeepResearchResult): string {
   const t = result.trace;
   const lines = [
@@ -195,10 +208,14 @@ export function formatZeroSourceFailure(result: DeepResearchResult): string {
     lines.push(
       `Stages: queries=${t.queries} searchHits=${t.searchHits} hitsWithUrl=${t.hitsWithUrl} uniqueUrls=${t.uniqueUrls} scrapeAttempted=${t.scrapeAttempted} scrapeNonEmpty=${t.scrapeNonEmpty} snippetFallbacks=${t.snippetFallbacks} emptyDropped=${t.emptyDropped} dedupKept=${t.dedupKept} dedupDropped=${t.dedupDropped}`,
     );
-    if (t.providerNotes.length > 0) lines.push(`Providers: ${t.providerNotes.join('; ')}`);
-    if (t.searchErrors.length > 0) lines.push(`Search errors: ${t.searchErrors.join('; ')}`);
+    if (t.providerNotes.length > 0) {
+      lines.push(`Providers: ${uniqueClipped(t.providerNotes, 4, 180).join('; ')}`);
+    }
+    if (t.searchErrors.length > 0) {
+      lines.push(`Search errors: ${uniqueClipped(t.searchErrors, 4, 200).join('; ')}`);
+    }
     if (t.scrapeErrors.length > 0) {
-      lines.push(`Scrape errors: ${t.scrapeErrors.slice(0, 8).join('; ')}`);
+      lines.push(`Scrape errors: ${uniqueClipped(t.scrapeErrors, 8, 200).join('; ')}`);
     }
   } else {
     lines.push('Stages: (no per-stage trace — pipeline returned an empty registry)');

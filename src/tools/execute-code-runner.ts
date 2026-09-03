@@ -149,7 +149,13 @@ export async function executeCode(
   let scriptCode = code;
   if (rpcSupported) {
     await fs.mkdir(rpcDir, { recursive: true });
-    scriptCode = `${buildRpcHelper(language)}\n${code}`;
+    const helper = buildRpcHelper(language);
+    // Python: `from __future__ import …` MUST stay at the top of the file
+    // (after the docstring/comments only). Prepending the helper used to
+    // raise SyntaxError and abort every `buddy science` Python experiment
+    // that started with a future import.
+    scriptCode =
+      language === 'python' ? injectAfterPythonPreamble(code, helper) : `${helper}\n${code}`;
   }
   await fs.writeFile(scriptPath, scriptCode, 'utf8');
   if (language === 'shell' && process.platform !== 'win32') {
@@ -528,6 +534,86 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
  *   shape.
  * Both write `<uuid>.req.json` atomically and poll for the response.
  */
+const PYTHON_FUTURE_IMPORT = /^from\s+__future__\s+import\s+/;
+const PYTHON_TRIPLE_QUOTE = /^(\s*)("""|''')/;
+
+/**
+ * Insert `helper` after the legal Python module preamble so a user script
+ * that starts with a docstring and/or `from __future__ import …` stays valid.
+ * Never throws; empty code ⇒ helper alone.
+ */
+export function injectAfterPythonPreamble(userCode: string, helper: string): string {
+  const code = typeof userCode === 'string' ? userCode : '';
+  const block = helper.endsWith('\n') ? helper : `${helper}\n`;
+  if (!code) return block;
+  const insertion = findPythonPreambleEnd(code);
+  const before = code.slice(0, insertion);
+  const after = code.slice(insertion);
+  const nl = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+  return `${before}${nl}${block}${after}`;
+}
+
+/** Character offset immediately after shebang / comments / docstring / future imports. */
+export function findPythonPreambleEnd(code: string): number {
+  const raw = code.startsWith('\ufeff') ? code.slice(1) : code;
+  const bom = code.startsWith('\ufeff') ? 1 : 0;
+  const lines = raw.split('\n');
+  let i = 0;
+
+  const lineStart = (idx: number): number => {
+    let off = bom;
+    for (let k = 0; k < idx; k++) off += (lines[k]?.length ?? 0) + 1;
+    return off;
+  };
+
+  if (lines[0]?.startsWith('#!')) i++;
+
+  const skipCommentsAndBlanks = (): void => {
+    while (i < lines.length) {
+      const t = (lines[i] ?? '').trim();
+      if (t === '' || t.startsWith('#')) {
+        i++;
+        continue;
+      }
+      break;
+    }
+  };
+
+  skipCommentsAndBlanks();
+
+  const first = lines[i] ?? '';
+  const doc = first.match(PYTHON_TRIPLE_QUOTE);
+  if (doc) {
+    const quote = doc[2] ?? '"""';
+    const afterOpen = first.slice((doc[1]?.length ?? 0) + quote.length);
+    if (afterOpen.includes(quote)) {
+      i++;
+    } else {
+      i++;
+      while (i < lines.length && !(lines[i] ?? '').includes(quote)) i++;
+      if (i < lines.length) i++;
+    }
+    skipCommentsAndBlanks();
+  }
+
+  while (i < lines.length && PYTHON_FUTURE_IMPORT.test((lines[i] ?? '').trim())) {
+    const startLine = lines[i] ?? '';
+    const openParens = (startLine.match(/\(/g) ?? []).length - (startLine.match(/\)/g) ?? []).length;
+    i++;
+    if (openParens > 0) {
+      let depth = openParens;
+      while (i < lines.length && depth > 0) {
+        const l = lines[i] ?? '';
+        depth += (l.match(/\(/g) ?? []).length - (l.match(/\)/g) ?? []).length;
+        i++;
+      }
+    }
+  }
+
+  if (i >= lines.length) return code.length;
+  return lineStart(i);
+}
+
 function buildRpcHelper(language: ExecuteCodeLanguage): string {
   if (language === 'python') {
     return [
