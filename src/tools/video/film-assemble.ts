@@ -652,6 +652,13 @@ export function buildAudioMixGraph(
   }
 ): { segments: string[]; finalLabel: string } {
   const segments: string[] = [];
+  const D = round2(Math.max(opts.totalDuration, 0.1));
+  // acrossfade does not advertise an output duration. `apad=whole_dur` is then a
+  // no-op (it needs a known input length), and amix truncates to the music bed —
+  // measured on GK4 as 11.43s video / 10.83s audio. `pad_dur` always appends
+  // silence; atrim keeps the first D seconds. Keep the longest mixed input.
+  const mix = `amix=inputs=2:duration=longest:dropout_transition=0:normalize=0`;
+  const pin = `apad=pad_dur=${D},atrim=0:${D},asetpts=PTS-STARTPTS`;
 
   // Fold the voiceover into the "program" audio (clip audio + narration).
   let progLabel = baseLabel;
@@ -660,7 +667,7 @@ export function buildAudioMixGraph(
       `[${opts.voiceRef}]aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
         `asetpts=PTS-STARTPTS[vo]`
     );
-    segments.push(`[${progLabel}][vo]amix=inputs=2:duration=first:normalize=0[prog]`);
+    segments.push(`[${progLabel}][vo]${mix}[prog]`);
     progLabel = 'prog';
   }
 
@@ -668,9 +675,12 @@ export function buildAudioMixGraph(
     return { segments, finalLabel: progLabel };
   }
 
+  segments.push(`[${progLabel}]${pin}[prog_pad]`);
+  progLabel = 'prog_pad';
+
   // Bound the (possibly looped) music to the film length, then set its volume.
   segments.push(
-    `[${opts.musicRef}]atrim=0:${round2(opts.totalDuration)},` +
+    `[${opts.musicRef}]atrim=0:${D},${pin},` +
       `aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
       `volume=${opts.musicVolume}[music0]`
   );
@@ -681,9 +691,9 @@ export function buildAudioMixGraph(
     segments.push(
       `[music0][prog_b]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[music_d]`
     );
-    segments.push(`[prog_a][music_d]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[prog_a][music_d]${mix}[aout]`);
   } else {
-    segments.push(`[${progLabel}][music0]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[${progLabel}][music0]${mix}[aout]`);
   }
   return { segments, finalLabel: 'aout' };
 }
@@ -783,6 +793,13 @@ export function buildFilmArgs(
     totalDuration: Math.max(estimated, 0.1),
   });
   segments.push(...mix.segments);
+  // sidechaincompress (ducking) drops the advertised duration; amix then EOFs
+  // one transition early (GK4: 0.6s). Pad the mixed audio and stop with the
+  // video via -shortest so the AAC stream covers the whole film.
+  const audioLabel = 'aoutp';
+  segments.push(
+    `[${mix.finalLabel}]apad=pad_dur=${round2(Math.max(estimated, 0.1))}[${audioLabel}]`
+  );
 
   const filterComplex = segments.join(';');
 
@@ -794,7 +811,7 @@ export function buildFilmArgs(
     '-map',
     `[${video.finalLabel}]`,
     '-map',
-    `[${mix.finalLabel}]`,
+    `[${audioLabel}]`,
     '-c:v',
     'libx264',
     '-preset',
@@ -809,10 +826,11 @@ export function buildFilmArgs(
     '192k',
     '-movflags',
     '+faststart',
+    '-shortest',
     opts.outputPath
   );
 
-  return { args, videoLabel: video.finalLabel, audioLabel: mix.finalLabel, filterComplex };
+  return { args, videoLabel: video.finalLabel, audioLabel, filterComplex };
 }
 
 // ============================================================================

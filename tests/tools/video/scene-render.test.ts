@@ -13,6 +13,7 @@ import {
   buildSceneVideoArgs,
   buildHeroCardArgs,
   buildFallbackStillArgs,
+  computeFramedLayout,
   renderScene,
 } from '../../../src/tools/video/scene-render.js';
 
@@ -83,6 +84,15 @@ describe('pure builders', () => {
     });
     expect(fb.join(' ')).toContain('gradients=s=1920x1080:c0=0x0f2027');
     expect(fb.join(' ')).toContain('textfile=/t.txt');
+  });
+
+  // GK4 scene 2: subtitle "Détection de sommeil" was drawn at 0.152*h while the
+  // mermaid started at 0.14*h, so the label sat on top of the diagram.
+  it('keeps the 9:16 subtitle inside the title band so it cannot overlap a diagram', () => {
+    const withSub = computeFramedLayout(1080, 1920, true);
+    expect(withSub.subtitleY + withSub.subSize).toBeLessThanOrEqual(withSub.titleZone);
+    const noSub = computeFramedLayout(1080, 1920, false);
+    expect(noSub.titleZone).toBeLessThan(withSub.titleZone);
   });
 });
 

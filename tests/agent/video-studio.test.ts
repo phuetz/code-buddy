@@ -68,6 +68,7 @@ function deps(
       silent: false,
       blackIntervals: [],
       totalBlackSeconds: 0,
+      audioMatchesVideo: true,
       warnings: [],
     })),
     noMusic: undefined,
@@ -93,6 +94,24 @@ describe('produceVideoFromPrompt', () => {
     const scene1 = d.rendered[0] as { duration: number; narrationWav?: string };
     expect(scene1.duration).toBeCloseTo(5.6, 1);
     expect(scene1.narrationWav).toBeDefined();
+  });
+
+  it('rewrites flowchart LR to TD when rendering a 9:16 short', async () => {
+    const d = deps({ noMusic: true });
+    await produceVideoFromPrompt('x', { count: 2, resolution: '1080x1920' }, d);
+    expect(d.renderMermaid).toHaveBeenCalledWith(
+      expect.stringMatching(/^flowchart TD\b/),
+      expect.any(String)
+    );
+  });
+
+  it('keeps flowchart LR on a landscape frame', async () => {
+    const d = deps({ noMusic: true });
+    await produceVideoFromPrompt('x', { count: 2, resolution: '1920x1080' }, d);
+    expect(d.renderMermaid).toHaveBeenCalledWith(
+      expect.stringMatching(/^flowchart LR\b/),
+      expect.any(String)
+    );
   });
 
   it('falls back to a text card when the diagram cannot be rendered (no mmdc)', async () => {

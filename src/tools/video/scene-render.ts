@@ -208,6 +208,46 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Title-band + image-box geometry for a framed still (pure, unit-tested). */
+export function computeFramedLayout(
+  w: number,
+  h: number,
+  hasSubtitle: boolean
+): {
+  side: number;
+  titleZone: number;
+  captionZone: number;
+  imgBoxW: number;
+  imgBoxH: number;
+  brandSize: number;
+  titleSize: number;
+  subSize: number;
+  tx: number;
+  brandY: number;
+  titleY: number;
+  subtitleY: number;
+} {
+  const side = Math.round(w * 0.06);
+  // Keep the title + subtitle in the reserved band. 0.14*h was too small on
+  // 9:16: the subtitle baseline sat *below* the diagram (GK4 scene 2).
+  const titleZone = Math.round(h * (hasSubtitle ? 0.2 : 0.14));
+  const captionZone = Math.round(h * 0.14);
+  return {
+    side,
+    titleZone,
+    captionZone,
+    imgBoxW: w - 2 * side,
+    imgBoxH: Math.max(120, h - titleZone - captionZone),
+    brandSize: Math.round(h * 0.028),
+    titleSize: Math.round(h * 0.05),
+    subSize: Math.round(h * 0.028),
+    tx: Math.round(w * 0.048),
+    brandY: Math.round(h * 0.05),
+    titleY: Math.round(h * 0.092),
+    subtitleY: Math.round(h * 0.152),
+  };
+}
+
 // ============================================================================
 // Spawn helpers (injectable)
 // ============================================================================
@@ -303,16 +343,18 @@ async function composeFramedStill(
 ): Promise<boolean> {
   const c0 = input.c0 ?? '#0f2027';
   const c1 = input.c1 ?? '#243b55';
-  // Aspect-aware layout: reserve a title band on top + a caption band at the
-  // bottom, fit the framed image into what's left (works for wide and 9:16).
-  const side = Math.round(w * 0.06);
-  const titleZone = Math.round(h * 0.14);
-  const imgBoxW = w - 2 * side;
-  const imgBoxH = Math.max(120, h - titleZone - Math.round(h * 0.14));
-  const brandSize = Math.round(h * 0.028);
-  const titleSize = Math.round(h * 0.05);
-  const subSize = Math.round(h * 0.028);
-  const tx = Math.round(w * 0.048);
+  const {
+    titleZone,
+    imgBoxW,
+    imgBoxH,
+    brandSize,
+    titleSize,
+    subSize,
+    tx,
+    brandY,
+    titleY,
+    subtitleY,
+  } = computeFramedLayout(w, h, !!input.subtitle);
   const resized = `${stillPath}.rs.png`;
   const rounded = `${stillPath}.rnd.png`;
   const bg = `${stillPath}.bg.png`;
@@ -400,7 +442,7 @@ async function composeFramedStill(
       '-fill',
       '#9fb4ff',
       '-annotate',
-      `+${tx}+${Math.round(h * 0.05)}`,
+      `+${tx}+${brandY}`,
       '● code-buddy',
       '-font',
       FB,
@@ -409,7 +451,7 @@ async function composeFramedStill(
       '-fill',
       'white',
       '-annotate',
-      `+${tx}+${Math.round(h * 0.092)}`,
+      `+${tx}+${titleY}`,
       input.title,
     ];
     if (input.subtitle)
@@ -421,7 +463,7 @@ async function composeFramedStill(
         '-fill',
         '#cdd6f4',
         '-annotate',
-        `+${tx}+${Math.round(h * 0.152)}`,
+        `+${tx}+${subtitleY}`,
         input.subtitle
       );
     composeArgs.push(stillPath);
