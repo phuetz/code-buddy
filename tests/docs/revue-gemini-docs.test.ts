@@ -109,12 +109,17 @@ describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () 
   });
 
   describe('3. Commandes CLI promises dans la documentation mais absentes du binaire', () => {
-    it('docs/fleet-guide.md:850 et hermes-openclaw-parity.md:134 promettent buddy fleet tasks add', () => {
-      // Documentation claim: "buddy fleet tasks add <title> --goal-mode"
-      // Reality: tasks is a subcommand of buddy autonomy / colab, NOT buddy fleet
-      const res = runCli(['fleet', 'tasks', 'add', 'demo task']);
-      // Ce test ROUGE échoue car Commander renvoie "error: unknown command 'tasks'" (exitCode 1)
+    it('route les tâches goal-mode par buddy autonomy plutôt que buddy fleet', () => {
+      const fleetGuide = readRepoFile('docs', 'fleet-guide.md');
+      const parity = readRepoFile('docs', 'hermes-openclaw-parity.md');
+      expect(fleetGuide).toContain('buddy autonomy tasks add "<title>" --goal-mode');
+      expect(parity).toContain('buddy autonomy tasks add --goal-mode');
+      expect(fleetGuide).not.toContain('buddy fleet tasks add');
+      expect(parity).not.toContain('buddy fleet tasks add');
+
+      const res = runCli(['autonomy', 'tasks', 'add', '--help']);
       expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain('--goal-mode');
     });
 
     it('CLAUDE.md:334 promet buddy nodes reject', () => {

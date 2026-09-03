@@ -847,7 +847,8 @@ Tailscale mesh. Each peer periodically:
 7. Append `colab-worklog.json` entry, mark task completed, push.
 
 **Goal-mode tasks** (Hermes kanban goal-mode parity): add a task with
-`buddy fleet tasks add "<title>" --goal-mode [--goal-max-turns N]` and a
+`buddy autonomy tasks add "<title>" --goal-mode [--goal-max-turns N]` (also
+available through the `buddy colab` alias) and a
 successful worker attempt is no longer enough — an LLM judge (fail-open,
 free local tier by default, overridable via `goals.judgeModel`) checks the
 task title/description with `acceptanceCriteria` as strict numbered
