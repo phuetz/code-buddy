@@ -36,8 +36,8 @@ WARN Tool error {"tool":"bash","error":"Approval requires an interactive termina
 je m'abstiens / I cannot comply
 ```
 
-Journaux : `repro-tilde-red.log`, `repro-absolute-red.log`,
-`repro-dot-red.log`.
+Journaux : `_qa/headless2/repro-tilde-red.log`,
+`_qa/headless2/repro-absolute-red.log`, `_qa/headless2/repro-dot-red.log`.
 
 ## Cause établie
 
@@ -92,12 +92,14 @@ est :
 ?? node_modules
 ```
 
-Journaux verts : `final-tilde.log`, `final-absolute.log`, `final-dot.log`.
+Journaux verts : `_qa/headless2/final-tilde.log`,
+`_qa/headless2/final-absolute.log`, `_qa/headless2/final-dot.log`.
 
 La mission jouet réelle Ollama a exécuté une chaîne unique `ls | grep | npx
 vitest` en headless `dontAsk`. Résultat : `bash completed`, modèle
 `qwen3:4b-instruct`, coût `$0.0000`, fichier de sécurité Vitest `1/1`,
-`40/40` tests passés en 235 ms. Journal : `final-toy-mission.log`.
+`40/40` tests passés en 235 ms. Journal :
+`_qa/headless2/final-toy-mission.log`.
 
 ## Vérifications finales
 
@@ -107,12 +109,17 @@ Test Files 66 passed (66)
 Tests      1131 passed (1131)
 
 npx tsc --noEmit -p .                         exit 0
-npx eslint [fichiers corrigés et tests ciblés] exit 0
+npx eslint src/sandbox/execpolicy.ts src/sandbox/docker-sandbox.ts \
+  src/tools/bash/command-validator.ts src/tools/bash/execution-policy.ts \
+  tests/tools/bash-execution-policy.test.ts \
+  tests/bash/command-validator-security-regression.test.ts \
+  tests/sandbox/docker-sandbox.test.ts        exit 0
 git diff --check                              exit 0
 ```
 
 Commits thématiques : `6d622a439` (Git `-C`), `6ffb5da15` (chemins `~`),
-`7227eb96c` (HOME sandbox), `1dcb2c10d` (dépendances read-only/cache), avec
+`7227eb96c` (HOME sandbox), `1dcb2c10d` (dépendances read-only/cache),
+`9fb115ed6` (QA ignorée), avec
 les réservations documentaires précédentes `8ea7a4c38`, `8dce39a48`,
 `a90cbfa70` et `9e1e9ac5f`.
 
