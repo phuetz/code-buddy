@@ -49,4 +49,13 @@ describe('buddy backup CLI --confirm', () => {
     await parse(['node', 'test', 'backup', 'restore', 'x.json']);
     expect(vi.mocked(handleBackup)).toHaveBeenCalledWith('restore x.json');
   });
+
+  it('help says it backs up the current project, not the home profile', () => {
+    const program = new Command();
+    program.exitOverride();
+    registerBackupCommand(program, () => {});
+    const help = program.commands.find((command) => command.name() === 'backup')?.helpInformation() ?? '';
+    expect(help).toMatch(/current project/i);
+    expect(help).toMatch(/home profile/i);
+  });
 });

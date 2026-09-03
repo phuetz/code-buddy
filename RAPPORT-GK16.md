@@ -158,7 +158,15 @@ Rouge collé : `Size: 0 KB` pour 208 o ; restore tronqué `Failed to read backup
 
 Correctif : taille en B/KB/MB ; « not a readable Code Buddy backup (truncated or not JSON) » ; version 1.x exigée.
 
-Vert : 6 fichiers / 36 tests.
+Vert : 6 fichiers / 36 tests. Commit `0a797e0b5`.
+
+### Lot H — projet vs HOME (rouge → vert)
+
+Rouge collé : create ne disait pas que la source est le `.codebuddy/` du projet.
+
+Correctif : ligne `Source: … (current project .codebuddy/; does not include ~/.codebuddy)` ; help CLI ; `docs/commands.md` ; `docs/deployment.md`.
+
+Vert : 6 fichiers / 38 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

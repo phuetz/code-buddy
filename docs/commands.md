@@ -498,8 +498,18 @@ buddy execpolicy check | check-argv | add-prefix | dashboard
 ```bash
 buddy deploy platforms | init | nix
 buddy update [--channel stable|beta|dev] [--check] [--force] [--tag <ref>]
-buddy backup create | verify | list | restore [--only-config] [--no-include-workspace]
+buddy backup create | verify | list | restore [--only-config] [--no-include-workspace] [--output <dir>] [--confirm]
 ```
+
+`buddy backup` archives the **current project's** `.codebuddy/` directory
+(the working directory when you run the command). Archives are stored in
+`~/.codebuddy/backups` by default (`--output` overrides that). It does
+**not** back up the home profile (`~/.codebuddy` memory, global sessions,
+skills). Restore **merges**: files present in the archive overwrite
+matching paths; extra files already in the project `.codebuddy/` are
+left in place. `restore` requires `--confirm`. Files larger than 1 MB,
+`screenshots/`, `tool-results/`, `runs/`, `browser-data/`, and symbolic
+links are skipped on create.
 
 ### Setup
 

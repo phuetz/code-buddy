@@ -291,6 +291,14 @@ describe('GK16 backup size and unreadable archives are honest', () => {
     removeTmpDir(workspace);
   });
 
+  it('says create archives the current project .codebuddy, not the home profile', async () => {
+    const created = await handleBackup(`create --output ${path.join(workspace, 'backups')}`);
+    expect(created.exitCode ?? 0).toBe(0);
+    expect(created.response).toMatch(/current project/i);
+    expect(created.response).toContain(path.join(workspace, '.codebuddy'));
+    expect(created.response ?? '').not.toMatch(/home profile/i);
+  });
+
   it('reports create size in bytes when the payload is under 1 KB', async () => {
     const created = await handleBackup(`create --output ${path.join(workspace, 'backups')}`);
     expect(created.exitCode ?? 0).toBe(0);

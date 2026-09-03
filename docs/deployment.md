@@ -49,8 +49,11 @@ processes of the same binary, not two listeners in one process.
 6. **Optional device pairing.** `CODEBUDDY_GATEWAY_REQUIRE_PAIRING=true`
    gates unknown WebSocket devices behind an approval queue
    (`buddy gateway-pairing pending|approve|reject|revoke`).
-7. **Back up before upgrading:** `buddy backup create` (verify with
-   `buddy backup verify`).
+7. **Back up the project `.codebuddy/` before upgrading:**
+   `buddy backup create` (verify with `buddy backup verify`). This
+   archives the **current project's** `.codebuddy/`, not the home
+   profile `~/.codebuddy`. Restore with `buddy backup restore <file>
+   --confirm` (merge: extra files are kept).
 
 ---
 
@@ -263,7 +266,9 @@ misbehaving install (`--fix` applies auto-migrations).
 
 ## Upgrades
 
-1. `buddy backup create` (and `buddy backup verify`).
+1. `buddy backup create` (and `buddy backup verify`) in each project
+   whose `.codebuddy/` you need to keep. This is not a backup of
+   `~/.codebuddy`.
 2. Deploy the new version (rebuild image / `git pull && npm ci && npm
    run build` / `buddy update`).
 3. Restart the service. **SQLite schema migrations run automatically at
@@ -273,5 +278,6 @@ misbehaving install (`--fix` applies auto-migrations).
 4. Legacy JSON installs (pre-SQLite `~/.codebuddy/*.json`) are imported
    by the JSON→SQLite migration; `buddy doctor --fix` triggers it if
    needed.
-5. If anything goes wrong: stop the service, `buddy backup restore`,
-   redeploy the previous version.
+5. If anything goes wrong: stop the service, `buddy backup restore
+   <file> --confirm` (merge into the project `.codebuddy/`; extra files
+   are kept), redeploy the previous version.

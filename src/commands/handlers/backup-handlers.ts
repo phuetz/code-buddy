@@ -171,6 +171,7 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     handled: true,
     response: [
       `Backup created: ${backupPath}`,
+      `Source: ${sourcePath} (current project .codebuddy/; does not include ~/.codebuddy)`,
       `Files: ${files.length}${fileList}`,
       `Size: ${formatBackupSize(backupData.totalSize)}`,
       skippedLine,

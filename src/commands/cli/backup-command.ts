@@ -16,7 +16,9 @@ export function registerBackupCommand(
 ): void {
   program
     .command('backup [subcommand] [args...]')
-    .description('Manage .codebuddy/ backups (create, verify, list, restore)')
+    .description(
+      "Manage backups of the current project's .codebuddy/ (archives default to ~/.codebuddy/backups; this does not back up the home profile)",
+    )
     .option('--only-config', 'Only backup configuration files')
     .option('--no-include-workspace', 'Exclude workspace data')
     .option('--output <path>', 'Custom output directory')
