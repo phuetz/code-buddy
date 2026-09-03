@@ -38,7 +38,7 @@ import { TelegramProFormatter } from './pro-formatter.js';
 import { renderWidgetDataToPng, renderWidgetHtmlToPng } from '../../widgets/widget-image-renderer.js';
 import { resolveTelegramApiBase } from '../../utils/telegram-api-base.js';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
-const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
+export const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
 const POLL_REQUEST_MARGIN_MS = 5_000;
 const POLL_RETRY_INITIAL_MS = 2_000;
 const POLL_RETRY_MAX_MS = 60_000;
@@ -851,6 +851,9 @@ export class TelegramChannel extends BaseChannel {
     // Voice note → text only after pairing/auth, so a failed transcription never
     // notifies an unapproved sender.
     await this.maybeTranscribeVoice(message);
+    if (message.content === VOICE_TRANSCRIPTION_FAILED) {
+      return;
+    }
     const parsed = this.parseCommand(message);
     parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
 
