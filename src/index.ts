@@ -3052,7 +3052,8 @@ program
   .command("login [provider]")
   .description("Authenticate with a provider (chatgpt | xai — uses your subscription, no API key)")
   .option("--code <code>", "Complete an xAI login with the code shown in the browser")
-  .action(async (provider: string | undefined, options: { code?: string }) => {
+  .option("--no-browser", "Fail immediately instead of waiting for a browser callback")
+  .action(async (provider: string | undefined, options: { code?: string; browser?: boolean }) => {
     const target = (provider ?? "chatgpt").toLowerCase();
     if (target === "xai" || target === "grok" || target === "xai-oauth") {
       await loginXaiCli(options.code);
@@ -3061,6 +3062,13 @@ program
     if (target !== "chatgpt" && target !== "codex" && target !== "openai") {
       cli.stdout(`Unknown provider: "${provider}". Supported: \`chatgpt\`, \`xai\`.`);
       cli.stdout("Other providers (Gemini, Anthropic) authenticate via API key env vars.");
+      process.exit(1);
+    }
+    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE } = await import(
+      "./commands/login-prerequisites.js"
+    );
+    if (options.browser === false || !canAttemptInteractiveLogin()) {
+      cli.error(LOGIN_NEEDS_BROWSER_MESSAGE);
       process.exit(1);
     }
     const { loginInteractive, getCodexAuthFilePath } = await import(
