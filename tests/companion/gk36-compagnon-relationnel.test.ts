@@ -4,7 +4,7 @@
  * HOME / artefacts uniquement sous `_qa/gk36/` dans le clone. Faits fictifs.
  * Lecteur audio et Telegram injectés — jamais le pont 8129 ni les enceintes.
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -189,6 +189,19 @@ describe('GK36 — self_evolution seulement si on le demande', () => {
   it('la question orale débloque, un bonjour ne débloque pas', () => {
     expect(isLisaEvolutionRequest("qu'est-ce qui a changé chez toi ?")).toBe(true);
     expect(isLisaEvolutionRequest('Bonsoir Lisa, comment s’est passée ta journée ?')).toBe(false);
+  });
+});
+
+describe('GK36 — documentation alignée', () => {
+  it('CLAUDE.md décrit l’épisode saillant, MIN_GAP Telegram, rest, et self-evolution seulement à la demande', () => {
+    const claude = readFileSync(path.join(REPO, 'CLAUDE.md'), 'utf8');
+    expect(claude).toMatch(/`CODEBUDDY_COMPANION_PROACTIVE` \/ `CODEBUDDY_COMPANION_MIN_GAP_MS`/);
+    expect(claude).not.toMatch(/`CODEBUDDY_COMPANION_PROACTIVE` \/ `_MIN_GAP_MS`/);
+    expect(claude).toMatch(/jargon-free episode hint/);
+    expect(claude).toMatch(/spoken \*\*or\*\* Telegram/);
+    expect(claude).toMatch(/Maison `rest`/);
+    expect(claude).toMatch(/not the arrival greeting/);
+    expect(claude).toMatch(/invents absent facts is dropped/);
   });
 });
 
