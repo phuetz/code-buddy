@@ -272,16 +272,6 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Initialize Executor
     const timelineEnabled = process.env.CODEBUDDY_TIMELINE === 'true';
-    let lastTimelineCheckpointId: string | undefined;
-    if (timelineEnabled) {
-      try {
-        lastTimelineCheckpointId = this.checkpointManager.getCheckpoints().at(-1)?.id;
-      } catch (error) {
-        logger.warn('[session-timeline] failed to inspect initial checkpoint state', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
     this.executor = new AgentExecutor({
       client: this.codebuddyClient,
       toolHandler: this.toolHandler,
@@ -298,12 +288,20 @@ export class CodeBuddyAgent extends BaseAgent {
               const sessionId = this.sessionStore.getCurrentSessionId();
               if (!sessionId) return;
               const { SessionTimeline } = await import('../sessions/timeline.js');
-              const latestCheckpoint = this.checkpointManager.getCheckpoints().at(-1);
-              const turnCheckpoint = turn.filesTouched.length > 0 &&
-                latestCheckpoint?.id !== lastTimelineCheckpointId
-                ? latestCheckpoint
-                : undefined;
-              lastTimelineCheckpointId = latestCheckpoint?.id;
+              let checkpointId: string | undefined;
+              try {
+                const { captureAndSaveTimelineSnapshot } = await import('../sessions/timeline-snapshot.js');
+                const cwd = this.toolHandler.getWorkingDirectory() || process.cwd();
+                checkpointId = captureAndSaveTimelineSnapshot({
+                  sessionId,
+                  turn: turn.turn,
+                  cwd,
+                }).id;
+              } catch (error) {
+                logger.warn('[session-timeline] failed to snapshot working tree', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
               await new SessionTimeline(sessionId).record({
                 turn: turn.turn,
                 ts: turn.ts,
@@ -311,7 +309,7 @@ export class CodeBuddyAgent extends BaseAgent {
                 textPreview: turn.text,
                 toolCalls: turn.toolCalls,
                 filesTouched: turn.filesTouched,
-                ...(turnCheckpoint ? { checkpointId: turnCheckpoint.id } : {}),
+                ...(checkpointId ? { checkpointId } : {}),
               });
             },
           }
