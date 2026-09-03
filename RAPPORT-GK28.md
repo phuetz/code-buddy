@@ -2,7 +2,7 @@
 
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-catalogue-2026-09-02`
+Clone : `~/DEV/cb-repar-catalogue-2026-09-02`
 Branche : `fix/gk28-analytics-reel-2026-09-03`
 HEAD au départ : `5e7639b42` (`Merge GK22 …`)
 HEAD produit : `999137f79`

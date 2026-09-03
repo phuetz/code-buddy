@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # GK4b — replay from-prompt --short after the audio/layout fixes.
 set -euo pipefail
-ROOT=/home/patrice/DEV/cb-never-slash-2026-09-02
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 GK4_HOME="$ROOT/_qa/gk4/home"
 VOICE="$ROOT/_qa/gk4/voices/fr_FR-siwis-medium.onnx"
-CHROME=/home/patrice/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome
+CHROME="$HOME/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome"
 LOG="$ROOT/_qa/gk4/logs/from-prompt-b.log"
 mkdir -p "$GK4_HOME" "$ROOT/_qa/gk4/logs"
 

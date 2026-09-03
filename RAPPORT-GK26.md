@@ -2,7 +2,7 @@
 
 Mission : exercer **pour de vrai** la porte de revue des diffs (`CODEBUDDY_DIFF_REVIEW=static|full`, boucle de révision) dans un dépôt jouet, via l'agent headless (Ollama) et les cinq surfaces d'écriture.
 
-- Clone autorisé : `/home/patrice/DEV/cb-repar-jumeaux-5-2026-09-02` uniquement
+- Clone autorisé : `~/DEV/cb-repar-jumeaux-5-2026-09-02` uniquement
 - Branche : `fix/gk26-diff-review-reel-2026-09-03`
 - HEAD au départ : `5e7639b42` (`Merge GK22 …`)
 - Date : 2026-09-03 (Europe/Paris)

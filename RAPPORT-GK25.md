@@ -2,7 +2,7 @@
 
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-jumeaux-4-2026-09-02`
+Clone : `~/DEV/cb-repar-jumeaux-4-2026-09-02`
 Branche : `fix/gk25-vision-train-reel-2026-09-03`
 HEAD au démarrage : `4bfbc4ac7`
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)
@@ -26,7 +26,7 @@ Loi : « se servir de ses applis EN VRAI ». Chaque défaut (score annoncé sans
 - Aucun `git push`, `git prune`, `git reset --hard`, `rm -rf`, `git add -A`, `git commit -a`.
 - Aucune API payante. Ollama local : `moondream` (vision), `qwen3:4b-instruct` (texte).
 - Aucun service systemd. ComfyUI réel 8188 intact (faux serveur `127.0.0.1:42125`). Pont 8129 réel intact. Caméra réelle jamais ouverte.
-- HOME = `_qa/gk25/home` dans le clone. `CODEBUDDY_YOLO_PYTHON=/home/patrice/vision_tests/venv/bin/python`, modèle `/home/patrice/vision_tests/yolov8n.pt`.
+- HOME = `_qa/gk25/home` dans le clone. `CODEBUDDY_YOLO_PYTHON=~/vision_tests/venv/bin/python`, modèle `~/vision_tests/yolov8n.pt`.
 - Rien téléchargé > 50 Mo. `DISPLAY` unset. `package-lock.json` restauré après `npm install`.
 
 ## Journal

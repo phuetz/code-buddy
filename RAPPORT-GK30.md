@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-widgets-2026-09-02`
+Clone : `~/DEV/cb-repar-widgets-2026-09-02`
 Branche : `fix/gk30-widgets-reel-2026-09-03`
 HEAD au démarrage : `a41944cc2` (`Merge GK21 (outils navigateur en vrai : app_server, web_test, computer_control) into codex/audit-systeme-nerveux-2026-09-01`)
 HEAD produit : lot documentaire (cette révision)

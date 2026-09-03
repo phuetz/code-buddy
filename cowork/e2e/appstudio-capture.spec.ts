@@ -47,7 +47,7 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page; work: s
       COWORK_E2E: '1',
       COWORK_E2E_USER_DATA_DIR: userDataDir,
       CODEBUDDY_RUNS_DIR: path.join(userDataDir, 'codebuddy-runs'),
-      CODEBUDDY_ENGINE_PATH: process.env.CODEBUDDY_ENGINE_PATH || '/home/patrice/code-buddy/dist',
+      CODEBUDDY_ENGINE_PATH: process.env.CODEBUDDY_ENGINE_PATH || path.join(os.homedir(), 'code-buddy', 'dist'),
       CI: '1',
     },
   });

@@ -7,14 +7,14 @@ Rebaser les sept preuves, le rapport de revue et les six correctifs SENSE3 de la
 les comportements de l'une ou l'autre lignée.
 
 Ce rapport a été créé avant toute inspection du dépôt, conformément à la mission. Le clone
-travaillé est `/home/patrice/DEV/cb-succes-sensory-2026-09-02`. Le dépôt source
-`/home/patrice/code-buddy` a uniquement servi de source de `git fetch`; aucune écriture ni aucun
+travaillé est `~/DEV/cb-succes-sensory-2026-09-02`. Le dépôt source
+`~/code-buddy` a uniquement servi de source de `git fetch`; aucune écriture ni aucun
 push n'y a été effectué.
 
 ## État initial et rebase
 
 - HEAD initial : `8e3cb43d5`, branche `fix/sense-gemini-2026-09-03`.
-- Cible vérifiée après `git fetch /home/patrice/code-buddy codex/audit-systeme-nerveux-2026-09-01` :
+- Cible vérifiée après `git fetch ~/code-buddy codex/audit-systeme-nerveux-2026-09-01` :
   `FETCH_HEAD=4ac91f2561b52944329817970d88b06983ce9d4b`.
 - Base commune : `facea986446db20cfcb63085be0344756e8c6122`.
 - `git rebase FETCH_HEAD` a rejoué 14 commits propres à SENSE3 : sept preuves, le rapport de

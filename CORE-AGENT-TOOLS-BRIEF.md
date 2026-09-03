@@ -5,11 +5,11 @@ Tu es **GPT-5.5 (Codex)**. Tu ajoutes une suite de **nouveaux tools agent** au *
 Tu produis des **fichiers NEUFS**. **Tu ne câbles PAS l'enregistrement dans les god-files du registry** (`src/codebuddy/tools.ts`, `src/agent/codebuddy-agent.ts executeTool`, `src/tools/registry/index.ts`, `src/tools/metadata.ts`) — tu produis à la place un **manifeste** qui dit à l'intégrateur (Fable) exactement quoi enregistrer où. Fable câble en une passe.
 
 ## ⚠️ TU ES DÉJÀ DANS TON WORKTREE ISOLÉ
-Tu tournes dans `/home/patrice/coretools-wt` sur la branche `feat/core-agent-tools`. **NE FAIS PAS `git worktree add`, NE CHANGE PAS DE BRANCHE, NE FAIS PAS `git checkout -b`.** Commits directement sur la branche courante. (D'autres agents travaillent en parallèle dans d'autres worktrees — changer de branche = course git.)
+Tu tournes dans `~/coretools-wt` sur la branche `feat/core-agent-tools`. **NE FAIS PAS `git worktree add`, NE CHANGE PAS DE BRANCHE, NE FAIS PAS `git checkout -b`.** Commits directement sur la branche courante. (D'autres agents travaillent en parallèle dans d'autres worktrees — changer de branche = course git.)
 
 ## Modèle de travail
 - **UNE tranche (un tool) = UN commit atomique.** Fais le maximum. Batch partiel OK.
-- Après CHAQUE tranche : `npx tsc --noEmit` à la racine (PAS dans cowork) = **0 erreur** sur tes fichiers. Le noyau a ses `node_modules` complets dans ce worktree ? Si tu vois des `Cannot find module`, symlink : `ln -sf /home/patrice/code-buddy/node_modules /home/patrice/coretools-wt/node_modules` (package.json identique), retire-le avant le `git status` final.
+- Après CHAQUE tranche : `npx tsc --noEmit` à la racine (PAS dans cowork) = **0 erreur** sur tes fichiers. Le noyau a ses `node_modules` complets dans ce worktree ? Si tu vois des `Cannot find module`, symlink : `ln -sf ~/code-buddy/node_modules ~/coretools-wt/node_modules` (package.json identique), retire-le avant le `git status` final.
 - Lance les tests de tes tools : `npx vitest run tests/tools/<ton-test>.test.ts`.
 - **NE PUSH JAMAIS. NE MERGE JAMAIS.** Commits sur `feat/core-agent-tools`.
 

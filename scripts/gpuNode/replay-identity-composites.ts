@@ -10,10 +10,10 @@ import {
   type InsertCharacterOptions,
 } from './insert-character-in-location.js';
 
-const SOURCE_ROOT = '/home/patrice/.codebuddy/personas/ambre/wardrobe-automne';
-const COMPOSITE_ROOT = '/home/patrice/Videos/personas/ambre-scenes/automne-composites';
+const SOURCE_ROOT = `${process.env.HOME}/.codebuddy/personas/ambre/wardrobe-automne`;
+const COMPOSITE_ROOT = `${process.env.HOME}/Videos/personas/ambre-scenes/automne-composites`;
 const DEFAULT_OUTPUT_ROOT =
-  '/home/patrice/Videos/personas/composites-identite-2026-08-01/replays';
+  `${process.env.HOME}/Videos/personas/composites-identite-2026-08-01/replays`;
 const WORKFLOWS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'workflows');
 
 interface ReplayTask {

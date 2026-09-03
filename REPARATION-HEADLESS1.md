@@ -4,7 +4,7 @@
 
 - Statut : rouge — les flags headless `-o, --output-last-message` et `--output-schema` ne sont pas encore implémentés.
 - Vérification initiale : `npx vitest run tests/cli/headless-output-flags.test.ts` — rouge, aucun fichier de test trouvé (code 1).
-- Périmètre : clone `/home/patrice/DEV/cb-headless1-2026-09-03` uniquement.
+- Périmètre : clone `~/DEV/cb-headless1-2026-09-03` uniquement.
 
 ## Livraison
 
@@ -25,7 +25,7 @@
 
 ## Passation
 
-- Dépôt : `/home/patrice/DEV/cb-headless1-2026-09-03` ; branche : `feat/headless1-output-schema-2026-09-03`.
+- Dépôt : `~/DEV/cb-headless1-2026-09-03` ; branche : `feat/headless1-output-schema-2026-09-03`.
 - Commit fonctionnel : `b0094859a` (`feat(cli): add headless final output flags`).
 - `node_modules` est un symlink non suivi préexistant et n’a pas été ajouté.
-- Aucun push, appel API payant, service systemd, ComfyUI ou dépôt `/home/patrice/code-buddy` touché.
+- Aucun push, appel API payant, service systemd, ComfyUI ou dépôt `~/code-buddy` touché.

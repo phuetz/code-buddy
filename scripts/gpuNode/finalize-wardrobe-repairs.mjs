@@ -4,7 +4,7 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 
-const root = '/home/patrice/Videos/personas/garde-robe-reparee';
+const root = `${process.env.HOME}/Videos/personas/garde-robe-reparee`;
 const scoreFiles = [
   'arcface-ambre-attempt-1.json',
   'arcface-lisa-attempt-1.json',

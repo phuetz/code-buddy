@@ -14,11 +14,11 @@ import sharp from 'sharp';
 
 const comfyUrl = process.env.QWEN_RESIDUAL_COMFY_URL ?? 'http://127.0.0.1:8189';
 const sourceRoot =
-  '/home/patrice/Videos/personas/garde-robe-reparee/final-short-qc-20260731';
+  `${process.env.HOME}/Videos/personas/garde-robe-reparee/final-short-qc-20260731`;
 const outputRoot =
-  '/home/patrice/Videos/personas/garde-robe-reparee/final-short-qc-20260731-v4';
+  `${process.env.HOME}/Videos/personas/garde-robe-reparee/final-short-qc-20260731-v4`;
 const qcRoot =
-  '/home/patrice/Videos/publication-2026-07-30/qc/reparation-2026-07-31/' +
+  `${process.env.HOME}/Videos/publication-2026-07-30/qc/reparation-2026-07-31/` +
   'seconde-passe';
 const workflowPath = new URL('./workflows/insert-qwen-edit.json', import.meta.url);
 

@@ -35,7 +35,7 @@ Extrait de sortie :
 
 ```text
 
- RUN  v4.1.9 /home/patrice/DEV/cb-repar-skills-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-repar-skills-2026-09-02
 
  ❯ tests/skills/skill-sources.test.ts (1 test | 1 failed) 5ms
      × propagates a git clone failure instead of returning a phantom directory 4ms
@@ -87,7 +87,7 @@ Résultat : exit 0.
 
 ```text
 
- RUN  v4.1.9 /home/patrice/DEV/cb-repar-skills-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-repar-skills-2026-09-02
 
 
  Test Files  3 passed (3)

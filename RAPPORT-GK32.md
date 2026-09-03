@@ -2,7 +2,7 @@
 
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-heure-2026-09-02`
+Clone : `~/DEV/cb-repar-heure-2026-09-02`
 Branche : `fix/gk32-onboard-doctor-2026-09-03`
 HEAD au départ : `345bb4f87` (`Merge GK27 (conseil de modèles et routage en vrai) into codex/audit-systeme-nerveux-2026-09-01`)
 HEAD produit : `d0f4ee187` (`docs(gk32): consigner onboard/doctor/login/update en vrai et libérer le chantier`)

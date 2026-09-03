@@ -3,7 +3,7 @@
  * convention (`AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md`).
  *
  * The convention is three shared JSON files (today living in
- * `claude-et-patrice/.codebuddy/`, driven until now by an external
+ * `private-handover-repo/.codebuddy/`, driven until now by an external
  * `heartbeat_tick.py` wrapper):
  *   - `colab-tasks.json`   — the fleet task queue
  *   - `colab-worklog.json` — append-only work log
@@ -18,7 +18,7 @@
  *    git push order ("first to push wins"), per the protocol — callers must
  *    `git pull --rebase` before and reconcile after. Unit tests prove the local
  *    store logic, NOT the cross-machine race resolution.
- *  - The shared dir is usually a DIFFERENT repo (claude-et-patrice) with its own
+ *  - The shared dir is usually a DIFFERENT repo (the private handover repository) with its own
  *    write rules; this module only mutates the JSON it owns and preserves the
  *    human `version`/`comment` fields.
  *

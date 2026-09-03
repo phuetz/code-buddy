@@ -20,7 +20,7 @@ sorties retenues dépassent la cible ArcFace 0,75 avec une référence canonique
 la même tenue. Les sorties sont sous :
 
 ```text
-/home/patrice/Videos/personas/composites-identite-2026-08-01/
+~/Videos/personas/composites-identite-2026-08-01/
 ```
 
 Les résultats exacts et non arrondis du tableau sont conservés dans
@@ -161,21 +161,21 @@ jq -s '{total:length,
   verdicts:(group_by(.verdict)|map({key:.[0].verdict,value:length})|from_entries),
   identity_rejects:[.[]|select((.deterministic.identity_arcface // 1)
     < (.deterministic.identity_threshold // 0.55))]}' \
-  /home/patrice/Videos/personas/ambre-scenes/automne-composites/ambre-0{01..38}-*.png.qc.json
+  ~/Videos/personas/ambre-scenes/automne-composites/ambre-0{01..38}-*.png.qc.json
 
 /tmp/codebuddy-visual-gate-20260801/bin/python \
   scripts/gpuNode/score-arcface-images.py \
   --reference ~/.codebuddy/personas/ambre/wardrobe-automne/ambre-cocooning-flanelle-sapin.png \
-  --output /home/patrice/Videos/personas/composites-identite-2026-08-01/mesures/ambre-030-v3-score.json \
-  /home/patrice/Videos/personas/composites-identite-2026-08-01/replays-v3/ambre-030-salon-dore-flanelle/composite.png
+  --output ~/Videos/personas/composites-identite-2026-08-01/mesures/ambre-030-v3-score.json \
+  ~/Videos/personas/composites-identite-2026-08-01/replays-v3/ambre-030-salon-dore-flanelle/composite.png
 
 /tmp/codebuddy-visual-gate-20260801/bin/python \
   scripts/influencer/visual-gate.py \
-  /home/patrice/Videos/personas/composites-identite-2026-08-01/replays-v3/ambre-030-salon-dore-flanelle/composite.png \
+  ~/Videos/personas/composites-identite-2026-08-01/replays-v3/ambre-030-salon-dore-flanelle/composite.png \
   --persona ambre \
   --reference ~/.codebuddy/personas/ambre/wardrobe-automne/ambre-cocooning-flanelle-sapin.png \
   --force \
-  --journal /home/patrice/Videos/personas/composites-identite-2026-08-01/mesures/ambre-030-v3-gate.jsonl
+  --journal ~/Videos/personas/composites-identite-2026-08-01/mesures/ambre-030-v3-gate.jsonl
 
 npm test -- tests/tools/video/character-in-location.test.ts \
   tests/scripts/insert-character-in-location.test.ts

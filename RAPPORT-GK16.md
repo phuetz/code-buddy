@@ -2,7 +2,7 @@
 
 Mission : exercer la commande `buddy backup` pour de vrai, y compris les cas méchants, dans un HOME temporaire du clone.
 
-- Clone autorisé : `/home/patrice/DEV/cb-repar-channels-2026-09-02` uniquement
+- Clone autorisé : `~/DEV/cb-repar-channels-2026-09-02` uniquement
 - Branche : `fix/gk16-backup-reel-2026-09-03`
 - HEAD au départ : `13f878cec` (`Merge branch 'feat/gk5-pocket-tts-rust-2026-09-03' …`)
 - Date de démarrage : 2026-09-03 (Europe/Paris)
@@ -34,8 +34,8 @@ Sortie collée :
 ```
 ## fix/gk16-backup-reel-2026-09-03
 ---
-13f878cec Merge branch 'feat/gk5-pocket-tts-rust-2026-09-03' of /home/patrice/DEV/cb-never-env-2026-09-02 into codex/audit-systeme-nerveux-2026-09-01
-53a02dd1a Merge branch 'fix/gk2-research-deep-2026-09-03' of /home/patrice/DEV/cb-never-tools-2026-09-02 into codex/audit-systeme-nerveux-2026-09-01
+13f878cec Merge branch 'feat/gk5-pocket-tts-rust-2026-09-03' of ~/DEV/cb-never-env-2026-09-02 into codex/audit-systeme-nerveux-2026-09-01
+53a02dd1a Merge branch 'fix/gk2-research-deep-2026-09-03' of ~/DEV/cb-never-tools-2026-09-02 into codex/audit-systeme-nerveux-2026-09-01
 2a4e7c39f docs(gk5): coller le SHA du lot documentaire
 369ccde0a docs(gk5): consigner la faisabilité Pocket TTS Rust/ONNX
 03bb492c3 feat(buddy-sense): ajouter Pocket TTS ONNX (feature pocket-tts)

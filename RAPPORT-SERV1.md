@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-serv1-2026-09-03`
+Clone : `~/DEV/cb-serv1-2026-09-03`
 Branche : `fix/serv1-serveur-reel-2026-09-03`
 HEAD au démarrage : `6c6e43b58`
 HEAD produit : `217d80c65` (lot documentaire)

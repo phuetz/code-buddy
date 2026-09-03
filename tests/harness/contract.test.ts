@@ -58,7 +58,7 @@ describe('harness contract', () => {
   it('normalizes and bounds scope paths', () => {
     expect(scopePathSchema.parse('.\\docs\\qa\\proof.json')).toBe('docs/qa/proof.json');
     expect(() => scopePathSchema.parse('../outside')).toThrow();
-    expect(() => scopePathSchema.parse('C:/Users/patri/secret.txt')).toThrow();
+    expect(() => scopePathSchema.parse('C:/Users/user/secret.txt')).toThrow();
     expect(() => scopePathSchema.parse('/etc/passwd')).toThrow();
   });
 

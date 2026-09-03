@@ -2,7 +2,7 @@
 
 Date : 2026-09-03  
 Agent : Grok 4.6  
-Clone : `/home/patrice/DEV/cb-never-cowork-2026-09-02`  
+Clone : `~/DEV/cb-never-cowork-2026-09-02`
 Branche : `fix/gk1-cowork-inconnu-2026-09-03`  
 Base : `3fcf5a97d` (`docs(voice): consigner les preuves DARK3`)  
 HEAD produit : `5b5330c8f`

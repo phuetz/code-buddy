@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Branche : `fix/pack1-2026-09-03`
-Dépôt de travail : `/home/patrice/DEV/cb-pack1-2026-09-03`
+Dépôt de travail : `~/DEV/cb-pack1-2026-09-03`
 
 ---
 ## Objectifs de la mission
@@ -19,8 +19,8 @@ Dépôt de travail : `/home/patrice/DEV/cb-pack1-2026-09-03`
 - `tests/security/donnees-personnelles.test.ts` : 88 lignes (87 sans saut final)
 - `package.json` : 295 lignes (294 initialement)
 - `.npmignore` : 92 lignes (91 sans saut final)
-- `/home/patrice/DEV/lecture-comparative-2026-09-03/codex/codex-cli/package.json` : 23 lignes (22 sans saut final)
-- `/home/patrice/DEV/lecture-comparative-2026-09-03/gemini-cli/packages/cli/package.json` : 92 lignes (91 sans saut final)
+- `~/DEV/lecture-comparative-2026-09-03/codex/codex-cli/package.json` : 23 lignes (22 sans saut final)
+- `~/DEV/lecture-comparative-2026-09-03/gemini-cli/packages/cli/package.json` : 92 lignes (91 sans saut final)
 - `scripts/strip-sourcemaps.mjs` : 50 lignes (49 sans saut final)
 - `src/security/index.ts` : 510 lignes
 
@@ -32,14 +32,14 @@ Commande : `npx vitest run tests/security/npm-pack-contents.test.ts`
 Code de sortie : `1`
 Sortie :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-pack1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-pack1-2026-09-03
 
  ❯ tests/security/npm-pack-contents.test.ts (0 test)
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  tests/security/npm-pack-contents.test.ts [ tests/security/npm-pack-contents.test.ts ]
-Error: Cannot find module '../../src/security/pack-contents-policy.js' imported from /home/patrice/DEV/cb-pack1-2026-09-03/tests/security/npm-pack-contents.test.ts
+Error: Cannot find module '../../src/security/pack-contents-policy.js' imported from ~/DEV/cb-pack1-2026-09-03/tests/security/npm-pack-contents.test.ts
  ❯ tests/security/npm-pack-contents.test.ts:6:1
       4| import { join } from 'path';
       5| import { tmpdir } from 'os';
@@ -68,7 +68,7 @@ Pour prouver que le test d'intégration détecte bien l'absence d'exclusion des 
 
 Sortie Rouge obtenue :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-pack1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-pack1-2026-09-03
 
  ❯ tests/security/npm-pack-contents.test.ts (9 tests | 1 failed) 1120ms
      × prouve que .npmignore exclut bien les .map et que leur présence fait échouer l’audit 129ms
@@ -98,7 +98,7 @@ AssertionError: expected [ 'dist/index.js', …(2) ] to not include 'dist/index.
 ### 1. `npx vitest run tests/security/npm-pack-contents.test.ts tests/security/donnees-personnelles.test.ts`
 Code de sortie : `0`
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-pack1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-pack1-2026-09-03
 
  Test Files  2 passed (2)
       Tests  11 passed (11)
@@ -111,7 +111,7 @@ Code de sortie : `0`
 > @phuetz/code-buddy@2.0.0 check:pack
 > vitest run tests/security/npm-pack-contents.test.ts
 
- RUN  v4.1.9 /home/patrice/DEV/cb-pack1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-pack1-2026-09-03
 
  Test Files  1 passed (1)
       Tests  10 passed (10)

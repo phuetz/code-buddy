@@ -1108,7 +1108,7 @@ async function renderShort(
 }
 
 async function main(): Promise<void> {
-  const defaultPlan = '/home/patrice/DEV/MySoulmate/youtube-shorts-workspace/plan.json';
+  const defaultPlan = `${process.env.HOME}/DEV/MySoulmate/youtube-shorts-workspace/plan.json`;
   const planPath = path.resolve(argument('plan', defaultPlan));
   const planBytes = await fs.readFile(planPath);
   const planRevision = createHash('sha256').update(planBytes).digest('hex');

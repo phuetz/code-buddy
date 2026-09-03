@@ -6,10 +6,10 @@ Tu produis une grande vague de **fichiers NEUFS** (services main + composants re
 
 ## Modèle de travail
 ```sh
-cd /home/patrice/code-buddy
+cd ~/code-buddy
 git worktree add -b feat/cowork-app-studio ../appstudio-wt main
 cd ../appstudio-wt
-ln -s /home/patrice/code-buddy/cowork/node_modules cowork/node_modules   # si absent
+ln -s ~/code-buddy/cowork/node_modules cowork/node_modules   # si absent
 ```
 - **UNE tranche = UN commit atomique.** Fais le maximum de tranches dans l'ordre. Batch partiel OK.
 - Après CHAQUE tranche : `cd cowork && npx tsc --noEmit` = **0 erreur** (⚠️ lance-le dans le worktree AVEC le symlink node_modules ; si tu vois des erreurs `Cannot find module 'openai'/'chalk'`, c'est que le `node_modules` RACINE du repo manque — ces erreurs-là sont environnementales et hors de ton périmètre, ignore-les ; ne considère QUE les erreurs dans des fichiers `cowork/`).

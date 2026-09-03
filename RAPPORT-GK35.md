@@ -2,7 +2,7 @@
 
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-server-2026-09-02`
+Clone : `~/DEV/cb-repar-server-2026-09-02`
 Branche : `fix/gk35-mcp-reel-2026-09-03`
 HEAD au départ : `1ecb8a07e` (`Merge IMG1/IMG2 (pilote Grok Imagine durci : arrêt au 403, en-têtes, jeton masqué) into codex/audit-systeme-nerveux-2026-09-01`)
 Réservation : `268fb2d23`
@@ -52,7 +52,7 @@ HEAD `1ecb8a07e`. Arbre propre. Réservation `268fb2d23`.
 - `buddy import` fusionne `.mcp.json` et `.claude/settings.json`, **pas** `.claude/mcp.json`.
 - `code_explorer_ask` appelle `query` sans `repo`. Avec plusieurs graphes, Code Explorer refuse. Un résultat MCP vide tombait sur « missing endpoint ».
 - `ingest-code` default ops `hotspots`/`get_insights` vides sur un jouet → message « non connecté ». `list_repos` `[]` était ingéré comme une découverte.
-- `.codebuddy/mcp.json` pointait `/home/patrice/DEV/gitnexus-rs/...` et `/home/patrice/code-buddy/src`. Binaire réel : `/home/patrice/.local/bin/code-explorer`.
+- `.codebuddy/mcp.json` pointait `~/DEV/code-explorer/...` et `~/code-buddy/src`. Binaire réel : `~/.local/bin/code-explorer`.
 
 ## Parcours réel (après correctifs)
 
@@ -81,7 +81,7 @@ Le clone entier n'a pas été indexé : un `code-explorer analyze .` lancé par 
 | D5 | `ingest-code` accuse MCP d'être down sur un graphe jouet | 0 insight, message « non connecté » | `6650ba9b1` |
 | D6 | MCP connecté + query vide → « missing endpoint » | notes `missing endpoint` | `a1020bc2b` |
 | D7 | `list_repos` `[]` ingéré comme insight | découverte `[]` | `3c1ad67b8` |
-| D8 | Doc / `mcp.json` : chemin privé `gitnexus`, pas de timeout | `buddy mcp test gitnexus`, `/home/patrice/DEV/gitnexus-rs` | `aab8304b3` |
+| D8 | Doc / `mcp.json` : chemin privé `gitnexus`, pas de timeout | `buddy mcp test gitnexus`, `~/DEV/code-explorer` | `aab8304b3` |
 
 ## Tableau final
 
@@ -93,7 +93,7 @@ Le clone entier n'a pas été indexé : un `code-explorer analyze .` lancé par 
 | `buddy import` Claude Code | Fusion sans doublon | `.claude/mcp.json` ignoré | Chemin ajouté ; noms existants conservés | `2652998c5` |
 | `code_explorer_ask` | Réponse graphe pour cwd / `repo` | Échec multi-repos ou « missing endpoint » | Résolution `list_repos` + rester sur MCP | `f8984c10b` `a1020bc2b` |
 | `research ingest-code` jouet | Insights CKG | « non connecté » / `[]` | Ops `report`/`coverage` ; ignorer `[]` | `6650ba9b1` `3c1ad67b8` |
-| Doc + `mcp.json` | `code-explorer` sur PATH, timeout documenté | `gitnexus` + chemins `/home/patrice/...` | CLAUDE.md, integration, entrée portable | `aab8304b3` |
+| Doc + `mcp.json` | `code-explorer` sur PATH, timeout documenté | `gitnexus` + chemins `~/...` | CLAUDE.md, integration, entrée portable | `aab8304b3` |
 
 ## Vérifications
 
@@ -107,7 +107,7 @@ Le clone entier n'a pas été indexé : un `code-explorer analyze .` lancé par 
 
 ## Reste ouvert
 
-- `pubcommander` dans `.codebuddy/mcp.json` pointe encore `/home/patrice/DEV/PubCommander/...` (hors mission, config auteur).
+- `un-outil-editorial-tiers` dans `.codebuddy/mcp.json` pointe encore `~/DEV/un outil éditorial tiers/...` (hors mission, config auteur).
 - Index Code Explorer : catalogue **scopé au HOME**. Un HOME temporaire ne voit pas les graphes du vrai `~/.codeexplorer` ; il faut `code-explorer analyze` sous ce HOME. Le clone entier n'est pas indexé ici.
 - `pdfcommander` / `cowork-pilot` du robot non relancés (ports robot interdits).
 - `CODEBUDDY_DISABLE_MCP` reste `true` par défaut en `buddy -p` (documenté, inchangé).

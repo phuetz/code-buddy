@@ -2,7 +2,7 @@
 
 ## Périmètre
 
-- Dépôt : `/home/patrice/code-buddy`
+- Dépôt : `~/code-buddy`
 - Branche : `fix/ci-green-2026-08-30`
 - Commit du correctif : `d38d1a5a3d49c285ef1ab6f2f6411052265d6d52`
 - Aucun push effectué.
@@ -45,7 +45,7 @@ Commande ciblée principale : `npm test -- tests/unit/bash-tool.test.ts`
 > vitest run tests/unit/bash-tool.test.ts
 
 
- RUN  v4.1.9 /home/patrice/code-buddy
+ RUN  v4.1.9 ~/code-buddy
 
 
  Test Files  1 passed (1)
@@ -61,7 +61,7 @@ Suite Bash voisine trouvée par le grep : `npm test -- tests/tools/bash-tool.tes
 > vitest run tests/tools/bash-tool.test.ts
 
 
- RUN  v4.1.9 /home/patrice/code-buddy
+ RUN  v4.1.9 ~/code-buddy
 
 
  Test Files  1 passed (1)

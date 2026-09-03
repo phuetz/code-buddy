@@ -12,7 +12,7 @@
    - Action : création de `REPARATION-SENSE1.md` avec `apply_patch`.
    - Résultat : rapport initialisé.
 2. Faits mesurés lus intégralement avant inspection du clone.
-   - Commande : `cat /home/patrice/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md`.
+   - Commande : `cat ~/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md`.
    - Résultat : causes confirmées — confiance indue dans `aecActive`, bruit sombre au-dessus du seuil de mouvement, pertes de visage de 2 à 6 s et journal STT répété.
 3. Coordination lue intégralement par tranches, puis état du clone contrôlé.
    - Commandes : `cat docs/FABLE5-CODEX-COORDINATION.md`, lectures intégrales par tranches avec `dd`, `git status --short --branch`, `git branch --show-current`, `git log -1 --oneline`.
@@ -22,7 +22,7 @@
 
 ## Fichiers lus
 
-- `/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md` (source imposée, lecture seule hors clone)
+- `~/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md` (source imposée, lecture seule hors clone)
 - `docs/FABLE5-CODEX-COORDINATION.md`
 - `CLAUDE.md` (section sensorielle et variables voix/vision)
 - `src/sensory/voice-activity.ts`

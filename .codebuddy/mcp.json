@@ -49,19 +49,19 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"
+        "${PUBCOMMANDER_MCP_STDIO}"
       ],
       "env": {
         "LOG_LEVEL": "silent"
       },
-      "enabled": true,
+      "enabled": false,
       "description": "PubCommander editorial control: drafts, approval queue, scheduling dry-runs, guarded publication and analytics."
     },
     "pubcommander-editorial": {
       "name": "pubcommander-editorial",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "editorial" },
       "enabled": false,
       "description": "PubCommander templates, writing styles, content pillars, ideas and viral references."
@@ -70,7 +70,7 @@
       "name": "pubcommander-media",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "media" },
       "enabled": false,
       "description": "PubCommander generated-media inventory and YouTube transcription."
@@ -79,7 +79,7 @@
       "name": "pubcommander-autoblog",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "autoblog" },
       "enabled": false,
       "description": "PubCommander AutoBlog configuration visibility for book and website campaigns."
@@ -88,7 +88,7 @@
       "name": "pubcommander-analytics",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "analytics" },
       "enabled": false,
       "description": "PubCommander real stored publication performance by platform."
@@ -97,7 +97,7 @@
       "name": "pubcommander-automation",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "automation" },
       "enabled": false,
       "description": "PubCommander visual automations and execution history."

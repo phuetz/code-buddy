@@ -4,7 +4,7 @@ Rapport initialisé avant toute inspection du dépôt le 2026-09-03.
 
 ## Cadre et baseline
 
-- Clone : `/home/patrice/DEV/cb-succes-registry-2026-09-02`.
+- Clone : `~/DEV/cb-succes-registry-2026-09-02`.
 - Branche : `fix/gf2-regressions-fusions-2026-09-03`.
 - Base GF1 : `5323b00d2` ; réservation : `48a0f4889`.
 - Temporaires de test confinés sous `node_modules/.gf2/{home,tmp}`.
@@ -140,7 +140,7 @@ toutes les écritures temporaires restent physiquement sous `node_modules/.gf2/`
 ```text
 GF2_RUN_TMP=/proc/<pid-shell>/cwd/node_modules/.gf2/tmp
 HOME=node_modules/.gf2/home TMPDIR=$GF2_RUN_TMP GIT_CEILING_DIRECTORIES=$PWD \
-PLAYWRIGHT_BROWSERS_PATH=/home/patrice/.cache/ms-playwright \
+PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright \
 PATH=$PWD/node_modules/.gf2/bin:$PATH \
 npx vitest run tests/sensory tests/companion tests/fleet tests/commands tests/unit
 

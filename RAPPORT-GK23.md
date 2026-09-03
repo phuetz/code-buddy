@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-jumeaux-3-2026-09-02`
+Clone : `~/DEV/cb-repar-jumeaux-3-2026-09-02`
 Branche : `fix/gk23-rappels-reel-2026-09-03`
 HEAD au démarrage : `4659bf343` (`Merge GK16 (buddy backup en vrai, cas méchants) into codex/audit-systeme-nerveux-2026-09-01`)
 HEAD produit : lot documentaire (cette révision)

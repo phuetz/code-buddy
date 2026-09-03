@@ -2,7 +2,7 @@
 
 ## Suivi
 
-- Dépôt : `/home/patrice/DEV/cb-compact1-2026-09-03`
+- Dépôt : `~/DEV/cb-compact1-2026-09-03`
 - Branche annoncée : `fix/compact1-2026-09-03`
 - Statut : implémentation, vérifications, commits et documentation réalisés.
 
@@ -23,7 +23,7 @@
 - `tests/context/compact-hooks.test.ts` — 159 lignes après ajout.
 - `tests/hooks/pre-compact.test.ts` — 34 lignes après ajout.
 
-La référence `/home/patrice/DEV/lecture-comparative-2026-09-03/codex/codex-rs/core/src/compact.rs` et les docs Codex associées ont été consultées en lecture seule avec `rg` autour de `pre_compact`/`post_compact`. Aucun texte de plus de 10 lignes n’a été repris ; aucun `NOTICE` n’est donc nécessaire.
+La référence `~/DEV/lecture-comparative-2026-09-03/codex/codex-rs/core/src/compact.rs` et les docs Codex associées ont été consultées en lecture seule avec `rg` autour de `pre_compact`/`post_compact`. Aucun texte de plus de 10 lignes n’a été repris ; aucun `NOTICE` n’est donc nécessaire.
 
 ## Réservation et inventaire des chemins
 
@@ -105,7 +105,7 @@ Code de retour : `0`
 Sortie :
 
 ```text
- RUN v4.1.9 /home/patrice/DEV/cb-compact1-2026-09-03
+ RUN v4.1.9 ~/DEV/cb-compact1-2026-09-03
 
  Test Files  2 passed (2)
       Tests  7 passed (7)
@@ -122,7 +122,7 @@ Code de retour : `0`
 Sortie :
 
 ```text
- RUN v4.1.9 /home/patrice/DEV/cb-compact1-2026-09-03
+ RUN v4.1.9 ~/DEV/cb-compact1-2026-09-03
 
  Test Files  15 passed (15)
       Tests  500 passed (500)
@@ -137,7 +137,7 @@ Code de retour : `0`
 Sortie :
 
 ```text
- RUN v4.1.9 /home/patrice/DEV/cb-compact1-2026-09-03
+ RUN v4.1.9 ~/DEV/cb-compact1-2026-09-03
 
  Test Files  3 passed (3)
       Tests  117 passed (117)
@@ -150,13 +150,13 @@ Typecheck : `npx tsc --noEmit -p .` — code `0`, aucune sortie.
 ESLint ciblé sur les fichiers TypeScript modifiés : code `0`. Sortie :
 
 ```text
-/home/patrice/DEV/cb-compact1-2026-09-03/src/context/default-context-engine.ts
+~/DEV/cb-compact1-2026-09-03/src/context/default-context-engine.ts
   37:42  warning  'budget' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
 
 ✖ 1 problem (0 errors, 1 warning)
 ```
 
-`git diff --check` est vert (code `0`). Aucun `npm install`, appel réseau, service, push ou écriture dans `/home/patrice/code-buddy` n’a été effectué.
+`git diff --check` est vert (code `0`). Aucun `npm install`, appel réseau, service, push ou écriture dans `~/code-buddy` n’a été effectué.
 
 ## Implémentation et commits
 

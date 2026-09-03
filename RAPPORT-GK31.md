@@ -2,7 +2,7 @@
 
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-selfdescribe-2026-09-02`
+Clone : `~/DEV/cb-repar-selfdescribe-2026-09-02`
 Branche : `docs/gk31-readme-inconnu-2026-09-03`
 HEAD au départ : `af2ace177` (`Merge GK25 …`)
 Réservation : `107929b07`

@@ -1,7 +1,7 @@
 # RAPPORT GK4 — Video Studio en vrai : short 9:16 à 0 €
 
 Date : 2026-09-03
-Clone : `/home/patrice/DEV/cb-never-slash-2026-09-02`
+Clone : `~/DEV/cb-never-slash-2026-09-02`
 Branche visée : `fix/gk4-video-studio-reel-2026-09-03`
 Règles : aucun push ; aucune API payante ; aucun systemd ; aucune écriture hors clone / `~/.codebuddy` (HOME temporaire dans le clone) ; original `~/code-buddy` interdit ; pas de `DISPLAY=:10` ; ports libres seulement.
 
@@ -35,7 +35,7 @@ GK4a a produit le short et s’est arrêté à « (à coller) » en § 4.3. GK4b
 
 HEAD de départ : `3fcf5a97d docs(voice): consigner les preuves DARK3`
 
-Lanceur PATH `buddy` (`~/.local/bin/buddy`) → `/home/patrice/code-buddy` **interdit**. Invocation : `./node_modules/.bin/tsx src/index.ts` depuis le clone.
+Lanceur PATH `buddy` (`~/.local/bin/buddy`) → `~/code-buddy` **interdit**. Invocation : `./node_modules/.bin/tsx src/index.ts` depuis le clone.
 
 `package-lock.json` : GK4a avait changé `license` MIT → BUSL-1.1 (écho de `package.json` après `npm install`). **Restauré** — inutile au Video Studio.
 
@@ -63,7 +63,7 @@ env -u DISPLAY -u GROK_API_KEY -u OPENAI_API_KEY -u ANTHROPIC_API_KEY \
   OLLAMA_MODEL=qwen3.8:27b \
   CODEBUDDY_TTS_VOICE="$ROOT/_qa/gk4/voices/fr_FR-siwis-medium.onnx" \
   CODEBUDDY_TTS_ENGINE=piper \
-  CODEBUDDY_CHROMIUM_PATH=/home/patrice/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome \
+  CODEBUDDY_CHROMIUM_PATH=~/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome \
   LOG_LEVEL=info \
   ./node_modules/.bin/tsx src/index.ts film from-prompt \
     "Pourquoi un robot compagnon doit se taire la nuit" \

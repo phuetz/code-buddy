@@ -2,7 +2,7 @@
 
 **Date** : 3 septembre 2026  
 **Auteur** : Gemini (Antigravity)  
-**Dépôt** : `/home/patrice/DEV/cb-succes-sensory-2026-09-02`  
+**Dépôt** : `~/DEV/cb-succes-sensory-2026-09-02`
 **Branche** : `revue/sense6-activation-2026-09-03`  
 **Commit des tests rouges** : `8bfbc78b9` (`test(sensory): prouver les 7 trous d'interaction SENSE6 par des tests rouges`)  
 **Typecheck / Lint** : Vert (0 erreur, `npm run typecheck` code 0, eslint code 0)  

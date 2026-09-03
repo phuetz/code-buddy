@@ -3,7 +3,7 @@
 ## Cadre
 
 - Date de début : 2026-09-03
-- Clone autorisé : `/home/patrice/DEV/cb-verif-voix-2026-09-02`
+- Clone autorisé : `~/DEV/cb-verif-voix-2026-09-02`
 - Branche attendue : `fix/conv3-reponse-courte-2026-09-03`
 - Objectif : ajouter, sur opt-in `CODEBUDDY_SENSORY_SHORT_FIRST=true`, une première phrase utile immédiatement audible, puis une suite interrompable et bornée.
 - Interdits respectés : aucun accès au dépôt original, aucun push, aucune API payante, aucun service système touché, aucune écriture hors du clone ou dans `~/.codebuddy`.

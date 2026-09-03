@@ -19,10 +19,10 @@ const comfyUrl =
   process.env.QWEN_GHOST_COMFY_URL ?? 'http://127.0.0.1:8189';
 const sourceRoot =
   process.env.QWEN_GHOST_SOURCE ??
-  '/home/patrice/Videos/personas/garde-robe-reparee/final';
+  `${process.env.HOME}/Videos/personas/garde-robe-reparee/final`;
 const outputRoot =
   process.env.QWEN_GHOST_OUTPUT ??
-  '/home/patrice/Videos/personas/garde-robe-reparee/' +
+  `${process.env.HOME}/Videos/personas/garde-robe-reparee/` +
     'contours-fantomes-20260731/qwen';
 const workflowPath = new URL(
   './workflows/insert-qwen-edit.json',

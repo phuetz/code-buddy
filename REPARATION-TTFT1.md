@@ -4,7 +4,7 @@ Date : 2026-09-03
 
 ## Contraintes appliquées
 
-- Dépôt de travail : `/home/patrice/DEV/cb-ttft1-2026-09-03`.
+- Dépôt de travail : `~/DEV/cb-ttft1-2026-09-03`.
 - Aucun accès en écriture à `~/code-buddy`, aucun push, aucune API payante.
 - Tout état Code Buddy éventuel sera écrit sous un `HOME` temporaire situé dans le clone.
 - Les sorties rouges seront consignées avant chaque correctif, puis les preuves vertes après correction.
@@ -16,7 +16,7 @@ Rapport créé avant toute inspection du code, conformément à la mission.
 ## Incident de confinement corrigé
 
 Le `node_modules` non suivi du clone est un lien symbolique vers
-`/home/patrice/code-buddy/node_modules`. Les premières commandes avaient placé
+`~/code-buddy/node_modules`. Les premières commandes avaient placé
 leur `HOME`/`TMPDIR` sous ce lien et ont donc créé uniquement
 `.ttft1-home/` et `.ttft1-tmp/` dans le `node_modules` de l’original. L’écart a
 été détecté avant le test CLI, inventorié, puis ces deux répertoires exactement

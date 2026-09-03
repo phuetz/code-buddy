@@ -5,10 +5,10 @@ Tu es **GPT-5.5** et tu implémentes une grande vague de composants additifs pou
 ## Modèle de travail
 - Tu travailles dans un **worktree git isolé** que tu crées toi-même depuis `main` :
   ```sh
-  cd /home/patrice/code-buddy
+  cd ~/code-buddy
   git worktree add -b feat/cowork-genspark-2 ../genspark2-wt main
   cd ../genspark2-wt
-  ln -s /home/patrice/code-buddy/cowork/node_modules cowork/node_modules   # si absent
+  ln -s ~/code-buddy/cowork/node_modules cowork/node_modules   # si absent
   ```
 - **UNE tranche = UN commit atomique.** Tu fais autant de tranches que possible, dans l'ordre, en committant chacune. Un batch partiel est acceptable (chaque tranche est indépendante).
 - Après CHAQUE tranche : `cd cowork && npx tsc --noEmit` doit rester à **0 erreur**. Si une tranche casse le typecheck, corrige-la avant de committer.
@@ -36,7 +36,7 @@ Tu es **GPT-5.5** et tu implémentes une grande vague de composants additifs pou
 
 ## Recette de typecheck (à lancer après chaque tranche)
 ```sh
-cd /home/patrice/genspark2-wt/cowork
+cd ~/genspark2-wt/cowork
 npx tsc --noEmit 2>&1 | grep -cE "error TS"   # doit afficher 0
 ```
 Pour les tests : `npx vitest run tests/<ton-test>.test.ts`.

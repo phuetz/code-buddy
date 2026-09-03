@@ -120,7 +120,7 @@ Tu n'as pas tort de sentir que « ça ne te comprend pas ». **Ce n'est pas dans
 - **Persona `lisa`** (`persona-state.json` : `companion` → `lisa`) → vraie personnalité tendre. *(n'impose pas de voix → garde ta voix Piper, pas de mutisme — vérifié)*
 - **Mode action ON, lecture seule** : `CODEBUDDY_SENSORY_SPEAK_ACT=true` + `_PERMISSION_MODE=plan`.
 - **Agent vocal = gpt-5.5** : `CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL=gpt-5.5` (route OAuth/Codex auto, $0). `_SPEAK_MODEL=qwen2.5:7b` reste pour le bavardage + le résumé parlé.
-- **Grounding dépôt** : `CODEBUDDY_SENSORY_SPEAK_CWD=/home/patrice/code-buddy` (l'agent lit tes vrais fichiers, en lecture seule).
+- **Grounding dépôt** : `CODEBUDDY_SENSORY_SPEAK_CWD=~/code-buddy` (l'agent lit tes vrais fichiers, en lecture seule).
 
 ### Code (compilé, typecheck OK, lint OK, 11 nouveaux tests verts)
 - **`src/sensory/hybrid-reply.ts`** (nouveau) — aiguillage : phatique → ligne chaleureuse instantanée ; bavardage/émotion → réponse Lisa rapide ; **vraie question/commande → tour d'agent fondé** (lit/cherche puis résume) *quand ACT on*. + **mémoire conversationnelle** (préambule de contexte) pour « et l'autre fichier ? ». Heuristique `isSubstantiveQuery` (gère la perte d'accents STT). Injectable, never-throws.

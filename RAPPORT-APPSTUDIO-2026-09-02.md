@@ -4,7 +4,7 @@ Date : 2 septembre 2026
 
 Branche : `appstudio-design`
 
-Production `/home/patrice/code-buddy` : non modifiée
+Production `~/code-buddy` : non modifiée
 
 Push : aucun
 

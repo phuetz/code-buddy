@@ -1,7 +1,7 @@
 # MISSION R16 — Réparation de l’import de skills
 
 Date : 2026-09-02 (Europe/Paris)
-Dépôt : `/home/patrice/DEV/cb-repar-skills-import-2026-09-02`
+Dépôt : `~/DEV/cb-repar-skills-import-2026-09-02`
 Branche : `fix/repar-skills-import-2026-09-02`
 
 ## Périmètre et garde-fous

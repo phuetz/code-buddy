@@ -4,7 +4,7 @@ LOG="$HOME/code-buddy/fix-research.log"
 cd "$HOME/code-buddy" || exit 1
 echo "=== [$(date +%H:%M)] début" >> "$LOG"
 
-codex exec -c sandbox_mode=danger-full-access "MISSION CORRECTIVE sur les facultés de RECHERCHE de Code Buddy (~/code-buddy). Contexte : ces briques vont servir à de la recherche biomédicale sur la maladie de Parkinson (le père de Patrice en est atteint) — la fiabilité prime sur tout. Lis d'abord le diagnostic : ~/DEV/claude-et-patrice/RECHERCHE-PARKINSON-CODE-BUDDY.md (partie 1 : audit du code réel, chemins exacts et causes racines).
+codex exec -c sandbox_mode=danger-full-access "MISSION CORRECTIVE sur les facultés de RECHERCHE de Code Buddy (~/code-buddy). Contexte : ces briques vont servir à de la recherche biomédicale sur la maladie de Parkinson (le père de Patrice en est atteint) — la fiabilité prime sur tout. Lis d'abord le diagnostic : ~/DEV/private-handover-repo/RECHERCHE-PARKINSON-CODE-BUDDY.md (partie 1 : audit du code réel, chemins exacts et causes racines).
 
 Trois défauts, par ordre de gravité :
 

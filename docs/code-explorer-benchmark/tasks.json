@@ -1,7 +1,7 @@
 {
   "$comment": "Benchmark tasks for measuring Code Explorer (gitnexus MCP) lift. Each task is a code-navigation/impact question an agent must answer about THIS codebase (code-buddy/src, which gitnexus has indexed). ground_truth is filled in after manual verification (grep + reading) so correctness can be judged independently of the graph itself. Keep tasks graph-favourable but realistic — things a developer actually asks.",
-  "target_repo": "/home/patrice/code-buddy",
-  "indexed_path": "/home/patrice/code-buddy/src",
+  "target_repo": "~/code-buddy",
+  "indexed_path": "~/code-buddy/src",
   "tasks": [
     {
       "id": "impact-executePlan",

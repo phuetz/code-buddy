@@ -5,7 +5,7 @@ Tu es **GPT-5.5 (Codex)**. Tu construis une grande vague de vues « **Mission Co
 Tu produis des **fichiers NEUFS**, props-driven, testés. **Tu ne câbles RIEN dans les god-files** — l'intégrateur (Fable) montera tout via ton manifeste.
 
 ## ⚠️ TU ES DÉJÀ DANS TON WORKTREE ISOLÉ
-Tu tournes dans `/home/patrice/agenticos-wt` sur la branche `feat/cowork-agentic-os`. **NE FAIS PAS `git worktree add`. NE CHANGE PAS DE BRANCHE. NE FAIS PAS `git checkout -b`.** Tu commits directement sur la branche courante. (Un autre agent travaille en parallèle dans un autre worktree — si tu changes de branche ou crées un worktree, tu provoques une course git.)
+Tu tournes dans `~/agenticos-wt` sur la branche `feat/cowork-agentic-os`. **NE FAIS PAS `git worktree add`. NE CHANGE PAS DE BRANCHE. NE FAIS PAS `git checkout -b`.** Tu commits directement sur la branche courante. (Un autre agent travaille en parallèle dans un autre worktree — si tu changes de branche ou crées un worktree, tu provoques une course git.)
 
 ## Modèle de travail
 - **UNE tranche = UN commit atomique.** Fais le maximum, dans l'ordre. Batch partiel OK.

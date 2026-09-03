@@ -22,7 +22,7 @@ et corrélation commit par commit entre chaque PR et les commits de `main`.
 | **#70** | companion — détresse aiguë (en fait : parapluie pipeline média) | 27 j | CONFLICTING (26 fichiers) | 6/8 rouges (10/08) | **À fermer** — remplacée | 0 h |
 | **#69** | Audit Fable 5 batch 2 (55 fixes) | 43 j | CONFLICTING (29 fichiers) | non exécutée | **À fermer** — remplacée par #106 + #120 ; résidu à porter **depuis les branches `codex/portage-*`**, pas depuis cette PR | 0 h pour fermer / **4–6 h** pour le lot résiduel |
 | **#68** | Audit Fable 5 batch 1 (26 fixes) | 43 j | CONFLICTING (24 fichiers) | non exécutée | **À fermer** — remplacée par #99 + #108 ; **2 correctifs de sécurité restent non portés** | 0 h pour fermer / **2–3 h** pour le lot sécurité résiduel |
-| **#40** | cowork-chat — parité gitnexus-rs (5 gaps) | **103 j** | CONFLICTING (7 fichiers) | rouge (mai, matrice Node 18) | **À fermer** — 4 gaps sur 5 sont sur `main` | 0 h pour fermer / ~1 h si le 5ᵉ gap est voulu |
+| **#40** | cowork-chat — parité code-explorer (5 gaps) | **103 j** | CONFLICTING (7 fichiers) | rouge (mai, matrice Node 18) | **À fermer** — 4 gaps sur 5 sont sur `main` | 0 h pour fermer / ~1 h si le 5ᵉ gap est voulu |
 
 **Répartition : 1 à merger · 1 à trancher par Patrice · 4 à fermer.**
 
@@ -273,9 +273,9 @@ depuis `53cc9b22` ou depuis `codex/portage-security-july-2026`, + arbitrage `isS
 
 ---
 
-## #40 — feat(cowork-chat) : parité avec le chat-ui de gitnexus-rs
+## #40 — feat(cowork-chat) : parité avec le chat-ui de code-explorer
 
-**Ce qu'elle apporte.** Cinq gaps UX du chat de Cowork face au chat-ui de gitnexus-rs :
+**Ce qu'elle apporte.** Cinq gaps UX du chat de Cowork face au chat-ui de code-explorer :
 (1) bouton *Regenerate* au survol des messages assistant, (2) textarea auto-grow 44→200 px,
 (3) `HealthBadge` permanent dans la Titlebar (poll `/health` avec backoff), (4) badges d'outils
 en tête du message + scroll vers le `ToolUseBlock`, (5) rendu Mermaid inline (import paresseux + DOMPurify).
@@ -294,7 +294,7 @@ Vérification fichier par fichier sur `origin/main` :
 | Gap | Sur `main` ? | Porté par |
 |---|---|---|
 | 1 · Regenerate | **oui** — `MessageCard.tsx:305-310` (`onRegenerate`, `data-testid=message-regenerate-*`) et `ChatView.tsx:947` (« P1.1 — Regenerate an assistant response ») | implémentation native de `main`, pas le hook `use-regenerate.ts` de la PR (absent) |
-| 2 · Textarea auto-grow | **oui** — `cowork/src/renderer/hooks/use-textarea-autogrow.ts` | **PR #105** `feat(cowork-chat): chat-ui parity with gitnexus-rs (rebased from PR #40)`, mergée le 22/08 |
+| 2 · Textarea auto-grow | **oui** — `cowork/src/renderer/hooks/use-textarea-autogrow.ts` | **PR #105** `feat(cowork-chat): chat-ui parity with code-explorer (rebased from PR #40)`, mergée le 22/08 |
 | 3 · HealthBadge | **oui** — `components/HealthBadge.tsx` + `hooks/use-backend-status.ts` | **PR #105** |
 | 4 · Badges d'outils inline | **non** — aucun `ToolBadgeStrip`/`toolBadge` sous `cowork/src` | — (`e7ecc73b feat(cowork): stream live tool output in the ToolUseBlock card` couvre une partie du besoin autrement) |
 | 5 · Mermaid inline | **oui** — `components/message/MermaidBlock.tsx` | `5bc5b296 feat(cowork): render mermaid diagrams inline in chat (ported from code-explorer)` |

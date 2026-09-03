@@ -1,7 +1,7 @@
 /**
  * Fleet tick handler — Phase (d).18 (Autonomous Fleet Protocol v0.1).
  *
- * Native TypeScript port of `claude-et-patrice/tools/heartbeat_tick.py`,
+ * Native TypeScript port of `private-handover-repo/tools/heartbeat_tick.py`,
  * which has been operational since 2026-05-02 (6+ successful cycles).
  * The port lets Code Buddy run the fleet protocol in-process — no
  * external Python script, no Task Scheduler, works on Linux. The
@@ -81,7 +81,7 @@ export interface ResolvedTickProvider {
 export type AutonomousLlmProvider = 'cloud' | 'auto' | PeerChatProviderId;
 
 export interface FleetTickOptions {
-  /** Absolute path to the claude-et-patrice repo (fleet bus). */
+  /** Absolute path to the private handover repository (fleet bus). */
   repoPath: string;
   /** Host identifier, e.g. `ministar/grok-cli`. */
   host: string;
@@ -300,7 +300,7 @@ export function buildTaskPrompt(host: string, task: FleetTask): string {
   const criteria =
     task.acceptanceCriteria.map((c) => `  - ${c}`).join('\n') || '  - (aucun)';
   return [
-    `Tu es Claude/${host} dans le fleet autonome (cf. claude-et-patrice/propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md).`,
+    `Tu es Claude/${host} dans le fleet autonome (cf. private-handover-repo/propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md).`,
     `Tu viens de claimer la tâche ${task.id} :`,
     '',
     `TITRE : ${task.title}`,

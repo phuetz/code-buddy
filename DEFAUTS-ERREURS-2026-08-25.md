@@ -30,7 +30,7 @@ figure est un défaut même si le comportement est correct.
 | `buddy backup verify <absent>` | `Backup file not found: <chemin résolu>` | Le chemin cherché est là. |
 | `buddy scrape` | `A URL is required unless --setup or --check is used.` | Dit quoi fournir. |
 | `buddy science` | `error: missing required argument 'goal'` | Nomme l'argument. |
-| `buddy changelog` hors git | `Ce dossier n’est pas un dépôt Git : /home/patrice` | Nomme le cwd. `src/commands/changelog.ts:123`. |
+| `buddy changelog` hors git | `Ce dossier n’est pas un dépôt Git : ~` | Nomme le cwd. `src/commands/changelog.ts:123`. |
 | `buddy vision-train` sans opt-in | Dit d'exporter `CODEBUDDY_VISION_TRAIN=true` et comment. | Actionnable. |
 
 `logger.getLevel()` est déjà exposé à côté de `setLevel` (`src/utils/logger.ts:180,554`).

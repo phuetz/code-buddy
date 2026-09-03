@@ -275,7 +275,7 @@ describe('HookManager', () => {
 
       // Should use os.homedir() as fallback (line 67 in source)
       expect(mockFs.existsSync).toHaveBeenCalled();
-      // The actual path will use os.homedir() which is mocked to return '/home/patrice'
+      // The actual path will use os.homedir() which is mocked to return '/home/user'
     });
 
     it('should use USERPROFILE when HOME is not set (Windows)', () => {

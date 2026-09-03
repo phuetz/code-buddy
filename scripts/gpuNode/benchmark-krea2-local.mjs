@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 const comfyUrl = process.env.KREA2_COMFY_URL ?? 'http://127.0.0.1:8189';
 const outputRoot =
   process.env.KREA2_BENCHMARK_OUT ??
-  '/home/patrice/Videos/personas/benchmark-krea2-local-2026-07-29';
+  `${process.env.HOME}/Videos/personas/benchmark-krea2-local-2026-07-29`;
 const workflowPath = new URL('./workflows/krea2-persona-edit.json', import.meta.url);
 
 const personas = [
@@ -25,7 +25,7 @@ const personas = [
     lora: 'ambre-v3-best.safetensors',
     aspectRatio: '16:9 (Widescreen)',
     reference:
-      '/home/patrice/Videos/personas/ambre-scenes/automne-composites/' +
+      `${process.env.HOME}/Videos/personas/ambre-scenes/automne-composites/` +
       'ambre-002-chalet-exterieur-flanelle.png',
   },
   {
@@ -33,7 +33,7 @@ const personas = [
     trigger: 'ohwx lisa',
     lora: 'lisa-v3-best.safetensors',
     aspectRatio: '9:16 (Portrait Widescreen)',
-    reference: '/home/patrice/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png',
+    reference: `${process.env.HOME}/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png`,
   },
 ];
 

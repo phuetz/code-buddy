@@ -50,7 +50,7 @@ Vérifié **en direct** via le serveur MCP `code-explorer` pendant cette étude 
 
 Le câblage côté Code Buddy (audit du code, avec `fichier:ligne`) :
 
-- **Config MCP** : `.codebuddy/mcp.json` → serveur `code-explorer` = binaire `~/DEV/gitnexus-rs/target/release/gitnexus mcp`, `enabled:true`. Double-nommage `code-explorer`/`gitnexus` toléré par regex (`src/codebuddy/tools.ts:398`).
+- **Config MCP** : `.codebuddy/mcp.json` → serveur `code-explorer` = binaire `~/DEV/code-explorer/target/release/gitnexus mcp`, `enabled:true`. Double-nommage `code-explorer`/`gitnexus` toléré par regex (`src/codebuddy/tools.ts:398`).
 - **Client réel** : `src/plugins/code-explorer/code-explorer-client.ts` (appelle `MCPManager.callTool` avec préfixe résolu dynamiquement, never-throws) + `CodeExplorerManager.ts` (cycle de vie process, stats).
 - **Tool natif LLM** : `code_explorer_ask` (déf. `src/codebuddy/tool-definitions/code-explorer-tools.ts:9-28`, adaptateur `src/tools/registry/code-explorer-tools.ts`, metadata `fleetSafe:true` `src/tools/metadata.ts:1459`).
 - **Steering** : `src/services/prompt-builder.ts:427-451` injecte `<code_explorer_priority>` **seulement si connecté** (dégradation propre sinon).

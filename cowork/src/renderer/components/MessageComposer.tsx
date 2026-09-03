@@ -73,7 +73,7 @@ export function MessageComposer(props: MessageComposerProps) {
   }, []);
 
   // Auto-grow the textarea between 44 and 200 px as the user types or
-  // pastes multi-line content. Mirrors the chat-ui gitnexus-rs ChatInput pattern.
+  // pastes multi-line content. Mirrors the chat-ui code-explorer ChatInput pattern.
   useTextareaAutogrow(props.textareaRef, props.prompt);
 
   return (

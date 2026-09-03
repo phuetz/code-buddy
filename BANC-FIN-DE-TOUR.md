@@ -1,7 +1,7 @@
 # Banc fin de tour — PILE-C / LiveKit v1-mini + Silero
 
 État initial — 2026-09-02, Europe/Paris
-Dépôt : `/home/patrice/DEV/cb-conv-pilec-2026-09-03`
+Dépôt : `~/DEV/cb-conv-pilec-2026-09-03`
 Branche : `feat/fin-de-tour-livekit-2026-09-03`
 Mission : banc local, français, sans appel payant et sans lecture audio réelle.
 
@@ -31,7 +31,7 @@ $ python3 --version
 Python 3.13.12
 
 $ python3 -m pip --version
-pip 26.0.1 from /home/patrice/miniforge3/lib/python3.13/site-packages/pip (python 3.13)
+pip 26.0.1 from ~/miniforge3/lib/python3.13/site-packages/pip (python 3.13)
 
 $ uname -srmo && nproc && lscpu | rg 'Model name|Architecture|CPU\(s\)|Thread|Core|MHz' | head -20
 Linux 6.17.0-1032-oem x86_64 GNU/Linux
@@ -80,11 +80,11 @@ plugin complète, mais il ne sera pas confondu avec l’ancien détecteur textue
 ## Recherche de cadrage relue
 
 La section 7, « pile C », de
-/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH2-ETAT-DE-L-ART-GROK.md
+~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH2-ETAT-DE-L-ART-GROK.md
 propose précisément LiveKit Agents local + Turn Detector v1-mini + Silero,
 avec exécution CPU, et signale comme risques la calibration, la latence et la
 licence des modèles. Le thème 2 et le mécanisme 1 de
-/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md
+~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md
 relient la prédiction de fin de tour aux pauses et à la prosodie (famille VAP)
 pour éviter de couper une intention avant sa reprise ; ce mécanisme motive la
 mesure pause intra-phrase, mais ne constitue pas une preuve de performance de
@@ -96,7 +96,7 @@ Toutes les écritures de l’installation et des poids seront redirigées dans l
 clone ; aucune lecture audio ni service systemd ne sera lancé.
 
 ```console
-$ cd /home/patrice/DEV/cb-conv-pilec-2026-09-03
+$ cd ~/DEV/cb-conv-pilec-2026-09-03
 $ python3 -m venv .venv-turn-2026-09-03
 $ PIP_NO_CACHE_DIR=1 .venv-turn-2026-09-03/bin/python -m pip install --upgrade pip
 $ mkdir -p .turn-bench-cache-2026-09-03 .turn-bench-artifacts-2026-09-03

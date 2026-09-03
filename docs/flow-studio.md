@@ -70,7 +70,7 @@ compte et ne publie rien automatiquement.
 Depuis le dépôt MySoulmate, préparer un seul Short en simulation :
 
 ```bash
-npx tsx /home/patrice/code-buddy/scripts/mysoulmate/export-google-flow-batch.ts \
+npx tsx ~/code-buddy/scripts/mysoulmate/export-google-flow-batch.ts \
   --model fast \
   --remaining-credits 25000 \
   --max-credits 100
@@ -114,8 +114,8 @@ ne consomme aucun crédit et ne publie rien.
 Le rendu LongCat commercial possède un preflight sans génération :
 
 ```bash
-npx tsx /home/patrice/code-buddy/scripts/mysoulmate/render-youtube-short-batch.ts \
-  --plan /home/patrice/DEV/MySoulmate/youtube-shorts-workspace/plan.json \
+npx tsx ~/code-buddy/scripts/mysoulmate/render-youtube-short-batch.ts \
+  --plan ~/DEV/MySoulmate/youtube-shorts-workspace/plan.json \
   --all --preflight
 ```
 

@@ -75,4 +75,4 @@ Browser plugin indisponible; repli Playwright local conformément à la skill fr
 
 ## Environnement de test
 
-Le worktree ne contenait pas `node_modules`. Un lien symbolique temporaire vers `/home/patrice/code-buddy/node_modules` a été utilisé pour les vérifications, puis retiré avant la passation; il ne fait partie d'aucun commit.
+Le worktree ne contenait pas `node_modules`. Un lien symbolique temporaire vers `~/code-buddy/node_modules` a été utilisé pour les vérifications, puis retiré avant la passation; il ne fait partie d'aucun commit.

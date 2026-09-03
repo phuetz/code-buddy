@@ -619,7 +619,7 @@ future roadmap idea.
 ### Bootstrap the hub on Ministar Linux (Ubuntu)
 
 ```bash
-# In /home/patrice/code-buddy
+# In ~/code-buddy
 export GOOGLE_API_KEY="AIza..."         # → cloud fallback when needed
 export OLLAMA_HOST="http://localhost:11434"   # → priority 1
 export CODEBUDDY_FLEET_HOSTNAME="ministar-ubuntu"
@@ -838,7 +838,7 @@ LLM (continuing with peer's answer in context): "gpuNode suggests …"
 >   Fleet clients disable hidden `CodeBuddyClient` fallbacks, and each durable saga step records
 >   a secret-redacted `attempts[]` provenance trail (peer/model/provider/run/timestamps).
 
-Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
+Fleet bus = the `private-handover-repo/.codebuddy/` repo on a shared
 Tailscale mesh. Each peer periodically:
 
 1. `git pull --rebase`
@@ -870,7 +870,7 @@ Configure via TOML `[autonomous_fleet]`:
 ```toml
 [autonomous_fleet]
 enabled = true
-repo_path = "/path/to/claude-et-patrice"
+repo_path = "/path/to/handover-repo"
 host = "ministar/grok-cli"
 interval_minutes = 30
 max_task_ms = 600000
@@ -880,7 +880,7 @@ llm_provider = "auto"         # cloud (default) | auto | ollama | grok | …
 
 Slash commands: `/fleet autonomous status` (preview resolved provider),
 `/fleet autonomous tick-now` (one-shot tick). The Python wrapper
-`claude-et-patrice/tools/heartbeat_tick.py` remains as the V0
+`private-handover-repo/tools/heartbeat_tick.py` remains as the V0
 reference — same protocol, same files.
 
 ### `peer.chat-stream` V1.1 (Phase d.19)
@@ -1498,5 +1498,5 @@ and saves the request+response artifact.
 - `src/fleet/peer-chat-client-factory.ts` — env-driven detection
 - `scripts/fleet-roundtrip-smoke.ts` — cross-host round-trip smoke test (this section)
 - `src/server/websocket/peer-rpc.ts` — registry + dispatcher
-- `claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md` —
+- `private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md` —
   comparative audit that informed two recent fixes

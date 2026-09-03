@@ -1,7 +1,7 @@
 /** Capture a clean screenshot of the assistant message bubble via clip rect. */
 import { CoworkPilot, CHATGPT_PROFILE } from './pilot-core.mjs';
 
-const OUT = '/home/patrice/code-buddy/docs/qa/code-buddy-studio/audit-2026-06-15';
+const OUT = `${process.env.HOME}/code-buddy/docs/qa/code-buddy-studio/audit-2026-06-15`;
 const pilot = new CoworkPilot({ log: () => {} });
 try {
   await pilot.launch();

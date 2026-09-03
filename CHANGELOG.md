@@ -293,7 +293,7 @@ once it reaches `1.0.0`.
 - **cli:** add `buddy cost` (aggregated token & cost dashboard), `buddy changelog` (release notes from Conventional Commits), and `buddy import` (rules & MCP server migration from Cursor/Cline/Copilot/Claude Code) (#104).
 - **cli:** add `buddy explain [path]` — one-shot repository explanation report (Markdown or self-contained HTML, `--depth quick|deep`), extracted from PR #70 (#107)
 - **ui:** read-only LSP navigation tools (`lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`) and ephemeral `@file` mentions with bounded project-root resolution (#103).
-- **cowork-chat:** chat-ui parity with gitnexus-rs (`HealthBadge`, backend status probe, `useTextareaAutogrow`) rebased from PR #40 (#105).
+- **cowork-chat:** chat-ui parity with code-explorer (`HealthBadge`, backend status probe, `useTextareaAutogrow`) rebased from PR #40 (#105).
 - **providers:** OmniRoute gateway, 24 free-tier providers catalog, live probes, and real numbers (#82).
 
 ### Fixed
@@ -513,7 +513,7 @@ once it reaches `1.0.0`.
 
 Post-1.0 work tracked in the V1.1 roadmap: OpenAPI spec (WS8-T2),
 GitNexus integration (WS2), central Policy Engine + PII lint (WS5). See
-`claude-et-patrice/propositions/` and the V1.x roadmap section of
+`private-handover-repo/propositions/` and the V1.x roadmap section of
 [`docs/fleet-guide.md`](docs/fleet-guide.md).
 
 ### Added — Multi-LLM registry: list, auto-failover & ensemble (2026-06-18)
@@ -1333,7 +1333,7 @@ shipped over the May 7-8 session, organised in three stacked branches.
 - **Phase (d).18 — Autonomous Fleet Protocol v0.1 (native TS port)**.
   `src/agent/autonomous/{fleet-task-types,fleet-tick-handler}.ts`
   ports the operational python wrapper
-  `claude-et-patrice/tools/heartbeat_tick.py` (proven over 6 cycles
+  `private-handover-repo/tools/heartbeat_tick.py` (proven over 6 cycles
   on 2026-05-02). Pull → FLEET_PAUSE check → pickTask (priority
   cascade, critical SKIPPED for autonomous) → atomic claim → in-process
   agent run → scope guard → worklog → mark completed → push.
@@ -1520,7 +1520,7 @@ existing infrastructure rather than inventing new modules.
 
 ### Audit shipped
 - **Claude Code subagent + plan mode audit**
-  (`claude-et-patrice/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`,
+  (`private-handover-repo/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`,
   268 lines) — 3rd iteration of the audit-doc pattern, this time with
   direct access to the Claude Code source (`D:\CascadeProjects\claude-code-source-code-main`).
   Audited 4 zones: plan mode workflow phasé (⚠️ partial), structured user
@@ -1693,7 +1693,7 @@ management ("très important"), and cross-CLI fleet alignment.
 
 ### Audit follow-ups closed
 Post-Gemini-CLI-source audit
-(`claude-et-patrice/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`):
+(`private-handover-repo/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`):
 - Reco #1 (mid-stream retry exponential backoff) — helper `cd653ab` +
   wirage `2a06864`
 - Reco #2 (streaming events visibility in sequential mode) — `7ec4bc0`
@@ -1853,7 +1853,7 @@ all touched files.
 
 The comparative audit Claude Code source vs Code Buddy
 SmartCompactionEngine is archived in
-[`claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md`](https://github.com/phuetz/claude-et-patrice).
+[`private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md`](https://github.com/private-handover-repo).
 3 actionable improvements identified — #3 and #1 shipped, #2 (preview
 mode before apply, M scope) deferred to `1.0.0` final.
 

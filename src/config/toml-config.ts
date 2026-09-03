@@ -440,7 +440,7 @@ export interface SessionsTomlConfig {
 
 /**
  * Enterprise modules configuration (Phase K — top #3 audit OpenClaw,
- * audit `claude-et-patrice/propositions/AUDIT-OPENCLAW-HERITAGE-2026-05-02.md`).
+ * audit `private-handover-repo/propositions/AUDIT-OPENCLAW-HERITAGE-2026-05-02.md`).
  *
  * `initializeNativeEngineModules()` in `src/openclaw/index.ts` instantiates
  * 6 enterprise modules. Audit (2026-05-02) revealed 5/6 of them have
@@ -514,7 +514,7 @@ export interface MultiAgentSystemConfig {
 /**
  * Autonomous Fleet Protocol v0.1 — Phase (d).18.
  * Native TypeScript port of the Python wrapper
- * `claude-et-patrice/tools/heartbeat_tick.py`. When `enabled=true`, Code
+ * `private-handover-repo/tools/heartbeat_tick.py`. When `enabled=true`, Code
  * Buddy schedules its own fleet ticks (independent of HeartbeatEngine):
  * pull repo, pick claimable task, claim atomically, run agent, append
  * worklog, mark completed. See AUTONOMOUS-FLEET-PROTOCOL-2026-05-02 v0.1.
@@ -522,7 +522,7 @@ export interface MultiAgentSystemConfig {
 export interface AutonomousFleetConfig {
   /** Whether the autonomous tick starts at boot (default: false). */
   enabled?: boolean;
-  /** Absolute path to the claude-et-patrice repo (the fleet bus). */
+  /** Absolute path to the private handover repository (the fleet bus). */
   repo_path?: string;
   /** Host identifier broadcast in claims, e.g. `ministar/grok-cli`. */
   host?: string;

@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-jumeaux-b-2026-09-02`
+Clone : `~/DEV/cb-repar-jumeaux-b-2026-09-02`
 Branche : `fix/gk21-web-test-reel-2026-09-03`
 HEAD au démarrage : `2cb4bb7b5`
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)
@@ -16,7 +16,7 @@ Rapport créé **avant toute inspection** du code `app_server` / `web_test` / `c
 
 - Aucun `git push` / `prune` / `reset --hard` / `rm -rf` / `git add -A` / `git commit -a`.
 - Aucune API payante. ComfyUI 8188/8189 non touché. Port 8000 (uvicorn, pas OmniParser) non appelé.
-- `PLAYWRIGHT_BROWSERS_PATH=/home/patrice/.cache/ms-playwright` (cache déjà présent, pas de téléchargement). Chromium headless Playwright, pas Brave.
+- `PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright` (cache déjà présent, pas de téléchargement). Chromium headless Playwright, pas Brave.
 - HOME = `_qa/gk21/home` dans le clone.
 
 ## Fichiers lus

@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
@@ -52,7 +53,7 @@ describe('GK21 real mini-app (app_server + web_test)', () => {
     process.env.HOME = gk21Home;
     // Reuse the already-installed Playwright cache; do not download, never Brave.
     if (!savedPlaywrightBrowsers) {
-      process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(savedHome || '/home/patrice', '.cache/ms-playwright');
+      process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(savedHome || os.homedir(), '.cache/ms-playwright');
     }
   });
 

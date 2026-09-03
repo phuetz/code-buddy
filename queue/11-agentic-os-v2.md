@@ -1,6 +1,6 @@
 # Vague — Agentic OS v2 : actions de contrôle interactives
 
-Lis d'abord **`/home/patrice/code-buddy/CODEX-CONVENTIONS.md`**. Ce brief rend le cockpit « Mission Control » (v1 déjà sur main) **interactif** : depuis les vues, on pilote le système (pas juste observer).
+Lis d'abord **`~/code-buddy/CODEX-CONVENTIONS.md`**. Ce brief rend le cockpit « Mission Control » (v1 déjà sur main) **interactif** : depuis les vues, on pilote le système (pas juste observer).
 
 **Zone (fichiers neufs)** : `cowork/src/renderer/components/os-actions/`, tests sous `cowork/tests/`.
 

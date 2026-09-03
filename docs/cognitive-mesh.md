@@ -59,7 +59,7 @@ facts + decisions + lessons + relationship memory (months/years)
 future sessions, models and robot versions
 ```
 
-This separation is the "octopus principle" captured in the `claude-et-patrice` project: intelligence without transmissible memory repeatedly rediscovers the same lessons. The goal is not to persist every internal thought. It is to preserve verified knowledge, decisions, preferences and useful experience with provenance, revision and forgetting policies, then retrieve them at the right time. Code Explorer supplies technical indexing; persistent memory and lessons supply personal/operational continuity; the cognitive workspace supplies the present moment.
+This separation is the "octopus principle" captured in the `the private handover repository` project: intelligence without transmissible memory repeatedly rediscovers the same lessons. The goal is not to persist every internal thought. It is to preserve verified knowledge, decisions, preferences and useful experience with provenance, revision and forgetting policies, then retrieve them at the right time. Code Explorer supplies technical indexing; persistent memory and lessons supply personal/operational continuity; the cognitive workspace supplies the present moment.
 
 ## Safety and scheduling invariants
 

@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6 (vérificateur, **pas** l'auteur des lanes)
-Clone : `/home/patrice/DEV/cb-verif1-2026-09-03`
+Clone : `~/DEV/cb-verif1-2026-09-03`
 Branche : `verif/verif1-mutation-2026-09-03`
 HEAD de départ : `6c6e43b58`
 HEAD rapport vide : `2bec67f01`

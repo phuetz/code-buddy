@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-gemini-2026-09-02`
+Clone : `~/DEV/cb-repar-gemini-2026-09-02`
 Branche : `fix/gk20-rules-reel-2026-09-03`
 HEAD au démarrage : `98b0a77e1`
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)

@@ -19,12 +19,12 @@ new file(s) only, typecheck-clean, one commit. When you finish, we do a review.
 
 ## Setup (isolated worktree, off `main`)
 ```sh
-cd /home/patrice/code-buddy
-git worktree add /home/patrice/genspark-wt -b feat/cowork-genspark main
-cd /home/patrice/genspark-wt
+cd ~/code-buddy
+git worktree add ~/genspark-wt -b feat/cowork-genspark main
+cd ~/genspark-wt
 # node_modules for typechecking — symlink the main checkout's; NEVER commit these:
-ln -s /home/patrice/code-buddy/cowork/node_modules cowork/node_modules
-ln -s /home/patrice/code-buddy/node_modules node_modules
+ln -s ~/code-buddy/cowork/node_modules cowork/node_modules
+ln -s ~/code-buddy/node_modules node_modules
 ```
 
 ## Conventions — copy the patterns in `cowork/src/renderer/components/GoalBanner.tsx`

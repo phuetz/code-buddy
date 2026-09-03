@@ -53,12 +53,12 @@ describe('ScaffoldService', () => {
   it('lands the project EXACTLY in targetDir even when vars.projectName differs', async () => {
     // Regression: the core engine builds `join(outputDir, projectName)`, so the
     // directory name must be basename(targetDir) — not vars.projectName — or the
-    // project lands in the wrong folder (/home/patrice/ws/app instead of the
-    // /home/patrice/ws/my-cool-app the user picked). The chosen name still drives
+    // project lands in the wrong folder (/home/user/ws/app instead of the
+    // /home/user/ws/my-cool-app the user picked). The chosen name still drives
     // interpolation (package.json name, README) via the variable.
     const generate = vi.fn().mockResolvedValue({
       success: true,
-      projectPath: '/home/patrice/ws/my-cool-app',
+      projectPath: '/home/user/ws/my-cool-app',
       filesCreated: ['package.json'],
     });
     mockedLoadCoreModule.mockResolvedValue({ getTemplateEngine: () => ({ generate }) });
@@ -66,7 +66,7 @@ describe('ScaffoldService', () => {
 
     await service.scaffoldProject({
       template: 'node-cli',
-      targetDir: '/home/patrice/ws/my-cool-app',
+      targetDir: '/home/user/ws/my-cool-app',
       vars: { projectName: 'app', description: 'Tool' },
     });
 
@@ -74,7 +74,7 @@ describe('ScaffoldService', () => {
       template: 'node-cli',
       // Directory name = basename(targetDir) so join(outputDir, projectName) === targetDir.
       projectName: 'my-cool-app',
-      outputDir: '/home/patrice/ws',
+      outputDir: '/home/user/ws',
       // Interpolation keeps the user's chosen name.
       variables: { projectName: 'app', description: 'Tool' },
     });

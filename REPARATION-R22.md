@@ -2,7 +2,7 @@
 
 ## Réservation
 
-- Dépôt : `/home/patrice/DEV/cb-repar-security-2026-09-02`
+- Dépôt : `~/DEV/cb-repar-security-2026-09-02`
 - Branche : `fix/repar-security-2026-09-02`
 - Propriétaire : Codex
 - Zone : `src/security/write-policy.ts`, `src/utils/confirmation-service.ts`, les tests ciblés `tests/security/` et `tests/utils/`, et ce rapport.
