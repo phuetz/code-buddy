@@ -6,7 +6,7 @@ Clone : `/home/patrice/DEV/cb-repar-server-2026-09-02`
 Branche : `fix/gk35-mcp-reel-2026-09-03`
 HEAD au départ : `1ecb8a07e` (`Merge IMG1/IMG2 (pilote Grok Imagine durci : arrêt au 403, en-têtes, jeton masqué) into codex/audit-systeme-nerveux-2026-09-01`)
 Réservation : `268fb2d23`
-HEAD produit : voir le dernier commit de ce rapport
+HEAD produit : `c5cfcf46b` (`docs(gk35): consigner MCP/Code Explorer en vrai et libérer le chantier`) — le hash de *ce* commit de HEAD suit en `docs(gk35): record product HEAD`.
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)
 Rapport créé **avant toute inspection** du code MCP / Code Explorer.
 Buddy invoqué depuis le clone : `_qa/gk35/buddy.sh` → `node_modules/tsx/dist/cli.mjs src/index.ts`
