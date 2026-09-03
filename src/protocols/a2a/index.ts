@@ -392,7 +392,7 @@ export class A2AAgentClient {
   }
 
   /** Score a spoke for a given skill (higher = better) */
-  private scoreSpokeForSkill(spokeName: string, skillId: string): number {
+  private scoreSpokeForSkill(spokeName: string, _skillId: string): number {
     const remote = this.remoteCards.get(spokeName);
     if (!remote) return 0;
 
