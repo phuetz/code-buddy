@@ -62,13 +62,26 @@ describe('speech-engine-config — single source of truth (no more companion/spe
   });
 
   it('selects faster-whisper when Parakeet cannot honour the requested language', () => {
-    expect(resolveSpeechTranscriptionPlan('parakeet', {
+    // French is inside Parakeet-TDT v3's 25 languages: the pin is honoured by the model itself
+    // (CONV4, 2026-09-03: 5/5 French fixtures exact at 179 ms). No fallback, no warning.
+    expect(resolveSpeechTranscriptionPlan('sherpa-rs', {
       CODEBUDDY_SPEECH_LANG: 'fr',
+      CODEBUDDY_SPEECH_FALLBACK: 'true',
+    })).toEqual({
+      requestedEngine: 'sherpa-rs',
+      effectiveEngine: 'sherpa-rs',
+      language: 'fr',
+      languagePinned: true,
+      fallbackEnabled: true,
+    });
+    // A pin outside that set (Japanese) still hands the turn to faster-whisper.
+    expect(resolveSpeechTranscriptionPlan('parakeet', {
+      CODEBUDDY_SPEECH_LANG: 'ja',
       CODEBUDDY_SPEECH_FALLBACK: 'true',
     })).toEqual({
       requestedEngine: 'parakeet',
       effectiveEngine: 'faster-whisper',
-      language: 'fr',
+      language: 'ja',
       languagePinned: true,
       fallbackEnabled: true,
       fallbackReason: 'parakeet-language-pin-unsupported',
@@ -77,7 +90,7 @@ describe('speech-engine-config — single source of truth (no more companion/spe
       CODEBUDDY_SPEECH_FALLBACK: 'true',
     }).effectiveEngine).toBe('parakeet');
     expect(resolveSpeechTranscriptionPlan('parakeet', {
-      CODEBUDDY_SPEECH_LANG: 'fr',
+      CODEBUDDY_SPEECH_LANG: 'ja',
       CODEBUDDY_SPEECH_FALLBACK: 'false',
     })).toMatchObject({
       effectiveEngine: 'parakeet',

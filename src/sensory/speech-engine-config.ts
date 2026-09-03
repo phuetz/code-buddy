@@ -57,6 +57,22 @@ export function resolveSpeechLanguage(env: NodeJS.ProcessEnv = process.env): str
   );
 }
 
+/**
+ * Languages Parakeet-TDT 0.6B v3 decodes natively (NVIDIA model card, 25 languages). A pin
+ * inside this set is honoured by the multilingual model itself — measured on the robot
+ * (CONV4, 2026-09-03): five French fixtures transcribed exactly, 179 ms median versus
+ * 1 216 ms for faster-whisper `small`. Only a pin OUTSIDE this set needs the fallback.
+ */
+export const PARAKEET_TDT_V3_LANGUAGES: ReadonlySet<string> = new Set([
+  'bg', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'de', 'el', 'hu', 'it', 'lv', 'lt',
+  'mt', 'pl', 'pt', 'ro', 'sk', 'sl', 'es', 'sv', 'ru', 'uk',
+]);
+
+export function parakeetSupportsLanguage(language: string): boolean {
+  const base = language.trim().toLowerCase().split(/[-_]/)[0] ?? '';
+  return PARAKEET_TDT_V3_LANGUAGES.has(base);
+}
+
 function languageIsPinned(env: NodeJS.ProcessEnv): boolean {
   const configured = env.CODEBUDDY_SPEECH_LANG?.trim().toLowerCase()
     || env.CODEBUDDY_COMPANION_LANGUAGE?.trim().toLowerCase();
@@ -66,8 +82,9 @@ function languageIsPinned(env: NodeJS.ProcessEnv): boolean {
 /**
  * Resolve the decoder that can actually honour an explicit language pin.
  * Parakeet-TDT v3 is multilingual and auto-detects language, but the sherpa-rs
- * transducer API has no per-request language field. When the operator explicitly
- * pins a language and fallback is allowed, faster-whisper owns that turn.
+ * transducer API has no per-request language field. A pin the multilingual model covers
+ * (see PARAKEET_TDT_V3_LANGUAGES) stays on Parakeet; when the operator pins a language
+ * outside that set and fallback is allowed, faster-whisper owns that turn.
  */
 export function resolveSpeechTranscriptionPlan(
   requestedEngine = resolveSpeechRecognitionEngine(),
@@ -76,7 +93,7 @@ export function resolveSpeechTranscriptionPlan(
   const language = resolveSpeechLanguage(env);
   const languagePinned = languageIsPinned(env);
   const fallbackEnabled = env.CODEBUDDY_SPEECH_FALLBACK?.trim().toLowerCase() !== 'false';
-  if (engineUsesParakeetModel(requestedEngine) && languagePinned) {
+  if (engineUsesParakeetModel(requestedEngine) && languagePinned && !parakeetSupportsLanguage(language)) {
     if (fallbackEnabled) {
       return {
         requestedEngine,
