@@ -858,21 +858,25 @@ export const CAMERA_ANALYZE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "camera_analyze",
-    description: "Capture one local webcam frame and return a natural-language description from a local multimodal vision model (default Ollama gemma4:12b). Use this to actually SEE what the camera shows, not just save a PNG. Requires ffmpeg, OS camera permission, and a reachable local vision model.",
+    description: "Describe a still image with a local multimodal vision model (default Ollama moondream, or CODEBUDDY_VISION_MODEL). Pass image_path to analyze an existing file without the webcam. Omitting image_path captures one local webcam frame. Dark frames (mean luma < 12) are refused.",
     parameters: {
       type: "object",
       properties: {
+        image_path: {
+          type: "string",
+          description: "Existing still image to describe (no webcam). JPEG/PNG/WebP."
+        },
         prompt: {
           type: "string",
           description: "What to ask the vision model about the frame. Default \"Describe what you see.\""
         },
         device: {
           type: "string",
-          description: "Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0."
+          description: "Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0. Ignored when image_path is set."
         },
         model: {
           type: "string",
-          description: "Local multimodal model id served by Ollama. Default gemma4:12b."
+          description: "Local multimodal model id served by Ollama. Default moondream (or CODEBUDDY_VISION_MODEL). gemma* is text-only and will invent."
         },
         include_ocr: {
           type: "boolean",

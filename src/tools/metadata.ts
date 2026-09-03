@@ -878,9 +878,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'camera_analyze',
     category: 'media',
-    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see'],
+    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see', 'image_path'],
     priority: 7,
-    description: 'Capture a local webcam frame and describe it with a local multimodal vision model'
+    description: 'Describe a still image (image_path) or a webcam frame with a local VLM (default moondream); refuses dark frames'
   },
   {
     name: 'audio',
