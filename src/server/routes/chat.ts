@@ -372,9 +372,13 @@ router.post(
           callId: tc.id,
           success: tc.success ?? true,
           output: tc.output,
+          data: tc.data,
           error: tc.error,
           executionTime: tc.executionTime || 0,
         })),
+        ...(result.data !== undefined ? { data: result.data } : {}),
+        ...(result.widgetHtml ? { widgetHtml: result.widgetHtml } : {}),
+        ...(result.canvasId ? { canvasId: result.canvasId, canvasPath: result.canvasPath } : {}),
         sessionId: body.sessionId,
         latency: Date.now() - startTime,
       };

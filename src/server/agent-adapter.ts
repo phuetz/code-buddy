@@ -61,9 +61,14 @@ export interface ServerAgentCompletion {
     id: string;
     success?: boolean;
     output?: string;
+    data?: unknown;
     error?: string;
     executionTime?: number;
   }>;
+  data?: unknown;
+  widgetHtml?: string;
+  canvasId?: string;
+  canvasPath?: string;
 }
 
 export interface ServerAgentRequestOptions {
@@ -198,14 +203,26 @@ export async function runAgentCompletion(
         id: entry.toolCall!.id,
         success: entry.toolResult?.success,
         output: entry.toolResult?.output,
+        data: entry.toolResult?.data,
         error: entry.toolResult?.error,
         executionTime: 0,
       }));
+
+    const payloads = entries
+      .filter((entry) => entry.type === 'tool_result')
+      .map((entry) => entry.toolResult ?? { output: entry.content });
+    const { publishAnswerWidget } = await import('../widgets/canvas-publish.js');
+    const published = await publishAnswerWidget(content, payloads);
+    const data = published.candidate?.data
+      ?? payloads.map((payload) => payload.data).find((value) => value !== undefined);
 
     return {
       content,
       finishReason: 'stop',
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      ...(data !== undefined ? { data } : {}),
+      ...(published.widgetHtml ? { widgetHtml: published.widgetHtml } : {}),
+      ...(published.canvasId ? { canvasId: published.canvasId, canvasPath: published.canvasPath ?? undefined } : {}),
     };
   });
 }
