@@ -197,66 +197,29 @@ Do NOT implement yet. Plan only.`;
 
   // ── buddy dev pr ───────────────────────────────────────────────
   dev
-    .command('pr <objective>')
-    .description('Run a workflow then generate a PR summary')
-    .option('-t, --type <type>', 'workflow type', 'add-feature')
+    .command('pr [objective]')
+    .description('Print a PR title/body and create a PR (fail-closed without gh; local remotes are pushed)')
     .option('-y, --yes', 'skip confirmation prompts', false)
-    .action(async (objective: string, opts: { type: string; yes: boolean }) => {
-      const { runWorkflow } = await import('./workflows.js');
-      type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
+    .action(async (objective: string | undefined) => {
+      const { buildPrTitleAndBody, attemptPullRequest } = await import('./golden-path.js');
+      const { title, body } = buildPrTitleAndBody(process.cwd(), objective);
+      console.log('\n── PR ──────────────────────────────────');
+      console.log(`Title: ${title}`);
+      console.log('');
+      console.log(body);
+      console.log('');
 
-      const validTypes: WFType[] = ['add-feature', 'fix-tests', 'refactor', 'security-audit'];
-      const workflowType = validTypes.includes(opts.type as WFType)
-        ? (opts.type as WFType)
-        : 'add-feature';
-
-      const agent = await createAgent();
-      await agent.systemPromptReady;
-
-      try {
-        const result = await runWorkflow(workflowType, objective, agent, {
-          nonInteractive: opts.yes,
-          tags: ['pr'],
-        });
-
-        if (result.status === 'completed') {
-          console.log('\n── PR Summary ──────────────────────────');
-          const prPrompt = `Based on what was just implemented, write a GitHub Pull Request description:
-- Title (max 70 chars)
-- Summary (bullet points of what changed)
-- Test plan (what to verify)
-Keep it concise and professional.`;
-
-          for await (const chunk of agent.processUserMessageStream(prPrompt)) {
-            if (chunk.type === 'content' && chunk.content) {
-              process.stdout.write(chunk.content);
-            }
-          }
-          console.log('');
-
-          // Generate full PR description using LLM
-          try {
-            const { GitHubIntegration } = await import('../../integrations/github-integration.js');
-            const gh = new GitHubIntegration();
-            const prDescription = await gh.generatePRDescriptionWithLLM(
-              undefined,
-              async (prompt: string) => {
-                let response = '';
-                for await (const chunk of agent.processUserMessageStream(prompt)) {
-                  if (chunk.type === 'content' && chunk.content) response += chunk.content;
-                }
-                return response;
-              },
-            );
-            console.log('\n── Full PR Description ─────────────────');
-            console.log(prDescription);
-          } catch {
-            // Non-critical: PR summary was already printed above
-          }
-        }
-      } finally {
-        await disposePlanResources(agent);
+      const attempt = attemptPullRequest(process.cwd(), title, body);
+      if (attempt.created) {
+        console.log(`PR created: ${attempt.url}`);
+        return;
       }
+      if (attempt.pushed) {
+        console.log('Pushed to local origin (no GitHub PR: gh is not authenticated).');
+        return;
+      }
+      console.error(`PR not created: ${attempt.error || 'gh not authenticated'}`);
+      process.exitCode = 1;
     });
 
   // ── buddy dev fix-ci ───────────────────────────────────────────

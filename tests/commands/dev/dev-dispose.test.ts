@@ -25,7 +25,8 @@ describe('dev plan resource disposal', () => {
     expect(runBlock).toContain('conventionalCommitNamedFiles');
     expect(runBlock).toContain('buildConventionalCommitMessage');
     expect(runBlock).toContain('disposePlanResources(agent)');
-    expect(prBlock).toContain('disposePlanResources(agent)');
+    expect(prBlock).toContain('attemptPullRequest');
+    expect(prBlock).toContain('buildPrTitleAndBody');
   });
 
   it('uses the same cleanup for fix-ci and explain', () => {
