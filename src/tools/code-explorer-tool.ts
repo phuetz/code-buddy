@@ -105,6 +105,14 @@ export class CodeExplorerTool {
         if (answer && !/Multiple repos indexed/i.test(answer)) {
           return { likelyFiles: [], dependentSymbols: [], testsToWatch: [], notes: answer };
         }
+        return {
+          likelyFiles: [],
+          dependentSymbols: [],
+          testsToWatch: [],
+          notes: answer
+            ? answer
+            : `Code Explorer is connected but returned no graph hits${resolvedRepo ? ` for repo ${resolvedRepo}` : ''}.`,
+        };
       }
     } catch {
       /* MCP path unavailable — fall through to the HTTP endpoint */
