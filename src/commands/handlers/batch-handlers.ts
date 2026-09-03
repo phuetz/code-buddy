@@ -98,7 +98,9 @@ function labelFromInstruction(instruction: string, index: number, files: string[
  * Returns null when the goal is not a list of at least two items.
  */
 export function parseNumberedBatchUnits(goal: string): BatchUnit[] | null {
-  const parts = goal.split(/(?:^|\n|\s)(?=\d+[.)]\s+)/);
+  // Only split at line starts. Splitting on any `N)` would break
+  // `add(2, 3) returns 5` into a fake unit named "returns".
+  const parts = goal.split(/(?:^|\n)(?=\s*\d+[.)]\s+)/);
   const instructions: string[] = [];
   for (const part of parts) {
     const match = part.trim().match(/^\d+[.)]\s+([\s\S]+)/);

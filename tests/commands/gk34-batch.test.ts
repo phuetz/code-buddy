@@ -40,6 +40,17 @@ describe('GK34 /batch decomposition', () => {
     expect(plan.units[0]?.label).not.toBe('main');
   });
 
+  it('does not treat add(2, 3) returns as a numbered item', async () => {
+    const goal = [
+      '1. Fix src/add.js so add(2, 3) returns 5. Only touch src/add.js.',
+      '2. Write README.md. Only touch README.md.',
+    ].join('\n');
+    const numbered = parseNumberedBatchUnits(goal);
+    expect(numbered).toHaveLength(2);
+    expect(numbered!.map((u) => u.label)).toEqual(['add', 'README']);
+    expect(numbered![0]?.instruction).toContain('add(2, 3) returns 5');
+  });
+
   it('keeps the single-unit fallback for an unstructured goal without chatFn', async () => {
     const plan = await decomposeBatchGoal('add logging');
     expect(plan.units).toHaveLength(1);
