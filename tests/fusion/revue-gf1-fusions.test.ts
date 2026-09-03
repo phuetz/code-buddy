@@ -244,7 +244,7 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
   describe('3. Régression GK28 : CodeBuddyAgent.saveCurrentSession() et inferCostProvider', () => {
     it('inferCostProvider ne doit pas lever TypeError si model est undefined ou vide', () => {
       // TROU PROUVÉ : une valeur runtime absente fait model.trim() -> TypeError.
-      expect(() => inferCostProvider(undefined as unknown as string)).not.toThrow();
+      expect(() => inferCostProvider(undefined)).not.toThrow();
     });
 
     it('saveCurrentSession ne doit pas lever TypeError si costTracker n a pas getSessionUsage (mocks de test unitaires)', () => {

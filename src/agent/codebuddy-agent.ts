@@ -1649,9 +1649,16 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   override saveCurrentSession(): Promise<void> | void {
     const report = this.costTracker.getReport();
-    const model = this.getCurrentModel();
+    const sessionTokens = report.sessionTokens ?? { input: 0, output: 0 };
+    const currentModel = this.getCurrentModel();
+    const model = typeof currentModel === 'string' && currentModel.trim()
+      ? currentModel
+      : 'unknown';
     const provider = process.env.CODEBUDDY_PROVIDER?.trim() || inferCostProvider(model);
-    const turns = this.costTracker.getSessionUsage().map((row) => ({
+    const sessionUsage = typeof this.costTracker.getSessionUsage === 'function'
+      ? this.costTracker.getSessionUsage()
+      : [];
+    const turns = sessionUsage.map((row) => ({
       timestamp: row.timestamp.toISOString(),
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
@@ -1662,8 +1669,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory(), {
       provider,
       model,
-      inputTokens: report.sessionTokens.input,
-      outputTokens: report.sessionTokens.output,
+      inputTokens: sessionTokens.input,
+      outputTokens: sessionTokens.output,
       totalCost: this.getSessionCost(),
       turns,
     });

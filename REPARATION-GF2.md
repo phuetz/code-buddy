@@ -79,6 +79,29 @@ Le voisin `tests/server/peer-tool-bridge.test.ts` utilisait `hello.txt`. Sous le
 donc à tort un fichier volontairement ignoré. La fixture est devenue `hello.md`, avec les mêmes
 octets et les mêmes assertions de lecture/recherche.
 
+## Régression 4 — GK28 × cœur Agent, sauvegarde de session
+
+GK28 doit persister le modèle, le fournisseur, les totaux et chaque tour de coût. Le cœur Agent
+doit rester tolérant aux anciens modèles absents et aux doubles de test partiels. Les données
+réelles sont conservées ; seuls les champs absents replient vers `unknown` ou une liste vide.
+
+```text
+ROUGE — baseline GF1 :
+- inferCostProvider(undefined) → TypeError sur trim ;
+- costTracker sans getSessionUsage → TypeError ;
+- getCurrentModel() undefined → TypeError.
+Suites officielles : codebuddy-agent et grok-agent rouges sur saveCurrentSession.
+
+Premier vert GF1 : 3/3. Le voisin `codebuddy-agent` a ensuite révélé un quatrième champ absent
+dans son double historique (`report.sessionTokens`) ; le même repli zéro borné lui est appliqué.
+Au rejeu suivant, le test passait mais Vitest signalait un rejet non géré : son ancien
+`SessionStore` factice ne possède pas `attachUsageToCurrentSession`. `SessionFacade` centralise
+désormais l'attachement optionnel dans une seule garde, sans omettre les stores modernes.
+
+VERT — GF1 GK28 : 3/3 ; `codebuddy-agent`, `grok-agent`, `cost-report`, commande cost et
+`session-store` : 5 fichiers, 170/170, aucun rejet non géré.
+```
+
 ## Vérifications finales
 
 À compléter.
