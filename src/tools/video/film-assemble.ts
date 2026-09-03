@@ -652,6 +652,12 @@ export function buildAudioMixGraph(
   }
 ): { segments: string[]; finalLabel: string } {
   const segments: string[] = [];
+  const D = round2(Math.max(opts.totalDuration, 0.1));
+  // acrossfade does not always advertise an output duration. amix duration=first
+  // then ends with the music bed and truncates the program — measured on GK4 as
+  // 11.43s video / 10.83s audio (one 0.6s transition missing). Pin both sides
+  // to the film length and keep the longest input.
+  const mix = `amix=inputs=2:duration=longest:dropout_transition=0:normalize=0`;
 
   // Fold the voiceover into the "program" audio (clip audio + narration).
   let progLabel = baseLabel;
@@ -660,7 +666,7 @@ export function buildAudioMixGraph(
       `[${opts.voiceRef}]aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
         `asetpts=PTS-STARTPTS[vo]`
     );
-    segments.push(`[${progLabel}][vo]amix=inputs=2:duration=first:normalize=0[prog]`);
+    segments.push(`[${progLabel}][vo]${mix}[prog]`);
     progLabel = 'prog';
   }
 
@@ -668,9 +674,14 @@ export function buildAudioMixGraph(
     return { segments, finalLabel: progLabel };
   }
 
+  segments.push(
+    `[${progLabel}]apad=whole_dur=${D},atrim=0:${D},asetpts=PTS-STARTPTS[prog_pad]`
+  );
+  progLabel = 'prog_pad';
+
   // Bound the (possibly looped) music to the film length, then set its volume.
   segments.push(
-    `[${opts.musicRef}]atrim=0:${round2(opts.totalDuration)},` +
+    `[${opts.musicRef}]atrim=0:${D},apad=whole_dur=${D},` +
       `aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
       `volume=${opts.musicVolume}[music0]`
   );
@@ -681,9 +692,9 @@ export function buildAudioMixGraph(
     segments.push(
       `[music0][prog_b]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[music_d]`
     );
-    segments.push(`[prog_a][music_d]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[prog_a][music_d]${mix}[aout]`);
   } else {
-    segments.push(`[${progLabel}][music0]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[${progLabel}][music0]${mix}[aout]`);
   }
   return { segments, finalLabel: 'aout' };
 }

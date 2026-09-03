@@ -392,14 +392,34 @@ describe('buildAudioMixGraph', () => {
       totalDuration: 12.5,
     });
     expect(finalLabel).toBe('aout');
-    expect(segments[0]).toBe(
-      '[4:a]atrim=0:12.5,aformat=sample_rates=48000:channel_layouts=stereo,volume=0.3[music0]'
-    );
-    expect(segments).toContain('[filmA]asplit=2[prog_a][prog_b]');
+    expect(segments.join(';')).toContain('atrim=0:12.5');
+    expect(segments.join(';')).toContain('volume=0.3');
+    expect(segments).toContain('[prog_pad]asplit=2[prog_a][prog_b]');
     expect(segments).toContain(
       '[music0][prog_b]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[music_d]'
     );
-    expect(segments).toContain('[prog_a][music_d]amix=inputs=2:duration=first:normalize=0[aout]');
+    expect(segments.join(';')).toContain(
+      'amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]'
+    );
+  });
+
+  // GK4: mixing a music bed with amix duration=first truncated the audio by one
+  // transition (11.43s video / 10.83s audio). acrossfade does not always advertise
+  // a duration, so amix must pad the program and keep the longest input.
+  it('pads program audio and mixes music with duration=longest so the bed cannot truncate the film', () => {
+    const { segments, finalLabel } = buildAudioMixGraph('filmA', {
+      musicRef: '4:a',
+      musicVolume: 0.16,
+      ducking: false,
+      totalDuration: 11.45,
+    });
+    expect(finalLabel).toBe('aout');
+    const graph = segments.join(';');
+    expect(graph).toContain('[filmA]apad=whole_dur=11.45,atrim=0:11.45,asetpts=PTS-STARTPTS[prog_pad]');
+    expect(graph).toContain('apad=whole_dur=11.45');
+    expect(graph).toContain('duration=longest');
+    expect(graph).toContain('dropout_transition=0');
+    expect(graph).not.toMatch(/duration=first/);
   });
 
   it('folds a voiceover into the program before mixing music', () => {
@@ -411,8 +431,12 @@ describe('buildAudioMixGraph', () => {
       totalDuration: 8,
     });
     expect(segments[0]).toContain('[5:a]aformat=');
-    expect(segments).toContain('[filmA][vo]amix=inputs=2:duration=first:normalize=0[prog]');
-    expect(segments).toContain('[prog][music0]amix=inputs=2:duration=first:normalize=0[aout]');
+    expect(segments.join(';')).toContain(
+      '[filmA][vo]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[prog]'
+    );
+    expect(segments.join(';')).toContain(
+      'amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]'
+    );
   });
 });
 
@@ -760,6 +784,49 @@ describe.runIf(hasFfmpeg)('assembleFilm — real ffmpeg render', () => {
     expect(res.probedDuration).toBeLessThan(5.6);
     expect(res.targetWidth).toBe(480);
     expect(res.hasAudio).toBe(true);
+  }, 120_000);
+
+  it('keeps mixed-in music as long as the video (no 0.6s audio truncate)', async () => {
+    const music = join(root, 'bed.m4a');
+    const musicR = spawnSync('ffmpeg', [
+      '-y',
+      '-hide_banner',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=220:duration=8',
+      '-c:a',
+      'aac',
+      music,
+    ]);
+    expect(musicR.status).toBe(0);
+    const res = await assembleFilm({
+      clips,
+      transitions: 'fade',
+      transitionDuration: 0.5,
+      resolution: '480x360',
+      music,
+      ducking: true,
+      musicVolume: 0.16,
+      rootDir: root,
+      name: 'real-music',
+    });
+    expect(res.success, res.error).toBe(true);
+    const probe = spawnSync('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'stream=codec_type,duration',
+      '-of',
+      'csv=p=0',
+      res.outputPath!,
+    ]);
+    const lines = probe.stdout.toString().trim().split('\n');
+    const videoDur = Number(lines.find((l) => l.startsWith('video,'))?.split(',')[1]);
+    const audioDur = Number(lines.find((l) => l.startsWith('audio,'))?.split(',')[1]);
+    expect(videoDur).toBeGreaterThan(4.5);
+    expect(audioDur).toBeGreaterThan(4.5);
+    expect(Math.abs(videoDur - audioDur)).toBeLessThan(0.25);
   }, 120_000);
 
   it('hard-cut concat (transition 0) yields the full summed duration ≈ 6s', async () => {
