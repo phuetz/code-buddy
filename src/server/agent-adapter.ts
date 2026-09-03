@@ -193,6 +193,7 @@ export async function runAgentCompletion(
     const content = entries
       .filter((entry) => entry.type === 'assistant' && entry.content.trim().length > 0)
       .map((entry) => entry.content)
+      .filter((text) => !isInternalUsageContent(text) && !isInternalContextNotice(text))
       .join('\n')
       .trim();
 
@@ -251,7 +252,7 @@ export async function* streamAgentDeltas(
       surface: options.surface ?? 'http',
     })) {
       if (chunk.type === 'content' && chunk.content) {
-        if (isInternalUsageContent(chunk.content)) {
+        if (isInternalUsageContent(chunk.content) || isInternalContextNotice(chunk.content)) {
           continue;
         }
         emittedContent = true;
@@ -280,6 +281,10 @@ export async function* streamAgentDeltas(
 
 function isInternalUsageContent(content: string): boolean {
   return /^\s*\[tokens:\s[\s\S]*\|\scost:\s\$/.test(content);
+}
+
+function isInternalContextNotice(content: string): boolean {
+  return /Context (Info|Notice|Warning|Critical):\sYou have used /.test(content);
 }
 
 async function withRequestModel<T>(
