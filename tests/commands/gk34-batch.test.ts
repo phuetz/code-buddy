@@ -312,6 +312,50 @@ describe('GK34 /batch success contract', () => {
       resetPermissionModeManager();
     }
   });
+
+  it('attributes only the scoped target to each concurrent result', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gk34-attribution-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.email=gk34@local', '-c', 'user.name=gk34', 'commit', '--allow-empty', '-qm', 'init'], { cwd: dir });
+    let started = 0;
+    let releaseBoth!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    const spawn = createDefaultBatchSpawnFn({
+      cwd: dir,
+      apiKey: 'ollama',
+      concurrency: 2,
+      agentFactory: ({ agentId }) => ({
+        async *processUserMessageStream() {
+          started += 1;
+          if (started === 2) releaseBoth();
+          await bothStarted;
+          writeFileSync(join(dir, `${agentId}.js`), `export const id = '${agentId}';\n`);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          yield { type: 'content' as const, content: agentId };
+        },
+        abortCurrentOperation() {},
+        dispose() {},
+      }),
+    });
+
+    const results = await executeBatchPlan(
+      {
+        goal: 'two files',
+        units: [
+          { label: 'alpha', instruction: 'Create alpha.js.', filePatterns: ['alpha.js'] },
+          { label: 'beta', instruction: 'Create beta.js.', filePatterns: ['beta.js'] },
+        ],
+      },
+      spawn,
+    );
+
+    expect(results).toHaveLength(2);
+    for (const result of results) {
+      expect(result.filesChanged).toEqual([`${result.label}.js`]);
+    }
+  });
 });
 
 describe('GK34 /batch docs', () => {

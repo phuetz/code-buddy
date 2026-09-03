@@ -181,6 +181,18 @@ du `ToolHandler` les a refusés faute de terminal interactif. Aucun fichier n'a
 été créé, code 1 après 31,7 s : ce rouge réel est celui couvert par le test de
 posture ci-dessus et ne compte pas comme preuve finale.
 
+Tentative 4 fonctionnelle mais non retenue comme preuve finale : ancien chemin
+3 437,2 ms ; nouveau chemin 34 201,6 ms ; `alpha=21`, `beta=34` ; 59 événements
+étiquetés ; chevauchement 27 978,9 ms. Le processus a dû être interrompu après
+le résumé (timer résiduel, code 130) et le rapport de chaque unité attribuait à
+tort les deux cibles concurrentes. Rouge de non-régression ajouté :
+
+```text
+tests/commands/gk34-batch.test.ts : 1 échec | 15 passés
+alpha filesChanged attendu ["alpha.js"], reçu ["alpha.js", "beta.js"]
+EXIT_CODE=1
+```
+
 ## Vérifications finales
 
 À compléter.

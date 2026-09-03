@@ -61,7 +61,11 @@ export interface BatchResult {
 }
 
 export interface BatchSpawnFn {
-  (label: string, instruction: string): Promise<BatchResult>;
+  (
+    label: string,
+    instruction: string,
+    filePatterns?: readonly string[],
+  ): Promise<BatchResult>;
   /** Release the shared thread scheduler after the complete batch plan. */
   close?: () => Promise<void>;
 }
@@ -336,7 +340,7 @@ export async function executeBatchPlan(
               'If a target is absent, use create_file or apply_patch; absence is expected and does not require confirmation.',
             ].join('\n')
             : unit.instruction;
-          return spawnFn(unit.label, instruction);
+          return spawnFn(unit.label, instruction, unit.filePatterns);
         }),
       );
 
@@ -465,7 +469,26 @@ function porcelainPaths(status: string): string[] {
     .filter(Boolean);
 }
 
-function listChangedFiles(cwd: string, before: string): string[] {
+function filterBatchChangedFiles(
+  paths: string[],
+  filePatterns?: readonly string[],
+): string[] {
+  const visible = paths.filter((changedPath) => {
+    const normalized = normalizeBatchFile(changedPath);
+    return normalized !== '.codebuddy' && !normalized.startsWith('.codebuddy/');
+  });
+  if (!filePatterns?.length) return visible;
+  const matchers = filePatterns.map(globToRegExp);
+  return visible.filter((changedPath) =>
+    matchers.some((matcher) => matcher.test(normalizeBatchFile(changedPath))),
+  );
+}
+
+function listChangedFiles(
+  cwd: string,
+  before: string,
+  filePatterns?: readonly string[],
+): string[] {
   const after = gitPorcelain(cwd);
   const beforeSet = new Set(porcelainPaths(before));
   const afterPaths = porcelainPaths(after);
@@ -476,14 +499,17 @@ function listChangedFiles(cwd: string, before: string): string[] {
     return beforeLine !== afterLine;
   });
   const unique = [...new Set([...added, ...statusChanged])];
-  if (unique.length > 0) return unique;
+  if (unique.length > 0) return filterBatchChangedFiles(unique, filePatterns);
   try {
     const diff = execFileSync('git', ['diff', '--name-only', 'HEAD'], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    return diff.split('\n').map((s) => s.trim()).filter(Boolean);
+    return filterBatchChangedFiles(
+      diff.split('\n').map((s) => s.trim()).filter(Boolean),
+      filePatterns,
+    );
   } catch {
     return [];
   }
@@ -604,7 +630,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
     }
   })();
 
-  const spawn: BatchSpawnFn = async (label, instruction) => {
+  const spawn: BatchSpawnFn = async (label, instruction, filePatterns) => {
     const started = Date.now();
     const cwd = opts.cwd ?? process.cwd();
     const before = gitPorcelain(cwd);
@@ -619,7 +645,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         throw new Error(outcome.message ?? outcome.reason ?? 'Delegate failed');
       }
 
-      const filesChanged = listChangedFiles(cwd, before);
+      const filesChanged = listChangedFiles(cwd, before, filePatterns);
       if (filesChanged.length === 0) {
         return {
           label,
@@ -642,7 +668,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         success: false,
         summary: `Error: ${err instanceof Error ? err.message : String(err)}`,
         durationMs: Date.now() - started,
-        filesChanged: listChangedFiles(cwd, before),
+        filesChanged: listChangedFiles(cwd, before, filePatterns),
       };
     }
   };
