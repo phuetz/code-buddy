@@ -399,7 +399,16 @@ describe('runDeepResearchPipeline (end-to-end, injected boundaries)', () => {
     expect(result.report).toContain('[2] Zed Two — https://two.com');
     expect(result.plannerLlmUsed).toBe(true);
     expect(result.synthesisLlmUsed).toBe(true);
-    expect(stages).toEqual(['planning', 'planned', 'collecting', 'collected', 'deduped', 'synthesizing', 'done']);
+    expect(stages).toEqual([
+      'planning',
+      'planned',
+      'collecting',
+      'searched',
+      'collected',
+      'deduped',
+      'synthesizing',
+      'done',
+    ]);
   });
 
   it('degrades to a full deterministic path (no LLM, no sources) without throwing', async () => {

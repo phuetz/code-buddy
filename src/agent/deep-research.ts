@@ -143,6 +143,67 @@ export interface DeepResearchResult {
   synthesisLlmUsed: boolean;
   /** How many scraped sources were dropped as near-duplicates. */
   duplicatesDropped: number;
+  /** Per-stage in/out counts. Always present on pipeline results. */
+  trace?: DeepResearchTrace;
+}
+
+/** Journal of how many results entered/left each collection stage. */
+export interface DeepResearchTrace {
+  queries: number;
+  searchHits: number;
+  hitsWithUrl: number;
+  uniqueUrls: number;
+  scrapeAttempted: number;
+  scrapeNonEmpty: number;
+  snippetFallbacks: number;
+  emptyDropped: number;
+  dedupKept: number;
+  dedupDropped: number;
+  searchErrors: string[];
+  scrapeErrors: string[];
+  providerNotes: string[];
+}
+
+export function emptyDeepResearchTrace(): DeepResearchTrace {
+  return {
+    queries: 0,
+    searchHits: 0,
+    hitsWithUrl: 0,
+    uniqueUrls: 0,
+    scrapeAttempted: 0,
+    scrapeNonEmpty: 0,
+    snippetFallbacks: 0,
+    emptyDropped: 0,
+    dedupKept: 0,
+    dedupDropped: 0,
+    searchErrors: [],
+    scrapeErrors: [],
+    providerNotes: [],
+  };
+}
+
+/**
+ * Explicit failure copy when Deep Research would otherwise announce a
+ * "successful" report with an empty citation registry.
+ */
+export function formatZeroSourceFailure(result: DeepResearchResult): string {
+  const t = result.trace;
+  const lines = [
+    'Deep Research produced 0 cited sources — refusing to report success.',
+  ];
+  if (t) {
+    lines.push(
+      `Stages: queries=${t.queries} searchHits=${t.searchHits} hitsWithUrl=${t.hitsWithUrl} uniqueUrls=${t.uniqueUrls} scrapeAttempted=${t.scrapeAttempted} scrapeNonEmpty=${t.scrapeNonEmpty} snippetFallbacks=${t.snippetFallbacks} emptyDropped=${t.emptyDropped} dedupKept=${t.dedupKept} dedupDropped=${t.dedupDropped}`,
+    );
+    if (t.providerNotes.length > 0) lines.push(`Providers: ${t.providerNotes.join('; ')}`);
+    if (t.searchErrors.length > 0) lines.push(`Search errors: ${t.searchErrors.join('; ')}`);
+    if (t.scrapeErrors.length > 0) {
+      lines.push(`Scrape errors: ${t.scrapeErrors.slice(0, 8).join('; ')}`);
+    }
+  } else {
+    lines.push('Stages: (no per-stage trace — pipeline returned an empty registry)');
+  }
+  return lines.join('\n');
 }
 
 // ============================================================================
@@ -173,6 +234,7 @@ export type DeepResearchStage =
   | { stage: 'planning' }
   | { stage: 'planned'; subQuestions: number; queries: number; llmUsed: boolean }
   | { stage: 'collecting'; urls: number }
+  | { stage: 'searched'; queries: number; hits: number; urls: number }
   | { stage: 'collected'; scraped: number }
   | { stage: 'deduped'; kept: number; dropped: number }
   | { stage: 'synthesizing' }
@@ -296,54 +358,96 @@ export async function collectSources(
   plan: DeepQueryPlan,
   boundaries: DeepResearchBoundaries,
   opts: ResolvedOptions,
+  trace: DeepResearchTrace = emptyDeepResearchTrace(),
 ): Promise<Array<Omit<CollectedSource, 'id'>>> {
   const flatQueries: string[] = [];
   for (const sq of plan.subQuestions) {
     for (const q of sq.queries) flatQueries.push(q);
   }
   const queries = dedupStrings(flatQueries);
+  const mapBatched = boundaries.mapBatched ?? defaultMapBatched;
 
-  // Run searches in parallel but reassemble hits in deterministic query order.
-  const perQueryHits = await Promise.all(
-    queries.map(async (query) => {
-      try {
-        const hits = await boundaries.search(query, opts.resultsPerQuery);
-        return { query, hits: Array.isArray(hits) ? hits.slice(0, opts.resultsPerQuery) : [] };
-      } catch (err) {
-        logger.debug(`[deep-research] search failed for "${query}": ${errMsg(err)}`);
-        return { query, hits: [] as SearchHit[] };
-      }
-    }),
-  );
+  // Bounded fan-out: 12 parallel DuckDuckGo queries trip CAPTCHA and wipe the
+  // whole round. Reassemble hits in deterministic query order via mapBatched.
+  const perQueryHits = await mapBatched(queries, opts.concurrency, async (query) => {
+    try {
+      const hits = await boundaries.search(query, opts.resultsPerQuery);
+      const list = Array.isArray(hits) ? hits.slice(0, opts.resultsPerQuery) : [];
+      const withUrl = list.filter((h) => typeof h?.url === 'string' && h.url.trim().length > 0);
+      trace.queries += 1;
+      trace.searchHits += list.length;
+      trace.hitsWithUrl += withUrl.length;
+      trace.providerNotes.push(
+        `query "${query}": ${list.length} hit(s) in, ${withUrl.length} with URL`,
+      );
+      logger.info('[deep-research] search stage', {
+        query,
+        hitsIn: list.length,
+        hitsWithUrl: withUrl.length,
+      });
+      return { query, hits: list };
+    } catch (err) {
+      const message = errMsg(err);
+      logger.debug(`[deep-research] search failed for "${query}": ${message}`);
+      trace.queries += 1;
+      trace.searchErrors.push(`${query}: ${message}`);
+      trace.providerNotes.push(`query "${query}": search failed (${message})`);
+      return { query, hits: [] as SearchHit[] };
+    }
+  });
 
   // Collect unique URLs in stable order, globally bounded BEFORE scraping.
   const seen = new Set<string>();
-  const targets: Array<{ url: string; title: string; query: string }> = [];
+  const targets: Array<{ url: string; title: string; query: string; snippet: string }> = [];
   for (const { query, hits } of perQueryHits) {
     for (const hit of hits) {
       const url = typeof hit?.url === 'string' ? hit.url.trim() : '';
       if (!url || seen.has(url)) continue;
       seen.add(url);
-      targets.push({ url, title: (hit.title || url).trim(), query });
+      const snippet = typeof hit.snippet === 'string' ? hit.snippet.trim() : '';
+      targets.push({ url, title: (hit.title || url).trim(), query, snippet });
       if (targets.length >= opts.maxSources) break;
     }
     if (targets.length >= opts.maxSources) break;
   }
+  trace.uniqueUrls = targets.length;
+  logger.info('[deep-research] unique URLs before scrape', { uniqueUrls: targets.length });
 
-  const mapBatched = boundaries.mapBatched ?? defaultMapBatched;
   const scraped = await mapBatched(targets, opts.concurrency, async (t) => {
+    trace.scrapeAttempted += 1;
     let content = '';
     try {
       content = await boundaries.scrape(t.url);
     } catch (err) {
-      logger.debug(`[deep-research] scrape failed for ${t.url}: ${errMsg(err)}`);
+      const message = errMsg(err);
+      logger.debug(`[deep-research] scrape failed for ${t.url}: ${message}`);
+      trace.scrapeErrors.push(`${t.url}: ${message}`);
       content = '';
     }
-    return { ...t, content: typeof content === 'string' ? content : '' };
+    content = typeof content === 'string' ? content : '';
+    if (content.trim().length > 0) {
+      trace.scrapeNonEmpty += 1;
+    } else if (t.snippet) {
+      // Search snippets are citable when the page fetch is empty/blocked.
+      content = t.snippet;
+      trace.snippetFallbacks += 1;
+      logger.info('[deep-research] snippet fallback', { url: t.url });
+    } else {
+      trace.emptyDropped += 1;
+      trace.scrapeErrors.push(`${t.url}: empty scrape and empty snippet`);
+    }
+    return { url: t.url, title: t.title, query: t.query, content };
   });
 
-  // Drop sources with no usable content (failed/empty scrape).
-  return scraped.filter((s) => s.content.trim().length > 0);
+  const kept = scraped.filter((s) => s.content.trim().length > 0);
+  logger.info('[deep-research] scrape stage', {
+    attempted: trace.scrapeAttempted,
+    nonEmpty: trace.scrapeNonEmpty,
+    snippetFallbacks: trace.snippetFallbacks,
+    emptyDropped: trace.emptyDropped,
+    kept: kept.length,
+  });
+  return kept;
 }
 
 // ============================================================================
@@ -616,18 +720,28 @@ export async function runDeepResearchPipeline(
   const queryCount = plan.subQuestions.reduce((n, sq) => n + sq.queries.length, 0);
   emit({ stage: 'planned', subQuestions: plan.subQuestions.length, queries: queryCount, llmUsed: plannerLlmUsed });
 
+  const trace = emptyDeepResearchTrace();
+  emit({ stage: 'collecting', urls: opts.maxSources });
   let rawSources: Array<Omit<CollectedSource, 'id'>> = [];
   try {
-    rawSources = await collectSources(plan, boundaries, opts);
+    rawSources = await collectSources(plan, boundaries, opts, trace);
   } catch (err) {
     logger.debug(`[deep-research] collection failed: ${errMsg(err)}`);
     rawSources = [];
   }
-  emit({ stage: 'collecting', urls: rawSources.length });
+  emit({
+    stage: 'searched',
+    queries: trace.queries,
+    hits: trace.searchHits,
+    urls: trace.uniqueUrls,
+  });
+  emit({ stage: 'collected', scraped: rawSources.length });
 
   const { kept, dropped } = dedupSources(rawSources, boundaries, opts);
-  emit({ stage: 'collected', scraped: rawSources.length });
+  trace.dedupKept = kept.length;
+  trace.dedupDropped = dropped;
   emit({ stage: 'deduped', kept: kept.length, dropped });
+  logger.info('[deep-research] dedup stage', { kept: kept.length, dropped });
 
   emit({ stage: 'synthesizing' });
   const { report, llmUsed: synthesisLlmUsed } = await synthesize(question, plan, kept, boundaries, opts);
@@ -641,6 +755,7 @@ export async function runDeepResearchPipeline(
     plannerLlmUsed,
     synthesisLlmUsed,
     duplicatesDropped: dropped,
+    trace,
   };
   emit({ stage: 'done', sources: kept.length });
   return result;
@@ -855,9 +970,10 @@ async function safeCollect(
   plan: DeepQueryPlan,
   boundaries: DeepResearchBoundaries,
   opts: ResolvedOptions,
+  trace: DeepResearchTrace = emptyDeepResearchTrace(),
 ): Promise<Array<Omit<CollectedSource, 'id'>>> {
   try {
-    return await collectSources(plan, boundaries, opts);
+    return await collectSources(plan, boundaries, opts, trace);
   } catch (err) {
     logger.debug(`[deep-research] collection failed: ${errMsg(err)}`);
     return [];
@@ -919,11 +1035,20 @@ export async function runDeepResearchLoop(
   const accumulatedPlan: DeepQueryPlan = { question, subQuestions: [...initialPlan.subQuestions] };
   for (const sq of initialPlan.subQuestions) for (const q of sq.queries) usedQueries.add(q.toLowerCase());
 
-  const round1Raw = await safeCollect(initialPlan, boundaries, opts);
-  emit({ stage: 'collecting', urls: round1Raw.length });
+  const trace = emptyDeepResearchTrace();
+  emit({ stage: 'collecting', urls: opts.maxSources });
+  const round1Raw = await safeCollect(initialPlan, boundaries, opts, trace);
+  emit({
+    stage: 'searched',
+    queries: trace.queries,
+    hits: trace.searchHits,
+    urls: trace.uniqueUrls,
+  });
   const round1Merge = mergeSources(accumulated, accumulatedPrints, round1Raw, boundaries, opts, totalCap);
   emit({ stage: 'collected', scraped: round1Raw.length });
   emit({ stage: 'deduped', kept: accumulated.length, dropped: round1Merge.dropped });
+  trace.dedupKept = accumulated.length;
+  trace.dedupDropped = round1Merge.dropped;
   roundInfos.push({ round: 1, gapQueries: [], newSources: round1Merge.added, duplicatesDropped: round1Merge.dropped });
 
   emit({ stage: 'synthesizing' });
@@ -975,7 +1100,7 @@ export async function runDeepResearchLoop(
     };
     accumulatedPlan.subQuestions.push(gapSubQuestion);
 
-    const gapRaw = await safeCollect({ question, subQuestions: [gapSubQuestion] }, boundaries, opts);
+    const gapRaw = await safeCollect({ question, subQuestions: [gapSubQuestion] }, boundaries, opts, trace);
     emit({ stage: 'collecting', urls: gapRaw.length });
     const gapMerge = mergeSources(accumulated, accumulatedPrints, gapRaw, boundaries, opts, totalCap);
     emit({ stage: 'collected', scraped: gapRaw.length });
@@ -996,6 +1121,7 @@ export async function runDeepResearchLoop(
   }
 
   emit({ stage: 'done', sources: accumulated.length });
+  trace.dedupKept = accumulated.length;
 
   return {
     question,
@@ -1006,6 +1132,7 @@ export async function runDeepResearchLoop(
     plannerLlmUsed,
     synthesisLlmUsed,
     duplicatesDropped: roundInfos.reduce((n, r) => n + r.duplicatesDropped, 0),
+    trace,
     rounds: roundInfos.length,
     converged,
     roundInfos,

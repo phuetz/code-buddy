@@ -106,6 +106,14 @@ export interface SearchResult {
   published?: string;
 }
 
+/** One provider attempt from `searchStructured` (journal / Deep Research). */
+export interface StructuredSearchAttempt {
+  provider: SearchProvider;
+  hitsIn: number;
+  usableUrls: number;
+  error?: string;
+}
+
 export interface PerplexitySearchResult {
   content: string;
   citations: string[];
@@ -311,6 +319,12 @@ export class WebSearchTool {
   // Cache failed queries to avoid repeated timeouts (TTL: 2 minutes)
   private failedQueries = new Map<string, number>();
   private static readonly FAILED_QUERY_TTL = 120000;
+  private lastStructuredAttempts: StructuredSearchAttempt[] = [];
+
+  /** Last `searchStructured` provider attempts (empty until the first call). */
+  getLastStructuredAttempts(): StructuredSearchAttempt[] {
+    return this.lastStructuredAttempts.slice();
+  }
 
   async search(query: string, options: WebSearchOptions = {}): Promise<ToolResult> {
     // Mode check (Codex-inspired prompt injection mitigation)
@@ -521,16 +535,43 @@ export class WebSearchTool {
 
     const count = Math.max(1, Math.min(MAX_SEARCH_COUNT, effectiveOptions.maxResults ?? DEFAULT_SEARCH_COUNT));
     const chain = effectiveOptions.provider ? [effectiveOptions.provider] : this.buildProviderChain();
+    this.lastStructuredAttempts = [];
 
     for (const provider of chain) {
       try {
         const results = await this.resolveProviderResults(provider, query, count, effectiveOptions);
-        const filtered = results.filter((r) => !r.url || isDomainAllowed(r.url));
+        const filtered = results.filter(
+          (r) => typeof r.url === 'string' && r.url.trim().length > 0 && isDomainAllowed(r.url),
+        );
+        this.lastStructuredAttempts.push({
+          provider,
+          hitsIn: results.length,
+          usableUrls: filtered.length,
+        });
+        logger.info('[web-search] structured provider', {
+          provider,
+          hitsIn: results.length,
+          usableUrls: filtered.length,
+        });
         if (filtered.length > 0) return filtered;
+        logger.debug(`Structured search provider ${provider} returned no usable URLs, trying next`, {
+          raw: results.length,
+        });
       } catch (error) {
-        logger.debug(`Structured search provider ${provider} failed, trying next`, { error: getErrorMessage(error) });
+        const message = getErrorMessage(error);
+        this.lastStructuredAttempts.push({
+          provider,
+          hitsIn: 0,
+          usableUrls: 0,
+          error: message,
+        });
+        logger.debug(`Structured search provider ${provider} failed, trying next`, { error: message });
       }
     }
+    logger.warn('[web-search] structured search empty', {
+      query,
+      attempts: this.lastStructuredAttempts,
+    });
     return [];
   }
 

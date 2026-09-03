@@ -1244,9 +1244,18 @@ export class WideResearchOrchestrator extends EventEmitter {
       },
       search: async (query: string, k: number): Promise<SearchHit[]> => {
         const results = await webSearch.searchStructured(query, { maxResults: k });
-        return results
-          .filter((r) => typeof r.url === 'string' && r.url.length > 0)
-          .map((r) => ({ title: r.title || r.url, url: r.url, snippet: r.snippet || '' }));
+        const usable = results.filter((r) => typeof r.url === 'string' && r.url.trim().length > 0);
+        if (usable.length > 0) {
+          return usable.map((r) => ({ title: r.title || r.url, url: r.url, snippet: r.snippet || '' }));
+        }
+        const attempts = webSearch.getLastStructuredAttempts();
+        if (attempts.length > 0) {
+          const summary = attempts
+            .map((a) => `${a.provider}: ${a.error ?? `${a.usableUrls}/${a.hitsIn} urls`}`)
+            .join('; ');
+          throw new Error(`no usable URLs (${summary})`);
+        }
+        return [];
       },
       scrape: async (url: string): Promise<string> => {
         try {

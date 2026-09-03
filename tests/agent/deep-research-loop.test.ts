@@ -371,7 +371,16 @@ describe('runDeepResearchLoop — default is Phase-A byte-identical', () => {
     const boundaries = deterministicBoundaries(analyzeSpy);
     const stages: string[] = [];
     await runDeepResearchLoop('Explain Z', boundaries, { rounds: 1 }, (s) => stages.push(s.stage));
-    expect(stages).toEqual(['planning', 'planned', 'collecting', 'collected', 'deduped', 'synthesizing', 'done']);
+    expect(stages).toEqual([
+      'planning',
+      'planned',
+      'collecting',
+      'searched',
+      'collected',
+      'deduped',
+      'synthesizing',
+      'done',
+    ]);
     expect(analyzeSpy).not.toHaveBeenCalled();
   });
 });
