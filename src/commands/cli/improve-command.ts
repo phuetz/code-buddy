@@ -72,6 +72,8 @@ interface ImproveOptions {
   best?: boolean;
   pass?: boolean;
   fail?: boolean;
+  /** skills-consolidate: use this SKILL.md as the umbrella instead of calling an LLM. */
+  proposalFile?: string;
 }
 
 interface ImproveBenchOptions extends ImproveOptions {
@@ -465,13 +467,25 @@ export function registerImproveCommands(program: Command): void {
     .description('Merge overlapping authored skills into one umbrella (coverage-gated)')
     .option('--json', 'output JSON')
     .option('--apply', 'install the umbrella + archive merged siblings (else preview)')
+    .option('--proposal-file <path>', 'use this SKILL.md as the umbrella instead of calling an LLM')
     .action(async (options: ImproveOptions) => {
       const { LiveSkillMutator } = await import('../../agent/self-improvement/skill-mutator.js');
-      const { consolidateCluster, buildClusterFromInstalled, LlmUmbrellaProposer } = await import('../../agent/self-improvement/skill-consolidator.js');
+      const {
+        consolidateCluster,
+        buildClusterFromInstalled,
+        LlmUmbrellaProposer,
+        StaticUmbrellaProposer,
+      } = await import('../../agent/self-improvement/skill-consolidator.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
       const mutator = new LiveSkillMutator();
       const cluster = buildClusterFromInstalled(mutator, SEED_SKILL_SCENARIOS);
-      const out = await consolidateCluster(cluster, new LlmUmbrellaProposer(), mutator, new EvolutionaryArchive(), {
+      const proposer = options.proposalFile
+        ? new StaticUmbrellaProposer({
+          name: 'consolidated-skills',
+          content: (await import('fs')).readFileSync(options.proposalFile, 'utf-8'),
+        })
+        : new LlmUmbrellaProposer();
+      const out = await consolidateCluster(cluster, proposer, mutator, new EvolutionaryArchive(), {
         keepOnAccept: options.apply === true,
       });
       const text = out.accepted

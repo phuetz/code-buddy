@@ -74,3 +74,29 @@ describe('buddy improve skills-archive', () => {
     expect(payload.ok).toBe(false);
   });
 });
+
+describe('buddy improve skills-consolidate --proposal-file', () => {
+  it('rejects a lossy umbrella and leaves authored siblings untouched', async () => {
+    writeAuthored(tmp, 'authored-git-bisect', '# Git Bisect\nUse git bisect; mark good and bad commits.');
+    writeAuthored(tmp, 'authored-safe-delete', '# Safe Delete\nMake a backup, do a dry run, then confirm.');
+    const proposal = path.join(tmp, 'lossy-umbrella.md');
+    fs.writeFileSync(proposal, '# Dev Procedures\n## Git Bisect\nUse git bisect; mark good and bad commits.\n', 'utf-8');
+
+    await program().parseAsync([
+      'node', 'buddy', 'improve', 'skills-consolidate',
+      '--proposal-file', proposal,
+      '--apply',
+      '--json',
+    ]);
+
+    const payload = JSON.parse(logSpy.mock.calls.map((c) => c.join(' ')).join('\n')) as {
+      accepted: boolean;
+      rejectionReason?: string;
+    };
+    expect(payload.accepted).toBe(false);
+    expect(payload.rejectionReason).toBe('coverage-loss');
+    expect(fs.existsSync(path.join(tmp, '.codebuddy', 'skills', 'authored-git-bisect', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, '.codebuddy', 'skills', 'authored-safe-delete', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, '.codebuddy', 'skills', 'authored-dev-procedures'))).toBe(false);
+  });
+});
