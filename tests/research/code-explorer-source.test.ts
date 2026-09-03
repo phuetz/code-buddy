@@ -47,4 +47,10 @@ describe('code-explorer-source — Code Explorer insights → CKG discoveries', 
     expect(pubs[0]!.id).toBe('codeexplorer:list_repos:/tmp/toy');
     expect(pubs[0]!.abstract).toContain('/tmp/toy');
   });
+
+  it('does not treat an empty list_repos array as an insight', async () => {
+    const client = stubClient(true, {});
+    client.listRepos = async () => '[]';
+    expect(await fetchCodeExplorerInsights({ client })).toEqual([]);
+  });
 });

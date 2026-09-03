@@ -77,11 +77,12 @@ export async function fetchCodeExplorerInsights(opts: CodeInsightOptions = {}): 
   }
   if (pubs.length === 0) {
     const listed = await client.listRepos();
-    if (listed.trim()) {
+    const trimmed = listed.trim();
+    if (trimmed && trimmed !== '[]') {
       pubs.push({
         id: `codeexplorer:list_repos${repo ? `:${repo}` : ''}`,
         title: `Analyse de code — dépôts indexés${repo ? ` (${repo})` : ''}`,
-        abstract: listed.trim().slice(0, 1500),
+        abstract: trimmed.slice(0, 1500),
         source: 'code-explorer',
       });
     }
