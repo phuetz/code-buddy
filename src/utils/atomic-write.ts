@@ -235,10 +235,7 @@ async function recoveryCandidates(filePath: string, fileSystem: AtomicWriteFileS
   ];
 }
 
-async function readTextCandidate(
-  filePath: string,
-  fileSystem: AtomicWriteFileSystem,
-): Promise<string | undefined> {
+async function readTextCandidate(filePath: string): Promise<string | undefined> {
   try {
     const contents = await fsPromises.readFile(filePath, 'utf8');
     return contents.trim() ? contents : undefined;
@@ -254,11 +251,14 @@ export async function readJsonAtomic<T>(
   options: AtomicReadOptions<T> = {},
 ): Promise<T> {
   let contents: string;
+  let mainFileMissing = false;
   try {
     contents = await fsPromises.readFile(filePath, 'utf8');
   } catch (error) {
     if (!isMissing(error)) {
       warnUnreadable(filePath, String(error));
+    } else {
+      mainFileMissing = true;
     }
     contents = '';
   }
@@ -267,17 +267,19 @@ export async function readJsonAtomic<T>(
     try {
       const value: unknown = JSON.parse(contents);
       if (isValidValue(value, options)) {
-        return value;
+        return value as T;
       }
     } catch {
       // Fall through to one warning, recovery, and the caller's fallback.
     }
   }
 
-  warnUnreadable(filePath, 'empty or invalid JSON');
+  if (!mainFileMissing) {
+    warnUnreadable(filePath, 'empty or invalid JSON');
+  }
   const fileSystem = options.fileSystem ?? defaultFileSystem;
   for (const candidate of await recoveryCandidates(filePath, fileSystem)) {
-    const candidateContents = await readTextCandidate(candidate, fileSystem);
+    const candidateContents = await readTextCandidate(candidate);
     if (!candidateContents) {
       continue;
     }
@@ -287,12 +289,133 @@ export async function readJsonAtomic<T>(
         continue;
       }
       await writeJsonAtomic(filePath, value, options);
-      return value;
+      return value as T;
     } catch {
       // Try the next recovery candidate.
     }
   }
   return fallback;
+}
+
+function recoveryCandidatesSync(filePath: string): string[] {
+  const directory = path.dirname(filePath);
+  const basename = path.basename(filePath);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(directory, { encoding: 'utf8' });
+  } catch {
+    return [];
+  }
+  const temporaryPaths = entries
+    .filter(entry => entry === `${basename}.tmp` || entry.startsWith(`${basename}.tmp.`))
+    .map(candidate => {
+      const candidatePath = path.join(directory, candidate);
+      try {
+        return { candidatePath, mtimeMs: fs.statSync(candidatePath).mtimeMs };
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((item): item is { candidatePath: string; mtimeMs: number } => Boolean(item))
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .map(item => item.candidatePath);
+  return [`${filePath}.bak`, ...temporaryPaths];
+}
+
+function readTextCandidateSync(filePath: string): string | undefined {
+  try {
+    const contents = fs.readFileSync(filePath, 'utf8');
+    return contents.trim() ? contents : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Synchronous JSON reader with the same empty/corrupt recovery policy. */
+export function readJsonAtomicSync<T>(
+  filePath: string,
+  fallback: T,
+  options: Pick<AtomicReadOptions<T>, 'mode' | 'isValid'> = {},
+): T {
+  const contents = readTextCandidateSync(filePath);
+  if (contents) {
+    try {
+      const value: unknown = JSON.parse(contents);
+      if (!options.isValid || options.isValid(value)) {
+        return value as T;
+      }
+    } catch {
+      // Fall through to one warning, recovery, and the caller's fallback.
+    }
+  } else if (!fs.existsSync(filePath)) {
+    return fallback;
+  }
+
+  warnUnreadable(filePath, 'empty or invalid JSON');
+  for (const candidate of recoveryCandidatesSync(filePath)) {
+    const candidateContents = readTextCandidateSync(candidate);
+    if (!candidateContents) {
+      continue;
+    }
+    try {
+      const value: unknown = JSON.parse(candidateContents);
+      if (options.isValid && !options.isValid(value)) {
+        continue;
+      }
+      writeJsonAtomicSync(filePath, value, { mode: options.mode });
+      return value as T;
+    } catch {
+      // Try the next recovery candidate.
+    }
+  }
+  return fallback;
+}
+
+/** Synchronous text reader with the same empty/corrupt recovery policy. */
+export function readTextAtomicSync(
+  filePath: string,
+  fallback: string,
+  options: Pick<AtomicWriteOptions, 'mode'> = {},
+): string {
+  const contents = readTextCandidateSync(filePath);
+  if (contents) {
+    return contents;
+  }
+  if (!fs.existsSync(filePath)) {
+    return fallback;
+  }
+
+  warnUnreadable(filePath, 'empty or invalid text');
+  for (const candidate of recoveryCandidatesSync(filePath)) {
+    const candidateContents = readTextCandidateSync(candidate);
+    if (candidateContents) {
+      writeFileAtomicSync(filePath, candidateContents, options);
+      return candidateContents;
+    }
+  }
+  return fallback;
+}
+
+/** Synchronous counterpart for append-only JSONL state files. */
+export function readJsonLinesAtomicSync<T>(
+  filePath: string,
+  fallback: T[],
+  isValid: (value: unknown) => value is T,
+): T[] {
+  const contents = readTextAtomicSync(filePath, '');
+  if (!contents) return fallback;
+  const values: T[] = [];
+  for (const line of contents.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (isValid(value)) values.push(value);
+      else warnUnreadable(filePath, 'invalid JSONL entry');
+    } catch {
+      warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+    }
+  }
+  return values;
 }
 
 /** Read text state defensively, recovering a valid .bak or temporary file. */
@@ -302,27 +425,65 @@ export async function readTextAtomic(
   options: AtomicWriteOptions = {},
 ): Promise<string> {
   let contents: string | undefined;
+  let mainFileMissing = false;
   try {
     contents = await fsPromises.readFile(filePath, 'utf8');
   } catch (error) {
     if (!isMissing(error)) {
       warnUnreadable(filePath, String(error));
+    } else {
+      mainFileMissing = true;
     }
   }
   if (contents?.trim()) {
     return contents;
   }
 
-  warnUnreadable(filePath, 'empty or invalid text');
+  if (!mainFileMissing) {
+    warnUnreadable(filePath, 'empty or invalid text');
+  }
   const fileSystem = options.fileSystem ?? defaultFileSystem;
   for (const candidate of await recoveryCandidates(filePath, fileSystem)) {
-    const candidateContents = await readTextCandidate(candidate, fileSystem);
+    const candidateContents = await readTextCandidate(candidate);
     if (candidateContents) {
       await writeFileAtomic(filePath, candidateContents, options);
       return candidateContents;
     }
   }
   return fallback;
+}
+
+/** Read an append-only JSONL state file, skipping a torn/invalid line once. */
+export async function readJsonLinesAtomic<T>(
+  filePath: string,
+  fallback: T[],
+  isValid: (value: unknown) => value is T,
+): Promise<T[]> {
+  let contents: string;
+  try {
+    contents = await fsPromises.readFile(filePath, 'utf8');
+  } catch (error) {
+    if (isMissing(error)) return fallback;
+    warnUnreadable(filePath, String(error));
+    return fallback;
+  }
+  if (!contents.trim()) {
+    warnUnreadable(filePath, 'empty JSONL');
+    return fallback;
+  }
+
+  const values: T[] = [];
+  for (const line of contents.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (isValid(value)) values.push(value);
+      else warnUnreadable(filePath, 'invalid JSONL entry');
+    } catch {
+      warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+    }
+  }
+  return values;
 }
 
 /** Reset the process-local warning guard; intended for isolated tests. */

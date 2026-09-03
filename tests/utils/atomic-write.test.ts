@@ -62,4 +62,16 @@ describe('atomic state writes', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toContain(target);
   });
+
+  it.each([
+    ['backup', '.bak'],
+    ['temporary', '.tmp.12345'],
+  ])('restores a valid %s after a truncated main file', async (_label, suffix) => {
+    const target = join(tempDir, `recover-${_label}.json`);
+    await writeFile(target, '{"version":', 'utf8');
+    await writeFile(`${target}${suffix}`, '{"version":7}\n', 'utf8');
+
+    await expect(readJsonAtomic(target, { version: 0 })).resolves.toEqual({ version: 7 });
+    await expect(readFile(target, 'utf8')).resolves.toContain('"version": 7');
+  });
 });
