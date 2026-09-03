@@ -150,4 +150,24 @@ describe('agent-task-executor', () => {
     expect(paid.CODEBUDDY_PROVIDER).toBeUndefined(); // no baseUrl → don't force ollama
     expect(paid.GROK_MODEL).toBe('grok-4');
   });
+
+  it('fails when filesToModify were listed but none of those files changed', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('fs');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+    const ws = mkdtempSync(join(tmpdir(), 'agent-ws-'));
+    try {
+      writeFileSync(join(ws, 'add.mjs'), 'export function add(a, b) { return a - b; }\n');
+      const { fn } = spawnReturning({ status: 0, stdout: 'I thought about it' });
+      const exec = createAgentTaskExecutor({ workspaceRoot: ws, repoRoot: process.cwd(), spawnImpl: fn });
+      const r = await exec(
+        { ...task, filesToModify: ['add.mjs'] } as unknown as ColabTask,
+        localModel,
+      );
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/filesToModify|unchanged|no change/i);
+    } finally {
+      rmSync(ws, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
 });
