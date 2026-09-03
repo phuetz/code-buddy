@@ -119,6 +119,7 @@ describe('voice-activity — half-duplex speaking guard', () => {
     expect(hasRecentSpokenReference(1_100)).toBe(true);
     expect(isRecentVoiceFragmentEcho('Lisa stop', 1_100)).toBe(false);
     expect(isRecentVoiceFragmentEcho('Lisa et je suis', 1_100)).toBe(false);
+    expect(classifyRecentVoiceEcho('Lisa et je suis', 1_100)).toBe('echo');
     expect(isRecentVoiceFragmentEcho('Lisa prête', 91_001)).toBe(false);
     expect(hasRecentSpokenReference(91_001)).toBe(false);
   });

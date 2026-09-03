@@ -220,7 +220,9 @@ export function classifyRecentVoiceEcho(
   );
   if (references.length === 0) return 'unknown';
   const transcriptTokens = new Set(normalized.split(' ').filter(Boolean));
+  const boundedTranscript = ` ${normalized} `;
   for (const reference of [...references].reverse()) {
+    if (` ${reference.normalized} `.includes(boundedTranscript)) return 'echo';
     if (reference.tokens.length > 0) {
       const overlap = reference.tokens.filter(token => transcriptTokens.has(token)).length;
       if (overlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE) return 'echo';

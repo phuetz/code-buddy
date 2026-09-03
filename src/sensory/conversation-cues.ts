@@ -56,6 +56,7 @@ interface ConversationCueControllerOptions {
   player?: ConversationCuePlayer;
   now?: () => number;
   delayMs?: number;
+  canPlay?: () => boolean;
 }
 
 const BACKCHANNELS: ReadonlyArray<{
@@ -92,6 +93,7 @@ export function createConversationCueController(
   const player = options.player;
   const now = options.now ?? (() => Date.now());
   const delayMs = options.delayMs ?? BACKCHANNEL_START_DELAY_MS;
+  const canPlay = options.canPlay ?? (() => true);
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const repairedTurns = new Set<string>();
   let disposed = false;
@@ -120,7 +122,7 @@ export function createConversationCueController(
       const activeTimer = timer;
       timer = undefined;
       if (activeTimer !== undefined) timers.delete(activeTimer);
-      if (disposed || controller.signal.aborted) return;
+      if (disposed || controller.signal.aborted || !canPlay()) return;
       const selected = BACKCHANNELS[nextCueIndex % BACKCHANNELS.length]!;
       void Promise.resolve(player({
         kind: 'backchannel',
@@ -148,7 +150,7 @@ export function createConversationCueController(
   };
 
   const playRepair = async (turnId: string): Promise<boolean> => {
-    if (disposed || env.CODEBUDDY_SENSORY_REPAIR !== 'true' || !player) return false;
+    if (disposed || env.CODEBUDDY_SENSORY_REPAIR !== 'true' || !player || !canPlay()) return false;
     if (repairedTurns.has(turnId)) return false;
     repairedTurns.add(turnId);
     // Keep the once-per-turn guard bounded for long-running resident sessions.

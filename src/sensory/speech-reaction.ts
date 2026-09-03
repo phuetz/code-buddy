@@ -1497,6 +1497,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true' && Boolean(options.onConversationCue);
   const conversationCues = createConversationCueController({
     env,
+    canPlay: () => !isSpeaking(now()),
     ...(options.onConversationCue ? { player: options.onConversationCue } : {}),
   });
   let lastAt = Number.NEGATIVE_INFINITY;

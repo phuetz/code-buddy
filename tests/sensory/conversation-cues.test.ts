@@ -76,6 +76,24 @@ describe('conversation cues — sensory backchannel', () => {
     expect(player).not.toHaveBeenCalled();
   });
 
+  it('rechecks that the mouth is free before playing any cue', async () => {
+    vi.useFakeTimers();
+    const player = vi.fn(async () => true);
+    const controller = createConversationCueController({
+      env: {
+        CODEBUDDY_SENSORY_BACKCHANNEL: 'true',
+        CODEBUDDY_SENSORY_REPAIR: 'true',
+      },
+      player,
+      canPlay: () => false,
+    });
+
+    controller.armBackchannel('turn-speaking');
+    await vi.advanceTimersByTimeAsync(BACKCHANNEL_START_DELAY_MS);
+    expect(await controller.playRepair('turn-speaking')).toBe(false);
+    expect(player).not.toHaveBeenCalled();
+  });
+
   it('plays the local repair prompt immediately and at most once per turn', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);

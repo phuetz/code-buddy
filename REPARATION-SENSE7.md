@@ -32,6 +32,13 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 - Fixture fausse corrigée avec preuve : « Lisa écoute » était annoncé comme fragment de « Je suis là et je t écoute attentivement », qui ne contenait pas « Lisa ». La phrase source contient désormais réellement les deux mots ; l’assertion de silence reste inchangée.
 - Vert ciblé : trous 2, 3, 7 + `voice-activity` + `speech-reaction` → **5 fichiers, 68 tests réussis**.
 
+### Trou 1 — backchannel pendant parole ou écho
+
+- Rouge initial : **1 échec / 1 succès** ; « Lisa et je suis », sous-séquence de quatre mots de la phrase récente, déclenchait `Mhm.`.
+- Correctif écho : une sous-séquence normalisée et contiguë d’une empreinte récente est classée comme propre voix même si elle couvre moins de 60 % de la phrase complète.
+- Correctif bouche : le contrôleur de cues revalide au moment de jouer que `isSpeaking()` est faux. Cette garde couvre le timer du backchannel et la réparation immédiate ; l’admission antérieure du tour ne suffit jamais à superposer un cue à la voix du robot.
+- Vert ciblé : trous 1, 2, 7 + `conversation-cues`, `voice-activity`, `speech-reaction` → **6 fichiers, 75 tests réussis**.
+
 ## Grille de traçabilité
 
 | Trou | Correctif | Invariant préservé | Commit |
@@ -39,7 +46,7 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 | 7 | Coupe-circuit de tour suspect + empreinte courte de propre voix ; chronométrage fautif du test corrigé avec preuve | Boucle d’auto-dialogue, toutes briques actives et `AEC_TRUST=false` | Ce commit |
 | 3 | Exiger AEC active + marge de fuite mesurée avant tout barge-in sans transcript ; durée seule refusée | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | Ce commit |
 | 2 | Étendre l’empreinte aux fragments contenus de 1–3 mots et bloquer la réparation vide près d’une voix récente | Filtre de propre voix, y compris fragments courts de moins de 90 s | Ce commit |
-| 1 | À établir | Aucun backchannel avant décision ni pendant la parole du robot | À venir |
+| 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | Ce commit |
 | 4 | À établir | Aucune première phrase CONV3 avant décision | À venir |
 | 6 | À établir | Repli ElevenLabs au segment interrompu, jamais au début | À venir |
 | 5 | À établir | Grâce d’hésitation de 550–900 ms pour mots suspensifs | À venir |
