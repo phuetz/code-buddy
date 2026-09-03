@@ -14,7 +14,7 @@
 import { EventEmitter } from 'events';
 import { MCPManager, parseMcpInitTimeoutMs, DEFAULT_MCP_INIT_TIMEOUT_MS } from '../../src/mcp/client';
 import { MCPClient, getMCPClient, resetMCPClient } from '../../src/mcp/mcp-client';
-import type { MCPServerConfig, MCPTool, ServerStatus } from '../../src/mcp/types';
+import type { MCPServerConfig } from '../../src/mcp/types';
 import { createTransport } from '../../src/mcp/transports';
 import { logger } from '../../src/utils/logger';
 import fs from 'fs';
@@ -66,8 +66,15 @@ jest.mock('../../src/mcp/transports', () => ({
 const mockStdinWrite = jest.fn().mockReturnValue(true);
 const mockKill = jest.fn();
 
-function createMockProcess(): EventEmitter & { stdin: any; stdout: EventEmitter; stderr: EventEmitter; kill: jest.Mock } {
-  const proc = new EventEmitter() as any;
+type MockProcess = EventEmitter & {
+  stdin: { write: typeof mockStdinWrite };
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  kill: typeof mockKill;
+};
+
+function createMockProcess(): MockProcess {
+  const proc = new EventEmitter() as MockProcess;
   proc.stdin = { write: mockStdinWrite };
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
@@ -104,11 +111,17 @@ jest.mock('child_process', () => ({
 // ---------------------------------------------------------------------------
 jest.mock('fs', () => {
   const impl = {
-  existsSync: jest.fn().mockReturnValue(false),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
-};
+    existsSync: jest.fn().mockReturnValue(false),
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn(),
+    mkdirSync: jest.fn(),
+    openSync: jest.fn().mockImplementation((_path: string, flags: string) => flags === 'w' ? 101 : 102),
+    fsyncSync: jest.fn(),
+    closeSync: jest.fn(),
+    renameSync: jest.fn(),
+    chmodSync: jest.fn(),
+    unlinkSync: jest.fn(),
+  };
   return { ...impl, default: impl };
 });
 
@@ -165,7 +178,7 @@ describe('MCPManager', () => {
     it('should support legacy stdio config (command/args at top level)', async () => {
       const config: MCPServerConfig = {
         name: 'legacy-server',
-        transport: undefined as any,
+        transport: undefined,
         command: 'npx',
         args: ['-y', 'some-mcp-server'],
       };
@@ -180,7 +193,7 @@ describe('MCPManager', () => {
     it('should throw if no transport config is provided', async () => {
       const config: MCPServerConfig = {
         name: 'bad-server',
-        transport: undefined as any,
+        transport: undefined,
       };
 
       await expect(manager.addServer(config)).rejects.toThrow('Transport configuration is required');
@@ -490,7 +503,7 @@ describe('MCPManager', () => {
 
     it('should throw if server is not connected', async () => {
       // Manually add a tool entry pointing to a server that is not in the clients map
-      (manager as any).tools.set('mcp__ghost__do_thing', {
+      (manager as unknown as { tools: Map<string, unknown> }).tools.set('mcp__ghost__do_thing', {
         name: 'mcp__ghost__do_thing',
         description: 'phantom',
         inputSchema: {},
@@ -697,8 +710,16 @@ describe('MCPClient', () => {
       client.saveConfig(servers);
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
+        101,
+        `${JSON.stringify({ servers }, null, 2)}\n`,
+      );
+      expect(fs.renameSync).toHaveBeenCalledWith(
+        expect.stringMatching(/mcp-servers\.json\.tmp\./),
         expect.stringContaining('mcp-servers.json'),
-        expect.stringContaining('"test"')
+      );
+      expect(fs.chmodSync).toHaveBeenCalledWith(
+        expect.stringContaining('mcp-servers.json'),
+        0o600,
       );
     });
 
@@ -707,11 +728,19 @@ describe('MCPClient', () => {
 
       client.saveConfig([]);
       expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        101,
+        `${JSON.stringify({ servers: [] }, null, 2)}\n`,
+      );
+      expect(fs.renameSync).toHaveBeenCalledWith(
+        expect.stringMatching(/mcp-servers\.json\.tmp\./),
+        expect.stringContaining('mcp-servers.json'),
+      );
     });
 
     it('should throw when write fails', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.writeFileSync as jest.Mock).mockImplementation(function() {
+      (fs.writeFileSync as jest.Mock).mockImplementationOnce(function() {
         throw new Error('EACCES');
       });
 
