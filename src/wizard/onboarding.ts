@@ -218,7 +218,7 @@ export const ONBOARDING_PHASES: OnboardingPhase[] = [
   },
 ];
 
-const TTS_PROVIDERS = ['edge-tts', 'espeak', 'audioreader'];
+const TTS_PROVIDERS = ['pocket', 'elevenlabs', 'piper'];
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
@@ -475,13 +475,16 @@ async function selectModel(
  * summary — the Hermes-style reassurance that the agent is ready, derived from
  * env vars actually present. Kept deliberately minimal (getting-started scope).
  */
-function renderCapabilitiesFooter(): string {
+export function renderCapabilitiesFooter(): string {
   const has = (vars: string[]): boolean => vars.some((v) => Boolean(process.env[v]));
   const webSearch = has(['BRAVE_API_KEY', 'EXA_API_KEY', 'PERPLEXITY_API_KEY', 'TAVILY_API_KEY']);
+  const tts = has(['ELEVENLABS_API_KEY'])
+    ? '    ✓ Text-to-speech (ElevenLabs key detected; Pocket TTS / Piper as local fallback)'
+    : '    ○ Text-to-speech — Pocket TTS (`buddy speak --engine pocket`), Piper, or ELEVENLABS_API_KEY';
   return [
     '  Capabilities:',
     '    ✓ Code tools — file edit, shell, search',
-    '    ✓ Text-to-speech (edge-tts, offline fallback)',
+    tts,
     webSearch
       ? '    ✓ Web search'
       : '    ○ Web search — add BRAVE_API_KEY or EXA_API_KEY to enable',

@@ -15,6 +15,7 @@ import {
   applyOnboardingProjectConfig,
   resolveOnboardingProjectDir,
   PROJECT_FOLDER_QUESTION,
+  renderCapabilitiesFooter,
   OnboardingResult,
 } from '../../src/wizard/onboarding.js';
 
@@ -207,6 +208,14 @@ describe('onboarding', () => {
 
       const config = JSON.parse(readFileSync(join(nested, 'config.json'), 'utf-8'));
       expect(config.provider).toBe('ollama');
+    });
+  });
+
+  describe('capabilities footer', () => {
+    it('advertises Pocket TTS / ElevenLabs, not the retired edge-tts path', () => {
+      const footer = renderCapabilitiesFooter();
+      expect(footer).toMatch(/Pocket TTS|ElevenLabs/);
+      expect(footer).not.toMatch(/edge-tts/);
     });
   });
 
