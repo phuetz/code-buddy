@@ -33,8 +33,7 @@ import { ProFeatures } from '../pro/pro-features.js';
 import type { MessageButton as ProMessageButton } from '../pro/types.js';
 import { TelegramProFormatter } from './pro-formatter.js';
 import { renderWidgetDataToPng, renderWidgetHtmlToPng } from '../../widgets/widget-image-renderer.js';
-
-const TELEGRAM_API_BASE = 'https://api.telegram.org';
+import { resolveTelegramApiBase } from '../../utils/telegram-api-base.js';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
 const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
 const POLL_REQUEST_MARGIN_MS = 5_000;
@@ -75,7 +74,7 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private get apiUrl(): string {
-    return `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}`;
+    return `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}`;
   }
 
   /**
@@ -1272,7 +1271,7 @@ export class TelegramChannel extends BaseChannel {
       const form = new FormData();
       form.append('chat_id', channelId);
       form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), 'voice.ogg');
-      const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendVoice`;
+      const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendVoice`;
       const res = await fetch(url, { method: 'POST', body: form });
       if (!res.ok) throw new Error(`sendVoice HTTP ${res.status}`);
     } finally {
@@ -1294,7 +1293,7 @@ export class TelegramChannel extends BaseChannel {
     form.append('chat_id', channelId);
     if (caption) form.append('caption', caption.slice(0, 1024));
     form.append('photo', new Blob([bytes], { type: mime }), path.basename(imagePath));
-    const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendPhoto`;
+    const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendPhoto`;
     const res = await fetch(url, { method: 'POST', body: form });
     if (!res.ok) throw new Error(`sendPhoto HTTP ${res.status}`);
   }
@@ -1306,7 +1305,7 @@ export class TelegramChannel extends BaseChannel {
     const result = await this.apiRequest<{ file_path: string }>('getFile', {
       file_id: fileId,
     });
-    return `${TELEGRAM_API_BASE}/file/bot${this.telegramConfig.token}/${result.file_path}`;
+    return `${resolveTelegramApiBase()}/file/bot${this.telegramConfig.token}/${result.file_path}`;
   }
 
   /**
