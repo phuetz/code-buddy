@@ -38,6 +38,27 @@ VERT — test GF1 ciblé : 1 passed | 7 skipped ; voisins
 `voice-activity` + `revue-gt1-mutations` + `respond-decider` : 3 fichiers, 60 tests passés.
 ```
 
+## Régression 2 — SENSE1 × CONV2, demi-duplex et transitoires acoustiques
+
+SENSE1 impose que `aecActive` ne contourne jamais le demi-duplex sans
+`CODEBUDDY_SENSORY_AEC_TRUST=true`. CONV2/SENSE7 conserve le barge-in naturel, mais seulement
+pour une parole soutenue (250 ms) dépassant la marge de fuite. Les deux chemins
+`speech_start`/adaptatif utilisent maintenant la même évaluation de confiance et de durée ; les
+lectures oubliées de `options.env` ont été raccordées.
+
+Deux preuves GF1 étaient fausses : le cas demi-duplex n'avait aucun tour `inFlight`, et le cas
+50 ms ne traversait pas le `||` de production. Les harnais ont été corrigés avant le code.
+
+```text
+ROUGE — test GF1 SENSE1 corrigé : 3 failed | 5 skipped (8)
+- demi-duplex : reçu [ 'Bruit de retour haut-parleur' ] au lieu de []
+- AEC non approuvée : true au lieu de false
+- transitoire 50 ms : onBargeInStart appelé 1 fois
+
+VERT — GF1 SENSE1 corrigé : 3/3 ; voisins CONV2/speech-reaction/TV/GT2 :
+6 fichiers, 67/67 ; gardes SENSE6 + engagement + Maison : 10 fichiers, 18/18.
+```
+
 ## Vérifications finales
 
 À compléter.

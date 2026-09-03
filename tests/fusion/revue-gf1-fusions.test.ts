@@ -52,7 +52,12 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
     it('le barge-in acoustique ne doit pas réouvrir la garde demi-duplex si AEC n’est pas explicitement de confiance', async () => {
       const bus = getGlobalEventBus();
       const heard: string[] = [];
-      let clock = 1_000;
+      let clock = 800;
+      let firstTurnStarted = false;
+      let releaseFirstTurn!: () => void;
+      const holdFirstTurn = new Promise<void>((resolve) => {
+        releaseFirstTurn = resolve;
+      });
 
       // Barge-in activé, mais AEC NON déclarée de confiance
       const testEnv = {
@@ -62,18 +67,38 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
       };
       delete testEnv.CODEBUDDY_SENSORY_AEC_TRUST;
 
-      beginSpeaking(clock); // Le robot commence à parler à t=1000
-
       const unwire = wireSpeechReaction({
         env: testEnv,
         debounceMs: 0,
+        incompleteTurnHoldMs: 0,
         now: () => clock,
-        onHeard: (text) => {
-          heard.push(text);
+        onHeard: async (text) => {
+          if (!firstTurnStarted) {
+            firstTurnStarted = true;
+            await holdFirstTurn;
+          } else {
+            heard.push(text);
+          }
         },
       });
 
       try {
+        // Un premier tour réellement en vol est indispensable : le branchement
+        // speech_start litigieux est protégé par `inFlight`.
+        bus.emit('sensory:perception', {
+          source: 'test',
+          metadata: {
+            modality: 'audio',
+            kind: 'transcript_final',
+            receivedAt: clock,
+            payload: { text: 'Lisa, commence une réponse.', startedAtMs: clock },
+          },
+        });
+        await vi.waitFor(() => expect(firstTurnStarted).toBe(true));
+
+        clock = 1_000;
+        beginSpeaking(clock);
+
         // Un son fort arrive pendant la parole avec aecActive: true (non de confiance)
         // TROU PROUVÉ : shouldTriggerAcousticBargeIn se déclenche sur aecActive seul,
         // assigne bargedSpeechTurnId, et startSpeechJob court-circuite la garde demi-duplex !
@@ -86,6 +111,7 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
             receivedAt: clock,
             payload: {
               startedAtMs: clock,
+              audioMs: 300,
               aecActive: true,
               rms: 0.05,
               noiseFloorRms: 0.01,
@@ -109,12 +135,14 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
           },
         });
 
+        releaseFirstTurn();
         await new Promise((resolve) => setTimeout(resolve, 80));
 
         // SENSE1 exige que le micro reste fermé (demi-duplex) tant que l'AEC n'est pas de confiance.
         // Aucune phrase ne doit être entendue ni traitée.
         expect(heard).toEqual([]);
       } finally {
+        releaseFirstTurn();
         unwire();
         interruptSpeaking(clock);
       }
@@ -138,7 +166,7 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
       expect(res).toBe(false);
     });
 
-    it('le barge-in sur speech_start ne doit pas couper sur un transitoire < 250ms (court-circuit de 6de905980)', () => {
+    it('le barge-in sur speech_start ne doit pas couper sur un transitoire < 250ms (court-circuit de 6de905980)', async () => {
       // 6de905980 a créé shouldTriggerVoiceBargeInOnSpeechStart pour exiger >= 250ms de parole soutenue
       const transientPayload = {
         aecActive: true,
@@ -148,12 +176,68 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
       };
 
       // shouldTriggerVoiceBargeInOnSpeechStart refuse le transitoire court (< 250ms)
-      expect(shouldTriggerVoiceBargeInOnSpeechStart(transientPayload)).toBe(false);
+      expect(shouldTriggerVoiceBargeInOnSpeechStart(transientPayload, {
+        CODEBUDDY_SENSORY_BARGE_IN: 'true',
+        CODEBUDDY_SENSORY_AEC_TRUST: 'true',
+      })).toBe(false);
 
       // TROU PROUVÉ : dans speech-reaction.ts ligne 2285-2286, l'orchestrateur a gardé :
       // shouldTriggerVoiceBargeInOnSpeechStart(payload, env) || shouldTriggerAcousticBargeIn(payload, speechStartedAtMs)
       // Or shouldTriggerAcousticBargeIn retourne true immédiatement (lignes 1566-1568)
       // sans vérifier la durée minimale de 250ms, annulant la protection anti-bruit !
+      const bus = getGlobalEventBus();
+      const onBargeInStart = vi.fn();
+      let clock = 800;
+      let firstTurnStarted = false;
+      let releaseFirstTurn!: () => void;
+      const holdFirstTurn = new Promise<void>((resolve) => {
+        releaseFirstTurn = resolve;
+      });
+      const unwire = wireSpeechReaction({
+        debounceMs: 0,
+        incompleteTurnHoldMs: 0,
+        now: () => clock,
+        env: {
+          CODEBUDDY_SENSORY_BARGE_IN: 'true',
+          CODEBUDDY_SENSORY_AEC_TRUST: 'true',
+        },
+        onHeard: async () => {
+          firstTurnStarted = true;
+          await holdFirstTurn;
+        },
+        onBargeInStart,
+      });
+
+      try {
+        bus.emit('sensory:perception', {
+          source: 'test',
+          metadata: {
+            modality: 'audio',
+            kind: 'transcript_final',
+            receivedAt: clock,
+            payload: { text: 'Lisa, commence une réponse.', startedAtMs: clock },
+          },
+        });
+        await vi.waitFor(() => expect(firstTurnStarted).toBe(true));
+        clock = 1_000;
+        beginSpeaking(clock);
+        clock = 1_050;
+        bus.emit('sensory:perception', {
+          source: 'test',
+          metadata: {
+            modality: 'audio',
+            kind: 'speech_start',
+            receivedAt: clock,
+            payload: { ...transientPayload, startedAtMs: clock },
+          },
+        });
+
+        expect(onBargeInStart).not.toHaveBeenCalled();
+      } finally {
+        releaseFirstTurn();
+        unwire();
+        interruptSpeaking(clock);
+      }
     });
   });
 

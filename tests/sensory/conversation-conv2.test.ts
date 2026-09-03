@@ -36,12 +36,15 @@ async function waitFor(assertion: () => void): Promise<void> {
 describe('CONV2 — speech_start barge-in', () => {
   let previousBargeIn: string | undefined;
   let previousMargin: string | undefined;
+  let previousAecTrust: string | undefined;
 
   beforeEach(() => {
     previousBargeIn = process.env.CODEBUDDY_SENSORY_BARGE_IN;
     previousMargin = process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB;
+    previousAecTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
     process.env.CODEBUDDY_SENSORY_BARGE_IN = 'true';
     process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB = '6';
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     _resetVoiceActivityForTests();
   });
 
@@ -50,6 +53,8 @@ describe('CONV2 — speech_start barge-in', () => {
     else process.env.CODEBUDDY_SENSORY_BARGE_IN = previousBargeIn;
     if (previousMargin === undefined) delete process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB;
     else process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB = previousMargin;
+    if (previousAecTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousAecTrust;
     _resetVoiceActivityForTests();
   });
 

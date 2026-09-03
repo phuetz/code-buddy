@@ -38,12 +38,15 @@ async function waitFor(assertion: () => void): Promise<void> {
 describe('CONV2 — adaptive leakage reference', () => {
   let previousBargeIn: string | undefined;
   let previousMargin: string | undefined;
+  let previousAecTrust: string | undefined;
 
   beforeEach(() => {
     previousBargeIn = process.env.CODEBUDDY_SENSORY_BARGE_IN;
     previousMargin = process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB;
+    previousAecTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
     process.env.CODEBUDDY_SENSORY_BARGE_IN = 'true';
     process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB = '6';
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     _resetVoiceActivityForTests();
   });
 
@@ -52,6 +55,8 @@ describe('CONV2 — adaptive leakage reference', () => {
     else process.env.CODEBUDDY_SENSORY_BARGE_IN = previousBargeIn;
     if (previousMargin === undefined) delete process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB;
     else process.env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB = previousMargin;
+    if (previousAecTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousAecTrust;
     _resetVoiceActivityForTests();
   });
 
@@ -99,14 +104,15 @@ describe('CONV2 — adaptive leakage reference', () => {
 
       speechStart({
         startedAtMs: playbackStartedAt + 100,
+        audioMs: 100,
         rms: 0.015,
         noiseFloorRms: 0.01,
         aecActive: true,
       });
-      speechStart({ startedAtMs: playbackStartedAt + 400, rms: 0.015, aecActive: true });
+      speechStart({ startedAtMs: playbackStartedAt + 400, audioMs: 400, rms: 0.015, aecActive: true });
       await vi.waitFor(() => expect(stoppedAt).toBe(0), { timeout: 50, interval: 5 });
 
-      speechStart({ startedAtMs: playbackStartedAt + 500, rms: 0.035, aecActive: true });
+      speechStart({ startedAtMs: playbackStartedAt + 500, audioMs: 500, rms: 0.035, aecActive: true });
       await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));
       expect(exceedsVoiceLeakageMargin(0.015, 0.01, 6)).toBe(false);
       expect(exceedsVoiceLeakageMargin(0.035, 0.01, 6)).toBe(true);
@@ -158,6 +164,7 @@ describe('CONV2 — adaptive leakage reference', () => {
       await waitFor(() => expect(playbackStartedAt).toBeGreaterThan(0));
       speechStart({
         startedAtMs: playbackStartedAt + 100,
+        audioMs: 300,
         rms: 0.03,
         noiseFloorRms: 0.01,
         aecActive: true,
