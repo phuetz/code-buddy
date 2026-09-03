@@ -1,5 +1,8 @@
 import { execSync } from 'child_process';
 import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -8,6 +11,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
@@ -156,6 +160,20 @@ function checkDependencies(): DoctorCheck[] {
       level: 'warn',
       optional: true,
       missingMessage: 'not found — optional; install ICM only to use infinite-context memory',
+    },
+    {
+      cmd: 'ffmpeg',
+      label: 'ffmpeg',
+      level: 'warn',
+      optional: true,
+      missingMessage: 'not found — optional; install ffmpeg for film, video stitch, and screen capture',
+    },
+    {
+      cmd: process.env.CODEBUDDY_PIPER_BIN || 'piper',
+      label: 'Piper TTS',
+      level: 'warn',
+      optional: true,
+      missingMessage: 'not found — optional; install Piper for offline narration (`buddy film` / local TTS)',
     },
   ];
 
@@ -356,6 +374,65 @@ function checkDiskSpace(cwd: string): DoctorCheck {
     return { name: 'Disk space', status: 'warn', message: `${freeGB.toFixed(2)} GB free (< 1 GB)` };
   }
   return { name: 'Disk space', status: 'ok', message: `${freeGB.toFixed(1)} GB free` };
+}
+
+function checkProfilePermissions(): DoctorCheck {
+  const dir = join(homedir(), '.codebuddy');
+  if (!existsSync(dir)) {
+    return {
+      name: 'Profile permissions',
+      status: 'ok',
+      message: `${dir} not created yet (will be created 0700 on first save)`,
+    };
+  }
+  try {
+    accessSync(dir, fsConstants.W_OK);
+  } catch {
+    return {
+      name: 'Profile permissions',
+      status: 'error',
+      message: `${dir} is not writable`,
+    };
+  }
+  let mode = 0;
+  try {
+    mode = statSync(dir).mode & 0o777;
+  } catch {
+    return {
+      name: 'Profile permissions',
+      status: 'ok',
+      message: `${dir} writable`,
+    };
+  }
+  if ((mode & 0o002) !== 0) {
+    return {
+      name: 'Profile permissions',
+      status: 'warn',
+      message: `${dir} is world-writable (mode ${mode.toString(8)}) — chmod 700 recommended`,
+      fixable: true,
+      fix: async () => {
+        try {
+          chmodSync(dir, 0o700);
+          return {
+            success: true,
+            message: `Restricted ${dir} to mode 700`,
+            action: 'chmod-profile',
+          };
+        } catch (err) {
+          return {
+            success: false,
+            message: `Failed to chmod ${dir}: ${err instanceof Error ? err.message : String(err)}`,
+            action: 'chmod-profile',
+          };
+        }
+      },
+    };
+  }
+  return {
+    name: 'Profile permissions',
+    status: 'ok',
+    message: `${dir} writable (mode ${mode.toString(8)})`,
+  };
 }
 
 function checkGit(cwd: string): DoctorCheck {
@@ -745,6 +822,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
     ...checkStaleLockFiles(dir),
     ...checkTtsProviders(),
     checkServerExposureEnvironment(),
+    checkProfilePermissions(),
     checkDiskSpace(dir),
     checkGit(dir),
   ];
