@@ -30,6 +30,12 @@ _qa/gk20/work/
 _qa/gk20/rules.json
 _qa/gk20/runs.jsonl
 _qa/gk20/*.jsonl
+_qa/gk25/home/
+_qa/gk25/work/
+_qa/gk25/images/
+_qa/gk25/*.png
+_qa/gk25/*.jpg
+_qa/gk25/*.jsonl
 test-app/
 test-scripts/
 C\:Users*/
