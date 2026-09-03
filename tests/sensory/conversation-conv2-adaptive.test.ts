@@ -97,11 +97,16 @@ describe('CONV2 — adaptive leakage reference', () => {
       await waitFor(() => expect(handlerStarted).toBe(true));
       await waitFor(() => expect(playbackStartedAt).toBeGreaterThan(0));
 
-      speechStart({ startedAtMs: playbackStartedAt + 100, rms: 0.015, noiseFloorRms: 0.01 });
-      speechStart({ startedAtMs: playbackStartedAt + 400, rms: 0.015 });
+      speechStart({
+        startedAtMs: playbackStartedAt + 100,
+        rms: 0.015,
+        noiseFloorRms: 0.01,
+        aecActive: true,
+      });
+      speechStart({ startedAtMs: playbackStartedAt + 400, rms: 0.015, aecActive: true });
       await vi.waitFor(() => expect(stoppedAt).toBe(0), { timeout: 50, interval: 5 });
 
-      speechStart({ startedAtMs: playbackStartedAt + 500, rms: 0.035 });
+      speechStart({ startedAtMs: playbackStartedAt + 500, rms: 0.035, aecActive: true });
       await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));
       expect(exceedsVoiceLeakageMargin(0.015, 0.01, 6)).toBe(false);
       expect(exceedsVoiceLeakageMargin(0.035, 0.01, 6)).toBe(true);
@@ -151,7 +156,12 @@ describe('CONV2 — adaptive leakage reference', () => {
       transcriptFinal('Lisa, je parle vraiment');
       await waitFor(() => expect(handlerStarted).toBe(true));
       await waitFor(() => expect(playbackStartedAt).toBeGreaterThan(0));
-      speechStart({ startedAtMs: playbackStartedAt + 100, rms: 0.03, noiseFloorRms: 0.01 });
+      speechStart({
+        startedAtMs: playbackStartedAt + 100,
+        rms: 0.03,
+        noiseFloorRms: 0.01,
+        aecActive: true,
+      });
       await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));
     } finally {
       release?.();

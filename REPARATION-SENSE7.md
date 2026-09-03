@@ -18,12 +18,19 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 - Correctif : pendant une lecture connue, sans AEC active et avec réparation/backchannel actifs, `speech_start` devient un tour suspect au lieu de couper immédiatement la bouche. Un transcript de 1–3 mots entièrement contenu dans une empreinte vocale récente (< 90 s) est supprimé avant barge-in, cue, décision ou file d’attente.
 - Vert ciblé : `hole-sense6-auto-dialogue-loop`, `voice-activity`, `speech-reaction`, `conversation-conv2`, `conversation-conv2-adaptive`, `conversation-conv2-resume` → **6 fichiers, 70 tests réussis**.
 
+### Trou 3 — barge-in déclenché par la télévision
+
+- Rouge initial : le test TV recevait un `barge-in-start` pour `aecActive: false`, sur la seule combinaison durée 350 ms + énergie 12 dB au-dessus du plancher.
+- Correctif : le chemin sans transcript exige désormais simultanément une AEC active et une énergie mesurée au-dessus d’une référence de fuite. Une durée seule ne coupe plus ; sans AEC active, seul un transcript adressé (`Lisa` ou arrêt explicite) peut interrompre.
+- Tests CONV2 faux corrigés avec preuve : trois scénarios positifs d’interruption acoustique omettaient `aecActive` et, pour l’un, toute référence de fuite. Ces préconditions sont ajoutées conformément à l’invariant imposé ; un nouveau test négatif conserve explicitement la preuve que le même signal sans AEC active ne coupe pas.
+- Vert ciblé : trou 3 + trou 7 + `speech-reaction` + trois suites CONV2 → **6 fichiers, 63 tests réussis**.
+
 ## Grille de traçabilité
 
 | Trou | Correctif | Invariant préservé | Commit |
 |---|---|---|---|
 | 7 | Coupe-circuit de tour suspect + empreinte courte de propre voix ; chronométrage fautif du test corrigé avec preuve | Boucle d’auto-dialogue, toutes briques actives et `AEC_TRUST=false` | Ce commit |
-| 3 | À établir | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | À venir |
+| 3 | Exiger AEC active + marge de fuite mesurée avant tout barge-in sans transcript ; durée seule refusée | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | Ce commit |
 | 2 | À établir | Filtre de propre voix, y compris fragments courts de moins de 90 s | À venir |
 | 1 | À établir | Aucun backchannel avant décision ni pendant la parole du robot | À venir |
 | 4 | À établir | Aucune première phrase CONV3 avant décision | À venir |

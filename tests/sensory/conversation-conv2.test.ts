@@ -114,6 +114,8 @@ describe('CONV2 — speech_start barge-in', () => {
         startedAtMs: playbackStartedAt + 400,
         durationMs: 300,
         rms: 0.04,
+        noiseFloorRms: 0.01,
+        aecActive: true,
       });
 
       await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));

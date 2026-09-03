@@ -127,8 +127,8 @@ describe('CONV2 — interrupted-turn continuation', () => {
       transcriptFinal('Lisa, ouvre la conversation.');
       await waitFor(() => expect(heard).toEqual(['Lisa, ouvre la conversation.']));
       beginSpeaking(clock);
-      speechStart({ startedAtMs: clock + 100, rms: 0.01 });
-      speechStart({ startedAtMs: clock + 400, rms: 0.04 });
+      speechStart({ startedAtMs: clock + 100, rms: 0.01, aecActive: true });
+      speechStart({ startedAtMs: clock + 400, rms: 0.04, aecActive: true });
       transcriptFinal('continue sans répéter.', { startedAtMs: clock + 450 });
       releaseFirst();
       await waitFor(() => expect(heard).toHaveLength(2));

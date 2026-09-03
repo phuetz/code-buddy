@@ -8,6 +8,7 @@ import {
   isBargeInTranscript,
   resolveVoiceBargeInMinMs,
   shouldTriggerVoiceBargeIn,
+  shouldTriggerVoiceBargeInOnSpeechStart,
   resolveSpeechDebounceMs,
   normalizeSpeechTranscript,
   resolveFasterWhisperOptions,
@@ -477,6 +478,24 @@ describe('speech reaction — speech_end → STT → percept', () => {
       aecActive: false,
       audioMs: 100,
     })).toBe(true);
+  });
+
+  it('requires active AEC and a measured leakage margin for transcript-free barge-in', () => {
+    const energeticSpeech = {
+      audioMs: 300,
+      rms: 0.04,
+      noiseFloorRms: 0.01,
+    };
+    expect(shouldTriggerVoiceBargeInOnSpeechStart(energeticSpeech)).toBe(false);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      ...energeticSpeech,
+      aecActive: true,
+    })).toBe(true);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      audioMs: 300,
+      rms: 0.04,
+      aecActive: true,
+    })).toBe(false);
   });
 
   it('keeps the half-duplex guard closed when AEC is announced but not explicitly trusted', async () => {

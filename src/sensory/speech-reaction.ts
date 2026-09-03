@@ -216,11 +216,23 @@ export function voiceBargeInEnabled(env: NodeJS.ProcessEnv = process.env): boole
   return env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
 }
 
-/** Speech-start has no transcript yet; a sustained acoustic segment is enough to cut. */
+/**
+ * Speech-start has no transcript yet. It may cut only when active capture-side
+ * AEC accompanies both sustained speech and a calibrated energy margin.
+ */
 export function shouldTriggerVoiceBargeInOnSpeechStart(
   payload: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
+  if (payload.aecActive !== true
+    || (capturedSpeechMs(payload) ?? 0) < DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS) {
+    return false;
+  }
+  const rms = finiteTimestamp(payload.rms);
+  const leakageRms = finiteTimestamp(payload.noiseFloorRms);
+  return rms !== undefined
+    && leakageRms !== undefined
+    && exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
 }
 
 export function resolveVoiceBargeInMarginDb(env: NodeJS.ProcessEnv = process.env): number {
@@ -1531,7 +1543,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     payload: Record<string, unknown>,
     speechStartedAtMs: number | undefined,
   ): boolean => {
-    if (!voiceBargeInEnabled(env) || speechStartedAtMs === undefined) return false;
+    if (
+      !voiceBargeInEnabled(env)
+      || payload.aecActive !== true
+      || speechStartedAtMs === undefined
+    ) return false;
     const timing = measureVoiceResumeTiming(speechStartedAtMs);
     if (timing?.kind !== 'during_playback') {
       resetLeakageReference();
@@ -1541,7 +1557,6 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     if (leakagePlaybackStartedAtMs !== playbackStartedAtMs) {
       resetLeakageReference(playbackStartedAtMs);
     }
-    const durationReady = (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
     const rms = payloadRms(payload);
     const noiseFloorRms = payloadNoiseFloorRms(payload);
     const referenceSample = noiseFloorRms ?? rms;
@@ -1553,9 +1568,8 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     }
     if (timing.afterPlaybackStartMs <= VOICE_BARGEIN_LEAKAGE_REFERENCE_MS) {
       if (referenceSample !== undefined) leakageSamples.push(referenceSample);
-      return durationReady;
+      return false;
     }
-    if (durationReady) return true;
     const leakageRms = leakageSamples.length > 0
       ? leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length
       : noiseFloorRms;
@@ -2256,7 +2270,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         && !suspectedOwnPlayback
         && voiceBargeInEnabled(env)
         && (
-          shouldTriggerVoiceBargeInOnSpeechStart(payload)
+          shouldTriggerVoiceBargeInOnSpeechStart(payload, env)
           || shouldTriggerAcousticBargeIn(payload, speechStartedAtMs)
         )
         && (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
