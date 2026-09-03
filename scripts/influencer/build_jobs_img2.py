@@ -52,8 +52,8 @@ LISA_SCENES: list[dict[str, Any]] = [
             ),
             (
                 "digital-brain",
-                "An abstract neural core studies a floating sequence of unlabeled video "
-                "frames; one restrained pulse links two frames and fades.",
+                "An abstract neural core studies a ring of five solid translucent color "
+                "tiles containing no images; one restrained pulse links two blank tiles and fades.",
             ),
         ],
     },
@@ -370,6 +370,8 @@ def build(
     for scene in LISA_SCENES:
         for index, (reference, description) in enumerate(scene["plans"]):
             suffix = "a" if index == 0 else "b"
+            if scene["slug"] == "gemini-video-agentique" and suffix == "b":
+                suffix = "b-safe"
             job: dict[str, Any] = {
                 "name": f"lisa-img2-{scene['slug']}-{suffix}",
                 "mode": "video",

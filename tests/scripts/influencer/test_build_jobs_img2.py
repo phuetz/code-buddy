@@ -40,6 +40,9 @@ def test_img2_manifest_exact_counts_and_constraints(tmp_path: Path) -> None:
     assert {job["duration"] for job in lisa + ambre} == {6}
     assert {job["aspect_ratio"] for job in lisa} == {"9:16"}
     assert {job["aspect_ratio"] for job in ambre} == {"16:9"}
+    lisa_names = {job["name"] for job in lisa}
+    assert "lisa-img2-gemini-video-agentique-b-safe" in lisa_names
+    assert "lisa-img2-gemini-video-agentique-b" not in lisa_names
 
 
 def test_img2_prompts_lock_visual_safety_and_motion(tmp_path: Path) -> None:
