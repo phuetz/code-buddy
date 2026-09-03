@@ -38,6 +38,12 @@ import type {
 } from './types.js';
 import type { ContextEngine } from './context-engine.js';
 import { isContextZoomEnabled, SegmentArchive } from './segment-archive.js';
+import { getGlobalEventBus } from '../events/event-bus.js';
+import type {
+  ContextCompactionPayload,
+  ContextCompactionReason,
+} from '../events/types.js';
+import { getUserHooksManager } from '../hooks/user-hooks.js';
 
 // Lazy import memory monitor to avoid circular dependencies
 let memoryMonitorModule: typeof import('../utils/memory-monitor.js') | null = null;
@@ -82,6 +88,8 @@ export interface ContextManagerConfig {
   enableEnhancedCompression: boolean;
   /** Configuration for enhanced compression */
   enhancedCompressionConfig?: Partial<EnhancedCompressionConfig>;
+  /** Working directory used to load `.codebuddy/hooks.json`. */
+  workingDirectory?: string;
 }
 
 export interface ContextStats {
@@ -264,6 +272,8 @@ export class ContextManagerV2 {
   private _importanceScorer: ImportanceScorer | null = null;
   /** Pluggable context engine (Native Engine v2026.3.7 alignment) */
   private contextEngine: ContextEngine | null = null;
+  /** A slash `/compact` request is consumed by the next real compaction. */
+  private manualCompactionRequested = false;
   /** Durable recovery store for opt-in hierarchical context summaries. */
   private readonly segmentArchive: SegmentArchive;
 
@@ -363,18 +373,28 @@ export class ContextManagerV2 {
     return this.sessionId;
   }
 
+  /** Request an explicit compaction on the next context preparation. */
+  requestManualCompaction(): void {
+    this.manualCompactionRequested = true;
+  }
+
   /**
    * Raw message preparation — used by DefaultContextEngine to delegate
    * back to the built-in compression pipeline without infinite recursion.
    */
-  prepareMessagesRaw(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+  prepareMessagesRaw(
+    messages: CodeBuddyMessage[],
+    options: { reason?: ContextCompactionReason } = {},
+  ): CodeBuddyMessage[] {
     this.rejectIfCurrentRequestExceedsBudget(messages);
     const stats = this.getStats(messages);
+    const automaticCompaction = this.shouldAutoCompact(messages);
     const shouldSoftCompact =
       this.config.enableSummarization &&
       this.effectiveLimit <= 1000 &&
       messages.length > this.config.recentMessagesCount * 2;
-    const shouldCompact = this.shouldAutoCompact(messages) || stats.isNearLimit || shouldSoftCompact;
+    const requestedCompaction = this.manualCompactionRequested || options.reason !== undefined;
+    const shouldCompact = requestedCompaction || automaticCompaction || stats.isNearLimit || shouldSoftCompact;
 
     if (!shouldCompact) {
       this.lastTokenCount = stats.totalTokens;
@@ -382,12 +402,25 @@ export class ContextManagerV2 {
       return messages;
     }
 
+    const reason = options.reason ?? (this.manualCompactionRequested ? 'manual' : 'auto');
+    this.manualCompactionRequested = false;
+    const preCompact: ContextCompactionPayload = {
+      reason,
+      tokensBefore: stats.totalTokens,
+      messagesBefore: messages.length,
+    };
+    getGlobalEventBus().emit('context:pre_compact', preCompact);
+    const preservedContext = getUserHooksManager(
+      this.config.workingDirectory ?? process.cwd(),
+    ).runPreCompact(preCompact);
+
     let compacted: CodeBuddyMessage[];
     if (this.config.enableEnhancedCompression && this.enhancedCompressor) {
       compacted = this.prepareMessagesEnhanced(messages, stats);
     } else {
       compacted = this.prepareMessagesLegacy(messages, stats);
     }
+    compacted = this.injectPreservedContext(compacted, preservedContext);
 
     this.assertLastUserPreserved(messages, compacted);
     this.assertFitsTokenLimit(compacted);
@@ -408,7 +441,37 @@ export class ContextManagerV2 {
     // Re-arm warning thresholds we've dropped below so they can fire again.
     this.rearmWarningsAfterCompaction(stats, compacted);
 
+    getGlobalEventBus().emit('context:post_compact', {
+      ...preCompact,
+      tokensAfter: newStats.totalTokens,
+      messagesAfter: compacted.length,
+    });
+
     return compacted;
+  }
+
+  private injectPreservedContext(
+    messages: CodeBuddyMessage[],
+    preservedContext: string | undefined,
+  ): CodeBuddyMessage[] {
+    if (!preservedContext) return messages;
+    const block = `<preserved_context>\n${preservedContext}\n</preserved_context>`;
+    const summaryIndex = messages.findIndex(message =>
+      message.role === 'system' &&
+      typeof message.content === 'string' &&
+      /summary|summarized/i.test(message.content),
+    );
+    const index = summaryIndex >= 0 ? summaryIndex : messages.findIndex(message => message.role === 'system');
+    if (index < 0) {
+      return [{ role: 'system', content: block }, ...messages];
+    }
+    const target = messages[index];
+    if (!target || typeof target.content !== 'string') return messages;
+    return messages.map((message, messageIndex) =>
+      messageIndex === index
+        ? { ...message, content: `${target.content}\n${block}` }
+        : message,
+    );
   }
 
   /**
@@ -619,7 +682,10 @@ export class ContextManagerV2 {
    * Implements auto-compact like mistral-vibe's AutoCompactMiddleware
    * Now supports enhanced compression with key info preservation
    */
-  prepareMessages(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+  prepareMessages(
+    messages: CodeBuddyMessage[],
+    options: { reason?: ContextCompactionReason } = {},
+  ): CodeBuddyMessage[] {
     this.rejectIfCurrentRequestExceedsBudget(messages);
     // Delegate to pluggable context engine if registered (Native Engine v2026.3.7)
     if (this.contextEngine) {
@@ -647,7 +713,7 @@ export class ContextManagerV2 {
       }
 
       // Non-owning engine: run built-in compaction first, then assemble
-      const compacted = this.prepareMessagesRaw(messages);
+      const compacted = this.prepareMessagesRaw(messages, options);
       const result = this.contextEngine.assemble(compacted, this.effectiveLimit);
       const finalized = finalizeEngineMessages(result.messages);
       this.assertLastUserPreserved(messages, finalized);
@@ -657,37 +723,14 @@ export class ContextManagerV2 {
     }
 
     // Default pipeline (no engine registered)
-    return this.prepareMessagesRaw(messages);
+    return this.prepareMessagesRaw(messages, options);
   }
 
   /**
    * @deprecated Use prepareMessages() — this is kept for backwards compatibility
    */
   private _prepareMessagesInternal(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
-    const stats = this.getStats(messages);
-    const shouldSoftCompact =
-      this.config.enableSummarization &&
-      this.effectiveLimit <= 1000 &&
-      messages.length > this.config.recentMessagesCount * 2;
-
-    // Check for auto-compact threshold (like mistral-vibe)
-    const shouldCompact = this.shouldAutoCompact(messages) || stats.isNearLimit || shouldSoftCompact;
-
-    // If within limits and below auto-compact threshold, return as-is
-    if (!shouldCompact) {
-      this.lastTokenCount = stats.totalTokens;
-      return messages;
-    }
-
-    // Use enhanced compression if available, else legacy.
-    const compacted = this.config.enableEnhancedCompression && this.enhancedCompressor
-      ? this.prepareMessagesEnhanced(messages, stats)
-      : this.prepareMessagesLegacy(messages, stats);
-
-    // Re-arm warning thresholds we've dropped below so they can fire again.
-    this.rearmWarningsAfterCompaction(stats, compacted);
-
-    return compacted;
+    return this.prepareMessagesRaw(messages);
   }
 
   /**
@@ -1749,7 +1792,8 @@ export type {
  */
 export function createContextManager(
   model: string,
-  maxTokens?: number
+  maxTokens?: number,
+  workingDirectory?: string,
 ): ContextManagerV2 {
   // Use getModelToolConfig for glob-pattern matching (covers grok-3*, grok-4*, claude-*, etc.)
   const toolConfig = getModelToolConfig(model);
@@ -1764,6 +1808,7 @@ export function createContextManager(
     // so shouldAutoCompact() could never fire on it. Clamp it to the window;
     // for ≥200K-window models (grok 2M…) the 200K cap keeps its meaning.
     autoCompactThreshold: Math.min(200_000, detectedLimit),
+    ...(workingDirectory ? { workingDirectory } : {}),
   });
 }
 

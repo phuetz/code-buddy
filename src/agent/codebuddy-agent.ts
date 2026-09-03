@@ -162,7 +162,7 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Create infrastructure - encapsulates all manager dependencies
     this.infrastructure = createAgentInfrastructureSync(
-      { apiKey, model: modelToUse, baseURL, maxContextTokens },
+      { apiKey, model: modelToUse, baseURL, maxContextTokens, workingDirectory: initialWorkingDirectory },
       { memoryEnabled: this.memoryEnabled, useModelRouting: this.useModelRouting }
     );
 
@@ -1722,6 +1722,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
     if (this.abortController) {
       this.abortController.abort();
     }
+  }
+
+  requestManualCompaction(): void {
+    this.contextManager.requestManualCompaction();
   }
 
   // Clear chat and reset

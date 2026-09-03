@@ -42,6 +42,8 @@ export interface HeadlessSlashContext {
   client?: CodeBuddyClient;
   /** Optional goal-state key for non-TUI surfaces with their own session ids. */
   goalSessionKey?: string;
+  /** Mark the next context preparation as an explicit `/compact` request. */
+  requestCompaction?: () => void;
 }
 
 /** Result of running a special token outside the TUI. */
@@ -54,6 +56,8 @@ export interface HeadlessSlashResult {
   prompt?: string;
   /** True when the handler asked the surface to send `prompt` to the LLM. */
   passToAI?: boolean;
+  /** True when the command requested a manual compaction boundary. */
+  compactionRequested?: boolean;
   /** True when the token is recognized but intentionally gated for this surface. */
   denied?: boolean;
   /** Human-readable reason, set when denied or when a handler throws. */
@@ -107,6 +111,7 @@ export async function executeHeadlessSlashToken(
         output: result.entry?.content,
         prompt: result.prompt,
         passToAI: result.passToAI,
+        compactionRequested: result.compactionRequested,
       };
     }
 
@@ -115,11 +120,13 @@ export async function executeHeadlessSlashToken(
       args,
       [token, ...args].join(" "),
     );
+    if (result.compactionRequested) ctx.requestCompaction?.();
     return {
       handled: result.handled,
       output: result.entry?.content,
       prompt: result.prompt,
       passToAI: result.passToAI,
+      compactionRequested: result.compactionRequested,
     };
   } catch (error: unknown) {
     return {

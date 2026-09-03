@@ -135,6 +135,7 @@ export async function handleCompact(
 
   return {
     handled: true,
+    compactionRequested: true,
     entry: {
       type: 'assistant',
       content: lines.join('\n'),

@@ -688,10 +688,31 @@ export interface ContextCompressedEvent extends BaseEvent {
   compressedSize: number;
 }
 
+export type ContextCompactionReason = 'auto' | 'manual' | 'plugin';
+
+export interface ContextCompactionPayload {
+  reason: ContextCompactionReason;
+  tokensBefore: number;
+  tokensAfter?: number;
+  messagesBefore: number;
+  messagesAfter?: number;
+  droppedSegmentIds?: string[];
+}
+
+export interface ContextPreCompactEvent extends BaseEvent, ContextCompactionPayload {
+  type: 'context:pre_compact';
+}
+
+export interface ContextPostCompactEvent extends BaseEvent, ContextCompactionPayload {
+  type: 'context:post_compact';
+}
+
 export interface ContextEvents extends Record<string, BaseEvent> {
   'context:loaded': ContextLoadedEvent;
   'context:updated': ContextUpdatedEvent;
   'context:compressed': ContextCompressedEvent;
+  'context:pre_compact': ContextPreCompactEvent;
+  'context:post_compact': ContextPostCompactEvent;
 }
 
 // ============================================================================
@@ -918,6 +939,8 @@ export interface AllEvents extends Record<string, BaseEvent> {
   'context:loaded': ContextLoadedEvent;
   'context:updated': ContextUpdatedEvent;
   'context:compressed': ContextCompressedEvent;
+  'context:pre_compact': ContextPreCompactEvent;
+  'context:post_compact': ContextPostCompactEvent;
 
   // Performance Events
   'perf:metric': PerformanceMetricEvent;

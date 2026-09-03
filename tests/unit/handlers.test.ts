@@ -1470,6 +1470,7 @@ describe('Vibe Handlers', () => {
       const result = await handleCompact([], history);
 
       expect(result.handled).toBe(true);
+      expect(result.compactionRequested).toBe(true);
       expect(result.entry?.content).toContain('Compacting Conversation');
       expect(result.entry?.content).toContain('Current messages: 2');
     });

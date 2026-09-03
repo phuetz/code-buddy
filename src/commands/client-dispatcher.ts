@@ -219,6 +219,9 @@ export class ClientCommandDispatcher {
     const handlerResult = await enhancedHandler.handleCommand(token, args, originalInput);
 
     if (handlerResult.handled) {
+      if (handlerResult.compactionRequested) {
+        context.agent.requestManualCompaction();
+      }
       if (handlerResult.entry) {
         context.setChatHistory((prev) => [...prev, handlerResult.entry!]);
       }
