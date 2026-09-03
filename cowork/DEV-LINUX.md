@@ -177,4 +177,4 @@ when chasing a UI bug.
 | Electron freezes on boot | xrdp without `--disable-gpu` | always set the flag in dev |
 | `prepare:python:all HTTP 504` | GitHub releases API rate limit | skip — use `npx vite build` instead of `npm run build` |
 | `port 3000 already in use` | leftover `buddy serve` | `pkill -f "buddy serve"` or kill the PID from `ss -tlnp` |
-| `mainWindow=false` log on every event | regression of the dual-mainWindow bug | run electron with `--enable-logging`; if the log shows up, `setMainWindow()` is missing somewhere — see `architecture.md` |
+| `mainWindow=false` log on every event | regression of the dual-mainWindow bug | run electron with `--enable-logging`; if the log shows up, `setMainWindow()` is missing somewhere — see `ARCHITECTURE.md` |

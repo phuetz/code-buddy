@@ -192,10 +192,17 @@ Cowork inherits Code Buddy's providers — cheapest paths first:
 - **API key**: Grok / OpenAI / Anthropic / Gemini / OpenRouter / GLM / MiniMax / Kimi … — paste the key + base URL in **Settings → API**.
 
 ### 2. Configure
-Open ⚙️ **Settings** (grouped into Essentials · Models & Cost · Tools & MCP · Skills & Plugins · Automation · Security & Workspace · Server & Diagnostics). Set your provider/model and pick a **workspace** folder the agent may work in.
+On first launch, choose **Quick start** then **Local runtimes** to land on Ollama (not OpenRouter).
+Save the model, then **Choose a folder…** for a workspace the agent may write in — a native
+directory dialog, so a graphical session is required. Open ⚙️ **Settings** later for Essentials ·
+Models & Cost · Tools & MCP · Skills & Plugins · Automation · Security & Workspace · Server &
+Diagnostics.
 
 ### 3. Cowork
 Enter a prompt — e.g. *"Read `financial_report.csv` in this folder and create a 5‑slide PowerPoint summary."* Watch the run in the trace panel; use the Stop button to cancel an active turn.
+
+The left rail **Library** (🖼️) is the media library (generated images, video, audio). **History**
+reopens past chat sessions after a restart.
 
 ---
 
