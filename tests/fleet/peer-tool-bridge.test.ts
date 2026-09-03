@@ -323,20 +323,23 @@ describe('PeerToolBridge', () => {
       expect(res.error?.message).toContain('Policy Engine block');
     });
 
-    it('prompts confirmation when PolicyEngine decides needs_approval and succeeds if approved', async () => {
+    it('does not open a human prompt on needs_approval: the three fleet gates already passed (GK17, headless server)', async () => {
       await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'approved_data');
-      
+
       vi.spyOn(PolicyEngine.getInstance(), 'evaluate').mockReturnValue({
         decision: 'needs_approval',
         reason: 'Approval required',
       });
 
+      // On a headless `buddy server` a ConfirmationService prompt auto-rejects in milliseconds,
+      // which made peer.tool.invoke unusable in real use (GK17). needs_approval is not a second
+      // human gate: allowlist + fleetSafe + workspace root + JWT scope already decided.
       const confirmSpy = vi
         .spyOn(ConfirmationService.getInstance(), 'requestConfirmation')
-        .mockResolvedValue({ confirmed: true });
+        .mockResolvedValue({ confirmed: false });
 
       const frame = {
-        id: 'req-policy-confirm-ok',
+        id: 'req-policy-needs-approval',
         method: 'peer.tool.invoke',
         params: {
           tool: 'view_file',
@@ -347,21 +350,19 @@ describe('PeerToolBridge', () => {
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(true);
       expect((res.payload as any).output).toBe('approved_data');
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy).not.toHaveBeenCalled();
     });
 
-    it('prompts confirmation when PolicyEngine decides needs_approval and fails if rejected', async () => {
+    it('still blocks when PolicyEngine decides deny', async () => {
+      await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'denied_data');
+
       vi.spyOn(PolicyEngine.getInstance(), 'evaluate').mockReturnValue({
-        decision: 'needs_approval',
-        reason: 'Approval required',
+        decision: 'deny',
+        reason: 'Denied by policy',
       });
 
-      const confirmSpy = vi
-        .spyOn(ConfirmationService.getInstance(), 'requestConfirmation')
-        .mockResolvedValue({ confirmed: false });
-
       const frame = {
-        id: 'req-policy-confirm-fail',
+        id: 'req-policy-deny',
         method: 'peer.tool.invoke',
         params: {
           tool: 'view_file',
@@ -371,8 +372,6 @@ describe('PeerToolBridge', () => {
 
       const res = await dispatchPeerRequest(frame, defaultCtx);
       expect(res.ok).toBe(false);
-      expect(res.error?.message).toContain('Human approval was rejected');
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
     });
 
     it('bypasses confirmation when PolicyEngine decides allow', async () => {
