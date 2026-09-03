@@ -115,6 +115,70 @@ export function extractMemoriesFromMessages(
   return memories;
 }
 
+/**
+ * Extract memories from a rollout or a persisted session payload.
+ *
+ * Rollouts are commonly represented as JSONL, while SessionStore persists a
+ * JSON object containing a `messages` array. Supporting both shapes keeps the
+ * background worker independent from the session persistence format.
+ */
+export function extractMemoriesFromRollout(
+  rollout: unknown,
+  source: string = 'rollout',
+): ExtractedMemory[] {
+  let payload: unknown = rollout;
+
+  if (typeof rollout === 'string') {
+    let contents = rollout;
+    try {
+      if (fs.existsSync(rollout)) {
+        contents = fs.readFileSync(rollout, 'utf8');
+        source = rollout;
+      }
+    } catch {
+      // Treat the input as rollout content when a path cannot be read.
+    }
+    try {
+      payload = JSON.parse(contents);
+    } catch {
+      payload = contents
+        .split(/\r?\n/)
+        .filter(line => line.trim())
+        .flatMap(line => {
+          try {
+            return [JSON.parse(line) as unknown];
+          } catch {
+            return [];
+          }
+        });
+    }
+  }
+
+  const rawMessages = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.messages)
+      ? payload.messages
+      : [];
+  const messages = rawMessages.flatMap(message => {
+    if (!isRecord(message) || typeof message.content !== 'string') {
+      return [];
+    }
+
+    const role = typeof message.role === 'string'
+      ? message.role
+      : typeof message.type === 'string'
+        ? message.type
+        : null;
+    return role ? [{ role, content: message.content }] : [];
+  });
+
+  return extractMemoriesFromMessages(messages, source);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // ============================================================================
 // Phase 2: Consolidation
 // ============================================================================

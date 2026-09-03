@@ -666,6 +666,18 @@ export interface MemoryEvents extends Record<string, BaseEvent> {
   'memory:cleared': MemoryClearedEvent;
 }
 
+export interface MemoryExtractionEvent extends BaseEvent {
+  type: 'memory:extraction_started' | 'memory:extraction_completed';
+  sessionCount: number;
+  memoriesAdded: number;
+  durationMs: number;
+}
+
+export interface MemoryExtractionEvents extends Record<string, BaseEvent> {
+  'memory:extraction_started': MemoryExtractionEvent;
+  'memory:extraction_completed': MemoryExtractionEvent;
+}
+
 // ============================================================================
 // Context Events
 // ============================================================================
@@ -934,6 +946,8 @@ export interface AllEvents extends Record<string, BaseEvent> {
   'memory:retrieved': MemoryRetrievedEvent;
   'memory:deleted': MemoryDeletedEvent;
   'memory:cleared': MemoryClearedEvent;
+  'memory:extraction_started': MemoryExtractionEvent;
+  'memory:extraction_completed': MemoryExtractionEvent;
 
   // Context Events
   'context:loaded': ContextLoadedEvent;
