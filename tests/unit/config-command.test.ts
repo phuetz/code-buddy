@@ -169,6 +169,7 @@ jest.mock('../../src/codebuddy/tools', () => ({
     { function: { name: 'file_viewer' } },
     { function: { name: 'git_status' } },
   ]),
+  initializeMCPServers: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock interactive setup
@@ -754,6 +755,17 @@ describe('Compact Handler', () => {
 
 describe('Tools Handler', () => {
   describe('handleTools', () => {
+    const previousDisableMcp = process.env.CODEBUDDY_DISABLE_MCP;
+
+    beforeEach(() => {
+      process.env.CODEBUDDY_DISABLE_MCP = 'true';
+    });
+
+    afterEach(() => {
+      if (previousDisableMcp === undefined) delete process.env.CODEBUDDY_DISABLE_MCP;
+      else process.env.CODEBUDDY_DISABLE_MCP = previousDisableMcp;
+    });
+
     it('should list tools when no action provided', async () => {
       const result = await handleTools([]);
 

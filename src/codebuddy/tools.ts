@@ -477,6 +477,16 @@ export function codeExplorerToolPrefix(): string | null {
 
 let mcpServersInitPromise: Promise<void> | null = null;
 
+/** Drop the process-wide MCP singleton (tests / one-shot CLI teardown). */
+export async function resetMCPManager(): Promise<void> {
+  const current = mcpManager;
+  mcpManager = null;
+  mcpServersInitPromise = null;
+  if (current) {
+    await current.dispose();
+  }
+}
+
 export function initializeMCPServers(): Promise<void> {
   if (mcpServersInitPromise) return mcpServersInitPromise;
   const run = initializeMCPServersOnce();

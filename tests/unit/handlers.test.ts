@@ -256,6 +256,7 @@ jest.mock('../../src/codebuddy/tools', () => ({
     { function: { name: 'bash' } },
     { function: { name: 'search_files' } },
   ]),
+  initializeMCPServers: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock interactive-setup
@@ -1482,6 +1483,17 @@ describe('Vibe Handlers', () => {
   });
 
   describe('handleTools', () => {
+    const previousDisableMcp = process.env.CODEBUDDY_DISABLE_MCP;
+
+    beforeEach(() => {
+      process.env.CODEBUDDY_DISABLE_MCP = 'true';
+    });
+
+    afterEach(() => {
+      if (previousDisableMcp === undefined) delete process.env.CODEBUDDY_DISABLE_MCP;
+      else process.env.CODEBUDDY_DISABLE_MCP = previousDisableMcp;
+    });
+
     test('should list tools by default', async () => {
       const result = await handleTools([]);
 
