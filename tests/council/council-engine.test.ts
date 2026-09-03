@@ -549,6 +549,27 @@ describe('runCouncilPipeline', () => {
     expect(panel?.requestedCount).toBe(1);
     expect(panel?.modelsMatched).toBe(true);
   });
+
+  it('does not fall back to the whole pool when --models matches nothing', async () => {
+    const candidates = [
+      candidate('chatgpt', 'gpt-5.6-sol'),
+      candidate('agy-cli', 'gemini-3.8-flash-high'),
+      candidate('ollama', 'gemma4-moe-rag:latest'),
+    ];
+    const clients = {
+      'gpt-5.6-sol': fakeClient('gpt-5.6-sol', { answer: 'paid' }),
+      'gemini-3.8-flash-high': fakeClient('gemini-3.8-flash-high', { answer: 'paid' }),
+      'gemma4-moe-rag:latest': fakeClient('gemma4-moe-rag:latest', { answer: 'local' }),
+    };
+    const deps = makeDeps(candidates, clients);
+
+    await expect(
+      runCouncilPipeline(TASK, { count: 2, models: 'qwen3:4b-instruct' }, deps),
+    ).rejects.toMatchObject({
+      name: 'CouncilError',
+      code: 'no-candidates',
+    });
+  });
 });
 
 describe('conductor role stability', () => {

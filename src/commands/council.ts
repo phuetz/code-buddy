@@ -273,7 +273,9 @@ export async function runCouncil(task: string, opts: CouncilOptions, out: Emit):
     if (err instanceof CouncilError) {
       out(
         err.code === 'no-candidates'
-          ? 'No active LLMs detected. Run `buddy login`, set an API key, or start Ollama.'
+          ? err.message.startsWith('no model matched')
+            ? `❌ Aucun modèle ne correspond à --models. ${err.message}`
+            : 'No active LLMs detected. Run `buddy login`, set an API key, or start Ollama.'
           : '❌ Toutes les IA ont échoué.',
       );
       process.exitCode = 1;

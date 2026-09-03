@@ -168,6 +168,12 @@ export async function runCouncilPipeline(
     throw new CouncilError('no-candidates', 'no active LLMs detected');
   }
   const modelFilter = filterCouncilCandidates(usable, opts.models);
+  if (opts.models?.trim() && !modelFilter.matched) {
+    throw new CouncilError(
+      'no-candidates',
+      `no model matched --models « ${opts.models} »`,
+    );
+  }
   let candidates = modelFilter.candidates;
 
   // 2. capability routing × learned bias
