@@ -143,14 +143,15 @@ describe('GK34 /batch success contract', () => {
       },
       async (label) => ({
         label,
-        success: false,
-        summary: 'No files changed',
+        success: true,
+        summary: '',
         durationMs: 1,
         filesChanged: [],
       }),
     );
     expect(results[0]?.success).toBe(false);
     expect(results[0]?.summary).toMatch(/no files changed/i);
+    expect(results[0]?.filesChanged).toEqual([]);
   });
 
   it('handleBatchSlashCommand still plans-only when no spawnFn is wired', async () => {
