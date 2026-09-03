@@ -436,6 +436,21 @@ export function registerImproveCommands(program: Command): void {
     });
 
   improve
+    .command('skills-archive <name>')
+    .description('Archive an authored skill (recoverable; refuses pinned skills)')
+    .option('--json', 'output JSON')
+    .action(async (name: string, options: ImproveOptions) => {
+      const { LiveSkillMutator } = await import('../../agent/self-improvement/skill-mutator.js');
+      const mutator = new LiveSkillMutator();
+      const ok = mutator.archive(name);
+      print(
+        { kind: 'skill_archive', name, ok },
+        options,
+        ok ? `Archived ${name}` : `Could not archive ${name} (missing, not authored, or pinned)`,
+      );
+    });
+
+  improve
     .command('skills-restore <name>')
     .description('Restore a previously archived authored skill')
     .option('--json', 'output JSON')
