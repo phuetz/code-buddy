@@ -142,7 +142,15 @@ Rouge collé : `Files: 1 (settings.json)` sans mention de `session-big.json` (1 
 
 Correctif : skip enregistré `larger than 1 MB` dans `Skipped:`.
 
-Vert : 5 fichiers / 30 tests.
+Vert : 5 fichiers / 30 tests. Commit `31b84a41a`.
+
+### Lot F — restauration = fusion explicite (rouge → vert)
+
+Rouge collé : preview « This will overwrite current .codebuddy/ configuration. » sans citer `extra-not-in-archive.md`.
+
+Correctif : fusion nommée (fichiers extra listés, preview + succès). Pas un refus : les extras restent.
+
+Vert : 6 fichiers / 33 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

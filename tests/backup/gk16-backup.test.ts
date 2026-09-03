@@ -231,3 +231,45 @@ describe('GK16 create must not silently drop files larger than 1 MB', () => {
     expect(archive.files.map((file) => file.path)).toEqual(['settings.json']);
   });
 });
+
+describe('GK16 restore into a non-empty profile is an explicit merge', () => {
+  let workspace: string;
+  let previousCwd: string;
+
+  beforeEach(() => {
+    previousCwd = process.cwd();
+    workspace = makeTmpDir('gk16-backup-merge-', path.join(previousCwd, 'tmp'));
+    process.chdir(workspace);
+    fs.mkdirSync(path.join(workspace, '.codebuddy'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'settings.json'), '{"theme":"dark"}\n');
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    removeTmpDir(workspace);
+  });
+
+  it('names extra files that will be left in place instead of implying a full replace', async () => {
+    const output = path.join(workspace, 'backups');
+    const created = await handleBackup(`create --output ${output}`);
+    expect(created.exitCode ?? 0).toBe(0);
+    const archive = path.join(output, fs.readdirSync(output).filter((name) => name.endsWith('.json'))[0]!);
+
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'settings.json'), '{"theme":"wiped"}\n');
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'extra-not-in-archive.md'), 'I should survive merge\n');
+
+    const preview = await handleBackup(`restore ${archive}`);
+    expect(preview.exitCode ?? 0).toBe(0);
+    expect(preview.response).toMatch(/leave|left in place|merge|not in the archive/i);
+    expect(preview.response).toContain('extra-not-in-archive.md');
+
+    const restored = await handleBackup(`restore ${archive} --confirm`);
+    expect(restored.exitCode ?? 0).toBe(0);
+    expect(restored.response).toMatch(/left in place|merged/i);
+    expect(restored.response).toContain('extra-not-in-archive.md');
+    expect(fs.readFileSync(path.join(workspace, '.codebuddy', 'extra-not-in-archive.md'), 'utf8')).toBe(
+      'I should survive merge\n',
+    );
+    expect(fs.readFileSync(path.join(workspace, '.codebuddy', 'settings.json'), 'utf8')).toBe('{"theme":"dark"}\n');
+  });
+});

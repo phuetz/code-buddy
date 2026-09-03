@@ -322,6 +322,17 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
       };
     }
 
+    const destRoot = resolve(join(process.cwd(), '.codebuddy'));
+    let extras: string[] = [];
+    try {
+      extras = extraFilesNotInArchive(
+        destRoot,
+        manifest.files.map((file) => file.path),
+      );
+    } catch {
+      extras = [];
+    }
+
     if (!confirm) {
       return {
         handled: true,
@@ -330,7 +341,8 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
           `Created: ${manifest.createdAt}`,
           `Files: ${manifest.files.length}`,
           '',
-          'This will overwrite current .codebuddy/ configuration.',
+          'This merges into the current project .codebuddy/: archive files are overwritten, extra files are left in place.',
+          formatExtraFilesLine(extras) || 'No extra files are present in .codebuddy/.',
           'To confirm, run: backup restore <file> --confirm',
         ].join('\n'),
       };
@@ -346,7 +358,6 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     }
 
     const archiveFiles = data.files as BackupArchiveFile[];
-    const destRoot = resolve(join(process.cwd(), '.codebuddy'));
 
     try {
       mkdirSync(destRoot, { recursive: true });
@@ -416,6 +427,9 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
           `Restored backup: ${basename(fullPath)}`,
           `Files: ${restored.length}`,
           `Verified: sha256 match for ${restored.length} file(s)`,
+          extras.length === 0
+            ? 'Merged: no extra files were present in .codebuddy/.'
+            : `Merged: ${formatExtraFilesLine(extras)}`,
         ].join('\n'),
       };
     } catch (err) {
@@ -623,6 +637,50 @@ function collectFiles(
   }
 
   return results;
+}
+
+function listProfileRelativeFiles(root: string): string[] {
+  const results: string[] = [];
+  const walk = (dir: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const name = typeof entry === 'string' ? entry : entry?.name;
+      if (typeof name !== 'string' || name.length === 0) continue;
+      const full = join(dir, name);
+      const rel = relative(root, full).replace(/\\/g, '/');
+      if (rel === '.backup-restore-staging' || rel.startsWith('.backup-restore-staging/')) continue;
+      if (typeof entry !== 'object' || entry === null) {
+        results.push(rel);
+        continue;
+      }
+      if (typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink()) {
+        results.push(rel);
+        continue;
+      }
+      if (typeof entry.isDirectory === 'function' && entry.isDirectory()) walk(full);
+      else results.push(rel);
+    }
+  };
+  if (!existsSync(root)) return [];
+  walk(root);
+  return results.sort();
+}
+
+function extraFilesNotInArchive(destRoot: string, archivePaths: string[]): string[] {
+  const inArchive = new Set(archivePaths);
+  return listProfileRelativeFiles(destRoot).filter((filePath) => !inArchive.has(filePath));
+}
+
+function formatExtraFilesLine(extras: string[]): string {
+  if (extras.length === 0) return '';
+  const shown = extras.slice(0, 12);
+  const more = extras.length > 12 ? `; …and ${extras.length - 12} more` : '';
+  return `${extras.length} extra file(s) not in the archive will be left in place: ${shown.join(', ')}${more}`;
 }
 
 function resolveBackupPath(filePath: string): string {
