@@ -65,14 +65,20 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 
 | Trou | Correctif | Invariant préservé | Commit |
 |---|---|---|---|
-| 7 | Coupe-circuit de tour suspect + empreinte courte de propre voix ; chronométrage fautif du test corrigé avec preuve | Boucle d’auto-dialogue, toutes briques actives et `AEC_TRUST=false` | Ce commit |
-| 3 | Exiger AEC active + marge de fuite mesurée avant tout barge-in sans transcript ; durée seule refusée | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | Ce commit |
-| 2 | Étendre l’empreinte aux fragments contenus de 1–3 mots et bloquer la réparation vide près d’une voix récente | Filtre de propre voix, y compris fragments courts de moins de 90 s | Ce commit |
-| 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | Ce commit |
-| 4 | Rétablir la phrase d’avance et bufferiser short-first jusqu’à la revue lorsqu’elle est requise | Aucune première phrase CONV3 avant décision | Ce commit |
-| 6 | Mesurer le PCM accepté et reprendre ElevenLabs/Pocket à la frontière lexicale non jouée | Repli ElevenLabs au segment interrompu, jamais au début | Ce commit |
-| 5 | Donner priorité à la suspension syntaxique et attendre le reliquat 900 ms − endpoint | Grâce d’hésitation de 550–900 ms pour mots suspensifs | Ce commit |
+| 7 | Coupe-circuit de tour suspect + empreinte courte de propre voix ; chronométrage fautif du test corrigé avec preuve | Boucle d’auto-dialogue, toutes briques actives et `AEC_TRUST=false` | `362a4aeeb` |
+| 3 | Exiger AEC active + marge de fuite mesurée avant tout barge-in sans transcript ; durée seule refusée | Demi-duplex ouvert uniquement pour AEC fiable ou barge-in adressé | `6de905980` |
+| 2 | Étendre l’empreinte aux fragments contenus de 1–3 mots et bloquer la réparation vide près d’une voix récente | Filtre de propre voix, y compris fragments courts de moins de 90 s | `06c9058b5` |
+| 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | `401f3dc34` |
+| 4 | Rétablir la phrase d’avance et bufferiser short-first jusqu’à la revue lorsqu’elle est requise | Aucune première phrase CONV3 avant décision | `57aaafe76` |
+| 6 | Mesurer le PCM accepté et reprendre ElevenLabs/Pocket à la frontière lexicale non jouée | Repli ElevenLabs au segment interrompu, jamais au début | `0a890141b` |
+| 5 | Donner priorité à la suspension syntaxique et attendre le reliquat 900 ms − endpoint | Grâce d’hésitation de 550–900 ms pour mots suspensifs | `fb486f963` |
 
 ## Vérifications finales
 
-À compléter avec les commandes et totaux exacts.
+- Réunion SENSE6 : `npx vitest run tests/sensory/hole-sense6-*.test.ts` → **7 fichiers, 10 tests réussis**.
+- Suite demandée : `npx vitest run tests/sensory tests/companion tests/voice` → **157 fichiers réussis ; 1 432 tests réussis, 4 ignorés, 0 échec**.
+- Le premier passage global, avec ses temporaires placés dans le clone sous le dossier personnel, a exposé deux attentes de `companion-mode.test.ts` qui exigeaient le chemin absolu alors que le contrat CLI affiche `~/`. Le commit de harnais `03f07e9e8` vérifie désormais cette forme exacte ; test isolé : **14/14 réussis**. Aucun test n’a été supprimé, ignoré ou rendu moins strict.
+- `npm run typecheck` → **succès**, y compris `typecheck:gpuNode-identity`.
+- `git diff --name-only a500c93c5^..HEAD | rg '\.(ts|tsx)$' | xargs npx eslint` → **succès, aucune sortie**.
+- `git diff --check` → **succès** après la documentation finale.
+- Aucun push, appel d’API payante, service, audio réel ou modification du dépôt original. Les temporaires de la validation finale ont été confinés au clone puis supprimés.
