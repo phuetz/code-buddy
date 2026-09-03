@@ -1136,10 +1136,10 @@ async function processPromptHeadless(
       handler.setCodeBuddyClient(agent.getClient());
       const slash = await dispatchSlashPrompt(prompt.trim(), { client: agent.getClient() });
       if (slash?.handled) {
-        const resultText = slash.output ?? slash.reason ?? '';
+        const resultText = slash.output ?? slash.reason ?? '(slash command produced no output)';
         const format = outputFormat.toLowerCase();
         if (format === 'text' || format === 'markdown') {
-          if (resultText) cli.stdout(resultText);
+          cli.stdout(resultText);
         } else {
           cli.stdout(JSON.stringify({
             result: resultText,

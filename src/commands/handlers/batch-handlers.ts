@@ -408,6 +408,8 @@ export interface BatchSpawnOptions {
   baseURL?: string;
   model?: string;
   maxToolRounds?: number;
+  /** Max concurrent Code Buddy agents (default 1 — local Ollama cannot prefill two large contexts). */
+  concurrency?: number;
 }
 
 function gitPorcelain(cwd: string): string {
@@ -457,20 +459,45 @@ function listChangedFiles(cwd: string, before: string): string[] {
  * Spawn one Code Buddy agent per unit. Success requires a real file diff.
  */
 export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn {
+  const concurrency = Math.max(1, opts.concurrency ?? Number(process.env.CODEBUDDY_BATCH_CONCURRENCY || 1));
+  let active = 0;
+  const waiters: Array<() => void> = [];
+  const acquire = (): Promise<void> => {
+    if (active < concurrency) {
+      active += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      waiters.push(() => {
+        active += 1;
+        resolve();
+      });
+    });
+  };
+  const release = (): void => {
+    active = Math.max(0, active - 1);
+    const next = waiters.shift();
+    if (next) next();
+  };
+
   return async (label, instruction) => {
     const started = Date.now();
     const cwd = opts.cwd ?? process.cwd();
+    await acquire();
     const before = gitPorcelain(cwd);
     try {
+      process.stdout.write(`[batch] start ${label}\n`);
       const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
       const { ConfirmationService } = await import('../../utils/confirmation-service.js');
       ConfirmationService.getInstance().setSessionFlag('allOperations', true);
       ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
+      const maxRounds = opts.maxToolRounds
+        ?? Number(process.env.CODEBUDDY_BATCH_MAX_ROUNDS || 6);
       const agent = new CodeBuddyAgent(
         opts.apiKey,
         opts.baseURL,
         opts.model,
-        opts.maxToolRounds ?? 12,
+        Number.isFinite(maxRounds) && maxRounds > 0 ? maxRounds : 6,
         false,
         undefined,
         cwd,
@@ -480,6 +507,9 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
       const filesChanged = listChangedFiles(cwd, before);
       const lastAssistant = [...entries].reverse().find((e) => e.type === 'assistant' && e.content?.trim());
       const preview = (lastAssistant?.content ?? '').split('\n')[0]?.slice(0, 200) ?? '';
+      process.stdout.write(
+        `[batch] done ${label} files=${filesChanged.join(',') || '(none)'} ${((Date.now() - started) / 1000).toFixed(1)}s\n`,
+      );
       if (filesChanged.length === 0) {
         return {
           label,
@@ -497,6 +527,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         filesChanged,
       };
     } catch (err) {
+      process.stdout.write(`[batch] error ${label}: ${err instanceof Error ? err.message : String(err)}\n`);
       return {
         label,
         success: false,
@@ -504,6 +535,8 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         durationMs: Date.now() - started,
         filesChanged: listChangedFiles(cwd, before),
       };
+    } finally {
+      release();
     }
   };
 }
