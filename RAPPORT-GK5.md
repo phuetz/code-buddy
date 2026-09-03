@@ -185,9 +185,8 @@ Pas de fichier TS touché → pas de `tsc` / ESLint. `~/code-buddy` non ouvert e
 
 ```
 03bb492c3 feat(buddy-sense): ajouter Pocket TTS ONNX (feature pocket-tts)
+369ccde0a docs(gk5): consigner la faisabilité Pocket TTS Rust/ONNX
 ```
-
-Lot documentaire (ce fichier + coordination) : SHA collé après le second commit.
 
 ## Bilan (≤ 10 lignes)
 
