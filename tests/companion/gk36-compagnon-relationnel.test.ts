@@ -264,37 +264,44 @@ describe('GK36 — proactif : gap, cooldown, rest, Telegram, pas par-dessus', ()
     // 08:00 then +13 h = 21:00 : both outside the 22–8 quiet window, so silence
     // inside 12 h is the cooldown, not the night gate.
     const morning = Date.parse('2026-09-03T08:00:00+02:00');
+    let t = morning;
+    const conductor = new CompanionConductor(45_000, () => t);
     const tg = vi.fn(async () => true);
     const first = await runProactiveTick({
-      now: () => morning,
+      now: () => t,
       present: async () => false,
       telegramVoice: tg,
       statePath,
       relationshipStatePath: relPath,
       recentHearing: async () => [],
+      conductor,
     });
     expect(first).toBeTruthy();
     expect(tg).toHaveBeenCalledTimes(1);
     expect(canSend({ lastSentAt: morning, recentLines: [first!] }, morning + 11 * 3600_000, 12 * 3600_000)).toBe(
       false,
     );
+    t = morning + 11 * 3600_000;
     const again = await runProactiveTick({
-      now: () => morning + 11 * 3600_000,
+      now: () => t,
       present: async () => false,
       telegramVoice: tg,
       statePath,
       relationshipStatePath: relPath,
       recentHearing: async () => [],
+      conductor,
     });
     expect(again).toBeNull();
     expect(tg).toHaveBeenCalledTimes(1);
+    t = morning + 13 * 3600_000;
     const later = await runProactiveTick({
-      now: () => morning + 13 * 3600_000,
+      now: () => t,
       present: async () => false,
       telegramVoice: tg,
       statePath,
       relationshipStatePath: relPath,
       recentHearing: async () => [],
+      conductor,
     });
     expect(later).toBeTruthy();
     expect(tg).toHaveBeenCalledTimes(2);
