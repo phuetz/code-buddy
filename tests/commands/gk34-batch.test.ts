@@ -132,6 +132,31 @@ describe('GK34 /batch file overlap', () => {
     expect(overlapObserved).toBe(true);
     expect(maxConcurrent).toBe(2);
   });
+
+  it('explicitly authorizes delegates to create a named target that is absent', async () => {
+    let receivedInstruction = '';
+    await executeBatchPlan(
+      {
+        goal: 'create',
+        units: [
+          { label: 'new-file', instruction: 'Create new-file.js.', filePatterns: ['new-file.js'] },
+        ],
+      },
+      async (label, instruction) => {
+        receivedInstruction = instruction;
+        return {
+          label,
+          success: true,
+          summary: 'created',
+          durationMs: 1,
+          filesChanged: ['new-file.js'],
+        };
+      },
+    );
+
+    expect(receivedInstruction).toMatch(/explicitly authorized to create/i);
+    expect(receivedInstruction).toContain('create_file');
+  });
 });
 
 describe('GK34 /batch success contract', () => {
@@ -248,6 +273,44 @@ describe('GK34 /batch success contract', () => {
 
     expect(results.every((result) => result.success)).toBe(true);
     expect(maxActive).toBe(1);
+  });
+
+  it('runs each delegate turn under the configured subagent permission mode', async () => {
+    const { getPermissionModeManager, resetPermissionModeManager } = await import(
+      '../../src/security/permission-modes.js'
+    );
+    resetPermissionModeManager();
+    const permissionMode = getPermissionModeManager();
+    permissionMode.setMode('plan');
+    permissionMode.setSubagentMode('acceptEdits');
+    const dir = mkdtempSync(join(tmpdir(), 'gk34-permissions-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.email=gk34@local', '-c', 'user.name=gk34', 'commit', '--allow-empty', '-qm', 'init'], { cwd: dir });
+    const observedModes: string[] = [];
+
+    try {
+      const spawn = createDefaultBatchSpawnFn({
+        cwd: dir,
+        apiKey: 'ollama',
+        agentFactory: () => ({
+          async *processUserMessageStream() {
+            observedModes.push(getPermissionModeManager().getMode());
+            writeFileSync(join(dir, 'scoped.js'), 'export const scoped = true;\n');
+            yield { type: 'content' as const, content: 'created' };
+          },
+          abortCurrentOperation() {},
+          dispose() {},
+        }),
+      });
+      const result = await spawn('scoped', 'Create scoped.js. Only touch scoped.js.');
+      await spawn.close?.();
+
+      expect(result.success).toBe(true);
+      expect(observedModes).toEqual(['acceptEdits']);
+      expect(permissionMode.getMode()).toBe('plan');
+    } finally {
+      resetPermissionModeManager();
+    }
   });
 });
 

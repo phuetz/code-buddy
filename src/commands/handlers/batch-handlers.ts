@@ -15,11 +15,13 @@ import { CodeBuddyClient } from '../../codebuddy/client.js';
 import type { StreamingChunk } from '../../agent/types.js';
 import {
   ThreadDelegation,
+  type ThreadDelegateAgent,
   type ThreadDelegateAgentFactory,
   type ThreadDelegationEvent,
   type ThreadParentBudget,
 } from '../../agent/delegation/thread-delegation.js';
 import { getModelToolConfig } from '../../config/model-tools.js';
+import { getPermissionModeManager } from '../../security/permission-modes.js';
 
 // ============================================================================
 // Types
@@ -326,7 +328,13 @@ export async function executeBatchPlan(
       const batchResults = await Promise.allSettled(
         ready.map((unit) => {
           const instruction = unit.filePatterns?.length
-            ? `${unit.instruction}\n\nOnly modify these files: ${unit.filePatterns.join(', ')}. Do not touch any other file.`
+            ? [
+              unit.instruction,
+              '',
+              `Only create or modify these files: ${unit.filePatterns.join(', ')}. Do not touch any other file.`,
+              'You are explicitly authorized to create any named target that does not exist.',
+              'If a target is absent, use create_file or apply_patch; absence is expected and does not require confirmation.',
+            ].join('\n')
             : unit.instruction;
           return spawnFn(unit.label, instruction);
         }),
@@ -481,6 +489,30 @@ function listChangedFiles(cwd: string, before: string): string[] {
   }
 }
 
+async function* streamWithSubagentPermissionMode<TOutput>(
+  agent: ThreadDelegateAgent<TOutput>,
+  input: string,
+): AsyncGenerator<TOutput> {
+  const permissionManager = getPermissionModeManager();
+  const mode = permissionManager.getSubagentMode();
+  const iterator = agent.processUserMessageStream(input)[Symbol.asyncIterator]();
+  let completed = false;
+  try {
+    while (true) {
+      const next = await permissionManager.withModeAsync(mode, () => iterator.next());
+      if (next.done) {
+        completed = true;
+        return;
+      }
+      yield next.value;
+    }
+  } finally {
+    if (!completed && iterator.return) {
+      await permissionManager.withModeAsync(mode, () => iterator.return!());
+    }
+  }
+}
+
 /**
  * Spawn one Code Buddy agent per unit. Success requires a real file diff.
  */
@@ -513,7 +545,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         ? envContext
         : modelContext ?? 128_000),
   };
-  const createAgent: ThreadDelegateAgentFactory<StreamingChunk> = opts.agentFactory
+  const rawCreateAgent: ThreadDelegateAgentFactory<StreamingChunk> = opts.agentFactory
     ?? (async ({ budget }) => {
       const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
       const { ConfirmationService } = await import('../../utils/confirmation-service.js');
@@ -545,6 +577,15 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         getSessionCost: () => agent.getSessionCost(),
       };
     });
+  const createAgent: ThreadDelegateAgentFactory<StreamingChunk> = async (context) => {
+    const agent = await rawCreateAgent(context);
+    return {
+      processUserMessageStream: (input) => streamWithSubagentPermissionMode(agent, input),
+      abortCurrentOperation: () => agent.abortCurrentOperation(),
+      dispose: () => agent.dispose(),
+      getSessionCost: agent.getSessionCost ? () => agent.getSessionCost!() : undefined,
+    };
+  };
   const delegation = new ThreadDelegation<StreamingChunk>({
     createAgent,
     parentBudget,

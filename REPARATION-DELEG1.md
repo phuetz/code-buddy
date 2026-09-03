@@ -161,6 +161,26 @@ Tests       1 failed | 13 passed (14)
 EXIT_CODE=1
 ```
 
+Rouge de la posture d'autorisation des sous-agents (mis au jour par la preuve
+réelle : `create_file` était refusé sans TTY) :
+
+```text
+tests/commands/gk34-batch.test.ts : 1 échec | 14 passés
+expected mode ["acceptEdits"], received ["plan"]
+EXIT_CODE=1
+```
+
+Le réglage `subagentMode` existait mais `/batch` exécutait ses générateurs dans
+le mode global du parent. Le correctif doit utiliser le contexte asynchrone
+isolé de `PermissionModeManager`, sans mutation globale entre agents concurrents.
+
+Tentative 3 : ancien chemin valide (`alpha=21`, `beta=34`) en 1 292,4 ms.
+Les agents complets ont chevauché leurs exécutions pendant environ 30,0 s et
+ont tous deux produit un appel structuré `create_file`, mais la barrière exacte
+du `ToolHandler` les a refusés faute de terminal interactif. Aucun fichier n'a
+été créé, code 1 après 31,7 s : ce rouge réel est celui couvert par le test de
+posture ci-dessus et ne compte pas comme preuve finale.
+
 ## Vérifications finales
 
 À compléter.
