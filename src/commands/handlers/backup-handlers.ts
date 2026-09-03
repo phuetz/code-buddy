@@ -17,7 +17,6 @@ import {
 import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
-import { logger } from '../../utils/logger.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -96,12 +95,31 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
 
   // Ensure backup directory exists
   const backupDir = outputPath ? join(outputPath) : BACKUP_DIR;
-  if (!existsSync(backupDir)) {
-    mkdirSync(backupDir, { recursive: true });
+  try {
+    if (!existsSync(backupDir)) {
+      mkdirSync(backupDir, { recursive: true });
+    }
+  } catch (err) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response: describeBackupIoError(err, `create the backup directory ${backupDir}`),
+    };
   }
 
   // Collect files to backup
-  const files = collectFiles(sourcePath, sourcePath, { onlyConfig, noWorkspace });
+  const skipped: SkippedFile[] = [];
+  const files = collectFiles(sourcePath, sourcePath, { onlyConfig, noWorkspace }, skipped);
+  if (files.length === 0) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response:
+        `No files to back up in ${sourcePath}. ` +
+        `The directory is empty, or every file was skipped ` +
+        `(screenshots/, tool-results/, runs/, browser-data/, and files larger than 1 MB are not included).`,
+    };
+  }
 
   // Build manifest
   const manifest: BackupManifest = {
@@ -131,16 +149,31 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     fileCount: files.length,
   };
 
-  writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
+  try {
+    writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
+  } catch (err) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response: describeBackupIoError(err, `write backup ${backupPath}`),
+    };
+  }
 
-  const totalSizeKB = Math.round(backupData.totalSize / 1024);
+  const fileList = files.length <= 12
+    ? ` (${files.map((file) => file.relativePath).join(', ')})`
+    : '';
+  const skippedLine = skipped.length === 0
+    ? ''
+    : `Skipped: ${skipped.length} (${skipped.map((item) => `${item.relativePath}: ${item.reason}`).join('; ')})`;
 
   return {
     handled: true,
     response: [
       `Backup created: ${backupPath}`,
-      `Files: ${files.length}`,
-      `Size: ${totalSizeKB} KB`,
+      `Source: ${sourcePath} (current project .codebuddy/; does not include ~/.codebuddy)`,
+      `Files: ${files.length}${fileList}`,
+      `Size: ${formatBackupSize(backupData.totalSize)}`,
+      skippedLine,
       onlyConfig ? '(config only)' : '',
       noWorkspace ? '(workspace excluded)' : '',
     ].filter(Boolean).join('\n'),
@@ -180,10 +213,22 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
     }
+    if (!isSupportedBackupVersion(manifest.version)) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response:
+          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x), got ${manifest.version}`,
+      };
+    }
 
     const payloadError = verifyArchivePayloads(manifest, data.files);
     if (payloadError) {
-      throw new Error(payloadError);
+      return {
+        handled: true,
+        exitCode: 1,
+        response: `Invalid backup ${fullPath}: ${payloadError}`,
+      };
     }
 
     return {
@@ -201,7 +246,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
     return {
       handled: true,
       exitCode: 1,
-      response: `Backup corrupt or unreadable: ${fullPath}: ${(err as Error).message}`,
+      response: describeUnreadableBackup(fullPath, err),
     };
   }
 }
@@ -238,8 +283,7 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
   const lines = files.map(f => {
     const fullPath = join(backupDir, f);
     const stat = statSync(fullPath);
-    const sizeKB = Math.round(stat.size / 1024);
-    return `  ${f}  (${sizeKB} KB, ${stat.mtime.toLocaleDateString()})`;
+    return `  ${f}  (${formatBackupSize(stat.size)}, ${stat.mtime.toLocaleDateString()})`;
   });
 
   return {
@@ -282,6 +326,25 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
     }
+    if (!isSupportedBackupVersion(manifest.version)) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response:
+          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x), got ${String(manifest.version)}`,
+      };
+    }
+
+    const destRoot = resolve(join(process.cwd(), '.codebuddy'));
+    let extras: string[] = [];
+    try {
+      extras = extraFilesNotInArchive(
+        destRoot,
+        manifest.files.map((file) => file.path),
+      );
+    } catch {
+      extras = [];
+    }
 
     if (!confirm) {
       return {
@@ -291,7 +354,8 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
           `Created: ${manifest.createdAt}`,
           `Files: ${manifest.files.length}`,
           '',
-          'This will overwrite current .codebuddy/ configuration.',
+          'This merges into the current project .codebuddy/: archive files are overwritten, extra files are left in place.',
+          formatExtraFilesLine(extras) || 'No extra files are present in .codebuddy/.',
           'To confirm, run: backup restore <file> --confirm',
         ].join('\n'),
       };
@@ -307,81 +371,92 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     }
 
     const archiveFiles = data.files as BackupArchiveFile[];
-    const destRoot = resolve(join(process.cwd(), '.codebuddy'));
-    mkdirSync(destRoot, { recursive: true });
 
-    const destinations = new Map<string, string>();
-    for (const manifestFile of manifest.files) {
-      const dest = resolveRestoreDestination(destRoot, manifestFile.path);
-      if (!dest) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
-        };
+    try {
+      mkdirSync(destRoot, { recursive: true });
+
+      const destinations = new Map<string, string>();
+      for (const manifestFile of manifest.files) {
+        const dest = resolveRestoreDestination(destRoot, manifestFile.path);
+        if (!dest) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
+          };
+        }
+        destinations.set(manifestFile.path, dest);
       }
-      destinations.set(manifestFile.path, dest);
+
+      for (const [archivePath, dest] of destinations) {
+        const safetyError = getRestorePathSafetyError(destRoot, dest);
+        if (safetyError) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
+          };
+        }
+      }
+
+      const restored: string[] = [];
+      for (const manifestFile of manifest.files) {
+        const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
+        if (!archiveFile) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
+          };
+        }
+        const content = Buffer.from(archiveFile.content, 'base64');
+        const dest = destinations.get(manifestFile.path)!;
+        mkdirSync(dirname(dest), { recursive: true });
+        const safetyError = getRestorePathSafetyError(destRoot, dest);
+        if (safetyError) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
+          };
+        }
+        writeFileSync(dest, content);
+        const reread = readFileSync(dest);
+        const expectedChecksum = fileChecksum(content);
+        const actualChecksum = fileChecksum(reread);
+        if (actualChecksum !== expectedChecksum || actualChecksum !== manifestFile.checksum) {
+          return {
+            handled: true,
+            exitCode: 1,
+            response: `Restore verification failed for ${manifestFile.path}: on-disk hash does not match the archive`,
+          };
+        }
+        restored.push(manifestFile.path);
+      }
+
+      return {
+        handled: true,
+        response: [
+          `Restored backup: ${basename(fullPath)}`,
+          `Files: ${restored.length}`,
+          `Verified: sha256 match for ${restored.length} file(s)`,
+          extras.length === 0
+            ? 'Merged: no extra files were present in .codebuddy/.'
+            : `Merged: ${formatExtraFilesLine(extras)}`,
+        ].join('\n'),
+      };
+    } catch (err) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response: describeBackupIoError(err, `write restored files from ${fullPath}`),
+      };
     }
-
-    for (const [archivePath, dest] of destinations) {
-      const safetyError = getRestorePathSafetyError(destRoot, dest);
-      if (safetyError) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
-        };
-      }
-    }
-
-    const restored: string[] = [];
-    for (const manifestFile of manifest.files) {
-      const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
-      if (!archiveFile) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
-        };
-      }
-      const content = Buffer.from(archiveFile.content, 'base64');
-      const dest = destinations.get(manifestFile.path)!;
-      mkdirSync(dirname(dest), { recursive: true });
-      const safetyError = getRestorePathSafetyError(destRoot, dest);
-      if (safetyError) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
-        };
-      }
-      writeFileSync(dest, content);
-      const reread = readFileSync(dest);
-      const expectedChecksum = fileChecksum(content);
-      const actualChecksum = fileChecksum(reread);
-      if (actualChecksum !== expectedChecksum || actualChecksum !== manifestFile.checksum) {
-        return {
-          handled: true,
-          exitCode: 1,
-          response: `Restore verification failed for ${manifestFile.path}: on-disk hash does not match the archive`,
-        };
-      }
-      restored.push(manifestFile.path);
-    }
-
-    return {
-      handled: true,
-      response: [
-        `Restored backup: ${basename(fullPath)}`,
-        `Files: ${restored.length}`,
-        `Verified: sha256 match for ${restored.length} file(s)`,
-      ].join('\n'),
-    };
   } catch (err) {
     return {
       handled: true,
       exitCode: 1,
-      response: `Failed to read backup ${fullPath}: ${(err as Error).message}`,
+      response: describeUnreadableBackup(fullPath, err),
     };
   }
 }
@@ -395,8 +470,56 @@ interface CollectedFile {
   content: Buffer;
 }
 
+interface SkippedFile {
+  relativePath: string;
+  reason: string;
+}
+
 function fileChecksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
+}
+
+/** Dummy dest used only to decide whether an archive path would escape on restore. */
+const VERIFY_PATH_ROOT = resolve('/codebuddy-backup-dest');
+
+function isSupportedBackupVersion(version: unknown): boolean {
+  return typeof version === 'string' && /^1(\.|$)/.test(version);
+}
+
+function formatBackupSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    const kb = bytes / 1024;
+    return kb < 10 ? `${kb.toFixed(1)} KB` : `${Math.round(kb)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function describeUnreadableBackup(fullPath: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/JSON|Unexpected token|Unterminated|not valid JSON/i.test(message)) {
+    return `This file is not a readable Code Buddy backup (truncated or not JSON): ${fullPath}`;
+  }
+  return `Cannot read backup ${fullPath}: ${message}`;
+}
+
+function describeBackupIoError(err: unknown, action: string): string {
+  const e = err as NodeJS.ErrnoException;
+  const target = e.path ? ` (${e.path})` : '';
+  if (e.code === 'ENOSPC') {
+    return `Cannot ${action}: no space left on the device${target}.`;
+  }
+  if (e.code === 'EACCES' || e.code === 'EPERM') {
+    return `Cannot ${action}: permission denied${target}.`;
+  }
+  if (e.code === 'ENOTDIR') {
+    return `Cannot ${action}: the output path is not a directory${target}.`;
+  }
+  if (e.code === 'EISDIR') {
+    return `Cannot ${action}: expected a file, got a directory${target}.`;
+  }
+  return `Cannot ${action}: ${e.message ?? String(err)}`;
 }
 
 /** True when `candidate` is destRoot itself or a file/dir under it. */
@@ -463,6 +586,9 @@ function verifyArchivePayloads(
     return 'archive payload does not match the manifest';
   }
   for (const manifestFile of manifest.files) {
+    if (!resolveRestoreDestination(VERIFY_PATH_ROOT, manifestFile.path)) {
+      return `path escapes destination: ${manifestFile.path}`;
+    }
     const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
     if (!archiveFile || typeof archiveFile.content !== 'string') {
       return `archive payload is missing ${manifestFile.path}`;
@@ -484,7 +610,8 @@ function verifyArchivePayloads(
 function collectFiles(
   dir: string,
   base: string,
-  opts: { onlyConfig: boolean; noWorkspace: boolean }
+  opts: { onlyConfig: boolean; noWorkspace: boolean },
+  skipped: SkippedFile[] = [],
 ): CollectedFile[] {
   const results: CollectedFile[] = [];
 
@@ -505,9 +632,14 @@ function collectFiles(
         continue;
       }
 
+      if (typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink()) {
+        skipped.push({ relativePath, reason: 'symbolic link' });
+        continue;
+      }
+
       if (entry.isDirectory()) {
         if (opts.noWorkspace && relativePath === 'knowledge') continue;
-        results.push(...collectFiles(fullPath, base, opts));
+        results.push(...collectFiles(fullPath, base, opts, skipped));
       } else {
         // Config-only mode: only include config files
         if (opts.onlyConfig && !configPatterns.some(p => relativePath.startsWith(p) || relativePath === p)) {
@@ -516,8 +648,10 @@ function collectFiles(
 
         try {
           const stat = statSync(fullPath);
-          // Skip files larger than 1MB
-          if (stat.size > 1024 * 1024) continue;
+          if (stat.size > 1024 * 1024) {
+            skipped.push({ relativePath, reason: 'larger than 1 MB' });
+            continue;
+          }
 
           const content = readFileSync(fullPath);
           const checksum = fileChecksum(content);
@@ -538,6 +672,50 @@ function collectFiles(
   }
 
   return results;
+}
+
+function listProfileRelativeFiles(root: string): string[] {
+  const results: string[] = [];
+  const walk = (dir: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const name = typeof entry === 'string' ? entry : entry?.name;
+      if (typeof name !== 'string' || name.length === 0) continue;
+      const full = join(dir, name);
+      const rel = relative(root, full).replace(/\\/g, '/');
+      if (rel === '.backup-restore-staging' || rel.startsWith('.backup-restore-staging/')) continue;
+      if (typeof entry !== 'object' || entry === null) {
+        results.push(rel);
+        continue;
+      }
+      if (typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink()) {
+        results.push(rel);
+        continue;
+      }
+      if (typeof entry.isDirectory === 'function' && entry.isDirectory()) walk(full);
+      else results.push(rel);
+    }
+  };
+  if (!existsSync(root)) return [];
+  walk(root);
+  return results.sort();
+}
+
+function extraFilesNotInArchive(destRoot: string, archivePaths: string[]): string[] {
+  const inArchive = new Set(archivePaths);
+  return listProfileRelativeFiles(destRoot).filter((filePath) => !inArchive.has(filePath));
+}
+
+function formatExtraFilesLine(extras: string[]): string {
+  if (extras.length === 0) return '';
+  const shown = extras.slice(0, 12);
+  const more = extras.length > 12 ? `; …and ${extras.length - 12} more` : '';
+  return `${extras.length} extra file(s) not in the archive will be left in place: ${shown.join(', ')}${more}`;
 }
 
 function resolveBackupPath(filePath: string): string {
