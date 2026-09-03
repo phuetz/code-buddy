@@ -213,6 +213,7 @@ export function classifyRecentVoiceEcho(
 ): VoiceEchoClassification {
   const normalized = normalizeSpokenText(transcript).slice(0, 1_000);
   if (!normalized || !finiteClock(atMs)) return 'unknown';
+  if (isRecentVoiceFragmentEcho(normalized, atMs)) return 'echo';
   const references = spokenReferences.filter(
     reference => atMs >= reference.recordedAtMs - 1_000
       && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,

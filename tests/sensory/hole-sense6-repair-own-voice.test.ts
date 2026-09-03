@@ -97,14 +97,14 @@ describe('Mission SENSE6 — Trou 2 : Réparation communicative « Pardon ? » d
     const cuesPlayed: ConversationCueRequest[] = [];
     let currentTime = 100_000;
 
-    // Lisa prononce une phrase de 8 mots
-    const lisaSpeech = 'Je suis là et je t écoute attentivement.';
+    // Lisa prononce une phrase qui contient réellement le futur fragment d'écho.
+    const lisaSpeech = 'Lisa écoute et je suis là, attentive.';
     noteSpokenText(lisaSpeech, currentTime);
     beginSpeaking(currentTime);
     currentTime = 102_000;
     endSpeaking(currentTime);
 
-    // À t = 103.5s, un écho de 2 mots "Lisa écoute" est capté
+    // À t = 103.5s, le fragment d'écho de 2 mots "Lisa écoute" est capté.
     currentTime = 103_500;
 
     const decider = createResponseDecider({
@@ -145,7 +145,8 @@ describe('Mission SENSE6 — Trou 2 : Réparation communicative « Pardon ? » d
       // Aucun réflexe de réparation ne doit être armé sur un fragment de sa propre voix.
       //
       // TROU PROUVÉ :
-      // 1. "Lisa écoute" (2 mots) a une couverture de 1/7 = 14% < 60% -> classé 'distinct' (non supprimé par l'écho).
+      // 1. "Lisa écoute" (2 mots) est entièrement contenu dans la phrase récente,
+      //    mais reste sous le seuil historique de couverture globale.
       // 2. Le texte contient "Lisa" -> decisionReason = 'addressed'.
       // 3. shouldRepairTranscript("Lisa écoute") est vrai car wordCount <= 2.
       // 4. conversationCues.playRepair() est appelé et Lisa dit « Pardon, tu disais ? » à son propre écho !

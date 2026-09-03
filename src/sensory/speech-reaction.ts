@@ -1811,8 +1811,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         }
         if (!text) {
           let repairAddressed = false;
+          const repairCaptureAtMs = captureStartedAtMs ?? transcribeStartMs;
+          const recentOwnPlaybackRisk = !isSensoryAecTrusted(payload.aecActive === true, env)
+            && hasRecentSpokenReference(repairCaptureAtMs);
           if (env.CODEBUDDY_SENSORY_REPAIR === 'true' && options.onConversationCue) {
-            if (job.repairAddressHint && options.isAddressed) {
+            const repairHintIsOwnEcho = job.repairAddressHint
+              ? classifyRecentVoiceEcho(job.repairAddressHint, repairCaptureAtMs) === 'echo'
+              : false;
+            if (job.repairAddressHint && !repairHintIsOwnEcho && options.isAddressed) {
               try {
                 repairAddressed = await options.isAddressed(job.repairAddressHint);
               } catch {
@@ -1820,7 +1826,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               }
             }
             const attention = options.getAttentionSnapshot?.();
-            repairAddressed ||= attention?.engaged === true && attention.source === 'addressed';
+            repairAddressed ||= !recentOwnPlaybackRisk
+              && attention?.engaged === true
+              && attention.source === 'addressed';
           }
           const repairStartedAt = now();
           const repairSpoke = repairAddressed
