@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### SANDBOX1 — bac à sable noyau pour `bash` (3 septembre 2026)
+
+`CODEBUDDY_NATIVE_SANDBOX` confine les commandes shell après confirmation,
+sans Docker : Bubblewrap si les user namespaces marchent, sinon Landlock,
+sinon `sandbox-exec` sur macOS. Variable absente = spawn inchangé. Variable
+posée et confinement impossible = refus honnête, jamais d'exécution en clair.
+`buddy doctor` affiche une ligne de capacité.
+
 ### GK33 — modes de recherche en vrai (3 septembre 2026)
 
 `buddy research --deep/--storm` n’affiche plus le bandeau Wide Research. Les

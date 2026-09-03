@@ -17,6 +17,10 @@ import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
 import { SERVER_CONFIG } from '../config/constants.js';
 import { diagnoseServerExposure } from '../server/exposure-diagnostic.js';
+import {
+  detectNativeSandboxCapabilities,
+  formatDoctorLine,
+} from '../security/native-sandbox.js';
 import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
 import type { UserSettings } from '../utils/settings-manager.js';
 
@@ -435,6 +439,16 @@ function checkProfilePermissions(): DoctorCheck {
   };
 }
 
+function checkNativeSandbox(): DoctorCheck {
+  const caps = detectNativeSandboxCapabilities();
+  return {
+    name: 'Native sandbox (kernel)',
+    status: caps.recommended === 'none' ? 'warn' : 'ok',
+    message: formatDoctorLine(caps),
+    optional: true,
+  };
+}
+
 function checkGit(cwd: string): DoctorCheck {
   if (!commandExists('git')) {
     return { name: 'Git', status: 'error', message: 'git not found' };
@@ -828,6 +842,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
     checkProfilePermissions(),
     checkDiskSpace(dir),
     checkGit(dir),
+    checkNativeSandbox(),
   ];
 }
 

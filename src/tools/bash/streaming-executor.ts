@@ -21,6 +21,7 @@ import {
   executeInWorkspaceSandbox,
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
+import { confineSpawn } from '../../security/native-sandbox.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -161,10 +162,19 @@ export async function* executeStreaming(
   const shellCommand = shellConfiguration.shell === 'bash'
     ? `${buildBashEnvPrelude()}\n${executionCommand}`
     : executionCommand;
-  const proc = spawn(shellConfiguration.executable, [...shellConfiguration.argsPrefix, shellCommand], {
-    shell: false,
+  const confined = confineSpawn({
+    file: shellConfiguration.executable,
+    args: [...shellConfiguration.argsPrefix, shellCommand],
     cwd,
     env: controlledEnv,
+  });
+  if (!confined.ok) {
+    return { success: false, error: confined.error };
+  }
+  const proc = spawn(confined.file, confined.args, {
+    shell: false,
+    cwd,
+    env: confined.env,
     detached: !isWindows,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
