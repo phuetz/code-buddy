@@ -72,6 +72,50 @@ ESLint ciblé --max-warnings=0 : code 0
 npx tsc --noEmit -p . : code 0
 ```
 
+### Brique 2 — consommation réelle par `/batch`
+
+Rouge avant intégration :
+
+```text
+$ HOME=$PWD/.deleg1-home TMPDIR=$PWD/.deleg1-tmp npx vitest run tests/commands/gk34-batch.test.ts
+[batch] error add: legacy chat path used
+[batch] error one: legacy chat path used
+[batch] error two: legacy chat path used
+Test Files  1 failed (1)
+Tests       2 failed | 11 passed (13)
+EXIT_CODE=1
+```
+
+Le piège `chatFn` est volontaire : il prouve que le chemin fichier utilisait
+encore la complétion simple et empêche tout appel réseau pendant ce rouge.
+
+Rouge intermédiaire du test après câblage (produit exécuté, assertion fautive) :
+
+```text
+Test Files  1 failed (1)
+Tests       1 failed | 12 passed (13)
+AssertionError: expected events to contain { agentId: 'add', kind: 'content' }
+Événement reçu : { agentId: 'add', kind: 'content', payload: {...} }
+EXIT_CODE=1
+```
+
+Vert de la brique 2 :
+
+```text
+tests/agent/delegation/thread-delegation.test.ts
+tests/commands/gk34-batch.test.ts
+tests/commands/batch-slash-wiring.test.ts
+Test Files  3 passed (3)
+Tests       22 passed (22)
+ESLint ciblé --max-warnings=0 : code 0
+npx tsc --noEmit -p . : code 0
+git diff --check : code 0
+```
+
+Le flux réel du test porte notamment
+`[batch:one:status]`, `[batch:one:content]`, `[batch:two:status]` et
+`[batch:two:content]`. La concurrence omise reste égale à 1.
+
 ## Preuve Ollama réelle
 
 À compléter après vérification de `ollama ps`.
