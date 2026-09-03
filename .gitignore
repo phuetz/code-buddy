@@ -51,6 +51,17 @@ _qa/gk27/
 _qa/gk29/
 _qa/gk26/
 _qa/gk31/
+_qa/gk32/home/
+_qa/gk32/home-virgin/
+_qa/gk32/work/
+_qa/gk32/logs/
+_qa/gk32/project/
+_qa/gk32/project-virgin/
+_qa/gk32/fix-project/
+_qa/gk32/*.jsonl
+_qa/gk32/*.sh
+_qa/gk32/*.py
+_qa/gk32/npm-registry/
 test-app/
 test-scripts/
 C\:Users*/

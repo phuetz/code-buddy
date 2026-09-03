@@ -556,25 +556,28 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
           reject(new Error('Login timed out after 5 minutes'));
         }, 5 * 60 * 1000);
 
-        // Open the browser. If it fails, log the URL so the user can
-        // copy-paste manually.
+        const failOpen = (detail?: unknown) => {
+          cleanup();
+          const reason = detail instanceof Error ? detail.message : '';
+          reject(new Error(
+            `Couldn't open a browser${reason ? ` (${reason})` : ''}. `
+            + 'ChatGPT login needs a browser. Use `buddy onboard` for a local model.',
+          ));
+        };
+
+        // Open the browser. If that fails, reject immediately — waiting
+        // five minutes for a callback that cannot arrive is a hang.
         if (openUrl) {
           try {
             const res = openUrl(authUrl);
             if (res instanceof Promise) {
-              res.catch(() => {
-                console.error(`Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`);
-              });
+              res.catch(failOpen);
             }
-          } catch {
-            console.error(`Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`);
+          } catch (err) {
+            failOpen(err);
           }
         } else {
-          open(authUrl).catch(() => {
-            console.error(
-              `Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`
-            );
-          });
+          open(authUrl).catch(failOpen);
         }
       })
       .catch(reject);

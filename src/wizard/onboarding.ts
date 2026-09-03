@@ -1,7 +1,7 @@
 import * as readline from 'readline';
 import { spawn } from 'child_process';
 import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join, resolve } from 'path';
 import {
   getValidationConfigForGuide,
   validateProviderKey,
@@ -218,7 +218,7 @@ export const ONBOARDING_PHASES: OnboardingPhase[] = [
   },
 ];
 
-const TTS_PROVIDERS = ['edge-tts', 'espeak', 'audioreader'];
+const TTS_PROVIDERS = ['pocket', 'elevenlabs', 'piper'];
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
@@ -283,6 +283,7 @@ export async function persistProviderSelection(
       provider: guide.id,
       defaultModel: model,
       model,
+      models: [model],
       ...(guide.baseURL ? { baseURL: guide.baseURL } : {}),
     });
   } catch { /* non-fatal */ }
@@ -298,6 +299,17 @@ export async function persistProviderSelection(
   if (guide.id === 'ollama' && !process.env.OLLAMA_HOST) {
     process.env.OLLAMA_HOST = 'http://localhost:11434';
   }
+}
+
+export const PROJECT_FOLDER_QUESTION = 'Which project folder should Code Buddy use?';
+
+export function resolveOnboardingProjectDir(answer: string, cwd: string = process.cwd()): string {
+  const raw = answer.trim() || cwd;
+  return isAbsolute(raw) ? resolve(raw) : resolve(cwd, raw);
+}
+
+export function applyOnboardingProjectConfig(projectDir: string, result: OnboardingResult): void {
+  writeConfig(join(projectDir, '.codebuddy'), result);
 }
 
 export function writeConfig(configDir: string, result: OnboardingResult): void {
@@ -464,13 +476,16 @@ async function selectModel(
  * summary — the Hermes-style reassurance that the agent is ready, derived from
  * env vars actually present. Kept deliberately minimal (getting-started scope).
  */
-function renderCapabilitiesFooter(): string {
+export function renderCapabilitiesFooter(): string {
   const has = (vars: string[]): boolean => vars.some((v) => Boolean(process.env[v]));
   const webSearch = has(['BRAVE_API_KEY', 'EXA_API_KEY', 'PERPLEXITY_API_KEY', 'TAVILY_API_KEY']);
+  const tts = has(['ELEVENLABS_API_KEY'])
+    ? '    ✓ Text-to-speech (ElevenLabs key detected; Pocket TTS / Piper as local fallback)'
+    : '    ○ Text-to-speech — Pocket TTS (`buddy speak --engine pocket`), Piper, or ELEVENLABS_API_KEY';
   return [
     '  Capabilities:',
     '    ✓ Code tools — file edit, shell, search',
-    '    ✓ Text-to-speech (edge-tts, offline fallback)',
+    tts,
     webSearch
       ? '    ✓ Web search'
       : '    ○ Web search — add BRAVE_API_KEY or EXA_API_KEY to enable',
@@ -522,7 +537,8 @@ async function pullOllamaModel(model: string): Promise<string | null> {
  */
 async function runQuickStart(
   rl: readline.Interface,
-  snapshot: EnvironmentSnapshot
+  snapshot: EnvironmentSnapshot,
+  projectDir: string,
 ): Promise<OnboardingResult | null> {
   const free = snapshot.recommendedFree;
   const ollama = snapshot.capabilities.find((c) => c.id === 'ollama');
@@ -538,13 +554,13 @@ async function runQuickStart(
       if (free.id === 'ollama' || free.id === 'lmstudio') {
         const model = await selectModel(rl, guide, free.models);
         await persistProviderSelection({ ...guide, baseURL: free.baseURL ?? guide.baseURL }, model, '');
-        return finishQuickStart(free.id, model, free.baseURL);
+        return finishQuickStart(free.id, model, free.baseURL, projectDir);
       }
 
       // OAuth path (chatgpt / xai) — already signed in, just persist the choice.
       const model = guide.defaultModel;
       await persistProviderSelection(guide, model, '');
-      return finishQuickStart(free.id, model, guide.baseURL);
+      return finishQuickStart(free.id, model, guide.baseURL, projectDir);
     }
     return null; // user declined the fast path → full menu
   }
@@ -564,7 +580,7 @@ async function runQuickStart(
       if (pulled) {
         const guide = getProviderGuide('ollama');
         await persistProviderSelection({ ...guide, baseURL: ollama.baseURL ?? guide.baseURL }, pulled, '');
-        return finishQuickStart('ollama', pulled, ollama.baseURL);
+        return finishQuickStart('ollama', pulled, ollama.baseURL, projectDir);
       }
       console.log('  ⚠️ Pull did not complete — falling back to the full setup menu.');
     }
@@ -574,7 +590,12 @@ async function runQuickStart(
 }
 
 /** Persist config.json + build the OnboardingResult for a fast-path selection. */
-function finishQuickStart(provider: string, model: string, baseURL?: string): OnboardingResult {
+function finishQuickStart(
+  provider: string,
+  model: string,
+  baseURL: string | undefined,
+  projectDir: string,
+): OnboardingResult {
   const guide = getProviderGuide(provider);
   const result: OnboardingResult = {
     provider,
@@ -584,7 +605,7 @@ function finishQuickStart(provider: string, model: string, baseURL?: string): On
     authMode: guide.authMode,
     recommendedNextCommands: buildRecommendedNextCommands({ provider, apiKey: '', model }),
   };
-  writeConfig(join(process.cwd(), '.codebuddy'), result);
+  applyOnboardingProjectConfig(projectDir, result);
   console.log('');
   console.log('  ✅ You\'re set — no environment variable needed.');
   console.log('');
@@ -639,7 +660,12 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
     console.log(renderDetectionSummary(snapshot));
     console.log('');
 
-    const quick = await runQuickStart(rl, snapshot);
+    const folderAnswer = await ask(rl, PROJECT_FOLDER_QUESTION, process.cwd());
+    const projectDir = resolveOnboardingProjectDir(folderAnswer);
+    console.log(`  Project folder: ${projectDir}`);
+    console.log('');
+
+    const quick = await runQuickStart(rl, snapshot, projectDir);
     if (quick) {
       console.log(renderCapabilitiesFooter());
       console.log('');
@@ -736,8 +762,8 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
       ...(ttsProvider ? { ttsProvider } : {}),
     };
 
-    // 6. Write project config
-    writeConfig(join(process.cwd(), '.codebuddy'), result);
+    // 6. Write project config into the folder the user chose
+    applyOnboardingProjectConfig(projectDir, result);
 
     // 7. Summary
     const ready = verified || (guide.authMode === 'api-key' && Boolean(apiKey));

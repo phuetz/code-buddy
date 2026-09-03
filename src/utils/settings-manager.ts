@@ -20,7 +20,6 @@ import {
   ConnectionProfile,
   ResolvedConfig,
   CLIOverrides,
-  ModernUserSettings,
   needsMigration,
   migrateSettings,
   mergeWithDefaults,
@@ -137,6 +136,18 @@ export class SettingsManager {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
+  }
+
+  /**
+   * Read user settings when the file exists. Does not create defaults.
+   * Diagnostics (`buddy doctor`) must not invent a grok profile on a
+   * missing file.
+   */
+  public readUserSettingsIfPresent(): UserSettings | undefined {
+    if (!fs.existsSync(this.userSettingsPath)) {
+      return undefined;
+    }
+    return this.loadUserSettings();
   }
 
   /**
