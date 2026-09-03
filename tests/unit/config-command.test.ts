@@ -209,8 +209,12 @@ describe('Theme Handler', () => {
       mockGetCurrentTheme.mockReturnValue({ id: 'dark', name: 'Dark' });
 
       const result = handleTheme([]);
+      const content = result.entry?.content ?? '';
 
       expect(mockGetCurrentTheme).toHaveBeenCalled();
+      expect(content).toContain('▶ Dark');
+      expect(content).not.toMatch(/▶ Default/);
+      expect(content).not.toMatch(/▶ Neon/);
     });
 
     it('should set theme when valid theme name provided', () => {
@@ -847,7 +851,7 @@ describe('Vim Mode Handler', () => {
     it('should toggle with "toggle" action', async () => {
       process.env.GROK_VIM_MODE = 'false';
 
-      const result = await handleVimMode(['toggle']);
+      await handleVimMode(['toggle']);
 
       expect(process.env.GROK_VIM_MODE).toBe('true');
     });
@@ -891,12 +895,12 @@ describe('Edge Cases and Error Handling', () => {
   });
 
   it('should parse numeric arguments correctly', () => {
-    const result = handleCost(['budget', '10.50']);
+    handleCost(['budget', '10.50']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(10.50);
   });
 
   it('should handle invalid numeric arguments', () => {
-    const result = handleCost(['budget', 'invalid']);
+    handleCost(['budget', 'invalid']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(NaN);
   });
 });
