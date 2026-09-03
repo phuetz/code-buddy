@@ -234,6 +234,8 @@ export interface ProactiveDeps {
   now?: () => number;
   /** Someone is in front of the camera right now (→ speak vs Telegram). */
   present?: () => boolean | Promise<boolean>;
+  /** True while the mouth (or its echo tail) is already taken — do not talk over it. */
+  speaking?: (now: number) => boolean | Promise<boolean>;
   /** Deliver aloud (present). Default: sayNow (Piper). True only when speech actually played. */
   say?: (text: string) => Promise<boolean>;
   /** Deliver to the phone (absent). Default: sendTelegramVoice (falls back to text). */
@@ -265,6 +267,15 @@ async function defaultPresent(): Promise<boolean> {
   try {
     const { readPresenceContext } = await import('../memory/presence-injector.js');
     return (await readPresenceContext()).hasMatch;
+  } catch {
+    return false;
+  }
+}
+
+async function defaultSpeaking(now: number): Promise<boolean> {
+  try {
+    const { isSpeaking } = await import('../sensory/voice-activity.js');
+    return isSpeaking(now);
   } catch {
     return false;
   }
@@ -318,6 +329,7 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       ? await deps.homePolicy(present ? 'proactive-local' : 'proactive-remote', new Date(now))
       : null;
     if (homeDecision && !homeDecision.allowed) return null;
+    if (present && (await (deps.speaking ?? defaultSpeaking)(now))) return null;
 
     const cooldownMs =
       deps.cooldownMs ??
@@ -376,14 +388,13 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       }
     }
 
-    // Deliver: aloud if he's here, otherwise reach his phone. A spoken ritual
-    // yields to the conductor; a denied floor releases the budget reservation.
-    if (present) {
-      const conductor = deps.conductor ?? getCompanionConductor();
-      if (!conductor.claim('proactive')) {
-        await reservation?.release();
-        return null;
-      }
+    // Deliver: aloud if he's here, otherwise reach his phone. Every initiative
+    // yields to the conductor (spoken or Telegram) so two surfaces cannot land
+    // inside CODEBUDDY_COMPANION_MIN_GAP_MS. A denied floor releases the budget.
+    const conductor = deps.conductor ?? getCompanionConductor();
+    if (!conductor.claim('proactive')) {
+      await reservation?.release();
+      return null;
     }
     try {
       if (present) {

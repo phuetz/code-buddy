@@ -269,6 +269,40 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
   });
 
+  it('yields to the conductor when absent (Telegram still honours MIN_GAP)', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
+    const tg = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => false,
+      telegramVoice: tg,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      conductor: { claim: () => false },
+    });
+    expect(line).toBeNull();
+    expect(tg).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
+  it('stays silent when the mouth is already speaking', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      speaking: () => true,
+      say,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
   it('yields to the conductor when present (another voice has the floor)', async () => {
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
     const say = vi.fn(async () => true);

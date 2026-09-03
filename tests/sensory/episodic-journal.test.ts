@@ -99,14 +99,14 @@ describe('runEpisodeConsolidation', () => {
     expect(promoted).toHaveLength(0);
   });
 
-  it('lets an LLM refine the episode line', async () => {
+  it('lets an LLM refine the episode line when the wording stays grounded', async () => {
     const ep = await runEpisodeConsolidation({
       cwd: tmp,
       readHeard: async () => ['des trucs', 'et des machins'],
-      refine: async () => 'On a surtout parlé du déploiement et des tests.',
+      refine: async () => 'On a surtout parlé de trucs et de machins.',
       promote: async () => {},
     });
-    expect(ep!.line).toBe('On a surtout parlé du déploiement et des tests.');
+    expect(ep!.line).toBe('On a surtout parlé de trucs et de machins.');
   });
 
   it('reports the template fallback when LLM refinement fails', async () => {

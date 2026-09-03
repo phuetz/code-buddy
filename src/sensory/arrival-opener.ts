@@ -15,6 +15,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 import { withTimeout } from '../council/with-timeout.js';
+import { extractSalientTerms } from '../conversation/dialogue-act.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
@@ -34,6 +35,12 @@ export interface ArrivalContext {
   drowsy?: boolean;
   /** Randomness in [0,1). Default Math.random; inject for tests. */
   rng?: () => number;
+  /**
+   * Recent-episode line (from the episodic journal). Evening/afternoon openers
+   * weave a jargon-free hint so the greeting can mention what you talked about
+   * without an LLM and without XML/scores.
+   */
+  episodeLine?: string;
 }
 
 export interface ArrivalOpener {
@@ -137,6 +144,42 @@ function interpolate(text: string, name?: string): string {
   return text.replace(/\{\{name\}\}/g, name);
 }
 
+const HINT_STOP = new Set([
+  'recemment',
+  'parle',
+  'parler',
+  'surtout',
+  'conversation',
+  'dernier',
+  'point',
+  'utilisateur',
+  'position',
+  'episode',
+  'lisa',
+]);
+
+const ARRIVAL_JARGON =
+  /<[^>]+>|\/100|\blisa_state\b|\brecent_episode\b|\buser_model\b|\bTraits dominants\b|\bRegistre expressif\b|\bj['’]ai appris à/i;
+
+const FACT_HINT =
+  /\b(train|souvenir|demain|concert|anniversaire|valise|rendez[- ]vous)\b/i;
+
+/** Spoken recap of the day without XML, scores, or prompt scaffolding. */
+export function spokenEpisodeHint(episodeLine: string): string {
+  const cleaned = episodeLine.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  const segments = cleaned.split(/\s*;\s*/);
+  const factSegs = segments.filter((segment) => FACT_HINT.test(segment));
+  const pool = factSegs.length > 0 ? factSegs : segments;
+  const terms = extractSalientTerms(pool.join(' '), 8).filter((term) => !HINT_STOP.has(term));
+  if (terms.length === 0) return '';
+  return `Tout à l'heure, on parlait de ${terms.slice(0, 4).join(', ')}.`;
+}
+
+export function isJargonArrivalLine(text: string): boolean {
+  return ARRIVAL_JARGON.test(text);
+}
+
 /**
  * Build a varied, context-aware arrival opener. Picks a trigger from time/gap/state, then a template
  * from that trigger's pool avoiding `recent` (falls back to the full pool if all were used recently).
@@ -154,7 +197,14 @@ export function buildArrivalOpener(ctx: ArrivalContext): ArrivalOpener {
   const idx = Math.min(choices.length - 1, Math.floor(rng() * choices.length));
   const template = choices[idx] as string;
   const safeName = ctx.recognizedUser === false ? undefined : ctx.name;
-  return { text: interpolate(template, safeName), trigger, template };
+  let text = interpolate(template, safeName);
+  if ((trigger === 'evening' || trigger === 'afternoon') && ctx.episodeLine) {
+    const hint = spokenEpisodeHint(ctx.episodeLine);
+    if (hint && !isJargonArrivalLine(hint)) {
+      text = `${text} ${hint}`.replace(/\s+/g, ' ').trim();
+    }
+  }
+  return { text, trigger, template };
 }
 
 /** Pure identity gate used by the semantic camera reaction before naming an arrival. */
@@ -198,6 +248,8 @@ export interface LlmArrivalContext {
   chat?: ArrivalChat;
   /** Per-call timeout before falling back to the deterministic opener (ms). */
   timeoutMs?: number;
+  /** Jargon-free episode line the greeting may reference. */
+  episodeLine?: string;
 }
 
 /** Default chat: route to the sensory voice model (same path as hybrid-reply / respond-decider). */
@@ -237,9 +289,16 @@ export async function buildLlmArrivalOpener(ctx: LlmArrivalContext): Promise<str
     `Tu viens de voir ${who} apparaître devant ta caméra. Dis UNE seule phrase d'accueil — courte, naturelle, chaleureuse et VARIÉE, comme un vrai compagnon (pas un assistant). Pas forcément une question.`,
     `Moment : ${TRIGGER_TIME_LABEL[trigger]}.`,
     ctx.relationalContext?.trim() ? `Ce que tu sais de lui et ton registre expressif (utilise-le en douceur, sans réciter ni prétendre éprouver des émotions humaines) :\n${ctx.relationalContext.trim()}` : '',
+    (() => {
+      const hint = ctx.episodeLine?.trim() ? spokenEpisodeHint(ctx.episodeLine) : '';
+      return hint
+        ? `Ce dont vous avez parlé récemment (évoque-le en douceur, sans balises XML, sans scores /100, sans notes d'évolution) : ${hint}`
+        : '';
+    })(),
     heard.length ? `Dernières choses qu'il t'a dites (tu peux y faire référence en douceur, sans forcer) : ${heard.map((h) => `« ${h} »`).join(' ; ')}.` : '',
     avoid.length ? `N'utilise PAS ces formulations récentes : ${avoid.map((a) => `« ${a} »`).join(' ; ')}.` : '',
     `Réponds en français, UNE phrase, sans guillemets, sans emoji superflu, sans préambule.`,
+    `N'utilise jamais de balises XML, de scores /100, ni de notes d'évolution internes. Ne mentionne pas ce qui a changé chez toi sauf si on te le demande explicitement.`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -260,7 +319,9 @@ export async function buildLlmArrivalOpener(ctx: LlmArrivalContext): Promise<str
     const guarded = guardRelationshipReply(cleaned);
     // Null selects the reviewed deterministic opener; a generic policy repair
     // would sound unnatural as an arrival greeting.
-    return guarded.intervened ? null : guarded.response;
+    if (guarded.intervened) return null;
+    if (isJargonArrivalLine(guarded.response)) return null;
+    return guarded.response;
   } catch {
     return null;
   }
