@@ -1,14 +1,19 @@
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
 import { resolveParakeetModelDir } from '../../src/sensory/speech-engine-config.js';
 import { resolveResidentVoicePermissionMode } from '../../src/sensory/voice-loop.js';
 import { resolveOrGenerate } from '../../src/widgets/widget-engine.js';
-import { assistantSettings } from '../../src/companion/assistant-config.js';
+import { ASSISTANT_SETTINGS } from '../../src/companion/assistant-config.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const distIndex = path.join(repoRoot, 'dist', 'index.js');
+
+function readRepoFile(...segments: string[]): string {
+  return readFileSync(path.join(repoRoot, ...segments), 'utf8');
+}
 
 function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
   try {
@@ -40,21 +45,33 @@ describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () 
       expect(res.stdout).toMatch(/--max-tool-rounds <rounds>\s+maximum number of tool execution rounds \(default: "?50"?\)/);
     });
 
-    it('CLAUDE.md:265 promet que le mode par défaut de CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE est plan', () => {
-      // Documentation claim: "Voice ACT posture: plan (default, read-only)"
-      // Reality in src/sensory/voice-loop.ts:429 & assistant-config.ts:253: default is 'default', not 'plan'
+    it('documente le mode résident default et sa migration depuis plan', () => {
       const mode = resolveResidentVoicePermissionMode({});
-      // Ce test ROUGE échoue car le code renvoie 'default' (plan est obsolète)
-      expect(mode).toBe('plan');
+      const claude = readRepoFile('CLAUDE.md');
+      expect(mode).toBe('default');
+      expect(claude).toMatch(/SENSORY_SPEAK_PERMISSION_MODE[^\n]+`default` \(\*\*default\*\*/);
+      expect(claude).toContain('legacy resident value of `plan` is migrated to `default`');
     });
 
-    it('CLAUDE.md:271 promet que CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS a une valeur par défaut de 30000 ms', () => {
-      // Documentation claim: "Post-reply window (default 30000)"
-      // Reality in src/companion/assistant-config.ts:436 & src/sensory/respond-decider.ts:511: default is 120000 ms
-      const setting = assistantSettings.find((s) => s.key === 'CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS');
+    it('documente la fenêtre d’attention réelle de 120000 ms', () => {
+      const setting = ASSISTANT_SETTINGS.find((s) => s.key === 'CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS');
       expect(setting).toBeDefined();
-      // Ce test ROUGE échoue car la valeur par défaut réelle est "120000" et non "30000"
-      expect(setting?.default).toBe('30000');
+      expect(setting?.default).toBe('120000');
+      expect(readRepoFile('CLAUDE.md')).toMatch(/SENSORY_ENGAGE_WINDOW_MS[^\n]+default 120000/);
+    });
+
+    it('précise que YOLO doit être armé explicitement', () => {
+      const claude = readRepoFile('CLAUDE.md');
+      expect(claude).toContain('Arm YOLO explicitly with `buddy --yolo` or `/yolo on`');
+      expect(claude).toContain('setting `YOLO_MODE=true` alone only emits a warning');
+    });
+
+    it('nomme sans abréviation la variable du plancher compagnon', () => {
+      const claude = readRepoFile('CLAUDE.md');
+      expect(claude).toMatch(/`CODEBUDDY_COMPANION_PROACTIVE` \/ `CODEBUDDY_COMPANION_MIN_GAP_MS`/);
+      expect(readRepoFile('src', 'companion', 'orchestrator.ts')).toContain(
+        'process.env.CODEBUDDY_COMPANION_MIN_GAP_MS'
+      );
     });
   });
 
