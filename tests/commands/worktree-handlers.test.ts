@@ -1,8 +1,30 @@
-/**
- * Tests for worktree-handlers (Git worktree management)
- */
-
+import { execFileSync } from 'child_process';
 import { handleWorktree } from '../../src/commands/handlers/worktree-handlers';
+
+jest.mock('child_process', () => ({
+  execFileSync: jest.fn((command: string, args: string[]) => {
+    if (command === 'git') {
+      if (args[0] === 'rev-parse') {
+        throw new Error('fatal: Needed a single revision');
+      }
+      if (args[0] === 'worktree' && args[1] === 'list') {
+        return 'worktree /path/to/repo\nHEAD 1234567890abcdef\nbranch refs/heads/main\n\n';
+      }
+      if (args[0] === 'worktree' && args[1] === 'prune' && args[2] === '--dry-run') {
+        return '';
+      }
+    }
+    return Buffer.from('');
+  }),
+}));
+
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual('fs');
+  return {
+    ...actualFs,
+    existsSync: jest.fn(() => false),
+  };
+});
 
 describe('Worktree Handlers', () => {
   describe('handleWorktree', () => {
@@ -140,14 +162,17 @@ describe('Worktree Handlers', () => {
 
 describe('Worktree Error Handling', () => {
   beforeEach(() => {
-    jest.resetModules();
+    jest.clearAllMocks();
   });
 
   it('should handle git not available', () => {
-    // This test verifies the handler doesn't crash on errors
+    (execFileSync as unknown as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('git not available');
+    });
     const result = handleWorktree(['list']);
 
     expect(result.handled).toBe(true);
     expect(result.entry).toBeDefined();
+    expect(result.entry?.content).toContain('No worktrees found');
   });
 });
