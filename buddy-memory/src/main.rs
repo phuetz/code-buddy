@@ -3,15 +3,10 @@
 //! server over stdio: each line `{"id":N,"method":"...","params":{...}}` → `{"id":N,"result":...}`
 //! (or `{"id":N,"error":"..."}`). Code Buddy spawns this as a sidecar; the TS CKG is a client.
 
-#[cfg(feature = "embeddings")]
-mod embed;
-mod model;
-mod store;
-
+use buddy_memory::store::{RememberInput, RememberRel, Store};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use store::{RememberInput, RememberRel, Store};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -109,21 +104,18 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
             let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
             let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
             let types = parse_str_array(params.get("types"));
-            #[cfg(feature = "embeddings")]
-            let res = {
-                let w_sem = params
-                    .get("semanticWeight")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.7);
-                let mmr = params
-                    .get("mmrLambda")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.7);
-                store.recall_hybrid(query, limit, types.as_deref(), w_sem, mmr)
-            };
-            // Built without embeddings → keyword recall (degrades like the TS path).
-            #[cfg(not(feature = "embeddings"))]
-            let res = store.recall(query, limit, types.as_deref());
+            let w_sem = params
+                .get("semanticWeight")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.7);
+            let mmr = params
+                .get("mmrLambda")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.7);
+            if let Some(ex) = params.get("exhaustive").and_then(|v| v.as_bool()) {
+                store.set_hybrid_exhaustive(ex);
+            }
+            let res = store.recall_hybrid(query, limit, types.as_deref(), w_sem, mmr);
             Ok(serde_json::to_value(res).unwrap_or(Value::Null))
         }
         "getSuperseded" => Ok(serde_json::to_value(store.get_superseded()).unwrap_or(Value::Null)),
@@ -132,7 +124,7 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
     }
 }
 
-fn opt_result(r: Option<store::RecallResult>) -> Value {
+fn opt_result(r: Option<buddy_memory::store::RecallResult>) -> Value {
     match r {
         Some(x) => serde_json::to_value(x).unwrap_or(Value::Null),
         None => Value::Null,

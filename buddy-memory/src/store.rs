@@ -51,6 +51,12 @@ pub struct Stats {
     pub relations: usize,
     #[serde(rename = "ledgerPath")]
     pub ledger_path: String,
+    #[serde(rename = "indexTokens")]
+    pub index_tokens: usize,
+    #[serde(rename = "hnswPoints")]
+    pub hnsw_points: usize,
+    #[serde(rename = "snapshotVersion")]
+    pub snapshot_version: u8,
 }
 
 /// Fast-load snapshot of the materialized graph at a given ledger offset. Avoids replaying the
@@ -63,6 +69,12 @@ struct Snapshot {
     current: HashMap<String, MemEntity>,
     superseded: HashMap<String, MemEntity>,
     relations: HashMap<String, MemRelation>,
+    /// Inverted index (token → entity ids). Empty on v1 snapshots → rebuilt on load.
+    #[serde(default)]
+    index: HashMap<String, HashSet<String>>,
+    /// Embedding cache (contentHash → vector). Rebuilds the HNSW graph on load.
+    #[serde(default)]
+    emb_cache: HashMap<String, Vec<f32>>,
 }
 
 /// Write a fresh snapshot after this many appended events.
@@ -84,8 +96,14 @@ pub struct Store {
     embedder: Option<crate::embed::Embedder>,
     #[cfg(feature = "embeddings")]
     embed_tried: bool,
-    #[cfg(feature = "embeddings")]
+    /// contentHash → embedding (ONNX or synthetic). Always present so Phase-4
+    /// benches/tests can run without the `embeddings` cargo feature.
     emb_cache: HashMap<String, Vec<f32>>,
+    /// When true, hybrid recall scores every current entity (Phase-3 exhaustive path).
+    /// When false, HNSW + inverted-index candidates are used (Phase 4).
+    hybrid_exhaustive: bool,
+    ann: Option<crate::ann::AnnIndex>,
+    snapshot_version: u8,
 }
 
 fn now_iso() -> String {
@@ -177,11 +195,16 @@ impl Store {
             embedder: None,
             #[cfg(feature = "embeddings")]
             embed_tried: false,
-            #[cfg(feature = "embeddings")]
             emb_cache: HashMap::new(),
+            hybrid_exhaustive: false,
+            ann: None,
+            snapshot_version: 2,
         };
         s.load_snapshot(); // fast cold start (sets offset to the snapshot's coverage)
-        s.rebuild_index(); // snapshot bulk-restores `current` without apply_entity → index it
+        if s.index.is_empty() {
+            s.rebuild_index(); // v1 snapshots bulk-restore `current` without apply_entity
+        }
+        s.rebuild_ann_from_cache();
         s.load_incremental(); // replay only the ledger tail beyond the snapshot (maintains index)
         s
     }
@@ -253,11 +276,13 @@ impl Store {
     /// Persist a fast-load snapshot of the current materialized graph (atomic temp+rename).
     pub fn save_snapshot(&mut self) {
         let snap = Snapshot {
-            version: 1,
+            version: 2,
             offset: self.offset,
             current: self.current.clone(),
             superseded: self.superseded.clone(),
             relations: self.relations.clone(),
+            index: self.index.clone(),
+            emb_cache: self.emb_cache.clone(),
         };
         if let Ok(json) = serde_json::to_string(&snap) {
             let tmp = self.snapshot_path.with_extension("snap.tmp");
@@ -276,7 +301,7 @@ impl Store {
             Err(_) => return,
         };
         let snap: Snapshot = match serde_json::from_str::<Snapshot>(&data) {
-            Ok(s) if s.version == 1 => s,
+            Ok(s) if s.version == 1 || s.version == 2 => s,
             _ => return,
         };
         let ledger_len = fs::metadata(&self.ledger_path)
@@ -288,7 +313,10 @@ impl Store {
         self.current = snap.current;
         self.superseded = snap.superseded;
         self.relations = snap.relations;
+        self.index = snap.index;
+        self.emb_cache = snap.emb_cache;
         self.offset = snap.offset;
+        self.snapshot_version = snap.version;
     }
 
     fn apply_event(&mut self, ev: &LedgerEvent) {
@@ -513,7 +541,12 @@ impl Store {
                 }
             }
         }
-        self.current.get(&id).map(|e| self.to_result(e, None, None))
+        if self.current.contains_key(&id) {
+            self.ann_upsert_id(&id);
+            self.current.get(&id).map(|e| self.to_result(e, None, None))
+        } else {
+            None
+        }
     }
 
     pub fn recall(
@@ -589,7 +622,300 @@ impl Store {
             superseded: self.superseded.len(),
             relations: self.relations.len(),
             ledger_path: self.ledger_path.to_string_lossy().to_string(),
+            index_tokens: self.index.len(),
+            hnsw_points: self.ann.as_ref().map(|a| a.live_points()).unwrap_or(0),
+            snapshot_version: self.snapshot_version,
         }
+    }
+
+    /// Phase-3 exhaustive hybrid (true) vs Phase-4 indexed hybrid (false).
+    pub fn set_hybrid_exhaustive(&mut self, exhaustive: bool) {
+        self.hybrid_exhaustive = exhaustive;
+    }
+
+    pub fn hybrid_exhaustive(&self) -> bool {
+        self.hybrid_exhaustive
+    }
+
+    fn synth_embed_enabled() -> bool {
+        matches!(
+            std::env::var("BUDDY_MEMORY_SYNTH_EMBED").as_deref(),
+            Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes")
+        )
+    }
+
+    /// Embed a query/entity. Synthetic (deterministic) takes precedence when opted in so
+    /// benches stay hermetic; otherwise ONNX when the feature+model are present.
+    fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
+        if Self::synth_embed_enabled() {
+            return Some(crate::synth::embed(text));
+        }
+        #[cfg(feature = "embeddings")]
+        {
+            self.ensure_embedder();
+            let emb = self.embedder.as_mut()?.embed(&[text]).ok()?;
+            let v = emb.into_iter().next()?;
+            if v.iter().all(|x| *x == 0.0) {
+                return None;
+            }
+            return Some(v);
+        }
+        #[cfg(not(feature = "embeddings"))]
+        {
+            let _ = text;
+            None
+        }
+    }
+
+    fn cached_or_embed(&mut self, content_hash: &str, embed_text: &str) -> Option<Vec<f32>> {
+        if let Some(v) = self.emb_cache.get(content_hash) {
+            return Some(v.clone());
+        }
+        let v = self.embed_text(embed_text)?;
+        self.emb_cache.insert(content_hash.to_string(), v.clone());
+        Some(v)
+    }
+
+    /// Hybrid recall: semantic + keyword + salience + corroboration, then MMR.
+    /// Without an embedder this degrades to keyword `recall` (same as the TS path).
+    /// Exhaustive mode scores every current entity (Phase 3). Indexed mode is Phase 4.
+    pub fn recall_hybrid(
+        &mut self,
+        query: &str,
+        limit: usize,
+        types: Option<&[String]>,
+        w_sem: f64,
+        mmr_lambda: f64,
+    ) -> Vec<RecallResult> {
+        self.load_incremental();
+        let qvec = self.embed_text(query);
+        if qvec.is_none() {
+            return self.recall(query, limit, types);
+        }
+        let qvec = qvec.unwrap();
+        if qvec.iter().all(|x| *x == 0.0) {
+            return self.recall(query, limit, types);
+        }
+
+        let q = tokenize(query);
+        let passes_type = |e: &MemEntity| {
+            types
+                .map(|ts| ts.iter().any(|t| t == &e.node_type))
+                .unwrap_or(true)
+        };
+
+        let candidate_ids: Vec<String> = if self.hybrid_exhaustive {
+            self.current
+                .values()
+                .filter(|e| passes_type(e))
+                .map(|e| e.id.clone())
+                .collect()
+        } else {
+            self.ensure_ann();
+            self.indexed_hybrid_ids(&q, &qvec, types)
+        };
+        if candidate_ids.is_empty() {
+            return Vec::new();
+        }
+
+        struct Cand {
+            id: String,
+            embed_text: String,
+            kw_text: String,
+            ch: String,
+            mentions: u64,
+            updated_at: String,
+            contributors: usize,
+        }
+        let mut cands: Vec<Cand> = Vec::new();
+        for id in &candidate_ids {
+            let Some(e) = self.current.get(id) else {
+                continue;
+            };
+            if !passes_type(e) {
+                continue;
+            }
+            cands.push(Cand {
+                id: e.id.clone(),
+                embed_text: format!("{}. {}", e.name, e.text),
+                kw_text: format!("{} {}", e.name, e.text),
+                ch: e.content_hash.clone(),
+                mentions: e.mentions,
+                updated_at: e.updated_at.clone(),
+                contributors: e.contributors.len(),
+            });
+        }
+        if cands.is_empty() {
+            return Vec::new();
+        }
+
+        let mut items: Vec<(usize, f64, f32)> = Vec::new();
+        for (i, c) in cands.iter().enumerate() {
+            let v = match self.cached_or_embed(&c.ch, &c.embed_text) {
+                Some(v) => v,
+                None => continue,
+            };
+            let sem = crate::synth::cosine(&qvec, &v);
+            let kw = keyword_overlap(&q, &c.kw_text);
+            let sal = compute_salience(c.mentions, days_since(&c.updated_at), 60.0, 1.0);
+            let rel = (w_sem * sem as f64 + (1.0 - w_sem) * kw)
+                * (0.7 + 0.3 * sal.min(1.0))
+                * corroboration_boost(c.contributors);
+            items.push((i, rel, sem));
+        }
+        items.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut picked: Vec<(usize, f64, f32)> = Vec::new();
+        while picked.len() < limit && !items.is_empty() {
+            let mut best = 0usize;
+            let mut best_mmr = f64::NEG_INFINITY;
+            for (j, cand) in items.iter().enumerate() {
+                let mut max_sim = 0f32;
+                let ca = self.emb_cache.get(&cands[cand.0].ch);
+                for p in &picked {
+                    let cb = self.emb_cache.get(&cands[p.0].ch);
+                    if let (Some(a), Some(b)) = (ca, cb) {
+                        max_sim = max_sim.max(crate::synth::cosine(a, b));
+                    }
+                }
+                let mmr = mmr_lambda * cand.1 - (1.0 - mmr_lambda) * max_sim as f64;
+                if mmr > best_mmr {
+                    best_mmr = mmr;
+                    best = j;
+                }
+            }
+            picked.push(items.remove(best));
+        }
+
+        picked
+            .into_iter()
+            .filter_map(|(idx, rel, sem)| {
+                self.current
+                    .get(&cands[idx].id)
+                    .map(|e| self.to_result(e, Some(rel), Some(sem as f64)))
+            })
+            .collect()
+    }
+
+    fn rebuild_ann_from_cache(&mut self) {
+        if self.emb_cache.is_empty() || self.current.is_empty() {
+            return;
+        }
+        let Some(dim) = self.emb_cache.values().next().map(|v| v.len()) else {
+            return;
+        };
+        let mut pairs = Vec::new();
+        for e in self.current.values() {
+            if let Some(v) = self.emb_cache.get(&e.content_hash) {
+                if v.len() == dim {
+                    pairs.push((e.id.clone(), v.clone()));
+                }
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let cap = pairs.len().saturating_mul(2).max(32);
+        self.ann = Some(crate::ann::AnnIndex::from_pairs(dim, cap, pairs));
+    }
+
+    fn probe_dim(&mut self) -> Option<usize> {
+        if let Some(v) = self.emb_cache.values().next() {
+            return Some(v.len());
+        }
+        if Self::synth_embed_enabled() {
+            return Some(crate::synth::SYNTH_DIM);
+        }
+        #[cfg(feature = "embeddings")]
+        {
+            self.ensure_embedder();
+            if self.embedder.is_some() {
+                return Some(384);
+            }
+        }
+        None
+    }
+
+    fn ensure_ann(&mut self) {
+        let Some(dim) = self.probe_dim() else {
+            return;
+        };
+        let need = self.current.len();
+        if let Some(ann) = &self.ann {
+            if ann.dim() == dim && ann.live_points() + 16 >= need {
+                return;
+            }
+        }
+        let entities: Vec<(String, String, String)> = self
+            .current
+            .values()
+            .map(|e| {
+                (
+                    e.id.clone(),
+                    e.content_hash.clone(),
+                    format!("{}. {}", e.name, e.text),
+                )
+            })
+            .collect();
+        let mut pairs = Vec::with_capacity(entities.len());
+        for (id, ch, text) in entities {
+            if let Some(v) = self.cached_or_embed(&ch, &text) {
+                if v.len() == dim {
+                    pairs.push((id, v));
+                }
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let cap = pairs.len().saturating_mul(2).max(32);
+        self.ann = Some(crate::ann::AnnIndex::from_pairs(dim, cap, pairs));
+    }
+
+    fn ann_upsert_id(&mut self, id: &str) {
+        let Some(e) = self.current.get(id) else {
+            return;
+        };
+        let ch = e.content_hash.clone();
+        let text = format!("{}. {}", e.name, e.text);
+        let eid = e.id.clone();
+        let Some(v) = self.cached_or_embed(&ch, &text) else {
+            return;
+        };
+        match self.ann.as_mut() {
+            Some(ann) if ann.dim() == v.len() => ann.insert(&eid, &v),
+            _ => self.ensure_ann(),
+        }
+    }
+
+    /// Phase-4 candidate union: inverted-index keyword hits ∪ HNSW neighbours.
+    fn indexed_hybrid_ids(
+        &self,
+        q: &BTreeSet<String>,
+        qvec: &[f32],
+        types: Option<&[String]>,
+    ) -> Vec<String> {
+        let mut cand_ids: HashSet<String> = HashSet::new();
+        for tok in q {
+            if let Some(ids) = self.index.get(tok) {
+                cand_ids.extend(ids.iter().cloned());
+            }
+        }
+        if let Some(ann) = &self.ann {
+            for (id, _) in ann.search(qvec, 200) {
+                cand_ids.insert(id);
+            }
+        }
+        cand_ids
+            .into_iter()
+            .filter(|id| {
+                self.current.get(id).is_some_and(|e| {
+                    types
+                        .map(|ts| ts.iter().any(|t| t == &e.node_type))
+                        .unwrap_or(true)
+                })
+            })
+            .collect()
     }
 
     fn to_result(
@@ -651,125 +977,6 @@ impl Store {
         if let Ok(e) = crate::embed::Embedder::load(path, 384, 256, needs_tt) {
             self.embedder = Some(e);
         }
-    }
-
-    /// Hybrid recall: semantic (ONNX embeddings) + keyword + salience + corroboration, then MMR
-    /// for diversity. No LLM at retrieval. Falls back to keyword recall if the model is missing or
-    /// produces zero vectors. Mirrors the TS `recallHybrid` scoring.
-    pub fn recall_hybrid(
-        &mut self,
-        query: &str,
-        limit: usize,
-        types: Option<&[String]>,
-        w_sem: f64,
-        mmr_lambda: f64,
-    ) -> Vec<RecallResult> {
-        self.load_incremental();
-        self.ensure_embedder();
-        if self.embedder.is_none() {
-            return self.recall(query, limit, types);
-        }
-        struct Cand {
-            id: String,
-            embed_text: String,
-            kw_text: String,
-            ch: String,
-            mentions: u64,
-            updated_at: String,
-            contributors: usize,
-        }
-        let mut cands: Vec<Cand> = Vec::new();
-        for e in self.current.values() {
-            if let Some(ts) = types {
-                if !ts.iter().any(|t| t == &e.node_type) {
-                    continue;
-                }
-            }
-            cands.push(Cand {
-                id: e.id.clone(),
-                embed_text: format!("{}. {}", e.name, e.text),
-                kw_text: format!("{} {}", e.name, e.text),
-                ch: e.content_hash.clone(),
-                mentions: e.mentions,
-                updated_at: e.updated_at.clone(),
-                contributors: e.contributors.len(),
-            });
-        }
-        if cands.is_empty() {
-            return Vec::new();
-        }
-
-        let mut to_embed: Vec<&str> = vec![query];
-        let mut need: Vec<usize> = Vec::new();
-        for (i, c) in cands.iter().enumerate() {
-            if !self.emb_cache.contains_key(&c.ch) {
-                need.push(i);
-                to_embed.push(&c.embed_text);
-            }
-        }
-        let emb = match self.embedder.as_mut().unwrap().embed(&to_embed) {
-            Ok(v) if !v.is_empty() => v,
-            _ => return self.recall(query, limit, types),
-        };
-        let qvec = emb[0].clone();
-        if qvec.iter().all(|x| *x == 0.0) {
-            return self.recall(query, limit, types); // model failed → keyword
-        }
-        for (k, ci) in need.iter().enumerate() {
-            if let Some(v) = emb.get(k + 1) {
-                self.emb_cache.insert(cands[*ci].ch.clone(), v.clone());
-            }
-        }
-
-        let q = tokenize(query);
-        let mut items: Vec<(usize, f64, f32)> = Vec::new(); // (cand idx, relevance, similarity)
-        for (i, c) in cands.iter().enumerate() {
-            let v = match self.emb_cache.get(&c.ch) {
-                Some(v) => v,
-                None => continue,
-            };
-            let sem = crate::embed::cosine(&qvec, v);
-            let kw = keyword_overlap(&q, &c.kw_text);
-            let sal = compute_salience(c.mentions, days_since(&c.updated_at), 60.0, 1.0);
-            let rel = (w_sem * sem as f64 + (1.0 - w_sem) * kw)
-                * (0.7 + 0.3 * sal.min(1.0))
-                * corroboration_boost(c.contributors);
-            items.push((i, rel, sem));
-        }
-        items.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // MMR (Carbonell-Goldstein): relevant but diverse.
-        let mut picked: Vec<(usize, f64, f32)> = Vec::new();
-        while picked.len() < limit && !items.is_empty() {
-            let mut best = 0usize;
-            let mut best_mmr = f64::NEG_INFINITY;
-            for (j, cand) in items.iter().enumerate() {
-                let mut max_sim = 0f32;
-                for p in &picked {
-                    if let (Some(a), Some(b)) = (
-                        self.emb_cache.get(&cands[cand.0].ch),
-                        self.emb_cache.get(&cands[p.0].ch),
-                    ) {
-                        max_sim = max_sim.max(crate::embed::cosine(a, b));
-                    }
-                }
-                let mmr = mmr_lambda * cand.1 - (1.0 - mmr_lambda) * max_sim as f64;
-                if mmr > best_mmr {
-                    best_mmr = mmr;
-                    best = j;
-                }
-            }
-            picked.push(items.remove(best));
-        }
-
-        picked
-            .into_iter()
-            .filter_map(|(idx, rel, sem)| {
-                self.current
-                    .get(&cands[idx].id)
-                    .map(|e| self.to_result(e, Some(rel), Some(sem as f64)))
-            })
-            .collect()
     }
 }
 
@@ -973,6 +1180,109 @@ mod store_tests {
             ok >= n * 4,
             "expected at least {} entity lines, got {ok}",
             n * 4
+        );
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    fn gk6_ledger(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let n = CTR.fetch_add(1, Ordering::Relaxed);
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".gk6-work")
+            .join(format!("test-{}-{}-{}", label, std::process::id(), n));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("ledger.jsonl")
+    }
+
+    #[test]
+    fn snapshot_persists_inverted_index_and_embeddings() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("snap-index");
+        {
+            let mut s = Store::new(led.clone(), "a/r".into());
+            s.remember(&input("k1", "alpha beta gamma topic", "a/r"));
+            s.remember(&input("k2", "delta epsilon topic", "a/r"));
+            s.save_snapshot();
+            let raw = fs::read_to_string(&s.snapshot_path).expect("snap");
+            assert!(raw.contains("\"version\":2"), "v2 snapshot: {raw:.80}");
+            assert!(raw.contains("\"index\""), "index key missing");
+            assert!(raw.contains("\"emb_cache\"") || raw.contains("emb_cache"));
+        }
+        let mut s2 = Store::new(led.clone(), "a/r".into());
+        assert!(!s2.index.is_empty(), "persisted inverted index must reload");
+        assert!(!s2.emb_cache.is_empty(), "persisted embeddings must reload");
+        assert!(s2.ann.as_ref().map(|a| a.live_points()).unwrap_or(0) >= 2);
+        let hits = s2.recall("alpha gamma", 5, None);
+        assert!(hits.iter().any(|r| r.name == "k1"));
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn indexed_hybrid_top10_overlaps_exhaustive() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("parity");
+        let corpus = crate::synth::generate(3_000, 100, 42);
+        crate::synth::write_ledger(&led, &corpus, "bench/gk6");
+        let mut s = Store::new(led.clone(), "bench/gk6".into());
+        s.set_hybrid_exhaustive(true);
+        let mut gold: Vec<Vec<String>> = Vec::with_capacity(100);
+        for q in &corpus.queries {
+            gold.push(
+                s.recall_hybrid(q, 10, None, 0.7, 0.7)
+                    .into_iter()
+                    .map(|r| r.id)
+                    .collect(),
+            );
+        }
+        s.set_hybrid_exhaustive(false);
+        let mut sum = 0.0;
+        let mut identical = 0usize;
+        for (q, g) in corpus.queries.iter().zip(&gold) {
+            let got: Vec<String> = s
+                .recall_hybrid(q, 10, None, 0.7, 0.7)
+                .into_iter()
+                .map(|r| r.id)
+                .collect();
+            if got == *g {
+                identical += 1;
+            }
+            sum += crate::synth::overlap_at_k(g, &got, 10);
+        }
+        let mean = sum / gold.len() as f64;
+        assert!(
+            mean >= 0.9,
+            "mean top-10 overlap {mean:.3} (identical {identical}/100) below 0.9"
+        );
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn ingest_updates_hnsw_and_inverted_index() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("ingest-ann");
+        let mut s = Store::new(led.clone(), "a/r".into());
+        s.set_hybrid_exhaustive(false);
+        s.remember(&input(
+            "old",
+            "c0t0 c0t1 w1 background filler tokens here",
+            "a/r",
+        ));
+        let _ = s.recall_hybrid("c0t0 c0t1", 5, None, 0.7, 0.7);
+        s.remember(&input(
+            "fresh",
+            "c7t0 c7t1 uniquezingesttoken w2 extra words",
+            "a/r",
+        ));
+        assert!(s
+            .index
+            .values()
+            .any(|ids| ids.iter().any(|id| id.contains("fresh"))));
+        let hits = s.recall_hybrid("uniquezingesttoken c7t0", 5, None, 0.7, 0.7);
+        assert!(
+            hits.iter().any(|r| r.name == "fresh"),
+            "ingested node must be searchable, got {:?}",
+            hits.iter().map(|h| &h.name).collect::<Vec<_>>()
         );
         let _ = std::fs::remove_dir_all(led.parent().unwrap());
     }

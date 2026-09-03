@@ -1,5 +1,11 @@
 import { vi } from 'vitest';
 
+// Phase-4 CKG default is rust-if-binary. Keep the Vitest suite on the in-process
+// TS path unless a test explicitly sets CODEBUDDY_CKG_ENGINE=rust|auto.
+if (process.env.CODEBUDDY_CKG_ENGINE === undefined) {
+  process.env.CODEBUDDY_CKG_ENGINE = 'ts';
+}
+
 // Mimic Jest's global object for easier migration
 const jestMock = {
   fn: vi.fn,
