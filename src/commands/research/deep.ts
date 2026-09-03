@@ -16,10 +16,11 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import type { WideResearchOrchestrator, DeepResearchProgress } from '../../agent/wide-research.js';
-import type {
-  DeepResearchLoopOptions,
-  DeepResearchResult,
-  DeepResearchLoopResult,
+import {
+  formatZeroSourceFailure,
+  type DeepResearchLoopOptions,
+  type DeepResearchResult,
+  type DeepResearchLoopResult,
 } from '../../agent/deep-research.js';
 import type {
   StormProgress,
@@ -115,6 +116,12 @@ export async function runDeepResearchCli(
     orchestrator = io.makeOrchestrator();
   } else {
     // CLI path: wire the worker factory before the orchestrator spawns sub-agents.
+    const { maybeDiscoverLocalSearxng } = await import('./discover-searxng.js');
+    const hadSearxng = Boolean(process.env.SEARXNG_URL?.trim());
+    const discovered = await maybeDiscoverLocalSearxng();
+    if (discovered && !hadSearxng) {
+      log(`  🔎 Local SearXNG discovered at ${discovered}`);
+    }
     const { ensureResearchWorkerFactory } = await import('./wire-research-worker.js');
     await ensureResearchWorkerFactory();
     const { WideResearchOrchestrator } = await import('../../agent/wide-research.js');
@@ -152,7 +159,11 @@ export async function runDeepResearchCli(
           log(`  ✍️ ${e.sections} section(s) written (${e.coWritten ? 'outline-first' : 'flat fallback'})`);
           break;
         case 'storm-done':
-          log(`  ✅ STORM Deep Research complete (${e.sources} cited source(s))`);
+          if (e.sources === 0) {
+            log('  ❌ STORM Deep Research produced 0 cited source(s)');
+          } else {
+            log(`  ✅ STORM Deep Research complete (${e.sources} cited source(s))`);
+          }
           break;
       }
       return;
@@ -168,8 +179,13 @@ export async function runDeepResearchCli(
       case 'collecting':
         log(`  🌐 Collecting up to ${e.urls} source(s)...`);
         break;
+      case 'searched':
+        log(
+          `  🔎 Search: ${e.hits} hit(s) in → ${e.urls} unique URL(s) from ${e.queries} quer${e.queries === 1 ? 'y' : 'ies'}`,
+        );
+        break;
       case 'collected':
-        log(`  📥 Scraped ${e.scraped} source(s)`);
+        log(`  📥 Kept ${e.scraped} source(s) after scrape/snippet fallback`);
         break;
       case 'deduped':
         log(`  🧹 ${e.kept} kept, ${e.dropped} near-duplicate(s) dropped`);
@@ -194,7 +210,11 @@ export async function runDeepResearchCli(
         log(`  🎯 Converged at round ${e.round} (${e.reason})`);
         break;
       case 'done':
-        log(`  ✅ Deep Research complete (${e.sources} cited source(s))`);
+        if (e.sources === 0) {
+          log('  ❌ Deep Research produced 0 cited source(s)');
+        } else {
+          log(`  ✅ Deep Research complete (${e.sources} cited source(s))`);
+        }
         break;
     }
   });
@@ -218,6 +238,9 @@ export async function runDeepResearchCli(
             ckgArg,
           )
         : await orchestrator.deepResearch(topic, apiKey, providerConfig, opts.deepOptions, undefined, ckgArg);
+    if (!Array.isArray(result.sources) || result.sources.length === 0) {
+      throw new Error(formatZeroSourceFailure(result));
+    }
     const content = buildDeepReportFile(topic, result, opts.providerLabel);
 
     if (reportPath) {
