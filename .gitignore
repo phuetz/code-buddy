@@ -24,6 +24,11 @@ tmp/
 tmp_*/
 _test-*/
 _gk1/
+_qa/gk20/home/
+_qa/gk20/work/
+_qa/gk20/rules.json
+_qa/gk20/runs.jsonl
+_qa/gk20/*.jsonl
 test-app/
 test-scripts/
 C\:Users*/
