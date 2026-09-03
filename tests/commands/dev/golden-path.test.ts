@@ -193,6 +193,17 @@ describe('PR fail-closed vs local remote', () => {
   });
 });
 
+describe('documentation vs golden path', () => {
+  it('does not claim buddy dev pr only generates a summary', () => {
+    const commands = fs.readFileSync(path.join(process.cwd(), 'docs/commands.md'), 'utf8');
+    const features = fs.readFileSync(path.join(process.cwd(), 'docs/features.md'), 'utf8');
+    expect(commands).not.toMatch(/Dev run \+ generate PR summary/);
+    expect(commands).toMatch(/PLAN\.md/);
+    expect(commands).toMatch(/fail-closed|gh pr create/);
+    expect(features).toMatch(/auto-commit/i);
+  });
+});
+
 describe('WritePolicy.strict: shell writes', () => {
   it('detects redirect/heredoc/tee writes and allows read-only commands', () => {
     expect(isShellWriteCommand('echo x > src/add.js')).toBe(true);
