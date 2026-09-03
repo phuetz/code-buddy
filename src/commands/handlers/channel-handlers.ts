@@ -27,7 +27,7 @@ import {
   __resetSessionModelOverridesForTests,
 } from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
-import { resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
+import { channelEnvToken, resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
 import type { ModelEgress } from '../../providers/model-egress.js';
 import {
   getChannelCognitivePort,
@@ -229,14 +229,72 @@ export async function startConfiguredChannels(
 
 function getChannelConfigPaths(configPath?: string): string[] {
   const envConfigPath = process.env.CODEBUDDY_CHANNEL_CONFIG?.trim();
+  const home = process.env.HOME || process.env.USERPROFILE || '';
   return configPath
     ? [configPath]
     : envConfigPath
       ? [envConfigPath]
     : [
         path.join(process.cwd(), '.codebuddy', 'channels.json'),
-        path.join(process.env.HOME || process.env.USERPROFILE || '', '.codebuddy', 'channels.json'),
+        path.join(home, '.codebuddy', 'channels.json'),
+        path.join(process.cwd(), '.codebuddy', 'settings.json'),
+        path.join(home, '.codebuddy', 'settings.json'),
       ];
+}
+
+function mapSettingsChannelEntry(key: string, value: unknown): ChannelConfigEntry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const type = typeof entry.type === 'string' && entry.type.trim() ? entry.type.trim() : key;
+  const options: Record<string, unknown> = {
+    ...(entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)
+      ? (entry.options as Record<string, unknown>)
+      : {}),
+  };
+  if (Array.isArray(entry.adminUsers)) options.adminUsers = entry.adminUsers;
+  const mapped: ChannelConfigEntry = {
+    type,
+    enabled: entry.enabled !== false,
+  };
+  if (typeof entry.token === 'string') mapped.token = entry.token;
+  if (typeof entry.webhookUrl === 'string') mapped.webhookUrl = entry.webhookUrl;
+  if (Array.isArray(entry.allowedUsers)) {
+    mapped.allowedUsers = entry.allowedUsers.filter((item): item is string => typeof item === 'string');
+  }
+  if (Array.isArray(entry.allowedChannels)) {
+    mapped.allowedChannels = entry.allowedChannels.filter((item): item is string => typeof item === 'string');
+  }
+  if (Object.keys(options).length > 0) mapped.options = options;
+  return mapped;
+}
+
+function asChannelConfig(raw: unknown): ChannelsConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const channelsField = (raw as { channels?: unknown }).channels;
+  if (Array.isArray(channelsField)) {
+    return { channels: channelsField as ChannelConfigEntry[] };
+  }
+  if (channelsField && typeof channelsField === 'object') {
+    const channels = Object.entries(channelsField as Record<string, unknown>)
+      .map(([key, value]) => mapSettingsChannelEntry(key, value))
+      .filter((entry): entry is ChannelConfigEntry => entry !== null);
+    if (channels.length === 0) return null;
+    return { channels };
+  }
+  return null;
+}
+
+function applyEnvChannelTokens(config: ChannelsConfig): ChannelsConfig {
+  const telegramToken = channelEnvToken('telegram');
+  if (!telegramToken) return config;
+  const existing = config.channels.find((channel) => channel.type === 'telegram');
+  if (existing) {
+    if (!existing.token) existing.token = telegramToken;
+    return config;
+  }
+  return {
+    channels: [...config.channels, { type: 'telegram', enabled: true, token: telegramToken }],
+  };
 }
 
 export function loadChannelConfigWithPath(configPath?: string): { config: ChannelsConfig; path: string } | null {
@@ -244,11 +302,17 @@ export function loadChannelConfigWithPath(configPath?: string): { config: Channe
     try {
       if (fs.existsSync(p)) {
         const content = fs.readFileSync(p, 'utf-8');
-        return { config: JSON.parse(content) as ChannelsConfig, path: p };
+        const parsed = asChannelConfig(JSON.parse(content));
+        if (!parsed) continue;
+        return { config: applyEnvChannelTokens(parsed), path: p };
       }
     } catch (err) {
       logger.debug(`Failed to load channel config from ${p}`, { error: err instanceof Error ? err.message : String(err) });
     }
+  }
+  const fromEnv = applyEnvChannelTokens({ channels: [] });
+  if (fromEnv.channels.length > 0) {
+    return { config: fromEnv, path: 'env:TELEGRAM_BOT_TOKEN' };
   }
   return null;
 }

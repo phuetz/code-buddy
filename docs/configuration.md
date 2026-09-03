@@ -76,6 +76,7 @@ Doc LoRA : [krea-lora.md](./krea-lora.md).
 | Variable | Description |
 |:---------|:------------|
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_API_BASE` | Telegram Bot API origin (default `https://api.telegram.org`). Point at a local fake for tests; trailing slashes are stripped |
 | `DISCORD_TOKEN` | Discord bot token |
 | `SLACK_BOT_TOKEN` | Slack bot token |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | Feishu/Lark app credentials |

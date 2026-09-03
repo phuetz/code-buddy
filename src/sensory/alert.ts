@@ -6,6 +6,7 @@
  * @module sensory/alert
  */
 import { logger } from '../utils/logger.js';
+import { resolveTelegramApiBase } from '../utils/telegram-api-base.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 
 /**
@@ -23,7 +24,7 @@ export async function sendTelegramVoice(
     fallback?: (t: string) => Promise<boolean>;
   } = {},
 ): Promise<boolean> {
-  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
   const clean = prepareSpeech(text);
   if (!token || !chat || !clean) return false;
@@ -40,7 +41,7 @@ export async function sendTelegramVoice(
     form.append('chat_id', chat);
     form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), path.basename(ogg));
     form.append('caption', clean.slice(0, 1024)); // text too, for skim + fallback context
-    const res = await post(`https://api.telegram.org/bot${token}/sendVoice`, form);
+    const res = await post(`${resolveTelegramApiBase()}/bot${token}/sendVoice`, form);
     if (res?.ok) return true;
     return await (deps.fallback ?? sendTelegramAlert)(clean);
   } catch (err) {
@@ -65,12 +66,12 @@ export async function sendTelegramAlert(
     readFile?: (p: string) => Promise<Buffer>;
   } = {},
 ): Promise<boolean> {
-  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
   if (!token || !chat) return false;
   const doFetch = deps.fetch ?? ((url: string, init: RequestInit) => fetch(url, init));
   const sendText = (): Promise<unknown> =>
-    doFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    doFetch(`${resolveTelegramApiBase()}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chat, text: caption }),
@@ -85,7 +86,7 @@ export async function sendTelegramAlert(
         form.append('chat_id', chat);
         form.append('caption', caption.slice(0, 1024));
         form.append('photo', new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }), path.basename(imagePath));
-        const result = await doFetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        const result = await doFetch(`${resolveTelegramApiBase()}/bot${token}/sendPhoto`, {
           method: 'POST',
           body: form,
         });

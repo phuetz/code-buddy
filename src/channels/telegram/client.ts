@@ -6,6 +6,9 @@
  */
 
 import { EventEmitter } from 'events';
+import fs from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
 import type {
   TelegramConfig,
   TelegramUpdate,
@@ -33,10 +36,9 @@ import { ProFeatures } from '../pro/pro-features.js';
 import type { MessageButton as ProMessageButton } from '../pro/types.js';
 import { TelegramProFormatter } from './pro-formatter.js';
 import { renderWidgetDataToPng, renderWidgetHtmlToPng } from '../../widgets/widget-image-renderer.js';
-
-const TELEGRAM_API_BASE = 'https://api.telegram.org';
+import { resolveTelegramApiBase } from '../../utils/telegram-api-base.js';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
-const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
+export const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
 const POLL_REQUEST_MARGIN_MS = 5_000;
 const POLL_RETRY_INITIAL_MS = 2_000;
 const POLL_RETRY_MAX_MS = 60_000;
@@ -75,7 +77,41 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private get apiUrl(): string {
-    return `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}`;
+    return `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}`;
+  }
+
+  private offsetFilePath(): string {
+    const override = process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR?.trim();
+    const root = override
+      || process.env.HOME
+      || process.env.USERPROFILE
+      || homedir();
+    return path.join(root, '.codebuddy', `telegram-offset-${this.botId}.json`);
+  }
+
+  private loadPersistedOffset(): void {
+    try {
+      const raw = fs.readFileSync(this.offsetFilePath(), 'utf8');
+      const parsed = JSON.parse(raw) as { lastUpdateId?: unknown };
+      const value = Number(parsed.lastUpdateId);
+      if (Number.isFinite(value) && value > 0) {
+        this.lastUpdateId = value;
+      }
+    } catch {
+      // Missing or unreadable file: first run, keep lastUpdateId at 0.
+    }
+  }
+
+  private persistOffset(): void {
+    try {
+      const file = this.offsetFilePath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `${JSON.stringify({ lastUpdateId: this.lastUpdateId })}\n`, 'utf8');
+    } catch (error) {
+      logger.warn('Telegram offset persist failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -509,6 +545,7 @@ export class TelegramChannel extends BaseChannel {
   private async startPolling(): Promise<void> {
     // Delete any existing webhook
     await this.apiRequest('deleteWebhook');
+    this.loadPersistedOffset();
 
     this.pollingActive = true;
     this.consecutiveErrors = 0;
@@ -539,6 +576,7 @@ export class TelegramChannel extends BaseChannel {
       for (const update of updates) {
         this.lastUpdateId = update.update_id;
         await this.handleUpdate(update);
+        this.persistOffset();
       }
     } catch (error) {
       if (!this.isCurrentPoll(generation)) return;
@@ -813,6 +851,9 @@ export class TelegramChannel extends BaseChannel {
     // Voice note → text only after pairing/auth, so a failed transcription never
     // notifies an unapproved sender.
     await this.maybeTranscribeVoice(message);
+    if (message.content === VOICE_TRANSCRIPTION_FAILED) {
+      return;
+    }
     const parsed = this.parseCommand(message);
     parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
 
@@ -1272,7 +1313,7 @@ export class TelegramChannel extends BaseChannel {
       const form = new FormData();
       form.append('chat_id', channelId);
       form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), 'voice.ogg');
-      const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendVoice`;
+      const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendVoice`;
       const res = await fetch(url, { method: 'POST', body: form });
       if (!res.ok) throw new Error(`sendVoice HTTP ${res.status}`);
     } finally {
@@ -1294,7 +1335,7 @@ export class TelegramChannel extends BaseChannel {
     form.append('chat_id', channelId);
     if (caption) form.append('caption', caption.slice(0, 1024));
     form.append('photo', new Blob([bytes], { type: mime }), path.basename(imagePath));
-    const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendPhoto`;
+    const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendPhoto`;
     const res = await fetch(url, { method: 'POST', body: form });
     if (!res.ok) throw new Error(`sendPhoto HTTP ${res.status}`);
   }
@@ -1306,7 +1347,7 @@ export class TelegramChannel extends BaseChannel {
     const result = await this.apiRequest<{ file_path: string }>('getFile', {
       file_id: fileId,
     });
-    return `${TELEGRAM_API_BASE}/file/bot${this.telegramConfig.token}/${result.file_path}`;
+    return `${resolveTelegramApiBase()}/file/bot${this.telegramConfig.token}/${result.file_path}`;
   }
 
   /**

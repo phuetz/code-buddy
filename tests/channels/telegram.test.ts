@@ -594,9 +594,12 @@ describe('TelegramChannel', () => {
         },
       });
 
-      expect(messageSpy).toHaveBeenCalled();
-      expect(messageSpy.mock.calls[0][0].content).toBe('[transcription vocale échouée]');
-      expect(mockFetch.mock.calls.some((call) => String(call[0]).includes('sendMessage'))).toBe(true);
+      expect(messageSpy).not.toHaveBeenCalled();
+      const sent = mockFetch.mock.calls
+        .filter((call) => String(call[0]).includes('sendMessage'))
+        .map((call) => String(call[1]?.body ?? ''));
+      expect(sent.some((body) => /transcri/i.test(body))).toBe(true);
+      expect(sent.some((body) => body.includes('[transcription vocale échouée]'))).toBe(false);
     });
 
     it("does not notify a transcription failure before pairing (jumeau D7)", async () => {
