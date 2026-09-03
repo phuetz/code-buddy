@@ -258,7 +258,7 @@ le banc ne redistribue toutefois aucun poids dans Git.
 ## Protocole effectivement exécuté
 
 Le script reproductible est
-[benchmarks/turn-detector/bench_fr.py](benchmarks/turn-detector/bench_fr.py).
+[benchmarks/turn-detector/bench_fr.py](../../../benchmarks/turn-detector/bench_fr.py).
 Il fixe le seed de synthèse à 20260903 pour Python, NumPy et Torch, synthétise
 avec Pocket TTS french_24l, voix estelle, puis resample chaque cas en PCM mono
 16 kHz. Les 10 cas pause-* ont une première proposition avec

@@ -40,7 +40,7 @@ Cette revue a analysé systématiquement :
 ## 3. Analyse Détaillée des Anomalies et Régressions
 
 ### 3.1. Collision SENSE7 × GT2 : Faux positif d'écho sur réponses courtes de l'utilisateur (Thème 1)
-- **Fichiers** : [`src/sensory/voice-activity.ts:222-236`](src/sensory/voice-activity.ts#L222-L236)
+- **Fichiers** : [`src/sensory/voice-activity.ts:222-236`](../../../src/sensory/voice-activity.ts#L222-L236)
 - **Lanes en conflit** : SENSE7 (`887aaab8c` / `ef2a825c5`) × GT2 (`2cb4bb7b5` / `7495c6469`).
 - **Mécanisme du bogue** :
   SENSE7 exigeait qu'une phrase entendue recouvre au moins 60 % des tokens du robot (`referenceOverlap / reference.tokens.length >= 0.6`) pour être qualifiée d'écho. GT2 a voulu interdire qu'un extrait de phrase du robot passe sans être vu, et a ajouté :
@@ -52,13 +52,13 @@ Cette revue a analysé systématiquement :
   if (transcriptIsRobotFragment || referenceOverlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE) return 'echo';
   ```
 - **Scénario de panne** :
-  Si le robot dit par exemple : *« Bonjour, veux-tu continuer ? Dis oui ou non. »*, les tokens de référence contiennent notamment `"oui"` et `"non"`. Si l'utilisateur répond simplement *« Oui »*, `transcriptTokens` vaut `["oui"]`. L'expression `transcriptTokens.every(...)` est évaluée à `true`. La réponse légitime de l'utilisateur est classée comme un **écho du haut-parleur** (`'echo'`) et **totalement ignorée / supprimée** par le moteur audio ([`src/sensory/speech-reaction.ts:1889-1944`](src/sensory/speech-reaction.ts#L1889-L1944)).
+  Si le robot dit par exemple : *« Bonjour, veux-tu continuer ? Dis oui ou non. »*, les tokens de référence contiennent notamment `"oui"` et `"non"`. Si l'utilisateur répond simplement *« Oui »*, `transcriptTokens` vaut `["oui"]`. L'expression `transcriptTokens.every(...)` est évaluée à `true`. La réponse légitime de l'utilisateur est classée comme un **écho du haut-parleur** (`'echo'`) et **totalement ignorée / supprimée** par le moteur audio ([`src/sensory/speech-reaction.ts:1889-1944`](../../../src/sensory/speech-reaction.ts#L1889-L1944)).
 - **Preuve rouge** : Test 1 dans `tests/fusion/revue-gf1-fusions.test.ts` (`classifyRecentVoiceEcho('oui', 1500)` renvoie `'echo'`).
 
 ---
 
 ### 3.2. Collision SENSE1 × CONV2 : Réouverture du demi-duplex sans AEC de confiance (Thèmes 1 et 2)
-- **Fichiers** : [`src/sensory/speech-reaction.ts:1543-1579`](src/sensory/speech-reaction.ts#L1543-L1579), [`src/sensory/speech-reaction.ts:1648-1653`](src/sensory/speech-reaction.ts#L1648-L1653), [`src/sensory/speech-reaction.ts:2284-2287`](src/sensory/speech-reaction.ts#L2284-L2287).
+- **Fichiers** : [`src/sensory/speech-reaction.ts:1543-1579`](../../../src/sensory/speech-reaction.ts#L1543-L1579), [`src/sensory/speech-reaction.ts:1648-1653`](../../../src/sensory/speech-reaction.ts#L1648-L1653), [`src/sensory/speech-reaction.ts:2284-2287`](../../../src/sensory/speech-reaction.ts#L2284-L2287).
 - **Lanes en conflit** : SENSE1 (`5a04f9e5e` / `a9056300a`) × CONV2 (`c95464c20` / `6de905980`).
 - **Mécanisme du bogue** :
   1. **Rupture d'invariant SENSE1** : SENSE1 a établi que la porte demi-duplex interdit l'écoute du micro pendant la parole du robot, sauf si l'AEC est **explicitement approuvée** via `CODEBUDDY_SENSORY_AEC_TRUST=true` (`isSensoryAecTrusted`). Or CONV2 a introduit le barge-in acoustique via `shouldTriggerAcousticBargeIn` qui teste uniquement `payload.aecActive !== true`, sans tester `isSensoryAecTrusted`. La résolution manuelle dans `5a04f9e5e` a ajouté une exception `bargedIn` :
@@ -78,7 +78,7 @@ Cette revue a analysé systématiquement :
 ---
 
 ### 3.3. Régression silencieuse GK28 : Plantage de `CodeBuddyAgent.saveCurrentSession` (Thème 1)
-- **Fichiers** : [`src/agent/codebuddy-agent.ts:1650-1665`](src/agent/codebuddy-agent.ts#L1650-L1665), [`src/analytics/cost-report.ts:390-395`](src/analytics/cost-report.ts#L390-L395).
+- **Fichiers** : [`src/agent/codebuddy-agent.ts:1650-1665`](../../../src/agent/codebuddy-agent.ts#L1650-L1665), [`src/analytics/cost-report.ts:390-395`](../../../src/analytics/cost-report.ts#L390-L395).
 - **Lanes en conflit** : GK28 (`6409b24e2` / `986122b5d`) × Agent Core (`tests/unit/codebuddy-agent.test.ts`, `tests/grok-agent.test.ts`).
 - **Mécanisme du bogue** :
   Dans le commit `986122b5d`, GK28 a ajouté une surcharge `saveCurrentSession()` dans `CodeBuddyAgent` :
@@ -98,10 +98,10 @@ Cette revue a analysé systématiquement :
 ---
 
 ### 3.4. Régression de renommage non propagée GK1 (Thème 1 & 4)
-- **Fichiers** : [`tests/docs/public-screenshots.test.ts:16, 219`](tests/docs/public-screenshots.test.ts#L16)
+- **Fichiers** : [`tests/docs/public-screenshots.test.ts:16, 219`](../../../tests/docs/public-screenshots.test.ts#L16)
 - **Lanes en conflit** : GK1 (`8a2b55e0d` / `0f505045a`) × Tests Docs.
 - **Mécanisme du bogue** :
-  La lane GK1 a renommé `cowork/readme.md` en majuscules `cowork/README.md` pour compatibilité avec les systèmes de fichiers Linux sensibles à la casse. GK1 a mis à jour plusieurs références dans la documentation et dans `tests/docs/cowork-public-docs-privacy.test.ts`, mais a omis [`tests/docs/public-screenshots.test.ts`](tests/docs/public-screenshots.test.ts) qui référence toujours en dur `path.join(repoRoot, 'cowork', 'readme.md')`.
+  La lane GK1 a renommé `cowork/readme.md` en majuscules `cowork/README.md` pour compatibilité avec les systèmes de fichiers Linux sensibles à la casse. GK1 a mis à jour plusieurs références dans la documentation et dans `tests/docs/cowork-public-docs-privacy.test.ts`, mais a omis [`tests/docs/public-screenshots.test.ts`](../../../tests/docs/public-screenshots.test.ts) qui référence toujours en dur `path.join(repoRoot, 'cowork', 'readme.md')`.
 - **Impact** : Échec systématique de la suite de test avec `ENOENT: no such file or directory, open '.../cowork/readme.md'`.
 - **Preuve rouge** : Test 6 dans `tests/fusion/revue-gf1-fusions.test.ts`.
 
@@ -109,14 +109,14 @@ Cette revue a analysé systématiquement :
 
 ### 3.5. Affaiblissement / Inversion de tests de sécurité : GK17 & GT2 (Thème 4)
 1. **Contournement d'approbation sur `peer.tool.invoke` (GK17)** :
-   - Fichiers : [`src/fleet/peer-tool-bridge.ts:435-442`](src/fleet/peer-tool-bridge.ts#L435-L442), [`tests/fleet/peer-tool-bridge.test.ts:323-370`](tests/fleet/peer-tool-bridge.test.ts#L323-L370).
+   - Fichiers : [`src/fleet/peer-tool-bridge.ts:435-442`](../../../src/fleet/peer-tool-bridge.ts#L435-L442), [`tests/fleet/peer-tool-bridge.test.ts:323-370`](../../../tests/fleet/peer-tool-bridge.test.ts#L323-L370).
    - GK17 a supprimé la vérification de `needs_approval` de `PolicyEngine` pour éviter les auto-rejets en mode headless. En conséquence, les appels distants recevant `needs_approval` sont exécutés sans aucune validation humaine.
    - Pour que la CI passe, le commit `92e832a39` a inversé les assertions de test : `expect(confirmSpy).not.toHaveBeenCalled()`, supprimant la garantie de validation.
 2. **Suppression du test de blocage VAD sous bruit ambiant (GT2)** :
-   - Fichiers : [`tests/sensory/hole-vad-noise-cap.test.ts:1-6`](tests/sensory/hole-vad-noise-cap.test.ts#L1-L6).
+   - Fichiers : [`tests/sensory/hole-vad-noise-cap.test.ts:1-6`](../../../tests/sensory/hole-vad-noise-cap.test.ts#L1-L6).
    - Commit `c08ab6d2e` a remplacé la simulation de fermeture du VAD sous bruit ambiant (50 lignes vérifiant l'hystérésis et la fermeture sur silence) par un simple marqueur `it.todo(...)`.
 3. **Mock de disque partiel dans `tests/unit/memory.test.ts` (G3R)** :
-   - Fichiers : [`tests/unit/memory.test.ts:43-75`](tests/unit/memory.test.ts#L43-L75).
+   - Fichiers : [`tests/unit/memory.test.ts:43-75`](../../../tests/unit/memory.test.ts#L43-L75).
    - Le mock `fakeDisk` intercepte `readFile`, `writeFile`, `rename`, `remove`, mais `mockPathExists` est laissé à `false` par défaut (`mockPathExists: vi.fn().mockResolvedValue(false)`), créant une incohérence entre l'état de `fakeDisk` et la réponse de `fs.pathExists`.
 
 ---
@@ -144,7 +144,7 @@ L'inspection de `4478d1ea1..HEAD` montre l'introduction non contrôlée de nombr
 
 ## 4. Tests Rouges Ajoutés
 
-Fichier créé et commité : [`tests/fusion/revue-gf1-fusions.test.ts`](tests/fusion/revue-gf1-fusions.test.ts) (commit `750083cc7`).
+Fichier créé et commité : [`tests/fusion/revue-gf1-fusions.test.ts`](../../../tests/fusion/revue-gf1-fusions.test.ts) (commit `750083cc7`).
 
 ### Résultats d'exécution Vitest :
 ```bash

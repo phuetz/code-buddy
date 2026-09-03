@@ -212,7 +212,7 @@ supplantés par le rectificatif ci-dessus et par la table finale de DOC1.
 ## 4. Tests de preuve (Tests ROUGES exécutés et validés)
 
 Un ensemble initial de 15 tests automatisés a été rédigé dans
-[`tests/docs/revue-gemini-docs.test.ts`](tests/docs/revue-gemini-docs.test.ts) et
+[`tests/docs/revue-gemini-docs.test.ts`](../../../tests/docs/revue-gemini-docs.test.ts) et
 commité (`e3c6d857e`). Six matérialisaient un écart réel ; neuf ne lisaient pas
 la documentation et testaient donc une promesse qui n’y figurait pas.
 

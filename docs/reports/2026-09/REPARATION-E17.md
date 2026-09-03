@@ -83,10 +83,10 @@ Après correction, la même commande avec
 `COWORK_E17_CHAT_SCREENSHOT="$PWD/../_qa/shots/e17-two-turn-chat.png"` donne
 1 test passé en 14,5 s, code 0, durée murale 15,21 s. La capture 1400×900 montre
 les deux bulles utilisateur, les deux bulles assistant et le compositeur encore
-visible : [`_qa/shots/e17-two-turn-chat.png`](_qa/shots/e17-two-turn-chat.png),
+visible : [`_qa/shots/e17-two-turn-chat.png`](../../../_qa/shots/e17-two-turn-chat.png),
 SHA-256 `05d892e83761f56ed8d95ac47d670adec05d7fae92815326d12cf8c4f3c1fd7f`.
 La capture rouge est
-[`_qa/shots/e17-d22-red.png`](_qa/shots/e17-d22-red.png), SHA-256
+[`_qa/shots/e17-d22-red.png`](../../../_qa/shots/e17-d22-red.png), SHA-256
 `fae8f9caab9c8021c4f79d1cd76687532a1253c4ad456f197bcc4033a464a60a`.
 
 Commit : `bd1f789a2 fix(cowork): keep composer visible after each turn`.
