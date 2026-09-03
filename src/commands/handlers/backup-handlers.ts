@@ -17,7 +17,6 @@ import {
 import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
-import { logger } from '../../utils/logger.js';
 
 export interface CommandHandlerResult {
   handled: boolean;

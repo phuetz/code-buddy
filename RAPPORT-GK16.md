@@ -166,45 +166,64 @@ Rouge collé : create ne disait pas que la source est le `.codebuddy/` du projet
 
 Correctif : ligne `Source: … (current project .codebuddy/; does not include ~/.codebuddy)` ; help CLI ; `docs/commands.md` ; `docs/deployment.md`.
 
-Vert : 6 fichiers / 38 tests.
+Vert : 6 fichiers / 38 tests. Commit `4bfba4d0c`.
 
-## Périmètre annoncé (à remplir après lecture)
+### Rejeu CLI après correctifs (HOME `_gk16/home`)
 
-Fichiers à lire ensuite (annoncés, pas encore ouverts) :
+```
+create vide (screenshots only) → exit 1
+  No files to back up in …/empty-project/.codebuddy. …
 
-- `src/commands/backup*.ts`
-- `src/backup/`
-- `tests/backup/`
-- documentation utilisateur relative à `buddy backup`
+create dir chmod a-w → exit 1, pas de crash
+  Cannot write backup …: permission denied (…).
 
-Cycle réel prévu, HOME temporaire du clone uniquement :
+verify abs.json → exit 1
+  Invalid backup …: path escapes destination: /etc/passwd
 
-1. peupler un faux `~/.codebuddy` (config / mémoire / sessions)
-2. `create` → `list` → `verify`
-3. modifier des fichiers
-4. `restore` et comparer sha256 avant/après
+create projet → exit 0
+  Source: …/project/.codebuddy (current project .codebuddy/; does not include ~/.codebuddy)
+  Files: 9 (…)
+  Size: 231 B
+```
 
-Cas méchants prévus :
+Vérifications machine : `npx tsc --noEmit -p .` exit 0 ; `tsc --project tsconfig.gpuNode-identity.json` exit 0 ; ESLint ciblé `--max-warnings=0` exit 0 (après retrait de `logger` inutilisé) ; `npm run lint` exit 0 (0 erreur, 2473 warnings historiques) ; `git diff --check` exit 0 ; tests backup 6 fichiers / 38 verts.
 
-- archive tronquée
-- archive avec symlink absolu et `../`
-- fichier de 0 octet
-- disque « plein » simulé
-- restauration dans un profil non vide (fusion ou refus explicite ?)
-- archive d'une version antérieure du format
+## Tableau final
 
-Chaque défaut : test rouge → correctif → vert, un commit.
-
-## Tableau final (à compléter)
-
-| Cas | Attendu utilisateur | Observé | Verdict | Correctif |
-|-----|---------------------|---------|---------|-----------|
-| *(vide jusqu'à exécution)* | | | | |
+| Cas | Attendu utilisateur | Observé avant | Verdict | Correctif |
+|-----|---------------------|---------------|---------|-----------|
+| create → list → verify → mutate → restore | sha256 identiques | 8/8 fichiers d'archive restaurés à l'identique | **vert** (happy path) | déjà là (R30) |
+| Fichier 0 octet | inclus et restauré | sha256 vide `e3b0c442…` OK | **vert** | aucun |
+| Symlink dest (G6R) | refuse, ne pas écrire dehors | `symbolic link is forbidden`, victime `KEEPME` | **vert** | déjà là (G6R) |
+| `.codebuddy` vide | ne pas annoncer un backup | create « Backup created Files: 0 » | **rouge** | Lot A `7f9920a47` |
+| Disque plein / EACCES | message d'écriture, pas un crash | crash `Unhandled promise rejection` ; restore « Failed to read » | **rouge** | Lot B `c5bd46383` |
+| Archive `../` ou chemin absolu | verify refuse | verify « Backup valid », restore refuse | **rouge** | Lot C `f1fd3dbf7` |
+| Symlink source hors projet | ne pas emballer la cible | archive contenait `SECRET_OUTSIDE` | **rouge** | Lot D `78c846046` |
+| Fichier > 1 Mo | le dire | sauté sans mention | **rouge** | Lot E `31b84a41a` |
+| Restore profil non vide | fusion ou refus **explicite** | fusion silencieuse, phrase « overwrite current .codebuddy/ » | **rouge** → **fusion explicite** | Lot F `7af07e409` |
+| Taille < 1 Ko | ne pas afficher 0 KB | `Size: 0 KB` pour 208 o | **rouge** | Lot G `0a797e0b5` |
+| Archive tronquée / tar | message lisible | `Unterminated string in JSON` / `Failed to read` | **rouge** | Lot G |
+| Format v0.9 | « format non supporté » | `archive size mismatch` | **rouge** | Lot G |
+| Cible = projet vs HOME | le dire | seuls les fichiers cwd étaient sauvés, sans le dire | **rouge** | Lot H `4bfba4d0c` |
 
 ## Ce qu'un utilisateur peut croire à tort
 
-*(à remplir après les exécutions)*
+1. **`buddy backup` sauve `~/.codebuddy` (mémoire globale, sessions, skills).** Faux : ça sauve le `.codebuddy/` du **répertoire courant**. Les archives atterrissent seulement dans `~/.codebuddy/backups`. Un `create` lancé hors projet échoue (pas de `.codebuddy/` projet).
+2. **`restore --confirm` remet le profil exactement comme au `create`.** Faux : c'est une **fusion**. Les fichiers hors archive (et `screenshots/` jamais sauvés) restent. Avant le lot F, le message le faisait croire.
+3. **`verify` « Backup valid » veut dire « on pourra restaurer ».** Faux avant le lot C : une archive avec `/etc/passwd` était « valid ».
+4. **`Backup created` avec `Files: 0` / `Size: 0 KB` est un vrai backup.** Faux : vide inutilisable (lot A) ; 0 KB était un arrondi (lot G).
+5. **Tous les fichiers du projet sont dans l'archive.** Faux : > 1 Mo, `screenshots/`, `tool-results/`, `runs/`, `browser-data/`, et désormais les **symlinks**, sont exclus.
+6. **Un échec d'écriture pendant create est un message clair.** Faux avant le lot B : crash + `buddy --resume`.
+7. **Le checksum affiché est un SHA-256 complet.** Faux : 16 hex (64 bits). Suffisant pour le happy path mesuré, pas une preuve cryptographique forte.
+8. **Restore est tout-ou-rien.** Encore vrai seulement si l'écriture échoue **avant** le premier fichier. Un crash au milieu du boucle laisse des fichiers déjà écrasés (pas de staging transactionnel). Ouvert.
+
+## Ouvert
+
+- Restore non transactionnel (pas de répertoire staging puis rename).
+- Checksum tronqué à 16 hex.
+- Toujours pas de backup du profil HOME (décision produit ; désormais dite).
+- Plafond 1 Mo inchangé (désormais annoncé).
 
 ## Bilan (≤ 10 lignes)
 
-*(à remplir en fin de mission)*
+Cycle réel `create` → `list` → `verify` → mutation → `restore --confirm` : sha256 des fichiers d'archive identiques avant/après. Huit défauts mesurés (succès vide, crash EACCES, verify menteur, symlink source, skip 1 Mo, fusion silencieuse, 0 KB, JSON/format). Huit lots rouge→vert, un commit chacun (`7f9920a47` … `4bfba4d0c`). Preuves : CLI HOME `_gk16/home` ; 6 fichiers / 38 tests backup ; `tsc` racine+GPU exit 0 ; ESLint ciblé 0 ; pas de push, pas d'`~/.codebuddy` réel, original `~/code-buddy` intact. Reste ouvert : restore non atomique, checksum 16 hex, pas de backup HOME.
