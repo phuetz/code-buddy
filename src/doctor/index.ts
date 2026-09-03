@@ -695,14 +695,17 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
   let userSettings: (UserSettings & OllamaSelectionSettings) | undefined;
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
-    userSettings = getSettingsManager().loadUserSettings();
+    userSettings = getSettingsManager().readUserSettingsIfPresent();
   } catch {
     /* settings unreadable — treat as not onboarded */
   }
   const p = (userSettings?.provider || '').toLowerCase();
   const onboardedLocal = p === 'ollama' || p === 'lmstudio';
   const envLocal = Boolean(process.env.OLLAMA_HOST || process.env.LMSTUDIO_HOST);
-  const ollamaExplicitlySelected = Boolean(process.env.OLLAMA_HOST) || p === 'ollama';
+  // OLLAMA_HOST alone is not a saved model selection. Treating the grok
+  // defaultModel that loadUserSettings() used to invent as "the user's
+  // Ollama tag" made doctor lie on a virgin profile.
+  const ollamaExplicitlySelected = onboardedLocal;
   const liveOllamaModel = ollama?.available && ollama.baseURL
     ? resolveOllamaModel(ollama.models ?? [], userSettings)
     : undefined;

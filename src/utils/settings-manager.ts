@@ -140,6 +140,18 @@ export class SettingsManager {
   }
 
   /**
+   * Read user settings when the file exists. Does not create defaults.
+   * Diagnostics (`buddy doctor`) must not invent a grok profile on a
+   * missing file.
+   */
+  public readUserSettingsIfPresent(): UserSettings | undefined {
+    if (!fs.existsSync(this.userSettingsPath)) {
+      return undefined;
+    }
+    return this.loadUserSettings();
+  }
+
+  /**
    * Load user settings from ~/.codebuddy/user-settings.json
    * Uses Zod validation for type safety and defaults
    */
