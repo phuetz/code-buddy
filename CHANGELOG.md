@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DELEG2 — `/swarm` et `/team` multiplexés (3 septembre 2026)
+
+`/swarm` et `/team run` passent par les délégués légers de DELEG1 : flux
+étiqueté FIFO, concurrence par défaut inchangée à 1, budgets réduits, annulation
+descendante, un équipier qui jette ne tue pas la session. Endpoint Ollama local
+normalisé. Prouvé sur Ollama avec deux workers chevauchés (45,96 s mur).
+QualityGate et Verifier restent sur l'ancien chemin.
+
 ### RANG1 — les rapports de lanes quittent la racine (3 septembre 2026)
 
 121 rapports `RAPPORT-*`, `REPARATION-*`, `REVUE-*`, `AUDIT-*`, `BILAN-*`, `BANC-*`
