@@ -326,7 +326,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
               ]);
               await speakCanonicalVoiceInitiative(
                 text,
-                (content) => sayNow(content, { phoneDelivery: 'never' }),
+                (content) => sayNow(content, { phoneDelivery: 'never', ttsRouteHint: 'opening' }),
               );
             });
           await greet(safeGreeting);

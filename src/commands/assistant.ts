@@ -259,7 +259,7 @@ export function registerAssistantCommand(program: Command): void {
         engines = [requested];
       } else if (requested === 'active') {
         const active = resolveTtsEngine(env);
-        if (active === 'piper' || active === 'elevenlabs') {
+        if (active === 'piper' || active === 'elevenlabs' || active === 'kyutai') {
           console.error(
             `Le moteur actif ${active} ne fournit pas de flux PCM progressif. ` +
               'Utilise --engine pocket, --engine voicebox ou --engine both.'

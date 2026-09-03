@@ -290,6 +290,8 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_REMINDER_TICK_MS` | Reminder runner poll interval (default 60000) |
 | `CODEBUDDY_SENSORY_RULES_FILE` / `CODEBUDDY_RULE_RUNS_FILE` | Override the sensory-rules store / run-log paths. Administer with `buddy rules list\|enable\|disable\|rm\|runs\|validate\|add` or the Cowork **Automations** panel. Edits **hot-reload** on a running server (`wireSensoryRules` mtime-cache); `validateRule` runs `isDestructive` at write-time so a dangerous shell/agent rule is rejected on save. `src/sensory/sensory-rules-engine.ts` |
 | `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | `elevenlabs:<voice_id>` selects ElevenLabs for Lisa; otherwise a Piper `.onnx` path keeps the local Piper route. Unset leaves the Pocket `estelle` default unchanged |
+| `CODEBUDDY_TTS_TWO_SPEED` / `CODEBUDDY_TTS_SHORT_MAX_CHARS` | **Opt-in DARK3** (`false` by default): `true` routes segments up to 80 characters, backchannels, welcome openings, reminders, “Pardon ?” and the first useful CONV3 sentence to Kyutai; longer continuations use ElevenLabs. `_SHORT_MAX_CHARS` overrides the 80-character cutoff. Every choice logs `[voice] route=local\|elevenlabs reason=…`; unset keeps the established provider path unchanged. |
+| `CODEBUDDY_TTS_LOCAL_URL` / `CODEBUDDY_TTS_LOCAL_TIMEOUT_MS` / `CODEBUDDY_TTS_LOCAL_N_Q` | Trusted Kyutai server (`GET /health`, `POST /tts` JSON `{text}` → raw PCM16 mono 24 kHz). The default 1500 ms timeout covers headers and first PCM byte; any failure retries the unchanged phrase through ElevenLabs then Pocket. `_LOCAL_N_Q` defaults to 12 and partitions cache identity (`local:kyutai:<n_q>:…`) from Lisa’s cloud voice. |
 | `CODEBUDDY_ELEVENLABS_MODEL` | Lisa's ElevenLabs model (default `eleven_flash_v2_5`; use `eleven_multilingual_v2` for maximum quality) |
 | `CODEBUDDY_ELEVENLABS_STABILITY` / `_SIMILARITY` / `_STYLE` / `_SPEAKER_BOOST` / `_SPEED` | Réglages de rendu de la voix ElevenLabs du robot (voix plus douce : stabilité 0,8, similarité 0,8, style 0,1, vitesse 0,92 — 03/09/2026). Bornés 0–1 (vitesse 0,7–1,2) ; aucune variable ⇒ requête identique à avant. La clé du cache TTS inclut ces réglages, un changement ne rejoue pas d'anciens rendus |
 | `CODEBUDDY_ELEVENLABS_MONTHLY_CAP` | Robot-voice-only ElevenLabs character cap (default `200000`); persisted monthly in `~/.codebuddy/elevenlabs-voice-usage.json`, cache hits cost zero |
@@ -311,6 +313,12 @@ mensuel de 200 000 caractères s'appliquent par défaut. Surveiller le compteur 
 `buddy companion tts-cache stats`. Pour revenir immédiatement à Pocket `estelle`, exécuter
 `unset CODEBUDDY_TTS_VOICE`; les erreurs réseau, l'absence de clé et le plafond provoquent déjà ce
 repli automatiquement, sans interrompre la parole.
+
+Pour DARK3, `buddy companion tts-bank build|list|verify` gère la banque de phrases fixes du
+projet (`.codebuddy/tts-bank.txt`) et les ouvertures/cues intégrés. `build` utilise Kyutai par
+défaut; `--provider elevenlabs` est un choix explicite. `list` et `verify` ne synthétisent et ne
+jouent aucun son. Les modèles dynamiques (date, heure, nombres et placeholders comme
+`{{name}}`) sont refusés; les ouvertures intégrées résolvent leur nom avant validation.
 
 ## Special Modes
 

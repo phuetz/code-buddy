@@ -28,8 +28,13 @@ import {
   type ElevenLabsVoiceSynthesisOptions,
   elevenLabsVoiceSettingsSignature,
 } from './elevenlabs-voice.js';
+import {
+  openKyutaiPcm24kStream,
+  resolveKyutaiLocalTimeoutMs,
+  type KyutaiLocalVoiceOptions,
+} from './kyutai-local-voice.js';
 
-export type LocalTtsEngine = 'elevenlabs' | 'pocket' | 'voicebox' | 'piper';
+export type LocalTtsEngine = 'elevenlabs' | 'kyutai' | 'pocket' | 'voicebox' | 'piper';
 
 const DEFAULT_POCKET_SERVER_URL = 'http://127.0.0.1:8766';
 const DEFAULT_POCKET_SERVER_START_TIMEOUT_MS = 120_000;
@@ -45,7 +50,9 @@ let pocketCleanupRegistered = false;
 export function resolveTtsEngine(env: NodeJS.ProcessEnv = process.env): LocalTtsEngine {
   if (resolveElevenLabsVoiceId(env)) return 'elevenlabs';
   const configured = (env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase();
-  if (configured === 'piper' || configured === 'voicebox') return configured;
+  if (configured === 'piper' || configured === 'voicebox' || configured === 'kyutai') {
+    return configured;
+  }
   return 'pocket';
 }
 
@@ -475,6 +482,74 @@ export function wrapPcm16Mono24kStreamAsWav(
   );
 }
 
+/** Kyutai counterpart of openElevenLabsAudioStream: raw PCM → streaming WAV. */
+export async function openKyutaiAudioStream(
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiLocalVoiceOptions & {
+    signal?: AbortSignal;
+    onPcmComplete?: (pcm: Buffer) => void;
+  } = {},
+): Promise<ReadableStream<Uint8Array> | null> {
+  const stream = await openKyutaiPcm24kStream(
+    text,
+    env,
+    options.signal,
+    {
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    },
+  );
+  return stream
+    ? wrapPcm16Mono24kStreamAsWav(stream, options.onPcmComplete)
+    : null;
+}
+
+/** Buffer a complete Kyutai stream into the existing normalized WAV contract. */
+export async function synthesizeKyutaiWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiLocalVoiceOptions & {
+    signal?: AbortSignal;
+    frozenFactor?: number;
+  } = {},
+): Promise<boolean> {
+  try {
+    const stream = await openKyutaiPcm24kStream(
+      text,
+      env,
+      options.signal,
+      {
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      },
+    );
+    if (!stream || options.signal?.aborted) return false;
+    const reader = stream.getReader();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      chunks.push(chunk);
+      total += chunk.length;
+    }
+    if (total === 0 || total % 2 !== 0 || options.signal?.aborted) return false;
+    const wav = pcm16Mono24kToWav(Buffer.concat(chunks, total));
+    writeFileSync(wavPath, normalizePcm16Wav(wav, env, options.frozenFactor), { mode: 0o600 });
+    return true;
+  } catch (error) {
+    if (!options.signal?.aborted) {
+      logger.warn(
+        `[kyutai-voice] synthèse interrompue (${error instanceof Error ? error.message : String(error)}); repli ElevenLabs`,
+      );
+    }
+    return false;
+  }
+}
+
 /**
  * Same visibility contract as `pocketStreamUnavailable`: losing the native
  * ElevenLabs stream means per-sentence blocking synthesis (choppy speech) or a
@@ -561,6 +636,64 @@ export async function synthesizeElevenLabsWav(
   }
 }
 
+export interface KyutaiFallbackWavOptions {
+  signal?: AbortSignal;
+  frozenFactor?: number;
+  kyutai?: KyutaiLocalVoiceOptions;
+  elevenLabs?: ElevenLabsVoiceSynthesisOptions;
+  pocketTimeoutMs?: number;
+}
+
+/**
+ * Preserve the phrase across the complete DARK3 degradation chain:
+ * Kyutai → ElevenLabs → Pocket. A failed provider never changes or truncates
+ * the text handed to the next one.
+ */
+export async function synthesizeKyutaiWithFallbackWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiFallbackWavOptions = {},
+): Promise<boolean> {
+  const signal = options.signal;
+  if (signal?.aborted) return false;
+  if (await synthesizeKyutaiWav(text, wavPath, env, {
+    ...(options.kyutai ?? {}),
+    timeoutMs: options.kyutai?.timeoutMs ?? resolveKyutaiLocalTimeoutMs(env),
+    ...(signal ? { signal } : {}),
+    ...(options.frozenFactor !== undefined ? { frozenFactor: options.frozenFactor } : {}),
+  })) {
+    return true;
+  }
+  if (signal?.aborted) return false;
+
+  if (resolveElevenLabsVoiceId(env)) {
+    logger.warn('[voice] Kyutai synthesis failed — falling back to ElevenLabs for this phrase');
+    if (await synthesizeElevenLabsWav(
+      text,
+      wavPath,
+      env,
+      DEFAULT_ELEVENLABS_TIMEOUT_MS,
+      signal,
+      options.frozenFactor,
+      options.elevenLabs,
+    )) {
+      return true;
+    }
+  }
+  if (signal?.aborted) return false;
+
+  logger.warn('[voice] Kyutai/ElevenLabs synthesis failed — falling back to Pocket for this phrase');
+  return synthesizePocketWav(
+    text,
+    wavPath,
+    env,
+    options.pocketTimeoutMs ?? 180_000,
+    signal,
+    options.frozenFactor,
+  );
+}
+
 /**
  * ElevenLabs route with its fail-open local policy. Pocket is attempted after
  * every cloud failure unless Piper was explicitly selected as the fallback.
@@ -645,6 +778,7 @@ export function localTtsAvailable(): boolean {
     // this synchronous compatibility API only reports whether it is configured.
     return Boolean(process.env.CODEBUDDY_VOICEBOX_PROFILE?.trim());
   }
+  if (engine === 'kyutai') return true;
   // Pocket auto-resolves through `uvx pocket-tts` and keeps its model resident.
   if (engine === 'pocket') return true;
   return (

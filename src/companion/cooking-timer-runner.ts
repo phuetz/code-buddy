@@ -34,7 +34,7 @@ async function defaultSay(text: string): Promise<void> {
   ]);
   await speakCanonicalVoiceInitiative(
     text,
-    (content) => sayNow(content, { phoneDelivery: 'never' }),
+    (content) => sayNow(content, { phoneDelivery: 'never', ttsRouteHint: 'reminder' }),
   );
 }
 

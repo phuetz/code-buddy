@@ -72,6 +72,13 @@ import {
   resolveTtsEngine,
   type LocalTtsEngine,
 } from '../voice/local-tts.js';
+import { resolveKyutaiCacheVoice } from '../voice/kyutai-local-voice.js';
+import {
+  selectTwoSpeedTtsRoute,
+  twoSpeedTtsEnabled,
+  type TwoSpeedTtsRouteHint,
+} from '../voice/two-speed-voice.js';
+export type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
@@ -157,6 +164,8 @@ export interface VoiceStepOptions {
   signal?: AbortSignal;
   /** Frozen gain measured from the first audio segment of this spoken turn. */
   ttsNormalizationFactor?: number;
+  /** Per-segment reason that forces the opt-in two-speed policy onto Kyutai. */
+  ttsRouteHint?: TwoSpeedTtsRouteHint;
   /** Insert the pipeline-owned fixed gap before a non-first sentence. */
   prependInterSentenceSilence?: boolean;
   /** The producer already applied the shared loudness law to this WAV. */
@@ -459,12 +468,15 @@ export function describeVoiceReadiness(
   const model = routed ? 'auto' : override;
   const ttsEngine = resolveTtsEngine(env);
   const piperVoice = env.CODEBUDDY_TTS_VOICE || env.CODEBUDDY_TTS_PIPER_MODEL || undefined;
+  const kyutaiUrl = env.CODEBUDDY_TTS_LOCAL_URL?.trim() || undefined;
   const voice = ttsEngine === 'pocket'
     ? (env.CODEBUDDY_POCKET_VOICE || 'estelle')
+    : ttsEngine === 'kyutai'
+      ? kyutaiUrl
     : ttsEngine === 'voicebox'
       ? (env.CODEBUDDY_VOICEBOX_PROFILE?.trim() || undefined)
       : piperVoice;
-  const speakReady = ttsEngine === 'pocket' || Boolean(voice);
+  const speakReady = ttsEngine === 'pocket' || ttsEngine === 'kyutai' || Boolean(voice);
   const modelReady = route?.reason !== 'fallback default';
   const warnings: string[] = [];
   if (ttsEngine === 'piper' && !piperVoice) {
@@ -477,6 +489,11 @@ export function describeVoiceReadiness(
     warnings.push(
       'Voicebox is selected but CODEBUDDY_VOICEBOX_PROFILE is empty — the robot will use its ' +
         'Pocket/Piper fallback. Set a profile name or id, then run `buddy assistant voicebox`.'
+    );
+  }
+  if ((ttsEngine === 'kyutai' || twoSpeedTtsEnabled(env)) && !kyutaiUrl) {
+    warnings.push(
+      'Kyutai local speech is not configured — set CODEBUDDY_TTS_LOCAL_URL; phrases will use ElevenLabs/Pocket fallback.',
     );
   }
   warnings.push(
@@ -2167,6 +2184,9 @@ function resolveBaseCacheVoice(
   if (engine === 'elevenlabs') {
     return resolveElevenLabsCacheVoice(env);
   }
+  if (engine === 'kyutai') {
+    return resolveKyutaiCacheVoice(env);
+  }
   return voice || resolveDefaultPiperVoiceModel() || 'piper:default';
 }
 
@@ -2190,6 +2210,49 @@ function makeDefaultSynth(
     text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
     let selectedEngine = engine;
+    if (selectedEngine === 'kyutai') {
+      const {
+        resolveElevenLabsVoiceId,
+        synthesizeElevenLabsWav,
+        synthesizeKyutaiWav,
+        synthesizePocketWav,
+      } = await import('../voice/local-tts.js');
+      if (await synthesizeKyutaiWav(text, wavPath, process.env, {
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.ttsNormalizationFactor !== undefined
+          ? { frozenFactor: opts.ttsNormalizationFactor }
+          : {}),
+      })) {
+        return { wav: wavPath, cacheable: true };
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      if (resolveElevenLabsVoiceId(process.env)) {
+        logger.warn('[voice] Kyutai synthesis failed — falling back to ElevenLabs for this phrase');
+        if (await synthesizeElevenLabsWav(
+          text,
+          wavPath,
+          process.env,
+          6_000,
+          opts.signal,
+          opts.ttsNormalizationFactor,
+        )) {
+          return { wav: wavPath, cacheable: false };
+        }
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      logger.warn('[voice] Kyutai/ElevenLabs synthesis failed — falling back to Pocket for this phrase');
+      if (await synthesizePocketWav(
+        text,
+        wavPath,
+        process.env,
+        180_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
+        return { wav: wavPath, cacheable: false };
+      }
+      throw new Error('Kyutai, ElevenLabs and Pocket TTS synthesis failed');
+    }
     if (selectedEngine === 'elevenlabs') {
       const { synthesizeElevenLabsWav } = await import('../voice/local-tts.js');
       if (await synthesizeElevenLabsWav(
@@ -2269,10 +2332,18 @@ function makeDefaultSynth(
     // A cache entry carries the gain of the turn that created it. Once the
     // current turn has frozen its own factor, synthesize fresh so it is applied
     // to raw engine output instead of compounding two independent gains.
-    if (opts.ttsNormalizationFactor !== undefined && engine !== 'elevenlabs') {
+    if (
+      opts.ttsNormalizationFactor !== undefined &&
+      engine !== 'elevenlabs' &&
+      engine !== 'kyutai'
+    ) {
       return (await synthFresh(text, opts)).wav;
     }
-    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS && engine !== 'elevenlabs') {
+    if (
+      text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS &&
+      engine !== 'elevenlabs' &&
+      engine !== 'kyutai'
+    ) {
       return (await synthFresh(text, opts)).wav;
     }
     const cacheVoice = opts.delivery && engine === 'voicebox'
@@ -2282,15 +2353,17 @@ function makeDefaultSynth(
     // Lisa's real voice and are shared with MySoulmate and the phone assistant.
     // Playing one costs nothing and sounds better than any local engine. Read-only
     // and copy-on-hit — the caller unlinks what it plays, and those files were paid for.
-    try {
-      const { getVoiceLibrary } = await import('./elevenlabs-library.js');
-      const paid = getVoiceLibrary().copyForPlayback(text);
-      if (paid) {
-        logger.info('[voice] paid ElevenLabs library hit');
-        return paid;
+    if (engine !== 'kyutai') {
+      try {
+        const { getVoiceLibrary } = await import('./elevenlabs-library.js');
+        const paid = getVoiceLibrary().copyForPlayback(text);
+        if (paid) {
+          logger.info('[voice] paid ElevenLabs library hit');
+          return paid;
+        }
+      } catch {
+        /* best-effort: an unavailable library must never delay or break speaking */
       }
-    } catch {
-      /* best-effort: an unavailable library must never delay or break speaking */
     }
 
     let cache: TtsCache;
@@ -2396,13 +2469,26 @@ async function lookupPaidElevenLabsWav(
   }
 }
 
+/** Project TTS-cache lookup without consulting the paid ElevenLabs library. */
+async function lookupTtsCacheWav(text: string, cacheVoice: string): Promise<string | null> {
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return null;
+  try {
+    const { getTtsCache } = await import('./tts-cache.js');
+    const hit = getTtsCache().lookup(text, cacheVoice);
+    if (hit) logger.info('[voice] tts cache hit (stream path)');
+    return hit;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Persist a completed streamed ElevenLabs clip into the TTS cache (same WAV
  * shape as the blocking path: 24 kHz PCM16 container + file-level RMS
  * normalization), so the NEXT occurrence of this phrase plays from disk for
  * free instead of being re-billed. Fire-and-forget; failures only log.
  */
-async function storeElevenLabsStreamInTtsCache(
+async function storePcmStreamInTtsCache(
   text: string,
   cacheVoice: string,
   pcm: Buffer,
@@ -2413,7 +2499,7 @@ async function storeElevenLabsStreamInTtsCache(
   try {
     const { pcm16Mono24kToWav } = await import('../voice/local-tts.js');
     const wav = normalizePcm16Wav(pcm16Mono24kToWav(pcm), process.env, frozenFactor);
-    const tmp = join(tmpdir(), `cb-voice-elstream-${process.pid}-${Date.now()}.wav`);
+    const tmp = join(tmpdir(), `cb-voice-pcmstream-${process.pid}-${Date.now()}.wav`);
     await writeFile(tmp, wav, { mode: 0o600 });
     try {
       const { getTtsCache } = await import('./tts-cache.js');
@@ -2423,9 +2509,7 @@ async function storeElevenLabsStreamInTtsCache(
       await unlink(tmp).catch(() => undefined);
     }
   } catch (err) {
-    logger.debug(
-      `[voice] elevenlabs stream cache store failed: ${err instanceof Error ? err.message : String(err)}`
-    );
+    logger.debug(`[voice] PCM stream cache store failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -2446,8 +2530,13 @@ function makeDefaultStreamSpeak(
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
     : engine === 'elevenlabs'
       ? process.env.CODEBUDDY_ELEVENLABS_AUDIO_STREAM !== 'false'
-      : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
-  if ((engine !== 'pocket' && engine !== 'voicebox' && engine !== 'elevenlabs') || !streamEnabled) {
+      : engine === 'kyutai'
+        ? process.env.CODEBUDDY_TTS_LOCAL_AUDIO_STREAM !== 'false'
+        : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
+  if (
+    (engine !== 'pocket' && engine !== 'voicebox' && engine !== 'elevenlabs' && engine !== 'kyutai') ||
+    !streamEnabled
+  ) {
     return undefined;
   }
 
@@ -2506,7 +2595,7 @@ function makeDefaultStreamSpeak(
         const stream = await openElevenLabsAudioStream(prepared, process.env, {
           ...(opts.signal ? { signal: opts.signal } : {}),
           onPcmComplete: (pcm) => {
-            void storeElevenLabsStreamInTtsCache(prepared, cacheVoice, pcm, turnFactor);
+            void storePcmStreamInTtsCache(prepared, cacheVoice, pcm, turnFactor);
           },
         });
         if (cancelled) {
@@ -2560,7 +2649,9 @@ function makeDefaultStreamSpeak(
       // lookup (a fresh local synth is free and streams faster than a file copy).
       cachedWav = engine === 'elevenlabs'
         ? await lookupPaidElevenLabsWav(text, cacheVoice)
-        : await lookupInstantBackchannelWav(
+        : engine === 'kyutai'
+          ? await lookupTtsCacheWav(text, cacheVoice)
+          : await lookupInstantBackchannelWav(
             text,
             process.env,
             undefined,
@@ -2611,7 +2702,7 @@ function makeDefaultStreamSpeak(
               // Every streamed character was billed — write the completed clip
               // back to the TTS cache so repeating the phrase costs zero.
               onPcmComplete: (pcm) => {
-                void storeElevenLabsStreamInTtsCache(
+                void storePcmStreamInTtsCache(
                   preparedText,
                   cacheVoice,
                   pcm,
@@ -2620,7 +2711,22 @@ function makeDefaultStreamSpeak(
               },
             });
           })()
-        : await (async () => {
+        : engine === 'kyutai'
+          ? await (async () => {
+              const { openKyutaiAudioStream } = await import('../voice/local-tts.js');
+              return openKyutaiAudioStream(text, process.env, {
+                ...(signal ? { signal } : {}),
+                onPcmComplete: (pcm) => {
+                  void storePcmStreamInTtsCache(
+                    preparedText,
+                    cacheVoice,
+                    pcm,
+                    opts.ttsNormalizationFactor,
+                  );
+                },
+              });
+            })()
+          : await (async () => {
             const { openPocketAudioStream } = await import('../voice/local-tts.js');
             return openPocketAudioStream(text, process.env, { signal });
           })());
@@ -2855,6 +2961,74 @@ function makeDefaultStreamSpeak(
   return engine === 'elevenlabs' ? Object.assign(speak, { prefetch }) : speak;
 }
 
+/** Select one provider per segment while retaining the pre-DARK3 path verbatim when disabled. */
+function makeRoutedSynth(
+  voice?: string,
+  rootDir?: string,
+  engine: LocalTtsEngine = resolveTtsEngine(),
+  env: NodeJS.ProcessEnv = process.env,
+): SynthFn {
+  const established = makeDefaultSynth(voice, rootDir, engine);
+  if (!twoSpeedTtsEnabled(env) && engine !== 'kyutai') return established;
+  const local = engine === 'kyutai' ? established : makeDefaultSynth(voice, rootDir, 'kyutai');
+  const cloud = engine === 'elevenlabs' ? established : makeDefaultSynth(voice, rootDir, 'elevenlabs');
+
+  return async (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env, opts.ttsRouteHint)
+      : { route: 'local' as const, reason: 'configured-engine' };
+    if (decision.route === 'default') return established(text, opts);
+    logger.info(`[voice] route=${decision.route} reason=${decision.reason}`);
+    return decision.route === 'local' ? local(text, opts) : cloud(text, opts);
+  };
+}
+
+/** Progressive Kyutai → ElevenLabs → Pocket chain, with the exact text reused at every hop. */
+function makeRoutedStreamSpeak(
+  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
+  engine: LocalTtsEngine = resolveTtsEngine(),
+  env: NodeJS.ProcessEnv = process.env,
+): StreamSpeakFn | undefined {
+  const established = makeDefaultStreamSpeak(playerPromise, engine);
+  if (!twoSpeedTtsEnabled(env) && engine !== 'kyutai') return established;
+  const local = engine === 'kyutai'
+    ? established
+    : makeDefaultStreamSpeak(playerPromise, 'kyutai');
+  const cloud = engine === 'elevenlabs'
+    ? established
+    : makeDefaultStreamSpeak(playerPromise, 'elevenlabs');
+  const pocket = makeDefaultStreamSpeak(playerPromise, 'pocket');
+
+  const speak: StreamSpeakFn = async (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env, opts.ttsRouteHint)
+      : { route: 'local' as const, reason: 'configured-engine' };
+    if (decision.route === 'default') return established?.(text, opts) ?? false;
+    logger.info(`[voice] route=${decision.route} reason=${decision.reason}`);
+    if (decision.route === 'elevenlabs') {
+      if (await cloud?.(text, opts)) return true;
+      if (opts.signal?.aborted) return false;
+      logger.warn('[voice] ElevenLabs stream failed — falling back to Pocket for this phrase');
+      return await pocket?.(text, opts) ?? false;
+    }
+    if (await local?.(text, opts)) return true;
+    if (opts.signal?.aborted) return false;
+    logger.warn('[voice] Kyutai stream failed — falling back to ElevenLabs for this phrase');
+    if (await cloud?.(text, opts)) return true;
+    if (opts.signal?.aborted) return false;
+    logger.warn('[voice] Kyutai/ElevenLabs stream failed — falling back to Pocket for this phrase');
+    return await pocket?.(text, opts) ?? false;
+  };
+  speak.prefetch = (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env)
+      : { route: 'local' as const };
+    if (decision.route === 'elevenlabs') cloud?.prefetch?.(text, opts);
+    else if (decision.route === 'default') established?.prefetch?.(text, opts);
+  };
+  return speak;
+}
+
 /** Default speak: play a WAV with the first available local player, blocking until done.
  *  Interruptible: when `opts.signal` aborts (barge-in), the audio child is SIGKILLed and
  *  the play resolves immediately so the ear can re-open. */
@@ -2931,6 +3105,8 @@ export const __voiceAudioPlayerTest = {
   resolveBaseCacheVoice,
   makeDefaultSynth,
   makeDefaultStreamSpeak,
+  makeRoutedSynth,
+  makeRoutedStreamSpeak,
   defaultPlay,
 };
 
@@ -2975,9 +3151,12 @@ export async function sayNow(
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   let played = false;
   try {
-    const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
+    const synth = options.synth ?? makeRoutedSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
-    const wav = await synth(t, { signal: options.signal });
+    const wav = await synth(t, {
+      signal: options.signal,
+      ...(options.ttsRouteHint ? { ttsRouteHint: options.ttsRouteHint } : {}),
+    });
     if (wav) {
       // Half-duplex: mute the ear while speaking. The signal lets barge-in kill this player too.
       await withSpeakingGuard(() => {
@@ -3133,7 +3312,8 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         /* keep env default */
       }
     }
-    const baseSynth = options.synth ?? makeDefaultSynth(voice, options.rootDir, engine);
+    const baseSynth = options.synth ?? makeRoutedSynth(voice, options.rootDir, engine, env);
+    if (twoSpeedTtsEnabled(env) && !options.synth) return baseSynth;
     return cacheShortSegments(
       baseSynth,
       shortSegmentVoiceIdentity(voice, env, engine),
@@ -3172,7 +3352,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     // native stream rule so older injected synth/player tests keep their contract.
     const nativeStreamSpeak = options.streamSpeak ?? (
       !options.synth && !options.play
-        ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
+        ? makeRoutedStreamSpeak(playerPromise, turnTtsEngine, env)
         : undefined
     );
     const delivery = deriveSpokenDeliveryProfile(heard, context, env);
@@ -3720,6 +3900,17 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               };
             })(),
             ...(timedStreamSpeak ? { streamSpeak: timedStreamSpeak } : {}),
+            ttsRouteHint: (() => {
+              let firstContentPending = true;
+              return (text: string): TwoSpeedTtsRouteHint | undefined => {
+                if (INSTANT_BACKCHANNELS.has(text.trim())) return 'backchannel';
+                if (shortFirstConfig && firstContentPending) {
+                  firstContentPending = false;
+                  return 'conv3-first';
+                }
+                return undefined;
+              };
+            })(),
             signal,
             cap: options.sentenceCap ?? voiceSentenceCap(),
             audioPrebufferMs: () => streamRouteRemote ? voiceAudioPrebufferMs(env) : 0,

@@ -2250,6 +2250,62 @@ export function registerCompanionCommands(program: Command): void {
       const result = await prewarmVoiceReplyCache({ ...(phrases ? { phrases } : {}), ...(limit ? { limit } : {}) });
       console.log(`TTS cache prewarmed: ${result.cached}/${result.attempted} phrase(s).`);
     });
+
+  const ttsBank = companion
+    .command('tts-bank')
+    .description('Build or verify the fixed-phrase TTS bank without playing audio');
+
+  const parseTtsBankProvider = (value: string): 'local' | 'elevenlabs' => {
+    const provider = value.trim().toLowerCase();
+    if (provider !== 'local' && provider !== 'elevenlabs') {
+      throw new Error("--provider must be 'local' or 'elevenlabs'");
+    }
+    return provider;
+  };
+
+  ttsBank
+    .command('build')
+    .description('Synthesize missing fixed phrases into the selected provider cache')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { buildTtsBank } = await import('../../voice/tts-bank.js');
+      const result = await buildTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(
+        `TTS bank (${result.provider}): built=${result.built} present=${result.present} ` +
+          `failed=${result.failed} expected=${result.expected} rejected=${result.rejected.length}.`,
+      );
+      if (result.failed > 0) process.exitCode = 1;
+    });
+
+  ttsBank
+    .command('list')
+    .description('List fixed phrases and their cache presence without synthesis or playback')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { listTtsBank } = await import('../../voice/tts-bank.js');
+      const result = listTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(`TTS bank (${result.provider}) voice=${result.voice}`);
+      for (const entry of result.entries) {
+        console.log(`${entry.present ? 'present' : 'missing'}\t${entry.text}`);
+      }
+      for (const rejected of result.rejected) {
+        console.log(`rejected:${rejected.reason}\t${rejected.text}`);
+      }
+    });
+
+  ttsBank
+    .command('verify')
+    .description('Verify fixed-phrase cache presence without synthesis or playback')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { verifyTtsBank } = await import('../../voice/tts-bank.js');
+      const result = verifyTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(
+        `TTS bank (${result.provider}): present=${result.present}/${result.expected} ` +
+          `missing=${result.missing.length} rejected=${result.rejected.length}.`,
+      );
+      if (result.missing.length > 0 || result.rejected.length > 0) process.exitCode = 1;
+    });
 }
 
 // ============================================================================

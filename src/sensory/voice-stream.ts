@@ -33,6 +33,7 @@ import { logger } from '../utils/logger.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { withSpeakingGuard } from './voice-activity.js';
 import type { SynthFn, PlayFn, StreamSpeakFn } from './voice-loop.js';
+import type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 
 /**
  * After the first low-latency fragment, preserve longer natural French
@@ -345,6 +346,8 @@ export interface StreamToSpeechParams {
    * fallback but are not used by the fast path.
    */
   streamSpeak?: StreamSpeakFn;
+  /** Assign one stable two-speed routing reason to each emitted text segment. */
+  ttsRouteHint?: (text: string, segmentIndex: number) => TwoSpeedTtsRouteHint | undefined;
   /**
    * Route-aware audio prebuffer. A positive value switches to synthesized WAV buffering and
    * waits for a second ready segment (or this timeout) before the first playback.
@@ -470,6 +473,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
         let segmentIndex = 0;
         while (true) {
           if (text === null) break;
+          const ttsRouteHint = params.ttsRouteHint?.(text, segmentIndex);
           let didPlay = false;
           if (nativeStreamHealthy) {
             // Look-ahead: while this sentence streams and plays, open the next one's
@@ -492,6 +496,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
                   ? { ttsNormalizationFactor: turnNormalizationFactor }
                   : {}),
                 ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+                ...(ttsRouteHint ? { ttsRouteHint } : {}),
                 onTtsNormalizationFactor: (factor) => {
                   if (turnNormalizationFactor === undefined) turnNormalizationFactor = factor;
                 },
@@ -520,6 +525,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
             try {
               wav = await params.synth(text, {
                 signal,
+                ...(ttsRouteHint ? { ttsRouteHint } : {}),
                 ...(turnNormalizationFactor !== undefined
                   ? { ttsNormalizationFactor: turnNormalizationFactor }
                   : {}),
@@ -572,11 +578,16 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const synthWorker = (async (): Promise<void> => {
     try {
       let text: string | null = firstSentence;
+      let segmentIndex = 0;
       while (true) {
         if (text === null) break;
         let wav = '';
         try {
-          wav = await params.synth(text, { signal });
+          const ttsRouteHint = params.ttsRouteHint?.(text, segmentIndex);
+          wav = await params.synth(text, {
+            signal,
+            ...(ttsRouteHint ? { ttsRouteHint } : {}),
+          });
         } catch (err) {
           logger.warn(`[voice] stream synth failed (skipping sentence): ${errMsg(err)}`);
         }
@@ -585,6 +596,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           break;
         }
         if (wav) wavQ.push({ text, wav });
+        segmentIndex += 1;
         text = await sentenceQ.shift(stop);
       }
     } finally {

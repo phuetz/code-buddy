@@ -60,7 +60,7 @@ async function defaultSay(text: string): Promise<void> {
   const { sayNow } = await import('../sensory/voice-loop.js');
   // The runner owns its Telegram notification separately; never emit a second
   // voice note through sayNow's legacy environment-controlled phone path.
-  await sayNow(text, { phoneDelivery: 'never' });
+  await sayNow(text, { phoneDelivery: 'never', ttsRouteHint: 'reminder' });
 }
 async function defaultNotify(text: string): Promise<boolean> {
   const { sendTelegramAlert } = await import('../sensory/alert.js');
