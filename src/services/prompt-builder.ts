@@ -817,10 +817,17 @@ Output formatting discipline:
       const contextWindow = toolCfg.contextWindow ?? 8192;
       const maxOutputTokens = toolCfg.maxOutputTokens ?? 2048;
       // Guard the degenerate case where maxOutputTokens >= contextWindow (some
-      // custom/reasoning model configs): (cw - maxOut) can be <= 0, making
-      // budgetChars 0 or negative. Without Math.max, slice(0, 0-3) === slice(0,
-      // -3) returns the WHOLE prompt minus 3 chars — the opposite of truncating.
-      const budgetTokens = Math.max(0, Math.min(Math.floor((contextWindow - maxOutputTokens) * 0.5), 32_000)); // 32K hard cap
+      // custom/reasoning model configs, or CODEBUDDY_MAX_CONTEXT capping a
+      // 262k model down to its own maxOutputTokens): (cw - maxOut) can be <= 0.
+      // A 0-token budget used to wipe the system prompt (GK21: 16384/16384 → 0).
+      // Fall back to 25% of the window (floor 256) instead of an empty prompt.
+      const leftover = contextWindow - maxOutputTokens;
+      const rawBudget = leftover > 0
+        ? Math.floor(leftover * 0.5)
+        : Math.floor(contextWindow * 0.25);
+      const budgetTokens = leftover > 0
+        ? Math.min(rawBudget, 32_000)
+        : Math.max(256, Math.min(rawBudget, 32_000));
       const budgetChars = budgetTokens * 4; // ~4 chars per token
       if (systemPrompt.length > budgetChars) {
         logger.warn(`System prompt truncated for ${modelName}: ${systemPrompt.length} chars → ${budgetChars} (budget: ${budgetTokens} tokens, 32K hard cap)`);
