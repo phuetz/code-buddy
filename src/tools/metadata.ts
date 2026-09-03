@@ -82,6 +82,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: "Inspect the robot's attested core, bounded code structure, turn metadata, configured faculties, and epistemic limits without live probes",
     fleetSafe: true,
   },
+  {
+    name: 'self_evolution',
+    category: 'file_read',
+    keywords: ['self', 'evolution', 'evolutions', 'changement', 'changements', 'recent', 'récemment', 'release', 'changelog', 'notes de version', 'version', 'appris', 'learned', 'voice', 'voix', 'memory', 'mémoire', 'companion', 'fiabilité', 'reliability'],
+    priority: 50,
+    description: "Read documented recent changes to Code Buddy's own behavior without modifying files or probing services",
+  },
 
   // Directory listing
   {

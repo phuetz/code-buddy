@@ -3334,6 +3334,11 @@ addLazyCommandGroup(program, 'assistant', 'Manage the voice assistant (Lisa): im
   registerAssistantCommand(program);
 });
 
+addLazyCommandGroup(program, 'self', 'Inspect Code Buddy’s documented self-model and evolution', async () => {
+  const { createSelfCommand } = await import('./commands/self.js');
+  program.addCommand(createSelfCommand());
+});
+
 addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, preview, generate (authored)', async () => {
   const { registerWidgetsCommand } = await import('./commands/widgets.js');
   registerWidgetsCommand(program);
