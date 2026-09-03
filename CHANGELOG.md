@@ -1,5 +1,28 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### HEADLESS2 — `bash` s'exécute enfin en headless `dontAsk` (4 septembre 2026)
+
+Les lectures `git -C <chemin>` étaient classées `ask` par la politique
+d'exécution, donc refusées sans terminal (« Approval requires an interactive
+terminal ») : une mission headless sur un modèle gratuit ne pouvait même pas
+lire `git status`. Elles passent désormais en bac à sable sans escalade ; les
+chemins protégés en `~` (`~/.ssh`) sont bloqués après expansion ; le bac à sable
+Docker conserve `HOME` et monte les dépendances en lecture seule. Reproduit et
+prouvé sur Ollama, refus dangereux conservés.
+
+### BRANCH1 — un test créait deux copies du dépôt à la racine (4 septembre 2026)
+
+`worktree-handlers.test.ts` mockait mal `git` et `fs` et laissait `git worktree
+add` créer `branch/` et `feature-branch/` (593 Mo chacun) dans le dépôt réel, ce
+qui faisait ensuite rougir des centaines de tests ramassés en double. Test
+hermétique.
+
+### VERIF2 — mutation des fusions du soir (4 septembre 2026)
+
+Plus de vingt mutations sur DELEG1, SERV1, SANDBOX1, IMPROVE1, TAUTFIX1 et PRIV1.
+Deux restées vertes, à couvrir : l'ordre FIFO des délégués avec plusieurs
+waiters et chaque motif du garde-fou de données personnelles pris isolément.
+
 ### DELEG2 — `/swarm` et `/team` multiplexés (3 septembre 2026)
 
 `/swarm` et `/team run` passent par les délégués légers de DELEG1 : flux
