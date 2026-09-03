@@ -59,13 +59,47 @@ Lecture de `docs/FABLE5-CODEX-COORDINATION.md` (protocole + début du tableau) p
 | 4 | Bascule défaut rust si binaire+snapshot, sinon TS | `feat(gk6): basculer CKG rust par défaut mesurée` |
 | 5 | Docs CLAUDE.md + docs/ + passation | `docs(gk6): documenter Phase 4 et la bascule` |
 
-## Inspection (à compléter)
+## Inspection
 
-*(vide — le code produit n’a pas encore été lu)*
+Fichiers lus après création du rapport :
 
-## Banc AVANT (à coller)
+- `buddy-memory/Cargo.toml`, `README.md`, `src/{main,model,store,embed}.rs`
+- `src/memory/collective-knowledge-graph.ts` (engineClient, ingest, recallHybrid)
+- `src/memory/buddy-memory-client.ts`
+- `tests/memory/buddy-memory-engine.test.ts`
 
-*(vide)*
+Constat :
+
+- Phases 1–3 présentes : ledger JSONL, snapshot `.snap` v1, JSON-RPC, hybrid ONNX derrière `feature = embeddings`.
+- Index inversé mot-clé **déjà** dans `Store::index` (non persisté dans le snapshot, reconstruit au chargement). `recall()` l’utilise.
+- `recall_hybrid` (ONNX) scannait **tous** les nœuds — O(N) embeddings + scoring. Sans ONNX, repli keyword.
+- `CODEBUDDY_CKG_ENGINE` n’active rust que si la variable vaut exactement `rust`. Défaut = TS.
+- Snapshot v1 : `current` / `superseded` / `relations` uniquement.
+
+## Banc AVANT (collé)
+
+Générateur déterministe `buddy-memory/src/synth.rs` (seed 42, 100 clusters, aucun texte réel). Embeddings synthétiques 32-d (hash de tokens, L2). HOME / `~/.codebuddy` non touchés : travail sous `buddy-memory/.gk6-work/`.
+
+Commande :
+
+```
+cd buddy-memory && cargo run --release --offline --bin ckg-bench -- --nodes 50000 --queries 100 --mode exhaustive --seed 42 --work /home/patrice/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-exhaustive-50k
+```
+
+Sortie (exit 0, 73 s) :
+
+```
+GK6 CKG bench  mode=exhaustive  nodes=50000  queries=100
+  generate 65.7 ms   ledger-write 1758.4 ms   load 723.2 ms
+  recallHybrid p50=660.401 ms  p95=999.582 ms  mean=694.406 ms
+  RSS start=2.6 MiB  loaded=142.9 MiB  warm=179.7 MiB  after=181.5 MiB
+```
+
+| Mode | Nœuds | Requêtes | p50 (ms) | p95 (ms) | mean (ms) | RSS chargé (MiB) | RSS après (MiB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| exhaustive (Phase 3, AVANT) | 50 000 | 100 | **660.401** | **999.582** | 694.406 | 142.9 | 181.5 |
+
+Fumée 2 000 nœuds / 20 requêtes : p50=9.578 ms, p95=23.371 ms, RSS après=10.9 MiB (échelle ~linéaire).
 
 ## Index et parité (à coller)
 

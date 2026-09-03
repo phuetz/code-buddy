@@ -7,9 +7,17 @@ description = "Rust engine for Code Buddy's Collective Knowledge Graph (CKG) —
 repository = "https://github.com/phuetz/code-buddy"
 authors = ["Patrick Huetz"]
 
+[lib]
+name = "buddy_memory"
+path = "src/lib.rs"
+
 [[bin]]
 name = "buddy-memory"
 path = "src/main.rs"
+
+[[bin]]
+name = "ckg-bench"
+path = "src/bin/ckg-bench.rs"
 
 [features]
 # Hybrid (semantic) recall via ONNX embeddings. Off by default → keyword recall, light build.
