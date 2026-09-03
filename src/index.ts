@@ -1069,6 +1069,7 @@ async function processPromptHeadless(
       runId = runStore.startRun('headless prompt', {
         channel: 'terminal',
         sessionId: session.id,
+        cwd: session.workingDirectory,
         tags: ['headless', modelToUse || 'unknown'],
       });
       agent.setRunId(runId);

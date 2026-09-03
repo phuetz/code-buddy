@@ -60,6 +60,8 @@ export interface RunMetadata {
   userId?: string;
   /** Session ID */
   sessionId?: string;
+  /** Working directory of the run, used by `buddy run replay` */
+  cwd?: string;
   /** Tags for filtering */
   tags?: string[];
   /**
