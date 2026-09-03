@@ -119,10 +119,16 @@ export function scanAuthoredSkillContent(content: string): SkillFirewallCheck {
   }
 }
 
+export type SkillSafetyRejection = 'static-scan' | 'firewall';
+
 /** Safety re-gate over authored skill CONTENT (static scan + firewall). */
-export function safetyGateSkill(content: string): { ok: boolean; reasons: string[] } {
+export function safetyGateSkill(content: string): {
+  ok: boolean;
+  reasons: string[];
+  rejectionReason?: SkillSafetyRejection;
+} {
   const scan = inspectAuthoredCode(content, 'skill');
-  if (!scan.ok) return { ok: false, reasons: scan.reasons };
+  if (!scan.ok) return { ok: false, reasons: scan.reasons, rejectionReason: 'static-scan' };
   const authoredReasons: string[] = [];
   if (PROMPT_OVERRIDE_RE.test(content)) {
     authoredReasons.push('contains an instruction to override higher-priority prompts');
@@ -130,9 +136,13 @@ export function safetyGateSkill(content: string): { ok: boolean; reasons: string
   if (SECRET_EXFILTRATION_RE.test(content)) {
     authoredReasons.push('contains instructions to exfiltrate credentials or secrets');
   }
-  if (authoredReasons.length > 0) return { ok: false, reasons: authoredReasons };
+  if (authoredReasons.length > 0) {
+    return { ok: false, reasons: authoredReasons, rejectionReason: 'firewall' };
+  }
   const fw = scanAuthoredSkillContent(content);
-  if (!fw.safe) return { ok: false, reasons: [`firewall: ${fw.verdict}`, ...fw.reasons] };
+  if (!fw.safe) {
+    return { ok: false, reasons: [`firewall: ${fw.verdict}`, ...fw.reasons], rejectionReason: 'firewall' };
+  }
   return { ok: true, reasons: [] };
 }
 
