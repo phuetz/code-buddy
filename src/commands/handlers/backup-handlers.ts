@@ -109,7 +109,8 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
   }
 
   // Collect files to backup
-  const files = collectFiles(sourcePath, sourcePath, { onlyConfig, noWorkspace });
+  const skipped: SkippedFile[] = [];
+  const files = collectFiles(sourcePath, sourcePath, { onlyConfig, noWorkspace }, skipped);
   if (files.length === 0) {
     return {
       handled: true,
@@ -161,12 +162,20 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
 
   const totalSizeKB = Math.round(backupData.totalSize / 1024);
 
+  const fileList = files.length <= 12
+    ? ` (${files.map((file) => file.relativePath).join(', ')})`
+    : '';
+  const skippedLine = skipped.length === 0
+    ? ''
+    : `Skipped: ${skipped.length} (${skipped.map((item) => `${item.relativePath}: ${item.reason}`).join('; ')})`;
+
   return {
     handled: true,
     response: [
       `Backup created: ${backupPath}`,
-      `Files: ${files.length}`,
+      `Files: ${files.length}${fileList}`,
       `Size: ${totalSizeKB} KB`,
+      skippedLine,
       onlyConfig ? '(config only)' : '',
       noWorkspace ? '(workspace excluded)' : '',
     ].filter(Boolean).join('\n'),
@@ -434,6 +443,11 @@ interface CollectedFile {
   content: Buffer;
 }
 
+interface SkippedFile {
+  relativePath: string;
+  reason: string;
+}
+
 function fileChecksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
 }
@@ -547,7 +561,8 @@ function verifyArchivePayloads(
 function collectFiles(
   dir: string,
   base: string,
-  opts: { onlyConfig: boolean; noWorkspace: boolean }
+  opts: { onlyConfig: boolean; noWorkspace: boolean },
+  skipped: SkippedFile[] = [],
 ): CollectedFile[] {
   const results: CollectedFile[] = [];
 
@@ -568,9 +583,14 @@ function collectFiles(
         continue;
       }
 
+      if (typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink()) {
+        skipped.push({ relativePath, reason: 'symbolic link' });
+        continue;
+      }
+
       if (entry.isDirectory()) {
         if (opts.noWorkspace && relativePath === 'knowledge') continue;
-        results.push(...collectFiles(fullPath, base, opts));
+        results.push(...collectFiles(fullPath, base, opts, skipped));
       } else {
         // Config-only mode: only include config files
         if (opts.onlyConfig && !configPatterns.some(p => relativePath.startsWith(p) || relativePath === p)) {

@@ -153,3 +153,43 @@ describe('GK16 verify must not call an unrestorable archive valid', () => {
     expect(restored.exitCode).toBe(1);
   });
 });
+
+describe('GK16 create must not follow source symlinks out of .codebuddy/', () => {
+  let workspace: string;
+  let previousCwd: string;
+
+  beforeEach(() => {
+    previousCwd = process.cwd();
+    workspace = makeTmpDir('gk16-backup-symlink-', path.join(previousCwd, 'tmp'));
+    process.chdir(workspace);
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    removeTmpDir(workspace);
+  });
+
+  it('skips a symlink pointing outside the project instead of packing the target bytes', async () => {
+    const outside = path.join(workspace, 'outside-secret.txt');
+    fs.writeFileSync(outside, 'SECRET_OUTSIDE\n');
+    fs.mkdirSync(path.join(workspace, '.codebuddy'), { recursive: true });
+    fs.symlinkSync(outside, path.join(workspace, '.codebuddy', 'settings.json'));
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'hooks.json'), '{"hooks":[]}\n');
+    const output = path.join(workspace, 'backups');
+
+    const created = await handleBackup(`create --output ${output}`);
+    expect(created.exitCode ?? 0).toBe(0);
+    expect(created.response).toMatch(/symbolic link|skipped/i);
+    expect(created.response).toContain('hooks.json');
+
+    const archives = fs.readdirSync(output).filter((name) => name.endsWith('.json'));
+    expect(archives).toHaveLength(1);
+    const archive = JSON.parse(fs.readFileSync(path.join(output, archives[0]!), 'utf8')) as {
+      files: Array<{ path: string; content: string }>;
+    };
+    expect(archive.files.map((file) => file.path)).toEqual(['hooks.json']);
+    expect(archive.files.some((file) => Buffer.from(file.content, 'base64').toString().includes('SECRET_OUTSIDE'))).toBe(
+      false,
+    );
+  });
+});

@@ -126,7 +126,15 @@ Rouge collé : `verify` exit 0 « Backup valid » pour `/etc/passwd`, `../victim
 
 Correctif : `verifyArchivePayloads` refuse les mêmes chemins que restore. Plus de throw déguisé en « corrupt » pour ces cas.
 
-Vert : 5 fichiers / 28 tests.
+Vert : 5 fichiers / 28 tests. Commit `f1fd3dbf7`.
+
+### Lot D — create suivait les symlinks source (rouge → vert)
+
+Rouge collé : `Files: 2` et l'archive contenait `SECRET_OUTSIDE` (cible hors projet).
+
+Correctif : `collectFiles` ignore les liens symboliques et les annonce (`Skipped: 1 (settings.json: symbolic link)`).
+
+Vert : 5 fichiers / 29 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 
