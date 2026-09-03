@@ -556,7 +556,9 @@ export async function importProjectConfiguration(
     existingMCPText,
     toProjectPath(roots.projectRoot, mcpPath)
   );
-  const claimedNames = new Set(targetMCP.existingNames);
+  // Keep destination names separate from names claimed during this import pass:
+  // the first guard protects existing configuration, the second detects source duplicates.
+  const claimedNames = new Set<string>();
   const mcpToImport: DiscoveredMCPServer[] = [];
   const mcpServers: MCPImportItem[] = discoveredMCP.map((server) => {
     if (targetMCP.existingNames.has(server.name)) {
