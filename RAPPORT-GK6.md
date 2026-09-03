@@ -101,13 +101,45 @@ GK6 CKG bench  mode=exhaustive  nodes=50000  queries=100
 
 Fumée 2 000 nœuds / 20 requêtes : p50=9.578 ms, p95=23.371 ms, RSS après=10.9 MiB (échelle ~linéaire).
 
-## Index et parité (à coller)
+## Index et parité (collé)
 
-*(vide)*
+Crate `hnsw_rs` 0.3.4 (MIT/Apache). Index inversé persisté dans le snapshot v2 (`index` + `emb_cache`) ; le graphe HNSW est reconstruit depuis les vecteurs au chargement et mis à jour à `remember()`. stdout de `hnsw_rs` (println tous les 50k points) est silencée pour ne pas casser le JSON-RPC.
 
-## Banc APRÈS (à coller)
+```
+cd buddy-memory && cargo test --offline --lib indexed_hybrid_top10 -- --nocapture
+```
 
-*(vide)*
+```
+running 1 test
+test store::store_tests::indexed_hybrid_top10_overlaps_exhaustive ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 51.21s
+```
+
+Autres tests d’index : `snapshot_persists_inverted_index_and_embeddings`, `ingest_updates_hnsw_and_inverted_index` verts dans `cargo test --lib` (12/12).
+
+## Banc APRÈS (collé)
+
+Commande :
+
+```
+cd buddy-memory && cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode indexed --seed 42 --work /home/patrice/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-indexed-50k
+```
+
+Sortie (exit 0) :
+
+```
+GK6 CKG bench  mode=indexed  nodes=50000  queries=100
+  generate 112.0 ms   ledger-write 3335.1 ms   load 1333.9 ms
+  recallHybrid p50=10.372 ms  p95=24.453 ms  mean=12.810 ms
+  RSS start=2.7 MiB  loaded=143.2 MiB  warm=309.3 MiB  after=309.3 MiB
+```
+
+| Mode | Nœuds | Requêtes | p50 (ms) | p95 (ms) | mean (ms) | RSS après (MiB) |
+|---|---:|---:|---:|---:|---:|---:|
+| exhaustive (AVANT) | 50 000 | 100 | 660.401 | 999.582 | 694.406 | 181.5 |
+| indexed HNSW+inversé (APRÈS) | 50 000 | 100 | **10.372** | **24.453** | 12.810 | 309.3 |
+
+Gain p50 : **×63,7** (660.401 / 10.372). Gain p95 : **×40,9**. RAM +127.8 MiB (graphe HNSW), attendu.
 
 ## Bascule défaut (à coller)
 
