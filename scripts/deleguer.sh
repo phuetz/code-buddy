@@ -39,6 +39,8 @@
 #   nvidia NVIDIA Build (clé GRATUITE ~40 RPM) — Code Buddy headless sur Kimi K3 /
 #                                         Nemotron 3 ; 0 quota perso ; prompts → NVIDIA (pas de confidentiel)
 #   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
+#   spark  codex gpt-5.3-codex-spark    — quota Codex-Spark SÉPARÉ du général (à préférer
+#                                         quand le général est bas)
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
 #
@@ -111,6 +113,13 @@ empreinte_depot() {
 AVANT=$(empreinte_depot "$DEPOT")
 
 case "$MOTEUR" in
+  spark)
+    # GPT-5.3-Codex-Spark : quota SÉPARÉ du forfait ChatGPT général (jauge propre, 5 h + hebdo).
+    # À préférer quand le général est bas (03/09/2026 : général 21 %, Spark 55 %).
+    codex exec -C "$DEPOT" -m "gpt-5.3-codex-spark" \
+      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+      - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    ;;
   luna|sol)
     codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" \
       --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
