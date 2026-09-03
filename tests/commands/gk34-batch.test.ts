@@ -5,6 +5,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -191,5 +192,14 @@ describe('GK34 /batch success contract', () => {
     expect(result.success).toBe(true);
     expect(result.filesChanged).toContain('add.js');
     expect(readFileSync(join(dir, 'add.js'), 'utf8')).toContain('return a + b');
+  });
+});
+
+describe('GK34 /batch docs', () => {
+  it('does not claim plan approval before a spawn that never ran', () => {
+    const docs = readFileSync(fileURLToPath(new URL('../../docs/agents.md', import.meta.url)), 'utf8');
+    const batch = docs.slice(docs.indexOf('## Batch Decomposition'), docs.indexOf('## A2A Protocol'));
+    expect(batch).not.toMatch(/Plan approval before execution/);
+    expect(batch).toMatch(/numbered list/i);
   });
 });
