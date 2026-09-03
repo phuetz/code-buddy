@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### GK33 — modes de recherche en vrai (3 septembre 2026)
+
+`buddy research --deep/--storm` n’affiche plus le bandeau Wide Research. Les
+`[n]` dont la source ne contient pas l’idée sont retirés ; un dump
+`**Références**` LLM ne double plus la section déterministe. `buddy flow`
+parse un JSON de plan enveloppé ou parasite et logue planning → execution →
+synthesis. PaperQA-lite sur PDF locaux : extraits ancrés, refus RCS des
+hors-sujet (vérifié live, Ollama `qwen3:4b-instruct`, $0).
+
+
 **« Code Buddy 2 ».** 575 commits depuis la 1.8.0 : 151 fonctionnalités, 158 correctifs,
 219 commits de tests et de documentation. **Aucune rupture de compatibilité** — pas un seul
 `BREAKING CHANGE`, et les dix innovations de la campagne CB2 restent opt-in : sans leur variable

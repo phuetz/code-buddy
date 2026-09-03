@@ -9,6 +9,7 @@
 
 import { EventEmitter } from 'events';
 import { findUnexecutedProseToolCall } from '../../cli/headless-options.js';
+import { parseJsonResponse } from '../../utils/llm-retry.js';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 
 /* ── Types ── */
@@ -211,12 +212,16 @@ Respond ONLY with the JSON object, no markdown fences.`;
 
     const response = await this.config.planWithLLM(prompt);
 
-    // Parse LLM response
+    // Parse LLM response. Live GK33: local models wrap the JSON in prose or
+    // markdown fences; JSON.parse on the whole string then silently collapsed
+    // the plan to a single "Execute task" step and skipped real decomposition.
     let parsed: { steps: Array<{ id: string; title: string; description: string; agentKey?: string; dependencies?: string[] }> };
     try {
-      // Strip markdown fences if present
-      const cleaned = response.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      parsed = JSON.parse(cleaned);
+      const candidate = parseJsonResponse(response) as { steps?: unknown };
+      if (!Array.isArray(candidate.steps)) {
+        throw new Error('plan JSON missing steps');
+      }
+      parsed = candidate as typeof parsed;
     } catch {
       // Fallback: single step with the full goal
       parsed = {

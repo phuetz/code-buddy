@@ -334,23 +334,47 @@ export function createResearchCommand(): Command {
       }
       const safeTopic = redactWideResearchText(topic, [apiKey]);
 
+      // Phase B: --iterations > 1 turns the single Phase-A round into the bounded
+      // gap loop. Default '1' ⇒ Phase A byte-identical (the loop delegates).
+      // Phase C (STORM): --perspectives N (or --storm ⇒ 4) turns Deep Research
+      // into the multi-perspective outline-first pipeline. STORM implies --deep
+      // and TAKES PRECEDENCE over --iterations (per-perspective single round).
+      const stormRequested = Boolean(opts.storm) || perspectivesN > 0;
+      const stormPerspectives = stormRequested ? perspectivesN || 4 : undefined;
+      const deepEnabled = Boolean(opts.deep) || stormRequested; // STORM implies --deep
+
       if (!jsonOutput) {
-        console.log(`\n🔬 Wide Research: "${safeTopic}"`);
-        console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
-        console.log(
-          `   Items: ${items}  |  Concurrency: ${concurrency} per wave` +
-            `  |  Max rounds per worker: ${maxRoundsPerWorker}`,
-        );
-        console.log(
-          `   Overall timeout: ${Math.ceil(overallTimeoutMs / 60_000)} min` +
-            `${explicitOverallTimeout ? ' (user override)' : ' (auto-scaled)'}`,
-        );
-        if (checkpointPath) {
+        if (deepEnabled) {
+          // GK33: do not leak the Wide Research header (items/concurrency/timeout)
+          // onto the Deep/STORM path — that banner describes a pipeline that is
+          // not running.
+          console.log(`\n🔬 Deep Research: "${safeTopic}"`);
+          console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
+          if (stormRequested) {
+            console.log(`   Mode: STORM (${stormPerspectives} perspective(s))`);
+          } else if (deepRounds > 1) {
+            console.log(`   Mode: deep (gap loop, ${deepRounds} round(s))`);
+          } else {
+            console.log('   Mode: deep');
+          }
+        } else {
+          console.log(`\n🔬 Wide Research: "${safeTopic}"`);
+          console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
           console.log(
-            resumeRequested
-              ? `   Resume checkpoint: ${checkpointPath}`
-              : `   Checkpoint: ${checkpointPath}`,
+            `   Items: ${items}  |  Concurrency: ${concurrency} per wave` +
+              `  |  Max rounds per worker: ${maxRoundsPerWorker}`,
           );
+          console.log(
+            `   Overall timeout: ${Math.ceil(overallTimeoutMs / 60_000)} min` +
+              `${explicitOverallTimeout ? ' (user override)' : ' (auto-scaled)'}`,
+          );
+          if (checkpointPath) {
+            console.log(
+              resumeRequested
+                ? `   Resume checkpoint: ${checkpointPath}`
+                : `   Checkpoint: ${checkpointPath}`,
+            );
+          }
         }
         console.log('─'.repeat(60));
       }
@@ -363,14 +387,6 @@ export function createResearchCommand(): Command {
       // FIRST and independently of TTY (it is automation-friendly). Strictly
       // gated: without `--deep`, the Wide/direct paths below run byte-identically.
       const { maybeRunDeepResearch, runDeepResearchCli } = await import('./deep.js');
-      // Phase B: --iterations > 1 turns the single Phase-A round into the bounded
-      // gap loop. Default '1' ⇒ Phase A byte-identical (the loop delegates).
-      // Phase C (STORM): --perspectives N (or --storm ⇒ 4) turns Deep Research
-      // into the multi-perspective outline-first pipeline. STORM implies --deep
-      // and TAKES PRECEDENCE over --iterations (per-perspective single round).
-      const stormRequested = Boolean(opts.storm) || perspectivesN > 0;
-      const stormPerspectives = stormRequested ? perspectivesN || 4 : undefined;
-      const deepEnabled = Boolean(opts.deep) || stormRequested; // STORM implies --deep
       // Phase D (CKG bridge): opt-in via --ckg OR the shared CODEBUDDY_COLLECTIVE_MEMORY
       // gate. Rides on the deep path (inert without --deep). Off ⇒ A/B/C byte-identical.
       const { resolveCkgEnabled } = await import('../../agent/deep-research-ckg.js');

@@ -79,18 +79,21 @@ export function createFlowCommand(): Command {
           maxRetries: parseInt(options.maxRetries, 10),
         });
 
-        // Progress events
+        // Always show the three phases. Step detail stays behind --verbose.
+        flow.on('flow:phase', (data: { phase?: string }) => {
+          if (data.phase) console.log(`  Phase: ${data.phase}`);
+        });
+        flow.on('flow:plan_created', (data: { stepCount?: number }) => {
+          console.log(`  Plan: ${data.stepCount} steps`);
+        });
         if (options.verbose) {
-          flow.on('flow:plan_created', (data: any) => {
-            console.log(`  Plan: ${data.stepCount} steps`);
-          });
-          flow.on('flow:step_start', (data: any) => {
+          flow.on('flow:step_start', (data: { title?: string }) => {
             console.log(`  [${flow.getProgress()}%] Step: ${data.title}`);
           });
-          flow.on('flow:step_complete', (data: any) => {
+          flow.on('flow:step_complete', (data: { title?: string; status?: string }) => {
             console.log(`  Done: ${data.title} (${data.status ?? 'completed'})`);
           });
-          flow.on('flow:step_failed', (data: any) => {
+          flow.on('flow:step_failed', (data: { stepId?: string; error?: string }) => {
             console.log(`  Failed: ${data.stepId ?? ''} ${data.error ?? ''}`.trim());
           });
         }

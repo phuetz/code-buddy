@@ -20,6 +20,8 @@ import {
   fingerprintSimilarity,
   renderReferences,
   stripInvalidCitationMarkers,
+  stripTrailingReferences,
+  groundCitedClaims,
   runDeepResearchPipeline,
   resolveDeepResearchOptions,
   type DeepResearchBoundaries,
@@ -343,7 +345,7 @@ describe('citation tracing + synthesis', () => {
       id: i + 1,
       url: `https://s${i + 1}.com`,
       title: `S${i + 1}`,
-      content: `content ${i + 1}`,
+      content: `content ${i + 1} alpha finding gamma detail`,
       query: 'q',
     }));
     const { report, llmUsed } = await synthesize('Q', { question: 'Q', subQuestions: [] }, sources, boundaries, OPTS);
@@ -357,6 +359,95 @@ describe('citation tracing + synthesis', () => {
     expect(report.match(/## Références/g)).toHaveLength(1);
     expect(report).toContain('[5] S5 — https://s5.com');
     expect(report).not.toContain('[6]');
+  });
+
+  it('stripTrailingReferences also drops a bold **Références** block the LLM left at the end', () => {
+    const raw = [
+      '## TL;DR',
+      '',
+      'Hangover reduces false cuts [1].',
+      '',
+      '**Références**',
+      '[1] Wikipédia – Hystérésis',
+      '[2] Dictionnaire Larousse',
+    ].join('\n');
+    const out = stripTrailingReferences(raw);
+    expect(out).toContain('Hangover reduces false cuts [1].');
+    expect(out).not.toMatch(/\*\*Références\*\*/i);
+    expect(out).not.toContain('Wikipédia');
+    expect(out).not.toContain('Larousse');
+  });
+
+  it('groundCitedClaims strips a [n] whose source does not contain the cited idea', () => {
+    const body = [
+      'A hangover timer of 300 milliseconds reduces false cuts [1].',
+      'A VAD is a variable-air-volume fan with 1.2 tesla coercivity [1].',
+    ].join(' ');
+    const sources = [
+      {
+        id: 1,
+        url: 'https://vad.test/hangover',
+        title: 'Hangover',
+        content:
+          'A hangover timer keeps the VAD in the speech state. Typical hangover duration is 200 to 400 milliseconds. This hysteresis reduces false cuts in the middle of a word.',
+        query: 'q',
+      },
+    ];
+    const out = groundCitedClaims(body, sources);
+    expect(out).toContain('300 milliseconds reduces false cuts [1]');
+    expect(out).not.toMatch(/coercivity\s*\[1\]/);
+    expect(out).toContain('tesla coercivity');
+  });
+
+  it('does not leave empty "de à" holes after stripping ungrounded markers', () => {
+    const body = 'Confirmed by many sources (de [4] à [11]). Mentioned in [10], [11].';
+    const sources = [
+      { id: 4, url: 'https://a', title: 'A', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+      { id: 10, url: 'https://b', title: 'B', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+      { id: 11, url: 'https://c', title: 'C', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+    ];
+    const out = groundCitedClaims(body, sources);
+    expect(out).not.toMatch(/de\s+à/);
+    expect(out).not.toMatch(/in\s+,/);
+    expect(out).toContain('Confirmed by many sources');
+  });
+
+  it('synthesis strips an LLM **Références** dump and ungrounded citations (GK33 live)', async () => {
+    const boundaries = makeBoundaries({
+      llm: async () =>
+        [
+          '## TL;DR',
+          '',
+          'A hangover of 300 milliseconds reduces false cuts [1].',
+          'A VAD is a ventilateur à débit variable [1].',
+          '',
+          '**Références**',
+          '[1] Wikipédia – Hystérésis',
+        ].join('\n'),
+    });
+    const sources = [
+      {
+        id: 1,
+        url: 'https://vad.test/hangover',
+        title: 'Hangover',
+        content:
+          'A hangover timer of 200 to 400 milliseconds reduces false cuts in a voice activity detector.',
+        query: 'q',
+      },
+    ];
+    const { report, llmUsed } = await synthesize(
+      'Q',
+      { question: 'Q', subQuestions: [] },
+      sources,
+      boundaries,
+      OPTS,
+    );
+    expect(llmUsed).toBe(true);
+    expect(report.match(/## Références/g)).toHaveLength(1);
+    expect(report).not.toContain('Wikipédia');
+    expect(report).toContain('300 milliseconds reduces false cuts [1]');
+    expect(report).not.toMatch(/débit variable\s*\[1\]/);
+    expect(report).toContain('[1] Hangover — https://vad.test/hangover');
   });
 });
 

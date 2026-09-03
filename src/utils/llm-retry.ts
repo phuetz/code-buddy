@@ -74,6 +74,9 @@ function findBalancedJsonEnd(text: string, start: number): number | null {
 
 function repairCommonJson(value: string): string {
   let repaired = value.trim();
+  // GK33 live: qwen3 emitted a stray `",` line after `"id": "3",` which
+  // made JSON.parse fail and collapsed buddy flow to a single Execute task.
+  repaired = repaired.replace(/\n\s*",\s*\n/g, '\n');
   repaired = repaired.replace(/,\s*([}\]])/g, '$1');
 
   if ([...repaired].some(char => !'{}[] \t\r\n'.includes(char))) {
