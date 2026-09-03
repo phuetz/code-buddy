@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### FLOWFIX1 — le pilote Flow/Veo soumet à nouveau (3 septembre 2026)
+
+Cause : le bouton « Créer » reste `aria-disabled="true"` tant que l'éditeur
+Slate n'a pas le prompt dans son propre modèle ; `Input.insertText` ne
+peignait que le DOM et `.disabled` restait `false`, donc les clics étaient des
+no-op. Correctif dans `flow-crame.py` : saisie caractère par caractère via
+`Input.dispatchKeyEvent`, clic TRUSTED, garde sur `aria-disabled`, projet
+épinglé (l'onglet dérivait vers un autre projet), faux « Échec » pendant la
+génération corrigé. Prouvé par deux clips Veo 3.1 Quality réels (8 s, 720p,
+100 crédits la prise).
+
 ### DELEG1 — sous-agents légers multiplexés (3 septembre 2026)
 
 `src/agent/delegation/thread-delegation.ts` : un délégué léger par sous-agent
