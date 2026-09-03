@@ -84,8 +84,16 @@ describe('LlmToolProposer — held-out cases never reach the model', () => {
     expect(Object.keys(view).sort()).toEqual(['capability', 'description', 'id', 'visibleCases']);
 
     const prompt = buildToolDraftPrompt(view);
-    const heldOutNeedles = SLUGIFY.heldOutCases.flatMap((c) => [String(c.input.text), ...c.expectIncludes]);
-    for (const needle of heldOutNeedles) {
+    const visibleBlob = JSON.stringify(view.visibleCases);
+    // Needles that exist in BOTH visible and held-out (e.g. "hello-world" after
+    // the run-of-spaces held-out was added) cannot prove redaction. Use the
+    // held-out-only strings (fresh inputs / fresh expected slugs).
+    const uniqueHeldOutNeedles = SLUGIFY.heldOutCases
+      .flatMap((c) => [String(c.input.text), ...c.expectIncludes])
+      .filter((needle) => needle.length > 0 && !visibleBlob.includes(needle));
+    expect(uniqueHeldOutNeedles.length).toBeGreaterThan(0);
+    expect(uniqueHeldOutNeedles).toEqual(expect.arrayContaining(['The Quick Brown', 'the-quick-brown', 'Hello  World']));
+    for (const needle of uniqueHeldOutNeedles) {
       expect(prompt).not.toContain(needle);
     }
 
@@ -99,7 +107,7 @@ describe('LlmToolProposer — held-out cases never reach the model', () => {
       },
     });
     await proposer.propose(view);
-    for (const needle of heldOutNeedles) {
+    for (const needle of uniqueHeldOutNeedles) {
       expect(seen).not.toContain(needle);
     }
   });
