@@ -244,6 +244,9 @@ function fmtTime(sec: unknown, tz: unknown): string | undefined {
   if (typeof sec !== 'number' || !Number.isFinite(sec)) return undefined;
   try {
     return new Intl.DateTimeFormat('fr-FR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       ...(typeof tz === 'string' && tz ? { timeZone: tz } : {}),
@@ -251,6 +254,16 @@ function fmtTime(sec: unknown, tz: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function fmtFetchedAt(ts: number): string {
+  return `relevé ${new Intl.DateTimeFormat('fr-FR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(ts))}`;
 }
 
 /** Parse a Yahoo Finance v8 chart response into a StockWidgetData. Pure. null if unusable. */
@@ -330,6 +343,9 @@ export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidget
   const rawName = typeof d.companyName === 'string' ? d.companyName : '';
   const name = rawName.replace(/\s+(Common Stock|Common Shares|Ordinary Shares|Class [A-Z] Common Stock).*$/i, '').trim();
   const currency = (typeof pd?.currency === 'string' && pd.currency) || 'USD';
+  const time = typeof pd?.lastTradeTimestamp === 'string' && pd.lastTradeTimestamp.trim()
+    ? pd.lastTradeTimestamp.trim()
+    : undefined;
   return {
     type: 'stock',
     symbol: typeof d.symbol === 'string' ? d.symbol : symbolInput.toUpperCase(),
@@ -343,6 +359,7 @@ export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidget
     ...(previousClose != null ? { previousClose } : {}),
     ...(volume != null ? { volume } : {}),
     ...(typeof d.exchange === 'string' ? { market: d.exchange } : {}),
+    ...(time ? { time } : {}),
   };
 }
 
@@ -394,6 +411,7 @@ export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput:
   const change = num(q.d) ?? (prev != null ? round(price - prev) : undefined);
   const changePercent = num(q.dp) ?? (prev != null && prev !== 0 ? round(((price - prev) / prev) * 100, 2) : undefined);
   const ticker = (typeof p.ticker === 'string' && p.ticker) || symbolInput.toUpperCase();
+  const time = fmtTime(q.t, undefined);
   return {
     type: 'stock',
     symbol: ticker,
@@ -407,6 +425,7 @@ export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput:
     ...(num(q.l) != null ? { low: num(q.l)! } : {}),
     ...(prev != null ? { previousClose: prev } : {}),
     ...(typeof p.exchange === 'string' ? { market: p.exchange } : {}),
+    ...(time ? { time } : {}),
   };
 }
 
@@ -423,7 +442,9 @@ export function parseStooqCsv(text: string, symbolInput: string): StockWidgetDat
   const low = num(cols[5]);
   const volume = num(cols[7]);
   const sym = (cols[0] || symbolInput).toUpperCase();
-  const time = cols[2] && /^\d{2}:\d{2}/.test(cols[2]) ? cols[2].slice(0, 5) : undefined;
+  const date = cols[1] && /^\d{4}-\d{2}-\d{2}$/.test(cols[1]) ? cols[1] : undefined;
+  const clock = cols[2] && /^\d{2}:\d{2}/.test(cols[2]) ? cols[2].slice(0, 5) : undefined;
+  const time = [date, clock].filter(Boolean).join(' ') || undefined;
   return {
     type: 'stock',
     symbol: sym,
@@ -459,6 +480,7 @@ export function formatQuoteSummary(d: StockWidgetData): string {
   const h = num(d.high);
   const l = num(d.low);
   if (h != null && l != null) parts.push(`séance ${fmtFr(l)}–${fmtFr(h)}`);
+  if (d.time) parts.push(String(d.time));
   return parts.join(', ') + '.';
 }
 
@@ -467,13 +489,17 @@ function quoteResult(
   provider: StockQuoteProvider,
   sourceUrl: string
 ): ToolResult {
+  const fetchedAt = Date.now();
+  const dated: StockWidgetData = data.time
+    ? data
+    : { ...data, time: fmtFetchedAt(fetchedAt) };
   const metadata: StockQuoteMetadata = {
     provider,
     sourceUrl,
-    fetchedAt: Date.now(),
-    ...(data.time ? { quoteTime: data.time } : {}),
+    fetchedAt,
+    quoteTime: dated.time,
   };
-  return { success: true, output: formatQuoteSummary(data), data, metadata };
+  return { success: true, output: formatQuoteSummary(dated), data: dated, metadata };
 }
 
 export class StockQuoteTool {
