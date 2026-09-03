@@ -651,7 +651,7 @@ export function groundCitedClaims(body: string, sources: CollectedSource[]): str
   if (!Array.isArray(sources) || sources.length === 0) return body;
   const byId = new Map<number, CollectedSource>();
   for (const source of sources) byId.set(source.id, source);
-  return body.replace(/[^.!?\n]+(?:[.!?]+|$)/g, (sentence) =>
+  const stripped = body.replace(/[^.!?\n]+(?:[.!?]+|$)/g, (sentence) =>
     sentence.replace(/\[(\d{1,5})\]/g, (full, num: string) => {
       const id = Number(num);
       const source = byId.get(id);
@@ -659,6 +659,12 @@ export function groundCitedClaims(body: string, sources: CollectedSource[]): str
       return citationOverlapsSource(sentence, source) ? full : '';
     }),
   );
+  return stripped
+    .replace(/\(\s*de\s+à\s*\)/gi, '')
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,/g, ',')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([.,;:])/g, '$1');
 }
 
 /**

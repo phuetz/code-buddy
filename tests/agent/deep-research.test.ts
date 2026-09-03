@@ -399,6 +399,19 @@ describe('citation tracing + synthesis', () => {
     expect(out).toContain('tesla coercivity');
   });
 
+  it('does not leave empty "de à" holes after stripping ungrounded markers', () => {
+    const body = 'Confirmed by many sources (de [4] à [11]). Mentioned in [10], [11].';
+    const sources = [
+      { id: 4, url: 'https://a', title: 'A', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+      { id: 10, url: 'https://b', title: 'B', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+      { id: 11, url: 'https://c', title: 'C', content: 'magnetic loop width twelve milliwatts', query: 'q' },
+    ];
+    const out = groundCitedClaims(body, sources);
+    expect(out).not.toMatch(/de\s+à/);
+    expect(out).not.toMatch(/in\s+,/);
+    expect(out).toContain('Confirmed by many sources');
+  });
+
   it('synthesis strips an LLM **Références** dump and ungrounded citations (GK33 live)', async () => {
     const boundaries = makeBoundaries({
       llm: async () =>
