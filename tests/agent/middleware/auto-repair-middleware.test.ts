@@ -90,6 +90,31 @@ describe('AutoRepairMiddleware', () => {
       expect(result.action).toBe('continue');
     });
 
+    it('does not retry WritePolicy.strict shell blocks as bash failures', async () => {
+      const mw = new AutoRepairMiddleware();
+      const ctx = makeContext({
+        history: [
+          {
+            type: 'tool_result',
+            content: 'WritePolicy (strict): shell write blocked. Use apply_patch with a unified diff instead.',
+            timestamp: new Date(),
+            toolCall: {
+              id: 'call-wp',
+              type: 'function',
+              function: { name: 'bash', arguments: '{"command":"echo x > src/add.js"}' },
+            },
+            toolResult: {
+              success: false,
+              error: 'WritePolicy (strict): shell write blocked. Use apply_patch with a unified diff instead.',
+            },
+          } as ChatEntry,
+        ],
+      });
+      const result = await mw.afterTurn(ctx);
+      expect(result.action).toBe('continue');
+      expect(result.message ?? '').not.toContain('Auto-Repair');
+    });
+
     it('detects error in bash tool output', async () => {
       const mw = new AutoRepairMiddleware();
       const ctx = makeContext({
