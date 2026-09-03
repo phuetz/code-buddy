@@ -50,7 +50,7 @@ describe('Pack Contents Policy - Unit Tests', () => {
       expect.arrayContaining([
         { file: 'dist/index.js.map', rule: 'forbidden-extension: *.map' },
         { file: 'dist/bundle.map', rule: 'forbidden-extension: *.map' },
-      ]),
+      ])
     );
   });
 
@@ -58,9 +58,19 @@ describe('Pack Contents Policy - Unit Tests', () => {
     const files = ['package.json', '.env', '.env.local', 'dist/.env.production'];
     const result = auditPackContents(files);
     expect(result.ok).toBe(false);
-    expect(result.violations.some((v) => v.file === '.env' && v.rule === 'forbidden-pattern: .env*')).toBe(true);
-    expect(result.violations.some((v) => v.file === '.env.local' && v.rule === 'forbidden-pattern: .env*')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'dist/.env.production' && v.rule === 'forbidden-pattern: .env*')).toBe(true);
+    expect(
+      result.violations.some((v) => v.file === '.env' && v.rule === 'forbidden-pattern: .env*')
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === '.env.local' && v.rule === 'forbidden-pattern: .env*'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/.env.production' && v.rule === 'forbidden-pattern: .env*'
+      )
+    ).toBe(true);
   });
 
   it('détecte et interdit les répertoires sources et sensibles (src/, tests/, scripts/, etc.)', () => {
@@ -76,13 +86,42 @@ describe('Pack Contents Policy - Unit Tests', () => {
     const result = auditPackContents(files);
     expect(result.ok).toBe(false);
 
-    expect(result.violations.some((v) => v.file === 'src/index.ts' && v.rule === 'forbidden-directory: src/')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'tests/security/secret.test.ts' && v.rule === 'forbidden-directory: tests/')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'cowork/App.tsx' && v.rule === 'forbidden-directory: cowork/')).toBe(true);
-    expect(result.violations.some((v) => v.file === '.github/workflows/ci.yml' && v.rule === 'forbidden-directory: .github/')).toBe(true);
-    expect(result.violations.some((v) => v.file === '_qa/report.html' && v.rule === 'forbidden-directory: _qa/')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'scripts/build.sh' && v.rule === 'forbidden-directory: scripts/')).toBe(true);
-    expect(result.violations.some((v) => v.file === '.codebuddy/history.json' && v.rule === 'forbidden-directory: .codebuddy/')).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'src/index.ts' && v.rule === 'forbidden-directory: src/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) =>
+          v.file === 'tests/security/secret.test.ts' && v.rule === 'forbidden-directory: tests/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'cowork/App.tsx' && v.rule === 'forbidden-directory: cowork/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === '.github/workflows/ci.yml' && v.rule === 'forbidden-directory: .github/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === '_qa/report.html' && v.rule === 'forbidden-directory: _qa/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'scripts/build.sh' && v.rule === 'forbidden-directory: scripts/'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === '.codebuddy/history.json' && v.rule === 'forbidden-directory: .codebuddy/'
+      )
+    ).toBe(true);
   });
 
   it('détecte et interdit les clés privées, certificats, bases et journaux (*.pem, *.key, *.p12, id_rsa*, *.sqlite, *.jsonl)', () => {
@@ -97,37 +136,69 @@ describe('Pack Contents Policy - Unit Tests', () => {
     ];
     const result = auditPackContents(files);
     expect(result.ok).toBe(false);
-    expect(result.violations.some((v) => v.file === 'dist/server.pem' && v.rule === 'forbidden-extension: *.pem')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'dist/private.key' && v.rule === 'forbidden-extension: *.key')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'dist/cert.p12' && v.rule === 'forbidden-extension: *.p12')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'id_rsa' && v.rule === 'forbidden-pattern: id_rsa*')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'id_rsa.pub' && v.rule === 'forbidden-pattern: id_rsa*')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'dist/data.sqlite' && v.rule === 'forbidden-extension: *.sqlite')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'dist/events.jsonl' && v.rule === 'forbidden-extension: *.jsonl')).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/server.pem' && v.rule === 'forbidden-extension: *.pem'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/private.key' && v.rule === 'forbidden-extension: *.key'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/cert.p12' && v.rule === 'forbidden-extension: *.p12'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some((v) => v.file === 'id_rsa' && v.rule === 'forbidden-pattern: id_rsa*')
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'id_rsa.pub' && v.rule === 'forbidden-pattern: id_rsa*'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/data.sqlite' && v.rule === 'forbidden-extension: *.sqlite'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'dist/events.jsonl' && v.rule === 'forbidden-extension: *.jsonl'
+      )
+    ).toBe(true);
   });
 
   it('détecte et interdit les motifs de données personnelles dans les chemins', () => {
     const samplePersonalName = ['dist/', ['france', 'travail'].join('-'), '.js'].join('');
-    const sampleDarkStar = ['dist/', ['dark', 'star'].join(''), '.js'].join('');
+    const sampleMachineName = ['dist/', ['dark', 'star'].join(''), '.js'].join('');
     const sampleIp = ['dist/', ['100', '73', '1'].join('.'), '.js'].join('');
 
-    const files = [samplePersonalName, sampleDarkStar, sampleIp];
+    const files = [samplePersonalName, sampleMachineName, sampleIp];
     const result = auditPackContents(files);
     expect(result.ok).toBe(false);
     expect(result.violations.length).toBeGreaterThanOrEqual(3);
-    expect(result.violations.some((v) => v.rule.startsWith('forbidden-personal-pattern:'))).toBe(true);
+    expect(result.violations.some((v) => v.rule.startsWith('forbidden-personal-pattern:'))).toBe(
+      true
+    );
   });
 
   it('rejette tout fichier hors préfixes autorisés', () => {
-    const files = [
-      'package.json',
-      'secret-directory/payload.js',
-      'random_config.json',
-    ];
+    const files = ['package.json', 'secret-directory/payload.js', 'random_config.json'];
     const result = auditPackContents(files);
     expect(result.ok).toBe(false);
-    expect(result.violations.some((v) => v.file === 'secret-directory/payload.js' && v.rule === 'unauthorized-prefix')).toBe(true);
-    expect(result.violations.some((v) => v.file === 'random_config.json' && v.rule === 'unauthorized-prefix')).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'secret-directory/payload.js' && v.rule === 'unauthorized-prefix'
+      )
+    ).toBe(true);
+    expect(
+      result.violations.some(
+        (v) => v.file === 'random_config.json' && v.rule === 'unauthorized-prefix'
+      )
+    ).toBe(true);
   });
 });
 
@@ -136,7 +207,7 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
     const packJsonOutput = execFileSync(
       'npm',
       ['pack', '--dry-run', '--json', '--ignore-scripts'],
-      { cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+      { cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
     );
 
     const packData = JSON.parse(packJsonOutput);
@@ -162,7 +233,7 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
         JSON.stringify({
           name: 'test-pack-npmignore',
           version: '1.0.0',
-        }),
+        })
       );
       writeFileSync(join(tmpDir, '.npmignore'), realNpmIgnore);
 
@@ -173,9 +244,11 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
       const outWithIgnore = execFileSync(
         'npm',
         ['pack', '--dry-run', '--json', '--ignore-scripts'],
-        { cwd: tmpDir, encoding: 'utf8' },
+        { cwd: tmpDir, encoding: 'utf8' }
       );
-      const packedWithIgnore: string[] = JSON.parse(outWithIgnore)[0].files.map((f: { path: string }) => f.path);
+      const packedWithIgnore: string[] = JSON.parse(outWithIgnore)[0].files.map(
+        (f: { path: string }) => f.path
+      );
 
       expect(packedWithIgnore).toContain('dist/index.js');
       expect(packedWithIgnore).not.toContain('dist/index.js.map');
@@ -191,18 +264,18 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
       const outWithoutIgnore = execFileSync(
         'npm',
         ['pack', '--dry-run', '--json', '--ignore-scripts'],
-        { cwd: tmpDir, encoding: 'utf8' },
+        { cwd: tmpDir, encoding: 'utf8' }
       );
-      const packedWithoutIgnore: string[] = JSON.parse(outWithoutIgnore)[0].files.map((f: { path: string }) => f.path);
+      const packedWithoutIgnore: string[] = JSON.parse(outWithoutIgnore)[0].files.map(
+        (f: { path: string }) => f.path
+      );
 
       expect(packedWithoutIgnore).toContain('dist/index.js.map');
 
       const auditWithoutIgnore = auditPackContents(packedWithoutIgnore);
       expect(auditWithoutIgnore.ok).toBe(false);
       expect(auditWithoutIgnore.violations).toEqual(
-        expect.arrayContaining([
-          { file: 'dist/index.js.map', rule: 'forbidden-extension: *.map' },
-        ]),
+        expect.arrayContaining([{ file: 'dist/index.js.map', rule: 'forbidden-extension: *.map' }])
       );
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
