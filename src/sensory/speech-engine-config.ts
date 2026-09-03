@@ -124,15 +124,15 @@ export function resolveSpeechTranscriptionPlan(
 
 /**
  * Location of the NeMo Parakeet / sherpa-onnx model directory (shared by the
- * `parakeet` and `sherpa-rs` engines). Override via `CODEBUDDY_PARAKEET_MODEL_DIR`
- * or `CODEBUDDY_SHERPA_ONNX_MODEL_DIR`; the buddy-sense side uses the same
- * `BUDDY_SENSE_STT_MODEL_DIR` variable.
+ * `parakeet` and `sherpa-rs` engines). The buddy-sense names take precedence,
+ * matching the Rust worker, while the historical Code Buddy aliases remain
+ * supported.
  */
-export function resolveParakeetModelDir(): string {
+export function resolveParakeetModelDir(env: NodeJS.ProcessEnv = process.env): string {
   return expandSpeechPath(
-    process.env.BUDDY_SENSE_STT_MODEL_DIR?.trim()
-      || process.env.CODEBUDDY_PARAKEET_MODEL_DIR?.trim()
-      || process.env.CODEBUDDY_SHERPA_ONNX_MODEL_DIR?.trim()
+    env.BUDDY_SENSE_STT_MODEL_DIR?.trim()
+      || env.CODEBUDDY_PARAKEET_MODEL_DIR?.trim()
+      || env.CODEBUDDY_SHERPA_ONNX_MODEL_DIR?.trim()
       || '~/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8',
   );
 }
@@ -160,6 +160,19 @@ export function isFrenchParakeetModelAvailable(modelDir = resolveParakeetModelDi
   const modelName = basename(modelDir).toLowerCase();
   return modelName.includes('parakeet-tdt-0.6b-v3')
     || existsSync(join(modelDir, 'test_wavs', 'fr.wav'));
+}
+
+/** Resolve the positive decoder thread count passed to the buddy-sense worker. */
+export function resolveSpeechSttThreads(env: NodeJS.ProcessEnv = process.env): number {
+  for (const name of [
+    'BUDDY_SENSE_STT_THREADS',
+    'CODEBUDDY_SPEECH_STT_THREADS',
+    'CODEBUDDY_SPEECH_THREADS',
+  ]) {
+    const value = Number(env[name]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 4;
 }
 
 /** True when the configured/resolved engine decodes with the Parakeet model. */

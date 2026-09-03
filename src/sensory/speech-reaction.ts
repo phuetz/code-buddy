@@ -35,6 +35,7 @@ import {
   resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
   isFrenchParakeetModelAvailable,
+  resolveSpeechSttThreads,
   expandSpeechPath,
   type SpeechRecognitionEngine,
   type SpeechTranscriptionPlan,
@@ -552,10 +553,6 @@ function resolveSherpaRustBin(): string {
     }
   }
   return '';
-}
-
-function sherpaRustThreads(): number {
-  return numericEnv('CODEBUDDY_SPEECH_STT_THREADS', numericEnv('CODEBUDDY_SPEECH_THREADS', 4));
 }
 
 function readSpeechHotwordsFile(filePath: string): string[] {
@@ -1343,7 +1340,7 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
     wav,
     bin,
     resolveParakeetModelDir(),
-    sherpaRustThreads()
+    resolveSpeechSttThreads()
   );
 }
 

@@ -3,6 +3,7 @@ import {
   resolveSpeechRecognitionEngine,
   resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
+  resolveSpeechSttThreads,
   engineUsesParakeetModel,
   expandSpeechPath,
   isParakeetModelComplete,
@@ -31,6 +32,9 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+  delete process.env.CODEBUDDY_PARAKEET_MODEL_DIR;
+  delete process.env.CODEBUDDY_SHERPA_ONNX_MODEL_DIR;
+  delete process.env.BUDDY_SENSE_STT_MODEL_DIR;
 });
 
 describe('speech-engine-config — single source of truth (no more companion/speech-reaction drift)', () => {
@@ -121,5 +125,16 @@ describe('speech-engine-config — single source of truth (no more companion/spe
     expect(isFrenchParakeetModelAvailable('/definitely/not-a-model')).toBe(false);
     process.env.BUDDY_SENSE_STT_MODEL_DIR = '~/custom/model';
     expect(resolveParakeetModelDir()).toBe(join(homedir(), 'custom/model'));
+  });
+
+  it('honours the documented buddy-sense model and thread overrides', () => {
+    expect(resolveParakeetModelDir({
+      BUDDY_SENSE_STT_MODEL_DIR: '/opt/custom/parakeet-model',
+      CODEBUDDY_PARAKEET_MODEL_DIR: '/opt/legacy/model',
+    })).toBe('/opt/custom/parakeet-model');
+    expect(resolveSpeechSttThreads({ BUDDY_SENSE_STT_THREADS: '6' })).toBe(6);
+    expect(resolveSpeechSttThreads({ CODEBUDDY_SPEECH_STT_THREADS: '5' })).toBe(5);
+    expect(resolveSpeechSttThreads({ CODEBUDDY_SPEECH_THREADS: '3' })).toBe(3);
+    expect(resolveSpeechSttThreads({ BUDDY_SENSE_STT_THREADS: '0' })).toBe(4);
   });
 });

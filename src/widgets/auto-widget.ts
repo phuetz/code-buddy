@@ -144,8 +144,8 @@ export async function autoWidget(
       return safeResult(answer, candidate);
     }
 
-    // Structured kinds (tables and typed payloads) have deterministic renderers.
-    // They must not sit behind WIDGETS_AUTOGEN, which is only for LLM generation.
+    // Structured kinds (tables and typed payloads) have deterministic renderers;
+    // the automatic answer path never needs to invoke an LLM.
     if (candidate.kind === 'table') {
       return { answer, widgetHtml: renderMarkdownTableWidget(candidate, deps.theme), candidate };
     }

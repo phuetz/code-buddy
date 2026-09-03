@@ -17,17 +17,12 @@ CODEBUDDY_WIDGETS=true
 CODEBUDDY_WIDGETS_AUTO=true
 ```
 
-Sans elles, le résultat texte est byte-identique et aucune détection, lecture du
-registre ou génération n’est effectuée. La création LLM sur un type sans widget
-compatible demande en plus :
-
-```bash
-CODEBUDDY_WIDGETS_AUTOGEN=true
-```
-
-Cette troisième variable est désactivée par défaut. La génération réutilise le
-proposer existant, puis le gate fail-closed et la persistance
-`authored-<kind>/widget.html`; elle ne contourne jamais la validation authored.
+Sans elles, le résultat texte est byte-identique et aucune détection ni lecture
+du registre n’est effectuée. Le chemin automatique n’appelle aucun LLM : un
+payload structuré sans widget compatible reçoit un tableau HTML déterministe.
+Pour créer volontairement un nouveau template authored avec un LLM, utiliser
+`buddy widgets gen <kind>` ; cette commande explicite applique le gate
+fail-closed avant toute persistance sous `authored-<kind>/widget.html`.
 
 ## Contrat JSON headless
 

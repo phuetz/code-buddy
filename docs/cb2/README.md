@@ -30,7 +30,6 @@ Specs d'origine : [`docs/specs/cb2/`](../specs/cb2/).
 | `CODEBUDDY_CKG_SYNC_TYPES` / `CODEBUDDY_CKG_SYNC_MAX` | `lesson,fact` / 1000 | Allowlist des types synchronisés / borne d'ingestion par run |
 | `CODEBUDDY_SELF_BENCH_TIMEOUT_MS` / `_DROP` / `_HISTORY` | 60000 / 0.15 / `~/.codebuddy/capability-history.jsonl` | Timeout par scénario / seuil de régression relatif / chemin d'historique |
 | `CODEBUDDY_CONTEXT_ZOOM_MAX_MB` | 200 | Quota LRU de l'archive de segments |
-| `CODEBUDDY_WIDGETS_AUTOGEN` | off | Autorise la génération LLM d'un nouveau template en l'absence de match (re-gaté) |
 | `CODEBUDDY_ERRORWATCH_VISION` / `_DEBOUNCE_MS` / `_MAX_PER_HOUR` | off / 120000 / 4 | Étage vision (keyframe→modèle local) / anti-harcèlement |
 | `CODEBUDDY_WORKSPACE_TIMEOUT_MS` / `_MAX_FILE_KB` | 30000 / 512 | Bornes de la recherche/lecture cross-repo |
 
