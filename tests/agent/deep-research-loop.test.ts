@@ -163,6 +163,22 @@ describe('runDeepResearchLoop — cross-round dedup', () => {
     // No new sources ⇒ converged (no marginal gain).
     expect(result.converged).toBe(true);
   });
+
+  it('announces the gap-round collect cap before scraping, not "up to 0" after an empty fan-out', async () => {
+    const collecting: number[] = [];
+    const boundaries = makeBoundaries({
+      analyzeGaps: async () => ({ sufficient: false, gaps: ['more'], queries: ['q2'] }),
+      searchMap: { q1: [hit('https://one.com', 'One')] },
+      scrapeMap: { 'https://one.com': 'content one' },
+      fingerprint: fpFromMap({ 'content one': [1, 2] }),
+    });
+    await runDeepResearchLoop('Q', boundaries, { rounds: 2 }, (stage) => {
+      if (stage.stage === 'collecting') collecting.push(stage.urls);
+    });
+    expect(collecting.length).toBe(2);
+    expect(collecting[0]).toBeGreaterThan(0);
+    expect(collecting[1]).toBeGreaterThan(0);
+  });
 });
 
 // ==========================================================================

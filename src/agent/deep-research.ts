@@ -1188,8 +1188,8 @@ export async function runDeepResearchLoop(
     };
     accumulatedPlan.subQuestions.push(gapSubQuestion);
 
+    emit({ stage: 'collecting', urls: opts.maxSources });
     const gapRaw = await safeCollect({ question, subQuestions: [gapSubQuestion] }, boundaries, opts, trace);
-    emit({ stage: 'collecting', urls: gapRaw.length });
     const gapMerge = mergeSources(accumulated, accumulatedPrints, gapRaw, boundaries, opts, totalCap);
     emit({ stage: 'collected', scraped: gapRaw.length });
     emit({ stage: 'merged', round, added: gapMerge.added, dropped: gapMerge.dropped, total: accumulated.length });
