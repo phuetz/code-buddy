@@ -1,5 +1,36 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### SERV1 — le serveur branché par un inconnu (3 septembre 2026)
+
+`/v1/chat/completions` renvoie des erreurs honnêtes (`max_tokens` absurde, `tools`
+non supportés, modèle inconnu) au lieu d'un 200 avec une excuse dans le texte ; le
+bandeau `Context Notice` ne fuite plus dans les deltas SSE ; le battement
+`/api/health` sonde `OLLAMA_HOST` ; l'A2A accepte un fournisseur local et ne
+recouvre plus un échec par `completed` ; l'AgentCard est publique ; le 429 porte
+`Retry-After` et `X-RateLimit-*`. Écarts assumés et documentés : un seul port,
+CORS HTTP sans 403, `usage.prompt_tokens` estimé.
+
+### IMPROVE1 — auto-amélioration en vrai (3 septembre 2026)
+
+Le pare-feu de compétences met en quarantaine un jailbreak caché dans un
+commentaire HTML ou coupé sur plusieurs lignes ; le proposeur d'outils ne voit
+jamais les cas held-out (prouvé) ; la porte G4 couvre les suites d'espaces ; les
+tests unitaires ne persistent plus d'outils dans le workspace.
+
+### VERIF1 / VERIFIX1 — vérification par mutation des fusions du jour (3 septembre 2026)
+
+17 mutations sur GK34, GK35, GK36 et FLOTTE1 : 12 rougissent, 5 restaient vertes.
+Fermées : `verify` du journal de lanes refuse un `prev_hash` faux et deux journaux
+recollés ; le vrai `buddy -p "/batch"` et `/swarm` sont routés sans passer par le
+LLM ; les trois filtres d'accueil (XML, `/100`, auto-évolution) sont testés
+isolément ; l'import MCP prouve l'absence de doublon dans le JSON écrit.
+
+### MCPFIX1 — douze tests MCP dormants (3 septembre 2026)
+
+Douze harnais périmés (`mcp-agent-server`, `client`) réalignés sur les contrats
+actuels, chacun prouvé par un cycle vert → rouge → vert ; aucun défaut de
+production derrière.
+
 ### SANDBOX1 — bac à sable noyau pour `bash` (3 septembre 2026)
 
 `CODEBUDDY_NATIVE_SANDBOX` confine les commandes shell après confirmation,
