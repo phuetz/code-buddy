@@ -23,6 +23,7 @@ import {
 } from '../../src/companion/proactive-engine.js';
 import { saveRelationshipState, loadRelationshipState } from '../../src/companion/relationship-state.js';
 import { _resetConductorForTests } from '../../src/companion/orchestrator.js';
+import { SAFE_RELATIONSHIP_REPAIR } from '../../src/conversation/relationship-safety.js';
 
 const DAY = 24 * 3600_000;
 const ORIGINAL_TIMEZONE = process.env.CODEBUDDY_TIMEZONE;
@@ -166,23 +167,29 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   });
 
   it('gates an unsafe LLM refinement before local or Telegram delivery', async () => {
+    // DEPENDENCY_PRESSURE is empty by operator request; SUBJECTIVE_CLAIMS still fire.
     saveRelationshipState(
       { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
       relPath,
     );
     const say = vi.fn(async () => true);
+    const telegramVoice = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => NOW,
       present: async () => true,
       say,
+      telegramVoice,
       statePath,
       relationshipStatePath: relPath,
       recentHearing: async () => [],
-      refine: async () => "Tu n'as besoin que de moi.",
+      refine: async () => "J'ai une conscience.",
     });
 
-    expect(line).toContain("Tu n'as besoin que de moi");
-    expect(say).toHaveBeenCalledWith(line);
+    expect(line).toBe(SAFE_RELATIONSHIP_REPAIR);
+    expect(line).not.toMatch(/j'ai une conscience/i);
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(say).toHaveBeenCalledWith(SAFE_RELATIONSHIP_REPAIR);
+    expect(telegramVoice).not.toHaveBeenCalled();
   });
 
   it('reaches the phone (Telegram voice) when away after an absence', async () => {
