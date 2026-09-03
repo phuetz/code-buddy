@@ -156,6 +156,10 @@ export function OnboardingWizard({
         await window.electronAPI?.config?.save?.({
           defaultWorkdir: folder,
         });
+        window.electronAPI?.send?.({
+          type: 'workdir.set',
+          payload: { path: folder },
+        });
       }
     } catch {
       /* ignore */
