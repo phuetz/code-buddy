@@ -384,12 +384,17 @@ export async function runCouncilPipeline(
   // whose recent history is consecutive failures are excluded from the seat,
   // and a judge whose CALL fails is penalised then REPLACED within the same
   // run — a dead judge must not cost a whole deliberation.
-  const pickedModels = new Set(picked.map((p) => p.c.model));
+  const deadModels = new Set(failures.map((f) => f.source));
+  const pickedModels = new Set(
+    [...picked.map((p) => p.c.model), ...answers.map((a) => a.displayName)].filter(
+      (model) => !deadModels.has(model),
+    ),
+  );
   const answersForJudge = answers.map((a) => ({
     content: a.content,
     ...(a.role?.label ? { roleLabel: a.role.label } : {}),
   }));
-  const excludedJudges = new Set<string>();
+  const excludedJudges = new Set<string>(deadModels);
   let verdict: JudgeVerdict = {
     kind: 'abstained',
     winnerIdx: null,
@@ -402,15 +407,23 @@ export async function runCouncilPipeline(
   };
   let judgeClient: CouncilChatClient | null = null;
 
+  const livingFallback = (): { candidate: CouncilCandidate; neutral: false } | null => {
+    for (const answer of answers) {
+      const candidate = candidates.find((c) => c.model === answer.displayName && !excludedJudges.has(c.model));
+      if (candidate) return { candidate, neutral: false };
+    }
+    return null;
+  };
+
   for (let attempt = 0; attempt < 2; attempt++) {
     let selection = selectNeutralJudge(
-      candidates.filter((c) => !excludedJudges.has(c.model)),
+      candidates.filter((c) => !excludedJudges.has(c.model) && !deadModels.has(c.model)),
       pickedModels,
       attempt === 0 ? opts.judge : undefined,
       scoreboard,
     );
-    if (!selection && attempt === 0 && picked[0]) {
-      selection = { candidate: picked[0].c, neutral: false };
+    if (!selection) {
+      selection = livingFallback();
     }
     if (!selection) break;
 

@@ -374,6 +374,31 @@ describe('runCouncilPipeline', () => {
     expect(sb.selectionBias('code', 'coder-dead')).toBeLessThan(0);
   });
 
+  it('does not ask a dead panel member to judge after it was replaced', async () => {
+    const candidates = [
+      candidate('prov-a', 'coder-dead'),
+      candidate('prov-b', 'coder-b'),
+      candidate('prov-c', 'coder-c'),
+    ];
+    const clients = {
+      'coder-dead': fakeClient('coder-dead', { answer: async () => Promise.reject(new Error('model not found')) }),
+      'coder-b': fakeClient('coder-b', {
+        answer: 'answer B from the living seat',
+        judgeJson: '{"scores":{"A":0.9,"B":0.4},"winner":"A","why":"ok"}',
+        synthesis: 'MERGED BY LIVING JUDGE',
+      }),
+      'coder-c': fakeClient('coder-c', { answer: 'answer C from the replacement seat' }),
+    };
+    const deps = makeDeps(candidates, clients);
+
+    const result = await runCouncilPipeline(TASK, { count: 2 }, deps);
+
+    expect(result.answers.map((a) => a.displayName).sort()).toEqual(['coder-b', 'coder-c']);
+    expect(result.verdict.judgeModel).not.toBe('coder-dead');
+    expect(result.verdict.kind).toBe('judged');
+    expect(result.synthesis).toBe('MERGED BY LIVING JUDGE');
+  });
+
   it('throws a typed error when no LLM is active', async () => {
     const deps = makeDeps([], {});
     await expect(runCouncilPipeline(TASK, {}, deps)).rejects.toBeInstanceOf(CouncilError);
