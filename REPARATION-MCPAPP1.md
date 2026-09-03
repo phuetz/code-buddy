@@ -104,7 +104,7 @@ Code de retour : 0
 ### Étape 6 : Commits Git dédiés
 
 Fichiers ajoutés un par un, nommément :
-- Commit `feat(mcp): structured patch and command approval elicitation` :
+- Commit `10c523174ed2ab1bae7653354aaef781cc3114cd` (`feat(mcp): structured patch and command approval elicitation`) :
   - `src/server/mcp/approval-elicitation.ts`
   - `src/mcp/approval-elicitation.ts`
   - `src/utils/confirmation-service.ts`
