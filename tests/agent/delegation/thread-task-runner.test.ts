@@ -85,6 +85,36 @@ describe('ThreadTaskRunner', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards a child stream in order and returns its final output', async () => {
+    const runner = new ThreadTaskRunner<string, TestOutput>({
+      parentBudget,
+      createAgent: ({ agentId }) => ({
+        async *execute(input) {
+          yield { type: 'message', text: `${agentId}:${input}:one` };
+          yield { type: 'message', text: `${agentId}:${input}:two` };
+        },
+        abortCurrentOperation() {},
+        dispose() {},
+      }),
+    });
+    const messages: string[] = [];
+    const drain = (async () => {
+      for await (const event of runner.events()) {
+        if (event.kind === 'message') messages.push((event.payload as TestOutput).text);
+      }
+    })();
+
+    const outcome = await runner.submit('alpha', 'turn');
+    await runner.close();
+    await drain;
+
+    expect(messages).toEqual(['alpha:turn:one', 'alpha:turn:two']);
+    expect(outcome).toMatchObject({
+      success: true,
+      output: { type: 'message', text: 'alpha:turn:two' },
+    });
+  });
+
   it('contains a throwing child so another child still completes', async () => {
     const runner = new ThreadTaskRunner<string, TestOutput>({
       parentBudget,

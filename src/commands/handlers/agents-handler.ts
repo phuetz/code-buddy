@@ -117,7 +117,7 @@ export interface AgentsInvocationOptions {
   threadDelegation?: WorkflowThreadDelegationOptions;
 }
 
-function resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
+export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
   const grok = process.env.GROK_API_KEY?.trim();
   const grokBase = process.env.GROK_BASE_URL?.trim();
   if (grok) {
@@ -392,7 +392,7 @@ export async function handleAgents(
       return textResult('No active workflow to stop.');
     }
     const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const stopCreds = resolveAgentsCredentials();
+    const stopCreds = _resolveAgentsCredentials();
     if (!('error' in stopCreds)) {
       const system = getMultiAgentSystem(stopCreds.apiKey, stopCreds.baseURL);
       system.stop();
@@ -498,7 +498,7 @@ export async function handleAgents(
   }
 
   // From here on (enable/run/plan), credentials are needed.
-  const creds = resolveAgentsCredentials();
+  const creds = _resolveAgentsCredentials();
   if ('error' in creds) {
     return textResult(creds.error);
   }

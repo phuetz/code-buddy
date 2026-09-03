@@ -14,3 +14,9 @@ Faire passer `/swarm`, puis `/team`, par `thread-delegation` avec les garanties 
 - Brique `/swarm`, vert :
   `npx vitest run tests/agent/delegation/thread-task-runner.test.ts tests/commands/swarm-thread-delegation.test.ts tests/agent/delegation/thread-delegation.test.ts tests/commands/agents-handler.test.ts`
   → 4 fichiers, 54 tests réussis. `npm run typecheck` → 0 erreur. ESLint ciblé sur 7 fichiers → 0 erreur.
+- Brique `/team`, rouge collé avant code produit :
+  `npx vitest run tests/commands/team-thread-delegation.test.ts`
+  → 1 fichier, 4 tests en échec : le runtime/raccord `_resetTeamHandlerForTests` n'existait pas encore et `/team run` n'était pas implémenté.
+- Brique `/team`, vert :
+  `npx vitest run tests/agent/delegation tests/agent/team-manager.test.ts tests/agent/teams-and-definitions.test.ts tests/commands/team-thread-delegation.test.ts tests/commands/gk34-headless-slash.test.ts tests/commands/agents-handler.test.ts tests/commands/swarm-thread-delegation.test.ts`
+  → 8 fichiers, 207 tests réussis. `npm run typecheck` → 0 erreur. ESLint ciblé sur 5 fichiers → 0 erreur.

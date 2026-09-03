@@ -9,7 +9,7 @@ import {
 
 /** A complete child agent adapted to the string-channel ThreadDelegation core. */
 export interface ThreadTaskAgent<TInput, TOutput> {
-  execute(input: TInput): Promise<TOutput>;
+  execute(input: TInput): Promise<TOutput> | AsyncIterable<TOutput>;
   abortCurrentOperation(): void;
   dispose(): void | Promise<void>;
   getSessionCost?(): number;
@@ -65,10 +65,19 @@ export class ThreadTaskRunner<TInput, TOutput> {
           processUserMessageStream: async function* (requestId: string) {
             const task = pendingTasks.get(requestId);
             if (!task) throw new Error(`Unknown delegated task request: ${requestId}`);
-            const output = await taskAgent.execute(task.input);
-            task.output = output;
-            task.hasOutput = true;
-            yield output;
+            const execution = taskAgent.execute(task.input);
+            if (Symbol.asyncIterator in Object(execution)) {
+              for await (const output of execution as AsyncIterable<TOutput>) {
+                task.output = output;
+                task.hasOutput = true;
+                yield output;
+              }
+            } else {
+              const output = (await execution) as TOutput;
+              task.output = output;
+              task.hasOutput = true;
+              yield output;
+            }
           },
           abortCurrentOperation: () => taskAgent.abortCurrentOperation(),
           dispose: () => taskAgent.dispose(),
