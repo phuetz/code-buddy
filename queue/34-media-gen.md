@@ -1,6 +1,6 @@
 # Vague — Galerie de génération image/vidéo (façon Genspark), props-driven
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/media-gen`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/media-gen`.
 
 ## But (inspiration Genspark image/video gen)
 La surface de génération d'images/vidéos : un composer (prompt + options) + une galerie masonry des résultats (chaque

@@ -6,7 +6,7 @@
  * pour falsifier ou confirmer chaque hypothèse logique sur les silences de 30 à 130 ms.
  *
  * Les tests sont conçus pour être ROUGES sur le code actuel, prouvant formellement
- * les défauts logiques identifiés dans le rapport REVUE-VOIX-GEMINI.md.
+ * les défauts logiques identifiés dans le rapport docs/reports/2026-09/REVUE-VOIX-GEMINI.md.
  */
 
 import { EventEmitter } from 'node:events';

@@ -11,7 +11,7 @@ Modèle : **brief auto-suffisant → `buddy --yolo -p` one-shot** dans un **work
 | 2 | **Agentic OS — Mission Control** | `agenticos-wt` / `feat/cowork-agentic-os` | `cowork/src/renderer/components/os/` | 🔄 tourne |
 | 3 | **Noyau — nouveaux tools agent** | `coretools-wt` / `feat/core-agent-tools` | `src/tools/` | 🔄 tourne |
 
-Briefs : `COWORK-APP-STUDIO-BRIEF.md`, `COWORK-AGENTIC-OS-BRIEF.md`, `CORE-AGENT-TOOLS-BRIEF.md`.
+Briefs : `docs/briefs/2026-07/COWORK-APP-STUDIO-BRIEF.md`, `docs/briefs/2026-07/COWORK-AGENTIC-OS-BRIEF.md`, `docs/briefs/2026-07/CORE-AGENT-TOOLS-BRIEF.md`.
 
 ## FILE (à lancer après gate+merge des dépendances)
 | # | Vague | Zone | Dépend de | Volume |
