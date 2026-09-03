@@ -32,6 +32,12 @@ export {
   SELF_DESCRIBE_TOOLS,
 } from './self-describe-tools.js';
 
+// Read-only release notes about the agent's own evolution
+export {
+  SELF_EVOLUTION_TOOL,
+  SELF_EVOLUTION_TOOLS,
+} from './self-evolution-tools.js';
+
 // Search tools
 export {
   SEARCH_TOOL,

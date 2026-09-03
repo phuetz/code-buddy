@@ -7,6 +7,11 @@ import {
   renderChangelogMarkdown,
   type ChangelogCommit,
 } from '../git/changelog.js';
+import {
+  queryEvolutionNotes,
+  readEvolutionNotes,
+  type EvolutionNote,
+} from '../self-model/evolution-notes.js';
 import { logger } from '../utils/logger.js';
 
 const GIT_LOG_FORMAT = '--format=%H%x00%s%x00%b';
@@ -18,6 +23,7 @@ export interface ChangelogCommandDependencies {
   cwd?: string;
   runGit?: ChangelogGitRunner;
   stdout?: (content: string) => void;
+  readEvolutionNotes?: (workDir: string) => Promise<EvolutionNote[]>;
 }
 
 export interface ChangelogCollectionOptions {
@@ -41,6 +47,9 @@ export interface CollectedChangelogCommits {
 interface ChangelogCliOptions extends ChangelogCollectionOptions {
   json: boolean;
   out?: string;
+  self?: boolean;
+  subject?: string;
+  limit?: string;
 }
 
 class GitCommandError extends Error {
@@ -248,11 +257,41 @@ function writeStdout(content: string, writer?: (content: string) => void): void 
   (writer ?? ((value) => process.stdout.write(value)))(`${content.trimEnd()}\n`);
 }
 
+/** Shared presenter for `buddy changelog --self` and `buddy self evolution`. */
+export function renderEvolutionNotesMarkdown(notes: readonly EvolutionNote[]): string {
+  if (notes.length === 0) return 'Aucune note d’évolution trouvée dans CHANGELOG.md.';
+  return [
+    '# Évolutions documentées de Code Buddy',
+    '',
+    ...notes.flatMap((note) => [
+      `## ${note.date ?? 'Date inconnue'} — ${note.title}`,
+      '',
+      ...note.facts.map((fact) => `- ${fact}`),
+      ...(note.variables.length > 0 ? [`- Variables : ${note.variables.map((value) => `\`${value}\``).join(', ')}`] : []),
+      ...(note.commands.length > 0 ? [`- Commandes : ${note.commands.map((value) => `\`${value}\``).join(', ')}`] : []),
+      ...(note.activation !== 'unspecified' ? [`- Activation : ${note.activation}`] : []),
+      '',
+    ]),
+  ].join('\n').trimEnd();
+}
+
+function parseSelfLimit(value: string | undefined): number {
+  if (value === undefined) return 5;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 50) {
+    throw new Error('--limit doit être un entier compris entre 1 et 50.');
+  }
+  return parsed;
+}
+
 export function createChangelogCommand(dependencies: ChangelogCommandDependencies = {}): Command {
   const command = new Command('changelog')
     .description('Générer des release notes depuis les Conventional Commits')
+    .option('--self', 'lire les notes d’évolution de CHANGELOG.md au lieu de l’historique Git')
     .option('--since <tag|YYYY-MM-DD|ref>', 'Début exclu de la plage, ou date YYYY-MM-DD')
     .option('--to <ref>', 'Fin incluse de la plage Git', 'HEAD')
+    .option('--subject <sujet>', 'filtrer les notes de soi par sujet (avec --self)')
+    .option('--limit <n>', 'nombre maximal de notes de soi (avec --self)', '5')
     .option('--out <CHANGELOG.md>', 'Préfixer les release notes dans ce fichier Markdown')
     .option('--json', 'Émettre la structure groupée en JSON sur stdout', false);
 
@@ -260,6 +299,27 @@ export function createChangelogCommand(dependencies: ChangelogCommandDependencie
     try {
       if (options.json && options.out) {
         throw new Error('`--json` et `--out` ne peuvent pas être utilisés ensemble.');
+      }
+
+      if (options.self) {
+        if (options.out) throw new Error('`--out` ne peut pas être utilisé avec `--self`.');
+        if (options.since !== undefined && !isIsoDate(options.since.trim())) {
+          throw new Error('Avec `--self`, --since doit être une date YYYY-MM-DD.');
+        }
+        if (options.since !== undefined) validateDate(options.since.trim());
+        const cwd = path.resolve(dependencies.cwd ?? process.cwd());
+        const notes = await (dependencies.readEvolutionNotes ?? (async (workDir: string) => readEvolutionNotes({ workDir })))(cwd);
+        const selected = queryEvolutionNotes(notes, {
+          ...(options.since ? { since: options.since.trim() } : {}),
+          ...(options.subject ? { subject: options.subject } : {}),
+          limit: parseSelfLimit(options.limit),
+        });
+        if (options.json) {
+          writeStdout(JSON.stringify({ kind: 'self_evolution', notes: selected }, null, 2), dependencies.stdout);
+        } else {
+          writeStdout(renderEvolutionNotesMarkdown(selected), dependencies.stdout);
+        }
+        return;
       }
 
       const collection = await collectChangelogCommits(options, dependencies);

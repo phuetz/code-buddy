@@ -163,6 +163,7 @@ search
 search_files
 search_multi
 self_describe
+self_evolution
 send_message
 session_search
 sessions_history

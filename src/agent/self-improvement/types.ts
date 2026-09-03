@@ -28,7 +28,7 @@ export interface Experience {
   /** Stable id (e.g. `run:<runId>:<frictionKey>` or `sensor:<...>`). */
   id: string;
   /** Where it came from. */
-  source: 'run' | 'sensor' | 'manual';
+  source: 'run' | 'sensor' | 'manual' | 'changelog';
   /** Short machine label for the situation (used to target a benchmark scenario). */
   kind: string;
   /** Human-readable description of the friction/opportunity. */
@@ -110,7 +110,7 @@ export interface GateOutcome {
 /** One accepted improvement, kept as an evolutionary stepping stone (DGM). */
 export interface ArchiveEntry {
   proposalId: string;
-  kind: ImprovementProposal['kind'] | 'tool' | 'skill';
+  kind: ImprovementProposal['kind'] | 'tool' | 'skill' | 'evolution-notes';
   targetScenarioId: string;
   experienceId?: string;
   delta: number;
@@ -122,6 +122,8 @@ export interface ArchiveEntry {
   createdAt: string;
   /** Sentinel for auditability, mirrors the learning-loop convention. */
   reviewedBy: string;
+  /** Origin of non-lesson archive entries, for example the project CHANGELOG. */
+  provenance?: 'changelog' | string;
 }
 
 export interface SelfImprovementCycleResult {

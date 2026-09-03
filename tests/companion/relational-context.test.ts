@@ -113,6 +113,36 @@ describe('buildRelationalContext — composition', () => {
     expect(ctx).toBe('<presence>seul</presence>');
   });
 
+  it('keeps self-evolution silent by default and injects at most three first-person lines when invited', async () => {
+    const block = async (): Promise<string> =>
+      'J’ai appris à mieux écouter.\nJ’ai appris à mieux vérifier.\nJ’ai appris à garder le fil.\nCette quatrième ligne doit disparaître.';
+
+    const disabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      selfEvolutionBlock: block,
+    });
+    expect(disabled).toBe('');
+
+    const enabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      includeSelfEvolution: true,
+      selfEvolutionBlock: block,
+    });
+    expect(enabled).toContain('<lisa_evolution>');
+    expect(enabled).toContain('J’ai appris à mieux écouter.');
+    expect(enabled).not.toContain('quatrième ligne');
+    expect(enabled).not.toMatch(/(?:src\/|tests\/|[0-9a-f]{12,})/i);
+    expect(enabled.split('\n')).toHaveLength(3);
+  });
+
   it('starts episode and presence reads concurrently while preserving prompt order', async () => {
     let episodeStarted = false;
     let presenceStarted = false;

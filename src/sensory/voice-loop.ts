@@ -1736,6 +1736,10 @@ export async function buildSpokenPromptAugmentation(
     }
   }
 
+  const evolutionGuard = relational.includes('<lisa_evolution>')
+    ? 'Les évolutions ci-dessous sont un contexte silencieux : ne les mentionne que si la personne te demande explicitement ce qui a changé chez toi.'
+    : '';
+
   // The shared snapshot contains only bounded symbolic observations (surface,
   // affect band, support/deliberation state and counters), never transcript
   // text. Unlike the richer facts/episode block above, it is part of the
@@ -1752,7 +1756,9 @@ export async function buildSpokenPromptAugmentation(
     /* continuity is best-effort and must never delay or break speech */
   }
 
-  return [memoryCallback, relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
+  return [memoryCallback, relational, evolutionGuard, sharedRelationship, guidance]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 async function prepareSpokenTurn(

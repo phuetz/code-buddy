@@ -28,6 +28,7 @@ import { EvolutionaryArchive } from '../../agent/self-improvement/evolutionary-a
 import {
   createDefaultRunExperienceSource,
   createDefaultSensorExperienceSource,
+  createDefaultEvolutionNotesExperienceSource,
 } from '../../agent/self-improvement/experience-source.js';
 import { CorpusStore } from '../../agent/self-improvement/rule-store.js';
 import { summarizeTrajectory } from '../../agent/self-improvement/execution-gate.js';
@@ -46,6 +47,7 @@ async function collectExperiences(): Promise<Experience[]> {
   const sources = [
     createDefaultRunExperienceSource({ limit: 10 }),
     createDefaultSensorExperienceSource({ limit: 10 }),
+    createDefaultEvolutionNotesExperienceSource({ workDir: process.cwd(), limit: 10 }),
   ];
   const collected = await Promise.all(
     sources.map(async (source) => {

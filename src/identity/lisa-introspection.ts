@@ -228,6 +228,14 @@ const DESCRIBE_PATTERNS = [
   /\b(?:explain|describe) your (?:architecture|memory|tools?|modules?|internal components?)\b/,
 ] as const;
 
+const EVOLUTION_PATTERNS = [
+  /\bqu est ce qui a change (?:chez|dans) (?:toi|vous)\b/,
+  /\b(?:quoi de neuf|quelles? evolutions?) (?:chez|pour|dans) (?:toi|vous)\b/,
+  /\b(?:qu as tu|qu avez vous) appris (?:recemment|depuis)\b/,
+  /\b(?:what changed|what s new) (?:about|with) (?:you|yourself)\b/,
+  /\bwhat have you learned recently\b/,
+] as const;
+
 const EXPLICIT_EXTERNAL_SCOPE =
   /\b(?:dans|de|du|sur|pour)\s+(?:(?:l|ce|cet|cette|ces|le|la|les|un|une|mon|ma|mes|notre|nos|votre|vos)\s+)?(?:code(?! buddy\b)|projet|serveur|module|application|site|interface|codebase|depot|repository)\b|\b(?:mon|ma|mes|notre|nos|ce|cet|cette|ces)\s+(?:code|projet|serveur|module|application|site|interface|codebase|depot|repository)\b|\b(?:this|my|our|the|the current)\s+(?:code|project|server|module|application|site|interface|codebase|repository)\b|\b(?:ton|votre) architecture (?:css|frontend|backend|web|du projet|de l application)\b/;
 
@@ -236,6 +244,15 @@ const EXPLICIT_PERSONAL_INTROSPECTION_SCOPE =
 
 function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+/** Whether a question asks specifically for documented changes to Lisa herself. */
+export function isLisaEvolutionRequest(raw: string): boolean {
+  const text = normalizeIntrospectionText(raw);
+  return (
+    matchesAny(text, EVOLUTION_PATTERNS) &&
+    (!EXPLICIT_PERSONAL_INTROSPECTION_SCOPE.test(text) || SELF_IMPLEMENTATION_TARGET.test(text))
+  );
 }
 
 /**
@@ -425,6 +442,10 @@ export function classifyLisaIntrospection(raw: string): LisaIntrospectionIntent 
   // deterministic epistemic boundary, even when the exact wording was not
   // listed in the broader descriptive patterns below.
   if (isLisaPrimarilySubjectiveConsciousnessQuestion(text)) {
+    return 'describe';
+  }
+
+  if (isLisaEvolutionRequest(text)) {
     return 'describe';
   }
 

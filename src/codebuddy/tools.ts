@@ -34,6 +34,7 @@ import {
 import {
   CORE_TOOLS,
   SELF_DESCRIBE_TOOLS,
+  SELF_EVOLUTION_TOOLS,
   MORPH_EDIT_TOOL,
   isMorphEnabled,
   SEARCH_TOOLS,
@@ -171,7 +172,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
-  CORE_TOOLS, SELF_DESCRIBE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
+  CORE_TOOLS, SELF_DESCRIBE_TOOLS, SELF_EVOLUTION_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
   SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS, LSP_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
@@ -181,6 +182,7 @@ export function getBuiltinToolNames(): string[] {
   const groups: CodeBuddyTool[][] = [
     CORE_TOOLS,
     SELF_DESCRIBE_TOOLS,
+    SELF_EVOLUTION_TOOLS,
     [MORPH_EDIT_TOOL],
     SEARCH_TOOLS,
     WORKSPACE_TOOLS,
@@ -267,6 +269,7 @@ export function initializeToolRegistry(): void {
   // Register all tool groups
   registerGroup(CORE_TOOLS);
   registerGroup(SELF_DESCRIBE_TOOLS);
+  registerGroup(SELF_EVOLUTION_TOOLS);
   registerGroup([CONTEXT_EXPAND_TOOL], () => process.env.CODEBUDDY_CONTEXT_ZOOM === 'true');
 
   // Register Morph tool separately with its own enabled check

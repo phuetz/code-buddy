@@ -160,6 +160,7 @@ async function* singleTextStream(text: string): AsyncGenerator<string, void, unk
 
 export {
   classifyLisaIntrospection,
+  isLisaEvolutionRequest,
   isLisaIntrospectionRequest,
 } from '../identity/lisa-introspection.js';
 export type { LisaIntrospectionIntent } from '../identity/lisa-introspection.js';
