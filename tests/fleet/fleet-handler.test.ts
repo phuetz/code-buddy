@@ -184,7 +184,28 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
     it('rejects without apiKey when env not set', async () => {
       const r = await handleFleet(['listen', 'ws://peer:3000/ws']);
-      expect(r.entry?.content).toContain('no apiKey provided');
+      expect(r.entry?.content).toMatch(/no apiKey|no jwt/i);
+    });
+
+    it('accepts jwt via --jwt without requiring --api-key (documented fleet token path)', async () => {
+      const r = await handleFleet([
+        'listen',
+        'ws://peer:3000/ws',
+        '--jwt',
+        'eyJ.test-token',
+        '--name',
+        'gpuNode',
+      ]);
+      expect(r.entry?.content).toContain('connected to');
+      expect(fleetListenerMock.constructorCalls).toHaveLength(1);
+      expect(fleetListenerMock.constructorCalls[0]?.url).toBe('ws://peer:3000/ws');
+      expect(fleetListenerMock.constructorCalls[0]?.jwt).toBe('eyJ.test-token');
+      expect(fleetListenerMock.constructorCalls[0]?.apiKey).toBeUndefined();
+    });
+
+    it('help documents --jwt for buddy fleet token', async () => {
+      const r = await handleFleet(['help']);
+      expect(r.entry?.content).toContain('--jwt');
     });
 
     it('accepts apiKey via --api-key flag', async () => {
