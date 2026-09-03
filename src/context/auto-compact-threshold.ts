@@ -2,7 +2,7 @@
  * Adaptive auto-compact threshold helper.
  *
  * Derived from the comparative audit Claude Code source vs Code Buddy
- * SmartCompactionEngine (claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
+ * SmartCompactionEngine (private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
  * Recommended #1 in the audit — adaptive buffer per model, scope M.
  *
  * Problem

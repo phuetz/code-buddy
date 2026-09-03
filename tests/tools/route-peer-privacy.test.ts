@@ -95,7 +95,7 @@ describe('route_peer privacy lint enforcement', () => {
     registerPeer('local-peer', 'local', 'ollama', ['reasoning']);
 
     const result = await executeRoutePeer({
-      prompt: 'Review the files under /home/patrice/private-project',
+      prompt: 'Review the files under /home/user/private-project',
       privacyTag: 'public',
     });
 

@@ -435,19 +435,19 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     const analyzer: VisionAnalyzer = {
       analyze: async () => ({
         success: true,
-        description: 'Contact test@example.com avec sk-proj-abcdefghijklmnopqrstuvwxyz dans /home/patrice/secret.txt',
+        description: 'Contact test@example.com avec sk-proj-abcdefghijklmnopqrstuvwxyz dans /home/user/secret.txt',
       }),
     };
     const unwire = wireVisionReaction({ analyzer, debounceMs: 0, cwd: tmp });
     try {
-      motion({ score: 0.5, camera: 'Kitchen-/home/patrice-sk-proj-secret' });
+      motion({ score: 0.5, camera: 'Kitchen-/home/user-sk-proj-secret' });
       await new Promise((resolve) => setTimeout(resolve, 60));
       const sent = bodies.join('\n');
       expect(sent).toContain('caméra locale');
       expect(sent).toContain('[REDACTED:pii-email]');
       expect(sent).toContain('[REDACTED:env-key]');
       expect(sent).not.toContain('test@example.com');
-      expect(sent).not.toContain('/home/patrice');
+      expect(sent).not.toContain('/home/user');
       expect(sent).not.toContain('Kitchen-');
     } finally {
       unwire();

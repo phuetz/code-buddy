@@ -67,7 +67,7 @@ describe('scanForSecrets', () => {
 
   it('detects private home paths', () => {
     const out = scanForSecrets(
-      'Help me debug this issue in /home/patrice/Documents/private',
+      'Help me debug this issue in /home/user/Documents/private',
     );
     expect(out.matches.some((m) => m.kind === 'private-path')).toBe(true);
   });
@@ -81,7 +81,7 @@ describe('scanForSecrets', () => {
 
   it('avoids overlapping matches when several patterns hit the same range', () => {
     const out = scanForSecrets(
-      'AIzaSyAbcdefghijklmnopqrstuvwxyz1234567A in /home/patrice/foo',
+      'AIzaSyAbcdefghijklmnopqrstuvwxyz1234567A in /home/user/foo',
     );
     // env-key + private-path should both register as separate matches.
     expect(out.matches.length).toBeGreaterThanOrEqual(2);

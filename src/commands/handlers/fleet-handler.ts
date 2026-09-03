@@ -1901,7 +1901,7 @@ async function handleAutonomous(rest: string[]): Promise<CommandHandlerResult> {
           'Enable in .codebuddy/config.toml:\n' +
           '  [autonomous_fleet]\n' +
           '  enabled = true\n' +
-          '  repo_path = "/path/to/claude-et-patrice"\n' +
+          '  repo_path = "/path/to/handover-repo"\n' +
           '  host = "ministar/grok-cli"\n' +
           '  interval_minutes = 30\n' +
           '  priority_threshold = "high"   # critical is always skipped\n' +

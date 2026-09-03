@@ -40,7 +40,7 @@ describe('shadow CLI directory option', () => {
       logs.push(String(message ?? ''));
     });
 
-    const directory = '/home/patrice/DEV/cb-repar-jumeaux-2026-09-02/tmp/shadow-r30-repo';
+    const directory = '/home/user/DEV/cb-repar-jumeaux-2026-09-02/tmp/shadow-r30-repo';
     await createShadowCommand().parseAsync(['node', 'shadow', 'status', '-d', directory]);
     expect(logs.some((line) => line.includes(`Repository: ${directory}`))).toBe(true);
 

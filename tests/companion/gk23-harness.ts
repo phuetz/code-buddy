@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, chmodSync, copyFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,11 +13,11 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 export const GK23_ROOT = path.join(REPO_ROOT, '_qa', 'gk23');
 export const APLAY_BIN = path.join(GK23_ROOT, 'bin', 'aplay');
 export const PIPER_BIN = '/usr/local/bin/piper';
-export const PIPER_MODEL = '/home/patrice/DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx';
-export const REAL_REMINDERS = '/home/patrice/.codebuddy/reminders.json';
-export const REAL_PENDING = '/home/patrice/.codebuddy/companion/pending-acks.json';
-export const REAL_LOG = '/home/patrice/.codebuddy/companion/reminder-log.jsonl';
-export const REAL_SNOOZES = '/home/patrice/.codebuddy/companion/snoozes.json';
+export const PIPER_MODEL = path.join(os.homedir(), 'DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx');
+export const REAL_REMINDERS = path.join(os.homedir(), '.codebuddy/reminders.json');
+export const REAL_PENDING = path.join(os.homedir(), '.codebuddy/companion/pending-acks.json');
+export const REAL_LOG = path.join(os.homedir(), '.codebuddy/companion/reminder-log.jsonl');
+export const REAL_SNOOZES = path.join(os.homedir(), '.codebuddy/companion/snoozes.json');
 
 const KEYS = [
   'HOME',

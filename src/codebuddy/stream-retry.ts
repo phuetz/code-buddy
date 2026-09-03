@@ -3,7 +3,7 @@
  * exponential-backoff retry on retryable errors.
  *
  * Derived from the comparative audit Gemini CLI vs Code Buddy
- * (claude-et-patrice/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
+ * (private-handover-repo/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
  * recommendation #1 — vrai gap, M scope).
  *
  * Problem
