@@ -75,7 +75,7 @@ Les 20 autres mutations ont rougi sur le test ciblé : annulation DELEG1 active
 et au démarrage, budget, attribution ; les sept contrats SERV1 ; les deux
 portes SANDBOX1 ; les quatre contrats IMPROVE1 ; et les trois tests TAUTFIX1.
 Le témoin complet avant et après les mutations est resté vert : 14 fichiers,
-169 tests.
+173 tests.
 
 ## Journal
 
@@ -87,6 +87,7 @@ Le témoin complet avant et après les mutations est resté vert : 14 fichiers,
   `git checkout -- <fichier>` avant la mutation suivante.
 * Aucun code de production ni test n’est conservé muté ; aucun push, service,
   API payante ou écriture dans le dépôt original.
+* Commit documentaire de preuve : `21986501b`.
 
 ## Vérifications finales
 
@@ -94,8 +95,9 @@ Le témoin complet avant et après les mutations est resté vert : 14 fichiers,
 |---|---|
 | `npx vitest run tests/agent/delegation/thread-delegation.test.ts tests/server/serv1-openai-completions-errors.test.ts tests/server/serv1-a2a-failed-status.test.ts tests/server/serv1-agentcard-public.test.ts tests/server/serv1-rate-limit-http.test.ts tests/server/serv1-openai-stream-notice.test.ts tests/security/native-sandbox.test.ts tests/agent/self-improvement/tool-gate.test.ts tests/agent/self-improvement/skill-gate.test.ts tests/agent/self-improvement/llm-tool-proposer.test.ts tests/commands/improve-skills-curation.test.ts tests/companion/proactive-engine.test.ts tests/commands/gk34-batch.test.ts tests/unit/config-command.test.ts tests/security/donnees-personnelles.test.ts --run` | **14 fichiers / 173 tests verts** avec HOME/TMPDIR temporaires |
 | `npx vitest run tests/security/donnees-personnelles.test.ts` | **1/1 vert** après restauration et rédaction du rapport |
+| `npx tsc --noEmit -p .` | **code 0** |
 | `git diff --check` | **code 0** |
-| `git status --short --branch` | source restaurée ; seuls rapport, coordination et `.gitignore` doivent rester modifiés, hors `node_modules` préexistant |
+| `git status --short --branch` | source restaurée et fichiers documentaires commités ; seul `node_modules` non-suivi préexistant demeure |
 
 ## Bilan
 
