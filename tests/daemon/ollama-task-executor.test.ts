@@ -70,4 +70,30 @@ describe('createLocalModelTaskExecutor', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/no baseUrl/);
   });
+
+  it('strips leaked <think> blocks from the artifact', async () => {
+    const fetchImpl = vi.fn(async () => okResponse(
+      '<think>I will pretend to edit add.mjs</think>\nexport function add(a, b) {\n  return a + b;\n}\n',
+    ));
+    const exec = createLocalModelTaskExecutor({ outputDir: dir, fetchImpl: fetchImpl as unknown as typeof fetch });
+    const result = await exec(TASK, LOCAL);
+    expect(result.ok).toBe(true);
+    const written = readFileSync(join(dir, 'task-haiku.md'), 'utf-8');
+    expect(written).not.toMatch(/<think>/);
+    expect(written).toContain('return a + b');
+  });
+
+  it('refuses a repo-edit task that needs the agent executor', async () => {
+    const fetchImpl = vi.fn(async () => okResponse('export function add(a, b) { return a + b; }'));
+    const exec = createLocalModelTaskExecutor({ outputDir: dir, fetchImpl: fetchImpl as unknown as typeof fetch });
+    const coding: ColabTask = {
+      ...TASK,
+      filesToModify: ['add.mjs'],
+      verifyCommand: 'node add.check.mjs',
+    };
+    const result = await exec(coding, LOCAL);
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/agent executor/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
