@@ -51,7 +51,7 @@ export class DefaultContextEngine implements ContextEngine {
       return messages;
     }
     // Force compression via prepareMessages (which triggers compact when needed)
-    return this.manager.prepareMessagesRaw(messages);
+    return this.manager.prepareMessagesRaw(messages, { reason: 'plugin' });
   }
 
   afterTurn(_messages: CodeBuddyMessage[], _response: CodeBuddyMessage): void {

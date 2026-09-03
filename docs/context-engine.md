@@ -49,6 +49,9 @@ Post-compaction cleanup (`src/context/transcript-repair.ts`):
 ## Pre-Compaction Memory Flush
 
 Before compaction triggers, a silent background LLM turn extracts durable facts and saves them to `MEMORY.md`. If the model returns `NO_REPLY` with no meaningful content, the output is suppressed entirely (no notification spam).
+User hooks may opt into `pre_compact` in `.codebuddy/hooks.json` using the existing `command` handler format.
+The hook receives the compaction payload as JSON on stdin; trimmed stdout is injected as `<preserved_context>` (maximum 2,000 characters).
+The hook is bounded to five seconds; failures are logged and ignored so compaction continues.
 
 ## Restorable Compression
 
