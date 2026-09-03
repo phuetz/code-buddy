@@ -14,6 +14,7 @@ import { createHash, randomUUID } from 'crypto';
 import * as yaml from 'yaml';
 import { scanSkillFirewall } from '../security/skill-scanner.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { getBundledSkillsPath } from './index.js';
 import { parseSkillFile } from './parser.js';
 import {
@@ -337,13 +338,8 @@ function parseManifest(packageDir: string): ExchangeManifest {
 
 function readTrustedKeys(): TrustedKeysFile {
   const file = trustedKeysPath();
-  if (!fs.existsSync(file)) return { schemaVersion: 1, keys: [] };
-  let raw: unknown;
-  try {
-    raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as unknown;
-  } catch (error) {
-    throw new Error(`Malformed trusted-key store: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const raw = readJsonAtomicSync<unknown>(file, null);
+  if (raw === null) return { schemaVersion: 1, keys: [] };
   if (!isRecord(raw) || raw.schemaVersion !== 1 || !Array.isArray(raw.keys)) {
     throw new Error('Malformed trusted-key store');
   }
@@ -366,9 +362,7 @@ function readTrustedKeys(): TrustedKeysFile {
 function writeTrustedKeys(store: TrustedKeysFile): void {
   fs.mkdirSync(signingDir(), { recursive: true, mode: 0o700 });
   const destination = trustedKeysPath();
-  const temporary = `${destination}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(store, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  fs.renameSync(temporary, destination);
+  writeJsonAtomicSync(destination, store, { mode: 0o600 });
 }
 
 /** List explicitly trusted exchange author keys. */
@@ -537,7 +531,7 @@ function writeExchangeProvenance(skillFile: string, name: string, author: string
     installedAt,
     pinned: true,
   };
-  fs.writeFileSync(skillFile, `---\n${yaml.stringify(metadata)}---\n\n${(match[2] ?? '').trim()}\n`, 'utf-8');
+  writeFileAtomicSync(skillFile, `---\n${yaml.stringify(metadata)}---\n\n${(match[2] ?? '').trim()}\n`);
 }
 
 /** Verify and install a signed skill package under the managed imported namespace. */

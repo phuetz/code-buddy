@@ -19,6 +19,7 @@ import {
 import { BUILTIN_THEMES, DEFAULT_THEME } from './default-themes.js';
 import { themeSchema, themePreferencesSchema } from './theme-schema.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Singleton manager for themes and avatars
@@ -90,8 +91,8 @@ export class ThemeManager {
         if (file.endsWith('.json')) {
           try {
             const filePath = path.join(this.themesDir, file);
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const parsed = JSON.parse(content);
+            const parsed = readJsonAtomicSync<unknown>(filePath, null);
+            if (!parsed) continue;
 
             // Validate theme structure with Zod
             const validationResult = themeSchema.safeParse(parsed);
@@ -125,8 +126,8 @@ export class ThemeManager {
         return;
       }
 
-      const content = fs.readFileSync(this.preferencesPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = readJsonAtomicSync<unknown>(this.preferencesPath, null);
+      if (!parsed) return;
 
       // Validate preferences structure with Zod
       const validationResult = themePreferencesSchema.safeParse(parsed);
@@ -172,7 +173,7 @@ export class ThemeManager {
         customColors: Object.keys(this.customColors).length > 0 ? this.customColors : undefined,
       };
 
-      fs.writeFileSync(this.preferencesPath, JSON.stringify(preferences, null, 2));
+      writeJsonAtomicSync(this.preferencesPath, preferences);
     } catch (_error) {
       logger.warn('Failed to save theme preferences', { source: 'ThemeManager' });
     }
@@ -335,7 +336,7 @@ export class ThemeManager {
     try {
       this.ensureDirectoryExists(this.themesDir);
       const filePath = path.join(this.themesDir, `${theme.id}.json`);
-      fs.writeFileSync(filePath, JSON.stringify(theme, null, 2));
+      writeJsonAtomicSync(filePath, theme);
     } catch (_error) {
       logger.warn(`Failed to save custom theme: ${theme.id}`, { source: 'ThemeManager' });
     }

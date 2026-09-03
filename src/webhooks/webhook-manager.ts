@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface WebhookConfig {
   id: string;
@@ -152,27 +153,20 @@ export class WebhookManager {
   }
 
   private load(): void {
-    try {
-      if (existsSync(this.configPath)) {
-        const data = JSON.parse(readFileSync(this.configPath, 'utf-8'));
-        if (Array.isArray(data)) {
-          for (const hook of data) {
-            this.webhooks.set(hook.id, hook);
-          }
-        }
+    const data = readJsonAtomicSync<WebhookConfig[]>(this.configPath, [], {
+      mode: 0o600,
+      isValid: (value): value is WebhookConfig[] => Array.isArray(value),
+    });
+    for (const hook of data) {
+      if (hook && typeof hook.id === 'string') {
+        this.webhooks.set(hook.id, hook);
       }
-    } catch {
-      // Start with empty webhooks on load failure
     }
   }
 
   private save(): void {
     try {
-      const dir = dirname(this.configPath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-      writeFileSync(this.configPath, JSON.stringify(this.list(), null, 2));
+      writeJsonAtomicSync(this.configPath, this.list(), { mode: 0o600 });
     } catch {
       // Silently fail on save errors
     }

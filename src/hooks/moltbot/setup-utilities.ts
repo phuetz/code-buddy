@@ -19,6 +19,7 @@ import {
   DEFAULT_INTRO_HOOK_TEMPLATE,
   DEFAULT_GLOBAL_INTRO_TEMPLATE,
 } from "./config.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 // ============================================================================
 // Setup Check
@@ -149,7 +150,7 @@ export function setupMoltbotHooks(
   if (options.projectLevel !== false) {
     const projectConfigPath = path.join(projectDir, "moltbot-hooks.json");
     try {
-      fs.writeFileSync(projectConfigPath, JSON.stringify(config, null, 2));
+      writeJsonAtomicSync(projectConfigPath, config, { mode: 0o600 });
       result.filesCreated.push(projectConfigPath);
     } catch (error) {
       result.errors.push(`Failed to create project config: ${error}`);
@@ -184,14 +185,14 @@ export function disableMoltbotHooks(workingDirectory: string = process.cwd()): v
 
   if (fs.existsSync(configPath)) {
     try {
-      const content = fs.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(content) as MoltbotHooksConfig;
+      const config = readJsonAtomicSync<MoltbotHooksConfig | null>(configPath, null, { mode: 0o600 });
+      if (!config) return;
 
       config.intro.enabled = false;
       config.persistence.enabled = false;
       config.commandLog.enabled = false;
 
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      writeJsonAtomicSync(configPath, config, { mode: 0o600 });
     } catch {
       // Ignore errors
     }

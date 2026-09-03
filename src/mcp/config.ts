@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { getSettingsManager } from "../utils/settings-manager.js";
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type { MCPServerConfig, MCPConfig } from "./types.js";
 
 // Re-export types for backwards compatibility
@@ -52,7 +53,7 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   const projectMCPPath = path.join(process.cwd(), '.codebuddy', 'mcp.json');
   if (fs.existsSync(projectMCPPath)) {
     try {
-      const projectMCP = JSON.parse(fs.readFileSync(projectMCPPath, 'utf-8'));
+      const projectMCP = readJsonAtomicSync<Record<string, unknown>>(projectMCPPath, {});
       const mcpServers = projectMCP.mcpServers || projectMCP.servers || {};
 
       for (const [name, config] of Object.entries(mcpServers)) {
@@ -91,7 +92,7 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   const userMCPPath = path.join(os.homedir(), '.codebuddy', 'mcp.json');
   if (fs.existsSync(userMCPPath)) {
     try {
-      const userMCP = JSON.parse(fs.readFileSync(userMCPPath, 'utf-8'));
+      const userMCP = readJsonAtomicSync<Record<string, unknown>>(userMCPPath, {});
       const mcpServers = userMCP.mcpServers || userMCP.servers || {};
 
       for (const [name, config] of Object.entries(mcpServers)) {
@@ -161,7 +162,8 @@ function updateEnabledInJsonFile(
   enabled: boolean,
 ): boolean {
   if (!fs.existsSync(filePath)) return false;
-  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+  const parsed = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null);
+  if (!parsed) return false;
   const key = parsed.mcpServers && typeof parsed.mcpServers === 'object' ? 'mcpServers' : 'servers';
   const servers = parsed[key];
   if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return false;
@@ -169,7 +171,7 @@ function updateEnabledInJsonFile(
   const existing = record[serverName];
   if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
   record[serverName] = { ...existing, enabled };
-  fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`);
+  writeJsonAtomicSync(filePath, parsed);
   return true;
 }
 
@@ -257,7 +259,7 @@ export function saveProjectMCPConfig(servers: Record<string, MCPServerConfig>): 
     mcpServers: servers
   };
 
-  fs.writeFileSync(projectMCPPath, JSON.stringify(config, null, 2));
+  writeJsonAtomicSync(projectMCPPath, config);
   return projectMCPPath;
 }
 
@@ -316,7 +318,7 @@ export function createMCPConfigTemplate(): string {
     }
   };
 
-  fs.writeFileSync(projectMCPPath, JSON.stringify(template, null, 2));
+  writeJsonAtomicSync(projectMCPPath, template);
   return projectMCPPath;
 }
 

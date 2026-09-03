@@ -20,6 +20,7 @@ import { EmbeddingCache, getEmbeddingCache, EmbeddingCacheStats } from './embedd
 import { SearchResultsCache, getSearchResultsCache, SearchCacheStats } from './search-results-cache.js';
 import { getCacheConfig, UnifiedCacheConfig } from './cache-config.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 
 // ============================================================================
@@ -1034,7 +1035,6 @@ export class CacheManager extends EventEmitter {
    * Persist all cache state to disk for long sessions
    */
   async persistToDisk(basePath: string = '.codebuddy/cache'): Promise<void> {
-    const fs = await import('fs/promises');
     const path = await import('path');
     const { existsSync, mkdirSync } = await import('fs');
 
@@ -1049,14 +1049,14 @@ export class CacheManager extends EventEmitter {
 
       // Write state file
       const statePath = path.join(basePath, 'cache-manager-state.json');
-      await fs.writeFile(statePath, JSON.stringify(state, null, 2));
+      await writeJsonAtomic(statePath, state);
 
       // Write metrics history
       const metricsPath = path.join(basePath, 'metrics-history.json');
-      await fs.writeFile(metricsPath, JSON.stringify({
+      await writeJsonAtomic(metricsPath, {
         history: this.metricsHistory,
         savedAt: Date.now(),
-      }, null, 2));
+      });
 
       logger.debug(`Cache state persisted to ${basePath}`);
       this.emit('persist:complete', { path: basePath });
@@ -1070,7 +1070,6 @@ export class CacheManager extends EventEmitter {
    * Restore cache state from disk
    */
   async restoreFromDisk(basePath: string = '.codebuddy/cache'): Promise<boolean> {
-    const fs = await import('fs/promises');
     const path = await import('path');
     const { existsSync } = await import('fs');
 
@@ -1083,8 +1082,8 @@ export class CacheManager extends EventEmitter {
 
     try {
       // Read state file
-      const stateContent = await fs.readFile(statePath, 'utf-8');
-      const state = JSON.parse(stateContent);
+      const state = await readJsonAtomic<Awaited<ReturnType<CacheManager['exportCacheState']>> | null>(statePath, null);
+      if (!state) return false;
 
       // Check if state is too old (more than 24 hours)
       const maxAge = 24 * 60 * 60 * 1000;
@@ -1099,12 +1098,13 @@ export class CacheManager extends EventEmitter {
       // Try to restore metrics history
       const metricsPath = path.join(basePath, 'metrics-history.json');
       if (existsSync(metricsPath)) {
-        const metricsContent = await fs.readFile(metricsPath, 'utf-8');
-        const metricsData = JSON.parse(metricsContent);
+        const metricsData = await readJsonAtomic<{
+          history?: Array<{ timestamp: number; stats: UnifiedCacheStats }>;
+        } | null>(metricsPath, null);
 
         // Only restore recent metrics (last hour)
         const oneHourAgo = Date.now() - 60 * 60 * 1000;
-        this.metricsHistory = (metricsData.history || []).filter(
+        this.metricsHistory = (metricsData?.history || []).filter(
           (m: { timestamp: number }) => m.timestamp > oneHourAgo
         );
       }

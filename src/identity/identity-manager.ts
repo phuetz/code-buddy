@@ -14,6 +14,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { watch, type FSWatcher } from 'fs';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -139,7 +140,7 @@ export class IdentityManager extends EventEmitter {
 
     try {
       await fs.mkdir(dirPath, { recursive: true });
-      await fs.writeFile(filePath, content, 'utf-8');
+      await writeFileAtomic(filePath, content, { mode: 0o600 });
 
       const stat = await fs.stat(filePath);
       const file: IdentityFile = {

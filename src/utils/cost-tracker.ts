@@ -3,6 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
 import { getAnalyticsRepository, AnalyticsRepository } from '../database/repositories/analytics-repository.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 /**
  * Detect models served EXCLUSIVELY via the ChatGPT subscription auth
@@ -145,10 +146,13 @@ export class CostTracker extends EventEmitter {
 
   private loadConfig(): void {
     try {
-      if (fs.existsSync(this.configPath)) {
-        const saved = fs.readJsonSync(this.configPath);
-        this.config = { ...this.config, ...saved };
-      }
+      const saved = readJsonAtomicSync<Partial<CostConfig> | null>(this.configPath, null, {
+        mode: 0o600,
+        isValid: (value): value is Partial<CostConfig> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (saved) this.config = { ...this.config, ...saved };
     } catch (_error) {
       // Use defaults
     }
@@ -156,9 +160,7 @@ export class CostTracker extends EventEmitter {
 
   private saveConfig(): void {
     try {
-      const dir = path.dirname(this.configPath);
-      fs.ensureDirSync(dir);
-      fs.writeJsonSync(this.configPath, this.config, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, this.config, { mode: 0o600 });
     } catch (_error) {
       // Ignore
     }
@@ -168,8 +170,11 @@ export class CostTracker extends EventEmitter {
     if (!this.config.trackHistory) return;
 
     try {
-      if (fs.existsSync(this.historyPath)) {
-        const saved = fs.readJsonSync(this.historyPath);
+      const saved = readJsonAtomicSync<Array<{ timestamp: string | Date; inputTokens: number; outputTokens: number; model: string; cost: number }> | null>(this.historyPath, null, {
+        mode: 0o600,
+        isValid: (value): value is Array<{ timestamp: string | Date; inputTokens: number; outputTokens: number; model: string; cost: number }> => Array.isArray(value),
+      });
+      if (saved) {
         this.history = saved.map((u: { timestamp: string | Date; inputTokens: number; outputTokens: number; model: string; cost: number }) => ({
           ...u,
           timestamp: new Date(u.timestamp),
@@ -189,9 +194,7 @@ export class CostTracker extends EventEmitter {
     if (!this.config.trackHistory) return;
 
     try {
-      const dir = path.dirname(this.historyPath);
-      fs.ensureDirSync(dir);
-      fs.writeJsonSync(this.historyPath, this.history, { spaces: 2 });
+      writeJsonAtomicSync(this.historyPath, this.history, { mode: 0o600 });
     } catch (_error) {
       // Ignore
     }

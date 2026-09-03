@@ -17,6 +17,7 @@ import os from 'os';
 import { randomUUID } from 'crypto';
 import { getSkillRegistry } from '../../skills/registry.js';
 import { logger } from '../../utils/logger.js';
+import { writeFileAtomicSync } from '../../utils/atomic-write.js';
 import { scanSkillFirewall } from '../../security/skill-scanner.js';
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
 import type { SkillSpec } from './skill-types.js';
@@ -232,7 +233,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     }
     const dir = this.dirFor(spec.name);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this.skillFile(spec.name), content, 'utf-8');
+    writeFileAtomicSync(this.skillFile(spec.name), content);
     this.reload(spec.name);
     return { name: spec.name };
   }
@@ -245,7 +246,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     const withFm = ensureFrontmatter(name, description, newContent);
     const gate = safetyGateSkill(withFm);
     if (!gate.ok) return gate;
-    fs.writeFileSync(this.skillFile(name), withFm, 'utf-8');
+    writeFileAtomicSync(this.skillFile(name), withFm);
     this.reload(name);
     return { ok: true, reasons: [] };
   }
@@ -336,7 +337,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     const content = this.readContent(name);
     if (content === null) return false;
     const withFm = ensureFrontmatter(name, '', content);
-    fs.writeFileSync(this.skillFile(name), setPinned(withFm, value), 'utf-8');
+    writeFileAtomicSync(this.skillFile(name), setPinned(withFm, value));
     this.reload(name);
     return true;
   }

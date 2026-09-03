@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'events';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Security Modes - Inspired by OpenAI Codex CLI
@@ -241,7 +242,7 @@ export class SecurityModeManager extends EventEmitter {
       )
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(configToSave, null, 2));
+    writeJsonAtomicSync(configPath, configToSave, { mode: 0o600 });
   }
 
   /**

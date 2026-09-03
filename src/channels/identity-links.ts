@@ -24,6 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
@@ -398,9 +399,7 @@ export class IdentityLinker extends EventEmitter {
       identities: Array.from(this.canonicals.values()),
     };
 
-    const dir = path.dirname(this.config.persistPath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(this.config.persistPath, JSON.stringify(data, null, 2));
+    await writeJsonAtomic(this.config.persistPath, data, { mode: 0o600 });
     this.dirty = false;
   }
 
@@ -411,12 +410,22 @@ export class IdentityLinker extends EventEmitter {
     if (!this.config.persistPath) return;
 
     try {
-      const content = await fs.readFile(this.config.persistPath, 'utf-8');
-      const data = JSON.parse(content) as {
+      const data = await readJsonAtomic<{
         version: number;
         idCounter: number;
         identities: CanonicalIdentity[];
-      };
+      } | null>(this.config.persistPath, null, {
+        mode: 0o600,
+        isValid: (value): value is {
+          version: number;
+          idCounter: number;
+          identities: CanonicalIdentity[];
+        } => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          Array.isArray((value as { identities?: unknown }).identities),
+        ),
+      });
+      if (!data) return;
 
       this.idCounter = data.idCounter || 0;
       this.canonicals.clear();

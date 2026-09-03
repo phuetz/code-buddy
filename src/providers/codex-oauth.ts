@@ -30,6 +30,7 @@ import * as path from 'path';
 import * as os from 'os';
 import open from 'open';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** OpenAI's public OAuth client id for the Codex CLI. Not a secret —
  *  identifies the application to the IdP, paired with PKCE for security.
@@ -102,18 +103,9 @@ export interface ChatGptAuth {
 // Storage
 // ─────────────────────────────────────────────────────────────────────
 
-function ensureConfigDir(): void {
-  const dir = path.dirname(AUTH_FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
 function loadAuthFile(): CodexAuthDotJson | null {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return null;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8');
-    return JSON.parse(raw) as CodexAuthDotJson;
+    return readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
   } catch (err) {
     logger.error('Error reading codex-auth.json', err instanceof Error ? err : { error: String(err) });
     return null;
@@ -122,14 +114,7 @@ function loadAuthFile(): CodexAuthDotJson | null {
 
 function saveAuthFile(auth: CodexAuthDotJson): void {
   try {
-    ensureConfigDir();
-    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(auth, null, 2), 'utf-8');
-    // Restrict permissions on Unix (0o600 = owner read/write only).
-    if (process.platform !== 'win32') {
-      try {
-        fs.chmodSync(AUTH_FILE_PATH, 0o600);
-      } catch { /* non-fatal */ }
-    }
+    writeJsonAtomicSync(AUTH_FILE_PATH, auth, { mode: 0o600 });
   } catch (err) {
     logger.error('Error writing codex-auth.json', err instanceof Error ? err : { error: String(err) });
   }
@@ -150,10 +135,8 @@ export function clearCodexCredentials(): void {
  *  provider auto-detection (no token loading, just file presence). */
 export function hasCodexCredentials(): boolean {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return false;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8').trim();
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as CodexAuthDotJson;
+    const parsed = readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
+    if (!parsed) return false;
     return Boolean(parsed.tokens?.access_token);
   } catch {
     return false;
