@@ -13,6 +13,8 @@ mod bus;
 mod event;
 mod organs;
 mod senses;
+#[cfg(feature = "pocket-tts")]
+mod tts;
 
 use tokio::sync::{broadcast, mpsc};
 
@@ -69,6 +71,18 @@ fn compute_audio_events(path: &str) -> Result<Vec<SensoryEvent>, String> {
 async fn main() {
     // `buddy-sense stt` → run the in-process STT worker (JSONL on stdin/stdout) and
     // never return. Built only with `--features stt`; a clear error otherwise.
+    if std::env::args().skip(1).any(|a| a == "tts") {
+        #[cfg(feature = "pocket-tts")]
+        {
+            tts::run_cli();
+        }
+        #[cfg(not(feature = "pocket-tts"))]
+        {
+            eprintln!("[buddy-sense] `tts` requires building with --features pocket-tts");
+            std::process::exit(2);
+        }
+    }
+
     if std::env::args().skip(1).any(|a| a == "stt") {
         #[cfg(feature = "stt")]
         {
