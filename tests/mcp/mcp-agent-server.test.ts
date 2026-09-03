@@ -65,6 +65,7 @@ jest.mock('../../src/utils/confirmation-service', () => ({
     getInstance: jest.fn().mockReturnValue({
       setSessionFlag: jest.fn(),
       getSessionFlags: jest.fn().mockReturnValue({ allOperations: true }),
+      setMcpApprovalBridge: jest.fn(),
     }),
   },
 }));
@@ -179,26 +180,37 @@ jest.mock('../../src/tools/bash/index', () => ({
 }));
 
 // Mock MCP SDK
-const registeredTools = new Map<string, { description: string; schema: unknown; handler: Function }>();
-const registeredResources = new Map<string, { uri: string; options: unknown; handler: Function }>();
-const registeredPrompts = new Map<string, { description: string; schema: unknown; handler: Function }>();
+type ToolHandler = (args: Record<string, unknown>) => Promise<{
+  content: Array<{ text: string }>;
+  isError?: boolean;
+}>;
+type ResourceHandler = () => Promise<{
+  contents: Array<{ uri: string; text: string; mimeType?: string }>;
+}>;
+type PromptHandler = (args: Record<string, unknown>) => {
+  messages: Array<{ role: string; content: { text: string } }>;
+};
+
+const registeredTools = new Map<string, { description: string; schema: unknown; handler: ToolHandler }>();
+const registeredResources = new Map<string, { uri: string; options: unknown; handler: ResourceHandler }>();
+const registeredPrompts = new Map<string, { description: string; schema: unknown; handler: PromptHandler }>();
 
 jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: jest.fn().mockImplementation(function() { return {
-    registerTool: jest.fn((name: string, config: { description?: string; inputSchema?: unknown }, handler: Function) => {
+    registerTool: jest.fn((name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolHandler) => {
       registeredTools.set(name, {
         description: config.description ?? '',
         schema: config.inputSchema,
         handler,
       });
     }),
-    tool: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
+    tool: jest.fn((name: string, description: string, schema: unknown, handler: ToolHandler) => {
       registeredTools.set(name, { description, schema, handler });
     }),
-    resource: jest.fn((name: string, uri: string, options: unknown, handler: Function) => {
+    resource: jest.fn((name: string, uri: string, options: unknown, handler: ResourceHandler) => {
       registeredResources.set(name, { uri, options, handler });
     }),
-    prompt: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
+    prompt: jest.fn((name: string, description: string, schema: unknown, handler: PromptHandler) => {
       registeredPrompts.set(name, { description, schema, handler });
     }),
     connect: jest.fn().mockResolvedValue(undefined),
@@ -350,6 +362,7 @@ describe('MCP Agent Intelligence Layer', () => {
 
       expect(result.content).toBeDefined();
       expect(result.content[0].text).toContain('Hello from agent');
+      expect(mockProcessUserMessage).toHaveBeenCalledWith('Hello');
     });
 
     it('should handle errors gracefully', async () => {
@@ -370,6 +383,8 @@ describe('MCP Agent Intelligence Layer', () => {
 
       expect(result.content).toBeDefined();
       expect(result.content[0].text).toContain('Hello from agent');
+      expect(mockNeedsOrchestration).toHaveBeenCalledWith('read a file');
+      expect(mockProcessUserMessage).toHaveBeenCalledWith('read a file');
     });
 
     it('should use executePlan for complex tasks', async () => {
@@ -379,6 +394,7 @@ describe('MCP Agent Intelligence Layer', () => {
 
       expect(result.content).toBeDefined();
       expect(result.content[0].text).toContain('Plan executed');
+      expect(mockExecutePlan).toHaveBeenCalledWith('refactor the entire module');
     });
 
     it('should handle errors gracefully', async () => {
@@ -397,7 +413,9 @@ describe('MCP Agent Intelligence Layer', () => {
       const result = await handler({ task: 'build a feature' });
 
       expect(result.content).toBeDefined();
-      expect(mockProcessUserMessage).toHaveBeenCalled();
+      expect(result.content[0].text).toContain('Hello from agent');
+      expect(mockProcessUserMessage).toHaveBeenCalledWith('build a feature');
+      expect(CodeBuddyAgent.mock.results[0].value.agentMode).toBe('plan');
     });
   });
 
