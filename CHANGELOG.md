@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### RANG1 — les rapports de lanes quittent la racine (3 septembre 2026)
+
+121 rapports `RAPPORT-*`, `REPARATION-*`, `REVUE-*`, `AUDIT-*`, `BILAN-*`, `BANC-*`
+déplacés vers `docs/reports/<AAAA-MM>/` selon leur date d'ajout, références
+réparées (docs, tests, scripts, coordination), convention dans
+`docs/reports/README.md`. La racine ne garde que README, CHANGELOG, CLAUDE,
+AGENTS, CONTRIBUTING, SECURITY et CODE_OF_CONDUCT.
+
 ### FLOWFIX1 — le pilote Flow/Veo soumet à nouveau (3 septembre 2026)
 
 Cause : le bouton « Créer » reste `aria-disabled="true"` tant que l'éditeur
