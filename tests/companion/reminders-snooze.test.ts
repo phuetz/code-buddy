@@ -152,7 +152,9 @@ describe('runReminderTick re-announces a due snooze', () => {
       say: async () => {
         throw new Error('speaker down');
       },
-      notify: async () => {},
+      notify: async () => {
+        throw new Error('telegram down');
+      },
     };
 
     await runReminderTick(new Date(1500), deps);
