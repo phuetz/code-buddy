@@ -193,6 +193,41 @@ alpha filesChanged attendu ["alpha.js"], reçu ["alpha.js", "beta.js"]
 EXIT_CODE=1
 ```
 
+### Preuve finale — tentative 5, code 0
+
+Avant le lancement, `HOME=$PWD/.deleg1-home ollama ps` ne montrait qu'un seul
+modèle actif : `qwen3:4b-instruct`, 100 % GPU. Aucun fournisseur distant ni
+clé d'API n'était présent dans l'environnement du harnais.
+
+```text
+MODEL=qwen3:4b-instruct
+[before:beta:done] 868.0ms
+[before:alpha:done] 1454.6ms
+[before:verified] {"alpha":21,"beta":34} total=1454.8ms
+[after:+1120.4ms:beta:status] {"state":"turn_started","turn":1,"maxTurns":6}
+[after:+1340.4ms:alpha:status] {"state":"turn_started","turn":1,"maxTurns":6}
+[after:+15222.4ms:alpha:tool_calls] create_file(alpha.js)
+[after:+20656.8ms:beta:tool_calls] create_file(beta.js)
+[after:+27076.3ms:alpha:done] {"state":"closed","turns":1}
+[after:+31271.5ms:beta:done] {"state":"closed","turns":1}
+Completed: 2/2 (0 failed)
+Files: alpha.js / Files: beta.js
+[after:verified] {"alpha":21,"beta":34} total=31272.0ms overlap=25735.9ms
+SUMMARY={"beforeTotalMs":1454.8,"afterTotalMs":31272,"overlapMs":25735.9,"eventCount":51,...}
+EXIT_CODE=0
+```
+
+Comparaison honnête : le rejeu de l'ancien `chat()` par fichier est beaucoup
+plus rapide sur ce micro-cas chaud (1,45 s contre 31,27 s, environ 21,5 fois).
+Le nouveau chemin paie le prompt système, la sélection d'outils et la boucle
+agentique ; son gain ici est fonctionnel, pas chronométrique : vrais appels
+`create_file`, contextes et budgets séparés, 51 événements multiplexés, et
+25,74 s de chevauchement réel. La ligne « Total time: 58.3s » de l'UI somme
+les durées unitaires ; le temps mural mesuré par le harnais est 31,27 s.
+
+Porte ESLint du harnais, rouge puis corrigée : import type `StreamingChunk`
+inutilisé (1 erreur, code 1), supprimé avant commit.
+
 ## Vérifications finales
 
 À compléter.
