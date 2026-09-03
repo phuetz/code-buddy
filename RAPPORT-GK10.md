@@ -29,7 +29,8 @@ Rapport créé **avant toute inspection** du code des canaux, des alertes, des c
 |---|---|
 | 2026-09-03 (démarrage) | Rapport créé **avant inspection**. Coordination réservée. HOME temporaire : `_qa/gk10/home`. |
 | 2026-09-03 (inspection) | Lecture de la doc canaux, du client Telegram, des alertes, des handlers CLI et des tests existants. |
-| 2026-09-03 (lot 1) | Écart E1 : `TELEGRAM_API_BASE` n’existait pas (constante figée `https://api.telegram.org`). Test rouge 3/3, correctif, vert 5/5 + 38 ciblés. |
+| 2026-09-03 (lot 1) | Écart E1 : `TELEGRAM_API_BASE` n’existait pas (constante figée `https://api.telegram.org`). Test rouge 3/3, correctif, vert 5/5 + 38 ciblés. Commit `73d8f7915`. |
+| 2026-09-03 (lot 2) | Faux Bot API `_qa/gk10/fake-telegram.mjs` : getMe, getUpdates (long poll), sendMessage, sendVoice, sendPhoto, answerCallbackQuery, journal avec jeton masqué. 3/3 tests HTTP verts. |
 
 ## Plan d’exécution (annoncé avant lecture)
 
@@ -90,7 +91,7 @@ Les alertes vocale utilisent `CODEBUDDY_SENSORY_ALERT_TOKEN`/`_CHAT`, pas le jet
 
 | Étape | Écart | Correctif | Commit |
 |---|---|---|---|
-| Faux Bot API local | E1 constante `api.telegram.org` | `TELEGRAM_API_BASE` + `resolveTelegramApiBase()` | *(lot 1, en cours)* |
+| Faux Bot API local | E1 constante `api.telegram.org` | `TELEGRAM_API_BASE` + `resolveTelegramApiBase()` | `73d8f7915` |
 | Configurer le canal | E2 doc ≠ code | *(à faire)* | |
 | Démarrer | E2 `buddy --channel telegram` absent | *(à faire)* | |
 | Premier texte / Ollama | à éprouver après E2 | | |
