@@ -342,6 +342,38 @@ describe('runCouncilPipeline', () => {
     expect(sb.ranking('code')).toHaveLength(0);
   });
 
+  it('replaces a dead panel member within the same run and still deliberates', async () => {
+    const candidates = [
+      candidate('prov-a', 'coder-dead'),
+      candidate('prov-b', 'coder-b'),
+      candidate('prov-c', 'coder-c'),
+      candidate('prov-j', 'gpt-5-arbiter'),
+    ];
+    const clients = {
+      'coder-dead': fakeClient('coder-dead', { answer: async () => Promise.reject(new Error('model not found')) }),
+      'coder-b': fakeClient('coder-b', { answer: 'answer B from the living seat' }),
+      'coder-c': fakeClient('coder-c', { answer: 'answer C from the replacement seat' }),
+      'gpt-5-arbiter': fakeClient('gpt-5-arbiter', {
+        judgeJson: '{"scores":{"A":0.9,"B":0.4},"winner":"A","why":"ok"}',
+        synthesis: 'MERGED AFTER REPLACEMENT',
+      }),
+    };
+    const deps = makeDeps(candidates, clients);
+    const events: CouncilProgressEvent[] = [];
+
+    const result = await runCouncilPipeline(TASK, { count: 2 }, deps, (e) => events.push(e));
+
+    expect(events.filter((e) => e.type === 'answer_failed' && e.source === 'coder-dead')).toHaveLength(1);
+    expect(result.failures.some((f) => f.source === 'coder-dead')).toBe(true);
+    expect(result.answers.map((a) => a.displayName).sort()).toEqual(['coder-b', 'coder-c']);
+    expect(result.answers).toHaveLength(2);
+    expect(result.verdict.kind).toBe('judged');
+    expect(result.synthesis).toBe('MERGED AFTER REPLACEMENT');
+    const sb = new ModelScoreboard(ledger);
+    expect(sb.consecutiveRecentFailures('coder-dead')).toBeGreaterThanOrEqual(1);
+    expect(sb.selectionBias('code', 'coder-dead')).toBeLessThan(0);
+  });
+
   it('throws a typed error when no LLM is active', async () => {
     const deps = makeDeps([], {});
     await expect(runCouncilPipeline(TASK, {}, deps)).rejects.toBeInstanceOf(CouncilError);
