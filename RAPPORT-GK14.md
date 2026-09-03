@@ -236,7 +236,7 @@ vitest execute-code-python-future + race + science-command + deep-research-zero-
 | `027ff1719` | `fix(execute-code): conserver from __future__ en tête des scripts Python` |
 | `3473498d6` | `fix(research): isoler les tentatives de recherche parallèles` |
 | `e2308cb77` | `fix(science): exit 1 quand le plan est refusé` |
-| (ce lot) | `docs(gk14): consigner science/research --deep --ckg en vrai` |
+| `b4bf31038` | `docs(gk14): consigner science/research --deep --ckg en vrai` |
 
 ## Ouvert (non corrigé ici)
 
