@@ -97,7 +97,7 @@ Le témoin complet avant et après les mutations est resté vert : 14 fichiers,
 | `npx vitest run tests/security/donnees-personnelles.test.ts` | **1/1 vert** après restauration et rédaction du rapport |
 | `npx tsc --noEmit -p .` | **code 0** |
 | `git diff --check` | **code 0** |
-| `git status --short --branch` | source restaurée et fichiers documentaires commités ; seul `node_modules` non-suivi préexistant demeure |
+| `git status --short --branch` | **propre** ; le symlink `node_modules` préexistant est explicitement ignoré, sans suppression ni écriture |
 
 ## Bilan
 
