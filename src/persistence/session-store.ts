@@ -32,6 +32,24 @@ export interface SessionMetadata {
   [key: string]: string | string[] | number | boolean | undefined;
 }
 
+export interface SessionTurnUsage {
+  timestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  model?: string;
+  provider?: string;
+}
+
+export interface SessionUsageSnapshot {
+  provider?: string;
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  turns?: SessionTurnUsage[];
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -41,6 +59,11 @@ export interface Session {
   createdAt: Date;
   lastAccessedAt: Date;
   metadata?: SessionMetadata;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalCost?: number;
+  turns?: SessionTurnUsage[];
 }
 
 export interface SessionMessage {
@@ -285,6 +308,29 @@ export class SessionStore {
     session.messages = this.convertChatEntriesToMessages(chatHistory);
     session.lastAccessedAt = new Date();
 
+    await this.saveSession(session);
+  }
+
+  /**
+   * Persist directional token usage and cost onto the current session JSON
+   * so `buddy cost` can report real tokens instead of "unknown $0".
+   */
+  async attachUsageToCurrentSession(usage: SessionUsageSnapshot): Promise<void> {
+    if (!this.currentSessionId || this.ephemeral) return;
+    const session = await this.loadSession(this.currentSessionId);
+    if (!session) return;
+
+    session.provider = usage.provider;
+    session.inputTokens = usage.inputTokens;
+    session.outputTokens = usage.outputTokens;
+    session.totalCost = usage.totalCost;
+    session.turns = usage.turns;
+    session.metadata = {
+      ...session.metadata,
+      tokenCount: usage.inputTokens + usage.outputTokens,
+      totalCost: usage.totalCost,
+      ...(usage.provider ? { provider: usage.provider } : {}),
+    };
     await this.saveSession(session);
   }
 

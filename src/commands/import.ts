@@ -71,6 +71,8 @@ const MCP_SOURCE_PATHS = [
   '.vscode/mcp.json',
   'claude_desktop_config.json',
   '.mcp.json',
+  '.claude/settings.json',
+  'settings.json',
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

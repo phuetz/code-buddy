@@ -315,6 +315,11 @@ export class CostTracker extends EventEmitter {
     }
   }
 
+  /** Session-scoped usage rows recorded since construction. */
+  getSessionUsage(): readonly TokenUsage[] {
+    return this.sessionUsage;
+  }
+
   /**
    * Get cost report
    */

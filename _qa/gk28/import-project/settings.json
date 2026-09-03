@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "root-settings-nimbus": {
+      "command": "root-settings-mcp"
+    }
+  }
+}

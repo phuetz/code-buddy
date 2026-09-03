@@ -24,7 +24,7 @@
  *   buddy run mobile-pairing-acceptance-plan <query> → preview pairing acceptance
  *   buddy run mobile-approval-queue <query> → preview local approvals
  *   buddy run tail <runId>        → live-stream events (follow mode)
- *   buddy run replay <runId>      → show timeline + re-execute test steps
+ *   buddy run replay <runId>      → show timeline + re-execute recorded reads and test steps
  */
 
 import type { Command } from 'commander';
@@ -650,7 +650,7 @@ export function registerRunCommands(program: Command): void {
   // ── buddy run replay ───────────────────────────────────────────
   run
     .command('replay <runId>')
-    .description('Show timeline and re-execute test steps')
+    .description('Show timeline and re-execute recorded view_file reads and test steps')
     .option('--no-rerun', 'only show timeline, do not re-run tests')
     .action(async (runId: string, opts: { rerun: boolean }) => {
       const { replayRun } = await import('../../observability/run-viewer.js');

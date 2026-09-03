@@ -40,6 +40,7 @@ import { resetPluginMarketplace } from "../plugins/marketplace.js";
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
 import { primeLocalRuntimeModelConfig } from '../config/local-runtime-context.js';
 import { getModelToolConfig } from '../config/model-tools.js';
+import { inferCostProvider } from '../analytics/cost-report.js';
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -1632,6 +1633,28 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.codebuddyClient.getCurrentModel();
   }
 
+  override saveCurrentSession(): Promise<void> | void {
+    const report = this.costTracker.getReport();
+    const model = this.getCurrentModel();
+    const provider = process.env.CODEBUDDY_PROVIDER?.trim() || inferCostProvider(model);
+    const turns = this.costTracker.getSessionUsage().map((row) => ({
+      timestamp: row.timestamp.toISOString(),
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      costUsd: row.cost,
+      model: row.model,
+      provider: process.env.CODEBUDDY_PROVIDER?.trim() || inferCostProvider(row.model),
+    }));
+    return this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory(), {
+      provider,
+      model,
+      inputTokens: report.sessionTokens.input,
+      outputTokens: report.sessionTokens.output,
+      totalCost: this.getSessionCost(),
+      turns,
+    });
+  }
+
   getCurrentSessionId(): string | null {
     return this.sessionStore.getCurrentSessionId();
   }
@@ -2009,6 +2032,18 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
     this.costTracker.recordUsage(inputTokens, outputTokens, model);
+
+    const activeRun = getActiveRunStore();
+    const runId = activeRun?.getCurrentRunId();
+    if (activeRun && runId) {
+      const report = this.costTracker.getReport();
+      activeRun.updateMetrics(runId, {
+        promptTokens: report.sessionTokens.input,
+        completionTokens: report.sessionTokens.output,
+        totalTokens: report.sessionTokens.input + report.sessionTokens.output,
+        totalCost: this.sessionCost,
+      });
+    }
 
     // Check budget alerts after recording cost
     if (this.sessionCostLimit !== Infinity) {

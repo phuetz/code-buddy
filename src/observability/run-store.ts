@@ -60,6 +60,8 @@ export interface RunMetadata {
   userId?: string;
   /** Session ID */
   sessionId?: string;
+  /** Working directory of the run, used by `buddy run replay` */
+  cwd?: string;
   /** Tags for filtering */
   tags?: string[];
   /**
@@ -433,6 +435,11 @@ export class RunStore {
     const summary = this.summaries.get(runId);
     if (summary) {
       summary.eventCount = count;
+    }
+
+    if (event.type === 'tool_call') {
+      const current = this.getRun(runId)?.metrics.toolCallCount ?? 0;
+      this.updateMetrics(runId, { toolCallCount: current + 1 });
     }
   }
 
