@@ -37,6 +37,37 @@ pub fn resolve_model_dir() -> String {
     format!("{home}/{DEFAULT_MODEL_SUBDIR}")
 }
 
+const MODEL_FILES: [&str; 4] = [
+    "encoder.int8.onnx",
+    "decoder.int8.onnx",
+    "joiner.int8.onnx",
+    "tokens.txt",
+];
+
+pub fn model_is_complete(model_dir: &str) -> bool {
+    MODEL_FILES
+        .iter()
+        .all(|name| std::path::Path::new(model_dir).join(name).is_file())
+}
+
+/// Evidence used only by the generic auto route. The installed Parakeet-TDT
+/// v3 model is known to support French; custom model bundles can carry the
+/// same local witness WAV without requiring a network lookup.
+pub fn model_is_french(model_dir: &str) -> bool {
+    if !model_is_complete(model_dir) {
+        return false;
+    }
+    let name = std::path::Path::new(model_dir)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    name.contains("parakeet-tdt-0.6b-v3")
+        || std::path::Path::new(model_dir)
+            .join("test_wavs/fr.wav")
+            .is_file()
+}
+
 fn num_threads() -> i32 {
     std::env::var("BUDDY_SENSE_STT_THREADS")
         .ok()
@@ -54,12 +85,7 @@ impl Stt {
     /// Load the offline transducer from a sherpa-onnx model directory.
     pub fn load(model_dir: &str) -> Result<Self, String> {
         let f = |name: &str| format!("{model_dir}/{name}");
-        for name in [
-            "encoder.int8.onnx",
-            "decoder.int8.onnx",
-            "joiner.int8.onnx",
-            "tokens.txt",
-        ] {
+        for name in MODEL_FILES {
             if !std::path::Path::new(&f(name)).exists() {
                 return Err(format!("model file missing: {}", f(name)));
             }

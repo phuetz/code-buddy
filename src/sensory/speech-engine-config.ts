@@ -12,8 +12,9 @@
  * @module sensory/speech-engine-config
  */
 
+import { existsSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 export type SpeechRecognitionEngine = 'faster-whisper' | 'parakeet' | 'sherpa-rs' | 'auto';
 
@@ -56,6 +57,12 @@ export function resolveSpeechLanguage(env: NodeJS.ProcessEnv = process.env): str
   );
 }
 
+function languageIsPinned(env: NodeJS.ProcessEnv): boolean {
+  const configured = env.CODEBUDDY_SPEECH_LANG?.trim().toLowerCase()
+    || env.CODEBUDDY_COMPANION_LANGUAGE?.trim().toLowerCase();
+  return Boolean(configured && !['auto', 'detect', 'automatic'].includes(configured));
+}
+
 /**
  * Resolve the decoder that can actually honour an explicit language pin.
  * Parakeet-TDT v3 is multilingual and auto-detects language, but the sherpa-rs
@@ -67,9 +74,7 @@ export function resolveSpeechTranscriptionPlan(
   env: NodeJS.ProcessEnv = process.env,
 ): SpeechTranscriptionPlan {
   const language = resolveSpeechLanguage(env);
-  const languagePinned = Boolean(
-    env.CODEBUDDY_SPEECH_LANG?.trim() || env.CODEBUDDY_COMPANION_LANGUAGE?.trim()
-  );
+  const languagePinned = languageIsPinned(env);
   const fallbackEnabled = env.CODEBUDDY_SPEECH_FALLBACK?.trim().toLowerCase() !== 'false';
   if (engineUsesParakeetModel(requestedEngine) && languagePinned) {
     if (fallbackEnabled) {
@@ -103,14 +108,41 @@ export function resolveSpeechTranscriptionPlan(
 /**
  * Location of the NeMo Parakeet / sherpa-onnx model directory (shared by the
  * `parakeet` and `sherpa-rs` engines). Override via `CODEBUDDY_PARAKEET_MODEL_DIR`
- * or `CODEBUDDY_SHERPA_ONNX_MODEL_DIR`.
+ * or `CODEBUDDY_SHERPA_ONNX_MODEL_DIR`; the buddy-sense side uses the same
+ * `BUDDY_SENSE_STT_MODEL_DIR` variable.
  */
 export function resolveParakeetModelDir(): string {
   return expandSpeechPath(
-    process.env.CODEBUDDY_PARAKEET_MODEL_DIR?.trim()
+    process.env.BUDDY_SENSE_STT_MODEL_DIR?.trim()
+      || process.env.CODEBUDDY_PARAKEET_MODEL_DIR?.trim()
       || process.env.CODEBUDDY_SHERPA_ONNX_MODEL_DIR?.trim()
       || '~/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8',
   );
+}
+
+const PARAKEET_MODEL_FILES = [
+  'encoder.int8.onnx',
+  'decoder.int8.onnx',
+  'joiner.int8.onnx',
+  'tokens.txt',
+] as const;
+
+/** A directory existing on disk is not enough to make a decoder usable. */
+export function isParakeetModelComplete(modelDir = resolveParakeetModelDir()): boolean {
+  return PARAKEET_MODEL_FILES.every((file) => existsSync(join(modelDir, file)));
+}
+
+/**
+ * The generic auto route is allowed to select sherpa-rs only for a model whose
+ * French support is locally evidenced. The shipped Parakeet-TDT v3 int8 model
+ * is a known multilingual French model; custom model directories may carry the
+ * same evidence as the installed model's `test_wavs/fr.wav` witness.
+ */
+export function isFrenchParakeetModelAvailable(modelDir = resolveParakeetModelDir()): boolean {
+  if (!isParakeetModelComplete(modelDir)) return false;
+  const modelName = basename(modelDir).toLowerCase();
+  return modelName.includes('parakeet-tdt-0.6b-v3')
+    || existsSync(join(modelDir, 'test_wavs', 'fr.wav'));
 }
 
 /** True when the configured/resolved engine decodes with the Parakeet model. */

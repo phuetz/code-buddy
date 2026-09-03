@@ -191,11 +191,17 @@ fn resolve_live_stt_decision_from(
     fallback: Option<&str>,
 ) -> LiveSttDecision {
     let requested_engine = normalized_engine(engine);
-    let pinned_language = language
+    let configured_language = language
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
-    let language = pinned_language
+    let pinned_language = configured_language.clone().filter(|value| {
+        !matches!(
+            value.to_ascii_lowercase().as_str(),
+            "auto" | "detect" | "automatic"
+        )
+    });
+    let language = configured_language
         .clone()
         .unwrap_or_else(|| "auto".to_string());
     let fallback_enabled = env_enabled(fallback, true);
@@ -937,28 +943,68 @@ fn capture_loop(
             language,
         } => {
             let model_dir = crate::senses::stt::resolve_model_dir();
-            let stt = match crate::senses::stt::Stt::load(&model_dir) {
-                Ok(stt) => stt,
-                Err(error) => {
+            if requested_engine == "auto" && !crate::senses::stt::model_is_french(&model_dir) {
+                if env_enabled(
+                    std::env::var("CODEBUDDY_SPEECH_FALLBACK").ok().as_deref(),
+                    true,
+                ) {
                     eprintln!(
-                        "[buddy-sense] live-audio: recognizer load failed ({error}); sense disabled"
+                        "[buddy-sense] live-audio: auto STT fallback activated effective=faster-whisper reason=french-parakeet-model-missing-or-incomplete transport=speech_end-wav"
+                    );
+                    LiveTranscriber::DelegateToBrain(DelegatedStt {
+                        requested_engine,
+                        language,
+                        reason: "french-parakeet-model-missing-or-incomplete",
+                        hotwords_configured: speech_hotwords_configured(),
+                    })
+                } else {
+                    eprintln!(
+                        "[buddy-sense] live-audio: STT DISABLED requested=auto language={language} reason=french-parakeet-model-missing-or-incomplete"
                     );
                     return;
                 }
-            };
-            eprintln!(
-                "[buddy-sense] live-audio: STT ready requested={requested_engine} effective=sherpa-rs language={language} model={model_dir}"
-            );
-            if speech_hotwords_configured() {
-                eprintln!(
-                    "[buddy-sense] live-audio: WARNING hotwords configured but not supported by the in-process Parakeet decoder"
-                );
-            }
-            LiveTranscriber::InProcessParakeet {
-                stt,
-                model_dir,
-                requested_engine,
-                language,
+            } else {
+                match crate::senses::stt::Stt::load(&model_dir) {
+                    Ok(stt) => {
+                        eprintln!(
+                            "[buddy-sense] live-audio: STT ready requested={requested_engine} effective=sherpa-rs language={language} model={model_dir}"
+                        );
+                        if speech_hotwords_configured() {
+                            eprintln!(
+                                "[buddy-sense] live-audio: WARNING hotwords configured but not supported by the in-process Parakeet decoder"
+                            );
+                        }
+                        LiveTranscriber::InProcessParakeet {
+                            stt,
+                            model_dir,
+                            requested_engine,
+                            language,
+                        }
+                    }
+                    Err(error)
+                        if requested_engine == "auto"
+                            && env_enabled(
+                                std::env::var("CODEBUDDY_SPEECH_FALLBACK").ok().as_deref(),
+                                true,
+                            ) =>
+                    {
+                        eprintln!(
+                            "[buddy-sense] live-audio: auto STT fallback activated effective=faster-whisper reason=sherpa-rs-model-load-failed transport=speech_end-wav ({error})"
+                        );
+                        LiveTranscriber::DelegateToBrain(DelegatedStt {
+                            requested_engine,
+                            language,
+                            reason: "sherpa-rs-model-load-failed",
+                            hotwords_configured: speech_hotwords_configured(),
+                        })
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "[buddy-sense] live-audio: recognizer load failed ({error}); sense disabled"
+                        );
+                        return;
+                    }
+                }
             }
         }
         LiveSttDecision::DelegateToBrain {
@@ -1459,6 +1505,13 @@ mod tests {
             resolve_live_stt_decision_from(Some("parakeet"), None, Some("true")),
             LiveSttDecision::InProcessParakeet {
                 requested_engine: "parakeet".to_string(),
+                language: "auto".to_string(),
+            }
+        );
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("auto"), Some("false")),
+            LiveSttDecision::InProcessParakeet {
+                requested_engine: "sherpa-rs".to_string(),
                 language: "auto".to_string(),
             }
         );
