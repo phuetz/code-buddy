@@ -45,6 +45,12 @@ type SharpChain = {
   png: () => SharpChain;
   webp: () => SharpChain;
   avif: () => SharpChain;
+  removeAlpha: () => SharpChain;
+  raw: () => SharpChain;
+  toBuffer: (opts?: { resolveWithObject: true }) => Promise<{
+    data: Buffer;
+    info: { channels?: number; width?: number; height?: number };
+  }>;
   toFile: (path: string) => Promise<unknown>;
 };
 

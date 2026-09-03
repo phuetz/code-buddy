@@ -23,6 +23,7 @@ import {
 } from './camera-keyframe-policy.js';
 import { redactVisionDescriptionForEgress } from './vision-description-safety.js';
 import { DARK_SCENE_SALIENCE, isDarkScenePerception } from './dreaming.js';
+import { DARK_SCENE_LUMA_THRESHOLD } from '../tools/vision/mean-luma.js';
 
 /** Varied prefixes for the motion Telegram caption (the `${desc}` suffix already
  *  varies with the scene) so the notification isn't the exact same opening
@@ -58,7 +59,7 @@ export interface VisionReactionOptions {
 const DEFAULT_VISION_DEBOUNCE_MS = 8000;
 const DEFAULT_VISION_ALERT_COOLDOWN_MS = 300_000;
 const DEFAULT_VISION_ALERT_SIMILARITY = 0.6;
-export const DEFAULT_VISION_MIN_LUMA = 12;
+export const DEFAULT_VISION_MIN_LUMA = DARK_SCENE_LUMA_THRESHOLD;
 export const DEFAULT_VISION_MAX_ANALYSES_PER_MIN = 4;
 
 function configuredNumber(value: number | string | undefined): number {
