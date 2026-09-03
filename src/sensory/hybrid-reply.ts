@@ -29,7 +29,13 @@ import type {
   StreamReplyFn,
   VoiceStepOptions,
 } from './voice-loop.js';
-import { resolveVoiceModel, voiceLatencyBufferEnabled } from './voice-loop.js';
+import {
+  resolveVoiceModel,
+  sensoryReplyMaxSentences,
+  sensoryShortFirstEnabled,
+  voiceLatencyBufferEnabled,
+} from './voice-loop.js';
+import { FIRST_SENTENCE_CAP, SentenceAssembler } from './voice-stream.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
   intentKeyForQuery,
@@ -71,6 +77,85 @@ function completedStreamText(text: string): string {
     end = match.index + match[0].length;
   }
   return end >= 0 ? text.slice(0, end).trim() : '';
+}
+
+const SHORT_FIRST_MAX_WORDS = 20;
+const SHORT_FIRST_SENTENCE_CAP = 4_096;
+
+function splitOverlongFirstSentence(sentence: string): string[] {
+  const words = [...sentence.matchAll(/\S+/gu)];
+  if (words.length <= SHORT_FIRST_MAX_WORDS && sentence.length <= FIRST_SENTENCE_CAP) {
+    return [sentence.trim()];
+  }
+  const last = words[Math.min(words.length, SHORT_FIRST_MAX_WORDS) - 1];
+  if (!last || last.index === undefined) return [sentence.trim()];
+  const maximumCut = Math.min(last.index + last[0].length, FIRST_SENTENCE_CAP - 1);
+  let cut = maximumCut;
+  while (cut > 0 && !/\s/u.test(sentence[cut] ?? '')) cut -= 1;
+  if (cut === 0) cut = maximumCut;
+  const first = sentence
+    .slice(0, cut)
+    .replace(/[,;:.!?…]+$/u, '')
+    .trim();
+  const continuation = sentence.slice(cut).trim();
+  return [`${first}…`, continuation].filter(Boolean);
+}
+
+/**
+ * Turn token deltas into complete stable sentences and stop the provider iterator at the
+ * configured audio budget. The generous assembler cap avoids inventing a boundary before
+ * punctuation; the 20-word split is only a fail-safe for a provider that ignores the prompt.
+ */
+async function* shortFirstSentenceStream(
+  source: AsyncIterable<string>,
+  maxSentences: number,
+  signal?: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const assembler = new SentenceAssembler(
+    SHORT_FIRST_SENTENCE_CAP,
+    SHORT_FIRST_SENTENCE_CAP,
+  );
+  const iterator = source[Symbol.asyncIterator]();
+  let emitted = 0;
+  let sourceDone = false;
+  const emit = function* (sentences: string[]): Generator<string, boolean, unknown> {
+    for (const sentence of sentences) {
+      const parts = emitted === 0 ? splitOverlongFirstSentence(sentence) : [sentence.trim()];
+      for (const part of parts) {
+        if (!part || emitted >= maxSentences) return true;
+        emitted += 1;
+        yield `${part} `;
+        if (emitted >= maxSentences) return true;
+      }
+    }
+    return false;
+  };
+  try {
+    while (!signal?.aborted) {
+      const next = await iterator.next();
+      if (next.done) {
+        sourceDone = true;
+        yield* emit(assembler.flush());
+        return;
+      }
+      if (typeof next.value !== 'string' || next.value.length === 0) continue;
+      const limited = emit(assembler.push(next.value));
+      while (true) {
+        const part = limited.next();
+        if (part.done) {
+          if (part.value) return;
+          break;
+        }
+        yield part.value;
+      }
+    }
+  } finally {
+    if (!sourceDone) await iterator.return?.();
+  }
+}
+
+async function* singleTextStream(text: string): AsyncGenerator<string, void, unknown> {
+  yield text;
 }
 
 export {
@@ -857,6 +942,13 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     const startedAt = Date.now();
     try {
       const recent = conversationHistory(heard);
+      if (
+        sensoryShortFirstEnabled() &&
+        classifyLisaIntrospection(heard) === null &&
+        !classify(heard, recent)
+      ) {
+        return '';
+      }
       const route = await resolveVoiceModel(heard, { history: recent });
       if (!voiceLatencyBufferEnabled(
         process.env.CODEBUDDY_VOICE_SPOKEN_PREFIX,
@@ -1135,9 +1227,14 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       let full = '';
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       let cognitiveEvidence: string | undefined;
+      const shortFirst = sensoryShortFirstEnabled()
+        ? { maxSentences: sensoryReplyMaxSentences() }
+        : undefined;
+      let shortFirstSentenceCount = 0;
       const streamOptions: VoiceStepOptions = {
         ...(replyOpts ?? {}),
         relationshipEvolutionHandled: true,
+        ...(shortFirst ? { shortFirst } : {}),
         ...(options.acquireCognitiveContext
           ? { acquireCognitiveContext: options.acquireCognitiveContext }
           : {}),
@@ -1155,10 +1252,16 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           cognitiveEvidence = context.evidence || undefined;
         },
       };
+      if (shortFirst) replyOpts?.onShortFirstReady?.(shortFirst);
       try {
-        for await (const delta of chitchatStream!(heard, recent, streamOptions)) {
+        const source = chitchatStream!(heard, recent, streamOptions);
+        const delivered = shortFirst
+          ? shortFirstSentenceStream(source, shortFirst.maxSentences, replyOpts?.signal)
+          : source;
+        for await (const delta of delivered) {
           if (replyOpts?.signal?.aborted) return;
           if (typeof delta !== 'string' || delta.length === 0) continue;
+          if (shortFirst) shortFirstSentenceCount += 1;
           full += delta;
           if (!prefixBuffer) yield delta;
         }
@@ -1193,7 +1296,12 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         yield completed;
       }
       let correction = '';
-      if (completed && shouldReviewPlan(prepared.plan, heard) && !replyOpts?.signal?.aborted) {
+      if (
+        completed &&
+        shouldReviewPlan(prepared.plan, heard) &&
+        (!shortFirst || shortFirstSentenceCount < shortFirst.maxSentences) &&
+        !replyOpts?.signal?.aborted
+      ) {
         const reviewed = await reviewBeforeDelivery({
           request: heard,
           draft: completed,
@@ -1207,7 +1315,21 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         }, streamOptions);
         correction = briefSemanticCorrection(completed, reviewed);
         if (replyOpts?.signal?.aborted) return;
-        if (correction) yield ` ${correction}`;
+        if (correction && shortFirst) {
+          const limitedCorrection: string[] = [];
+          const remaining = shortFirst.maxSentences - shortFirstSentenceCount;
+          for await (const delta of shortFirstSentenceStream(
+            singleTextStream(correction),
+            remaining,
+            replyOpts?.signal,
+          )) {
+            limitedCorrection.push(delta.trim());
+            yield ` ${delta}`;
+          }
+          correction = limitedCorrection.join(' ');
+        } else if (correction) {
+          yield ` ${correction}`;
+        }
       }
       if (completed && !replyOpts?.signal?.aborted) {
         await evolveRelationshipFromUtterance(heard);

@@ -192,6 +192,15 @@ export interface VoiceStepOptions {
   onSpokenPrefixTelemetry?: (cause: SpokenPrefixTelemetryCause) => void;
   /** Register a non-blocking semantic correction for playback after the initial answer. */
   onSemanticCorrection?: (correction: Promise<string>) => void;
+  /** Opt-in contract owned by the fast chitchat route. */
+  shortFirst?: VoiceShortFirstConfig;
+  /** Tell the outer audio pipeline that the fast route accepted the short-first contract. */
+  onShortFirstReady?: (config: VoiceShortFirstConfig) => void;
+}
+
+export interface VoiceShortFirstConfig {
+  /** Total number of spoken answer sentences, including the first useful sentence. */
+  maxSentences: number;
 }
 
 export type VoiceReplyTimingPhase =
@@ -530,6 +539,34 @@ export const SPEAK_SYSTEM_PROMPT =
   'développée et argumentée pour une question complexe. ' +
   "Pour une question factuelle, donne l'explication correcte la plus simple et n'invente rien. " +
   "Pas de markdown, pas de listes, pas de code, pas d'emoji.";
+
+export const DEFAULT_SENSORY_REPLY_MAX_SENTENCES = 3;
+const MAX_SENSORY_REPLY_MAX_SENTENCES = 12;
+
+/** The pilot is deliberately exact opt-in; every other value preserves the established route. */
+export function sensoryShortFirstEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CODEBUDDY_SENSORY_SHORT_FIRST?.trim().toLowerCase() === 'true';
+}
+
+/** Bound the complete fast spoken answer. Invalid input falls back to the documented default. */
+export function sensoryReplyMaxSentences(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_SENSORY_REPLY_MAX_SENTENCES?.trim();
+  if (!raw) return DEFAULT_SENSORY_REPLY_MAX_SENTENCES;
+  const configured = Number(raw);
+  if (!Number.isFinite(configured)) return DEFAULT_SENSORY_REPLY_MAX_SENTENCES;
+  return Math.max(1, Math.min(MAX_SENSORY_REPLY_MAX_SENTENCES, Math.floor(configured)));
+}
+
+/** Model-facing contract for the fast route only. */
+export function buildShortFirstPrompt(config: VoiceShortFirstConfig): string {
+  return [
+    '<short_first_response>',
+    "Une phrase d'abord, puis développe si utile.",
+    'La première phrase doit être autonome, utile immédiatement et compter au plus 20 mots.',
+    `Ne dépasse pas ${config.maxSentences} phrases au total, première phrase comprise.`,
+    '</short_first_response>',
+  ].join('\n');
+}
 
 export const IMMEDIATE_THINKING_ACKNOWLEDGEMENTS = ['Alors…', 'Voyons ça.'] as const;
 export const MAX_SPOKEN_PREFIX_CHARS = 180;
@@ -1779,6 +1816,7 @@ async function prepareSpokenTurn(
     augmentation,
     cognitivePrompt,
     voiceClockPromptBlock(),
+    replyOpts?.shortFirst ? buildShortFirstPrompt(replyOpts.shortFirst) : '',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -1985,7 +2023,7 @@ export async function* streamCompanionReply(
       await evolveRelationshipFromUtterance(heard);
     }
     const resolvedRoute = await resolveVoiceModel(heard, { history });
-    const acknowledgement = replyOpts?.spokenPrefix
+    const acknowledgement = replyOpts?.spokenPrefix || replyOpts?.shortFirst
       ? null
       : immediateEmotionAcknowledgement(detectEmotion(heard)) ??
         immediateThinkingAcknowledgement(heard, process.env, resolvedRoute.baseURL);
@@ -3556,7 +3594,10 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // the blocking path below (which is the original, unchanged tour-par-tour behavior).
       if (streamFn && visualReply === undefined) {
         try {
-          const relationshipSafety = new RelationshipSafetyStreamGuard();
+          let shortFirstConfig: VoiceShortFirstConfig | undefined;
+          const relationshipSafety = new RelationshipSafetyStreamGuard(
+            () => shortFirstConfig !== undefined,
+          );
           const timedReplyStream = (async function* (): AsyncGenerator<string> {
             let atStreamStart = true;
             let spokenPrefix = '';
@@ -3596,6 +3637,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               ...(interruption ? { interruption } : {}),
               ...(spokenPrefix ? { spokenPrefix } : {}),
               onReplyTimingPhase: markReplyTimingPhase,
+              onShortFirstReady: (config) => {
+                shortFirstConfig = config;
+              },
               onProviderResolved: (route) => {
                 streamRouteRemote = isRemoteVoiceRoute(route.baseURL);
               },
@@ -3675,6 +3719,12 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             audioPrebufferMs: () => streamRouteRemote ? voiceAudioPrebufferMs(env) : 0,
           });
           streamFallbackSegments = result.fallbackSegments ?? 0;
+          if (shortFirstConfig && (result.played || result.aborted)) {
+            logger.info(
+              `[voice] short-first: firstContentMs=${firstContentAudioMs ?? -1}, ` +
+                `sentences=${result.sentences.length}`,
+            );
+          }
           if (signal.aborted) {
             if (interruptionContextEnabled) {
               interruptedAtSentence = result.interruptedSentence ?? Math.max(1, result.sentences.length + 1);
