@@ -32,17 +32,19 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
   describe('1. Collision SENSE7 × GT2 : faux positif écho sur réponse humaine courte', () => {
     it('ne doit pas classer une réponse humaine normale ("oui", "non", "merci") comme un écho du robot', () => {
       // Le robot prononce une phrase contenant des mots courants
-      noteSpokenText('Bonjour, veux-tu continuer ? Dis oui ou non.', 1_000);
+      noteSpokenText('Bonjour, veux-tu continuer ? Dis oui ou non, merci.', 1_000);
 
       // L’humain répond 500 ms plus tard : "oui"
       // TROU PROUVÉ : GT2 a ajouté transcriptTokens.every(token => referenceTokens.has(token))
       // Comme "oui" fait partie des tokens du robot, transcriptIsRobotFragment = true.
       // SENSE7 et GT2 coexistent via un `||`, donc classifyRecentVoiceEcho retourne 'echo'
       // et la réponse humaine est silencieusement éliminée par speech-reaction !
-      const classification = classifyRecentVoiceEcho('oui', 1_500);
-
-      // Le comportement attendu pour une réponse humaine brève est 'distinct' (ou non 'echo')
-      expect(classification).not.toBe('echo');
+      // Le titre historique annonçait trois réponses mais ne testait que « oui ».
+      // Toutes les réponses fermées usuelles doivent rester distinctes, tandis que
+      // les tests SENSE7/GT2 voisins continuent d'exiger le rejet des vrais fragments.
+      for (const reply of ['oui', 'non', 'merci']) {
+        expect(classifyRecentVoiceEcho(reply, 1_500), reply).toBe('distinct');
+      }
     });
   });
 
@@ -157,8 +159,8 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
 
   describe('3. Régression GK28 : CodeBuddyAgent.saveCurrentSession() et inferCostProvider', () => {
     it('inferCostProvider ne doit pas lever TypeError si model est undefined ou vide', () => {
-      // TROU PROUVÉ : inferCostProvider(undefined as any) fait model.trim() -> TypeError
-      expect(() => inferCostProvider(undefined as any)).not.toThrow();
+      // TROU PROUVÉ : une valeur runtime absente fait model.trim() -> TypeError.
+      expect(() => inferCostProvider(undefined as unknown as string)).not.toThrow();
     });
 
     it('saveCurrentSession ne doit pas lever TypeError si costTracker n a pas getSessionUsage (mocks de test unitaires)', () => {
@@ -166,10 +168,10 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
       // qui appelle directement this.costTracker.getSessionUsage().map(...) sans guard optionnel.
       // Dans tests/unit/codebuddy-agent.test.ts, le mock ne définit pas getSessionUsage.
       const agent = new CodeBuddyAgent('test-api-key');
-      (agent as any).costTracker = {
+      Reflect.set(agent, 'costTracker', {
         getReport: () => ({ sessionTokens: { input: 0, output: 0 } }),
         getSessionCost: () => 0,
-      };
+      });
       expect(() => agent.saveCurrentSession()).not.toThrow();
     });
 
@@ -177,7 +179,7 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
       // TROU PROUVÉ : dans tests/grok-agent.test.ts, getCurrentModel() retourne undefined via le client mocké,
       // ce qui fait planter inferCostProvider(undefined) sur model.trim().
       const agent = new CodeBuddyAgent('test-api-key');
-      vi.spyOn(agent, 'getCurrentModel').mockReturnValue(undefined as any);
+      vi.spyOn(agent, 'getCurrentModel').mockReturnValue(undefined as unknown as string);
       expect(() => agent.saveCurrentSession()).not.toThrow();
     });
   });

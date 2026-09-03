@@ -113,6 +113,15 @@ describe('voice-activity — half-duplex speaking guard', () => {
     expect(classifyRecentVoiceEcho('nouveau message vocal', 1_300)).toBe('echo');
   });
 
+  it('keeps bounded human answers distinct from a longer robot prompt', () => {
+    noteSpokenText('Veux-tu continuer ? Réponds oui ou non, merci.', 1_000);
+
+    for (const reply of ['oui', 'non', 'merci']) {
+      expect(classifyRecentVoiceEcho(reply, 1_100), reply).toBe('distinct');
+    }
+    expect(classifyRecentVoiceEcho('réponds oui ou non', 1_100)).toBe('echo');
+  });
+
   it('recognizes only one-to-three-word fragments contained in a recent spoken phrase', () => {
     noteSpokenText('Bonjour Patrice, je suis Lisa et je suis prête.', 1_000);
 

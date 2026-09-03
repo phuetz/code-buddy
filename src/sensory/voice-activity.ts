@@ -11,6 +11,8 @@
  *
  * @module sensory/voice-activity
  */
+import { isBriefConversationAnswer } from './respond-decider.js';
+
 let activePlays = 0;
 let speakingUntilMs = 0;
 
@@ -193,6 +195,7 @@ export function isRecentVoiceFragmentEcho(
   return spokenReferences.some(reference =>
     atMs >= reference.recordedAtMs - 1_000
       && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS
+      && !(isBriefConversationAnswer(normalized) && reference.tokens.length > tokens.length)
       && tokens.every(token => reference.tokens.includes(token)),
   );
 }
@@ -223,15 +226,22 @@ export function classifyRecentVoiceEcho(
   const transcriptTokens = [...new Set(normalized.split(' ').filter(Boolean))];
   const boundedTranscript = ` ${normalized} `;
   for (const reference of [...references].reverse()) {
-    if (` ${reference.normalized} `.includes(boundedTranscript)) return 'echo';
+    // A closed conversational answer copied from a longer question is ambiguous
+    // acoustically but must remain available to the engagement gate. Exact short
+    // loudspeaker utterances and all non-answer fragments retain SENSE7/GT2 filtering.
+    const briefReplyToLongerPrompt = isBriefConversationAnswer(normalized)
+      && reference.tokens.length > transcriptTokens.length;
+    if (!briefReplyToLongerPrompt && ` ${reference.normalized} `.includes(boundedTranscript)) {
+      return 'echo';
+    }
     if (reference.tokens.length > 0) {
       const referenceTokens = new Set(reference.tokens);
       const referenceOverlap = reference.tokens.filter(token => transcriptTokens.includes(token)).length;
       const transcriptIsRobotFragment = transcriptTokens.every(token => referenceTokens.has(token));
-      if (
+      if (!briefReplyToLongerPrompt && (
         transcriptIsRobotFragment
         || referenceOverlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE
-      ) return 'echo';
+      )) return 'echo';
     }
   }
   return 'distinct';
