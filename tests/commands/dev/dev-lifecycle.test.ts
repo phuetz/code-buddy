@@ -45,7 +45,7 @@ function runDevPlan(port: number, home: string): Promise<ChildResult> {
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
-    }, 15000);
+    }, 45000); // instable sous charge du balayage complet (2× 15 s dépassés le 03/09), passe seul en ~2 s
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
