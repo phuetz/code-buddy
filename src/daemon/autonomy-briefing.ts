@@ -499,10 +499,6 @@ export class AutonomyBriefingJournal {
   }
 
   private atomicWrite(file: string, content: string): void {
-    try {
-      writeFileAtomicSync(file, content, { mode: 0o600 });
-    } catch (error) {
-      throw error;
-    }
+    writeFileAtomicSync(file, content, { mode: 0o600 });
   }
 }

@@ -434,11 +434,7 @@ export class SagaStore {
 
   private async writeUnlocked(record: SagaRecord): Promise<void> {
     const file = this.fileFor(record.id);
-    try {
-      await writeJsonAtomic(file, record, { mode: 0o600 });
-    } catch (err) {
-      throw err;
-    }
+    await writeJsonAtomic(file, record, { mode: 0o600 });
   }
 
   private buildInitialSteps(plan: DispatchPlan): SagaStep[] {
