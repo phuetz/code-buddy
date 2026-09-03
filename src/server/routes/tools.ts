@@ -195,10 +195,16 @@ router.post(
         (agent) => agent.executeToolByName(name, body.parameters || {}),
       );
 
+      const { publishToolResultWidget } = await import('../../widgets/canvas-publish.js');
+      const published = await publishToolResultWidget(result);
+
       const response: ToolExecutionResponse = {
         toolName: name,
         success: result.success,
         output: result.output,
+        ...(result.data !== undefined ? { data: result.data } : {}),
+        ...(published.widgetHtml ? { widgetHtml: published.widgetHtml } : {}),
+        ...(published.canvasId ? { canvasId: published.canvasId, canvasPath: published.canvasPath ?? undefined } : {}),
         error: result.error,
         executionTime: Date.now() - startTime,
       };

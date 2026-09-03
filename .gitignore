@@ -30,6 +30,10 @@ _qa/gk20/work/
 _qa/gk20/rules.json
 _qa/gk20/runs.jsonl
 _qa/gk20/*.jsonl
+_qa/gk30/home/
+_qa/gk30/npm-cache/
+_qa/gk30/tmp/
+_qa/gk30/work/
 _gk18/
 _qa/gk28/home/
 _qa/gk28/work/
