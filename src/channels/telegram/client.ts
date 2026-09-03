@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 import type {
   TelegramConfig,
   TelegramUpdate,
@@ -90,23 +91,22 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private loadPersistedOffset(): void {
-    try {
-      const raw = fs.readFileSync(this.offsetFilePath(), 'utf8');
-      const parsed = JSON.parse(raw) as { lastUpdateId?: unknown };
-      const value = Number(parsed.lastUpdateId);
-      if (Number.isFinite(value) && value > 0) {
-        this.lastUpdateId = value;
-      }
-    } catch {
-      // Missing or unreadable file: first run, keep lastUpdateId at 0.
+    const parsed = readJsonAtomicSync<{ lastUpdateId?: unknown } | null>(this.offsetFilePath(), null, {
+      mode: 0o600,
+      isValid: (value): value is { lastUpdateId?: unknown } => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    const value = Number(parsed?.lastUpdateId);
+    if (Number.isFinite(value) && value > 0) {
+      this.lastUpdateId = value;
     }
   }
 
   private persistOffset(): void {
     try {
       const file = this.offsetFilePath();
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, `${JSON.stringify({ lastUpdateId: this.lastUpdateId })}\n`, 'utf8');
+      writeJsonAtomicSync(file, { lastUpdateId: this.lastUpdateId }, { mode: 0o600 });
     } catch (error) {
       logger.warn('Telegram offset persist failed', {
         error: error instanceof Error ? error.message : String(error),

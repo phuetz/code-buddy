@@ -39,6 +39,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { ChannelType, InboundMessage } from './index.js';
 
 // ============================================================================
@@ -549,14 +550,7 @@ export class DMPairingManager extends EventEmitter {
     for (const channelType of channelTypes) {
       const filePath = path.join(this.config.allowlistPath, `${channelType}-allowFrom.json`);
       const senders = byChannel[channelType] ?? [];
-      const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-      try {
-        await fs.writeFile(tmpPath, JSON.stringify(senders, null, 2));
-        await fs.rename(tmpPath, filePath);
-      } catch (err) {
-        await fs.unlink(tmpPath).catch(() => undefined);
-        throw err;
-      }
+      await writeJsonAtomic(filePath, senders);
     }
   }
 
@@ -582,35 +576,9 @@ export class DMPairingManager extends EventEmitter {
     for (const file of files) {
       if (!file.endsWith('-allowFrom.json')) continue;
       const filePath = path.join(this.config.allowlistPath, file);
-      let content: string;
-      try {
-        content = await fs.readFile(filePath, 'utf-8');
-      } catch (err) {
-        if (isEnoent(err)) continue;
-        logger.warn('Failed to read DM pairing allowlist file', {
-          path: filePath,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
-      let senders: ApprovedSender[];
-      try {
-        senders = JSON.parse(content) as ApprovedSender[];
-      } catch (err) {
-        logger.warn('Corrupt DM pairing allowlist file', {
-          path: filePath,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
-      if (!Array.isArray(senders)) {
-        const error = new Error(`Allowlist is not an array: ${filePath}`);
-        logger.warn('Corrupt DM pairing allowlist file', {
-          path: filePath,
-          error: error.message,
-        });
-        throw error;
-      }
+      const senders = await readJsonAtomic<ApprovedSender[]>(filePath, [], {
+        isValid: (value): value is ApprovedSender[] => Array.isArray(value),
+      });
       for (const sender of senders) {
         if (!isApprovedSenderEntry(sender)) {
           const error = new Error(`Allowlist entry is invalid: ${filePath}`);

@@ -65,11 +65,11 @@ describe('store + due-logic', () => {
     expect(dueFollowUp(NOW, p)).toBeNull();
   });
 
-  it('does not treat a corrupt follow-up store as empty (jumeau D1)', () => {
+  it('treats a corrupt follow-up store as absent (MEM1)', () => {
     writeFileSync(p, '{this is not json');
-    expect(() => loadEventFollowUps(p)).toThrow();
+    expect(loadEventFollowUps(p)).toEqual([]);
     writeFileSync(p, '{}');
-    expect(() => loadEventFollowUps(p)).toThrow();
+    expect(loadEventFollowUps(p)).toEqual([]);
   });
 });
 

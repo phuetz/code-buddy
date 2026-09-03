@@ -16,6 +16,7 @@ import path from 'path';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import { logger } from '../utils/logger.js';
 import { GoalState, normalizeGoalState } from './goal-state.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface GoalStoreOptions {
   /** Override the storage directory (test isolation). */
@@ -39,8 +40,8 @@ export class GoalStore {
     for (const file of this.fileCandidatesForRead(key)) {
       try {
         if (!fs.existsSync(file)) continue;
-        const raw = fs.readFileSync(file, 'utf-8');
-        return normalizeGoalState(JSON.parse(raw));
+        const raw = readJsonAtomicSync<unknown | null>(file, null, { mode: 0o600 });
+        return raw === null ? null : normalizeGoalState(raw);
       } catch (error) {
         logger.debug('GoalStore: failed to load goal state', { key, file, error: String(error) });
       }
@@ -53,10 +54,7 @@ export class GoalStore {
     if (!key) return;
     const file = this.fileFor(key);
     try {
-      fs.mkdirSync(this.storeDir, { recursive: true });
-      const tmp = `${file}.tmp.${process.pid}`;
-      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
-      fs.renameSync(tmp, file);
+      writeJsonAtomicSync(file, state, { mode: 0o600 });
     } catch (error) {
       logger.debug('GoalStore: failed to save goal state', { key, error: String(error) });
     }

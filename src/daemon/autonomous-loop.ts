@@ -37,23 +37,24 @@ import { DEFAULT_COLAB_GOAL_MAX_TURNS, type ColabGoalJudge } from './colab-goal.
 import * as fs from 'fs';
 import * as path from 'path';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Read the persisted last-self-improve timestamp (ms). Best-effort → null. */
 function readSelfImproveState(file: string): number | null {
-  try {
-    const raw = fs.readFileSync(file, 'utf-8');
-    const at = (JSON.parse(raw) as { lastSelfImproveAt?: unknown }).lastSelfImproveAt;
-    return typeof at === 'number' && Number.isFinite(at) ? at : null;
-  } catch {
-    return null;
-  }
+  const data = readJsonAtomicSync<{ lastSelfImproveAt?: unknown } | null>(file, null, {
+    mode: 0o600,
+    isValid: (value): value is { lastSelfImproveAt?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  const at = data?.lastSelfImproveAt;
+  return typeof at === 'number' && Number.isFinite(at) ? at : null;
 }
 
 /** Persist the last-self-improve timestamp (ms). Best-effort, never-throws. */
 function writeSelfImproveState(file: string, at: number): void {
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ lastSelfImproveAt: at }), 'utf-8');
+    writeJsonAtomicSync(file, { lastSelfImproveAt: at }, { mode: 0o600 });
   } catch {
     /* the cooldown persistence is best-effort — never block the loop */
   }

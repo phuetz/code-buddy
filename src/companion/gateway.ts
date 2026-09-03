@@ -1,5 +1,6 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { appendFile, mkdir } from 'fs/promises';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import * as path from 'path';
 import type { ChannelManager, ChannelType, ContentType } from '../channels/core.js';
 import { readSendMessageOutbox } from '../channels/send-message.js';
@@ -346,53 +347,28 @@ function sortChannels(channels: CompanionGatewayChannelConfig[]): CompanionGatew
 }
 
 async function writeProfile(profile: CompanionGatewayProfile): Promise<void> {
-  await mkdir(path.dirname(profile.storePath), { recursive: true });
-  const tmp = `${profile.storePath}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(profile, null, 2)}\n`, 'utf8');
-  await rename(tmp, profile.storePath);
+  await writeJsonAtomic(profile.storePath, profile, { mode: 0o600 });
 }
 
 export async function readCompanionGatewayProfile(
   options: CompanionGatewayOptions = {},
 ): Promise<CompanionGatewayProfile> {
   const fallback = emptyProfile(options);
-  let raw: string;
+  const record = await readJsonAtomic<Partial<CompanionGatewayProfile> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionGatewayProfile> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+        && Array.isArray((value as { channels?: unknown }).channels),
+    ),
+  });
+  if (!record) return fallback;
   try {
-    raw = (await readFile(fallback.storePath, 'utf8')).trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return fallback;
-    logger.warn(
-      `[companion-gateway] could not read profile: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[companion-gateway] profile exists but is empty: ${fallback.storePath}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      const msg = `[companion-gateway] profile is not an object: ${fallback.storePath}`;
-      logger.warn(msg);
-      throw new Error(msg);
-    }
-    const record = parsed as Partial<CompanionGatewayProfile>;
     const defaultMode = isMode(record.defaultMode) ? record.defaultMode : fallback.defaultMode;
-    if (!Array.isArray(record.channels)) {
-      const msg = `[companion-gateway] profile channels is not a list: ${fallback.storePath}`;
-      logger.warn(msg);
-      throw new Error(msg);
-    }
     const parsedChannels: CompanionGatewayChannelConfig[] = [];
-    for (const item of record.channels) {
+    for (const item of record.channels ?? []) {
       const channel = parseChannel(item, defaultMode);
       if (!channel) {
-        const msg = `[companion-gateway] profile has an invalid channel: ${fallback.storePath}`;
-        logger.warn(msg);
-        throw new Error(msg);
+        return fallback;
       }
       parsedChannels.push(channel);
     }
@@ -407,11 +383,8 @@ export async function readCompanionGatewayProfile(
       defaultMode,
       channels: sortChannels([...byChannel.values()]),
     };
-  } catch (err) {
-    logger.warn(
-      `[companion-gateway] profile JSON is unreadable: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    throw err;
+  } catch {
+    return fallback;
   }
 }
 

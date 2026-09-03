@@ -16,6 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -139,10 +140,7 @@ export function consolidateMemories(
 
   // Load existing memories
   const memoryFilePath = path.join(memDir, MEMORY_FILE);
-  let existingContent = '';
-  if (fs.existsSync(memoryFilePath)) {
-    existingContent = fs.readFileSync(memoryFilePath, 'utf-8');
-  }
+  const existingContent = readTextAtomicSync(memoryFilePath, '');
 
   const existingLines = new Set(
     existingContent.split('\n')
@@ -192,13 +190,13 @@ export function consolidateMemories(
       // Atomic lock: O_EXCL fails if file exists
       fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
       try {
-        fs.appendFileSync(memoryFilePath, section);
+        fs.appendFileSync(memoryFilePath, section, { encoding: 'utf8', mode: 0o600 });
       } finally {
         try { fs.unlinkSync(lockPath); } catch { /* best effort */ }
       }
     } catch {
       // Lock failed (another process writing) — append anyway (appendFileSync is atomic on most OS for small writes)
-      fs.appendFileSync(memoryFilePath, section);
+      fs.appendFileSync(memoryFilePath, section, { encoding: 'utf8', mode: 0o600 });
     }
   }
 
@@ -211,7 +209,7 @@ export function consolidateMemories(
     .join('\n');
   if (preferences.trim()) {
     const summaryContent = `# Memory Summary\n\nKey preferences and patterns:\n${preferences}\n`;
-    fs.writeFileSync(summaryPath, summaryContent.substring(0, 2000));
+    writeFileAtomicSync(summaryPath, summaryContent.substring(0, 2000), { mode: 0o600 });
   }
 
   // Write rollout summary
@@ -227,7 +225,7 @@ export function consolidateMemories(
       ``,
       ...newMemories.map(m => `- [${m.category}] ${m.summary}`),
     ].join('\n');
-    fs.writeFileSync(rolloutPath, rolloutContent);
+    writeFileAtomicSync(rolloutPath, rolloutContent, { mode: 0o600 });
 
     // Prune old rollout summaries (keep last 30)
     try {
@@ -256,11 +254,6 @@ export function consolidateMemories(
  */
 export function loadMemorySummary(cwd: string = process.cwd()): string | null {
   const summaryPath = path.join(cwd, MEMORY_DIR, SUMMARY_FILE);
-  try {
-    if (fs.existsSync(summaryPath)) {
-      const content = fs.readFileSync(summaryPath, 'utf-8');
-      if (content.trim()) return content;
-    }
-  } catch { /* optional */ }
-  return null;
+  const content = readTextAtomicSync(summaryPath, '');
+  return content || null;
 }

@@ -13,17 +13,9 @@
  *
  * @module companion/relationship-state
  */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Personality traits (0–100) that slowly DRIFT with the kind of time spent together. */
 export interface RelationshipTraits {
@@ -76,29 +68,16 @@ function defaultStatePath(): string {
 }
 
 export function loadRelationshipState(statePath = defaultStatePath()): RelationshipState {
-  let raw: string;
-  try {
-    raw = readFileSync(statePath, 'utf8').trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
-      return { celebratedMilestones: [] };
-    }
-    throw err;
-  }
-  if (!raw) {
-    throw new Error(`[relationship] state exists but is empty: ${statePath}`);
-  }
-  const data: unknown = JSON.parse(raw);
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error(`[relationship] state is not an object: ${statePath}`);
-  }
+  const data = readJsonAtomicSync<Record<string, unknown> | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Record<string, unknown> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+        && ((value as { celebratedMilestones?: unknown }).celebratedMilestones === undefined
+          || Array.isArray((value as { celebratedMilestones?: unknown }).celebratedMilestones)),
+    ),
+  });
+  if (!data) return { celebratedMilestones: [] };
   const record = data as Record<string, unknown>;
-  if (
-    record.celebratedMilestones !== undefined &&
-    !Array.isArray(record.celebratedMilestones)
-  ) {
-    throw new Error(`[relationship] celebratedMilestones is not a list: ${statePath}`);
-  }
   const parsed: RelationshipState = {
     firstSeenAt: typeof record.firstSeenAt === 'number' ? record.firstSeenAt : undefined,
     lastPresentAt: typeof record.lastPresentAt === 'number' ? record.lastPresentAt : undefined,
@@ -124,36 +103,11 @@ export function loadRelationshipState(statePath = defaultStatePath()): Relations
 }
 
 export function saveRelationshipState(state: RelationshipState, statePath = defaultStatePath()): boolean {
-  const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   const normalizedState = normalizeStateForPersistence(state);
   try {
-    mkdirSync(dirname(statePath), { recursive: true, mode: 0o700 });
-    writeFileSync(temporaryPath, JSON.stringify(normalizedState), { encoding: 'utf8', mode: 0o600 });
-    try {
-      renameSync(temporaryPath, statePath);
-    } catch {
-      // Windows can reject replacing an existing destination. Preserve the
-      // cross-platform best-effort contract while keeping the temp-first path
-      // atomic on platforms that support replacement rename.
-      writeFileSync(statePath, JSON.stringify(normalizedState), { encoding: 'utf8', mode: 0o600 });
-      try {
-        unlinkSync(temporaryPath);
-      } catch {
-        /* already moved/removed */
-      }
-    }
-    try {
-      chmodSync(statePath, 0o600);
-    } catch {
-      /* chmod is advisory on some Windows filesystems */
-    }
+    writeJsonAtomicSync(statePath, normalizedState, { mode: 0o600 });
     return true;
   } catch {
-    try {
-      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
-    } catch {
-      /* best effort cleanup */
-    }
     return false;
   }
 }

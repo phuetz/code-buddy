@@ -21,6 +21,7 @@ import { getMemoryRepository, MemoryRepository } from '../database/repositories/
 import type { Memory as DBMemory, MemoryType as DBMemoryType } from '../database/schema.js';
 import { getEmbeddingProvider } from '../embeddings/embedding-provider.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { BayesianQualifier } from '../ml/bayesian-qualifier.js';
 import { mmrSelect, type RankedCandidate } from './hybrid-mmr.js';
 
@@ -175,9 +176,7 @@ export class EnhancedMemory extends EventEmitter {
   private memories: Map<string, MemoryEntry> = new Map();
   private projects: Map<string, ProjectMemory> = new Map();
   private summaries: ConversationSummary[] = [];
-  private summariesLoadError: string | null = null;
   private userProfile: UserProfile | null = null;
-  private userProfileLoadError: string | null = null;
   private currentProjectId: string | null = null;
   private decayIntervalId: ReturnType<typeof setInterval> | null = null;
   private dbRepository: MemoryRepository | null = null;
@@ -263,12 +262,12 @@ export class EnhancedMemory extends EventEmitter {
 
     // Load GPR state if exists
     const qualifierPath = path.join(this.dataDir, 'bayesian-state.json');
-    if (await fs.pathExists(qualifierPath)) {
+    const qualifierState = await readTextAtomic(qualifierPath, '');
+    if (qualifierState) {
       try {
-        const state = await fs.readFile(qualifierPath, 'utf8');
-        this.bayesianQualifier.loadState(state);
-      } catch (err: any) {
-        logger.error(`Failed to load bayesian-state: ${err.message}`);
+        this.bayesianQualifier.loadState(qualifierState);
+      } catch (err) {
+        logger.error(`Failed to load bayesian-state: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -316,29 +315,15 @@ export class EnhancedMemory extends EventEmitter {
     // Fallback: Load from JSON
     const indexPath = path.join(this.dataDir, 'memory-index.json');
 
-    if (await fs.pathExists(indexPath)) {
-      try {
-        const entries: unknown = await fs.readJSON(indexPath);
-        if (!Array.isArray(entries)) {
-          throw new Error('expected a JSON array');
-        }
-        for (const entry of entries) {
-          if (!entry || typeof entry !== 'object' || typeof (entry as { id?: unknown }).id !== 'string') {
-            throw new Error('invalid memory entry');
-          }
-          const memoryEntry = entry as MemoryEntry;
-          this.memories.set(memoryEntry.id, memoryEntry);
-        }
-      } catch (err) {
-        const failure = new EnhancedMemoryInitializationError(
-          `Cannot load memory-index.json: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        logger.warn('Enhanced memory index is corrupt or unreadable', {
-          path: indexPath,
-          error: failure.message,
-        });
-        throw failure;
+    const entries = await readJsonAtomic<unknown[]>(indexPath, [], {
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object' || typeof (entry as { id?: unknown }).id !== 'string') {
+        continue;
       }
+      const memoryEntry = entry as MemoryEntry;
+      this.memories.set(memoryEntry.id, memoryEntry);
     }
   }
 
@@ -359,13 +344,15 @@ export class EnhancedMemory extends EventEmitter {
     const jsonFiles = files.filter(file => file.endsWith('.json'));
     const loadResults = await Promise.allSettled(
       jsonFiles.map(async file => {
-        const project = await fs.readJSON(path.join(projectsDir, file));
+        const project = await readJsonAtomic<ProjectMemory | null>(path.join(projectsDir, file), null, {
+          isValid: (value): value is ProjectMemory => Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+        });
         return project;
       })
     );
 
     for (const result of loadResults) {
-      if (result.status === 'fulfilled') {
+      if (result.status === 'fulfilled' && result.value) {
         this.projects.set(result.value.projectId, result.value);
       }
       // Skip rejected promises (invalid files)
@@ -378,23 +365,9 @@ export class EnhancedMemory extends EventEmitter {
   private async loadUserProfile(): Promise<void> {
     const profilePath = path.join(this.dataDir, 'user-profile.json');
 
-    if (await fs.pathExists(profilePath)) {
-      try {
-        const profile: unknown = await fs.readJSON(profilePath);
-        if (profile === null || typeof profile !== 'object' || Array.isArray(profile)) {
-          throw new Error('expected a JSON object');
-        }
-        this.userProfile = profile as UserProfile;
-        this.userProfileLoadError = null;
-      } catch (err) {
-        this.userProfile = null;
-        this.userProfileLoadError = err instanceof Error ? err.message : String(err);
-        logger.warn('Enhanced memory user profile is corrupt or unreadable', {
-          path: profilePath,
-          error: this.userProfileLoadError,
-        });
-      }
-    }
+    this.userProfile = await readJsonAtomic<UserProfile | null>(profilePath, null, {
+      isValid: (value): value is UserProfile => Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+    });
   }
 
   /**
@@ -403,23 +376,9 @@ export class EnhancedMemory extends EventEmitter {
   private async loadSummaries(): Promise<void> {
     const summariesPath = path.join(this.dataDir, 'summaries.json');
 
-    if (await fs.pathExists(summariesPath)) {
-      try {
-        const summaries: unknown = await fs.readJSON(summariesPath);
-        if (!Array.isArray(summaries)) {
-          throw new Error('expected a JSON array');
-        }
-        this.summaries = summaries as ConversationSummary[];
-        this.summariesLoadError = null;
-      } catch (err) {
-        this.summaries = [];
-        this.summariesLoadError = err instanceof Error ? err.message : String(err);
-        logger.warn('Enhanced memory summaries are corrupt or unreadable', {
-          path: summariesPath,
-          error: this.summariesLoadError,
-        });
-      }
-    }
+    this.summaries = await readJsonAtomic<ConversationSummary[]>(summariesPath, [], {
+      isValid: (value): value is ConversationSummary[] => Array.isArray(value),
+    });
   }
 
   /**
@@ -434,44 +393,36 @@ export class EnhancedMemory extends EventEmitter {
     // Save all data files in parallel for better performance
     const saveOperations: Promise<void>[] = [
       // Save memory index
-      fs.writeJSON(
+      writeJsonAtomic(
         path.join(this.dataDir, 'memory-index.json'),
         Array.from(this.memories.values()),
-        { spaces: 2 }
+        { mode: 0o600 }
       ),
     ];
 
-    // A corrupt summaries file is not an empty summary list. Keep it intact
-    // until it can be repaired or loaded explicitly.
-    if (!this.summariesLoadError) {
-      saveOperations.push(fs.writeJSON(
-        path.join(this.dataDir, 'summaries.json'),
-        this.summaries,
-        { spaces: 2 }
-      ));
-    }
+    saveOperations.push(writeJsonAtomic(
+      path.join(this.dataDir, 'summaries.json'),
+      this.summaries,
+      { mode: 0o600 }
+    ));
 
-    // A corrupt profile file is not an empty profile. Keep it intact
-    // until it can be repaired or loaded explicitly.
-    if (this.userProfile && !this.userProfileLoadError) {
+    if (this.userProfile) {
       saveOperations.push(
-        fs.writeJSON(
+        writeJsonAtomic(
           path.join(this.dataDir, 'user-profile.json'),
           this.userProfile,
-          { spaces: 2 }
+          { mode: 0o600 }
         )
       );
     }
 
-    if (this.bayesianQualifier) {
-      saveOperations.push(
-        fs.writeFile(
-          path.join(this.dataDir, 'bayesian-state.json'),
-          this.bayesianQualifier.saveState(),
-          'utf8'
-        )
-      );
-    }
+    saveOperations.push(
+      writeFileAtomic(
+        path.join(this.dataDir, 'bayesian-state.json'),
+        this.bayesianQualifier.saveState(),
+        { mode: 0o600 }
+      )
+    );
 
     await Promise.all(saveOperations);
   }
@@ -901,7 +852,7 @@ export class EnhancedMemory extends EventEmitter {
       'projects',
       `${project.projectId}.json`
     );
-    await fs.writeJSON(projectPath, project, { spaces: 2 });
+    await writeJsonAtomic(projectPath, project, { mode: 0o600 });
   }
 
   /**
@@ -956,11 +907,6 @@ export class EnhancedMemory extends EventEmitter {
     messageCount: number;
   }): Promise<ConversationSummary> {
     await this.ready;
-    if (this.summariesLoadError) {
-      throw new EnhancedMemoryInitializationError(
-        `Cannot store summary because summaries.json is corrupt or unreadable: ${this.summariesLoadError}`,
-      );
-    }
     const summary: ConversationSummary = {
       id: crypto.randomBytes(8).toString('hex'),
       sessionId: options.sessionId,
@@ -1003,11 +949,6 @@ export class EnhancedMemory extends EventEmitter {
    */
   async updateUserProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
     await this.ready;
-    if (this.userProfileLoadError) {
-      throw new EnhancedMemoryInitializationError(
-        `Cannot update user profile because user-profile.json is corrupt or unreadable: ${this.userProfileLoadError}`,
-      );
-    }
     if (!this.userProfile) {
       this.userProfile = {
         id: crypto.randomBytes(8).toString('hex'),
@@ -1044,11 +985,6 @@ export class EnhancedMemory extends EventEmitter {
    * Get user profile
    */
   getUserProfile(): UserProfile | null {
-    if (this.userProfileLoadError) {
-      throw new EnhancedMemoryInitializationError(
-        `Cannot read user profile because user-profile.json is corrupt or unreadable: ${this.userProfileLoadError}`,
-      );
-    }
     return this.userProfile;
   }
 
@@ -1075,9 +1011,7 @@ export class EnhancedMemory extends EventEmitter {
 
     // Add user preferences
     if (options.includePreferences) {
-      if (this.userProfileLoadError) {
-        parts.push(`\nUser profile unavailable: user-profile.json is corrupt or unreadable (${this.userProfileLoadError}).`);
-      } else if (this.userProfile) {
+      if (this.userProfile) {
         parts.push(`User preferences:\n${JSON.stringify(this.userProfile.preferences, null, 2)}`);
       }
     }
@@ -1101,9 +1035,6 @@ export class EnhancedMemory extends EventEmitter {
 
     // Add recent summaries
     if (options.includeRecentSummaries) {
-      if (this.summariesLoadError) {
-        parts.push(`\nRecent conversation summaries unavailable: summaries.json is corrupt or unreadable (${this.summariesLoadError}).`);
-      }
       const recentSummaries = this.summaries.slice(-3);
       if (recentSummaries.length > 0) {
         parts.push('\nRecent conversation context:');

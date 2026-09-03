@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 import { getLessonProvenanceIndex } from './lesson-provenance.js';
 import { BM25Index } from '../search/bm25.js';
 
@@ -469,7 +470,7 @@ export class LessonsTracker {
       const projectItems = this.items.filter(item =>
         this.locationsOf(item.id).some(loc => loc.path === this.projectPath),
       );
-      fs.writeFileSync(this.projectPath, this.serialiseItems(projectItems), 'utf-8');
+      writeFileAtomicSync(this.projectPath, this.serialiseItems(projectItems), { mode: 0o600 });
     });
   }
 
@@ -597,9 +598,7 @@ export class LessonsTracker {
       const next = mutate(this.loadFile(filePath));
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const tmp = `${filePath}.tmp`;
-      fs.writeFileSync(tmp, this.serialiseItems(next), 'utf-8');
-      fs.renameSync(tmp, filePath);
+      writeFileAtomicSync(filePath, this.serialiseItems(next), { mode: 0o600 });
     });
   }
 
@@ -970,9 +969,9 @@ export class LessonsTracker {
   }
 
   private loadFile(filePath: string): LessonItem[] {
-    if (!fs.existsSync(filePath)) return [];
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = readTextAtomicSync(filePath, '');
+      if (!content) return [];
       return this.parseMd(content);
     } catch {
       return [];

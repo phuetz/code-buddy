@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import * as path from 'path';
 import type { ChannelType, ContentType } from '../channels/core.js';
 import {
@@ -514,51 +515,27 @@ function parseItem(value: unknown): CompanionGatewayInboxItem | null {
 }
 
 async function writeInbox(inbox: CompanionGatewayInbox): Promise<void> {
-  await mkdir(path.dirname(inbox.storePath), { recursive: true });
-  const tmp = `${inbox.storePath}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(withCounts(inbox), null, 2)}\n`, 'utf8');
-  await rename(tmp, inbox.storePath);
+  await writeJsonAtomic(inbox.storePath, withCounts(inbox), { mode: 0o600 });
 }
 
 export async function readCompanionGatewayInbox(
   options: CompanionGatewayInboxOptions = {},
 ): Promise<CompanionGatewayInbox> {
   const fallback = emptyInbox(options);
-  let raw: string;
+  const record = await readJsonAtomic<Partial<CompanionGatewayInbox> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionGatewayInbox> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+        && Array.isArray((value as { items?: unknown }).items),
+    ),
+  });
+  if (!record) return fallback;
   try {
-    raw = (await readFile(fallback.storePath, 'utf8')).trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return fallback;
-    logger.warn(
-      `[companion-gateway] could not read inbox: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[companion-gateway] inbox exists but is empty: ${fallback.storePath}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      const msg = `[companion-gateway] inbox is not an object: ${fallback.storePath}`;
-      logger.warn(msg);
-      throw new Error(msg);
-    }
-    const record = parsed as Partial<CompanionGatewayInbox>;
-    if (!Array.isArray(record.items)) {
-      const msg = `[companion-gateway] inbox items is not a list: ${fallback.storePath}`;
-      logger.warn(msg);
-      throw new Error(msg);
-    }
     const items: CompanionGatewayInboxItem[] = [];
-    for (const item of record.items) {
+    for (const item of record.items ?? []) {
       const parsedItem = parseItem(item);
       if (!parsedItem) {
-        const msg = `[companion-gateway] inbox has an invalid item: ${fallback.storePath}`;
-        logger.warn(msg);
-        throw new Error(msg);
+        return fallback;
       }
       items.push(parsedItem);
     }
@@ -567,11 +544,8 @@ export async function readCompanionGatewayInbox(
       generatedAt: typeof record.generatedAt === 'string' ? record.generatedAt : fallback.generatedAt,
       items,
     });
-  } catch (err) {
-    logger.warn(
-      `[companion-gateway] inbox JSON is unreadable: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    throw err;
+  } catch {
+    return fallback;
   }
 }
 
@@ -682,8 +656,10 @@ export async function draftCompanionGatewayInboxItem(
   };
 
   await mkdir(draftsDir, { recursive: true });
-  await writeFile(taskFile, `${JSON.stringify(task, null, 2)}\n`, 'utf8');
-  await writeFile(draftFile, `${JSON.stringify(draft, null, 2)}\n`, 'utf8');
+  await Promise.all([
+    writeJsonAtomic(taskFile, task, { mode: 0o600 }),
+    writeJsonAtomic(draftFile, draft, { mode: 0o600 }),
+  ]);
 
   await writeInbox({
     ...inbox,
@@ -745,7 +721,7 @@ export async function routeCompanionGatewayDraftToFleet(
   };
 
   await mkdir(draftsDir, { recursive: true });
-  await writeFile(draftFile, `${JSON.stringify(fleetDraft, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(draftFile, fleetDraft, { mode: 0o600 });
   await writeInbox({
     ...inbox,
     generatedAt: createdAt,
@@ -805,7 +781,7 @@ export async function draftCompanionGatewayOutboundReply(
   };
 
   await mkdir(path.dirname(replyDraft.draftFile), { recursive: true });
-  await writeFile(replyDraft.draftFile, `${JSON.stringify(replyDraft, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(replyDraft.draftFile, replyDraft, { mode: 0o600 });
   await writeInbox({
     ...inbox,
     generatedAt: createdAt,

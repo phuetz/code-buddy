@@ -14,6 +14,7 @@ import {
   type ForgettingConfig,
 } from "./memory-forgetting.js";
 import { withSessionLock } from "../persistence/session-lock.js";
+import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -352,7 +353,7 @@ export class PersistentMemoryManager extends EventEmitter {
       await fs.ensureDir(projectDir);
 
       if (!(await fs.pathExists(this.config.projectMemoryPath))) {
-        await fs.writeFile(this.config.projectMemoryPath, MEMORY_TEMPLATE);
+        await writeFileAtomic(this.config.projectMemoryPath, MEMORY_TEMPLATE, { mode: 0o600 });
       }
     }
 
@@ -361,7 +362,7 @@ export class PersistentMemoryManager extends EventEmitter {
     await fs.ensureDir(userDir);
 
     if (!(await fs.pathExists(this.config.userMemoryPath))) {
-      await fs.writeFile(this.config.userMemoryPath, MEMORY_TEMPLATE);
+      await writeFileAtomic(this.config.userMemoryPath, MEMORY_TEMPLATE, { mode: 0o600 });
     }
   }
 
@@ -1237,9 +1238,7 @@ export class PersistentMemoryManager extends EventEmitter {
         }
         cleaned.push(line);
       }
-      const tmpPath = `${archivePath}.tmp`;
-      await fs.writeFile(tmpPath, cleaned.join("\n"), "utf-8");
-      await fs.rename(tmpPath, archivePath);
+      await writeFileAtomic(archivePath, cleaned.join("\n"), { mode: 0o600 });
     } catch (err) {
       logger.warn(
         `[persistent-memory] archive cleanup after restore failed (restore itself succeeded): ${err instanceof Error ? err.message : String(err)}`,
@@ -1435,14 +1434,8 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
       await fs.ensureDir(path.dirname(filePath));
-      const temporaryPath = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
-      try {
-        await fs.writeFile(temporaryPath, content);
-        await fs.rename(temporaryPath, filePath);
-        this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
-      } finally {
-        await fs.remove(temporaryPath).catch(() => undefined);
-      }
+      await writeFileAtomic(filePath, content, { mode: 0o600 });
+      this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
     });
   }
 

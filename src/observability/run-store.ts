@@ -23,6 +23,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -460,9 +461,16 @@ export class RunStore {
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
       if (fs.existsSync(metricsPath)) {
-        const metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8')) as RunMetrics;
-        metrics.durationMs = (summary?.endedAt || Date.now()) - (summary?.startedAt || Date.now());
-        fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
+        const metrics = readJsonAtomicSync<RunMetrics | null>(metricsPath, null, {
+          mode: 0o600,
+          isValid: (value): value is RunMetrics => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value),
+          ),
+        });
+        if (metrics) {
+          metrics.durationMs = (summary?.endedAt || Date.now()) - (summary?.startedAt || Date.now());
+          writeJsonAtomicSync(metricsPath, metrics, { mode: 0o600 });
+        }
       }
     } catch {
       // Ignore
@@ -543,11 +551,14 @@ export class RunStore {
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
       let existing: Partial<RunMetrics> = {};
-      if (fs.existsSync(metricsPath)) {
-        existing = JSON.parse(fs.readFileSync(metricsPath, 'utf-8'));
-      }
+      existing = readJsonAtomicSync<Partial<RunMetrics>>(metricsPath, {}, {
+        mode: 0o600,
+        isValid: (value): value is Partial<RunMetrics> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
       const merged = { ...existing, ...metrics };
-      fs.writeFileSync(metricsPath, JSON.stringify(merged, null, 2));
+      writeJsonAtomicSync(metricsPath, merged, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -569,9 +580,12 @@ export class RunStore {
     let metrics: Partial<RunMetrics> = {};
     try {
       const metricsPath = path.join(runDir, 'metrics.json');
-      if (fs.existsSync(metricsPath)) {
-        metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8'));
-      }
+      metrics = readJsonAtomicSync<Partial<RunMetrics>>(metricsPath, {}, {
+        mode: 0o600,
+        isValid: (value): value is Partial<RunMetrics> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch {
       // Ignore
     }
@@ -1234,7 +1248,7 @@ export class RunStore {
   private saveMetrics(runId: string, metrics: Partial<RunMetrics>): void {
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
-      fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
+      writeJsonAtomicSync(metricsPath, metrics, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -1243,7 +1257,7 @@ export class RunStore {
   private saveSummary(runId: string, summary: RunSummary): void {
     try {
       const summaryPath = path.join(this.runDir(runId), 'summary.json');
-      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+      writeJsonAtomicSync(summaryPath, summary, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -1257,8 +1271,14 @@ export class RunStore {
       for (const dir of dirs) {
         try {
           const summaryPath = path.join(this.runsDir, dir, 'summary.json');
-          if (fs.existsSync(summaryPath)) {
-            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')) as RunSummary;
+          const summary = readJsonAtomicSync<RunSummary | null>(summaryPath, null, {
+            mode: 0o600,
+            isValid: (value): value is RunSummary => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value) &&
+              typeof (value as RunSummary).runId === 'string',
+            ),
+          });
+          if (summary) {
             this.summaries.set(summary.runId, summary);
             // Count events from file size heuristic (avoid full parse on load)
             const eventsPath = path.join(this.runsDir, dir, 'events.jsonl');

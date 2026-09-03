@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { recordCompanionPercept } from './percepts.js';
 import { recordCompanionSafetyEvent } from './safety-ledger.js';
 
@@ -185,23 +186,21 @@ function sortCards(cards: CompanionCard[]): CompanionCard[] {
 }
 
 async function writeStore(store: CompanionCardStore): Promise<void> {
-  await mkdir(path.dirname(store.storePath), { recursive: true });
-  await writeFile(store.storePath, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(store.storePath, store, { mode: 0o600 });
 }
 
 export async function readCompanionCards(
   options: CompanionCardQueryOptions = {},
 ): Promise<CompanionCardStore> {
   const fallback = emptyStore(options);
-  let raw: string;
+  const parsed = await readJsonAtomic<Partial<CompanionCardStore> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionCardStore> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!parsed) return fallback;
   try {
-    raw = await readFile(fallback.storePath, 'utf8');
-  } catch {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<CompanionCardStore>;
     const cards = Array.isArray(parsed.cards)
       ? parsed.cards.map(parseCard).filter((card): card is CompanionCard => Boolean(card))
       : [];

@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { logger } from '../utils/logger.js';
+import { readJsonLinesAtomicSync, readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 export interface OutcomeRecord {
   /** ISO timestamp of the run. */
@@ -125,12 +126,14 @@ export class ModelScoreboard {
   private load(): void {
     try {
       let raw = '';
+      let sourcePath = this.file;
       if (fs.existsSync(this.file)) {
-        raw = fs.readFileSync(this.file, 'utf-8').trim();
+        raw = readTextAtomicSync(this.file, '').trim();
       } else {
         const legacy = this.legacyFile();
         if (legacy && fs.existsSync(legacy)) {
-          raw = fs.readFileSync(legacy, 'utf-8').trim();
+          sourcePath = legacy;
+          raw = readTextAtomicSync(legacy, '').trim();
         }
       }
       if (!raw) {
@@ -144,17 +147,9 @@ export class ModelScoreboard {
         this.records = Array.isArray(parsed) ? (parsed as OutcomeRecord[]) : [];
         this.rewriteAsJsonl();
       } else {
-        this.records = raw
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .flatMap((line) => {
-            try {
-              return [JSON.parse(line) as OutcomeRecord];
-            } catch {
-              return []; // a torn/corrupt line loses one record, never the ledger
-            }
-          });
+        this.records = readJsonLinesAtomicSync<OutcomeRecord>(sourcePath, [], (value): value is OutcomeRecord => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ));
       }
       this.cachedMtimeMs = this.statMtimeMs();
     } catch (err) {
@@ -167,8 +162,11 @@ export class ModelScoreboard {
 
   private rewriteAsJsonl(): void {
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this.file, this.records.map((r) => JSON.stringify(r)).join('\n') + (this.records.length ? '\n' : ''), 'utf-8');
+      writeFileAtomicSync(
+        this.file,
+        this.records.map((r) => JSON.stringify(r)).join('\n') + (this.records.length ? '\n' : ''),
+        { mode: 0o600 },
+      );
       this.cachedMtimeMs = this.statMtimeMs();
     } catch (err) {
       logger.warn?.('[model-scoreboard] could not migrate ledger to JSONL', {
@@ -184,7 +182,7 @@ export class ModelScoreboard {
     this.records.push(normalized);
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.appendFileSync(this.file, JSON.stringify(normalized) + '\n', 'utf-8');
+      fs.appendFileSync(this.file, JSON.stringify(normalized) + '\n', { encoding: 'utf8', mode: 0o600 });
       this.cachedMtimeMs = this.statMtimeMs();
     } catch (err) {
       logger.warn?.('[model-scoreboard] could not write ledger', {

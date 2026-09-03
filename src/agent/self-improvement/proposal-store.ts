@@ -11,6 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 import type { SkillGateOutcome, SkillProposal } from './skill-types.js';
 import type { ToolGateOutcome, ToolProposal } from './tool-types.js';
@@ -105,12 +106,13 @@ export class PendingProposalStore {
 
   private write(filePath: string, record: PendingProposalRecord): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf-8');
+    writeJsonAtomicSync(filePath, record, { mode: 0o600 });
   }
 
   private read(filePath: string): PendingProposalRecord | null {
     try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Partial<PendingProposalRecord>;
+      const parsed = readJsonAtomicSync<Partial<PendingProposalRecord> | null>(filePath, null, { mode: 0o600 });
+      if (!parsed) return null;
       if (parsed.schemaVersion !== PENDING_PROPOSAL_SCHEMA_VERSION) return null;
       if (parsed.kind !== 'tool' && parsed.kind !== 'skill') return null;
       if (typeof parsed.scenarioId !== 'string' || !parsed.proposal || !parsed.gate) return null;

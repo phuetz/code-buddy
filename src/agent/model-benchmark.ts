@@ -8,10 +8,10 @@
  * can use to rank candidates.
  */
 
-import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { normalizeBaseURL } from '../utils/base-url.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface ModelBenchmarkCandidate {
   model: string;
@@ -244,22 +244,20 @@ export async function writeBenchmarkIndex(
     entries,
   };
 
-  await fs.mkdir(path.dirname(indexPath), { recursive: true });
-  await fs.writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(indexPath, index, { mode: 0o600 });
   return index;
 }
 
 export async function loadBenchmarkIndex(
   indexPath = defaultBenchmarkIndexPath(),
 ): Promise<ModelBenchmarkIndex | null> {
-  try {
-    const raw = await fs.readFile(indexPath, 'utf8');
-    const parsed = JSON.parse(raw) as ModelBenchmarkIndex;
-    if (!parsed || !Array.isArray(parsed.entries)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return readJsonAtomic<ModelBenchmarkIndex | null>(indexPath, null, {
+    mode: 0o600,
+    isValid: (value): value is ModelBenchmarkIndex => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value) &&
+      Array.isArray((value as ModelBenchmarkIndex).entries),
+    ),
+  });
 }
 
 export async function loadBenchmarkScoreMap(

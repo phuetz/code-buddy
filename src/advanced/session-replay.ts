@@ -7,6 +7,7 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface ReplayEvent {
   id: string;
@@ -70,7 +71,7 @@ export class SessionReplayManager extends EventEmitter {
     const safeName = session.name.replace(/[^a-z0-9]/gi, '-');
     const filename = session.id + '-' + safeName + '.json';
     const filePath = path.join(this.storageDir, filename);
-    await fs.writeJson(filePath, session, { spaces: 2 });
+    await writeJsonAtomic(filePath, session, { mode: 0o600 });
     return filePath;
   }
 
@@ -79,7 +80,7 @@ export class SessionReplayManager extends EventEmitter {
     const files = await fs.readdir(this.storageDir);
     const sessionFile = files.find(f => f.startsWith(sessionId));
     if (!sessionFile) return null;
-    return fs.readJson(path.join(this.storageDir, sessionFile));
+    return readJsonAtomic<ReplaySession | null>(path.join(this.storageDir, sessionFile), null);
   }
 
   async listSessions(): Promise<Array<{ id: string; name: string; date: Date }>> {

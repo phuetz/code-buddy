@@ -12,6 +12,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { logger } from './logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 export interface HistoryManagerConfig {
   /** Maximum number of history entries to store */
@@ -79,9 +80,10 @@ export class HistoryManager {
    */
   private loadHistory(): void {
     try {
-      if (fs.existsSync(this.config.historyFile)) {
-        const data = fs.readFileSync(this.config.historyFile, 'utf-8');
-        const parsed = JSON.parse(data);
+      const parsed = readJsonAtomicSync<unknown | null>(this.config.historyFile, null, {
+        mode: 0o600,
+      });
+      if (parsed !== null) {
 
         // Handle both old format (string[]) and new format (HistoryEntry[])
         if (Array.isArray(parsed)) {
@@ -113,13 +115,7 @@ export class HistoryManager {
    */
   private saveHistory(): void {
     try {
-      const dir = path.dirname(this.config.historyFile);
-      fs.ensureDirSync(dir);
-      fs.writeFileSync(
-        this.config.historyFile,
-        JSON.stringify(this.history, null, 2),
-        'utf-8'
-      );
+      writeJsonAtomicSync(this.config.historyFile, this.history, { mode: 0o600 });
     } catch (error) {
       logger.warn('Failed to save history', { error: String(error) });
     }

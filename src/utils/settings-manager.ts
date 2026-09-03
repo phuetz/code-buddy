@@ -26,6 +26,7 @@ import {
   validateConnectionConfig,
 } from "../config/index.js";
 import { shouldWriteProjectRuntimeFiles } from "./runtime-flags.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 /**
  * User-level settings stored in ~/.codebuddy/user-settings.json
@@ -162,18 +163,8 @@ export class SettingsManager {
         return { ...DEFAULT_USER_SETTINGS };
       }
 
-      const content = fs.readFileSync(this.userSettingsPath, "utf-8");
-      let rawSettings: unknown;
-
-      try {
-        rawSettings = JSON.parse(content);
-      } catch (parseError) {
-        logger.error("Invalid JSON in user settings file", {
-          path: this.userSettingsPath,
-          error: parseError instanceof Error ? parseError.message : "Parse error"
-        });
-        return { ...DEFAULT_USER_SETTINGS };
-      }
+      const rawSettings = readJsonAtomicSync<unknown | null>(this.userSettingsPath, null, { mode: 0o600 });
+      if (rawSettings === null) return { ...DEFAULT_USER_SETTINGS };
 
       // Validate with Zod schema
       const validator = getZodConfigValidator();
@@ -219,9 +210,13 @@ export class SettingsManager {
       let existingSettings: UserSettings = { ...DEFAULT_USER_SETTINGS };
       if (fs.existsSync(this.userSettingsPath)) {
         try {
-          const content = fs.readFileSync(this.userSettingsPath, "utf-8");
-          const parsed = JSON.parse(content);
-          existingSettings = { ...DEFAULT_USER_SETTINGS, ...parsed };
+          const parsed = readJsonAtomicSync<Record<string, unknown> | null>(this.userSettingsPath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
+          if (parsed) existingSettings = { ...DEFAULT_USER_SETTINGS, ...parsed };
         } catch (_error) {
           // If file is corrupted, use defaults
           logger.warn("Corrupted user settings file, using defaults");
@@ -230,11 +225,7 @@ export class SettingsManager {
 
       const mergedSettings = { ...existingSettings, ...settings };
 
-      fs.writeFileSync(
-        this.userSettingsPath,
-        JSON.stringify(mergedSettings, null, 2),
-        { mode: 0o600 } // Secure permissions for API key
-      );
+      writeJsonAtomicSync(this.userSettingsPath, mergedSettings, { mode: 0o600 });
     } catch (error) {
       logger.error(
         "Failed to save user settings:",
@@ -316,18 +307,8 @@ export class SettingsManager {
         return { ...DEFAULT_PROJECT_SETTINGS };
       }
 
-      const content = fs.readFileSync(this.projectSettingsPath, "utf-8");
-      let rawSettings: unknown;
-
-      try {
-        rawSettings = JSON.parse(content);
-      } catch (parseError) {
-        logger.error("Invalid JSON in project settings file", {
-          path: this.projectSettingsPath,
-          error: parseError instanceof Error ? parseError.message : "Parse error"
-        });
-        return { ...DEFAULT_PROJECT_SETTINGS };
-      }
+      const rawSettings = readJsonAtomicSync<unknown | null>(this.projectSettingsPath, null, { mode: 0o600 });
+      if (rawSettings === null) return { ...DEFAULT_PROJECT_SETTINGS };
 
       // Validate with Zod schema
       const validator = getZodConfigValidator();
@@ -373,9 +354,13 @@ export class SettingsManager {
       let existingSettings: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS };
       if (fs.existsSync(this.projectSettingsPath)) {
         try {
-          const content = fs.readFileSync(this.projectSettingsPath, "utf-8");
-          const parsed = JSON.parse(content);
-          existingSettings = { ...DEFAULT_PROJECT_SETTINGS, ...parsed };
+          const parsed = readJsonAtomicSync<Record<string, unknown> | null>(this.projectSettingsPath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
+          if (parsed) existingSettings = { ...DEFAULT_PROJECT_SETTINGS, ...parsed };
         } catch (_error) {
           // If file is corrupted, use defaults
           logger.warn("Corrupted project settings file, using defaults");
@@ -384,10 +369,7 @@ export class SettingsManager {
 
       const mergedSettings = { ...existingSettings, ...settings };
 
-      fs.writeFileSync(
-        this.projectSettingsPath,
-        JSON.stringify(mergedSettings, null, 2)
-      );
+      writeJsonAtomicSync(this.projectSettingsPath, mergedSettings, { mode: 0o600 });
     } catch (error) {
       logger.error(
         "Failed to save project settings:",

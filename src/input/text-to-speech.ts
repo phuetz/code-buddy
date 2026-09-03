@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import { commandExists } from '../utils/command-exists.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface TTSConfig {
   enabled: boolean;
@@ -121,25 +122,14 @@ export class TextToSpeechManager extends EventEmitter {
   private loadConfig(): void {
     const configPath = path.join(os.homedir(), '.codebuddy', 'tts-config.json');
 
-    if (fs.existsSync(configPath)) {
-      try {
-        const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        this.config = { ...this.config, ...saved };
-      } catch {
-        // Use defaults
-      }
-    }
+    const saved = readJsonAtomicSync<Partial<TTSConfig>>(configPath, {});
+    this.config = { ...this.config, ...saved };
   }
 
   saveConfig(): void {
-    const configDir = path.join(os.homedir(), '.codebuddy');
-    const configPath = path.join(configDir, 'tts-config.json');
+    const configPath = path.join(os.homedir(), '.codebuddy', 'tts-config.json');
 
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-
-    fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
+    writeJsonAtomicSync(configPath, this.config);
   }
 
   /**

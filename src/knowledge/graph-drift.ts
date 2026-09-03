@@ -17,6 +17,7 @@ import path from 'path';
 import { KnowledgeGraph, type Triple } from './knowledge-graph.js';
 import { computePageRank } from './graph-pagerank.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 const SNAPSHOT_FILENAME = '.codebuddy/code-graph-snapshot.json';
 
@@ -47,7 +48,7 @@ export function saveSnapshot(graph: KnowledgeGraph, cwd: string): void {
     triples: graph.toJSON(),
   };
 
-  fs.writeFileSync(filePath, JSON.stringify(data));
+  writeJsonAtomicSync(filePath, data);
   logger.debug(`GraphDrift: snapshot saved (${data.tripleCount} triples)`);
 }
 
@@ -57,10 +58,14 @@ export function saveSnapshot(graph: KnowledgeGraph, cwd: string): void {
 export function loadSnapshot(cwd: string): KnowledgeGraph | null {
   const filePath = path.join(cwd, SNAPSHOT_FILENAME);
   try {
-    if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const data: SnapshotFile = JSON.parse(raw);
-    if (data.version !== 1 || !Array.isArray(data.triples)) return null;
+    const data = readJsonAtomicSync<SnapshotFile | null>(filePath, null, {
+      isValid: (value): value is SnapshotFile => Boolean(
+        value && typeof value === 'object' &&
+        (value as SnapshotFile).version === 1 &&
+        Array.isArray((value as SnapshotFile).triples)
+      ),
+    });
+    if (!data) return null;
 
     const snap = new KnowledgeGraph();
     snap.loadJSON(data.triples);
@@ -76,10 +81,14 @@ export function loadSnapshot(cwd: string): KnowledgeGraph | null {
 export function getSnapshotInfo(cwd: string): { savedAt: string; tripleCount: number } | null {
   const filePath = path.join(cwd, SNAPSHOT_FILENAME);
   try {
-    if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const data: SnapshotFile = JSON.parse(raw);
-    return { savedAt: data.savedAt, tripleCount: data.tripleCount };
+    const data = readJsonAtomicSync<SnapshotFile | null>(filePath, null, {
+      isValid: (value): value is SnapshotFile => Boolean(
+        value && typeof value === 'object' &&
+        (value as SnapshotFile).version === 1 &&
+        Array.isArray((value as SnapshotFile).triples)
+      ),
+    });
+    return data ? { savedAt: data.savedAt, tripleCount: data.tripleCount } : null;
   } catch {
     return null;
   }

@@ -17,6 +17,7 @@ import type {
   ExecuteResult,
 } from './transports/base-transport.js';
 import { getPlatformCommands, type DevicePlatform } from './platform-commands.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -154,14 +155,18 @@ export class DeviceNodeManager {
 
   private loadDevices(): void {
     try {
-      if (fs.existsSync(DEVICES_FILE)) {
-        const raw = fs.readFileSync(DEVICES_FILE, 'utf-8');
-        const data = JSON.parse(raw) as PersistedDevices;
-        if (data.version === DEVICES_VERSION && Array.isArray(data.devices)) {
+      const data = readJsonAtomicSync<PersistedDevices | null>(DEVICES_FILE, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistedDevices => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          (value as PersistedDevices).version === DEVICES_VERSION &&
+          Array.isArray((value as PersistedDevices).devices),
+        ),
+      });
+      if (data) {
           for (const d of data.devices) {
             this.devices.set(d.id, d);
           }
-        }
       }
     } catch {
       logger.debug('No persisted devices found or failed to load');
@@ -170,15 +175,11 @@ export class DeviceNodeManager {
 
   private saveDevices(): void {
     try {
-      const dir = path.dirname(DEVICES_FILE);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
       const data: PersistedDevices = {
         version: DEVICES_VERSION,
         devices: Array.from(this.devices.values()),
       };
-      fs.writeFileSync(DEVICES_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      writeJsonAtomicSync(DEVICES_FILE, data, { mode: 0o600 });
     } catch (err) {
       logger.warn('Failed to save devices', {
         error: err instanceof Error ? err.message : String(err),

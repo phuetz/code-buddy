@@ -15,9 +15,9 @@
  *
  * @module companion/proactive-engine
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import {
   loadRelationshipState,
@@ -180,36 +180,19 @@ function defaultProactiveStatePath(): string {
 }
 
 export function loadProactiveState(statePath = defaultProactiveStatePath()): ProactiveState {
-  if (!existsSync(statePath)) return { recentLines: [] };
-  let raw: string;
-  try {
-    raw = readFileSync(statePath, 'utf8').trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return { recentLines: [] };
-    logger.warn(
-      `[proactive] could not read state: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[proactive] state exists but is empty: ${statePath}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  try {
-    const data = JSON.parse(raw) as { lastSentAt?: unknown; recentLines?: unknown };
-    return {
-      lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
-      recentLines: Array.isArray(data.recentLines)
-        ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
-        : [],
-    };
-  } catch (err) {
-    logger.warn(
-      `[proactive] could not parse state: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
+  const data = readJsonAtomicSync<{ lastSentAt?: unknown; recentLines?: unknown } | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is { lastSentAt?: unknown; recentLines?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!data) return { recentLines: [] };
+  return {
+    lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
+    recentLines: Array.isArray(data.recentLines)
+      ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
+      : [],
+  };
 }
 
 export function saveProactiveState(
@@ -217,13 +200,7 @@ export function saveProactiveState(
   statePath = defaultProactiveStatePath()
 ): boolean {
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    const tmp = `${statePath}.tmp`;
-    writeFileSync(
-      tmp,
-      JSON.stringify({ ...state, recentLines: state.recentLines.slice(-8) })
-    );
-    renameSync(tmp, statePath);
+    writeJsonAtomicSync(statePath, { ...state, recentLines: state.recentLines.slice(-8) }, { mode: 0o600 });
     return true;
   } catch (err) {
     logger.warn(

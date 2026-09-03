@@ -13,7 +13,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
+import { appendFile, mkdir, rename, stat } from 'fs/promises';
 import path from 'path';
 import { readRecentDialogueHearing } from '../companion/dialogue-percepts.js';
 import {
@@ -22,6 +22,7 @@ import {
 } from '../conversation/dialogue-act.js';
 import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface EpisodeSummary {
   at: number;
@@ -221,12 +222,13 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
   ep.fingerprint = createHash('sha256').update(ep.line).digest('hex');
   const dir = path.join(deps.cwd ?? process.cwd(), '.codebuddy', 'companion');
   const statePath = deps.statePath ?? path.join(dir, 'episode-state.json');
-  try {
-    const previous = JSON.parse(await readFile(statePath, 'utf8')) as { fingerprint?: unknown };
-    if (previous.fingerprint === ep.fingerprint) return null;
-  } catch {
-    /* First episode or unreadable cursor: continue with a safe rebuild. */
-  }
+    const previous = await readJsonAtomic<{ fingerprint?: unknown } | null>(statePath, null, {
+      mode: 0o600,
+      isValid: (value): value is { fingerprint?: unknown } => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    if (previous?.fingerprint === ep.fingerprint) return null;
 
   try {
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -239,10 +241,7 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
       /* no file yet */
     }
     await appendFile(file, `${JSON.stringify(ep)}\n`, { encoding: 'utf8', mode: 0o600 });
-    await writeFile(statePath, JSON.stringify({ fingerprint: ep.fingerprint, at: ep.at }), {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
+    await writeJsonAtomic(statePath, { fingerprint: ep.fingerprint, at: ep.at }, { mode: 0o600 });
   } catch (err) {
     logger.warn(`[episode] could not persist episode: ${err instanceof Error ? err.message : String(err)}`);
   }

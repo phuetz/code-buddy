@@ -13,6 +13,7 @@ import * as crypto from 'crypto';
 import type { AgentConfig, AgentSession } from './agent-config.js';
 import { generateSessionKey, parseSessionKey } from './agent-config.js';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -251,7 +252,7 @@ export class AgentWorkspace extends EventEmitter {
         state: this.state.state,
       },
     };
-    await fs.writeJSON(stateFile, data, { spaces: 2 });
+    await writeJsonAtomic(stateFile, data, { mode: 0o600 });
   }
 
   /**
@@ -265,7 +266,16 @@ export class AgentWorkspace extends EventEmitter {
     }
 
     try {
-      const data = await fs.readJSON(stateFile);
+      const data = await readJsonAtomic<{
+        session?: AgentSession;
+        state?: {
+          workingDirectory?: string;
+          environment?: Record<string, string>;
+          activeFiles?: string[];
+          state?: Record<string, unknown>;
+        };
+      } | null>(stateFile, null);
+      if (!data?.session || !data.state) return false;
       this.session = data.session;
       this.state = {
         workingDirectory: data.state.workingDirectory || process.cwd(),

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Multi-board Kanban registry (toward upstream Hermes `kanban boards …` parity).
@@ -98,8 +99,7 @@ export class KanbanBoardRegistry {
   private readMeta(): BoardsMeta {
     let meta: BoardsMeta = { schemaVersion: 1, current: DEFAULT_BOARD_SLUG, boards: [] };
     try {
-      const raw = fs.readFileSync(this.metaPath, 'utf-8');
-      const parsed = JSON.parse(raw) as Partial<BoardsMeta>;
+      const parsed = readJsonAtomicSync<Partial<BoardsMeta> | null>(this.metaPath, null);
       if (parsed && Array.isArray(parsed.boards)) {
         meta = {
           schemaVersion: 1,
@@ -126,12 +126,13 @@ export class KanbanBoardRegistry {
 
   private writeMeta(meta: BoardsMeta): void {
     fs.mkdirSync(this.boardsDir, { recursive: true });
-    fs.writeFileSync(this.metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.metaPath, meta, { mode: 0o600 });
   }
 
   private countCards(boardPath: string): number {
     try {
-      const parsed = JSON.parse(fs.readFileSync(boardPath, 'utf-8')) as { cards?: unknown[] };
+      const parsed = readJsonAtomicSync<{ cards?: unknown[] } | null>(boardPath, null);
+      if (!parsed) return 0;
       return Array.isArray(parsed.cards) ? parsed.cards.length : 0;
     } catch {
       return 0;

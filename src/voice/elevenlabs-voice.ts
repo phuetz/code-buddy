@@ -8,15 +8,13 @@ import {
   existsSync,
   mkdirSync,
   openSync,
-  readFileSync,
-  renameSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   DEFAULT_ELEVENLABS_MODEL,
   requestElevenLabsSpeech,
@@ -87,7 +85,6 @@ export function elevenLabsVoiceSettingsSignature(env: NodeJS.ProcessEnv = proces
 const inFlightCharacters = new Map<string, number>();
 const warnedMonths = new Set<string>();
 const unwritableLedgers = new Set<string>();
-let usageWriteSequence = 0;
 const STALE_LEDGER_LOCK_MS = 30_000;
 
 function currentMonth(now: Date): string {
@@ -117,41 +114,27 @@ function blankUsage(month: string, now: Date): ElevenLabsVoiceUsage {
 }
 
 function parseUsage(path: string): ElevenLabsVoiceUsage | null {
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ElevenLabsVoiceUsage>;
-    if (
-      parsed.version !== 1 ||
-      typeof parsed.month !== 'string' ||
-      typeof parsed.characters !== 'number' ||
-      !Number.isInteger(parsed.characters) ||
-      parsed.characters < 0 ||
-      typeof parsed.warned !== 'boolean' ||
-      typeof parsed.updatedAt !== 'string'
-    ) {
-      return null;
-    }
-    return parsed as ElevenLabsVoiceUsage;
-  } catch {
-    return null;
-  }
+  return readJsonAtomicSync<ElevenLabsVoiceUsage | null>(path, null, {
+    mode: 0o600,
+    isValid: (value): value is ElevenLabsVoiceUsage => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      const parsed = value as Partial<ElevenLabsVoiceUsage>;
+      return parsed.version === 1
+        && typeof parsed.month === 'string'
+        && typeof parsed.characters === 'number'
+        && Number.isInteger(parsed.characters)
+        && parsed.characters >= 0
+        && typeof parsed.warned === 'boolean'
+        && typeof parsed.updatedAt === 'string';
+    },
+  });
 }
 
 function writeUsage(path: string, usage: ElevenLabsVoiceUsage): boolean {
-  const temporary = `${path}.${process.pid}.${++usageWriteSequence}.tmp`;
   try {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    writeFileSync(temporary, `${JSON.stringify(usage, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    renameSync(temporary, path);
+    writeJsonAtomicSync(path, usage, { mode: 0o600 });
     return true;
   } catch {
-    try {
-      rmSync(temporary, { force: true });
-    } catch {
-      /* best-effort cleanup */
-    }
     return false;
   }
 }
@@ -507,5 +490,4 @@ export function resetElevenLabsVoiceState(): void {
   inFlightCharacters.clear();
   warnedMonths.clear();
   unwritableLedgers.clear();
-  usageWriteSequence = 0;
 }

@@ -84,7 +84,7 @@ describe('pending-ack persistence — survive a restart mid-window (health safet
     await mkdir(dir, { recursive: true });
     await writeFile(file, '{this is not json', 'utf8');
 
-    await expect(loadPendingAcks()).rejects.toThrow();
+    await expect(loadPendingAcks()).resolves.toBeUndefined();
     expect(pendingAcks(1000, 999_999)).toHaveLength(0);
   });
 });

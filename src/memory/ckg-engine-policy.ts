@@ -9,7 +9,8 @@
  * @module memory/ckg-engine-policy
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { readJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type CkgEnginePreference = 'rust' | 'ts';
 
@@ -21,10 +22,13 @@ export function snapshotPathFor(ledgerPath: string): string {
 export function isCkgSnapshotLoadable(snapshotPath: string): boolean {
   if (!existsSync(snapshotPath)) return true;
   try {
-    const snap = JSON.parse(readFileSync(snapshotPath, 'utf8')) as {
-      version?: unknown;
-      offset?: unknown;
-    };
+    const snap = readJsonAtomicSync<{ version?: unknown; offset?: unknown } | null>(snapshotPath, null, {
+      mode: 0o600,
+      isValid: (value): value is { version?: unknown; offset?: unknown } => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    if (!snap) return false;
     return (snap.version === 1 || snap.version === 2) && typeof snap.offset === 'number';
   } catch {
     return false;

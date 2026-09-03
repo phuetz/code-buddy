@@ -10,6 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../../../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../../utils/atomic-write.js';
 
 export interface VariantRecord {
   id: string;
@@ -139,7 +140,7 @@ export class CodeVariantStore {
   list(): VariantRecord[] {
     if (!existsSync(this.path)) return [];
     try {
-      const data = JSON.parse(readFileSync(this.path, 'utf8'));
+      const data = readJsonAtomicSync<{ variants?: VariantRecord[] }>(this.path, {}, { mode: 0o600 });
       return Array.isArray(data?.variants) ? (data.variants as VariantRecord[]) : [];
     } catch (err) {
       logger.warn(`[evolve] variant store unreadable: ${err instanceof Error ? err.message : String(err)}`);
@@ -152,8 +153,7 @@ export class CodeVariantStore {
     try {
       const variants = this.list();
       variants.push(rec);
-      mkdirSync(dirname(this.path), { recursive: true });
-      writeFileSync(this.path, JSON.stringify({ schemaVersion: 1, variants }, null, 2));
+      writeJsonAtomicSync(this.path, { schemaVersion: 1, variants }, { mode: 0o600 });
     } catch (err) {
       logger.warn(`[evolve] variant store write failed: ${err instanceof Error ? err.message : String(err)}`);
     }

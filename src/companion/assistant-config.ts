@@ -8,13 +8,14 @@
  * @module companion/assistant-config
  */
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { PRESET_VOICES } from '../talk-mode/providers/pocket-tts.js';
 import { synthesizePocketWav } from '../voice/local-tts.js';
 import { resolveSensoryResponsePolicy } from '../sensory/respond-decider.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 import { DEFAULT_MARKET_SYMBOLS, DEFAULT_NEWS_QUERY } from './prefetch-config.js';
 import {
   readVoiceRuntimeSnapshot,
@@ -863,8 +864,7 @@ function hasOwn(obj: Record<string, string>, key: string): boolean {
 
 function readTextFile(path: string): string {
   try {
-    if (!existsSync(path)) return '';
-    return readFileSync(path, 'utf8');
+    return readTextAtomicSync(path, '');
   } catch {
     return '';
   }
@@ -872,8 +872,7 @@ function readTextFile(path: string): string {
 
 function writeTextFile(path: string, content: string): boolean {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, content, { encoding: 'utf8', mode: 0o600 });
+    writeFileAtomicSync(path, content, { mode: 0o600 });
     return true;
   } catch {
     return false;

@@ -30,6 +30,7 @@ Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` fi
 
 ## Testing Gotchas
 
+- **MEM1 state writes:** les JSON/MD d'état passent par `src/utils/atomic-write.ts`; les lectures vides/tronquées repliquent et avertissent une seule fois, les JSONL append-only restent `O_APPEND`.
 - ESM project (`"type": "module"`). Use `import.meta.url` + `fileURLToPath` for `__dirname`. `@` alias → `./src` (see `vitest.config.ts`). Source imports need `.js` extensions even for `.ts` files.
 - Use `logger` (`src/utils/logger.js`) not `console.*` in production — tests spy on `logger.warn`.
 - **`BashTool`** tests: call `ConfirmationService.setSessionFlag('bashCommands', true)` first, and mock every transitive import (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`). `execute()` has async pre-spawn logic, so defer mock process events with `setImmediate()` — don't emit synchronously.

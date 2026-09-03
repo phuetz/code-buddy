@@ -42,7 +42,6 @@ import {
   readFileSync,
   readSync,
   statSync,
-  writeFileSync,
   type Stats,
 } from 'node:fs';
 import { dirname, join } from 'path';
@@ -55,6 +54,7 @@ import { BM25Index } from '../search/bm25.js';
 import { cosineSimilarityF32, hybridMmrRank, type HybridCandidate } from './hybrid-mmr.js';
 import { DiskEmbeddingCache } from '../research/paper-qa/disk-embedding-cache.js';
 import { withTimeout } from '../utils/errors.js';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 import {
   canonicalObject,
   factMatchKey,
@@ -928,7 +928,7 @@ export class CollectiveKnowledgeGraph {
         );
       }
       const file = join(dir, `${category}.md`);
-      writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+      writeFileAtomicSync(file, lines.join('\n') + '\n', { mode: 0o600 });
       files.push(file);
     }
     return { files, factCount: facts.length };

@@ -17,6 +17,7 @@ import { KnowledgeGraph } from '../knowledge/knowledge-graph.js';
 import { populateCodeGraph } from '../knowledge/code-graph-populator.js';
 import { saveCodeGraph, loadCodeGraph, codeGraphExists } from '../knowledge/code-graph-persistence.js';
 import { shouldWriteProjectRuntimeFiles } from '../utils/runtime-flags.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface RepoProfile {
   detectedAt: string;
@@ -484,9 +485,12 @@ export class RepoProfiler {
 
   private loadCache(): RepoProfile | null {
     try {
-      if (!fs.existsSync(this.cachePath)) return null;
-      const raw = fs.readFileSync(this.cachePath, 'utf-8');
-      return JSON.parse(raw) as RepoProfile;
+      return readJsonAtomicSync<RepoProfile | null>(this.cachePath, null, {
+        mode: 0o600,
+        isValid: (value): value is RepoProfile => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch {
       return null;
     }
@@ -510,11 +514,7 @@ export class RepoProfiler {
 
   private saveCache(profile: RepoProfile): void {
     try {
-      const dir = path.dirname(this.cachePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(this.cachePath, JSON.stringify(profile, null, 2));
+      writeJsonAtomicSync(this.cachePath, profile, { mode: 0o600 });
     } catch (err) {
       logger.debug('RepoProfiler: failed to save cache', { err });
     }

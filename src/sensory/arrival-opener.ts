@@ -12,11 +12,11 @@
  * @module sensory/arrival-opener
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { withTimeout } from '../council/with-timeout.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type ArrivalTrigger = 'morning' | 'afternoon' | 'evening' | 'night' | 'backSoon' | 'drowsy';
 
@@ -283,25 +283,25 @@ function defaultStatePath(): string {
 }
 
 export function loadArrivalState(statePath = defaultStatePath()): ArrivalState {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      return {
-        recent: Array.isArray(data.recent) ? data.recent : [],
-        lastSeenAt: data.lastSeenAt,
-        ...(Array.isArray(data.recentSpoken) ? { recentSpoken: data.recentSpoken } : {}),
-      };
-    }
-  } catch {
-    /* best effort */
-  }
-  return { recent: [] };
+  const data = readJsonAtomicSync<Record<string, unknown> | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Record<string, unknown> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!data) return { recent: [] };
+  return {
+    recent: Array.isArray(data.recent) ? data.recent.filter((item): item is string => typeof item === 'string') : [],
+    ...(typeof data.lastSeenAt === 'number' ? { lastSeenAt: data.lastSeenAt } : {}),
+    ...(Array.isArray(data.recentSpoken)
+      ? { recentSpoken: data.recentSpoken.filter((item): item is string => typeof item === 'string') }
+      : {}),
+  };
 }
 
 export function saveArrivalState(state: ArrivalState, statePath = defaultStatePath()): void {
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(statePath, JSON.stringify(state));
+    writeJsonAtomicSync(statePath, state, { mode: 0o600 });
   } catch {
     /* best effort */
   }

@@ -23,6 +23,7 @@ import { logger } from '../utils/logger.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { RunStore } from '../observability/run-store.js';
 import { repairToolCallPairs } from './transcript-repair.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   EnhancedContextCompressor,
   EnhancedCompressionConfig,
@@ -1712,11 +1713,7 @@ export class ContextManagerV2 {
     try {
       const dir = path.join(workDir, '.codebuddy');
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(
-        path.join(dir, 'context-snapshot.json'),
-        JSON.stringify(snapshot, null, 2),
-        'utf8',
-      );
+      writeJsonAtomicSync(path.join(dir, 'context-snapshot.json'), snapshot, { mode: 0o600 });
     } catch (err) {
       logger.debug('Context snapshot write failed', { error: String(err) });
       return null;
