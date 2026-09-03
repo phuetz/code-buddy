@@ -51,6 +51,7 @@ import {
   createA2AProtocolRoutes,
   createACPRoutes,
   createK8sHealthAliases,
+  createCanvasRouter,
   createDashboardRouter,
   createCloudTaskRoutes,
   createWebhookRoutes,
@@ -1068,6 +1069,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
       },
     });
   });
+
+  // Canvas / A2UI (documented at /__codebuddy__/canvas/:id and /__codebuddy__/a2ui/)
+  app.use('/__codebuddy__', createCanvasRouter());
 
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
