@@ -293,12 +293,31 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
           // Varied, context-aware opener (time of day / gap since last seen) with anti-repetition,
           // instead of the single fixed persona.greeting that made it say the same line every time.
           const state = loadArrivalState(options.arrivalStatePath);
+          let episodeLine = '';
+          if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+            try {
+              const { readFile } = await import('node:fs/promises');
+              const { join } = await import('node:path');
+              const raw = await readFile(
+                join(options.cwd ?? process.cwd(), '.codebuddy', 'companion', 'episodes.jsonl'),
+                'utf8',
+              );
+              const last = raw.trim().split('\n').filter(Boolean).at(-1);
+              if (last) {
+                const parsed = JSON.parse(last) as { line?: unknown };
+                if (typeof parsed.line === 'string') episodeLine = parsed.line;
+              }
+            } catch {
+              /* episode hint is optional */
+            }
+          }
           const opener = buildArrivalOpener({
             now: t,
             lastSeenAt: state.lastSeenAt ?? null,
             recent: state.recent,
             ...(arrivalName ? { name: arrivalName } : {}),
             recognizedUser: recognizedArrival,
+            ...(episodeLine ? { episodeLine } : {}),
           });
           let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
 
@@ -336,6 +355,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
                 recentHeard,
                 ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
                 ...(relationalContext ? { relationalContext } : {}),
+                ...(episodeLine ? { episodeLine } : {}),
                 ...(arrivalName ? { name: arrivalName } : {}),
                 ...(options.llmChat ? { chat: options.llmChat } : {}),
               });
