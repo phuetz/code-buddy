@@ -801,6 +801,18 @@ describe('PromptBuilder — Phase T4', () => {
       await expect(builder.buildSystemPrompt(undefined, 'grok-3', null)).resolves.toContain('SHORT');
     });
 
+    it('does not wipe the system prompt when maxOutputTokens >= contextWindow', async () => {
+      modelToolsMock.getModelToolConfigMock.mockReturnValueOnce({
+        contextWindow: 16_384,
+        maxOutputTokens: 16_384,
+      });
+      promptMocks.getSystemPromptForModeMock.mockReturnValueOnce('KEEP_ME_' + 'C'.repeat(2000));
+      const { builder } = buildBuilder();
+      const prompt = await builder.buildSystemPrompt(undefined, 'qwen3.8:27b', null);
+      expect(prompt.length).toBeGreaterThan(0);
+      expect(prompt).toContain('KEEP_ME_');
+    });
+
     it('respects the 32K hard cap on the budget even when the model context is huge', async () => {
       // 1M context window × 0.5 = 500K tokens, but the hard cap is 32K → 128K chars.
       modelToolsMock.getModelToolConfigMock.mockReturnValueOnce({
