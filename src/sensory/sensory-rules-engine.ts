@@ -23,7 +23,7 @@ import {
   type SensoryAction,
   type SensoryEventContext,
 } from './sensory-action-executor.js';
-import { assertSafeUrl, getSSRFGuard } from '../security/ssrf-guard.js';
+import { assertSafeUrl, getSSRFGuard, isLoopbackHttpUrl } from '../security/ssrf-guard.js';
 
 export interface SensoryRule {
   id: string;
@@ -43,6 +43,14 @@ function auditPath(): string {
 }
 
 const RULE_RUNS_MAX_BYTES = 512 * 1024;
+const DEFAULT_MAX_IN_FLIGHT = 8;
+const DEFAULT_MAX_FIRES_PER_SEC = 8;
+const RATE_WINDOW_MS = 1000;
+
+function envPositiveInt(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
 
 /** Append one rule audit entry while keeping the sidecar bounded to one backup. */
 export async function appendRuleRun(run: RuleRun, path = auditPath()): Promise<void> {
@@ -92,8 +100,10 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
   } else if (a.type === 'agent') {
     if (!a.prompt?.trim()) errors.push('agent action needs a prompt');
   } else if (a.type === 'webhook') {
-    const urlCheck = getSSRFGuard().isSafeUrlSync(a.url ?? '');
-    if (!urlCheck.safe) errors.push(`webhook url rejected by SSRF guard: ${urlCheck.reason}`);
+    if (!isLoopbackHttpUrl(a.url ?? '')) {
+      const urlCheck = getSSRFGuard().isSafeUrlSync(a.url ?? '');
+      if (!urlCheck.safe) errors.push(`webhook url rejected by SSRF guard: ${urlCheck.reason}`);
+    }
   } else if (a.type !== 'alert') {
     errors.push(`unknown action.type '${(a as { type?: string }).type}'`);
   }
@@ -103,6 +113,7 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
 async function validateRuleForUse(rule: SensoryRule): Promise<{ ok: boolean; errors: string[] }> {
   const validation = validateRule(rule);
   if (!validation.ok || rule.action.type !== 'webhook') return validation;
+  if (isLoopbackHttpUrl(rule.action.url)) return validation;
 
   const urlCheck = await assertSafeUrl(rule.action.url);
   if (!urlCheck.safe) {
@@ -116,13 +127,19 @@ async function validateRuleForUse(rule: SensoryRule): Promise<{ ok: boolean; err
 
 export async function saveSensoryRules(rules: SensoryRule[], path = rulesPath()): Promise<void> {
   const validations = await Promise.all(rules.map((rule) => validateRuleForUse(rule)));
-  const invalidIndex = validations.findIndex((validation) => !validation.ok);
-  if (invalidIndex >= 0) {
-    const validation = validations[invalidIndex];
-    throw new Error(`Invalid sensory rule: ${validation?.errors.join('; ') || 'validation failed'}`);
+  const valid = rules.filter((_, index) => validations[index]?.ok === true);
+  const firstInvalid = validations.find((validation) => !validation.ok);
+  // A file that an editor filled with only-unsafe rules still fails closed.
+  // A mix (unsafe leftover + a new valid rule) drops the unsafe ones so admin
+  // add/toggle/remove is not stuck after a hot-reload of a hand-edited file.
+  if (valid.length === 0 && rules.length > 0) {
+    throw new Error(`Invalid sensory rule: ${firstInvalid?.errors.join('; ') || 'validation failed'}`);
+  }
+  if (valid.length < rules.length) {
+    logger.warn(`[rules] dropped ${rules.length - valid.length} unsafe rule(s) while saving`);
   }
   await mkdir(join(path, '..'), { recursive: true });
-  await writeFile(path, JSON.stringify(rules, null, 2), 'utf8');
+  await writeFile(path, JSON.stringify(valid, null, 2), 'utf8');
 }
 
 export const listSensoryRules = loadSensoryRules;
@@ -263,6 +280,18 @@ export function wireSensoryRules(
   if (fileBacked) void maybeReload(now()); // initial load
 
   const lastFired = new Map<string, number>();
+  const running = new Set<string>();
+  const fireTimes = new Map<string, number[]>();
+  let inFlight = 0;
+  let lastDropLog = 0;
+  const maxInFlight = envPositiveInt('CODEBUDDY_RULE_MAX_IN_FLIGHT', DEFAULT_MAX_IN_FLIGHT);
+  const maxFiresPerSec = envPositiveInt('CODEBUDDY_RULE_MAX_FIRES_PER_SEC', DEFAULT_MAX_FIRES_PER_SEC);
+
+  const noteDrop = (ruleId: string, reason: string, t: number): void => {
+    if (t - lastDropLog < RATE_WINDOW_MS) return;
+    lastDropLog = t;
+    logger.warn(`[rules] dropping ${ruleId}: ${reason}`);
+  };
 
   const id = bus.on('sensory:perception', async (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -272,7 +301,24 @@ export function wireSensoryRules(
       if (!ruleMatches(rule, p, new Date(t))) continue;
       const cd = rule.cooldownMs ?? 0;
       if (cd > 0 && t - (lastFired.get(rule.id) ?? Number.NEGATIVE_INFINITY) < cd) continue;
+      if (running.has(rule.id)) {
+        noteDrop(rule.id, 'already in flight (loop guard)', t);
+        continue;
+      }
+      if (inFlight >= maxInFlight) {
+        noteDrop(rule.id, `in-flight cap ${maxInFlight}`, t);
+        continue;
+      }
+      const recent = (fireTimes.get(rule.id) ?? []).filter((ts) => t - ts < RATE_WINDOW_MS);
+      if (recent.length >= maxFiresPerSec) {
+        noteDrop(rule.id, `per-second cap ${maxFiresPerSec}`, t);
+        continue;
+      }
+      recent.push(t);
+      fireTimes.set(rule.id, recent);
       lastFired.set(rule.id, t);
+      running.add(rule.id);
+      inFlight += 1;
 
       const payload = (p.payload ?? {}) as Record<string, unknown>;
       const ctx: SensoryEventContext = {
@@ -286,19 +332,24 @@ export function wireSensoryRules(
       };
 
       void (async () => {
-        const res = await execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) }));
-        logger.info(`[rules] ${rule.id} (${rule.action.type}) → ${res.ok ? 'ok' : 'FAIL'}${res.detail ? `: ${res.detail.slice(0, 80)}` : ''}`);
         try {
-          await appendRuleRun({
-            ts: t,
-            rule: rule.id,
-            action: rule.action.type,
-            kind: p.kind,
-            ok: res.ok,
-            detail: res.detail,
-          });
-        } catch {
-          /* best-effort audit */
+          const res = await execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) }));
+          logger.info(`[rules] ${rule.id} (${rule.action.type}) → ${res.ok ? 'ok' : 'FAIL'}${res.detail ? `: ${res.detail.slice(0, 80)}` : ''}`);
+          try {
+            await appendRuleRun({
+              ts: t,
+              rule: rule.id,
+              action: rule.action.type,
+              kind: p.kind,
+              ok: res.ok,
+              detail: res.detail,
+            });
+          } catch {
+            /* best-effort audit */
+          }
+        } finally {
+          running.delete(rule.id);
+          inFlight = Math.max(0, inFlight - 1);
         }
       })();
     }
