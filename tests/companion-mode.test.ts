@@ -22,6 +22,16 @@ function envAssignment(key: string, value: string): RegExp {
   return new RegExp(`${key}='?${escaped}'?`);
 }
 
+/** Match the CLI contract: paths below the user's home are rendered with `~/`. */
+function displayedPath(value: string): string {
+  const home = os.homedir();
+  if (value === home) return '~';
+  if (value.startsWith(`${home}${path.sep}`)) {
+    return `~/${path.relative(home, value)}`;
+  }
+  return value;
+}
+
 const mocks = vi.hoisted(() => {
   const identity = {
     load: vi.fn(),
@@ -344,10 +354,16 @@ describe('companion-mode', () => {
     expect(output).toContain('CODEBUDDY_SPEECH_ENGINE=parakeet');
     // Paths are shell-quoted when they carry characters outside the safe set
     // (Windows backslashes), so accept an optional single-quoted spelling.
-    expect(output).toMatch(envAssignment('CODEBUDDY_PARAKEET_MODEL_DIR', path.join(tempDir, 'parakeet')));
+    expect(output).toMatch(envAssignment(
+      'CODEBUDDY_PARAKEET_MODEL_DIR',
+      displayedPath(path.join(tempDir, 'parakeet'))
+    ));
     expect(output).toContain('CODEBUDDY_SPEECH_MODEL=base');
     expect(output).toContain('CODEBUDDY_SPEECH_LANG=fr');
-    expect(output).toMatch(envAssignment('CODEBUDDY_SPEECH_HOTWORDS_FILE', path.join(tempDir, 'speech-hotwords.txt')));
+    expect(output).toMatch(envAssignment(
+      'CODEBUDDY_SPEECH_HOTWORDS_FILE',
+      displayedPath(path.join(tempDir, 'speech-hotwords.txt'))
+    ));
     expect(output).toContain('CODEBUDDY_PIPER_BIN=piper');
     expect(output).toContain('Voice assistant behavior');
     expect(output).toContain('/tmp/ear/bin/python buddy-vision/ear.py');
@@ -425,7 +441,7 @@ describe('companion-mode', () => {
     expect(check.decision).toEqual({ respond: true, reason: 'addressed' });
     expect(output).toContain('Lisa Listen Check');
     expect(output).toContain('Parakeet/sherpa-onnx (fr)');
-    expect(output).toContain(`Parakeet model: ${path.join(tempDir, 'parakeet')}`);
+    expect(output).toContain(`Parakeet model: ${displayedPath(path.join(tempDir, 'parakeet'))}`);
     expect(output).toContain('Response gate: respond (addressed)');
   });
 
