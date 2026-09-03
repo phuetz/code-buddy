@@ -8,6 +8,7 @@
  *   buddy update                    # Update to latest on current channel
  *   buddy update --channel beta     # Switch to beta channel and update
  *   buddy update --check            # Check for updates without installing
+ *   buddy update --dry-run          # Show version, channel and source without writing
  *   buddy update --channel stable   # Switch back to stable
  *   buddy update --tag main         # Install from GitHub main branch
  *   buddy update --tag v1.2.3       # Install from GitHub tag/branch
@@ -83,20 +84,53 @@ export async function fetchNpmRelease(
   return { packageName, tag, version, date };
 }
 
+function parentRequestedDryRun(command: Command): boolean {
+  const parent = command.parent;
+  if (!parent || typeof parent.opts !== 'function') return false;
+  const opts = parent.opts() as { dryRun?: boolean };
+  return opts.dryRun === true;
+}
+
+function printDryRunPlan(plan: {
+  channel?: string;
+  current?: string;
+  source: string;
+  packageLine: string;
+  installCmd: string;
+}): void {
+  if (plan.channel) console.log(`\nChannel: ${plan.channel}`);
+  if (plan.current) console.log(`Current: ${plan.current}`);
+  console.log(`Source: ${plan.source}`);
+  console.log(`Package: ${plan.packageLine}`);
+  console.log(`Would run: ${plan.installCmd}`);
+  console.log('Dry-run: nothing was installed.');
+}
+
 export function createUpdateCommand(dependencies: UpdateCommandDependencies = {}): Command {
   const cmd = new Command('update')
     .description('Update Code Buddy (switch channels: stable, beta, dev)')
     .option('--channel <channel>', 'Switch update channel (stable, beta, dev)')
     .option('--check', 'Check for updates without installing')
+    .option('--dry-run', 'Show version, channel and install source without writing')
     .option('--force', 'Force reinstall even if up-to-date')
     .option('--tag <ref>', 'Install from GitHub ref (branch or tag, e.g. main, v1.2.3)')
     .option('--from-source', 'Alias for --tag main (install from GitHub main branch)')
-    .action(async (opts) => {
+    .action(async (opts, command: Command) => {
       // Resolve --from-source alias
       const gitRef = opts.fromSource ? 'main' : opts.tag;
+      const dryRun = opts.dryRun === true || parentRequestedDryRun(command);
 
       // GitHub install path — skip channel logic entirely
       if (gitRef) {
+        const installCmd = buildGitHubInstallCommand(gitRef);
+        if (dryRun) {
+          printDryRunPlan({
+            source: 'github',
+            packageLine: `${GITHUB_REPO}#${gitRef}`,
+            installCmd,
+          });
+          return;
+        }
         return performGitHubInstall(gitRef);
       }
 
@@ -116,6 +150,18 @@ export function createUpdateCommand(dependencies: UpdateCommandDependencies = {}
 
       const channel = manager.getCurrentChannel();
       console.log(`\nChannel: ${channel}`);
+
+      if (dryRun) {
+        const pkg = readPackageMetadata();
+        const npmTag = channel === 'stable' ? 'latest' : channel;
+        printDryRunPlan({
+          current: pkg.version,
+          source: 'npm',
+          packageLine: `${pkg.name}@${npmTag}`,
+          installCmd: `npm install -g ${pkg.name}@${npmTag}`,
+        });
+        return;
+      }
 
       if (opts.check) {
         try {

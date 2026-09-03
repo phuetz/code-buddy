@@ -499,7 +499,7 @@ buddy execpolicy check | check-argv | add-prefix | dashboard
 
 ```bash
 buddy deploy platforms | init | nix
-buddy update [--channel stable|beta|dev] [--check] [--force] [--tag <ref>]
+buddy update [--channel stable|beta|dev] [--check] [--dry-run] [--force] [--tag <ref>]
 buddy backup create | verify | list | restore [--only-config] [--no-include-workspace] [--output <dir>] [--confirm]
 ```
 

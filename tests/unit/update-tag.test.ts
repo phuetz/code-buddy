@@ -138,6 +138,45 @@ describe('update --tag / --from-source', () => {
     });
   });
 
+  describe('--dry-run never installs', () => {
+    it('prints version, channel and source without calling npm', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as ReturnType<typeof vi.fn>).mockClear();
+      const cmd = createUpdateCommand();
+      cmd.exitOverride();
+
+      await cmd.parseAsync(['node', 'test', '--dry-run']);
+
+      expect(execSync).not.toHaveBeenCalled();
+      const output = consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(output).toContain('Channel: stable');
+      expect(output).toContain('Current: 2.0.0');
+      expect(output).toContain('Source: npm');
+      expect(output).toContain('@phuetz/code-buddy@latest');
+      expect(output).toMatch(/Would run: npm install -g @phuetz\/code-buddy@latest/);
+      expect(output).toMatch(/Dry-run: nothing was installed/);
+    });
+
+    it('--dry-run --tag main shows the GitHub source and does not install', async () => {
+      const { execSync } = await import('child_process');
+      (execSync as ReturnType<typeof vi.fn>).mockClear();
+      const cmd = createUpdateCommand();
+      cmd.exitOverride();
+
+      await cmd.parseAsync(['node', 'test', '--dry-run', '--tag', 'main']);
+
+      expect(execSync).not.toHaveBeenCalled();
+      const output = [
+        ...consoleLogSpy.mock.calls.map((call) => call.join(' ')),
+        ...consoleWarnSpy.mock.calls.map((call) => call.join(' ')),
+      ].join('\n');
+      expect(output).toContain('Source: github');
+      expect(output).toContain('phuetz/code-buddy#main');
+      expect(output).toContain('Would run: npm install -g github:phuetz/code-buddy#main');
+      expect(output).toMatch(/Dry-run: nothing was installed/);
+    });
+  });
+
   describe('error handling', () => {
     it('calls process.exit(1) on install failure', async () => {
       const { execSync } = await import('child_process');
