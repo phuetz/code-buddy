@@ -6,6 +6,7 @@ import { logger } from '../../src/utils/logger.js';
 import {
   type AtomicWriteFileSystem,
   readJsonAtomic,
+  readJsonLinesAtomic,
   resetAtomicReadWarningsForTests,
   writeFileAtomic,
 } from '../../src/utils/atomic-write.js';
@@ -73,5 +74,16 @@ describe('atomic state writes', () => {
 
     await expect(readJsonAtomic(target, { version: 0 })).resolves.toEqual({ version: 7 });
     await expect(readFile(target, 'utf8')).resolves.toContain('"version": 7');
+  });
+
+  it('recovers a valid JSONL backup after a torn final record', async () => {
+    const target = join(tempDir, 'timeline.jsonl');
+    await writeFile(target, '{"id":1}\n{"id":', 'utf8');
+    await writeFile(`${target}.bak`, '{"id":1}\n{"id":2}\n', 'utf8');
+
+    await expect(readJsonLinesAtomic<{ id: number }>(target, [], (value): value is { id: number } => (
+      typeof value === 'object' && value !== null && typeof (value as { id?: unknown }).id === 'number'
+    ))).resolves.toEqual([{ id: 1 }, { id: 2 }]);
+    await expect(readFile(target, 'utf8')).resolves.toContain('"id":2');
   });
 });

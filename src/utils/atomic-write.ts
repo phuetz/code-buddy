@@ -331,6 +331,25 @@ function readTextCandidateSync(filePath: string): string | undefined {
   }
 }
 
+function parseJsonLines<T>(
+  contents: string,
+  isValid: (value: unknown) => value is T,
+): { values: T[]; invalid: boolean } {
+  const values: T[] = [];
+  let invalid = false;
+  for (const line of contents.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (isValid(value)) values.push(value);
+      else invalid = true;
+    } catch {
+      invalid = true;
+    }
+  }
+  return { values, invalid };
+}
+
 /** Synchronous JSON reader with the same empty/corrupt recovery policy. */
 export function readJsonAtomicSync<T>(
   filePath: string,
@@ -402,20 +421,36 @@ export function readJsonLinesAtomicSync<T>(
   fallback: T[],
   isValid: (value: unknown) => value is T,
 ): T[] {
-  const contents = readTextAtomicSync(filePath, '');
-  if (!contents) return fallback;
-  const values: T[] = [];
-  for (const line of contents.split(/\r?\n/)) {
-    if (!line.trim()) continue;
+  const contents = readTextCandidateSync(filePath);
+  if (!contents && !fs.existsSync(filePath)) return recoverJsonLinesSync(filePath, fallback, isValid);
+  if (!contents) {
+    warnUnreadable(filePath, 'empty JSONL');
+    return recoverJsonLinesSync(filePath, fallback, isValid);
+  }
+  const parsed = parseJsonLines(contents, isValid);
+  if (!parsed.invalid) return parsed.values;
+  warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+  return recoverJsonLinesSync(filePath, parsed.values.length ? parsed.values : fallback, isValid);
+}
+
+function recoverJsonLinesSync<T>(
+  filePath: string,
+  fallback: T[],
+  isValid: (value: unknown) => value is T,
+): T[] {
+  for (const candidate of recoveryCandidatesSync(filePath)) {
+    const candidateContents = readTextCandidateSync(candidate);
+    if (!candidateContents) continue;
+    const parsed = parseJsonLines(candidateContents, isValid);
+    if (parsed.invalid || parsed.values.length === 0) continue;
     try {
-      const value: unknown = JSON.parse(line);
-      if (isValid(value)) values.push(value);
-      else warnUnreadable(filePath, 'invalid JSONL entry');
+      writeFileAtomicSync(filePath, candidateContents);
+      return parsed.values;
     } catch {
-      warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+      // Try the next recovery candidate.
     }
   }
-  return values;
+  return fallback;
 }
 
 /** Read text state defensively, recovering a valid .bak or temporary file. */
@@ -463,27 +498,40 @@ export async function readJsonLinesAtomic<T>(
   try {
     contents = await fsPromises.readFile(filePath, 'utf8');
   } catch (error) {
-    if (isMissing(error)) return fallback;
+    if (isMissing(error)) return recoverJsonLines(filePath, fallback, isValid);
     warnUnreadable(filePath, String(error));
     return fallback;
   }
   if (!contents.trim()) {
     warnUnreadable(filePath, 'empty JSONL');
-    return fallback;
+    return recoverJsonLines(filePath, fallback, isValid);
   }
 
-  const values: T[] = [];
-  for (const line of contents.split(/\r?\n/)) {
-    if (!line.trim()) continue;
+  const parsed = parseJsonLines(contents, isValid);
+  if (!parsed.invalid) return parsed.values;
+  warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+  return recoverJsonLines(filePath, parsed.values.length ? parsed.values : fallback, isValid);
+}
+
+async function recoverJsonLines<T>(
+  filePath: string,
+  fallback: T[],
+  isValid: (value: unknown) => value is T,
+): Promise<T[]> {
+  const fileSystem = defaultFileSystem;
+  for (const candidate of await recoveryCandidates(filePath, fileSystem)) {
+    const candidateContents = await readTextCandidate(candidate);
+    if (!candidateContents) continue;
+    const parsed = parseJsonLines(candidateContents, isValid);
+    if (parsed.invalid || parsed.values.length === 0) continue;
     try {
-      const value: unknown = JSON.parse(line);
-      if (isValid(value)) values.push(value);
-      else warnUnreadable(filePath, 'invalid JSONL entry');
+      await writeFileAtomic(filePath, candidateContents);
+      return parsed.values;
     } catch {
-      warnUnreadable(filePath, 'truncated or invalid JSONL entry');
+      // Try the next recovery candidate.
     }
   }
-  return values;
+  return fallback;
 }
 
 /** Reset the process-local warning guard; intended for isolated tests. */
