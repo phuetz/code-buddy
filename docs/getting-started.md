@@ -414,7 +414,17 @@ If you don't want to set up multiple peers but want the team-lead pattern, use t
 ```
 > /swarm refactor the auth module to use JWT with PKCE
 ```
-This auto-enables `MultiAgentSystem`, decomposes the task, and dispatches subtasks to specialized worker agents (orchestrator, coder, reviewer, tester) running concurrently. Inspired by Korben's article on Claude Code's hidden Swarms mode — but Code Buddy ships the infrastructure built-in (no patch needed). Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` (no `GROK_API_KEY`).
+This auto-enables `MultiAgentSystem`, decomposes the task, and submits specialized workers (orchestrator, coder, reviewer, tester) through bounded thread delegation. The scheduler defaults to one active worker; set `CODEBUDDY_SWARM_CONCURRENCY` explicitly when the provider can sustain more. Every worker stream is tagged `[swarm:<agent>:<kind>]`. Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` (no `GROK_API_KEY`).
+
+For a persistent lead-managed task list, `/team` uses the same transport:
+```
+> /team start ship the toy feature
+> /team add coder builder
+> /team task implement the assigned change
+> /team assign <task-id> <member-id>
+> /team run all
+```
+Each member gets an independent full agent. Tasks for the same member remain FIFO; a member failure is reported without terminating its siblings. `/team stop` cancels active children before dissolving the team. Its scheduler also defaults to one active worker and accepts `CODEBUDDY_TEAM_CONCURRENCY` as an explicit override.
 
 ### Full guide
 

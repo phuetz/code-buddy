@@ -34,8 +34,16 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
-import type { CollaborationStrategy, WorkflowResult, WorkflowEvent, AgentTask, AgentExecutionResult } from '../../agent/multi-agent/types.js';
+import type {
+  AgentExecutionResult,
+  AgentTask,
+  CollaborationStrategy,
+  WorkflowEvent,
+  WorkflowResult,
+  WorkflowThreadDelegationOptions,
+} from '../../agent/multi-agent/types.js';
 import type { PersistedWorkflow } from '../../agent/multi-agent/workflow-persistence.js';
+import { resolveProviderFromCatalog } from '../../providers/provider-catalog.js';
 
 const VALID_ACTIONS = new Set([
   'enable', 'disable', 'status', 'run', 'plan', 'stop', 'strategy',
@@ -106,7 +114,11 @@ export function _setActiveStrategy(strategy: CollaborationStrategy): void {
   activeStrategy = strategy;
 }
 
-function resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
+export interface AgentsInvocationOptions {
+  threadDelegation?: WorkflowThreadDelegationOptions;
+}
+
+export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
   const grok = process.env.GROK_API_KEY?.trim();
   const grokBase = process.env.GROK_BASE_URL?.trim();
   if (grok) {
@@ -115,9 +127,10 @@ function resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { er
   const provider = (process.env.CODEBUDDY_PROVIDER ?? '').trim().toLowerCase();
   const ollamaHost = process.env.OLLAMA_HOST?.trim();
   if (provider === 'ollama' || ollamaHost) {
+    const resolved = resolveProviderFromCatalog({ providerOverride: 'ollama' });
     return {
-      apiKey: 'ollama',
-      baseURL: ollamaHost || grokBase || 'http://localhost:11434',
+      apiKey: resolved?.apiKey || 'ollama',
+      baseURL: resolved?.baseURL || 'http://localhost:11434/v1',
     };
   }
   return {
@@ -294,7 +307,10 @@ async function formatStatus(): Promise<string> {
 /**
  * /agents <action> [args]
  */
-export async function handleAgents(args: string[]): Promise<CommandHandlerResult> {
+export async function handleAgents(
+  args: string[],
+  invocation: AgentsInvocationOptions = {},
+): Promise<CommandHandlerResult> {
   const action = (args[0] || 'status').trim().toLowerCase();
   const rest = args.slice(1);
 
@@ -378,7 +394,7 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('No active workflow to stop.');
     }
     const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const stopCreds = resolveAgentsCredentials();
+    const stopCreds = _resolveAgentsCredentials();
     if (!('error' in stopCreds)) {
       const system = getMultiAgentSystem(stopCreds.apiKey, stopCreds.baseURL);
       system.stop();
@@ -484,7 +500,7 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
   }
 
   // From here on (enable/run/plan), credentials are needed.
-  const creds = resolveAgentsCredentials();
+  const creds = _resolveAgentsCredentials();
   if ('error' in creds) {
     return textResult(creds.error);
   }
@@ -559,7 +575,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       const sys = getMultiAgentSystem(apiKey, baseURL);
       await wireCoordinatorIfPresent(sys as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
       agentsEnabled = true;
-      const submission = await orchestrator.submitWorkflow(goal, { strategy: activeStrategy });
+      const submission = await orchestrator.submitWorkflow(goal, {
+        strategy: activeStrategy,
+        ...(invocation.threadDelegation
+          ? { threadDelegation: invocation.threadDelegation }
+          : {}),
+      });
       if (submission.status === 'rejected') {
         return textResult(`Workflow rejected: ${submission.reason}`);
       }
@@ -643,7 +664,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     const streamerHandle = attachStreamer(system as unknown as Parameters<typeof attachStreamer>[0]);
 
     const startedAt = new Date();
-    const promise = system.runWorkflow(goal, { strategy: activeStrategy }).then(
+    const promise = system.runWorkflow(goal, {
+      strategy: activeStrategy,
+      ...(invocation.threadDelegation
+        ? { threadDelegation: invocation.threadDelegation }
+        : {}),
+    }).then(
       (result) => {
         streamerHandle.detach();
         lastResult = {

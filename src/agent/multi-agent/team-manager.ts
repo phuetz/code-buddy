@@ -215,6 +215,7 @@ export class TeamManager extends EventEmitter {
 
     this.members.delete(memberId);
     this.emit('team:member-removed', { memberId, role: member.role });
+    persistTeam(this);
 
     return { success: true, message: `Removed ${member.label} (${member.role}) from the team.` };
   }
@@ -256,6 +257,7 @@ export class TeamManager extends EventEmitter {
     }
 
     this.emit('team:task-added', task);
+    persistTeam(this);
     return task;
   }
 
@@ -282,20 +284,26 @@ export class TeamManager extends EventEmitter {
     if (updates.error) task.error = updates.error;
     task.updatedAt = new Date();
 
-    if (updates.status === 'completed') {
-      task.completedAt = new Date();
-      // Update member stats
+    if (updates.status === 'completed') task.completedAt = new Date();
+    if (updates.status === 'completed' || updates.status === 'failed') {
       if (task.assignedTo) {
         const member = this.members.get(task.assignedTo);
         if (member) {
-          member.completedTasks++;
-          member.status = 'idle';
-          member.currentTaskId = null;
+          if (updates.status === 'completed') member.completedTasks++;
+          const next = Array.from(this.tasks.values()).find(
+            (candidate) =>
+              candidate.id !== task.id &&
+              candidate.assignedTo === member.id &&
+              candidate.status === 'in_progress',
+          );
+          member.currentTaskId = next?.id ?? null;
+          member.status = next ? 'working' : updates.status === 'failed' ? 'error' : 'idle';
         }
       }
     }
 
     this.emit('team:task-updated', task);
+    persistTeam(this);
     return { success: true, message: `Task ${taskId} updated: ${task.status}` };
   }
 
@@ -314,12 +322,14 @@ export class TeamManager extends EventEmitter {
     }
 
     task.assignedTo = memberId;
+    task.assignedRole = member.role;
     task.status = 'in_progress';
     task.updatedAt = new Date();
     member.status = 'working';
     member.currentTaskId = taskId;
 
     this.emit('team:task-assigned', { taskId, memberId, role: member.role });
+    persistTeam(this);
     return { success: true, message: `Assigned "${task.title}" to ${member.label} (${member.role})` };
   }
 
@@ -372,6 +382,7 @@ export class TeamManager extends EventEmitter {
 
     this.mailbox.push(msg);
     this.emit('team:message', msg);
+    persistTeam(this);
     return msg;
   }
 
@@ -403,6 +414,7 @@ export class TeamManager extends EventEmitter {
         msg.read = true;
       }
     }
+    persistTeam(this);
   }
 
   // ==========================================================================
