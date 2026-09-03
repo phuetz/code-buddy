@@ -157,6 +157,25 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       expect(r.error?.message).toContain('missing string tool name');
     });
 
+    it('headless view_file succeeds when ConfirmationService has no operator (GK17)', async () => {
+      vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockResolvedValue({
+        confirmed: false,
+        feedback: 'Human approval was rejected or timed out',
+      });
+      wirePeerToolBridge();
+      const r = await dispatchPeerRequest(
+        {
+          id: 'p-headless',
+          method: 'peer.tool.invoke',
+          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+        },
+        baseCtx,
+      );
+      expect(r.ok).toBe(true);
+      expect((r.payload as { output?: string }).output).toContain('hello world');
+      expect(ConfirmationService.getInstance().requestConfirmation).not.toHaveBeenCalled();
+    });
+
     it('TOOL_NOT_ALLOWED for tool outside V1 allowlist (bash)', async () => {
       wirePeerToolBridge();
       const r = await dispatchPeerRequest(

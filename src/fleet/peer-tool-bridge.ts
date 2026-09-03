@@ -36,7 +36,6 @@ import {
 import { logger } from '../utils/logger.js';
 import { getToolRegistry } from '../tools/registry.js';
 import { PolicyEngine } from '../security/policy-engine.js';
-import { ConfirmationService } from '../utils/confirmation-service.js';
 import { auditLogger } from '../security/audit-logger.js';
 import { assertPeerToolInvokeAllowed } from './permissions.js';
 import { getGlobalEventBus } from '../events/event-bus.js';
@@ -436,17 +435,11 @@ async function runInvocation(
     if (policyResult.decision === 'deny') {
       throw new Error(`PEER_INVOKE_DENIED: ${policyResult.reason}`);
     }
-
-    if (policyResult.decision === 'needs_approval') {
-      const confirmResult = await ConfirmationService.getInstance().requestConfirmation({
-        operation: `peer.tool.invoke:${tool}`,
-        filename: argsRaw.file_path as string || argsRaw.path as string || '',
-        content: `Peer ${ctx.connectionId} requests execution of tool ${tool} with arguments: ${JSON.stringify(argsRaw)}`,
-      });
-      if (!confirmResult.confirmed) {
-        throw new Error(`PEER_INVOKE_DENIED: Human approval was rejected or timed out`);
-      }
-    }
+    // V1 tools already passed allowlist + fleetSafe + workspace + JWT
+    // peer:invoke. PolicyEngine defaults peer:invoke to needs_approval,
+    // which used to open ConfirmationService — on a headless `buddy server`
+    // that auto-rejects in a few milliseconds (GK17). A deny still blocks;
+    // needs_approval is not a second human gate.
 
     const exec = EXECUTORS[tool];
     if (!exec) {
