@@ -31,10 +31,10 @@
     "code-explorer": {
       "name": "code-explorer",
       "type": "stdio",
-      "command": "/home/patrice/DEV/gitnexus-rs/target/release/gitnexus",
+      "command": "code-explorer",
       "args": ["mcp"],
       "enabled": true,
-      "description": "Code Explorer (gitnexus binary) — graph-powered code intelligence: query, impact/blast-radius, callers, hotspots, complexity over a pre-indexed knowledge graph. Canonical name `code-explorer` so it de-dups with a user-level entry of the same name (avoids loading 31 tools twice). Local path /home/patrice/DEV/gitnexus-rs/target/release/gitnexus; /home/patrice/code-buddy/src is indexed. https://github.com/phuetz/code-explorer"
+      "description": "Code Explorer — graph-powered code intelligence: query, impact/blast-radius, callers, hotspots, complexity over a pre-indexed knowledge graph. Canonical name `code-explorer` (the older `gitnexus` binary name is still recognized). Enable after `code-explorer` is on PATH; index with `code-explorer analyze .`. https://github.com/phuetz/code-explorer"
     },
     "lm-resizer": {
       "name": "lm-resizer",
