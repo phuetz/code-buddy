@@ -1062,17 +1062,29 @@ async function processPromptHeadless(
     // before the first message is processed.
     const sessionStore = agent.getSessionStore();
     if (!sessionStore.isEphemeral()) {
-      const sessionName = prompt.replace(/\s+/gu, ' ').trim().slice(0, 80) || 'Headless session';
-      const session = await sessionStore.createSession(sessionName, modelToUse);
-      const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
-      runStore = RunStoreClass.getInstance();
-      runId = runStore.startRun('headless prompt', {
-        channel: 'terminal',
-        sessionId: session.id,
-        cwd: session.workingDirectory,
-        tags: ['headless', modelToUse || 'unknown'],
-      });
-      agent.setRunId(runId);
+      // GK29: --resume/--continue hydrate the persisted session in headless mode; GK28: the run
+      // record keeps the session's working directory for `buddy run show`.
+      const existingId = sessionStore.getCurrentSessionId();
+      const existing = existingId ? await sessionStore.loadSession(existingId) : null;
+      if (existing) {
+        agent.hydratePersistedSession(existing);
+      } else {
+        const sessionName = prompt.replace(/\s+/gu, ' ').trim().slice(0, 80) || 'Headless session';
+        await sessionStore.createSession(sessionName, modelToUse);
+      }
+      const sessionId = sessionStore.getCurrentSessionId();
+      if (sessionId) {
+        const current = existing ?? (await sessionStore.loadSession(sessionId));
+        const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
+        runStore = RunStoreClass.getInstance();
+        runId = runStore.startRun('headless prompt', {
+          channel: 'terminal',
+          sessionId,
+          ...(current?.workingDirectory ? { cwd: current.workingDirectory } : {}),
+          tags: ['headless', modelToUse || 'unknown'],
+        });
+        agent.setRunId(runId);
+      }
     }
 
     await agent.systemPromptReady;

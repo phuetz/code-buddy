@@ -143,7 +143,7 @@ their env var the behavior is byte-identical** (asserted by tests). Index + per-
 
 | Feature | Gate | Surface |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------- |
-| Shadow Workspace (speculative execution: writes validated in a ghost worktree BEFORE touching files) | `CODEBUDDY_SHADOW_WORKSPACE` | `src/speculative/`, `buddy shadow` |
+| Shadow Workspace (speculative execution: writes validated in a ghost worktree BEFORE touching files) | `CODEBUDDY_SHADOW_WORKSPACE` | `src/speculative/`, `buddy shadow status\|run\|list\|clean` |
 | Time-Travel Sessions (per-turn timeline; replay/restore/fork) | `CODEBUDDY_TIMELINE` | `src/sessions/timeline.ts`, `buddy replay` |
 | Intent Ledger (falsifiable versioned specs; drift detection) | `CODEBUDDY_INTENTS` | `src/intents/`, `buddy intents` |
 | CKG federation (pull-only `peer.ckg.sync` between fleet peers, fail-closed) | `CODEBUDDY_CKG_SYNC` | `src/fleet/peer-ckg-bridge.ts`, `buddy research sync` |
