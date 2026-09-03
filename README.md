@@ -31,11 +31,11 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 <p align="center">
   <a href="docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4"><img src="docs/qa/code-buddy-studio/cowork-demo-moneyshot.gif" alt="A local model reasons, then creates a file — for ~$0.0001" width="760"/></a>
   <br/>
-  <sub>A <b>local</b> model reasons, then uses a tool to create a real file — <code>~$0.0001</code>, no cloud. <a href="cowork/readme.md#demo">More demos →</a></sub>
+  <sub>A <b>local</b> model reasons, then uses a tool to create a real file — <code>~$0.0001</code>, no cloud. <a href="cowork/README.md#demo">More demos →</a></sub>
 </p>
 
 - 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (30 free-tier or local `$0`) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy login` (or `buddy onboard`) → `buddy try`.
-- 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/readme.md#demo).
+- 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/README.md#demo).
 - 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp serve`, `buddy mcp add`).
 - 🖥️ **Runs everywhere** — terminal TUI, the **Cowork** desktop app, an HTTP/WebSocket server, your phone, or a 24/7 background service — one core engine.
 - 🏗️ **App Studio** (Cowork) — describe an app → scaffold, **live preview**, capped auto-fix (3 tries), one-click GitHub push. Static apps use the managed preview server; npm stacks run a real install + dev server.
@@ -147,7 +147,7 @@ here), cost `$0.0000`, English by default.
 
 🎙️ **And you can _talk_ to it.** Send a voice note and it replies by voice — speech-to-text (faster-whisper) and text-to-speech (Piper) both run **locally, `$0`**, mirroring your modality (voice in → voice out). Needs the local voice engines installed; it transparently degrades to a text reply otherwise.
 
-More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/readme.md`](cowork/readme.md#demo) · [`docs/screenshots/`](docs/screenshots/README.md).
+More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/README.md`](cowork/README.md#demo) · [`docs/screenshots/`](docs/screenshots/README.md).
 
 ---
 
@@ -493,7 +493,7 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 | [Providers](docs/providers.md)                                                                         | All 64 providers (30 free-tier or local `$0`), connection profiles, model pairs, circuit breaker                    |
 | [Tools Reference](docs/tools-reference.md)                                                             | Tool categories, RAG selection, edit matching, `apply_patch`, streaming                                             |
 | [Commands](docs/commands.md)                                                                           | All slash commands, CLI subcommands, companion commands, global flags                                               |
-| [Cowork Desktop](docs/cowork.md) · [Architecture](cowork/ARCHITECTURE.md) · [README](cowork/readme.md) | Desktop overview, install, source build, sandbox modes, internals                                                   |
+| [Cowork Desktop](docs/cowork.md) · [Architecture](cowork/ARCHITECTURE.md) · [README](cowork/README.md) | Desktop overview, install, source build, sandbox modes, internals                                                   |
 | [Agents](docs/agents.md) · [Reasoning](docs/reasoning.md)                                              | Orchestration, SWE agent, planning flow, A2A; thinking, ToT, MCTS                                                   |
 | [Fleet Guide](docs/fleet-guide.md)                                                                     | Multi-AI hub, peer-rpc methods, env-driven auto-detect, Tailscale labs                                              |
 | [Security](docs/security.md) · [Context Engine](docs/context-engine.md)                                | Permission modes, Guardian, sandboxing, secrets; compression, JIT context                                           |

@@ -62,5 +62,5 @@ cd cowork && npm run dev          # Vite + Electron depuis les sources
 ## Pour aller plus loin
 
 - `cowork/ARCHITECTURE.md` — les trois contextes Electron, les bridges (Workflow, Hooks, A2A, Presence, Server, SubAgent, Team, Fleet), les canaux IPC, l'état persistant, et le modèle de runner.
-- `cowork/readme.md` — README source de Cowork : fonctionnalités, démos, install, skills embarqués.
+- `cowork/README.md` — README source de Cowork : fonctionnalités, démos, install, skills embarqués.
 - `docs/cowork.md` — vue d'ensemble intégrée côté monorepo + la politique de confidentialité des captures d'écran/vidéos de QA.
