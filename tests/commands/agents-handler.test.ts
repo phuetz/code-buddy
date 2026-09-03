@@ -207,7 +207,7 @@ describe('handleAgents (/agents)', () => {
     process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('Multi-agent system started');
-    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('ollama', 'http://127.0.0.1:11434');
+    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('ollama', 'http://127.0.0.1:11434/v1');
   });
 
   it('disable resets the system when enabled', async () => {

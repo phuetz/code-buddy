@@ -43,6 +43,7 @@ import type {
   WorkflowThreadDelegationOptions,
 } from '../../agent/multi-agent/types.js';
 import type { PersistedWorkflow } from '../../agent/multi-agent/workflow-persistence.js';
+import { resolveProviderFromCatalog } from '../../providers/provider-catalog.js';
 
 const VALID_ACTIONS = new Set([
   'enable', 'disable', 'status', 'run', 'plan', 'stop', 'strategy',
@@ -126,9 +127,10 @@ export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string 
   const provider = (process.env.CODEBUDDY_PROVIDER ?? '').trim().toLowerCase();
   const ollamaHost = process.env.OLLAMA_HOST?.trim();
   if (provider === 'ollama' || ollamaHost) {
+    const resolved = resolveProviderFromCatalog({ providerOverride: 'ollama' });
     return {
-      apiKey: 'ollama',
-      baseURL: ollamaHost || grokBase || 'http://localhost:11434',
+      apiKey: resolved?.apiKey || 'ollama',
+      baseURL: resolved?.baseURL || 'http://localhost:11434/v1',
     };
   }
   return {
