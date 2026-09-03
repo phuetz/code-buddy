@@ -38,6 +38,17 @@ function motion(payload: Record<string, unknown> = { score: 0.5 }): void {
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
 
+async function waitForPerceptCount(tmp: string, expected: number): Promise<string> {
+  const perceptPath = path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl');
+  let raw = '';
+  await vi.waitFor(async () => {
+    raw = await readFile(perceptPath, 'utf8');
+    expect(raw.trim().split('\n').filter(Boolean)).toHaveLength(expected);
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  return raw;
+}
+
 describe('vision reaction — motion → camera_analyze (debounced)', () => {
   it('analyzes once on motion, records a percept, and debounces a rapid second', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-'));
@@ -57,7 +68,7 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     const unwire = wireVisionReaction({ analyzer, debounceMs: 5000, cwd: tmp, now: () => clock });
     try {
       motion();
-      await tick();
+      await waitForPerceptCount(tmp, 1);
       expect(calls).toBe(1); // first motion → analyzed
 
       motion();
@@ -66,10 +77,9 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
 
       clock += 6000; // past the debounce
       motion();
-      await tick();
+      const percepts = await waitForPerceptCount(tmp, 2);
       expect(calls).toBe(2);
 
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
       const lines = percepts.trim().split('\n').filter(Boolean);
       expect(lines.length).toBe(2); // one percept per analysis
       expect(percepts).toContain('a tidy desk');
@@ -84,6 +94,7 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     } finally {
       unwire();
       getGlobalEventBus().off(listenerId);
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 
