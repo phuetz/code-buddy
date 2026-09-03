@@ -30,6 +30,7 @@ export type SkillFirewallCapability =
   | 'dynamic-code'
   | 'filesystem'
   | 'network'
+  | 'prompt-injection'
   | 'prototype-pollution'
   | 'secrets'
   | 'shell';
@@ -142,6 +143,11 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Shell injection
   { pattern: /`\$\{.*\}`/, severity: 'medium', description: 'Template literal with interpolation (potential injection)', name: 'template-injection', capability: 'shell' },
   { pattern: /\$\(.*\)/, severity: 'medium', description: 'Shell command substitution', name: 'shell-subst', capability: 'shell' },
+
+  // Prompt injection / jailbreak (a skill is injected into the agent context)
+  { pattern: /\b(?:ignore|disregard|override|forget)\b.{0,80}\b(?:all|any|previous|prior|system|developer)\b.{0,80}\b(?:instruction|prompt|message)s?\b/i, severity: 'critical', description: 'Instruction to override higher-priority prompts', name: 'prompt-override', capability: 'prompt-injection' },
+  { pattern: /\b(?:jailbreak|godmode|g0dm0d3)\b/i, severity: 'critical', description: 'Jailbreak / GODMODE skill content', name: 'jailbreak-godmode', capability: 'prompt-injection' },
+  { pattern: /\b(?:disable|bypass)\b.{0,60}\b(?:all|every|any)\b.{0,40}\b(?:safety|guardrail|restriction)s?\b/i, severity: 'critical', description: 'Instruction to disable safety policies', name: 'disable-safety', capability: 'prompt-injection' },
 ];
 
 /**
