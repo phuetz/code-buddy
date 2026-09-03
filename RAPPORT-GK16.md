@@ -118,7 +118,15 @@ Rouge collé : create lançait `Error EACCES` (crash) ; restore écrivait « Fai
 
 Correctif : `describeBackupIoError` (ENOSPC/EACCES/ENOTDIR) autour de mkdir/write create et des écritures restore.
 
-Vert : 6 fichiers / 27 tests.
+Vert : 6 fichiers / 27 tests. Commit `c5bd46383`.
+
+### Lot C — verify menteur sur chemins hors profil (rouge → vert)
+
+Rouge collé : `verify` exit 0 « Backup valid » pour `/etc/passwd`, `../victim-outside.txt`, `..\..\etc\x`.
+
+Correctif : `verifyArchivePayloads` refuse les mêmes chemins que restore. Plus de throw déguisé en « corrupt » pour ces cas.
+
+Vert : 5 fichiers / 28 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

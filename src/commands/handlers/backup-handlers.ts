@@ -209,7 +209,11 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
 
     const payloadError = verifyArchivePayloads(manifest, data.files);
     if (payloadError) {
-      throw new Error(payloadError);
+      return {
+        handled: true,
+        exitCode: 1,
+        response: `Invalid backup ${fullPath}: ${payloadError}`,
+      };
     }
 
     return {
@@ -434,6 +438,9 @@ function fileChecksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
 }
 
+/** Dummy dest used only to decide whether an archive path would escape on restore. */
+const VERIFY_PATH_ROOT = resolve('/codebuddy-backup-dest');
+
 function describeBackupIoError(err: unknown, action: string): string {
   const e = err as NodeJS.ErrnoException;
   const target = e.path ? ` (${e.path})` : '';
@@ -516,6 +523,9 @@ function verifyArchivePayloads(
     return 'archive payload does not match the manifest';
   }
   for (const manifestFile of manifest.files) {
+    if (!resolveRestoreDestination(VERIFY_PATH_ROOT, manifestFile.path)) {
+      return `path escapes destination: ${manifestFile.path}`;
+    }
     const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
     if (!archiveFile || typeof archiveFile.content !== 'string') {
       return `archive payload is missing ${manifestFile.path}`;

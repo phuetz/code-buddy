@@ -2,6 +2,7 @@
  * GK16 — real-filesystem backup create/verify/list/restore.
  * Temp dirs live under the clone `tmp/` (never shared /tmp, never ~/.codebuddy).
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -103,5 +104,52 @@ describe('GK16 backup I/O failures must not crash or pretend to have read the ar
     expect(restored?.exitCode).toBe(1);
     expect(restored?.response).toMatch(/cannot write|permission denied|no space left/i);
     expect(restored?.response ?? '').not.toMatch(/Failed to read backup/i);
+  });
+});
+
+describe('GK16 verify must not call an unrestorable archive valid', () => {
+  let workspace: string;
+  let previousCwd: string;
+
+  beforeEach(() => {
+    previousCwd = process.cwd();
+    workspace = makeTmpDir('gk16-backup-verify-', path.join(previousCwd, 'tmp'));
+    process.chdir(workspace);
+    fs.mkdirSync(path.join(workspace, '.codebuddy'), { recursive: true });
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    removeTmpDir(workspace);
+  });
+
+  it.each([
+    '/etc/passwd',
+    '../victim-outside.txt',
+    '..\\..\\etc\\x',
+  ])('rejects verify for archive path %s', async (archivePath) => {
+    const payload = Buffer.from('pwned');
+    const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+    const file = path.join(workspace, 'evil.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        manifest: {
+          version: '1.0.0',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          files: [{ path: archivePath, size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: true },
+        },
+        files: [{ path: archivePath, content: payload.toString('base64') }],
+      }),
+    );
+
+    const verified = await handleBackup(`verify ${file}`);
+    expect(verified.exitCode).toBe(1);
+    expect(verified.response).toMatch(/escapes destination|\.\.|not a valid restore path/i);
+    expect(verified.response ?? '').not.toMatch(/Backup valid/i);
+
+    const restored = await handleBackup(`restore ${file} --confirm`);
+    expect(restored.exitCode).toBe(1);
   });
 });
