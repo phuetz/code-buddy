@@ -787,12 +787,19 @@ LLM (continuing with peer's answer in context): "gpuNode suggests …"
 > `critical` never auto-claimed) on the **free-first model ladder** (`CODEBUDDY_LOCAL_MODEL` →
 > `CODEBUDDY_NETWORK_MODELS=model@url,…` → `CODEBUDDY_ESCALATION_MODEL`), and `buddy autonomy install`
 > runs it as an always-on service.
-> - **Two executors.** Default v0 writes scoped artifacts (no repo edits). Opt-in `CODEBUDDY_AUTONOMY_EXECUTOR=agent`
->   (or `buddy autonomy install --executor agent --workspace <dir>`) runs the **real agent** to edit files —
->   *fail-closed*: it refuses without `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT` (a cwd bound, not a hard sandbox;
->   tighten with `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"`).
-> - **Verified completion.** A task's optional `verifyCommand` (e.g. `node x.check.mjs`, `npm test`) must exit 0,
->   else the task is released for retry. **Auto-escalation**: repeated failures climb the model ladder.
+> - **Two executors.** Default v0 writes a scoped `.md` artifact (no repo edits) and will **refuse**
+>   a task that carries `filesToModify` / `verifyCommand`. For real edits:
+>   `buddy autonomy run --executor agent --workspace <dir>` (or env
+>   `CODEBUDDY_AUTONOMY_EXECUTOR=agent` + `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`). Fail-closed without a
+>   workspace (a cwd bound, not a hard sandbox; tighten with
+>   `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"`).
+> - **Verified completion.** `buddy autonomy tasks add "<title>" --verify-command "node x.check.mjs"
+>   --files-to-modify add.mjs` stores the gate. It only *runs* when the operator also passes
+>   `buddy autonomy run --verify` (or `CODEBUDDY_AUTONOMY_VERIFY_COMMANDS=1`) on an **agent**
+>   executor — otherwise the task is released, not marked done. A listed `filesToModify` path that
+>   did not change is also a failure. **Auto-escalation**: repeated failures climb the model ladder.
+> - **Journal.** Each `autonomy run` is a `buddy run` entry (`buddy run list` / `buddy run show <id>`).
+> - **Bench.** `buddy autonomy bench` ranks the **local** Ollama model plus any Tailnet peers.
 > - **Local agentic models:** use qwen3+/devstral/mistral (qwen2.5:7b is chat-only). Runnable demo: `npm run autonomy:lab`.
 > - **Service lifecycle.** `buddy autonomy service start|stop|restart|status` controls the installed
 >   `codebuddy-autonomy` service (systemd user unit / launchd / Task Scheduler) without touching the unit by hand.

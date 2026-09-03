@@ -93,6 +93,9 @@ Run `buddy <cmd> --help` for any subcommand. Most useful:
 buddy server --port 3000              # HTTP 3000 + Gateway WS 3001 (required for the fleet)
 buddy fleet status [--json]           # routing + presence
 buddy autonomy run [--watch] [--interval <ms>] [--max-ticks <n>] [--dir <colab>] [--output-dir <art>]
+                 [--executor artifact|agent] [--workspace <dir>] [--verify]
+buddy autonomy tasks add "<title>" [--verify-command <cmd>] [--files-to-modify a,b] [--acceptance-criteria ...]
+buddy autonomy bench [--models csv] [--peer pattern]   # local Ollama + Tailnet peers
 buddy autonomy install | uninstall    # always-on systemd/launchd/Task-Scheduler service
 buddy autonomy install --executor agent --workspace <dir>   # service runs the REAL agent (edits files in <dir>)
 buddy colab status                    # shared task queue (colab-tasks.json: claim lease/TTL, dependsOn DAG)
@@ -100,8 +103,9 @@ buddy colab status                    # shared task queue (colab-tasks.json: cla
 
 - The autonomous loop claims open, non-`critical` tasks in priority order, respecting DAG `dependsOn`, on the free-first model ladder (local → Tailscale network → paid). Configure via env: `CODEBUDDY_LOCAL_MODEL`, `OLLAMA_BASE_URL`, `CODEBUDDY_NETWORK_MODELS=model@url,…`, `CODEBUDDY_ESCALATION_MODEL`.
 - **Auto-escalation**: a task that keeps failing on the cheap tier climbs the ladder (policy `escalateAfterFailures`) instead of retrying forever on a model that can't do it.
-- The default daemon executor (v0) writes the model's output as a scoped artifact — it does **not** edit the repo. To make the daemon run the **real agent** (editing files), set `CODEBUDDY_AUTONOMY_EXECUTOR=agent` **and** `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT=<bounded dir>` (or `buddy autonomy install --executor agent --workspace <dir>`) — fail-closed: it refuses to run without the workspace root. NB: this is a cwd bound, not a hard sandbox; use a disposable/contained dir, and `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"` to tighten the tool surface.
-- **Verified completion**: give a colab task a `verifyCommand` (e.g. `node add.check.mjs`, `npm test`). The agent executor runs it after the agent and only marks the task completed if it exits 0 — otherwise the task is released for retry/escalation. Use qwen3+/devstral/mistral for the local tier (qwen2.5:7b is chat-only). The autonomy lab demonstrates the full pattern.
+- The default daemon executor (v0) writes the model's output as a scoped artifact — it does **not** edit the repo, and it **refuses** a task that lists `filesToModify` or `verifyCommand`. For real edits: `buddy autonomy run --executor agent --workspace <dir>` (or `CODEBUDDY_AUTONOMY_EXECUTOR=agent` + `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`). Fail-closed without a workspace. NB: this is a cwd bound, not a hard sandbox; use a disposable/contained dir, and `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"` to tighten the tool surface.
+- **Verified completion**: `buddy autonomy tasks add … --verify-command "node add.check.mjs" --files-to-modify add.mjs`. The gate runs only with `--executor agent` **and** `--verify` (or `CODEBUDDY_AUTONOMY_VERIFY_COMMANDS=1`). Unchanged `filesToModify` is a failure. Use qwen3+/devstral/mistral for the local tier (qwen2.5:7b is chat-only). The autonomy lab demonstrates the full pattern.
+- Each `autonomy run` is recorded in `buddy run list` / `buddy run show`.
 
 ## The autonomy lab
 

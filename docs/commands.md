@@ -258,6 +258,8 @@ buddy forge create|evaluate|compare|select ...                              # pr
 buddy exchange constitution|bid|rank|rehearse|award|reject ...              # policy-gated multi-LLM/Fleet market and Shadow Twin
 buddy capsule list|create|activate|revoke ...                               # proof-backed portable workflows from proven outcomes
 buddy autonomy status|run|briefing|bench|tasks ...                          # buddy colab ... is an alias
+#   tasks add "<title>" [--verify-command cmd] [--files-to-modify a,b] [--acceptance-criteria ...]
+#   run [--executor artifact|agent] [--workspace dir] [--verify] [--max-ticks N]
 buddy llm
 buddy llm ensemble "<question>"
 buddy council "<task>" [-n 3] [--models gpt,ollama] [--judge <model>] [--task-type code|reasoning|french|vision|general] [--fleet] [--no-conductor] [--no-synthesis] [--no-consensus]
