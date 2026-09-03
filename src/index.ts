@@ -2688,7 +2688,7 @@ program
       if (act === "add") {
         const label = args.join(" ").trim();
         if (!label || !options.at) {
-          cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--days 1,3,5]');
+          cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--date YYYY-MM-DD] [--days 1,3,5]');
           process.exitCode = 1;
           return;
         }
@@ -2752,7 +2752,7 @@ program
         cli.stdout(removed ? `🗑️  Removed ${id}` : `Reminder not found: ${id}`);
         if (!removed) process.exitCode = 1;
       } else {
-        cli.stdout("Usage: buddy remind add|list|done|rm");
+        cli.stdout("Usage: buddy remind add|list|agenda|done|rm");
         process.exitCode = 1;
       }
     } catch (e) {
