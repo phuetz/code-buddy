@@ -4,6 +4,8 @@ import {
   endSpeaking,
   isSpeaking,
   classifyRecentVoiceEcho,
+  hasRecentSpokenReference,
+  isRecentVoiceFragmentEcho,
   measureVoiceResumeTiming,
   noteSpokenText,
   interruptSpeaking,
@@ -108,6 +110,17 @@ describe('voice-activity — half-duplex speaking guard', () => {
     noteSpokenText('Nouveau message vocal.', 1_200);
     expect(classifyRecentVoiceEcho('voici phrase courte', 1_300)).toBe('echo');
     expect(classifyRecentVoiceEcho('nouveau message vocal', 1_300)).toBe('echo');
+  });
+
+  it('recognizes only one-to-three-word fragments contained in a recent spoken phrase', () => {
+    noteSpokenText('Bonjour Patrice, je suis Lisa et je suis prête.', 1_000);
+
+    expect(isRecentVoiceFragmentEcho('Lisa prête', 1_100)).toBe(true);
+    expect(hasRecentSpokenReference(1_100)).toBe(true);
+    expect(isRecentVoiceFragmentEcho('Lisa stop', 1_100)).toBe(false);
+    expect(isRecentVoiceFragmentEcho('Lisa et je suis', 1_100)).toBe(false);
+    expect(isRecentVoiceFragmentEcho('Lisa prête', 91_001)).toBe(false);
+    expect(hasRecentSpokenReference(91_001)).toBe(false);
   });
 
   it('classifies barge-in during playback and never re-arms a tail after interruption', () => {

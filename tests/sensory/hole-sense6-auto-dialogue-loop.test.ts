@@ -78,7 +78,10 @@ describe('Mission SENSE6 — Trou 7 : Réouverture de la boucle d\'auto-dialogue
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Le backchannel légitime du premier tour est armé à 120 ms. Attendre son
+      // échéance avant de vider le journal évite de l'attribuer à tort à la fuite
+      // acoustique injectée ensuite.
+      await new Promise((resolve) => setTimeout(resolve, 150));
       noteSpokenText(initialSpokenPhrase, nowMs);
       beginSpeaking(nowMs);
       // Réinitialiser le journal : nous voulons capturer UNIQUEMENT les réactions provoquées par sa propre voix

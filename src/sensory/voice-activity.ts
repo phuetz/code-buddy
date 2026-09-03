@@ -176,6 +176,36 @@ export function noteSpokenText(text: string, now: number = Date.now()): void {
   }
 }
 
+/**
+ * Detect a short transcript wholly contained in a recent loudspeaker phrase.
+ * This conservative fingerprint is used while playback is active, where a
+ * one-to-three-word match is enough to identify a likely self-capture even
+ * though it cannot meet the normal whole-phrase coverage threshold.
+ */
+export function isRecentVoiceFragmentEcho(
+  transcript: string,
+  atMs: number = Date.now(),
+): boolean {
+  const normalized = normalizeSpokenText(transcript).slice(0, 1_000);
+  if (!normalized || !finiteClock(atMs)) return false;
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 3) return false;
+  return spokenReferences.some(reference =>
+    atMs >= reference.recordedAtMs - 1_000
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS
+      && tokens.every(token => reference.tokens.includes(token)),
+  );
+}
+
+/** Whether a loudspeaker fingerprint is still available for the given capture time. */
+export function hasRecentSpokenReference(atMs: number = Date.now()): boolean {
+  if (!finiteClock(atMs)) return false;
+  return spokenReferences.some(reference =>
+    atMs >= reference.recordedAtMs - 1_000
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
+  );
+}
+
 /** Classify a transcript against only the recent in-memory loudspeaker fingerprints. */
 export function classifyRecentVoiceEcho(
   transcript: string,

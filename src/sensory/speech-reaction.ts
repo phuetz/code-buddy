@@ -23,6 +23,8 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import {
   classifyRecentVoiceEcho,
+  hasRecentSpokenReference,
+  isRecentVoiceFragmentEcho,
   isSensoryAecTrusted,
   isSpeaking,
   measureVoiceResumeTiming,
@@ -1499,6 +1501,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let pendingSpeechTurnId: string | undefined;
   let pendingSpeechPartialText: string | undefined;
   let bargedSpeechTurnId: string | undefined;
+  let suspectedOwnPlaybackTurnId: string | undefined;
   let leakagePlaybackStartedAtMs: number | undefined;
   let leakageSamples: number[] = [];
 
@@ -2242,9 +2245,15 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       });
       const speechStartedAtMs = pendingSpeechStartedAtMs ?? now();
       const playbackActive = measureVoiceResumeTiming(speechStartedAtMs)?.kind === 'during_playback';
+      const suspectedOwnPlayback = playbackActive
+        && payload.aecActive !== true
+        && (env.CODEBUDDY_SENSORY_REPAIR === 'true' || sensoryBackchannelEnabled)
+        && hasRecentSpokenReference(speechStartedAtMs);
+      suspectedOwnPlaybackTurnId = suspectedOwnPlayback ? pendingSpeechTurnId : undefined;
       if (
         inFlight
         && playbackActive
+        && !suspectedOwnPlayback
         && voiceBargeInEnabled(env)
         && (
           shouldTriggerVoiceBargeInOnSpeechStart(payload)
@@ -2326,11 +2335,25 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         (p.payload as Record<string, unknown> | undefined)?.startedAtMs,
       ) ?? pendingSpeechStartedAtMs;
       let turnId = pendingSpeechTurnId;
+      const suspectedOwnPlayback = turnId !== undefined
+        && suspectedOwnPlaybackTurnId === turnId;
       const repairAddressHint = pendingSpeechPartialText;
       pendingSpeechStartedAtMs = undefined;
       pendingSpeechTurnId = undefined;
       pendingSpeechPartialText = undefined;
       let text = livePayload?.text?.trim() ?? '';
+      if (suspectedOwnPlayback) suspectedOwnPlaybackTurnId = undefined;
+      if (suspectedOwnPlayback && isRecentVoiceFragmentEcho(text, speechStartedAtMs ?? now())) {
+        if (turnId) {
+          turnCoordinator.transition(turnId, 'suppressed', {
+            suppressionReason: 'own_playback_fragment',
+            scene: 'assistant_playback',
+            sceneConfidence: 0.98,
+          });
+        }
+        logger.info('[speech] dropped own playback fragment');
+        return;
+      }
       if (!text && env.CODEBUDDY_SENSORY_REPAIR !== 'true') return;
       const key = `live:${liveSeq++}`;
       if (heldLiveTurn) {
@@ -2449,6 +2472,10 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const turnId = pendingSpeechTurnId;
     pendingSpeechStartedAtMs = undefined;
     pendingSpeechTurnId = undefined;
+    if (turnId !== undefined && suspectedOwnPlaybackTurnId === turnId) {
+      suspectedOwnPlaybackTurnId = undefined;
+      return;
+    }
     if (!wav) return; // no audio to transcribe (the batch path needs a WAV)
 
     if (inFlight) {
