@@ -44,6 +44,12 @@ export class SessionFacade {
   private encryption: SessionEncryption | null = null;
   private encryptionInitialized = false;
 
+  private async attachUsageIfSupported(usage?: SessionUsageSnapshot): Promise<void> {
+    if (usage && typeof this.sessionStore.attachUsageToCurrentSession === 'function') {
+      await this.sessionStore.attachUsageToCurrentSession(usage);
+    }
+  }
+
   constructor(deps: SessionFacadeDeps) {
     this.checkpointManager = deps.checkpointManager;
     this.sessionStore = deps.sessionStore;
@@ -143,7 +149,7 @@ export class SessionFacade {
           timestamp: new Date(),
         };
         await this.sessionStore.updateCurrentSession([marker]);
-        if (usage) await this.sessionStore.attachUsageToCurrentSession(usage);
+        await this.attachUsageIfSupported(usage);
         return;
       } catch (err) {
         logger.warn('Session encryption failed, saving unencrypted', {
@@ -152,7 +158,7 @@ export class SessionFacade {
       }
     }
     await this.sessionStore.updateCurrentSession(chatHistory);
-    if (usage) await this.sessionStore.attachUsageToCurrentSession(usage);
+    await this.attachUsageIfSupported(usage);
   }
 
   /**

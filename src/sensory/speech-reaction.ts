@@ -216,6 +216,16 @@ export function voiceBargeInEnabled(env: NodeJS.ProcessEnv = process.env): boole
   return env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
 }
 
+function assessAcousticBargeInEligibility(
+  payload: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+): { trustedAec: boolean; sustainedSpeech: boolean } {
+  return {
+    trustedAec: isSensoryAecTrusted(payload.aecActive === true, env),
+    sustainedSpeech: (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS,
+  };
+}
+
 /**
  * Speech-start has no transcript yet. It may cut only when active capture-side
  * AEC accompanies both sustained speech and a calibrated energy margin.
@@ -224,8 +234,8 @@ export function shouldTriggerVoiceBargeInOnSpeechStart(
   payload: Record<string, unknown>,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  if (payload.aecActive !== true
-    || (capturedSpeechMs(payload) ?? 0) < DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS) {
+  const eligibility = assessAcousticBargeInEligibility(payload, env);
+  if (!eligibility.trustedAec || !eligibility.sustainedSpeech) {
     return false;
   }
   const rms = finiteTimestamp(payload.rms);
@@ -1544,9 +1554,10 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     payload: Record<string, unknown>,
     speechStartedAtMs: number | undefined,
   ): boolean => {
+    const eligibility = assessAcousticBargeInEligibility(payload, env);
     if (
       !voiceBargeInEnabled(env)
-      || payload.aecActive !== true
+      || !eligibility.trustedAec
       || speechStartedAtMs === undefined
     ) return false;
     const timing = measureVoiceResumeTiming(speechStartedAtMs);
@@ -1563,7 +1574,8 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const referenceSample = noiseFloorRms ?? rms;
     // The VAD's calibrated floor is already a leakage measurement. Use it at once when the
     // speech-start sample clears the margin; otherwise collect the first 300 ms before deciding.
-    if (rms !== undefined && noiseFloorRms !== undefined
+    if (eligibility.sustainedSpeech
+      && rms !== undefined && noiseFloorRms !== undefined
       && exceedsVoiceLeakageMargin(rms, noiseFloorRms, resolveVoiceBargeInMarginDb(env))) {
       return true;
     }
@@ -1574,7 +1586,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const leakageRms = leakageSamples.length > 0
       ? leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length
       : noiseFloorRms;
-    if (rms === undefined || leakageRms === undefined) return false;
+    if (!eligibility.sustainedSpeech || rms === undefined || leakageRms === undefined) return false;
     return exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
   };
   type SpeechJob = {
@@ -1640,7 +1652,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       ? measureVoiceResumeTiming(job.speechStartedAtMs)
       : undefined;
     const aecActive = (job.p.payload as Record<string, unknown> | undefined)?.aecActive === true;
-    const aecTrusted = isSensoryAecTrusted(aecActive);
+    const aecTrusted = isSensoryAecTrusted(aecActive, env);
     // A turn that already barged in (CONV2) has stopped the playback: hear it. Otherwise the
     // half-duplex guard only opens for an explicitly trusted AEC (SENSE1) — never on aecActive alone.
     // A capture that STARTED after normal playback ended is different: transcribe it so the
@@ -1881,7 +1893,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           captureStartedAtMs ?? transcribeStartMs,
         );
         const explicitBargeIn = playbackCaptureKind
-          ? shouldTriggerVoiceBargeIn(text, payload)
+          ? shouldTriggerVoiceBargeIn(text, payload, env)
             // A turn that already cut the playback acoustically (CONV2 speech_start barge-in)
             // counts as an explicit interruption: the robot is no longer speaking over it.
             || (job.turnId !== undefined && bargedSpeechTurnId === job.turnId)
@@ -1893,7 +1905,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
                 playbackCaptureKind,
                 echoClassification,
                 explicitBargeIn,
-                isSensoryAecTrusted(payload.aecActive === true),
+                isSensoryAecTrusted(payload.aecActive === true, env),
               )
             : false
         );

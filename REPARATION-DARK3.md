@@ -58,6 +58,7 @@ Ajouter un fournisseur TTS local Kyutai, une politique vocale opt-in à deux vit
 ```dotenv
 CODEBUDDY_TTS_TWO_SPEED=true
 CODEBUDDY_TTS_LOCAL_URL=http://127.0.0.1:8300
+CODEBUDDY_TTS_LOCAL_URL=http://gpu-voice.example:8300
 CODEBUDDY_TTS_LOCAL_TIMEOUT_MS=1500
 CODEBUDDY_TTS_LOCAL_N_Q=12
 CODEBUDDY_TTS_SHORT_MAX_CHARS=80
@@ -70,4 +71,5 @@ CODEBUDDY_TTS_VOICE=elevenlabs:3fxbs2pB9bs8S6Z1N38A
   `n_q=24` (0,40 s, qualité potentiellement supérieure), puis reconstruire la banque si ce choix
   change puisque `n_q` fait partie de la clé.
 - Le serveur Kyutai local doit être allumé et joignable; sinon le repli fonctionne,
+- Le serveur GPU Kyutai doit être allumé et joignable; sinon le repli fonctionne,
   mais le bénéfice de latence locale disparaît.

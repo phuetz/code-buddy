@@ -490,12 +490,16 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(shouldTriggerVoiceBargeInOnSpeechStart({
       ...energeticSpeech,
       aecActive: true,
-    })).toBe(true);
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(true);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      ...energeticSpeech,
+      aecActive: true,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'false' })).toBe(false);
     expect(shouldTriggerVoiceBargeInOnSpeechStart({
       audioMs: 300,
       rms: 0.04,
       aecActive: true,
-    })).toBe(false);
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(false);
   });
 
   it('keeps the half-duplex guard closed when AEC is announced but not explicitly trusted', async () => {

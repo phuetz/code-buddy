@@ -38,16 +38,21 @@ async function waitFor(assertion: () => void): Promise<void> {
 
 describe('CONV2 — interrupted-turn continuation', () => {
   let previousBargeIn: string | undefined;
+  let previousAecTrust: string | undefined;
 
   beforeEach(() => {
     previousBargeIn = process.env.CODEBUDDY_SENSORY_BARGE_IN;
+    previousAecTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
     process.env.CODEBUDDY_SENSORY_BARGE_IN = 'true';
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     _resetVoiceActivityForTests();
   });
 
   afterEach(() => {
     if (previousBargeIn === undefined) delete process.env.CODEBUDDY_SENSORY_BARGE_IN;
     else process.env.CODEBUDDY_SENSORY_BARGE_IN = previousBargeIn;
+    if (previousAecTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousAecTrust;
     _resetVoiceActivityForTests();
   });
 
@@ -127,8 +132,8 @@ describe('CONV2 — interrupted-turn continuation', () => {
       transcriptFinal('Lisa, ouvre la conversation.');
       await waitFor(() => expect(heard).toEqual(['Lisa, ouvre la conversation.']));
       beginSpeaking(clock);
-      speechStart({ startedAtMs: clock + 100, rms: 0.01, aecActive: true });
-      speechStart({ startedAtMs: clock + 400, rms: 0.04, aecActive: true });
+      speechStart({ startedAtMs: clock + 100, audioMs: 100, rms: 0.01, aecActive: true });
+      speechStart({ startedAtMs: clock + 400, audioMs: 400, rms: 0.04, aecActive: true });
       transcriptFinal('continue sans répéter.', { startedAtMs: clock + 450 });
       releaseFirst();
       await waitFor(() => expect(heard).toHaveLength(2));

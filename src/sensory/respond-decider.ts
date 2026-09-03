@@ -346,10 +346,10 @@ const CONTINUATION =
   /^(et|alors|ok|oui|non|ouais|aussi|puis|donc|d accord|dac|attends|sinon|bon|au fait)\b/;
 
 /** A bounded answer to the assistant's immediately preceding conversational turn. */
-function isBriefConversationAnswer(text: string): boolean {
+export function isBriefConversationAnswer(text: string): boolean {
   const normalized = normWords(text);
   if (!normalized || normalized.split(' ').length > 4) return false;
-  return /^(?:oui|ouais|non|ok|d accord|dac|bien sur|volontiers|pas vraiment|pourquoi pas)$/.test(
+  return /^(?:oui|ouais|non|ok|d accord|dac|bien sur|volontiers|merci|merci beaucoup|pas vraiment|pourquoi pas)$/.test(
     normalized,
   );
 }

@@ -70,7 +70,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     options: ['pocket', 'kyutai', 'voicebox', 'piper'],
     default: 'pocket',
     envFile: 'both',
-    help: 'Pocket is realtime; Kyutai is the opt-in local stream; Voicebox is expressive; Piper is the final fallback.',
+    help: 'Pocket is realtime; Kyutai is the opt-in private GPU stream; Voicebox is expressive; Piper is the final fallback.',
   },
   {
     key: 'CODEBUDDY_TTS_TWO_SPEED',
@@ -106,7 +106,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     type: 'text',
     default: '12',
     envFile: 'vision',
-    help: 'Kyutai quantizer count used in the cache identity; must match the server.',
+    help: 'Private Kyutai server quantizer count used in the cache identity; must match the server.',
   },
   {
     key: 'CODEBUDDY_TTS_SHORT_MAX_CHARS',
