@@ -3,60 +3,65 @@
 Date : 2026-09-03 (Europe/Paris)
 Agent : Grok 4.6
 Clone : `/home/patrice/DEV/cb-flowfix1-2026-09-03`
-Branche visée : `fix/flowfix1-pilote-flow-2026-09-03`
+Branche : `fix/flowfix1-pilote-flow-2026-09-03`
 Original `~/code-buddy` : interdit en écriture. Aucun push.
 
 ## Statut
 
-**RÉSERVÉ.** Ce fichier est créé **avant toute inspection** du pilote, du DOM Flow, du CDP ou des scripts.
+**FAIT.** Le pilote soumet à nouveau. Deux clips Veo 3.1 Quality téléchargés depuis les prompts du JSON de test, contenu vérifié sur image extraite.
 
-## Enjeu (donné, non redécouvert)
+## Cause
 
-Le compte Google AI Ultra (palier 20x) porte 25 000 crédits Flow vidéo par mois, non reportables.
-Solde lu par le pilotage le 03/09 à 18 h 50 = **N**, perdus le **28** s'ils ne sont pas consommés.
-Veo 3.1 Quality est le seul moteur 1080p « pièce maîtresse ». Le pilote ne sait plus soumettre :
-tout l'usage vidéo Flow est à l'arrêt.
+Le bouton d’envoi Agent (`arrow_forward` + « Créer », w=32) n’utilise plus l’attribut HTML `disabled`. React pose `aria-disabled="true"` tant que le **modèle Slate** est vide. `.disabled` reste `false`.
 
-## Constats déjà établis par le pilotage (03/09, 18 h 40–19 h 20)
+`fill_prompt()` faisait `selectNodeContents` + `Input.insertText` : `innerText` égalait le prompt (le DOM était peint) alors que Slate restait sur le placeholder + U+FEFF. Le pilote voyait un bouton « actif », cliquait (DOM synthétique, clic TRUSTED, Entrée) : l’`onClick` React partait, l’application no-opait. Champ non vidé, solde inchangé.
 
-1. `flow-crame.py` échoue avec « champ non vidé après envoi ». `credits()`, navigation, `close_profile()`, `card_count()` et le réglage de l'agent fonctionnent encore.
-2. Réglage agent enregistré : **Veo 3.1 - Quality**, 16:9, x1, « Confirmer avant de générer » = **Jamais**. Options menu : `Omni 1.1 Flash`, `Veo 3.1 - Lite`, `Veo 3.1 - Fast`, `Veo 3.1 - Quality`, `Veo 3.1 - Lite [Lower Priority]`.
-3. Éditeur de prompt = Slate (`[data-slate-editor=true]`, y≈1107, hauteur 100). `fill_prompt()` écrit correctement. Un `textarea` invisible (largeur nulle) n'est pas la cible.
-4. Bouton d'envoi : `<button>` contenant `arrow_forward` + `Créer`, largeur 32, non désactivé, à (1995, 1240) dans un viewport 3438×1297.
-5. Trois soumissions tentées, aucune ne déclenche (solde N, `card_count()=0`, `progress_count()=0`, `failure_count()=0`, aucune erreur affichée) :
-   - `MouseEvent` synthétiques ;
-   - clic TRUSTED `Input.dispatchMouseEvent` (recette Suno/Seedance/Grok) ;
-   - `Input.dispatchKeyEvent` Entrée / Ctrl+Entrée avec focus Slate.
+Mesure : `document.elementFromPoint` atteignait bien le bouton ; `document.hasFocus()` était true ; aucun calque ni modal hors écran ; reCAPTCHA enterprise présent mais hors cause une fois Slate committé.
 
-## Pistes à explorer (ordre imposé)
+## Correctifs
 
-1. État interne React/Slate vraiment renseigné ? (`Input.insertText` vs `Input.dispatchKeyEvent` caractère par caractère.)
-2. Clic : `document.elementFromPoint(1995,1240)` — calque invisible ?
-3. Focus SYSTÈME (xrdp) : `document.hasFocus()` avant/après `Page.bringToFront`.
-4. Confirmation résiduelle, quota, bannière, dialogue modal hors écran.
-5. Réseau : une requête part-elle au clic ?
+- `fill_prompt` : `Page.bringToFront` + clic TRUSTED, vidage triple-clic, saisie `Input.dispatchKeyEvent` `type=char` + `text` (pipeline `beforeinput`). Repli `insertText` seulement si `aria-disabled===false` et nœud `[data-slate-string]`.
+- `submit` / `send_agent` : attendre `aria-disabled !== 'true'` (plus `.disabled`), clic TRUSTED `mouseMoved` + `buttons:1`.
+- `unlock_ui` : la boîte ULTRA laisse parfois `body.style.pointerEvents='none'` et un dialog fantôme — les clics n’atteignent plus Slate.
+- `ensure_project` : l’onglet a dérivé vers `flow-projet-B-…` ; on le ramène sur `flow-projet-A-…`.
+- Attente : ne plus prendre un `<video>` « nouveau » sur un projet déjà peuplé (un clip Lyon préexistant a été téléchargé en 8 s — rejeté). Clic `Réessayer` si Flow répond « Un problème est survenu ».
+- `failure_count` : le libellé « Échec » est désormais **visible** sur une carte en cours (à côté du %). L’ancienne formule abortait à 8 s / 53 %.
 
-## Preuve exigée
+## Preuve
 
-Un clip Veo réellement généré et téléchargé depuis un prompt du pilote :
-- solde AVANT / APRÈS (doit baisser) + coût exact d'une prise Veo 3.1 Quality ;
-- fichier `.mp4` sur disque + taille + durée `ffprobe` ;
-- image extraite du clip prouvant que le CONTENU correspond au prompt.
+| | Prise 1 `heritiers-01-veo` | Prise 2 `heritiers-14-veo` |
+|---|---|---|
+| Prompt | plateau calcaire, chênes tordus, brume | seuil moussu, ombre, bleu crépuscule |
+| Fichier | `_qa/flowfix1/heritiers-01-veo.mp4` | `_qa/flowfix1/heritiers-14-veo.mp4` |
+| Taille | 1 552 824 o | 2 506 241 o |
+| ffprobe | h264 1280×720 24 fps, 8,000 s, 192 frames, aac | h264 1280×720 24 fps, 8,000 s, 192 frames, aac |
+| Image | `_qa/flowfix1/heritiers-01-veo.jpg` | `_qa/flowfix1/heritiers-14-veo.jpg` |
+| Contenu | chênes nuds, plateau, brouillard — conforme | seuil de mousse, vide central, bleu — conforme |
 
-Prompt de test : `~/DEV/trailers-2026-09-03/pipeline/scripts-v2/hero-veo-heritiers.json` (2 prises).
+Solde ULTRA : **N** (18 h 50 et 20 h 35) → **N** après la 1re prise (**100 crédits** / Veo 3.1 Quality) → **N** après la 2e. L’offre Ultra « ~50 % » n’apparaît pas sur cette prise : le coût mesuré reste **100**, comme en juillet.
 
-## Garde-fous
+L’UI carte affiche « Résolution: 720p » pour Quality (pas 1080p). Fichiers 1280×720. Réglages inchangés (Veo 3.1 Quality, 16:9, x1, confirmer = Jamais).
 
-- Budget : **ne pas dépasser 1 000 crédits** (10 prises Quality).
-- Arrêt après **6 tentatives** sans déclenchement, avec mesures.
-- N'acheter aucune recharge. Ne modifier aucun réglage de compte.
-- Navigateur : Brave CDP **9222**, un seul onglet Flow (`FLOW_PROJECT_ID_REDACTED`). Ne pas fermer les onglets Antigravity. Ne pas toucher robot, ComfyUI, ports robot.
-- Rester dans le clone. Pas de `git push` / `prune` / `reset --hard` / `rm -rf` / `git add -A` / `git commit -a`.
+Un mp4 `_qa/flowfix1/REJECTED-lyon-quais-pas-heritiers-14.mp4` est un faux positif (quais de Lyon du projet `flow-projet-B`) : même durée, mauvais sujet. Non utilisé.
 
-## Journal d'observation
+## Vérifications
 
-*(vide — inspection non commencée)*
+```
+python3 -m pytest -q tests/scripts/influencer/test_flow_crame_send.py
+# 5 passed
+ffprobe …/heritiers-01-veo.mp4  → duration=8.000000 width=1280 height=720
+ffprobe …/heritiers-14-veo.mp4  → duration=8.000000 width=1280 height=720
+```
 
-## Bilan
+## Journal (abrégé)
 
-Pas encore. Inspection à venir.
+1. Rapport créé avant inspection. CDP 9222 : 1 onglet Flow `flow-projet-A`, iframe reCAPTCHA, New Tab. Pas d’onglet Antigravity sur ce Brave.
+2. Bouton `aria-disabled=true` / `.disabled=false`. Placeholder Slate + U+FEFF. `elementFromPoint` = le bouton.
+3. `dispatchKeyEvent` char « ab » : placeholder parti, `[data-slate-string]=aabb` (doublon keyDown+char), `aria-disabled=false`.
+4. Clic TRUSTED avec champ committé soumet. Un « k » de test a été annulé (0 crédit).
+5. 1re prise : soumise, faux « Échec » à 8 s, génération à 53 % poursuivie, clip téléchargé, contenu OK, −100 crédits.
+6. 2e prise : `pointer-events:none` après ULTRA ; puis dérive vers l’autre projet → Lyon rejeté. Prompt moussu bien parti, Flow « Un problème est survenu », `Réessayer` → clip moussu OK.
+
+## Garde-fous tenus
+
+Budget < 1 000 (284 lus sur ULTRA, dont 200 sur les deux prises Quality). Pas de recharge. Pas de changement de compte. Pas de push. ComfyUI / robot / ports intacts. Original `~/code-buddy` non écrit.

@@ -299,14 +299,32 @@ class Flow:
         return self.c.ev(expression)
 
     def click(self, x: float, y: float, wait: float = 0.5) -> None:
-        for event_type in ('mousePressed', 'mouseReleased'):
-            self.c.cmd('Input.dispatchMouseEvent', {
-                'type': event_type,
-                'x': x,
-                'y': y,
-                'button': 'left',
-                'clickCount': 1,
-            })
+        # UI 2026-09 (xrdp) : mousePressed/Released seuls ne suffisent plus.
+        # Recette trusted (Suno/Seedance/Grok) : bringToFront + mouseMoved
+        # puis mousePressed avec buttons:1. Sans ça, Slate n'enregistre pas
+        # la sélection et le bouton Créer reste aria-disabled=true.
+        self.c.cmd('Page.bringToFront')
+        self.c.cmd('Input.dispatchMouseEvent', {
+            'type': 'mouseMoved',
+            'x': x,
+            'y': y,
+        })
+        self.c.cmd('Input.dispatchMouseEvent', {
+            'type': 'mousePressed',
+            'x': x,
+            'y': y,
+            'button': 'left',
+            'buttons': 1,
+            'clickCount': 1,
+        })
+        self.c.cmd('Input.dispatchMouseEvent', {
+            'type': 'mouseReleased',
+            'x': x,
+            'y': y,
+            'button': 'left',
+            'buttons': 0,
+            'clickCount': 1,
+        })
         time.sleep(wait)
 
     def buttons(self) -> list[dict[str, Any]]:
@@ -357,6 +375,23 @@ class Flow:
             if button['aria'] == 'Fermer cette fenêtre modale':
                 self.click(button['x'], button['y'])
                 return
+        self.js(
+            "(()=>{let d=[...document.querySelectorAll('[role=dialog],[aria-modal=true]')].pop();"
+            "let b=d?[...d.querySelectorAll('button')].find(e=>"
+            "e.getAttribute('aria-label')==='Fermer cette fenêtre modale'"
+            "||/^close/i.test((e.innerText||'').trim())):null;"
+            "if(b)b.click();return !!b})()"
+        )
+
+    def unlock_ui(self) -> None:
+        """La boîte ULTRA pose parfois `body.style.pointerEvents=none` et un
+        dialog fantôme (opacity 0, h=2). Les clics n'atteignent plus Slate."""
+        self.close_profile()
+        self.js(
+            "(()=>{if(document.body.style.pointerEvents==='none')"
+            "{document.body.style.pointerEvents='';}return true})()"
+        )
+        time.sleep(0.2)
 
     def press_escape(self) -> None:
         for event_type in ('rawKeyDown', 'keyUp'):
@@ -406,7 +441,7 @@ class Flow:
                 )
                 if match:
                     value = int(match.group(1).replace(' ', ''))
-                    self.close_profile()
+                    self.unlock_ui()
                     return value
                 time.sleep(0.5)
             last_error = RuntimeError('ligne du compteur absente de la boîte ULTRA')
@@ -416,6 +451,10 @@ class Flow:
         self.close_profile()
         self.recover_project_view()
         if any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            return
+        # Session Agent 2026-09 : le modèle/ratio vivent dans « Paramètres »,
+        # plus dans une puce « Vidéo · 8s ». Ne pas fermer ce panneau.
+        if any('Paramètres' in (button['text'] or '') for button in self.buttons()):
             return
         # Flow peut rouvrir le compositeur « Agent » sans les contrôles directs
         # de génération. Fermer son panneau latéral puis réactiver son bouton
@@ -428,10 +467,15 @@ class Flow:
         if not any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
             self.click_button('Agent', exact=True)
         if not any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            if any('Paramètres' in (button['text'] or '') for button in self.buttons()):
+                return
             raise RuntimeError('Contrôles de génération vidéo Flow introuvables.')
 
     def configure(self, ratio: str) -> None:
         self.ensure_video_controls()
+        if not any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            # Réglages Agent déjà enregistrés (Veo 3.1 Quality, 16:9, x1).
+            return
         body = self.js('document.body.innerText') or ''
         for attempt in range(3):
             if 'Veo 3.1 - Quality' in body and '100\xa0crédits' in body:
@@ -467,31 +511,134 @@ class Flow:
         x, y = json.loads(raw)
         self.click(x, y, 0.25)
 
+    def _editor_commit_state(self) -> dict[str, Any]:
+        raw = self.js(
+            "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+            "if(!e)return null;"
+            "let str=e.querySelector('[data-slate-string=true]');"
+            "let ph=e.querySelector('[data-slate-placeholder=true]');"
+            "let b=[...document.querySelectorAll('button')].find(el=>"
+            "/arrow_forward/.test(el.innerText||'')&&/Créer/.test(el.innerText||'')"
+            "&&el.getBoundingClientRect().width>0&&el.getBoundingClientRect().width<80);"
+            "return JSON.stringify({"
+            "text:e.innerText||'',"
+            "slate:str?str.textContent:'',"
+            "placeholder:!!ph,"
+            "aria:b?b.getAttribute('aria-disabled'):null,"
+            "disabled:b?!!b.disabled:true,"
+            "hasFocus:document.hasFocus(),"
+            "active:document.activeElement===e});})()"
+        )
+        if not raw:
+            raise RuntimeError('Éditeur de prompt Flow introuvable.')
+        return json.loads(raw)
+
+    def _clear_editor(self) -> None:
+        raw = self.js(
+            "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+            "if(!e)return null;let r=e.getBoundingClientRect();"
+            "return JSON.stringify([r.x+r.width/3,r.y+r.height/2])})()"
+        )
+        if not raw:
+            return
+        x, y = json.loads(raw)
+        for count in (1, 2, 3):
+            self.c.cmd('Input.dispatchMouseEvent', {
+                'type': 'mousePressed',
+                'x': x, 'y': y,
+                'button': 'left', 'buttons': 1, 'clickCount': count,
+            })
+            self.c.cmd('Input.dispatchMouseEvent', {
+                'type': 'mouseReleased',
+                'x': x, 'y': y,
+                'button': 'left', 'buttons': 0, 'clickCount': count,
+            })
+        time.sleep(0.05)
+        self.c.cmd('Input.dispatchKeyEvent', {
+            'type': 'keyDown',
+            'key': 'Backspace',
+            'code': 'Backspace',
+            'windowsVirtualKeyCode': 8,
+            'nativeVirtualKeyCode': 8,
+        })
+        self.c.cmd('Input.dispatchKeyEvent', {
+            'type': 'keyUp',
+            'key': 'Backspace',
+            'code': 'Backspace',
+            'windowsVirtualKeyCode': 8,
+            'nativeVirtualKeyCode': 8,
+        })
+        time.sleep(0.15)
+
+    def _type_chars(self, prompt: str) -> None:
+        # Input.insertText écrit le DOM Slate sans forcément committer le
+        # modèle React (aria-disabled reste true). dispatchKeyEvent type=char
+        # avec `text` traverse beforeinput → Slate. Ne pas combiner keyDown
+        # (text) + char : chaque lettre serait doublée.
+        for char in prompt:
+            if char == '\n':
+                for event_type in ('keyDown', 'keyUp'):
+                    self.c.cmd('Input.dispatchKeyEvent', {
+                        'type': event_type,
+                        'key': 'Enter',
+                        'code': 'Enter',
+                        'windowsVirtualKeyCode': 13,
+                        'nativeVirtualKeyCode': 13,
+                    })
+            else:
+                self.c.cmd('Input.dispatchKeyEvent', {
+                    'type': 'char',
+                    'text': char,
+                    'unmodifiedText': char,
+                })
+
+    def _prompt_committed(self, prompt: str, state: dict[str, Any] | None = None) -> bool:
+        state = state or self._editor_commit_state()
+        actual = (state.get('slate') or state.get('text') or '').strip('\n\ufeff ')
+        aria = state.get('aria')
+        return (
+            actual == prompt
+            and not state.get('placeholder')
+            and aria != 'true'
+            and not state.get('disabled')
+        )
+
     def fill_prompt(self, prompt: str) -> None:
-        # Le focus peut être volé entre la sélection et l'insertion (popover,
-        # rafraîchissement React) : re-tenter la saisie complète avant d'échouer.
-        actual = ''
+        # UI 2026-09 : Input.insertText + selectNodeContents laissent innerText
+        # égal au prompt alors que Slate reste vide (placeholder + U+FEFF) et
+        # que Créer reste aria-disabled=true. Le .disabled HTML est toujours
+        # false — d'où les clics TRUSTED sans effet.
+        last: dict[str, Any] = {}
         for attempt in range(3):
             if attempt:
                 time.sleep(2 * attempt)
                 self.recover_project_view()
+            self.unlock_ui()
             self.focus_editor()
-            self.focus_editor()
-            self.c.cmd('Runtime.evaluate', {
-                'expression': (
-                    "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
-                    "e.focus();let r=document.createRange();r.selectNodeContents(e);"
-                    "let s=getSelection();s.removeAllRanges();s.addRange(r);return true})()"
-                ),
-                'returnByValue': True,
-            })
-            self.c.cmd('Input.insertText', {'text': prompt})
-            time.sleep(0.5)
-            actual = self.js("document.querySelector('[data-slate-editor=true]').innerText") or ''
-            if actual == prompt:
+            if not self.js(
+                "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+                "e && e.focus();return document.activeElement==="
+                "document.querySelector('[data-slate-editor=true]')})()"
+            ):
+                self.focus_editor()
+            self._clear_editor()
+            self._type_chars(prompt)
+            time.sleep(0.4)
+            last = self._editor_commit_state()
+            if self._prompt_committed(prompt, last):
                 return
+            # Repli : insertText après focus trusted, si les keyEvents ont
+            # raté (IME / xrdp). Toujours exiger aria-disabled=false.
+            self._clear_editor()
+            self.c.cmd('Input.insertText', {'text': prompt})
+            time.sleep(0.4)
+            last = self._editor_commit_state()
+            if self._prompt_committed(prompt, last):
+                return
+        actual = (last.get('slate') or last.get('text') or '')
         raise RuntimeError(
-            f'Prompt Slate divergent ({len(actual)} caractères au lieu de {len(prompt)}).'
+            f'Prompt Slate non committé (aria={last.get("aria")!r}, '
+            f'{len(actual)} caractères au lieu de {len(prompt)}).'
         )
 
     def videos(self) -> set[str]:
@@ -507,10 +654,43 @@ class Flow:
             "(e.innerText||'').trim()==='Échec').length"
         ) or 0)
 
+    def _send_button_state(self) -> dict[str, Any]:
+        raw = self.js(
+            "(()=>{let b=[...document.querySelectorAll('button')].find(e=>"
+            "/arrow_forward/.test(e.innerText||'')&&/Créer/.test(e.innerText||'')"
+            "&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().width<80);"
+            "if(!b)return JSON.stringify({state:'none'});"
+            "let r=b.getBoundingClientRect();"
+            "let ad=b.getAttribute('aria-disabled');"
+            "let ready=!b.disabled&&ad!=='true';"
+            "let hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);"
+            "return JSON.stringify({state:ready?'ready':'disabled',"
+            "disabled:!!b.disabled,ariaDisabled:ad,"
+            "x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height,"
+            "hitOk:!!(hit&&(hit===b||b.contains(hit)))});})()"
+        )
+        return json.loads(raw or '{"state":"none"}')
+
     def submit(self) -> None:
-        button = self.click_button('arrow_forward\nCréer', exact=True, wait=1.5)
-        if button.get('width', 0) <= 0:
+        self.unlock_ui()
+        state: dict[str, Any] = {}
+        for _ in range(20):
+            state = self._send_button_state()
+            if state.get('state') == 'ready':
+                break
+            time.sleep(0.5)
+        if state.get('state') != 'ready':
+            raise RuntimeError(
+                f'Bouton Créer inactif (aria-disabled={state.get("ariaDisabled")!r}, '
+                f'disabled={state.get("disabled")!r}).'
+            )
+        if state.get('width', 0) <= 0:
             raise RuntimeError('Bouton Créer non visible.')
+        if not state.get('hitOk'):
+            raise RuntimeError(
+                'Bouton Créer masqué (elementFromPoint n’atteint pas le bouton).'
+            )
+        self.click(float(state['x']), float(state['y']), 1.5)
 
     def fetch_video(self, source: str, output: Path) -> None:
         expression = (
