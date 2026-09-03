@@ -7,12 +7,12 @@
  * generated speech.
  */
 
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { logger } from '../utils/logger.js';
-import { writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type VoiceTurnPhase =
   | 'idle'
@@ -110,7 +110,8 @@ export function readVoiceRuntimeSnapshot(
   path = resolveVoiceRuntimeFile(),
 ): VoiceTurnRuntimeSnapshot | null {
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as VoiceTurnRuntimeSnapshot;
+    const parsed = readJsonAtomicSync<VoiceTurnRuntimeSnapshot | null>(path, null);
+    if (!parsed) return null;
     if (parsed.version !== 1 || !PHASES.has(parsed.phase) || !parsed.counters) return null;
     const recent = Array.isArray(parsed.recent)
       ? parsed.recent.slice(-200).flatMap((item) => {

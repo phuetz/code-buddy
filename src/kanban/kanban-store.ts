@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'archived';
 export type KanbanPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -299,8 +300,8 @@ export class KanbanStore {
 
   async readBoard(): Promise<KanbanBoard> {
     try {
-      const raw = await fs.readFile(this.boardPath, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<KanbanBoard>;
+      const parsed = await readJsonAtomic<Partial<KanbanBoard> | null>(this.boardPath, null);
+      if (!parsed) return this.emptyBoard();
       if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.cards)) {
         throw new Error(`invalid kanban board schema at ${this.boardPath}`);
       }
@@ -332,10 +333,7 @@ export class KanbanStore {
 
   private async writeBoard(board: KanbanBoard): Promise<void> {
     board.updatedAt = this.isoNow();
-    await fs.mkdir(path.dirname(this.boardPath), { recursive: true });
-    const tempPath = `${this.boardPath}.${process.pid}.${Date.now()}.tmp`;
-    await fs.writeFile(tempPath, `${JSON.stringify(board, null, 2)}\n`, 'utf8');
-    await fs.rename(tempPath, this.boardPath);
+    await writeJsonAtomic(this.boardPath, board, { mode: 0o600 });
   }
 
   private emptyBoard(): KanbanBoard {

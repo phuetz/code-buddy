@@ -20,7 +20,7 @@ import {
   LISA_COMPANION_SYSTEM_PROMPT,
 } from '../identity/companion-identity.js';
 import { resolveUserName } from '../companion/user-name.js';
-import { writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readJsonAtomic, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface Persona {
   id: string;
@@ -566,7 +566,7 @@ export class PersonaManager extends EventEmitter {
 
   private async loadPersistedActiveId(): Promise<string | null> {
     try {
-      const data = (await fs.readJson(this.stateFile())) as { activePersonaId?: string };
+      const data = await readJsonAtomic<{ activePersonaId?: unknown } | null>(this.stateFile(), null);
       return typeof data?.activePersonaId === 'string' ? data.activePersonaId : null;
     } catch {
       return null; // no file yet / unreadable → fall back to config default
@@ -600,7 +600,8 @@ export class PersonaManager extends EventEmitter {
 
           try {
             if (await fs.pathExists(personaPath)) {
-              const persona = await fs.readJSON(personaPath);
+              const persona = await readJsonAtomic<Persona | null>(personaPath, null);
+              if (!persona) return;
               persona.isBuiltin = false;
               this.personas.set(persona.id ?? id, persona);
               this.emit('persona:reloaded', { id: persona.id ?? id });
@@ -633,7 +634,8 @@ export class PersonaManager extends EventEmitter {
       if (file.endsWith('.json')) {
         try {
           const personaPath = path.join(this.dataDir, file);
-          const persona = await fs.readJSON(personaPath);
+          const persona = await readJsonAtomic<Persona | null>(personaPath, null);
+          if (!persona) continue;
           persona.isBuiltin = false;
           this.personas.set(persona.id, persona);
         } catch {
@@ -740,7 +742,7 @@ export class PersonaManager extends EventEmitter {
 
     // Save to disk
     const personaPath = path.join(this.dataDir, `${id}.json`);
-    await fs.writeJSON(personaPath, persona, { spaces: 2 });
+    await writeJsonAtomic(personaPath, persona, { mode: 0o600 });
 
     this.personas.set(id, persona);
     this.emit('persona:created', { persona });
@@ -772,7 +774,7 @@ export class PersonaManager extends EventEmitter {
 
     // Save to disk
     const personaPath = path.join(this.dataDir, `${id}.json`);
-    await fs.writeJSON(personaPath, updated, { spaces: 2 });
+    await writeJsonAtomic(personaPath, updated, { mode: 0o600 });
 
     this.personas.set(id, updated);
     this.emit('persona:updated', { persona: updated });

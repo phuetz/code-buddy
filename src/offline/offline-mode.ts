@@ -26,6 +26,7 @@ import {
   LocalLLMMessage,
   autoConfigureLocalProvider,
 } from '../providers/local-llm-provider.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface OfflineConfig {
   enabled: boolean;
@@ -180,7 +181,7 @@ export class OfflineMode extends EventEmitter {
     const indexPath = path.join(this.cacheDir, 'response-index.json');
     if (await fs.pathExists(indexPath)) {
       try {
-        const index = await fs.readJSON(indexPath);
+        const index = await readJsonAtomic<CachedResponse[]>(indexPath, []);
         for (const item of index) {
           this.responseCache.set(item.queryHash, item);
         }
@@ -193,7 +194,7 @@ export class OfflineMode extends EventEmitter {
     const embIndexPath = path.join(this.cacheDir, 'embedding-index.json');
     if (await fs.pathExists(embIndexPath)) {
       try {
-        const index = await fs.readJSON(embIndexPath);
+        const index = await readJsonAtomic<CachedEmbedding[]>(embIndexPath, []);
         for (const item of index) {
           this.embeddingCache.set(item.textHash, item);
         }
@@ -213,7 +214,7 @@ export class OfflineMode extends EventEmitter {
     const queuePath = path.join(this.dataDir, 'queue.json');
     if (await fs.pathExists(queuePath)) {
       try {
-        this.requestQueue = await fs.readJSON(queuePath);
+        this.requestQueue = await readJsonAtomic<QueuedRequest[]>(queuePath, []);
         this.stats.queuedRequests = this.requestQueue.length;
       } catch {
         this.requestQueue = [];
@@ -226,23 +227,23 @@ export class OfflineMode extends EventEmitter {
    */
   private async saveQueue(): Promise<void> {
     const queuePath = path.join(this.dataDir, 'queue.json');
-    await fs.writeJSON(queuePath, this.requestQueue, { spaces: 2 });
+    await writeJsonAtomic(queuePath, this.requestQueue, { mode: 0o600 });
   }
 
   /**
    * Save cache indexes
    */
   private async saveCacheIndexes(): Promise<void> {
-    await fs.writeJSON(
+    await writeJsonAtomic(
       path.join(this.cacheDir, 'response-index.json'),
       Array.from(this.responseCache.values()),
-      { spaces: 2 }
+      { mode: 0o600 },
     );
 
-    await fs.writeJSON(
+    await writeJsonAtomic(
       path.join(this.cacheDir, 'embedding-index.json'),
       Array.from(this.embeddingCache.values()),
-      { spaces: 2 }
+      { mode: 0o600 },
     );
   }
 
@@ -344,7 +345,7 @@ export class OfflineMode extends EventEmitter {
 
     // Save response to file
     const responsePath = path.join(this.cacheDir, 'responses', `${id}.json`);
-    await fs.writeJSON(responsePath, cached, { spaces: 2 });
+    await writeJsonAtomic(responsePath, cached, { mode: 0o600 });
 
     this.responseCache.set(queryHash, cached);
     await this.saveCacheIndexes();
@@ -453,7 +454,7 @@ export class OfflineMode extends EventEmitter {
 
     // Save embedding to file
     const embPath = path.join(this.cacheDir, 'embeddings', `${id}.json`);
-    await fs.writeJSON(embPath, cached);
+    await writeJsonAtomic(embPath, cached, { mode: 0o600 });
 
     this.embeddingCache.set(textHash, cached);
     await this.saveCacheIndexes();
@@ -877,7 +878,7 @@ export class OfflineMode extends EventEmitter {
    */
   private async saveConfig(): Promise<void> {
     const configPath = path.join(this.dataDir, 'config.json');
-    await fs.writeJSON(configPath, this.config, { spaces: 2 });
+    await writeJsonAtomic(configPath, this.config, { mode: 0o600 });
   }
 
   /**

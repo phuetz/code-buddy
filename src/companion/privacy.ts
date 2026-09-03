@@ -1,10 +1,11 @@
-import { copyFile, mkdir, readdir, rm, stat, writeFile } from 'fs/promises';
+import { copyFile, mkdir, readdir, rm, stat } from 'fs/promises';
 import * as path from 'path';
 import { getCompanionCardsPath, readCompanionCards } from './cards.js';
 import { getCompanionGatewayProfilePath, readCompanionGatewayProfile } from './gateway.js';
 import { getCompanionPerceptsPath, getCompanionPerceptStats } from './percepts.js';
 import { getCompanionSafetyLedgerPath, getCompanionSafetyLedgerStats } from './safety-ledger.js';
 import { getCompanionSkillCandidatePath, readCompanionSkillCandidates } from './skill-curator.js';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export type CompanionPrivacyKind =
   | 'percepts'
@@ -201,7 +202,7 @@ export async function exportCompanionPrivacyBundle(
   const report = await buildCompanionPrivacyReport({ cwd, now });
   const copied = (await Promise.all(uniqueKinds(options.kinds).map(kind => copyKind(cwd, exportDir, kind)))).flat();
   const manifestPath = path.join(exportDir, 'manifest.json');
-  await writeFile(manifestPath, `${JSON.stringify({ ...report, copied }, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(manifestPath, { ...report, copied }, { mode: 0o600 });
   return { exportDir, manifestPath, report, copied };
 }
 

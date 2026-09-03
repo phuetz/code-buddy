@@ -19,6 +19,7 @@ import {
   type LisaContentTier,
 } from './lisa-selfie.js';
 import { resolveUserName } from './user-name.js';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface LisaSelfieCacheOptions {
   rootDir?: string;
@@ -140,9 +141,9 @@ export async function generateLisaSelfieCache(
 
       try {
         await fs.copyFile(result.outputPath, outputPath);
-        await fs.writeFile(
+        await writeJsonAtomic(
           outputPath.replace(/\.png$/i, '.json'),
-          JSON.stringify({
+          {
             avatarId,
             contentTier,
             style,
@@ -154,8 +155,8 @@ export async function generateLisaSelfieCache(
             prompt,
             generatedAt: new Date().toISOString(),
             disclosure: 'AI-generated image',
-          }, null, 2) + '\n',
-          'utf8',
+          },
+          { mode: 0o600 },
         );
         generated += 1;
         files.push(outputPath);

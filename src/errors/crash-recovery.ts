@@ -11,6 +11,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface RecoveryInfo {
   sessionId: string;
@@ -38,11 +39,11 @@ export async function recordRecoveryAttempt(): Promise<number> {
   const latestFile = join(recoveryDir, 'latest.json');
   if (!existsSync(latestFile)) return 0;
   try {
-    const content = await readFile(latestFile, 'utf-8');
-    const data = JSON.parse(content);
+    const data = await readJsonAtomic<Record<string, unknown> | null>(latestFile, null);
+    if (!data) return 0;
     data.attempts = (typeof data.attempts === 'number' ? data.attempts : 0) + 1;
-    await writeFile(latestFile, JSON.stringify(data, null, 2), 'utf-8');
-    return data.attempts;
+    await writeJsonAtomic(latestFile, data, { mode: 0o600 });
+    return typeof data.attempts === 'number' ? data.attempts : 0;
   } catch (err) {
     logger.debug(`Failed to record recovery attempt: ${err instanceof Error ? err.message : String(err)}`);
     return 0;

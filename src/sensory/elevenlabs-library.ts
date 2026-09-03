@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** One synthesized phrase in the shared library. */
 export interface VoiceLibraryEntry {
@@ -92,8 +93,14 @@ export class ElevenLabsVoiceLibrary {
     if (this.byPhrase) return this.byPhrase;
 
     try {
-      const raw = fs.readFileSync(path.join(this.dir, 'index.json'), 'utf8');
-      const parsed = JSON.parse(raw) as { entries?: RawEntry[] } | RawEntry[];
+      const parsed = readJsonAtomicSync<{ entries?: RawEntry[] } | RawEntry[] | null>(
+        path.join(this.dir, 'index.json'),
+        null,
+        { isValid: (value): value is { entries?: RawEntry[] } | RawEntry[] => (
+          Array.isArray(value) || Boolean(value && typeof value === 'object')
+        ) },
+      );
+      if (!parsed) return null;
       const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? []);
       const map = new Map<string, VoiceLibraryEntry>();
 
@@ -303,14 +310,15 @@ export function publishToVoiceLibrary(
 
   const ok = withIndexLock(path.join(dir, 'index.lock'), () => {
     fs.mkdirSync(dir, { recursive: true });
-    let parsed: { voice?: string; count?: number; entries?: RawEntry[] } = {};
-    try {
-      parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as typeof parsed;
-    } catch {
-      /* first write, or an unreadable index we must not clobber blindly */
-      if (fs.existsSync(indexPath)) throw new Error('index unreadable — refusing to overwrite');
-    }
-    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    const parsed = readJsonAtomicSync<{ voice?: string; count?: number; entries?: RawEntry[] } | null>(
+      indexPath,
+      null,
+      { isValid: (value): value is { voice?: string; count?: number; entries?: RawEntry[] } => (
+        Boolean(value && typeof value === 'object' && !Array.isArray(value))
+      ) },
+    );
+    if (!parsed && fs.existsSync(indexPath)) throw new Error('index unreadable — refusing to overwrite');
+    const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
     const wanted = normalizePhrase(canonical);
     if (entries.some((e) => e?.text && normalizePhrase(e.text) === wanted)) return;
 
@@ -330,10 +338,8 @@ export function publishToVoiceLibrary(
     }
 
     entries.push({ key, text: canonical, voice, file });
-    const next = { ...parsed, voice: parsed.voice ?? voice, count: entries.length, entries };
-    const tmpIndex = `${indexPath}.${process.pid}.tmp`;
-    fs.writeFileSync(tmpIndex, JSON.stringify(next, null, 1));
-    fs.renameSync(tmpIndex, indexPath);
+    const next = { ...parsed, voice: parsed?.voice ?? voice, count: entries.length, entries };
+    writeJsonAtomicSync(indexPath, next, { mode: 0o600 });
     published = dest;
   });
 
