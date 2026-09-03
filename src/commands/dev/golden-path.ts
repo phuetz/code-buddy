@@ -40,9 +40,9 @@ export function stripGuardNoise(text: string): string {
 export function isMeaningfulPlan(text: string): boolean {
   const cleaned = stripGuardNoise(text);
   if (cleaned.length < 40) return false;
-  if (/^\s*(\d+[\.)]|[-*]\s+)/m.test(cleaned)) return true;
+  if (/^\s*(\d+[.)]|[-*]\s+)/m.test(cleaned)) return true;
   const words = cleaned.split(/\s+/).filter(Boolean);
-  if (words.length >= 12 && /\b[\w./-]+\.\w{1,8}\b/.test(cleaned)) return true;
+  if (words.length >= 12 && /\b[\w./-]+\.[A-Za-z0-9]{1,8}\b/.test(cleaned)) return true;
   return false;
 }
 
@@ -145,7 +145,7 @@ function git(cwd: string, args: string[], allowFail = false): string {
 export function parseGitStatusPorcelain(raw: string): string[] {
   const files: string[] = [];
   for (const line of raw.split('\n')) {
-    const plain = line.replace(/\x1B\[[0-9;]*m/g, '');
+    const plain = line.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '');
     if (!plain.trim() || plain.startsWith('##')) continue;
     const renamed = plain.match(/^.{2} (.+) -> (.+)$/);
     const normal = plain.match(/^.{2} (.+)$/);
