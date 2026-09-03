@@ -345,6 +345,15 @@ export function isVocativeAddress(
 const CONTINUATION =
   /^(et|alors|ok|oui|non|ouais|aussi|puis|donc|d accord|dac|attends|sinon|bon|au fait)\b/;
 
+/** A bounded answer to the assistant's immediately preceding conversational turn. */
+function isBriefConversationAnswer(text: string): boolean {
+  const normalized = normWords(text);
+  if (!normalized || normalized.split(' ').length > 4) return false;
+  return /^(?:oui|ouais|non|ok|d accord|dac|bien sur|volontiers|pas vraiment|pourquoi pas)$/.test(
+    normalized,
+  );
+}
+
 /**
  * Is a follow-up (inside a live conversation) directed at the robot rather than ambient cross-talk?
  * A direct request or second-person cue counts; a bare question mark or a continuation opener
@@ -630,7 +639,12 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
           // conversation becomes explicitly engaged and normal long follow-ups work.
           return staySilent('ambient-in-window');
         }
-        if (isDirectedFollowUp(text) || isDirectGreeting(text) || isDirectCheckIn(text)) {
+        if (
+          isDirectedFollowUp(text)
+          || isBriefConversationAnswer(text)
+          || isDirectGreeting(text)
+          || isDirectCheckIn(text)
+        ) {
           // A follow-up aimed at the robot → respond, and (conversation mode) keep the dialogue
           // alive by extending the window, up to the total cap (re-address required past it).
           if (conversationMode && now() - dialogueStartedAt < conversationMaxMs) {

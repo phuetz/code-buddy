@@ -391,6 +391,23 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     expect(judge).not.toHaveBeenCalled();
   });
 
+  it.each(['oui', "d'accord", 'pas vraiment', 'pourquoi pas'])(
+    'accepts the bounded conversational answer %s only inside an engagement window',
+    async (answer) => {
+      let t = 1_000;
+      const d = createResponseDecider({
+        robotName: 'Lisa',
+        now: () => t,
+        engageWindowMs: 30_000,
+      });
+
+      expect(await d.decide(answer)).toEqual({ respond: false, reason: 'ambient' });
+      expect((await d.decide('Lisa, tu m’entends ?')).respond).toBe(true);
+      t = 2_000;
+      expect(await d.decide(answer)).toEqual({ respond: true, reason: 'engaged' });
+    },
+  );
+
   it('conversation mode: extends on DIRECTED follow-ups, stays silent on ambient in-window', async () => {
     let t = 0;
     const d = createResponseDecider({

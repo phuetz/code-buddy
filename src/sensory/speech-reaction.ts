@@ -1625,8 +1625,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const aecTrusted = isSensoryAecTrusted(aecActive);
     // A turn that already barged in (CONV2) has stopped the playback: hear it. Otherwise the
     // half-duplex guard only opens for an explicitly trusted AEC (SENSE1) — never on aecActive alone.
+    // A capture that STARTED after normal playback ended is different: transcribe it so the
+    // in-memory fingerprint can distinguish room echo from a genuinely new quick reply.
     const bargedIn = job.turnId !== undefined && bargedSpeechTurnId === job.turnId;
-    if (isSpeaking(t) && !aecTrusted && !bargedIn) {
+    const canDiscriminateEchoTail = voiceResume?.kind === 'echo_tail';
+    if (isSpeaking(t) && !aecTrusted && !bargedIn && !canDiscriminateEchoTail) {
       void cleanupSpeechJob(job);
       return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
     }
@@ -1859,7 +1862,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           : false;
         const ownEcho = echoClassification === 'echo';
         const suppressPlaybackCapture = ownEcho || (
-          playbackCaptureKind !== undefined && echoClassification !== 'unknown'
+          playbackCaptureKind !== undefined
             ? shouldSuppressPlaybackCapture(
                 playbackCaptureKind,
                 echoClassification,

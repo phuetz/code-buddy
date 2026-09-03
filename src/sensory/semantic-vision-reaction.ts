@@ -101,6 +101,14 @@ export interface SemanticVisionOptions {
   conductor?: Conductor;
   /** Household posture store; injectable to isolate callers and tests. */
   homeModeStore?: HomeModeStore;
+  /** Greeting cooldown override for deterministic callers and tests. */
+  greetCooldownMs?: number;
+  /** Arrival episode store override; production defaults to the user companion store. */
+  arrivalStatePath?: string;
+}
+
+function identityKey(name: string): string {
+  return name.normalize('NFKC').trim().toLocaleLowerCase();
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -108,7 +116,12 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   // Greet an arriving person aloud (opt-in) — the robot stops being a tool that waits and becomes a
   // presence that notices you. Cooldown'd so a person flickering in/out doesn't re-greet.
   const greetEnabled = process.env.CODEBUDDY_SENSORY_GREET === 'true';
-  const greetCooldownMs = Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS) || 60_000;
+  const configuredGreetCooldownMs = options.greetCooldownMs
+    ?? Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS);
+  const greetCooldownMs = Number.isFinite(configuredGreetCooldownMs)
+    && configuredGreetCooldownMs >= 0
+    ? configuredGreetCooldownMs
+    : 60_000;
   const regreetMinMs = resolveSensoryRegreetMinMs();
   const now = options.now ?? (() => Date.now());
   const conductor = options.conductor ?? getCompanionConductor();
@@ -116,6 +129,8 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   let awaitingIdentityGreeting = false;
   let recognizedUserPresent = false;
   let lastLossAt = Number.NEGATIVE_INFINITY;
+  let presentIdentityKey: string | undefined;
+  let lostIdentityKey: string | undefined;
   let suppressCurrentArrivalGreeting = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
@@ -142,10 +157,13 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       suppressCurrentArrivalGreeting = enteredAt - lastLossAt < regreetMinMs;
       if (!suppressCurrentArrivalGreeting) lastLossAt = Number.NEGATIVE_INFINITY;
       recognizedUserPresent = false;
+      presentIdentityKey = undefined;
       options.onIdentityChange?.(false);
       awaitingIdentityGreeting = payload.identityPending === true;
     } else if (kind === 'person_lost' || kind === 'person_left') {
       lastLossAt = now();
+      lostIdentityKey = presentIdentityKey;
+      presentIdentityKey = undefined;
       recognizedUserPresent = false;
       awaitingIdentityGreeting = false;
       options.onIdentityChange?.(false);
@@ -167,6 +185,20 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
           ? rawName
           : 'unknown';
         const unknown = safeName.toLocaleLowerCase() === 'unknown';
+        const arrivingIdentityKey = unknown ? undefined : identityKey(safeName);
+        if (
+          identityShouldOpenArrival
+          && suppressCurrentArrivalGreeting
+          && lostIdentityKey
+          && arrivingIdentityKey
+          && arrivingIdentityKey !== lostIdentityKey
+        ) {
+          // The cooldown is for detector flicker of the same occupant, not for a
+          // different identified person arriving shortly after somebody left.
+          suppressCurrentArrivalGreeting = false;
+          lastLossAt = Number.NEGATIVE_INFINITY;
+        }
+        presentIdentityKey = arrivingIdentityKey;
         const similarity = typeof payload.similarity === 'number' &&
           Number.isFinite(payload.similarity)
           ? Math.max(-1, Math.min(1, payload.similarity))
@@ -260,7 +292,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
           const persona = await getActivePersonaVoiceAsync();
           // Varied, context-aware opener (time of day / gap since last seen) with anti-repetition,
           // instead of the single fixed persona.greeting that made it say the same line every time.
-          const state = loadArrivalState();
+          const state = loadArrivalState(options.arrivalStatePath);
           const opener = buildArrivalOpener({
             now: t,
             lastSeenAt: state.lastSeenAt ?? null,
@@ -334,7 +366,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
             lastSeenAt: t,
             recent: pushRecent(state.recent, opener.template),
             recentSpoken: pushRecent(state.recentSpoken ?? [], safeGreeting),
-          });
+          }, options.arrivalStatePath);
           options.onEngage?.(); // open the conversation window — follow-ups are now treated as addressed
           logger.info(`[vision] greeted arrival (${opener.trigger}) → ${safeGreeting}`);
         } catch (err) {

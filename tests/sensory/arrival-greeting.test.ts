@@ -157,6 +157,45 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     }
   });
 
+  it('keeps the same identified person inside one episode but greets a different identity', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    process.env.CODEBUDDY_USER_NAME = 'Patrice';
+    const greet = vi.fn(async () => {});
+    let clock = 1_000;
+    const conductor = new CompanionConductor(1_000, () => clock);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({
+      greet,
+      now: () => clock,
+      greetCooldownMs: 1_000,
+      arrivalStatePath: path.join(tmp, 'arrival-state.json'),
+      conductor,
+      homeModeStore,
+      cwd: tmp,
+    });
+    try {
+      identityPendingArrival();
+      personIdentified('Patrice');
+      await waitForCalls(greet, 1);
+
+      clock = 10_000;
+      personLost();
+      identityPendingArrival();
+      personIdentified('PATRICE');
+      await tick();
+      expect(greet).toHaveBeenCalledTimes(1);
+
+      clock = 20_000;
+      personLost();
+      identityPendingArrival();
+      personIdentified('Alice');
+      await waitForCalls(greet, 2);
+      expect(greet).toHaveBeenCalledTimes(2);
+    } finally {
+      unwire();
+    }
+  });
+
   it('the arrival greeting opens the engagement window the speech gate reads (shared decider)', async () => {
     // This is the bug fix: server/index.ts wires onEngage -> the SAME decider the
     // speech reaction gates on, so a greeted visitor's natural reply (no wake-word)
