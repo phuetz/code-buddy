@@ -34,6 +34,7 @@ import {
   resolveSpeechLanguage,
   resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
+  isFrenchParakeetModelAvailable,
   expandSpeechPath,
   type SpeechRecognitionEngine,
   type SpeechTranscriptionPlan,
@@ -1348,6 +1349,13 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
 
 const warnedSpeechFallbacks = new Set<string>();
 
+function warnAutoFallbackOnce(reason: string): void {
+  const key = `auto:${reason}`;
+  if (warnedSpeechFallbacks.has(key)) return;
+  warnedSpeechFallbacks.add(key);
+  logger.warn(`[speech] auto STT fallback activated: effective=faster-whisper reason=${reason}`);
+}
+
 /** Log one configuration-level STT fallback once for the lifetime of this process. */
 export function warnSpeechFallbackOnce(
   plan: SpeechTranscriptionPlan,
@@ -1418,21 +1426,34 @@ async function transcribeWavRaw(
     return transcribeWavWithFasterWhisperRaw(wav);
   }
 
-  // Auto mode: prefer the in-process Rust engine (fastest, same model) when its
-  // binary is built, then python Parakeet when its model dir exists, else faster-whisper.
-  if (resolveSherpaRustBin() && existsSync(resolveParakeetModelDir())) {
+  // Auto mode: prefer the in-process Rust engine only when both its binary and a
+  // complete locally evidenced French model are present. A bare directory or a
+  // stale binary must never silently select the sherpa path.
+  const sherpaBin = resolveSherpaRustBin();
+  const modelDir = resolveParakeetModelDir();
+  const binaryAvailable = Boolean(sherpaBin && existsSync(sherpaBin));
+  const frenchModelAvailable = isFrenchParakeetModelAvailable(modelDir);
+  if (binaryAvailable && frenchModelAvailable) {
     try {
       return await transcribeWavWithSherpaRustRaw(wav);
     } catch (err) {
+      warnAutoFallbackOnce('sherpa-rs-runtime-unavailable');
       logger.warn(
         `[speech] auto STT: sherpa-rs unavailable; trying Parakeet/faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+  } else {
+    warnAutoFallbackOnce(
+      !binaryAvailable
+        ? 'sherpa-rs-binary-missing'
+        : 'french-parakeet-model-missing-or-incomplete',
+    );
   }
-  if (existsSync(resolveParakeetModelDir())) {
+  if (frenchModelAvailable) {
     try {
       return await transcribeWavWithParakeetRaw(wav);
     } catch (err) {
+      warnAutoFallbackOnce('parakeet-runtime-unavailable');
       logger.warn(
         `[speech] auto STT: Parakeet unavailable; trying faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );

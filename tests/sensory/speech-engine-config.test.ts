@@ -1,21 +1,36 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { beforeEach, describe, it, expect, afterEach } from 'vitest';
 import {
   resolveSpeechRecognitionEngine,
   resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
   engineUsesParakeetModel,
   expandSpeechPath,
+  isParakeetModelComplete,
+  isFrenchParakeetModelAvailable,
 } from '../../src/sensory/speech-engine-config.js';
 import { homedir } from 'os';
 import { join } from 'path';
 
 const ENGINE = 'CODEBUDDY_SPEECH_ENGINE';
-const prev = process.env[ENGINE];
+const MODEL_ENV_KEYS = [
+  ENGINE,
+  'CODEBUDDY_SPEECH_LANG',
+  'CODEBUDDY_COMPANION_LANGUAGE',
+  'CODEBUDDY_SPEECH_FALLBACK',
+  'CODEBUDDY_PARAKEET_MODEL_DIR',
+  'CODEBUDDY_SHERPA_ONNX_MODEL_DIR',
+  'BUDDY_SENSE_STT_MODEL_DIR',
+];
+let previous: Record<string, string | undefined> = {};
+beforeEach(() => {
+  previous = Object.fromEntries(MODEL_ENV_KEYS.map((key) => [key, process.env[key]]));
+});
 afterEach(() => {
-  if (prev === undefined) delete process.env[ENGINE];
-  else process.env[ENGINE] = prev;
-  delete process.env.CODEBUDDY_PARAKEET_MODEL_DIR;
-  delete process.env.CODEBUDDY_SHERPA_ONNX_MODEL_DIR;
+  for (const key of MODEL_ENV_KEYS) {
+    const value = previous[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 describe('speech-engine-config — single source of truth (no more companion/speech-reaction drift)', () => {
@@ -69,6 +84,15 @@ describe('speech-engine-config — single source of truth (no more companion/spe
       fallbackEnabled: false,
       blockingReason: 'parakeet-language-pin-unsupported-and-fallback-disabled',
     });
+    expect(resolveSpeechTranscriptionPlan('sherpa-rs', {
+      CODEBUDDY_SPEECH_LANG: 'auto',
+      CODEBUDDY_SPEECH_FALLBACK: 'false',
+    })).toMatchObject({
+      effectiveEngine: 'sherpa-rs',
+      language: 'auto',
+      languagePinned: false,
+      fallbackEnabled: false,
+    });
   });
 
   it('resolves + expands the parakeet model dir', () => {
@@ -77,5 +101,12 @@ describe('speech-engine-config — single source of truth (no more companion/spe
     expect(resolveParakeetModelDir()).toBe(join(homedir(), 'custom/model'));
     expect(expandSpeechPath('/abs/path')).toBe('/abs/path');
     expect(expandSpeechPath('~')).toBe(homedir());
+  });
+
+  it('fails closed when auto has no complete French-capable model', () => {
+    expect(isParakeetModelComplete('/definitely/not-a-model')).toBe(false);
+    expect(isFrenchParakeetModelAvailable('/definitely/not-a-model')).toBe(false);
+    process.env.BUDDY_SENSE_STT_MODEL_DIR = '~/custom/model';
+    expect(resolveParakeetModelDir()).toBe(join(homedir(), 'custom/model'));
   });
 });

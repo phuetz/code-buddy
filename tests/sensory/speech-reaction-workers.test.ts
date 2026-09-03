@@ -1,5 +1,4 @@
 import { mkdtemp, rm } from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,6 +121,9 @@ beforeEach(() => {
   vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'false');
   vi.stubEnv('CODEBUDDY_SPEECH_PYTHON', 'fake-python');
   vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', '/tmp/fake-buddy-sense');
+  vi.stubEnv('BUDDY_SENSE_STT_MODEL_DIR', undefined);
+  vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', undefined);
+  vi.stubEnv('CODEBUDDY_SHERPA_ONNX_MODEL_DIR', undefined);
 });
 
 afterEach(() => {
@@ -189,18 +191,43 @@ describe('speech reaction — persistent STT workers', () => {
     expect(workerScript).not.toContain('import sherpa_onnx');
   });
 
-  it('does not cascade auto STT when sherpa-rs returns an empty transcript', async () => {
-    const modelDir = await mkdtemp(path.join(os.tmpdir(), 'speech-auto-model-'));
+  it('does not choose sherpa-rs for an incomplete auto model directory', async () => {
+    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-model-'));
+    vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
     vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
     vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
-    workerHarness.queueResponses('empty');
+    workerHarness.queueResponses('text');
     const { transcribeWav } = await loadSpeechReaction();
 
     try {
-      await expect(transcribeWav('/tmp/silence.wav', 'auto')).resolves.toBe('');
+      await expect(transcribeWav('/tmp/silence.wav', 'auto')).resolves.toBe('bonjour');
       expect(workerHarness.spawn).toHaveBeenCalledOnce();
-      expect(workerHarness.processes[0]?.command).toBe('/tmp/fake-buddy-sense');
+      expect(workerHarness.processes[0]?.command).toBe('fake-python');
+      expect(workerHarness.processes[0]?.args.join('\n')).toContain('from faster_whisper import WhisperModel');
     } finally {
+      await rm(modelDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+
+  it('logs an auto fallback caused by a missing Rust/model pair only once per process', async () => {
+    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-missing-'));
+    vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
+    vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    workerHarness.queueResponses('text', 'text');
+    const { transcribeWav } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(transcribeWav('/tmp/first.wav', 'auto')).resolves.toBe('bonjour');
+      await expect(transcribeWav('/tmp/second.wav', 'auto')).resolves.toBe('bonjour');
+      const autoFallbacks = warn.mock.calls.filter(([message]) =>
+        String(message).includes('auto STT fallback activated'),
+      );
+      expect(autoFallbacks).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
       await rm(modelDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });

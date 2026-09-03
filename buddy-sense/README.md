@@ -91,8 +91,9 @@ LD_LIBRARY_PATH=target/release \
 ```
 
 Code Buddy's `speech-reaction.ts` drives this worker when `CODEBUDDY_SPEECH_ENGINE=sherpa-rs`
-(or `auto` when the binary is built). Env: `BUDDY_SENSE_STT_MODEL_DIR` (model dir),
-`BUDDY_SENSE_STT_THREADS` (decode threads). **Rebuild after pulling** — an older
+(or `auto` when both the binary and a complete locally evidenced French model are present).
+Env: `BUDDY_SENSE_STT_MODEL_DIR` (model dir), `BUDDY_SENSE_STT_THREADS` (decode threads).
+**Rebuild after pulling** — an older
 binary built without `stt` ignores the `stt` arg and runs the daemon instead.
 
 #### Live microphone (`live-audio` feature)
