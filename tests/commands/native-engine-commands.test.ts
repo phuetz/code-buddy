@@ -1127,6 +1127,22 @@ describe('Native Engine CLI Commands', () => {
       expect(getLogOutput()).toContain('Added task task-1');
     });
 
+    it('passes verifyCommand, filesToModify and acceptanceCriteria from the CLI', async () => {
+      await program.parseAsync([
+        'node', 'test', 'autonomy', 'tasks', 'add', 'Fix add',
+        '--verify-command', 'node add.check.mjs',
+        '--files-to-modify', 'add.mjs,README.md',
+        '--acceptance-criteria', 'node add.check.mjs exits 0',
+        '--acceptance-criteria', 'add(2,3)===5',
+      ]);
+      expect(mockColabStore.addTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Fix add',
+        verifyCommand: 'node add.check.mjs',
+        filesToModify: ['add.mjs', 'README.md'],
+        acceptanceCriteria: ['node add.check.mjs exits 0', 'add(2,3)===5'],
+      }));
+    });
+
     it('passes goal-mode max turns as a strict positive integer', async () => {
       await program.parseAsync([
         'node', 'test', 'autonomy', 'tasks', 'add', 'Goal task',
@@ -1182,6 +1198,12 @@ describe('Native Engine CLI Commands', () => {
       await program.parseAsync(['node', 'test', 'autonomy', 'link', 'child', 'parent']);
       expect(mockColabStore.link).toHaveBeenCalledWith('child', 'parent');
       expect(getLogOutput()).toContain('Linked: child depends on');
+    });
+
+    it('refuses --executor agent without a workspace', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'run', '--executor', 'agent']);
+      expect(getErrorOutput()).toMatch(/--workspace/);
+      expect(processExitSpy).toHaveBeenCalledWith(1);
     });
 
     it('installs the autonomy systemd service with local-model env + watch args', async () => {
