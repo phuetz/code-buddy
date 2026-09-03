@@ -8,13 +8,11 @@
 //! cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode indexed
 //! ```
 
-use buddy_memory::model::{content_hash, entity_id};
 use buddy_memory::store::Store;
-use buddy_memory::synth::{generate, percentile, rss_kb, SynthCorpus};
+use buddy_memory::synth::{generate, percentile, rss_kb, write_ledger};
 use serde_json::{json, Value};
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::PathBuf;
 use std::time::Instant;
 
 fn parse_flag(args: &[String], name: &str, default: &str) -> String {
@@ -24,33 +22,11 @@ fn parse_flag(args: &[String], name: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
-fn write_synth_ledger(path: &Path, corpus: &SynthCorpus, agent: &str) {
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
-    let mut f = File::create(path).expect("ledger create");
-    // Fixed timestamps → salience is stable across runs (the bench is about retrieval, not recency).
-    let recorded = "2026-09-03T00:00:00.000Z";
-    for node in &corpus.nodes {
-        let ev = json!({
-            "v": 1,
-            "kind": "entity",
-            "recordedAt": recorded,
-            "agentId": agent,
-            "contentHash": content_hash(&node.node_type, &node.text),
-            "id": entity_id(&node.node_type, &node.name),
-            "type": node.node_type,
-            "name": node.name,
-            "text": node.text,
-            "confidence": 0.8
-        });
-        writeln!(f, "{ev}").expect("ledger write");
-    }
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let n_nodes: usize = parse_flag(&args, "--nodes", "50000").parse().unwrap_or(50_000);
+    let n_nodes: usize = parse_flag(&args, "--nodes", "50000")
+        .parse()
+        .unwrap_or(50_000);
     let n_queries: usize = parse_flag(&args, "--queries", "100").parse().unwrap_or(100);
     let mode = parse_flag(&args, "--mode", "exhaustive");
     let seed: u64 = parse_flag(&args, "--seed", "42").parse().unwrap_or(42);
@@ -79,7 +55,7 @@ fn main() {
     let gen_ms = t_gen.elapsed().as_secs_f64() * 1000.0;
 
     let t_write = Instant::now();
-    write_synth_ledger(&ledger, &corpus, "bench/gk6");
+    write_ledger(&ledger, &corpus, "bench/gk6");
     let write_ms = t_write.elapsed().as_secs_f64() * 1000.0;
 
     let t_load = Instant::now();
@@ -132,10 +108,11 @@ fn main() {
     }
     fs::write(&out, serde_json::to_string_pretty(&result).unwrap()).expect("write result");
 
-    eprintln!("GK6 CKG bench  mode={mode}  nodes={}  queries={n_queries}", stats.entities);
     eprintln!(
-        "  generate {gen_ms:.1} ms   ledger-write {write_ms:.1} ms   load {load_ms:.1} ms"
+        "GK6 CKG bench  mode={mode}  nodes={}  queries={n_queries}",
+        stats.entities
     );
+    eprintln!("  generate {gen_ms:.1} ms   ledger-write {write_ms:.1} ms   load {load_ms:.1} ms");
     eprintln!("  recallHybrid p50={p50:.3} ms  p95={p95:.3} ms  mean={mean:.3} ms");
     eprintln!(
         "  RSS start={:.1} MiB  loaded={:.1} MiB  warm={:.1} MiB  after={:.1} MiB",
@@ -145,5 +122,8 @@ fn main() {
         kb(rss_after)
     );
     eprintln!("  result {}", out.display());
-    println!("{}", serde_json::to_string(&result).unwrap_or_else(|_| Value::Null.to_string()));
+    println!(
+        "{}",
+        serde_json::to_string(&result).unwrap_or_else(|_| Value::Null.to_string())
+    );
 }

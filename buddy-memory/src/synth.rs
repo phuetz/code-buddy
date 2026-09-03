@@ -3,7 +3,11 @@
 //! Used by the Phase-4 bench and parity tests. No real user data, no ONNX, no network.
 //! Vectors are L2-normalised so cosine == dot product.
 
+use crate::model::{content_hash, entity_id};
+use serde_json::json;
 use std::collections::BTreeSet;
+use std::io::Write;
+use std::path::Path;
 
 /// Dimensionality of the synthetic embedder (small → cheap 50k×100 benches).
 pub const SYNTH_DIM: usize = 32;
@@ -13,7 +17,11 @@ pub struct XorShift(u64);
 
 impl XorShift {
     pub fn new(seed: u64) -> Self {
-        Self(if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed })
+        Self(if seed == 0 {
+            0x9E37_79B9_7F4A_7C15
+        } else {
+            seed
+        })
     }
 
     pub fn next_u64(&mut self) -> u64 {
@@ -137,6 +145,41 @@ pub fn generate(n_nodes: usize, n_queries: usize, seed: u64) -> SynthCorpus {
         queries.push(format!("c{cluster}t0 c{cluster}t1 c{cluster}t2 {extra}"));
     }
     SynthCorpus { nodes, queries }
+}
+
+pub fn write_ledger(path: &Path, corpus: &SynthCorpus, agent: &str) {
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let mut f = std::fs::File::create(path).expect("ledger create");
+    let recorded = "2026-09-03T00:00:00.000Z";
+    for node in &corpus.nodes {
+        let ev = json!({
+            "v": 1,
+            "kind": "entity",
+            "recordedAt": recorded,
+            "agentId": agent,
+            "contentHash": content_hash(&node.node_type, &node.text),
+            "id": entity_id(&node.node_type, &node.name),
+            "type": node.node_type,
+            "name": node.name,
+            "text": node.text,
+            "confidence": 0.8
+        });
+        writeln!(f, "{ev}").expect("ledger write");
+    }
+}
+
+pub fn overlap_at_k(gold: &[String], got: &[String], k: usize) -> f64 {
+    if k == 0 {
+        return 1.0;
+    }
+    let g: BTreeSet<&str> = gold.iter().take(k).map(|s| s.as_str()).collect();
+    if g.is_empty() {
+        return 1.0;
+    }
+    let h: BTreeSet<&str> = got.iter().take(k).map(|s| s.as_str()).collect();
+    g.intersection(&h).count() as f64 / g.len() as f64
 }
 
 pub fn rss_kb() -> Option<u64> {

@@ -51,6 +51,12 @@ pub struct Stats {
     pub relations: usize,
     #[serde(rename = "ledgerPath")]
     pub ledger_path: String,
+    #[serde(rename = "indexTokens")]
+    pub index_tokens: usize,
+    #[serde(rename = "hnswPoints")]
+    pub hnsw_points: usize,
+    #[serde(rename = "snapshotVersion")]
+    pub snapshot_version: u8,
 }
 
 /// Fast-load snapshot of the materialized graph at a given ledger offset. Avoids replaying the
@@ -63,6 +69,12 @@ struct Snapshot {
     current: HashMap<String, MemEntity>,
     superseded: HashMap<String, MemEntity>,
     relations: HashMap<String, MemRelation>,
+    /// Inverted index (token → entity ids). Empty on v1 snapshots → rebuilt on load.
+    #[serde(default)]
+    index: HashMap<String, HashSet<String>>,
+    /// Embedding cache (contentHash → vector). Rebuilds the HNSW graph on load.
+    #[serde(default)]
+    emb_cache: HashMap<String, Vec<f32>>,
 }
 
 /// Write a fresh snapshot after this many appended events.
@@ -90,6 +102,8 @@ pub struct Store {
     /// When true, hybrid recall scores every current entity (Phase-3 exhaustive path).
     /// When false, HNSW + inverted-index candidates are used (Phase 4).
     hybrid_exhaustive: bool,
+    ann: Option<crate::ann::AnnIndex>,
+    snapshot_version: u8,
 }
 
 fn now_iso() -> String {
@@ -182,10 +196,15 @@ impl Store {
             #[cfg(feature = "embeddings")]
             embed_tried: false,
             emb_cache: HashMap::new(),
-            hybrid_exhaustive: true,
+            hybrid_exhaustive: false,
+            ann: None,
+            snapshot_version: 2,
         };
         s.load_snapshot(); // fast cold start (sets offset to the snapshot's coverage)
-        s.rebuild_index(); // snapshot bulk-restores `current` without apply_entity → index it
+        if s.index.is_empty() {
+            s.rebuild_index(); // v1 snapshots bulk-restore `current` without apply_entity
+        }
+        s.rebuild_ann_from_cache();
         s.load_incremental(); // replay only the ledger tail beyond the snapshot (maintains index)
         s
     }
@@ -257,11 +276,13 @@ impl Store {
     /// Persist a fast-load snapshot of the current materialized graph (atomic temp+rename).
     pub fn save_snapshot(&mut self) {
         let snap = Snapshot {
-            version: 1,
+            version: 2,
             offset: self.offset,
             current: self.current.clone(),
             superseded: self.superseded.clone(),
             relations: self.relations.clone(),
+            index: self.index.clone(),
+            emb_cache: self.emb_cache.clone(),
         };
         if let Ok(json) = serde_json::to_string(&snap) {
             let tmp = self.snapshot_path.with_extension("snap.tmp");
@@ -280,7 +301,7 @@ impl Store {
             Err(_) => return,
         };
         let snap: Snapshot = match serde_json::from_str::<Snapshot>(&data) {
-            Ok(s) if s.version == 1 => s,
+            Ok(s) if s.version == 1 || s.version == 2 => s,
             _ => return,
         };
         let ledger_len = fs::metadata(&self.ledger_path)
@@ -292,7 +313,10 @@ impl Store {
         self.current = snap.current;
         self.superseded = snap.superseded;
         self.relations = snap.relations;
+        self.index = snap.index;
+        self.emb_cache = snap.emb_cache;
         self.offset = snap.offset;
+        self.snapshot_version = snap.version;
     }
 
     fn apply_event(&mut self, ev: &LedgerEvent) {
@@ -517,7 +541,12 @@ impl Store {
                 }
             }
         }
-        self.current.get(&id).map(|e| self.to_result(e, None, None))
+        if self.current.contains_key(&id) {
+            self.ann_upsert_id(&id);
+            self.current.get(&id).map(|e| self.to_result(e, None, None))
+        } else {
+            None
+        }
     }
 
     pub fn recall(
@@ -593,6 +622,9 @@ impl Store {
             superseded: self.superseded.len(),
             relations: self.relations.len(),
             ledger_path: self.ledger_path.to_string_lossy().to_string(),
+            index_tokens: self.index.len(),
+            hnsw_points: self.ann.as_ref().map(|a| a.live_points()).unwrap_or(0),
+            snapshot_version: self.snapshot_version,
         }
     }
 
@@ -679,6 +711,7 @@ impl Store {
                 .map(|e| e.id.clone())
                 .collect()
         } else {
+            self.ensure_ann();
             self.indexed_hybrid_ids(&q, &qvec, types)
         };
         if candidate_ids.is_empty() {
@@ -696,7 +729,9 @@ impl Store {
         }
         let mut cands: Vec<Cand> = Vec::new();
         for id in &candidate_ids {
-            let Some(e) = self.current.get(id) else { continue };
+            let Some(e) = self.current.get(id) else {
+                continue;
+            };
             if !passes_type(e) {
                 continue;
             }
@@ -762,12 +797,102 @@ impl Store {
             .collect()
     }
 
-    /// Phase-4 candidate union (HNSW ∪ inverted index). Exhaustive fallback while
-    /// the ANN graph is not yet wired — replaced in the index lot.
+    fn rebuild_ann_from_cache(&mut self) {
+        if self.emb_cache.is_empty() || self.current.is_empty() {
+            return;
+        }
+        let Some(dim) = self.emb_cache.values().next().map(|v| v.len()) else {
+            return;
+        };
+        let mut pairs = Vec::new();
+        for e in self.current.values() {
+            if let Some(v) = self.emb_cache.get(&e.content_hash) {
+                if v.len() == dim {
+                    pairs.push((e.id.clone(), v.clone()));
+                }
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let cap = pairs.len().saturating_mul(2).max(32);
+        self.ann = Some(crate::ann::AnnIndex::from_pairs(dim, cap, pairs));
+    }
+
+    fn probe_dim(&mut self) -> Option<usize> {
+        if let Some(v) = self.emb_cache.values().next() {
+            return Some(v.len());
+        }
+        if Self::synth_embed_enabled() {
+            return Some(crate::synth::SYNTH_DIM);
+        }
+        #[cfg(feature = "embeddings")]
+        {
+            self.ensure_embedder();
+            if self.embedder.is_some() {
+                return Some(384);
+            }
+        }
+        None
+    }
+
+    fn ensure_ann(&mut self) {
+        let Some(dim) = self.probe_dim() else {
+            return;
+        };
+        let need = self.current.len();
+        if let Some(ann) = &self.ann {
+            if ann.dim() == dim && ann.live_points() + 16 >= need {
+                return;
+            }
+        }
+        let entities: Vec<(String, String, String)> = self
+            .current
+            .values()
+            .map(|e| {
+                (
+                    e.id.clone(),
+                    e.content_hash.clone(),
+                    format!("{}. {}", e.name, e.text),
+                )
+            })
+            .collect();
+        let mut pairs = Vec::with_capacity(entities.len());
+        for (id, ch, text) in entities {
+            if let Some(v) = self.cached_or_embed(&ch, &text) {
+                if v.len() == dim {
+                    pairs.push((id, v));
+                }
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let cap = pairs.len().saturating_mul(2).max(32);
+        self.ann = Some(crate::ann::AnnIndex::from_pairs(dim, cap, pairs));
+    }
+
+    fn ann_upsert_id(&mut self, id: &str) {
+        let Some(e) = self.current.get(id) else {
+            return;
+        };
+        let ch = e.content_hash.clone();
+        let text = format!("{}. {}", e.name, e.text);
+        let eid = e.id.clone();
+        let Some(v) = self.cached_or_embed(&ch, &text) else {
+            return;
+        };
+        match self.ann.as_mut() {
+            Some(ann) if ann.dim() == v.len() => ann.insert(&eid, &v),
+            _ => self.ensure_ann(),
+        }
+    }
+
+    /// Phase-4 candidate union: inverted-index keyword hits ∪ HNSW neighbours.
     fn indexed_hybrid_ids(
         &self,
         q: &BTreeSet<String>,
-        _qvec: &[f32],
+        qvec: &[f32],
         types: Option<&[String]>,
     ) -> Vec<String> {
         let mut cand_ids: HashSet<String> = HashSet::new();
@@ -776,19 +901,21 @@ impl Store {
                 cand_ids.extend(ids.iter().cloned());
             }
         }
-        if cand_ids.is_empty() {
-            return self
-                .current
-                .values()
-                .filter(|e| {
+        if let Some(ann) = &self.ann {
+            for (id, _) in ann.search(qvec, 200) {
+                cand_ids.insert(id);
+            }
+        }
+        cand_ids
+            .into_iter()
+            .filter(|id| {
+                self.current.get(id).is_some_and(|e| {
                     types
                         .map(|ts| ts.iter().any(|t| t == &e.node_type))
                         .unwrap_or(true)
                 })
-                .map(|e| e.id.clone())
-                .collect();
-        }
-        cand_ids.into_iter().collect()
+            })
+            .collect()
     }
 
     fn to_result(
@@ -1053,6 +1180,109 @@ mod store_tests {
             ok >= n * 4,
             "expected at least {} entity lines, got {ok}",
             n * 4
+        );
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    fn gk6_ledger(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let n = CTR.fetch_add(1, Ordering::Relaxed);
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".gk6-work")
+            .join(format!("test-{}-{}-{}", label, std::process::id(), n));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("ledger.jsonl")
+    }
+
+    #[test]
+    fn snapshot_persists_inverted_index_and_embeddings() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("snap-index");
+        {
+            let mut s = Store::new(led.clone(), "a/r".into());
+            s.remember(&input("k1", "alpha beta gamma topic", "a/r"));
+            s.remember(&input("k2", "delta epsilon topic", "a/r"));
+            s.save_snapshot();
+            let raw = fs::read_to_string(&s.snapshot_path).expect("snap");
+            assert!(raw.contains("\"version\":2"), "v2 snapshot: {raw:.80}");
+            assert!(raw.contains("\"index\""), "index key missing");
+            assert!(raw.contains("\"emb_cache\"") || raw.contains("emb_cache"));
+        }
+        let mut s2 = Store::new(led.clone(), "a/r".into());
+        assert!(!s2.index.is_empty(), "persisted inverted index must reload");
+        assert!(!s2.emb_cache.is_empty(), "persisted embeddings must reload");
+        assert!(s2.ann.as_ref().map(|a| a.live_points()).unwrap_or(0) >= 2);
+        let hits = s2.recall("alpha gamma", 5, None);
+        assert!(hits.iter().any(|r| r.name == "k1"));
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn indexed_hybrid_top10_overlaps_exhaustive() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("parity");
+        let corpus = crate::synth::generate(3_000, 100, 42);
+        crate::synth::write_ledger(&led, &corpus, "bench/gk6");
+        let mut s = Store::new(led.clone(), "bench/gk6".into());
+        s.set_hybrid_exhaustive(true);
+        let mut gold: Vec<Vec<String>> = Vec::with_capacity(100);
+        for q in &corpus.queries {
+            gold.push(
+                s.recall_hybrid(q, 10, None, 0.7, 0.7)
+                    .into_iter()
+                    .map(|r| r.id)
+                    .collect(),
+            );
+        }
+        s.set_hybrid_exhaustive(false);
+        let mut sum = 0.0;
+        let mut identical = 0usize;
+        for (q, g) in corpus.queries.iter().zip(&gold) {
+            let got: Vec<String> = s
+                .recall_hybrid(q, 10, None, 0.7, 0.7)
+                .into_iter()
+                .map(|r| r.id)
+                .collect();
+            if got == *g {
+                identical += 1;
+            }
+            sum += crate::synth::overlap_at_k(g, &got, 10);
+        }
+        let mean = sum / gold.len() as f64;
+        assert!(
+            mean >= 0.9,
+            "mean top-10 overlap {mean:.3} (identical {identical}/100) below 0.9"
+        );
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn ingest_updates_hnsw_and_inverted_index() {
+        std::env::set_var("BUDDY_MEMORY_SYNTH_EMBED", "1");
+        let led = gk6_ledger("ingest-ann");
+        let mut s = Store::new(led.clone(), "a/r".into());
+        s.set_hybrid_exhaustive(false);
+        s.remember(&input(
+            "old",
+            "c0t0 c0t1 w1 background filler tokens here",
+            "a/r",
+        ));
+        let _ = s.recall_hybrid("c0t0 c0t1", 5, None, 0.7, 0.7);
+        s.remember(&input(
+            "fresh",
+            "c7t0 c7t1 uniquezingesttoken w2 extra words",
+            "a/r",
+        ));
+        assert!(s
+            .index
+            .values()
+            .any(|ids| ids.iter().any(|id| id.contains("fresh"))));
+        let hits = s.recall_hybrid("uniquezingesttoken c7t0", 5, None, 0.7, 0.7);
+        assert!(
+            hits.iter().any(|r| r.name == "fresh"),
+            "ingested node must be searchable, got {:?}",
+            hits.iter().map(|h| &h.name).collect::<Vec<_>>()
         );
         let _ = std::fs::remove_dir_all(led.parent().unwrap());
     }

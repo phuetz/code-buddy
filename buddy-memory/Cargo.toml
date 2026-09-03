@@ -30,6 +30,7 @@ sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ort = { version = "2.0.0-rc.12", optional = true }
 tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
+hnsw_rs = "0.3"
 
 [profile.release]
 opt-level = 3
