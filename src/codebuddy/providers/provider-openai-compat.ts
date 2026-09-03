@@ -50,6 +50,7 @@ import {
   injectJsonSystemPromptForAnthropic,
 } from './provider-openai-compat-hooks.js';
 import type { Provider } from './provider-interface.js';
+import type { ActiveTurnMetrics, TurnMetricsRecorder } from '../../observability/turn-metrics.js';
 
 /** Chat completion request payload — OpenAI-shaped with a few provider-specific fields. */
 interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming, 'tools' | 'tool_choice'> {
@@ -104,6 +105,16 @@ function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayloa
   }
   delete payload.temperature;
   return payload;
+}
+
+function chunkContainsGeneratedToken(chunk: ChatCompletionChunk): boolean {
+  return chunk.choices.some((choice) => {
+    const delta = choice.delta as unknown as Record<string, unknown>;
+    return [delta.content, delta.reasoning, delta.reasoning_content]
+      .some((value) => typeof value === 'string' && value.length > 0)
+      || (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0)
+      || (typeof delta.function_call === 'object' && delta.function_call !== null);
+  });
 }
 
 export interface OpenAICompatProviderOptions {
@@ -800,6 +811,22 @@ export class OpenAICompatProvider implements Provider {
     return 'provider';
   }
 
+  /** Canonical provider id shared with fleet candidate identities. */
+  private getMetricsProviderId(): string {
+    const url = this.baseURL.toLowerCase();
+    if (url.includes('api.x.ai') || url.includes('xai')) return 'grok';
+    if (url.includes('openai.com')) return 'openai';
+    if (url.includes('anthropic.com')) return 'anthropic';
+    if (url.includes('openrouter.ai')) return 'openrouter';
+    if (url.includes('groq.com')) return 'groq';
+    if (url.includes('together.xyz')) return 'together';
+    if (url.includes('fireworks.ai')) return 'fireworks';
+    if (url.includes(':11434') || url.includes('ollama')) return 'ollama';
+    if (url.includes(':1234') || url.includes('lmstudio')) return 'lmstudio';
+    if (url.includes('vllm')) return 'vllm';
+    return this.detectProviderLabel();
+  }
+
   // ===========================================================================
   // chat() / chatStream()
   // ===========================================================================
@@ -984,6 +1011,25 @@ export class OpenAICompatProvider implements Provider {
     opts: ChatOptions = {},
     searchOptions?: SearchOptions,
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+    let metricsRecorder: TurnMetricsRecorder | undefined;
+    let measuredTurn: ActiveTurnMetrics | undefined;
+    let usageInputTokens: number | undefined;
+    let usageOutputTokens: number | undefined;
+    const observeChunk = (chunk: ChatCompletionChunk): void => {
+      if (metricsRecorder && measuredTurn && chunkContainsGeneratedToken(chunk)) {
+        metricsRecorder.markFirstChunk(measuredTurn);
+      }
+      const usage = chunk.usage;
+      if (usage) {
+        usageInputTokens = usage.prompt_tokens;
+        usageOutputTokens = usage.completion_tokens;
+      }
+    };
+    const markMessageComplete = (): void => {
+      if (metricsRecorder && measuredTurn) {
+        metricsRecorder.markFirstMessage(measuredTurn);
+      }
+    };
     try {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
@@ -1046,10 +1092,20 @@ export class OpenAICompatProvider implements Provider {
         ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
       };
 
+      metricsRecorder = opts.turnMetrics?.recorder;
+      const ensureMeasuredTurn = (): void => {
+        if (!metricsRecorder || measuredTurn) return;
+        measuredTurn = metricsRecorder.startTurn(
+          this.getMetricsProviderId(),
+          streamingPayload.model,
+        );
+      };
+
       const stream = await this.withCircuitBreaker(opts.circuitBreaker, () =>
         retry(
           async () => {
             const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
+            ensureMeasuredTurn();
             return opts.signal
               ? await this.client.chat.completions.create(payload, { signal: opts.signal })
               : await this.client.chat.completions.create(payload);
@@ -1072,7 +1128,11 @@ export class OpenAICompatProvider implements Provider {
           logger.debug('Streaming request returned a non-streaming chat response; adapting it to chunks', {
             source: 'OpenAICompatProvider',
           });
-          yield* this.nonStreamingResponseToChunks(stream, searchOmitted);
+          for (const chunk of this.nonStreamingResponseToChunks(stream, searchOmitted)) {
+            observeChunk(chunk);
+            yield chunk;
+          }
+          markMessageComplete();
           return;
         }
 
@@ -1084,13 +1144,18 @@ export class OpenAICompatProvider implements Provider {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
-        yield* this.nonStreamingResponseToChunks(response);
+        for (const chunk of this.nonStreamingResponseToChunks(response)) {
+          observeChunk(chunk);
+          yield chunk;
+        }
+        markMessageComplete();
         return;
       }
 
       let yieldedChunks = 0;
       for await (const chunk of stream) {
         yieldedChunks++;
+        observeChunk(chunk);
         yield searchOmitted ? { ...chunk, searchHonored: false } as SearchAwareChatCompletionChunk : chunk;
       }
 
@@ -1099,8 +1164,12 @@ export class OpenAICompatProvider implements Provider {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
-        yield* this.nonStreamingResponseToChunks(response, searchOmitted);
+        for (const chunk of this.nonStreamingResponseToChunks(response, searchOmitted)) {
+          observeChunk(chunk);
+          yield chunk;
+        }
       }
+      markMessageComplete();
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {
         throw error;
@@ -1115,6 +1184,19 @@ export class OpenAICompatProvider implements Provider {
         new Error(mapProviderError(message, this.detectProviderLabel())),
         error,
       );
+    } finally {
+      if (metricsRecorder && measuredTurn) {
+        let outputTokens = usageOutputTokens;
+        try {
+          outputTokens = opts.turnMetrics?.getOutputTokens?.() ?? outputTokens;
+        } catch {
+          // Token accounting is optional; latency recording must still finish.
+        }
+        metricsRecorder.endTurn(measuredTurn, {
+          inputTokens: opts.turnMetrics?.inputTokens ?? usageInputTokens,
+          outputTokens,
+        });
+      }
     }
   }
 }

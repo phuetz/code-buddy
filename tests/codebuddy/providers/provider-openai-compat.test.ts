@@ -28,6 +28,7 @@ vi.mock('../../../src/agent/extended-thinking.js', () => ({
 }));
 
 import { OpenAICompatProvider } from '../../../src/codebuddy/providers/provider-openai-compat.js';
+import { TurnMetricsRecorder } from '../../../src/observability/turn-metrics.js';
 import { logger } from '../../../src/utils/logger.js';
 
 function createProvider(
@@ -77,6 +78,62 @@ afterEach(() => {
 });
 
 describe('OpenAICompatProvider request payloads', () => {
+  it('measures from request send to the first token-bearing chunk and complete message', async () => {
+    const now = vi.fn()
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(130)
+      .mockReturnValueOnce(160)
+      .mockReturnValueOnce(165);
+    const recorder = new TurnMetricsRecorder({
+      persist: false,
+      clock: {
+        now,
+        timestamp: () => '2026-09-03T12:00:00.000Z',
+      },
+    });
+    const endSpy = vi.spyOn(recorder, 'endTurn');
+    providerMocks.create.mockResolvedValueOnce((async function* () {
+      yield {
+        id: 'role-only',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'grok-code-fast-1',
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+      };
+      yield {
+        id: 'first-token',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'grok-code-fast-1',
+        choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: null }],
+      };
+    })());
+
+    for await (const _chunk of createProvider().chatStream(
+      [{ role: 'user', content: 'hello' }],
+      [],
+      {
+        turnMetrics: {
+          recorder,
+          inputTokens: 11,
+          getOutputTokens: () => 3,
+        },
+      },
+    )) { /* drain */ }
+
+    expect(endSpy).toHaveBeenCalledTimes(1);
+    expect(endSpy.mock.results[0]?.value).toMatchObject({
+      provider: 'grok',
+      model: 'grok-code-fast-1',
+      ttftMs: 30,
+      ttfmMs: 60,
+      totalMs: 65,
+      inputTokens: 11,
+      outputTokens: 3,
+    });
+    expect(now).toHaveBeenCalledTimes(4);
+  });
+
   it('rejects a non-streaming response with empty choices', async () => {
     providerMocks.create.mockResolvedValueOnce({ choices: [] });
 

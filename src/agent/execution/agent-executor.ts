@@ -60,6 +60,7 @@ import {
 } from "../../context/restorable-compression.js";
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
+import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
 import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
@@ -1596,6 +1597,11 @@ export class AgentExecutor {
           tools,
           {
             streamRetry: false,
+            turnMetrics: {
+              recorder: getTurnMetricsRecorder(),
+              inputTokens,
+              getOutputTokens: () => this.deps.streamingHandler.getTokenCount() || 0,
+            },
             ...(abortController?.signal ? { signal: abortController.signal } : {}),
           },
           this.config.isGrokModel() &&

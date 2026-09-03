@@ -71,6 +71,40 @@ Test Files  2 passed (2)
 Tests  33 passed (33)
 ```
 
+### D3 — le chemin streaming réel ne pose aucun jalon TTFT/TTFM
+
+Deux tests ferment les deux niveaux du chemin réel : le provider doit ignorer
+un chunk vide de rôle, marquer le premier chunk porteur de token puis la fin du
+message ; `runTurnLoop` doit transmettre le compteur de jetons à ce point de
+mesure unique. Avant correction, ni le provider ni l’exécuteur ne le font.
+
+```text
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/codebuddy/providers/provider-openai-compat.test.ts tests/agent/execution/agent-executor.test.ts
+FAIL ...provider-openai-compat.test.ts > measures from request send to the first token-bearing chunk and complete message
+AssertionError: expected "endTurn" to be called 1 times, but got 0 times
+FAIL ...agent-executor.test.ts > enables precise provider turn metrics from the authoritative runTurnLoop
+TypeError: actual value must be number or bigint, received "undefined"
+Test Files  2 failed (2)
+Tests  2 failed | 148 passed (150)
+```
+
+Correctif : `runTurnLoop` transmet un observateur et ses compteurs au client ;
+le provider OpenAI-compatible démarre le tour juste avant l’appel SDK, ignore
+les chunks de rôle/usage sans token, marque le premier delta texte/raisonnement/
+outil, puis le message complet à la fermeture normale du flux. Son `finally`
+enregistre aussi les échecs sans fabriquer de TTFT. Le dispatcher porte une
+seule option interne, donc les chemins séquentiel et streaming partagent bien
+le même `runTurnLoop`.
+
+```text
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/codebuddy/providers/provider-openai-compat.test.ts tests/agent/execution/agent-executor.test.ts
+Test Files  2 passed (2)
+Tests  150 passed (150)
+$ HOME="$PWD/node_modules/.ttft1-home" TMPDIR="$PWD/node_modules/.ttft1-tmp" npx vitest run tests/codebuddy/providers/provider-openai-compat.test.ts tests/agent/execution/turn-metrics-wiring.test.ts
+Test Files  2 passed (2)
+Tests  11 passed (11)
+```
+
 ## Tour réel Ollama local à 0 €
 
 À effectuer après l’implémentation, sous réserve que l’instance Ollama locale soit disponible et non occupée.
