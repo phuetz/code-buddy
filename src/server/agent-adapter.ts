@@ -214,7 +214,10 @@ export async function runAgentCompletion(
     const { publishAnswerWidget } = await import('../widgets/canvas-publish.js');
     const published = await publishAnswerWidget(content, payloads);
     const data = published.candidate?.data
-      ?? payloads.map((payload) => payload.data).find((value) => value !== undefined);
+      ?? entries
+        .filter((entry) => entry.type === 'tool_result')
+        .map((entry) => entry.toolResult?.data)
+        .find((value) => value !== undefined);
 
     return {
       content,
