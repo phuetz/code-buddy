@@ -99,6 +99,9 @@ DEBUT=$(date +%s)
 # annoncee « depot INCHANGE » alors que le livrable venait d'etre produit (vu le 26/08/2026).
 # Un controle qui crie au loup finit par ne plus etre lu.
 empreinte_depot() {
+  # Le commit de tête fait partie de l'empreinte : une lane qui COMMITE son travail laissait
+  # l'arbre propre et le contrôle criait « aucun fichier créé NI modifié » (vu 3× le 03/09/2026).
+  (cd "$1" && git rev-parse HEAD 2>/dev/null)
   (cd "$1" && git status --porcelain 2>/dev/null | sort | while read -r ligne; do
     fichier=${ligne:3}
     fichier=${fichier%\"}; fichier=${fichier#\"}
