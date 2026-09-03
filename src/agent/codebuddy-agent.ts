@@ -2033,6 +2033,18 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.routingFacade?.addSessionCost(cost);
     this.costTracker.recordUsage(inputTokens, outputTokens, model);
 
+    const activeRun = getActiveRunStore();
+    const runId = activeRun?.getCurrentRunId();
+    if (runId) {
+      const report = this.costTracker.getReport();
+      activeRun.updateMetrics(runId, {
+        promptTokens: report.sessionTokens.input,
+        completionTokens: report.sessionTokens.output,
+        totalTokens: report.sessionTokens.input + report.sessionTokens.output,
+        totalCost: this.sessionCost,
+      });
+    }
+
     // Check budget alerts after recording cost
     if (this.sessionCostLimit !== Infinity) {
       this.budgetAlertManager.check(this.sessionCost, this.sessionCostLimit);

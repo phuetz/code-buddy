@@ -434,6 +434,11 @@ export class RunStore {
     if (summary) {
       summary.eventCount = count;
     }
+
+    if (event.type === 'tool_call') {
+      const current = this.getRun(runId)?.metrics.toolCallCount ?? 0;
+      this.updateMetrics(runId, { toolCallCount: current + 1 });
+    }
   }
 
   /**
