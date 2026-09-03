@@ -183,6 +183,33 @@ describe('GK36 — accueil du soir sans jargon', () => {
     expect(clean).toMatch(/train/i);
     expect(clean).not.toMatch(/<[^>]+>|\/100/i);
   });
+
+  it('refuse une balise XML isolée dans une phrase d’accueil LLM', async () => {
+    const result = await buildLlmArrivalOpener({
+      now: EVENING,
+      chat: async () => 'Bonsoir. <pause> Je suis contente de te voir.',
+      timeoutMs: 500,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('refuse un score isolé dans une phrase d’accueil LLM', async () => {
+    const result = await buildLlmArrivalOpener({
+      now: EVENING,
+      chat: async () => 'Bonsoir. Ta journée semble douce (72/100).',
+      timeoutMs: 500,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('refuse une note d’auto-évolution isolée dans une phrase d’accueil LLM', async () => {
+    const result = await buildLlmArrivalOpener({
+      now: EVENING,
+      chat: async () => 'Bonsoir. J’ai appris à mieux écouter.',
+      timeoutMs: 500,
+    });
+    expect(result).toBeNull();
+  });
 });
 
 describe('GK36 — self_evolution seulement si on le demande', () => {
