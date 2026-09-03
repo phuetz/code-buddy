@@ -2,9 +2,41 @@
  * Default full-mode reviewer resolution — a local Ollama qwen3.8 must be
  * pickable (CODEBUDDY_DIFF_REVIEW=full with no cloud key), an explicit pin
  * wins, and a dead model is skipped. Fail-closed when nothing usable remains.
+ *
+ * The wrapped chat call must cap maxTokens: qwen3.8's model default is 16k
+ * output, which lets hidden thinking eat the whole review timeout.
  */
-import { describe, expect, it } from 'vitest';
-import { pickReviewerPoolEntry } from '../../src/review/llm-client.js';
+import { describe, expect, it, vi } from 'vitest';
+
+const { chatCalls } = vi.hoisted(() => ({ chatCalls: [] as unknown[] }));
+
+vi.mock('../../src/providers/active-llm-model-pool.js', () => ({
+  listActiveLlmModelPool: vi.fn(async () => [
+    {
+      provider: 'ollama',
+      model: 'qwen3.8:27b',
+      apiKey: 'ollama',
+      baseURL: 'http://127.0.0.1:11434/v1',
+      egress: 'local',
+      costInputUsdPerMtok: 0,
+    },
+  ]),
+}));
+
+vi.mock('../../src/codebuddy/client.js', () => ({
+  CodeBuddyClient: class {
+    async chat(_messages: unknown, _tools: unknown, options?: unknown) {
+      chatCalls.push(options);
+      return { choices: [{ message: { content: '{"decision":"accept"}' } }], usage: { prompt_tokens: 1, total_tokens: 1 } };
+    }
+  },
+}));
+
+vi.mock('../../src/fleet/model-scoreboard.js', () => ({
+  getModelScoreboard: () => ({ consecutiveRecentFailures: () => 0 }),
+}));
+
+import { pickReviewerPoolEntry, resolveDefaultReviewClient } from '../../src/review/llm-client.js';
 import type { ActiveLlmModelPoolEntry } from '../../src/providers/active-llm-model-pool.js';
 
 function entry(
@@ -81,5 +113,21 @@ describe('pickReviewerPoolEntry', () => {
       () => 0,
     );
     expect(empty).toBeNull();
+  });
+});
+
+describe('resolveDefaultReviewClient — bounded JSON review call', () => {
+  it('caps maxTokens and disables thinking-sized defaults so a local 27b can finish', async () => {
+    chatCalls.length = 0;
+    const client = await resolveDefaultReviewClient();
+    expect(client).not.toBeNull();
+    await client!.chat([{ role: 'user', content: 'review' }]);
+    expect(chatCalls[0]).toMatchObject({
+      temperature: 0,
+      maxTokens: 1024,
+      disableProviderFallback: true,
+    });
+    const opts = chatCalls[0] as { maxTokens: number };
+    expect(opts.maxTokens).toBeLessThan(4096);
   });
 });

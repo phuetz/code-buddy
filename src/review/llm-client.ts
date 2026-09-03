@@ -99,7 +99,14 @@ export async function resolveDefaultReviewClient(): Promise<CouncilChatClient | 
     const raw = new CodeBuddyClient(pick.apiKey, pick.model, pick.baseURL);
     return {
       async chat(messages) {
-        const resp = await raw.chat(messages, []);
+        // Cap output: qwen3.8's model default is 16 384 tokens, which lets
+        // hidden thinking fill the review timeout without ever emitting JSON.
+        // Temperature 0 + no cross-provider fallback keep the verdict local.
+        const resp = await raw.chat(messages, [], {
+          temperature: 0,
+          maxTokens: 1024,
+          disableProviderFallback: true,
+        });
         return {
           content: resp?.choices?.[0]?.message?.content ?? '',
           promptTokens: resp?.usage?.prompt_tokens ?? 0,
