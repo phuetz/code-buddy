@@ -322,7 +322,18 @@ export async function runDevLoop(
   for (let i = 0; i < maxIterations; i++) {
     // 1) EXECUTE (snapshot git avant/après pour la couche structurelle)
     const preStatus = structuralCwd ? await gitStatusSnapshot(structuralCwd) : null;
-    const entries = await agent.processUserMessage(prompt);
+    let entries: ChatEntry[];
+    try {
+      entries = await agent.processUserMessage(prompt);
+    } catch (error) {
+      // A stalled/thrown turn must never look like success: pause with the
+      // raw error so `buddy loop` can exit 1 instead of vanishing.
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.debug('dev-loop turn failed', { error: reason });
+      manager.pause(`turn error: ${reason}`);
+      emit(`⏸ Dev-loop en pause — erreur du tour : ${reason}`);
+      break;
+    }
     const turnSummary = summarizeTurn(entries);
 
     // 2a) VERIFY — couche structurelle zéro-LLM d'abord (jarvis-OS layer 1) :
