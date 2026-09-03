@@ -13,7 +13,7 @@ const publicScreenshotDocs = [
 ] as const;
 const publicAnchorDocs = [
   path.join(repoRoot, 'README.md'),
-  path.join(repoRoot, 'cowork', 'readme.md'),
+  path.join(repoRoot, 'cowork', 'README.md'),
 ] as const;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const jpegPrefix = Buffer.from([0xff, 0xd8, 0xff]);
@@ -216,7 +216,7 @@ describe('public README screenshots', () => {
     }
 
     expect(anchorCountsByFile.get(path.join(repoRoot, 'README.md'))).toBe(24);
-    expect(anchorCountsByFile.get(path.join(repoRoot, 'cowork', 'readme.md'))).toBe(6);
+    expect(anchorCountsByFile.get(path.join(repoRoot, 'cowork', 'README.md'))).toBe(6);
   });
 
   it('keeps screenshot gallery text free of personal workstation details', () => {

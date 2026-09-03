@@ -102,6 +102,18 @@ VERT — GF1 GK28 : 3/3 ; `codebuddy-agent`, `grok-agent`, `cost-report`, comman
 `session-store` : 5 fichiers, 170/170, aucun rejet non géré.
 ```
 
+## Régression 5 — GK1 × tests Docs, casse du README Cowork
+
+GK1 a rendu le README Cowork portable sur Linux par le renommage `readme.md` → `README.md`. Le
+contrôle des captures et ancres publiques doit continuer à parcourir ce document et à vérifier ses
+six ancres. Les deux références internes du test pointent maintenant vers le nom canonique ; aucune
+assertion de contenu ou de cardinalité n'est changée.
+
+```text
+ROUGE — baseline GF1 : ancien chemin détecté ; public-screenshots : ENOENT cowork/readme.md.
+VERT — GF1 complet + docs publiques : 3 fichiers, 26/26.
+```
+
 ## Vérifications finales
 
 À compléter.
