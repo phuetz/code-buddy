@@ -72,6 +72,18 @@ ESLint ciblé --max-warnings=0 : code 0
 npx tsc --noEmit -p . : code 0
 ```
 
+Rouge de durcissement de l'annulation pendant la création asynchrone :
+
+```text
+tests/agent/delegation/thread-delegation.test.ts : 1 échec | 8 passés
+expected turns=0, received 1
+EXIT_CODE=1
+```
+
+Le signal parent arrivait après l'acquisition du créneau mais pendant la
+fabrique d'agent ; une boucle de tour pouvait donc encore commencer à son
+retour.
+
 ### Brique 2 — consommation réelle par `/batch`
 
 Rouge avant intégration :
@@ -118,7 +130,36 @@ Le flux réel du test porte notamment
 
 ## Preuve Ollama réelle
 
-À compléter après vérification de `ollama ps`.
+### Tentative 1 — rouge réel avant correction du prompt agent
+
+`ollama ps` était vide ; seul `qwen3:4b-instruct` a été chargé. Le rejeu du
+chemin ancien a réussi : `alpha.js=21` en 7 140,9 ms, `beta.js=34` en
+7 797,9 ms, total mural 7 805,3 ms. Le nouveau chemin a réellement démarré
+`beta` à +3 741,8 ms et `alpha` à +3 887,8 ms ; leurs intervalles se sont
+chevauchés environ 31,9 s et les événements étaient correctement étiquetés.
+
+Rouge : les deux agents ont appelé `view_file`, reçu « file not found », puis
+ont refusé de créer le fichier parce que le prompt ajoutait « Only modify these
+files ». Résultat : aucun `alpha.js`/`beta.js`, `ENOENT`, code 1 après 39,5 s.
+Cette tentative prouve la concurrence mais **pas** l'accomplissement ; elle ne
+compte donc pas comme preuve finale.
+
+Tentative 2 arrêtée par le harnais avant le chemin « après » : `beta.js`
+exportait une fonction fléchée valide (`export const beta = () => 34`) mais le
+contrôle exigeait à tort le texte `function beta`. Chronos anciens : alpha
+908,4 ms, beta 1 416,5 ms. Le contrôle est corrigé pour juger l'export exécuté
+et sa valeur, pas sa syntaxe.
+
+Test rouge ajouté avant correction :
+
+```text
+FAIL tests/commands/gk34-batch.test.ts
+expected "Only modify these files: new-file.js" to match
+/explicitly authorized to create/i
+Test Files  1 failed (1)
+Tests       1 failed | 13 passed (14)
+EXIT_CODE=1
+```
 
 ## Vérifications finales
 

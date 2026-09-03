@@ -449,6 +449,16 @@ export class ThreadDelegation<TOutput = unknown> {
               signal: state.controller.signal,
             });
           }
+          // The parent can be cancelled while an asynchronous factory is still
+          // loading a provider. Re-check before counting or starting a turn.
+          if (this.cancelled || state.cancelledReason || state.controller.signal.aborted) {
+            request.resolve({
+              success: false,
+              reason: 'cancelled',
+              message: state.cancelledReason ?? 'Parent cancelled',
+            });
+            continue;
+          }
           state.turns += 1;
           this.emit(state.agentId, 'status', {
             state: 'turn_started',

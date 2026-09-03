@@ -151,6 +151,43 @@ describe('ThreadDelegation multiplexed delegates', () => {
     expect(events.some((event) => (event.payload as TestChunk).content === 'late')).toBe(false);
   });
 
+  it('does not start a turn when the parent aborts while the agent is starting', async () => {
+    const parent = new AbortController();
+    const factoryStarted = deferred();
+    const factoryRelease = deferred();
+    let turns = 0;
+    const delegation = new ThreadDelegation<TestChunk>({
+      parentBudget,
+      parentSignal: parent.signal,
+      createAgent: async () => {
+        factoryStarted.resolve();
+        await factoryRelease.promise;
+        return {
+          async *processUserMessageStream(): AsyncGenerator<TestChunk> {
+            turns += 1;
+            yield { type: 'content', content: 'too late' };
+          },
+          abortCurrentOperation() {},
+          dispose() {},
+        };
+      },
+    });
+    const collecting = collectEvents(delegation.events());
+    const child = delegation.spawn('starting');
+    const turn = child.submit('work');
+    child.closeInput();
+
+    await factoryStarted.promise;
+    parent.abort('parent stopped during startup');
+    factoryRelease.resolve();
+    const outcome = await turn;
+    await delegation.close();
+    await collecting;
+
+    expect(outcome).toMatchObject({ success: false, reason: 'cancelled' });
+    expect(turns).toBe(0);
+  });
+
   it('stops cleanly with an honest event when the reduced turn budget is exceeded', async () => {
     let turns = 0;
     const delegation = new ThreadDelegation<TestChunk>({
