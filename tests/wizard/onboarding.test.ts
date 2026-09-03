@@ -16,8 +16,11 @@ import {
   resolveOnboardingProjectDir,
   PROJECT_FOLDER_QUESTION,
   renderCapabilitiesFooter,
+  persistProviderSelection,
+  getProviderGuide,
   OnboardingResult,
 } from '../../src/wizard/onboarding.js';
+import { SettingsManager } from '../../src/utils/settings-manager.js';
 
 describe('onboarding', () => {
   it('explains how to proceed when no interactive terminal is available', () => {
@@ -208,6 +211,28 @@ describe('onboarding', () => {
 
       const config = JSON.parse(readFileSync(join(nested, 'config.json'), 'utf-8'));
       expect(config.provider).toBe('ollama');
+    });
+  });
+
+  describe('persistProviderSelection', () => {
+    it('does not leave grok catalog entries in an Ollama profile', async () => {
+      const home = join(tmpdir(), `onboarding-home-${Date.now()}`);
+      const previousHome = process.env.HOME;
+      process.env.HOME = home;
+      (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
+      try {
+        await persistProviderSelection(getProviderGuide('ollama'), 'qwen3:4b-instruct', '');
+        const saved = JSON.parse(readFileSync(join(home, '.codebuddy', 'user-settings.json'), 'utf-8'));
+        expect(saved.provider).toBe('ollama');
+        expect(saved.model).toBe('qwen3:4b-instruct');
+        expect(saved.models).toEqual(['qwen3:4b-instruct']);
+        expect(saved.models).not.toContain('grok-code-fast-1');
+      } finally {
+        if (previousHome === undefined) delete process.env.HOME;
+        else process.env.HOME = previousHome;
+        (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
+        rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      }
     });
   });
 

@@ -283,6 +283,7 @@ export async function persistProviderSelection(
       provider: guide.id,
       defaultModel: model,
       model,
+      models: [model],
       ...(guide.baseURL ? { baseURL: guide.baseURL } : {}),
     });
   } catch { /* non-fatal */ }
