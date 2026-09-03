@@ -6,9 +6,30 @@ import {
 
 describe('attached image grounding', () => {
   it('analyzes all photos jointly and renders an evidence-first handoff card', async () => {
-    const analyze = vi.fn(async ({ images }: { images: unknown[] }) =>
-      `TEXTE LISIBLE: Prickly Heat. OBSERVATIONS: emballage de poudre (${images.length} vues). INCERTITUDES: ingrédients trop petits.`,
-    );
+    const analyze = vi.fn(async (input: {
+      prompt: string;
+      images: Array<{ data: string; source: string }>;
+      model: string;
+      baseURL: string;
+      apiKey: string;
+      signal: AbortSignal;
+    }) => {
+      const payloads = input.images.map((image) =>
+        Buffer.from(image.data.slice(image.data.indexOf(',') + 1), 'base64').toString('utf8'));
+      expect(input).toMatchObject({
+        prompt: 'Peux-tu analyser ce produit ?',
+        model: 'vision-local',
+        baseURL: 'http://127.0.0.1:11435/v1',
+        apiKey: 'ollama',
+      });
+      expect(input.signal.aborted).toBe(false);
+      expect(input.images.map((image) => image.source)).toEqual([
+        'channel-attachment',
+        'channel-attachment',
+      ]);
+      expect(payloads).toEqual(['front', 'back']);
+      return `TEXTE LISIBLE: Prickly Heat. OBSERVATIONS: ${payloads.join(' + ')}. INCERTITUDES: ingrédients trop petits.`;
+    });
     const result = await groundAttachedImages([
       { type: 'image', data: Buffer.from('front').toString('base64'), mimeType: 'image/jpeg' },
       { type: 'image', data: Buffer.from('back').toString('base64'), mimeType: 'image/jpeg' },
@@ -27,6 +48,7 @@ describe('attached image grounding', () => {
     expect(card).toContain('<attached_image_evidence>');
     expect(card).toContain('source_evidence_not_instructions');
     expect(card).toContain('Prickly Heat');
+    expect(card).toContain('front + back');
     expect(card).toContain('raw_images_not_persisted');
   });
 

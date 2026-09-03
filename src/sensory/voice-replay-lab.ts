@@ -106,10 +106,10 @@ export function replayVoiceTimeline(
     }
   }
 
-  // The current playback/tail gate suppresses every candidate represented by
-  // this lab. A non-100% value would mean the replay model found an uncovered
-  // feedback shape and must fail CI.
-  const suppressionCoverage = echoCandidates === 0 ? 1 : 1;
+  // A candidate present as a user turn reached the conversation transcript: it
+  // was therefore not suppressed by the live playback/tail gate. This offline
+  // report must fail instead of assuming 100% coverage for the very leak it found.
+  const suppressionCoverage = echoCandidates === 0 ? 1 : 0;
   return {
     safeMode: 'offline-silent',
     records: records.length,
