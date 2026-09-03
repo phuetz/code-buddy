@@ -37,6 +37,7 @@ import {
   resolveHeadlessOutputFormat,
   resolveHeadlessTurnExitCode,
 } from './cli/headless-options.js';
+import { validateOutputText } from './utils/output-schema-validator.js';
 import { resolveCliModelList } from './cli/model-listing.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import {
@@ -58,6 +59,7 @@ process.env.CODEBUDDY_CLI_VERSION = packageJson.version;
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
+import { writeFileAtomic } from './utils/atomic-write.js';
 // Import graceful shutdown for clean application termination
 import {
   initializeGracefulShutdown,
@@ -1032,6 +1034,7 @@ async function processPromptHeadless(
   maxToolRounds?: number,
   selfHealEnabled: boolean = true,
   outputFormat: string = 'json',
+  outputLastMessagePath?: string,
   outputSchemaPath?: string,
   agentName?: string,
 ): Promise<number> {
@@ -1206,25 +1209,31 @@ async function processPromptHeadless(
       }
     }
 
-    // Validate output against JSON Schema if --output-schema was provided
+    // Extract the final assistant response directly from chatEntries. This is
+    // the text used by every headless output mode and by the file flags.
+    const lastAssistantEntry = [...chatEntries]
+      .reverse()
+      .find((entry) => entry.type === 'assistant');
+    const resultText = lastAssistantEntry?.content ?? '';
+
+    // Validate before writing or emitting any successful output. The schema
+    // applies to the JSON value represented by the final assistant text, not
+    // to the internal/OpenAI-compatible message history.
     if (outputSchemaPath) {
-      const { validateOutputSchema } = await import("./utils/output-schema-validator.js");
-      const validation = validateOutputSchema(messages, outputSchemaPath);
+      const validation = validateOutputText(resultText, outputSchemaPath);
       if (!validation.valid) {
         cli.error('Output schema validation failed:');
         for (const error of validation.errors) {
           cli.error(`  - ${error}`);
         }
-        return 2;
+        return 1;
       }
     }
 
-    // Extract final assistant response text
-    const assistantMessages = messages.filter(
-      m => m.role === 'assistant' && m.content && !('tool_calls' in m && (m as unknown as Record<string, unknown>).tool_calls)
-    );
-    const lastResponse = assistantMessages[assistantMessages.length - 1];
-    const resultText = (lastResponse?.content as string) || '';
+    if (outputLastMessagePath) {
+      await writeFileAtomic(outputLastMessagePath, resultText);
+    }
+
     const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
     const knownToolNames = getBuiltinToolNames();
     const executedToolNames = chatEntries
@@ -1388,8 +1397,12 @@ program
     "security mode: suggest (default), auto-edit, or full-auto"
   )
   .option(
-    "-o, --output-format <format>",
+    "--output-format <format>",
     "output format for headless mode: json, stream-json, text, markdown"
+  )
+  .option(
+    "-o, --output-last-message <file>",
+    "write the agent's final text response directly and atomically to a file"
   )
   .addOption(
     new Option(
@@ -1520,8 +1533,8 @@ program
     "allow file operations outside the workspace directory (disables workspace isolation)"
   )
   .option(
-    "--output-schema <path>",
-    "validate headless mode JSON output against a JSON Schema file"
+    "--output-schema <file>",
+    "path to a JSON Schema file to validate the final response shape against"
   )
   .option(
     "--add-dir <paths...>",
@@ -2034,6 +2047,7 @@ program
           maxToolRounds,
           options.selfHeal !== false,
           resolveHeadlessOutputFormat(options),
+          options.outputLastMessage,
           options.outputSchema,
           options.agent
         );
