@@ -62,6 +62,7 @@ _qa/gk32/*.jsonl
 _qa/gk32/*.sh
 _qa/gk32/*.py
 _qa/gk32/npm-registry/
+_qa/gk35/
 test-app/
 test-scripts/
 C\:Users*/
