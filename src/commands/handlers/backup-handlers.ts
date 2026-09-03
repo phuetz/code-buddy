@@ -102,6 +102,16 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
 
   // Collect files to backup
   const files = collectFiles(sourcePath, sourcePath, { onlyConfig, noWorkspace });
+  if (files.length === 0) {
+    return {
+      handled: true,
+      exitCode: 1,
+      response:
+        `No files to back up in ${sourcePath}. ` +
+        `The directory is empty, or every file was skipped ` +
+        `(screenshots/, tool-results/, runs/, browser-data/, and files larger than 1 MB are not included).`,
+    };
+  }
 
   // Build manifest
   const manifest: BackupManifest = {

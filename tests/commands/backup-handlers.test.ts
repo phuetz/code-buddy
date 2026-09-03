@@ -81,11 +81,28 @@ describe('Backup Handlers', () => {
     it('should support --only-config flag', async () => {
       const { existsSync, readdirSync, readFileSync, statSync } = await import('fs');
       vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readdirSync).mockReturnValue([
+        { name: 'settings.json', isDirectory: () => false, isFile: () => true } as any,
+      ]);
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{"key": "value"}'));
+      vi.mocked(statSync).mockReturnValue({ size: 16, mtime: new Date() } as any);
+
+      const result = await handleBackup('create --only-config');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode ?? 0).toBe(0);
+      expect(result.response).toContain('config only');
+    });
+
+    it('should refuse create when there are no files to back up', async () => {
+      const { existsSync, readdirSync } = await import('fs');
+      vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readdirSync).mockReturnValue([]);
 
       const result = await handleBackup('create --only-config');
       expect(result.handled).toBe(true);
-      expect(result.response).toContain('config only');
+      expect(result.exitCode).toBe(1);
+      expect(result.response).toMatch(/No files to back up/i);
+      expect(result.response).not.toMatch(/Backup created/i);
     });
   });
 

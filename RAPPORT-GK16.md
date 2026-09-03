@@ -45,6 +45,73 @@ Sortie collée :
 
 Arbre de travail propre au départ (aucun fichier modifié/non suivi). Chantier réservé dans `docs/FABLE5-CODEX-COORDINATION.md`. Aucun fichier source backup lu encore.
 
+Réservation : `356e77e6d` (`chore(gk16): réserver le chantier backup réel`).
+
+### 2026-09-03 — inspection (après réservation)
+
+Il n'existe pas de `src/backup/` ni de `tests/backup/` (G6R vit dans `tests/commands/revue-gemini-backup-symlink.test.ts`). Surface réelle :
+
+- `src/commands/cli/backup-command.ts`
+- `src/commands/handlers/backup-handlers.ts`
+- `tests/commands/backup-handlers.test.ts`, `backup-restore.test.ts`, `backup-archive.test.ts`, `backup-cli-confirm.test.ts`, `revue-gemini-backup-symlink.test.ts`
+- Doc : `docs/commands.md`, `docs/deployment.md`, `CLAUDE.md` / `AGENTS.md`
+
+`create`/`restore` portent le `.codebuddy/` du **cwd** (projet). Les archives vont par défaut dans `$HOME/.codebuddy/backups`. `BACKUP_DIR` est figé au chargement du module via `homedir()`.
+
+### 2026-09-03 — cycle réel (HOME `_gk16/home`, cwd `_gk16/project`)
+
+Faux fichiers uniquement (aucun `~/.codebuddy` réel lu). `npm ci` dans le clone (node_modules absent au départ).
+
+```
+buddy backup create
+→ Backup created: …/home/.codebuddy/backups/codebuddy-backup-2026-09-03T10-00-40.json
+  Files: 8
+  Size: 0 KB          ← 208 octets réels, arrondi à 0
+create_exit=0
+
+buddy backup list
+→ Backups in …/home/.codebuddy/backups:
+    codebuddy-backup-2026-09-03T10-00-40.json  (2 KB, 9/3/2026)
+list_exit=0
+
+buddy backup verify codebuddy-backup-2026-09-03T10-00-40.json
+→ Backup valid … Files: 8
+verify_exit=0
+```
+
+Archive : 8 fichiers (dont `empty-note.txt` 0 octet, checksum SHA-256 vide `e3b0c44298fc1c14…`). `screenshots/` sauté. Fichiers globaux du HOME (`must-not-appear`, `home-sess`) absents de l'archive.
+
+Après mutation + `restore --confirm` : sha256 des 8 fichiers **identiques** à l'avant. `extra-not-in-archive.md` **survécu** (fusion). Message : « This will overwrite current .codebuddy/ configuration. »
+
+### 2026-09-03 — cas méchants (CLI réel)
+
+| Cas | Sortie | Verdict |
+|-----|--------|---------|
+| Archive tronquée (80 o) | verify exit 1 `Unterminated string in JSON at position 80` ; restore exit 1 `Failed to read backup …` | refuse, message technique |
+| Chemin `/etc/passwd` et `../` dans l'archive | **verify exit 0 « Backup valid »** ; restore exit 1 `path escapes destination` ; victime intacte | verify menteur |
+| Fichier 0 octet | inclus + restauré, sha256 vide OK | vert |
+| `create` dir chmod a-w | **crash** `Unhandled promise rejection: EACCES` + recovery JSON | crash |
+| `create --output` fichier | crash `ENOTDIR` | crash |
+| Restore profil non vide | fusion silencieuse, extras conservés | message menteur |
+| Format v0 / tar `ustar` | exit 1 manifest/JSON | refuse, message technique |
+| `.codebuddy` vide (que screenshots/) | **create exit 0 « Backup created … Files: 0 »** puis verify/restore exit 1 empty | succès sans contenu |
+| Fichier > 1 Mo | sauté sans le dire (`Files: 1` = settings seulement) | skip silencieux |
+| Symlink source hors projet | create suit le lien, archive contient `SECRET_OUTSIDE` | fuite |
+| Symlink dest (G6R) | restore exit 1 `symbolic link is forbidden` ; victime `KEEPME` | vert |
+
+### Lot A — create vide (rouge → vert)
+
+Rouge collé :
+
+```
+FAIL tests/backup/gk16-backup.test.ts
+expected undefined to be 1  // create vide annonçait Backup created
+```
+
+Correctif : `handleBackupCreate` refuse si `files.length === 0` (exit 1, pas d'archive écrite).
+
+Vert : 5 fichiers / 23 tests backup ciblés.
+
 ## Périmètre annoncé (à remplir après lecture)
 
 Fichiers à lire ensuite (annoncés, pas encore ouverts) :
