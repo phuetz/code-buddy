@@ -26,6 +26,13 @@ import { join } from 'path';
 const RACINE = join(__dirname, '..', '..');
 
 /** Ce qui identifie la situation personnelle ou l'infrastructure privée de l'auteur. */
+const CHEMIN_HOME_AUTEUR = ['/', 'home', '/', 'pat', 'rice'].join('');
+const CHEMIN_USERS_WIN = ['c:/users/', 'patri'].join('');
+const CHEMIN_USERS_WIN_BSLASH = ['c:\\users\\', 'patri'].join('');
+const DEPOT_PASSATION = ['claude', '-et-', 'patrice'].join('');
+const MOTEUR_EXPLORER_PRIVE = ['gitnexus', '-rs'].join('');
+const OUTIL_EDITORIAL_PRIVE = ['pub', 'commander'].join('');
+
 const INTERDITS = [
   'france travail',
   'pôle emploi',
@@ -37,18 +44,53 @@ const INTERDITS = [
   'demandeur d\'emploi',
   ['100', '73', ''].join('.'),
   ['dark', 'star'].join(''),
+  CHEMIN_HOME_AUTEUR,
+  CHEMIN_USERS_WIN,
+  CHEMIN_USERS_WIN_BSLASH,
+  DEPOT_PASSATION,
+  MOTEUR_EXPLORER_PRIVE,
+  OUTIL_EDITORIAL_PRIVE,
 ];
 
-/** Ce fichier cite forcément les termes : c'est son objet. */
+/** Ce fichier cite forcément les termes : c'est son objet. CHANGELOG est relu à la main. */
 const EXEMPTS = new Set(['CHANGELOG.md', 'tests/security/donnees-personnelles.test.ts']);
+
+/**
+ * L'outil éditorial tiers est un pont MCP du produit : identifiant de serveur,
+ * skill bundlée, CLI `campaign`. On ne peut pas renommer ces fichiers (lanes en vol).
+ * Le terme reste interdit partout ailleurs — docs, rapports, chemins de home.
+ */
+const FICHIERS_PONT_EDITORIAL = new Set([
+  '.codebuddy/mcp.json',
+  'src/commands/campaign.ts',
+  'src/index.ts',
+  'cowork/src/main/mcp/codebuddy-mcp-import.ts',
+  'cowork/tests/agentbase-panel.test.tsx',
+  'cowork/tests/codebuddy-mcp-import.test.ts',
+  'tests/commands/campaign.test.ts',
+  'tests/commands/skills-list-bundled-hint.test.ts',
+  'tests/mcp/profiles.test.ts',
+  'tests/mcp/prompt-footprint.test.ts',
+  'tests/skills/bundled-skills-loading.test.ts',
+  'tests/unit/mcp.test.ts',
+]);
+
+function termeApplicable(fichier: string, terme: string): boolean {
+  if (terme !== OUTIL_EDITORIAL_PRIVE) return true;
+  if (fichier.toLowerCase().includes(OUTIL_EDITORIAL_PRIVE)) return false;
+  if (FICHIERS_PONT_EDITORIAL.has(fichier)) return false;
+  return true;
+}
 
 function fichiersSuivis(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: RACINE, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
     .split('\n')
     .filter(Boolean)
     .filter((f) => !EXEMPTS.has(f))
+    // Artefacts de compilation suivis par erreur : pas du texte à assainir ici.
+    .filter((f) => !f.startsWith('src-sidecar/target/'))
     // Les binaires n'ont pas de texte à inspecter, et leur lecture coûterait cher.
-    .filter((f) => !/\.(png|jpe?g|gif|mp[34]|wav|webm|mov|pdf|zip|woff2?|ico|onnx|bin)$/i.test(f));
+    .filter((f) => !/\.(png|jpe?g|gif|mp[34]|wav|webm|mov|pdf|zip|woff2?|ico|onnx|bin|rlib|rmeta)$/i.test(f));
 }
 
 describe('aucune donnée personnelle dans un dépôt public', () => {
@@ -62,9 +104,12 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
       } catch {
         continue; // fichier supprimé ou illisible : rien à inspecter
       }
-      const trouves = INTERDITS.filter((terme) => contenu.includes(terme));
+      const trouves = INTERDITS.filter(
+        (terme) => termeApplicable(fichier, terme) && contenu.includes(terme),
+      );
       const cheminNormalise = fichier.toLowerCase();
       for (const terme of INTERDITS) {
+        if (!termeApplicable(fichier, terme)) continue;
         if (cheminNormalise.includes(terme) && !trouves.includes(terme)) {
           trouves.push(terme);
         }
@@ -80,7 +125,7 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
         'ne doivent pas y figurer — pas même comme sujet d’essai dans un test.\n' +
         'Pour un test : utiliser « organisme témoin » et poser INFLUENCER_EXCLUDED_TOPICS ' +
         'dans le test lui-même.\n' +
-        'Pour un document de travail : le dépôt privé phuetz/claude-et-patrice.\n\n' +
+        'Pour un document de travail : le dépôt privé de passation, hors de ce dépôt public.\n\n' +
         fautifs.join('\n'),
     ).toEqual([]);
   });
