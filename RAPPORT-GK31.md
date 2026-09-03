@@ -166,7 +166,7 @@ npx vitest run tests/docs/readme-truth.test.ts \
 ## Points ouverts
 
 - Le README ne prouve plus le chat Ollama en live dans *cette* session (consigne : texte seulement). La commande est celle des parcours GK1/E14, vérifiée `--help`.
-- `CHANGELOG.md` conserve encore « Darkstar » : fichier **exempté** par `donnees-personnelles.test.ts`. Hors zone GK31.
+- `CHANGELOG.md` conserve encore « la machine GPU de l'auteur » : fichier **exempté** par `donnees-personnelles.test.ts`. Hors zone GK31.
 - `npm install -g` / `curl | sh` restent documentés dans `docs/install.md` comme canaux publiés, pas comme le premier run de ce tree.
 - Suite Vitest complète non lancée.
 - Aucun push.
