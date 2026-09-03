@@ -11,7 +11,9 @@ describe('/batch TUI wiring', () => {
       source.indexOf("['__BATCH__'"),
       source.indexOf("['__CLEAR_CHAT__'"),
     );
-    expect(batchBlock).toContain('handleBatchSlashCommand(args)');
+    expect(batchBlock).toContain('handleBatchSlashCommand(');
+    expect(batchBlock).toContain('createBatchChatFn');
+    expect(batchBlock).toContain('createBatchSpawnFn');
     expect(batchBlock).not.toContain('Batch command initiated');
     expect(batchBlock).not.toContain('asyncAction');
   });

@@ -60,7 +60,8 @@ Under the hood:
   - Auto-enables MultiAgentSystem (idempotent)
   - Forces strategy=parallel for this run (restored after)
   - Delegates to /agents run <task>
-  - Output is fire-and-forget; track progress with /swarm status
+  - Headless (buddy -p) waits for the team to finish and prints the report
+  - Interactive TUI is fire-and-forget; track progress with /swarm status
 
 Inspired by Korben's article on Claude Code's hidden Swarms mode
 (korben.info/claude-code-activer-mode-swarms-cache.html). Code Buddy

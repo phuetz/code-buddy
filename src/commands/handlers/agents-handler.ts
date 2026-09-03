@@ -86,7 +86,9 @@ Configure defaults in TOML under [multi_agent_system]:
 
 Cost note: a workflow runs 4 agents (orchestrator + coder + reviewer + tester)
 with up to N iterations of LLM calls each. Use /agents plan first to preview.
-Requires GROK_API_KEY env var.`;
+Requires GROK_API_KEY, or CODEBUDDY_PROVIDER=ollama (local, $0).
+In headless mode (buddy -p), /agents run and /swarm wait for the workflow
+and print the summary instead of returning immediately.`;
 
 let agentsEnabled = false;
 let activeStrategy: CollaborationStrategy = 'hierarchical';
@@ -102,6 +104,54 @@ export function _peekActiveStrategy(): CollaborationStrategy {
 }
 export function _setActiveStrategy(strategy: CollaborationStrategy): void {
   activeStrategy = strategy;
+}
+
+function resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
+  const grok = process.env.GROK_API_KEY?.trim();
+  const grokBase = process.env.GROK_BASE_URL?.trim();
+  if (grok) {
+    return grokBase ? { apiKey: grok, baseURL: grokBase } : { apiKey: grok };
+  }
+  const provider = (process.env.CODEBUDDY_PROVIDER ?? '').trim().toLowerCase();
+  const ollamaHost = process.env.OLLAMA_HOST?.trim();
+  if (provider === 'ollama' || ollamaHost) {
+    return {
+      apiKey: 'ollama',
+      baseURL: ollamaHost || grokBase || 'http://localhost:11434',
+    };
+  }
+  return {
+    error:
+      'Error: GROK_API_KEY is not set. Cannot run multi-agent workflow. ' +
+      'For a local model set CODEBUDDY_PROVIDER=ollama and OLLAMA_HOST.',
+  };
+}
+
+function shouldWaitForWorkflow(): boolean {
+  const flag = (process.env.CODEBUDDY_HEADLESS ?? '').trim().toLowerCase();
+  return flag === 'true' || flag === '1';
+}
+
+function formatWorkflowReport(goal: string, result: WorkflowResult): string {
+  const lines: string[] = [
+    `Workflow completed for: ${goal}`,
+    `Success: ${result.success ? 'yes' : 'no'}`,
+    `Duration: ${(result.totalDuration / 1000).toFixed(1)}s`,
+    `Summary: ${result.summary || '(no summary)'}`,
+  ];
+  if (result.artifacts?.length) {
+    lines.push('Artifacts:');
+    for (const artifact of result.artifacts.slice(0, 20)) {
+      lines.push(`  - ${artifact.filePath || artifact.name}`);
+    }
+  }
+  if (result.errors?.length) {
+    lines.push('Errors:');
+    for (const err of result.errors.slice(0, 10)) {
+      lines.push(`  - ${err}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -328,10 +378,9 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('No active workflow to stop.');
     }
     const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    const baseURL = process.env.GROK_BASE_URL;
-    if (apiKey) {
-      const system = getMultiAgentSystem(apiKey, baseURL);
+    const stopCreds = resolveAgentsCredentials();
+    if (!('error' in stopCreds)) {
+      const system = getMultiAgentSystem(stopCreds.apiKey, stopCreds.baseURL);
       system.stop();
     }
     const stoppedGoal = activeWorkflow.goal;
@@ -434,12 +483,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     }
   }
 
-  // From here on (enable/run/plan), apiKey is needed — pattern from think-handlers.ts L210
-  const apiKey = process.env.GROK_API_KEY ?? '';
-  const baseURL = process.env.GROK_BASE_URL;
-  if (!apiKey) {
-    return textResult('Error: GROK_API_KEY is not set. Cannot run multi-agent workflow.');
+  // From here on (enable/run/plan), credentials are needed.
+  const creds = resolveAgentsCredentials();
+  if ('error' in creds) {
+    return textResult(creds.error);
   }
+  const { apiKey, baseURL } = creds;
 
   const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
 
@@ -644,6 +693,16 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     );
     activeWorkflow = { goal, startedAt, promise };
     logger.info(`MultiAgentSystem workflow started`, { goal, strategy: activeStrategy });
+    if (shouldWaitForWorkflow()) {
+      try {
+        const result = await promise;
+        return textResult(formatWorkflowReport(goal, result));
+      } catch (err) {
+        return textResult(
+          `Workflow failed for: ${goal}\n${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     return textResult(
       `Workflow started for: ${goal}\n` +
       `Strategy: ${activeStrategy}\n` +

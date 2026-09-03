@@ -8,6 +8,9 @@
  */
 
 import { EventEmitter } from 'events';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { createId } from './base-agent.js';
 import type {
   AgentRole,
@@ -58,6 +61,16 @@ export interface TeamTask {
 
 export type TeamStatus = 'inactive' | 'active' | 'paused' | 'dissolved';
 
+export interface PersistedTeam {
+  status: TeamStatus;
+  leadId: string | null;
+  teamGoal: string;
+  startedAt: string | null;
+  members: TeamMember[];
+  tasks: TeamTask[];
+  mailbox: MailboxMessage[];
+}
+
 // ============================================================================
 // TeamManager
 // ============================================================================
@@ -96,6 +109,7 @@ export class TeamManager extends EventEmitter {
     this.mailbox = [];
 
     this.emit('team:started', { leadId: this.leadId, goal });
+    persistTeam(this);
 
     return {
       success: true,
@@ -127,6 +141,7 @@ export class TeamManager extends EventEmitter {
     this.teamGoal = '';
     this.startedAt = null;
     this.status = 'inactive';
+    persistTeam(this);
 
     return {
       success: true,
@@ -172,6 +187,7 @@ export class TeamManager extends EventEmitter {
 
     this.members.set(memberId, member);
     this.emit('team:member-added', member);
+    persistTeam(this);
 
     return {
       success: true,
@@ -547,6 +563,44 @@ export class TeamManager extends EventEmitter {
   getTeamGoal(): string {
     return this.teamGoal;
   }
+
+  snapshot(): PersistedTeam {
+    return {
+      status: this.status,
+      leadId: this.leadId,
+      teamGoal: this.teamGoal,
+      startedAt: this.startedAt ? this.startedAt.toISOString() : null,
+      members: this.getMembers(),
+      tasks: this.getTasks(),
+      mailbox: this.mailbox.map((m) => ({ ...m })),
+    };
+  }
+
+  restore(raw: PersistedTeam): void {
+    if (raw.status !== 'active') return;
+    this.status = 'active';
+    this.leadId = raw.leadId;
+    this.teamGoal = raw.teamGoal ?? '';
+    this.startedAt = raw.startedAt ? new Date(raw.startedAt) : new Date();
+    this.members = new Map(
+      (raw.members ?? []).map((m) => [m.id, { ...m, joinedAt: new Date(m.joinedAt) }]),
+    );
+    this.tasks = new Map(
+      (raw.tasks ?? []).map((t) => [
+        t.id,
+        {
+          ...t,
+          createdAt: new Date(t.createdAt),
+          updatedAt: new Date(t.updatedAt),
+          completedAt: t.completedAt ? new Date(t.completedAt) : undefined,
+        },
+      ]),
+    );
+    this.mailbox = (raw.mailbox ?? []).map((msg) => ({
+      ...msg,
+      timestamp: new Date(msg.timestamp),
+    }));
+  }
 }
 
 // ============================================================================
@@ -555,9 +609,44 @@ export class TeamManager extends EventEmitter {
 
 let teamManagerInstance: TeamManager | null = null;
 
+function teamPersistPath(): string | null {
+  const explicit = process.env.CODEBUDDY_TEAM_FILE?.trim();
+  if (explicit) return explicit;
+  if (process.env.VITEST) return null;
+  return join(homedir(), '.codebuddy', 'team-session.json');
+}
+
+function persistTeam(team: TeamManager): void {
+  const file = teamPersistPath();
+  if (!file) return;
+  try {
+    const snapshot = team.snapshot();
+    mkdirSync(dirname(file), { recursive: true });
+    if (snapshot.status === 'inactive') {
+      if (existsSync(file)) unlinkSync(file);
+      return;
+    }
+    writeFileSync(file, JSON.stringify(snapshot), 'utf8');
+  } catch {
+    // Persistence is best-effort; coordination in-process still works.
+  }
+}
+
+function hydrateTeam(team: TeamManager): void {
+  const file = teamPersistPath();
+  if (!file || !existsSync(file)) return;
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as PersistedTeam;
+    team.restore(raw);
+  } catch {
+    // Corrupt snapshot: start empty rather than crash /team status.
+  }
+}
+
 export function getTeamManager(): TeamManager {
   if (!teamManagerInstance) {
     teamManagerInstance = new TeamManager();
+    hydrateTeam(teamManagerInstance);
   }
   return teamManagerInstance;
 }

@@ -77,6 +77,42 @@ export function isSpecialCommandToken(value: string): boolean {
  * @param allow - Default-deny allow set the trusted caller controls.
  * @param ctx - Optional session context for history/client-dependent tokens.
  */
+/**
+ * Dispatch a user prompt that starts with `/` without sending it to the LLM.
+ * Returns null when the text is not a slash command.
+ */
+export async function dispatchSlashPrompt(
+  prompt: string,
+  ctx: HeadlessSlashContext = {},
+): Promise<HeadlessSlashResult | null> {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith('/')) return null;
+
+  const { getSlashCommandManager } = await import('./slash-commands.js');
+  const parsed = getSlashCommandManager().execute(trimmed);
+  if (!parsed.success) {
+    return {
+      handled: true,
+      output: parsed.error || `Unknown command: ${trimmed.split(/\s+/)[0]}`,
+      reason: parsed.error,
+    };
+  }
+  if (parsed.prompt && isSpecialCommandToken(parsed.prompt)) {
+    const rest = trimmed.replace(/^\/\S+\s*/, '');
+    const args = rest.length > 0 ? rest.split(' ') : [];
+    const handler = getEnhancedCommandHandler();
+    const allow = new Set(handler.getRegisteredTokens());
+    return executeHeadlessSlashToken(parsed.prompt, args, allow, ctx);
+  }
+  if (parsed.prompt) {
+    return { handled: false, passToAI: true, prompt: parsed.prompt };
+  }
+  return {
+    handled: true,
+    output: `Command ${trimmed.split(/\s+/)[0]} produced no handler output.`,
+  };
+}
+
 export async function executeHeadlessSlashToken(
   token: string,
   args: string[],

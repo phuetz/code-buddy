@@ -530,6 +530,10 @@ export class CodeBuddyClient {
     return this.baseURL;
   }
 
+  getApiKey(): string {
+    return this.apiKey;
+  }
+
   /**
    * Derive a human-readable provider name from the base URL.
    */

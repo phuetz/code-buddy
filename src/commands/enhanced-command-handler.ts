@@ -103,6 +103,8 @@ import {
   handleTeam,
   // Batch handler (CC13 — parallel task decomposition)
   handleBatchSlashCommand,
+  createBatchChatFn,
+  createDefaultBatchSpawnFn,
   // Starter pack handler
   handleStarter,
   // Fast mode handler (Enterprise-aligned)
@@ -449,7 +451,11 @@ export class EnhancedCommandHandler {
     ['__TEAM__', (args) => handleTeam(args)],
 
     // CC13: Batch parallel task decomposition
-    ['__BATCH__', (args) => handleBatchSlashCommand(args)],
+    ['__BATCH__', (args) => handleBatchSlashCommand(
+      args,
+      this.createBatchChatFn(),
+      this.createBatchSpawnFn(),
+    )],
 
     // Commands previously handled inline in client-dispatcher
     ['__CLEAR_CHAT__', () => handleClearChat()],
@@ -596,6 +602,21 @@ export class EnhancedCommandHandler {
   setCodeBuddyClient(client: CodeBuddyClient): void {
     this.codebuddyClient = client;
     setBtwClient(client);
+  }
+
+  private createBatchChatFn() {
+    return createBatchChatFn(this.codebuddyClient);
+  }
+
+  private createBatchSpawnFn() {
+    const client = this.codebuddyClient;
+    if (!client) return undefined;
+    return createDefaultBatchSpawnFn({
+      cwd: process.cwd(),
+      apiKey: client.getApiKey(),
+      baseURL: client.getBaseURL(),
+      model: client.getCurrentModel(),
+    });
   }
 
   /**
