@@ -276,6 +276,7 @@ export async function runCouncil(task: string, opts: CouncilOptions, out: Emit):
           ? 'No active LLMs detected. Run `buddy login`, set an API key, or start Ollama.'
           : '❌ Toutes les IA ont échoué.',
       );
+      process.exitCode = 1;
       return;
     }
     throw err;
