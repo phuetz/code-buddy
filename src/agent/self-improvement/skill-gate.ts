@@ -1,17 +1,16 @@
 /**
  * Skill gate — validates an authored skill proposal. Ordered, blocking, fail-closed:
- *   G1 static scan (authored-artifact-gate, subsystem 'skill': dangerous patterns
- *      in any embedded code, secrets, no-src, omissions)
- *   G2 SKILL FIREWALL (the headline skill safety check: prompt-injection /
- *      exfiltration surface — a skill is INJECTED into the agent's context)
+ *   G1+G2 `safetyGateSkill` (static scan + full-document prompt-injection /
+ *      exfiltration firewall — a skill is INJECTED into the agent's context)
  *   G3 COVERAGE — the skill must surface the scenario's expected guidance.
  * Installation happens only on accept+keep (auto-apply); scoring never installs.
+ * Propose-only uses the same safety gate so a jailbreak cannot be "accepted"
+ * then throw on create().
  *
  * @module agent/self-improvement/skill-gate
  */
 
-import { inspectAuthoredCode } from './authored-artifact-gate.js';
-import { scanAuthoredSkillContent, type SkillMutatorPort } from './skill-mutator.js';
+import { safetyGateSkill, type SkillMutatorPort } from './skill-mutator.js';
 import type { SkillBenchmarkScenario, SkillGateOutcome, SkillProposal } from './skill-types.js';
 
 export interface ValidateSkillOptions {
@@ -33,20 +32,17 @@ export function validateSkillProposal(
   const base = { proposalId: proposal.id, scenarioId: scenario.id };
   const content = proposal.spec.content ?? '';
 
-  // G1 — static scan (no execution).
-  const scan = inspectAuthoredCode(content, 'skill');
-  if (!scan.ok) {
-    return { ...base, accepted: false, rejectionReason: 'static-scan', reasons: scan.reasons };
-  }
-
-  // G2 — skill firewall (prompt-injection / exfiltration). The headline defence.
-  const fw = scanAuthoredSkillContent(content);
-  if (!fw.safe) {
+  // G1 static scan + G2 skill firewall (prompt-injection / exfiltration), including
+  // full-document instruction threats that the line-oriented scanner used to miss
+  // (HTML comments, split-line jailbreaks). Must reject BEFORE create() so
+  // propose-only cannot accept a skill that auto-apply would throw on.
+  const safety = safetyGateSkill(content);
+  if (!safety.ok) {
     return {
       ...base,
       accepted: false,
-      rejectionReason: 'firewall',
-      reasons: [`skill firewall flagged it (${fw.verdict})`, ...fw.reasons],
+      rejectionReason: safety.rejectionReason ?? 'static-scan',
+      reasons: safety.reasons,
     };
   }
 

@@ -181,6 +181,13 @@ export function scanFile(filePath: string): ScanResult {
         }
       }
     }
+
+    // Prompt-injection patterns also run over the FULL document. The line loop
+    // skips `<!-- … -->` (to avoid flagging example `eval()` in comments) and
+    // cannot see a jailbreak split across lines — that's how a no-shell
+    // override slipped through on 2026-09-03. Dotall matching here catches
+    // both without re-enabling those comment false positives for eval/shell.
+    findings.push(...collectPromptInjectionFindings(content, filePath, findings));
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
   }
@@ -311,6 +318,34 @@ export function formatScanReport(results: ScanResult[]): string {
   }
 
   return lines.join('\n');
+}
+
+/** Full-document prompt-injection pass (HTML comments + split-line jailbreaks). */
+function collectPromptInjectionFindings(
+  content: string,
+  filePath: string,
+  existing: ScanFinding[],
+): ScanFinding[] {
+  const extra: ScanFinding[] = [];
+  const seen = new Set(existing.map((finding) => finding.pattern));
+  for (const dp of DANGEROUS_PATTERNS) {
+    if (dp.capability !== 'prompt-injection') continue;
+    if (seen.has(dp.name)) continue;
+    const flags = dp.pattern.flags.includes('s') ? dp.pattern.flags : `${dp.pattern.flags}s`;
+    const re = new RegExp(dp.pattern.source, flags.replace('g', ''));
+    const match = re.exec(content);
+    if (!match || match.index === undefined) continue;
+    seen.add(dp.name);
+    extra.push({
+      severity: dp.severity,
+      pattern: dp.name,
+      description: dp.description,
+      file: filePath,
+      line: content.slice(0, match.index).split('\n').length,
+      evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+    });
+  }
+  return extra;
 }
 
 function countFindings(findings: ScanFinding[]): Record<FindingSeverity, number> {
