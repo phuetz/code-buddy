@@ -30,6 +30,12 @@ _qa/gk20/work/
 _qa/gk20/rules.json
 _qa/gk20/runs.jsonl
 _qa/gk20/*.jsonl
+_qa/gk28/home/
+_qa/gk28/work/
+_qa/gk28/toy/.git/
+_qa/gk28/changelog-repo/.git/
+_qa/gk28/*.jsonl
+_qa/gk28/logs/
 test-app/
 test-scripts/
 C\:Users*/
