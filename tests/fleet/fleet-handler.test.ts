@@ -839,6 +839,34 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(r.entry?.content).toContain('No fleet peers connected');
     });
 
+    it('surfaces IBAN privacy lint on /fleet route even without connected peers', async () => {
+      const r = await handleFleet([
+        'route',
+        'Virement',
+        'vers',
+        'FR76',
+        '3000',
+        '6000',
+        '0112',
+        '3456',
+        '7890',
+        '189',
+        'pour',
+        'le',
+        'fournisseur',
+        'test.',
+        '--json',
+      ]);
+      const out = r.entry?.content ?? '';
+      expect(out).toMatch(/No fleet peers connected/i);
+      expect(out).toMatch(/pii-iban/);
+      const parsed = JSON.parse(out) as {
+        error?: string;
+        data?: { privacyLint?: { matchKinds?: string[] } };
+      };
+      expect(parsed.data?.privacyLint?.matchKinds).toContain('pii-iban');
+    });
+
     it('renders a human recommendation from peer.describe capabilities', async () => {
       await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'chatgpt']);
       fleetListenerMock.requestMock.mockImplementationOnce(async (method) => {
