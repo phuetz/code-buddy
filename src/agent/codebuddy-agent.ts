@@ -2035,7 +2035,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
     const activeRun = getActiveRunStore();
     const runId = activeRun?.getCurrentRunId();
-    if (runId) {
+    if (activeRun && runId) {
       const report = this.costTracker.getReport();
       activeRun.updateMetrics(runId, {
         promptTokens: report.sessionTokens.input,
