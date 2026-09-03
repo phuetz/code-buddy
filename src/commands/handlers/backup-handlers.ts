@@ -599,8 +599,10 @@ function collectFiles(
 
         try {
           const stat = statSync(fullPath);
-          // Skip files larger than 1MB
-          if (stat.size > 1024 * 1024) continue;
+          if (stat.size > 1024 * 1024) {
+            skipped.push({ relativePath, reason: 'larger than 1 MB' });
+            continue;
+          }
 
           const content = readFileSync(fullPath);
           const checksum = fileChecksum(content);

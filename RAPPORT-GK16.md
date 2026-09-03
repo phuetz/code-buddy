@@ -134,7 +134,15 @@ Rouge collé : `Files: 2` et l'archive contenait `SECRET_OUTSIDE` (cible hors pr
 
 Correctif : `collectFiles` ignore les liens symboliques et les annonce (`Skipped: 1 (settings.json: symbolic link)`).
 
-Vert : 5 fichiers / 29 tests.
+Vert : 5 fichiers / 29 tests. Commit `78c846046`.
+
+### Lot E — fichiers > 1 Mo sautés sans le dire (rouge → vert)
+
+Rouge collé : `Files: 1 (settings.json)` sans mention de `session-big.json` (1 048 577 o).
+
+Correctif : skip enregistré `larger than 1 MB` dans `Skipped:`.
+
+Vert : 5 fichiers / 30 tests.
 
 ## Périmètre annoncé (à remplir après lecture)
 

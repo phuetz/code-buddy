@@ -193,3 +193,41 @@ describe('GK16 create must not follow source symlinks out of .codebuddy/', () =>
     );
   });
 });
+
+describe('GK16 create must not silently drop files larger than 1 MB', () => {
+  let workspace: string;
+  let previousCwd: string;
+
+  beforeEach(() => {
+    previousCwd = process.cwd();
+    workspace = makeTmpDir('gk16-backup-large-', path.join(previousCwd, 'tmp'));
+    process.chdir(workspace);
+    fs.mkdirSync(path.join(workspace, '.codebuddy'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, '.codebuddy', 'settings.json'), '{"ok":true}\n');
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    removeTmpDir(workspace);
+  });
+
+  it('reports a skipped file larger than 1 MB instead of omitting it quietly', async () => {
+    fs.writeFileSync(
+      path.join(workspace, '.codebuddy', 'session-big.json'),
+      Buffer.alloc(1024 * 1024 + 1, 0x78),
+    );
+    const output = path.join(workspace, 'backups');
+
+    const created = await handleBackup(`create --output ${output}`);
+    expect(created.exitCode ?? 0).toBe(0);
+    expect(created.response).toMatch(/skipped/i);
+    expect(created.response).toMatch(/session-big\.json/);
+    expect(created.response).toMatch(/1 MB/i);
+
+    const archives = fs.readdirSync(output).filter((name) => name.endsWith('.json'));
+    const archive = JSON.parse(fs.readFileSync(path.join(output, archives[0]!), 'utf8')) as {
+      files: Array<{ path: string }>;
+    };
+    expect(archive.files.map((file) => file.path)).toEqual(['settings.json']);
+  });
+});
