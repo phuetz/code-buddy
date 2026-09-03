@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
   const onMock = vi.fn();
   const listenerCountMock = vi.fn(() => 0);
   const removeAllListenersMock = vi.fn();
+  const removeListenerMock = vi.fn();
 
   const fakeSystem = {
     runWorkflow: runWorkflowMock,
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
     on: onMock,
     listenerCount: listenerCountMock,
     removeAllListeners: removeAllListenersMock,
+    removeListener: removeListenerMock,
   };
 
   const getMultiAgentSystemMock = vi.fn(() => fakeSystem);
@@ -62,7 +64,7 @@ const mocks = vi.hoisted(() => {
   const getSessionRegistryMock = vi.fn(() => fakeRegistry);
 
   return {
-    runWorkflowMock, stopMock, disposeMock, onMock, listenerCountMock, removeAllListenersMock,
+    runWorkflowMock, stopMock, disposeMock, onMock, listenerCountMock, removeAllListenersMock, removeListenerMock,
     fakeSystem, getMultiAgentSystemMock, resetMultiAgentSystemMock,
     markTaskStartedMock, recordTaskCompletionMock, getPerformanceReportMock, getConflictsMock,
     getAgentMetricsMock,
@@ -102,9 +104,15 @@ import { handleAgents, _resetAgentsHandlerForTests } from '../../src/commands/ha
 
 describe('handleAgents (/agents)', () => {
   const originalApiKey = process.env.GROK_API_KEY;
+  const originalProvider = process.env.CODEBUDDY_PROVIDER;
+  const originalOllama = process.env.OLLAMA_HOST;
+  const originalHeadless = process.env.CODEBUDDY_HEADLESS;
 
   beforeEach(() => {
     process.env.GROK_API_KEY = 'test-key';
+    delete process.env.CODEBUDDY_PROVIDER;
+    delete process.env.OLLAMA_HOST;
+    delete process.env.CODEBUDDY_HEADLESS;
     _resetAgentsHandlerForTests();
     mocks.runWorkflowMock.mockReset();
     mocks.stopMock.mockReset();
@@ -135,6 +143,12 @@ describe('handleAgents (/agents)', () => {
   afterEach(() => {
     if (originalApiKey === undefined) delete process.env.GROK_API_KEY;
     else process.env.GROK_API_KEY = originalApiKey;
+    if (originalProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
+    else process.env.CODEBUDDY_PROVIDER = originalProvider;
+    if (originalOllama === undefined) delete process.env.OLLAMA_HOST;
+    else process.env.OLLAMA_HOST = originalOllama;
+    if (originalHeadless === undefined) delete process.env.CODEBUDDY_HEADLESS;
+    else process.env.CODEBUDDY_HEADLESS = originalHeadless;
     _resetAgentsHandlerForTests();
   });
 
@@ -181,8 +195,19 @@ describe('handleAgents (/agents)', () => {
 
   it('enable without GROK_API_KEY returns clear error', async () => {
     delete process.env.GROK_API_KEY;
+    delete process.env.CODEBUDDY_PROVIDER;
+    delete process.env.OLLAMA_HOST;
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('GROK_API_KEY is not set');
+  });
+
+  it('enable with CODEBUDDY_PROVIDER=ollama does not require GROK_API_KEY', async () => {
+    delete process.env.GROK_API_KEY;
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
+    const r = await handleAgents(['enable']);
+    expect(r.entry?.content).toContain('Multi-agent system started');
+    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('ollama', 'http://127.0.0.1:11434');
   });
 
   it('disable resets the system when enabled', async () => {
@@ -237,6 +262,26 @@ describe('handleAgents (/agents)', () => {
     const status = await handleAgents(['status']);
     expect(status.entry?.content).toContain('ACTIVE WORKFLOW');
     expect(status.entry?.content).toContain('Add a hello endpoint');
+  });
+
+  it('run in headless waits for the workflow and reports the summary', async () => {
+    process.env.CODEBUDDY_HEADLESS = 'true';
+    mocks.runWorkflowMock.mockResolvedValue({
+      success: true,
+      summary: 'Coder wrote src/add.js; tester passed 1/1',
+      totalDuration: 1500,
+      plan: { phases: [] },
+      results: new Map(),
+      artifacts: [{ id: 'a', type: 'code', name: 'src/add.js', content: 'export const add = (a,b) => a+b;', metadata: {} }],
+      timeline: [],
+      errors: [],
+    });
+
+    const r = await handleAgents(['run', 'fix', 'the', 'bug']);
+    expect(r.entry?.content).toContain('Workflow completed for: fix the bug');
+    expect(r.entry?.content).toContain('Coder wrote src/add.js');
+    expect(r.entry?.content).toContain('src/add.js');
+    expect(r.entry?.content).not.toContain('Monitor with: /agents status');
   });
 
   it('second run while one is active is refused', async () => {

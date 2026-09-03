@@ -1129,6 +1129,32 @@ async function processPromptHeadless(
       interactionLogger = il;
     } catch (e) { logger.debug('Failed to initialize headless interaction logger', { error: String(e) }); }
 
+    // Slash commands must not be sent to the LLM as a user message.
+    if (prompt.trim().startsWith('/')) {
+      const { dispatchSlashPrompt } = await import('./commands/headless-slash.js');
+      const handler = (await import('./commands/enhanced-command-handler.js')).getEnhancedCommandHandler();
+      handler.setCodeBuddyClient(agent.getClient());
+      const slash = await dispatchSlashPrompt(prompt.trim(), { client: agent.getClient() });
+      if (slash?.handled) {
+        const resultText = slash.output ?? slash.reason ?? '';
+        const format = outputFormat.toLowerCase();
+        if (format === 'text' || format === 'markdown') {
+          if (resultText) cli.stdout(resultText);
+        } else {
+          cli.stdout(JSON.stringify({
+            result: resultText,
+            cost: { total: agent.getSessionCost() },
+            model: modelToUse || process.env.GROK_MODEL || 'unknown',
+            messages: [{ role: 'assistant', content: resultText }],
+          }));
+        }
+        return slash.denied ? 1 : 0;
+      }
+      if (slash?.passToAI && slash.prompt) {
+        prompt = slash.prompt;
+      }
+    }
+
     // Process the user message
     const chatEntries = await agent.processUserMessage(prompt, { surface: 'cli' });
     if (!sessionStore.isEphemeral()) {
