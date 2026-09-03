@@ -141,18 +141,47 @@ GK6 CKG bench  mode=indexed  nodes=50000  queries=100
 
 Gain p50 : **×63,7** (660.401 / 10.372). Gain p95 : **×40,9**. RAM +127.8 MiB (graphe HNSW), attendu.
 
-## Bascule défaut (à coller)
+## Bascule défaut (collé)
 
-*(vide)*
+Politique pure `src/memory/ckg-engine-policy.ts` : unset/`auto` → rust seulement si binaire **sur disque** et snapshot chargeable (absent = OK ; JSON cassé / version inconnue = TS). `rust` force le sidecar (repli TS si spawn/ping/RPC échoue). `ts`/`off`/`false` force TS.
 
-## Vérifications (à coller)
+```
+npx vitest run tests/memory/ckg-engine-policy.test.ts tests/memory/ckg-engine-default.test.ts tests/memory/buddy-memory-engine.test.ts
+```
 
-*(vide)*
+```
+ Test Files  3 passed (3)
+      Tests  13 passed | 1 skipped (14)
+```
+
+Le skip est le test sémantique ONNX Phase 2 (`hasEmbeddings` heuristique `/release/` sans `--features embeddings`), préexistant. Les deux chemins (TS forcé, rust auto + snapshot v2) et le repli (binaire `exit 1`, snapshot corrompu) sont verts. Handler `stdin` EPIPE ajouté pour qu’un sidecar mort ne lève plus d’exception non gérée.
+
+Vitest pose `CODEBUDDY_CKG_ENGINE=ts` si la variable est absente, pour que la suite ne spawn pas le sidecar.
+
+## Vérifications (collé)
+
+| Commande | Résultat |
+|---|---|
+| `cd buddy-memory && cargo test --offline --lib` | exit 0, 12 tests (dont parité top-10, snapshot v2, ingest HNSW) |
+| `npx vitest run tests/memory` | **38 files / 229 passed / 1 skipped**, exit 0 |
+| `npx tsc --noEmit -p .` | exit 0 |
+| `npm run typecheck` (tsc + gpuNode-identity) | exit 0 |
+| `npx eslint src/memory/ckg-engine-policy.ts src/memory/buddy-memory-client.ts src/memory/collective-knowledge-graph.ts tests/memory/ckg-engine-policy.test.ts tests/memory/ckg-engine-default.test.ts vitest.setup.ts --max-warnings=0` | exit 0, aucune sortie |
+| `git diff --check` (fichiers du lot) | exit 0 |
+
+Aucun push. Aucune API payante. Aucun service systemd. `~/.codebuddy` non écrit (benches/tests sous `buddy-memory/.gk6-work/` et `.gk6-work/`). `~/code-buddy` intact. ComfyUI 8188/8189 non touchés.
 
 ## Commits
 
-*(vide)*
+| Hash | Message |
+|---|---|
+| `5a88f2ea3` | `chore(gk6): réserver le chantier CKG Phase 4` |
+| `1546455e5` | `feat(gk6): banc reproductible recallHybrid 50k` |
+| `5a59eff78` | `feat(gk6): index HNSW et inversé sous-linéaire` |
+| `f0d3a1d37` | `test(gk6): mesurer le gain de l'index Phase 4` |
+| `7fde85392` | `feat(gk6): basculer CKG rust par défaut mesurée` |
+| `docs(gk6)` (tête de branche) | `docs(gk6): documenter Phase 4 et la bascule` |
 
 ## Bilan
 
-*(à écrire en fin de mission, ≤ 10 lignes)*
+Phase 4 livrée dans le clone : index HNSW + inversé, banc 50k mesuré, défaut rust conditionnel. Preuve de gain : `ckg-bench` exhaustive p50 **660.4 ms** / p95 **999.6 ms** → indexed p50 **10.4 ms** / p95 **24.5 ms** (×64 / ×41), RSS 181 → 309 MiB. Preuve de parité : `indexed_hybrid_top10_overlaps_exhaustive` vert (recouvrement ≥ 0,9). Preuve de bascule : 13 tests policy/default/engine verts, repli TS si binaire mort ou snapshot illisible. `cargo test --lib` 12/12, `tests/memory` 229/229 (+1 skip ONNX), typecheck 0, ESLint ciblé 0. Reste ouvert : hybrid ONNX réel (feature `embeddings` + modèle) non rejoué ici ; `remember()` TS n’emprunte toujours pas le sidecar (préexistant, hors mission).
