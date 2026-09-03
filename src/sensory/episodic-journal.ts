@@ -16,9 +16,11 @@ import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
 import path from 'path';
 import { readRecentDialogueHearing } from '../companion/dialogue-percepts.js';
+import { detectEmotion } from '../companion/reply-augment.js';
 import {
   analyzeConversationTurn,
   extractSalientTerms,
+  normalizeConversationText,
 } from '../conversation/dialogue-act.js';
 import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
@@ -40,9 +42,20 @@ export interface EpisodeSummary {
   fingerprint?: string;
 }
 
+const PERSONAL_FACT =
+  /\b(train|souvenir|demain|rendez[- ]vous|anniversaire|je me souviens|j ai un)\b/;
+
+/** Emotion, a named plan, or an explicit memory — not just the last STT window. */
+export function isSalientHeard(text: string): boolean {
+  if (!text.trim()) return false;
+  if (detectEmotion(text).emotion !== 'neutral') return true;
+  return PERSONAL_FACT.test(normalizeConversationText(text));
+}
+
 /**
  * Pure consolidation: turn a list of heard utterances into a compact episode. Drops consecutive
- * duplicates (STT re-hears) and keeps the last few distinct ones. No LLM — the caller may refine.
+ * duplicates (STT re-hears). Keeps recent utterances AND earlier salient ones (a train tomorrow
+ * must not vanish because six small-talk turns followed). No LLM — the caller may refine.
  */
 export function summarizeEpisode(heard: string[], now: number): EpisodeSummary {
   const clean = heard.map((s) => (s ?? '').trim()).filter(Boolean);
@@ -50,7 +63,14 @@ export function summarizeEpisode(heard: string[], now: number): EpisodeSummary {
   for (const t of clean) {
     if (t !== distinct[distinct.length - 1]) distinct.push(t);
   }
-  const topics = distinct.slice(-6);
+  const salient = distinct.filter(isSalientHeard).slice(-6);
+  if (salient.length === 0) {
+    const topics = distinct.slice(-6);
+    const line = topics.length ? `Récemment, on a parlé de : ${topics.join(' ; ')}.` : '';
+    return { at: now, count: clean.length, topics, line };
+  }
+  const keep = new Set([...salient, ...distinct.slice(-4)]);
+  const topics = distinct.filter((t) => keep.has(t));
   const line = topics.length ? `Récemment, on a parlé de : ${topics.join(' ; ')}.` : '';
   return { at: now, count: clean.length, topics, line };
 }
