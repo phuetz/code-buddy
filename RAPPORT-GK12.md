@@ -46,11 +46,11 @@
 | `buddy autonomy bench --models qwen3:4b --prompt-set latency` | local présent | `ok true`, 1 candidat `local qwen3:4b-instruct` |
 | `buddy autonomy briefing` | 2 échecs visibles, 1 completed historique | 3 ticks, 2 failed, 0 payant |
 
-Le tick agent `--executor agent --workspace _qa/gk12-jouet --verify` sur `qwen3:4b-instruct` a été lancé après les correctifs (preuve du câblage CLI). Le 27b a déjà démontré un timeout 600 s sans diff ; un 4b instruct n’est pas un tool-caller fiable (doc existante).
+Le tick agent `--executor agent --workspace _qa/gk12-jouet --verify` sur `qwen3:4b-instruct` : **8 min 44 s**, `failed: 1`, worklog `no change in filesToModify (add.mjs)`, jouet toujours `add(2,3)=-1`. La tâche a été **dead-lettered** (`blocked`, 3 tentatives). Le 27b avait déjà démontré un timeout 600 s sans diff. Aucune preuve positive « le modèle local a édité add.mjs » sur ce GPU aujourd’hui.
 
 ## Ouvert
 
-- Le 27b local n’a pas corrigé le jouet en 10 min (contention GPU + `spawnSync` 600 s). Pas de preuve positive « le modèle a édité add.mjs ».
+- Ni `qwen3.8:27b` (ETIMEDOUT 600 s) ni `qwen3:4b-instruct` (8 min 44 s, `filesToModify` inchangés) n’ont corrigé le jouet. Pas de preuve positive « le modèle a édité add.mjs ».
 - `buddy colab --help` reste l’aide racine Commander.
 - Un run `headless prompt` resté `[RUNNING]` après le timeout 27b (fuite de journal, hors périmètre).
 - Le completed historique (sidecar v0) reste dans la queue isolée GK12 ; le produit ne le réécrit pas.
