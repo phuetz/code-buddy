@@ -8,4 +8,9 @@ Faire passer `/swarm`, puis `/team`, par `thread-delegation` avec les garanties 
 
 ## Journal des preuves
 
-À compléter au fil du chantier avec les tests rouges/verts, les commits et les vérifications finales.
+- Brique `/swarm`, rouge collé avant code produit :
+  `npx vitest run tests/agent/delegation/thread-task-runner.test.ts tests/commands/swarm-thread-delegation.test.ts`
+  → 2 fichiers en échec : module `thread-task-runner.js` absent, puis 2 assertions rouges car `/swarm` ne transmettait aucune configuration `threadDelegation`.
+- Brique `/swarm`, vert :
+  `npx vitest run tests/agent/delegation/thread-task-runner.test.ts tests/commands/swarm-thread-delegation.test.ts tests/agent/delegation/thread-delegation.test.ts tests/commands/agents-handler.test.ts`
+  → 4 fichiers, 54 tests réussis. `npm run typecheck` → 0 erreur. ESLint ciblé sur 7 fichiers → 0 erreur.
