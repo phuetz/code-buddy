@@ -168,6 +168,12 @@ export async function runCouncilPipeline(
     throw new CouncilError('no-candidates', 'no active LLMs detected');
   }
   const modelFilter = filterCouncilCandidates(usable, opts.models);
+  if (opts.models?.trim() && !modelFilter.matched) {
+    throw new CouncilError(
+      'no-candidates',
+      `no model matched --models « ${opts.models} »`,
+    );
+  }
   let candidates = modelFilter.candidates;
 
   // 2. capability routing × learned bias
@@ -226,40 +232,72 @@ export async function runCouncilPipeline(
   }
 
   // 4. parallel fan-out with per-model timeout — one slow model never blocks
-  // the council; timed-out / failed models are simply dropped from the panel.
+  // the council; timed-out / failed models are penalised and, when a spare
+  // remains in the ranked pool, REPLACED within the same run so a 404 does
+  // not silently shrink a 2-seat deliberation to a monologue.
   if (opts.fleet) {
     if (peers.length === 0) onProgress({ type: 'fleet_no_peers' });
     else onProgress({ type: 'fleet_consulting', peerCount: peers.length });
   }
+
+  const answers: CouncilAnswer[] = [];
+  const failures: Array<{ source: string; error: string }> = [];
+
+  const askSeat = async (p: RankedCandidate, index: number): Promise<CouncilAnswer> => {
+    const client = deps.clientFactory(p.c);
+    const t0 = Date.now();
+    const prompt = buildCouncilPrompt(task, plan, index);
+    const controller = new AbortController();
+    const resp = await withTimeout(
+      client.chat([{ role: 'user', content: prompt }], { signal: controller.signal }),
+      timeoutMs,
+      p.c.model,
+      controller,
+    );
+    // Council answers bypass the agent-executor, so leakage tokens
+    // (<think>, CJK artifacts, zero-width chars) must be stripped here.
+    const content = sanitizeModelOutput(resp.content);
+    if (!content.trim()) throw new Error('réponse vide');
+    return {
+      source: { kind: 'local', provider: p.c.provider, model: p.c.model },
+      displayName: p.c.model,
+      ...(plan.roles[index] ? { role: plan.roles[index] } : {}),
+      content,
+      latencyMs: Date.now() - t0,
+      tokensUsed: resp.totalTokens,
+      costUsd: (resp.promptTokens / 1_000_000) * p.c.costInputUsdPerMtok,
+    };
+  };
+
+  const recordSeatFailure = (model: string, provider: string, error: string): void => {
+    failures.push({ source: model, error });
+    onProgress({ type: 'answer_failed', source: model, error });
+    // A dead model (404 / timeout / empty reply) must stop being re-seated:
+    // record the failure UNCONDITIONALLY — observing a failure needs no
+    // judge, and without this a retired catalog model with a strong name
+    // heuristic would occupy a panel seat forever (only successes used to
+    // be recorded). Failed records bias selection down without polluting
+    // the quality stats (see OutcomeRecord.failed).
+    try {
+      scoreboard.recordOutcome({
+        at: (deps.now?.() ?? new Date()).toISOString(),
+        taskType,
+        model,
+        provider,
+        won: false,
+        quality: 0,
+        latencyMs: 0,
+        costUsd: 0,
+        failed: true,
+      });
+    } catch {
+      /* the ledger must never block the council */
+    }
+  };
+
   // Start local models and Fleet peers in one wave. The old two-wave layout
   // waited for every local timeout before even contacting another machine.
-  const localRound = Promise.allSettled(
-    picked.map(async (p, index): Promise<CouncilAnswer> => {
-      const client = deps.clientFactory(p.c);
-      const t0 = Date.now();
-      const prompt = buildCouncilPrompt(task, plan, index);
-      const controller = new AbortController();
-      const resp = await withTimeout(
-        client.chat([{ role: 'user', content: prompt }], { signal: controller.signal }),
-        timeoutMs,
-        p.c.model,
-        controller,
-      );
-      // Council answers bypass the agent-executor, so leakage tokens
-      // (<think>, CJK artifacts, zero-width chars) must be stripped here.
-      const content = sanitizeModelOutput(resp.content);
-      if (!content.trim()) throw new Error('réponse vide');
-      return {
-        source: { kind: 'local', provider: p.c.provider, model: p.c.model },
-        displayName: p.c.model,
-        ...(plan.roles[index] ? { role: plan.roles[index] } : {}),
-        content,
-        latencyMs: Date.now() - t0,
-        tokensUsed: resp.totalTokens,
-        costUsd: (resp.promptTokens / 1_000_000) * p.c.costInputUsdPerMtok,
-      };
-    }),
-  );
+  const localRound = Promise.allSettled(picked.map((p, index) => askSeat(p, index)));
   const peerRound =
     opts.fleet && peers.length > 0
       ? gatherPeerAnswers(
@@ -277,38 +315,44 @@ export async function runCouncilPipeline(
           errors: [] as Array<{ id: string; message: string }>,
         });
   const [settled, peerResult] = await Promise.all([localRound, peerRound]);
-  const answers: CouncilAnswer[] = [];
-  const failures: Array<{ source: string; error: string }> = [];
+  const failedSeatIndexes: number[] = [];
   settled.forEach((s, i) => {
     if (s.status === 'fulfilled') {
       answers.push(s.value);
     } else {
       const error = s.reason instanceof Error ? s.reason.message : String(s.reason);
-      failures.push({ source: picked[i]!.c.model, error });
-      onProgress({ type: 'answer_failed', source: picked[i]!.c.model, error });
-      // A dead model (404 / timeout / empty reply) must stop being re-seated:
-      // record the failure UNCONDITIONALLY — observing a failure needs no
-      // judge, and without this a retired catalog model with a strong name
-      // heuristic would occupy a panel seat forever (only successes used to
-      // be recorded). Failed records bias selection down without polluting
-      // the quality stats (see OutcomeRecord.failed).
-      try {
-        scoreboard.recordOutcome({
-          at: (deps.now?.() ?? new Date()).toISOString(),
-          taskType,
-          model: picked[i]!.c.model,
-          provider: picked[i]!.c.provider,
-          won: false,
-          quality: 0,
-          latencyMs: 0,
-          costUsd: 0,
-          failed: true,
-        });
-      } catch {
-        /* the ledger must never block the council */
-      }
+      recordSeatFailure(picked[i]!.c.model, picked[i]!.c.provider, error);
+      failedSeatIndexes.push(i);
     }
   });
+
+  // Replace dead local seats from the unused ranked pool, keeping the failed
+  // seat's conductor role so the panel size the user asked for still stands.
+  if (answers.length < picked.length && failedSeatIndexes.length > 0) {
+    const used = new Set<string>([
+      ...picked.map((p) => p.c.model),
+      ...answers.map((a) => a.displayName),
+      ...failures.map((f) => f.source),
+    ]);
+    const bench = ranked.filter((r) => !used.has(r.c.model));
+    let roleCursor = 0;
+    for (const spare of bench) {
+      if (answers.length >= picked.length) break;
+      const index = failedSeatIndexes[roleCursor] ?? answers.length;
+      try {
+        answers.push(await askSeat(spare, index));
+        used.add(spare.c.model);
+        roleCursor++;
+      } catch (err) {
+        recordSeatFailure(
+          spare.c.model,
+          spare.c.provider,
+          err instanceof Error ? err.message : String(err),
+        );
+        used.add(spare.c.model);
+      }
+    }
+  }
 
   // Fleet — fold peer answers into the SAME judged set (judge/consensus/
   // scoreboard are source-agnostic: they score answers, not their origin).
@@ -340,12 +384,17 @@ export async function runCouncilPipeline(
   // whose recent history is consecutive failures are excluded from the seat,
   // and a judge whose CALL fails is penalised then REPLACED within the same
   // run — a dead judge must not cost a whole deliberation.
-  const pickedModels = new Set(picked.map((p) => p.c.model));
+  const deadModels = new Set(failures.map((f) => f.source));
+  const pickedModels = new Set(
+    [...picked.map((p) => p.c.model), ...answers.map((a) => a.displayName)].filter(
+      (model) => !deadModels.has(model),
+    ),
+  );
   const answersForJudge = answers.map((a) => ({
     content: a.content,
     ...(a.role?.label ? { roleLabel: a.role.label } : {}),
   }));
-  const excludedJudges = new Set<string>();
+  const excludedJudges = new Set<string>(deadModels);
   let verdict: JudgeVerdict = {
     kind: 'abstained',
     winnerIdx: null,
@@ -358,15 +407,23 @@ export async function runCouncilPipeline(
   };
   let judgeClient: CouncilChatClient | null = null;
 
+  const livingFallback = (): { candidate: CouncilCandidate; neutral: false } | null => {
+    for (const answer of answers) {
+      const candidate = candidates.find((c) => c.model === answer.displayName && !excludedJudges.has(c.model));
+      if (candidate) return { candidate, neutral: false };
+    }
+    return null;
+  };
+
   for (let attempt = 0; attempt < 2; attempt++) {
     let selection = selectNeutralJudge(
-      candidates.filter((c) => !excludedJudges.has(c.model)),
+      candidates.filter((c) => !excludedJudges.has(c.model) && !deadModels.has(c.model)),
       pickedModels,
       attempt === 0 ? opts.judge : undefined,
       scoreboard,
     );
-    if (!selection && attempt === 0 && picked[0]) {
-      selection = { candidate: picked[0].c, neutral: false };
+    if (!selection) {
+      selection = livingFallback();
     }
     if (!selection) break;
 

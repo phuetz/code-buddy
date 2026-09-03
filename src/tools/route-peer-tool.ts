@@ -84,13 +84,28 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
     };
   }
 
+  const privacyLint = scanForSecrets(params.prompt);
+  const privacyTag = privacyLint.hasSecrets ? 'sensitive' : params.privacyTag;
+  const lintKinds = privacyLint.matches.map((match) => match.kind);
+  const lintData = {
+    privacyTag: privacyTag ?? 'public',
+    privacyLint: {
+      hasSecrets: privacyLint.hasSecrets,
+      highConfidence: privacyLint.highConfidence,
+      matchKinds: lintKinds,
+    },
+  };
+  const lintNote = privacyLint.hasSecrets ? ` Privacy lint flagged: ${lintKinds.join(', ')}.` : '';
+
   const registry = getFleetRegistry();
   const entries = registry.list();
   if (entries.length === 0) {
     return {
       success: false,
       error:
-        'No fleet peers connected. Ask the user to run /fleet listen <ws-url> --name <id> first.',
+        'No fleet peers connected. Ask the user to run /fleet listen <ws-url> --name <id> first.' +
+        lintNote,
+      data: lintData,
     };
   }
 
@@ -129,13 +144,12 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
     return {
       success: false,
       error:
-        'No connected peer exposed routable capabilities. Try list_peers({includeCapabilities:true}) for details.',
-      data: { describeErrors },
+        'No connected peer exposed routable capabilities. Try list_peers({includeCapabilities:true}) for details.' +
+        lintNote,
+      data: { describeErrors, ...lintData },
     };
   }
 
-  const privacyLint = scanForSecrets(params.prompt);
-  const privacyTag = privacyLint.hasSecrets ? 'sensitive' : params.privacyTag;
   const routablePeers = privacyLint.highConfidence
     ? keepLocalOnly(peers)
     : peers;
