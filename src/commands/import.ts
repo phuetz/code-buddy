@@ -71,6 +71,7 @@ const MCP_SOURCE_PATHS = [
   '.vscode/mcp.json',
   'claude_desktop_config.json',
   '.mcp.json',
+  '.claude/mcp.json',
   '.claude/settings.json',
   'settings.json',
 ] as const;

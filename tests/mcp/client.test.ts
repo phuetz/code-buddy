@@ -12,10 +12,11 @@
 // ---------------------------------------------------------------------------
 
 import { EventEmitter } from 'events';
-import { MCPManager } from '../../src/mcp/client';
+import { MCPManager, parseMcpInitTimeoutMs, DEFAULT_MCP_INIT_TIMEOUT_MS } from '../../src/mcp/client';
 import { MCPClient, getMCPClient, resetMCPClient } from '../../src/mcp/mcp-client';
 import type { MCPServerConfig, MCPTool, ServerStatus } from '../../src/mcp/types';
 import { createTransport } from '../../src/mcp/transports';
+import { logger } from '../../src/utils/logger';
 import fs from 'fs';
 
 jest.mock('../../src/utils/logger', () => ({
@@ -273,6 +274,145 @@ describe('MCPManager', () => {
       expect(createTransport).toHaveBeenCalledTimes(1);
       expect(mockClientConnect).toHaveBeenCalledTimes(1);
       expect(manager.getServers()).toEqual(['boot-server']);
+    });
+
+    describe('init timeout and late reconnect (GK35)', () => {
+      it('parses CODEBUDDY_MCP_INIT_TIMEOUT_MS with a 15s default', () => {
+        expect(parseMcpInitTimeoutMs(undefined)).toBe(DEFAULT_MCP_INIT_TIMEOUT_MS);
+        expect(parseMcpInitTimeoutMs('')).toBe(DEFAULT_MCP_INIT_TIMEOUT_MS);
+        expect(parseMcpInitTimeoutMs('nope')).toBe(DEFAULT_MCP_INIT_TIMEOUT_MS);
+        expect(parseMcpInitTimeoutMs('0')).toBe(DEFAULT_MCP_INIT_TIMEOUT_MS);
+        expect(parseMcpInitTimeoutMs('-1')).toBe(DEFAULT_MCP_INIT_TIMEOUT_MS);
+        expect(parseMcpInitTimeoutMs('200')).toBe(200);
+        expect(parseMcpInitTimeoutMs('15000')).toBe(15_000);
+      });
+
+      const previousTimeout = process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS;
+
+      afterEach(() => {
+        if (previousTimeout === undefined) delete process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS;
+        else process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS = previousTimeout;
+        (createTransport as jest.Mock).mockImplementation(function() {
+          return {
+            connect: mockTransportConnect,
+            disconnect: mockTransportDisconnect,
+            getType: mockTransportGetType,
+          };
+        });
+        mockTransportConnect.mockResolvedValue({});
+      });
+
+      function delayConnect(ms: number): Promise<Record<string, never>> {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve({}), ms);
+        });
+      }
+
+      function connectByCommand(slowMs: number) {
+        (createTransport as jest.Mock).mockImplementation((config: { command?: string }) => ({
+          connect: () => (config.command === 'slow' ? delayConnect(slowMs) : Promise.resolve({})),
+          disconnect: mockTransportDisconnect,
+          getType: mockTransportGetType,
+        }));
+      }
+
+      it('honors CODEBUDDY_MCP_INIT_TIMEOUT_MS: fast server loads, slow is skipped', async () => {
+        process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS = '200';
+        connectByCommand(1500);
+
+        const started = Date.now();
+        await manager.ensureServersInitialized({
+          servers: [
+            {
+              name: 'fast-mcp',
+              transport: { type: 'stdio' as const, command: 'fast', args: [] },
+            },
+            {
+              name: 'slow-mcp',
+              transport: { type: 'stdio' as const, command: 'slow', args: [] },
+            },
+          ],
+        });
+        const elapsed = Date.now() - started;
+
+        expect(elapsed).toBeLessThan(800);
+        expect(manager.getServerStatus('fast-mcp')).toBe('connected');
+        expect(manager.getTools().some((tool) => tool.serverName === 'fast-mcp')).toBe(true);
+        expect(manager.getTools().some((tool) => tool.serverName === 'slow-mcp')).toBe(false);
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('slow-mcp'),
+          expect.objectContaining({
+            error: expect.objectContaining({
+              message: expect.stringMatching(/init timed out after 200ms/),
+            }),
+          }),
+        );
+      });
+
+      it('announces that a timed-out server keeps connecting in the background', async () => {
+        process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS = '150';
+        connectByCommand(1500);
+
+        await manager.ensureServersInitialized({
+          servers: [{
+            name: 'slow-mcp',
+            transport: { type: 'stdio' as const, command: 'slow', args: [] },
+          }],
+        });
+
+        const warnCalls = (logger.warn as jest.Mock).mock.calls.map((call) => {
+          const err = (call[1] as { error?: unknown } | undefined)?.error;
+          const errText = err instanceof Error ? err.message : String(err ?? '');
+          return `${String(call[0])} ${errText}`;
+        }).join('\n');
+        expect(warnCalls).toMatch(/init timed out after 150ms/i);
+        expect(warnCalls).toMatch(/background/i);
+      });
+
+      it('does not wait another timeout when init is called again while a server is still connecting', async () => {
+        process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS = '200';
+        connectByCommand(1500);
+
+        await manager.ensureServersInitialized({
+          servers: [{
+            name: 'slow-mcp',
+            transport: { type: 'stdio' as const, command: 'slow', args: [] },
+          }],
+        });
+
+        const started = Date.now();
+        await manager.ensureServersInitialized({
+          servers: [{
+            name: 'slow-mcp',
+            transport: { type: 'stdio' as const, command: 'slow', args: [] },
+          }],
+        });
+        expect(Date.now() - started).toBeLessThan(80);
+      });
+
+      it('registers tools in the background once a skipped server finally responds', async () => {
+        process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS = '150';
+        connectByCommand(400);
+
+        const lateReady = new Promise<void>((resolve) => {
+          manager.once('serverLateReady', () => resolve());
+        });
+
+        await manager.ensureServersInitialized({
+          servers: [{
+            name: 'slow-mcp',
+            transport: { type: 'stdio' as const, command: 'slow', args: [] },
+          }],
+        });
+        expect(manager.getTools().some((tool) => tool.serverName === 'slow-mcp')).toBe(false);
+
+        await lateReady;
+        expect(manager.getServerStatus('slow-mcp')).toBe('connected');
+        expect(manager.getTools().some((tool) => tool.name === 'mcp__slow-mcp__read_file')).toBe(true);
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringMatching(/slow-mcp.*after the 150ms init skip/i),
+        );
+      }, 5000);
     });
   });
 

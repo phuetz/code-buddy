@@ -241,6 +241,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_SLACK_BLOCK_KIT` | `true` renders agent markdown as Slack Block Kit on `send()` (headers/dividers/code + markdown tables as **native `table` blocks**, prose→mrkdwn); `text` stays as the notification fallback; oversized tables fall back to a code section (Slack caps 100×20/10k chars); default off = plain text unchanged |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit |
 | `CODEBUDDY_AUTOCOMPACT_PCT` | Auto-compact threshold as % of context window |
+| `CODEBUDDY_MCP_INIT_TIMEOUT_MS` | Per-server MCP handshake timeout (default `15000`). A slow server is skipped so the others still load; the handshake continues in the background and tools appear when it responds. Invalid/non-positive values fall back to 15s. |
 | `MORPH_API_KEY` | Enables fast file editing |
 | `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO). Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
 | `JWT_SECRET` | Required in production for API server |

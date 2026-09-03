@@ -198,6 +198,44 @@ describe('buddy import', () => {
     );
   });
 
+  it('imports a Claude Code .claude/mcp.json without overwriting existing names', async () => {
+    const root = await temporaryProject('codebuddy-import-claude-mcp-');
+    await writeFixture(
+      root,
+      '.codebuddy/mcp.json',
+      `${JSON.stringify({
+        description: 'À préserver',
+        mcpServers: { existing: { command: 'keep-me' } },
+      })}\n`
+    );
+    await writeFixture(
+      root,
+      '.claude/mcp.json',
+      JSON.stringify({
+        mcpServers: {
+          existing: { command: 'must-not-win' },
+          'claude-project-nimbus': { command: 'from-claude-mcp-json' },
+        },
+      })
+    );
+
+    const result = await importProjectConfiguration({}, { cwd: root });
+    const mcp = await readJson(root, '.codebuddy/mcp.json');
+
+    expect(result.mcpServersImported).toBe(1);
+    expect(mcp.description).toBe('À préserver');
+    expect(mcp.mcpServers).toEqual({
+      existing: { command: 'keep-me' },
+      'claude-project-nimbus': { command: 'from-claude-mcp-json' },
+    });
+    expect(formatConfigImportResult(result)).toContain(
+      'MCP existing: .claude/mcp.json (nom déjà présent, conservé)'
+    );
+    expect(formatConfigImportResult(result)).toContain(
+      'MCP claude-project-nimbus: .claude/mcp.json (importé)'
+    );
+  });
+
   it('is byte-for-byte idempotent on a second run', async () => {
     const root = await temporaryProject();
     await writeFixture(root, '.cursorrules', 'Ne jamais écraser le travail local.\n');

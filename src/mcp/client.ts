@@ -8,6 +8,26 @@ import type { MCPServerConfig, MCPTool, ServerStatus } from "./types.js";
 // Re-export types for backwards compatibility
 export type { MCPServerConfig, MCPTool, ServerStatus } from "./types.js";
 
+export const DEFAULT_MCP_INIT_TIMEOUT_MS = 15_000;
+const MAX_MCP_INIT_TIMEOUT_MS = 10 * 60_000;
+
+/** Parse `CODEBUDDY_MCP_INIT_TIMEOUT_MS` (default 15s). Invalid/non-positive values fall back. */
+export function parseMcpInitTimeoutMs(
+  raw: string | undefined = process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS,
+): number {
+  if (raw === undefined || raw.trim() === '') return DEFAULT_MCP_INIT_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MCP_INIT_TIMEOUT_MS;
+  return Math.min(parsed, MAX_MCP_INIT_TIMEOUT_MS);
+}
+
+function mcpInitTimeoutMessage(serverName: string, timeoutMs: number): string {
+  return (
+    `MCP server "${serverName}" init timed out after ${timeoutMs}ms — skipped so other servers still load. ` +
+    `Connecting continues in the background; tools will appear when it responds.`
+  );
+}
+
 export class MCPManager extends EventEmitter {
   private clients: Map<string, Client> = new Map();
   private transports: Map<string, MCPTransport> = new Map();
@@ -273,24 +293,29 @@ export class MCPManager extends EventEmitter {
     if (this.initializationPromise) return this.initializationPromise;
     const initialize = async (): Promise<void> => {
       const config = configOverride ?? (await import('./config.js')).loadMCPConfig();
-      const enabledServers = config.servers.filter((server) =>
-        server.enabled !== false && this.serverStatuses.get(server.name) !== 'connected'
-      );
+      const enabledServers = config.servers.filter((server) => {
+        if (server.enabled === false) return false;
+        const status = this.serverStatuses.get(server.name);
+        // A still-connecting server is the leftover of a previous timed-out
+        // wave: do not wait another timeout on the same handshake (two slow
+        // MCP servers used to cost 30s of startup because init was invoked
+        // twice — constructor then first tool listing).
+        return status !== 'connected' && status !== 'connecting';
+      });
       if (enabledServers.length === 0) return;
 
       // Initialize servers in parallel. Each server gets its OWN timeout so a
       // hanging/unresponsive server can't block every healthy MCP server.
-      const INIT_TIMEOUT_MS = Number(process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS) || 15_000;
+      const INIT_TIMEOUT_MS = parseMcpInitTimeoutMs();
       const initPromises = enabledServers.map(async (serverConfig) => {
         let timer: NodeJS.Timeout | undefined;
+        const connectPromise = this.addServer(serverConfig);
         try {
           await Promise.race([
-            this.addServer(serverConfig),
+            connectPromise,
             new Promise<never>((_, reject) => {
               timer = setTimeout(
-                () => reject(new Error(
-                  `MCP server "${serverConfig.name}" init timed out after ${INIT_TIMEOUT_MS}ms — skipped so other servers still load`,
-                )),
+                () => reject(new Error(mcpInitTimeoutMessage(serverConfig.name, INIT_TIMEOUT_MS))),
                 INIT_TIMEOUT_MS,
               );
               timer.unref?.();
@@ -298,6 +323,13 @@ export class MCPManager extends EventEmitter {
           ]);
         } catch (error) {
           logger.warn(`Failed to initialize MCP server ${serverConfig.name}`, { error });
+          const timedOut =
+            error instanceof Error && error.message.includes('init timed out after');
+          if (timedOut) {
+            this.watchLateConnect(serverConfig.name, connectPromise, INIT_TIMEOUT_MS);
+          } else {
+            void connectPromise.catch(() => undefined);
+          }
         } finally {
           if (timer) clearTimeout(timer);
         }
@@ -313,5 +345,31 @@ export class MCPManager extends EventEmitter {
     } finally {
       if (this.initializationPromise === run) this.initializationPromise = null;
     }
+  }
+
+  /**
+   * Keep a timed-out handshake alive. When it eventually succeeds, tools are
+   * already registered by addServerInternal; this just surfaces it to the user
+   * and swallows a later rejection so it is not an unhandledRejection.
+   */
+  private watchLateConnect(
+    serverName: string,
+    connectPromise: Promise<void>,
+    timeoutMs: number,
+  ): void {
+    void connectPromise
+      .then(() => {
+        const tools = this.getTools().filter((tool) => tool.serverName === serverName).length;
+        logger.info(
+          `MCP server "${serverName}" connected after the ${timeoutMs}ms init skip — ${tools} tool(s) now available`,
+        );
+        this.emit('serverLateReady', serverName, tools);
+      })
+      .catch((error) => {
+        logger.warn(
+          `MCP server "${serverName}" failed after init timeout — tools remain unavailable`,
+          { error },
+        );
+      });
   }
 }
