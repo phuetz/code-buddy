@@ -75,6 +75,11 @@ describe('Mission SENSE6 — Trou 5 : Tour détecté fini par v1-mini alors que 
       // L'heuristique syntaxique française est donc totalement écrasée par v1-mini,
       // et Lisa commence à répondre immédiatement à une phrase inachevée !
       expect(heardTurns).toEqual([]);
+
+      // Le silence déjà attendu (350 ms) est retranché de la cible suspendue
+      // (900 ms) : le tour est libéré après 550 ms supplémentaires, jamais perdu.
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      expect(heardTurns).toEqual([incompleteHumanPhrase]);
     } finally {
       unwire();
     }

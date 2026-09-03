@@ -2405,14 +2405,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         ? incompleteTurnHoldMs
         : Math.max(0, conversationalEndSilenceMs - endpointWaitMs);
       if (
-        // CONV1 shortened the hold (conversational end-silence minus the endpoint already waited);
-        // PILE-C lets an opt-in turn detector decide before the text heuristic (fail-open).
+        // CONV1 shortens the hold by the endpoint silence already waited. A
+        // probabilistic detector may confirm a complete turn, but may not
+        // override an explicit syntactic suspension in the transcript.
         remainingIncompleteHoldMs > 0 &&
-        (turnDecision?.endOfTurn === false || (
-          turnDecision?.endOfTurn !== true &&
-          !livePayload?.turnDetector &&
-          isLikelyIncompleteVoiceTurn(text)
-        ))
+        (turnDecision?.endOfTurn === false || isLikelyIncompleteVoiceTurn(text))
       ) {
         const timer = setTimeout(() => {
           const held = heldLiveTurn;

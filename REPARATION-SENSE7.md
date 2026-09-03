@@ -54,6 +54,13 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 - Fixture fausse corrigée avec preuve : `controller.error()` était appelé dans `start()` après deux `enqueue`, ce qui ne garantissait pas leur lecture ; de plus la tête de gain par défaut retenait 400 ms alors que la fixture n’en fournissait que 200. Le test utilise désormais une troncature EOF de 200 ms, une tête de 50 ms, un premier lecteur en échec et vérifie qu’au moins du PCM local a précédé l’ouverture ElevenLabs. Le test DARK3 voisin conserve explicitement le texte intact lorsque le flux coupe avant toute sortie PCM.
 - Vert ciblé : trou 6 + routage Kyutai + flux/jitter/falsification + lecteurs voix → **8 fichiers, 47 tests réussis** ; contrôle court trou 6 + DARK3 → **2 fichiers, 6 tests réussis**.
 
+### Trou 5 — hésitation et détecteur de tour
+
+- Rouge initial : v1-mini déclarait `endOfTurn=true` à 0,35 et livrait immédiatement « Lisa, je voulais te demander si ».
+- Correctif : une suspension syntaxique explicite reste prioritaire sur la probabilité du détecteur. Le délai est la cible suspendue de 900 ms moins l’endpoint déjà attendu ; avec 350 ms, la grâce supplémentaire vaut exactement 550 ms.
+- Test renforcé : il vérifie le silence à 50 ms puis la livraison intacte du tour après les 550 ms de grâce, afin de prouver à la fois l’absence de coupure et l’absence de perte.
+- Vert ciblé : trou 5 + `voice-turn-taking` + `speech-reaction` → **3 fichiers, 62 tests réussis**.
+
 ## Grille de traçabilité
 
 | Trou | Correctif | Invariant préservé | Commit |
@@ -64,7 +71,7 @@ Mission SENSE7 — fermeture des sept trous d’interaction issus de la revue Ge
 | 1 | Classer les sous-séquences récentes comme écho et revalider la bouche libre au déclenchement des cues | Aucun backchannel avant décision ni pendant la parole du robot | Ce commit |
 | 4 | Rétablir la phrase d’avance et bufferiser short-first jusqu’à la revue lorsqu’elle est requise | Aucune première phrase CONV3 avant décision | Ce commit |
 | 6 | Mesurer le PCM accepté et reprendre ElevenLabs/Pocket à la frontière lexicale non jouée | Repli ElevenLabs au segment interrompu, jamais au début | Ce commit |
-| 5 | À établir | Grâce d’hésitation de 550–900 ms pour mots suspensifs | À venir |
+| 5 | Donner priorité à la suspension syntaxique et attendre le reliquat 900 ms − endpoint | Grâce d’hésitation de 550–900 ms pour mots suspensifs | Ce commit |
 
 ## Vérifications finales
 
