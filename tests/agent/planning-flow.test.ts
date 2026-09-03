@@ -32,6 +32,29 @@ describe('PlanningFlow', () => {
     };
   }
 
+  it('parses a plan JSON wrapped in prose or markdown fences (GK33 live)', async () => {
+    mockPlanLLM.mockResolvedValue(
+      [
+        'Sure, here is the plan.',
+        '```json',
+        JSON.stringify({
+          steps: [
+            { id: 'step_1', title: 'Define metrics', description: 'Choose false-cut metric', agentKey: 'default', dependencies: [] },
+            { id: 'step_2', title: 'Run offline VAD', description: 'Score hangover 0 vs 300 ms', agentKey: 'default', dependencies: ['step_1'] },
+          ],
+        }),
+        '```',
+      ].join('\n'),
+    );
+
+    const flow = new PlanningFlow(createConfig());
+    const result = await flow.execute('Measure VAD hangover');
+
+    expect(flow.plan!.steps.map((s) => s.title)).toEqual(['Define metrics', 'Run offline VAD']);
+    expect(result).toContain('2 completed');
+    expect(flow.plan!.steps[0]!.title).not.toBe('Execute task');
+  });
+
   it('creates plan and executes steps', async () => {
     mockPlanLLM.mockResolvedValue(JSON.stringify({
       steps: [
