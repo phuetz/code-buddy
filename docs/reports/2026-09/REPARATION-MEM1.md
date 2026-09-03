@@ -27,7 +27,7 @@ Le redémarrage observé le 02/09 à 20 h 12 pouvait laisser `~/.codebuddy/memor
 
 ### A — Atomique : même dossier, fsync, rename
 
-Le point d’entrée unique est [`src/utils/atomic-write.ts`](src/utils/atomic-write.ts) :
+Le point d’entrée unique est [`src/utils/atomic-write.ts`](../../../src/utils/atomic-write.ts) :
 
 - `writeFileAtomic` : chemin temporaire dans le dossier cible (`:60-62`), ouverture en `0600` par défaut (`:29-40`, `:101-111`), écriture puis `fsync` du fichier (`:111-114`), fermeture, `rename` dans la même arborescence et `fsync` du dossier (`:115-117`, `:81-93`), nettoyage du temporaire en cas d’erreur (`:118-123`).
 - `writeJsonAtomic` : sérialisation JSON + newline vers ce chemin (`:127-133`).
@@ -79,7 +79,7 @@ Les écritures d’artefacts/outils (sorties Excel/SQL/archive, fichiers de trav
 
 ## Tests rouge → vert
 
-Dans [`tests/utils/atomic-write.test.ts`](tests/utils/atomic-write.test.ts) :
+Dans [`tests/utils/atomic-write.test.ts`](../../../tests/utils/atomic-write.test.ts) :
 
 - interruption factice immédiatement après `open` : l’ancien contenu reste lisible (`:27-53`) ;
 - fichier 0 octet : fallback propre et un seul `logger.warn` sur deux lectures (`:55-65`) ;
@@ -87,7 +87,7 @@ Dans [`tests/utils/atomic-write.test.ts`](tests/utils/atomic-write.test.ts) :
 - restauration JSONL depuis `.bak` après dernière ligne déchirée (`:79-88`) ;
 - restauration synchrone depuis `.bak` lorsque la cible principale manque (`:90-98`).
 
-Le test compagnon MEM1 [`tests/companion/proactive-engine.test.ts:321-338`](tests/companion/proactive-engine.test.ts:321) utilise un RNG injecté afin de vérifier le fallback sans dépendre d’un template aléatoire.
+Le test compagnon MEM1 [`tests/companion/proactive-engine.test.ts:321-338`](../../../tests/companion/proactive-engine.test.ts#L321) utilise un RNG injecté afin de vérifier le fallback sans dépendre d’un template aléatoire.
 
 ## Vérifications exécutées
 
@@ -103,7 +103,7 @@ Le test compagnon MEM1 [`tests/companion/proactive-engine.test.ts:321-338`](test
 
 `e678a6cdb` → `3525a6866` → `9e36ac091` → `8beefe119` → `5b649cc8a` → `1d2f375d3` → `09e0f30cc` → `e774a070d` → `8910191c3` → `72e493078` → `6a62e70b4` → `ddf01e23f`.
 
-Le dernier lot documentaire ajoutera ce rapport, la ligne MEM1 de [`CLAUDE.md`](CLAUDE.md) et la mise à jour de [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md) avec les commits et vérifications de passation.
+Le dernier lot documentaire ajoutera ce rapport, la ligne MEM1 de [`CLAUDE.md`](../../../CLAUDE.md) et la mise à jour de [`docs/FABLE5-CODEX-COORDINATION.md`](../../FABLE5-CODEX-COORDINATION.md) avec les commits et vérifications de passation.
 
 ## Reste ouvert
 

@@ -1,6 +1,6 @@
 # Vague — Noyau tools v2 : build / qualité / déploiement
 
-Lis d'abord **`~/code-buddy/CODEX-CONVENTIONS.md`**. Ce brief ajoute une 2ᵉ suite de **tools agent** au noyau (v1 déjà sur main : scaffold_app, project_map, dep_inspect, code_stats, git_summary, todo_scan, json_query, csv_preview, env_doctor, port_check).
+Lis d'abord **`docs/briefs/2026-07/CODEX-CONVENTIONS.md`**. Ce brief ajoute une 2ᵉ suite de **tools agent** au noyau (v1 déjà sur main : scaffold_app, project_map, dep_inspect, code_stats, git_summary, todo_scan, json_query, csv_preview, env_doctor, port_check).
 
 **Zone (fichiers neufs)** : classes sous `src/tools/`, tests sous `tests/tools/`, manifeste `src/tools/authored-tools-manifest-2.ts` (NE touche PAS `authored-tools-manifest.ts` de v1).
 

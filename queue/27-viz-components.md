@@ -1,6 +1,6 @@
 # Vague — Bibliothèque de data-viz props-driven (SVG à la main, zéro lib)
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (déjà concaténé au-dessus). Worktree `feat/viz-components`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (déjà concaténé au-dessus). Worktree `feat/viz-components`.
 
 ## But
 Crée une petite bibliothèque de graphiques **props-driven** (données par props, zéro accès store/IPC), en **SVG dessiné

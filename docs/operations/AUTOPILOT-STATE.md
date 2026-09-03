@@ -79,7 +79,7 @@ La production dépasse largement le câblage. **Prochaine grande phase = CÂBLAG
 4. **Genspark (~33 slices)** — montage Labs/palette via genspark-slices.ts. **Validation Patrice.**
 
 ### ⚠️ BUG DE BRIEF corrigé pour la suite
-Les briefs référençaient `~/code-buddy/CODEX-CONVENTIONS.md` en chemin ABSOLU → hors du workspace du worktree → buddy refuse (« Path outside workspace »). **Fix pour les futures vagues : lancer avec le prompt CONCATÉNÉ** `-p "$(cat CODEX-CONVENTIONS.md; echo; cat queue/N.md)"` (tout inline, pas de lecture de fichier externe). Ne pas référencer de chemin absolu hors worktree dans un brief.
+Les briefs référençaient `docs/briefs/2026-07/CODEX-CONVENTIONS.md` en chemin hors workspace du worktree → buddy refuse (« Path outside workspace »). **Fix pour les futures vagues : lancer avec le prompt CONCATÉNÉ** `-p "$(cat docs/briefs/2026-07/CODEX-CONVENTIONS.md; echo; cat queue/N.md)"` (tout inline, pas de lecture de fichier externe). Ne pas référencer de chemin hors worktree dans un brief.
 
 ### ⚠️ Process transitoires dans le checkout principal
 Des PID buddy `--yolo` apparaissent brièvement avec cwd=~/code-buddy (forks des process worktree). Transitoires, disparaissent seuls. main reste == origin/main. Surveiller mais pas d'action tant que main intact.

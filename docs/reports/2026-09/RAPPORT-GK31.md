@@ -135,7 +135,7 @@ Variables lues par `src/` : `CODEBUDDY_PROVIDER`, `CODEBUDDY_SENSORY`, `CODEBUDD
 | 30 s + 5 démos + 3 cmd install | README anglais court, faits GK, pas d'image inventée | ~140 lignes, 2 GIF existants, getting-started, BUSL 1.1 | Réécriture | `f7014c504` |
 | `readme-truth` | Commandes ⊂ `buddy --help` ; env lues par `src/` | 4/4 verts | Test nouveau | `af2af4dfd` |
 | Screenshots publics | Liens/images résolubles | 5/5 verts (plancher 30 retiré) | Test ajusté | `af2af4dfd` |
-| Lien Cowork | `[Cowork Desktop](docs/cowork.md)` | 13/13 `cowork-public-docs-privacy` | Casse du libellé | dans `f7014c504` (fix follow-up dans le fichier) |
+| Lien Cowork | `[Cowork Desktop](../../cowork.md)` | 13/13 `cowork-public-docs-privacy` | Casse du libellé | dans `f7014c504` (fix follow-up dans le fichier) |
 | Données personnelles | 0 terme interdit | 1/1 vert après rédactions | `la machine GPU de l'auteur` / IP | `d7172ebb6` |
 
 ## Vérifications

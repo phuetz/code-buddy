@@ -1,6 +1,6 @@
 # Vague — App Studio v2 : compléter bolt.diy (deploy / git / export / import / diff)
 
-Lis d'abord **`~/code-buddy/CODEX-CONVENTIONS.md`** (règles communes). Ce brief complète l'App Studio v1 (déjà sur main) pour atteindre la **parité bolt.diy**.
+Lis d'abord **`docs/briefs/2026-07/CODEX-CONVENTIONS.md`** (règles communes). Ce brief complète l'App Studio v1 (déjà sur main) pour atteindre la **parité bolt.diy**.
 
 **Zone (fichiers neufs uniquement)** : renderer sous `cowork/src/renderer/components/studio2/`, services main sous `cowork/src/main/studio2/`, tests sous `cowork/tests/`.
 

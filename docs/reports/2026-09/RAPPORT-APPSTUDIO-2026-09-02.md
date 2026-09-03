@@ -26,11 +26,11 @@ Les deux vues sont des pages réellement servies par Vite et capturées à 1 440
 
 | Avant — `react-ts` conservé | Après — `react-tailwind` clair |
 |---|---|
-| ![Gabarit React nu avant](docs/assets/appstudio-2026-09-02/before-react-ts.png) | ![Nouveau gabarit clair](docs/assets/appstudio-2026-09-02/after-light.png) |
+| ![Gabarit React nu avant](../../assets/appstudio-2026-09-02/before-react-ts.png) | ![Nouveau gabarit clair](../../assets/appstudio-2026-09-02/after-light.png) |
 
 | Après — sombre | Après — mobile sombre, 390 px |
 |---|---|
-| ![Nouveau gabarit sombre](docs/assets/appstudio-2026-09-02/after-dark.png) | ![Nouveau gabarit mobile sombre](docs/assets/appstudio-2026-09-02/after-mobile-dark.png) |
+| ![Nouveau gabarit sombre](../../assets/appstudio-2026-09-02/after-dark.png) | ![Nouveau gabarit mobile sombre](../../assets/appstudio-2026-09-02/after-mobile-dark.png) |
 
 ### Ce qui sort du moteur
 
