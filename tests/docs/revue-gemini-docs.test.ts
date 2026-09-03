@@ -97,14 +97,18 @@ describe('Revue Gemini — Preuves ROUGES des divergences de documentation', () 
       }
     });
 
-    it('docs/cb2/README.md:19 promet la variable CODEBUDDY_WIDGETS_AUTOGEN pour autoriser la génération', async () => {
-      // Documentation claim: "CODEBUDDY_WIDGETS_AUTOGEN | off | Autorise la génération LLM d'un nouveau template"
-      // Reality in src/widgets/widget-engine.ts:163: widget-engine only checks CODEBUDDY_WIDGETS === 'true'
+    it('retire la variable fantôme WIDGETS_AUTOGEN du contrat courant', async () => {
+      const index = readRepoFile('docs', 'cb2', 'README.md');
+      const guide = readRepoFile('docs', 'cb2', 'generative-ui.md');
+      expect(index).not.toContain('CODEBUDDY_WIDGETS_AUTOGEN');
+      expect(guide).not.toContain('CODEBUDDY_WIDGETS_AUTOGEN');
+      expect(guide).toContain('Le chemin automatique n’appelle aucun LLM');
+      expect(guide).toContain('buddy widgets gen <kind>');
+
       const result = await resolveOrGenerate({ kind: 'custom_chart', value: 42 }, {
         env: { CODEBUDDY_WIDGETS_AUTOGEN: 'true' } as NodeJS.ProcessEnv,
       });
-      // Ce test ROUGE échoue car CODEBUDDY_WIDGETS_AUTOGEN n'est jamais lu par le moteur, qui renvoie null
-      expect(result).not.toBeNull();
+      expect(result).toBeNull();
     });
   });
 
