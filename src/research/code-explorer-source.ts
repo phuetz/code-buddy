@@ -17,8 +17,10 @@ import {
   type CodeExplorerClient,
 } from '../plugins/code-explorer/code-explorer-client.js';
 
-/** Insight ops to pull by default (each → one discovery). All read-only Code Explorer tools. */
-const DEFAULT_OPS = ['hotspots', 'find_cycles', 'get_insights'] as const;
+/** Insight ops to pull by default (each → one discovery). All read-only Code Explorer tools.
+ *  `report`/`coverage` produce output on a freshly indexed toy repo; `hotspots` needs git
+ *  churn and `get_insights` needs a symbol, so they are not the only defaults. */
+const DEFAULT_OPS = ['report', 'coverage', 'find_cycles', 'hotspots'] as const;
 
 export interface CodeInsightOptions {
   /** Repo path/id (else the default indexed repo). */
@@ -69,6 +71,17 @@ export async function fetchCodeExplorerInsights(opts: CodeInsightOptions = {}): 
         id: `codeexplorer:${op}${repo ? `:${repo}` : ''}`,
         title: `Analyse de code — ${op}${repo ? ` (${repo})` : ''}`,
         abstract: text.trim().slice(0, 1500),
+        source: 'code-explorer',
+      });
+    }
+  }
+  if (pubs.length === 0) {
+    const listed = await client.listRepos();
+    if (listed.trim()) {
+      pubs.push({
+        id: `codeexplorer:list_repos${repo ? `:${repo}` : ''}`,
+        title: `Analyse de code — dépôts indexés${repo ? ` (${repo})` : ''}`,
+        abstract: listed.trim().slice(0, 1500),
         source: 'code-explorer',
       });
     }
