@@ -36,7 +36,7 @@ Réécrire le README public pour qu'un inconnu (dirigeant de PME, développeur, 
 | 13:25 | Archive `docs/archive/README-avant-2026-09-03.md` (`45f5df094`). |
 | 13:26 | README réécrit (`f7014c504`). |
 | 13:27 | Test `tests/docs/readme-truth.test.ts` + assouplissement des compteurs d'images (`af2af4dfd`). |
-| 13:28 | `donnees-personnelles` rouge sur `darkstar` / `100.73.` préexistants → rédactions (`d7172ebb6`). |
+| 13:28 | `donnees-personnelles` rouge sur `la machine GPU de l'auteur` / `[IP Tailscale rédigée]` préexistants → rédactions (`d7172ebb6`). |
 | 13:29 | Union ciblée 4 fichiers / 23 verts. ESLint ciblé 0. `git diff --check` 0. |
 
 ## Fichiers lus
@@ -124,7 +124,7 @@ Variables lues par `src/` : `CODEBUDDY_PROVIDER`, `CODEBUDDY_SENSORY`, `CODEBUDD
 | R1 | README-catalogue (543 lignes) : l'inconnu n'atteint pas l'install en 30 s ; chiffres non sourcés (64 providers, 200+ tools, `$0.0001`) | Réécriture | `f7014c504` |
 | R2 | Aucun test n'empêchait de citer une commande absente de `buddy --help` | `tests/docs/readme-truth.test.ts` | `af2af4dfd` |
 | R3 | `public-screenshots` exigeait 30 images / 24 ancres → force le catalogue | Assouplir les compteurs, corriger `cowork/README.md` (casse Linux) | `af2af4dfd` |
-| R4 | `donnees-personnelles` rouge : `darkstar`, `100.73.` dans des fichiers déjà suivis | Rédaction (aide companion, rapports, coordination) | `d7172ebb6` |
+| R4 | `donnees-personnelles` rouge : `la machine GPU de l'auteur`, `[IP Tailscale rédigée]` dans des fichiers déjà suivis | Rédaction (aide companion, rapports, coordination) | `d7172ebb6` |
 
 ## Tableau final « scénario → attendu → obtenu → correctif → commit »
 
@@ -136,7 +136,7 @@ Variables lues par `src/` : `CODEBUDDY_PROVIDER`, `CODEBUDDY_SENSORY`, `CODEBUDD
 | `readme-truth` | Commandes ⊂ `buddy --help` ; env lues par `src/` | 4/4 verts | Test nouveau | `af2af4dfd` |
 | Screenshots publics | Liens/images résolubles | 5/5 verts (plancher 30 retiré) | Test ajusté | `af2af4dfd` |
 | Lien Cowork | `[Cowork Desktop](docs/cowork.md)` | 13/13 `cowork-public-docs-privacy` | Casse du libellé | dans `f7014c504` (fix follow-up dans le fichier) |
-| Données personnelles | 0 terme interdit | 1/1 vert après rédactions | `darkstar` / IP | `d7172ebb6` |
+| Données personnelles | 0 terme interdit | 1/1 vert après rédactions | `la machine GPU de l'auteur` / IP | `d7172ebb6` |
 
 ## Vérifications
 
