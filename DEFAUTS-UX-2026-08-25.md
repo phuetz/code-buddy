@@ -311,7 +311,7 @@ Store: 4 version(s); head 3/3, best 3/3 (5f07d4d0)
 ### `buddy autonomy status`
 
 ```text
-Fleet store: /home/patrice/code-buddy/.codebuddy
+Fleet store: ~/code-buddy/.codebuddy
 Tasks: 0 (none)
 Next auto-claimable: none (or all critical)
 Blocked by deps: 0
@@ -434,7 +434,7 @@ Arguments:
 
 Options:
   -V, --version                            output the version number
-  -d, --directory <dir>                    set working directory (default: "/home/patrice/code-buddy")
+  -d, --directory <dir>                    set working directory (default: "~/code-buddy")
   -k, --api-key <key>                      CodeBuddy API key (or set GROK_API_KEY env var)
   -u, --base-url <url>                     CodeBuddy API base URL (or set GROK_BASE_URL env var)
   -m, --model <model>                      AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)
@@ -501,7 +501,7 @@ Commands:
   ws                                       Manage and search the opt-in multi-repository workspace
   provider                                 Manage AI providers (Claude, ChatGPT, Grok, Gemini)
   mcp                                      Manage MCP servers or expose Code Buddy with `buddy mcp serve`
-  campaign                                 Native editorial, book-promotion and PubCommander campaign workspace
+  campaign                                 Native editorial, book-promotion and un outil éditorial tiers campaign workspace
   influencer                               Influencer & book-trailer media pipeline (scripts/influencer)
   maison                                   Household rhythm, holidays, quiet modes and private meal safety
   pipeline                                 Manage and run pipeline workflows
@@ -770,13 +770,13 @@ Commands:
 ```text
 Usage: buddy campaign [options] [command]
 
-Native editorial, book-promotion and PubCommander campaign workspace
+Native editorial, book-promotion and un outil éditorial tiers campaign workspace
 
 Options:
   -h, --help                          display help for command
 
 Commands:
-  status [options]                    Show every configured PubCommander
+  status [options]                    Show every configured un outil éditorial tiers
                                       capability module
   overview [options]                  Aggregate the editorial queue, assets,
                                       blogs, performance and automations
@@ -784,7 +784,7 @@ Commands:
                                       viral references
   transcribe [options] <youtube-url>  Extract a YouTube transcript for research
                                       or book-promotion inspiration
-  draft [options]                     Create a guarded PubCommander draft
+  draft [options]                     Create a guarded un outil éditorial tiers draft
                                       directly from Code Buddy
   submit <post-id>                    Send a draft to human approval; never
                                       self-approves or publishes
@@ -2337,7 +2337,7 @@ Options:
                              (default: "127.0.0.1")
   --port <port>              Bind port (default: "4310")
   --state-dir <path>         Persistent queue and job artifacts (default:
-                             "/home/patrice/.codebuddy/gpu-worker")
+                             "~/.codebuddy/gpu-worker")
   --root <path...>           Allowed input/output roots
   --worker-id <id>           Worker identifier (default: "gpuNode")
   --max-concurrency <count>  Concurrent jobs (1–2) (default: "1")

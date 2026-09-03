@@ -2,7 +2,7 @@
 
 Mission : se servir des applis EN VRAI. `CODEBUDDY_COMPANION_RELATIONAL`, `_PROACTIVE` / `_MIN_GAP_MS`, journal épisodique, oubli d'Ebbinghaus. Ce qu'un utilisateur obtient, ce qui casse, réparé.
 
-- Clone : `/home/patrice/DEV/cb-repar-telegram-2026-09-02`
+- Clone : `~/DEV/cb-repar-telegram-2026-09-02`
 - Branche : `fix/gk36-compagnon-relationnel-reel-2026-09-03`
 - Date : 2026-09-03 (Europe/Paris)
 - Agent : Grok 4.6

@@ -2,7 +2,7 @@
 
 Mission : faisabilité d’une voix française locale de secours, inspirée de `buzz-voice`.
 
-- Clone : `/home/patrice/DEV/cb-never-env-2026-09-02`
+- Clone : `~/DEV/cb-never-env-2026-09-02`
 - Branche : `feat/gk5-pocket-tts-rust-2026-09-03`
 - Date de démarrage : 2026-09-03 (Europe/Paris)
 - Agent : Grok 4.6

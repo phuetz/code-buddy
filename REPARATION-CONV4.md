@@ -20,7 +20,7 @@
 
 ## Périmètre et garde-fous
 
-- Clone de travail : `/home/patrice/DEV/cb-voix-e2e-2026-09-02`
+- Clone de travail : `~/DEV/cb-voix-e2e-2026-09-02`
 - Branche demandée : `fix/conv4-stt-flux-2026-09-03`
 - Aucun accès au dépôt original, aucun push, aucune API payante, aucun service système, aucune écriture hors clone ou dans `~/.codebuddy`.
 - Fixtures WAV uniquement ; aucune écoute réelle ni donnée personnelle.
@@ -48,7 +48,7 @@ pass 3: 141.6 ms — texte français attendu
 exit=0 ; ready={"ready":true}
 ```
 
-Preuve complémentaire : modèle local `/home/patrice/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`, lu sans modification, `du -sh` → `641M`; fichiers requis présents : `encoder.int8.onnx` (652184281 octets), `decoder.int8.onnx` (11845275), `joiner.int8.onnx` (6355277), `tokens.txt` (93939). Le modèle est donc complet. Le dossier contient aussi `test_wavs/fr.wav`, témoin local utilisé par la règle de sélection `auto`.
+Preuve complémentaire : modèle local `~/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`, lu sans modification, `du -sh` → `641M`; fichiers requis présents : `encoder.int8.onnx` (652184281 octets), `decoder.int8.onnx` (11845275), `joiner.int8.onnx` (6355277), `tokens.txt` (93939). Le modèle est donc complet. Le dossier contient aussi `test_wavs/fr.wav`, témoin local utilisé par la règle de sélection `auto`.
 
 Les cinq fixtures sont dans `tests/fixtures/stt-conv4/`, PCM mono 16 kHz, dérivées localement du témoin français public du modèle (référence, calme, fort, marge de début, bande limitée). Aucun microphone n’est ouvert.
 
@@ -94,9 +94,9 @@ CODEBUDDY_SPEECH_LANG=auto
 CODEBUDDY_SPEECH_FALLBACK=true
 CODEBUDDY_SPEECH_WORKER=true
 CODEBUDDY_SPEECH_MODEL=small
-CODEBUDDY_SPEECH_PYTHON=/home/patrice/miniforge3/bin/python3
-CODEBUDDY_SPEECH_STT_BIN=/home/patrice/DEV/cb-voix-e2e-2026-09-02/buddy-sense/target/release/buddy-sense
-BUDDY_SENSE_STT_MODEL_DIR=/home/patrice/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
+CODEBUDDY_SPEECH_PYTHON=~/miniforge3/bin/python3
+CODEBUDDY_SPEECH_STT_BIN=~/DEV/cb-voix-e2e-2026-09-02/buddy-sense/target/release/buddy-sense
+BUDDY_SENSE_STT_MODEL_DIR=~/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
 BUDDY_SENSE_STT_THREADS=4
 ```
 

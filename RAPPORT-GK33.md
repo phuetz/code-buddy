@@ -2,7 +2,7 @@
 
 Mission : se servir des applis EN VRAI. `buddy research --deep --iterations N`, `--storm --perspectives N`, `buddy flow`, PaperQA-lite. Ce qu’un utilisateur obtient, ce qui casse, réparé.
 
-- Clone : `/home/patrice/DEV/cb-repar-slash-2026-09-02`
+- Clone : `~/DEV/cb-repar-slash-2026-09-02`
 - Branche : `fix/gk33-recherche-modes-2026-09-03`
 - Date : 2026-09-03 (Europe/Paris)
 - Agent : Grok 4.6

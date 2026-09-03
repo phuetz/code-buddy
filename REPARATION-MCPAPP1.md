@@ -8,17 +8,17 @@ Implémentation des approbations structurées lorsque Code Buddy fonctionne en m
 - Le mode par défaut hors MCP reste byte-identique.
 
 ## 2. Fichiers inspectés (lecture intégrale)
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/utils/confirmation-service.ts` : 597 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/utils/confirmation-helper.ts` : 213 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/mcp/mcp-server.ts` : 635 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/utils/diff-generator.ts` : 393 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/tests/mcp/mcp-server.test.ts` : 139 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/tools/apply-patch.ts` : 569 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/tools/text-editor.ts` : 771 lignes
-- `/home/patrice/DEV/cb-mcpapp1-2026-09-03/src/tools/bash/bash-tool.ts` : 915 lignes
-- `/home/patrice/DEV/lecture-comparative-2026-09-03/codex/codex-rs/mcp-server/src/patch_approval.rs` : 141 lignes (référence Apache 2.0)
-- `/home/patrice/DEV/lecture-comparative-2026-09-03/codex/codex-rs/mcp-server/src/exec_approval.rs` : 146 lignes (référence Apache 2.0)
-- `/home/patrice/DEV/lecture-comparative-2026-09-03/codex/codex-rs/protocol/src/mcp_approval_meta.rs` : 27 lignes (référence Apache 2.0)
+- `~/DEV/cb-mcpapp1-2026-09-03/src/utils/confirmation-service.ts` : 597 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/utils/confirmation-helper.ts` : 213 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/mcp/mcp-server.ts` : 635 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/utils/diff-generator.ts` : 393 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/tests/mcp/mcp-server.test.ts` : 139 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/tools/apply-patch.ts` : 569 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/tools/text-editor.ts` : 771 lignes
+- `~/DEV/cb-mcpapp1-2026-09-03/src/tools/bash/bash-tool.ts` : 915 lignes
+- `~/DEV/lecture-comparative-2026-09-03/codex/codex-rs/mcp-server/src/patch_approval.rs` : 141 lignes (référence Apache 2.0)
+- `~/DEV/lecture-comparative-2026-09-03/codex/codex-rs/mcp-server/src/exec_approval.rs` : 146 lignes (référence Apache 2.0)
+- `~/DEV/lecture-comparative-2026-09-03/codex/codex-rs/protocol/src/mcp_approval_meta.rs` : 27 lignes (référence Apache 2.0)
 
 ## 3. Étapes de développement (TDD)
 
@@ -32,7 +32,7 @@ npx vitest run tests/server/mcp/approval-elicitation.test.ts
 Sortie ROUGE collée :
 ```
  FAIL  tests/server/mcp/approval-elicitation.test.ts [ tests/server/mcp/approval-elicitation.test.ts ]
-Error: Cannot find module '../../../src/server/mcp/approval-elicitation.js' imported from /home/patrice/DEV/cb-mcpapp1-2026-09-03/tests/server/mcp/approval-elicitation.test.ts
+Error: Cannot find module '../../../src/server/mcp/approval-elicitation.js' imported from ~/DEV/cb-mcpapp1-2026-09-03/tests/server/mcp/approval-elicitation.test.ts
  ❯ tests/server/mcp/approval-elicitation.test.ts:3:1
       1| import { afterEach, beforeEach, describe, expect, it, vi } from 'vites…
       2| import * as path from 'path';
@@ -74,7 +74,7 @@ npx vitest run tests/server/mcp/ tests/mcp/mcp-server.test.ts tests/security/don
 
 Sortie VERTE collée :
 ```
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpapp1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpapp1-2026-09-03
 
  Test Files  4 passed (4)
       Tests  28 passed (28)

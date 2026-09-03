@@ -2,7 +2,7 @@
 
 Mission : se servir de la fonctionnalité phare de Code Buddy 2 (flotte multi-IA) **en vrai** — deux `buddy server` sur la même machine, Ollama local, HOME temporaire dans le clone.
 
-- Clone : `/home/patrice/DEV/cb-repar-companion-2026-09-02`
+- Clone : `~/DEV/cb-repar-companion-2026-09-02`
 - Branche : `fix/gk17-fleet-reel-2026-09-03`
 - Date : 2026-09-03 (Europe/Paris)
 - Agent : Grok 4.6

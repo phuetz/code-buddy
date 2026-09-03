@@ -2,7 +2,7 @@
 
 Date : 2026-08-25
 
-Dépôt : `/home/patrice/code-buddy`
+Dépôt : `~/code-buddy`
 
 Branche partagée observée : `audit/cb7-complacent-tests-2026-08-25`
 

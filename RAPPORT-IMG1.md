@@ -4,7 +4,7 @@ Date : 2026-09-03 (Europe/Paris)
 
 ## Périmètre et garde-fous
 
-- Clone : `/home/patrice/DEV/cb-verif-repar-c-2026-09-02`
+- Clone : `~/DEV/cb-verif-repar-c-2026-09-02`
 - Branche : `feat/img1-broll-grok-imagine-2026-09-03`
 - HEAD initial : `ac8dbe474`
 - Service payant autorisé : API xAI déjà câblée dans `scripts/influencer/grok_imagine.py`, exclusivement.

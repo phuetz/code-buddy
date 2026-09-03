@@ -1,7 +1,7 @@
 # R17 — Réparation des innovations Code Buddy mesurées par exécution
 
 Date : 2026-09-02  
-Dépôt : `/home/patrice/DEV/cb-repar-cb2-2026-09-02`  
+Dépôt : `~/DEV/cb-repar-cb2-2026-09-02`
 Branche : `fix/repar-cb2-2026-09-02`  
 Rapport source : `AUDIT-A-REPARER.md` (lu intégralement)  
 Coordination : `docs/FABLE5-CODEX-COORDINATION.md` lue intégralement ; non modifiée conformément à la consigne R17.

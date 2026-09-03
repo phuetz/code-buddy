@@ -2,8 +2,8 @@
 
 ## État de la fusion
 
-- Worktree vérifié avant toute opération : `/home/patrice/code-buddy-fusion-2026-08-26`.
-- Aucun accès ni aucune écriture dans `/home/patrice/code-buddy` ou un autre worktree.
+- Worktree vérifié avant toute opération : `~/code-buddy-fusion-2026-08-26`.
+- Aucun accès ni aucune écriture dans `~/code-buddy` ou un autre worktree.
 - HEAD initial : `279b36c6edee9e59fe8469f3f380beba00a99aa1`.
 - Branche créée depuis ce HEAD : `merge/f1-reconcile-origin-main-2026-08-26`.
 - Réservation Fable 5 commitée avant fusion : `6b43173419f84ece2965afdaf9ec8d45a7cbffd6` (`docs(coordination): reserve F1 reconciliation`).

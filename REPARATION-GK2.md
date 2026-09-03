@@ -1,7 +1,7 @@
 # Réparation GK2 — `buddy research --deep` renvoie zéro source
 
 - Début : 2026-09-03 (Europe/Paris)
-- Clone autorisé : `/home/patrice/DEV/cb-never-tools-2026-09-02` uniquement
+- Clone autorisé : `~/DEV/cb-never-tools-2026-09-02` uniquement
 - Branche : `fix/gk2-research-deep-2026-09-03`
 - HEAD au départ : `3fcf5a97d` (`docs(voice): consigner les preuves DARK3`)
 - Réservation : `f2daaf638` (`chore(gk2): réserver le chantier recherche --deep`)
@@ -40,7 +40,7 @@ Ce rapport a été créé **avant toute inspection** du code de recherche, confo
 
 ## Reproduction réelle (étages)
 
-HOME isolé : `/home/patrice/DEV/cb-never-tools-2026-09-02/_gk2/home`. Clés payantes absentes de l’environnement. Ollama local joignable (`qwen3:4b-instruct`, `qwen3.8:27b`).
+HOME isolé : `~/DEV/cb-never-tools-2026-09-02/_gk2/home`. Clés payantes absentes de l’environnement. Ollama local joignable (`qwen3:4b-instruct`, `qwen3.8:27b`).
 
 ### DuckDuckGo HTML (curl)
 

@@ -8,13 +8,13 @@ reprenant le moteur de montage et les seuils documentés pour la vidéo 01.
 Le master final est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4
+~/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4
 ```
 
 Son sidecar auditable est placé à côté :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4.meta.json
+~/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4.meta.json
 ```
 
 SHA-256 du master :
@@ -42,7 +42,7 @@ Les dix fichiers `ambre-013` à `ambre-022` ont été recalculés avec
 canonique, jamais contre un composite ni une image de garde-robe :
 
 ```text
-/home/patrice/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
+~/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
 ```
 
 SHA-256 de la référence :

@@ -2,7 +2,7 @@
 
 Mission : exercer **pour de vrai** le conseil de modèles avec deux LLM Ollama locaux, le routage principal derrière `CODEBUDDY_COUNCIL_ROUTING`, et le lint de vie privée de `/fleet route` / `route_peer`.
 
-- Clone autorisé : `/home/patrice/DEV/cb-repar-jumeaux-2026-09-02` uniquement
+- Clone autorisé : `~/DEV/cb-repar-jumeaux-2026-09-02` uniquement
 - Branche : `fix/gk27-council-reel-2026-09-03`
 - HEAD au départ : `5e7639b426a7f22679b9db7fa118d7f41e9bebe4`
 - Date : 2026-09-03 (Europe/Paris)

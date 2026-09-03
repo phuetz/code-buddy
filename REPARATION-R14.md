@@ -1,7 +1,7 @@
 # Réparation R14 — Mémoire collective, council, recherche simple
 
 Date : 2026-09-02
-Dépôt : `/home/patrice/DEV/cb-repar-connaissance-2026-09-02`
+Dépôt : `~/DEV/cb-repar-connaissance-2026-09-02`
 Branche : `fix/repar-connaissance-2026-09-02`
 Agent : Grok 4.6
 

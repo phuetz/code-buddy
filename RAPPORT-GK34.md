@@ -2,7 +2,7 @@
 
 Date : 2026-09-03  
 Agent : Grok 4.6  
-Clone : `/home/patrice/DEV/cb-repar-security-2026-09-02`  
+Clone : `~/DEV/cb-repar-security-2026-09-02`
 Branche : `fix/gk34-multi-agents-reel-2026-09-03`  
 HEAD de départ : `1ecb8a07e`  
 Réservation : `e0cdc3a80`

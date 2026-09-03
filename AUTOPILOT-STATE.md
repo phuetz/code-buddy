@@ -7,7 +7,7 @@
 **Garde-fous** (leçons session) : worktree créé par Fable (pas l'agent) → pas de course git ; one-shot `buddy -p` → pas de re-réveil (≠ runaway) ; gate sur checkout principal (node_modules complet, pas le worktree) ; jamais de god-file/`src/` par Codex (manifeste → Fable câble) ; df check avant worktree ; max 3 vagues parallèles.
 
 ## Commandes utiles
-- Lancer une vague : worktree `git worktree add -b feat/X /home/patrice/wt-X main` + symlink node_modules + `cd wt-X && nohup node /home/patrice/code-buddy/dist/index.js --yolo -p "$(cat queue/N.md)" > LOG 2>&1 &`
+- Lancer une vague : worktree `git worktree add -b feat/X ~/wt-X main` + symlink node_modules + `cd wt-X && nohup node ~/code-buddy/dist/index.js --yolo -p "$(cat queue/N.md)" > LOG 2>&1 &`
 - Gate cowork : `cd cowork && npx tsc --noEmit | grep -c "error TS"` (0) + `npx vitest run <tests>` + `npx vite build`
 - Gate noyau : `npx tsc --noEmit` (racine) + `npx vitest run tests/tools/<...>`
 - Logs vagues : `/tmp/claude-1000/.../scratchpad/v2-*.log`
@@ -33,7 +33,7 @@
 
 ### ✅ Cowork LANCÉ + validé par Patrice en direct (gpt-5.5)
 - gpt-5.5 branché : config Cowork `provider=chatgpt`, baseURL auto-résolu `chatgpt.com/backend-api/codex` (OAuth codex-auth.json). Fixé via CDP (config.save). L'adapter boot sur gpt-5.5.
-- **Gotchas Cowork lancement** : binaire Electron manquait (`node node_modules/electron/install.js`), better-sqlite3 pas compilé pour Electron ABI (mon `--ignore-scripts` de l'install CodeMirror ; fix = `electron-rebuild --only better-sqlite3` dans cowork ; copie cowork séparée de la racine Node donc sûr). Lancer : `CODEBUDDY_ENGINE_PATH=/home/patrice/code-buddy/dist DISPLAY=:10.0 NODE_ENV=production setsid nohup ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js`. Tuer par PID du main (pas pkill large → tue le shell, Exit 144).
+- **Gotchas Cowork lancement** : binaire Electron manquait (`node node_modules/electron/install.js`), better-sqlite3 pas compilé pour Electron ABI (mon `--ignore-scripts` de l'install CodeMirror ; fix = `electron-rebuild --only better-sqlite3` dans cowork ; copie cowork séparée de la racine Node donc sûr). Lancer : `CODEBUDDY_ENGINE_PATH=~/code-buddy/dist DISPLAY=:10.0 NODE_ENV=production setsid nohup ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js`. Tuer par PID du main (pas pkill large → tue le shell, Exit 144).
 - **Retours GUI corrigés+poussés** : z-index barre menu `z-[100]→z-30` + 3 thèmes Genspark/Codex/Anthropic + sélecteur (répare open-cowork au passage) (`6c753ce0`) ; **crash Fleet** `capability?.models.length`→`?.models?.length` + PanelErrorBoundary sur Fleet (seul panneau sans) → plus de blocage (`da20a0db`).
 - ⚠️ **Bug connu non corrigé** : « Test de connexion » ChatGPT OAuth échoue (chemin OneShot/pi-ai route en `openai-completions` vers le backend Codex → réponse vide). Le CHAT réel marche (adapter embedded → ChatGptResponsesProvider). À corriger : router l'OAuth vers le bon protocole côté test.
 
@@ -45,7 +45,7 @@ Les 20 tools authored sont câblés dans les 2 registres (adapter ITool `src/too
 
 ### 🔓 VALIDATION COMPUTER-USE DÉBLOQUÉE (2026-07-05)
 Je peux VOIR + piloter Cowork moi-même (capture X11 `import -window root` + CDP `--remote-debugging-port=9222` sur `window.useAppStore`). Donc le câblage GUI n'attend plus Patrice pour la validation VISUELLE — je monte, screenshot, vérifie, ajuste, PUIS montre à Patrice une surface déjà propre. Patrice a dit « continue en mode autonome » après le fix mermaid. Voir [[cowork-live-validation]].
-- **Bug mermaid corrigé** (`5bc5b296`) : les blocs ```mermaid``` rendaient en texte → `MermaidBlock.tsx` (mermaid dynamic import + DOMPurify + SVG theme-aware, porté de code-explorer `~/DEV/gitnexus-rs/chat-ui`). ⚠️ **Gotcha** : intercepter dans `ContentBlockView.tsx:200` (le code renderer du chat, override `MessageMarkdown` DEFAULT) PAS seulement MessageMarkdown. Validé live.
+- **Bug mermaid corrigé** (`5bc5b296`) : les blocs ```mermaid``` rendaient en texte → `MermaidBlock.tsx` (mermaid dynamic import + DOMPurify + SVG theme-aware, porté de code-explorer `~/DEV/code-explorer/chat-ui`). ⚠️ **Gotcha** : intercepter dans `ContentBlockView.tsx:200` (le code renderer du chat, override `MessageMarkdown` DEFAULT) PAS seulement MessageMarkdown. Validé live.
 
 ### ✅ CÂBLAGE GUI EN COURS (validé par computer-use, mergé)
 - **App Studio** monté `primaryView:'studio'` (`352e3e28`) — VALIDÉ visuellement (composer « Décris l'app », chips modèles, build strip, état vide). bolt.diy intégré.
@@ -79,10 +79,10 @@ La production dépasse largement le câblage. **Prochaine grande phase = CÂBLAG
 4. **Genspark (~33 slices)** — montage Labs/palette via genspark-slices.ts. **Validation Patrice.**
 
 ### ⚠️ BUG DE BRIEF corrigé pour la suite
-Les briefs référençaient `/home/patrice/code-buddy/CODEX-CONVENTIONS.md` en chemin ABSOLU → hors du workspace du worktree → buddy refuse (« Path outside workspace »). **Fix pour les futures vagues : lancer avec le prompt CONCATÉNÉ** `-p "$(cat CODEX-CONVENTIONS.md; echo; cat queue/N.md)"` (tout inline, pas de lecture de fichier externe). Ne pas référencer de chemin absolu hors worktree dans un brief.
+Les briefs référençaient `~/code-buddy/CODEX-CONVENTIONS.md` en chemin ABSOLU → hors du workspace du worktree → buddy refuse (« Path outside workspace »). **Fix pour les futures vagues : lancer avec le prompt CONCATÉNÉ** `-p "$(cat CODEX-CONVENTIONS.md; echo; cat queue/N.md)"` (tout inline, pas de lecture de fichier externe). Ne pas référencer de chemin absolu hors worktree dans un brief.
 
 ### ⚠️ Process transitoires dans le checkout principal
-Des PID buddy `--yolo` apparaissent brièvement avec cwd=/home/patrice/code-buddy (forks des process worktree). Transitoires, disparaissent seuls. main reste == origin/main. Surveiller mais pas d'action tant que main intact.
+Des PID buddy `--yolo` apparaissent brièvement avec cwd=~/code-buddy (forks des process worktree). Transitoires, disparaissent seuls. main reste == origin/main. Surveiller mais pas d'action tant que main intact.
 
 ### 📋 File (à écrire/lancer)
 - **Data-viz partagée** (`cowork/.../viz/`) : sparkline/barres/donut/heatmap/timeline props-driven sans lib
@@ -188,7 +188,7 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
 - **Export au bon endroit RE-PROUVÉ + PodStudio (`c51409a8`→suivant)** : commits-nuit-v2.xlsx créé dans le cwd de
   session (Excel réel) — famille cwd close. PodStudio (B10) : 4e livrable fonctionnel, script ```pod live (7 segments
   validés), synthèse via text_to_speech (honore context.cwd). ⚠️ Synthèse audio réelle à prouver : relancer Electron
-  avec CODEBUDDY_TTS_VOICE=/home/patrice/DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx pour le piper local.
+  avec CODEBUDDY_TTS_VOICE=~/DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx pour le piper local.
 - **🔴 CHANTIER PRIORITAIRE : sélection d'outils embarquée instable** — tours mesurés : 74 in (AUCUN SP/outil !),
   3,8k (aucun outil), 6,2k (search seul — ni tool_search ni l'alwaysInclude), 8,9k (bash OK). L'alwaysInclude n'est
   pas systématiquement honoré en Electron. PISTE N°1 : le fallback keyword/BM25 quand les embeddings RAG ne chargent
@@ -367,7 +367,7 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
 - **SALVE 3 (G/H) + EXPORT CONVERSATIONS (demandes Patrice)** : (a) /grill-me [--yolo] et /deepthink (mode plan +
   thinking xhigh) — handlers Codex gatés/cherry-pickés, enregistrés au catalogue slash + map (smoke /deepthink
   répond). (b) Export conversations : MD (exportToFile existant + bouton drawer) et PDF « de toute beauté » —
-  template adapté du pipeline corporate de Code Explorer (~/DEV/gitnexus-rs pdf.rs : page de garde dégradé,
+  template adapté du pipeline corporate de Code Explorer (~/DEV/code-explorer pdf.rs : page de garde dégradé,
   @page A4, print-color-adjust) sur l'identité Ember, markdown-lite sans dépendance, offscreen printToPDF +
   Save-As natif. Prouvé e2e : clic bouton → dialogue natif piloté xdotool → PDF 2 pages 60 Ko envoyé à Patrice.
   Bilan Codex du jour : 8 vagues, 8 récupérées. ⚠️ Récidive gotcha : kill+relance dans le MÊME bloc bash → bind
@@ -467,7 +467,7 @@ par Fable ; les vagues calent ~50% → WIP copié+réparé+commité à la main).
 
 ## SESSION 2026-07-05 NUIT — fixes chat live + 3 vagues Codex relancées
 Retours GUI Patrice traités en direct (tous poussés) :
-- **Recherche web cassée (CAPTCHA)** → clés Serper/Brave/OpenRouter extraites de `~/DEV/claude-et-patrice/Acces_Centralises.md`
+- **Recherche web cassée (CAPTCHA)** → clés Serper/Brave/OpenRouter extraites de `~/DEV/private-handover-repo/Acces_Centralises.md`
   → écrites dans `.env` (racine, CLI) + `cowork/.env` (Cowork charge `__dirname/../../.env` = cowork/.env, PAS racine !),
   gitignored. Serper prouvé (actus fraîches + « qui est Patrice Huetz »→son GitHub). AUCUN code committé (config env).
 - **Listbox gris sur blanc** → `color-scheme` par thème + couleurs `select/option` (`d3a56722`).

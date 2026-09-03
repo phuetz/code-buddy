@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-repar-cowork-2026-09-02`
+Clone : `~/DEV/cb-repar-cowork-2026-09-02`
 Branche : `fix/gk29-cb2-reel-2026-09-03`
 HEAD au démarrage : `d0e067392` (`Merge GK23 (rappels de Lisa en vrai) into codex/audit-systeme-nerveux-2026-09-01`)
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)

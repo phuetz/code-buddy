@@ -335,7 +335,7 @@ Received:
 
     Array [
       "Voici ce que je vois.",
-      "/home/patrice/.codebuddy/companion/motion-22.jpg",
+      "~/.codebuddy/companion/motion-22.jpg",
     ]
 
  ❯ tests/companion/revue-gemini-camera-share.test.ts:59:31

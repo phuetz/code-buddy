@@ -2,7 +2,7 @@
 
 Date d’ouverture : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-succes-memory-2026-09-02`
+Clone : `~/DEV/cb-succes-memory-2026-09-02`
 Branche : `feat/gk6-ckg-phase4-2026-09-03`
 HEAD à l’ouverture : `3fcf5a97d` (`docs(voice): consigner les preuves DARK3`)
 
@@ -43,7 +43,7 @@ ec6cdb99a feat(voice): ajouter le routage Kyutai à deux vitesses
 9719f57d0 chore(dark3): réserver le chantier voix locale
 d50aee61e Merge EVO1 (notes de version lisibles par Lisa, outil self_evolution, source d'expérience Darwin-Gödel opt-in) into codex/audit-systeme-nerveux-2026-09-01
 c053ccd22 docs(self-model): document self evolution
-/home/patrice/DEV/cb-succes-memory-2026-09-02
+~/DEV/cb-succes-memory-2026-09-02
 ```
 
 Lecture de `docs/FABLE5-CODEX-COORDINATION.md` (protocole + début du tableau) pour réserver le chantier GK6. Aucune lecture de `buddy-memory/src/`, `src/memory/collective-knowledge-graph.ts` ni `buddy-memory-client.ts` à ce stade.
@@ -83,7 +83,7 @@ Générateur déterministe `buddy-memory/src/synth.rs` (seed 42, 100 clusters, a
 Commande :
 
 ```
-cd buddy-memory && cargo run --release --offline --bin ckg-bench -- --nodes 50000 --queries 100 --mode exhaustive --seed 42 --work /home/patrice/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-exhaustive-50k
+cd buddy-memory && cargo run --release --offline --bin ckg-bench -- --nodes 50000 --queries 100 --mode exhaustive --seed 42 --work ~/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-exhaustive-50k
 ```
 
 Sortie (exit 0, 73 s) :
@@ -122,7 +122,7 @@ Autres tests d’index : `snapshot_persists_inverted_index_and_embeddings`, `ing
 Commande :
 
 ```
-cd buddy-memory && cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode indexed --seed 42 --work /home/patrice/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-indexed-50k
+cd buddy-memory && cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode indexed --seed 42 --work ~/DEV/cb-succes-memory-2026-09-02/buddy-memory/.gk6-work/bench-indexed-50k
 ```
 
 Sortie (exit 0) :

@@ -2,7 +2,7 @@
 
 Date : 2026-09-03  
 Agent : Grok 4.6  
-Clone : `/home/patrice/DEV/cb-repar-context-2026-09-02`  
+Clone : `~/DEV/cb-repar-context-2026-09-02`
 Branche : `fix/gk18-dev-golden-path-2026-09-03`  
 Base : `587bbc3ae` (`Merge GK4/GK4b`)  
 Réservation : `64cf5611d`

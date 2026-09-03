@@ -1,6 +1,6 @@
 # CB20 — La mémoire persistante : ce qu'elle garde, ce qu'elle perd
 
-Date : 2026-08-25. Worktree `/home/patrice/code-buddy`, branche `audit/cb7-complacent-tests-2026-08-25` (worktree partagé). Aucun push.
+Date : 2026-08-25. Worktree `~/code-buddy`, branche `audit/cb7-complacent-tests-2026-08-25` (worktree partagé). Aucun push.
 
 Un seul défaut corrigé. Les quatre autres questions sont reproduites et tiennent, ou relèvent du format de stockage (pas un correctif de logique métier).
 

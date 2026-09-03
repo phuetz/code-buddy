@@ -1,6 +1,6 @@
 # Réparation SANDBOX1 — bac à sable natif (Landlock / Bubblewrap)
 
-Clone : `/home/patrice/DEV/cb-sandbox1-2026-09-03`
+Clone : `~/DEV/cb-sandbox1-2026-09-03`
 Branche : `feat/sandbox1-native-sandbox-2026-09-03` (`61fd3d17c`)
 Agent : Grok 4.6
 Date : 2026-09-03
@@ -67,13 +67,13 @@ Tests       no tests
 
 ## Preuves d'exécution réelle (Landlock, clone)
 
-`CODEBUDDY_NATIVE_SANDBOX=true` ; backend `landlock` ; python `/home/patrice/miniforge3/bin/python3`.
+`CODEBUDDY_NATIVE_SANDBOX=true` ; backend `landlock` ; python `~/miniforge3/bin/python3`.
 
 ### 1. `echo ok` — réussit
 
 ```
 ===== echo ok =====
-backend=landlock file=/home/patrice/miniforge3/bin/python3
+backend=landlock file=~/miniforge3/bin/python3
 status=0
 stdout="ok\n"
 stderr=""
@@ -86,10 +86,10 @@ stderr=""
 backend=landlock
 status=0
 stdout="SSH_EXIT=2\n"
-stderr="ls: cannot open directory '/home/patrice/.ssh': Permission denied\n"
+stderr="ls: cannot open directory '~/.ssh': Permission denied\n"
 
 ===== ls ~/.codebuddy =====
-stderr="ls: cannot open directory '/home/patrice/.codebuddy': Permission denied\n"
+stderr="ls: cannot open directory '~/.codebuddy': Permission denied\n"
 ```
 
 Aucun JSON de `~/.codebuddy` lu. Le vrai `~/.codebuddy` n'a pas été écrit.
@@ -103,10 +103,10 @@ stderr="/usr/bin/bash: line 1: /tmp/cb-sandbox1-write-probe-2785149: Permission 
 
 ===== write $HOME =====
 stdout="HOME_EXIT=1\n"
-stderr="/usr/bin/bash: line 1: /home/patrice/cb-sandbox1-home-probe-2785151: Permission denied\n"
+stderr="/usr/bin/bash: line 1: ~/cb-sandbox1-home-probe-2785151: Permission denied\n"
 ```
 
-`ls /tmp/cb-sandbox1-write-probe-*` et `ls /home/patrice/cb-sandbox1-home-probe-*` : aucun fichier.
+`ls /tmp/cb-sandbox1-write-probe-*` et `ls ~/cb-sandbox1-home-probe-*` : aucun fichier.
 
 Écriture dans le TMPDIR dédié du projet : `confined-ok`.
 

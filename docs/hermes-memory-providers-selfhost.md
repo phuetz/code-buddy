@@ -240,7 +240,7 @@ sides), so they do not share the Mem0 bug class.
 mem0 recipe on this box:
 
 ```bash
-# /home/patrice/mem0/server/.env
+# ~/mem0/server/.env
 MEM0_DEFAULT_LLM_MODEL=qwen2.5:7b-instruct     # fast, non-thinking
 MEM0_DEFAULT_EMBEDDER_MODEL=nomic-embed-text
 MEM0_DEFAULT_EMBEDDER_DIMS=768                 # MUST match nomic

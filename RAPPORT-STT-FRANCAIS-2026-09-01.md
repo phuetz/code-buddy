@@ -31,7 +31,7 @@ forme de WAV transitoire au chemin TypeScript/faster-whisper qui sait réellemen
 est interdit, le chemin échoue fermé et le dit au lieu de produire un faux succès dans une autre
 langue.
 
-Je n'ai **pas modifié** `/home/patrice/.codebuddy/vision.env`.
+Je n'ai **pas modifié** `~/.codebuddy/vision.env`.
 
 ## Preuve du moteur réellement exécuté avant correction
 
@@ -40,7 +40,7 @@ Je n'ai **pas modifié** `/home/patrice/.codebuddy/vision.env`.
 Le service user `buddy-sense.service` exécutait bien :
 
 ```text
-/home/patrice/code-buddy/buddy-sense/target/release/buddy-sense
+~/code-buddy/buddy-sense/target/release/buddy-sense
 ```
 
 Sa trace de démarrage, antérieure à la correction :
@@ -48,7 +48,7 @@ Sa trace de démarrage, antérieure à la correction :
 ```text
 2026-08-28T13:52:53+02:00 buddy-sense[284562]:
 [buddy-sense] live-audio: recognizer ready
-(/home/patrice/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8)
+(~/.codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8)
 ```
 
 La chaîne effective était donc :
@@ -113,7 +113,7 @@ Le WAV parlé a été généré dans le dépôt, sans utiliser le WAV chanté :
 ```bash
 printf 'Lisa, tu m’entends ?' \
   | /usr/local/bin/piper \
-      --model /home/patrice/DEV/lisa/voices/fr_FR-siwis-medium.onnx \
+      --model ~/DEV/lisa/voices/fr_FR-siwis-medium.onnx \
       --output_file tmp/stt-francais-2026-09-01/lisa-tu-mentends.wav
 ```
 
@@ -121,7 +121,7 @@ Exécution après correction, avec les mêmes fichiers d'environnement que le se
 
 ```bash
 node --env-file=.env \
-  --env-file=/home/patrice/.codebuddy/vision.env \
+  --env-file=~/.codebuddy/vision.env \
   --import tsx scripts/reproduce-stt-francais.ts \
   tmp/stt-francais-2026-09-01/lisa-tu-mentends.wav
 ```
@@ -261,7 +261,7 @@ Le percept relu et déchiffré par le code du dépôt confirme :
 
 Ce n'est pas une consigne explicite de complaisance dans les trois fichiers suspects :
 
-- le prompt vivant `/home/patrice/.codebuddy/bot-cwd/.codebuddy/SOUL.md` dit déjà « Be honest,
+- le prompt vivant `~/.codebuddy/bot-cwd/.codebuddy/SOUL.md` dit déjà « Be honest,
   always » et « love does not lie » ;
 - le prompt du dépôt préfère les preuves live et interdit de bluffer l'architecture ;
 - `reply-augment.ts` module l'émotion, le ton et les ouvertures, pas les faits ;

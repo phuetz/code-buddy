@@ -2,7 +2,7 @@
 
 Date : 2026-09-02
 
-Dépôt : `/home/patrice/DEV/cb-repar-providers-2026-09-02`
+Dépôt : `~/DEV/cb-repar-providers-2026-09-02`
 
 Branche : `fix/repar-providers-2026-09-02`
 

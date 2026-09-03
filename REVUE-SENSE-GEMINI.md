@@ -12,7 +12,7 @@ Règles respectées : aucun push, aucune API payante, aucun service systemd modi
 
 ### Lectures préalables et cadrage
 1. Initialisation du rapport `REVUE-SENSE-GEMINI.md` avant toute inspection.
-2. Lecture intégrale de `/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md` (lignes 1 à 39) :
+2. Lecture intégrale de `~/DEV/vitrine-drafts/vague-2026-09-02/robot/FAITS-ROBOT-ECHO-MOUVEMENT-2026-09-02.md` (lignes 1 à 39) :
    - Fait 1 : Auto-transcription et auto-réponse (PipeWire virtual source `echo-cancel-source` annonce `aecActive: true` ; `speech-reaction.ts` désactive la garde half-duplex ; résidu Whisper transcrit la voix de Lisa ; aucun filtre `recentSpoken`/`selfEcho`).
    - Fait 2 : Mouvement continu dans le noir (`BUDDY_VISION_MOTION=0.02` inférieur au bruit du capteur 0.0315–0.0370 ; frames noires envoyées à moondream toutes les 8s qui hallucine des scènes).
    - Fait 3 : Présence clignotante (`person_entered` / `person_lost` en 2 à 6s sans hystérèse dans `watch.py` à 4 FPS ; accueil répété "encore toi").

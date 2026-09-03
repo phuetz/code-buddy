@@ -36,7 +36,7 @@
   - Export de `resolveVoiceJitterBufferMs` dans `__voiceAudioPlayerTest`.
 - **Test vert :**
   ```
-  RUN  v4.1.9 /home/patrice/DEV/cb-voix-agy-2026-09-02
+  RUN  v4.1.9 ~/DEV/cb-voix-agy-2026-09-02
   Test Files  1 passed (1)
        Tests  4 passed (4)
     Duration  1.53s

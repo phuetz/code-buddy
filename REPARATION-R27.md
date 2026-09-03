@@ -1,7 +1,7 @@
 # Réparation R27 — widgets Telegram et contrat JSON
 
 Date : 2026-09-02
-Dépôt : `/home/patrice/DEV/cb-repar-widgets-2026-09-02`
+Dépôt : `~/DEV/cb-repar-widgets-2026-09-02`
 Branche : `fix/repar-widgets-2026-09-02`
 
 Ce rapport est créé avant les correctifs, conformément à la mission. Aucun

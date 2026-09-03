@@ -1,6 +1,6 @@
 # RÉPARATION R21 — routes du serveur HTTP
 
-- Dépôt : `/home/patrice/DEV/cb-repar-server-2026-09-02`
+- Dépôt : `~/DEV/cb-repar-server-2026-09-02`
 - Branche : `fix/repar-server-2026-09-02`
 - Date : 2026-09-02
 - Audit source : `AUDIT-A-REPARER.md`, lu intégralement avant correction

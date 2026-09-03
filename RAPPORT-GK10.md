@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-succes-channels-2026-09-02`
+Clone : `~/DEV/cb-succes-channels-2026-09-02`
 Branche : `fix/gk10-telegram-inconnu-2026-09-03`
 HEAD au démarrage : `3fcf5a97d` (`docs(voice): consigner les preuves DARK3`)
 Original `~/code-buddy` : interdit (jamais ouvert, jamais écrit)

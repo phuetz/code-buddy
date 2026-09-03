@@ -2,7 +2,7 @@
 
 ## État initial
 
-- Dépôt : `/home/patrice/DEV/cb-repar-jumeaux-b-2026-09-02`
+- Dépôt : `~/DEV/cb-repar-jumeaux-b-2026-09-02`
 - Branche attendue : `fix/repar-jumeaux-b-2026-09-02`
 - HEAD initial : `35a3f6f17`
 - Vérification lue intégralement : `VERIF-A-LIRE.md`

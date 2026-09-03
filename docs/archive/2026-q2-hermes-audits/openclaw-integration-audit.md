@@ -4,7 +4,7 @@ Date: 2026-05-16, updated 2026-06-07
 
 Scope: current Code Buddy worktree after the weekend Fleet/Cowork work.
 This file updates the older Claude audit in
-`D:\CascadeProjects\claude-et-patrice\propositions\AUDIT-OPENCLAW-HERITAGE-2026-05-02.md`.
+`D:\CascadeProjects\the private handover repository\propositions\AUDIT-OPENCLAW-HERITAGE-2026-05-02.md`.
 
 ## Executive summary
 

@@ -15,5 +15,5 @@ Résultat : échec, code 1 — `No test files found` pour le filtre `tests/memor
 - Prouvé : suites corruption/atomic → 2 fichiers, 8/8 verts ; données personnelles → 1/1 vert.
 - Prouvé : `npx tsc --noEmit -p .` et ESLint ciblé → code 0.
 - Commits : `16f81afa8` fonctionnel ; second commit tests/docs présent sur cette branche.
-- Aucun push, service, API payante, écriture hors clone ou accès en écriture à `/home/patrice/code-buddy`.
+- Aucun push, service, API payante, écriture hors clone ou accès en écriture à `~/code-buddy`.
 - Reste ouvert : le déclenchement périodique externe doit appeler l’entrée exportée `triggerBackgroundExtraction`.

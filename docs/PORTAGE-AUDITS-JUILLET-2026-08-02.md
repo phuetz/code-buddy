@@ -5,7 +5,7 @@ sous-lot Fleet lifecycle, le premier sous-lot Providers/context et l'activation
 LM-Resizer + Code Explorer sont portés et commités sur cinq branches isolées ;
 ce document n'autorise toujours aucun merge ou push. Les
 branches sources et leurs rapports ont été protégés par la sauvegarde P0
-décrite dans `/home/patrice/Backups/code-buddy/2026-08-02-p0/MANIFESTE.md`.
+décrite dans `~/Backups/code-buddy/2026-08-02-p0/MANIFESTE.md`.
 
 ## Cible de reprise
 
@@ -138,7 +138,7 @@ donné **GO** sur LM-Resizer, la barrière MCP headless et le routage multi-inde
 Le nom `gitnexus` ne subsiste que comme alias d'exécutable/préfixe historique de
 compatibilité ; le produit et le serveur sont nommés **Code Explorer**.
 
-L'index local Code Explorer de `/home/patrice/code-buddy` a ensuite été reconstruit
+L'index local Code Explorer de `~/code-buddy` a ensuite été reconstruit
 au commit `b192eba3` : 6 130 fichiers, 124 583 nœuds, 298 368 arêtes, 10 328
 communautés et 75 processus. Cette reconstruction est locale et ignorée par Git.
 

@@ -9,13 +9,13 @@ Rendu le 1er août 2026 selon
 Le master final est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4
 ```
 
 Son sidecar est placé à côté :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4.meta.json
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4.meta.json
 ```
 
 SHA-256 du master :
@@ -32,7 +32,7 @@ référence, pas un dossier. La référence utilisée est donc l’image canoniq
 du kit, et jamais un composite généré :
 
 ```text
-/home/patrice/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
+~/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
 ```
 
 Son SHA-256 est

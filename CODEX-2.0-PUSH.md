@@ -1,7 +1,7 @@
 # Code Buddy 2.0 — état vérifiable avant push
 
 Date : 2026-08-31  
-Dépôt : `/home/patrice/code-buddy`  
+Dépôt : `~/code-buddy`
 Branche : `fix/ci-green-2026-08-30`  
 Push : **aucun**
 
@@ -63,10 +63,10 @@ AVANT — extrait et synthèse réels, exit 1 :
 
 ```text
 FAIL  tests/commands/utility-commands.test.ts > utility CLI commands > runs doctor checks against the global --directory target
-Error: [vitest] No "summarizeDoctorChecks" export is defined on the "/home/patrice/code-buddy/src/doctor/index.ts" mock. Did you forget to return it from "vi.mock"?
+Error: [vitest] No "summarizeDoctorChecks" export is defined on the "~/code-buddy/src/doctor/index.ts" mock. Did you forget to return it from "vi.mock"?
 
 FAIL  tests/commands/utility-commands.test.ts > utility CLI commands > returns a failing status when doctor finds no ready provider
-Error: [vitest] No "summarizeDoctorChecks" export is defined on the "/home/patrice/code-buddy/src/doctor/index.ts" mock. Did you forget to return it from "vi.mock"?
+Error: [vitest] No "summarizeDoctorChecks" export is defined on the "~/code-buddy/src/doctor/index.ts" mock. Did you forget to return it from "vi.mock"?
 
 Test Files  1 failed | 93 passed (94)
      Tests  2 failed | 1112 passed (1114)

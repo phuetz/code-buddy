@@ -28,7 +28,7 @@ Malgré les correctifs apportés le 02/09/2026 (commit `3c48489c6` résolvant le
 #### A. `mesure-charge.wav` (16,60 s, 48 kHz stéréo, 3 phrases)
 Commande exécutée :
 ```bash
-ffmpeg -i /home/patrice/DEV/vitrine-drafts/vague-2026-09-02/voix/mesure-charge.wav -af "silencedetect=noise=-40dB:duration=0.03" -f null - 2>&1 | grep -E "silence_(start|end|duration)"
+ffmpeg -i ~/DEV/vitrine-drafts/vague-2026-09-02/voix/mesure-charge.wav -af "silencedetect=noise=-40dB:duration=0.03" -f null - 2>&1 | grep -E "silence_(start|end|duration)"
 ```
 Sortie brute :
 - `silence_start: 0 | silence_end: 2.48479 | silence_duration: 2.48479` (attente initiale)
@@ -50,7 +50,7 @@ Sortie brute :
 #### B. `mesure-stress.wav` (1 min 09 s, 48 kHz stéréo, charge CPU 24 cœurs saturés)
 Commande exécutée :
 ```bash
-ffmpeg -i /home/patrice/DEV/vitrine-drafts/vague-2026-09-02/voix/mesure-stress.wav -af "silencedetect=noise=-40dB:duration=0.03" -f null - 2>&1 | grep -E "silence_(start|end|duration)"
+ffmpeg -i ~/DEV/vitrine-drafts/vague-2026-09-02/voix/mesure-stress.wav -af "silencedetect=noise=-40dB:duration=0.03" -f null - 2>&1 | grep -E "silence_(start|end|duration)"
 ```
 Sortie brute : **16 micro-trous** strictement situés entre 35 ms et 127 ms :
 - 9.498 s (46,5 ms), 9.701 s (74,1 ms), 9.998 s (41,2 ms)

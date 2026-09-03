@@ -6,7 +6,7 @@ Pilote : Codex + flotte disponible, Claude exclu à la demande de Patrice. Aucun
 
 ### Formation LISA IA
 
-Dépôt : `/home/patrice/DEV/formation-lisa-ia`, branche `master` locale.
+Dépôt : `~/DEV/formation-lisa-ia`, branche `master` locale.
 
 - PDF rendus reproductibles et métadonnées normalisées ;
 - 24 ancres internes cassées corrigées ;
@@ -19,7 +19,7 @@ Commits : `7c92cc5`, `b2d4ede`, `69b11ef`, `efdf55c`, `349220b`, `e8e2dba`, `fb1
 
 ### Livre « Automatisez vos chaînes YouTube »
 
-Dépôt : `/home/patrice/DEV/livre-automatisez-youtube`, branche `master` locale.
+Dépôt : `~/DEV/livre-automatisez-youtube`, branche `master` locale.
 
 - chapitre 9 aligné avec la grille 0–3–10–50–60 ;
 - note `[H]` redondante retirée ;
@@ -50,7 +50,7 @@ Reste humain : recouper les faits signalés, trancher Halong/Gizeh, choisir l'av
 
 ### Mathery
 
-Branche isolée : `fix/mathery-release-gates-2026-08-24`, worktree `/home/patrice/mathery-release-gates-2026-08-24`.
+Branche isolée : `fix/mathery-release-gates-2026-08-24`, worktree `~/mathery-release-gates-2026-08-24`.
 
 - `006d64bb` : couverture réelle du rendu Markdown/KaTeX des fiches IA et restauration du contrat smoke ;
 - `8d4ad54a` : smoke Lite adapté au mode « Naturel » et au menu d'actions courant ;
@@ -63,7 +63,7 @@ Contre-revue des budgets : le seuil Lite est obsolète après l'embarquement vol
 
 ### NexusSwitch
 
-Branche isolée : `fix/nexusswitch-bundle-budget-2026-08-24`, worktree `/home/patrice/nexusswitch-bundle-budget-2026-08-24`.
+Branche isolée : `fix/nexusswitch-bundle-budget-2026-08-24`, worktree `~/nexusswitch-bundle-budget-2026-08-24`.
 
 - `03ec2f1` : `docx` isolé dans un chunk dédié ; entrée principale de 924 à 590,7 KiB ;
 - `d90866f` : 149 chaînes UI remises sur des clés FR/EN existantes, autonyme documenté et statut licence rendu indépendant de la langue ;

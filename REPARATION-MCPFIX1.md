@@ -22,7 +22,7 @@ Commande (code de sortie 1) :
 ```text
 npx vitest run tests/mcp/mcp-agent-server.test.ts tests/mcp/client.test.ts
 
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 10 failed) 78ms
        × should send message to agent and return response 4ms
@@ -296,13 +296,13 @@ Mutation : `processUserMessage(args.message)` → `processUserMessage('')`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  772ms (transform 401ms, setup 20ms, import 320ms, tests 264ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 161ms
        × should send message to agent and return response 159ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_chat handler > should send message to agent and return response
@@ -320,7 +320,7 @@ Number of calls: 1
    Duration  1.01s (transform 732ms, setup 38ms, import 718ms, tests 161ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  919ms (transform 491ms, setup 26ms, import 303ms, tests 375ms, environment 0ms)
@@ -332,13 +332,13 @@ Mutation : réponse d'erreur avec `${message}` → texte fixe sans cause.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.29s (transform 784ms, setup 78ms, import 659ms, tests 334ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 95ms
        × should handle errors gracefully 94ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_chat handler > should handle errors gracefully
@@ -351,7 +351,7 @@ Received: "Agent chat error"
    Duration  1.18s (transform 789ms, setup 141ms, import 777ms, tests 95ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.01s (transform 503ms, setup 90ms, import 472ms, tests 92ms, environment 0ms)
@@ -363,13 +363,13 @@ Mutation : branche simple `processUserMessage(args.task)` → chaîne vide.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  986ms (transform 740ms, setup 49ms, import 773ms, tests 85ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 269ms
        × should process simple task directly 258ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_task handler > should process simple task directly
@@ -387,7 +387,7 @@ Number of calls: 1
    Duration  726ms (transform 355ms, setup 41ms, import 250ms, tests 269ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  986ms (transform 546ms, setup 112ms, import 504ms, tests 90ms, environment 0ms)
@@ -399,13 +399,13 @@ Mutation : `executePlan(args.task)` → `executePlan('')`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  2.53s (transform 349ms, setup 56ms, import 324ms, tests 102ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 105ms
        × should use executePlan for complex tasks 100ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_task handler > should use executePlan for complex tasks
@@ -423,7 +423,7 @@ Number of calls: 1
    Duration  748ms (transform 472ms, setup 26ms, import 475ms, tests 105ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.33s (transform 730ms, setup 89ms, import 702ms, tests 174ms, environment 0ms)
@@ -435,13 +435,13 @@ Mutation : réponse d'erreur avec `${message}` → texte fixe sans cause.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  786ms (transform 458ms, setup 59ms, import 453ms, tests 82ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 105ms
        × should handle errors gracefully 104ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_task handler > should handle errors gracefully
@@ -454,7 +454,7 @@ Received: "Agent task error"
    Duration  1.15s (transform 738ms, setup 85ms, import 738ms, tests 105ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  484ms (transform 278ms, setup 39ms, import 241ms, tests 94ms, environment 0ms)
@@ -466,13 +466,13 @@ Mutation : `processUserMessage(args.task)` → `processUserMessage('')`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  377ms (transform 220ms, setup 18ms, import 195ms, tests 89ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 427ms
        × should create plan without executing 424ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent_plan handler > should create plan without executing
@@ -490,7 +490,7 @@ Number of calls: 1
    Duration  801ms (transform 426ms, setup 36ms, import 215ms, tests 427ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  959ms (transform 552ms, setup 25ms, import 412ms, tests 380ms, environment 0ms)
@@ -502,13 +502,13 @@ Mutation : premier argument `apiKey` du constructeur → chaîne vide.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  805ms (transform 499ms, setup 22ms, import 332ms, tests 359ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 410ms
        × should initialize agent on first agent tool call 408ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent lazy initialization > should initialize agent on first agent tool call
@@ -522,7 +522,7 @@ AssertionError: expected '' to be 'test-key-123' // Object.is equality
    Duration  1.06s (transform 632ms, setup 32ms, import 469ms, tests 410ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.47s (transform 891ms, setup 93ms, import 736ms, tests 312ms, environment 0ms)
@@ -534,13 +534,13 @@ Mutation : `if (!apiKey)` → `if (false)`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.23s (transform 707ms, setup 115ms, import 595ms, tests 234ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 380ms
        × should throw when no API key is set 378ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > agent lazy initialization > should throw when no API key is set
@@ -555,7 +555,7 @@ undefined
    Duration  1.69s (transform 958ms, setup 98ms, import 837ms, tests 380ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.27s (transform 767ms, setup 70ms, import 527ms, tests 408ms, environment 0ms)
@@ -567,13 +567,13 @@ Mutation : `const result = agentLock.then(fn, fn)` → `const result = fn()`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.26s (transform 819ms, setup 109ms, import 710ms, tests 296ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 218ms
        × should serialize concurrent agent calls 215ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > concurrency lock > should serialize concurrent agent calls
@@ -584,7 +584,7 @@ AssertionError: expected 2 to be greater than 10
    Duration  883ms (transform 496ms, setup 29ms, import 300ms, tests 218ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  691ms (transform 416ms, setup 23ms, import 294ms, tests 210ms, environment 0ms)
@@ -596,13 +596,13 @@ Mutation : `this.agent.dispose()` → `void this.agent`.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  770ms (transform 464ms, setup 19ms, import 260ms, tests 276ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/mcp-agent-server.test.ts (62 tests | 1 failed | 61 skipped) 528ms
        × should dispose agent on stop 525ms
  FAIL  tests/mcp/mcp-agent-server.test.ts > MCP Agent Intelligence Layer > server lifecycle with agent > should dispose agent on stop
@@ -613,7 +613,7 @@ AssertionError: expected "vi.fn()" to be called at least once
    Duration  1.17s (transform 556ms, setup 46ms, import 407ms, tests 528ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 61 skipped (62)
    Duration  1.32s (transform 680ms, setup 130ms, import 566ms, tests 505ms, environment 0ms)
@@ -625,13 +625,13 @@ Mutation : `{ servers }` → `{ servers: [] }` dans l'appel atomique.
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 53 skipped (54)
    Duration  294ms (transform 102ms, setup 17ms, import 116ms, tests 83ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/client.test.ts (54 tests | 1 failed | 53 skipped) 42ms
        × should write servers to config file 40ms
  FAIL  tests/mcp/client.test.ts > MCPClient > saveConfig > should write servers to config file
@@ -646,7 +646,7 @@ AssertionError: expected "vi.fn()" to be called with arguments: [ 101, …(1) ]
    Duration  268ms (transform 129ms, setup 17ms, import 130ms, tests 42ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 53 skipped (54)
    Duration  1.01s (transform 210ms, setup 19ms, import 391ms, tests 228ms, environment 0ms)
@@ -659,13 +659,13 @@ Mutation : appel atomique inconditionnel → appel seulement si
 
 ```text
 VERT INITIAL (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 53 skipped (54)
    Duration  490ms (transform 302ms, setup 32ms, import 331ms, tests 90ms, environment 0ms)
 
 MUTANT ROUGE (exit 1)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  ❯ tests/mcp/client.test.ts (54 tests | 1 failed | 53 skipped) 89ms
        × should create directory if it does not exist 87ms
  FAIL  tests/mcp/client.test.ts > MCPClient > saveConfig > should create directory if it does not exist
@@ -677,7 +677,7 @@ Number of calls: 0
    Duration  804ms (transform 516ms, setup 23ms, import 290ms, tests 89ms, environment 0ms)
 
 VERT RESTAURÉ (exit 0)
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
  Test Files  1 passed (1)
       Tests  1 passed | 53 skipped (54)
    Duration  741ms (transform 169ms, setup 18ms, import 194ms, tests 506ms, environment 0ms)
@@ -688,10 +688,10 @@ VERT RESTAURÉ (exit 0)
 ### Incident de confinement et essais non retenus
 
 Le premier chemin choisi, `$PWD/node_modules/.mcpfix1`, semblait local mais
-`node_modules` est un lien symbolique vers `/home/patrice/code-buddy/node_modules`.
+`node_modules` est un lien symbolique vers `~/code-buddy/node_modules`.
 Il y a donc eu une écriture temporaire dans ce sous-répertoire de l'original,
 en violation de la consigne. Ce répertoire créé par la mission a été supprimé
-et `test ! -e /home/patrice/code-buddy/node_modules/.mcpfix1` est vert. Aucun
+et `test ! -e ~/code-buddy/node_modules/.mcpfix1` est vert. Aucun
 fichier source de l'original n'a été touché. Tous les compteurs retenus
 ci-dessous ont ensuite été reproduits avec les trois chemins réels sous
 `$PWD/.mcpfix1/`.
@@ -709,7 +709,7 @@ Commande correctement confinée (exit 0) :
 ```text
 HOME="$PWD/.mcpfix1/home" XDG_CONFIG_HOME="$PWD/.mcpfix1/config" TMPDIR="$PWD/.mcpfix1/tmp" npx vitest run tests/mcp/mcp-agent-server.test.ts tests/mcp/client.test.ts
 
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  Test Files  2 passed (2)
       Tests  116 passed (116)
@@ -730,7 +730,7 @@ La commande exacte reste rouge sous la charge parallèle (exit 1) :
 ```text
 HOME="$PWD/.mcpfix1/home" XDG_CONFIG_HOME="$PWD/.mcpfix1/config" TMPDIR="$PWD/.mcpfix1/tmp" npx vitest run tests/mcp tests/server
 
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  ❯ tests/mcp/gk35-stdio-timeout.test.ts (1 test | 1 failed) 1493ms
      × loads a fast stdio server and late-registers a slow one after the skip 1490ms
@@ -790,7 +790,7 @@ Error: Fleet listener auth timeout (5000ms)
 Journal brut exact de ce passage (sans les codes couleur ANSI) :
 
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  ❯ tests/mcp/gk35-stdio-timeout.test.ts (1 test | 1 failed) 1493ms
      × loads a fast stdio server and late-registers a slow one after the skip 1490ms
@@ -887,7 +887,7 @@ vert (exit 0) :
 ```text
 HOME="$PWD/.mcpfix1/home" XDG_CONFIG_HOME="$PWD/.mcpfix1/config" TMPDIR="$PWD/.mcpfix1/tmp" npx vitest run tests/mcp tests/server --maxWorkers=1
 
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  Test Files  63 passed (63)
       Tests  677 passed (677)
@@ -908,7 +908,7 @@ Commande correctement confinée (exit 0) :
 ```text
 HOME="$PWD/.mcpfix1/home" XDG_CONFIG_HOME="$PWD/.mcpfix1/config" TMPDIR="$PWD/.mcpfix1/tmp" npx vitest run tests/security/donnees-personnelles.test.ts
 
- RUN  v4.1.9 /home/patrice/DEV/cb-mcpfix1-2026-09-03
+ RUN  v4.1.9 ~/DEV/cb-mcpfix1-2026-09-03
 
  Test Files  1 passed (1)
       Tests  1 passed (1)

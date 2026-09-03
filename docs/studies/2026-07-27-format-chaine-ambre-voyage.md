@@ -652,9 +652,9 @@ ElevenLabs présente Multilingual v2 comme son modèle stable pour les générat
 
 Fichiers :
 
-- `/home/patrice/Videos/personas/ambre-voice-tests/ambre-voix-a-perle.mp3`
-- `/home/patrice/Videos/personas/ambre-voice-tests/ambre-voix-b-babel.mp3`
-- `/home/patrice/Videos/personas/ambre-voice-tests/ambre-voix-c-elena.mp3`
+- `~/Videos/personas/ambre-voice-tests/ambre-voix-a-perle.mp3`
+- `~/Videos/personas/ambre-voice-tests/ambre-voix-b-babel.mp3`
+- `~/Videos/personas/ambre-voice-tests/ambre-voix-c-elena.mp3`
 
 **Recommandation provisoire : Elena**, puis Perle. Il faut surtout vérifier :
 

@@ -2,7 +2,7 @@
 
 Mission : se servir des applis EN VRAI. Ce qu’un utilisateur obtient, ce qui casse, réparé.
 
-- Clone : `/home/patrice/DEV/cb-repar-cb2-2026-09-02`
+- Clone : `~/DEV/cb-repar-cb2-2026-09-02`
 - Branche : `fix/gk14-science-reel-2026-09-03`
 - Date de démarrage : 2026-09-03 (Europe/Paris)
 - Agent : Grok 4.6

@@ -10,8 +10,8 @@
 ## Journal des lectures
 
 - `docs/FABLE5-CODEX-COORDINATION.md:1-274` — protocole et tableau de réservation ; aucune réservation concurrente CONV1 trouvée.
-- `/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/CONTEXTE-LISA.md:1-13` — chaîne et latences de référence.
-- `/home/patrice/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-493` — section 8 et cinq mécanismes : projection de fin de tour, barge-in/AEC-VAD, backchannels, réparation communicative, TTS basse latence.
+- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/CONTEXTE-LISA.md:1-13` — chaîne et latences de référence.
+- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-493` — section 8 et cinq mécanismes : projection de fin de tour, barge-in/AEC-VAD, backchannels, réparation communicative, TTS basse latence.
 - `src/sensory/speech-reaction.ts:1-2181`, `src/sensory/respond-decider.ts:1-695`, `src/sensory/voice-loop.ts:1-3797` — chemin complet `speech_end/transcript_final → STT → gate → reply → speak`, garde demi-duplex, temporisation de tour et télémétrie du premier audio.
 - `buddy-sense/src/senses/audio.rs:1-295`, `buddy-sense/src/senses/stt.rs:1-191`, `buddy-sense/src/senses/live_audio.rs:1-1780`, `buddy-sense/src/main.rs:1-284` — VAD énergie, endpoint mesuré, sherpa-rs en processus, partiel spéculatif et émission du final.
 - `src/sensory/sensory-bridge.ts:1-176`, `src/sensory/voice-turn-taking.ts:1-42` — transport des percepts et heuristique textuelle antérieure.
@@ -60,4 +60,4 @@
 - `npx tsc --noEmit -p .` → exit 0, aucune sortie.
 - `npm run lint` → exit 0, **0 erreur**, 2 466 avertissements historiques ; ESLint ciblé des fichiers CONV1 → exit 0 sans sortie.
 - `file`/`ffprobe` sur les trois actifs → `pcm_s16le`, mono, 24 kHz ; aucune écoute ou lecture par un backend audio.
-- Aucun push, service, rappel, API payante ou écriture dans `/home/patrice/code-buddy`. Seul `node_modules` non suivi préexistant reste visible ; le cache Pocket reproductible de génération a été supprimé après création des trois WAV.
+- Aucun push, service, rappel, API payante ou écriture dans `~/code-buddy`. Seul `node_modules` non suivi préexistant reste visible ; le cache Pocket reproductible de génération a été supprimé après création des trois WAV.

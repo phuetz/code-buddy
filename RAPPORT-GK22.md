@@ -2,7 +2,7 @@
 
 Mission : exercer **pour de vrai** l'import d'une bibliothèque externe, le pare-feu, Skill Exchange signé (ed25519) et la curation (`pin` / `archive` / `restore` / `consolidate`).
 
-- Clone autorisé : `/home/patrice/DEV/cb-repar-jumeaux-2-2026-09-02` uniquement
+- Clone autorisé : `~/DEV/cb-repar-jumeaux-2-2026-09-02` uniquement
 - Branche : `fix/gk22-skills-reel-2026-09-03`
 - HEAD au départ : `4659bf343` (`Merge GK16 (buddy backup en vrai, cas méchants) into codex/audit-systeme-nerveux-2026-09-01`)
 - Date : 2026-09-03 (Europe/Paris)

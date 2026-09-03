@@ -1,7 +1,7 @@
 # Santé du dépôt avant push — `fix/shorts-decimaux-karaoke`
 
 **Date de la mesure :** 2026-08-25, ~06:00–06:20 CEST
-**Machine :** ministar (Linux) · `/home/patrice/code-buddy`
+**Machine :** ministar (Linux) · `~/code-buddy`
 **HEAD :** `6a889e67` — *fix(shorts): sonder le quota à son coût réel, et voir toutes les cartes*
 **origin/main :** `63278824` (2026-08-23) · `FETCH_HEAD` rafraîchi le 2026-08-25 06:04
 **Working tree :** propre (aucune modification non commitée au début de l'audit)
@@ -21,7 +21,7 @@ En revanche, **la qualité intrinsèque de la branche est bonne** :
 
 - typecheck, lint, build et détection de cycles : **tous verts** ;
 - **aucun** des 69 tests en échec n'est imputable aux 367 commits — les 5 fichiers concernés n'ont **jamais été touchés par la branche**, et `main` contient déjà les commits qui les réparent ;
-- **aucun secret, aucune clé privée, aucun binaire ajouté**, **aucun chemin absolu `/home/patrice` dans `src/`, `tests/` ou `cowork/src/`**.
+- **aucun secret, aucune clé privée, aucun binaire ajouté**, **aucun chemin absolu `~` dans `src/`, `tests/` ou `cowork/src/`**.
 
 Le geste à faire avant de pousser est donc **une intégration de `main` (rebase ou merge), pas une campagne de réparation**.
 
@@ -201,7 +201,7 @@ sur `main`. Ils devraient disparaître à l'intégration. Zéro régression impu
 
 ```
 Error: [vitest] No "WebScrapeTool" export is defined on the
-"/home/patrice/code-buddy/src/tools/index.ts" mock. Did you forget to return it from "vi.mock"?
+"~/code-buddy/src/tools/index.ts" mock. Did you forget to return it from "vi.mock"?
 ```
 Le `vi.mock` de `src/tools/index.ts` ne déclare pas `WebScrapeTool`, que le code de production
 importe désormais. Les 53 cas (Constructor, view_file, create_file, str_replace_editor, Bash,
@@ -224,7 +224,7 @@ et les assertions :
 **D — `tests/unit/agent-core.test.ts` (1 échec)** — signature d'appel bash élargie :
 ```
 expected [ StringContaining "ls -la", undefined, Any<String> ]
-received [ "ls -la", undefined, "/home/patrice/code-buddy", undefined ]
+received [ "ls -la", undefined, "~/code-buddy", undefined ]
 ```
 
 **E — `tests/docs/public-screenshots.test.ts` (1 échec)** — ligne 218 :
@@ -255,10 +255,10 @@ temporaire — bruit à surveiller (source possible de flaky en CI), pas un éch
 | Clés privées (`BEGIN … PRIVATE`) | **0 occurrence** |
 | Motifs de clés connues (`sk-`, `sk-ant-`, `xoxb-`, `ghp_`, `AIza`, `hf_`, `xai-`, `AKIA`) | **0 occurrence** |
 | Fichiers binaires / médias ajoutés | **0** (`git diff --stat` : aucune ligne `Bin`) |
-| `/home/patrice` dans `src/` | **0** |
-| `/home/patrice` dans `tests/` | **0** |
-| `/home/patrice` dans `cowork/src/` | **0** |
-| `/home/patrice` dans `.github/` | **0** |
+| `~` dans `src/` | **0** |
+| `~` dans `tests/` | **0** |
+| `~` dans `cowork/src/` | **0** |
+| `~` dans `.github/` | **0** |
 | Fichiers supprimés par la branche | **0** |
 
 Les 4 correspondances brutes du grep « secrets » sont toutes des faux positifs bénins :
@@ -306,15 +306,15 @@ fichiers, ~24 000 lignes) est un pipeline de production vidéo personnel : `scri
 `scripts/mysoulmate/`, `scripts/gpuNode/`, `scripts/lisa-studio/`, `scripts/chaine-controle.py`.
 S'y ajoutent :
 
-- **44 chemins absolus `/home/patrice`** figés dans ces scripts — ils ne tourneront que sur
+- **44 chemins absolus `~`** figés dans ces scripts — ils ne tourneront que sur
   ministar. Les plus concernés :
   `scripts/gpuNode/repair-wardrobe-qwen.mjs` (9), `scripts/gpuNode/rerender-ghost-contour-clips.sh` (5),
   `scripts/influencer/publication-manifest.example.json` (4), `scripts/overnight-lisa-pipeline.sh` (3),
   `scripts/gpuNode/replay-identity-composites.ts` (3), `scripts/gpuNode/repair-ambre-shorts-residuals-qwen.mjs` (3),
   `scripts/gpuNode/benchmark-krea2-local.mjs` (3), puis 8 fichiers à 1–2 occurrences.
-  Exemples : `'/home/patrice/Videos/personas/garde-robe-reparee'`,
-  `'/home/patrice/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png'`,
-  `ROOT = Path("/home/patrice/Videos/personas")`.
+  Exemples : `'~/Videos/personas/garde-robe-reparee'`,
+  `'~/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png'`,
+  `ROOT = Path("~/Videos/personas")`.
   **Aucun n'est dans le produit** (`src/`, `tests/`, `cowork/src/` : 0) — l'invariant tient.
 - **68 occurrences supplémentaires dans `docs/`** (rapports d'exécution, chemins de preuve).
 - `scratch/cdp-site-audit.py` — un fichier de brouillon versionné à la racine.

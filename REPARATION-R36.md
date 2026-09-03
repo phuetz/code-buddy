@@ -69,7 +69,7 @@ AssertionError: ContextManagerV3 emitted orphan tool_result call_exec_42: expect
   - `src/context/context-manager-v3.ts:22,151` : import et appel de `repairToolCallPairs` dans `prepareMessages` lorsque le transcript est déjà sous le budget.
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -119,7 +119,7 @@ AssertionError: Tool result for call_beta_2 must not be dropped while assistant 
   - `src/context/enhanced-compression.ts:256` : appel de `repairToolCallPairs(compressed)` dans `EnhancedContextCompressor.compress` pour garantir la réparation post-compaction (synthèse de résultat pour les tool_calls orphelins).
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -161,7 +161,7 @@ AssertionError: ContextManagerV3.getStats maxTokens remains stuck at 8192 instea
   - `src/context/context-manager-v3.ts:56,72` : dans le constructeur et dans `updateConfig`, recalculer `maxContextTokens` et `responseReserveTokens` selon `getModelToolConfig(model).contextWindow`.
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -193,7 +193,7 @@ AssertionError: expected function to throw an error, but it didn't
   - `src/tools/context-expand-tool.ts:30,39` : dans `ContextExpandTool`, autoriser l'exécution sans condition sur `CODEBUDDY_CONTEXT_ZOOM` lorsqu'une instance d'archive est injectée explicitement dans le constructeur (`explicitArchive`).
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -242,7 +242,7 @@ AssertionError: expected function to throw an error, but it didn't
   - `src/context/context-manager-v2.ts:25,620-645` : import de `repairToolCallPairs` et ajout d'un finaliseur `finalizeEngineMessages` pour les assemblages retournés par les moteurs de contexte (qu'ils soient `ownsCompaction: true` ou `ownsCompaction: false`). Il réinjecte les prompts système manquants issus de l'original, répare les paires d'outils (`repairToolCallPairs`), vérifie `assertLastUserPreserved`, applique `assertFitsTokenLimit` (qui manquait dans la branche non-owning) et met à jour `lastTokenCount`.
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -291,7 +291,7 @@ undefined
   - `src/context/compression.ts:9,147` : import de `estimateImageUrlTokens` et prise en charge des contenus multimodaux et images dans `countTotalTokens` et `countSingleMessageTokens`.
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -347,7 +347,7 @@ AssertionError: ContextManagerV2 injected synthetic role:system messages into a 
   - `src/context/context-manager-v2.ts:787,830,897,930` : propager `hasOriginalSystem` depuis `prepareMessagesLegacy` à `applyStrategies` et `applySlidingWindow`, et n'émettre le marqueur synthétique `{ role: 'system', content: '[Previous ...]' }` que si la conversation comportait originellement des messages système.
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
@@ -380,7 +380,7 @@ AssertionError: SmartCompactionEngine aggressively truncated context to 12897 to
   - La partie 2 du test (mise à l'échelle du budget par défaut de `ContextManagerV2` selon la fenêtre du modèle déclaré) a été résolue par le correctif du Trou 3 (`src/context/context-manager-v2.ts:311-321`).
 - **Sortie VERT** :
 ```text
- RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+ RUN  v4.1.9 ~/DEV/cb-verif-d-2026-09-02
 
  Test Files  1 passed (1)
       Tests  2 passed (2)

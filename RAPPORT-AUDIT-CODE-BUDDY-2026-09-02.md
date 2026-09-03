@@ -1,12 +1,12 @@
 # Audit de fiabilité Code Buddy — 2026-09-02
 
-Dépôt : `/home/patrice/DEV/code-buddy-audit`, branche `audit-complet` (base `b50d4d6f5`).
+Dépôt : `~/DEV/code-buddy-audit`, branche `audit-complet` (base `b50d4d6f5`).
 Critère directeur : **ce qui casse, ment ou gêne dans l'usage quotidien réel.**
 Méthode : quatre enquêtes parallèles ciblées (outils, fournisseurs, mémoire/compaction,
 ressources 24/7) + vérifications transverses (gardes orphelines, seuils, démarrage, run
 headless réel sur Ollama local), **preuve par exécution exigée** pour tout défaut « avéré » ;
 correctifs **rouge → vert** pour ce qui était corrigeable sans risque. Aucun appel LLM payant,
-aucun contact avec `/home/patrice/code-buddy` (production) ni `~/.codebuddy`.
+aucun contact avec `~/code-buddy` (production) ni `~/.codebuddy`.
 
 État final : `npm run typecheck` vert ; suites ciblées vertes (mémoire 195, codebuddy 248,
 fleet 624, companion 469, tools complet, tool-surface 4/4) ; ESLint sur les fichiers touchés :

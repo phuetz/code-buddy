@@ -190,7 +190,7 @@ AssertionError: expected 'allow' not to be 'allow' // Object.is equality
     return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
   }
   ```
-  Aucun `lstat` ni `realpath` n'est vérifié sur le système de fichiers. Si `.codebuddy/settings.json` (ou un dossier comme `.codebuddy/rules`) est un lien symbolique pointant vers un fichier sensible hors du projet (ex: `/home/patrice/.bashrc` ou `/etc/shadow`), `isInsideDestRoot` valide le chemin car le nom textuel est `destRoot/settings.json`. Ensuite, `writeFileSync(dest, content)` écrit directement à travers le symlink et écrase le fichier cible hors du répertoire de destination.
+  Aucun `lstat` ni `realpath` n'est vérifié sur le système de fichiers. Si `.codebuddy/settings.json` (ou un dossier comme `.codebuddy/rules`) est un lien symbolique pointant vers un fichier sensible hors du projet (ex: `~/.bashrc` ou `/etc/shadow`), `isInsideDestRoot` valide le chemin car le nom textuel est `destRoot/settings.json`. Ensuite, `writeFileSync(dest, content)` écrit directement à travers le symlink et écrase le fichier cible hors du répertoire de destination.
 - **Scénario concret :**
   Un attaquant prépare un dépôt avec un symlink `.codebuddy/settings.json -> victim-outside.txt`. Lors de la restauration d'une archive de sauvegarde (`buddy backup restore backup.json --confirm`), le fichier `victim-outside.txt` situé hors de la destination est écrasé avec le payload de l'archive.
 - **Gravité :** Critique (Écrasement et destruction arbitraires de fichiers système ou utilisateur).

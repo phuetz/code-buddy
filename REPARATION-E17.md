@@ -3,7 +3,7 @@
 ## Cadre et état initial
 
 - Mission : E17, exécutée le 3 septembre 2026 dans le seul clone autorisé
-  `/home/patrice/DEV/cb-exec-d-2026-09-02`.
+  `~/DEV/cb-exec-d-2026-09-02`.
 - Branche : `fix/cowork-inconnu-3-2026-09-03` ; HEAD initial :
   `facea986446db20cfcb63085be0344756e8c6122`.
 - Le présent rapport a été créé avant la première inspection, conformément à la

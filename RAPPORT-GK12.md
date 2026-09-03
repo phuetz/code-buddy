@@ -1,7 +1,7 @@
 # RAPPORT GK12 — `buddy autonomy` / `buddy colab` en vrai
 
 **Agent :** Grok 4.6
-**Clone :** `/home/patrice/DEV/cb-repar-executor-2026-09-02`
+**Clone :** `~/DEV/cb-repar-executor-2026-09-02`
 **Branche :** `fix/gk12-autonomy-reel-2026-09-03`
 **HOME isolé :** `_qa/gk12-home` (`CODEBUDDY_HOME`, `CODEBUDDY_FLEET_COLAB_DIR`, `CODEBUDDY_RUNS_DIR`)
 **Modèles :** Ollama local `qwen3:4b-instruct` et `qwen3.8:27b` — aucun appel payant (`whoami` : ChatGPT not connected).

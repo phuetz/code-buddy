@@ -2,7 +2,7 @@
 
 Date : 2026-09-03
 Agent : Grok 4.6
-Clone : `/home/patrice/DEV/cb-improve1-2026-09-03`
+Clone : `~/DEV/cb-improve1-2026-09-03`
 Branche : `fix/improve1-self-improvement-reel-2026-09-03`
 HEAD de départ : `6c6e43b58` (`codex/audit-systeme-nerveux-2026-09-01`)
 HOME isolé : `_qa/improve1/home` (dans le clone seulement)

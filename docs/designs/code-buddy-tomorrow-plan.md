@@ -9,7 +9,7 @@ Code Buddy Tomorrow ne sera pas un nouveau chatbot ni une seconde boucle
 autonome. Ce sera un **compilateur de journée** branché sur les fondations déjà
 présentes : Night Watch, Fleet, Intent Graph, Mission Constitution, Proof
 Ledger, Counterfactual Forge, Shadow Twin, scheduler, mémoire, Cowork et
-PubCommander.
+un outil éditorial tiers.
 
 Sa promesse est simple :
 
@@ -34,7 +34,7 @@ Le système ne cherchera pas à remplir la nuit. Un no-op honnête est préféra
 | Courriel | Gmail trigger et couche email | La couche IMAP historique contient encore des chemins simulés ; privilégier le connecteur Gmail réel, en lecture seule et à la demande |
 | Agenda | capacité Android `calendar.list` | Ajouter une source générique et configurable : appareil, CalDAV, Google ou MCP |
 | Approbations | workflow `approval_wait` | Les attentes Cowork sont éphémères ; créer une file de décisions durable pendant le sommeil |
-| Publication | pont et skill PubCommander | Produire des paquets éditoriaux et dry-runs ; garder la publication hors du niveau nocturne par défaut |
+| Publication | pont et skill un outil éditorial tiers | Produire des paquets éditoriaux et dry-runs ; garder la publication hors du niveau nocturne par défaut |
 | Romans et médias | Storyboard, Flow Studio, outils documents/vidéo | Ajouter une recette traçable « manuscrit → monde narratif → bande-annonce » |
 
 L'audit d'exécution a aussi révélé cinq prérequis concrets :
@@ -207,7 +207,7 @@ Elle dispose d'un budget séparé et explique pourquoi elle a été proposée.
 - arcs émotionnels, incohérences et scènes à forte valeur visuelle ;
 - bible visuelle stable et storyboard éditable ;
 - teaser, bande-annonce, podcast et dossier de presse en preview ;
-- page du livre et kit PubCommander sous forme de brouillons.
+- page du livre et kit un outil éditorial tiers sous forme de brouillons.
 
 Chaque fait narratif cite son chapitre ou passage. Les inférences sont
 explicitement distinguées du canon.
@@ -219,10 +219,10 @@ performance, SEO, fraîcheur, pages manquantes et cohérence avec les livres.
 Code Buddy prépare une branche ou une preview avec comparaison avant/après ; la
 production reste intacte pendant la nuit.
 
-### PubCommander comme bras éditorial
+### un outil éditorial tiers comme bras éditorial
 
 Tomorrow produit un paquet éditorial portable : source, texte, médias,
-plateformes, ton, date, droits, preuves et procédure de retrait. PubCommander
+plateformes, ton, date, droits, preuves et procédure de retrait. un outil éditorial tiers
 reste le système de publication et d'analytics.
 
 Le chemin nocturne s'arrête normalement à : brouillon → soumission pour revue →
@@ -310,7 +310,7 @@ jamais republier ou renvoyer deux fois.
 3. Calendrier en lecture seule via un adaptateur disponible.
 4. Gmail connecté, requêtes ciblées et sans persistance du corps.
 5. Santé des dépôts et travaux en cours.
-6. PubCommander : file, brouillons, campagnes et analytics.
+6. un outil éditorial tiers : file, brouillons, campagnes et analytics.
 7. Bibliothèque de manuscrits et projets médias explicitement autorisés.
 
 Chaque source peut être désactivée et expose ses permissions, sa fraîcheur et
@@ -425,7 +425,7 @@ mutation du calendrier.
 - recette dépôt → branche testée ;
 - roman → graphe canonique → storyboard ;
 - site → audit → preview ;
-- paquet PubCommander → brouillon → dry-run.
+- paquet un outil éditorial tiers → brouillon → dry-run.
 
 **Gate** : artefacts privés, diffs réversibles, tests déterministes et aucune
 publication.
@@ -444,7 +444,7 @@ tout apprentissage nocturne.
 
 - destinations et quotas explicites ;
 - approbation séparée de l'action exacte ;
-- reçu, URL finale, mesure et rollback PubCommander.
+- reçu, URL finale, mesure et rollback un outil éditorial tiers.
 
 **Gate** : tests d'idempotence, destination non autorisée refusée et restauration
 réelle validée avant activation.
