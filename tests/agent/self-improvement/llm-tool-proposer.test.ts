@@ -13,6 +13,7 @@ import { EvolutionaryArchive } from '../../../src/agent/self-improvement/evoluti
 import { SEED_TOOL_SCENARIOS } from '../../../src/agent/self-improvement/tool-benchmark.js';
 import { FormalToolRegistry } from '../../../src/tools/registry/tool-registry.js';
 import { getToolRegistry } from '../../../src/tools/registry.js';
+import { LiveToolMutator } from '../../../src/agent/self-improvement/tool-skill-mutator.js';
 
 const SLUGIFY = SEED_TOOL_SCENARIOS.find((s) => s.id === 'slugify')!;
 
@@ -42,6 +43,7 @@ function engineWith(content: string) {
   return new ToolImprovementEngine({
     scenarios: [SLUGIFY],
     proposer: new LlmToolProposer({ client: mockClient(content) }),
+    mutator: new LiveToolMutator({ persist: false }),
     archive: new EvolutionaryArchive({ workDir: path.join(os.tmpdir(), `cb-arch-${randomUUID()}`) }),
     autonomy: 'auto-apply',
   });
