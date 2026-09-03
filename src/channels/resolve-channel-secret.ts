@@ -15,7 +15,8 @@
  *   1. `config.token` literal — a hand-written `channels.json` or env-provided
  *      token stays authoritative; the encrypted store is never consulted.
  *   2. the encrypted `channel:<type>:token` secret from the CredentialManager.
- *   3. `undefined` — no token (channel stays unauthenticated, unchanged legacy
+ *   3. the documented process env var (`TELEGRAM_BOT_TOKEN` for Telegram).
+ *   4. `undefined` — no token (channel stays unauthenticated, unchanged legacy
  *      behavior).
  *
  * Contract:
@@ -33,6 +34,18 @@ import { getCredentialManager } from '../security/credential-manager.js';
  */
 export function channelSecretKey(type: string): string {
   return `channel:${type}:token`;
+}
+
+const CHANNEL_ENV_TOKENS: Record<string, string> = {
+  telegram: 'TELEGRAM_BOT_TOKEN',
+};
+
+/** Documented env var that can supply a channel token (Telegram: TELEGRAM_BOT_TOKEN). */
+export function channelEnvToken(type: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const name = CHANNEL_ENV_TOKENS[type];
+  if (!name) return undefined;
+  const value = env[name]?.trim();
+  return value || undefined;
 }
 
 /** The minimal shape `resolveChannelSecret` reads from a channel config. */
@@ -70,6 +83,13 @@ export function resolveChannelSecret(
     // if no token was configured (legacy behavior). The secret is never logged.
   }
 
-  // 3. No token — channel stays unauthenticated (unchanged legacy behavior).
+  // 3. Documented env var (TELEGRAM_BOT_TOKEN, …) — what `docs/channels.md` tells
+  //    a stranger to set. Never logged.
+  const fromEnv = channelEnvToken(type);
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  // 4. No token — channel stays unauthenticated (unchanged legacy behavior).
   return undefined;
 }

@@ -30,7 +30,8 @@ Rapport créé **avant toute inspection** du code des canaux, des alertes, des c
 | 2026-09-03 (démarrage) | Rapport créé **avant inspection**. Coordination réservée. HOME temporaire : `_qa/gk10/home`. |
 | 2026-09-03 (inspection) | Lecture de la doc canaux, du client Telegram, des alertes, des handlers CLI et des tests existants. |
 | 2026-09-03 (lot 1) | Écart E1 : `TELEGRAM_API_BASE` n’existait pas (constante figée `https://api.telegram.org`). Test rouge 3/3, correctif, vert 5/5 + 38 ciblés. Commit `73d8f7915`. |
-| 2026-09-03 (lot 2) | Faux Bot API `_qa/gk10/fake-telegram.mjs` : getMe, getUpdates (long poll), sendMessage, sendVoice, sendPhoto, answerCallbackQuery, journal avec jeton masqué. 3/3 tests HTTP verts. |
+| 2026-09-03 (lot 2) | Faux Bot API `_qa/gk10/fake-telegram.mjs` : getMe, getUpdates (long poll), sendMessage, sendVoice, sendPhoto, answerCallbackQuery, journal avec jeton masqué. 3/3 tests HTTP verts. Commit `526df0c61`. |
+| 2026-09-03 (lot 3) | E2 chemin documenté : `TELEGRAM_BOT_TOKEN`, `settings.json` objet, `buddy --channel telegram`. Rouge 5, vert 21. |
 
 ## Plan d’exécution (annoncé avant lecture)
 
@@ -71,9 +72,13 @@ Le client (`src/channels/telegram/client.ts`) et les alertes (`src/sensory/alert
 - Correctif : `resolveTelegramApiBase()` (`src/utils/telegram-api-base.ts`), lu à chaque requête ; défaut inchangé.
 - Vert : 5/5 sur ce fichier ; union `telegram-api-base` + `telegram-voice` + `telegram` = 38/38.
 
-### E2 — chemin documenté de configuration/démarrage (ouvert)
+### E2 — chemin documenté de configuration/démarrage — FERMÉ
 
-`docs/channels.md` dit : jeton `TELEGRAM_BOT_TOKEN` ou `.codebuddy/settings.json` objet `channels.telegram`, puis `buddy --channel telegram` / `buddy daemon start`. Le chargeur réel lit `.codebuddy/channels.json` (tableau), ignore `TELEGRAM_BOT_TOKEN` et `settings.json`, et `buddy --channel telegram` n’existe pas (`src/index.ts`). Seuls `buddy channels start` et `buddy server` démarrent le canal.
+`docs/channels.md` promettait `TELEGRAM_BOT_TOKEN`, `.codebuddy/settings.json` objet, et `buddy --channel telegram`. Rien de tout cela n’était câblé.
+
+- Rouge : 5 tests (`resolveChannelSecret` ignore l’env, `loadChannelConfig` ignore settings.json, `startConfiguredChannels` noConfig, `--help` sans `--channel`)
+- Correctif : env + settings.json + synthèse telegram ; flag racine `--channel` ; doc daemon clarifiée (`CODEBUDDY_SERVER_CHANNEL_INTAKE`)
+- Vert : 21 tests (stranger-config + secret + channel-intake)
 
 ### E3 — offset de polling non persisté (ouvert)
 
@@ -92,8 +97,8 @@ Les alertes vocale utilisent `CODEBUDDY_SENSORY_ALERT_TOKEN`/`_CHAT`, pas le jet
 | Étape | Écart | Correctif | Commit |
 |---|---|---|---|
 | Faux Bot API local | E1 constante `api.telegram.org` | `TELEGRAM_API_BASE` + `resolveTelegramApiBase()` | `73d8f7915` |
-| Configurer le canal | E2 doc ≠ code | *(à faire)* | |
-| Démarrer | E2 `buddy --channel telegram` absent | *(à faire)* | |
+| Configurer le canal | E2 `TELEGRAM_BOT_TOKEN` / settings.json ignorés | env + objet settings.json | *(lot 3)* |
+| Démarrer | E2 `buddy --channel telegram` absent | flag racine `--channel` | *(lot 3)* |
 | Premier texte / Ollama | à éprouver après E2 | | |
 | `/help` + 2 commandes | E4 `/help` `/status` non gérés | *(à faire)* | |
 | Photo | à éprouver | | |

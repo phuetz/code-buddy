@@ -1570,6 +1570,10 @@ program
     "--tts-provider <provider>",
     "TTS provider (edge-tts, espeak, say, piper, audioreader)"
   )
+  .option(
+    "--channel <name>",
+    "Start with a messaging channel (telegram, discord, slack, …)"
+  )
   .action(async (message, options) => {
     const unknownCommand = getNonInteractiveUnknownCommand({
       positionalArgs: Array.isArray(message) ? message : undefined,
@@ -1592,6 +1596,11 @@ program
       process.env.VERBOSE = 'true';
       process.env.DEBUG = 'true';
       logger.setLevel('debug');
+    }
+    if (options.channel) {
+      const { handleChannels } = await import('./commands/handlers/channel-handlers.js');
+      await handleChannels('start', { type: String(options.channel) });
+      return;
     }
     // Apply --speak / --tts-provider flags
     if (options.speak || options.ttsProvider) {
