@@ -68,6 +68,7 @@ function deps(
       silent: false,
       blackIntervals: [],
       totalBlackSeconds: 0,
+      audioMatchesVideo: true,
       warnings: [],
     })),
     noMusic: undefined,
