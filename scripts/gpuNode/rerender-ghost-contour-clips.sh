@@ -6,16 +6,16 @@
 
 set -uo pipefail
 
-export PATH="/home/patrice/.nvm/versions/node/v24.14.1/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH="$HOME/.nvm/versions/node/v24.14.1/bin:/usr/local/bin:/usr/bin:/bin"
 
-REPO=/home/patrice/code-buddy
-SELECTED=/home/patrice/Videos/personas/garde-robe-reparee/contours-fantomes-20260731/selected
-DESTINATION=/home/patrice/Videos/personas/ambre-scenes/tenues
+REPO=$HOME/code-buddy
+SELECTED=$HOME/Videos/personas/garde-robe-reparee/contours-fantomes-20260731/selected
+DESTINATION=$HOME/Videos/personas/ambre-scenes/tenues
 COMFY=http://127.0.0.1:8189
 RENDERER="$REPO/scripts/gpuNode/render-native-fashion-clip.ts"
 WORKFLOWS="$REPO/scripts/gpuNode/workflows"
 SOUND="$REPO/scripts/influencer/add-sound.py"
-MUSIC="/home/patrice/.codebuddy/media-audio/music/warm/ES_It Could Be Sweet (Instrumental Version) - Ludlow.mp3"
+MUSIC="$HOME/.codebuddy/media-audio/music/warm/ES_It Could Be Sweet (Instrumental Version) - Ludlow.mp3"
 WORK_ROOT="$DESTINATION/.ghost-contour-rerenders-20260731-fresh"
 SUMMARY="$WORK_ROOT/summary.tsv"
 

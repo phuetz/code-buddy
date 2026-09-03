@@ -7,7 +7,7 @@
 #
 # Usage : powershell -ExecutionPolicy Bypass -File D:\DEV\scripts\run-best-of-n.ps1
 
-$py     = "C:\Users\patri\AppData\Local\Programs\Python\Python312\python.exe"
+$py     = "$env:USERPROFILE\AppData\Local\Programs\Python\Python312\python.exe"
 $script = "D:\DEV\scripts\best-of-n-keyframes.py"
 $scorer = "D:\DEV\scripts\score-arcface-images.py"
 $arcpy  = "D:\DEV\arcface-venv\Scripts\python.exe"

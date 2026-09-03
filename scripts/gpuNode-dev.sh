@@ -17,8 +17,9 @@
 # qu'il n'existe jamais deux vérités. `rapatrier` refuse d'écraser un travail non commité.
 set -uo pipefail
 
-HOTE=${GPU_NODE_HOTE_SSH:-patri@gpuNode}
-DISTANT=${GPU_NODE_DEPOT:-C:/Users/patri/code-buddy}
+HOTE=${GPU_NODE_HOTE_SSH:?define GPU_NODE_HOTE_SSH (user@host)}
+DISTANT=${GPU_NODE_DEPOT:?define GPU_NODE_DEPOT (remote clone path)}
+BUNDLE_REMOTE=${GPU_NODE_BUNDLE:-cb.bundle}
 LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PS='C:/Program Files/PowerShell/7/pwsh.exe'
 
@@ -32,16 +33,16 @@ case "${1:-}" in
     tmp=$(mktemp -d); bundle="$tmp/cb.bundle"
     echo "== bundle de $branche"
     (cd "$LOCAL" && git bundle create "$bundle" "$branche") >/dev/null 2>&1 || die "bundle en échec"
-    scp -q "$bundle" "$HOTE:C:/Users/patri/cb.bundle" || die "copie en échec"
+    scp -q "$bundle" "$HOTE:$BUNDLE_REMOTE" || die "copie en échec"
     rm -rf "$tmp"
     echo "== fetch côté gpuNode"
     courante=$(distant "git rev-parse --abbrev-ref HEAD" | tr -d '\r')
     if [ "$courante" = "$branche" ]; then
       # Git refuse de fetcher dans la branche checkoutée : FETCH_HEAD + fast-forward.
       # --ff-only échoue si gpuNode a divergé — c'est voulu, le code fait foi ici.
-      distant "git fetch C:/Users/patri/cb.bundle ${branche}; git merge --ff-only FETCH_HEAD"
+      distant "git fetch $BUNDLE_REMOTE ${branche}; git merge --ff-only FETCH_HEAD"
     else
-      distant "git fetch C:/Users/patri/cb.bundle ${branche}:refs/heads/${branche} --force; git checkout ${branche} --force"
+      distant "git fetch $BUNDLE_REMOTE ${branche}:refs/heads/${branche} --force; git checkout ${branche} --force"
     fi
     # Le succès se prouve par le résultat, pas par le code de retour du pipe SSH.
     recu=$(distant "git rev-parse HEAD" | tr -d '\r')

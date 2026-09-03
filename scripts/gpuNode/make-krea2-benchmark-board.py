@@ -3,13 +3,15 @@
 
 from __future__ import annotations
 
+import os
+
 import json
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
-ROOT = Path("/home/patrice/Videos/personas")
+ROOT = Path(os.path.expanduser("~/Videos/personas"))
 KREA = ROOT / "benchmark-krea2-local-2026-07-29"
 BASE = ROOT / "benchmark-identite-2026-07-29"
 OUT = KREA / "PLANCHE-COMPARATIVE-KREA2-LOCAL-2026-07-29.jpg"
@@ -25,7 +27,7 @@ PERSONAS = {
     },
     "lisa": {
         "reference": Path(
-            "/home/patrice/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png"
+            os.path.expanduser("~/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png")
         ),
         "label": "LISA",
     },

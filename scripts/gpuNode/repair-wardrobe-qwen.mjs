@@ -20,7 +20,7 @@ import sharp from 'sharp';
 const comfyUrl = process.env.QWEN_REPAIR_COMFY_URL ?? 'http://127.0.0.1:8189';
 const outputRoot =
   process.env.QWEN_REPAIR_OUTPUT ??
-  '/home/patrice/Videos/personas/garde-robe-reparee';
+  `${process.env.HOME}/Videos/personas/garde-robe-reparee`;
 const workflowPath = new URL('./workflows/insert-qwen-edit.json', import.meta.url);
 const commonInstruction =
   "Ne pas modifier le visage, les cheveux, l'expression, la lumière, le cadrage " +
@@ -28,12 +28,12 @@ const commonInstruction =
   'Retouche photoréaliste localisée uniquement dans le masque blanc, bords naturels, ' +
   'aucune nouvelle silhouette fantôme. Tout ce qui est hors masque doit rester identique.';
 
-const A_AUTUMN = '/home/patrice/.codebuddy/personas/ambre/wardrobe-automne';
-const A_BEACH = '/home/patrice/.codebuddy/personas/ambre/wardrobe-plage';
-const L_STANDARD = '/home/patrice/.codebuddy/personas/lisa/wardrobe';
-const L_AUTUMN = '/home/patrice/.codebuddy/personas/lisa/wardrobe-automne';
+const A_AUTUMN = `${process.env.HOME}/.codebuddy/personas/ambre/wardrobe-automne`;
+const A_BEACH = `${process.env.HOME}/.codebuddy/personas/ambre/wardrobe-plage`;
+const L_STANDARD = `${process.env.HOME}/.codebuddy/personas/lisa/wardrobe`;
+const L_AUTUMN = `${process.env.HOME}/.codebuddy/personas/lisa/wardrobe-automne`;
 const A_COMPOSITES =
-  '/home/patrice/Videos/personas/ambre-scenes/automne-composites';
+  `${process.env.HOME}/Videos/personas/ambre-scenes/automne-composites`;
 
 const rightCutout = [{ type: 'rect', x: 950, y: 1470, width: 130, height: 450 }];
 const leftGhost = {
@@ -363,7 +363,7 @@ const tasks = [
     slug: 'ambre-kimono-azur-une-piece-short-qc',
     persona: 'ambre',
     source:
-      '/home/patrice/Videos/personas/garde-robe-reparee/final/' +
+      `${process.env.HOME}/Videos/personas/garde-robe-reparee/final/` +
       'ambre-kimono-azur-une-piece.png',
     prompt:
       "Réparer uniquement l'encolure du débardeur-maillot bleu marine. Créer une " +
@@ -386,7 +386,7 @@ const tasks = [
     slug: 'ambre-maillot-une-piece-corail-short-qc',
     persona: 'ambre',
     source:
-      '/home/patrice/Videos/personas/garde-robe-reparee/final/' +
+      `${process.env.HOME}/Videos/personas/garde-robe-reparee/final/` +
       'ambre-maillot-une-piece-corail.png',
     prompt:
       "Supprimer uniquement les formes anatomiques parasites du côté droit de l'image. " +
@@ -416,7 +416,7 @@ const tasks = [
     slug: 'ambre-robe-longue-fluide-dos-nu-short-qc',
     persona: 'ambre',
     source:
-      '/home/patrice/Videos/personas/garde-robe-reparee/final/' +
+      `${process.env.HOME}/Videos/personas/garde-robe-reparee/final/` +
       'ambre-robe-longue-fluide-dos-nu.png',
     prompt:
       'Réparer uniquement le drapé du corsage orange. Refaire les deux pans de satin ' +
