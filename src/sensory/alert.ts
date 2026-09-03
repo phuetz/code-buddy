@@ -24,7 +24,7 @@ export async function sendTelegramVoice(
     fallback?: (t: string) => Promise<boolean>;
   } = {},
 ): Promise<boolean> {
-  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
   const clean = prepareSpeech(text);
   if (!token || !chat || !clean) return false;
@@ -66,7 +66,7 @@ export async function sendTelegramAlert(
     readFile?: (p: string) => Promise<Buffer>;
   } = {},
 ): Promise<boolean> {
-  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+  const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
   if (!token || !chat) return false;
   const doFetch = deps.fetch ?? ((url: string, init: RequestInit) => fetch(url, init));

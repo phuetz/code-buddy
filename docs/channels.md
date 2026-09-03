@@ -162,6 +162,8 @@ Telegram is the most feature-rich channel. Setup:
 2. Set `TELEGRAM_BOT_TOKEN` or configure in `.codebuddy/settings.json` (object) or `.codebuddy/channels.json` (array)
 3. Start: `buddy --channel telegram` or `buddy channels start --type telegram`
 
+Voice notes from `sayNow` (reminders, `CODEBUDDY_VOICE_TO_TELEGRAM=true`) reuse `TELEGRAM_BOT_TOKEN` when `CODEBUDDY_SENSORY_ALERT_TOKEN` is unset, and still need `CODEBUDDY_SENSORY_ALERT_CHAT` (your numeric chat id).
+
 **Deployment modes**: Polling (default, works behind NAT) or Webhook (lower latency).
 
 **Supported message types**: text, images, audio, video, documents, stickers, locations, contacts, inline buttons, reply threads, typing indicators.
