@@ -64,6 +64,14 @@ export {
   type SandboxResult,
 } from './sandbox.js';
 
+export {
+  NATIVE_SANDBOX_ENV,
+  confineSpawn,
+  detectNativeSandboxCapabilities,
+  formatDoctorLine,
+  isNativeSandboxEnabled,
+} from './native-sandbox.js';
+
 // Credential management
 export {
   CredentialManager,
