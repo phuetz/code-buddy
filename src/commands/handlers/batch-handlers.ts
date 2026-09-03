@@ -10,8 +10,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { logger } from '../../utils/logger.js';
-import type { CodeBuddyClient } from '../../codebuddy/client.js';
+import { CodeBuddyClient } from '../../codebuddy/client.js';
 
 // ============================================================================
 // Types
@@ -410,6 +412,8 @@ export interface BatchSpawnOptions {
   maxToolRounds?: number;
   /** Max concurrent Code Buddy agents (default 1 — local Ollama cannot prefill two large contexts). */
   concurrency?: number;
+  /** Injected chat for tests and file-scoped writes. */
+  chatFn?: (prompt: string) => Promise<string>;
 }
 
 function gitPorcelain(cwd: string): string {
@@ -422,6 +426,22 @@ function gitPorcelain(cwd: string): string {
   } catch {
     return '';
   }
+}
+
+function stripCodeFence(text: string): string {
+  const fenced = text.match(/```(?:[\w.+-]*)\r?\n([\s\S]*?)```/);
+  const body = (fenced?.[1] ?? text).replace(/^\uFEFF/, '');
+  return body.endsWith('\n') ? body : `${body}\n`;
+}
+
+function resolveInsideCwd(cwd: string, rel: string): string {
+  const root = resolve(cwd);
+  const abs = resolve(root, rel);
+  const prefix = root.endsWith('/') ? root : `${root}/`;
+  if (abs !== root && !abs.startsWith(prefix)) {
+    throw new Error(`Refusing to write outside workspace: ${rel}`);
+  }
+  return abs;
 }
 
 function porcelainPaths(status: string): string[] {
@@ -487,26 +507,60 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
     const before = gitPorcelain(cwd);
     try {
       process.stdout.write(`[batch] start ${label}\n`);
-      const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-      const { ConfirmationService } = await import('../../utils/confirmation-service.js');
-      ConfirmationService.getInstance().setSessionFlag('allOperations', true);
-      ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
-      const maxRounds = opts.maxToolRounds
-        ?? Number(process.env.CODEBUDDY_BATCH_MAX_ROUNDS || 6);
-      const agent = new CodeBuddyAgent(
-        opts.apiKey,
-        opts.baseURL,
-        opts.model,
-        Number.isFinite(maxRounds) && maxRounds > 0 ? maxRounds : 6,
-        false,
-        undefined,
-        cwd,
-      );
-      await agent.systemPromptReady;
-      const entries = await agent.processUserMessage(instruction, { surface: 'cli' });
+      const targets = extractBatchFilePatterns(instruction);
+      const chat = opts.chatFn ?? (async (prompt: string) => {
+        const client = new CodeBuddyClient(opts.apiKey, opts.model, opts.baseURL);
+        const response = await client.chat([{ role: 'user', content: prompt }]);
+        return response.choices[0]?.message?.content ?? '';
+      });
+
+      if (targets.length > 0) {
+        for (const rel of targets) {
+          const abs = resolveInsideCwd(cwd, rel);
+          let current = '';
+          try {
+            current = readFileSync(abs, 'utf8');
+          } catch {
+            current = '';
+          }
+          const prompt = [
+            `You are editing exactly one file: ${rel}`,
+            `Instruction: ${instruction}`,
+            'Current contents:',
+            '```',
+            current || '(file does not exist yet)',
+            '```',
+            'Return the COMPLETE new file contents. No commentary. A single markdown fence is allowed.',
+          ].join('\n');
+          const raw = await chat(prompt);
+          const next = stripCodeFence(raw);
+          if (!next.trim()) {
+            throw new Error(`Empty model output for ${rel}`);
+          }
+          mkdirSync(dirname(abs), { recursive: true });
+          writeFileSync(abs, next, 'utf8');
+        }
+      } else {
+        const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
+        const { ConfirmationService } = await import('../../utils/confirmation-service.js');
+        ConfirmationService.getInstance().setSessionFlag('allOperations', true);
+        ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
+        const maxRounds = opts.maxToolRounds
+          ?? Number(process.env.CODEBUDDY_BATCH_MAX_ROUNDS || 6);
+        const agent = new CodeBuddyAgent(
+          opts.apiKey,
+          opts.baseURL,
+          opts.model,
+          Number.isFinite(maxRounds) && maxRounds > 0 ? maxRounds : 6,
+          false,
+          undefined,
+          cwd,
+        );
+        await agent.systemPromptReady;
+        await agent.processUserMessage(instruction, { surface: 'cli' });
+      }
+
       const filesChanged = listChangedFiles(cwd, before);
-      const lastAssistant = [...entries].reverse().find((e) => e.type === 'assistant' && e.content?.trim());
-      const preview = (lastAssistant?.content ?? '').split('\n')[0]?.slice(0, 200) ?? '';
       process.stdout.write(
         `[batch] done ${label} files=${filesChanged.join(',') || '(none)'} ${((Date.now() - started) / 1000).toFixed(1)}s\n`,
       );
@@ -514,7 +568,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         return {
           label,
           success: false,
-          summary: preview ? `No files changed. ${preview}` : 'No files changed',
+          summary: 'No files changed',
           durationMs: Date.now() - started,
           filesChanged,
         };
@@ -522,7 +576,7 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
       return {
         label,
         success: true,
-        summary: preview || `Updated ${filesChanged.join(', ')}`,
+        summary: `Updated ${filesChanged.join(', ')}`,
         durationMs: Date.now() - started,
         filesChanged,
       };

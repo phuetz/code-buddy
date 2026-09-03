@@ -3,8 +3,13 @@
  * when files are distinct, and refuse to race two writers on the same file.
  * A unit that reports success without touching a file is a failure.
  */
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  createDefaultBatchSpawnFn,
   decomposeBatchGoal,
   executeBatchPlan,
   handleBatchSlashCommand,
@@ -156,5 +161,24 @@ describe('GK34 /batch success contract', () => {
     expect(result.entry?.content).not.toContain('plan only');
     expect(result.entry?.content).toContain('[OK]');
     expect(result.entry?.content).toMatch(/Completed: 2\/2/);
+  });
+
+  it('file-scoped spawn writes the named file from chat output', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gk34-spawn-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.email=gk34@local', '-c', 'user.name=gk34', 'commit', '--allow-empty', '-qm', 'init'], { cwd: dir });
+    writeFileSync(join(dir, 'add.js'), 'export function add(a, b) { return -1; }\n');
+    execFileSync('git', ['add', 'add.js'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.email=gk34@local', '-c', 'user.name=gk34', 'commit', '-qm', 'add'], { cwd: dir });
+
+    const spawn = createDefaultBatchSpawnFn({
+      cwd: dir,
+      apiKey: 'ollama',
+      chatFn: async () => 'export function add(a, b) {\n  return a + b;\n}\n',
+    });
+    const result = await spawn('add', 'Fix add.js so add(2,3) is 5. Only touch add.js.');
+    expect(result.success).toBe(true);
+    expect(result.filesChanged).toContain('add.js');
+    expect(readFileSync(join(dir, 'add.js'), 'utf8')).toContain('return a + b');
   });
 });
