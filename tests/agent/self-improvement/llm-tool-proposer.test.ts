@@ -5,7 +5,9 @@ import { randomUUID } from 'crypto';
 import {
   LlmToolProposer,
   parseToolDraft,
+  buildToolDraftPrompt,
 } from '../../../src/agent/self-improvement/llm-tool-proposer.js';
+import { toProposerView } from '../../../src/agent/self-improvement/tool-proposer.js';
 import { ToolImprovementEngine } from '../../../src/agent/self-improvement/tool-engine.js';
 import { EvolutionaryArchive } from '../../../src/agent/self-improvement/evolutionary-archive.js';
 import { SEED_TOOL_SCENARIOS } from '../../../src/agent/self-improvement/tool-benchmark.js';
@@ -70,6 +72,34 @@ describe('parseToolDraft', () => {
   it('declines when no provider/client is configured', async () => {
     const proposer = new LlmToolProposer({ client: null });
     expect(await proposer.propose({ id: 'x', capability: 'c', description: 'd', visibleCases: [] })).toBeNull();
+  });
+});
+
+describe('LlmToolProposer — held-out cases never reach the model', () => {
+  it('toProposerView omits heldOutCases and the draft prompt never contains them', async () => {
+    const view = toProposerView(SLUGIFY);
+    expect(view).not.toHaveProperty('heldOutCases');
+    expect(Object.keys(view).sort()).toEqual(['capability', 'description', 'id', 'visibleCases']);
+
+    const prompt = buildToolDraftPrompt(view);
+    const heldOutNeedles = SLUGIFY.heldOutCases.flatMap((c) => [String(c.input.text), ...c.expectIncludes]);
+    for (const needle of heldOutNeedles) {
+      expect(prompt).not.toContain(needle);
+    }
+
+    let seen = '';
+    const proposer = new LlmToolProposer({
+      client: {
+        chat: async (messages) => {
+          seen = messages.map((m) => m.content).join('\n');
+          return { choices: [{ message: { content: REAL_DRAFT } }] };
+        },
+      },
+    });
+    await proposer.propose(view);
+    for (const needle of heldOutNeedles) {
+      expect(seen).not.toContain(needle);
+    }
   });
 });
 
