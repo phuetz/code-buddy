@@ -162,6 +162,39 @@ describe('repository explainer', () => {
     );
   });
 
+  it('does not invent TypeScript when the tree is JavaScript-only', () => {
+    const explanation = explainRepository({
+      rootPath: '/tmp/nimbus-ledger',
+      rootName: 'nimbus-ledger',
+      depth: 'quick',
+      generatedAt: '2026-09-03T10:47:03.969Z',
+      files: [
+        { path: 'README.md', sizeBytes: 40 },
+        { path: 'package.json', sizeBytes: 80 },
+        { path: 'src/index.js', sizeBytes: 120 },
+        { path: 'src/ledger.js', sizeBytes: 200 },
+        { path: 'tests/ledger.test.mjs', sizeBytes: 90 },
+        { path: 'HARVEST.md', sizeBytes: 70 },
+      ],
+      profile: {
+        name: 'nimbus-ledger',
+        description: 'Toy double-entry bookkeeper with harvest marker NIMBUS_LEDGER_MARK=7f3a',
+        languages: ['TypeScript', 'JavaScript'],
+        packageManager: 'npm',
+      },
+      git: { available: false },
+      codeExplorer: { indexed: false },
+    });
+
+    expect(explanation.overview.languages.map((language) => language.name)).toEqual([
+      'JavaScript',
+    ]);
+    expect(explanation.overview.languages[0]).toMatchObject({ name: 'JavaScript', files: 2 });
+    const markdown = renderRepoExplanationMarkdown(explanation);
+    expect(markdown).toContain('NIMBUS_LEDGER_MARK=7f3a');
+    expect(markdown).not.toMatch(/TypeScript/);
+  });
+
   it('uses an injected Code Explorer Mermaid graph when available', async () => {
     const input = await fixtureInput();
     input.codeExplorer = {
