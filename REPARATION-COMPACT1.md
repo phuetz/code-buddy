@@ -4,7 +4,7 @@
 
 - Dépôt : `/home/patrice/DEV/cb-compact1-2026-09-03`
 - Branche annoncée : `fix/compact1-2026-09-03`
-- Statut : implémentation et vérifications réalisées ; commit fonctionnel créé, commit documentaire en préparation.
+- Statut : implémentation, vérifications, commits et documentation réalisés.
 
 ## Fichiers lus en entier
 
@@ -170,7 +170,7 @@ ESLint ciblé sur les fichiers TypeScript modifiés : code `0`. Sortie :
 - `docs/context-engine.md:52-54` : trois lignes de documentation utilisateur.
 
 Commit fonctionnel : `9e66ac876 feat(context): add compaction lifecycle hooks` — code et tests ajoutés nominativement, sans `node_modules`, docs ni rapport.
-Commit documentaire à venir : `docs(context): document compaction lifecycle hooks`.
+Commit documentaire : `6d0441ef6 docs(context): document compaction lifecycle hooks`.
 
 ## Décisions / points ouverts
 
@@ -190,4 +190,4 @@ Commit documentaire à venir : `docs(context): document compaction lifecycle hoo
 7. Timeout 5 s et erreurs non bloquantes journalisées par `logger.warn`.
 8. Les tests ciblés et voisins couvrent 500 cas verts, puis 117 cas bus/confidentialité.
 9. `tsc` et ESLint ciblé sortent code 0 ; ESLint garde un warning préexistant.
-10. Commit fonctionnel `9e66ac876` créé ; le commit documentaire et la libération de coordination restent à faire.
+10. Commits `9e66ac876` et `6d0441ef6` créés ; la coordination est mise à jour pour passation.
