@@ -51,14 +51,14 @@ describe('relationship-state pure helpers', () => {
     }
   });
 
-  it('does not treat a corrupt relationship store as empty defaults (jumeau D1)', () => {
+  it('treats a corrupt relationship store as absent defaults (MEM1)', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'rel-bad-'));
     const p = path.join(dir, 's.json');
     try {
       writeFileSync(p, '{this is not json');
-      expect(() => loadRelationshipState(p)).toThrow();
+      expect(loadRelationshipState(p)).toEqual({ celebratedMilestones: [] });
       writeFileSync(p, '[]');
-      expect(() => loadRelationshipState(p)).toThrow();
+      expect(loadRelationshipState(p)).toEqual({ celebratedMilestones: [] });
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }

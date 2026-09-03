@@ -11,6 +11,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 
 export type EvolutionActivation = 'opt-in' | 'default' | 'mixed' | 'unspecified';
 
@@ -355,7 +356,8 @@ export async function readEvolutionNotes(
     options.cachePath ?? path.join(workDir, '.codebuddy', 'self-model', 'evolution.json'),
   );
   const readFile = options.readFile ?? ((filePath: string) => fs.readFile(filePath, 'utf8'));
-  const writeFile = options.writeFile ?? ((filePath: string, content: string) => fs.writeFile(filePath, content, 'utf8'));
+  const readCacheFile = options.readFile ?? ((filePath: string) => readTextAtomic(filePath, ''));
+  const writeFile = options.writeFile ?? ((filePath: string, content: string) => writeFileAtomic(filePath, content, { mode: 0o600 }));
   const mkdir = options.mkdir ?? ((directory: string) => fs.mkdir(directory, { recursive: true }));
 
   let source: { mtimeMs: number; size: number };
@@ -369,7 +371,7 @@ export async function readEvolutionNotes(
   }
 
   try {
-    const cached = JSON.parse(await readFile(cachePath)) as unknown;
+    const cached = JSON.parse(await readCacheFile(cachePath)) as unknown;
     if (cacheIsValid(cached, source)) return cached.notes;
   } catch {
     // A missing or corrupt cache is rebuilt from the source below.

@@ -18,11 +18,11 @@
  *
  * @module companion/event-followups
  */
-import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface EventFollowUp {
   id: string;
@@ -91,69 +91,18 @@ function isEventFollowUp(value: unknown): value is EventFollowUp {
 }
 
 export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowUp[] {
-  let raw: string;
-  try {
-    raw = readFileSync(statePath, 'utf8').trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
-    logger.warn(
-      `[event-followups] could not read store: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[event-followups] store exists but is empty: ${statePath}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    logger.warn(
-      `[event-followups] could not parse store: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!Array.isArray(parsed)) {
-    const msg = `[event-followups] store is not a list: ${statePath}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  const items: EventFollowUp[] = [];
-  for (const entry of parsed) {
-    if (!isEventFollowUp(entry)) {
-      const msg = `[event-followups] store has an invalid entry: ${statePath}`;
-      logger.warn(msg);
-      throw new Error(msg);
-    }
-    items.push(entry);
-  }
-  return items;
+  const parsed = readJsonAtomicSync<unknown[]>(statePath, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
+  return parsed.filter(isEventFollowUp);
 }
 
 export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): boolean {
-  const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(temporaryPath, JSON.stringify(items));
-    try {
-      renameSync(temporaryPath, statePath);
-    } catch {
-      writeFileSync(statePath, JSON.stringify(items));
-      try {
-        unlinkSync(temporaryPath);
-      } catch {
-        /* already moved/removed */
-      }
-    }
+    writeJsonAtomicSync(statePath, items, { mode: 0o600 });
     return true;
   } catch (err) {
-    try {
-      unlinkSync(temporaryPath);
-    } catch {
-      /* best effort cleanup */
-    }
     logger.warn(
       `[event-followups] could not persist store: ${err instanceof Error ? err.message : String(err)}`
     );

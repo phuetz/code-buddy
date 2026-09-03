@@ -50,7 +50,7 @@ describe('reminders — store', () => {
     await expect(addReminder({ label: 'x', time: '25:00' })).rejects.toThrow();
   });
 
-  it('does not treat a corrupt store as empty, and addReminder does not wipe it (D2)', async () => {
+  it('treats a corrupt store as absent, warns once, and rebuilds it on write (MEM1)', async () => {
     const file = process.env.CODEBUDDY_REMINDERS_FILE!;
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -79,19 +79,23 @@ describe('reminders — store', () => {
     );
     await writeFile(file, '{this is not json', 'utf8');
 
-    await expect(listReminders()).rejects.toThrow();
-    await expect(addReminder({ label: 'nouveau', time: '10:00' })).rejects.toThrow();
-    expect(await readFile(file, 'utf8')).toBe('{this is not json');
+    await expect(listReminders()).resolves.toEqual([]);
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).resolves.toMatchObject({ label: 'nouveau' });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([
+      expect.objectContaining({ label: 'nouveau' }),
+    ]);
   });
 
-  it('does not treat an existing empty store as a new empty list (D2)', async () => {
+  it('treats an existing empty store as absent and rebuilds it on write (MEM1)', async () => {
     const file = process.env.CODEBUDDY_REMINDERS_FILE!;
     await mkdir(dir, { recursive: true });
     await writeFile(file, '', 'utf8');
 
-    await expect(listReminders()).rejects.toThrow();
-    await expect(addReminder({ label: 'nouveau', time: '10:00' })).rejects.toThrow();
-    expect(await readFile(file, 'utf8')).toBe('');
+    await expect(listReminders()).resolves.toEqual([]);
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).resolves.toMatchObject({ label: 'nouveau' });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([
+      expect.objectContaining({ label: 'nouveau' }),
+    ]);
   });
 });
 

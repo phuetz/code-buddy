@@ -20,7 +20,7 @@ import { EnhancedMemory } from '../../src/memory/enhanced-memory.js';
 
 const testRoot = path.join(process.cwd(), '.r28-tests');
 
-describe('R28 D7 — recall ne réécrit pas des résumés corrompus', () => {
+describe('MEM1 — recall récupère les résumés corrompus', () => {
   let home: string;
   let memory: EnhancedMemory | null;
 
@@ -43,7 +43,7 @@ describe('R28 D7 — recall ne réécrit pas des résumés corrompus', () => {
     }
   });
 
-  it('rend les souvenirs mais conserve summaries.json octet pour octet', async () => {
+  it('rend les souvenirs puis remplace le fichier corrompu par un état valide', async () => {
     const dataDir = path.join(home, '.codebuddy', 'memory');
     fs.mkdirSync(path.join(dataDir, 'projects'), { recursive: true });
     fs.mkdirSync(path.join(dataDir, 'memories'), { recursive: true });
@@ -68,12 +68,14 @@ describe('R28 D7 — recall ne réécrit pas des résumés corrompus', () => {
 
     expect(recalled).toHaveLength(1);
     expect(recalled[0]?.content).toContain('SQLite');
-    expect(fs.readFileSync(summariesPath, 'utf8')).toBe(corrupt);
     await expect(memory.storeSummary({
       sessionId: 'nouvelle',
       summary: 'ne doit pas mentir',
       topics: ['mémoire'],
       messageCount: 1,
-    })).rejects.toThrow(/summaries\.json.*corrupt|summaries.*unreadable/i);
+    })).resolves.toMatchObject({ summary: 'ne doit pas mentir' });
+    expect(JSON.parse(fs.readFileSync(summariesPath, 'utf8'))).toEqual([
+      expect.objectContaining({ summary: 'ne doit pas mentir' }),
+    ]);
   });
 });

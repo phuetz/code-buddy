@@ -23,10 +23,10 @@
  * @module src/memory/presence-injector
  */
 
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic } from '../utils/atomic-write.js';
 
 const PRESENCE_FILE = path.join(os.homedir(), '.codebuddy', 'presence', 'current.json');
 
@@ -78,8 +78,14 @@ const EMPTY_CONTEXT: PresenceContext = {
  */
 export async function readPresenceContext(): Promise<PresenceContext> {
   try {
-    const raw = await fs.readFile(PRESENCE_FILE, 'utf-8');
-    const parsed = JSON.parse(raw) as PresenceFileShape;
+    const parsed = await readJsonAtomic<PresenceFileShape | null>(PRESENCE_FILE, null, {
+      mode: 0o600,
+      isValid: (value): value is PresenceFileShape => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value) &&
+        typeof (value as PresenceFileShape).updatedAt === 'number',
+      ),
+    });
+    if (!parsed) return EMPTY_CONTEXT;
     const ageMs = Date.now() - parsed.updatedAt;
 
     if (ageMs > STALE_AFTER_MS) {

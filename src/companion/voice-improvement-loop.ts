@@ -24,16 +24,14 @@
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
-  existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   loadRelationshipState,
   saveRelationshipState,
@@ -210,8 +208,12 @@ function conversationFingerprint(heard: string[]): string {
 
 function loadImprovementState(path: string): VoiceImprovementState {
   try {
-    if (!existsSync(path)) return {};
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    const parsed = readJsonAtomicSync<Record<string, unknown>>(path, {}, {
+      mode: 0o600,
+      isValid: (value): value is Record<string, unknown> => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
     return {
       ...(typeof parsed.lastFingerprint === 'string'
         ? { lastFingerprint: parsed.lastFingerprint }
@@ -229,8 +231,7 @@ function loadImprovementState(path: string): VoiceImprovementState {
 
 function saveImprovementState(path: string, state: VoiceImprovementState): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(state));
+    writeJsonAtomicSync(path, state, { mode: 0o600 });
   } catch {
     /* best effort — a failed cursor write only causes a later safe retry */
   }

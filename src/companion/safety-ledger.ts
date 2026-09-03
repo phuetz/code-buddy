@@ -1,6 +1,7 @@
-import { appendFile, mkdir, readFile, rename, stat } from 'fs/promises';
+import { appendFile, mkdir, rename, stat } from 'fs/promises';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { readJsonLinesAtomic } from '../utils/atomic-write.js';
 
 export type CompanionSafetyEventKind = 'sense' | 'tool' | 'mission' | 'permission' | 'data';
 export type CompanionSafetyEventRisk = 'low' | 'medium' | 'high';
@@ -141,17 +142,13 @@ function parseSafetyEvent(line: string): CompanionSafetyEvent | null {
 
 async function readSafetyEvents(options: CompanionSafetyLedgerOptions = {}): Promise<CompanionSafetyEvent[]> {
   const ledgerPath = resolveLedgerPath(options);
-  let content: string;
-  try {
-    content = await readFile(ledgerPath, 'utf8');
-  } catch {
-    return [];
-  }
-
-  return content
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map(parseSafetyEvent)
+  const rawEvents = await readJsonLinesAtomic<unknown>(
+    ledgerPath,
+    [],
+    (value): value is unknown => parseSafetyEvent(JSON.stringify(value) ?? '') !== null,
+  );
+  return rawEvents
+    .map(value => parseSafetyEvent(JSON.stringify(value) ?? ''))
     .filter((event): event is CompanionSafetyEvent => Boolean(event));
 }
 

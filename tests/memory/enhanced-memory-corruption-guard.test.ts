@@ -47,7 +47,7 @@ describe('R28 D6/D8 — EnhancedMemory refuse un état non chargé', () => {
     }
   });
 
-  it('D6 : un index JSON corrompu fait échouer store sans écraser le fichier', async () => {
+  it('MEM1 : un index JSON corrompu repart d’un repli et est réécrit atomiquement', async () => {
     const dataDir = path.join(home, '.codebuddy', 'memory');
     fs.mkdirSync(path.join(dataDir, 'projects'), { recursive: true });
     fs.mkdirSync(path.join(dataDir, 'memories'), { recursive: true });
@@ -56,16 +56,12 @@ describe('R28 D6/D8 — EnhancedMemory refuse un état non chargé', () => {
     fs.writeFileSync(indexPath, corrupt);
 
     memory = new EnhancedMemory({ useSQLite: false, embeddingEnabled: false });
-    let failure: unknown;
-    try {
-      await memory.store({ type: 'fact', content: 'nouveau souvenir' });
-    } catch (err) {
-      failure = err;
-    }
-
-    expect(fs.readFileSync(indexPath, 'utf8')).toBe(corrupt);
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toMatch(/memory-index|JSON|initialize/i);
+    await expect(memory.store({ type: 'fact', content: 'nouveau souvenir' })).resolves.toMatchObject({
+      content: 'nouveau souvenir',
+    });
+    expect(JSON.parse(fs.readFileSync(indexPath, 'utf8'))).toEqual([
+      expect.objectContaining({ content: 'nouveau souvenir' }),
+    ]);
   });
 
   it('D8 : un initialize incomplet rejette whenReady/store et préserve l’index existant', async () => {

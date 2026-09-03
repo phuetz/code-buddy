@@ -23,9 +23,9 @@
  */
 
 import { createHash } from 'crypto';
-import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { shouldWriteProjectRuntimeFiles } from '../utils/runtime-flags.js';
 
 // ============================================================================
@@ -1010,10 +1010,26 @@ export class KnowledgeGraph {
 
     this.loadPromise = (async () => {
       try {
-        if (!existsSync(this.dbPath)) return;
-        const { readFile } = await import('fs/promises');
-        const content = await readFile(this.dbPath, 'utf-8');
-        const data = JSON.parse(content);
+        const data = await readJsonAtomic(this.dbPath, {
+          entities: [] as Entity[],
+          relations: [] as Relation[],
+          categories: [] as MemoryCategory[],
+          contentHashes: [] as string[],
+        }, {
+          mode: 0o600,
+          isValid: (value): value is {
+            entities: Entity[];
+            relations: Relation[];
+            categories: MemoryCategory[];
+            contentHashes: string[];
+          } => Boolean(
+            value && typeof value === 'object'
+              && Array.isArray((value as { entities?: unknown }).entities)
+              && Array.isArray((value as { relations?: unknown }).relations)
+              && Array.isArray((value as { categories?: unknown }).categories)
+              && Array.isArray((value as { contentHashes?: unknown }).contentHashes),
+          ),
+        });
 
         // Restore entities
         for (const e of data.entities || []) {
@@ -1068,7 +1084,6 @@ export class KnowledgeGraph {
     }
 
     try {
-      const { mkdir, writeFile } = await import('fs/promises');
       const data = {
         version: 2,
         savedAt: new Date().toISOString(),
@@ -1077,8 +1092,7 @@ export class KnowledgeGraph {
         categories: [...this.categories.values()],
         contentHashes: [...this.contentHashes],
       };
-      await mkdir(dirname(this.dbPath), { recursive: true });
-      await writeFile(this.dbPath, JSON.stringify(data, null, 2), 'utf-8');
+      await writeJsonAtomic(this.dbPath, data, { mode: 0o600 });
       this.dirty = false;
       logger.debug(`KnowledgeGraph: saved ${data.entities.length} entities, ${data.relations.length} relations, ${data.categories.length} categories`);
     } catch (err) {

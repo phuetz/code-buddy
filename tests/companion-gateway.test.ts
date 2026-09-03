@@ -858,24 +858,23 @@ describe('companion gateway', () => {
     expect(rawLog).not.toContain('Final approved admin reply');
   });
 
-  it('does not treat a corrupt gateway profile as empty defaults (D4)', async () => {
+  it('treats a corrupt gateway profile as fallback defaults (MEM1)', async () => {
     const profilePath = getCompanionGatewayProfilePath(tempDir);
     await mkdir(path.dirname(profilePath), { recursive: true });
     await writeFile(profilePath, '{this is not json', 'utf8');
 
-    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).resolves.toMatchObject({ channels: expect.any(Array) });
     await expect(
       updateCompanionGatewayChannel('slack', { cwd: tempDir, enabled: true }),
-    ).rejects.toThrow();
-    expect(await readFile(profilePath, 'utf8')).toBe('{this is not json');
+    ).resolves.toMatchObject({ channels: expect.arrayContaining([expect.objectContaining({ channel: 'slack', enabled: true })]) });
   });
 
-  it('does not treat a corrupt gateway inbox as empty (D5)', async () => {
+  it('treats a corrupt gateway inbox as fallback defaults (MEM1)', async () => {
     const inboxPath = getCompanionGatewayInboxPath(tempDir);
     await mkdir(path.dirname(inboxPath), { recursive: true });
     await writeFile(inboxPath, '{this is not json', 'utf8');
 
-    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).resolves.toMatchObject({ items: [] });
     await expect(
       recordCompanionGatewayInboxItem({
         accepted: true,
@@ -885,8 +884,7 @@ describe('companion gateway', () => {
         senderId: 'u1',
         sessionKey: 'companion:slack:u1',
       }, { cwd: tempDir }),
-    ).rejects.toThrow();
-    expect(await readFile(inboxPath, 'utf8')).toBe('{this is not json');
+    ).resolves.toMatchObject({ sessionKey: 'companion:slack:u1' });
   });
 
   it('marks start failed when the adapter was skipped (D3)', async () => {
@@ -1014,34 +1012,34 @@ describe('companion gateway', () => {
     expect(manager.getChannel('telegram')?.getStatus().connected).not.toBe(true);
   });
 
-  it('rejects a syntactically valid but incoherent gateway profile (jumeau D4)', async () => {
+  it('falls back for a syntactically valid but incoherent gateway profile (MEM1)', async () => {
     const profilePath = getCompanionGatewayProfilePath(tempDir);
     await mkdir(path.dirname(profilePath), { recursive: true });
 
     await writeFile(profilePath, '[]', 'utf8');
-    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).resolves.toMatchObject({ channels: expect.any(Array) });
 
     await writeFile(profilePath, '{}', 'utf8');
-    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).resolves.toMatchObject({ channels: expect.any(Array) });
 
     await writeFile(profilePath, JSON.stringify({ channels: 'bad' }), 'utf8');
-    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).resolves.toMatchObject({ channels: expect.any(Array) });
 
     await writeFile(profilePath, JSON.stringify({ channels: [{}] }), 'utf8');
-    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).resolves.toMatchObject({ channels: expect.any(Array) });
   });
 
-  it('rejects a syntactically valid but incoherent gateway inbox (jumeau D5)', async () => {
+  it('falls back for a syntactically valid but incoherent gateway inbox (MEM1)', async () => {
     const inboxPath = getCompanionGatewayInboxPath(tempDir);
     await mkdir(path.dirname(inboxPath), { recursive: true });
 
     await writeFile(inboxPath, '[]', 'utf8');
-    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).resolves.toMatchObject({ items: [] });
 
     await writeFile(inboxPath, '{}', 'utf8');
-    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).resolves.toMatchObject({ items: [] });
 
     await writeFile(inboxPath, JSON.stringify({ items: [{}] }), 'utf8');
-    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).resolves.toMatchObject({ items: [] });
   });
 });

@@ -11,9 +11,10 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { readFile, writeFile, appendFile, mkdir, stat, rename, rm } from 'node:fs/promises';
+import { appendFile, mkdir, stat, rename, rm } from 'node:fs/promises';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readJsonLinesAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import {
@@ -65,18 +66,19 @@ export async function appendRuleRun(run: RuleRun, path = auditPath()): Promise<v
     await rm(`${path}.1`, { force: true });
     await rename(path, `${path}.1`);
   }
-  await appendFile(path, `${JSON.stringify(run)}\n`, 'utf8');
+  await appendFile(path, `${JSON.stringify(run)}\n`, { encoding: 'utf8', mode: 0o600 });
 }
 
 export async function loadSensoryRules(path = rulesPath()): Promise<SensoryRule[]> {
-  try {
-    const raw = await readFile(path, 'utf8');
-    const data = JSON.parse(raw) as { rules?: SensoryRule[] } | SensoryRule[];
-    const rules = Array.isArray(data) ? data : (data.rules ?? []);
-    return rules.filter((r) => r && r.match?.kind && r.action?.type);
-  } catch {
-    return [];
-  }
+  const data = await readJsonAtomic<SensoryRule[] | { rules?: SensoryRule[] } | null>(path, null, {
+    mode: 0o600,
+    isValid: (value): value is SensoryRule[] | { rules?: SensoryRule[] } => Boolean(
+      Array.isArray(value) || (value && typeof value === 'object' && !Array.isArray(value)),
+    ),
+  });
+  if (!data) return [];
+  const rules = Array.isArray(data) ? data : (data.rules ?? []);
+  return rules.filter((r) => r && r.match?.kind && r.action?.type);
 }
 
 // ── admin CRUD-lite (the surface `buddy rules` / Cowork call) ──────────
@@ -138,8 +140,7 @@ export async function saveSensoryRules(rules: SensoryRule[], path = rulesPath())
   if (valid.length < rules.length) {
     logger.warn(`[rules] dropped ${rules.length - valid.length} unsafe rule(s) while saving`);
   }
-  await mkdir(join(path, '..'), { recursive: true });
-  await writeFile(path, JSON.stringify(valid, null, 2), 'utf8');
+  await writeJsonAtomic(path, valid, { mode: 0o600 });
 }
 
 export const listSensoryRules = loadSensoryRules;
@@ -186,23 +187,11 @@ export interface RuleRun {
 
 /** Recent rule fires (newest first) from the audit log — the observe surface. */
 export async function readRuleRuns(limit = 20): Promise<RuleRun[]> {
-  try {
-    const raw = await readFile(auditPath(), 'utf8');
-    const lines = raw.trim().split('\n').filter(Boolean);
-    return lines
-      .slice(-limit)
-      .reverse()
-      .map((l) => {
-        try {
-          return JSON.parse(l) as RuleRun;
-        } catch {
-          return null;
-        }
-      })
-      .filter((x): x is RuleRun => x !== null);
-  } catch {
-    return [];
-  }
+  const runs = await readJsonLinesAtomic<RuleRun>(auditPath(), [], (value): value is RuleRun => Boolean(
+    value && typeof value === 'object' && typeof (value as RuleRun).ts === 'number' &&
+    typeof (value as RuleRun).rule === 'string',
+  ));
+  return runs.slice(-limit).reverse();
 }
 
 /** Is `now` (local HH:MM) within [start,end], wrapping past midnight (e.g. 22:00→06:00)? */

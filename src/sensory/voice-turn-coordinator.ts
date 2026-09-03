@@ -7,11 +7,12 @@
  * generated speech.
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { logger } from '../utils/logger.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type VoiceTurnPhase =
   | 'idle'
@@ -326,11 +327,8 @@ export class VoiceTurnCoordinator {
 
   private persist(snapshot: VoiceTurnRuntimeSnapshot): void {
     if (!this.persistEnabled) return;
-    const temporary = `${this.runtimeFile}.${process.pid}.tmp`;
     try {
-      mkdirSync(dirname(this.runtimeFile), { recursive: true });
-      writeFileSync(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.runtimeFile);
+      writeJsonAtomicSync(this.runtimeFile, snapshot, { mode: 0o600 });
     } catch (error) {
       logger.debug('[voice-turn] runtime snapshot write skipped', {
         error: error instanceof Error ? error.message : String(error),

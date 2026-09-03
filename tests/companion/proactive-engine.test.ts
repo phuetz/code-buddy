@@ -318,7 +318,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     expect(loadProactiveState(unwritable).lastSentAt).toBeUndefined();
   });
 
-  it('does not treat corrupt proactive state as never-sent (D1)', async () => {
+  it('uses a safe fallback for corrupt proactive state (MEM1)', async () => {
     writeFileSync(statePath, '{this is not json');
     saveRelationshipState(
       { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
@@ -333,8 +333,8 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
       relationshipStatePath: relPath,
       recentHearing: async () => [],
     });
-    expect(line).toBeNull();
-    expect(say).not.toHaveBeenCalled();
+    expect(line).toContain('30 jours qu\'on fait un bout de chemin ensemble');
+    expect(say).toHaveBeenCalledTimes(1);
   });
 
   it('does not persist cooldown when local say reports failure (D8)', async () => {

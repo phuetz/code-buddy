@@ -43,7 +43,7 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     }
   });
 
-  it('rappelle les souvenirs mais refuse un profil corrompu au lieu de le vider', async () => {
+  it('rappelle les souvenirs puis reconstruit un profil corrompu au prochain changement', async () => {
     const dataDir = path.join(home, '.codebuddy', 'memory');
     fs.mkdirSync(path.join(dataDir, 'projects'), { recursive: true });
     fs.mkdirSync(path.join(dataDir, 'memories'), { recursive: true });
@@ -69,17 +69,17 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     expect(recalled).toHaveLength(1);
     expect(recalled[0]?.content).toContain('SQLite');
     expect(fs.readFileSync(profilePath, 'utf8')).toBe(corrupt);
-    expect(() => memory!.getUserProfile()).toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
+    expect(memory!.getUserProfile()).toBeNull();
     await expect(memory.updateUserProfile({
       interests: ['ne doit pas ecraser'],
-    })).rejects.toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
-    expect(fs.readFileSync(profilePath, 'utf8')).toBe(corrupt);
+    })).resolves.toMatchObject({ interests: ['ne doit pas ecraser'] });
+    expect(JSON.parse(fs.readFileSync(profilePath, 'utf8'))).toMatchObject({ interests: ['ne doit pas ecraser'] });
   });
 
   it.each([
     { label: 'JSON null', body: 'null' },
     { label: 'JSON array', body: '[]' },
-  ])('fails closed on $label instead of treating it as an empty profile', async ({ body }) => {
+  ])('uses a null fallback for $label and rebuilds on update', async ({ body }) => {
     const dataDir = path.join(home, '.codebuddy', 'memory');
     fs.mkdirSync(path.join(dataDir, 'projects'), { recursive: true });
     fs.mkdirSync(path.join(dataDir, 'memories'), { recursive: true });
@@ -91,10 +91,10 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     await memory.recall({ query: 'anything' });
 
     expect(fs.readFileSync(profilePath, 'utf8')).toBe(body);
-    expect(() => memory!.getUserProfile()).toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
+    expect(memory!.getUserProfile()).toBeNull();
     await expect(memory.updateUserProfile({
       interests: ['ne doit pas ecraser'],
-    })).rejects.toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
-    expect(fs.readFileSync(profilePath, 'utf8')).toBe(body);
+    })).resolves.toMatchObject({ interests: ['ne doit pas ecraser'] });
+    expect(JSON.parse(fs.readFileSync(profilePath, 'utf8'))).toMatchObject({ interests: ['ne doit pas ecraser'] });
   });
 });

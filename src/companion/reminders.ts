@@ -17,8 +17,9 @@
 
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { readFile, writeFile, mkdir, appendFile, stat, rename } from 'node:fs/promises';
+import { mkdir, appendFile, stat, rename } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { resolveUserName } from './user-name.js';
 
 /** A reminder definition (shape mirrors prospective-memory's Reminder; stored as JSON). */
@@ -73,52 +74,27 @@ function logFile(): string {
 
 export async function loadReminders(): Promise<Reminder[]> {
   const file = remindersFile();
-  let raw: string;
-  try {
-    raw = (await readFile(file, 'utf8')).trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
-    logger.warn(
-      `[reminders] could not read store: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[reminders] store exists but is empty: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    logger.warn(
-      `[reminders] could not parse store: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
+  const parsed = await readJsonAtomic<unknown>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown => Boolean(
+      Array.isArray(value)
+      || (value && typeof value === 'object' && Array.isArray((value as { reminders?: unknown }).reminders)),
+    ),
+  });
   const record = parsed as { reminders?: unknown } | null;
   const list = Array.isArray(parsed)
     ? parsed
     : Array.isArray(record?.reminders)
       ? record.reminders
       : null;
-  if (!Array.isArray(list)) {
-    const msg = `[reminders] store is not a reminder list: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  return list.filter(
+  return (Array.isArray(list) ? list : []).filter(
     (r: unknown): r is Reminder => !!r && typeof (r as Reminder).id === 'string'
   );
 }
 
 export async function saveReminders(list: Reminder[]): Promise<void> {
   const file = remindersFile();
-  await mkdir(join(file, '..'), { recursive: true });
-  const tmp = `${file}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, file);
+  await writeJsonAtomic(file, list, { mode: 0o600 });
 }
 
 /** 'HH:MM' validator. */
@@ -404,9 +380,7 @@ async function savePendingAcksNow(): Promise<void> {
   try {
     const file = pendingAcksFile();
     await mkdir(join(file, '..'), { recursive: true });
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, JSON.stringify([...pending.values()]), 'utf8');
-    await rename(tmp, file);
+    await writeJsonAtomic(file, [...pending.values()], { mode: 0o600 });
   } catch (err) {
     logger.warn(
       `[reminders] could not persist pending acks: ${err instanceof Error ? err.message : String(err)}`
@@ -417,35 +391,10 @@ async function savePendingAcksNow(): Promise<void> {
 /** Restore the pending-ack registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadPendingAcks(): Promise<void> {
   const file = pendingAcksFile();
-  let raw: string;
-  try {
-    raw = (await readFile(file, 'utf8')).trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return;
-    logger.warn(
-      `[reminders] could not read pending acks: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[reminders] pending acks store exists but is empty: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    logger.warn(
-      `[reminders] could not parse pending acks: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!Array.isArray(parsed)) {
-    const msg = `[reminders] pending acks store is not a list: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
+  const parsed = await readJsonAtomic<unknown[]>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
   const loaded = new Map<string, PendingAck>();
   for (const a of parsed) {
     if (a && typeof (a as PendingAck).id === 'string' && Number.isFinite((a as PendingAck).firedAt)) {
@@ -967,9 +916,7 @@ async function saveSnoozesNow(): Promise<boolean> {
   try {
     const file = snoozesFile();
     await mkdir(join(file, '..'), { recursive: true });
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, JSON.stringify([...snoozes.values()]), 'utf8');
-    await rename(tmp, file);
+    await writeJsonAtomic(file, [...snoozes.values()], { mode: 0o600 });
     return true;
   } catch (err) {
     logger.warn(
@@ -982,35 +929,10 @@ async function saveSnoozesNow(): Promise<boolean> {
 /** Restore the snooze registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadSnoozes(): Promise<void> {
   const file = snoozesFile();
-  let raw: string;
-  try {
-    raw = (await readFile(file, 'utf8')).trim();
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return;
-    logger.warn(
-      `[reminders] could not read snoozes: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!raw) {
-    const msg = `[reminders] snooze store exists but is empty: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    logger.warn(
-      `[reminders] could not parse snoozes: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-  if (!Array.isArray(parsed)) {
-    const msg = `[reminders] snooze store is not a list: ${file}`;
-    logger.warn(msg);
-    throw new Error(msg);
-  }
+  const parsed = await readJsonAtomic<unknown[]>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
   const loaded = new Map<string, SnoozedReminder>();
   for (const s of parsed) {
     if (s && typeof (s as SnoozedReminder).id === 'string' && Number.isFinite((s as SnoozedReminder).fireAt)) {
