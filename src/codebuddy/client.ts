@@ -16,6 +16,7 @@ import { GeminiCliProvider } from "./providers/provider-gemini-cli.js";
 import { AgyCliProvider } from './providers/provider-agy-cli.js';
 import { withStreamRetry } from "./stream-retry.js";
 import { createAbortError } from './abort-signal.js';
+import type { TurnMetricsRecorder } from '../observability/turn-metrics.js';
 import {
   recordRuntimeFallbackFailure,
   recordRuntimeFallbackSuccess,
@@ -176,6 +177,15 @@ export interface ChatOptions {
     maxAttempts?: number;
     initialDelayMs?: number;
     maxDelayMs?: number;
+  };
+  /**
+   * Internal streamed-turn observer. `runTurnLoop` supplies this once; the
+   * provider owns the request-send/first-chunk/message-complete lifecycle.
+   */
+  turnMetrics?: {
+    recorder: TurnMetricsRecorder;
+    inputTokens?: number;
+    getOutputTokens?: () => number;
   };
 }
 
