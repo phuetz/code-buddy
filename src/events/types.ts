@@ -72,6 +72,14 @@ export interface AgentEvent extends BaseEvent {
   error?: Error;
 }
 
+export interface LoopDetectedEvent extends BaseEvent {
+  type: 'agent:loop_detected';
+  loopType: string;
+  detail: string;
+  turnIndex?: number;
+  count?: number;
+}
+
 export interface ToolEvent extends BaseEvent {
   type: 'tool:started' | 'tool:completed' | 'tool:error';
   toolName: string;
@@ -108,6 +116,7 @@ export interface ApplicationEvents extends Record<string, BaseEvent> {
   'agent:started': AgentEvent;
   'agent:stopped': AgentEvent;
   'agent:error': AgentEvent;
+  'agent:loop_detected': LoopDetectedEvent;
   'tool:started': ToolEvent;
   'tool:completed': ToolEvent;
   'tool:error': ToolEvent;
@@ -838,6 +847,7 @@ export interface AllEvents extends Record<string, BaseEvent> {
   'agent:started': AgentEvent;
   'agent:stopped': AgentEvent;
   'agent:error': AgentEvent;
+  'agent:loop_detected': LoopDetectedEvent;
 
   // Tool Events
   'tool:started': ToolEvent;
