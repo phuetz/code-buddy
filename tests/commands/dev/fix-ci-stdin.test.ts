@@ -38,6 +38,13 @@ describe('readStdinIfPiped', () => {
   });
 });
 
+describe('CI auto-fix staging', () => {
+  it('does not stage with git add -A', () => {
+    const src = fs.readFileSync(new URL('../../../src/integrations/ci-autofix-pipeline.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/['"`]git add -A['"`]/);
+  });
+});
+
 describe('buddy dev fix-ci stdin', () => {
   it('exits 1 quickly when stdin is an open pipe with no data (does not hang)', async () => {
     const root = fs.mkdtempSync(path.join(repoRoot, '.gk18-fixci-'));
