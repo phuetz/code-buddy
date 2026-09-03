@@ -4,9 +4,9 @@
  * Same discipline as the council judge: strict-JSON verdict, two-stage parse
  * (pure JSON then salvage), and FAIL-CLOSED on anything unreliable — a
  * reviewer that times out, errors or answers prose yields a `reject` report
- * flagged `failClosed`, never a silent pass. Lenses run in parallel and are
- * deliberately diverse (correctness vs security) — diversity catches failure
- * modes redundancy can't.
+ * flagged `failClosed`, never a silent pass. Lenses run one after another
+ * (a local runtime cannot overlap generations) and are deliberately diverse
+ * (correctness vs security) — diversity catches failure modes redundancy can't.
  *
  * @module review/llm-reviewer
  */

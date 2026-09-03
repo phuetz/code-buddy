@@ -163,6 +163,38 @@ describe('reviewProposedDiff', () => {
     expect(merit.decision).toBe('reject');
     expect(merit.failClosed).toBe(false); // a real blocker exists — not just unreviewability
   });
+
+  it('runs lenses serially so a local runtime that cannot overlap generations still finishes both', async () => {
+    write('a.ts', 'v1\n');
+    const diff = buildProposedDiff({ workDir, intent: 'x', origin: ORIGIN, changes: [{ path: 'a.ts', newContent: 'v2\n' }] });
+    let inflight = 0;
+    let maxInflight = 0;
+    let chain: Promise<void> = Promise.resolve();
+    const serial: CouncilChatClient = {
+      async chat() {
+        const run = chain.then(async () => {
+          inflight++;
+          maxInflight = Math.max(maxInflight, inflight);
+          await new Promise((r) => setTimeout(r, 80));
+          inflight--;
+          return { content: ACCEPT_JSON, promptTokens: 1, totalTokens: 1 };
+        });
+        chain = run.then(() => undefined);
+        return run;
+      },
+    };
+    const lenses: ReviewLens[] = [
+      { id: 'correctness', label: 'Correctness reviewer', focus: 'bugs' },
+      { id: 'security', label: 'Security reviewer', focus: 'injection' },
+    ];
+
+    const verdict = await reviewProposedDiff(diff, { mode: 'full', client: serial, timeoutMs: 120, lenses });
+
+    expect(maxInflight).toBe(1);
+    expect(verdict.decision).toBe('accept');
+    expect(verdict.failClosed).toBe(false);
+    expect(verdict.reviewers.map((r) => r.reviewer)).toEqual(['static-gate', 'correctness', 'security']);
+  });
 });
 
 describe('reviewAndApply (facade, end to end)', () => {
