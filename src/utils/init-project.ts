@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { RepoProfile } from '../agent/repo-profiler.js';
 import type { CartographyResult, ComponentInventory } from '../agent/repo-profiling/cartography.js';
+import { writeFileAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 export interface InitOptions {
   force?: boolean;
@@ -595,7 +596,7 @@ priority: 1            # lower = higher priority
 
 Files with lower \`priority\` values are injected first (higher precedence).
 `;
-    fs.writeFileSync(knowledgeReadmePath, knowledgeReadmeContent);
+    writeFileAtomicSync(knowledgeReadmePath, knowledgeReadmeContent, { mode: 0o644 });
     result.created.push('.codebuddy/knowledge/README.md');
   }
 
@@ -613,7 +614,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
   const contextMdPath = path.join(codebuddyDir, 'CONTEXT.md');
   if (!fs.existsSync(contextMdPath) || options.force) {
     const contextContent = generateContextMdContent(profile, workingDirectory);
-    fs.writeFileSync(contextMdPath, contextContent);
+    writeFileAtomicSync(contextMdPath, contextContent, { mode: 0o644 });
     result.created.push('.codebuddy/CONTEXT.md');
   } else {
     result.skipped.push('.codebuddy/CONTEXT.md (already exists)');
@@ -622,7 +623,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
   // Create CODEBUDDY.md — priority 2 (project-aware custom instructions)
   const codebuddyMdPath = path.join(codebuddyDir, 'CODEBUDDY.md');
   if (!fs.existsSync(codebuddyMdPath) || options.force) {
-    fs.writeFileSync(codebuddyMdPath, generateCODEBUDDYMdContent(profile));
+    writeFileAtomicSync(codebuddyMdPath, generateCODEBUDDYMdContent(profile), { mode: 0o644 });
     result.created.push('.codebuddy/CODEBUDDY.md');
   } else {
     result.skipped.push('.codebuddy/CODEBUDDY.md (already exists)');
@@ -636,7 +637,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
   // only ignores `.codebuddy/`, not AGENTS.md).
   const agentsMdPath = path.join(workingDirectory, 'AGENTS.md');
   if (!fs.existsSync(agentsMdPath) || options.force) {
-    fs.writeFileSync(agentsMdPath, generateAgentsMdContent(profile));
+    writeFileAtomicSync(agentsMdPath, generateAgentsMdContent(profile), { mode: 0o644 });
     result.created.push('AGENTS.md');
   } else {
     result.skipped.push('AGENTS.md (already exists)');
@@ -680,7 +681,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
           }
         ]
       };
-      fs.writeFileSync(hooksPath, JSON.stringify(hooksContent, null, 2));
+      writeJsonAtomicSync(hooksPath, hooksContent, { mode: 0o600 });
       result.created.push('.codebuddy/hooks.json');
     } else {
       result.skipped.push('.codebuddy/hooks.json (already exists)');
@@ -716,7 +717,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
           }
         }
       };
-      fs.writeFileSync(mcpPath, JSON.stringify(mcpContent, null, 2));
+      writeJsonAtomicSync(mcpPath, mcpContent, { mode: 0o600 });
       result.created.push('.codebuddy/mcp.json');
     } else {
       result.skipped.push('.codebuddy/mcp.json (already exists)');
@@ -733,7 +734,7 @@ Files with lower \`priority\` values are injected first (higher precedence).
         blockedCommands: [],
         blockedPaths: []
       };
-      fs.writeFileSync(securityPath, JSON.stringify(securityContent, null, 2));
+      writeJsonAtomicSync(securityPath, securityContent, { mode: 0o600 });
       result.created.push('.codebuddy/security.json');
     } else {
       result.skipped.push('.codebuddy/security.json (already exists)');
@@ -766,7 +767,7 @@ You can use placeholders:
 
 Example: Analyze the file $1 and suggest improvements.
 `;
-      fs.writeFileSync(exampleCommandPath, exampleCommandContent);
+      writeFileAtomicSync(exampleCommandPath, exampleCommandContent, { mode: 0o644 });
       result.created.push('.codebuddy/commands/example.md');
     }
 
@@ -793,7 +794,7 @@ Safety checks:
 - Ensure no uncommitted changes
 - Confirm before proceeding
 `;
-      fs.writeFileSync(deployCommandPath, deployCommandContent);
+      writeFileAtomicSync(deployCommandPath, deployCommandContent, { mode: 0o644 });
       result.created.push('.codebuddy/commands/deploy.md');
     }
   }
@@ -809,7 +810,7 @@ Safety checks:
       maxToolRounds: 50,
       theme: 'default'
     };
-    fs.writeFileSync(settingsPath, JSON.stringify(settingsContent, null, 2));
+    writeJsonAtomicSync(settingsPath, settingsContent, { mode: 0o600 });
     result.created.push('.codebuddy/settings.json');
   } else {
     result.skipped.push('.codebuddy/settings.json (already exists)');
@@ -839,7 +840,7 @@ Safety checks:
         result.skipped.push('.gitignore (already has Code Buddy entries)');
       }
     } else {
-      fs.writeFileSync(gitignorePath, codebuddyIgnoreEntries.trim());
+      writeFileAtomicSync(gitignorePath, codebuddyIgnoreEntries.trim(), { mode: 0o644 });
       result.created.push('.gitignore');
     }
   }
@@ -913,7 +914,7 @@ Configure security modes in \`security.json\`:
 
 See the [Code Buddy documentation](https://github.com/phuetz/code-buddy) for more details.
 `;
-    fs.writeFileSync(readmePath, readmeContent);
+    writeFileAtomicSync(readmePath, readmeContent, { mode: 0o644 });
     result.created.push('.codebuddy/README.md');
   }
 

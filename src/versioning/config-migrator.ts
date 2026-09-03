@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as os from 'os';
 import semver from 'semver';
 import { EventEmitter } from 'events';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface ConfigTransform {
   version: string;
@@ -139,7 +140,7 @@ export class ConfigMigrator extends EventEmitter {
     }
 
     try {
-      return await fs.readJson(configPath);
+      return await readJsonAtomic<Record<string, unknown> | null>(configPath, null);
     } catch {
       return null;
     }
@@ -152,7 +153,7 @@ export class ConfigMigrator extends EventEmitter {
     if (this.config.dryRun) return;
 
     const configPath = path.join(this.config.configDir, this.config.configFile);
-    await fs.writeJson(configPath, config, { spaces: 2 });
+    await writeJsonAtomic(configPath, config, { mode: 0o600 });
     this.emit('config:saved', configPath);
   }
 
