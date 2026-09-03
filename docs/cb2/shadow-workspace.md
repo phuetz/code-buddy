@@ -18,7 +18,7 @@ When the variable is absent or has any value other than the exact string `true`,
 
 Without `CODEBUDDY_SHADOW_CMD`, Code Buddy selects `npm run typecheck` when `package.json` defines a `typecheck` script, then falls back to `npx tsc --noEmit` when `tsconfig.json` exists. If neither check is available, the shadow is inactive and writes pass through.
 
-`buddy shadow status` displays the repository, persistent worktree path, selected validator, timeout, and whether the worktree has been created. `buddy shadow run` copies the current tracked modifications and untracked files into the shadow and runs the effective validator.
+`buddy shadow status` displays the repository, persistent worktree path, selected validator, timeout, and whether the worktree has been created. `buddy shadow run` copies the current tracked modifications and untracked files into the shadow and runs the effective validator. `buddy shadow list` lists persistent ghost worktrees under `~/.codebuddy/shadow/` (hash, presence, origin repository, path). `buddy shadow clean` removes the ghost worktree for the selected repository (`git worktree remove --force`, then the leftover directory) without touching the real working tree.
 
 ## Architecture
 

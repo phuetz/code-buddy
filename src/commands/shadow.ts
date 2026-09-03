@@ -48,5 +48,36 @@ export function createShadowCommand(): Command {
       if (!result.ok) process.exitCode = 1;
     });
 
+  command
+    .command('list')
+    .description('List persistent shadow worktrees')
+    .option('-d, --directory <dir>', 'repository directory whose shadow store to inspect')
+    .action(async (options: ShadowDirectoryOptions) => {
+      const workspace = new ShadowWorkspace(options.directory ?? process.cwd());
+      const entries = await workspace.list();
+      if (entries.length === 0) {
+        console.log('No shadow worktrees.');
+        return;
+      }
+      for (const entry of entries) {
+        const repo = entry.repoRoot ?? 'unknown repository';
+        const state = entry.exists ? 'present' : 'missing';
+        console.log(`${entry.hash}\t${state}\t${repo}\t${entry.shadowPath}`);
+      }
+    });
+
+  command
+    .command('clean')
+    .description('Remove the persistent shadow worktree for a repository')
+    .option('-d, --directory <dir>', 'repository directory whose shadow to remove')
+    .action(async (options: ShadowDirectoryOptions) => {
+      const result = await new ShadowWorkspace(options.directory ?? process.cwd()).clean();
+      if (!result.removed) {
+        console.log(`Nothing to clean${result.shadowPath ? `: ${result.shadowPath}` : ''}${result.detail ? ` (${result.detail})` : ''}.`);
+        return;
+      }
+      console.log(`Removed shadow ${result.shadowPath}`);
+    });
+
   return command;
 }
