@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, sign } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,7 +103,8 @@ async function createLaneFixture(root: string, withTest = false): Promise<LaneFi
 async function appendDelegation(
   ledgerDir: string,
   fixture: LaneFixture,
-  branch = 'feature/lane'
+  branch = 'feature/lane',
+  engine = 'test-engine',
 ): Promise<CommandResult> {
   const report = await fs.readFile(path.join(fixture.source, 'REPARATION-LANE.md'));
   const mission = await fs.readFile(path.join(fixture.source, 'MISSION.md'));
@@ -113,7 +114,7 @@ async function appendDelegation(
       'append',
       'delegation',
       '--engine',
-      'test-engine',
+      engine,
       '--lane',
       'synthetic-lane',
       '--repository',
@@ -136,6 +137,38 @@ async function appendDelegation(
     ],
     { CODEBUDDY_DELEGATIONS_DIR: ledgerDir }
   );
+}
+
+async function resignWithBrokenPreviousHash(ledgerDir: string, lineIndex: number): Promise<void> {
+  const ledgerPath = path.join(ledgerDir, 'ledger.jsonl');
+  const rawLines = (await fs.readFile(ledgerPath, 'utf8')).trimEnd().split('\n');
+  const entry = JSON.parse(rawLines[lineIndex] ?? '') as Record<string, unknown>;
+  entry.prev_hash = 'not-the-previous-entry-hash';
+  const { entry_hash: _entryHash, signature: _signature, ...body } = entry;
+  const entryHash = sha256(JSON.stringify(body));
+  const privateKey = createPrivateKey(
+    await fs.readFile(path.join(ledgerDir, 'keys', `${String(entry.signer)}.key`)),
+  );
+  entry.entry_hash = entryHash;
+  entry.signature = sign(null, Buffer.from(entryHash, 'utf8'), privateKey).toString('base64');
+  rawLines[lineIndex] = JSON.stringify(entry);
+  await fs.writeFile(ledgerPath, `${rawLines.join('\n')}\n`);
+}
+
+async function copyKeyPair(
+  sourceLedgerDir: string,
+  signer: string,
+  targetLedgerDir: string,
+): Promise<void> {
+  await fs.mkdir(path.join(targetLedgerDir, 'keys'), { recursive: true });
+  for (const extension of ['key', 'pub']) {
+    const destination = path.join(targetLedgerDir, 'keys', `${signer}.${extension}`);
+    await fs.copyFile(
+      path.join(sourceLedgerDir, 'keys', `${signer}.${extension}`),
+      destination,
+    );
+    await fs.chmod(destination, 0o600);
+  }
 }
 
 let scratchRoot: string;
@@ -280,6 +313,57 @@ describe('lane ledger', () => {
       error: 'chain_broken',
       line: 1,
     });
+  });
+
+  it('rejects a validly signed entry whose prev_hash does not match the previous line', async () => {
+    const ledgerDir = path.join(scratchRoot, 'delegations');
+    const fixture = await createLaneFixture(scratchRoot);
+    expect((await appendDelegation(ledgerDir, fixture)).status).toBe(0);
+    expect((await appendDelegation(ledgerDir, fixture, 'feature/lane', 'second-engine')).status).toBe(0);
+
+    await resignWithBrokenPreviousHash(ledgerDir, 1);
+
+    const verified = run(ledgerScript, ['verify', '--json'], {
+      CODEBUDDY_DELEGATIONS_DIR: ledgerDir,
+    });
+    expect(verified.status).toBe(3);
+    expect(JSON.parse(verified.stderr)).toMatchObject({
+      error: 'chain_broken',
+      line: 2,
+    });
+    expect(verified.stderr).toContain('prev_hash invalide');
+  });
+
+  it('rejects concatenating two independently valid ledgers', async () => {
+    const firstLedgerDir = path.join(scratchRoot, 'first-ledger');
+    const secondLedgerDir = path.join(scratchRoot, 'second-ledger');
+    const combinedLedgerDir = path.join(scratchRoot, 'combined-ledger');
+    const fixture = await createLaneFixture(scratchRoot);
+
+    expect((await appendDelegation(firstLedgerDir, fixture, 'feature/lane', 'first-engine')).status).toBe(0);
+    expect((await appendDelegation(secondLedgerDir, fixture, 'feature/lane', 'second-engine')).status).toBe(0);
+    expect(run(ledgerScript, ['verify'], { CODEBUDDY_DELEGATIONS_DIR: firstLedgerDir }).status).toBe(0);
+    expect(run(ledgerScript, ['verify'], { CODEBUDDY_DELEGATIONS_DIR: secondLedgerDir }).status).toBe(0);
+
+    const firstLine = (await fs.readFile(path.join(firstLedgerDir, 'ledger.jsonl'), 'utf8')).trim();
+    const secondLine = (await fs.readFile(path.join(secondLedgerDir, 'ledger.jsonl'), 'utf8')).trim();
+    await fs.mkdir(path.join(combinedLedgerDir, 'keys'), { recursive: true });
+    await fs.writeFile(
+      path.join(combinedLedgerDir, 'ledger.jsonl'),
+      `${firstLine}\n${secondLine}\n`,
+    );
+    await copyKeyPair(firstLedgerDir, 'first-engine', combinedLedgerDir);
+    await copyKeyPair(secondLedgerDir, 'second-engine', combinedLedgerDir);
+
+    const verified = run(ledgerScript, ['verify', '--json'], {
+      CODEBUDDY_DELEGATIONS_DIR: combinedLedgerDir,
+    });
+    expect(verified.status).toBe(3);
+    expect(JSON.parse(verified.stderr)).toMatchObject({
+      error: 'chain_broken',
+      line: 2,
+    });
+    expect(verified.stderr).toContain('prev_hash invalide');
   });
 });
 
