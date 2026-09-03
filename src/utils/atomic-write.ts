@@ -366,11 +366,9 @@ export function readJsonAtomicSync<T>(
     } catch {
       // Fall through to one warning, recovery, and the caller's fallback.
     }
-  } else if (!fs.existsSync(filePath)) {
-    return fallback;
+  } else if (fs.existsSync(filePath)) {
+    warnUnreadable(filePath, 'empty or invalid JSON');
   }
-
-  warnUnreadable(filePath, 'empty or invalid JSON');
   for (const candidate of recoveryCandidatesSync(filePath)) {
     const candidateContents = readTextCandidateSync(candidate);
     if (!candidateContents) {
@@ -400,11 +398,9 @@ export function readTextAtomicSync(
   if (contents) {
     return contents;
   }
-  if (!fs.existsSync(filePath)) {
-    return fallback;
+  if (fs.existsSync(filePath)) {
+    warnUnreadable(filePath, 'empty or invalid text');
   }
-
-  warnUnreadable(filePath, 'empty or invalid text');
   for (const candidate of recoveryCandidatesSync(filePath)) {
     const candidateContents = readTextCandidateSync(candidate);
     if (candidateContents) {

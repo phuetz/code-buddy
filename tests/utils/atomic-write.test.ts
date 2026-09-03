@@ -6,6 +6,7 @@ import { logger } from '../../src/utils/logger.js';
 import {
   type AtomicWriteFileSystem,
   readJsonAtomic,
+  readJsonAtomicSync,
   readJsonLinesAtomic,
   resetAtomicReadWarningsForTests,
   writeFileAtomic,
@@ -85,5 +86,13 @@ describe('atomic state writes', () => {
       typeof value === 'object' && value !== null && typeof (value as { id?: unknown }).id === 'number'
     ))).resolves.toEqual([{ id: 1 }, { id: 2 }]);
     await expect(readFile(target, 'utf8')).resolves.toContain('"id":2');
+  });
+
+  it('recovers a valid synchronous backup when the main file is absent', async () => {
+    const target = join(tempDir, 'missing-main.json');
+    await writeFile(`${target}.bak`, '{"version":9}\n', 'utf8');
+
+    expect(readJsonAtomicSync(target, { version: 0 })).toEqual({ version: 9 });
+    await expect(readFile(target, 'utf8')).resolves.toContain('"version": 9');
   });
 });
