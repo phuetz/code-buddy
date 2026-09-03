@@ -32,6 +32,26 @@ describe('PlanningFlow', () => {
     };
   }
 
+  it('parses a plan JSON that contains a stray quote-comma line (GK33 live)', async () => {
+    mockPlanLLM.mockResolvedValue(`{
+  "steps": [
+    { "id": "step_1", "title": "Define metrics", "description": "Choose false-cut metric", "agentKey": "default", "dependencies": [] },
+    {
+      "id": "step_2",
+     ",
+      "title": "Run offline VAD",
+      "description": "Score hangover 0 vs 300 ms",
+      "agentKey": "default",
+      "dependencies": ["step_1"]
+    }
+  ]
+}`);
+    const flow = new PlanningFlow(createConfig());
+    const result = await flow.execute('Measure VAD hangover');
+    expect(flow.plan!.steps.map((s) => s.title)).toEqual(['Define metrics', 'Run offline VAD']);
+    expect(result).toContain('2 completed');
+  });
+
   it('parses a plan JSON wrapped in prose or markdown fences (GK33 live)', async () => {
     mockPlanLLM.mockResolvedValue(
       [

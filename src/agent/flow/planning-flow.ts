@@ -9,6 +9,7 @@
 
 import { EventEmitter } from 'events';
 import { findUnexecutedProseToolCall } from '../../cli/headless-options.js';
+import { parseJsonResponse } from '../../utils/llm-retry.js';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 
 /* ── Types ── */
@@ -61,15 +62,6 @@ const FLOW_KNOWN_TOOLS = [
   'view_file',
   'search',
 ];
-
-/** First JSON object in an LLM response (prose / markdown fences around it). */
-function extractJsonObject(raw: string): string | null {
-  if (typeof raw !== 'string') return null;
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  return raw.slice(start, end + 1);
-}
 
 export function looksLikeUnexecutedToolMarkup(text: string): boolean {
   if (
@@ -225,9 +217,7 @@ Respond ONLY with the JSON object, no markdown fences.`;
     // the plan to a single "Execute task" step and skipped real decomposition.
     let parsed: { steps: Array<{ id: string; title: string; description: string; agentKey?: string; dependencies?: string[] }> };
     try {
-      const cleaned = response.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      const json = extractJsonObject(cleaned) ?? cleaned;
-      const candidate = JSON.parse(json) as { steps?: unknown };
+      const candidate = parseJsonResponse(response) as { steps?: unknown };
       if (!Array.isArray(candidate.steps)) {
         throw new Error('plan JSON missing steps');
       }
