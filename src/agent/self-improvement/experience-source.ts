@@ -15,6 +15,12 @@
 import { logger } from '../../utils/logger.js';
 import type { Experience } from './types.js';
 
+export {
+  EvolutionNotesExperienceSource,
+  createDefaultEvolutionNotesExperienceSource,
+  type EvolutionNotesExperienceSourceOptions,
+} from './digest-sources.js';
+
 export interface ExperienceSource {
   readonly id: string;
   collect(): Promise<Experience[]>;

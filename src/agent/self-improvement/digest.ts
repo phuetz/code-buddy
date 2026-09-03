@@ -25,6 +25,7 @@ export interface DigestArchiveRecord {
   targetScenarioId?: string;
   appliedRef?: string;
   absorbedInto?: string;
+  provenance?: string;
   /** Current archive entries omit this because every entry is accepted. */
   accepted?: boolean;
   rejectionReason?: string;

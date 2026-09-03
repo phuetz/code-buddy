@@ -75,6 +75,7 @@ function completedStreamText(text: string): string {
 
 export {
   classifyLisaIntrospection,
+  isLisaEvolutionRequest,
   isLisaIntrospectionRequest,
 } from '../identity/lisa-introspection.js';
 export type { LisaIntrospectionIntent } from '../identity/lisa-introspection.js';
