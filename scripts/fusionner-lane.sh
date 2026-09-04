@@ -15,6 +15,34 @@ for argument in "$@"; do
   [ "$argument" = --json ] && JSON=1
 done
 
+# Outils GNU absents de macOS : sonder ce qui existe plutôt que le supposer.
+# `sha256sum` manquant rendait RAPPORT_SHA_ACTUEL vide, donc toujours différent
+# du SHA signé : la porte refusait toute lane sur macOS (exit 3).
+sha256_de() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  fi
+}
+
+# `realpath -e` est GNU. Le -e (exiger l'existence) n'existe pas partout ; on
+# le refait explicitement, et la résolution passe par cd+pwd -P, disponible
+# dans tout shell POSIX. La garde d'échappement du clone reste en aval.
+chemin_canonique_existant() {
+  local cible=$1 repertoire base
+  [ -e "$cible" ] || return 1
+  repertoire=$(cd "$(dirname "$cible")" 2>/dev/null && pwd -P) || return 1
+  base=$(basename "$cible")
+  case "$base" in
+    .)  printf '%s\n' "$repertoire" ;;
+    ..) printf '%s\n' "$(cd "$repertoire/.." && pwd -P)" ;;
+    *)  printf '%s/%s\n' "${repertoire%/}" "$base" ;;
+  esac
+}
+
 emit_error() {
   local code=$1 type=$2 message=$3
   if [ "$JSON" -eq 1 ]; then
@@ -62,9 +90,14 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$APPROUVE_PAR" ] || emit_error "$EXIT_USAGE" bad_input '--approuve-par est requis.'
-CLONE=$(cd "$CLONE_INPUT" 2>/dev/null && pwd) || \
+# `pwd -P` et non `pwd` : sur macOS /var est un lien vers /private/var, si bien
+# que le chemin LOGIQUE du clone (/var/folders/…) ne préfixait jamais le chemin
+# RÉSOLU du rapport (/private/var/folders/…) et la garde « le rapport sort du
+# clone » se déclenchait sur un rapport parfaitement à sa place. Le journal
+# canonicalise déjà ses dépôts par realpath : on compare enfin la même chose.
+CLONE=$(cd "$CLONE_INPUT" 2>/dev/null && pwd -P) || \
   emit_error "$EXIT_USAGE" bad_input "Clone introuvable : $CLONE_INPUT."
-CIBLE=$(cd "$CIBLE_INPUT" 2>/dev/null && pwd) || \
+CIBLE=$(cd "$CIBLE_INPUT" 2>/dev/null && pwd -P) || \
   emit_error "$EXIT_USAGE" bad_input "Dépôt cible introuvable : $CIBLE_INPUT."
 [ "$CLONE" != "$CIBLE" ] || emit_error "$EXIT_USAGE" bad_input 'Le clone et le dépôt cible doivent être distincts.'
 git -C "$CLONE" rev-parse --git-dir >/dev/null 2>&1 || \
@@ -105,13 +138,13 @@ LANE_RAPPORT_SHA=$(printf '%s' "$LANE" | node -e \
   emit_error "$EXIT_LEDGER" ledger_invalid 'Impossible de lire le hash du rapport vérifié.'
 git -C "$CLONE" cat-file -e "$LANE_HEAD_AVANT^{commit}" 2>/dev/null || \
   emit_error "$EXIT_LEDGER" ledger_invalid 'Le HEAD initial de la lane est absent du clone.'
-RAPPORT_CANONIQUE=$(realpath -e "$CLONE/$LANE_RAPPORT" 2>/dev/null) || \
+RAPPORT_CANONIQUE=$(chemin_canonique_existant "$CLONE/$LANE_RAPPORT" 2>/dev/null) || \
   emit_error "$EXIT_LEDGER" report_invalid 'Le rapport signé est absent du clone.'
 case "$RAPPORT_CANONIQUE" in
   "$CLONE"/*) ;;
   *) emit_error "$EXIT_LEDGER" report_invalid 'Le rapport signé sort du clone.' ;;
 esac
-RAPPORT_SHA_ACTUEL=$(sha256sum "$RAPPORT_CANONIQUE" | cut -d' ' -f1)
+RAPPORT_SHA_ACTUEL=$(sha256_de "$RAPPORT_CANONIQUE")
 [ "$RAPPORT_SHA_ACTUEL" = "$LANE_RAPPORT_SHA" ] || \
   emit_error "$EXIT_LEDGER" report_invalid 'Le rapport livré ne correspond plus à son SHA-256 signé.'
 

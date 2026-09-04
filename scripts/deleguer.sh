@@ -64,7 +64,10 @@ set -uo pipefail
 usage() { sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 2; }
 [ $# -ge 2 ] || usage
 
-DEPOT=$(cd "$1" 2>/dev/null && pwd) || { echo "dépôt introuvable : $1" >&2; exit 2; }
+# `pwd -P` : le journal de lane canonicalise ses dépôts par realpath ; garder
+# ici le chemin logique ferait diverger le préfixe retiré du rapport
+# (${LANE_RAPPORT#"$DEPOT"/}) du dépôt réellement enregistré sur macOS.
+DEPOT=$(cd "$1" 2>/dev/null && pwd -P) || { echo "dépôt introuvable : $1" >&2; exit 2; }
 MISSION=$2
 MOTEUR=${3:-luna}
 [ -f "$MISSION" ] || { echo "mission introuvable : $MISSION" >&2; exit 2; }
@@ -107,6 +110,29 @@ DEBUT=$(date +%s)
 # et la meme ligne de statut, si bien qu'une mission qui refait un rapport deja present etait
 # annoncee « depot INCHANGE » alors que le livrable venait d'etre produit (vu le 26/08/2026).
 # Un controle qui crie au loup finit par ne plus etre lu.
+# Outils GNU absents de macOS. Chaque helper sonde ce qui EXISTE plutôt que de
+# supposer coreutils : sans cela le journal de lane se remplissait de trous
+# silencieux sur macOS (`report: null`, empreinte « ? »), c'est-à-dire une
+# preuve absente présentée comme une preuve.
+sha256_de() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  fi
+}
+
+# `stat -c` est GNU, `stat -f` est BSD. Retomber sur « ? » comme avant rendait
+# l'empreinte AVEUGLE sur macOS : deux états différents donnaient la même
+# empreinte et la lane était annoncée « dépôt INCHANGÉ ».
+taille_et_mtime() {
+  stat -c '%s:%Y' "$1" 2>/dev/null \
+    || stat -f '%z:%m' "$1" 2>/dev/null \
+    || echo '?'
+}
+
 empreinte_depot() {
   # Le commit de tête fait partie de l'empreinte : une lane qui COMMITE son travail laissait
   # l'arbre propre et le contrôle criait « aucun fichier créé NI modifié » (vu 3× le 03/09/2026).
@@ -115,7 +141,7 @@ empreinte_depot() {
     fichier=${ligne:3}
     fichier=${fichier%\"}; fichier=${fichier#\"}
     if [ -f "$fichier" ]; then
-      printf '%s %s\n' "$ligne" "$(stat -c '%s:%Y' "$fichier" 2>/dev/null || echo '?')"
+      printf '%s %s\n' "$ligne" "$(taille_et_mtime "$fichier")"
     else
       printf '%s\n' "$ligne"
     fi
@@ -129,7 +155,7 @@ AVANT=$(empreinte_depot "$DEPOT")
 if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   LANE_HEAD_AVANT=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
   LANE_BRANCHE=$(git -C "$DEPOT" branch --show-current 2>/dev/null || true)
-  LANE_MISSION_SHA=$(sha256sum "$MISSION" | cut -d' ' -f1)
+  LANE_MISSION_SHA=$(sha256_de "$MISSION")
 fi
 
 case "$MOTEUR" in
@@ -396,12 +422,28 @@ done
 if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   LANE_HEAD_APRES=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
   [ -n "$LANE_BRANCHE" ] || LANE_BRANCHE="detached-${LANE_HEAD_APRES:0:12}"
-  LANE_RAPPORT=$(find "$DEPOT" \
+  # `find -printf` est une extension GNU : BSD find (macOS) la refuse, la
+  # recherche ressortait VIDE et le journal enregistrait « report: null » —
+  # puis fusionner-lane.sh refusait la lane pour rapport absent. On trie donc
+  # sur des mtimes lus par un stat sondé, sans dépendre de -printf.
+  LANE_RAPPORT=""
+  LANE_RAPPORT_MTIME=-1
+  while IFS= read -r candidat; do
+    [ -n "$candidat" ] || continue
+    mtime=$(stat -c '%Y' "$candidat" 2>/dev/null || stat -f '%m' "$candidat" 2>/dev/null || echo 0)
+    case "$mtime" in ''|*[!0-9]*) mtime=0 ;; esac
+    if [ "$mtime" -gt "$LANE_RAPPORT_MTIME" ]; then
+      LANE_RAPPORT_MTIME=$mtime
+      LANE_RAPPORT=$candidat
+    fi
+  done <<EOF_RAPPORTS
+$(find "$DEPOT" \
     -path "$DEPOT/.git" -prune -o \
     -path "$DEPOT/node_modules" -prune -o \
     -path "$DEPOT/test-scripts" -prune -o \
     -type f \( -name 'RAPPORT-*' -o -name 'REPARATION-*' -o -name 'REVUE-*' \) \
-    -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+    -print 2>/dev/null)
+EOF_RAPPORTS
   LANE_LEDGER_ARGS=(
     append delegation
     --engine "$MOTEUR"
@@ -416,7 +458,7 @@ if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   if [ -n "$LANE_RAPPORT" ]; then
     LANE_LEDGER_ARGS+=(
       --report "${LANE_RAPPORT#"$DEPOT"/}"
-      --report-sha256 "$(sha256sum "$LANE_RAPPORT" | cut -d' ' -f1)"
+      --report-sha256 "$(sha256_de "$LANE_RAPPORT")"
     )
   fi
   LANE_LEDGER_SCRIPT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lane-ledger.sh
