@@ -1,5 +1,22 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### COST1 — le coût headless dit la vérité (4 septembre 2026)
+
+`"cost":{"total":0.011604}` sortait pour n'importe quel modèle et n'importe quel volume. Le coût
+est désormais calculé sur l'`usage` renvoyé par le fournisseur, avec un tarif par modèle (Mistral
+ajouté), et trois champs honnêtes : `estimated`, `pricing` (`known` / `unknown` / `subscription`)
+et `billing` (`pay-per-use` / `subscription`) — le forfait ChatGPT rapporte `total: 0`. Seconde
+mission de Mistral Vibe : correctif et tests commités par la lane, tombée ensuite sur une coupure
+réseau après 230 messages. Rapport : `docs/reports/2026-09/REPARATION-COST1.md`.
+
+### DGM2 — la Darwin-Gödel Machine face à l'état de l'art (4 septembre 2026)
+
+Audit en lecture seule par Gemini 3.8 Flash avec recherche Web (11 sources arXiv vérifiées,
+13 citations de code vérifiées) : `docs/reports/2026-09/AUDIT-DGM2.md`. Verdict : sécurité
+solide, mais fitness famélique (3 scénarios déterministes, proposeur à gabarit — un cycle réel
+dure 0 s), pas de pénalité de descendance ni de filtre de nouveauté, pas de couche d'évolution
+sûre hors `src/`. Huit propositions classées ; les trois [A] partent en missions.
+
 ### DISCOVERY1 — un catalogue bouchon ne rabaisse plus une déclaration nominative (4 septembre 2026)
 
 Le `/v1/models` de Mistral déclare 32 768 et toutes les capacités à `false` pour chaque variante
