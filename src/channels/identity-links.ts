@@ -24,7 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { readJsonAtomic, writeFileAtomic } from '../utils/atomic-write.js';
+import { cleanupOrphanedTemporaries, readJsonAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
@@ -114,6 +114,13 @@ export class IdentityLinker extends EventEmitter {
       persistPath: config.persistPath ??
         path.join(homedir(), '.codebuddy', 'identity-links.json'),
     };
+
+    // Best-effort startup sweep: a prior process killed between `open` and
+    // `rename` (e.g. SIGTERM at service restart) can leave `.tmp.*` siblings
+    // behind. Never touches the target file itself. Never throws.
+    if (this.config.persistPath) {
+      cleanupOrphanedTemporaries(this.config.persistPath).catch(() => {});
+    }
   }
 
   // ==========================================================================
