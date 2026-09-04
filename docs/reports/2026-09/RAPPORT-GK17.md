@@ -27,7 +27,7 @@ Deux processus `tsx src/index.ts server --host 127.0.0.1` :
 | A `gk17-peer-a` | 127.0.0.1:3410 | `_gk17/home-a` | `_gk17/ws-a` | (unset) |
 | B `gk17-peer-b` | 127.0.0.1:3420 | `_gk17/home-b` | `_gk17/ws-b` | `CODEBUDDY_FLEET_MAX_CONCURRENCY=1` |
 
-JWT partagé `JWT_SECRET=gk17-fleet-reel-2026-09-03-ministar`. `buddy fleet token` + `/fleet listen --jwt` (après correctif). `peer.chat wired: ollama (qwen3:4b-instruct, local)` dans les journaux A et B.
+JWT partagé `JWT_SECRET=gk17-fleet-reel-2026-09-03-hub`. `buddy fleet token` + `/fleet listen --jwt` (après correctif). `peer.chat wired: ollama (qwen3:4b-instruct, local)` dans les journaux A et B.
 
 Le coordinateur a exercé le **vrai handler slash** `handleFleet` (`/fleet listen|describe|send|tool|route|chat`).
 

@@ -391,13 +391,13 @@ You're now streaming the peer's `fleet:agent:tool_started`, `fleet:workflow:even
 
 To send a message to the peer (and have it route to its LLM):
 ```
-> /fleet send ministar-linux peer.chat {"prompt":"hello, can you analyze this file?"}
+> /fleet send hub-linux peer.chat {"prompt":"hello, can you analyze this file?"}
 ```
 
 For a longer conversation, open a multi-turn chat session with an
 operating posture:
 ```
-> /fleet chat start ministar-linux --provider lemonade --profile review
+> /fleet chat start hub-linux --provider lemonade --profile review
 > /fleet chat say audit the dispatch flow before we change it
 > /fleet status --with-sessions
 ```

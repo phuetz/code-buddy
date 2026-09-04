@@ -293,7 +293,7 @@ env CODEBUDDY_HOME=~/code-buddy-proof/.proof-run-20260822/scenario4-home \
     "assignedAgent": null,
     "claimedBy": null,
     "claimedAt": null,
-    "createdBy": "ministar/code-buddy-proof",
+    "createdBy": "hub/code-buddy-proof",
     "createdAt": "2026-08-22T12:04:42.137Z"
   }
 }

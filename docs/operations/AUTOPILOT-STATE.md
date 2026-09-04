@@ -244,7 +244,7 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
 - **BOARD AUTONOMIE LIVE (`e9fbe0c7`)** : la ligne texte du snapshot daemon devient un vrai board dans Mission
   Control — compteurs par statut, file triée (in_progress > pending par priorité > completed), présence agents
   (fenêtre fraîcheur 10 min + « il y a X »), journal récent. Modèle pur testé (now injecté). Validé live : vraie
-  tâche du 8 juin, ministar/fleet « à l'instant », entrée worklog qwen2.5. La ligne « AutonomyDashboard sur
+  tâche du 8 juin, hub/fleet « à l'instant », entrée worklog qwen2.5. La ligne « AutonomyDashboard sur
   autonomy.snapshot » du backlog est soldée.
 - **VIDÉO DANS LE CHAT (12e cause racine, `63313334`)** : demande Patrice « permet de générer également des vidéos ».
   Reproduit : « Crée une vidéo… » → « je ne peux pas » (5,3K in — system prompt OK, donc SÉLECTION d'outils).

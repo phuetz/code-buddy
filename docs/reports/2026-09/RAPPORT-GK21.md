@@ -83,7 +83,7 @@ Playwright écrivait `/tmp/codebuddy-screenshots/…`.
 
 ### E4 — Origine non loopback — DÉJÀ CONFORME (`27ba115dc`)
 
-`CODEBUDDY_BROWSER_DEV_ORIGINS=http://localhost:5173, http://192.168.1.20:3000, https://example.com` : warn + seul le loopback enregistré. Test de preuve 1/1.
+`CODEBUDDY_BROWSER_DEV_ORIGINS=http://localhost:5173, http://198.51.100.20:3000, https://example.com` : warn + seul le loopback enregistré. Test de preuve 1/1.
 
 ### E5 — AT-SPI sans DISPLAY — FERMÉ (`94c35e701`)
 

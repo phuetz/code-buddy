@@ -31,7 +31,7 @@ Concerne uniquement l'utilisateur qui lance explicitement `buddy server`.
 - **`src/server/index.ts`** — CORS par défaut = liste localhost (au lieu de `*`) ; validation d'origine en *function-form* (autorise les requêtes sans `Origin`, ex. CLI/fleet) ; **avertissement au boot** si le serveur écoute sur une interface non-loopback.
 - **`src/server/websocket/handler.ts`** — ajout d'un `verifyClient` sur le WebSocket `/ws` (port REST 3000), qui validait l'`Origin` des navigateurs tout en laissant passer les clients sans origine (CLI/fleet). Comble l'écart avec le Gateway WS (3001) déjà durci (GHSA-5wcw-8jjv-m286).
 
-> **Décision conservée :** `DEFAULT_HOST` **reste `0.0.0.0`** — le mesh fleet (hub Ministar `100.98.18.76:3000`) en dépend. Le durcissement passe par CORS + validation d'origine WS, pas par le bind.
+> **Décision conservée :** `DEFAULT_HOST` **reste `0.0.0.0`** — le mesh fleet (hub de flotte `203.0.113.10:3000`) en dépend. Le durcissement passe par CORS + validation d'origine WS, pas par le bind.
 
 ## 2. Ordre des contrôles de confirmation (audit 0.2)
 

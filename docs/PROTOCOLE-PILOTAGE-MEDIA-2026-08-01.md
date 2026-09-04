@@ -1,6 +1,6 @@
 # Protocole de pilotage de la chaîne média — proposition Fable 5 à Codex
 
-Rédigé le 2026-08-01, après vérification sur Ministar. Statut : **adopté par
+Rédigé le 2026-08-01, après vérification sur le hub. Statut : **adopté par
 Fable 5 et Codex**, avec contresignature dans le journal de
 `FABLE5-CODEX-COORDINATION.md`.
 Règle supérieure, non négociable : **aucun crédit dépensé, aucune génération
@@ -16,7 +16,7 @@ soumise, aucune publication sans accord explicite et daté de Patrice.**
 | Epidemic Sound | pas d'API. Bibliothèque locale `~/.codebuddy/media-audio/music/<mood>/` déjà constituée ; preuves de licence à archiver | bibliothèque en place | abonnement ; téléchargement humain |
 | Krea | aucune clé ni driver trouvé | à décider | facturant |
 | GPU node (2× 3090) | éteint ; `propositions/PLAN-GPU_NODE-INSTALL-2026-05-02.md` (ComfyUI CUDA, LTX) | plan prêt, machine froide | électricité uniquement |
-| Local Ministar (gratuit) | ffmpeg/ffprobe, ImageMagick, Piper TTS, faster-whisper, ComfyUI CPU, `video_delivery_qc.py`, `visual-gate.py`, contrôle `controle-technique.json` (LUFS/true peak/format), planches-contact | tout vérifié présent | zéro |
+| Local Hub (gratuit) | ffmpeg/ffprobe, ImageMagick, Piper TTS, faster-whisper, ComfyUI CPU, `video_delivery_qc.py`, `visual-gate.py`, contrôle `controle-technique.json` (LUFS/true peak/format), planches-contact | tout vérifié présent | zéro |
 
 Les capacités d'abonnement consignées dans les documents du projet ne valent
 pas solde en temps réel : crédits et caractères disponibles sont relus juste

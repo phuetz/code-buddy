@@ -31,9 +31,9 @@ blenderproc run scripts/blenderproc/scene.py -- \
 ```
 
 > `scene.py` tente CUDA puis HIP puis retombe sur CPU. Sur les 3090 : GPU. Sur
-> l'AMD (HUB) : CPU (plus lent, mais marche).
+> l'AMD (le hub) : CPU (plus lent, mais marche).
 
-### Sur HUB — le scoring de la perception réelle
+### Sur le hub — le scoring de la perception réelle
 
 ```bash
 # Rapatrier ./boucle-a-out depuis GPU_NODE (tailscale/scp), puis :

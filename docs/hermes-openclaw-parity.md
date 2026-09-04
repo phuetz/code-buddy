@@ -1,6 +1,6 @@
 # Hermes Agent & OpenClaw — parity and gaps (canonical)
 
-**Date: 2026-07-06** (supersedes 2026-06-09/13/14; previous anchor 2026-07-03) · Machine: Ministar Linux (Ryzen AI 9
+**Date: 2026-07-06** (supersedes 2026-06-09/13/14; previous anchor 2026-07-03) · Machine: Hub Linux (Ryzen AI 9
 HX 470, Ollama Vulkan) · Verified against live installs: Hermes Agent `v0.16.0` (2026.6.5), OpenClaw `2026.6.11`
 (still npm latest on 2026-07-06 — zero drift).
 

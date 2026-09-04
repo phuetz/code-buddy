@@ -8,10 +8,10 @@ GPU0 : souvent Voicebox (~8 Go) · GPU1 : ComfyUI / jobs libres.
 | Service | URL | Notes |
 |---------|-----|--------|
 | **ComfyUI** | `http://192.0.2.42:8188` | Démarrer avec le script ci-dessous (GPU1) |
-| **Voicebox** | `http://192.0.2.42:17493` | Déjà utilisé par Ministar |
+| **Voicebox** | `http://192.0.2.42:17493` | Déjà utilisé par Hub |
 | **Ollama** | `http://192.0.2.42:11434` | |
 
-## Démarrer ComfyUI (Ministar → SSH)
+## Démarrer ComfyUI (Hub → SSH)
 
 ```bash
 # Session longue (ne pas fermer le shell tant que Comfy doit rester up)
@@ -21,7 +21,7 @@ ssh -o ServerAliveInterval=30 patri@192.0.2.42 \
 
 Vérif : `curl -s -o /dev/null -w '%{http_code}\n' http://192.0.2.42:8188/`
 
-## Brancher Ministar sur GPU node
+## Brancher Hub sur GPU node
 
 ```bash
 export CODEBUDDY_IMAGE_PROVIDER=comfyui
@@ -41,12 +41,12 @@ Chemins GPU node :
 
 | | |
 |--|--|
-| Images | `D:\DEV\lisa-lora\images` (sync depuis Ministar) |
+| Images | `D:\DEV\lisa-lora\images` (sync depuis Hub) |
 | Checkpoint monostack | `D:\DEV\ComfyUI\models\checkpoints\sd_turbo.safetensors` |
 | Sortie LoRA | `D:\DEV\ComfyUI\models\loras\lisa.safetensors` |
 | Script | `D:\DEV\lisa-lora\train-lisa-lora-comfy.py` |
 
-Sync dataset (depuis Ministar) :
+Sync dataset (depuis Hub) :
 
 ```bash
 ssh patri@192.0.2.42 'cmd /c "mkdir D:\DEV\lisa-lora\images"'

@@ -47,7 +47,7 @@ c053ccd22 docs(self-model): document self evolution
  1 file changed, 1 insertion(+)
 ```
 
-Chantier réservé dans `docs/FABLE5-CODEX-COORDINATION.md`. Aucun fichier source lu encore. HOST=`Ministar`, date UTC `2026-09-03T09:09:30Z`.
+Chantier réservé dans `docs/FABLE5-CODEX-COORDINATION.md`. Aucun fichier source lu encore. HOST=`Hub`, date UTC `2026-09-03T09:09:30Z`.
 
 ## 1. Recherche ONNX Pocket TTS voix française
 
@@ -103,7 +103,7 @@ Surfaces :
 
 `.onnx` gitignorés (~370 Mo). Restaurer : `buddy-sense/scripts/fetch-pocket-tts.sh`.
 
-## 3. Mesures Ministar
+## 3. Mesures Hub
 
 Hôte : **AMD Ryzen AI 9 HX 470 w/ Radeon 890M**, 24 threads, `ORT_DYLIB_PATH=~/.cache/onnxruntime/lib/libonnxruntime.so.1.20.1` (déjà là pour le VAD, pas d’écriture `~/.codebuddy`).
 
