@@ -54,7 +54,7 @@ Le serveur est le **vrai serveur Code Buddy** (`src/server/index.ts` du cœur), 
 
 | Champ | Défaut | Note |
 |-------|--------|------|
-| **Port** | `3000` | La gateway WebSocket tourne sur `port + 1` (donc `3001`). |
+| **Port** | `3000` | Un seul port : le WebSocket `/ws` est servi sur ce port-là. |
 | **Host** | `127.0.0.1` | `127.0.0.1` = local seul ; `0.0.0.0` expose sur le LAN. `127.0.0.1` / `::1` sont remappés en `localhost` au boot (évite le mismatch IPv4/IPv6 sous Windows). |
 | **WebSocket** | activé | Toggle `/ws` (gateway). Nécessaire pour les *peers* de la flotte Code Buddy. |
 | **JWT secret** | (vide) | Secret hex persisté. Vide ⇒ secret aléatoire généré au boot (**tokens perdus au redémarrage**). |

@@ -84,6 +84,12 @@ type ReasoningCompatiblePayload = {
 
 const EMPTY_PROVIDER_RESPONSE_ERROR = 'réponse vide du fournisseur';
 
+/** `CODEBUDDY_STREAM_USAGE=false` (or `0`/`off`) opts out of `stream_options`. */
+function streamUsageRequested(): boolean {
+  const raw = process.env.CODEBUDDY_STREAM_USAGE?.trim().toLowerCase();
+  return raw !== 'false' && raw !== '0' && raw !== 'off';
+}
+
 function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
   payload: T,
   baseURL: string,
@@ -1087,6 +1093,13 @@ export class OpenAICompatProvider implements Provider {
         ...requestPayload,
         ...searchParams,
         stream: true,
+        // OpenAI's own opt-in for real counters on a stream. Without it every
+        // usage number downstream (turn metrics, the OpenAI-compatible HTTP
+        // route) can only be a `length / 4` guess. Ollama, vLLM, LM Studio and
+        // the hosted OpenAI-compatible gateways all honour it; a server that
+        // does not simply ignores the field. `CODEBUDDY_STREAM_USAGE=false` is
+        // the escape hatch for a gateway that rejects unknown parameters.
+        ...(streamUsageRequested() ? { stream_options: { include_usage: true } } : {}),
         ...(thinkingConfig.thinking ? { thinking: thinkingConfig.thinking } : {}),
         ...(opts.service_tier ? { service_tier: opts.service_tier } : {}),
         ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),

@@ -199,7 +199,7 @@ buddy login                 # ChatGPT OAuth (no API key needed, $0 marginal cost
 buddy whoami                # Show current auth + plan
 buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
-buddy server [--port N]     # Start HTTP server (3000) + Gateway WS (3001) — required for fleet
+buddy server [--port N]     # Start the HTTP server (3000) — one port, WebSocket `/ws` on it; required for fleet
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
 buddy run list|show|tail|replay  # Observability
 buddy research "<topic>"    # Wide research
@@ -227,11 +227,11 @@ In-session slash commands (not exhaustive):
 
 ## HTTP Server (`src/server/`)
 
-Started with `buddy server`. Default ports: **3000** HTTP, **3001** Gateway WS. CORS enabled, rate-limit 100 req/min, JWT required in production.
+Started with `buddy server`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
 
-Gateway WS events: `connect` (pre-auth), `hello_ok`, `auth`, `chat`, `session_create|join|leave|patch`, `presence`, `peer:*`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).
+`/ws` message types (`src/server/websocket/handler.ts`): `authenticate`, `chat`, `stop`, `execute_tool`, `ping`, `status`, `avatar.*`, `peer:*`. The richer `connect` → `hello_ok` → `auth` → `session_*` / `presence` handshake lives in `src/gateway/` as a library; `buddy server` does not instantiate it, so nothing binds its `DEFAULT_GATEWAY_CONFIG.port`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. **The two surfaces differ**: the WebSocket refuses an unlisted `Origin` at the handshake (`403 Forbidden origin`), while HTTP answers a normal 200 and merely omits `Access-Control-Allow-Origin` — the browser blocks the read, the server does not. CORS is not an access control; the JWT and the network are. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).
 
 ## V1.1 Handover Guide (Recent Improvements)
 

@@ -77,7 +77,7 @@ buddy doctor
 ## 6. Server, fleet, and autonomous loop
 
 ```bash
-buddy server --port 3000          # HTTP (3000) + Gateway WS (3001) — required for the multi-AI fleet
+buddy server --port 3000          # HTTP + WebSocket `/ws` on ONE port — required for the multi-AI fleet
 buddy autonomy run --watch        # continuous autonomous loop: claim + run colab tasks, free-first models
 buddy autonomy install            # install it as an always-on systemd/launchd service
 buddy colab status                # inspect the shared fleet task queue
