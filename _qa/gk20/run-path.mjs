@@ -4,7 +4,7 @@
  * Binds 18010/18011/18012 only — never 8129, 8188, 8189, 3000, 3001.
  */
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile, appendFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import http from 'node:http';
@@ -258,7 +258,7 @@ try {
   await sense('person_entered', 1);
   const hitsAfter = await waitFileContains(path.join(WORK, 'webhook-hits.jsonl'), 'person_entered', 8000);
   const shellAfter = await waitFileContains(SHELL_PROOF, 'gk20-shell', 8000);
-  const runsAfter = await waitFileContains(RUNS, 'gk20-hook', 8000);
+  const _runsAfter = await waitFileContains(RUNS, 'gk20-hook', 8000);
   record(
     'perception → webhook + shell',
     'requête reçue + fichier écrit',
