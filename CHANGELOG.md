@@ -1,5 +1,12 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### BATCHFIX1 — le résumé de `/batch` dit vrai (4 septembre 2026)
+
+Les unités de vérification, qui n'écrivent rien par nature, étaient comptées
+« FAIL » par la garde « pas de done sans fichier modifié ». `BatchUnit.verifyOnly`
+les distingue ; la garde reste stricte pour les écritures. Prouvé sur Ollama :
+« 2/5 (3 failed) » devient « 4/4 (0 failed) ».
+
 ### SERV2 — `usage` réel, un seul port, CORS dit vrai (4 septembre 2026)
 
 `/v1/chat/completions` renvoie les compteurs du fournisseur : le flux ne
