@@ -1,5 +1,14 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### MEMFIX2 — 32 harnais de tests réalignés sur les écritures atomiques (4 septembre 2026)
+
+Le premier balayage complet depuis MEM1 (~34 800 tests) a trouvé 33 fichiers
+rouges, tous de la même famille : mocks de `fs` périmés par le passage aux
+écritures atomiques. Réalignés en deux lots, sans affaiblir une assertion
+(mutation prouvée par fichier). Un vrai défaut trouvé au passage : l'appairage
+DM échoue désormais fermé sur une liste d'autorisation corrompue au lieu de la
+considérer vide.
+
 ### MEMFIX1 / VERIFIX2 / DOCFIX3 (4 septembre 2026)
 
 Le harnais de `profile-manager.test.ts` est réaligné sur les écritures atomiques
