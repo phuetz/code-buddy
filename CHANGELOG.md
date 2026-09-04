@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### VERIF3 — 105 mutations sur les fusions de la nuit (4 septembre 2026)
+
+Vérification adverse par un Claude : 51 mutations rougissent comme attendu,
+54 restent vertes, regroupées en 21 trouvailles. Tiennent : la frontière `ask`
+de `git -C`, l'expansion du tilde, HOME dans Docker, l'override `/swarm`, la
+concurrence 1, l'annulation descendante, dm-pairing fail-closed, l'hermétisme
+BRANCH1. À fermer : onze harnais MEMFIX qui n'assertent qu'« un appel a eu
+lieu », dix motifs du garde-fou sans fixture isolée, le FIFO non discriminé par
+les tests DELEG2 (rapport `docs/reports/2026-09/RAPPORT-VERIF3.md`).
+
 ### DELEG3 — QualityGate et Verifier multiplexés (4 septembre 2026)
 
 CodeGuardian et SecurityReview tournent en deux délégués parallèles (bornés à
