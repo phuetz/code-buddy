@@ -25,7 +25,21 @@ mutation non prouvée identique.
 Rouge : les deux nouveaux modules manquaient, soit 1 suite non collectée et 2 tests R2 rouges.
 Vert intermédiaire : `ast-novelty.test.ts` + `parent-selection.test.ts` = 2 fichiers / 7 tests.
 
-Commit R1 : à compléter après la vérification ciblée.
+Commit R1 : `54ffeac50`.
+
+## R2 — pénalité de descendance
+
+`selectParentWithPenalty` filtre `passedAll && regressions.length === 0`, calcule
+`score * exp(-lambda * childrenCount)` et tire avec un générateur injectable. Le champ optionnel
+`childrenCount` reste compatible avec les anciens enregistrements ; `CodeVariantStore.record()` le
+matérialise et l’incrémente pour chaque parent d’un nouvel enfant. Le chemin historique
+`diverseElites()` reste disponible via `selectionMode: 'legacy'` / `legacyParentSelection: true` ; le
+moteur choisit le mode pénalisé par défaut.
+
+Rouge : `selectParentWithPenalty` et sa méthode de store étaient absents ; 2 tests R2 échouaient.
+Vert : évolution ciblée = 15 fichiers / 111 tests, dont la rotation déterministe sur 100 tirages.
+
+Commit R2 : à compléter après la vérification finale du lot.
 
 ## Preuves
 

@@ -7,8 +7,8 @@
  * @module agent/self-improvement/evolution/code-variant-store
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../../../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../../../utils/atomic-write.js';
 
@@ -39,6 +39,17 @@ export interface VariantRecord {
   parents?: string[];
   /** Generation depth: 0 for a direct child of the baseline, else 1 + max(parent generation). */
   generation?: number;
+  /** Number of offspring selected from this variant as a parent. Persisted for the penalty. */
+  childrenCount?: number;
+}
+
+export interface VariantStoreStats {
+  evaluationsAvoided: number;
+}
+
+interface VariantStoreData {
+  variants?: VariantRecord[];
+  stats?: Partial<VariantStoreStats>;
 }
 
 export interface BestOptions {
@@ -111,8 +122,43 @@ export function computeGeneration(parents: string[], records: VariantRecord[]): 
 }
 
 /** Direct children of a variant (records that list `id` among their parents). */
-export function childrenOf(records: VariantRecord[], id: string): VariantRecord[] {
+export function childrenOf(records: readonly VariantRecord[], id: string): VariantRecord[] {
   return records.filter((r) => (r.parents ?? []).includes(id));
+}
+
+function persistedChildrenCount(record: VariantRecord, records: readonly VariantRecord[]): number {
+  const declared = Number.isFinite(record.childrenCount) ? Math.max(0, Math.floor(record.childrenCount!)) : 0;
+  return Math.max(declared, childrenOf(records, record.id).length);
+}
+
+/**
+ * Weighted parent selection for the DGM offspring penalty. Only complete, no-regression variants
+ * enter the draw. The random source is injectable so a rotation can be tested without flakiness.
+ */
+export function selectParentWithPenalty(
+  records: readonly VariantRecord[],
+  lambda = 0.5,
+  random: () => number = Math.random,
+): VariantRecord | null {
+  const eligible = records.filter((record) => record.passedAll && record.regressions.length === 0);
+  if (eligible.length === 0) return null;
+
+  const penalty = Number.isFinite(lambda) && lambda >= 0 ? lambda : 0.5;
+  const weighted = eligible.map((record) => ({
+    record,
+    weight: Math.max(0, record.score) * Math.exp(-penalty * persistedChildrenCount(record, records)),
+  }));
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  if (!(total > 0)) return null;
+
+  const draw = Number(random());
+  const threshold = (Number.isFinite(draw) ? Math.max(0, draw) : 0) * total;
+  let cumulative = 0;
+  for (const item of weighted) {
+    cumulative += item.weight;
+    if (threshold < cumulative) return item.record;
+  }
+  return weighted[weighted.length - 1]!.record;
 }
 
 /**
@@ -137,25 +183,88 @@ export class CodeVariantStore {
     return this.path;
   }
 
-  list(): VariantRecord[] {
-    if (!existsSync(this.path)) return [];
+  private readData(): VariantStoreData {
+    if (!existsSync(this.path)) return { variants: [] };
     try {
-      const data = readJsonAtomicSync<{ variants?: VariantRecord[] }>(this.path, {}, { mode: 0o600 });
-      return Array.isArray(data?.variants) ? (data.variants as VariantRecord[]) : [];
+      const data = readJsonAtomicSync<VariantStoreData>(this.path, {}, { mode: 0o600 });
+      return {
+        variants: Array.isArray(data?.variants) ? data.variants : [],
+        stats: data?.stats,
+      };
     } catch (err) {
       logger.warn(`[evolve] variant store unreadable: ${err instanceof Error ? err.message : String(err)}`);
-      return [];
+      return { variants: [] };
+    }
+  }
+
+  private writeData(variants: VariantRecord[], stats: VariantStoreStats): void {
+    writeJsonAtomicSync(this.path, { schemaVersion: 1, variants, stats }, { mode: 0o600 });
+  }
+
+  list(): VariantRecord[] {
+    return this.readData().variants ?? [];
+  }
+
+  getEvaluationStats(): VariantStoreStats {
+    const stats = this.readData().stats;
+    return {
+      evaluationsAvoided:
+        Number.isFinite(stats?.evaluationsAvoided) && (stats?.evaluationsAvoided ?? 0) >= 0
+          ? Math.floor(stats!.evaluationsAvoided!)
+          : 0,
+    };
+  }
+
+  /** Persist one or more candidates rejected before the expensive fitness evaluation. */
+  recordEvaluationAvoided(count = 1): void {
+    const increment = Math.max(0, Math.floor(count));
+    if (increment === 0) return;
+    try {
+      const data = this.readData();
+      const current = this.getEvaluationStats().evaluationsAvoided;
+      this.writeData(data.variants ?? [], { evaluationsAvoided: current + increment });
+    } catch (err) {
+      logger.warn(`[evolve] variant store evaluation counter write failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   /** Append a variant record (best-effort, never throws). */
   record(rec: VariantRecord): void {
     try {
-      const variants = this.list();
-      variants.push(rec);
-      writeJsonAtomicSync(this.path, { schemaVersion: 1, variants }, { mode: 0o600 });
+      const data = this.readData();
+      const variants = data.variants ?? [];
+      const parentIds = new Set(rec.parents ?? []);
+      const updated = variants.map((variant) =>
+        parentIds.has(variant.id)
+          ? { ...variant, childrenCount: persistedChildrenCount(variant, variants) + 1 }
+          : variant,
+      );
+      updated.push({ ...rec, childrenCount: persistedChildrenCount(rec, variants) });
+      this.writeData(updated, {
+        evaluationsAvoided: this.getEvaluationStats().evaluationsAvoided,
+      });
     } catch (err) {
       logger.warn(`[evolve] variant store write failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** Select and persist one parent-use count for callers that do not append a child record yet. */
+  selectParentWithPenalty(lambda = 0.5, random: () => number = Math.random): VariantRecord | null {
+    try {
+      const data = this.readData();
+      const variants = data.variants ?? [];
+      const selected = selectParentWithPenalty(variants, lambda, random);
+      if (!selected) return null;
+      const updated = variants.map((variant) =>
+        variant.id === selected.id
+          ? { ...variant, childrenCount: persistedChildrenCount(variant, variants) + 1 }
+          : variant,
+      );
+      this.writeData(updated, { evaluationsAvoided: this.getEvaluationStats().evaluationsAvoided });
+      return updated.find((variant) => variant.id === selected.id) ?? null;
+    } catch (err) {
+      logger.warn(`[evolve] parent selection failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
     }
   }
 
