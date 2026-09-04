@@ -746,6 +746,10 @@ Two new tools registered on every Code Buddy:
   stage receives earlier stage output as handoff context, so Review
   can audit Code and Safe can verify the accumulated result.
 - `/fleet route "..."` — human-facing version of the same router.
+  Before choosing a model for a known work type, consult the measured council
+  scoreboard: `buddy council scoreboard best --task redaction-fr` (or another
+  task type). The result is a recommendation from observed outcomes; keep
+  `CODEBUDDY_COUNCIL_ROUTING=true` enabled when the main chat must apply it.
   Add `--profile review` (or another dispatch profile) to select a
   posture, and `--delegate` to route and immediately perform one
   `peer.chat` call on the selected peer/model.
