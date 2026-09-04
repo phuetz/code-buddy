@@ -1,3 +1,6 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import {
   MemoryProviderRegistry,
   LocalMemoryProvider,
@@ -7,6 +10,7 @@ import {
   type MemoryProvider,
 } from '../../src/memory/memory-provider.js';
 import type { Memory } from '../../src/memory/persistent-memory.js';
+import { resetMemoryManagerForTests } from '../../src/memory/persistent-memory.js';
 import {
   Mem0MemoryProvider,
   HonchoMemoryProvider,
@@ -88,10 +92,37 @@ describe('LocalMemoryProvider', () => {
   });
 });
 
+// TESTWRITE1 (2026-09-04): each network adapter's fallback used to be a bare
+// `new LocalMemoryProvider()`, which resolves the DEFAULT `PersistentMemoryManager`
+// singleton — `.codebuddy/CODEBUDDY_MEMORY.md` under `process.cwd()`. Exercising
+// the "no API key -> local fallback" path (the whole point of these tests) was
+// therefore writing `test-key`/`test-value` into the real, git-tracked project
+// memory file on every run (measured: category comments overwritten with
+// "No memories in this category"). `fallbackMemoryConfig` is the injectable
+// seam added to fix this (`src/memory/adapters/network-memory-adapters.ts`);
+// production callers never pass it, so the real default is unchanged.
+// `resetMemoryManagerForTests()` is required alongside it because
+// `getMemoryManager()` is itself a singleton — without a reset, an earlier
+// test in this same worker (e.g. `new LocalMemoryProvider()` above) can have
+// already claimed the real default path, and the override would be ignored.
 describe('NetworkMemoryProviders Fallbacks', () => {
+  let tmpDir: string;
+  let projectMemoryPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-memory-provider-test-'));
+    projectMemoryPath = path.join(tmpDir, 'CODEBUDDY_MEMORY.md');
+    resetMemoryManagerForTests();
+  });
+
+  afterEach(() => {
+    resetMemoryManagerForTests();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   describe('Mem0MemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new Mem0MemoryProvider({ apiKey: '' });
+      const provider = new Mem0MemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('mem0');
       // Should write to fallback local provider and retrieve it
@@ -103,7 +134,7 @@ describe('NetworkMemoryProviders Fallbacks', () => {
 
   describe('HonchoMemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new HonchoMemoryProvider({ apiKey: '' });
+      const provider = new HonchoMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('honcho');
       await provider.remember('test-key', 'test-value');
@@ -114,7 +145,7 @@ describe('NetworkMemoryProviders Fallbacks', () => {
 
   describe('SupermemoryMemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new SupermemoryMemoryProvider({ apiKey: '' });
+      const provider = new SupermemoryMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('supermemory');
       await provider.remember('test-key', 'test-value');
