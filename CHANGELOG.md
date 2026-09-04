@@ -22,6 +22,18 @@ parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persi
 (28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
 `docs/reports/2026-09/REPARATION-DGM4.md`.
 
+### SCORE1 — les bancs du jour entrent dans le tableau de bord des modèles (4 septembre 2026)
+
+Le Council savait déjà choisir un modèle par type de tâche, mais ses catégories s'arrêtaient à
+code, français, raisonnement et vision, et les mesures de la journée restaient dans la mémoire du
+pilote. Cinq catégories littéraires (`redaction-fr`, `arbitrage-litteraire`, `jugement-litteraire`,
+`audit-adversarial`, `relecture-typo`), une inférence FR/EN depuis le prompt, `buddy council
+scoreboard import|best`, et onze mesures sourcées (`docs/benchmarks/2026-09-04-bancs-litteraires.jsonl`).
+Preuve sur le registre réel avec `CODEBUDDY_COUNCIL_ROUTING=true` : « écris le chapitre » → luna,
+« tranche cet arbitrage » → Gemini 3.8 Flash, « juge à l'aveugle » → sol, une requête de code
+inchangée ; sans la variable, la façade de routage est un no-op strict. Mission luna (1 h 40).
+Rapport : `docs/reports/2026-09/REPARATION-SCORE1.md`.
+
 ### DGM6 — les journaux de lanes livrent des chiffres au rejeu des stratégies (4 septembre 2026)
 
 La source « journaux de lanes » ne produisait que des échecs nommés ; le rejeu contrefactuel des
