@@ -89,7 +89,7 @@ describe('LlmToolProposer — held-out cases never reach the model', () => {
     // the run-of-spaces held-out was added) cannot prove redaction. Use the
     // held-out-only strings (fresh inputs / fresh expected slugs).
     const uniqueHeldOutNeedles = SLUGIFY.heldOutCases
-      .flatMap((c) => [String(c.input.text), ...c.expectIncludes])
+      .flatMap((c) => [String(c.input.text), c.expectedOutput])
       .filter((needle) => needle.length > 0 && !visibleBlob.includes(needle));
     expect(uniqueHeldOutNeedles.length).toBeGreaterThan(0);
     expect(uniqueHeldOutNeedles).toEqual(expect.arrayContaining(['The Quick Brown', 'the-quick-brown', 'Hello  World']));

@@ -8,10 +8,10 @@
 
 import type { AuthoredToolSpec } from './authored-tool-runtime.js';
 
-/** One behavioural assertion: run the tool on `input`, output must contain ALL of `expectIncludes`. */
+/** One behavioural assertion: run the tool on `input`, output must equal `expectedOutput` after whitespace normalization. */
 export interface ToolCase {
   input: Record<string, unknown>;
-  expectIncludes: string[];
+  expectedOutput: string;
 }
 
 /**
