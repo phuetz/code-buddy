@@ -23,6 +23,16 @@ HEAD de départ annoncé : `7337b6883`
 ## Journal
 
 - 2026-09-04 — Rapport créé avant toute inspection du chantier ; réservation de coordination effectuée dans le même changement documentaire initial.
+- Brique QualityGate, rouge avant code produit :
+  `HOME=$PWD/_qa/deleg3/home npx vitest run tests/agent/middleware/quality-gate-middleware.test.ts`
+  → 1 fichier, 27 tests, 3 rouges. Les deux gates restaient séquentielles
+  (`maxActive=1`), aucun événement multiplexé n'était exposé, et une exception
+  ou un budget épuisé rendait encore `continue`.
+- Brique QualityGate, vert :
+  `HOME=$PWD/_qa/deleg3/home npx vitest run tests/agent/middleware/quality-gate-middleware.test.ts tests/agent/delegation/thread-task-runner.test.ts tests/agent/delegation/thread-delegation.test.ts`
+  → 3 fichiers, 42 tests réussis. Les deux revues atteignent `maxActive=2`,
+  leurs sorties sont étiquetées, et les erreurs/budgets deviennent
+  `INCOMPLETE REVIEW`. Le défaut hérité de `ThreadTaskRunner` reste 1.
 
 ## Résultats
 
