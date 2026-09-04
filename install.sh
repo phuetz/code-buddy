@@ -290,8 +290,20 @@ install_managed_launcher() { # <npm-prefix>
     die "refusing to replace unmanaged launcher $_launcher"
   fi
 
+  # Les deux extrémités du lien DOIVENT être canoniques. L'entrée du paquet a
+  # déjà traversé realpathSync ci-dessus ; garder le répertoire bin sous sa
+  # forme LOGIQUE produisait un lien cassé partout où le chemin traverse un
+  # lien symbolique — sur macOS $TMPDIR et $HOME passent par /var, qui pointe
+  # sur /private/var : la profondeur PHYSIQUE dépasse d'un cran la profondeur
+  # logique, il manquait donc un « .. » et le lien atterrissait sur /private.
+  # `buddy --version` répondait « Cannot find module … /dist/index.js » après
+  # une installation annoncée réussie. Le lien est résolu depuis le répertoire
+  # physique : c'est lui, et lui seul, qui doit servir de point de départ.
   _relative_package=$(node -e \
-    'const path = require("node:path"); process.stdout.write(path.relative(process.argv[1], process.argv[2]) || ".");' \
+    'const fs = require("node:fs"); const path = require("node:path");
+     const from = fs.realpathSync(process.argv[1]);
+     const to = fs.realpathSync(process.argv[2]);
+     process.stdout.write(path.relative(from, to) || ".");' \
     "$MANAGED_BIN_DIR" "$_package_root") \
     || die "could not compute a package-relative launcher target"
   case "$_relative_package" in
