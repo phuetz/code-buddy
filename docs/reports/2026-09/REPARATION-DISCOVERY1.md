@@ -29,6 +29,19 @@ Résultat : 18 tests, 17 verts et 1 rouge ; `mistral-medium-latest` reçoit
 À compléter avec le correctif, les tests rouge → vert, les vérifications de
 typecheck/lint/diff et les éventuels écarts préexistants.
 
+2026-09-04 — Point 2, le cache porte désormais la source (`local` ou
+`catalog`). Un catalogue hébergé sans capacité vraie est ignoré avec un
+`logger.debug` explicite ; une capacité vraie ne peut pas abaisser une
+déclaration nominative, alors qu’elle remplace toujours une estimation de
+famille. Les tests OpenRouter et GMI ont été rendus explicites sur leurs
+capacités ; le test vLLM local reste vert.
+
+2026-09-04 — Point 3, test d’intégration
+`tests/services/prompt-builder-catalogue-budget.test.ts` : la fixture Medium
+est ignorée, `mistral-medium-latest` conserve 128000 et le budget du prompt
+système est exactement 32000 jetons, sans `CODEBUDDY_MAX_CONTEXT`. Résultat :
+1 test vert.
+
 ## Bilan
 
 À compléter après les vérifications finales, en dix lignes maximum.
