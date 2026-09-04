@@ -18,7 +18,7 @@
  * - 3 system-prompt paths: explicit promptId, 'auto', undefined (legacy).
  * - Memory gating: enabled+memory wired vs enabled+no memory vs disabled.
  * - Intro hook: when moltbotHooksManager returns content vs throws.
- * - Truncation: long prompt → sliced to budget with "..." suffix.
+ * - Truncation: long prompt → complete blocks selected by priority.
  * - Truncation: short prompt → untouched.
  * - Error fallback: when getSystemPromptForMode throws on the legacy
  *   path → catches and returns the legacy fallback (still calls
@@ -98,8 +98,13 @@ vi.mock('../../src/memory/collective-knowledge-graph.js', () => ({
 
 import {
   PromptBuilder,
+  buildKnowledgeIndexBlock,
+  PROMPT_PRIORITIES,
+  truncatePromptBlocksByPriority,
   type PromptBuilderConfig,
 } from '../../src/services/prompt-builder.js';
+import { getBaseSystemPrompt } from '../../src/prompts/system-base.js';
+import { logger } from '../../src/utils/logger.js';
 import { resetToolFilter, setToolFilter } from '../../src/utils/tool-filter.js';
 import {
   _resetFleetRegistryForTests,
@@ -224,6 +229,7 @@ describe('PromptBuilder — Phase T4', () => {
     resetToolFilter();
     vi.unstubAllEnvs();
     ckgMock.formatCollectiveContextMock.mockClear();
+    vi.restoreAllMocks();
   });
 
   describe('construction + updateConfig', () => {
@@ -731,7 +737,75 @@ describe('PromptBuilder — Phase T4', () => {
   });
 
   describe('budget truncation', () => {
-    it('keeps the reserved collective-knowledge section when the system prompt is truncated', async () => {
+    it('selects complete blocks by declared priority without slicing content', () => {
+      const result = truncatePromptBlocksByPriority([
+        { id: 'style', content: 'STYLE EXAMPLE', priority: PROMPT_PRIORITIES.style },
+        { id: 'security', content: 'SECURITY RULES', priority: PROMPT_PRIORITIES.security },
+        { id: 'tools', content: 'TOOL INSTRUCTIONS', priority: PROMPT_PRIORITIES.tools },
+      ], 34);
+
+      expect(result.prompt).toBe('SECURITY RULES\n\nTOOL INSTRUCTIONS');
+      expect(result.removed).toEqual(['style']);
+      expect(result.prompt).not.toContain('STYLE');
+    });
+
+    it('keeps the knowledge startup index bounded and points to on-demand detail', () => {
+      const index = buildKnowledgeIndexBlock(
+        Array.from({ length: 200 }, (_, index) => ({
+          title: `Knowledge entry ${index} ${'x'.repeat(30)}`,
+          tags: ['domain', 'reference'],
+        })),
+      );
+
+      expect(index.length).toBeLessThanOrEqual(1_600);
+      expect(index).toContain('<knowledge_index>');
+      expect(index).toContain('knowledge_search');
+      expect(index).not.toContain('full entry body');
+    });
+
+    it('keeps the base security, confirmation, and sandbox rules available', () => {
+      const base = getBaseSystemPrompt(false, '/workspace');
+
+      expect(base).toMatch(/API keys, passwords, tokens, or credentials/i);
+      expect(base).toMatch(/confirmation/i);
+      expect(base).toMatch(/secure sandbox/i);
+    });
+
+    it('exposes a byte-complete, text-free ledger for prompt measurement', async () => {
+      const { builder } = buildBuilder({
+        config: { memoryEnabled: false },
+      });
+      const prompt = await builder.buildSystemPrompt(undefined, 'grok-3', null, {
+        includeBootstrap: false,
+        includePersona: false,
+        includeKnowledge: false,
+        includeProjectDocs: false,
+        includeRules: false,
+        includeSkills: false,
+        includeIdentity: false,
+        includeFleet: false,
+        includeMemoryDirective: false,
+        includeLessonsDirective: false,
+        includeUserModelDirective: false,
+        includeWritingRules: false,
+        includeCodingStyle: false,
+        includeWorkflowRules: false,
+        includeExecutionDiscipline: false,
+        includeVariation: false,
+      });
+
+      const blocks = builder.getLastPromptBlocks();
+      expect(blocks.map(block => block.id)).toEqual(['base']);
+      expect(blocks[0]).toMatchObject({
+        source: 'src/prompts/system-base.ts',
+        chars: prompt.length,
+        estimatedTokens: Math.ceil(prompt.length / 4),
+      });
+      expect(blocks[0]).not.toHaveProperty('content');
+      expect(blocks[0]?.sha256).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('keeps the security-priority base intact when lower-priority context is dropped', async () => {
       vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', 'true');
       ckgMock.formatCollectiveContextMock.mockClear();
       modelToolsMock.getModelToolConfigMock.mockReturnValueOnce({
@@ -741,6 +815,7 @@ describe('PromptBuilder — Phase T4', () => {
       promptMocks.getSystemPromptForModeMock.mockReturnValueOnce('A'.repeat(500));
 
       const { builder } = buildBuilder();
+      const warnSpy = vi.spyOn(logger, 'warn');
       const prompt = await builder.buildSystemPrompt(
         undefined,
         'grok-3',
@@ -750,12 +825,15 @@ describe('PromptBuilder — Phase T4', () => {
       );
 
       expect(ckgMock.formatCollectiveContextMock).toHaveBeenCalled();
-      expect(prompt).toContain('<collective_knowledge>');
-      expect(prompt).toContain('Diffusion-Based Audio Inpainting');
+      expect(prompt).toBe('A'.repeat(500));
+      expect(prompt).not.toContain('<collective_knowledge>');
       expect(prompt.endsWith('...')).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('blocs retirés : execution-discipline, collective-knowledge'),
+      );
     });
 
-    it('truncates a system prompt longer than the model budget and appends "..."', async () => {
+    it('keeps an oversized atomic block complete rather than cutting its text', async () => {
       // Force a tiny budget so the LEGACY_PROMPT_BODY ALONE overshoots.
       // budget = floor((contextWindow - maxOutputTokens) * 0.5) tokens
       //        = chars / 4
@@ -769,9 +847,9 @@ describe('PromptBuilder — Phase T4', () => {
       const { builder, cacheSystemPrompt } = buildBuilder();
       const prompt = await builder.buildSystemPrompt(undefined, 'grok-3', null);
 
-      expect(prompt.length).toBeLessThan(500);
-      expect(prompt.endsWith('...')).toBe(true);
-      // The cached prompt should be the truncated one, not the original
+      expect(prompt).toBe('A'.repeat(500));
+      expect(prompt.endsWith('...')).toBe(false);
+      // The cached prompt should be the selected prompt, not an unselected one.
       expect(cacheSystemPrompt.mock.calls[0][0]).toBe(prompt);
     });
 
@@ -819,12 +897,13 @@ describe('PromptBuilder — Phase T4', () => {
         contextWindow: 1_000_000,
         maxOutputTokens: 8_000,
       });
-      // 200K-char prompt → exceeds 128K cap → must be truncated
+      // One 200K-char atomic block cannot be cut safely; the fail-safe keeps
+      // it whole and the warning identifies the budget overrun.
       promptMocks.getSystemPromptForModeMock.mockReturnValueOnce('B'.repeat(200_000));
       const { builder } = buildBuilder();
       const prompt = await builder.buildSystemPrompt(undefined, 'grok-3', null);
-      expect(prompt.length).toBeLessThanOrEqual(32_000 * 4); // budget chars
-      expect(prompt.endsWith('...')).toBe(true);
+      expect(prompt).toBe('B'.repeat(200_000));
+      expect(prompt.endsWith('...')).toBe(false);
     });
   });
 

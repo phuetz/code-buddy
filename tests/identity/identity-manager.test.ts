@@ -2,7 +2,7 @@
  * IdentityManager Tests
  *
  * Tests for loading, validating, and hot-reloading identity files
- * (SOUL.md, USER.md, AGENTS.md, TOOLS.md, IDENTITY.md).
+ * (SOUL.md, USER.md, IDENTITY.md and related identity files).
  * Verifies project-over-global priority, singleton pattern,
  * prompt injection formatting, and file change events.
  */
@@ -12,7 +12,6 @@ import {
   getIdentityManager,
   resetIdentityManager,
 } from '../../src/identity/identity-manager.js';
-import type { IdentityFile } from '../../src/identity/identity-manager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { watch } from 'fs';
@@ -158,7 +157,7 @@ describe('IdentityManager', () => {
       await manager.load(CWD);
 
       // AGENTS.md / INSTRUCTIONS.md are owned by the unified project-context loader, not identity.
-      const expectedFiles = ['SOUL.md', 'USER.md', 'TOOLS.md', 'IDENTITY.md'];
+      const expectedFiles = ['SOUL.md', 'USER.md', 'IDENTITY.md'];
 
       for (const fileName of expectedFiles) {
         const projectPath = path.join(CWD, '.codebuddy', fileName);
