@@ -73,5 +73,5 @@ Les trois échecs Hermes sont reproductibles, liés à leur smoke navigateur loc
 (`local-playwright`/`local` retournent `failed`) et ne concernent ni le handler
 SWARM ni l’écriture mémoire ; ils restent ouverts hors périmètre.
 
-Commits de la mission : `f2a0f772a` (point 1) et `8af8921c1` (point 2 et
-passation).
+Commits de correction : `f2a0f772a` (point 1) et `64cdc66f3` (point 2) ;
+la présente mise à jour documentaire clôt la passation.
