@@ -90,7 +90,7 @@ Run `buddy <cmd> --help` for any subcommand. Most useful:
 ## Fleet & autonomy deep-dive
 
 ```bash
-buddy server --port 3000              # HTTP 3000 + Gateway WS 3001 (required for the fleet)
+buddy server --port 3000              # HTTP + WebSocket /ws on ONE port (required for the fleet)
 buddy fleet status [--json]           # routing + presence
 buddy autonomy run [--watch] [--interval <ms>] [--max-ticks <n>] [--dir <colab>] [--output-dir <art>]
                  [--executor artifact|agent] [--workspace <dir>] [--verify]

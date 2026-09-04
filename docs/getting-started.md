@@ -310,7 +310,7 @@ buddy lora lisa                 # Init a Krea 2 character LoRA project for Lisa'
 # Full guide: docs/krea-lora.md
 buddy speak "Bonjour"           # Speak text aloud through the configured TTS provider
 buddy daemon start              # Run 24/7 in background
-buddy server --port 3000        # Expose REST/WebSocket API
+buddy server --port 3000        # Expose the REST API + the WebSocket `/ws` on that ONE port
 ```
 
 Code Buddy autonomously reads files, writes code, runs commands, and fixes errors -- typically 5-15 tool calls per task (up to 50, or 400 in YOLO mode). After each edit, it can auto-commit (Aider-style), run linters, and execute tests automatically.
@@ -378,7 +378,7 @@ Code Buddy can connect to other Code Buddy instances over your network so multip
 
 On the **listener** instance (the one that wants to be observable):
 ```bash
-buddy server --port 3000          # Start the local Gateway WS
+buddy server --port 3000          # One process, one port: REST + the fleet WebSocket on /ws
 ```
 
 On the **peer** instance (the one connecting):

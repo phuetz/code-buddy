@@ -54,7 +54,7 @@ Layered, fail-closed safety: the **Guardian Agent** scores each operation 0–10
 
 ### Server & infrastructure
 
-**`buddy server`** exposes an HTTP API (port 3000) including an **OpenAI-compatible `/api/chat/completions`**, plus a **WebSocket gateway** (3001) for desktop/mobile clients (device pairing, presence, Origin-hardened, JWT in production). A **daemon** runs 24/7 with auto-restart, a heartbeat checklist, daily session reset, and a cross-platform service installer (systemd/launchd/Task Scheduler). **Cron** scheduling (`buddy cron add`) supports no-LLM `--watchdog` monitors and `--pre-check` gates so an expensive LLM run only fires when something actually changed. → [infrastructure.md](infrastructure.md)
+**`buddy server`** exposes an HTTP API (port 3000) including an **OpenAI-compatible `/api/chat/completions`**, plus a **WebSocket endpoint** `/ws` on that same single port for desktop/mobile clients (device pairing, presence, Origin-hardened, JWT in production). A **daemon** runs 24/7 with auto-restart, a heartbeat checklist, daily session reset, and a cross-platform service installer (systemd/launchd/Task Scheduler). **Cron** scheduling (`buddy cron add`) supports no-LLM `--watchdog` monitors and `--pre-check` gates so an expensive LLM run only fires when something actually changed. → [infrastructure.md](infrastructure.md)
 
 ### Channels
 

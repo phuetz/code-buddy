@@ -54,7 +54,12 @@ Advanced session management:
 
 ## WebSocket Gateway
 
-Separate gateway on port 3001 for multi-client communication:
+**No second port.** `buddy server` opens a single listener (default `3000`) and
+serves the WebSocket on `/ws` of that same port — verified with `ss -ltnp` on a
+running server. The multi-client handshake below is the `src/gateway/` library
+(`DEFAULT_GATEWAY_CONFIG`), which `buddy server` does **not** instantiate; a
+fleet gateway on another port is a *second process* of the same binary
+(`docs/deployment.md`).
 
 ```
 Client -> connect (deviceId, role, protocolVersion)
