@@ -144,6 +144,77 @@ describe('skill-gate — firewall + coverage', () => {
     expect(mutator.remove('authored-git-bisect')).toBe(true);
     expect(mutator.has('authored-git-bisect')).toBe(false);
   });
+
+  it('verifies SG1 (content length/validity), SG3 (visible terms) and SG4 (held-out terms)', () => {
+    const scenarioWithHeldOut: SkillBenchmarkScenario = {
+      id: 'test-scenario',
+      query: 'test scenario query',
+      expectIncludes: ['visible1', 'heldout1'],
+      visibleIncludes: ['visible1'],
+      heldOutIncludes: ['heldout1'],
+      description: 'test scenario',
+    };
+
+    const mutator = new LiveSkillMutator(tmpRoot());
+
+    // SG1 rejection: too short
+    const shortSpec: SkillSpec = { name: 'authored-short', description: 'desc', content: '# Hi' };
+    const sg1 = validateSkillProposal(
+      { id: 'p:short', targetScenarioId: scenarioWithHeldOut.id, spec: shortSpec },
+      scenarioWithHeldOut,
+      mutator,
+      { keepOnAccept: false },
+    );
+    expect(sg1.accepted).toBe(false);
+    expect(sg1.rejectionReason).toBe('static-scan');
+    expect(sg1.reasons[0]).toContain('SG1');
+
+    // SG3 rejection: visible term missing
+    const missingVisibleSpec: SkillSpec = {
+      name: 'authored-no-vis',
+      description: 'desc',
+      content: '# Documentation guide\nThis guide mentions heldout1 but omits the main visible requirement completely.',
+    };
+    const sg3 = validateSkillProposal(
+      { id: 'p:novis', targetScenarioId: scenarioWithHeldOut.id, spec: missingVisibleSpec },
+      scenarioWithHeldOut,
+      mutator,
+      { keepOnAccept: false },
+    );
+    expect(sg3.accepted).toBe(false);
+    expect(sg3.rejectionReason).toBe('coverage-fail');
+    expect(sg3.reasons[0]).toContain('SG3: visible coverage failed');
+
+    // SG4 rejection: held-out term missing
+    const missingHeldOutSpec: SkillSpec = {
+      name: 'authored-no-held',
+      description: 'desc',
+      content: '# Documentation guide\nThis guide mentions visible1 prominently but misses the extra criteria.',
+    };
+    const sg4 = validateSkillProposal(
+      { id: 'p:noheld', targetScenarioId: scenarioWithHeldOut.id, spec: missingHeldOutSpec },
+      scenarioWithHeldOut,
+      mutator,
+      { keepOnAccept: false },
+    );
+    expect(sg4.accepted).toBe(false);
+    expect(sg4.rejectionReason).toBe('coverage-fail');
+    expect(sg4.reasons[0]).toContain('SG4: held-out secret coverage failed');
+
+    // SG1 -> SG4 pass: both visible and held-out terms present
+    const validSpec: SkillSpec = {
+      name: 'authored-valid',
+      description: 'desc',
+      content: '# Complete guide\nThis guide satisfies visible1 clearly and also honors heldout1 properly.',
+    };
+    const passed = validateSkillProposal(
+      { id: 'p:valid', targetScenarioId: scenarioWithHeldOut.id, spec: validSpec },
+      scenarioWithHeldOut,
+      mutator,
+      { keepOnAccept: false },
+    );
+    expect(passed.accepted).toBe(true);
+  });
 });
 
 describe('SkillImprovementEngine — cycle', () => {

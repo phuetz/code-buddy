@@ -24,6 +24,10 @@ export interface SkillBenchmarkScenario {
   query: string;
   expectIncludes: string[];
   description: string;
+  /** Visible coverage terms presented to the proposer and checked by SG3 (defaults to expectIncludes). */
+  visibleIncludes?: string[];
+  /** Held-out secret coverage terms checked only by SG4 (anti-gaming, hidden from proposer). */
+  heldOutIncludes?: string[];
 }
 
 export interface SkillProposal {

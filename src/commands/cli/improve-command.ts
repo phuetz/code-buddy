@@ -407,13 +407,17 @@ export function registerImproveCommands(program: Command): void {
     .description('Author + safety-gate NEW skills for the agent (firewall + coverage)')
     .option('--json', 'output JSON')
     .option('--apply', 'install validated skills (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('skills')) return;
       const { SkillImprovementEngine } = await import('../../agent/self-improvement/skill-engine.js');
       const { LlmSkillProposer } = await import('../../agent/self-improvement/skill-proposer.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_SKILL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_SKILL_SCENARIOS;
       const engine = new SkillImprovementEngine({
-        scenarios: SEED_SKILL_SCENARIOS,
+        scenarios,
         proposer: new LlmSkillProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });

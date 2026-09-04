@@ -20,7 +20,9 @@ export interface ValidateSkillOptions {
 /** Deterministic coverage check: the skill content surfaces all expected guidance. */
 export function coversScenario(content: string, scenario: SkillBenchmarkScenario): boolean {
   const lower = content.toLowerCase();
-  return scenario.expectIncludes.every((s) => lower.includes(s.toLowerCase()));
+  const visible = scenario.visibleIncludes ?? scenario.expectIncludes;
+  const heldOut = scenario.heldOutIncludes ?? [];
+  return [...visible, ...heldOut].every((s) => lower.includes(s.toLowerCase()));
 }
 
 export function validateSkillProposal(
@@ -32,29 +34,50 @@ export function validateSkillProposal(
   const base = { proposalId: proposal.id, scenarioId: scenario.id };
   const content = proposal.spec.content ?? '';
 
-  // G1 static scan + G2 skill firewall (prompt-injection / exfiltration), including
-  // full-document instruction threats that the line-oriented scanner used to miss
-  // (HTML comments, split-line jailbreaks). Must reject BEFORE create() so
-  // propose-only cannot accept a skill that auto-apply would throw on.
+  // SG1: valid markdown content, non-empty instructions, structure / triggers
+  const trimmed = content.trim();
+  if (trimmed.length < 20 || !proposal.spec.name) {
+    return {
+      ...base,
+      accepted: false,
+      rejectionReason: 'static-scan',
+      reasons: ['SG1: skill content is empty or too short, or missing name'],
+    };
+  }
+
+  // SG2: static scan + skill firewall (prompt-injection / exfiltration / safety)
   const safety = safetyGateSkill(content);
   if (!safety.ok) {
     return {
       ...base,
       accepted: false,
       rejectionReason: safety.rejectionReason ?? 'static-scan',
-      reasons: safety.reasons,
+      reasons: safety.reasons.map((r) => `SG2: ${r}`),
     };
   }
 
-  // G3 — coverage: the skill must actually surface the expected guidance.
+  // SG3: visible cases coverage
   const lower = content.toLowerCase();
-  const missing = scenario.expectIncludes.filter((s) => !lower.includes(s.toLowerCase()));
-  if (missing.length > 0) {
+  const visible = scenario.visibleIncludes ?? scenario.expectIncludes;
+  const missingVisible = visible.filter((s) => !lower.includes(s.toLowerCase()));
+  if (missingVisible.length > 0) {
     return {
       ...base,
       accepted: false,
       rejectionReason: 'coverage-fail',
-      reasons: [`skill does not surface expected guidance: ${JSON.stringify(missing)}`],
+      reasons: [`SG3: visible coverage failed, missing: ${JSON.stringify(missingVisible)}`],
+    };
+  }
+
+  // SG4: held-out secrets coverage (anti-gaming)
+  const heldOut = scenario.heldOutIncludes ?? [];
+  const missingHeldOut = heldOut.filter((s) => !lower.includes(s.toLowerCase()));
+  if (missingHeldOut.length > 0) {
+    return {
+      ...base,
+      accepted: false,
+      rejectionReason: 'coverage-fail',
+      reasons: [`SG4: held-out secret coverage failed, missing: ${JSON.stringify(missingHeldOut)}`],
     };
   }
 
