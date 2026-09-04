@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Coordination Fable 5 / Codex
 
-Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main.
+Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main. Les rapports de mission (`RAPPORT-`, `REPARATION-`, `REVUE-`, `AUDIT-`, `BILAN-`, `BANC-`) vont sous `docs/reports/<AAAA-MM>/` (voir [`docs/reports/README.md`](docs/reports/README.md)).
 
 > **Status: 2.0.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v1.8.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
 
@@ -26,7 +26,7 @@ npm run build:gui      # Cowork Electron GUI (cd cowork && npm run build)
 npm run dev:gui        # Cowork dev (Vite + Electron)
 ```
 
-Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192`. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
+Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192` (4096 on Windows — lower RAM CI runners, `vitest.config.ts:141`). `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
 
 ## Testing Gotchas
 
@@ -48,7 +48,7 @@ Terminal multi-provider AI coding agent. **15 providers** via OpenAI-compatible 
 ```
 User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
                                          │
-                                Tool calls (max 50, YOLO 400)
+                                Tool rounds (max 50, YOLO 400)
                                          │
                               Execute + confirm → results → loop
 ```
@@ -81,18 +81,21 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 5. **Middleware pipeline** — `src/agent/middleware/` has composable before/after hooks. **Priorities matter:**
 
    | Middleware | Priority | Purpose |
-   | --------------------------- | -------- | ---------------------------------------------------------------------------- |
+   | --------------------------------- | -------- | ---------------------------------------------------------------------------- |
    | `TurnLimitMiddleware` | 10 | Enforce max turns per session |
    | `CostLimitMiddleware` | 20 | Enforce session cost budget |
    | `ContextWarningMiddleware` | 30 | Warn when nearing context limits |
    | `SessionDurationMiddleware` | 35 | Suggest a clean pause + snapshot past `CODEBUDDY_SESSION_PAUSE_HOURS` (12 h) |
    | `ReasoningMiddleware` | 42 | Auto-detect complex queries, inject `<reasoning_guidance>` |
    | `WorkflowGuardMiddleware` | 45 | Suggest plan init for complex first messages |
-   | `AutoObservationMiddleware` | 50 | Capture auto-observations (registered separately, ~line 1503) |
+   | `AutoObservationMiddleware` | 50 | Capture auto-observations (registered separately in `enableAutoObservation()`, line 1985) |
    | `AutoRepairMiddleware` | 150 | Detect errors, invoke fault localizer, suggest repairs |
-   | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian and SecurityReview agents |
+   | `VerificationEnforcementMiddleware` | 155 | After ≥3 file changes with no verify/test, nudge once to verify before finishing |
+   | `VisualValidationMiddleware` | 156 | Suggest a screenshot check for saved Office documents (Win32) |
+   | `PlanCompletionAuditMiddleware` | 157 | Nudge once to audit open `PLAN.md` items before concluding |
+   | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian/SecurityReview via `ThreadTaskRunner`/`ThreadDelegation` (`src/agent/delegation/`) |
 
-   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. `VerificationEnforcementMiddleware` (155) **is** wired (`codebuddy-agent.ts:~393`) — it nudges "verify before finishing" once per task (its `hasWarned` latch, and every middleware's per-task counters, are cleared by `MiddlewarePipeline.resetForNewTask()` at the start of each turn). The table plus the separately-registered `AutoObservationMiddleware` is now the exhaustive wired set. Two unwired factory scaffolds — `LearningFirstMiddleware` and `ToolFilterMiddleware` — were **removed 2026-07-04 as redundant**: correction/lesson capture is already covered by `memory-consolidation.ts` (same `MEMORY_SIGNALS` lineage) + the self-improvement lessons path, and tool gating/failure handling by `OperatingModeManager` plan-mode enforcement + `AutoRepairMiddleware`.
+   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. `VerificationEnforcementMiddleware` (155) **is** wired (`codebuddy-agent.ts:441`) — it nudges "verify before finishing" once per task (its `hasWarned` latch, and every middleware's per-task counters, are cleared by `MiddlewarePipeline.resetForNewTask()` at the start of each turn). The table above (12 entries) is the exhaustive wired set; `AutoObservationMiddleware` (50) is the one registered outside the main constructor block (in `enableAutoObservation()`, called for computer-use custom agents). Two unwired factory scaffolds — `LearningFirstMiddleware` and `ToolFilterMiddleware` — were **removed 2026-07-04 as redundant**: correction/lesson capture is already covered by `memory-consolidation.ts` (same `MEMORY_SIGNALS` lineage) + the self-improvement lessons path, and tool gating/failure handling by `OperatingModeManager` plan-mode enforcement + `AutoRepairMiddleware`.
 6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags → Guardian Agent.
 7. **Per-turn context injection** — Each LLM turn appends `<lessons_context>` (before) and `<todo_context>` (after). Must be applied in both agent-executor paths.
 8. **Pluggable ContextEngine** — Plugins can register a custom context pipeline via `PluginContext.registerContextEngine()`. If `ownsCompaction` is set, built-in auto-compact is skipped. Trust check blocks non-trusted plugins from owning compaction.
