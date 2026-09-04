@@ -130,9 +130,15 @@ describe('Miscellaneous Tools VFS Migration Part 2', () => {
       // note: readImage might use spawn, but we check dir creation
       
       // copyFileContent
+      mockReadFile.mockResolvedValue('clipboard file content');
+      const writeTextSpy = vi.spyOn(tool, 'writeText').mockResolvedValue({
+        success: true,
+        output: 'copied',
+      });
       await tool.copyFileContent('test.txt');
       expect(mockExists).toHaveBeenCalledWith(expect.stringContaining('test.txt'));
-      expect(mockReadFile).toHaveBeenCalled();
+      expect(mockReadFile).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+      expect(writeTextSpy).toHaveBeenCalledWith('clipboard file content');
     });
   });
 
