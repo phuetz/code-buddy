@@ -84,6 +84,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
+    // TESTWRITE1 (2026-09-04): fingerprints .codebuddy/settings.json and
+    // .codebuddy/CODEBUDDY_MEMORY.md before any test file runs and fails the
+    // whole run if either changed by the time every worker is done — see the
+    // guard file for the two real incidents this catches.
+    globalSetup: ['./tests/hygiene/no-repo-writes-global-setup.ts'],
     // windows-latest runners show I/O stall bursts: on 2026-08-22 three
     // different real-I/O suites (migration-e2e, execute-code RPC, ocr-tool)
     // each crossed 20 s once on a Windows job while finishing in < 5 s on
