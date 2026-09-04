@@ -61,7 +61,8 @@ Fix the bug in the login function => grok-3-mini
 sans flag => grok-3-mini
 ```
 
-Tests des fichiers touchés : 6 fichiers, 110/110 verts. Privacy :
+Tests des fichiers touchés et de leurs consommateurs directs : 10 fichiers,
+162/162 verts (6 fichiers / 110 tests principaux, puis 4 / 52 complémentaires). Privacy :
 `tests/security/donnees-personnelles.test.ts`, 40/40 verts. TypeScript :
 `npx tsc --noEmit -p .` et `npm run typecheck`, code 0. ESLint ciblé avec
 `--max-warnings=0`, code 0. `git diff --check`, code 0.
