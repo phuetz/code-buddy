@@ -219,6 +219,37 @@ describe('ThreadDelegation multiplexed delegates', () => {
     });
   });
 
+  it('fails the current turn honestly when its execution crosses the child cost budget', async () => {
+    let sessionCost = 0;
+    const delegation = new ThreadDelegation<TestChunk>({
+      parentBudget: { ...parentBudget, maxCostUsd: 2 },
+      createAgent: () => ({
+        async *processUserMessageStream(): AsyncGenerator<TestChunk> {
+          yield { type: 'content', content: 'work completed after spending too much' };
+          sessionCost = 1.25;
+        },
+        abortCurrentOperation() {},
+        dispose() {},
+        getSessionCost: () => sessionCost,
+      }),
+    });
+    const collecting = collectEvents(delegation.events());
+    const child = delegation.spawn('costly');
+
+    const outcome = await child.submit('work');
+    child.closeInput();
+    await delegation.close();
+
+    const events = await collecting;
+    expect(outcome).toMatchObject({
+      success: false,
+      reason: 'cost_budget_exhausted',
+    });
+    expect(events.find((event) => event.kind === 'budget_exhausted')?.payload).toMatchObject({
+      reason: 'cost_budget_exhausted',
+    });
+  });
+
   it('contains a throwing child and reports it while another child completes', async () => {
     const factory: ThreadDelegateAgentFactory<TestChunk> = ({ agentId }) => ({
       async *processUserMessageStream(): AsyncGenerator<TestChunk> {

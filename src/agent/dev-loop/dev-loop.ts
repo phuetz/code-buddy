@@ -172,6 +172,7 @@ export const defaultDevLoopVerifier: DevLoopVerifier = async ({ agent, goal, evi
           const r = await agent.executeToolByName(name, args);
           return { success: r.success, output: r.output, error: r.error };
         },
+        getSessionCost: () => getCostTracker().getReport().sessionCost,
       },
     });
     if (!result.success) return { verdict: 'unverified', evidence: result.error ?? 'verifier failed' };

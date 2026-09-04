@@ -33,6 +33,17 @@ HEAD de départ annoncé : `7337b6883`
   → 3 fichiers, 42 tests réussis. Les deux revues atteignent `maxActive=2`,
   leurs sorties sont étiquetées, et les erreurs/budgets deviennent
   `INCOMPLETE REVIEW`. Le défaut hérité de `ThreadTaskRunner` reste 1.
+- Brique Verifier, rouge avant code produit :
+  `HOME=$PWD/_qa/deleg3/home npx vitest run tests/agent/delegation/thread-delegation.test.ts tests/agents/verifier-delegation.test.ts`
+  → 2 fichiers, 14 tests, 3 rouges. `executeOn('verifier')` réutilisait
+  l'instance (`initialize` 1 fois au lieu de 2), exécutait 999 étapes demandées,
+  et un tour ayant franchi son budget coût restait déclaré réussi.
+- Brique Verifier, vert :
+  `HOME=$PWD/_qa/deleg3/home npx vitest run tests/agent/delegation tests/agents/verifier-delegation.test.ts tests/unit/verifier-agent.test.ts tests/agent/dev-loop.test.ts tests/agent/middleware/quality-gate-middleware.test.ts`
+  → 6 fichiers, 74 tests réussis. Chaque appel utilise une instance fraîche,
+  émet un résultat étiqueté, reçoit un budget enfant de 6 tours / 0,50 USD /
+  16 000 tokens et refuse toujours `CONFIRMED` sans oracle. Le coût est contrôlé
+  avant et après le tour.
 
 ## Résultats
 
