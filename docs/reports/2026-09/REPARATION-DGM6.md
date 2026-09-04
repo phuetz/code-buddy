@@ -104,7 +104,7 @@ Active after: baseline
 
 1. **Vitest self-improvement** :
    ```bash
-   HOME=/home/patrice/DEV/cb-dgm6-2026-09-04/_qa/dgm6/home npx vitest run tests/agent/self-improvement
+   HOME=~/DEV/cb-dgm6-2026-09-04/_qa/dgm6/home npx vitest run tests/agent/self-improvement
    # Test Files  42 passed (42)
    # Tests       323 passed (323)
    # Duration    2.92s
@@ -126,7 +126,7 @@ Active after: baseline
    ```
 5. **Tests de confidentialité (non-fuite de données personnelles)** :
    ```bash
-   HOME=/home/patrice/DEV/cb-dgm6-2026-09-04/_qa/dgm6/home npx vitest run tests/fleet/privacy-lint.test.ts tests/agent/state-privacy.test.ts tests/docs/cowork-public-docs-privacy.test.ts tests/companion-privacy.test.ts tests/tools/route-peer-privacy.test.ts
+   HOME=~/DEV/cb-dgm6-2026-09-04/_qa/dgm6/home npx vitest run tests/fleet/privacy-lint.test.ts tests/agent/state-privacy.test.ts tests/docs/cowork-public-docs-privacy.test.ts tests/companion-privacy.test.ts tests/tools/route-peer-privacy.test.ts
    # Test Files  5 passed (5)
    # Tests       56 passed (56)
    ```
