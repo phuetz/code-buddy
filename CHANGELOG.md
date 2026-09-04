@@ -1,5 +1,17 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### BASHSTREAM1 — le premier appel d'outil d'un tour perdait ses arguments sur MiniMax (4 septembre 2026)
+
+En headless sur MiniMax M3 (GMI), chaque `bash` échouait « Streaming execution
+error: Unexpected end of JSON input » alors que les autres outils passaient.
+Cause : l'accumulateur de deltas assignait le tout premier `tool_calls` par
+position de tableau ; MiniMax numérote ses appels à partir de 1, donc le premier
+appel du tour (bash, par hasard) gardait des arguments vides pendant qu'un objet
+orphelin absorbait les siens. Fusion par index dès le premier chunk ; test qui
+rejoue les deltas réels capturés ; reproduit avant (5 échecs / 7) et après (0 / 5)
+sur GMI. Le trou de tableau laissé en position 0 est compacté par le filtre de
+l'exécuteur avant toute exécution. Rapport : `docs/reports/2026-09/REPARATION-BASHSTREAM1.md`.
+
 ### DOCTOR1 — `buddy doctor --fix` choisit un modèle Ollama et le justifie (4 septembre 2026)
 
 `--fix` écrivait le premier modèle listé (un `rag` de 15 Go). Il choisit désormais
