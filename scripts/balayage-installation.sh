@@ -50,6 +50,19 @@ fi
 # réintroduirait exactement la dépendance au PATH que l'on vient de supprimer.
 TSX_CLI="$REPO/node_modules/tsx/dist/cli.mjs"
 
+# `wc -l` BSD (macOS) PRÉFIXE son décompte d'espaces (« ␣␣␣␣␣␣␣1 ») là où GNU
+# n'en met aucun. Interpolé tel quel, le message final devenait
+# « ✓        1/       1 commandes répondent » : le balayage passait, mais son
+# compte rendu — la seule chose qu'un humain lit — était illisible et les
+# vérifications qui l'analysent tombaient à côté. On normalise donc TOUT
+# décompte par une arithmétique shell, tolérante aux blancs des deux `wc`.
+compter_lignes() {
+  local brut
+  brut="$(wc -l < "$1" 2>/dev/null || echo 0)"
+  brut="${brut//[[:space:]]/}"
+  echo "$(( ${brut:-0} ))"
+}
+
 # timeout(1) GNU n'existe pas sur macOS. Ce watchdog shell est volontairement
 # utilisé partout : il ne dépend d'aucun binaire timeout et tue ensuite une
 # commande qui ignore SIGTERM. sleep est résolu avant env -i et exécuté dans le
@@ -112,7 +125,7 @@ if [ "${1:-}" = "--regenerer" ]; then
       avec_timeout_portable "$TIMEOUT" "$NODE_BIN" "$TSX_CLI" "$REPO/src/index.ts" --help
     fi
   } | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$tmp_ref"
-  nouveau=$(wc -l < "$tmp_ref")
+  nouveau=$(compter_lignes "$tmp_ref")
 
   # Ne JAMAIS écrire une référence vide : c'est exactement la panne que le balayage existe
   # pour attraper. La référence existante reste intacte.
@@ -129,7 +142,7 @@ if [ "${1:-}" = "--regenerer" ]; then
   if [ -f "$REFERENCE" ]; then
     perdues=$(comm -23 <(sort -u "$REFERENCE") "$tmp_ref")
     if [ -n "$perdues" ] && ! $force; then
-      ancien=$(wc -l < "$REFERENCE")
+      ancien=$(compter_lignes "$REFERENCE")
       echo "✗ régénération abandonnée : des commandes de la référence disparaîtraient ($nouveau vs $ancien)." >&2
       echo "  Commandes qui SERAIENT perdues (source cassée ou --help restructuré ?) :" >&2
       echo "$perdues" | sed 's/^/    - /' >&2
@@ -178,7 +191,7 @@ extraire_commandes() {
 }
 
 extraire_commandes "$ENTREE" > "$BASE/commandes.txt"
-total=$(wc -l < "$BASE/commandes.txt")
+total=$(compter_lignes "$BASE/commandes.txt")
 
 # L'ATTENDU : les commandes que le paquet DEVRAIT exposer. Un test l'injecte
 # (BALAYAGE_ATTENDU) ; en mode réel c'est la référence VERSIONNÉE — jamais
@@ -190,7 +203,7 @@ if [ -n "${BALAYAGE_ATTENDU:-}" ] && [ -f "$BALAYAGE_ATTENDU" ]; then
 elif [ -z "${BALAYAGE_ENTREE:-}" ] && [ -f "$REFERENCE" ]; then
   sort -u "$REFERENCE" > "$BASE/attendues.txt"
 fi
-attendu=$(wc -l < "$BASE/attendues.txt")
+attendu=$(compter_lignes "$BASE/attendues.txt")
 
 # Une extraction vide n'est PAS un succès : le balayage n'a rien pu tester (aide
 # restructurée, sortie sur stderr, env -i cassé…). Sans cette garde, la boucle ne
@@ -249,7 +262,7 @@ while read -r c; do
   fi
 done < "$BASE/commandes.txt"
 
-n=$(wc -l < "$BASE/fautives.txt")
+n=$(compter_lignes "$BASE/fautives.txt")
 echo
 if [ "$n" -eq 0 ]; then
   echo "✓ $total/$total commandes répondent sur une installation neuve"
