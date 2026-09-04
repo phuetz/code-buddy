@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### CIFIX1 — la CI de `main` : les deux familles encore rouges partout (4 septembre 2026)
+
+Le balayage d'installation (`scripts/balayage-installation.sh`) résout `node`, `npm`, `env` et
+`sleep` avant `env -i` (le PATH vierge est conservé, les runners GitHub n'ont pas `node` dans
+`/usr/bin`) et remplace `timeout` GNU, absent de macOS, par un chien de garde portable. Le test
+d'injection d'environnement du shell interactif choisit sa fixture (POSIX ou PowerShell) par
+`getShellConfiguration()`, le chemin Windows étant exercé par un mock sans exemption CI. Le
+PTY macOS reste documenté, pas corrigé à l'aveugle. Diagnostic complet des six journaux CI
+dans `docs/reports/2026-09/RAPPORT-CIMAIN1.md`, réparation dans `REPARATION-CIFIX1.md`.
+
 ### TESTWRITE1 — la suite Vitest écrivait dans le `.codebuddy/` réel (4 septembre 2026)
 
 Deux coupables mesurés (`strace`) : `tests/memory/memory-provider.test.ts` instanciait les
