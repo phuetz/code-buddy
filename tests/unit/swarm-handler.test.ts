@@ -88,9 +88,25 @@ describe('handleSwarm — /swarm slash command', () => {
   describe('task dispatch (the main path)', () => {
     it('forwards task to /agents run with strategy=parallel override', async () => {
       await handleSwarm(['refactor', 'the', 'auth', 'module']);
-      expect(handleAgentsMock).toHaveBeenCalledWith(['run', 'refactor the auth module']);
-      // Strategy must be set to parallel before the call
+      expect(handleAgentsMock).toHaveBeenCalledWith(
+        ['run', 'refactor the auth module'],
+        expect.objectContaining({
+          threadDelegation: expect.objectContaining({
+            concurrency: 1,
+            parentBudget: {
+              maxTurns: 100,
+              maxCostUsd: 10,
+              maxContextTokens: 128_000,
+            },
+            onEvent: expect.any(Function),
+          }),
+        }),
+      );
+      // Strategy must be set to parallel before the delegated call.
       expect(setMock).toHaveBeenCalledWith('parallel');
+      expect(setMock.mock.invocationCallOrder[0]).toBeLessThan(
+        handleAgentsMock.mock.invocationCallOrder[0],
+      );
     });
 
     it('restores the previous strategy after the run (no permanent mutation)', async () => {
