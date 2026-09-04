@@ -1,5 +1,22 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### CIFIX2 — la CI GitHub redevient verte sans désactiver un seul test (5 septembre 2026)
+
+Le run `33911350696` (PR #149) rendait 22 tests rouges sur les deux jambes ubuntu bloquantes,
+tous pour des causes d'environnement et aucune régression produit. `.github/workflows/ci.yml`
+exécutait `Build project` APRÈS `Run tests` : les 16 échecs de `tests/docs/revue-gemini-docs.test.ts`
+venaient d'un `dist/index.js` jamais construit, vert en local par accident. Le build passe devant
+les tests, et le test échoue désormais fort (« construire d'abord : npm run build ») au lieu de
+retourner un code de sortie 1 illisible. Les quatre échecs Chromium sont couverts pour de vrai par
+`npx playwright install --with-deps chromium` sur ubuntu ; ailleurs, un helper unique
+(`tests/helpers/cifix2-dependencies.ts`) garde Chromium, Piper et Ollama en imprimant le motif —
+jamais un `describe.skip` sec, et les assertions `/sendPhoto` et l'envoi multipart sont intactes.
+GK36 épingle l'horloge du foyer et rejoue le même 08:00 sous `TZ=UTC` et `TZ=Europe/Paris`. La
+porte `Security Audit` repasse à 0 par bump ciblé (browserslist 4.28.4 → 4.28.9, npm 11.19.0 →
+11.19.1 qui embarque tar 7.5.22, undici 6.27 → 6.28) et l'allowlist tombe de 24 à 10 entrées
+vivantes, sans relâcher le seuil. Mission Codex (GPT-5). Rapport :
+`docs/reports/2026-09/REPARATION-CIFIX2.md`.
+
 ### DGM5 — la Darwin-Gödel Machine nourrie avec la journée réelle (4 septembre 2026)
 
 La machine tournait à vide faute de matière. Une source d'expérience opt-in lit les journaux de
