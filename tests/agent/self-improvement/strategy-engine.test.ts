@@ -105,3 +105,21 @@ describe('StrategyImprovementEngine', () => {
     expect(r.notes[0]).toMatch(/proposer failed: boom/);
   });
 });
+
+describe('scope propagation (bug found by the CLI test on 2026-09-04)', () => {
+  it('a child of the scope-less baseline targets the ENGINE scope and is activated there', async () => {
+    const store = new StrategyStore({ workDir: work });
+    const engine = new StrategyImprovementEngine({ scope: 'headless', proposer: new HeuristicStrategyProposer(), store, workDir: work, autonomy: 'auto-apply' });
+    const r = await engine.runCycle(ROUNDS_CEILING);
+    expect(r.applied).toBe(true);
+    expect(r.gate?.appliedRef).toMatch(/^strat-headless-v2-/);
+    expect(store.activeId('headless')).toBe(r.gate?.appliedRef);
+    expect(store.activeId('default')).toBe('baseline');
+  });
+  it('the gate rejects a candidate whose scope is not the engine scope', async () => {
+    const store = new StrategyStore({ workDir: work });
+    const proposer = { propose: async () => ({ id: 'p', kind: 'strategy' as const, parentId: 'baseline', experienceIds: [], rationale: 'x', candidate: { ...BASELINE_STRATEGY, id: 'strat-audit-v2-000000', version: 2, parentId: 'baseline', scope: 'audit', limits: { maxToolRounds: 75, maxCostUsd: 10 }, provenance: { source: 'manual', experienceIds: [], createdAt: '2026-09-04T00:00:00.000Z' } } }) };
+    const r = await new StrategyImprovementEngine({ scope: 'headless', proposer, store, workDir: work, autonomy: 'auto-apply' }).runCycle(ROUNDS_CEILING);
+    expect(r.gate?.rejectionReason).toBe('lineage');
+  });
+});

@@ -1,5 +1,21 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### STRAT1 — la Darwin-Gödel Machine fait évoluer la façon d'exécuter (4 septembre 2026)
+
+Quatrième surface apprenable après les leçons, les outils et les skills : la **stratégie
+d'exécution** (plafonds de tours et de coût, niveau de raisonnement, exigences de vérification,
+consignes courtes). Ce sont exactement les réglages que le pilote a dû corriger à la main dans la
+journée (limite de 50 tours en headless, « preuve = tests des fichiers touchés », « commiter après
+chaque point »). Une stratégie est un JSON sous `.codebuddy/strategies/`, jamais du code, validé
+par un schéma Zod strict où aucun champ ne peut désactiver un garde-fou. Porte à cinq étages :
+schéma → pare-feu des consignes → lignée → inerte → **empirique** (rejeu contrefactuel
+déterministe sur les faits des runs, test de signe bayésien apparié, garde de coût) ; rien n'est
+gardé sur le schéma seul. Consommée uniquement sous `CODEBUDDY_SELF_IMPROVE_STRATEGIES=true` :
+le mode headless prend le plafond de tours de la stratégie quand `--max-tool-rounds` est absent et
+reçoit ses consignes en `<execution_strategy>`. CLI `buddy improve strategies [--apply]
+[--experiences fichier.jsonl]` et `strategies-list` ; le déclencheur d'inactivité l'essaie après
+les outils et les skills. Rapport : `docs/reports/2026-09/RAPPORT-STRAT1.md`.
+
 ### DGM3 — la fitness de l'auto-amélioration passe de 3 à 15 scénarios (4 septembre 2026)
 
 Le banc de capacités qui sert de « fitness » à la Darwin-Gödel Machine ne comptait que trois

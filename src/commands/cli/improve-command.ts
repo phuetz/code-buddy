@@ -62,6 +62,26 @@ async function collectExperiences(): Promise<Experience[]> {
   return collected.flat();
 }
 
+/** Optional JSONL of Experience records (one per line); malformed lines are skipped. */
+async function readExperiencesFile(file: string | undefined): Promise<Experience[]> {
+  if (!file) return [];
+  const { readFileSync } = await import('fs');
+  const out: Experience[] = [];
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const rec = JSON.parse(trimmed) as Partial<Experience>;
+      if (typeof rec.id === 'string' && typeof rec.context === 'string') {
+        out.push({ id: rec.id, source: rec.source ?? 'manual', kind: rec.kind ?? 'run', detail: rec.detail ?? '', context: rec.context, ...(typeof rec.severity === 'number' ? { severity: rec.severity } : {}) });
+      }
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  return out;
+}
+
 interface ImproveOptions {
   json?: boolean;
   apply?: boolean;
@@ -430,6 +450,66 @@ export function registerImproveCommands(program: Command): void {
         kept.length ? `Installed: ${kept.join(', ')} (under .codebuddy/skills/authored)` : 'No skill installed this run',
       ].join('\n');
       print({ kind: 'self_improvement_skills', cycles: results }, options, text);
+    });
+
+  improve
+    .command('strategies')
+    .description('Evolve the EXECUTION STRATEGY (round/cost ceilings, verification, directives) — strict schema + firewall + replay-gated')
+    .option('--json', 'output JSON')
+    .option('--apply', 'install + activate an accepted strategy (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scope <scope>', 'strategy scope: default|headless|code-edit|audit|research', 'headless')
+    .option('--experiences <file>', 'JSONL of Experience records carrying run facts (rounds=, cost=, outcome=, failure=)')
+    .action(async (options: ImproveOptions & { scope?: string; experiences?: string }) => {
+      if (options.apply && refuseApplyWithoutOptIn('strategies')) return;
+      const { StrategyImprovementEngine } = await import('../../agent/self-improvement/strategy-engine.js');
+      const { HeuristicStrategyProposer } = await import('../../agent/self-improvement/strategy-proposer.js');
+      const { STRATEGY_SCOPES } = await import('../../agent/self-improvement/strategy-types.js');
+      const scope = (STRATEGY_SCOPES as readonly string[]).includes(options.scope ?? '')
+        ? (options.scope as (typeof STRATEGY_SCOPES)[number])
+        : 'headless';
+      const experiences = [...(await collectExperiences()), ...(await readExperiencesFile(options.experiences))];
+      const engine = new StrategyImprovementEngine({
+        scope,
+        proposer: new HeuristicStrategyProposer(),
+        ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
+      });
+      const before = engine.activeStrategy;
+      const r = await engine.runCycle(experiences);
+      const paired = r.gate?.paired ? ` wins=${r.gate.paired.wins} losses=${r.gate.paired.losses} ties=${r.gate.paired.ties} P=${r.gate.paired.pImprove.toFixed(3)} (${r.gate.paired.evidence})` : '';
+      const text = [
+        `Autonomy: ${r.autonomy} · scope: ${scope} · experiences: ${experiences.length}`,
+        `Active before: ${before.id} (rounds ${before.limits.maxToolRounds}, cost $${before.limits.maxCostUsd}, ${before.directives.length} directive(s))`,
+        r.candidate
+          ? `Candidate: ${r.candidate.id} — ${r.rationale ?? ''} → rounds ${r.candidate.limits.maxToolRounds}, cost $${r.candidate.limits.maxCostUsd}, ${r.candidate.directives.length} directive(s)`
+          : `Candidate: none — ${r.notes.join('; ')}`,
+        r.gate
+          ? r.applied
+            ? `Gate: ACCEPTED + INSTALLED (${r.gate.appliedRef})${paired}`
+            : r.gate.accepted
+              ? `Gate: accepted (propose-only) — re-run with --apply to install${paired}`
+              : `Gate: rejected (${r.gate.rejectionReason})${paired} — ${r.gate.reasons.join('; ')}`
+          : '',
+        `Active after: ${engine.activeStrategy.id}`,
+      ].filter(Boolean).join('\n');
+      print({ kind: 'self_improvement_strategies', cycle: r }, options, text);
+    });
+
+  improve
+    .command('strategies-list')
+    .description('List stored execution strategies and which one is active per scope')
+    .option('--json', 'output JSON')
+    .action(async (options: ImproveOptions) => {
+      const { StrategyStore } = await import('../../agent/self-improvement/strategy-store.js');
+      const { STRATEGY_SCOPES } = await import('../../agent/self-improvement/strategy-types.js');
+      const store = new StrategyStore();
+      const strategies = store.list();
+      const active = Object.fromEntries(STRATEGY_SCOPES.map((s) => [s, store.activeId(s)]));
+      const text = [
+        `Stored: ${strategies.length} (under ${store.dir})`,
+        ...strategies.map((s) => `  ${s.id} v${s.version} ← ${s.parentId ?? '—'} [${s.scope}] rounds ${s.limits.maxToolRounds} cost $${s.limits.maxCostUsd} ${s.reasoning} tests:${s.verification.testsForTouchedFiles ? 'yes' : 'no'} commit:${s.verification.commitPerStep ? 'yes' : 'no'} directives:${s.directives.length} (${s.provenance.source}${s.provenance.operator ? `/${s.provenance.operator}` : ''})`),
+        'Active: ' + STRATEGY_SCOPES.map((s) => `${s}=${active[s]}`).join(' '),
+      ].join('\n');
+      print({ kind: 'self_improvement_strategies_list', strategies, active }, options, text);
     });
 
   improve

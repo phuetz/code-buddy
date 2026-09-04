@@ -10,11 +10,12 @@
 
 import { createHash } from 'crypto';
 import { parseRunFacts } from './strategy-replay.js';
-import { STRATEGY_LIMITS, type StrategyProposal, type StrategySpec } from './strategy-types.js';
+import { STRATEGY_LIMITS, type StrategyProposal, type StrategyScope, type StrategySpec } from './strategy-types.js';
 import type { Experience } from './types.js';
 
 export interface StrategyProposer {
-  propose(parent: StrategySpec, experiences: Experience[]): Promise<StrategyProposal | null>;
+  /** `scope` is the scope the candidate must target (a child of the scope-less baseline inherits it). */
+  propose(parent: StrategySpec, experiences: Experience[], scope?: StrategyScope): Promise<StrategyProposal | null>;
 }
 
 export const DIRECTIVES = {
@@ -91,20 +92,22 @@ export function dominantFailure(experiences: Experience[]): { key: string; count
 export class HeuristicStrategyProposer implements StrategyProposer {
   constructor(private readonly now: () => Date = () => new Date()) {}
 
-  async propose(parent: StrategySpec, experiences: Experience[]): Promise<StrategyProposal | null> {
+  async propose(parent: StrategySpec, experiences: Experience[], scope?: StrategyScope): Promise<StrategyProposal | null> {
     const dominant = dominantFailure(experiences);
     if (!dominant) return null;
     const operator = OPERATORS[dominant.key];
     if (!operator || !operator.applies(parent)) return null;
     const version = parent.version + 1;
-    const hash = createHash('sha256').update(`${parent.id}:${operator.name}:${version}`).digest('hex').slice(0, 6);
-    const id = `strat-${parent.scope}-v${version}-${hash}`;
+    const targetScope = scope ?? parent.scope;
+    const hash = createHash('sha256').update(`${parent.id}:${operator.name}:${version}:${targetScope}`).digest('hex').slice(0, 6);
+    const id = `strat-${targetScope}-v${version}-${hash}`;
     const candidate: StrategySpec = {
       ...parent,
       ...operator.mutate(parent),
       id,
       version,
       parentId: parent.id,
+      scope: targetScope,
       provenance: {
         source: 'heuristic',
         experienceIds: dominant.ids.slice(0, 50),

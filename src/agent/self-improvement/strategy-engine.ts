@@ -83,7 +83,7 @@ export class StrategyImprovementEngine {
     };
     let proposal: StrategyProposal | null = null;
     try {
-      proposal = await this.proposer.propose(parent, experiences);
+      proposal = await this.proposer.propose(parent, experiences, this.scope);
     } catch (error) {
       return { ...base, proposalId: null, candidate: null, rationale: null, gate: null, applied: false, notes: [`proposer failed: ${error instanceof Error ? error.message : String(error)}`] };
     }
@@ -96,7 +96,7 @@ export class StrategyImprovementEngine {
       parent,
       this.evaluatorFactory(experiences),
       this.store,
-      { ...this.gateOptions, keepOnAccept },
+      { ...this.gateOptions, keepOnAccept, scope: this.scope },
     );
     const applied = gate.accepted && !!gate.appliedRef;
     if (applied) {

@@ -21,6 +21,7 @@ import {
   type StrategyEvaluation,
   type StrategyGateOutcome,
   type StrategyProposal,
+  type StrategyScope,
   type StrategySpec,
 } from './strategy-types.js';
 
@@ -37,6 +38,8 @@ export interface ValidateStrategyOptions {
   maxCostRatio?: number;
   /** Minimum decisive pairs before an accept is even considered (default 3). */
   minDecisive?: number;
+  /** Scope the candidate must target (the engine's scope); defaults to the parent's. */
+  scope?: StrategyScope;
 }
 
 /**
@@ -101,7 +104,10 @@ export async function validateStrategyProposal(
   const lineage: string[] = [];
   if (candidate.parentId !== parent.id) lineage.push(`parentId ${candidate.parentId ?? '<none>'} ≠ ${parent.id}`);
   if (candidate.version !== parent.version + 1) lineage.push(`version ${candidate.version} ≠ ${parent.version + 1}`);
-  if (candidate.scope !== parent.scope && parent.id !== 'baseline') lineage.push(`scope ${candidate.scope} ≠ ${parent.scope}`);
+  const expectedScope = options.scope ?? parent.scope;
+  if (candidate.scope !== expectedScope && !(parent.id === 'baseline' && !options.scope)) {
+    lineage.push(`scope ${candidate.scope} ≠ ${expectedScope}`);
+  }
   if (candidate.id === parent.id || store.has(candidate.id)) lineage.push(`id ${candidate.id} already exists`);
   if (lineage.length > 0) return reject('lineage', lineage);
 

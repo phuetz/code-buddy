@@ -132,6 +132,23 @@ async function defaultSelfImproveHook(): Promise<{ applied: boolean; detail: str
     if (r.applied) return { applied: true, detail: `authored skill ${r.gate?.appliedRef}` };
   }
 
+  // Then the execution strategy — only when the strategy layer itself is opted in
+  // (CODEBUDDY_SELF_IMPROVE_STRATEGIES), since an installed strategy changes how
+  // headless runs execute. Replay-gated on the recent runs' facts; $0.
+  const { strategiesEnabled } = await import('../agent/self-improvement/strategy-runtime.js');
+  if (strategiesEnabled()) {
+    const { StrategyImprovementEngine } = await import('../agent/self-improvement/strategy-engine.js');
+    const { HeuristicStrategyProposer } = await import('../agent/self-improvement/strategy-proposer.js');
+    const { createDefaultRunExperienceSource } = await import('../agent/self-improvement/experience-source.js');
+    const experiences = await createDefaultRunExperienceSource({ limit: 20 }).collect().catch(() => []);
+    const r = await new StrategyImprovementEngine({
+      scope: 'headless',
+      proposer: new HeuristicStrategyProposer(),
+      autonomy: 'auto-apply',
+    }).runCycle(experiences);
+    if (r.applied) return { applied: true, detail: `evolved execution strategy ${r.gate?.appliedRef}` };
+  }
+
   return { applied: false, detail: 'all seed tool + skill scenarios already covered (or no proposal)' };
 }
 
