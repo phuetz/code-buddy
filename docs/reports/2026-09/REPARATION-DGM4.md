@@ -75,3 +75,4 @@ tests verts ; suite complète self-improvement = 34 fichiers / 243 tests verts.
 - `7552f7489` R2 : pénalité de descendance et sélection pondérée.
 - `9e20204c7` garde-fou de placement des imports.
 - `2f51c3a7e` scénario d’intégration et preuve de rotation.
+- `9f67cd366` preuves finales et passation Fable 5.
