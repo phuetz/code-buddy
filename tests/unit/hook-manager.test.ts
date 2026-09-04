@@ -29,6 +29,15 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock child_process
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -143,7 +152,8 @@ describe('HookManager', () => {
 
     // Default fs mock returns - no config files exist
     mockFs.existsSync.mockReturnValue(false);
-    mockFs.readJsonSync.mockReturnValue({ hooks: [] });
+    mockReadJsonAtomicSync.mockReset().mockReturnValue({ hooks: [] });
+    mockWriteJsonAtomicSync.mockReset();
 
     // Reset singleton by creating new instance
     jest.resetModules();
@@ -176,7 +186,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === globalPath
       );
-      mockFs.readJsonSync.mockReturnValue(globalHooks);
+      mockReadJsonAtomicSync.mockReturnValue(globalHooks);
 
       manager = new HookManager();
 
@@ -196,7 +206,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === projectPath
       );
-      mockFs.readJsonSync.mockReturnValue(projectHooks);
+      mockReadJsonAtomicSync.mockReturnValue(projectHooks);
 
       manager = new HookManager();
 
@@ -215,7 +225,7 @@ describe('HookManager', () => {
       };
 
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync
+      mockReadJsonAtomicSync
         .mockReturnValueOnce(globalHooks)  // First call for global
         .mockReturnValueOnce(projectHooks); // Second call for project
 
@@ -227,7 +237,7 @@ describe('HookManager', () => {
 
     it('should handle missing hooks array in config gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockReturnValue({}); // Empty config without hooks array
+      mockReadJsonAtomicSync.mockReturnValue({}); // Empty config without hooks array
 
       manager = new HookManager();
 
@@ -240,7 +250,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === globalPath
       );
-      mockFs.readJsonSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('Invalid JSON');
       });
 
@@ -256,7 +266,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === projectPath
       );
-      mockFs.readJsonSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('Parse error');
       });
 
@@ -317,11 +327,10 @@ describe('HookManager', () => {
 
       manager.addHook(hook);
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         path.join('/test/project', '.codebuddy', 'hooks.json'),
         { hooks: [hook] },
-        { spaces: 2 }
+        { mode: 0o600 }
       );
     });
 
@@ -358,11 +367,11 @@ describe('HookManager', () => {
 
       manager.removeHook(0);
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
 
     it('should handle save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
 
@@ -469,7 +478,7 @@ describe('HookManager', () => {
       };
 
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockReturnValue(newConfig);
+      mockReadJsonAtomicSync.mockReturnValue(newConfig);
 
       manager.reloadHooks();
 

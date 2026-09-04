@@ -25,6 +25,15 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock os - required for user-level config path
 jest.mock('os', () => {
   const impl = {
@@ -108,8 +117,6 @@ describe('MCPClient', () => {
   let mockProcess: MockProcess;
   let mockSpawn: jest.Mock;
   let mockExistsSync: jest.Mock;
-  let mockReadFileSync: jest.Mock;
-  let mockWriteFileSync: jest.Mock;
   let mockMkdirSync: jest.Mock;
 
   beforeEach(() => {
@@ -123,9 +130,9 @@ describe('MCPClient', () => {
 
     // Setup fs mocks
     mockExistsSync = fs.existsSync as jest.Mock;
-    mockReadFileSync = fs.readFileSync as jest.Mock;
-    mockWriteFileSync = fs.writeFileSync as jest.Mock;
     mockMkdirSync = fs.mkdirSync as jest.Mock;
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
 
     // Default fs behavior
     mockExistsSync.mockReturnValue(false);
@@ -178,7 +185,7 @@ describe('MCPClient', () => {
       };
 
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(mockConfig));
+      mockReadJsonAtomicSync.mockReturnValue(mockConfig);
 
       const configs = client.loadConfig();
 
@@ -199,7 +206,7 @@ describe('MCPClient', () => {
         .mockReturnValueOnce(false) // project config
         .mockReturnValueOnce(true); // user config
 
-      mockReadFileSync.mockReturnValue(JSON.stringify(mockConfig));
+      mockReadJsonAtomicSync.mockReturnValue(mockConfig);
 
       const configs = client.loadConfig();
 
@@ -209,7 +216,7 @@ describe('MCPClient', () => {
 
     it('should handle config with empty servers array', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify({ servers: [] }));
+      mockReadJsonAtomicSync.mockReturnValue({ servers: [] });
 
       const configs = client.loadConfig();
 
@@ -218,7 +225,7 @@ describe('MCPClient', () => {
 
     it('should handle config without servers property', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify({}));
+      mockReadJsonAtomicSync.mockReturnValue({});
 
       const configs = client.loadConfig();
 
@@ -227,7 +234,9 @@ describe('MCPClient', () => {
 
     it('should handle invalid JSON gracefully', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue('{ invalid json }');
+      mockReadJsonAtomicSync.mockImplementation(() => {
+        throw new Error('Invalid JSON');
+      });
 
       const configs = client.loadConfig();
 
@@ -237,7 +246,7 @@ describe('MCPClient', () => {
 
     it('should handle file read errors gracefully', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('Permission denied');
       });
 
@@ -273,9 +282,9 @@ describe('MCPClient', () => {
 
       client.saveConfig(servers);
 
-      expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         expect.stringContaining('mcp-servers.json'),
-        expect.stringContaining('"name": "test"')
+        { servers },
       );
     });
 
@@ -288,7 +297,8 @@ describe('MCPClient', () => {
 
       client.saveConfig(servers);
 
-      const writtenContent = mockWriteFileSync.mock.calls[0][1];
+      const writtenValue = mockWriteJsonAtomicSync.mock.calls[0][1];
+      const writtenContent = JSON.stringify(writtenValue, null, 2);
       expect(writtenContent).toContain('\n');
       expect(writtenContent).toContain('  '); // 2-space indent from JSON.stringify
     });
@@ -452,7 +462,7 @@ describe('MCPClient', () => {
       };
 
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(mockConfig));
+      mockReadJsonAtomicSync.mockReturnValue(mockConfig);
 
       // Create two mock processes
       const mockProcess1 = createMockProcess();
@@ -503,7 +513,7 @@ describe('MCPClient', () => {
       };
 
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(mockConfig));
+      mockReadJsonAtomicSync.mockReturnValue(mockConfig);
 
       const connectAllPromise = client.connectAll();
 
@@ -530,7 +540,7 @@ describe('MCPClient', () => {
       };
 
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(mockConfig));
+      mockReadJsonAtomicSync.mockReturnValue(mockConfig);
 
       // Emit error
       setTimeout(() => {

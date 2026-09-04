@@ -576,9 +576,17 @@ export class DMPairingManager extends EventEmitter {
     for (const file of files) {
       if (!file.endsWith('-allowFrom.json')) continue;
       const filePath = path.join(this.config.allowlistPath, file);
-      const senders = await readJsonAtomic<ApprovedSender[]>(filePath, [], {
+      const senders = await readJsonAtomic<ApprovedSender[] | null>(filePath, null, {
         isValid: (value): value is ApprovedSender[] => Array.isArray(value),
       });
+      if (senders === null) {
+        const error = new Error(`Allowlist file is unreadable: ${filePath}`);
+        logger.warn('Corrupt DM pairing allowlist file', {
+          path: filePath,
+          error: error.message,
+        });
+        throw error;
+      }
       for (const sender of senders) {
         if (!isApprovedSenderEntry(sender)) {
           const error = new Error(`Allowlist entry is invalid: ${filePath}`);

@@ -7,6 +7,7 @@ import type { DoctorCheck, FixResult } from '../../src/doctor/index.js';
 // Mock external commands so doctor checks don't depend on system state
 vi.mock('child_process', () => ({
   execSync: vi.fn(() => ''),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
 
 vi.mock('../../src/utils/logger.js', () => ({

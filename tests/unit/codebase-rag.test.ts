@@ -33,6 +33,12 @@ jest.mock('fs', async () => {
   return { ...impl, default: impl };
 });
 
+const mockWriteJsonAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/utils/atomic-write.js')>()),
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
+
 // Mock path
 jest.mock('path', async () => {
   const originalPath = await vi.importActual('path');
@@ -467,7 +473,7 @@ describe('CodebaseRAG', () => {
       await ragWithPath.indexFile('/test/file.ts');
       await ragWithPath.saveIndex();
 
-      expect(fsPromises.writeFile).toHaveBeenCalled();
+      expect(mockWriteJsonAtomic).toHaveBeenCalled();
       await ragWithPath.dispose();
     });
   });
