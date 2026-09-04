@@ -1,5 +1,20 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### GF3 — PRIV2 relu hunk par hunk : trois régressions fermées (4 septembre 2026)
+
+Une revue en lecture seule (Claude opus) des 169 hunks de code et de tests
+touchés par PRIV2 en classe 97 tests cohérents, 28 doc, 43 valeurs exécutées
+dont trois régressions réelles, toutes fermées : le miroir des actifs refuse
+de démarrer si sa destination par défaut n'existe pas et que `MIROIR_DEST`
+n'est pas posé (au lieu de recopier 40 Go dans un arbre neuf) ; les motifs de
+spoke A2A « toujours allumé » se configurent par `CODEBUDDY_A2A_ALWAYS_ON_SPOKES`
+(un nom de machine en dur ne survit pas à une substitution) ; l'unité modèle
+`codebuddy-flow-daily` refuse de démarrer sans `FLOW_PROJECT_URL`
+(`~/.codebuddy/flow.env`) au lieu de viser un projet vide. Restent : la clé
+`capacity.localGpu` sans alias de l'ancien nom (appels privés à mettre à jour) et
+dix témoins du garde-fou données personnelles à restaurer (lane PRIV3).
+Rapport : `docs/reports/2026-09/RAPPORT-GF3.md`.
+
 ### IMPROVE2 — les trois ouverts d'IMPROVE1 (4 septembre 2026)
 
 `CODEBUDDY_MAX_CONTEXT` est enfin honoré par Ollama : le serveur ignore
