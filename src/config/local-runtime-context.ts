@@ -4,9 +4,9 @@
  * Local runtimes (Ollama, LM Studio, vLLM) expose what they actually serve;
  * hosted OpenAI-compatible gateways (OpenRouter, GMI Cloud, Together, vLLM
  * behind a domain…) publish a `context_length` in their `/v1/models`
- * catalogue. Both feed the same synchronous cache, so a model reached through
- * a gateway gets the context window the gateway actually serves instead of the
- * 32 768 fallback that truncated its system prompt to 14 336 tokens.
+ * catalogue. Both feed the same synchronous cache, while the cache retains
+ * which source supplied the value so a hosted placeholder cannot override a
+ * nominative declaration.
  *
  * Network I/O stays out of `getModelToolConfig()` itself: startup awaits this
  * probe once, then primes the synchronous model-config cache. Every error is a
@@ -262,6 +262,11 @@ function containsTrueBoolean(value: unknown): boolean {
   return record !== null && Object.values(record).some(containsTrueBoolean);
 }
 
+function hasUsableCatalogCapabilities(value: unknown): boolean {
+  const capabilities = asRecord(value);
+  return capabilities !== null && Object.values(capabilities).some(containsTrueBoolean);
+}
+
 function findModelRecord(value: unknown, model: string): Record<string, unknown> | null {
   const candidates = responseModels(value).map(asRecord).filter((entry): entry is Record<string, unknown> => entry !== null);
   return candidates.find((entry) => sameModel(entry.id, model)
@@ -409,7 +414,7 @@ async function probeCatalog(
     if (record) break;
   }
   if (!record) return null;
-  if (!containsTrueBoolean(record.capabilities)) {
+  if (!hasUsableCatalogCapabilities(record.capabilities)) {
     logger.debug('Ignoring hosted catalogue entry without usable capabilities', {
       model,
       reason: 'capabilities missing or all false',

@@ -262,6 +262,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // qui en tient un million. Fenêtres = valeurs publiées par les catalogues OpenRouter
   // (`context_length` / `top_provider.context_length`) et GMI, relevées le 02/09/2026, en prenant
   // le plus petit des fournisseurs quand ils divergent. Un catalogue qui publie moins l'emporte
+  // pour une estimation de famille ; une déclaration nominative reste prioritaire
   // (découverte `/v1/models`, voir local-runtime-context.ts).
   {
     model: 'kimi-k3*',
