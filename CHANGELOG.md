@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### MODELLABEL1 — en headless, le JSON annonce le modèle qui a vraiment répondu (4 septembre 2026)
+
+`buddy -m gpt-6-astra -p …` rendait `"model":"gpt-6-astra"` alors que le provider ChatGPT avait
+remplacé en silence par `gpt-5.6-sol` (avertissement visible seulement sous `VERBOSE`). Le
+provider mémorise désormais le modèle réellement envoyé, le client le lit aussi sur le chemin
+streaming (celui du headless), la sortie JSON porte `model` = effectif et `requestedModel`
+quand ils diffèrent, et le repli est annoncé une fois sur stderr sans mode verbeux. Première
+mission confiée à Mistral Vibe (abonnement Pro, 0 $) — livrée sans commit ni preuve, complétée
+par le pilote. Rapport : `docs/reports/2026-09/REPARATION-MODELLABEL1.md`.
+
 ### CIFIX1 — la CI de `main` : les deux familles encore rouges partout (4 septembre 2026)
 
 Le balayage d'installation (`scripts/balayage-installation.sh`) résout `node`, `npm`, `env` et
