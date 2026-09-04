@@ -30,6 +30,7 @@ import {
   createDefaultRunExperienceSource,
   createDefaultSensorExperienceSource,
   createDefaultEvolutionNotesExperienceSource,
+  createDefaultDelegationLogsExperienceSource,
 } from '../../agent/self-improvement/experience-source.js';
 import { CorpusStore } from '../../agent/self-improvement/rule-store.js';
 import { summarizeTrajectory } from '../../agent/self-improvement/execution-gate.js';
@@ -49,6 +50,7 @@ async function collectExperiences(): Promise<Experience[]> {
     createDefaultRunExperienceSource({ limit: 10 }),
     createDefaultSensorExperienceSource({ limit: 10 }),
     createDefaultEvolutionNotesExperienceSource({ workDir: process.cwd(), limit: 10 }),
+    createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 10 }),
   ];
   const collected = await Promise.all(
     sources.map(async (source) => {
@@ -95,6 +97,7 @@ interface ImproveOptions {
   fail?: boolean;
   /** skills-consolidate: use this SKILL.md as the umbrella instead of calling an LLM. */
   proposalFile?: string;
+  scenario?: string;
 }
 
 interface ImproveBenchOptions extends ImproveOptions {
@@ -381,13 +384,17 @@ export function registerImproveCommands(program: Command): void {
     .description('Author + behaviorally validate NEW tools for the agent (held-out gated, anti-gaming)')
     .option('--json', 'output JSON')
     .option('--apply', 'keep validated tools for this session (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('tools')) return;
       const { ToolImprovementEngine } = await import('../../agent/self-improvement/tool-engine.js');
       const { LlmToolProposer } = await import('../../agent/self-improvement/llm-tool-proposer.js');
       const { SEED_TOOL_SCENARIOS } = await import('../../agent/self-improvement/tool-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_TOOL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_TOOL_SCENARIOS;
       const engine = new ToolImprovementEngine({
-        scenarios: SEED_TOOL_SCENARIOS,
+        scenarios,
         proposer: new LlmToolProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });
@@ -420,13 +427,17 @@ export function registerImproveCommands(program: Command): void {
     .description('Author + safety-gate NEW skills for the agent (firewall + coverage)')
     .option('--json', 'output JSON')
     .option('--apply', 'install validated skills (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('skills')) return;
       const { SkillImprovementEngine } = await import('../../agent/self-improvement/skill-engine.js');
       const { LlmSkillProposer } = await import('../../agent/self-improvement/skill-proposer.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_SKILL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_SKILL_SCENARIOS;
       const engine = new SkillImprovementEngine({
-        scenarios: SEED_SKILL_SCENARIOS,
+        scenarios,
         proposer: new LlmSkillProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });

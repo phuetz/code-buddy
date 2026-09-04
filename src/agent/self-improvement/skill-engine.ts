@@ -46,6 +46,7 @@ export class SkillImprovementEngine {
   private readonly now: () => Date;
   private readonly proposals: PendingProposalStore;
   private readonly covered = new Set<string>();
+  private readonly attempted = new Set<string>();
 
   constructor(options: SkillImprovementEngineOptions) {
     this.scenarios = options.scenarios;
@@ -62,7 +63,7 @@ export class SkillImprovementEngine {
     const base = { kind: 'skill_improvement_cycle' as const, startedAt, autonomy: this.autonomy };
 
     for (const scenario of this.scenarios) {
-      if (this.covered.has(scenario.id)) continue;
+      if (this.covered.has(scenario.id) || this.attempted.has(scenario.id)) continue;
 
       if (this.autonomy === 'auto-apply') {
         const pending = this.proposals.loadSkill(scenario.id);
@@ -74,9 +75,13 @@ export class SkillImprovementEngine {
       }
 
       const proposal = await this.proposer.propose(scenario);
-      if (!proposal) continue;
+      if (!proposal) {
+        this.attempted.add(scenario.id);
+        continue;
+      }
       if (this.mutator.has(proposal.spec.name)) {
         this.covered.add(scenario.id);
+        this.attempted.add(scenario.id);
         continue;
       }
 
@@ -99,7 +104,7 @@ export class SkillImprovementEngine {
     for (let i = 0; i < cap; i++) {
       const r = await this.runCycle();
       results.push(r);
-      if (!r.applied) break;
+      if (!r.selectedScenarioId) break;
     }
     return results;
   }
@@ -110,6 +115,7 @@ export class SkillImprovementEngine {
     proposal: SkillProposal,
     keepOnAccept: boolean,
   ): SkillCycleResult {
+    this.attempted.add(scenario.id);
     const gate = validateSkillProposal(proposal, scenario, this.mutator, { keepOnAccept });
     const applied = gate.accepted && !!gate.appliedRef;
 
