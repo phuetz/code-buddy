@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DOCTOR1 — `buddy doctor --fix` choisit un modèle Ollama et le justifie (4 septembre 2026)
+
+`--fix` écrivait le premier modèle listé (un `rag` de 15 Go). Il choisit désormais
+parmi les modèles installés selon un critère explicite — appel d'outils supporté,
+taille compatible avec la RAM libre, famille instruct/coder, jamais `embed`/`rag`/
+vision seule — et dit pourquoi en une ligne ; sans candidat, il le dit au lieu
+d'écrire un choix. `/batch` (sous-agents multiplexés, `CODEBUDDY_BATCH_CONCURRENCY`)
+et `buddy improve` (opt-in `CODEBUDDY_SELF_IMPROVE`, `propose-only` par défaut)
+entrent dans `README.md` et `docs/getting-started.md`, avec un test de présence.
+Rapport : `docs/reports/2026-09/REPARATION-DOCTOR1.md`.
+
 ### GF3 — PRIV2 relu hunk par hunk : trois régressions fermées (4 septembre 2026)
 
 Une revue en lecture seule (Claude opus) des 169 hunks de code et de tests
