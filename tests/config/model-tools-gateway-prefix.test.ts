@@ -84,9 +84,9 @@ describe('gateway-prefixed models resolve to their open-weights family', () => {
 
 describe('discovered context vs declared context', () => {
   it('a catalogue value REPLACES a family estimate, in both directions', () => {
-    cacheRuntimeModelContextWindow('moonshotai/kimi-k3', 262_144);
+    cacheRuntimeModelContextWindow('moonshotai/kimi-k3', 262_144, 'catalog');
     expect(getModelToolConfig('moonshotai/kimi-k3').contextWindow).toBe(262_144);
-    cacheRuntimeModelContextWindow('z-ai/glm-5', 400_000);
+    cacheRuntimeModelContextWindow('z-ai/glm-5', 400_000, 'catalog');
     expect(getModelToolConfig('z-ai/glm-5').contextWindow).toBe(400_000);
   });
 

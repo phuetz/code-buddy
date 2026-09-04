@@ -262,6 +262,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // qui en tient un million. Fenêtres = valeurs publiées par les catalogues OpenRouter
   // (`context_length` / `top_provider.context_length`) et GMI, relevées le 02/09/2026, en prenant
   // le plus petit des fournisseurs quand ils divergent. Un catalogue qui publie moins l'emporte
+  // pour une estimation de famille ; une déclaration nominative reste prioritaire
   // (découverte `/v1/models`, voir local-runtime-context.ts).
   {
     model: 'kimi-k3*',
@@ -1161,7 +1162,14 @@ function matchModel(modelName: string, pattern: string): boolean {
  * Results are cached per model name (when no custom configs are provided).
  */
 const _configCache = new Map<string, ModelToolConfig>();
-const _runtimeContextWindows = new Map<string, number>();
+export type RuntimeContextSource = 'local' | 'catalog';
+
+interface RuntimeContextCacheEntry {
+  contextWindow: number;
+  source: RuntimeContextSource;
+}
+
+const _runtimeContextWindows = new Map<string, RuntimeContextCacheEntry>();
 
 function modelCacheKey(modelName: string): string {
   return modelName.trim().toLowerCase();
@@ -1172,8 +1180,8 @@ function applyRuntimeContextWindow(
   config: ModelToolConfig,
   byFamily = false,
 ): ModelToolConfig {
-  const runtimeContextWindow = _runtimeContextWindows.get(modelCacheKey(modelName));
-  if (runtimeContextWindow === undefined) return config;
+  const runtimeContext = _runtimeContextWindows.get(modelCacheKey(modelName));
+  if (runtimeContext === undefined) return config;
 
   // A declaration matched on the FULL name is an intentional ceiling, not merely
   // documentation. The runtime can reveal that less context is actually served,
@@ -1181,9 +1189,17 @@ function applyRuntimeContextWindow(
   // conservative Gemma profiles above). A FAMILY match (bare name, see
   // `bareModelName`) is only an estimate of the weights: what the serving
   // catalogue publishes for this exact model replaces it, in both directions.
+  // Hosted catalogues are not runtime truth for a nominative declaration:
+  // providers occasionally publish placeholder metadata (for example a
+  // catalogue entry that reports 32k while the named model is documented at
+  // 128k). A local runtime still measures the context it actually serves and
+  // may lower the nominative declaration.
+  if (runtimeContext.source === 'catalog' && !byFamily && config.contextWindow !== undefined) {
+    return config;
+  }
   const contextWindow = config.contextWindow === undefined || byFamily
-    ? runtimeContextWindow
-    : Math.min(config.contextWindow, runtimeContextWindow);
+    ? runtimeContext.contextWindow
+    : Math.min(config.contextWindow, runtimeContext.contextWindow);
   return contextWindow === config.contextWindow ? config : { ...config, contextWindow };
 }
 
@@ -1201,15 +1217,20 @@ function applyEnvContextOverride(config: ModelToolConfig): ModelToolConfig {
 }
 
 /**
- * Prime the synchronous hot-path cache with a limit measured asynchronously
- * from a local runtime. Invalid values are ignored so discovery stays
- * fail-open.
+ * Prime the synchronous hot-path cache with a limit measured asynchronously.
+ * Invalid values are ignored so discovery stays fail-open. Direct callers
+ * default to `local` for backwards compatibility; catalogue probes pass their
+ * source explicitly from `local-runtime-context.ts`.
  */
-export function cacheRuntimeModelContextWindow(modelName: string, contextWindow: number): void {
+export function cacheRuntimeModelContextWindow(
+  modelName: string,
+  contextWindow: number,
+  source: RuntimeContextSource = 'local',
+): void {
   if (!modelName.trim() || !Number.isSafeInteger(contextWindow) || contextWindow <= 0) return;
 
   const normalizedModel = modelCacheKey(modelName);
-  _runtimeContextWindows.set(normalizedModel, contextWindow);
+  _runtimeContextWindows.set(normalizedModel, { contextWindow, source });
   for (const cachedModel of _configCache.keys()) {
     if (modelCacheKey(cachedModel) === normalizedModel) _configCache.delete(cachedModel);
   }
@@ -1267,7 +1288,7 @@ export function getModelToolConfig(
     supportsReasoning: false,
     supportsToolCalls: true,
     supportsVision: false,
-    contextWindow: _runtimeContextWindows.get(modelCacheKey(modelName)) ?? 32768,
+    contextWindow: _runtimeContextWindows.get(modelCacheKey(modelName))?.contextWindow ?? 32768,
     maxOutputTokens: 4096,
     patchFormat: 'search_replace',
   };
