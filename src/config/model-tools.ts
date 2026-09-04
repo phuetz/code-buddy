@@ -396,6 +396,29 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
   {
+    // Mistral Medium 3.x (`mistral-medium-latest` = 3.5 au 04/09/2026) : 128k de contexte
+    // documentés ; le motif famille `mistral*` (32k) tronquait le prompt système à 14k jetons.
+    model: 'mistral-medium*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 128000,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['french'],
+  },
+  {
+    // Codestral 25.08 : 256k de contexte documentés.
+    model: 'codestral*',
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 256000,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+    strengths: ['code', 'long-context'],
+  },
+  {
     model: 'mistral-large*',
     supportsReasoning: false,
     supportsToolCalls: true,

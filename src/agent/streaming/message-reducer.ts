@@ -7,6 +7,37 @@
  */
 
 /**
+ * Providers that stream structured content parts (Mistral Medium 3.5 sends
+ * `content: [{ type: 'thinking', thinking: [{ type: 'text', text }] }, …]`,
+ * OpenAI-style multimodal replies send `[{ type: 'text', text }]`) must not go
+ * through the generic by-index array merge: that merge concatenates every
+ * string field of every chunk — the `type` field included ("thinkingthinking…")
+ * — and leaves `content` as an array that the executor then `.trim()`s
+ * (measured on 2026-09-04: "(accumulatedMessage.content || '').trim is not a
+ * function"). Flatten instead: text parts append to `content`, thinking parts
+ * append to `reasoning_content`, anything else is ignored.
+ */
+function appendContentParts(acc: Record<string, unknown>, parts: unknown[]): void {
+  const collect = (items: unknown[], into: 'content' | 'reasoning_content'): void => {
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const part = item as Record<string, unknown>;
+      if (part.type === 'thinking' || part.type === 'reasoning') {
+        const nested = part.thinking ?? part.reasoning;
+        if (Array.isArray(nested)) collect(nested, 'reasoning_content');
+        else if (typeof nested === 'string') acc.reasoning_content = `${(acc.reasoning_content as string | undefined) ?? ''}${nested}`;
+        continue;
+      }
+      if (typeof part.text === 'string') {
+        const previous = typeof acc[into] === 'string' ? (acc[into] as string) : '';
+        acc[into] = previous + part.text;
+      }
+    }
+  };
+  collect(parts, 'content');
+}
+
+/**
  * Reduces a new streaming chunk into the previous accumulated message.
  *
  * @param previous - The previously accumulated message state
@@ -26,6 +57,10 @@ export function reduceStreamChunk(
     acc = { ...acc };
     
     for (const [key, value] of Object.entries(delta)) {
+      if (key === 'content' && Array.isArray(value)) {
+        appendContentParts(acc, value);
+        continue;
+      }
       if (Array.isArray(value)) {
         // Always merge arrays element-by-element via the delta element's own
         // `index` field (tool_calls), never as a positional direct-assign —
