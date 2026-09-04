@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { SEED_BENCHMARK_SCENARIOS } from '../../../src/agent/self-improvement/capability-benchmark.js';
 import type { LessonMutatorPort } from '../../../src/agent/self-improvement/empirical-gate.js';
 import { SelfImprovementEngine } from '../../../src/agent/self-improvement/engine.js';
 import { EvolutionaryArchive } from '../../../src/agent/self-improvement/evolutionary-archive.js';
@@ -114,5 +113,35 @@ describe('LlmProposer (creative generation, deterministic empirical gate)', () =
     const result = await engine.runCycle();
     expect(result.proposalId).toBeNull();
     expect(result.applied).toBe(false);
+  });
+
+  it('selects LlmProposer when CODEBUDDY_SELF_IMPROVE_PROPOSER=llm is set', async () => {
+    const { createWorkspaceEngine } = await import('../../../src/agent/self-improvement/index.js');
+    const { StaticProposer } = await import('../../../src/agent/self-improvement/proposer.js');
+
+    const origEnv = process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER;
+    try {
+      delete process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER;
+      const defaultEngine = createWorkspaceEngine({ workDir: process.cwd() });
+      expect((defaultEngine as unknown as { proposer: unknown }).proposer instanceof StaticProposer).toBe(true);
+
+      process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER = 'llm';
+      const llmEngine = createWorkspaceEngine({ workDir: process.cwd() });
+      expect((llmEngine as unknown as { proposer: unknown }).proposer instanceof LlmProposer).toBe(true);
+    } finally {
+      if (origEnv !== undefined) {
+        process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER = origEnv;
+      } else {
+        delete process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER;
+      }
+    }
+  });
+
+  it('createLlmDrafter handles unconfigured providers gracefully without throwing', async () => {
+    const { createLlmDrafter } = await import('../../../src/agent/self-improvement/llm-drafter.js');
+    const drafter = createLlmDrafter();
+    const result = await drafter(ONE[0]!, []);
+    // Without an active provider configured in unit tests, gracefully returns null
+    expect(result).toBeNull();
   });
 });
