@@ -10,6 +10,12 @@ import {
 } from '../../../src/agent/self-improvement/proposer.js';
 import type { BenchmarkScenario } from '../../../src/agent/self-improvement/types.js';
 
+// Hermétique : sans ces mocks, createLlmDrafter() résolvait le VRAI fournisseur de la machine
+// (ChatGPT OAuth) et appelait un modèle en test unitaire — vert dans un clone au HOME vierge,
+// rouge (et payant en temps) sur la machine de l'auteur (04/09/2026).
+vi.mock('../../../src/commands/llm-provider-resolution.js', () => ({ resolveCommandProvider: () => undefined }));
+vi.mock('../../../src/utils/provider-detector.js', () => ({ detectProviderFromEnv: () => null }));
+
 function fakePort(): LessonMutatorPort & { items: Array<{ id: string; content: string; context?: string }> } {
   const items: Array<{ id: string; content: string; context?: string }> = [];
   let n = 0;
