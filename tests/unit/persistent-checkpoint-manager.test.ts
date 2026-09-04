@@ -77,16 +77,37 @@ jest.mock('crypto', () => {
   return { ...impl, default: impl };
 });
 
-// Mock path with actual implementation
+// Mock path with actual implementation.
+// `persistent-checkpoint-manager.ts` fait `import path from 'path'`, donc il lit
+// l'export DEFAULT. Étaler `...actualPath` réintroduisait ce default : c'était
+// le VRAI module path que recevait le code testé, et les doubles ci-dessous ne
+// servaient qu'aux appels nommés. Sous POSIX la coïncidence tenait (même
+// séparateur) ; sous Windows le manager joignait avec des antislashs et les
+// égalités exactes de chemin ne pouvaient plus tomber juste. Le default pointe
+// désormais sur la même implémentation doublée que les exports nommés, comme
+// pour les doubles de fs, os et crypto plus haut.
 jest.mock('path', () => {
   const actualPath = await vi.importActual('path');
-  return {
+  const impl = {
     ...actualPath,
     join: (...args: string[]) => args.join('/'),
     dirname: (p: string) => p.split('/').slice(0, -1).join('/'),
     basename: (p: string) => p.split('/').pop() || '',
-    resolve: (...args: string[]) => args.join('/'),
+    // `path.resolve` IGNORE tout ce qui précède un segment absolu. Le double
+    // concaténait, si bien qu'un chemin déjà absolu ressortait préfixé du cwd
+    // — invisible tant que le code testé recevait le vrai module.
+    resolve: (...args: string[]) =>
+      args.reduce(
+        (accumulated, segment) =>
+          segment.startsWith('/')
+            ? segment
+            : accumulated
+              ? `${accumulated}/${segment}`
+              : segment,
+        '',
+      ),
   };
+  return { ...impl, default: impl };
 });
 
 // Mock logger

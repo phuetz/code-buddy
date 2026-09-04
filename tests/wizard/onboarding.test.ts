@@ -216,19 +216,23 @@ describe('onboarding', () => {
   describe('persistProviderSelection', () => {
     it('does not leave grok catalog entries in an Ollama profile', async () => {
       const home = join(tmpdir(), `onboarding-home-${Date.now()}`);
-      const previousHome = process.env.HOME;
-      process.env.HOME = home;
+      const userSettingsPath = join(home, '.codebuddy', 'user-settings.json');
+      // L'isolation passe par le seam explicite de SettingsManager, pas par
+      // $HOME : os.homedir() lit USERPROFILE sous Windows et ignore HOME, si
+      // bien que le scénario écrivait dans le VRAI profil de la machine puis
+      // lisait un fichier temporaire jamais créé (ENOTENT). Amorcer le
+      // singleton avec un chemin explicite est portable et rend l'écriture
+      // hors du répertoire de test impossible par construction.
       (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
+      SettingsManager.getInstance({ userSettingsPath });
       try {
         await persistProviderSelection(getProviderGuide('ollama'), 'qwen3:4b-instruct', '');
-        const saved = JSON.parse(readFileSync(join(home, '.codebuddy', 'user-settings.json'), 'utf-8'));
+        const saved = JSON.parse(readFileSync(userSettingsPath, 'utf-8'));
         expect(saved.provider).toBe('ollama');
         expect(saved.model).toBe('qwen3:4b-instruct');
         expect(saved.models).toEqual(['qwen3:4b-instruct']);
         expect(saved.models).not.toContain('grok-code-fast-1');
       } finally {
-        if (previousHome === undefined) delete process.env.HOME;
-        else process.env.HOME = previousHome;
         (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
         rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
       }
