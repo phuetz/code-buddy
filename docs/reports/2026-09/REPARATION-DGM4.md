@@ -65,7 +65,11 @@ tests verts ; suite complète self-improvement = 34 fichiers / 243 tests verts.
 - `git diff --check` : code 0.
 - `CODEBUDDY_SELF_IMPROVE` absent pendant la vérification ; aucun provider, API payante, service ou
   évolution réelle utilisé.
-- Arbre propre après le commit documentaire ; aucun push ; `~/code-buddy` interdit en écriture.
+- Arbre propre après le commit documentaire ; aucun push. Le clone possède toutefois un lien
+  symbolique préexistant `node_modules -> ~/code-buddy/node_modules` ; un cache Vitest a été observé
+  dans l’original (`node_modules/.vite/vitest/.../results.json`, horodaté pendant la session). Je ne
+  l’ai ni supprimé ni modifié manuellement ; l’isolation stricte des dépendances reste à corriger
+  avant un prochain rejeu.
 
 ## Commits
 
