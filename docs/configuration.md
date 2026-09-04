@@ -152,6 +152,9 @@ remote endpoint's retention policy.
 | `GROK_BASE_URL` | Custom API endpoint | - |
 | `GROK_MODEL` | Default model | - |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit | model's maxOutputTokens |
+| `CODEBUDDY_NATIVE_SANDBOX` | Opt-in kernel confinement for `bash` (`true`, `bwrap`, `landlock`, `seatbelt`). Fail-closed if unavailable. | unset (off) |
+| `CODEBUDDY_BATCH_CONCURRENCY` | Maximum concurrent `/batch` delegate threads | `1` |
+| `CODEBUDDY_BATCH_MAX_ROUNDS` | Maximum tool execution rounds per `/batch` delegate | `6` |
 | `MAX_COST` | Session cost limit ($) | $10 (YOLO: $100) |
 | `YOLO_MODE` | Full autonomy mode | false |
 | `JWT_SECRET` | API server auth | Required in production |

@@ -245,6 +245,8 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `MORPH_API_KEY` | Enables fast file editing |
 | `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO). Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
 | `CODEBUDDY_NATIVE_SANDBOX` | Opt-in kernel confinement for `bash` (Bubblewrap, else Landlock, else macOS `sandbox-exec`). Unset = host spawn unchanged. Set = wrap after confirmation, **fail-closed** if confinement cannot be applied (never runs unsandboxed under a sandbox label). `bwrap` / `landlock` / `seatbelt` force one backend. |
+| `CODEBUDDY_BATCH_CONCURRENCY` | Maximum concurrent `/batch` delegate threads (default `1`) |
+| `CODEBUDDY_BATCH_MAX_ROUNDS` | Maximum tool execution rounds per `/batch` delegate (default `6`) |
 | `JWT_SECRET` | Required in production for API server |
 | `OLLAMA_HOST` / `VLLM_BASE_URL` | Bundled provider auto-detect |
 | `CODEBUDDY_BROWSER_DEV_ORIGINS` | csv of extra **loopback-only** origins the agent browser may visit (e.g. `http://localhost:5173`); non-loopback entries are rejected loudly. Normal path: the `app_server` tool registers/unregisters the origin of the dev server it spawned (port must be free pre-spawn — never adopts a pre-existing service). `src/security/dev-origins.ts`; `web_test` is the one-call verify report (console+page errors, server logs, snapshot, screenshot, assertions) |

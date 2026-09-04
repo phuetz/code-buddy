@@ -116,7 +116,7 @@ Plan -> Parallel/Sequential Execute -> Synthesize
 `/batch <goal>` decomposes a goal into parallel execution units and **runs them**:
 1. A numbered list (`1. … 2. …`) is split without an LLM; otherwise an LLM decomposes the goal
 2. Units that name the same file are serialised; distinct files may run together
-3. Each named-file unit does one model call and writes that file (a spawn that changes no files is a failure)
+3. Each named-file unit spawns a full lightweight agent thread (`ThreadDelegation`, bounded context, tool execution up to 6 rounds by default) and writes that file (a spawn that changes no files is a failure)
 4. Headless `buddy -p "/batch …"` dispatches the slash command; it does not send `/batch` to the LLM as a user message
 
 ## A2A Protocol (Google Agent-to-Agent)
