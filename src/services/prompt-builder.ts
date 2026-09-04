@@ -169,40 +169,6 @@ const EXTERNAL_PROMPT_MANAGER_TOOLS = [
 
 const STARTUP_PROJECT_CONTEXT_FILES = ['AGENTS.md', 'CODEBUDDY.md'] as const;
 
-const COLLECTIVE_KNOWLEDGE_START = '<collective_knowledge>';
-const COLLECTIVE_KNOWLEDGE_END = '</collective_knowledge>';
-
-/**
- * Head-truncation that never drops a reserved `<collective_knowledge>` block.
- * Optional tail (after the block) is discarded first; the prefix is trimmed
- * only if the reserved section would not fit otherwise.
- */
-export function truncateSystemPromptPreservingReserved(
-  systemPrompt: string,
-  budgetChars: number,
-): string {
-  if (budgetChars <= 0) return '';
-  if (systemPrompt.length <= budgetChars) return systemPrompt;
-  const start = systemPrompt.indexOf(COLLECTIVE_KNOWLEDGE_START);
-  const end = systemPrompt.indexOf(COLLECTIVE_KNOWLEDGE_END);
-  if (start < 0 || end < start) {
-    return systemPrompt.slice(0, Math.max(0, budgetChars - 3)) + '...';
-  }
-  const reservedEnd = end + COLLECTIVE_KNOWLEDGE_END.length;
-  const reserved = systemPrompt.slice(start, reservedEnd);
-  if (reserved.length >= budgetChars) {
-    return reserved.slice(0, Math.max(0, budgetChars - 3)) + '...';
-  }
-  const before = systemPrompt.slice(0, start);
-  const after = systemPrompt.slice(reservedEnd);
-  const room = Math.max(0, budgetChars - reserved.length - 3);
-  if (before.length <= room) {
-    const tail = after.slice(0, room - before.length);
-    return before + reserved + tail + '...';
-  }
-  return before.slice(0, room) + '...' + reserved;
-}
-
 function hasActiveToolFilter(config: ToolFilterConfig): boolean {
   return config.enabledPatterns.length > 0 || config.disabledPatterns.length > 0;
 }
@@ -511,7 +477,7 @@ export class PromptBuilder {
       // injector (varySystemPrompt → extractBlocks splits on bullet lines), so
       // a late placement fragmented this block — foreign bullets got interleaved
       // between its lines. Up here it stays contiguous, cache-stable, and
-      // survives head-truncation. Gated off for trivial/lite + tool-callless
+      // stays contiguous and cache-stable. Gated off for trivial/lite + tool-callless
       // models (see gating above).
       if (gates.includeExecutionDiscipline) {
         try {
@@ -531,7 +497,7 @@ export class PromptBuilder {
 
       // Collective Knowledge Graph — relevance-ranked on the current query.
       // Placed BEFORE optional blocks (knowledge/docs/skills/identity/…) so
-      // head-truncation does not drop it first; truncation also reserves it.
+      // It remains its own atomic context block for priority selection.
       if (query && process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true') {
         try {
           const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
