@@ -22,7 +22,13 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'balayage-test-'));
 });
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  // Le balayage vient de tuer des enfants (watchdog SIGTERM puis SIGKILL).
+  // Sous Windows un handle encore ouvert laisse le fichier en « suppression
+  // différée » et le répertoire compte toujours comme non vide : rmdir rend
+  // ENOTEMPTY alors que le scénario lui-même a réussi. Réessayer laisse le
+  // temps aux handles de se fermer, comme le fait déjà l'afterEach de
+  // tests/speculative/shadow-workspace.test.ts.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 /** Écrit un faux CLI node dont le comportement dépend des arguments. */
@@ -151,7 +157,16 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
 });
 
 describe('balayage-installation.sh — gardes', () => {
-  it('résout node avant env -i quand le PATH isolé ne contient pas node', () => {
+    // Portée : POSIX. Ces deux scénarios exigent qu'une valeur de PATH traverse
+  // `env -i` INTACTE. Sous Git Bash, la couche de traduction MSYS réécrit toute
+  // variable qui ressemble à une liste de chemins en franchissant la frontière
+  // POSIX↔Windows (« C:\… » contient un deux-points, donc elle est découpée) :
+  // l'enfant ne peut pas recevoir la chaîne attendue, quel que soit le script.
+  // C'est la prémisse du scénario que le runtime casse, pas le comportement
+  // mesuré — et `scripts/balayage-installation.sh` est un contrôle de release
+  // POSIX (`env -i`, `/usr/bin:/bin`, `comm`), jamais lancé sous Windows. Les
+  // quatre autres scénarios du fichier, eux, tournent partout.
+  it.runIf(process.platform !== 'win32')('résout node avant env -i quand le PATH isolé ne contient pas node', () => {
     const isolatedPath = join(dir, 'path-sans-node');
     mkdirSync(isolatedPath);
     const expectedPath = JSON.stringify(isolatedPath);
@@ -167,7 +182,16 @@ describe('balayage-installation.sh — gardes', () => {
     expect(stdout).toMatch(/1\/1 commandes répondent/);
   });
 
-  it('fonctionne sans timeout dans le PATH isolé', () => {
+    // Portée : POSIX. Ces deux scénarios exigent qu'une valeur de PATH traverse
+  // `env -i` INTACTE. Sous Git Bash, la couche de traduction MSYS réécrit toute
+  // variable qui ressemble à une liste de chemins en franchissant la frontière
+  // POSIX↔Windows (« C:\… » contient un deux-points, donc elle est découpée) :
+  // l'enfant ne peut pas recevoir la chaîne attendue, quel que soit le script.
+  // C'est la prémisse du scénario que le runtime casse, pas le comportement
+  // mesuré — et `scripts/balayage-installation.sh` est un contrôle de release
+  // POSIX (`env -i`, `/usr/bin:/bin`, `comm`), jamais lancé sous Windows. Les
+  // quatre autres scénarios du fichier, eux, tournent partout.
+  it.runIf(process.platform !== 'win32')('fonctionne sans timeout dans le PATH isolé', () => {
     const isolatedPath = join(dir, 'path-sans-timeout');
     mkdirSync(isolatedPath);
     const cli = fakeCli(`

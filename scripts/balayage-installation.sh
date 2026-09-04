@@ -85,10 +85,20 @@ avec_timeout_portable() {
   "$ENV_BIN" -i "${environnement[@]}" "$@" &
   pid=$!
   (
-    "$SLEEP_BIN" "$duree"
+    # Le sleep tourne en ARRIÈRE-PLAN et un trap le tue avec le sous-shell.
+    # Auparavant, tuer le watchdog laissait son sleep orphelin : un processus
+    # par commande balayée survivait à la fonction, gardait des handles
+    # ouverts et empêchait la suppression du répertoire de travail sous
+    # Windows. Un chien de garde ne doit rien laisser derrière lui.
+    "$SLEEP_BIN" "$duree" &
+    veille_pid=$!
+    trap 'kill "$veille_pid" 2>/dev/null; exit 0' TERM INT
+    wait "$veille_pid" 2>/dev/null || exit 0
     if kill -0 "$pid" 2>/dev/null; then
       kill "$pid" 2>/dev/null || true
-      "$SLEEP_BIN" 5
+      "$SLEEP_BIN" 5 &
+      veille_pid=$!
+      wait "$veille_pid" 2>/dev/null || exit 0
       kill -KILL "$pid" 2>/dev/null || true
     fi
   ) > /dev/null 2>&1 &
