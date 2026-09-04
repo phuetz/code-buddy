@@ -1,5 +1,17 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### PRIV3 — les résidus « à nettoyer » de la revue AGYSEC2 (4 septembre 2026)
+
+Chemins d'espaces de travail privés retirés de 11 documents et 15 commentaires
+source, ancien nom du moteur reformulé dans deux rapports (les identifiants
+réellement exécutés sont signalés, pas touchés), soldes et paliers d'abonnement
+reformulés, dernier fragment tireté d'une adresse du maillage privé corrigé. Le
+garde-fou `tests/security/donnees-personnelles.test.ts` gagne trois motifs et
+retrouve les dix témoins supprimés par PRIV2 (31 tests, chaque témoin
+mutation-testé) — il a aussitôt attrapé quatre fichiers ajoutés le matin même
+(rapports GF3 et BASHSTREAM1, table de coordination, fixture de test), nettoyés
+avant fusion. Rapport : `docs/reports/2026-09/REPARATION-PRIV3.md`.
+
 ### BASHSTREAM1 — le premier appel d'outil d'un tour perdait ses arguments sur MiniMax (4 septembre 2026)
 
 En headless sur MiniMax M3 (GMI), chaque `bash` échouait « Streaming execution

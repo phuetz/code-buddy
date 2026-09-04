@@ -4,7 +4,7 @@ Statut : TERMINÉ (04/09/2026). Commits : `3e8e9a746` (correctif), `9d24b9839` (
 
 ## Mission
 
-Source : `~/DEV/vitrine-drafts/vague-2026-09-04/MISSION-BASHSTREAM1-ARGUMENTS-VIDES-MINIMAX.md`.
+Source : `<espace-de-travail>/vague-2026-09-04/MISSION-BASHSTREAM1-ARGUMENTS-VIDES-MINIMAX.md`.
 Clone : `~/DEV/cb-bashstream1-2026-09-04`, branche `fix/bashstream1-arguments-vides-2026-09-04` (base `f42783007`).
 
 ## Constat de départ (mesuré par la lane PRIV3, 04/09/2026 07 h 08)
@@ -53,7 +53,7 @@ Message final produit (extrait, essai 2) : `"tool_calls":[{"id":"call_function_h
 **Deltas bruts capturés** (instrumentation temporaire retirée avant commit, `CODEBUDDY_DEBUG_RAW_STREAM=<fichier>` dans `provider-openai-compat.ts`, essai « bonjour4 ») :
 ```json
 {"index":1,"id":"call_01a06ada19537ba3b4f09b5b","type":"function","function":{"name":"view_file","arguments":""}}
-{"index":1,"function":{"arguments":"{\"path\":\"/home/patrice/DEV/cb-bashstream1-2026-09-04/package.json\"}"}}
+{"index":1,"function":{"arguments":"{\"path\":\"/tmp/bashstream1/package.json\"}"}}
 {"index":2,"id":"call_01a06ada19537ba3b4f09b6a","type":"function","function":{"name":"bash","arguments":""}}
 {"index":2,"function":{"arguments":"{\"command\":\"echo bonjour4\"}"}}
 {"index":3,"id":"call_01a06ada19537ba3b4f09b79","type":"function","function":{"name":"create_file","arguments":"..."}}
