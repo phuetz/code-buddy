@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DELEG3 — QualityGate et Verifier multiplexés (4 septembre 2026)
+
+CodeGuardian et SecurityReview tournent en deux délégués parallèles (bornés à
+2), résultats multiplexés et agrégés comme avant ; un délégué qui jette ou
+dépasse son budget donne une « revue incomplète », jamais un faux vert. Le
+Verifier passe par un délégué à contexte neuf, budget 6 tours / 0,50 USD /
+16K tokens, et ne confirme toujours pas sans oracle. Prouvé sur Ollama.
+
 ### SWARMFIX1 — dernier rouge du balayage et un test qui écrivait dans le dépôt (4 septembre 2026)
 
 `swarm-handler.test.ts` prouve désormais le routage de `/swarm` par les délégués
