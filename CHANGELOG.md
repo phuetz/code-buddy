@@ -1,5 +1,40 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### VERIFIX3A — dix-sept harnais qui ne gardaient qu'« un appel » (4 septembre 2026)
+
+Les tests réalignés après MEM1 assertent désormais le contrat réel : chemin
+exact, contenu sérialisé, mode `0o600`, exception levée, permissions, latence
+mesurée. 72 mutations rouges, 34 tests nets ajoutés, aucun fichier `src/`
+modifié. Trois doubles de test corrigés au passage (un `mode` jeté, un scoreboard
+de latence figé, une contamination d'espions).
+
+### BATCHFIX1 — le résumé de `/batch` dit vrai (4 septembre 2026)
+
+Les unités de vérification, qui n'écrivent rien par nature, étaient comptées
+« FAIL » par la garde « pas de done sans fichier modifié ». `BatchUnit.verifyOnly`
+les distingue ; la garde reste stricte pour les écritures. Prouvé sur Ollama :
+« 2/5 (3 failed) » devient « 4/4 (0 failed) ».
+
+### SERV2 — `usage` réel, un seul port, CORS dit vrai (4 septembre 2026)
+
+`/v1/chat/completions` renvoie les compteurs du fournisseur : le flux ne
+demandait jamais `stream_options.include_usage` et jetait le chunk d'usage, ce
+qui laissait aussi les métriques TTFT1 sans `inputTokens`. Repli honnête marqué
+`usage.estimated: true` (`CODEBUDDY_STREAM_USAGE=false`). `buddy server` ouvre
+un seul port avec `/ws` dessus : neuf documents corrigés, test qui rougit si
+l'un d'eux redit « 3001 ». Une origine non listée reçoit 200 sans
+`Access-Control-Allow-Origin` ; le 403 n'existe que sur le WebSocket, la doc le
+dit désormais.
+
+### VERIFIX3B / DELEGVERIF — suites de VERIF3 et du juge NVIDIA (4 septembre 2026)
+
+Dix fixtures isolées supplémentaires pour le garde-fou de données personnelles,
+ordre FIFO discriminé pour `/swarm` et `/team`, argv réels de `worktree add`
+assertés, entrée `git -C` en lecture prouvée utile. Les huit points du juge
+NVIDIA sur DELEG3 ont été vérifiés par un Claude : six faux avec preuve, un vrai
+corrigé — les paramètres du parent ne sont plus transmis tels quels au Verifier
+délégué —, un test de sérialisation renforcé.
+
 ### INCONNU1 — installation depuis la branche poussée, à l'aveugle (4 septembre 2026)
 
 Un Claude a rejoué le parcours README + getting-started sur un clone GitHub :

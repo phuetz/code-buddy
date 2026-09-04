@@ -1204,7 +1204,7 @@ complémentaires**. Ne pas confondre :
 | Aspect | **Code Buddy Gateway** | **OpenClaw Gateway** |
 |---|---|---|
 | Daemon | `buddy --serve` / `buddy server` | `openclaw gateway` (repo upstream) |
-| Port défaut | 3001 (WS) / 3000 (HTTP) | configurable, ≠ 3001 |
+| Port défaut | 3000 — **un seul port**, WebSocket `/ws` dessus (`--port` pour en choisir un autre) | configurable, ≠ celui de Code Buddy |
 | Lockfile | aucun | `~/.openclaw/gateway.json` |
 | Workspace | `~/.codebuddy/` | `~/.openclaw/workspace/` |
 | Implémentation | propriétaire `src/gateway/server.ts` + `src/server/websocket/` | upstream openclaw, daemon séparé |
