@@ -35,6 +35,15 @@ const OUTIL_EDITORIAL_PRIVE = ['pub', 'commander'].join('');
 const MACHINE_AUTEUR = ['minis', 'tar'].join('');
 
 /**
+ * PRIV3 — dossiers de travail privés référencés comme chemins dans la
+ * documentation (brouillons, dépôt de formation, ancien nom du dépôt de
+ * passation). Le contenu de ces espaces n'entre pas dans ce dépôt public.
+ */
+const ESPACE_BROUILLONS_PRIVE = ['vitrine', '-drafts'].join('');
+const DEPOT_FORMATION_PRIVE = ['formation', '-lisa-', 'ia'].join('');
+const DEPOT_PASSATION_ANCIEN_NOM = ['private', '-handover-', 'repo'].join('');
+
+/**
  * PRIV2 — motifs à forme variable, qu'une simple sous-chaîne ne peut pas décrire.
  *
  * Les octets sont assemblés par concaténation : ce fichier ne doit pas contenir
@@ -113,6 +122,10 @@ const FICHIERS_PLAGES_PRIVEES = new Set([
   'tests/unit/device-transports.test.ts',
   'tests/unit/rest-server.test.ts',
   'tests/unit/ws-origin-hardening.test.ts',
+  // Fixture PRIV3 : isole le motif littéral « 100.73. » de son sur-recouvrement
+  // avec la plage régex ip-maillee (73 ∈ 64-127) — le sujet de ce témoin EST
+  // l'adresse privée, comme les autres fichiers de cette liste.
+  'fixtures/mesh-prefix-author.md',
 ]);
 
 const MOTIFS_REGEX = [
@@ -140,6 +153,9 @@ const INTERDITS = [
   MOTEUR_EXPLORER_PRIVE,
   OUTIL_EDITORIAL_PRIVE,
   MACHINE_AUTEUR,
+  ESPACE_BROUILLONS_PRIVE,
+  DEPOT_FORMATION_PRIVE,
+  DEPOT_PASSATION_ANCIEN_NOM,
 ];
 
 /** Ce fichier cite forcément les termes : c'est son objet. CHANGELOG est relu à la main. */
@@ -261,6 +277,84 @@ const DETECTION_FIXTURES = [
       '1f2e3d4c-5b6a-4798-8765-0a1b2c3d4e5f',
     ].join(''),
     motif: 'uuid-projet-video',
+  },
+  {
+    nom: 'France Travail',
+    fichier: ['fixtures/', 'employment-agency-fr', '.md'].join(''),
+    contenu: ['témoin : ', ['france', ' ', 'travail'].join('')].join(''),
+    motif: ['france', ' ', 'travail'].join(''),
+  },
+  {
+    nom: 'Pôle emploi (accentué)',
+    fichier: ['fixtures/', 'employment-agency-accented', '.md'].join(''),
+    contenu: ['témoin : ', ['pôle', ' ', 'emploi'].join('')].join(''),
+    motif: ['pôle', ' ', 'emploi'].join(''),
+  },
+  {
+    nom: 'Pole emploi (non accentué)',
+    fichier: ['fixtures/', 'employment-agency-unaccented', '.md'].join(''),
+    contenu: ['témoin : ', ['pole', ' ', 'emploi'].join('')].join(''),
+    motif: ['pole', ' ', 'emploi'].join(''),
+  },
+  {
+    nom: 'assurance chômage (accentué)',
+    fichier: ['fixtures/', 'unemployment-insurance-accented', '.md'].join(''),
+    contenu: ['témoin : ', ['assurance', ' ', 'chômage'].join('')].join(''),
+    motif: ['assurance', ' ', 'chômage'].join(''),
+  },
+  {
+    nom: 'assurance chomage (non accentué)',
+    fichier: ['fixtures/', 'unemployment-insurance-unaccented', '.md'].join(''),
+    contenu: ['témoin : ', ['assurance', ' ', 'chomage'].join('')].join(''),
+    motif: ['assurance', ' ', 'chomage'].join(''),
+  },
+  {
+    nom: 'cumul ARE',
+    fichier: ['fixtures/', 'unemployment-benefit-cumul', '.md'].join(''),
+    contenu: ['témoin : ', ['cumul', ' ', 'are'].join('')].join(''),
+    motif: ['cumul', ' ', 'are'].join(''),
+  },
+  {
+    nom: 'prestataire de la CCAS',
+    fichier: ['fixtures/', 'public-client-name', '.md'].join(''),
+    contenu: ['témoin : ', ['prestataire de la', ' ', 'ccas'].join('')].join(''),
+    motif: ['prestataire de la', ' ', 'ccas'].join(''),
+  },
+  {
+    nom: 'demandeur d’emploi',
+    fichier: ['fixtures/', 'jobseeker-status', '.md'].join(''),
+    contenu: ['témoin : ', ['demandeur d', '\'', 'emploi'].join('')].join(''),
+    motif: ['demandeur d', '\'', 'emploi'].join(''),
+  },
+  {
+    nom: 'préfixe réseau maillé privé (100.73.)',
+    fichier: ['fixtures/', 'mesh-prefix-author', '.md'].join(''),
+    contenu: ['témoin : ws://', ['100', '73', '5', '9'].join('.'), ':3000/ws'].join(''),
+    motif: ['100', '73', ''].join('.'),
+  },
+  {
+    nom: 'nom de la machine GPU de l’auteur',
+    fichier: ['fixtures/', 'author-gpu-host', '.md'].join(''),
+    contenu: ['témoin : ', ['dark', 'star'].join(''), '-linux'].join(''),
+    motif: ['dark', 'star'].join(''),
+  },
+  {
+    nom: 'espace de brouillons privé',
+    fichier: ['fixtures/', 'private-drafts-workspace', '.md'].join(''),
+    contenu: ['témoin : ~/DEV/', ['vitrine', '-drafts'].join(''), '/vague/NOTE.md'].join(''),
+    motif: ['vitrine', '-drafts'].join(''),
+  },
+  {
+    nom: 'dépôt de formation privé',
+    fichier: ['fixtures/', 'private-training-repo', '.md'].join(''),
+    contenu: ['témoin : ~/DEV/', ['formation', '-lisa-', 'ia'].join('')].join(''),
+    motif: ['formation', '-lisa-', 'ia'].join(''),
+  },
+  {
+    nom: 'ancien nom du dépôt de passation',
+    fichier: ['fixtures/', 'handoff-repository-old-name', '.md'].join(''),
+    contenu: ['témoin : ~/DEV/', ['private', '-handover-', 'repo'].join(''), '/passations/'].join(''),
+    motif: ['private', '-handover-', 'repo'].join(''),
   },
 ] as const;
 

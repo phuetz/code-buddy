@@ -81,7 +81,7 @@ Le clone entier n'a pas été indexé : un `code-explorer analyze .` lancé par 
 | D5 | `ingest-code` accuse MCP d'être down sur un graphe jouet | 0 insight, message « non connecté » | `6650ba9b1` |
 | D6 | MCP connecté + query vide → « missing endpoint » | notes `missing endpoint` | `a1020bc2b` |
 | D7 | `list_repos` `[]` ingéré comme insight | découverte `[]` | `3c1ad67b8` |
-| D8 | Doc / `mcp.json` : chemin privé `gitnexus`, pas de timeout | `buddy mcp test gitnexus`, `~/DEV/code-explorer` | `aab8304b3` |
+| D8 | Doc / `mcp.json` : chemin privé, ancien nom du moteur, pas de timeout | `buddy mcp test gitnexus`, `~/DEV/code-explorer` | `aab8304b3` |
 
 ## Tableau final
 
@@ -93,7 +93,7 @@ Le clone entier n'a pas été indexé : un `code-explorer analyze .` lancé par 
 | `buddy import` Claude Code | Fusion sans doublon | `.claude/mcp.json` ignoré | Chemin ajouté ; noms existants conservés | `2652998c5` |
 | `code_explorer_ask` | Réponse graphe pour cwd / `repo` | Échec multi-repos ou « missing endpoint » | Résolution `list_repos` + rester sur MCP | `f8984c10b` `a1020bc2b` |
 | `research ingest-code` jouet | Insights CKG | « non connecté » / `[]` | Ops `report`/`coverage` ; ignorer `[]` | `6650ba9b1` `3c1ad67b8` |
-| Doc + `mcp.json` | `code-explorer` sur PATH, timeout documenté | `gitnexus` + chemins `~/...` | CLAUDE.md, integration, entrée portable | `aab8304b3` |
+| Doc + `mcp.json` | `code-explorer` sur PATH, timeout documenté | ancien nom du moteur + chemins `~/...` | CLAUDE.md, integration, entrée portable | `aab8304b3` |
 
 ## Vérifications
 

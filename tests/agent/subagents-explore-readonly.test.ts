@@ -2,7 +2,7 @@
  * Tests for the Explore read-only subagent + disallowedTools field.
  *
  * Implements Phase A + Phase C of the Claude Code subagent audit
- * (`private-handover-repo/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`).
+ * (the handover repo's `propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`).
  *
  * Focus:
  * - The new `Explore` entry in PREDEFINED_SUBAGENTS exists and is read-only

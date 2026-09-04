@@ -3,7 +3,7 @@
  * convention (`AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md`).
  *
  * The convention is three shared JSON files (today living in
- * `private-handover-repo/.codebuddy/`, driven until now by an external
+ * the handover repo's `.codebuddy/`, driven until now by an external
  * `heartbeat_tick.py` wrapper):
  *   - `colab-tasks.json`   — the fleet task queue
  *   - `colab-worklog.json` — append-only work log

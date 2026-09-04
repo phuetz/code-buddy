@@ -1003,7 +1003,7 @@ export class AgentExecutor {
    * path.
    *
    * Derived from the comparative audit Gemini CLI vs Code Buddy
-   * (private-handover-repo/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
+   * (le dépôt privé de passation, propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
    * recommendation #2 — fix défensif S scope). Backward compat preserved:
    * existing `processUserMessage` callers see no change.
    *

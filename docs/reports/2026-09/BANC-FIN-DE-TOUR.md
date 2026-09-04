@@ -80,11 +80,11 @@ plugin complète, mais il ne sera pas confondu avec l’ancien détecteur textue
 ## Recherche de cadrage relue
 
 La section 7, « pile C », de
-~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH2-ETAT-DE-L-ART-GROK.md
+<espace-de-travail>/recherche-conversation/RECH2-ETAT-DE-L-ART-GROK.md
 propose précisément LiveKit Agents local + Turn Detector v1-mini + Silero,
 avec exécution CPU, et signale comme risques la calibration, la latence et la
 licence des modèles. Le thème 2 et le mécanisme 1 de
-~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md
+<espace-de-travail>/recherche-conversation/RECH1-LITTERATURE-GEMINI.md
 relient la prédiction de fin de tour aux pauses et à la prosodie (famille VAP)
 pour éviter de couper une intention avant sa reprise ; ce mécanisme motive la
 mesure pause intra-phrase, mais ne constitue pas une preuve de performance de

@@ -10,8 +10,8 @@
 ## Journal des lectures
 
 - `docs/FABLE5-CODEX-COORDINATION.md:1-274` — protocole et tableau de réservation ; aucune réservation concurrente CONV1 trouvée.
-- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/CONTEXTE-LISA.md:1-13` — chaîne et latences de référence.
-- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-493` — section 8 et cinq mécanismes : projection de fin de tour, barge-in/AEC-VAD, backchannels, réparation communicative, TTS basse latence.
+- `<espace-de-travail>/recherche-conversation/CONTEXTE-LISA.md:1-13` — chaîne et latences de référence.
+- `<espace-de-travail>/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-493` — section 8 et cinq mécanismes : projection de fin de tour, barge-in/AEC-VAD, backchannels, réparation communicative, TTS basse latence.
 - `src/sensory/speech-reaction.ts:1-2181`, `src/sensory/respond-decider.ts:1-695`, `src/sensory/voice-loop.ts:1-3797` — chemin complet `speech_end/transcript_final → STT → gate → reply → speak`, garde demi-duplex, temporisation de tour et télémétrie du premier audio.
 - `buddy-sense/src/senses/audio.rs:1-295`, `buddy-sense/src/senses/stt.rs:1-191`, `buddy-sense/src/senses/live_audio.rs:1-1780`, `buddy-sense/src/main.rs:1-284` — VAD énergie, endpoint mesuré, sherpa-rs en processus, partiel spéculatif et émission du final.
 - `src/sensory/sensory-bridge.ts:1-176`, `src/sensory/voice-turn-taking.ts:1-42` — transport des percepts et heuristique textuelle antérieure.

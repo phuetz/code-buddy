@@ -467,7 +467,7 @@ par Fable ; les vagues calent ~50% → WIP copié+réparé+commité à la main).
 
 ## SESSION 2026-07-05 NUIT — fixes chat live + 3 vagues Codex relancées
 Retours GUI Patrice traités en direct (tous poussés) :
-- **Recherche web cassée (CAPTCHA)** → clés Serper/Brave/OpenRouter extraites de `~/DEV/private-handover-repo/Acces_Centralises.md`
+- **Recherche web cassée (CAPTCHA)** → clés Serper/Brave/OpenRouter extraites du dépôt privé de passation (`Acces_Centralises.md`)
   → écrites dans `.env` (racine, CLI) + `cowork/.env` (Cowork charge `__dirname/../../.env` = cowork/.env, PAS racine !),
   gitignored. Serper prouvé (actus fraîches + « qui est Patrice Huetz »→son GitHub). AUCUN code committé (config env).
 - **Listbox gris sur blanc** → `color-scheme` par thème + couleurs `select/option` (`d3a56722`).
