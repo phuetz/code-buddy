@@ -1,5 +1,18 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DGM5 — la Darwin-Gödel Machine nourrie avec la journée réelle (4 septembre 2026)
+
+La machine tournait à vide faute de matière. Une source d'expérience opt-in lit les journaux de
+délégation (`~/.codebuddy/delegations`, chemin injectable) et en extrait des faits structurés :
+moteur, durée, sortie, ce qui a bougé, échecs nommés (« Maximum tool execution rounds »,
+« Unexpected end of JSON input », « trim is not a function », « peer closed connection », « Turn
+limit ») et les leçons que le pilote avait dû tirer à la main ; le digest les résume avec
+`provenance: delegation-log`. Première boucle réelle : la machine a écrit seule trois outils
+(`extract_url_statuses`, `audit_ffmpeg_argv`, `find_orphan_temp_files`) validés par les cas
+visibles puis cachés, et deux skills (relecture typographique française, mission-contrat de lane)
+passés au pare-feu et à la couverture, à 0 $ sur le forfait ChatGPT. Mission Gemini 3.8 Flash
+(24 min). Rapport : `docs/reports/2026-09/REPARATION-DGM5.md`.
+
 ### DGM4 — nouveauté AST et pénalité de descendance dans l'évolution de code (4 septembre 2026)
 
 Deux manques relevés par l'audit DGM2 : le moteur d'évolution notait des variants identiques à
