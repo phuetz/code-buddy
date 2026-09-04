@@ -57,6 +57,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: npm ci
 
+    - name: Install Chromium for blocking Ubuntu browser tests
+      if: matrix.os == 'ubuntu-latest'
+      run: npx playwright install --with-deps chromium
+
     - name: Rebuild native modules (better-sqlite3) for the CI Node ABI
       # Without this the better-sqlite3 .node binary often mismatches the runner's
       # Node version and the entire database test suite (~200 tests) is skipped.

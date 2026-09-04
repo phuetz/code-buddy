@@ -19,6 +19,7 @@ import { BrowserExecuteTool, resetMiscInstances } from '../../src/tools/registry
 import { getAppServerTool, resetAppServerTool } from '../../src/tools/app-server-tool.js';
 import { resetDevOrigins } from '../../src/security/dev-origins.js';
 import { resetProcessTool } from '../../src/tools/process-tool.js';
+import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const appCwd = path.join(repoRoot, '_qa/gk21-app');
@@ -34,7 +35,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-describe('GK21 real mini-app (app_server + web_test)', () => {
+describe.skipIf(!chromiumExecutableExists())('GK21 real mini-app (app_server + web_test)', () => {
   const webTest = new WebTestTool();
   const browser = new BrowserExecuteTool();
   let savedDisplay: string | undefined;
