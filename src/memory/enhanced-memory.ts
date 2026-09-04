@@ -130,6 +130,8 @@ export interface MemorySearchOptions {
 }
 
 export interface MemoryConfig {
+  /** Directory used for the JSON memory store (defaults to ~/.codebuddy/memory). */
+  dataDir?: string;
   enabled: boolean;
   maxMemories: number;
   maxMemoryAge: number; // days
@@ -162,6 +164,11 @@ const DEFAULT_CONFIG: MemoryConfig = {
   useSQLite: true, // SQLite by default
 };
 
+/** Preserve the production JSON-store location while keeping it observable in tests. */
+export function getDefaultMemoryDataDir(): string {
+  return path.join(os.homedir(), '.codebuddy', 'memory');
+}
+
 /**
  * Enhanced Memory Manager
  */
@@ -191,7 +198,7 @@ export class EnhancedMemory extends EventEmitter {
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.dataDir = path.join(os.homedir(), '.codebuddy', 'memory');
+    this.dataDir = config.dataDir ?? getDefaultMemoryDataDir();
 
     // Initialize SQLite repository if enabled
     if (this.config.useSQLite) {
@@ -615,7 +622,7 @@ export class EnhancedMemory extends EventEmitter {
     if (options.query) {
       const query = options.query.toLowerCase();
 
-      if (this.bayesianQualifier && (this.bayesianQualifier as any).isTrained) {
+      if (this.bayesianQualifier && (this.bayesianQualifier as unknown as { isTrained: boolean }).isTrained) {
         const queryEmbedding = this.config.embeddingEnabled
           ? await this.generateEmbedding(options.query)
           : undefined;
@@ -1210,7 +1217,7 @@ export class EnhancedMemory extends EventEmitter {
   async getActiveLearningTargets(limit: number = 5, query?: string): Promise<{
     memory: MemoryEntry; baldScore: number }[]> {
     await this.ready;
-    if (!this.bayesianQualifier || !(this.bayesianQualifier as any).isTrained) {
+    if (!this.bayesianQualifier || !(this.bayesianQualifier as unknown as { isTrained: boolean }).isTrained) {
       return [];
     }
 
