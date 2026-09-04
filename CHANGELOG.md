@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### INCONNU1 — installation depuis la branche poussée, à l'aveugle (4 septembre 2026)
+
+Un Claude a rejoué le parcours README + getting-started sur un clone GitHub :
+install, build, typecheck, `buddy doctor`, headless Ollama avec `-o` et
+`--output-schema`, `/batch`, `buddy improve status`, `buddy server` + curl,
+`buddy cost --latency`. Deux trous de doc réparés avec test (flags headless,
+`server --no-auth`). Signalés : le résumé de `/batch` compte des vérifications
+réussies comme « FAIL », `doctor --fix` choisit un modèle de 15 Go sans critère,
+`/batch` et `improve` absents des pages d'entrée.
+
 ### VERIF3 — 105 mutations sur les fusions de la nuit (4 septembre 2026)
 
 Vérification adverse par un Claude : 51 mutations rougissent comme attendu,
