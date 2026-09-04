@@ -14,4 +14,13 @@ Objectifs opérationnels :
 3. Preuves complètes : tests unitaires dédiés rouge -> vert, suite vitest globale `tests/agent/self-improvement`, typecheck `tsc`, eslint, `git diff --check`, et démonstration CLI en environnement isolé.
 
 ## 2. Journal des modifications
-- Initialisation du rapport avant inspection.
+- Initialisation du rapport avant inspection et réservation dans `docs/FABLE5-CODEX-COORDINATION.md`.
+- Documentation des invariants opératoires non-négociables dans `CLAUDE.md` (`CLAUDE.md:10-13`).
+- Création du test de contrat `tests/agent/self-improvement/capability-benchmark.test.ts` validant :
+  - 15 scénarios uniques en kebab-case.
+  - Au moins 2 termes dans `expectIncludes` pour chaque scénario.
+  - Présence et validité des sources documentaires (`fichier:ligne`).
+  - Non-trivialité (zéro couverture sur store vide ou leçons vides/sans termes).
+  - Orthogonalité stricte (aucune leçon ne couvre plus d'un scénario).
+- Témoin ROUGE constaté : 6/6 tests en échec (`SEED_BENCHMARK_SCENARIOS` a une taille de 3, aucune source définie, `SEED_LESSON_DRAFTS` taille 3).
+
