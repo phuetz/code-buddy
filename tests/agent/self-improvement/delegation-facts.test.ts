@@ -6,13 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   extractDelegationFacts,
   formatRunFactsLine,
-  readDelegationLogs,
-  findHeadlessJson,
-  extractModel,
-  extractRoundLimit,
-  countToolRounds,
-  extractCostUsd,
-  extractCostCap,
 } from '../../../src/agent/self-improvement/delegation-facts.js';
 import { DelegationLogsExperienceSource } from '../../../src/agent/self-improvement/digest-sources.js';
 import { parseRunFacts, replayUnder, ReplayStrategyEvaluator } from '../../../src/agent/self-improvement/strategy-replay.js';

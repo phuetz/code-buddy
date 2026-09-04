@@ -76,7 +76,11 @@ export interface ParsedHeadlessOutput {
  * Scans candidate JSON blocks (from bottom up).
  */
 export function findHeadlessJson(content: string): ParsedHeadlessOutput | null {
-  const lines = content.split('\n');
+  // Headless output is emitted at the end of the run (before banner).
+  // Restrict inspection to the tail (last 256 KB) to avoid ReDoS or multi-megabyte scanning.
+  const tail = content.length > 256 * 1024 ? content.slice(-256 * 1024) : content;
+
+  const lines = tail.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]?.trim();
     if (!line || !line.startsWith('{') || !line.endsWith('}')) continue;
@@ -91,8 +95,8 @@ export function findHeadlessJson(content: string): ParsedHeadlessOutput | null {
     }
   }
 
-  // Multiline JSON search
-  const jsonMatches = content.match(/\{[\s\S]*?"(?:result|error)"[\s\S]*?"cost"[\s\S]*?\}(?=\s*(?:──|moteur|$))/g);
+  // Multiline JSON search within tail
+  const jsonMatches = tail.match(/\{[\s\S]*?"(?:result|error)"[\s\S]*?"cost"[\s\S]*?\}(?=\s*(?:──|moteur|$))/g);
   if (jsonMatches) {
     for (let i = jsonMatches.length - 1; i >= 0; i--) {
       try {
@@ -498,6 +502,32 @@ export function formatRunFactsLine(fact: DelegationFact): string {
 }
 
 /**
+ * Reads a file up to maxBytes * 2. If larger, reads head and tail chunks
+ * (where launch commands and conclusion banners reside) to protect memory and regex performance.
+ */
+function readLogFileBounded(filePath: string, maxBytes = 256 * 1024): string {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size <= maxBytes * 2) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const headBuf = Buffer.alloc(maxBytes);
+      const headRead = fs.readSync(fd, headBuf, 0, maxBytes, 0);
+      const tailBuf = Buffer.alloc(maxBytes);
+      const tailOffset = Math.max(0, stat.size - maxBytes);
+      const tailRead = fs.readSync(fd, tailBuf, 0, maxBytes, tailOffset);
+      return headBuf.toString('utf8', 0, headRead) + '\n' + tailBuf.toString('utf8', 0, tailRead);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Reads delegation logs from a directory and extracts structured facts.
  */
 export function readDelegationLogs(delegationsDir: string, limit = 50): DelegationFact[] {
@@ -520,12 +550,9 @@ export function readDelegationLogs(delegationsDir: string, limit = 50): Delegati
   for (const outFile of outFiles) {
     if (facts.length >= limit) break;
     const outPath = path.join(delegationsDir, outFile);
-    let outContent = '';
-    try {
-      outContent = fs.readFileSync(outPath, 'utf8');
-    } catch {
-      continue;
-    }
+    const outContent = readLogFileBounded(outPath);
+    if (!outContent) continue;
+
     const logMatch = outContent.match(/journal\s*:\s*(\S+\.log)/i);
     let companionContent = '';
     let logBaseName = '';
@@ -535,11 +562,7 @@ export function readDelegationLogs(delegationsDir: string, limit = 50): Delegati
       consumedLogs.add(referencedLogName);
       const fullLogPath = path.join(delegationsDir, referencedLogName);
       if (fs.existsSync(fullLogPath)) {
-        try {
-          companionContent = fs.readFileSync(fullLogPath, 'utf8');
-        } catch {
-          /* ignore */
-        }
+        companionContent = readLogFileBounded(fullLogPath);
       }
     }
     const combinedContent = companionContent ? `${companionContent}\n${outContent}` : outContent;
@@ -551,13 +574,10 @@ export function readDelegationLogs(delegationsDir: string, limit = 50): Delegati
     if (facts.length >= limit) break;
     if (consumedLogs.has(logFile)) continue;
     const logPath = path.join(delegationsDir, logFile);
-    try {
-      const content = fs.readFileSync(logPath, 'utf8');
-      const factId = logFile.replace(/\.log$/, '');
-      facts.push(extractDelegationFacts(content, factId));
-    } catch {
-      continue;
-    }
+    const content = readLogFileBounded(logPath);
+    if (!content) continue;
+    const factId = logFile.replace(/\.log$/, '');
+    facts.push(extractDelegationFacts(content, factId));
   }
 
   return facts;

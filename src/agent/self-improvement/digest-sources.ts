@@ -210,6 +210,7 @@ export class DelegationLogsExperienceSource {
         });
         existing.add(experienceId);
       }
+      // facts: rounds=… limit=… cost=… outcome=… failure=… (formatRunFactsLine)
       const factsLine = formatRunFactsLine(fact);
       experiences.push({
         id: experienceId,
