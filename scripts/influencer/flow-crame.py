@@ -29,7 +29,8 @@ def looks_like_agent_send_button(inner_text: str, width: float) -> bool:
     il n'a PAS arrow_forward. Largeur < 80 écarte d'éventuels CTA larges.
     """
     text = inner_text or ''
-    return 'arrow_forward' in text and 'Créer' in text and 0 < float(width) < 80
+    # flow.google.com (sept. 2026) : le span « Créer » a disparu, seule l'icône reste.
+    return 'arrow_forward' in text and 0 < float(width) < 80
 
 
 def agent_send_is_ready(*, disabled: bool, aria_disabled: str | None) -> bool:
@@ -67,7 +68,7 @@ FLOW_PROJECT_URL = (
 # Sélecteur du bouton d'envoi de l'agent Flow (UI 2026-09 : '<button> arrow_forward Créer', w<80).
 # Ne PAS se fier à .disabled : voir agent_send_is_ready().
 _SEND_BTN = ("[...document.querySelectorAll('button')].find(e=>/arrow_forward/.test(e.innerText)"
-             "&&/Créer/.test(e.innerText)&&e.getBoundingClientRect().width>0"
+             "&&e.getBoundingClientRect().width>0"
              "&&e.getBoundingClientRect().width<80)")
 
 
@@ -109,7 +110,28 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
             return
         super().recover_project_view()
 
+    def credits(self) -> int:
+        # La boîte ULTRA met parfois quelques secondes à afficher la ligne du compteur
+        # (mesuré le 04/09 sur un onglet qui venait de changer de projet) : 4 essais.
+        last: Exception | None = None
+        for _ in range(4):
+            try:
+                return int(super().credits())
+            except RuntimeError as exc:  # « Compteur de crédits Flow illisible »
+                last = exc
+                time.sleep(3)
+        raise last  # type: ignore[misc]
+
+    def widen_viewport(self) -> None:
+        # flow.google.com : le compositeur déborde à droite du viewport (x≈3470-3740 pour 3438 px) ;
+        # sans cela, elementFromPoint n'atteint jamais le bouton et le clic TRUSTED est impossible.
+        w = int(self.js('window.innerWidth') or 0); h = int(self.js('window.innerHeight') or 0)
+        if 0 < w < 4000:
+            self.c.cmd('Emulation.setDeviceMetricsOverride', {'width': 4000, 'height': max(h, 1200), 'deviceScaleFactor': 1, 'mobile': False})
+            time.sleep(1.5)
+
     def ensure_project(self) -> None:
+        self.widen_viewport()
         url = str(self.js('location.href') or '')
         if FLOW_PROJECT_ID in url:
             return
@@ -119,7 +141,7 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         # « Éditeur de prompt Flow introuvable »). On attend l'éditeur Slate jusqu'à 45 s.
         for _ in range(45):
             time.sleep(1)
-            if self.js("!!document.querySelector('[data-slate-editor=true]')"):
+            if self.js("!!document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]')"):
                 time.sleep(2)
                 return
         etat = self.js("JSON.stringify({title:document.title,url:location.href,boutons:document.querySelectorAll('button').length,"
@@ -205,7 +227,7 @@ def send_agent(flow, max_wait: int = 20) -> None:
     val = ''
     for _ in range(12):
         time.sleep(1)
-        val = flow.js("(()=>{let e=document.querySelector('[data-slate-editor=true]');return e?e.innerText.trim():''})()") or ''
+        val = flow.js("(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');return e?e.innerText.trim():''})()") or ''
         # champ revenu au placeholder « Que voulez-vous créer ? » = soumis
         if 'voulez-vous' in val or len(val) <= 40:
             return
@@ -230,6 +252,7 @@ def main() -> None:
         raise RuntimeError('ARRÊT GARDE-FOU : un autre batch navigateur est actif.')
 
     flow = DomFlow()
+    flow.ensure_project()  # revenir au projet configuré AVANT de lire le compteur
     start = flow.credits()
     print(f'CREDITS-DEPART {start}', flush=True)
 

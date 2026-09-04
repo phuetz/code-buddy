@@ -434,13 +434,15 @@ class Flow:
                 continue
             for _ in range(6):
                 body = self.js('document.body.innerText') or ''
+                # flow.google.com (sept. 2026) : « 24 063 crédits Google Flow » avec espace fine
+                # insécable (U+202F) et « crédits » en minuscules ; labs.google : « N Crédits Google Flow ».
                 match = re.search(
-                    r'^\s*([0-9][0-9 ]*)\s+Crédits Google\s*Flow\s*$',
+                    r'^\s*([0-9][0-9 \u202f\u00a0]*)\s*cr[ée]dits Google\s*Flow\s*$',
                     body,
-                    flags=re.MULTILINE,
+                    flags=re.MULTILINE | re.IGNORECASE,
                 )
                 if match:
-                    value = int(match.group(1).replace(' ', ''))
+                    value = int(re.sub(r'[\s\u202f\u00a0]', '', match.group(1)))
                     self.unlock_ui()
                     return value
                 time.sleep(0.5)
@@ -502,7 +504,7 @@ class Flow:
 
     def focus_editor(self) -> None:
         raw = self.js(
-            "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+            "(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');"
             "if(!e)return null;let r=e.getBoundingClientRect();"
             "return JSON.stringify([r.x+r.width/3,r.y+r.height/2])})()"
         )
@@ -513,12 +515,12 @@ class Flow:
 
     def _editor_commit_state(self) -> dict[str, Any]:
         raw = self.js(
-            "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+            "(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');"
             "if(!e)return null;"
             "let str=e.querySelector('[data-slate-string=true]');"
             "let ph=e.querySelector('[data-slate-placeholder=true]');"
             "let b=[...document.querySelectorAll('button')].find(el=>"
-            "/arrow_forward/.test(el.innerText||'')&&/Créer/.test(el.innerText||'')"
+            "/arrow_forward/.test(el.innerText||'')"
             "&&el.getBoundingClientRect().width>0&&el.getBoundingClientRect().width<80);"
             "return JSON.stringify({"
             "text:e.innerText||'',"
@@ -535,7 +537,7 @@ class Flow:
 
     def _clear_editor(self) -> None:
         raw = self.js(
-            "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+            "(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');"
             "if(!e)return null;let r=e.getBoundingClientRect();"
             "return JSON.stringify([r.x+r.width/3,r.y+r.height/2])})()"
         )
@@ -616,9 +618,9 @@ class Flow:
             self.unlock_ui()
             self.focus_editor()
             if not self.js(
-                "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+                "(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');"
                 "e && e.focus();return document.activeElement==="
-                "document.querySelector('[data-slate-editor=true]')})()"
+                "document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]')})()"
             ):
                 self.focus_editor()
             self._clear_editor()
@@ -657,7 +659,7 @@ class Flow:
     def _send_button_state(self) -> dict[str, Any]:
         raw = self.js(
             "(()=>{let b=[...document.querySelectorAll('button')].find(e=>"
-            "/arrow_forward/.test(e.innerText||'')&&/Créer/.test(e.innerText||'')"
+            "/arrow_forward/.test(e.innerText||'')"
             "&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().width<80);"
             "if(!b)return JSON.stringify({state:'none'});"
             "let r=b.getBoundingClientRect();"
