@@ -104,4 +104,40 @@ premier essai et **réussi au retry** du même job. Le `||` de `.github/workflow
 
 ## Verdict CI
 
-Voir la section ajoutée après le run de la branche `ci/cifix3-macos-windows`.
+### Run 1 — `33923453145` (première passe)
+
+| Job | Avant (run `33918143339`) | Après passe 1 |
+| --- | --- | --- |
+| macOS Node 22 | échec (19 tests) | **succès** |
+| macOS Node 20 | échec (19 tests) | échec — 2 tests (OOM headless) |
+| Windows Node 20 | échec (15 tests, shard 1) | échec — 1 test (flake `gk35`) |
+| Windows Node 22 | échec (15 tests, shard 1) | échec — shards 2-6, **jamais exécutés jusque-là** |
+| Ubuntu Node 22 | succès | succès |
+| Ubuntu Node 20 | succès | échec — 1 flake `comfyui` (course de 10 ms) |
+
+Les 17 familles de la passe 1 sont fermées. Deux constats :
+
+1. **Le plafond de tas posé en argv n'atteignait pas le processus mesuré.** `tsx` RELANCE un
+   petit-fils node avec son propre chargeur ; un drapeau V8 de la ligne de commande du parent ne
+   le suit pas — `NODE_OPTIONS`, si. Besoin réel mesuré sous Linux en abaissant le plafond :
+   rouge à 1024 Mo, vert à 1536. Les ~2 Go du runner macOS ne suffisaient pas.
+2. **Windows a franchi le shard qui l'arrêtait**, ce qui a révélé six familles restées invisibles
+   derrière cet arrêt (`npm test -- --shard=1/6 || …` échouant, les shards 2 à 6 n'étaient jamais
+   lancés). Aucune n'est une régression : elles n'avaient simplement jamais tourné.
+
+### Passe 2 — familles fermées
+
+| Famille | Racine | Correctif |
+| --- | --- | --- |
+| headless macOS ×2 | drapeau V8 perdu au relancement tsx | `NODE_OPTIONS`, valeur héritée préservée |
+| `lane-ledger` ×24 | `spawnSync(script)` repose sur le shebang, absent de Windows (`EFTYPE`) | borné à POSIX par sonde |
+| `bash-tool` ×3 | attendu `bash -c` codé en dur ; le tool passe par `getShellConfiguration()` | attendu dérivé de la même source |
+| `conversation-cues` ×2, `codebase-rag` ×2 | chemins `path.join` comparés à des motifs en barres obliques | normalisation / attendus construits par `path.join` |
+| `strategy-store-runtime` | NTFS n'a pas de bits POSIX (rend 666) | seule cette assertion bornée |
+| `longcat-runner` | deux démarrages python dans 3 s | budget proportionné à la machine |
+| `gk35-stdio-timeout` | budget figé à 400 ms pour un scénario qui mesure une SÉQUENCE | seuils dérivés d'un budget unique, rapports inchangés |
+| `comfyui-recipe-runtime` (Ubuntu) | abandon après un délai FIXE de 10 ms, avant la mise en file | abandon déclenché par l'ÉVÉNEMENT, déterministe (5 exécutions) |
+
+### Run 2
+
+Voir la table ajoutée après le run de vérification.
