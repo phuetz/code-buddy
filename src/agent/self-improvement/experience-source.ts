@@ -19,6 +19,12 @@ export {
   EvolutionNotesExperienceSource,
   createDefaultEvolutionNotesExperienceSource,
   type EvolutionNotesExperienceSourceOptions,
+  DelegationLogsExperienceSource,
+  createDefaultDelegationLogsExperienceSource,
+  type DelegationLogsExperienceSourceOptions,
+  type DelegationFact,
+  NAMED_DELEGATION_FAILURES,
+  PILOT_LESSONS,
 } from './digest-sources.js';
 
 export interface ExperienceSource {
