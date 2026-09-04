@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### MEMFIX1 / VERIFIX2 / DOCFIX3 (4 septembre 2026)
+
+Le harnais de `profile-manager.test.ts` est réaligné sur les écritures atomiques
+de MEM1 (13 échecs, zéro défaut de production). L'admission FIFO des délégués et
+chaque motif du garde-fou de données personnelles sont désormais couverts
+isolément. Cinq corrections documentaires vérifiées dans le code : `/batch`
+lance des agents complets, le bac à sable natif est opt-in, les variables
+`CODEBUDDY_NATIVE_SANDBOX`, `CODEBUDDY_BATCH_CONCURRENCY` et
+`CODEBUDDY_BATCH_MAX_ROUNDS` sont listées, `buddy improve tools|skills` est
+documenté.
+
 ### HEADLESS2 — `bash` s'exécute enfin en headless `dontAsk` (4 septembre 2026)
 
 Les lectures `git -C <chemin>` étaient classées `ask` par la politique
