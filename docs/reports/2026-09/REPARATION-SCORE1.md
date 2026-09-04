@@ -74,7 +74,9 @@ Tests des fichiers touchés et de leurs consommateurs directs : 10 fichiers,
 - `257764c57` — import JSONL, `best`, CLI et banc ;
 - `218304612` — bornes des mots-clés ;
 - `02610dee6` — routage scoreboard dans la façade ;
-- `44750d758` — documentation flotte.
+- `44750d758` — documentation flotte ;
+- `285d90bb3` — rapport, preuves et première passation ;
+- `e54bc479c` — comptage complet des tests ciblés.
 
 ## Ouvert
 
