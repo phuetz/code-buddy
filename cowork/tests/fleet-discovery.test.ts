@@ -35,7 +35,7 @@ peers:
   it('parses multiple peers', () => {
     const yaml = `
 peers:
-  - label: ministar
+  - label: hub
     url: ws://203.0.113.10:3001/ws
   - label: gpuNode
     url: ws://203.0.113.11:3001/ws
@@ -43,7 +43,7 @@ peers:
 `;
     const peers = parseManualYaml(yaml);
     expect(peers).toHaveLength(2);
-    expect(peers[0].label).toBe('ministar');
+    expect(peers[0].label).toBe('hub');
     expect(peers[0].apiKey).toBeUndefined();
     expect(peers[1].label).toBe('gpuNode');
     expect(peers[1].apiKey).toBe('secret-token');

@@ -60,7 +60,7 @@ describe('fleetUtilization aggregate', () => {
   it('aggregates only over peers that declared a capacity', () => {
     const rows = buildPeerLoadRows([
       peer('gpuNode', { models: [], machineLabel: 'GPU_NODE', activeRequests: 3, maxConcurrency: 4 }),
-      peer('ministar', { models: [], machineLabel: 'Ministar', activeRequests: 1, maxConcurrency: 4 }),
+      peer('hub', { models: [], machineLabel: 'Hub', activeRequests: 1, maxConcurrency: 4 }),
       peer('mystery', { models: [], machineLabel: 'Mystery', activeRequests: 9 }), // no capacity
     ]);
 
@@ -78,7 +78,7 @@ describe('FleetUtilizationStrip', () => {
   it('renders the fleet rate and one load bar per actor', async () => {
     await render([
       peer('gpuNode', { models: [], machineLabel: 'GPU_NODE', activeRequests: 3, maxConcurrency: 4 }),
-      peer('ministar', { models: [], machineLabel: 'Ministar', activeRequests: 0, maxConcurrency: 2 }),
+      peer('hub', { models: [], machineLabel: 'Hub', activeRequests: 0, maxConcurrency: 2 }),
     ]);
 
     expect(container!.querySelector('[data-testid="fleet-utilization-rate"]')?.textContent).toBe('50%');

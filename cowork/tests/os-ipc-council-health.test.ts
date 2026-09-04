@@ -75,11 +75,11 @@ describe('readCouncilHealth', () => {
 describe('readKnowledgeGraph', () => {
   // Verbatim shape of the real CKG ledger (~/.codebuddy/collective/ckg-ledger.jsonl)
   const LEDGER = [
-    '{"v":1,"kind":"entity","recordedAt":"2026-06-30T07:45:41.050Z","agentId":"ministar/code-buddy","id":"discovery:collective:arxiv-1","type":"discovery","name":"arxiv:1","text":"Personalized attention…","confidence":0.7}',
-    '{"v":1,"kind":"entity","recordedAt":"2026-06-30T07:46:00.000Z","agentId":"ministar/code-buddy","id":"lesson:collective:l1","type":"lesson","name":"toujours gater no-mocks","confidence":0.9}',
-    '{"v":1,"kind":"relation","recordedAt":"2026-06-30T07:45:41.846Z","agentId":"ministar/code-buddy","sourceId":"discovery:collective:arxiv-1","targetId":"lesson:collective:l1","relType":"related_to","reason":"semantic neighbour"}',
+    '{"v":1,"kind":"entity","recordedAt":"2026-06-30T07:45:41.050Z","agentId":"hub/code-buddy","id":"discovery:collective:arxiv-1","type":"discovery","name":"arxiv:1","text":"Personalized attention…","confidence":0.7}',
+    '{"v":1,"kind":"entity","recordedAt":"2026-06-30T07:46:00.000Z","agentId":"hub/code-buddy","id":"lesson:collective:l1","type":"lesson","name":"toujours gater no-mocks","confidence":0.9}',
+    '{"v":1,"kind":"relation","recordedAt":"2026-06-30T07:45:41.846Z","agentId":"hub/code-buddy","sourceId":"discovery:collective:arxiv-1","targetId":"lesson:collective:l1","relType":"related_to","reason":"semantic neighbour"}',
     // Last write wins: same id re-ingested with a new confidence
-    '{"v":1,"kind":"entity","recordedAt":"2026-07-01T08:00:00.000Z","agentId":"ministar/code-buddy","id":"discovery:collective:arxiv-1","type":"discovery","name":"arxiv:1 v2","confidence":0.8}',
+    '{"v":1,"kind":"entity","recordedAt":"2026-07-01T08:00:00.000Z","agentId":"hub/code-buddy","id":"discovery:collective:arxiv-1","type":"discovery","name":"arxiv:1 v2","confidence":0.8}',
     // Tombstone drops a node
     '{"v":1,"kind":"entity","recordedAt":"2026-07-01T09:00:00.000Z","agentId":"a","id":"fact:collective:f1","type":"fact","name":"périmé","confidence":0.5}',
     '{"v":1,"kind":"tombstone","recordedAt":"2026-07-01T10:00:00.000Z","agentId":"a","id":"fact:collective:f1"}',

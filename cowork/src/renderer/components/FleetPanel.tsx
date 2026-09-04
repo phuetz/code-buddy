@@ -195,7 +195,7 @@ export function FleetPanel() {
                 value={addUrl}
                 onChange={(e) => setAddUrl(e.target.value)}
                 data-testid="fleet-add-url-input"
-                placeholder="ws://100.98.18.76:3000/ws"
+                placeholder="ws://203.0.113.10:3000/ws"
                 className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent font-mono"
               />
               <input
@@ -211,7 +211,7 @@ export function FleetPanel() {
                 value={addLabel}
                 onChange={(e) => setAddLabel(e.target.value)}
                 data-testid="fleet-add-label-input"
-                placeholder="Label (optional, e.g. Ministar Linux)"
+                placeholder="Label (optional, e.g. Linux hub)"
                 className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
               />
               {addError && (
@@ -245,7 +245,7 @@ export function FleetPanel() {
                   ? (
                     <>
                       No peers configured. Add a Code Buddy instance running on your Tailscale mesh
-                      (e.g. <code className="font-mono text-text-secondary">ws://100.98.18.76:3000/ws</code>)
+                      (e.g. <code className="font-mono text-text-secondary">ws://203.0.113.10:3000/ws</code>)
                       with a key scoped for fleet:listen and peer:invoke.
                     </>
                   )

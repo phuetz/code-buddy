@@ -74,7 +74,7 @@ describe('FleetRoutePreview', () => {
       privacyTag: 'public',
       rationale: 'best free local match',
       primary: { peerId: 'gpuNode/repo', model: 'qwen3.6:27b', score: 0.91 },
-      fallback: { peerId: 'ministar/repo', model: 'qwen2.5:7b', score: 0.6 },
+      fallback: { peerId: 'hub/repo', model: 'qwen2.5:7b', score: 0.6 },
     });
     await renderPreview(routePreview);
 
