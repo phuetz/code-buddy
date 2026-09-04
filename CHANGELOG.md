@@ -1,5 +1,14 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### VERIFIX3B / DELEGVERIF — suites de VERIF3 et du juge NVIDIA (4 septembre 2026)
+
+Dix fixtures isolées supplémentaires pour le garde-fou de données personnelles,
+ordre FIFO discriminé pour `/swarm` et `/team`, argv réels de `worktree add`
+assertés, entrée `git -C` en lecture prouvée utile. Les huit points du juge
+NVIDIA sur DELEG3 ont été vérifiés par un Claude : six faux avec preuve, un vrai
+corrigé — les paramètres du parent ne sont plus transmis tels quels au Verifier
+délégué —, un test de sérialisation renforcé.
+
 ### INCONNU1 — installation depuis la branche poussée, à l'aveugle (4 septembre 2026)
 
 Un Claude a rejoué le parcours README + getting-started sur un clone GitHub :
