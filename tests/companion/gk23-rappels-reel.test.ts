@@ -38,9 +38,11 @@ import {
 import { runReminderTick } from '../../src/companion/reminder-runner.js';
 import { sendTelegramAlert } from '../../src/sensory/alert.js';
 import { sayNow } from '../../src/sensory/voice-loop.js';
+import { hasPiper } from '../helpers/cifix2-dependencies.js';
 
 const FAKE_TOKEN = '123456:gk23-fake-token';
 const FAKE_CHAT = '4242';
+const piperProbe = hasPiper({ piperBin: PIPER_BIN, piperModel: PIPER_MODEL, audioPlayerBin: APLAY_BIN });
 
 function sha256File(file: string): string {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
@@ -51,7 +53,7 @@ function wavsIn(dir: string): string[] {
   return readdirSync(dir).filter((name) => name.endsWith('.wav'));
 }
 
-describe('GK23 — rappels en vrai (horloge factice, Piper, Telegram factice)', () => {
+describe.skipIf(!piperProbe.available)('GK23 — rappels en vrai (horloge factice, Piper, Telegram factice)', () => {
   const realBefore = {
     reminders: existsSync(REAL_REMINDERS) ? sha256File(REAL_REMINDERS) : 'missing',
     pending: existsSync(REAL_PENDING) ? sha256File(REAL_PENDING) : 'missing',
@@ -73,9 +75,6 @@ describe('GK23 — rappels en vrai (horloge factice, Piper, Telegram factice)', 
     const work = await makeWorkDir('e2e-');
     const stores = isolateStores(work);
     artifacts = stores.artifacts;
-    expect(existsSync(APLAY_BIN)).toBe(true);
-    expect(existsSync(PIPER_BIN)).toBe(true);
-    expect(existsSync(PIPER_MODEL)).toBe(true);
 
     const { listenFakeTelegram } = await import('../../_qa/gk10/fake-telegram.mjs');
     telegram = await listenFakeTelegram({ token: FAKE_TOKEN });

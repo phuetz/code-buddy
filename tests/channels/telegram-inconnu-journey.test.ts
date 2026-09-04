@@ -24,21 +24,12 @@ import {
   pushVoiceMessage,
 } from '../../_qa/gk10/fake-telegram.mjs';
 import { sendTelegramVoice } from '../../src/sensory/alert.js';
+import { hasOllamaModel } from '../helpers/cifix2-dependencies.js';
 
 const TOKEN = '123456:gk10-fake-token';
 const MODEL = 'qwen2.5:1.5b-instruct';
 const QA_HOME_ROOT = path.join(process.cwd(), '_qa', 'gk10', 'home');
-
-async function ollamaReady(): Promise<boolean> {
-  try {
-    const res = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(2000) });
-    if (!res.ok) return false;
-    const body = await res.json() as { models?: Array<{ name?: string }> };
-    return (body.models ?? []).some((model) => model.name?.startsWith(MODEL));
-  } catch {
-    return false;
-  }
-}
+const ollamaProbe = hasOllamaModel(MODEL);
 
 async function readOutbound(base: string): Promise<Array<{ method?: string; text?: string }>> {
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -69,7 +60,7 @@ async function waitForOutbound(
   return outbound;
 }
 
-describe('GK10 stranger Telegram journey', () => {
+describe.skipIf(!ollamaProbe.available)('GK10 stranger Telegram journey', () => {
   const previous = { ...process.env };
   let home: string;
   let fake: Awaited<ReturnType<typeof listenFakeTelegram>> | undefined;
@@ -103,9 +94,6 @@ describe('GK10 stranger Telegram journey', () => {
   });
 
   it('configures from the documented env, answers text via Ollama, runs /help, handles photo/voice, and does not duplicate after restart', async () => {
-    if (!await ollamaReady()) {
-      throw new Error(`Ollama local model ${MODEL} is required for GK10`);
-    }
     await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
