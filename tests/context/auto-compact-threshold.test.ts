@@ -1,6 +1,6 @@
 /**
  * Tests for src/context/auto-compact-threshold.ts (post-Claude-Code-audit
- * helper, see private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md
+ * helper, see the handover repo's propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md
  * recommendation #1).
  *
  * Pure function tests: each call snapshots+restores the

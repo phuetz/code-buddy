@@ -3,7 +3,7 @@
  *
  * Pure unit tests with full fs+git mocking. No real I/O, no real WebSocket,
  * no real Code Buddy agent. Verifies the deterministic flow ported from
- * `private-handover-repo/tools/heartbeat_tick.py` :
+ * the handover repo's `tools/heartbeat_tick.py` :
  *   - FLEET_PAUSE detection
  *   - Priority-based task picking, with priorityThreshold filter
  *   - Dirty-repo abort

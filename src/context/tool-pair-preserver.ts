@@ -1,6 +1,6 @@
 /**
  * Tool-pair preserver — post-audit fix derived from Claude Code source
- * comparison (private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
+ * comparison (le dépôt privé de passation, propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
  *
  * `SmartCompactionEngine.truncateMessages` walks newest-to-oldest and
  * stops when the budget is hit. If a `tool_result` lands in the kept

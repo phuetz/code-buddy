@@ -146,7 +146,7 @@ export class MessageHistoryManager {
    *
    * Pattern aligned with Gemini CLI's comprehensive vs curated history
    * distinction (see audit doc
-   * `private-handover-repo/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`,
+   * the handover repo's `propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`,
    * recommendation #3).
    */
   getComprehensiveHistory(): CodeBuddyMessage[] {

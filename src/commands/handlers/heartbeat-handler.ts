@@ -12,7 +12,7 @@
  *   /heartbeat status   — show running/enabled, tick counters, suppression count
  *
  * Per task `task-2026-05-02-wire-heartbeat-activation` from
- * `private-handover-repo/.codebuddy/colab-tasks.json`. Unblocks Phase 2 of
+ * the handover repo's `.codebuddy/colab-tasks.json`. Unblocks Phase 2 of
  * AUTONOMOUS-FLEET-PROTOCOL v0.1 on the always-on Linux hub.
  */
 
