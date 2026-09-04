@@ -478,7 +478,15 @@ export function registerImproveCommands(program: Command): void {
       const scope = (STRATEGY_SCOPES as readonly string[]).includes(options.scope ?? '')
         ? (options.scope as (typeof STRATEGY_SCOPES)[number])
         : 'headless';
-      const experiences = [...(await collectExperiences()), ...(await readExperiencesFile(options.experiences))];
+      // A strategy is judged on RUNS: widen the delegation-log window (the generic collector
+      // keeps 10) so the sign test has enough paired lanes; opt-in via the source's own env.
+      const wide = await createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 200 })
+        .collect()
+        .catch(() => [] as Experience[]);
+      const seen = new Set<string>();
+      const experiences = [...(await collectExperiences()), ...wide, ...(await readExperiencesFile(options.experiences))].filter(
+        (e) => (seen.has(e.id) ? false : (seen.add(e.id), true)),
+      );
       const engine = new StrategyImprovementEngine({
         scope,
         proposer: new HeuristicStrategyProposer(),
