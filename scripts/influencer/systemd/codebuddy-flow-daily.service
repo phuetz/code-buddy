@@ -10,6 +10,10 @@ WorkingDirectory=%h/code-buddy
 # L'identifiant du projet Flow n'est PAS versionne : renseignez-le dans
 # ~/.config/environment.d/ ou via `systemctl --user edit`, sous la forme
 #   Environment=FLOW_PROJECT_URL=https://labs.google/fx/<langue>/tools/flow/project/<identifiant>
+EnvironmentFile=-%h/.codebuddy/flow.env
+# Refus fermé : sans FLOW_PROJECT_URL, systemd substituerait une chaîne vide et le pilote
+# viserait un projet vide en dépensant des crédits (revue GF3, 04/09/2026).
+ExecStartPre=/bin/sh -c 'test -n "$FLOW_PROJECT_URL" || { echo "FLOW_PROJECT_URL absent (posez-le dans ~/.codebuddy/flow.env)" >&2; exit 1; }'
 ExecStart=/usr/bin/python3 %h/code-buddy/scripts/influencer/flow-daily.py --resume --project-url ${FLOW_PROJECT_URL}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
