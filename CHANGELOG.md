@@ -1,5 +1,17 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### STT2 — sherpa-rs rendait un transcript vide sur le robot (4 septembre 2026)
+
+Depuis le 03/09, chaque phrase entendue passait par le repli faster-whisper : le
+routage Rust du capteur rejetait à tort le pin de langue `fr` (jugé « non
+supporté » par Parakeet, qui le supporte) et le cerveau étiquetait mal les
+transcriptions. La liste des langues Parakeet est explicite ; le repli dit
+désormais la raison (code de sortie, stderr, durée, signal) et, après trois vides
+consécutifs, annonce une seule fois « sherpa-rs inactif » au lieu d'un avertissement
+par phrase. Prouvé sur un WAV réel de 9 s (transcription non vide en 2,0 s) puis en
+production : `STT ready requested=sherpa-rs effective=sherpa-rs language=fr`.
+Rapport : `docs/reports/2026-09/REPARATION-STT2.md`.
+
 ### PRIV3 — les résidus « à nettoyer » de la revue AGYSEC2 (4 septembre 2026)
 
 Chemins d'espaces de travail privés retirés de 11 documents et 15 commentaires
