@@ -55,12 +55,23 @@ ensuite tiré 100 fois avec un générateur déterministe ; plusieurs parents so
 `childrenCount` sont persistés. Aucun provider, service ou évolution réelle n’est utilisé.
 
 Preuve : `npx vitest run tests/agent/self-improvement/evolution/ast-novelty.test.ts` = 1 fichier / 7
-tests verts ; suite complète self-improvement = 34 fichiers / 242 tests verts.
+tests verts ; suite complète self-improvement = 34 fichiers / 243 tests verts.
 
 ## Preuves
 
-À compléter après les tests ciblés, `tsc`, ESLint ciblé et `git diff --check`.
+- `HOME="$PWD/_qa/dgm4/home" npx vitest run tests/agent/self-improvement` : 34 fichiers / 243 tests verts.
+- `npx tsc --noEmit -p .` : code 0.
+- ESLint ciblé sur les fichiers R1/R2 et tests associés : code 0.
+- `git diff --check` : code 0.
+- `CODEBUDDY_SELF_IMPROVE` absent pendant la vérification ; aucun provider, API payante, service ou
+  évolution réelle utilisé.
+- Arbre propre après le commit documentaire ; aucun push ; `~/code-buddy` interdit en écriture.
 
 ## Commits
 
-À compléter après chaque point R1/R2 et les vérifications finales.
+- `60b063ccc` rapport initial créé avant inspection.
+- `1cc9cae84` réservation Fable 5.
+- `54ffeac50` R1 : filtre AST G0 moteur/tool-gate.
+- `7552f7489` R2 : pénalité de descendance et sélection pondérée.
+- `9e20204c7` garde-fou de placement des imports.
+- `2f51c3a7e` scénario d’intégration et preuve de rotation.
