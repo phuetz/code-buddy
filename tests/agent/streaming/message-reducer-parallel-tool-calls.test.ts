@@ -115,6 +115,60 @@ describe('reduceStreamChunk - parallel tool-call accumulation', () => {
     expect(JSON.parse(toolCalls[0]!.function!.arguments!)).toEqual({ path: 'a.ts' });
   });
 
+  it('accumulates the first tool call correctly when the provider numbers tool_calls starting at 1, not 0 (MiniMax/GMI, BASHSTREAM1)', () => {
+    // Real delta sequence captured 2026-09-04 headless against
+    // MiniMaxAI/MiniMax-M3 via GMI (CODEBUDDY_DEBUG_RAW_STREAM dump), 3
+    // parallel tool calls (view_file, bash, create_file). MiniMax's `index`
+    // starts at 1 — there is no index-0 chunk at all. The buggy reducer's
+    // "first delta introducing the key" branch did a blind array-position
+    // direct-assign (ignoring `index`), so view_file's name/id landed at
+    // array position 0 while its own arguments-continuation chunk (which
+    // DOES carry `index: 1`) was merged into a *different* slot (position 1)
+    // via the by-index branch — leaving the first tool call's
+    // `function.arguments` permanently `""`, which crashes
+    // `JSON.parse(toolCall.function.arguments)` downstream (bash:
+    // tool-handler.ts executeStreamingBash ~l.1470) with "Unexpected end of
+    // JSON input".
+    const deltas: ToolCallDelta[][] = [
+      [{ index: 1, id: 'call_01a06ada19537ba3b4f09b5b', type: 'function', function: { name: 'view_file', arguments: '' } }],
+      [{ index: 1, function: { arguments: '{"path":"/home/patrice/DEV/cb-bashstream1-2026-09-04/package.json"}' } }],
+      [{ index: 2, id: 'call_01a06ada19537ba3b4f09b6a', type: 'function', function: { name: 'bash', arguments: '' } }],
+      [{ index: 2, function: { arguments: '{"command":"echo bonjour4"}' } }],
+      [{ index: 3, id: 'call_01a06ada19537ba3b4f09b79', type: 'function', function: { name: 'create_file', arguments: '' } }],
+      [{ index: 3, function: { arguments: '{"path":"/home/patrice/DEV/cb-bashstream1-2026-09-04/t4.txt","content":"test"}' } }],
+    ];
+
+    let acc: Record<string, unknown> = {};
+    for (const tcDelta of deltas) {
+      acc = reduceStreamChunk(acc, chunk(tcDelta));
+    }
+
+    const toolCalls = (acc.tool_calls as Array<{
+      id?: string;
+      function?: { name?: string; arguments?: string };
+    }> | undefined)?.filter(Boolean) ?? [];
+
+    // Three real tool calls, none dropped, none with a stranded empty-args slot.
+    expect(toolCalls).toHaveLength(3);
+    const [first, second, third] = toolCalls;
+
+    expect(first?.function?.name).toBe('view_file');
+    expect(second?.function?.name).toBe('bash');
+    expect(third?.function?.name).toBe('create_file');
+
+    // The regression: view_file's arguments must NOT be empty.
+    expect(first?.function?.arguments).not.toBe('');
+    expect(() => JSON.parse(first?.function?.arguments ?? '')).not.toThrow();
+    expect(JSON.parse(first!.function!.arguments!)).toEqual({
+      path: '/home/patrice/DEV/cb-bashstream1-2026-09-04/package.json',
+    });
+    expect(JSON.parse(second!.function!.arguments!)).toEqual({ command: 'echo bonjour4' });
+    expect(JSON.parse(third!.function!.arguments!)).toEqual({
+      path: '/home/patrice/DEV/cb-bashstream1-2026-09-04/t4.txt',
+      content: 'test',
+    });
+  });
+
   it('preserves content-only accumulation (no tool calls)', () => {
     const c1 = { id: 'x', choices: [{ index: 0, delta: { content: 'Hello, ' } }] };
     const c2 = { id: 'x', choices: [{ index: 0, delta: { content: 'world' } }] };
