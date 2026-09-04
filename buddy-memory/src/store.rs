@@ -1117,13 +1117,13 @@ mod store_tests {
     #[test]
     fn corroboration_counts_distinct_agents() {
         let led = tmp_ledger();
-        let mut a = Store::new(led.clone(), "ministar/cb".into());
+        let mut a = Store::new(led.clone(), "hub/cb".into());
         let mut b = Store::new(led.clone(), "laptop/cb".into());
         a.remember(&RememberInput {
             text: "le ledger append-only evite les pertes".into(),
             node_type: Some("fact".into()),
             name: Some("k".into()),
-            agent_id: Some("ministar/cb".into()),
+            agent_id: Some("hub/cb".into()),
             confidence: Some(0.6),
             ..Default::default()
         });

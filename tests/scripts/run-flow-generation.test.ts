@@ -61,7 +61,7 @@ function handoff(jobCount = 2, consumerPrefix = 'trailer'): GoogleFlowHandoff {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 1_000,
         maxFlowCreditsPerBatch: 1_000,

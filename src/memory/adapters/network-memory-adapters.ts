@@ -89,7 +89,7 @@ function trimBase(url: string): string {
 
 // ============================================================================
 // Mem0 — OSS self-hosted REST server OR Mem0 Platform cloud.
-//   Self-hosted (MEM0_BASE_URL set, e.g. http://ministar-linux:8888):
+//   Self-hosted (MEM0_BASE_URL set, e.g. http://hub-linux:8888):
 //     POST {base}/memories  {messages,[user_id]}   ·  POST {base}/search {query,user_id}
 //     auth: X-API-Key (optional)                   ·  NO /v1 prefix
 //   Cloud (api.mem0.ai):

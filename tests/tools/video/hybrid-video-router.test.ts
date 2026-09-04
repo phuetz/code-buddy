@@ -8,7 +8,7 @@ import {
 
 const capacity: HybridVideoCapacity = {
   gpuNode: true,
-  ministar: true,
+  localGpu: true,
   googleFlow: true,
   remainingFlowCredits: 25_000,
   maxFlowCreditsPerBatch: 500,

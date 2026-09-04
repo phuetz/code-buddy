@@ -83,7 +83,7 @@ export type AutonomousLlmProvider = 'cloud' | 'auto' | PeerChatProviderId;
 export interface FleetTickOptions {
   /** Absolute path to the private handover repository (fleet bus). */
   repoPath: string;
-  /** Host identifier, e.g. `ministar/grok-cli`. */
+  /** Host identifier, e.g. `hub/grok-cli`. */
   host: string;
   /** Hard cap on the agent's wall-clock time per task. Default 600 000 ms. */
   maxTaskMs?: number;

@@ -13,14 +13,14 @@ export type HybridVideoUseCase =
 export type HybridVideoEngine =
   | 'gpuNode-longcat'
   | 'gpuNode-comfyui'
-  | 'ministar-comfyui'
+  | 'localGpu-comfyui'
   | 'google-flow-veo31-lite'
   | 'google-flow-veo31-fast'
   | 'google-flow-veo31-quality';
 
 export interface HybridVideoCapacity {
   gpuNode: boolean;
-  ministar: boolean;
+  localGpu: boolean;
   googleFlow: boolean;
   remainingFlowCredits: number;
   maxFlowCreditsPerBatch: number;
@@ -54,7 +54,7 @@ const FLOW_CREDITS = {
 function localFallbacks(capacity: HybridVideoCapacity): HybridVideoEngine[] {
   return [
     ...(capacity.gpuNode ? (['gpuNode-comfyui'] as const) : []),
-    ...(capacity.ministar ? (['ministar-comfyui'] as const) : []),
+    ...(capacity.localGpu ? (['localGpu-comfyui'] as const) : []),
   ];
 }
 
@@ -80,8 +80,8 @@ export function routeHybridVideo(
   // Adult media is kept on infrastructure controlled by the project. Flow is
   // reserved for advertiser-safe YouTube and public companion assets.
   if (request.contentTier !== 'safe') {
-    const primary = capacity.gpuNode ? 'gpuNode-comfyui' : 'ministar-comfyui';
-    if (!capacity.gpuNode && !capacity.ministar) throw new Error('No local engine is available for private media');
+    const primary = capacity.gpuNode ? 'gpuNode-comfyui' : 'localGpu-comfyui';
+    if (!capacity.gpuNode && !capacity.localGpu) throw new Error('No local engine is available for private media');
     return {
       requestId: request.id,
       primary,
@@ -94,10 +94,10 @@ export function routeHybridVideo(
 
   if (request.requiresLipSync || request.useCase === 'avatar-lipsync') {
     if (!capacity.gpuNode) {
-      if (!capacity.ministar) throw new Error('No avatar-capable local engine is available');
+      if (!capacity.localGpu) throw new Error('No avatar-capable local engine is available');
       return {
         requestId: request.id,
-        primary: 'ministar-comfyui',
+        primary: 'localGpu-comfyui',
         fallbacks: [],
         executionMode: 'automatic-local',
         estimatedFlowCredits: 0,

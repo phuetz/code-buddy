@@ -69,9 +69,9 @@ describe('FleetRegistry', () => {
     reg.register(entry);
     expect(reg.size()).toBe(1);
     expect(reg.has('gpuNode')).toBe(true);
-    expect(reg.has('ministar')).toBe(false);
+    expect(reg.has('hub')).toBe(false);
     expect(reg.get('gpuNode')).toBe(entry);
-    expect(reg.get('ministar')).toBeUndefined();
+    expect(reg.get('hub')).toBeUndefined();
   });
 
   it('register replaces an existing entry with the same id', () => {

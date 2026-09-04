@@ -31,9 +31,9 @@ blenderproc run scripts/blenderproc/scene.py -- \
 ```
 
 > `scene.py` tente CUDA puis HIP puis retombe sur CPU. Sur les 3090 : GPU. Sur
-> l'AMD (MINISTAR) : CPU (plus lent, mais marche).
+> l'AMD (HUB) : CPU (plus lent, mais marche).
 
-### Sur MINISTAR — le scoring de la perception réelle
+### Sur HUB — le scoring de la perception réelle
 
 ```bash
 # Rapatrier ./boucle-a-out depuis GPU_NODE (tailscale/scp), puis :

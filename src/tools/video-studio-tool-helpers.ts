@@ -116,7 +116,7 @@ export function parseHybridCapacity(value: unknown): HybridVideoCapacity {
   const record = requireRecord(value, 'capacity');
   return {
     gpuNode: pickBoolean(record, ['gpuNode'], 'capacity.gpuNode'),
-    ministar: pickBoolean(record, ['ministar'], 'capacity.ministar'),
+    localGpu: pickBoolean(record, ['localGpu'], 'capacity.localGpu'),
     googleFlow: pickBoolean(record, ['google_flow', 'googleFlow'], 'capacity.google_flow'),
     remainingFlowCredits: pickFiniteNumber(
       record,

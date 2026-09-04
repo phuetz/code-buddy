@@ -429,7 +429,7 @@ export async function runHandoffStage(
     upscale4k: false,
     capacity: {
       gpuNode: false,
-      ministar: false,
+      localGpu: false,
       googleFlow: true,
       remainingFlowCredits: remainingCredits,
       maxFlowCreditsPerBatch: remainingCredits,

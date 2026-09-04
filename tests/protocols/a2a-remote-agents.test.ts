@@ -47,13 +47,13 @@ describe('A2AAgentClient — remote agents', () => {
 
   it('getAgentCard fallback to remote', () => {
     const client = new A2AAgentClient();
-    const card = makeCard('ministar-ollama', ['chat-qwen3']);
-    client.registerRemoteCard('ministar-ollama', {
+    const card = makeCard('hub-ollama', ['chat-qwen3']);
+    client.registerRemoteCard('hub-ollama', {
       url: 'http://203.0.113.10:11434',
       card,
       lastHeartbeat: Date.now(),
     });
-    expect(client.getAgentCard('ministar-ollama')?.name).toBe('ministar-ollama');
+    expect(client.getAgentCard('hub-ollama')?.name).toBe('hub-ollama');
   });
 
   it('touchRemoteAgent updates lastHeartbeat', () => {

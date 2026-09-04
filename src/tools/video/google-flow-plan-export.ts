@@ -88,7 +88,7 @@ export interface GoogleFlowPlanExportOptions {
   remainingFlowCredits: number;
   maxFlowCreditsPerBatch: number;
   gpuNodeAvailable: boolean;
-  ministarAvailable: boolean;
+  localGpuAvailable: boolean;
 }
 
 function assertShortPlan(value: unknown): asserts value is ShortPlan {
@@ -201,7 +201,7 @@ export async function exportGoogleFlowHandoffFromPlan(
     upscale4k: options.upscale4k,
     capacity: {
       gpuNode: options.gpuNodeAvailable,
-      ministar: options.ministarAvailable,
+      localGpu: options.localGpuAvailable,
       googleFlow: true,
       remainingFlowCredits: options.remainingFlowCredits,
       maxFlowCreditsPerBatch: options.maxFlowCreditsPerBatch,

@@ -35,7 +35,7 @@ $lines = @(
 Set-Content -Path $runner -Value ($lines -join "`r`n") -Encoding Ascii
 
 # Free the 24 GB card used by ComfyUI. Lisa remains available through the
-# Ministar SD Turbo fallback during training.
+# Hub SD Turbo fallback during training.
 schtasks.exe /End /TN 'CodeBuddy-ComfyUI' | Out-Host
 Start-Sleep -Seconds 3
 

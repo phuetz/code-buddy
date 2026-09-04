@@ -1022,7 +1022,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'media',
     keywords: [
       'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
-      'gpuNode', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+      'gpuNode', 'localGpu', 'credits', 'engine', 'routage', 'moteur',
     ],
     priority: 8,
     description:

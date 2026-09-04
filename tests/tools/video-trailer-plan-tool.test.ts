@@ -13,7 +13,7 @@ const SHA = 'a'.repeat(64);
 
 const capacity = {
   gpuNode: true,
-  ministar: true,
+  localGpu: true,
   google_flow: true,
   remaining_flow_credits: 25_000,
   max_flow_credits_per_batch: 5_000,

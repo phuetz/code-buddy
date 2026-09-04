@@ -18,7 +18,7 @@ vi.mock('../../src/integrations/tailscale.js', () => ({
           models: ['qwen3.6:35b-a3b-q4_K_M', 'phi4:latest'],
         },
         {
-          hostname: 'ministar-linux',
+          hostname: 'hub-linux',
           ip: '203.0.113.10',
           baseURL: 'http://203.0.113.10:11434/v1',
           models: ['qwen3.6:27b'],
@@ -54,7 +54,7 @@ vi.mock('../../src/fleet/model-inventory.js', () => ({
         provider: 'ollama',
         model: 'qwen3.6:27b',
         baseURL: 'http://203.0.113.10:11434/v1',
-        machineLabel: 'ministar-linux',
+        machineLabel: 'hub-linux',
         executionLocation: 'lan',
       },
       {
@@ -141,7 +141,7 @@ describe('resolveLiveModelTierConfig', () => {
       {
         model: 'qwen3.6:27b',
         baseUrl: 'http://203.0.113.10:11434/v1',
-        label: 'ministar-linux',
+        label: 'hub-linux',
       },
       {
         model: 'phi4:latest',
