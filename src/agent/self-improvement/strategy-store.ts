@@ -88,7 +88,9 @@ export class StrategyStore {
     const out: ActiveMap = {};
     for (const scope of STRATEGY_SCOPES) {
       const id = (raw as Record<string, unknown>)[scope];
-      if (typeof id === 'string') out[scope] = id;
+      if (typeof id === 'string' && (id === BASELINE_STRATEGY.id || /^[a-z0-9][a-z0-9-]{2,63}$/.test(id))) {
+        out[scope] = id;
+      }
     }
     return out;
   }
@@ -107,7 +109,9 @@ export class StrategyStore {
   }
 
   activeId(scope: StrategyScope): string {
-    return this.readActive()[scope] ?? BASELINE_STRATEGY.id;
+    const id = this.readActive()[scope];
+    if (!id || id === BASELINE_STRATEGY.id) return BASELINE_STRATEGY.id;
+    return this.has(id) ? id : BASELINE_STRATEGY.id;
   }
 
   /**

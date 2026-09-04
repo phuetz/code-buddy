@@ -91,24 +91,41 @@ export class StrategyImprovementEngine {
       return { ...base, proposalId: null, candidate: null, rationale: null, gate: null, applied: false, notes: ['no failure signal in the experiences — nothing to mutate'] };
     }
     const keepOnAccept = this.autonomy === 'auto-apply';
-    const gate = await validateStrategyProposal(
-      proposal,
-      parent,
-      this.evaluatorFactory(experiences),
-      this.store,
-      { ...this.gateOptions, keepOnAccept, scope: this.scope },
-    );
+    let gate: StrategyGateOutcome;
+    try {
+      gate = await validateStrategyProposal(
+        proposal,
+        parent,
+        this.evaluatorFactory(experiences),
+        this.store,
+        { ...this.gateOptions, keepOnAccept, scope: this.scope },
+      );
+    } catch (err) {
+      return {
+        ...base,
+        proposalId: proposal.id,
+        candidate: null,
+        rationale: proposal.rationale,
+        gate: null,
+        applied: false,
+        notes: [`gate failed: ${err instanceof Error ? err.message : String(err)}`],
+      };
+    }
     const applied = gate.accepted && !!gate.appliedRef;
     if (applied) {
-      this.archive.append({
-        proposalId: proposal.id,
-        kind: 'strategy',
-        targetScenarioId: `strategy:${this.scope}`,
-        experienceId: proposal.experienceIds[0],
-        delta: gate.paired ? gate.paired.wins - gate.paired.losses : 1,
-        scoreAfter: gate.paired?.pImprove ?? 1,
-        appliedRef: gate.appliedRef,
-      });
+      try {
+        this.archive.append({
+          proposalId: proposal.id,
+          kind: 'strategy',
+          targetScenarioId: `strategy:${this.scope}`,
+          experienceId: proposal.experienceIds[0],
+          delta: gate.paired ? gate.paired.wins - gate.paired.losses : 1,
+          scoreAfter: gate.paired?.pImprove ?? 1,
+          appliedRef: gate.appliedRef,
+        });
+      } catch (err) {
+        gate.reasons.push(`archive append failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     const candidate = gate.accepted || gate.rejectionReason !== 'schema' ? (proposal.candidate as StrategySpec) : null;
     return {
