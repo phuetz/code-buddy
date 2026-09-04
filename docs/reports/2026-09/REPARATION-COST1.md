@@ -147,4 +147,28 @@ calculateCost(inputTokens: number, outputTokens: number, model: string): number 
 
 | Date | Action | Résultat |
 |------|--------|----------|
-| 2026-09-04 | Création rapport | En cours |
+| 2026-09-04 | Création rapport | Terminé |
+| 2026-09-04 | Ajout tarifs Mistral et détection forfait ChatGPT | Terminé |
+| 2026-09-04 | Intégration usage provider dans calcul de coût | Terminé |
+| 2026-09-04 | Ajout métadonnées coût étendu (estimated, pricing, billing) | Terminé |
+| 2026-09-04 | Tests rouge→vert (10 nouveaux tests COST1) | 75/75 passés |
+
+---
+
+## Vérifications
+
+- ✅ `npx vitest run tests/utils tests/cli tests/codebuddy` : **914 tests passés, 0 échec**
+- ✅ `npx tsc --noEmit` : **exit 0**
+- ✅ `npx eslint` (ciblé) : **0 erreur, 0 warning**
+- ✅ `git diff --check` : **propre**
+
+---
+
+## Preuves attendues (à compléter)
+
+- [x] Tests rouge→vert
+- [x] `npx vitest run tests/utils tests/cli tests/codebuddy` : tous verts
+- [x] `tsc --noEmit` : exit 0
+- [x] `eslint` ciblé : 0 erreur
+- [x] `git diff --check` : propre
+- [ ] Preuve réelle ChatGPT forfait : `total: 0, billing: 'subscription'` (nécessite API payante)
