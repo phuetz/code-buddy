@@ -50,7 +50,11 @@ describe('ShadowWorkspace', () => {
   let shadowBase: string;
 
   beforeEach(() => {
-    testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-shadow-'));
+    // `realpathSync` : sur macOS os.tmpdir() rend /var/folders/… alors que /var
+    // est un lien vers /private/var. `git rev-parse --show-toplevel` — la source
+    // du `repoRoot` affiché par `buddy shadow status` — rend TOUJOURS le chemin
+    // résolu, donc une fixture logique ne pouvait jamais correspondre.
+    testRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-shadow-')));
     repo = createRepo(testRoot);
     shadowBase = path.join(testRoot, 'shadow-store');
     // node-based validators: identical on sh (POSIX) and cmd.exe (Windows).

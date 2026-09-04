@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn, spawnSync } from 'child_process';
-import { mkdtemp, rm, stat, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, realpath, rm, stat, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, sep } from 'path';
 
@@ -573,7 +573,13 @@ describe('output mastering and grading builders', () => {
 describe('assembleFilm — orchestration (injected)', () => {
   let root: string;
   beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), 'buddy-film-'));
+    // `realpath` : sur macOS os.tmpdir() rend /var/folders/… alors que /var est
+    // un lien vers /private/var. assembleFilm résout délibérément le LUT et sa
+    // racine (fs.realpath, une garde anti-lien symbolique), si bien qu'un
+    // attendu construit sur le chemin LOGIQUE ne pouvait pas correspondre à
+    // l'argv réellement passé à ffmpeg. On ancre donc la fixture sur la même
+    // forme canonique que le code de production.
+    root = await realpath(await mkdtemp(join(tmpdir(), 'buddy-film-')));
   });
   afterAll(async () => {
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -734,7 +740,7 @@ describe.runIf(hasFfmpeg)('assembleFilm — real ffmpeg render', () => {
   const clips: string[] = [];
 
   beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), 'buddy-film-real-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'buddy-film-real-')));
     // Three 2s lavfi clips (color + sine tone), distinct so a transition is visible.
     const colors = ['red', 'green', 'blue'];
     for (let i = 0; i < 3; i++) {
