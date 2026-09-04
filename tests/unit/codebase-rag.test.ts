@@ -41,14 +41,21 @@ jest.mock('../../src/utils/atomic-write.js', async (importOriginal) => ({
 }));
 
 // Mock path
+// CodebaseRAG fait « import path from 'path' » : il lit l'export DEFAULT.
+// Étaler ...originalPath réintroduisait ce default — le VRAI module path — si
+// bien que les doubles ne servaient qu'aux exports nommés. Sous POSIX la
+// coïncidence de séparateur masquait tout ; sous Windows l'implémentation
+// joignait avec des antislashs pendant que le scénario attendait le double.
+// Le default pointe désormais sur la même implémentation doublée.
 jest.mock('path', async () => {
   const originalPath = await vi.importActual('path');
-  return {
+  const impl = {
     ...originalPath,
     join: jest.fn((...args: string[]) => args.join('/')),
     relative: jest.fn((from: string, to: string) => to.replace(from + '/', '')),
     dirname: jest.fn((p: string) => p.split('/').slice(0, -1).join('/')),
   };
+  return { ...impl, default: impl };
 });
 
 // Mock logger
