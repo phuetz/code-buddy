@@ -515,6 +515,9 @@ describe('ToolCache', () => {
   describe('withCache', () => {
     it('should wrap tool execution with caching', async () => {
       resetToolCache();
+      // Hermétique : le cache persistait dans `.codebuddy/cache/tool-cache.json` du dépôt et
+      // ce test relisait sa propre entrée d'une exécution précédente (rouge le 04/09/2026).
+      getToolCache({ persistToDisk: false });
       let execCount = 0;
 
       const result = await withCache('search', { q: 'test' }, async () => {
