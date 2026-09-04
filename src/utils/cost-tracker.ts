@@ -1,4 +1,3 @@
-import fs from "fs-extra";
 import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
@@ -20,12 +19,20 @@ function isChatGptSubscriptionModel(model: string): boolean {
   if (!model) return false;
   const m = model.toLowerCase();
   return (
+    // Models served EXCLUSIVELY via ChatGPT OAuth/backend (not billable via API key)
     m === 'gpt-5.2' ||
     m === 'gpt-5.5' ||
     m.startsWith('gpt-5.5-') ||
     m.includes('-codex') ||
     m === 'codex-1' ||
-    m.startsWith('codex-mini')
+    m.startsWith('codex-mini') ||
+    // gpt-5.6 variants served via ChatGPT Responses backend
+    m === 'gpt-5.6-sol' ||
+    m === 'gpt-5.6' ||
+    m.startsWith('gpt-5.6-') ||
+    // Codex models
+    m === 'codex' ||
+    m.startsWith('codex-')
   );
 }
 
@@ -57,6 +64,12 @@ export interface TokenUsage {
   model: string;
   timestamp: Date;
   cost: number;
+  /** Whether this usage is based on provider-reported tokens (true) or local estimate (false) */
+  estimated?: boolean;
+  /** Pricing model used: 'known' | 'unknown' | 'subscription' */
+  pricing?: 'known' | 'unknown' | 'subscription';
+  /** Billing type: 'pay-per-use' | 'subscription' */
+  billing?: 'pay-per-use' | 'subscription';
 }
 
 export interface CostReport {
@@ -72,6 +85,21 @@ export interface CostReport {
   budgetLimit?: number;
   /** Persisted daily guardrail, when configured. */
   dailyLimit?: number;
+}
+
+/** Extended cost information with provenance metadata */
+export interface ExtendedCostInfo {
+  total: number;
+  /** Whether the cost is based on provider-reported tokens (false) or local estimate (true) */
+  estimated: boolean;
+  /** Pricing model: 'known' (model has known pricing), 'unknown' (model not in pricing table), 'subscription' (forfait) */
+  pricing: 'known' | 'unknown' | 'subscription';
+  /** Billing type: 'pay-per-use' or 'subscription' */
+  billing: 'pay-per-use' | 'subscription';
+  /** Input tokens used for this cost calculation */
+  inputTokens: number;
+  /** Output tokens used for this cost calculation */
+  outputTokens: number;
 }
 
 export interface CostConfig {
@@ -90,7 +118,9 @@ export interface ModelPricing {
 }
 
 // Model pricing (approximate, update as needed)
+// Pricing is per 1K tokens (inputPer1k, outputPer1k)
 const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Grok models
   "grok-4-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
   "grok-4-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
   "grok-4-1-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
@@ -99,6 +129,18 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   "grok-3-mini": { inputPer1k: 0.0003, outputPer1k: 0.0005 },
   "grok-code-fast-1": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
   "grok-2-latest": { inputPer1k: 0.002, outputPer1k: 0.010 },
+
+  // Mistral models - public pricing (as of 2026-09)
+  // mistral-medium-latest: 1.5 $/M input, 7.5 $/M output = 0.0015 $/K input, 0.0075 $/K output
+  "mistral-medium-latest": { inputPer1k: 0.0015, outputPer1k: 0.0075 },
+  "mistral-medium": { inputPer1k: 0.0015, outputPer1k: 0.0075 },
+  "mistral-large-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "mistral-large": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "mistral-small-latest": { inputPer1k: 0.00025, outputPer1k: 0.001 },
+  "mistral-small": { inputPer1k: 0.00025, outputPer1k: 0.001 },
+  "mixtral-8x7b-latest": { inputPer1k: 0.0005, outputPer1k: 0.002 },
+  "mixtral-8x7b": { inputPer1k: 0.0005, outputPer1k: 0.002 },
+
   // Fallback for unknown models
   "default": { inputPer1k: 0.003, outputPer1k: 0.015 },
 };
@@ -201,6 +243,25 @@ export class CostTracker extends EventEmitter {
   }
 
   /**
+   * Determine billing type for a model
+   */
+  private determineBillingType(model: string): 'subscription' | 'pay-per-use' {
+    return isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
+      ? 'subscription'
+      : 'pay-per-use';
+  }
+
+  /**
+   * Determine pricing status for a model
+   */
+  private determinePricingStatus(model: string): 'known' | 'unknown' | 'subscription' {
+    if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
+      return 'subscription';
+    }
+    return MODEL_PRICING[model] ? 'known' : 'unknown';
+  }
+
+  /**
    * Calculate cost for token usage.
    *
    * Returns 0 for ChatGPT subscription auth (`gpt-5.2`, `gpt-5.5*`, `gpt-5*-codex`,
@@ -208,15 +269,67 @@ export class CostTracker extends EventEmitter {
    * billed against the user's flat-fee ChatGPT Plus/Pro plan, NOT a
    * per-token API platform balance. Reporting a fictitious USD cost is
    * misleading and shows up in dashboards as "spend" that doesn't exist.
+   *
+   * When providerUsage is provided (provider-reported tokens), it takes precedence
+   * over local estimates. This ensures accuracy when the provider returns usage
+   * in the SSE stream (OpenAI-compatible APIs with include_usage option).
    */
-  calculateCost(inputTokens: number, outputTokens: number, model: string, cachedTokens: number = 0): number {
+  calculateCost(
+    inputTokens: number,
+    outputTokens: number,
+    model: string,
+    cachedTokens: number = 0,
+    providerUsage?: { promptTokens: number; completionTokens: number }
+  ): number {
+    // Use provider-reported tokens when available
+    const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
+    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
+
     if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
       return 0;
     }
     const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["default"] ?? { inputPer1k: 0.003, outputPer1k: 0.015 };
-    const effectiveInput = inputTokens - cachedTokens + (cachedTokens * 0.5);
     return (effectiveInput / 1000) * pricing.inputPer1k +
-           (outputTokens / 1000) * pricing.outputPer1k;
+           (effectiveOutput / 1000) * pricing.outputPer1k;
+  }
+
+  /**
+   * Calculate cost with extended metadata about the calculation.
+   * This provides transparency about whether the cost is based on provider
+   * usage or local estimates, and the pricing/billing status.
+   */
+  calculateCostExtended(
+    inputTokens: number,
+    outputTokens: number,
+    model: string,
+    cachedTokens: number = 0,
+    providerUsage?: { promptTokens: number; completionTokens: number }
+  ): ExtendedCostInfo {
+    const billing = this.determineBillingType(model);
+    const pricingStatus = this.determinePricingStatus(model);
+    const estimated = providerUsage === undefined;
+
+    // Use provider-reported tokens when available
+    const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
+    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
+
+    let total = 0;
+    if (billing === 'subscription') {
+      total = 0;
+    } else {
+      const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["default"] ?? { inputPer1k: 0.003, outputPer1k: 0.015 };
+      total = (effectiveInput / 1000) * pricing.inputPer1k +
+              (effectiveOutput / 1000) * pricing.outputPer1k;
+    }
+
+    return {
+      total,
+      estimated,
+      pricing: pricingStatus,
+      billing,
+      inputTokens: effectiveInput,
+      outputTokens: effectiveOutput,
+    };
   }
 
   /**
@@ -500,6 +613,9 @@ export class CostTracker extends EventEmitter {
     this.removeAllListeners();
   }
 }
+
+// Export helper functions for external use (e.g., cost display)
+export { isChatGptSubscriptionModel, isLocalNoCostModel, MODEL_PRICING };
 
 // Singleton instance
 let costTrackerInstance: CostTracker | null = null;

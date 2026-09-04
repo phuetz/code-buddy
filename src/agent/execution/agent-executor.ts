@@ -511,7 +511,7 @@ export interface ExecutorConfig {
   /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
-  recordSessionCost: (input: number, output: number) => void;
+  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number }) => void;
   /**
    * Optional: publishes the counters the PROVIDER reported for the turn, summed
    * over every round. Called exactly once per turn — with `undefined` when no
@@ -1326,7 +1326,11 @@ export class AgentExecutor {
       if (sessionCostRecorded) return;
       sessionCostRecorded = true;
       try {
-        this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        // Pass provider usage when available (takes precedence over local estimates)
+        const providerUsage = providerUsageSeen
+          ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+          : undefined;
+        this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
       }

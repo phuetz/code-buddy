@@ -18,7 +18,8 @@ import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
-import type { CostTracker } from "../utils/cost-tracker.js";
+import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
+import { MODEL_PRICING, isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -1666,6 +1667,40 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.lastTurnProviderUsage ? { ...this.lastTurnProviderUsage } : undefined;
   }
 
+  /**
+   * Get extended cost information for the current session.
+   * Returns metadata about whether the cost is based on provider usage or local estimates,
+   * the pricing model used, and billing type.
+   */
+  getSessionCostExtended(): ExtendedCostInfo {
+    const model = this.getCurrentModel();
+    const report = this.costTracker.getReport();
+    const lastProviderUsage = this.lastTurnProviderUsage;
+
+    // Determine if we have provider usage
+    const estimated = lastProviderUsage === null || lastProviderUsage === undefined;
+
+    // Get billing and pricing status
+    const billing: 'pay-per-use' | 'subscription' =
+      isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
+        ? 'subscription'
+        : 'pay-per-use';
+
+    const pricing: 'known' | 'unknown' | 'subscription' =
+      billing === 'subscription'
+        ? 'subscription'
+        : MODEL_PRICING[model] ? 'known' : 'unknown';
+
+    return {
+      total: this.sessionCost,
+      estimated,
+      pricing,
+      billing,
+      inputTokens: report.sessionTokens.input,
+      outputTokens: report.sessionTokens.output,
+    };
+  }
+
   override saveCurrentSession(): Promise<void> | void {
     const report = this.costTracker.getReport();
     const sessionTokens = report.sessionTokens ?? { input: 0, output: 0 };
@@ -2067,15 +2102,29 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /**
    * Record cost for current request
-   * @param inputTokens - Number of input tokens
-   * @param outputTokens - Number of output tokens
+   * @param inputTokens - Number of input tokens (local estimate)
+   * @param outputTokens - Number of output tokens (local estimate)
+   * @param providerUsage - Optional provider-reported usage (takes precedence over local estimates)
    */
-  private recordSessionCost(inputTokens: number, outputTokens: number): void {
+  private recordSessionCost(
+    inputTokens: number,
+    outputTokens: number,
+    providerUsage?: { promptTokens: number; completionTokens: number }
+  ): void {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
-    this.costTracker.recordUsage(inputTokens, outputTokens, model);
+
+    // Record usage with effective tokens (provider if available, otherwise local estimate)
+    const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
+    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
+    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+
+    // Store provider usage for extended cost info retrieval
+    if (providerUsage) {
+      this.lastTurnProviderUsage = { ...providerUsage };
+    }
 
     const activeRun = getActiveRunStore();
     const runId = activeRun?.getCurrentRunId();

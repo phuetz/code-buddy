@@ -1145,9 +1145,15 @@ async function processPromptHeadless(
           cli.stdout(resultText);
         } else {
           const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+          const slashCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
           const slashOutputData: Record<string, unknown> = {
             result: resultText,
-            cost: { total: agent.getSessionCost() },
+            cost: {
+              total: slashCostExtended.total,
+              estimated: slashCostExtended.estimated,
+              pricing: slashCostExtended.pricing,
+              billing: slashCostExtended.billing,
+            },
             model: slashEffectiveModel,
             messages: [{ role: 'assistant', content: resultText }],
           };
@@ -1289,11 +1295,12 @@ async function processPromptHeadless(
     runStatus = exitCode === 0 ? 'completed' : 'failed';
 
     // Gather cost and model info from the agent
-    const sessionCost = agent.getSessionCost();
+    const sessionCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
+    const sessionCost = sessionCostExtended.total;
     const client = agent.getClient();
     const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
     const requestedModel = client.getLastRequestedModel();
-    
+
     // MODELLABEL1: Warn on stderr when requested model differs from effective model in headless mode
     if (requestedModel && requestedModel !== effectiveModel) {
       const fallbackWarning = `⚠️  Modèle "${requestedModel}" non disponible, repli sur "${effectiveModel}"`;
@@ -1321,7 +1328,12 @@ async function processPromptHeadless(
       const summaryData: Record<string, unknown> = {
         type: 'summary',
         result: resultText,
-        cost: { total: sessionCost },
+        cost: {
+          total: sessionCost,
+          estimated: sessionCostExtended.estimated,
+          pricing: sessionCostExtended.pricing,
+          billing: sessionCostExtended.billing,
+        },
         model: effectiveModel,
       };
       if (requestedModel && requestedModel !== effectiveModel) {
@@ -1344,6 +1356,9 @@ async function processPromptHeadless(
         result: resultText,
         cost: {
           total: sessionCost,
+          estimated: sessionCostExtended.estimated,
+          pricing: sessionCostExtended.pricing,
+          billing: sessionCostExtended.billing,
         },
         model: effectiveModel,
         messages,
