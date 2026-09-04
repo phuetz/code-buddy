@@ -139,8 +139,15 @@ async function defaultSelfImproveHook(): Promise<{ applied: boolean; detail: str
   if (strategiesEnabled()) {
     const { StrategyImprovementEngine } = await import('../agent/self-improvement/strategy-engine.js');
     const { HeuristicStrategyProposer } = await import('../agent/self-improvement/strategy-proposer.js');
-    const { createDefaultRunExperienceSource } = await import('../agent/self-improvement/experience-source.js');
-    const experiences = await createDefaultRunExperienceSource({ limit: 20 }).collect().catch(() => []);
+    const { createDefaultRunExperienceSource, createDefaultDelegationLogsExperienceSource } = await import(
+      '../agent/self-improvement/experience-source.js'
+    );
+    // Run friction points + the delegation-log facts (the ones the replay gate can judge on).
+    const [runs, lanes] = await Promise.all([
+      createDefaultRunExperienceSource({ limit: 20 }).collect().catch(() => []),
+      createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 200 }).collect().catch(() => []),
+    ]);
+    const experiences = [...runs, ...lanes];
     const r = await new StrategyImprovementEngine({
       scope: 'headless',
       proposer: new HeuristicStrategyProposer(),
