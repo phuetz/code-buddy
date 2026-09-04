@@ -4,6 +4,9 @@
  * Covers: TailscaleManager, Dashboard, DeviceNodeManager, MessageTool, GatewayTool
  */
 
+import nodePath from 'path';
+import nodeOs from 'os';
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -320,6 +323,9 @@ describe('Dashboard', () => {
 
 describe('DeviceNodeManager', () => {
   let DeviceNodeManager: typeof import('../../src/nodes/device-node').DeviceNodeManager;
+  // VERIF3 T10 : `mockWriteJsonAtomicSync` ne servait qu'à empêcher l'écriture
+  // réelle de devices.json ; aucun contrat de persistance n'était gardé ici.
+  const devicesFile = nodePath.join(nodeOs.homedir(), '.codebuddy', 'devices.json');
 
   beforeEach(async () => {
     jest.resetModules();
@@ -394,6 +400,38 @@ describe('DeviceNodeManager', () => {
     await mgr.pairDevice('d1', 'Device 1', 'ssh');
     expect(mgr.isDevicePaired('d1')).toBe(true);
     expect(mgr.isDevicePaired('d99')).toBe(false);
+  });
+
+  it('should persist paired devices at the devices file in 0o600', async () => {
+    const mgr = DeviceNodeManager.getInstance();
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
+
+    expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
+    const [writtenPath, payload, options] = mockWriteJsonAtomicSync.mock.calls.at(-1)!;
+    expect(writtenPath).toBe(devicesFile);
+    expect(options).toEqual({ mode: 0o600 });
+    expect(payload.version).toBe(1);
+    expect(payload.devices).toHaveLength(1);
+    expect(payload.devices[0]).toMatchObject({
+      id: 'mac1',
+      name: 'My Mac',
+      transportType: 'ssh',
+      paired: true,
+    });
+  });
+
+  it('should persist the removal of an unpaired device', async () => {
+    const mgr = DeviceNodeManager.getInstance();
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
+    await mgr.pairDevice('mac2', 'Other Mac', 'ssh');
+    mockWriteJsonAtomicSync.mockClear();
+
+    expect(mgr.unpairDevice('mac1')).toBe(true);
+
+    const [writtenPath, payload, options] = mockWriteJsonAtomicSync.mock.calls.at(-1)!;
+    expect(writtenPath).toBe(devicesFile);
+    expect(options).toEqual({ mode: 0o600 });
+    expect(payload.devices.map((d: { id: string }) => d.id)).toEqual(['mac2']);
   });
 
   it('should take camera snap', async () => {
