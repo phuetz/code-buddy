@@ -77,6 +77,7 @@ interface ImproveOptions {
   fail?: boolean;
   /** skills-consolidate: use this SKILL.md as the umbrella instead of calling an LLM. */
   proposalFile?: string;
+  scenario?: string;
 }
 
 interface ImproveBenchOptions extends ImproveOptions {
@@ -363,13 +364,17 @@ export function registerImproveCommands(program: Command): void {
     .description('Author + behaviorally validate NEW tools for the agent (held-out gated, anti-gaming)')
     .option('--json', 'output JSON')
     .option('--apply', 'keep validated tools for this session (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('tools')) return;
       const { ToolImprovementEngine } = await import('../../agent/self-improvement/tool-engine.js');
       const { LlmToolProposer } = await import('../../agent/self-improvement/llm-tool-proposer.js');
       const { SEED_TOOL_SCENARIOS } = await import('../../agent/self-improvement/tool-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_TOOL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_TOOL_SCENARIOS;
       const engine = new ToolImprovementEngine({
-        scenarios: SEED_TOOL_SCENARIOS,
+        scenarios,
         proposer: new LlmToolProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });
