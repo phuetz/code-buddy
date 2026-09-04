@@ -84,7 +84,13 @@ describe('GK23 — rappels en vrai (horloge factice, Piper, Telegram factice)', 
     process.env.CODEBUDDY_SENSORY_ALERT_CHAT = FAKE_CHAT;
     process.env.CODEBUDDY_REMINDER_ACK_WINDOW_MS = String(20 * 60_000);
 
-    fireDay = new Date(2026, 8, 4, 10, 38, 30); // 4 Sep 2026 10:38:30 local
+    // Jour de tir = DEMAIN 10:38:30 (heure locale), jamais une date figée : les commandes
+    // `remind list/agenda` tournent en sous-processus sur l'horloge RÉELLE, et une date
+    // d'écriture figée (4 sept. 2026) faisait disparaître le rappel ponctuel de l'agenda
+    // dès que l'heure réelle l'avait dépassée (rouge à partir du 04/09/2026 10 h 38).
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    fireDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10, 38, 30);
     oneShotDate = localDateKey(fireDay);
     resetAcks();
     resetSnoozes();
@@ -196,7 +202,8 @@ describe('GK23 — rappels en vrai (horloge factice, Piper, Telegram factice)', 
     expect(missed.some((o) => /Pas de confirmation/.test(o.text ?? ''))).toBe(true);
     expect(pendingAcks(tSnoozeDue.getTime() + 16_000, 15_000)).toHaveLength(0);
 
-    const nextMorning = new Date(2026, 8, 5, 10, 38, 30);
+    // Lendemain du jour de tir (relatif, jamais figé — même raison que fireDay).
+    const nextMorning = new Date(fireDay.getFullYear(), fireDay.getMonth(), fireDay.getDate() + 1, 10, 38, 30);
     const after = await listReminders();
     const trainAfter = after.find((r) => r.id === train.id)!;
     const medsAfter = after.find((r) => r.id === meds.id)!;
