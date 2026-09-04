@@ -17,13 +17,14 @@ export function registerBackupCommand(
   program
     .command('backup [subcommand] [args...]')
     .description(
-      "Manage backups of .codebuddy/ directories (archives default to ~/.codebuddy/backups; use --home-profile for home profile)",
+      "Manage backups of .codebuddy/ directories (archives default to ~/.codebuddy/backups; use --home for home profile)",
     )
     .option('--only-config', 'Only backup configuration files')
     .option('--no-include-workspace', 'Exclude workspace data')
     .option('--output <path>', 'Custom output directory')
     .option('--confirm', 'Confirm restore overwrite of .codebuddy/')
-    .option('--home-profile', 'Backup the home profile (~/.codebuddy) instead of the current project')
+    .option('--home', 'Backup the home profile (~/.codebuddy) instead of the current project')
+    .option('--home-profile', 'Alias for --home')
     .option('--scope <home|project|both>', 'Backup scope: home profile, current project, or both')
     .option('--dry-run', 'Show what would be backed up without actually writing anything')
     .action(async (
@@ -34,6 +35,7 @@ export function registerBackupCommand(
         includeWorkspace?: boolean;
         output?: string;
         confirm?: boolean;
+        home?: boolean;
         homeProfile?: boolean;
         scope?: string;
         dryRun?: boolean;
@@ -45,7 +47,7 @@ export function registerBackupCommand(
       if (opts.includeWorkspace === false) flags.push('--no-include-workspace');
       if (opts.output) flags.push('--output', opts.output);
       if (opts.confirm) flags.push('--confirm');
-      if (opts.homeProfile) flags.push('--home-profile');
+      if (opts.home || opts.homeProfile) flags.push('--home');
       if (opts.scope) flags.push('--scope', opts.scope);
       if (opts.dryRun) flags.push('--dry-run');
       const fullArgs = [subcommand || 'list', ...(args || []), ...flags].join(' ');

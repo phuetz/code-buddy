@@ -14,6 +14,7 @@ import {
   statSync,
   readFileSync,
   writeFileSync,
+  copyFileSync,
 } from 'fs';
 import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } from 'path';
 import { homedir } from 'os';
@@ -34,8 +35,12 @@ const BACKUP_DIR = join(homedir(), '.codebuddy', 'backups');
 export const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 Mo
 /** Default total backup size limit (200 MB) */
 export const DEFAULT_MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 200 Mo
+/** Get current home profile directory (~/.codebuddy) */
+export function getHomeProfileDir(): string {
+  return join(homedir(), '.codebuddy');
+}
 /** Home profile directory */
-export const HOME_PROFILE_DIR = join(homedir(), '.codebuddy');
+export const HOME_PROFILE_DIR = getHomeProfileDir();
 
 /**
  * Whitelist patterns for home profile backup.
@@ -53,7 +58,6 @@ export const PROFILE_BACKUP_WHITELIST = [
   'speech-hotwords.txt',
   'mcp.json',
   'identity-links.json',
-  'vision.env',
   // JSON files in personas directory (no images)
   'personas/*.json',
   // SKILL.md files in skills directory
@@ -86,18 +90,17 @@ export function isBlacklisted(filename: string): boolean {
   const lowerFilename = filename.toLowerCase();
   for (const pattern of PROFILE_BACKUP_BLACKLIST) {
     const lowerPattern = pattern.toLowerCase();
-    // Convert glob pattern to regex using string replacements
-    const starRegExp = new RegExp('\\*', 'g');
-    const questionRegExp = new RegExp('\\?', 'g');
-    const dotRegExp = new RegExp('\\.', 'g');
-    const regexPattern = lowerPattern
-      .replace(starRegExp, '.*')
-      .replace(questionRegExp, '.')
-      .replace(dotRegExp, '\\.');
-    
-    const regex = new RegExp('^.*' + regexPattern + '.*$');
-    if (regex.test(lowerFilename)) {
-      return true;
+    if (lowerPattern.startsWith('*') && lowerPattern.endsWith('*')) {
+      const middle = lowerPattern.slice(1, -1);
+      if (lowerFilename.includes(middle)) return true;
+    } else if (lowerPattern.startsWith('*')) {
+      const suffix = lowerPattern.slice(1);
+      if (lowerFilename.endsWith(suffix)) return true;
+    } else if (lowerPattern.endsWith('*')) {
+      const prefix = lowerPattern.slice(0, -1);
+      if (lowerFilename.startsWith(prefix)) return true;
+    } else {
+      if (lowerFilename === lowerPattern) return true;
     }
   }
   return false;
@@ -119,7 +122,7 @@ function normalizePathForMatching(path: string): string {
 }
 
 /**
- * Simple glob pattern matching for whitelist
+ * Glob pattern matching for whitelist
  */
 function matchesPattern(path: string, pattern: string): boolean {
   const normalizedPath = normalizePathForMatching(path);
@@ -137,28 +140,16 @@ function matchesPattern(path: string, pattern: string): boolean {
     const prefix = parts[0] || '';
     const suffix = parts[1] || '';
     
-    // Simple check: path starts with prefix and ends with suffix
     if (prefix && !normalizedPath.startsWith(prefix)) return false;
     if (suffix && !normalizedPath.endsWith(suffix)) return false;
-    
-    // Check that the middle part exists
-    const middleStart = prefix ? prefix.length : 0;
-    const middleEnd = suffix ? normalizedPath.length - suffix.length : normalizedPath.length;
-    const middlePart = normalizedPath.slice(middleStart, middleEnd);
-    return middlePart.length >= 0; // Always true if we get here
+    return true;
   }
   
-  // Handle * patterns (simple wildcards)
+  // Handle * patterns (single-segment wildcards)
   if (normalizedPattern.includes('*')) {
-    const patternParts = normalizedPattern.split('*').filter(part => part !== '');
-    let currentPos = 0;
-    
-    for (const part of patternParts) {
-      const foundPos = normalizedPath.indexOf(part, currentPos);
-      if (foundPos === -1) return false;
-      currentPos = foundPos + part.length;
-    }
-    return true;
+    const escaped = normalizedPattern.replace(/\./g, '\\.').replace(/\*/g, '[^/]*');
+    const regex = new RegExp(`^${escaped}$`);
+    return regex.test(normalizedPath);
   }
   
   // Exact match
@@ -166,9 +157,43 @@ function matchesPattern(path: string, pattern: string): boolean {
 }
 
 export function isWhitelisted(relativePath: string): boolean {
+  const base = basename(relativePath);
+  if (isBlacklisted(base)) return false;
   for (const pattern of PROFILE_BACKUP_WHITELIST) {
     if (matchesPattern(relativePath, pattern)) {
       return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Determine whether a directory relative path could contain whitelisted files.
+ * Avoids descending into huge 1.3TB directories like personas/ (images), runtimes/, etc.
+ */
+function canContainWhitelistedFiles(dirRel: string): boolean {
+  const normDir = normalizePathForMatching(dirRel).replace(/\/+$/, '');
+  const dirBase = basename(normDir);
+  if (isBlacklisted(dirBase)) return false;
+
+  for (const pattern of PROFILE_BACKUP_WHITELIST) {
+    const normPattern = normalizePathForMatching(pattern);
+    if (normPattern.endsWith('/')) {
+      const patternDir = normPattern.slice(0, -1);
+      if (patternDir === normDir || patternDir.startsWith(normDir + '/') || normDir.startsWith(patternDir + '/')) {
+        return true;
+      }
+    } else if (normPattern.includes('**/')) {
+      const basePrefix = normPattern.split('**/')[0]!.replace(/\/+$/, '');
+      if (basePrefix === normDir || basePrefix.startsWith(normDir + '/') || normDir.startsWith(basePrefix + '/')) {
+        return true;
+      }
+    } else if (normPattern.includes('/')) {
+      const segments = normPattern.split('/');
+      const patternDir = segments.slice(0, -1).join('/');
+      if (patternDir === normDir || patternDir.startsWith(normDir + '/')) {
+        return true;
+      }
     }
   }
   return false;
@@ -201,8 +226,7 @@ export async function handleBackup(
   const subcommand = parts[0]?.toLowerCase() || 'list';
 
   // HOMEBACKUP1: Extract profile-related flags that apply to all subcommands
-  const profileIndex = parts.indexOf('--home-profile');
-  const profileMode = profileIndex >= 0;
+  const profileMode = parts.includes('--home') || parts.includes('--home-profile') || parts.includes('--profile');
   
   const scopeIndex = parts.indexOf('--scope');
   const scopeValue = scopeIndex >= 0 && scopeIndex + 1 < parts.length 
@@ -224,7 +248,7 @@ export async function handleBackup(
       return {
         handled: true,
         exitCode: 1,
-        response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--home-profile] [--scope home|project|both] [--dry-run]`,
+        response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--home] [--scope home|project|both] [--dry-run]`,
       };
   }
 }
@@ -261,6 +285,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
 
   // Determine source paths based on scope
   const sources: { path: string; type: 'project' | 'home' }[] = [];
+  const homeProfileDir = getHomeProfileDir();
   
   if (scope === 'both' || scope === 'project') {
     const cwd = process.cwd();
@@ -271,8 +296,8 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   }
   
   if (scope === 'both' || scope === 'home') {
-    if (existsSync(HOME_PROFILE_DIR)) {
-      sources.push({ path: HOME_PROFILE_DIR, type: 'home' });
+    if (existsSync(homeProfileDir)) {
+      sources.push({ path: homeProfileDir, type: 'home' });
     }
   }
 
@@ -281,7 +306,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
       handled: true,
       exitCode: 1,
       response: scope === 'home' 
-        ? `No home profile directory found at ${HOME_PROFILE_DIR}.`
+        ? `No home profile directory found at ${homeProfileDir}.`
         : `No .codebuddy/ directory found at ${join(process.cwd(), '.codebuddy')}. Create one with \`buddy --init\` first.`,
     };
   }
@@ -307,26 +332,29 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
 
   for (const source of sources) {
     const basePath = source.path;
-    const relativeBase = source.type === 'home' ? HOME_PROFILE_DIR : join(process.cwd(), '.codebuddy');
     
     if (source.type === 'home') {
       // For home profile, use profile-specific collection with whitelist/blacklist
       const profileFiles = collectProfileFiles(
-        basePath, 
-        HOME_PROFILE_DIR, 
-        { 
+        basePath,
+        homeProfileDir,
+        {
           maxFileSize: DEFAULT_MAX_FILE_SIZE,
           maxTotalSize: DEFAULT_MAX_TOTAL_SIZE,
         },
         allSkipped
       );
       allFiles.push(...profileFiles.files);
-      sourceDescriptions.push(`${HOME_PROFILE_DIR} (profile)`);
+      sourceDescriptions.push(`${homeProfileDir} (profile)`);
     } else {
       // For project, use existing collection
       const projectFiles = collectFiles(basePath, basePath, { onlyConfig, noWorkspace }, allSkipped);
       allFiles.push(...projectFiles);
-      sourceDescriptions.push(`${basePath} (project)`);
+      sourceDescriptions.push(
+        scope === 'both'
+          ? `${basePath} (current project .codebuddy/)`
+          : `${basePath} (current project .codebuddy/; does not include ~/.codebuddy; use --home for home profile)`
+      );
     }
   }
 
@@ -477,8 +505,18 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
         handled: true,
         exitCode: 1,
         response:
-          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x), got ${manifest.version}`,
+          `Invalid backup ${fullPath}: unsupported backup format (need version 1.x or 2.x), got ${manifest.version}`,
       };
+    }
+
+    for (const file of manifest.files) {
+      if (isBlacklisted(basename(file.path))) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Invalid backup ${fullPath}: secret file in archive is forbidden: ${file.path}`,
+        };
+      }
     }
 
     const payloadError = verifyArchivePayloads(manifest, data.files);
@@ -561,7 +599,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     return {
       handled: true,
       exitCode: 1,
-      response: 'Usage: backup restore <file> [--confirm] [--home-profile] [--scope home|project|both]',
+      response: 'Usage: backup restore <file> [--confirm] [--home] [--scope home|project|both]',
     };
   }
 
@@ -576,7 +614,6 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
 
   // HOMEBACKUP1: Determine restore scope from manifest or flags
   let restoreScope = profileOpts?.scope;
-  let isProfileBackup = profileOpts?.profileMode;
 
   try {
     const data = JSON.parse(readFileSync(fullPath, 'utf-8'));
@@ -604,7 +641,6 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     const manifestProfile = (manifest as BackupManifest & { profile?: boolean }).profile;
     
     restoreScope = restoreScope || manifestScope || (manifestProfile ? 'home' : 'project');
-    isProfileBackup = isProfileBackup || manifestProfile || restoreScope === 'home' || restoreScope === 'both';
 
     // Determine destination based on scope
     let destRoots: string[] = [];
@@ -613,7 +649,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
       destRoots.push(projectDest);
     }
     if (restoreScope === 'both' || restoreScope === 'home') {
-      destRoots.push(HOME_PROFILE_DIR);
+      destRoots.push(getHomeProfileDir());
     }
     
     if (destRoots.length === 0) {
@@ -645,6 +681,16 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
           'To confirm, run: backup restore <file> --confirm',
         ].join('\n'),
       };
+    }
+
+    for (const manifestFile of manifest.files) {
+      if (isBlacklisted(basename(manifestFile.path))) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Cannot restore ${fullPath}: secret file in archive is forbidden: ${manifestFile.path}`,
+        };
+      }
     }
 
     const payloadError = verifyArchivePayloads(manifest, data.files);
@@ -705,6 +751,13 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
             exitCode: 1,
             response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
           };
+        }
+        if (existsSync(dest)) {
+          try {
+            copyFileSync(dest, `${dest}.bak`);
+          } catch {
+            // Ignore backup copy failure if unable to write .bak
+          }
         }
         writeFileSync(dest, content);
         const reread = readFileSync(dest);
@@ -1003,63 +1056,22 @@ function collectProfileFiles(
         continue;
       }
 
-      // Only process files/directories that are whitelisted
-      if (!isWhitelisted(relativePath) && !isDir) {
-        // For files, they must be explicitly whitelisted
-        if (!isDir) {
-          skipped.push({ relativePath, reason: 'not in whitelist' });
-          continue;
-        }
-      }
-
       if (isDir) {
-        // For directories, check if any files within would be whitelisted
-        const dirPrefix = relativePath.endsWith('/') ? relativePath : relativePath + '/';
-        const hasWhitelistedDescendant = PROFILE_BACKUP_WHITELIST.some(pattern => {
-          if (pattern.endsWith('/')) {
-            // Directory pattern
-            const patternPrefix = pattern.slice(0, -1);
-            return dirPrefix.startsWith(patternPrefix + '/') || dirPrefix === patternPrefix + '/';
-          } else if (pattern.includes('/')) {
-            // Pattern with path
-            const patternParts = pattern.split('/');
-            const dirParts = dirPrefix.split('/');
-            return dirParts[0] === patternParts[0];
-          }
-          return false;
-        });
-
-        if (hasWhitelistedDescendant) {
-          // Recurse into directory if it might contain whitelisted files
+        if (canContainWhitelistedFiles(relativePath)) {
           const dirResult = collectProfileFiles(fullPath, base, limits, skipped);
-          const dirFiles = dirResult.files;
-          const dirTotalSize = dirResult.totalSize;
-          
-          // Check if adding this directory would exceed the total size limit
-          if (currentTotalSize + dirTotalSize <= limits.maxTotalSize) {
-            results.push(...dirFiles);
-            currentTotalSize += dirTotalSize;
-          } else {
-            // Add files until we hit the limit
-            for (const file of dirFiles) {
-              if (currentTotalSize + file.size <= limits.maxTotalSize) {
-                results.push(file);
-                currentTotalSize += file.size;
-              } else {
-                skipped.push({ 
-                  relativePath: file.relativePath, 
-                  reason: `exceeds total size limit (${formatBackupSize(limits.maxTotalSize)})` 
-                });
-              }
-            }
-          }
+          results.push(...dirResult.files);
+          currentTotalSize += dirResult.totalSize;
         } else {
-          // Directory has no whitelisted content
           skipped.push({ relativePath, reason: 'directory not in whitelist' });
           continue;
         }
       } else {
         // It's a file
+        if (!isWhitelisted(relativePath)) {
+          skipped.push({ relativePath, reason: 'not in whitelist' });
+          continue;
+        }
+
         try {
           const stat = statSync(fullPath);
           
@@ -1068,15 +1080,6 @@ function collectProfileFiles(
             skipped.push({ 
               relativePath, 
               reason: `larger than ${formatBackupSize(limits.maxFileSize)}` 
-            });
-            continue;
-          }
-
-          // Check total size limit
-          if (currentTotalSize + stat.size > limits.maxTotalSize) {
-            skipped.push({ 
-              relativePath, 
-              reason: `exceeds total size limit (${formatBackupSize(limits.maxTotalSize)})` 
             });
             continue;
           }

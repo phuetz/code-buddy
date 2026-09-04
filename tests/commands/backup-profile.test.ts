@@ -5,8 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { join } from 'path';
-import { homedir } from 'os';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -23,6 +22,7 @@ vi.mock('fs', async (importOriginal) => {
     lstatSync: vi.fn(),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
+    copyFileSync: vi.fn(),
   };
 });
 
@@ -52,7 +52,6 @@ let PROFILE_BACKUP_WHITELIST: any;
 let PROFILE_BACKUP_BLACKLIST: any;
 let DEFAULT_MAX_FILE_SIZE: any;
 let DEFAULT_MAX_TOTAL_SIZE: any;
-let HOME_PROFILE_DIR: any;
 
 // Helper to create a mock file system
 function createMockFileSystem(files: Record<string, { content?: string; size?: number; isDir?: boolean; isSymlink?: boolean }>) {
@@ -74,23 +73,33 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.readdirSync).mockImplementation((dir: string) => {
-    const normalizedDir = dir.replace(/\\/g, '/');
+    const normalizedDir = dir.replace(/\\/g, '/').replace(/\/+$/, '');
     const entries: any[] = [];
+    const seenNames = new Set<string>();
     
     for (const [filePath, fileInfo] of Object.entries(files)) {
       const normalizedPath = filePath.replace(/\\/g, '/');
       if (normalizedPath.startsWith(normalizedDir + '/')) {
         const relativePath = normalizedPath.slice(normalizedDir.length + 1);
         const parts = relativePath.split('/');
-        const name = parts[0];
+        const name = parts[0]!;
         
-        // Only include files/dirs directly in this directory
-        if (!relativePath.includes('/')) {
+        if (seenNames.has(name)) continue;
+        seenNames.add(name);
+
+        if (parts.length === 1) {
           entries.push({
             name,
-            isDirectory: vi.fn(() => fileInfo.isDir),
+            isDirectory: vi.fn(() => Boolean(fileInfo.isDir)),
             isFile: vi.fn(() => !fileInfo.isDir),
-            isSymbolicLink: vi.fn(() => fileInfo.isSymlink),
+            isSymbolicLink: vi.fn(() => Boolean(fileInfo.isSymlink)),
+          });
+        } else {
+          entries.push({
+            name,
+            isDirectory: vi.fn(() => true),
+            isFile: vi.fn(() => false),
+            isSymbolicLink: vi.fn(() => false),
           });
         }
       }
@@ -104,15 +113,21 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
     for (const [mockPath, fileInfo] of Object.entries(files)) {
       if (normalizedPath === mockPath.replace(/\\/g, '/')) {
         return {
-          size: fileInfo.size || 100,
+          size: fileInfo.size !== undefined ? fileInfo.size : (fileInfo.content ? fileInfo.content.length : 100),
           isFile: vi.fn(() => !fileInfo.isDir),
-          isDirectory: vi.fn(() => fileInfo.isDir),
-          isSymbolicLink: vi.fn(() => fileInfo.isSymlink),
+          isDirectory: vi.fn(() => Boolean(fileInfo.isDir)),
+          isSymbolicLink: vi.fn(() => Boolean(fileInfo.isSymlink)),
           mtime: new Date(),
         };
       }
     }
-    return { size: 100, isFile: vi.fn(() => true), isDirectory: vi.fn(() => false), mtime: new Date() };
+    for (const mockPath of Object.keys(files)) {
+      const normMock = mockPath.replace(/\\/g, '/');
+      if (normMock.startsWith(normalizedPath + '/')) {
+        return { size: 4096, isFile: vi.fn(() => false), isDirectory: vi.fn(() => true), isSymbolicLink: vi.fn(() => false), mtime: new Date() };
+      }
+    }
+    return { size: 100, isFile: vi.fn(() => true), isDirectory: vi.fn(() => false), isSymbolicLink: vi.fn(() => false), mtime: new Date() };
   });
 
   vi.mocked(fs.lstatSync).mockImplementation((filePath: string) => {
@@ -120,12 +135,18 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
     for (const [mockPath, fileInfo] of Object.entries(files)) {
       if (normalizedPath === mockPath.replace(/\\/g, '/')) {
         return {
-          size: fileInfo.size || 100,
+          size: fileInfo.size !== undefined ? fileInfo.size : (fileInfo.content ? fileInfo.content.length : 100),
           isFile: vi.fn(() => !fileInfo.isDir),
-          isDirectory: vi.fn(() => fileInfo.isDir),
-          isSymbolicLink: vi.fn(() => fileInfo.isSymlink),
+          isDirectory: vi.fn(() => Boolean(fileInfo.isDir)),
+          isSymbolicLink: vi.fn(() => Boolean(fileInfo.isSymlink)),
           mtime: new Date(),
         };
+      }
+    }
+    for (const mockPath of Object.keys(files)) {
+      const normMock = mockPath.replace(/\\/g, '/');
+      if (normMock.startsWith(normalizedPath + '/')) {
+        return { size: 4096, isFile: vi.fn(() => false), isDirectory: vi.fn(() => true), isSymbolicLink: vi.fn(() => false), mtime: new Date() };
       }
     }
     return { size: 100, isFile: vi.fn(() => true), isDirectory: vi.fn(() => false), isSymbolicLink: vi.fn(() => false), mtime: new Date() };
@@ -141,8 +162,17 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
     return Buffer.from('{}');
   });
 
-  vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+  vi.mocked(fs.writeFileSync).mockImplementation((filePath: any, data: any) => {
+    const normalized = String(filePath).replace(/\\/g, '/');
+    const content = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString('utf-8') : String(data);
+    files[normalized] = {
+      content,
+      size: Buffer.byteLength(content),
+      isDir: false,
+    };
+  });
   vi.mocked(fs.mkdirSync).mockImplementation(() => {});
+  vi.mocked(fs.copyFileSync).mockImplementation(() => {});
 }
 
 describe('HOMEBACKUP1 - Profile Backup Features', () => {
@@ -158,7 +188,6 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
     PROFILE_BACKUP_BLACKLIST = backupHandlers.PROFILE_BACKUP_BLACKLIST;
     DEFAULT_MAX_FILE_SIZE = backupHandlers.DEFAULT_MAX_FILE_SIZE;
     DEFAULT_MAX_TOTAL_SIZE = backupHandlers.DEFAULT_MAX_TOTAL_SIZE;
-    HOME_PROFILE_DIR = backupHandlers.HOME_PROFILE_DIR;
   });
 
   afterEach(() => {
@@ -244,7 +273,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/auth-profiles.json': { content: '{}', size: 50 },
       });
 
-      const result = await handleBackup('create --profile --scope home --dry-run --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --dry-run --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.exitCode).toBeUndefined();
@@ -264,7 +293,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/random-file.txt': { content: 'not whitelisted', size: 50 },
       });
 
-      const result = await handleBackup('create --profile --scope home --dry-run --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --dry-run --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.response).toContain('Skipped');
@@ -277,7 +306,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
   describe('Scope Handling', () => {
     it('should accept valid scope values', async () => {
       for (const scope of ['home', 'project', 'both']) {
-        const result = await handleBackup(`create --profile --scope ${scope} --dry-run`);
+        const result = await handleBackup(`create --home --scope ${scope} --dry-run`);
         expect(result.handled).toBe(true);
         // Should not return an error for valid scopes
         expect(result.response).not.toContain('Invalid scope');
@@ -285,7 +314,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
     });
 
     it('should reject invalid scope values', async () => {
-      const result = await handleBackup('create --profile --scope invalid --dry-run');
+      const result = await handleBackup('create --home --scope invalid --dry-run');
       expect(result.handled).toBe(true);
       expect(result.exitCode).toBe(1);
       expect(result.response).toContain('Invalid scope');
@@ -299,7 +328,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/user-settings.json': { content: '{}', size: 100 },
       });
 
-      const result = await handleBackup('create --home-profile --scope home --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.exitCode).toBeUndefined();
@@ -338,7 +367,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/settings.json': { content: '{}', size: 100 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       // The backup should be created but .env should be skipped
@@ -362,7 +391,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/settings.json': { content: '{}', size: 100 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.response).toContain('Skipped');
@@ -382,7 +411,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/settings.json': { content: '{}', size: 100 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.response).toContain('Skipped');
@@ -402,7 +431,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/settings.json': { content: '{}', size: 100 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
       
       expect(result.handled).toBe(true);
       expect(result.response).toContain('Skipped');
@@ -421,40 +450,39 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
     it('should skip files larger than max file size', async () => {
       createMockFileSystem({
         '/home/testuser/.codebuddy/settings.json': { content: '{}', size: 100 },
-        '/home/testuser/.codebuddy/large-file.json': { 
-          content: 'x'.repeat(6 * 1024 * 1024), 
+        '/home/testuser/.codebuddy/personas/large-file.json': {
+          content: 'x'.repeat(6 * 1024 * 1024),
           size: 6 * 1024 * 1024 // 6 Mo, larger than 5 Mo limit
         },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
-      
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
+
       expect(result.handled).toBe(true);
       expect(result.response).toContain('Skipped');
       expect(result.response).toContain('larger than');
-      
+
       const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
-      if (writeCalls.length > 0) {
-        const backupData = JSON.parse(writeCalls[0][1]);
-        const filePaths = backupData.files.map((f: any) => f.path);
-        expect(filePaths).not.toContain('large-file.json');
-      }
+      expect(writeCalls.length).toBeGreaterThan(0);
+      const backupData = JSON.parse(writeCalls[0][1]);
+      const filePaths = backupData.files.map((f: any) => f.path);
+      expect(filePaths).not.toContain('personas/large-file.json');
     });
 
     it('should fail when total size exceeds limit', async () => {
-      // Create many files that exceed the total limit
+      // Create many whitelisted files (each < 5 Mo) that together exceed 200 Mo limit
       const files: Record<string, { content: string; size: number }> = {};
       for (let i = 0; i < 50; i++) {
-        files[`/home/testuser/.codebuddy/file-${i}.json`] = { 
-          content: 'x'.repeat(10 * 1024 * 1024), // 10 Mo each
-          size: 10 * 1024 * 1024 
+        files[`/home/testuser/.codebuddy/personas/agent-${i}.json`] = {
+          content: 'x',
+          size: 4500 * 1024 // 4.5 Mo each, 50 * 4.5 Mo = 225 Mo (> 200 Mo)
         };
       }
-      
+
       createMockFileSystem(files);
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
-      
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
+
       expect(result.handled).toBe(true);
       expect(result.exitCode).toBe(1);
       expect(result.response).toContain('exceeds maximum allowed size');
@@ -473,27 +501,26 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/personas/avatar.png': { content: 'image data', size: 5000 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
-      
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
+
       expect(result.handled).toBe(true);
       expect(result.exitCode).toBeUndefined();
-      
+
       const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
-      if (writeCalls.length > 0) {
-        const backupData = JSON.parse(writeCalls[0][1]);
-        const filePaths = backupData.files.map((f: any) => f.path);
-        
-        // Should contain whitelisted files
-        expect(filePaths).toContain('settings.json');
-        expect(filePaths).toContain('user-settings.json');
-        expect(filePaths).toContain('memory.md');
-        expect(filePaths).toContain('personas/agent.json');
-        
-        // Should NOT contain non-whitelisted files
-        expect(filePaths).not.toContain('random-file.txt');
-        expect(filePaths).not.toContain('cache/data.json');
-        expect(filePaths).not.toContain('personas/avatar.png');
-      }
+      expect(writeCalls.length).toBeGreaterThan(0);
+      const backupData = JSON.parse(writeCalls[0][1]);
+      const filePaths = backupData.files.map((f: any) => f.path);
+
+      // Should contain whitelisted files
+      expect(filePaths).toContain('settings.json');
+      expect(filePaths).toContain('user-settings.json');
+      expect(filePaths).toContain('memory.md');
+      expect(filePaths).toContain('personas/agent.json');
+
+      // Should NOT contain non-whitelisted files
+      expect(filePaths).not.toContain('random-file.txt');
+      expect(filePaths).not.toContain('cache/data.json');
+      expect(filePaths).not.toContain('personas/avatar.png');
     });
 
     it('should handle nested whitelist patterns', async () => {
@@ -504,20 +531,196 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
         '/home/testuser/.codebuddy/skills/other-skill/readme.txt': { content: 'not whitelisted', size: 40 },
       });
 
-      const result = await handleBackup('create --profile --scope home --output /tmp/backup');
-      
+      const result = await handleBackup('create --home --scope home --output /tmp/backup');
+
       expect(result.handled).toBe(true);
-      
+
       const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
-      if (writeCalls.length > 0) {
-        const backupData = JSON.parse(writeCalls[0][1]);
-        const filePaths = backupData.files.map((f: any) => f.path);
-        
-        expect(filePaths).toContain('skills/my-skill/SKILL.md');
-        expect(filePaths).toContain('skills/other-skill/SKILL.md');
-        expect(filePaths).not.toContain('skills/my-skill/config.json');
-        expect(filePaths).not.toContain('skills/other-skill/readme.txt');
-      }
+      expect(writeCalls.length).toBeGreaterThan(0);
+      const backupData = JSON.parse(writeCalls[0][1]);
+      const filePaths = backupData.files.map((f: any) => f.path);
+
+      expect(filePaths).toContain('skills/my-skill/SKILL.md');
+      expect(filePaths).toContain('skills/other-skill/SKILL.md');
+      expect(filePaths).not.toContain('skills/my-skill/config.json');
+      expect(filePaths).not.toContain('skills/other-skill/readme.txt');
+    });
+  });
+
+  describe('Verify and Restore with --home', () => {
+    it('should support --home without --scope (defaulting scope to home)', async () => {
+      createMockFileSystem({
+        '/home/testuser/.codebuddy/settings.json': { content: '{"theme":"light"}', size: 18 },
+      });
+
+      const result = await handleBackup('create --home --dry-run --output /tmp/backup');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBeUndefined();
+      expect(result.response).toContain('[DRY RUN]');
+      expect(result.response).toContain('Actual scope: home');
+      expect(result.response).toContain('/home/testuser/.codebuddy (profile)');
+    });
+
+    it('should verify a valid home profile backup archive', async () => {
+      const payload = Buffer.from('{"theme":"dark"}');
+      const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+      const backupContent = JSON.stringify({
+        manifest: {
+          version: '2.0.0',
+          createdAt: '2026-09-04T12:00:00.000Z',
+          files: [{ path: 'settings.json', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: true },
+          scope: 'home',
+          profile: true,
+        },
+        files: [{ path: 'settings.json', content: payload.toString('base64') }],
+      });
+
+      createMockFileSystem({
+        '/tmp/backup/codebuddy-backup-test-profile.json': { content: backupContent, size: backupContent.length },
+      });
+
+      const result = await handleBackup('verify /tmp/backup/codebuddy-backup-test-profile.json');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBeUndefined();
+      expect(result.response).toContain('Backup valid: codebuddy-backup-test-profile.json');
+      expect(result.response).toContain('Version: 2.0.0');
+    });
+
+    it('should reject verification if archive contains blacklisted secret files', async () => {
+      const payload = Buffer.from('SECRET=key');
+      const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+      const backupContent = JSON.stringify({
+        manifest: {
+          version: '2.0.0',
+          createdAt: '2026-09-04T12:00:00.000Z',
+          files: [{ path: '.env', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: true },
+          scope: 'home',
+          profile: true,
+        },
+        files: [{ path: '.env', content: payload.toString('base64') }],
+      });
+
+      createMockFileSystem({
+        '/tmp/backup/bad-backup.json': { content: backupContent, size: backupContent.length },
+      });
+
+      const result = await handleBackup('verify /tmp/backup/bad-backup.json');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+      expect(result.response).toContain('secret file in archive is forbidden');
+    });
+
+    it('should restore home profile files with backup of existing files before overwrite (.bak)', async () => {
+      const payload = Buffer.from('{"theme":"restored"}');
+      const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+      const backupContent = JSON.stringify({
+        manifest: {
+          version: '2.0.0',
+          createdAt: '2026-09-04T12:00:00.000Z',
+          files: [{ path: 'settings.json', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: true },
+          scope: 'home',
+          profile: true,
+        },
+        files: [{ path: 'settings.json', content: payload.toString('base64') }],
+      });
+
+      createMockFileSystem({
+        '/tmp/backup/codebuddy-backup-test-profile.json': { content: backupContent, size: backupContent.length },
+        '/home/testuser/.codebuddy/settings.json': { content: '{"theme":"old-existing"}', size: 24 },
+      });
+
+      // Confirm prompt preview
+      const preview = await handleBackup('restore /tmp/backup/codebuddy-backup-test-profile.json --home');
+      expect(preview.handled).toBe(true);
+      expect(preview.response).toContain('Ready to restore');
+      expect(preview.response).toContain('--confirm');
+
+      // Actual restore with confirm
+      const result = await handleBackup('restore /tmp/backup/codebuddy-backup-test-profile.json --home --confirm');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBeUndefined();
+      expect(result.response).toContain('Restored backup');
+
+      // Verify existing file was backed up before overwrite
+      expect(vi.mocked(fs.copyFileSync)).toHaveBeenCalledWith(
+        path.resolve('/home/testuser/.codebuddy/settings.json'),
+        path.resolve('/home/testuser/.codebuddy/settings.json.bak'),
+      );
+      // Verify restored file was written
+      expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(
+        path.resolve('/home/testuser/.codebuddy/settings.json'),
+        payload,
+      );
+    });
+
+    it('should refuse restore if archive contains blacklisted secret files', async () => {
+      const payload = Buffer.from('{"secret":"leak"}');
+      const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+      const backupContent = JSON.stringify({
+        manifest: {
+          version: '2.0.0',
+          createdAt: '2026-09-04T12:00:00.000Z',
+          files: [{ path: 'auth-profiles.json', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: true },
+          scope: 'home',
+          profile: true,
+        },
+        files: [{ path: 'auth-profiles.json', content: payload.toString('base64') }],
+      });
+
+      createMockFileSystem({
+        '/tmp/backup/bad-auth-backup.json': { content: backupContent, size: backupContent.length },
+      });
+
+      const result = await handleBackup('restore /tmp/backup/bad-auth-backup.json --home --confirm');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+      expect(result.response).toContain('secret file in archive is forbidden: auth-profiles.json');
+      expect(vi.mocked(fs.writeFileSync)).not.toHaveBeenCalled();
+    });
+
+    it('should produce archive where .env and auth-profiles.json are absent and huge file is skipped', async () => {
+      createMockFileSystem({
+        '/home/testuser/.codebuddy/settings.json': { content: '{"theme":"dark"}', size: 50 },
+        '/home/testuser/.codebuddy/user-settings.json': { content: '{"vim":true}', size: 40 },
+        '/home/testuser/.codebuddy/memory.md': { content: '# Memory notes', size: 30 },
+        '/home/testuser/.codebuddy/personas/agent.json': { content: '{"name":"agent"}', size: 60 },
+        '/home/testuser/.codebuddy/.env': { content: 'SECRET_API_KEY=12345', size: 25 },
+        '/home/testuser/.codebuddy/auth-profiles.json': { content: '{"keys":"secret"}', size: 45 },
+        '/home/testuser/.codebuddy/credentials.enc': { content: 'enc_bytes', size: 20 },
+        '/home/testuser/.codebuddy/personas/huge-persona.json': {
+          content: 'x'.repeat(6 * 1024 * 1024),
+          size: 6 * 1024 * 1024, // 6 Mo > 5 Mo limit
+        },
+      });
+
+      const result = await handleBackup('create --home --output /tmp/backup');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBeUndefined();
+      expect(result.response).toContain('Backup created');
+      expect(result.response).toContain('Skipped');
+
+      const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
+      expect(writeCalls.length).toBeGreaterThan(0);
+      const backupData = JSON.parse(writeCalls[0][1]);
+      const filePaths = backupData.files.map((f: any) => f.path);
+
+      // Whitelisted files present
+      expect(filePaths).toContain('settings.json');
+      expect(filePaths).toContain('user-settings.json');
+      expect(filePaths).toContain('memory.md');
+      expect(filePaths).toContain('personas/agent.json');
+
+      // Secret files ABSENT
+      expect(filePaths).not.toContain('.env');
+      expect(filePaths).not.toContain('auth-profiles.json');
+      expect(filePaths).not.toContain('credentials.enc');
+
+      // Huge file SKIPPED
+      expect(filePaths).not.toContain('personas/huge-persona.json');
     });
   });
 });
