@@ -476,12 +476,22 @@ export class ThreadDelegation<TOutput = unknown> {
               message: state.cancelledReason ?? 'Parent cancelled',
             });
           } else {
-            request.resolve({ success: true });
-            this.emit(state.agentId, 'status', {
-              state: 'turn_completed',
-              turn: state.turns,
-              costUsd: state.agent.getSessionCost?.() ?? 0,
-            });
+            const sessionCost = state.agent.getSessionCost?.() ?? 0;
+            if (sessionCost >= state.budget.maxCostUsd) {
+              const message =
+                `Delegate cost budget exhausted at $${sessionCost.toFixed(4)} ` +
+                `(limit $${state.budget.maxCostUsd.toFixed(4)})`;
+              this.reportBudget(state, 'cost_budget_exhausted', message);
+              request.resolve({ success: false, reason: 'cost_budget_exhausted', message });
+              state.input.close(message);
+            } else {
+              request.resolve({ success: true });
+              this.emit(state.agentId, 'status', {
+                state: 'turn_completed',
+                turn: state.turns,
+                costUsd: sessionCost,
+              });
+            }
           }
         } catch (error) {
           if (this.cancelled || state.cancelledReason || state.controller.signal.aborted) {

@@ -329,3 +329,103 @@ describe('extractStructuredFindings', () => {
     expect(findings).toEqual([{ severity: 'low', message: 'nit' }]);
   });
 });
+
+// ── DELEG3: multiplexed, fail-closed quality delegates ────────────
+
+describe('quality gate delegated execution (DELEG3)', () => {
+  const gates = [
+    { id: 'code-guardian', agentId: 'code-guardian', action: 'find-issues', required: false },
+    { id: 'security-review', agentId: 'security-review', action: 'quick-scan', required: false },
+  ];
+
+  const completedContext = makeContext({
+    changedFiles: ['src/auth/login.ts'],
+    history: [assistantEntry('Implementation is complete and the changed authentication code is ready for review.')],
+  });
+
+  function replaceGateExecutor(
+    middleware: QualityGateMiddleware,
+    execute: (gate: { id: string }) => Promise<unknown>,
+  ): void {
+    (middleware as unknown as {
+      runSingleGate: (gate: { id: string }, files: string[]) => Promise<unknown>;
+    }).runSingleGate = execute;
+  }
+
+  it('runs both gates concurrently and exposes their tagged multiplexed results', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const events: Array<{ agentId: string; kind: string; payload: unknown }> = [];
+    const middleware = new QualityGateMiddleware(
+      { gates },
+      { onDelegateEvent: (event) => events.push(event) },
+    );
+    replaceGateExecutor(middleware, async (gate) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      active -= 1;
+      return {
+        gateId: gate.id,
+        passed: true,
+        findings: [],
+        structured: true,
+      };
+    });
+
+    const result = await middleware.afterTurn(completedContext);
+
+    expect(result.action).toBe('continue');
+    expect(maxActive).toBe(2);
+    expect(events.filter((event) => event.kind === 'output').map((event) => event.agentId).sort())
+      .toEqual(['code-guardian', 'security-review']);
+  });
+
+  it('reports a throwing delegate as an incomplete review instead of a false green', async () => {
+    const middleware = new QualityGateMiddleware({ gates });
+    replaceGateExecutor(middleware, async (gate) => {
+      if (gate.id === 'security-review') throw new Error('scanner crashed');
+      return {
+        gateId: gate.id,
+        passed: true,
+        findings: [],
+        structured: true,
+      };
+    });
+
+    const result = await middleware.afterTurn(completedContext);
+
+    expect(result.action).toBe('warn');
+    expect(result.message).toMatch(/incomplete review/i);
+    expect(result.message).toContain('scanner crashed');
+    expect(result.message).toContain('security-review');
+  });
+
+  it('reports delegate budget exhaustion and preserves the inherited default concurrency of one', async () => {
+    const sameAgentGates = [
+      { id: 'first-review', agentId: 'shared-reviewer', action: 'review-one', required: false },
+      { id: 'second-review', agentId: 'shared-reviewer', action: 'review-two', required: false },
+    ];
+    const middleware = new QualityGateMiddleware({
+      gates: sameAgentGates,
+      delegateParentBudget: {
+        maxTurns: 2,
+        maxCostUsd: 1,
+        maxContextTokens: 8_192,
+      },
+      delegateConcurrency: 1,
+    });
+    replaceGateExecutor(middleware, async (gate) => ({
+      gateId: gate.id,
+      passed: true,
+      findings: [],
+      structured: true,
+    }));
+
+    const result = await middleware.afterTurn(completedContext);
+
+    expect(result.action).toBe('warn');
+    expect(result.message).toMatch(/incomplete review/i);
+    expect(result.message).toMatch(/turn budget exhausted/i);
+  });
+});

@@ -21,7 +21,12 @@ import { getArchiveAgent } from './archive-agent.js';
 import { getCodeGuardianAgent } from './code-guardian-agent.js';
 import { getSecurityReviewAgent } from './security-review-agent.js';
 import { getSWEAgent } from './swe-agent-adapter.js';
-import { getVerifierAgent } from './verifier-agent.js';
+import { getVerifierAgent, VerifierAgent } from './verifier-agent.js';
+import { ThreadTaskRunner } from '../delegation/thread-task-runner.js';
+import type {
+  ThreadChildBudget,
+  ThreadParentBudget,
+} from '../delegation/thread-delegation.js';
 import { getErrorMessage } from '../../types/index.js';
 import { getAgentParams } from '../../config/agent-defaults.js';
 import { logger } from '../../utils/logger.js';
@@ -41,6 +46,17 @@ export interface AgentMatch {
   agent: SpecializedAgent;
   score: number;
   reason: string;
+}
+
+const VERIFIER_DELEGATION_PARENT_BUDGET: ThreadParentBudget = {
+  maxTurns: 12,
+  maxCostUsd: 1,
+  maxContextTokens: 32_000,
+};
+
+function boundedPositiveInteger(value: unknown, limit: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return limit;
+  return Math.min(Math.floor(value), limit);
 }
 
 // ============================================================================
@@ -262,11 +278,95 @@ export class AgentRegistry extends EventEmitter {
       };
     }
 
+    // The Verifier's public contract is a fresh, isolated conversation. Route
+    // every explicit execution through a new bounded delegate rather than the
+    // cached registry singleton used by deterministic specialized agents.
+    if (agentId === 'verifier') {
+      return this.executeVerifierOnDelegate(task);
+    }
+
     if (this.config.autoInitialize && !agent.isReady()) {
       await agent.initialize();
     }
 
     return agent.execute(task);
+  }
+
+  private async executeVerifierOnDelegate(task: AgentTask): Promise<AgentResult> {
+    const readSessionCost = typeof task.params?.getSessionCost === 'function'
+      ? task.params.getSessionCost as () => number
+      : null;
+    const initialCost = readSessionCost?.() ?? 0;
+    let childBudget: ThreadChildBudget | null = null;
+    const runner = new ThreadTaskRunner<AgentTask, AgentResult>({
+      parentBudget: VERIFIER_DELEGATION_PARENT_BUDGET,
+      createAgent: async ({ budget }) => {
+        childBudget = budget;
+        const verifier = new VerifierAgent();
+        await verifier.initialize();
+        return {
+          execute: (input) => {
+            const maxSteps = boundedPositiveInteger(input.params?.maxSteps, budget.maxTurns);
+            // Keep cumulative observations within the reduced context budget.
+            // Three chars/token is deliberately conservative for source/test logs.
+            const perStepObserveLimit = Math.max(
+              512,
+              Math.floor((budget.maxContextTokens * 3) / maxSteps),
+            );
+            const maxObserve = boundedPositiveInteger(
+              input.params?.maxObserve ?? 10_000,
+              perStepObserveLimit,
+            );
+            return verifier.execute({
+              ...input,
+              params: {
+                ...input.params,
+                maxSteps,
+                maxObserve,
+              },
+            });
+          },
+          abortCurrentOperation() {},
+          dispose: () => verifier.cleanup(),
+          getSessionCost: () => {
+            const current = readSessionCost?.() ?? initialCost;
+            return Math.max(0, current - initialCost);
+          },
+        };
+      },
+    });
+    const eventPump = (async () => {
+      for await (const event of runner.events()) {
+        this.emit('delegate:event', event);
+      }
+    })();
+
+    try {
+      const outcome = await runner.submit('verifier', task);
+      if (!outcome.success || !outcome.output) {
+        const detail = outcome.message ?? outcome.reason ?? 'delegate returned no result';
+        return {
+          success: false,
+          error: `Verifier delegate incomplete: ${detail}`,
+          metadata: {
+            verdict: 'NEEDS REVIEW',
+            delegated: true,
+            ...(outcome.reason ? { reason: outcome.reason } : {}),
+          },
+        };
+      }
+      return {
+        ...outcome.output,
+        metadata: {
+          ...outcome.output.metadata,
+          delegated: true,
+          ...(childBudget ? { delegateBudget: childBudget } : {}),
+        },
+      };
+    } finally {
+      await runner.close();
+      await eventPump;
+    }
   }
 
   /**
