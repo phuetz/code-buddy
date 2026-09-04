@@ -123,3 +123,28 @@ describe('scope propagation (bug found by the CLI test on 2026-09-04)', () => {
     expect(r.gate?.rejectionReason).toBe('lineage');
   });
 });
+
+describe('bridge to the delegation-log experience source (DGM5 prose)', () => {
+  const dgm5 = (id: string, failures: string, exit = 1): Experience => ({
+    id,
+    source: 'delegation-log',
+    kind: 'Maximum tool execution rounds',
+    detail: `Délégation mistral (1200 s, sortie ${exit}) : ${failures || 'succès'}.`,
+    context: [`Moteur : mistral.`, `Durée : 1200 s.`, `Sortie : ${exit}.`, failures ? `Échecs nommés : ${failures}.` : ''].filter(Boolean).join('\n'),
+  });
+  it('reads named failures and exit codes from French prose, never from free text', () => {
+    expect(parseRunFacts(dgm5('a', 'Maximum tool execution rounds'))).toMatchObject({ failure: 'max-rounds', outcome: 'failure' });
+    expect(parseRunFacts(dgm5('b', 'Turn limit'))).toMatchObject({ failure: 'max-rounds' });
+    expect(parseRunFacts(dgm5('c', '', 0))).toMatchObject({ outcome: 'success' });
+    expect(parseRunFacts(dgm5('d', 'trim is not a function'))).toMatchObject({ outcome: 'failure' });
+    expect(parseRunFacts(dgm5('d', 'trim is not a function')).failure).toBeUndefined();
+    expect(parseRunFacts({ detail: 'the lane hit the maximum tool execution rounds', context: '' })).toEqual({});
+  });
+  it('replays a ceiling-cut lane without a measured count against the ceiling IN FORCE', async () => {
+    const lanes = [1, 2, 3, 4].map((i) => dgm5(`lane-${i}`, 'Maximum tool execution rounds'));
+    const store = new StrategyStore({ workDir: work });
+    const r = await new StrategyImprovementEngine({ scope: 'headless', proposer: new HeuristicStrategyProposer(), store, workDir: work, autonomy: 'propose-only' }).runCycle(lanes);
+    expect(r.gate?.accepted).toBe(true);
+    expect(r.gate?.paired).toMatchObject({ wins: 4, losses: 0, evidence: 'replay' });
+  });
+});

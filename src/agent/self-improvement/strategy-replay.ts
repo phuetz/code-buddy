@@ -30,10 +30,34 @@ export interface RunFacts {
 
 const FACT_RE = /\b(rounds|limit|cost|cap|outcome|failure)=([a-z0-9.-]+)/gi;
 
-/** Extract `key=value` run facts from an experience's context/detail. Tolerant. */
+/**
+ * The delegation-log experience source (DGM5) writes prose, not `key=value`:
+ * `Échecs nommés : Maximum tool execution rounds, Turn limit.` and `Sortie : 0.`
+ * Map its NAMED failures to replay keys; only explicit markers count.
+ */
+const NAMED_FAILURE_KEYS: ReadonlyArray<[RegExp, string]> = [
+  [/Maximum tool execution rounds|Turn limit/i, 'max-rounds'],
+  [/cost (?:limit|cap) (?:reached|exceeded)|Plafond de co[uû]t/i, 'cost-cap'],
+];
+const NAMED_FAILURES_RE = /(?:Échecs nommés|Named failures)\s*:\s*([^\n]+)/i;
+const EXIT_CODE_RE = /(?:Sortie|Exit(?: code)?)\s*:\s*(\d+)\b/i;
+
+/** Extract run facts from an experience's context/detail. Tolerant; free prose never invents a fact. */
 export function parseRunFacts(experience: Pick<Experience, 'context' | 'detail'>): RunFacts {
   const facts: RunFacts = {};
   const text = `${experience.detail}\n${experience.context}`;
+  const named = NAMED_FAILURES_RE.exec(text);
+  if (named) {
+    for (const [re, key] of NAMED_FAILURE_KEYS) {
+      if (re.test(named[1] ?? '')) {
+        facts.failure = key;
+        facts.outcome = 'failure';
+        break;
+      }
+    }
+  }
+  const exit = EXIT_CODE_RE.exec(text);
+  if (exit && facts.failure === undefined) facts.outcome = exit[1] === '0' ? 'success' : 'failure';
   for (const m of text.matchAll(FACT_RE)) {
     const key = (m[1] ?? '').toLowerCase();
     const value = m[2] ?? '';
@@ -90,6 +114,11 @@ export class ReplayStrategyEvaluator implements StrategyEvaluator {
     const observations: StrategyPairedObservation[] = [];
     for (const exp of this.experiences) {
       const facts = parseRunFacts(exp);
+      // A run cut by the round ceiling without a measured count used the ceiling IN FORCE
+      // (the parent's) — the only value consistent with the failure it reports.
+      if (facts.failure === 'max-rounds' && facts.rounds === undefined) {
+        facts.rounds = facts.limit ?? parent.limits.maxToolRounds;
+      }
       const p = replayUnder(facts, parent);
       const c = replayUnder(facts, candidate);
       if (!p || !c) continue;
