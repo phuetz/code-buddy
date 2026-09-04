@@ -1,5 +1,14 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DGM4 — nouveauté AST et pénalité de descendance dans l'évolution de code (4 septembre 2026)
+
+Deux manques relevés par l'audit DGM2 : le moteur d'évolution notait des variants identiques à
+un espace près, et re-sélectionnait toujours le même parent. Un filtre de nouveauté AST (G0)
+rejette `ast-identical` avant tout scoring (compteur `evaluationsAvoided`), et la sélection de
+parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persistée. Mission luna
+(28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
+`docs/reports/2026-09/REPARATION-DGM4.md`.
+
 ### STRAT1 — la Darwin-Gödel Machine fait évoluer la façon d'exécuter (4 septembre 2026)
 
 Quatrième surface apprenable après les leçons, les outils et les skills : la **stratégie
