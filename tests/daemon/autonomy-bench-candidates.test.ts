@@ -18,7 +18,7 @@ describe('collectAutonomyBenchCandidates', () => {
       local: { model: 'qwen3:4b-instruct', baseUrl: 'http://127.0.0.1:11434/v1', label: 'local' },
       tailnet: [
         {
-          hostname: 'ministar-linux',
+          hostname: 'hub-linux',
           ip: '127.0.0.1',
           baseURL: 'http://127.0.0.1:11434/v1',
           models: ['qwen3:4b-instruct', 'qwen3.8:27b'],
@@ -34,7 +34,7 @@ describe('collectAutonomyBenchCandidates', () => {
     });
     expect(candidates.map((c) => `${c.label}:${c.model}`)).toEqual([
       'local:qwen3:4b-instruct',
-      'ministar-linux:qwen3.8:27b',
+      'hub-linux:qwen3.8:27b',
       'gpuNode:qwen3.8:27b',
     ]);
   });

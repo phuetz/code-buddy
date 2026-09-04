@@ -31,11 +31,11 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
       lastHeartbeat: Date.now(),
     });
 
-    client.registerRemoteCard('ollama-ministar', {
+    client.registerRemoteCard('ollama-hub', {
       url: 'http://203.0.113.10:3002',
       card: {
-        name: 'Ollama Ministar',
-        description: 'Always-on Ollama on Ministar Linux',
+        name: 'Ollama Hub',
+        description: 'Always-on Ollama on Hub Linux',
         url: 'http://203.0.113.10:3002',
         version: '0.2.0',
         skills: [
@@ -49,9 +49,9 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
   });
 
   it('should find best spoke for a skill (prefers always-on)', () => {
-    // Both have chat skill, but ollama-ministar is "always-on" so should score higher
+    // Both have chat skill, but ollama-hub is "always-on" so should score higher
     const best = client.findBestSpokeForSkill('chat-qwen3.6-35b');
-    expect(best).toBe('ollama-ministar');
+    expect(best).toBe('ollama-hub');
   });
 
   it('should find best spoke for unique skill', () => {
@@ -67,7 +67,7 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
 
   it('should resolve target by skill', () => {
     const resolved = client.resolveTarget({ skill: 'embed' });
-    expect(resolved).toEqual({ agentKey: 'ollama-ministar' });
+    expect(resolved).toEqual({ agentKey: 'ollama-hub' });
   });
 
   it('should prefer explicit agent over skill resolution', () => {

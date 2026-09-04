@@ -94,7 +94,7 @@ secrets (Docker/K8s). A common layout is `~/.codebuddy/fleet.env` with
 
 ## systemd
 
-Tested in production on the Ministar fleet hub. Two variants below —
+Tested in production on the always-on fleet hub. Two variants below —
 prefer the **built** one (faster boot, no toolchain at runtime).
 
 ### From a build (recommended)

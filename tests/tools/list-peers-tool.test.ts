@@ -78,7 +78,7 @@ describe('list_peers tool', () => {
       compactionActive: false,
       stale: false,
     });
-    registerPeer('ministar', {
+    registerPeer('hub', {
       lastSeenAgeMs: 200,
       lastSeenReason: 'event',
       compactionActive: false,
@@ -145,7 +145,7 @@ describe('list_peers tool', () => {
             isLocal: false,
           },
           capabilities: {
-            machineLabel: 'ministar',
+            machineLabel: 'hub',
             egress: 'cloud',
             models: [
               {
@@ -178,7 +178,7 @@ describe('list_peers tool', () => {
       isLocal: false,
     });
     expect(data.peers[0].capabilities).toMatchObject({
-      machineLabel: 'ministar',
+      machineLabel: 'hub',
       egress: 'cloud',
       modelCount: 2,
       providers: ['chatgpt-oauth', 'ollama'],

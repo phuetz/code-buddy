@@ -151,7 +151,7 @@ is not configured (the adapter degraded to local memory rather than failing). A
 write-without-read on an extraction-based backend (Mem0/OpenViking run an LLM)
 can be eventual-consistency — re-run the probe, or check the server logs.
 
-## Validated live on a self-hosted box (2026-06-04, ministar)
+## Validated live on a self-hosted box (2026-06-04, hub)
 
 Honcho is **live-validated** end-to-end against a real self-hosted instance with
 a 100% local LLM stack (Ollama) — `buddy hermes memory probe honcho` → `PASS`,

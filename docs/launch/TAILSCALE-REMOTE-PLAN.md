@@ -6,7 +6,7 @@
 ## Goal
 Reach Code Buddy beyond Telegram — from any tailnet device (PC, another phone) —
 via its HTTP/WebSocket server (web chat UI + JSON-RPC/MCP), using the Tailscale
-IP `203.0.113.10` (`ministar-linux`).
+IP `203.0.113.10` (`hub-linux`).
 
 ## Current state (observed, read-only)
 - `buddy server` already LISTENs on **`0.0.0.0:3000`** (pid of the system
@@ -34,14 +34,14 @@ IP `203.0.113.10` (`ministar-linux`).
    engine. (`chat-ui` dev server proxies /api /mcp to `code-explorer serve`.)
 4. **Auth**: keep `Auth: Enabled`; mint a `cb_sk_` key for the remote client. Store
    it in `Acces_Centralises.md` (private) — do not expose in the URL.
-5. **Tailscale ACL** (per `propositions/SECURISATION-RESEAU-MINISTAR-*.md`): scope
+5. **Tailscale ACL** (per `propositions/SECURISATION-RESEAU-HUB-*.md`): scope
    who on the tailnet can reach :3000/:8080 (e.g. only Patrice's devices, not
    Sébastien's) via the Tailscale admin ACL.
 
 ## Security notes (important)
 - The server is on **`0.0.0.0`** → reachable beyond the tailnet (LAN/public NIC).
   Phase-2 hardening exists but is pending (`ai-stack/secure_network.sh` enables UFW
-  with `tailscale0` + `lo` rules; `propositions/SECURISATION-RESEAU-MINISTAR-2026-05-01.md`).
+  with `tailscale0` + `lo` rules; `propositions/SECURISATION-RESEAU-HUB-2026-05-01.md`).
   Either run that (Tailscale-only ingress) or bind the server to the tailscale IP.
 - Telegram (Lisa) already gives secure remote access (DM-paired + `/approve`); the
   Tailscale server is the *richer* surface (web UI / API) for trusted devices.

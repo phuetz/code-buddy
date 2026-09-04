@@ -332,12 +332,12 @@ describe('A2A inbound TaskExecutor', () => {
     });
 
     const executor = createCodeBuddyTaskExecutor();
-    await executor(makeTask('hello', { peerId: 'ministar' }));
+    await executor(makeTask('hello', { peerId: 'hub' }));
 
     expect(loggerInfoMock).toHaveBeenCalledWith(
       '[a2a:inbound]',
       expect.objectContaining({
-        peerId: 'ministar',
+        peerId: 'hub',
         turns: 1,
         tokensUsed: 15,
         status: TaskStatus.COMPLETED,

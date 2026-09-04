@@ -792,7 +792,7 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       });
       fake.receive({
         type: 'fleet:workflow:start',
-        payload: { workflowId: 'wf-1', source: { hostname: 'ministar' } },
+        payload: { workflowId: 'wf-1', source: { hostname: 'hub' } },
       });
 
       const hist = l.getEventHistory();
@@ -802,7 +802,7 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       expect(hist[0].agentId).toBe('abc12345');
       expect(hist[0].at).toBeGreaterThan(0);
       expect(hist[1].type).toBe('fleet:workflow:start');
-      expect(hist[1].hostname).toBe('ministar');
+      expect(hist[1].hostname).toBe('hub');
       await l.disconnect();
     });
 

@@ -60,7 +60,7 @@ export async function runGoogleFlowExport(argv = process.argv): Promise<void> {
     remainingFlowCredits: positiveInteger(argv, 'remaining-credits', '25000'),
     maxFlowCreditsPerBatch: positiveInteger(argv, 'max-credits', '100'),
     gpuNodeAvailable: !argv.includes('--no-gpuNode'),
-    ministarAvailable: !argv.includes('--no-ministar'),
+    localGpuAvailable: !argv.includes('--no-localGpu'),
     ...(shortId ? { shortId } : {}),
     ...(argv.includes('--all') ? { includeAllShorts: true } : {}),
   };

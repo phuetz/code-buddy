@@ -524,7 +524,7 @@ export interface AutonomousFleetConfig {
   enabled?: boolean;
   /** Absolute path to the private handover repository (the fleet bus). */
   repo_path?: string;
-  /** Host identifier broadcast in claims, e.g. `ministar/grok-cli`. */
+  /** Host identifier broadcast in claims, e.g. `hub/grok-cli`. */
   host?: string;
   /** Tick interval in minutes (default: 30). */
   interval_minutes?: number;

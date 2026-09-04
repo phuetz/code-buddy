@@ -155,7 +155,7 @@ describe('Kyutai local voice provider', () => {
     const url = await listen(server);
     let settled = false;
     const opened = openKyutaiPcm24kStream(
-      'Bonjour depuis Ministar.',
+      'Bonjour depuis Hub.',
       { CODEBUDDY_TTS_LOCAL_URL: url, CODEBUDDY_TTS_LOCAL_TIMEOUT_MS: '500' },
     ).then((value) => {
       settled = true;
@@ -168,7 +168,7 @@ describe('Kyutai local voice provider', () => {
     const stream = await opened;
     expect(stream).not.toBeNull();
     expect(responseEnded).toBe(false);
-    expect(JSON.parse(received)).toEqual({ text: 'Bonjour depuis Ministar.' });
+    expect(JSON.parse(received)).toEqual({ text: 'Bonjour depuis Hub.' });
     releaseTail();
     await expect(readAll(stream!)).resolves.toHaveLength(pcm24k(40).length + pcm24k(20).length);
   });

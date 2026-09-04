@@ -90,7 +90,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
   });
 
   it('THESIS: agent B benefits from what agent A learned (shared ledger)', () => {
-    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
+    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy' });
     const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
 
     // B knows nothing yet.
@@ -103,7 +103,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     const hits = agentB.recall('router la voix vers gpt-5.5');
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0]!.text).toContain('gpt-5.5');
-    expect(hits[0]!.agentId).toBe('ministar/code-buddy');
+    expect(hits[0]!.agentId).toBe('hub/code-buddy');
   });
 
   it('reinforces: the SAME fact remembered twice accumulates mentions (not lost-update)', () => {
@@ -313,7 +313,7 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   }, 60000);
 
   it('METRIC — agent B answers paraphrased queries correctly thanks to A (≥2/3 vs 0/3 baseline)', async () => {
-    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy', embedder: deterministicEmbedder });
+    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy', embedder: deterministicEmbedder });
     const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy', embedder: deterministicEmbedder });
 
     // Three semantically well-separated lessons (no shared keywords with the probes).
@@ -465,7 +465,7 @@ describe('CollectiveKnowledgeGraph — cross-agent corroboration', () => {
   });
 
   it('two DISTINCT agents agreeing raises corroboration + confidence', () => {
-    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
+    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy' });
     const b = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
     const fact = { type: 'fact' as const, name: 'ledger', text: 'le journal append-only évite les pertes concurrentes', confidence: 0.6 };
     a.remember(fact);

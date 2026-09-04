@@ -79,7 +79,7 @@ function options(root: string) {
     remainingFlowCredits: 25_000,
     maxFlowCreditsPerBatch: 100,
     gpuNodeAvailable: true,
-    ministarAvailable: true,
+    localGpuAvailable: true,
   };
 }
 

@@ -1,6 +1,6 @@
 # Le Compagnon — ce que je sais faire
 
-*Un compagnon local et privé qui vit sur ta machine (Ministar). Je t'entends, je te vois, je te parle,
+*Un compagnon local et privé qui vit sur ta machine. Je t'entends, je te vois, je te parle,
 je veille sur toi, je te tiens compagnie, et je travaille utilement quand tu n'es pas là. Tout tourne
 en local ($0), et mon réglage par défaut, c'est **le silence** — je parle pour réchauffer, pas pour meubler.*
 

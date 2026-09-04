@@ -48,7 +48,7 @@ const ROLES = ['hero', 'b-roll', 'transition'] as const;
 
 const CAPACITY_PROPERTIES = {
   gpuNode: { type: 'boolean', description: 'GPU node local GPU worker is available.' },
-  ministar: { type: 'boolean', description: 'Ministar local GPU worker is available.' },
+  localGpu: { type: 'boolean', description: 'Local GPU worker is available.' },
   google_flow: { type: 'boolean', description: 'Google Flow (browser-assisted) is available.' },
   remaining_flow_credits: { type: 'number', description: 'Remaining Google Flow credits.' },
   max_flow_credits_per_batch: { type: 'number', description: 'Credit ceiling for this batch.' },
@@ -166,7 +166,7 @@ export const VIDEO_FLOW_HANDOFF_PARAMETERS = {
       type: 'object',
       description: 'Engine availability and Flow credits (create).',
       properties: { ...CAPACITY_PROPERTIES },
-      required: ['gpuNode', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
+      required: ['gpuNode', 'localGpu', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
       additionalProperties: false,
     },
     source_plan_sha256: { type: 'string', description: 'Canonical SHA-256 of the V3 source plan (create).' },
@@ -182,7 +182,7 @@ export const VIDEO_FLOW_HANDOFF_PARAMETERS = {
     remaining_flow_credits: { type: 'number', description: 'Remaining Flow credits (export).' },
     max_flow_credits_per_batch: { type: 'number', description: 'Batch credit ceiling (export).' },
     gpu_node_available: { type: 'boolean', description: 'GPU node available (export).' },
-    ministar_available: { type: 'boolean', description: 'Ministar available (export).' },
+    local_gpu_available: { type: 'boolean', description: 'Local GPU available (export).' },
     expected_receipt_sha256: { type: 'string', description: 'Expected import receipt digest (review_import).' },
     reviewer: { type: 'string', description: 'Reviewer name (review_import).' },
     reason: { type: 'string', description: 'Review reason (review_import).' },
@@ -258,7 +258,7 @@ export class VideoFlowHandoffTool implements ITool {
             'max_flow_credits_per_batch',
           ),
           gpuNodeAvailable: pickBoolean(input, ['gpu_node_available', 'gpuNodeAvailable'], 'gpu_node_available'),
-          ministarAvailable: pickBoolean(input, ['ministar_available', 'ministarAvailable'], 'ministar_available'),
+          localGpuAvailable: pickBoolean(input, ['local_gpu_available', 'localGpuAvailable'], 'local_gpu_available'),
         }));
       }
       const receipt = requireRecord(input.receipt, 'receipt') as unknown as GoogleFlowImportReceipt;

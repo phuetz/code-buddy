@@ -325,7 +325,7 @@ function formatHistorySource(record: { hostname?: string; agentId?: string }): s
 
 /**
  * Phase (d).12 — derive a default peer id from the WS URL (host:port).
- * `ws://203.0.113.10:3000/ws` → `203-0-113-10:3000` (dots → dashes for
+ * `ws://203.0.113.10:3000/ws` → `100-98-18-76:3000` (dots → dashes for
  * easier shell typing in /fleet stop / --peer).
  */
 function deriveDefaultPeerId(url: string): string {
@@ -1902,7 +1902,7 @@ async function handleAutonomous(rest: string[]): Promise<CommandHandlerResult> {
           '  [autonomous_fleet]\n' +
           '  enabled = true\n' +
           '  repo_path = "/path/to/handover-repo"\n' +
-          '  host = "ministar/grok-cli"\n' +
+          '  host = "hub/grok-cli"\n' +
           '  interval_minutes = 30\n' +
           '  priority_threshold = "high"   # critical is always skipped\n' +
           '  llm_provider = "cloud"        # or "auto" / "ollama" / "grok" / etc.\n',

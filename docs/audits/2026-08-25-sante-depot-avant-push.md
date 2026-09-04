@@ -1,7 +1,7 @@
 # Santé du dépôt avant push — `fix/shorts-decimaux-karaoke`
 
 **Date de la mesure :** 2026-08-25, ~06:00–06:20 CEST
-**Machine :** ministar (Linux) · `~/code-buddy`
+**Machine :** le hub (Linux) · `~/code-buddy`
 **HEAD :** `6a889e67` — *fix(shorts): sonder le quota à son coût réel, et voir toutes les cartes*
 **origin/main :** `63278824` (2026-08-23) · `FETCH_HEAD` rafraîchi le 2026-08-25 06:04
 **Working tree :** propre (aucune modification non commitée au début de l'audit)
@@ -307,7 +307,7 @@ fichiers, ~24 000 lignes) est un pipeline de production vidéo personnel : `scri
 S'y ajoutent :
 
 - **44 chemins absolus `~`** figés dans ces scripts — ils ne tourneront que sur
-  ministar. Les plus concernés :
+  hub. Les plus concernés :
   `scripts/gpuNode/repair-wardrobe-qwen.mjs` (9), `scripts/gpuNode/rerender-ghost-contour-clips.sh` (5),
   `scripts/influencer/publication-manifest.example.json` (4), `scripts/overnight-lisa-pipeline.sh` (3),
   `scripts/gpuNode/replay-identity-composites.ts` (3), `scripts/gpuNode/repair-ambre-shorts-residuals-qwen.mjs` (3),

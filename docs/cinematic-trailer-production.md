@@ -125,7 +125,7 @@ sur l'infrastructure locale (voir `hybrid-video-router.ts`).
 - **Google Flow / Veo 3.1** (`browser-assisted`) — plans safe, hero-shots
   premium (Veo Quality), variations en volume (Veo Lite). Coût en crédits Flow.
 - **GPU node LongCat** — lip-sync et continuité d'identité localisée.
-- **GPU node / Ministar ComfyUI** — repli local, contenu privé, recettes
+- **GPU node / Local GPU ComfyUI** — repli local, contenu privé, recettes
   contrôlées.
 
 Le routage effectif est décidé par `routeHybridVideo` ; ce socle ne le

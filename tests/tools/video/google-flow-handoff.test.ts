@@ -33,7 +33,7 @@ describe('Google Flow handoff', () => {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
         maxFlowCreditsPerBatch: 100,
@@ -71,7 +71,7 @@ describe('Google Flow handoff', () => {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
         maxFlowCreditsPerBatch: 300,
@@ -87,7 +87,7 @@ describe('Google Flow handoff', () => {
       upscale4k: true,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
         maxFlowCreditsPerBatch: 300,
@@ -114,7 +114,7 @@ describe('Google Flow handoff', () => {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 25_000,
         maxFlowCreditsPerBatch: 100,
@@ -133,7 +133,7 @@ describe('Google Flow handoff', () => {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 100,
         maxFlowCreditsPerBatch: 100,
@@ -152,7 +152,7 @@ describe('Google Flow handoff', () => {
       upscale4k: false,
       capacity: {
         gpuNode: true,
-        ministar: true,
+        localGpu: true,
         googleFlow: true,
         remainingFlowCredits: 100,
         maxFlowCreditsPerBatch: 100,

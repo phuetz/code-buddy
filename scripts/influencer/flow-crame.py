@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -47,9 +48,18 @@ exec((SCRIPT_DIR / 'flow-veo-mission.py').read_text().split('def run(')[0])  # n
 POLL_SECONDS = 8
 TIMEOUT_SECONDS = 20 * 60
 SUFFIX = ' No on-screen text, no watermark, no logo. One continuous eight-second shot with subtle native ambient sound.'
-# Projet Flow du chantier FLOWFIX1. get_tab() prend le premier onglet
-# labs.google/flow : si l'onglet a dérivé (Retour / autre projet), on y revient.
-FLOW_PROJECT_ID = 'FLOW_PROJECT_ID_REDACTED'
+# Projet Flow visé, lu dans l'environnement — JAMAIS en dur dans le dépôt public.
+# get_tab() prend le premier onglet labs.google/flow : si l'onglet a dérivé
+# (Retour / autre projet), on y revient.
+FLOW_PROJECT_ID = os.environ.get('FLOW_PROJECT_ID', '').strip()
+if not FLOW_PROJECT_ID:
+    raise SystemExit(
+        "FLOW_PROJECT_ID est obligatoire : exportez l'identifiant du projet Flow "
+        "avant de lancer ce script, par exemple\n"
+        "    export FLOW_PROJECT_ID=<identifiant-du-projet>\n"
+        "Il se lit dans l'URL du projet ouverte dans le navigateur "
+        "(https://labs.google/fx/<langue>/tools/flow/project/<identifiant-du-projet>)."
+    )
 FLOW_PROJECT_URL = (
     'https://labs.google/fx/fr/tools/flow/project/' + FLOW_PROJECT_ID
 )
@@ -103,7 +113,7 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         url = str(self.js('location.href') or '')
         if FLOW_PROJECT_ID in url:
             return
-        print(f'WARN: onglet Flow hors projet ({url}) — retour {FLOW_PROJECT_ID}', flush=True)
+        print(f'WARN: onglet Flow hors projet ({url}) — retour au projet configuré.', flush=True)
         self.c.cmd('Page.navigate', {'url': FLOW_PROJECT_URL})
         time.sleep(8)
 

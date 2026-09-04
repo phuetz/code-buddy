@@ -484,8 +484,8 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         {
           at: t0 + 4000,
           type: 'fleet:workflow:start',
-          payload: { workflowId: 'wf-x', source: { hostname: 'ministar' } },
-          hostname: 'ministar',
+          payload: { workflowId: 'wf-x', source: { hostname: 'hub' } },
+          hostname: 'hub',
         },
       ]);
       const r = await handleFleet(['history']);
@@ -498,7 +498,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(out).toContain('(heartbeat)');
       expect(out).toContain('fleet:workflow:start');
       expect(out).toContain('workflowId=wf-x');
-      expect(out).toContain('[ministar]');
+      expect(out).toContain('[hub]');
       // Timestamps formatted HH:mm:ss
       expect(out).toMatch(/\[\d{2}:\d{2}:\d{2}\]/);
     });
@@ -617,9 +617,9 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     });
 
     it('defaults to the only active peer and renders a capability summary', async () => {
-      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'ministar']);
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'hub']);
       fleetListenerMock.requestMock.mockResolvedValueOnce({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         pid: 42,
         methods: ['peer.describe', 'peer.chat', 'peer.tool.invoke'],
         apiVersion: 'd.21',
@@ -632,7 +632,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         },
         capabilities: {
           egress: 'cloud',
-          machineLabel: 'ministar',
+          machineLabel: 'hub',
           models: [
             {
               id: 'gpt-5.1-codex',
@@ -646,8 +646,8 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
       const r = await handleFleet(['describe']);
       const out = r.entry?.content ?? '';
-      expect(out).toContain('Fleet peer "ministar"');
-      expect(out).toContain('Hostname:      ministar-linux');
+      expect(out).toContain('Fleet peer "hub"');
+      expect(out).toContain('Hostname:      hub-linux');
       expect(out).toContain('Peer chat:     chatgpt-oauth / gpt-5.1-codex');
       expect(out).toContain('Capabilities: 1 model(s), egress=cloud');
       expect(out).toContain('Top models:   gpt-5.1-codex');
@@ -659,16 +659,16 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     });
 
     it('--json returns the raw peer.describe payload', async () => {
-      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'ministar']);
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'hub']);
       fleetListenerMock.requestMock.mockResolvedValueOnce({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         methods: ['peer.describe'],
       });
 
-      const r = await handleFleet(['describe', 'ministar', '--json']);
+      const r = await handleFleet(['describe', 'hub', '--json']);
       const parsed = JSON.parse(r.entry?.content ?? '{}');
       expect(parsed).toMatchObject({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         methods: ['peer.describe'],
       });
     });

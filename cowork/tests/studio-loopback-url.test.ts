@@ -12,7 +12,7 @@ describe('isLoopbackUrl', () => {
   it('rejects non-loopback and non-http URLs', () => {
     expect(isLoopbackUrl('https://example.com')).toBe(false);
     expect(isLoopbackUrl('file:///tmp/index.html')).toBe(false);
-    expect(isLoopbackUrl('http://192.168.1.10:5173')).toBe(false);
+    expect(isLoopbackUrl('http://203.0.113.10:5173')).toBe(false);
     expect(isLoopbackUrl('not a url')).toBe(false);
   });
 });

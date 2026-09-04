@@ -13,7 +13,7 @@
  *
  * Per task `task-2026-05-02-wire-heartbeat-activation` from
  * `private-handover-repo/.codebuddy/colab-tasks.json`. Unblocks Phase 2 of
- * AUTONOMOUS-FLEET-PROTOCOL v0.1 on Ministar Linux.
+ * AUTONOMOUS-FLEET-PROTOCOL v0.1 on the always-on Linux hub.
  */
 
 import { CommandHandlerResult } from './branch-handlers.js';

@@ -13,7 +13,7 @@ const SHA = 'a'.repeat(64);
 
 const capacity: HybridVideoCapacity = {
   gpuNode: true,
-  ministar: true,
+  localGpu: true,
   googleFlow: true,
   remainingFlowCredits: 25_000,
   maxFlowCreditsPerBatch: 5_000,
@@ -355,7 +355,7 @@ describe('compileTrailerPreview', () => {
   it('never throws when the router has no available engine — surfaces a diagnostic blocker', () => {
     const noEngines: HybridVideoCapacity = {
       gpuNode: false,
-      ministar: false,
+      localGpu: false,
       googleFlow: false,
       remainingFlowCredits: 0,
       maxFlowCreditsPerBatch: 0,

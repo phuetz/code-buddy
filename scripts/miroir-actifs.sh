@@ -15,7 +15,7 @@
 # (même machine) : la copie hors site reste le disque externe.
 set -uo pipefail
 
-DEST="${MIROIR_DEST:-/data/backups/ministar}"
+DEST="${MIROIR_DEST:-/data/backups/hub}"
 DRY=""
 [ "${1:-}" = "--dry-run" ] && DRY="--dry-run"
 

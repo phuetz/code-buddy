@@ -22,8 +22,8 @@ Mesure : `document.elementFromPoint` atteignait bien le bouton ; `document.hasFo
 
 - `fill_prompt` : `Page.bringToFront` + clic TRUSTED, vidage triple-clic, saisie `Input.dispatchKeyEvent` `type=char` + `text` (pipeline `beforeinput`). Repli `insertText` seulement si `aria-disabled===false` et nœud `[data-slate-string]`.
 - `submit` / `send_agent` : attendre `aria-disabled !== 'true'` (plus `.disabled`), clic TRUSTED `mouseMoved` + `buttons:1`.
-- `unlock_ui` : la boîte ULTRA laisse parfois `body.style.pointerEvents='none'` et un dialog fantôme — les clics n’atteignent plus Slate.
-- `ensure_project` : l’onglet a dérivé vers `flow-projet-B-…` ; on le ramène sur `flow-projet-A-…`.
+- `unlock_ui` : la boîte modale du compte laisse parfois `body.style.pointerEvents='none'` et un dialog fantôme — les clics n’atteignent plus Slate.
+- `ensure_project` : l’onglet avait dérivé vers un autre projet ; on le ramène sur le projet configuré (`FLOW_PROJECT_ID`).
 - Attente : ne plus prendre un `<video>` « nouveau » sur un projet déjà peuplé (un clip Lyon préexistant a été téléchargé en 8 s — rejeté). Clic `Réessayer` si Flow répond « Un problème est survenu ».
 - `failure_count` : le libellé « Échec » est désormais **visible** sur une carte en cours (à côté du %). L’ancienne formule abortait à 8 s / 53 %.
 
@@ -38,11 +38,11 @@ Mesure : `document.elementFromPoint` atteignait bien le bouton ; `document.hasFo
 | Image | `_qa/flowfix1/heritiers-01-veo.jpg` | `_qa/flowfix1/heritiers-14-veo.jpg` |
 | Contenu | chênes nuds, plateau, brouillard — conforme | seuil de mousse, vide central, bleu — conforme |
 
-Solde ULTRA : **N** (18 h 50 et 20 h 35) → **N** après la 1re prise (**100 crédits** / Veo 3.1 Quality) → **N** après la 2e. L’offre Ultra « ~50 % » n’apparaît pas sur cette prise : le coût mesuré reste **100**, comme en juillet.
+Compteur de crédits : stable à 18 h 50 et 20 h 35, puis **−100 par prise** Veo 3.1 Quality (deux prises mesurées, la seconde un peu plus coûteuse). L’offre promotionnelle « ~50 % » n’apparaît pas sur cette prise : le coût mesuré reste **100**, comme en juillet.
 
 L’UI carte affiche « Résolution: 720p » pour Quality (pas 1080p). Fichiers 1280×720. Réglages inchangés (Veo 3.1 Quality, 16:9, x1, confirmer = Jamais).
 
-Un mp4 `_qa/flowfix1/REJECTED-lyon-quais-pas-heritiers-14.mp4` est un faux positif (quais de Lyon du projet `flow-projet-B`) : même durée, mauvais sujet. Non utilisé.
+Un mp4 `_qa/flowfix1/REJECTED-lyon-quais-pas-heritiers-14.mp4` est un faux positif (quais de Lyon, provenant de l’autre projet) : même durée, mauvais sujet. Non utilisé.
 
 ## Vérifications
 
@@ -55,13 +55,13 @@ ffprobe …/heritiers-14-veo.mp4  → duration=8.000000 width=1280 height=720
 
 ## Journal (abrégé)
 
-1. Rapport créé avant inspection. CDP 9222 : 1 onglet Flow `flow-projet-A`, iframe reCAPTCHA, New Tab. Pas d’onglet Antigravity sur ce Brave.
+1. Rapport créé avant inspection. CDP 9222 : 1 onglet Flow sur le projet configuré, iframe reCAPTCHA, New Tab. Pas d’onglet Antigravity sur ce Brave.
 2. Bouton `aria-disabled=true` / `.disabled=false`. Placeholder Slate + U+FEFF. `elementFromPoint` = le bouton.
 3. `dispatchKeyEvent` char « ab » : placeholder parti, `[data-slate-string]=aabb` (doublon keyDown+char), `aria-disabled=false`.
-4. Clic TRUSTED avec champ committé soumet. Un « k » de test a été annulé (0 crédit).
-5. 1re prise : soumise, faux « Échec » à 8 s, génération à 53 % poursuivie, clip téléchargé, contenu OK, −100 crédits.
-6. 2e prise : `pointer-events:none` après ULTRA ; puis dérive vers l’autre projet → Lyon rejeté. Prompt moussu bien parti, Flow « Un problème est survenu », `Réessayer` → clip moussu OK.
+4. Clic TRUSTED avec champ committé soumet. Un « k » de test a été annulé (aucune consommation).
+5. 1re prise : soumise, faux « Échec » à 8 s, génération à 53 % poursuivie, clip téléchargé, contenu OK, une prise consommée.
+6. 2e prise : `pointer-events:none` après la modale du compte ; puis dérive vers l’autre projet → Lyon rejeté. Prompt moussu bien parti, Flow « Un problème est survenu », `Réessayer` → clip moussu OK.
 
 ## Garde-fous tenus
 
-Budget < 1 000 (284 lus sur ULTRA, dont 200 sur les deux prises Quality). Pas de recharge. Pas de changement de compte. Pas de push. ComfyUI / robot / ports intacts. Original `~/code-buddy` non écrit.
+Budget de la mission tenu : la consommation lue au compteur est restée sous le plafond fixé, dont deux prises Quality. Pas de recharge. Pas de changement de compte. Pas de push. ComfyUI / robot / ports intacts. Original `~/code-buddy` non écrit.

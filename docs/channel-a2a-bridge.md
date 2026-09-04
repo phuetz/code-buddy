@@ -162,7 +162,7 @@ blocked on `better-sqlite3` for Node 24). Migration steps:
 4. Restart the hub.
 
 The user-facing behaviour is the same except:
-- The bridge now lives inside the always-on hub on Ministar Linux
+- The bridge now lives inside the always-on Linux hub
   rather than GPU_NODE's session — survives GPU_NODE sleep / reboot.
 - Bonus: Discord, Slack, etc. work via the same path.
 

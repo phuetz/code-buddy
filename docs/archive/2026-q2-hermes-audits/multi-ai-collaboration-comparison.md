@@ -109,5 +109,5 @@ substrat multi-IA, et sur l'axe AI-to-AI Code Buddy dépasse OpenClaw.
 
 ---
 
-*Rédigé par Claude (Opus 4.8, 1M context), Ministar Ubuntu, 2026-06-08, avec
+*Rédigé par Claude (Opus 4.8, 1M context), sur le hub Ubuntu, 2026-06-08, avec
 Hermes Agent v0.16.0 et OpenClaw 2026.6.1 installés localement et inspectés.*

@@ -1,40 +1,5 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
-### VERIFIX3A — dix-sept harnais qui ne gardaient qu'« un appel » (4 septembre 2026)
-
-Les tests réalignés après MEM1 assertent désormais le contrat réel : chemin
-exact, contenu sérialisé, mode `0o600`, exception levée, permissions, latence
-mesurée. 72 mutations rouges, 34 tests nets ajoutés, aucun fichier `src/`
-modifié. Trois doubles de test corrigés au passage (un `mode` jeté, un scoreboard
-de latence figé, une contamination d'espions).
-
-### BATCHFIX1 — le résumé de `/batch` dit vrai (4 septembre 2026)
-
-Les unités de vérification, qui n'écrivent rien par nature, étaient comptées
-« FAIL » par la garde « pas de done sans fichier modifié ». `BatchUnit.verifyOnly`
-les distingue ; la garde reste stricte pour les écritures. Prouvé sur Ollama :
-« 2/5 (3 failed) » devient « 4/4 (0 failed) ».
-
-### SERV2 — `usage` réel, un seul port, CORS dit vrai (4 septembre 2026)
-
-`/v1/chat/completions` renvoie les compteurs du fournisseur : le flux ne
-demandait jamais `stream_options.include_usage` et jetait le chunk d'usage, ce
-qui laissait aussi les métriques TTFT1 sans `inputTokens`. Repli honnête marqué
-`usage.estimated: true` (`CODEBUDDY_STREAM_USAGE=false`). `buddy server` ouvre
-un seul port avec `/ws` dessus : neuf documents corrigés, test qui rougit si
-l'un d'eux redit « 3001 ». Une origine non listée reçoit 200 sans
-`Access-Control-Allow-Origin` ; le 403 n'existe que sur le WebSocket, la doc le
-dit désormais.
-
-### VERIFIX3B / DELEGVERIF — suites de VERIF3 et du juge NVIDIA (4 septembre 2026)
-
-Dix fixtures isolées supplémentaires pour le garde-fou de données personnelles,
-ordre FIFO discriminé pour `/swarm` et `/team`, argv réels de `worktree add`
-assertés, entrée `git -C` en lecture prouvée utile. Les huit points du juge
-NVIDIA sur DELEG3 ont été vérifiés par un Claude : six faux avec preuve, un vrai
-corrigé — les paramètres du parent ne sont plus transmis tels quels au Verifier
-délégué —, un test de sérialisation renforcé.
-
 ### INCONNU1 — installation depuis la branche poussée, à l'aveugle (4 septembre 2026)
 
 Un Claude a rejoué le parcours README + getting-started sur un clone GitHub :
@@ -138,8 +103,7 @@ peignait que le DOM et `.disabled` restait `false`, donc les clics étaient des
 no-op. Correctif dans `flow-crame.py` : saisie caractère par caractère via
 `Input.dispatchKeyEvent`, clic TRUSTED, garde sur `aria-disabled`, projet
 épinglé (l'onglet dérivait vers un autre projet), faux « Échec » pendant la
-génération corrigé. Prouvé par deux clips Veo 3.1 Quality réels (8 s, 720p,
-100 crédits la prise).
+génération corrigé. Prouvé par deux clips Veo 3.1 Quality réels (8 s, 720p).
 
 ### DELEG1 — sous-agents légers multiplexés (3 septembre 2026)
 
@@ -500,7 +464,7 @@ once it reaches `1.0.0`.
   texte dans l'application active, sans transmettre le transcript à un shell ; le presse-papiers seul
   sert de repli sûr quand l'injection système n'est pas disponible.
 
-- **LongCat Avatar 1.5 validé sur Darkstar.** Le profil RTX 3090 préchauffe désormais `torch.compile`
+- **LongCat Avatar 1.5 validé sur le poste GPU.** Le profil RTX 3090 préchauffe désormais `torch.compile`
   avec la grille latente correspondant réellement à l'image source, ce qui évite la pagination WSL2
   observée avec l'ancienne grille fixe. Le muxage final conserve la vidéo H.264 existante lorsque le
   FFmpeg Conda sans GPL ne fournit pas `libx264`, et le service Windows attend le retour de l'adresse
@@ -680,7 +644,7 @@ once it reaches `1.0.0`.
 
 Post-1.0 work tracked in the V1.1 roadmap: OpenAPI spec (WS8-T2),
 GitNexus integration (WS2), central Policy Engine + PII lint (WS5). See
-`private-handover-repo/propositions/` and the V1.x roadmap section of
+the private handover repository's proposals and the V1.x roadmap section of
 [`docs/fleet-guide.md`](docs/fleet-guide.md).
 
 ### Added — Multi-LLM registry: list, auto-failover & ensemble (2026-06-18)
@@ -1088,7 +1052,7 @@ Engine) is reclassified to the V1.1 roadmap and no longer blocks the tag.
     `dispatchPeerRequest`, while `tests/fleet/fleet-loopback-smoke.test.ts`
     starts a real Gateway WebSocket server and exercises `/fleet tool`
     over the loopback transport in both buffered and streamed modes.
-    Cross-host E2E with a real DARKSTAR fleet gateway remains the
+    Cross-host E2E with a real remote fleet gateway remains the
     intended Phase 2-3 follow-up.
 
 ### Added — Fleet V1.2 (Phase d.21)
@@ -1281,7 +1245,7 @@ end-to-end experience trustworthy after the rc.7 ship. Highlights:
 - **`@phuetz/ai-providers` inlined** (commit `5757b197`) into
   `src/providers/_shared/`. The workspace symlink was a footgun on
   any host that didn't have the sibling repo cloned (e.g. fresh
-  Ministar Linux): `loadCoreModule('tools/registry/index.js')` failed
+  Hub Linux): `loadCoreModule('tools/registry/index.js')` failed
   silently because `utils/retry.js` couldn't resolve the import.
 - **Core DB initialization before startServer** (commit `cc2d2260`).
   `ServerBridge.start()` now calls `getDatabaseManager().initialize()`
@@ -1351,7 +1315,7 @@ end-to-end experience trustworthy after the rc.7 ship. Highlights:
 ## [1.0.0-rc.7] — 2026-05-09
 
 **Cowork visual workflows now executable** — closes the gap identified
-by the Cowork audit (`journal/ministar-ubuntu-grok-cli.md`). The
+by the Cowork audit (`journal/hub-ubuntu-grok-cli.md`). The
 WorkflowEditor saved DAGs but the runtime was a noop. Now wraps the
 core `Orchestrator` (`src/orchestration/orchestrator.ts`) with a
 4-agent pool that fulfils tool/approval steps. Validated end-to-end
@@ -1500,7 +1464,7 @@ shipped over the May 7-8 session, organised in three stacked branches.
 - **Phase (d).18 — Autonomous Fleet Protocol v0.1 (native TS port)**.
   `src/agent/autonomous/{fleet-task-types,fleet-tick-handler}.ts`
   ports the operational python wrapper
-  `private-handover-repo/tools/heartbeat_tick.py` (proven over 6 cycles
+  the private handover repository's `heartbeat_tick.py` (proven over 6 cycles
   on 2026-05-02). Pull → FLEET_PAUSE check → pickTask (priority
   cascade, critical SKIPPED for autonomous) → atomic claim → in-process
   agent run → scope guard → worklog → mark completed → push.
@@ -1687,7 +1651,7 @@ existing infrastructure rather than inventing new modules.
 
 ### Audit shipped
 - **Claude Code subagent + plan mode audit**
-  (`private-handover-repo/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`,
+  (audit sous-agents du 2026-05-04, dépôt privé de passation,
   268 lines) — 3rd iteration of the audit-doc pattern, this time with
   direct access to the Claude Code source (`D:\CascadeProjects\claude-code-source-code-main`).
   Audited 4 zones: plan mode workflow phasé (⚠️ partial), structured user
@@ -1700,7 +1664,7 @@ existing infrastructure rather than inventing new modules.
 ### Notes for V1 final (1.0.0)
 Same items as rc.3, narrowed by what shipped here:
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Migration of `agent-executor.ts:636` and `:844` to `getCuratedHistory()`
@@ -1768,7 +1732,7 @@ be productive in 5 minutes.
 ### Notes for V1 final (1.0.0)
 Same items as rc.2, narrowed by what shipped here:
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Migration of `agent-executor.ts:636` and `:844` to `getCuratedHistory()`
@@ -1860,7 +1824,7 @@ management ("très important"), and cross-CLI fleet alignment.
 
 ### Audit follow-ups closed
 Post-Gemini-CLI-source audit
-(`private-handover-repo/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`):
+(audit boucle agentique du 2026-05-04, dépôt privé de passation) :
 - Reco #1 (mid-stream retry exponential backoff) — helper `cd653ab` +
   wirage `2a06864`
 - Reco #2 (streaming events visibility in sequential mode) — `7ec4bc0`
@@ -1869,7 +1833,7 @@ Post-Gemini-CLI-source audit
 
 ### Notes for V1 final (1.0.0)
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Vue agrégée des 7 sources mémoire deferred (Persistent + Enhanced +
@@ -2020,7 +1984,7 @@ all touched files.
 
 The comparative audit Claude Code source vs Code Buddy
 SmartCompactionEngine is archived in
-[`private-handover-repo/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md`](https://github.com/private-handover-repo).
+le dépôt privé de passation (audit compaction du 2026-05-04).
 3 actionable improvements identified — #3 and #1 shipped, #2 (preview
 mode before apply, M scope) deferred to `1.0.0` final.
 
@@ -2030,7 +1994,7 @@ mode before apply, M scope) deferred to `1.0.0` final.
 
 The day the inter-Claude fleet became real. 16 narrow phases shipped
 in a single working day, plus 5 critical-priority test files. The
-hardware setup (DARKSTAR PC 3090, MINISTAR G7 PT, Ministar Linux Ryzen
+hardware setup (GPU_NODE PC 3090, HUB G7 PT, Linux hub Ryzen
 AI 9 HX 470) and Tailscale mesh (`100.x.x.x` private network) became
 the first operational multi-AI hub on the lab.
 
@@ -2126,7 +2090,7 @@ followed.
 ### Added — A2A protocol POC (Niveau 1 → 3)
 
 - POC Niveau 1: Spoke registration via `POST /api/a2a/agents/register`
-  - heartbeat. Hub at Ministar Linux `203.0.113.10:3000`.
+  - heartbeat. Hub at the always-on Linux host `203.0.113.10:3000`.
 - POC Niveau 2 (`6bf7349`): Cross-host task router forwarding to remote
   spokes via HTTP.
 - POC Niveau 3 (`677a146`): Skill-based routing dispatch on
@@ -2180,7 +2144,7 @@ starts the structured record at 0.5.0.
 
 ## Notes for fleet Claudes
 
-When pulling this branch on DARKSTAR / MINISTAR / Ministar Linux:
+When pulling this branch on GPU_NODE / HUB / the Linux hub:
 
 1. `git pull --rebase` to get the latest fleet phases + post-audit fixes
 2. Restart your `codebuddy-a2a.service` (or equivalent) to pick up

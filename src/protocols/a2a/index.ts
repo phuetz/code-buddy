@@ -399,8 +399,8 @@ export class A2AAgentClient {
     // Base score: has the skill
     let score = 10;
 
-    // Bonus for always-on spokes (assume names with "ministar" or "linux" are always-on)
-    if (spokeName.toLowerCase().includes('ministar') || spokeName.toLowerCase().includes('linux')) {
+    // Bonus for always-on spokes (assume names with "hub" or "linux" are always-on)
+    if (spokeName.toLowerCase().includes('hub') || spokeName.toLowerCase().includes('linux')) {
       score += 5;
     }
 

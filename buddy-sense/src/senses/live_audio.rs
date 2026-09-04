@@ -877,7 +877,7 @@ fn available_pulse_sources() -> Vec<String> {
                 .collect();
         }
     }
-    // Minimal PipeWire installations (including Ministar) may not ship pactl.
+    // Minimal PipeWire installations may not ship pactl.
     // pw-cli is part of PipeWire itself; node names are sufficient because we
     // only select the strongly named echo-cancel virtual source.
     let Ok(output) = Command::new("pw-cli").args(["ls", "Node"]).output() else {

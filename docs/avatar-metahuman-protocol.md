@@ -7,13 +7,13 @@ Code Buddy. Il ne décide jamais du contenu conversationnel.
 ## Connexion et sécurité
 
 Le client Unreal ouvre `/ws` sur le même hôte et le même port que le serveur HTTP Code Buddy. Pour
-l'instance Lisa actuelle, le serveur écoute uniquement sur Ministar à
+l'instance Lisa actuelle, le serveur écoute uniquement sur le hub à
 `ws://127.0.0.1:3055/ws`. N'exposez pas ce port directement sur Internet.
 
 Depuis GPU node, la voie la plus sûre est un tunnel SSH sur Tailscale :
 
 ```powershell
-ssh -N -L 3055:127.0.0.1:3055 patrice@203.0.113.10
+ssh -N -L 3055:127.0.0.1:3055 <utilisateur>@203.0.113.10
 ```
 
 Unreal se connecte alors à `ws://127.0.0.1:3055/ws` sur GPU node. Le serveur de développement actuel

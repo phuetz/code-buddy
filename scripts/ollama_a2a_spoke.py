@@ -26,7 +26,7 @@ def detect_hostname() -> str:
     """Cross-platform short hostname (lowercase). On Linux/macOS use
     `hostname -s`; on Windows fall back to socket.gethostname() because
     `hostname -s` is not a valid option there (was failing the wrapper
-    on MINISTAR/GPU_NODE Windows hosts)."""
+    on HUB/GPU_NODE Windows hosts)."""
     try:
         return subprocess.check_output(['hostname', '-s'], stderr=subprocess.DEVNULL).decode().strip().lower()
     except Exception:
@@ -39,7 +39,7 @@ def _extract_text(value) -> str:
     The hub may pass a plain string (correct, post Phase-B fix
     code-buddy commit 8a9f5f4) OR a nested A2A message object
     {role, parts:[{type:'text', text:'...'}]} (pre-fix bug — observed
-    on GPU_NODE 2026-05-03 when hub on Ministar Linux had not yet
+    on GPU_NODE 2026-05-03 when the hub on the Linux host had not yet
     pulled the fix). Recursively unwrap until we get a string."""
     if isinstance(value, str):
         return value
