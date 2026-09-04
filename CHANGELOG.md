@@ -22,6 +22,17 @@ parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persi
 (28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
 `docs/reports/2026-09/REPARATION-DGM4.md`.
 
+### AUDIT-STRAT1 — la couche stratégies attaquée, cinq failles fermées (4 septembre 2026)
+
+Audit adversarial confié à Gemini 3.8 Flash une heure après la livraison : onze attaques contre
+les six promesses de la couche. Cinq failles réelles, toutes corrigées avec un test qui les
+rejoue : des consignes poussant à `bypassPermissions`, `--yolo`, `rm -rf` ou à exfiltrer un
+`.env` passaient la porte ; les homoglyphes, caractères de largeur nulle et césures contournaient
+le pare-feu (normalisation avant analyse) ; `activeId()` renvoyait un chemin `../` brut ; un fait
+`rounds=` cité dans du texte libre était cru ; un magasin en lecture seule faisait planter le
+cycle. Le gaming du rejeu est mesuré : la porte s'arrête net à 75 tours dès que le plafond
+couvre les runs. Rapport : `docs/reports/2026-09/AUDIT-STRAT1.md`.
+
 ### STRAT1 — la Darwin-Gödel Machine fait évoluer la façon d'exécuter (4 septembre 2026)
 
 Quatrième surface apprenable après les leçons, les outils et les skills : la **stratégie
