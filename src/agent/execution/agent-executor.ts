@@ -1330,7 +1330,13 @@ export class AgentExecutor {
         const providerUsage = providerUsageSeen
           ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
           : undefined;
-        this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
+        // Only pass provider usage when the provider reported one, so the
+        // historical two-argument call (and its tests) stays byte-identical.
+        if (providerUsage) {
+          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
+        } else {
+          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        }
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
       }
