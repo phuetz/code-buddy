@@ -18,6 +18,11 @@ const routingState = vi.hoisted(() => ({
   hasCodexCredentials: vi.fn(() => false),
   routes: [] as Array<{ model: string; apiKey: string; baseURL?: string }>,
   selectOptions: [] as Array<{ localOnly?: boolean; requireToolCalling?: boolean }>,
+  // VERIF3 T17 : le scoreboard du test renvoyait toujours `null`, donc
+  // supprimer la lecture de la latence mesurée dans model-selector était
+  // invisible. Il est désormais programmable par test.
+  turnLatency: {} as Record<string, { latencyMs: number } | null>,
+  turnLatencyCalls: [] as Array<{ provider: string; model: string; minRuns: number }>,
 }));
 
 vi.mock('../../src/fleet/model-selector.js', async (importOriginal) => {
@@ -38,7 +43,10 @@ vi.mock('../../src/fleet/model-selector.js', async (importOriginal) => {
           candidates: routingState.candidates as never,
           scoreboard: {
             ranking: () => [],
-            measuredTurnLatency: () => null,
+            measuredTurnLatency: (provider: string, model: string, minRuns: number) => {
+              routingState.turnLatencyCalls.push({ provider, model, minRuns });
+              return routingState.turnLatency[`${provider}/${model}`] ?? null;
+            },
           } as never,
         });
       },
@@ -102,6 +110,10 @@ describe('agent-reply ACT model routing', () => {
     routingState.candidates.length = 0;
     routingState.routes.length = 0;
     routingState.selectOptions.length = 0;
+    routingState.turnLatencyCalls.length = 0;
+    for (const key of Object.keys(routingState.turnLatency)) {
+      delete routingState.turnLatency[key];
+    }
     routingState.hasCodexCredentials.mockReset().mockReturnValue(false);
   });
 
@@ -150,6 +162,49 @@ describe('agent-reply ACT model routing', () => {
     expect(routingState.routes).toEqual([
       {
         model: 'qwen3:14b',
+        apiKey: 'ollama',
+        baseURL: 'http://127.0.0.1:11434/v1',
+      },
+    ]);
+  });
+
+  it('prefers the model with a measured TTFM over the heuristic favourite', async () => {
+    // Heuristique seule : qwen3:14b ≈ 8 s, qwen3:70b ≈ 36 s → le 14b gagne.
+    // Une latence de tour RÉELLEMENT mesurée sur le 70b doit renverser l'ordre.
+    routingState.candidates.push(
+      {
+        provider: 'ollama',
+        model: 'qwen3:14b',
+        apiKey: 'ollama',
+        baseURL: 'http://127.0.0.1:11434/v1',
+        isLocal: true,
+        costInputUsdPerMtok: 0,
+        strengths: ['tool-calling'],
+      },
+      {
+        provider: 'ollama',
+        model: 'qwen3:70b',
+        apiKey: 'ollama',
+        baseURL: 'http://127.0.0.1:11434/v1',
+        isLocal: true,
+        costInputUsdPerMtok: 0,
+        strengths: ['tool-calling'],
+      },
+    );
+    routingState.turnLatency['ollama/qwen3:70b'] = { latencyMs: 400 };
+
+    const reply = makeAgentReply({ summarize: async (output) => output });
+    await expect(reply('inspecte le dépôt')).resolves.toBe('Route prête.');
+
+    // La latence mesurée est bien LUE, pour chaque candidat, avec le minimum
+    // de mesures exigé.
+    expect(routingState.turnLatencyCalls).toEqual([
+      { provider: 'ollama', model: 'qwen3:14b', minRuns: 3 },
+      { provider: 'ollama', model: 'qwen3:70b', minRuns: 3 },
+    ]);
+    expect(routingState.routes).toEqual([
+      {
+        model: 'qwen3:70b',
         apiKey: 'ollama',
         baseURL: 'http://127.0.0.1:11434/v1',
       },
