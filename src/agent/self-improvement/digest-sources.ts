@@ -114,223 +114,31 @@ export function createDefaultEvolutionNotesExperienceSource(
   return new EvolutionNotesExperienceSource(options);
 }
 
-export const NAMED_DELEGATION_FAILURES = [
-  'Maximum tool execution rounds',
-  'Unexpected end of JSON input',
-  'trim is not a function',
-  'peer closed connection',
-  'Turn limit',
-] as const;
+export {
+  NAMED_DELEGATION_FAILURES,
+  type NamedDelegationFailure,
+  PILOT_LESSONS,
+  type PilotLesson,
+  type DelegationFact,
+  type ParsedHeadlessOutput,
+  extractDelegationFacts,
+  readDelegationLogs,
+  formatRunFactsLine,
+  findHeadlessJson,
+  extractModel,
+  extractRoundLimit,
+  countToolRounds,
+  extractCostUsd,
+  extractCostCap,
+  extractExitCode,
+  extractDurationSec,
+} from './delegation-facts.js';
 
-export type NamedDelegationFailure = (typeof NAMED_DELEGATION_FAILURES)[number];
-
-export const PILOT_LESSONS = [
-  'HOME isolé pour Vitest',
-  'commiter après chaque point',
-  'lire le journal du boot précédent avant de relancer',
-  'ne pas éditer un script bash en cours d\'exécution',
-  'preuve = tests des fichiers touchés',
-] as const;
-
-export type PilotLesson = (typeof PILOT_LESSONS)[number];
-
-export interface DelegationFact {
-  id: string;
-  engine: string;
-  durationSec?: number;
-  exitCode?: number;
-  changes: string[];
-  namedFailures: string[];
-  pilotLessons: string[];
-  rawPath?: string;
-  timestamp?: string;
-}
-
-export function extractDelegationFacts(content: string, filename = ''): DelegationFact {
-  let engine = 'inconnu';
-  const engineMatch =
-    content.match(/(?:moteur\s+|→\s+)([a-zA-Z0-9_-]+)(?:\s+sur|\s*·)/i) ??
-    content.match(/moteur\s*:\s*([a-zA-Z0-9_-]+)/i);
-  if (engineMatch?.[1]) {
-    engine = engineMatch[1].trim().toLowerCase();
-  } else {
-    const fileEngineMatch = filename.match(/\d{4}-\d{2}-\d{2}T\d{6}-([a-zA-Z0-9]+)-/);
-    if (fileEngineMatch?.[1]) {
-      engine = fileEngineMatch[1].trim().toLowerCase();
-    } else {
-      const launcherMatch = filename.match(/launcher-(?:[a-zA-Z0-9_-]+-)?([a-zA-Z0-9_-]+?)(?:-[0-9]+)?\.out/);
-      if (launcherMatch?.[1]) {
-        engine = launcherMatch[1].trim().toLowerCase();
-      }
-    }
-  }
-
-  let durationSec: number | undefined;
-  const durationMatch =
-    content.match(/·\s*(\d+)\s*s(?:\s*·|\s*$)/i) ??
-    content.match(/dur[ée]e\s*:\s*(\d+)\s*s/i) ??
-    content.match(/(\d+)\s*s\s*·\s*sortie/i);
-  if (durationMatch?.[1]) {
-    durationSec = parseInt(durationMatch[1], 10);
-  } else {
-    const tsMatches = Array.from(
-      content.matchAll(/\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)\b/g),
-    );
-    if (tsMatches.length >= 2) {
-      const firstStr = tsMatches[0]?.[1];
-      const lastStr = tsMatches[tsMatches.length - 1]?.[1];
-      if (firstStr && lastStr) {
-        const first = Date.parse(firstStr);
-        const last = Date.parse(lastStr);
-        if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
-          durationSec = Math.round((last - first) / 1000);
-        }
-      }
-    }
-  }
-
-  let exitCode: number | undefined;
-  const exitMatch = content.match(/sortie\s+(\d+)/i);
-  if (exitMatch?.[1]) {
-    exitCode = parseInt(exitMatch[1], 10);
-  } else if (
-    content.includes('❌ ERROR') ||
-    content.includes('errorType') ||
-    content.includes('Error: API error') ||
-    content.includes('failed')
-  ) {
-    exitCode = 1;
-  } else {
-    exitCode = 0;
-  }
-
-  const changes: string[] = [];
-  const changesBlock = content.match(/── ce qui a bougé ──([\s\S]*?)(?:─────────────────────────────|──\s*$|$)/);
-  if (changesBlock?.[1]) {
-    const lines = changesBlock[1].split('\n');
-    for (const rawLine of lines) {
-      const trimmed = rawLine.trim();
-      if (trimmed && !trimmed.startsWith('──')) {
-        changes.push(trimmed);
-      }
-    }
-  }
-
-  const namedFailures = NAMED_DELEGATION_FAILURES.filter((failure) =>
-    content.includes(failure),
-  );
-
-  const pilotLessons: string[] = [];
-  if (
-    content.includes('HOME isolé pour Vitest') ||
-    /HOME(?:=\S+)?\s+isol[eé]/i.test(content) ||
-    /HOME=.*_qa.*home/i.test(content) ||
-    /_qa\/\S+\/home/i.test(content)
-  ) {
-    pilotLessons.push('HOME isolé pour Vitest');
-  }
-  if (
-    content.includes('commiter après chaque point') ||
-    /commit(?:er|é|e)?\s+après\s+chaque\s+point/i.test(content) ||
-    /un\s+commit\s+par\s+point/i.test(content)
-  ) {
-    pilotLessons.push('commiter après chaque point');
-  }
-  if (
-    content.includes('lire le journal du boot précédent avant de relancer') ||
-    /lire\s+le\s+journal\s+(?:du\s+boot\s+précédent|précédent)/i.test(content)
-  ) {
-    pilotLessons.push('lire le journal du boot précédent avant de relancer');
-  }
-  if (
-    content.includes('ne pas éditer un script bash en cours d\'exécution') ||
-    /ne\s+pas\s+[eé]diter\s+(?:un\s+)?script\s+bash\s+en\s+cours/i.test(content)
-  ) {
-    pilotLessons.push('ne pas éditer un script bash en cours d\'exécution');
-  }
-  if (
-    content.includes('preuve = tests des fichiers touchés') ||
-    /preuve\s*=\s*tests\s+des\s+fichiers\s+touch[eé]s/i.test(content) ||
-    /tests\s+des\s+fichiers\s+touch[eé]s/i.test(content)
-  ) {
-    pilotLessons.push('preuve = tests des fichiers touchés');
-  }
-
-  const id = filename ? filename.replace(/\.(log|out)$/, '') : `delegation-${Date.now()}`;
-
-  return {
-    id,
-    engine,
-    durationSec,
-    exitCode,
-    changes,
-    namedFailures,
-    pilotLessons,
-  };
-}
-
-export function readDelegationLogs(delegationsDir: string, limit = 50): DelegationFact[] {
-  if (!fs.existsSync(delegationsDir)) return [];
-  const entries = fs.readdirSync(delegationsDir, { withFileTypes: true });
-  const outFiles: string[] = [];
-  const logFiles: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (entry.name.endsWith('.out')) outFiles.push(entry.name);
-    else if (entry.name.endsWith('.log')) logFiles.push(entry.name);
-  }
-
-  outFiles.sort().reverse();
-  logFiles.sort().reverse();
-
-  const consumedLogs = new Set<string>();
-  const facts: DelegationFact[] = [];
-
-  for (const outFile of outFiles) {
-    if (facts.length >= limit) break;
-    const outPath = path.join(delegationsDir, outFile);
-    let outContent = '';
-    try {
-      outContent = fs.readFileSync(outPath, 'utf8');
-    } catch {
-      continue;
-    }
-    const logMatch = outContent.match(/journal\s*:\s*(\S+\.log)/i);
-    let companionContent = '';
-    let logBaseName = '';
-    if (logMatch?.[1]) {
-      const referencedLogName = path.basename(logMatch[1]);
-      logBaseName = referencedLogName.replace(/\.log$/, '');
-      consumedLogs.add(referencedLogName);
-      const fullLogPath = path.join(delegationsDir, referencedLogName);
-      if (fs.existsSync(fullLogPath)) {
-        try {
-          companionContent = fs.readFileSync(fullLogPath, 'utf8');
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    const combinedContent = companionContent ? `${companionContent}\n${outContent}` : outContent;
-    const factId = logBaseName || outFile.replace(/\.out$/, '');
-    facts.push(extractDelegationFacts(combinedContent, factId));
-  }
-
-  for (const logFile of logFiles) {
-    if (facts.length >= limit) break;
-    if (consumedLogs.has(logFile)) continue;
-    const logPath = path.join(delegationsDir, logFile);
-    try {
-      const content = fs.readFileSync(logPath, 'utf8');
-      const factId = logFile.replace(/\.log$/, '');
-      facts.push(extractDelegationFacts(content, factId));
-    } catch {
-      continue;
-    }
-  }
-
-  return facts;
-}
+import {
+  type DelegationFact,
+  readDelegationLogs,
+  formatRunFactsLine,
+} from './delegation-facts.js';
 
 export interface DelegationLogsExperienceSourceOptions {
   workDir?: string;
@@ -402,6 +210,7 @@ export class DelegationLogsExperienceSource {
         });
         existing.add(experienceId);
       }
+      const factsLine = formatRunFactsLine(fact);
       experiences.push({
         id: experienceId,
         source: 'delegation-log',
@@ -410,9 +219,15 @@ export class DelegationLogsExperienceSource {
           fact.namedFailures.length > 0 ? fact.namedFailures.join(', ') : 'succès'
         }.`,
         context: [
+          factsLine,
           `Moteur : ${fact.engine}.`,
+          fact.model ? `Modèle : ${fact.model}${fact.requestedModel && fact.requestedModel !== fact.model ? ` (demandé : ${fact.requestedModel})` : ''}.` : '',
           fact.durationSec !== undefined ? `Durée : ${fact.durationSec} s.` : '',
           fact.exitCode !== undefined ? `Sortie : ${fact.exitCode}.` : '',
+          fact.toolRounds !== undefined ? `Tours d'outils : ${fact.toolRounds}.` : '',
+          fact.roundLimit !== undefined ? `Plafond de tours : ${fact.roundLimit}.` : '',
+          fact.costUsd !== undefined ? `Coût : $${fact.costUsd}.` : '',
+          fact.costCap !== undefined ? `Plafond de coût : $${fact.costCap}.` : '',
           fact.changes.length > 0
             ? `Ce qui a bougé :\n${fact.changes.map((c) => `  - ${c}`).join('\n')}`
             : '',
