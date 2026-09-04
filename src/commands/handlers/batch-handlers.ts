@@ -36,6 +36,15 @@ export interface BatchUnit {
   filePatterns?: string[];
   /** Dependencies (labels of units that must complete first) */
   dependsOn?: string[];
+  /**
+   * True when this unit only reads or checks existing state (e.g. "verify
+   * that X exists") and is not expected to create or modify any file.
+   * A verifyOnly unit that completes with zero file changes is reported as
+   * success — it is not a coding unit that silently did nothing. Every unit
+   * that omits this flag (the default) keeps the strict "no done without a
+   * changed file" guard (GK12/TAUTFIX1) unweakened.
+   */
+  verifyOnly?: boolean;
 }
 
 export interface BatchPlan {
@@ -216,12 +225,18 @@ Respond with a JSON array of objects, each with:
 - "instruction": detailed instruction for one agent
 - "filePatterns": array of file glob patterns this unit will modify (optional)
 - "dependsOn": array of labels this unit depends on (optional)
+- "verifyOnly": true ONLY for a unit that checks/reads existing state (e.g.
+  "verify that X exists", "confirm the file contains Y") and is not expected
+  to create or modify any file. Omit or set false for every unit that must
+  produce a file change (optional, default false).
 
 Rules:
 1. Each unit should be independently executable where possible
 2. Minimize dependencies between units
 3. Each unit should be focused on a specific file or component
 4. Include clear, actionable instructions
+5. Do not add extra verification/check units unless the goal explicitly asks
+   for verification — if you do add one, mark it "verifyOnly": true
 
 Respond with ONLY the JSON array, no other text.`;
 
@@ -246,6 +261,7 @@ Respond with ONLY the JSON array, no other text.`;
         instruction: String(u.instruction),
         filePatterns: Array.isArray(u.filePatterns) ? u.filePatterns : undefined,
         dependsOn: Array.isArray(u.dependsOn) ? u.dependsOn : undefined,
+        verifyOnly: u.verifyOnly === true ? true : undefined,
       }));
 
     return { goal, units };
@@ -352,11 +368,27 @@ export async function executeBatchPlan(
         if (settled.status === 'fulfilled') {
           const value = settled.value;
           if (value.success && value.filesChanged && value.filesChanged.length === 0) {
-            results.push({
-              ...value,
-              success: false,
-              summary: value.summary?.trim() ? value.summary : 'No files changed',
-            });
+            if (unit.verifyOnly) {
+              // A verification unit is not a coding unit: succeeding without
+              // touching a file is the expected outcome, not a silent no-op.
+              // Spawn functions describe a zero-diff outcome with the generic
+              // write-unit phrasing ("No files changed") since they don't
+              // know a unit's verifyOnly intent — rephrase that specific
+              // case so the summary doesn't read as a failure explanation;
+              // a more specific spawn summary is left untouched.
+              const summary = !value.summary?.trim() || /^no files changed$/i.test(value.summary.trim())
+                ? 'Verified — no write expected'
+                : value.summary;
+              results.push({ ...value, summary });
+            } else {
+              // GK12/TAUTFIX1 guard: a write unit that reports success without
+              // changing a single file is a silent no-op, never a success.
+              results.push({
+                ...value,
+                success: false,
+                summary: value.summary?.trim() ? value.summary : 'No files changed',
+              });
+            }
           } else {
             results.push(value);
           }
@@ -645,20 +677,16 @@ export function createDefaultBatchSpawnFn(opts: BatchSpawnOptions): BatchSpawnFn
         throw new Error(outcome.message ?? outcome.reason ?? 'Delegate failed');
       }
 
+      // Report the delegate's own outcome (its turn completed without
+      // throwing) plus the real diff. Whether a zero-file diff counts as a
+      // FAIL is not this spawn's call to make — it depends on whether the
+      // unit was a write unit or a verifyOnly unit, which only the caller
+      // (`executeBatchPlan`, GK12/TAUTFIX1 guard) knows about.
       const filesChanged = listChangedFiles(cwd, before, filePatterns);
-      if (filesChanged.length === 0) {
-        return {
-          label,
-          success: false,
-          summary: 'No files changed',
-          durationMs: Date.now() - started,
-          filesChanged,
-        };
-      }
       return {
         label,
         success: true,
-        summary: `Updated ${filesChanged.join(', ')}`,
+        summary: filesChanged.length > 0 ? `Updated ${filesChanged.join(', ')}` : 'No files changed',
         durationMs: Date.now() - started,
         filesChanged,
       };

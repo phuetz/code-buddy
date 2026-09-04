@@ -179,6 +179,90 @@ describe('GK34 /batch success contract', () => {
     expect(results[0]?.filesChanged).toEqual([]);
   });
 
+  it('a verifyOnly unit that changes no files is reported as success (BATCHFIX1)', async () => {
+    const results = await executeBatchPlan(
+      {
+        goal: 'write then verify',
+        units: [
+          {
+            label: 'verify-file-one',
+            instruction: "Check that file-one.txt exists and contains 'one'.",
+            filePatterns: ['file-one.txt'],
+            verifyOnly: true,
+          },
+        ],
+      },
+      async (label) => ({
+        label,
+        success: true,
+        summary: '',
+        durationMs: 5,
+        filesChanged: [],
+      }),
+    );
+    expect(results[0]?.success).toBe(true);
+    expect(results[0]?.summary).not.toMatch(/no files changed/i);
+    expect(results[0]?.filesChanged).toEqual([]);
+  });
+
+  it('a verifyOnly unit that fails its own turn is still reported as FAIL (BATCHFIX1)', async () => {
+    const results = await executeBatchPlan(
+      {
+        goal: 'verify that breaks',
+        units: [
+          {
+            label: 'verify-file-two',
+            instruction: "Check that file-two.txt exists.",
+            filePatterns: ['file-two.txt'],
+            verifyOnly: true,
+          },
+        ],
+      },
+      async (label) => ({
+        label,
+        success: false,
+        summary: 'Error: file-two.txt missing',
+        durationMs: 5,
+        filesChanged: [],
+      }),
+    );
+    expect(results[0]?.success).toBe(false);
+  });
+
+  it('a plain write unit with no file changes still fails even amid verifyOnly units (BATCHFIX1, TAUTFIX1 guard intact)', async () => {
+    const results = await executeBatchPlan(
+      {
+        goal: 'mixed',
+        units: [
+          { label: 'writer', instruction: 'write something', filePatterns: ['out.txt'] },
+          { label: 'verify-out', instruction: 'check out.txt', filePatterns: ['out.txt'], verifyOnly: true },
+        ],
+      },
+      async (label) => ({ label, success: true, summary: '', durationMs: 1, filesChanged: [] }),
+    );
+    const writer = results.find((r) => r.label === 'writer');
+    const verifier = results.find((r) => r.label === 'verify-out');
+    expect(writer?.success).toBe(false);
+    expect(writer?.summary).toMatch(/no files changed/i);
+    expect(verifier?.success).toBe(true);
+  });
+
+  it('decomposeBatchGoal parses verifyOnly from an LLM decomposition and defaults writers to unset', async () => {
+    const chatFn = async () =>
+      JSON.stringify([
+        { label: 'write-file', instruction: 'Create out.txt', filePatterns: ['out.txt'] },
+        {
+          label: 'verify-file',
+          instruction: 'Check out.txt exists',
+          filePatterns: ['out.txt'],
+          verifyOnly: true,
+        },
+      ]);
+    const plan = await decomposeBatchGoal('do a thing then verify it', chatFn);
+    expect(plan.units[0]?.verifyOnly).toBeUndefined();
+    expect(plan.units[1]?.verifyOnly).toBe(true);
+  });
+
   it('handleBatchSlashCommand still plans-only when no spawnFn is wired', async () => {
     const result = await handleBatchSlashCommand(['create', 'src/title-case.js']);
     expect(result.entry?.content).toContain('plan only');
