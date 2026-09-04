@@ -147,4 +147,12 @@ Qualité finale : `npx tsc --noEmit -p .` = 0 ; ESLint ciblé avec `--max-warnin
 
 ## Bilan
 
-À compléter (dix lignes maximum, avec les SHA des commits fonctionnels).
+- Mesure hermétique sans fournisseur : 203 674 caractères avant réduction, 15 blocs, aucun doublon textuel exact.
+- La duplication `.codebuddy/TOOLS.md` (134 751 caractères) est supprimée du chargement d’identité par défaut.
+- Le contexte de démarrage canonique et l’index `knowledge_search` ramènent le prompt à 49 489 caractères / 12 373 jetons.
+- Les règles de secrets, confirmation et sandbox du bloc de base restent présentes et testées.
+- La troncature sélectionne des blocs entiers selon sécurité > workspace > outils > style > contexte > exemples.
+- Les blocs retirés sont journalisés avec `blocs retirés : ...`; le cas atomique trop grand est conservé en fail-safe.
+- Preuves : 4 fichiers / 58 tests prompt verts ; 3 fichiers touchés / 86 tests verts ; `tsc`, ESLint ciblé et `git diff --check` à 0.
+- Commits fonctionnels : `88a05621b`, `2b4187432`, `775369471` ; mise à jour coordination/documentation à commiter.
+- Reste ouvert : fusion de la branche par Patrice ; les fichiers d’interopérabilité restent opt-in via `CODEBUDDY_INCLUDE_INTEROP_CONTEXT=true`.
