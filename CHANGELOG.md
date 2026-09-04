@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### VERIFIX3A — dix-sept harnais qui ne gardaient qu'« un appel » (4 septembre 2026)
+
+Les tests réalignés après MEM1 assertent désormais le contrat réel : chemin
+exact, contenu sérialisé, mode `0o600`, exception levée, permissions, latence
+mesurée. 72 mutations rouges, 34 tests nets ajoutés, aucun fichier `src/`
+modifié. Trois doubles de test corrigés au passage (un `mode` jeté, un scoreboard
+de latence figé, une contamination d'espions).
+
 ### BATCHFIX1 — le résumé de `/batch` dit vrai (4 septembre 2026)
 
 Les unités de vérification, qui n'écrivent rien par nature, étaient comptées
