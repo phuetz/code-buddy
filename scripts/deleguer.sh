@@ -12,6 +12,10 @@
 #   an interactive terminal ») — l'agent n'executait alors plus rien, echec impute a tort aux
 #   modeles. `dontAsk` leve la question sans lever les garde-fous : validateur statique de
 #   commandes et filtre de secrets restent actifs. CB_POSTURE permet de durcir au cas par cas.
+# NOTE (04/09/2026) — les moteurs qui pilotent Code Buddy en headless (qwen, gmi, openrouter,
+# minimax, nvidia, groq, cerebras, …) passent `--max-tool-rounds ${CB_MAX_ROUNDS:-300}` : le
+# défaut du mode -p est 50 tours, et une lane MiniMax (GF3FIX) s'est arrêtée sur « Maximum tool
+# execution rounds reached » après 20 outils, rapport écrit, aucun correctif commité.
 # Déléguer une mission à un moteur à $0, sans repayer les pièges déjà payés.
 #
 #   deleguer.sh <dépôt> <mission.md> [moteur]
@@ -158,7 +162,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=ollama OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   gmi)
     # GMI Cloud (api.gmi-serving.com), compatible OpenAI. Offre MiniMax : M3, M2.7, Speech 2.8
@@ -183,7 +187,7 @@ case "$MOTEUR" in
     # historique, il ne désigne pas xAI.
     (cd "$DEPOT" && GROK_API_KEY="$GKEY" GROK_BASE_URL="https://api.gmi-serving.com/v1" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GMI_MODELE:-MiniMaxAI/MiniMax-M3}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
   openrouter)
@@ -198,7 +202,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OPENROUTER_MODELE:-nvidia/nemotron-3-ultra-550b-a55b:free}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   minimax)
     # OpenRouter, MiniMax. Défaut : m2.7:free (196 608 de contexte, 0 $).
@@ -218,7 +222,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MINIMAX_MODELE:-minimax/minimax-m2.7:free}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
   nvidia)
@@ -235,7 +239,7 @@ case "$MOTEUR" in
     # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   groq|cerebras)
     # Paliers GRATUITS directs (clés régénérées le 02/09/2026, dans ~/.codebuddy/media.env) :
@@ -252,7 +256,7 @@ case "$MOTEUR" in
     # avec le prompt système complet) : CODEBUDDY_MAX_CONTEXT borne le budget du prompt.
     (cd "$DEPOT" && env "CODEBUDDY_PROVIDER=$MOTEUR" "${UPPER}_API_KEY=$PKEY" "CODEBUDDY_MAX_CONTEXT=$PCTX" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "$PMODEL" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   omniroute)
     # OmniRoute (passerelle locale MIT, `omniroute serve`, port 20128) : des centaines de modèles
@@ -268,7 +272,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=omniroute OMNIROUTE_BASE_URL="$OMNI_URL" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OMNIROUTE_MODELE:-auto/best-free}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
     # ⛔ UN SEUL TRAVAIL OPENCODE À LA FOIS. Le quota d'une fenêtre de 5 h
@@ -316,7 +320,7 @@ case "$MOTEUR" in
     # necessaire sinon le defaultModel perime part vers gpuNode et rend 404.
     (cd "$DEPOT" && GROK_BASE_URL="$DS_HOTE/v1" GROK_API_KEY=ollama \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GPU_NODE_MODELE:-qwen3.8:27b}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
