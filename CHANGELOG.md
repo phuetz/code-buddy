@@ -22,6 +22,18 @@ parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persi
 (28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
 `docs/reports/2026-09/REPARATION-DGM4.md`.
 
+### DGM6 — les journaux de lanes livrent des chiffres au rejeu des stratégies (4 septembre 2026)
+
+La source « journaux de lanes » ne produisait que des échecs nommés ; le rejeu contrefactuel des
+stratégies devait supposer le plafond de tours. Des parseurs purs (`delegation-facts.ts`, lecture
+bornée à 256 Ko contre les expressions régulières pathologiques) extraient désormais tours
+consommés, plafond, coût réel, plafond de coût, modèle effectif et code de sortie, et la source
+les émet en marqueurs explicites `facts: rounds= limit= cost= outcome= failure=`. Preuve réelle
+sur 857 journaux : le rejeu sait maintenant que la plupart des lanes tournaient à 300 tours (elles
+comptent comme égalités) et n'accepte « 75 tours » que sur les quatre lanes coupées à 50. Mission
+Gemini 3.8 Flash en deux temps (timeout d'API à 50 min, travail abrité puis terminé). Rapport :
+`docs/reports/2026-09/REPARATION-DGM6.md`.
+
 ### PROMPTBUDGET1 — le prompt système passe de 203 674 à 49 489 caractères (4 septembre 2026)
 
 Personne n'avait mesuré ce qui composait le prompt système : `scripts/measure-system-prompt.ts`
