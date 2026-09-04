@@ -212,9 +212,24 @@ buddy -p "run tests and fix failures" \
 
 # Auto-approve all tool executions
 buddy -p "fix lint errors" --auto-approve --output-format text
+
+# Write only the final assistant message to a file (atomic write)
+buddy -p "summarize the README" -o result.txt
+
+# Validate the final response against a JSON Schema; exits 1 if it doesn't match
+buddy -p "reply with {\"ok\": true}" --output-schema schema.json
 ```
 
 Headless mode exits cleanly after completion -- safe for `timeout`, shell scripts, and CI pipelines.
+
+`-o`/`--output-last-message <file>` writes the agent's last text response
+directly and atomically to a file — handy when you only want the answer, not
+the full JSON envelope. `--output-schema <file>` takes a path to a JSON
+Schema file and validates the final response against it before exiting; a
+non-conforming response makes the process exit with code `1` instead of
+silently returning bad output. Combine with `--permission-mode dontAsk` to
+run a real task (file writes, `bash`) without interactive confirmation
+prompts in a script or CI job.
 
 ## Session Management
 
@@ -401,6 +416,27 @@ From a shell, inspect the same operating postures before you route:
 buddy fleet profiles
 buddy fleet policy review bash
 ```
+
+### Calling the OpenAI-compatible REST API (curl, local, $0)
+
+`buddy server` also exposes an OpenAI-compatible `/v1/chat/completions`
+route. In production it requires a `JWT_SECRET` and a signed bearer token
+(see [Security](security.md)); for a quick local check against your own
+machine, start the server with `--no-auth` and bind it to loopback so it
+never leaves your machine:
+
+```bash
+buddy server --port 3721 --host 127.0.0.1 --no-auth
+
+curl -s http://127.0.0.1:3721/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"say hi"}]}'
+```
+
+`--no-auth` is explicitly loopback-only — the server logs a warning if you
+combine it with a non-loopback `--host`. Drop `--no-auth` and set
+`JWT_SECRET` once you want the same endpoint reachable from another machine
+on your network (Fleet / A2A use cases above).
 
 ### Two stated objectives
 
