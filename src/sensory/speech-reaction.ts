@@ -290,6 +290,9 @@ const STT_FAILURE_REPLY = "Pardon, je n'ai pas compris.";
 interface PcmWavSignal {
   durationMs: number;
   rms: number;
+  channels: number;
+  sampleRate: number;
+  bitsPerSample: number;
 }
 
 /** Read only the small PCM signal facts needed to avoid speaking on a fake/empty WAV. */
@@ -338,9 +341,63 @@ function readPcm16WavSignal(wav: string): PcmWavSignal | undefined {
     return {
       durationMs: dataSize / (sampleRate * channels * 2) * 1_000,
       rms: Math.sqrt(squareSum / sampleCount),
+      channels,
+      sampleRate,
+      bitsPerSample,
     };
   } catch {
     return undefined;
+  }
+}
+
+function describeSherpaRustAttempt(
+  wav: string,
+  startedAtMs: number,
+  worker: FasterWhisperWorker | null,
+  reason: string,
+): string {
+  const signal = readPcm16WavSignal(wav);
+  const exitCode = worker?.proc.exitCode;
+  const stderr = worker?.stderrTail?.trim() || '<empty>';
+  return [
+    `reason=${reason}`,
+    `exit_code=${exitCode === null || exitCode === undefined ? 'running' : exitCode}`,
+    `stderr=${JSON.stringify(stderr.slice(-300))}`,
+    `request_ms=${Math.max(0, Date.now() - startedAtMs)}`,
+    `audio_ms=${signal ? Math.round(signal.durationMs) : 'unknown'}`,
+    `format=${signal ? `pcm_s16le/${signal.sampleRate}Hz/${signal.channels}ch` : 'unknown'}`,
+    `rms=${signal ? signal.rms.toFixed(6) : 'unknown'}`,
+  ].join(' ');
+}
+
+function resolveSherpaEmptyThreshold(): number {
+  return Math.max(
+    1,
+    Math.round(numericEnv('CODEBUDDY_SHERPA_EMPTY_THRESHOLD', DEFAULT_SHERPA_EMPTY_THRESHOLD)),
+  );
+}
+
+function recordSherpaRustSuccess(): void {
+  if (sherpaRustInactiveAnnounced) {
+    logger.info(`[speech] sherpa-rs actif à nouveau après ${sherpaRustEmptyStreak} transcript(s) vide(s)`);
+  }
+  sherpaRustEmptyStreak = 0;
+  sherpaRustInactiveAnnounced = false;
+}
+
+function recordSherpaRustEmpty(details: string, fallbackEnabled: boolean): void {
+  sherpaRustEmptyStreak += 1;
+  const threshold = resolveSherpaEmptyThreshold();
+  if (sherpaRustEmptyStreak === 1) {
+    logger.warn(
+      `[speech] sherpa-rs empty transcript; ${details} fallback=${fallbackEnabled ? 'faster-whisper' : 'disabled'}`,
+    );
+  }
+  if (sherpaRustEmptyStreak >= threshold && !sherpaRustInactiveAnnounced) {
+    sherpaRustInactiveAnnounced = true;
+    logger.warn(
+      `[speech] sherpa-rs inactif : ${details} consecutive_empty=${sherpaRustEmptyStreak}`,
+    );
   }
 }
 
@@ -509,6 +566,7 @@ interface PendingWorkerRequest {
   resolve: (text: string) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  describeFailure?: (reason: string) => string;
 }
 
 interface FasterWhisperWorker {
@@ -518,6 +576,7 @@ interface FasterWhisperWorker {
   ready: Promise<void>;
   readySettled: boolean;
   pending: Map<string, PendingWorkerRequest>;
+  stderrTail?: string;
 }
 
 let fasterWhisperWorker: FasterWhisperWorker | null = null;
@@ -529,6 +588,10 @@ let parakeetWorkerSeq = 0;
 // no python on the hot path. The python whisper/parakeet workers stay as fallback.
 let sherpaRustWorker: FasterWhisperWorker | null = null;
 let sherpaRustWorkerSeq = 0;
+
+export const DEFAULT_SHERPA_EMPTY_THRESHOLD = 3;
+let sherpaRustEmptyStreak = 0;
+let sherpaRustInactiveAnnounced = false;
 
 class SpeechWorkerRequestError extends Error {
   constructor(message: string) {
@@ -796,7 +859,11 @@ function parakeetWorkerKey(python: string, modelDir: string, numThreads: number)
 function settlePending(worker: FasterWhisperWorker, error: Error): void {
   for (const pending of worker.pending.values()) {
     clearTimeout(pending.timeout);
-    pending.reject(error);
+    pending.reject(
+      pending.describeFailure
+        ? new SpeechWorkerRequestError(pending.describeFailure(error.message))
+        : error,
+    );
   }
   worker.pending.clear();
 }
@@ -1253,11 +1320,11 @@ async function createSherpaRustWorker(
     ready,
     readySettled: false,
     pending: new Map(),
+    stderrTail: '',
   };
 
-  let stderr = '';
   proc.stderr.on('data', (data) => {
-    stderr = `${stderr}${String(data)}`.slice(-2_000);
+    worker.stderrTail = `${worker.stderrTail ?? ''}${String(data)}`.slice(-2_000);
   });
   worker.rl.on('line', (line) => {
     let message: FasterWhisperWorkerMessage;
@@ -1280,7 +1347,12 @@ async function createSherpaRustWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] sherpa-rs request failed: ${message.error.slice(0, 300)}`);
-      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
+      const reason = `request_error:${message.error.slice(0, 300)}`;
+      pending.reject(
+        new SpeechWorkerRequestError(
+          pending.describeFailure ? pending.describeFailure(reason) : reason,
+        ),
+      );
       return;
     }
     pending.resolve(message.text?.trim() || '');
@@ -1291,9 +1363,9 @@ async function createSherpaRustWorker(
     if (!worker.readySettled) {
       rejectReady(new Error(`sherpa-rs worker exited before ready (code=${code})`));
     }
-    if (stderr.trim()) {
+    if (worker.stderrTail?.trim()) {
       logger.warn(
-        `[speech] sherpa-rs worker closed (code=${code}): ${stderr.trim().slice(0, 300)}`
+        `[speech] sherpa-rs worker closed (code=${code}): ${worker.stderrTail.trim().slice(0, 300)}`
       );
     }
   });
@@ -1330,17 +1402,20 @@ async function transcribeWavWithSherpaRustWorker(
   await waitForWorkerReady(worker, numericEnv('CODEBUDDY_SPEECH_STT_READY_TIMEOUT_MS', 8_000));
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `sherpa-rs-${Date.now()}-${++sherpaRustWorkerSeq}`;
+  const startedAtMs = Date.now();
+  const describeFailure = (reason: string): string =>
+    describeSherpaRustAttempt(wav, startedAtMs, worker, reason);
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
       const error = new SpeechWorkerRequestError(
-        `sherpa-rs worker request timed out after ${timeoutMs}ms`,
+        `sherpa-rs worker request timed out after ${timeoutMs}ms; ${describeFailure('timeout')}`,
       );
-      logger.warn(`[speech] sherpa-rs worker request timed out after ${timeoutMs}ms`);
+      logger.warn(`[speech] sherpa-rs worker request timed out; ${error.message}`);
       disposeSherpaRustWorker(worker);
       reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, reject, timeout });
+    worker.pending.set(id, { resolve, reject, timeout, describeFailure });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
@@ -1393,10 +1468,16 @@ export function warnSpeechFallbackOnce(
   );
 }
 
-async function transcribeWavRaw(
+export interface SpeechTranscriptionOutcome {
+  text: string;
+  engine: SpeechRecognitionEngine;
+}
+
+/** Transcribe a WAV and report the decoder that produced the returned text. */
+export async function transcribeWavWithMetadata(
   wav: string,
   engineOverride?: SpeechRecognitionEngine
-): Promise<string> {
+): Promise<SpeechTranscriptionOutcome> {
   // `engineOverride` lets ONE call path (e.g. long/video transcription) prefer a faster
   // engine WITHOUT touching the global `CODEBUDDY_SPEECH_ENGINE` default that the
   // companion/sensory hot paths read. Unset → the env-driven resolution (unchanged).
@@ -1414,29 +1495,46 @@ async function transcribeWavRaw(
     warnSpeechFallbackOnce(plan, engine, hotwordCount);
   }
   if (engine === 'faster-whisper') {
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine };
   }
 
   if (engine === 'sherpa-rs') {
+    const startedAtMs = Date.now();
     try {
       const text = await transcribeWavWithSherpaRustRaw(wav);
-      if (text || !parakeetFallbackEnabled()) return text;
-      logger.warn(
-        '[speech] sherpa-rs returned an empty transcript; falling back to faster-whisper'
+      if (text) {
+        recordSherpaRustSuccess();
+        return { text, engine };
+      }
+      const details = describeSherpaRustAttempt(
+        wav,
+        startedAtMs,
+        sherpaRustWorker,
+        'no_tokens',
       );
+      recordSherpaRustEmpty(details, plan.fallbackEnabled);
+      if (!plan.fallbackEnabled) return { text, engine };
     } catch (err) {
-      if (!parakeetFallbackEnabled()) throw err;
+      if (!plan.fallbackEnabled) throw err;
+      const details = err instanceof SpeechWorkerRequestError && err.message.includes('reason=')
+        ? err.message
+        : describeSherpaRustAttempt(
+            wav,
+            startedAtMs,
+            sherpaRustWorker,
+            `runtime_error:${err instanceof Error ? err.message : String(err)}`,
+          );
       logger.warn(
-        `[speech] sherpa-rs failed; falling back to faster-whisper: ${err instanceof Error ? err.message : String(err)}`
+        `[speech] sherpa-rs failed; falling back to faster-whisper: ${details}`,
       );
     }
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
   }
 
   if (engine === 'parakeet') {
     try {
       const text = await transcribeWavWithParakeetRaw(wav);
-      if (text || !parakeetFallbackEnabled()) return text;
+      if (text || !parakeetFallbackEnabled()) return { text, engine };
       logger.warn('[speech] Parakeet returned an empty transcript; falling back to faster-whisper');
     } catch (err) {
       if (!parakeetFallbackEnabled()) throw err;
@@ -1444,7 +1542,7 @@ async function transcribeWavRaw(
         `[speech] Parakeet failed; falling back to faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
   }
 
   // Auto mode: prefer the in-process Rust engine only when both its binary and a
@@ -1456,7 +1554,9 @@ async function transcribeWavRaw(
   const frenchModelAvailable = isFrenchParakeetModelAvailable(modelDir);
   if (binaryAvailable && frenchModelAvailable) {
     try {
-      return await transcribeWavWithSherpaRustRaw(wav);
+      const text = await transcribeWavWithSherpaRustRaw(wav);
+      if (text) recordSherpaRustSuccess();
+      return { text, engine: 'sherpa-rs' };
     } catch (err) {
       warnAutoFallbackOnce('sherpa-rs-runtime-unavailable');
       logger.warn(
@@ -1472,7 +1572,7 @@ async function transcribeWavRaw(
   }
   if (frenchModelAvailable) {
     try {
-      return await transcribeWavWithParakeetRaw(wav);
+      return { text: await transcribeWavWithParakeetRaw(wav), engine: 'parakeet' };
     } catch (err) {
       warnAutoFallbackOnce('parakeet-runtime-unavailable');
       logger.warn(
@@ -1480,7 +1580,14 @@ async function transcribeWavRaw(
       );
     }
   }
-  return transcribeWavWithFasterWhisperRaw(wav);
+  return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
+}
+
+async function transcribeWavRaw(
+  wav: string,
+  engineOverride?: SpeechRecognitionEngine,
+): Promise<string> {
+  return (await transcribeWavWithMetadata(wav, engineOverride)).text;
 }
 
 /** Default transcriber: local faster-whisper (base), best-effort, $0. Exported so the
@@ -1501,7 +1608,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs(env);
   const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs(env);
   const now = options.now ?? (() => Date.now());
-  const transcribe = options.transcriber ?? transcribeWavRaw;
+  const customTranscribe = options.transcriber;
   const turnCoordinator = getVoiceTurnCoordinator();
   const sensoryBackchannelEnabled =
     env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true' && Boolean(options.onConversationCue);
@@ -1701,9 +1808,18 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         // WAV, no STT here. Everything downstream (respond gate, onHeard, percept,
         // debounce/echo guard) is shared with the WAV path.
         let rawText = '';
+        let actualSttEngine: SpeechRecognitionEngine | undefined;
         let sttFailure: Error | undefined;
         try {
-          rawText = job.presetText !== undefined ? job.presetText : await transcribe(job.wav);
+          if (job.presetText !== undefined) {
+            rawText = job.presetText;
+          } else if (customTranscribe) {
+            rawText = await customTranscribe(job.wav);
+          } else {
+            const outcome = await transcribeWavWithMetadata(job.wav);
+            rawText = outcome.text;
+            actualSttEngine = outcome.engine;
+          }
         } catch (error) {
           sttFailure = error instanceof Error ? error : new Error(String(error));
         }
@@ -1955,11 +2071,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           return;
         }
         const configuredPlan = resolveSpeechTranscriptionPlan();
-        const sttEngine = typeof payload.sttEngine === 'string'
+        const sttEngine = actualSttEngine ?? (typeof payload.sttEngine === 'string'
           ? payload.sttEngine
           : job.presetText !== undefined
             ? 'sherpa-rs'
-            : configuredPlan.effectiveEngine;
+            : configuredPlan.effectiveEngine);
         const sttLanguage = typeof payload.sttLanguage === 'string'
           ? payload.sttLanguage
           : configuredPlan.language;

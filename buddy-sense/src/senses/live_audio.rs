@@ -185,6 +185,46 @@ fn normalized_engine(value: Option<&str>) -> String {
     }
 }
 
+/// Languages covered by the multilingual Parakeet-TDT 0.6B v3 model. The
+/// transducer auto-detects among these languages even though sherpa-rs exposes
+/// no per-request language parameter.
+fn parakeet_supports_language(language: &str) -> bool {
+    let base = language
+        .trim()
+        .to_ascii_lowercase()
+        .split(|character| character == '-' || character == '_')
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    matches!(
+        base.as_str(),
+        "bg" | "hr"
+            | "cs"
+            | "da"
+            | "nl"
+            | "en"
+            | "et"
+            | "fi"
+            | "fr"
+            | "de"
+            | "el"
+            | "hu"
+            | "it"
+            | "lv"
+            | "lt"
+            | "mt"
+            | "pl"
+            | "pt"
+            | "ro"
+            | "sk"
+            | "sl"
+            | "es"
+            | "sv"
+            | "ru"
+            | "uk"
+    )
+}
+
 fn resolve_live_stt_decision_from(
     engine: Option<&str>,
     language: Option<&str>,
@@ -212,7 +252,10 @@ fn resolve_live_stt_decision_from(
             reason: "configured-faster-whisper",
         };
     }
-    if pinned_language.is_some() {
+    if pinned_language
+        .as_deref()
+        .is_some_and(|value| !parakeet_supports_language(value))
+    {
         return if fallback_enabled {
             LiveSttDecision::DelegateToBrain {
                 requested_engine,
@@ -933,10 +976,9 @@ fn capture_loop(
     // microphone: the semantic playback guard remains active and hearing never dies.
     let capture = resolve_capture_profile(&source);
     let source = capture.source.clone();
-    // Parakeet-TDT v3 is multilingual and auto-detects language, but this
-    // sherpa-rs transducer API has no per-request language field. An explicit
-    // language pin is delegated as a WAV to the brain, whose faster-whisper
-    // path owns both language and hotword options.
+    // Parakeet-TDT v3 auto-detects its 25 supported languages. A supported pin
+    // therefore stays in-process; only an unsupported pin is delegated to the
+    // language-aware faster-whisper path in the brain.
     let mut transcriber = match resolve_live_stt_decision() {
         LiveSttDecision::InProcessParakeet {
             requested_engine,
@@ -1492,13 +1534,26 @@ mod tests {
     }
 
     #[test]
-    fn an_explicit_french_pin_is_delegated_to_the_language_aware_brain_stt() {
+    fn a_supported_french_pin_stays_on_the_in_process_parakeet_decoder() {
         assert_eq!(
             resolve_live_stt_decision_from(Some("parakeet"), Some("fr"), Some("true")),
-            LiveSttDecision::DelegateToBrain {
+            LiveSttDecision::InProcessParakeet {
                 requested_engine: "parakeet".to_string(),
                 language: "fr".to_string(),
-                reason: "parakeet-language-pin-unsupported",
+            }
+        );
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("fr"), Some("true")),
+            LiveSttDecision::InProcessParakeet {
+                requested_engine: "sherpa-rs".to_string(),
+                language: "fr".to_string(),
+            }
+        );
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("fr-FR"), Some("true")),
+            LiveSttDecision::InProcessParakeet {
+                requested_engine: "sherpa-rs".to_string(),
+                language: "fr-FR".to_string(),
             }
         );
         assert_eq!(
@@ -1520,10 +1575,18 @@ mod tests {
     #[test]
     fn a_language_pin_fails_closed_when_fallback_is_disabled() {
         assert_eq!(
-            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("fr"), Some("false")),
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("ja"), Some("true")),
+            LiveSttDecision::DelegateToBrain {
+                requested_engine: "sherpa-rs".to_string(),
+                language: "ja".to_string(),
+                reason: "parakeet-language-pin-unsupported",
+            }
+        );
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("ja"), Some("false")),
             LiveSttDecision::Disabled {
                 requested_engine: "sherpa-rs".to_string(),
-                language: "fr".to_string(),
+                language: "ja".to_string(),
                 reason: "parakeet-language-pin-unsupported-and-fallback-disabled",
             }
         );

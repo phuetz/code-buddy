@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerHarness = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void;
-  type Response = 'timeout' | 'empty' | 'text' | 'error' | 'one-shot-error';
+  type Response = 'timeout' | 'empty' | 'text' | 'error' | 'exit-error' | 'one-shot-error';
 
   class FakeEmitter {
     private readonly listeners = new Map<string, Listener[]>();
@@ -35,6 +35,7 @@ const workerHarness = vi.hoisted(() => {
     stdout: FakeStream;
     stderr: FakeStream;
     kill: ReturnType<typeof vi.fn>;
+    exitCode: number | null;
   };
 
   const responses: Response[] = [];
@@ -47,12 +48,19 @@ const workerHarness = vi.hoisted(() => {
       reader: undefined as FakeReader | undefined,
     });
     const stderr = Object.assign(new FakeEmitter(), { destroy: vi.fn() });
+    let proc: FakeProcess;
     const stdin = Object.assign(new FakeEmitter(), {
       destroy: vi.fn(),
       write: vi.fn((payload: string) => {
         if (response === 'timeout') return true;
         const request = JSON.parse(payload) as { id: string };
         queueMicrotask(() => {
+          if (response === 'exit-error') {
+            stderr.emit('data', 'decoder crashed');
+            proc.exitCode = 7;
+            proc.emit('close', 7);
+            return;
+          }
           stdout.reader?.emit(
             'line',
             response === 'error'
@@ -63,13 +71,14 @@ const workerHarness = vi.hoisted(() => {
         return true;
       }),
     });
-    const proc = Object.assign(new FakeEmitter(), {
+    proc = Object.assign(new FakeEmitter(), {
       command,
       args,
       stdin,
       stdout,
       stderr,
       kill: vi.fn(() => true),
+      exitCode: null,
     });
     processes.push(proc);
     if (response === 'one-shot-error') {
@@ -132,6 +141,66 @@ afterEach(() => {
 });
 
 describe('speech reaction — persistent STT workers', () => {
+  it('logs actionable diagnostics once, then announces one inactive sherpa-rs streak', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    vi.stubEnv('CODEBUDDY_SHERPA_EMPTY_THRESHOLD', '3');
+    workerHarness.queueResponses('empty', 'text');
+    const { transcribeWavWithMetadata } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+    const wav = path.join(process.cwd(), 'tests/fixtures/stt-conv4/fr-reference.wav');
+
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await expect(transcribeWavWithMetadata(wav, 'sherpa-rs')).resolves.toEqual({
+          text: 'bonjour',
+          engine: 'faster-whisper',
+        });
+      }
+
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      const firstEmpty = messages.filter((message) =>
+        message.includes('sherpa-rs empty transcript'),
+      );
+      expect(firstEmpty).toHaveLength(1);
+      expect(firstEmpty[0]).toContain('reason=no_tokens');
+      expect(firstEmpty[0]).toContain('exit_code=running');
+      expect(firstEmpty[0]).toContain('stderr="<empty>"');
+      expect(firstEmpty[0]).toMatch(/audio_ms=\d+/);
+
+      const inactive = messages.filter((message) => message.includes('sherpa-rs inactif :'));
+      expect(inactive).toHaveLength(1);
+      expect(inactive[0]).toContain('consecutive_empty=3');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('includes worker exit, stderr and WAV duration when sherpa-rs reports an error', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    workerHarness.queueResponses('exit-error', 'text');
+    const { transcribeWavWithMetadata } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+    const wav = path.join(process.cwd(), 'tests/fixtures/stt-conv4/fr-reference.wav');
+
+    try {
+      await expect(transcribeWavWithMetadata(wav, 'sherpa-rs')).resolves.toEqual({
+        text: 'bonjour',
+        engine: 'faster-whisper',
+      });
+      const failure = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes('sherpa-rs failed; falling back'));
+      expect(failure).toContain('reason=sherpa-rs worker closed (code=7)');
+      expect(failure).toContain('exit_code=7');
+      expect(failure).toContain('stderr="decoder crashed"');
+      expect(failure).toMatch(/audio_ms=\d+/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it.each([
     ['faster-whisper', 'fake-python'],
     ['parakeet', 'fake-python'],
