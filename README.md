@@ -106,6 +106,17 @@ Nothing below is required to chat with a local model. Defaults stay off.
 | `CODEBUDDY_SELF_IMPROVE=true` | The agent may author its own tools/skills behind empirical gates. It does not edit `src/`. |
 | `buddy --yolo` or `/yolo on` | Full autonomy. Setting `YOLO_MODE=true` alone only warns; it does not arm YOLO. |
 
+### Parallel sub-agents and self-improvement
+
+In an interactive session, `/batch <goal>` decomposes independent work into
+multiplexed `ThreadDelegate` sub-agents. `CODEBUDDY_BATCH_CONCURRENCY` caps
+the number of concurrent sub-agents (default: `1`).
+
+`buddy improve status` reports the local self-improvement state. The
+`buddy improve cycle|tools|skills|loop` commands are `propose-only` by default;
+to keep an empirically validated result, opt in with
+`CODEBUDDY_SELF_IMPROVE=true` (or `auto-apply`) and pass `--apply`.
+
 Further extras (shadow workspace, time-travel sessions, widgets, …) are documented in [docs/cb2](docs/cb2/README.md) and are byte-identical to off when their env var is unset.
 
 ---
