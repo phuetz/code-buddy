@@ -18,8 +18,16 @@ réservation Fable 5 est inscrite dans `docs/FABLE5-CODEX-COORDINATION.md`.
 
 ## Journal
 
-À compléter avec les tests rouge → vert, les commits thématiques, les
-vérifications de typecheck/lint/diff et les éventuels écarts préexistants.
+2026-09-04 — Point 1, reproduction ajoutée dans
+`tests/config/local-runtime-context.test.ts`, avec la fixture locale
+`tests/fixtures/mistral-v1-models.json` contenant exactement les deux entrées
+Mistral ciblées. Rouge confirmé avec :
+`HOME=~/DEV/cb-discovery1-2026-09-04/_qa/discovery1/home npx vitest run tests/config/local-runtime-context.test.ts --reporter=verbose`.
+Résultat : 18 tests, 17 verts et 1 rouge ; `mistral-medium-latest` reçoit
+32768 au lieu des 128000 attendus, tandis que Magistral est à 262144.
+
+À compléter avec le correctif, les tests rouge → vert, les vérifications de
+typecheck/lint/diff et les éventuels écarts préexistants.
 
 ## Bilan
 

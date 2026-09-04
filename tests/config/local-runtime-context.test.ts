@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import mistralModelsCatalogue from '../fixtures/mistral-v1-models.json';
 import {
   isLocalRuntimeURL,
   primeLocalRuntimeModelConfig,
@@ -240,6 +241,26 @@ describe('probe scope', () => {
 });
 
 describe('hosted OpenAI-compatible catalogue discovery', () => {
+  it('reproduces the Mistral catalogue values for Medium and Magistral', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response(mistralModelsCatalogue)
+      : response({}, false));
+
+    await primeLocalRuntimeModelConfig({
+      model: 'mistral-medium-latest',
+      baseURL: 'https://api.mistral.ai/v1',
+      fetchImpl,
+    });
+    expect(getModelToolConfig('mistral-medium-latest').contextWindow).toBe(128_000);
+
+    await primeLocalRuntimeModelConfig({
+      model: 'magistral-small-latest',
+      baseURL: 'https://api.mistral.ai/v1',
+      fetchImpl,
+    });
+    expect(getModelToolConfig('magistral-small-latest').contextWindow).toBe(262_144);
+  });
+
   it('reads OpenRouter and keeps the serving provider\'s smaller limit', async () => {
     const fetchImpl = routedFetch((url, init) => {
       if (url === 'https://openrouter.ai/api/v1/models') {
