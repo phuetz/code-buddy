@@ -68,6 +68,8 @@ export interface BenchmarkScenario {
   expectIncludes: string[];
   /** Human label. */
   description: string;
+  /** Source documentation reference (e.g. 'CLAUDE.md:27'). */
+  source?: string;
 }
 
 export interface BenchmarkScenarioResult {
