@@ -15,12 +15,21 @@
  */
 
 import { execFileSync, spawn } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../../../utils/logger.js';
 import { scoreBranchInWorktree } from './worktree-scorer.js';
 import { WorktreeSessionManager } from '../../../git/worktree-sessions.js';
-import { CodeVariantStore, behaviorDescriptor, diverseElites, computeGeneration, type VariantRecord } from './code-variant-store.js';
+import {
+  CodeVariantStore,
+  behaviorDescriptor,
+  diverseElites,
+  computeGeneration,
+  type VariantRecord,
+} from './code-variant-store.js';
 import { makeLlmVariantPlanner, renderVariantPlan, type VariantPlan, type VariantPlanner } from './variant-planner.js';
 import { changedPathsVsBase } from './protected-paths.js';
+import { checkAstNovelty, type AstNoveltyResult } from './ast-novelty.js';
 import type { FitnessComponent, FitnessReport } from './variant-fitness.js';
 import { pickModelUCB, type BanditScoreboard } from './model-bandit.js';
 import type { LlmCandidate } from '../../../fleet/model-selector.js';
@@ -118,6 +127,7 @@ export interface EvolutionCycleResult {
   report: FitnessReport;
   beatsBaseline: boolean;
   kept: boolean;
+  rejectionReason?: 'ast-identical';
 }
 
 /** Pure decision: a candidate "wins" if it passed everything, regressed nothing, and beats baseline. */
@@ -173,6 +183,34 @@ export function gatherInspirations(
     if (diff.length > MAX_INSPIRATION_DIFF) diff = `${diff.slice(0, MAX_INSPIRATION_DIFF)}\n…(truncated)`;
     return { id: v.id, goal: v.detail ?? '', score: v.score, diff };
   });
+}
+
+function checkBranchAstNovelty(
+  branch: string,
+  baselineRef: string,
+  basePath: string,
+  worktreeDir: string,
+): AstNoveltyResult {
+  const changed = changedPathsVsBase(branch, baselineRef, basePath).filter((file) => /\.(?:[cm]?tsx?|[cm]?jsx?)$/i.test(file));
+  if (changed.length === 0) return { isNovel: true, diffNodesCount: 0 };
+
+  let diffNodesCount = 0;
+  let allIdentical = true;
+  for (const file of changed) {
+    let parentCode = '';
+    try {
+      parentCode = git(['show', `${baselineRef}:${file}`], basePath);
+    } catch {
+      // A new file has an empty parent; the AST comparison below will conservatively mark it novel.
+    }
+    const mutatedCode = existsSync(join(worktreeDir, file)) ? readFileSync(join(worktreeDir, file), 'utf8') : '';
+    const result = checkAstNovelty(mutatedCode, parentCode);
+    diffNodesCount += result.diffNodesCount;
+    if (result.isNovel) allIdentical = false;
+  }
+  return allIdentical
+    ? { isNovel: false, diffNodesCount, reason: 'ast-identical' }
+    : { isNovel: true, diffNodesCount };
 }
 
 /** The bandit's pick for one cycle: the model + its provider + the scoreboard to record the outcome to. */
@@ -343,6 +381,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   // 2-3. mutate in an isolated worktree, then commit the change on the branch.
   let mutated = false;
   let mutationPlan: string | undefined; // the instruction that produced this variant (for audit)
+  let astNovelty: AstNoveltyResult = { isNovel: true, diffNodesCount: 0 };
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
   try {
@@ -369,6 +408,12 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
         { cwd: session.worktreePath, stdio: ['ignore', 'ignore', 'ignore'] },
       );
       mutated = true;
+      try {
+        astNovelty = checkBranchAstNovelty(branch, opts.baselineRef, basePath, session.worktreePath);
+      } catch (err) {
+        // A read/parse failure must fail open: only a proven AST identity may skip evaluation.
+        logger.warn(`[evolve] AST novelty check failed for ${branch}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     if (!mutated) logger.info(`[evolve] mutator produced no change for ${branch}${res.detail ? ` (${res.detail})` : ''}`);
   } finally {
@@ -392,6 +437,27 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
       report: { score: 0, passedAll: false, regressions: [], components: [] },
       beatsBaseline: false,
       kept: false,
+    };
+  }
+
+  // G0 — reject a formatting/comment/import-only mutation before materialising the scoring
+  // worktree. The counter is persisted in the same archive store as the variants.
+  if (!astNovelty.isNovel) {
+    store.recordEvaluationAvoided();
+    logger.info(`[evolve] G0 rejected AST-identical mutation ${branch} (${astNovelty.diffNodesCount} changed nodes)`);
+    try {
+      git(['branch', '-D', branch], basePath);
+    } catch {
+      /* keep the branch if cleanup fails; the evaluation was still avoided */
+    }
+    return {
+      variantId,
+      branch,
+      mutated: true,
+      report: { score: 0, passedAll: false, regressions: [], components: [] },
+      beatsBaseline: false,
+      kept: false,
+      rejectionReason: 'ast-identical',
     };
   }
 

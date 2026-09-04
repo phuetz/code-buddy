@@ -10,7 +10,22 @@ et la sélection de parents avec pénalité de descendance (proposition 3) de l�
 ## Journal
 
 - Rapport créé avant inspection du dépôt.
-- Inspection et réservation Fable 5 à effectuer.
+- Inspection effectuée et réservation Fable 5 inscrite.
+- Réservation commitée dans `1cc9cae84` après le commit du rapport `60b063ccc`.
+
+## R1 — nouveauté AST avant évaluation
+
+`ast-novelty.ts` compare les nœuds produits par TypeScript, sans trivia, et trie les imports avant
+la comparaison. Le moteur applique cette porte G0 avant `scoreBranchInWorktree`; le tool-gate accepte
+un `parentCode` optionnel et applique le même G0 avant G1. Une identité AST est rejetée avec
+`rejectionReason: 'ast-identical'`. Les rejets du moteur incrémentent `stats.evaluationsAvoided` dans
+`variants.json`. En cas d’erreur de lecture/parsing, le contrôle s’ouvre pour ne jamais rejeter une
+mutation non prouvée identique.
+
+Rouge : les deux nouveaux modules manquaient, soit 1 suite non collectée et 2 tests R2 rouges.
+Vert intermédiaire : `ast-novelty.test.ts` + `parent-selection.test.ts` = 2 fichiers / 7 tests.
+
+Commit R1 : à compléter après la vérification ciblée.
 
 ## Preuves
 

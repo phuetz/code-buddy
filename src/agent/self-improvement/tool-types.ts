@@ -35,9 +35,12 @@ export interface ToolProposal {
   targetScenarioId: string;
   experienceId?: string;
   spec: AuthoredToolSpec;
+  /** Optional source of the tool before mutation; enables the shared G0 AST novelty gate. */
+  parentCode?: string;
 }
 
 export type ToolGateRejection =
+  | 'ast-identical'
   | 'static-scan'
   | 'name-invalid'
   | 'visible-fail'
