@@ -1,5 +1,23 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### IMPROVE2 — les trois ouverts d'IMPROVE1 (4 septembre 2026)
+
+`CODEBUDDY_MAX_CONTEXT` est enfin honoré par Ollama : le serveur ignore
+`num_ctx` sur `/v1/chat/completions` et ne l'honore que sur `/api/chat`, d'où
+un transport natif en un seul point de couture, aiguillé sur l'URL (trappe
+`CODEBUDDY_OLLAMA_NATIVE_CHAT=false`). Prouvé : 32 000 / 5,2 Go au lieu de
+262 144 / 24 Go. Le scoring des outils authored compare exactement, et
+`buddy improve … --apply` refuse en nommant `CODEBUDDY_SELF_IMPROVE` au lieu
+d'appliquer.
+
+### Pilote Flow sur flow.google.com (4 septembre 2026)
+
+Google a déplacé Flow sur un nouveau domaine : éditeur ProseMirror au lieu de
+Slate, bouton d'envoi réduit à `arrow_forward`, compteur « N crédits Google
+Flow » avec espace fine insécable, compositeur hors viewport. Le pilote
+s'adapte (viewport élargi par émulation, projet rétabli avant la lecture du
+compteur, attente de l'éditeur) ; prise réelle vérifiée.
+
 ### PRIV2 — plus rien de l'infrastructure de l'auteur dans le dépôt (4 septembre 2026)
 
 130 fichiers : adresses privées remplacées par des plages de documentation ou
