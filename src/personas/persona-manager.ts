@@ -77,6 +77,8 @@ export interface PersonaConfig {
   activePersonaId: string;
   autoSwitch: boolean;
   customPersonasDir: string;
+  /** Persist the selected persona between processes (enabled in production). */
+  persistActivePersona: boolean;
 }
 
 const DEFAULT_STYLE: PersonaStyle = {
@@ -86,6 +88,11 @@ const DEFAULT_STYLE: PersonaStyle = {
   codeStyle: 'commented',
   explanationDepth: 'moderate',
 };
+
+/** Preserve the production custom-persona location while keeping it observable in tests. */
+export function getDefaultPersonasDir(): string {
+  return path.join(os.homedir(), '.codebuddy', 'personas');
+}
 
 // Built-in personas
 const BUILTIN_PERSONAS: Omit<Persona, 'createdAt' | 'updatedAt'>[] = [
@@ -519,7 +526,8 @@ export class PersonaManager extends EventEmitter {
       activePersonaId: config.activePersonaId || 'default',
       autoSwitch: config.autoSwitch ?? true,
       customPersonasDir:
-        config.customPersonasDir || path.join(os.homedir(), '.codebuddy', 'personas'),
+        config.customPersonasDir || getDefaultPersonasDir(),
+      persistActivePersona: config.persistActivePersona ?? true,
     };
     this.dataDir = this.config.customPersonasDir;
     this.initPromise = this.initialize();
@@ -550,7 +558,9 @@ export class PersonaManager extends EventEmitter {
 
     // Set active persona — a previously chosen personality STICKS across sessions (persisted to
     // disk), so the robot keeps the voice/character the user last selected.
-    const persisted = await this.loadPersistedActiveId();
+    const persisted = this.config.persistActivePersona
+      ? await this.loadPersistedActiveId()
+      : null;
     const target =
       persisted && this.personas.has(persisted) ? persisted : this.config.activePersonaId;
     this.setActivePersona(target, { persist: false });
@@ -574,6 +584,7 @@ export class PersonaManager extends EventEmitter {
   }
 
   private persistActiveId(id: string): void {
+    if (!this.config.persistActivePersona) return;
     const file = this.stateFile();
     try {
       writeJsonAtomicSync(file, { activePersonaId: id }, { mode: 0o600 });
