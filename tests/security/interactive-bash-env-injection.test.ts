@@ -55,7 +55,14 @@ function commandForExecutable(
   configuration: ShellConfiguration = getShellConfiguration(),
 ): string {
   const fixture = fixtureForShell(configuration);
-  return `${fixture.quote(executable)} ${fixture.quote(script)}`;
+  const invocation = `${fixture.quote(executable)} ${fixture.quote(script)}`;
+  // PowerShell traite une commande qui COMMENCE par une chaîne entre quotes
+  // comme une expression littérale, pas comme un appel : « 'C:\\…\\node.exe'
+  // 'C:\\…\\probe.cjs' » rendait « Unexpected token … in expression or
+  // statement » et aucun enfant n'était lancé. L'opérateur d'appel `&` est la
+  // façon canonique d'exécuter un chemin cité — bash n'en a pas besoin et
+  // garde sa forme historique.
+  return configuration.shell === 'powershell' ? `& ${invocation}` : invocation;
 }
 
 function combinedOutput(result: { stdout?: string | null; stderr?: string | null }): string {
@@ -209,6 +216,31 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     },
   );
 
+  it('dégrade vers le repli sans PTY quand node-pty se charge mais ne sait pas lancer', async () => {
+    // Reproduit le node-pty de macOS dont le `spawn-helper` a perdu son bit
+    // exécutable : le module se CHARGE (isPTYAvailable reste vrai) et pourtant
+    // chaque spawn rend « posix_spawnp failed ». Avant le correctif, l'appel
+    // rejetait et toute commande interactive était perdue ; le repli sans PTY
+    // existait déjà, il n'était simplement jamais emprunté.
+    const brokenPty: PTYModule = {
+      spawn() {
+        throw new Error('posix_spawnp failed.');
+      },
+    };
+    const victimScript = join(workDir, 'degraded-victim.cjs');
+    writeFileSync(victimScript, "process.stdout.write('child ok\\n');\n");
+    const tool = new InteractiveBashTool(brokenPty);
+    try {
+      const result = await tool.executeInteractive(
+        commandForExecutable(process.execPath, victimScript),
+        { cwd: workDir },
+      );
+      expect(result.output).toContain('child ok');
+    } finally {
+      tool.dispose();
+    }
+  });
+
   it('exerce la fixture PowerShell quand getShellConfiguration() est mockée en win32', async () => {
     const powerShellConfiguration: ShellConfiguration = {
       executable: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -259,7 +291,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
           "C:\\work\\victim's.cjs",
           configuration,
         ),
-      ).toBe("'C:\\Program Files\\O''Brien\\node.exe' 'C:\\work\\victim''s.cjs'");
+      ).toBe("& 'C:\\Program Files\\O''Brien\\node.exe' 'C:\\work\\victim''s.cjs'");
       const tool = new MockedInteractiveBashTool(fakePty);
       const result = await tool.executeInteractive(command, { cwd: workDir });
       tool.dispose();
