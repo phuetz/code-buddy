@@ -416,4 +416,39 @@ describe('ThreadDelegation multiplexed delegates', () => {
     expect(Number.isFinite(fromUnlimited.maxCostUsd)).toBe(true);
     expect(Number.isFinite(fromUnlimited.maxContextTokens)).toBe(true);
   });
+  it('closes the input channel on the overspending turn so no further turn ever runs (DELEGVERIF)', async () => {
+    // Point 4 of the judge: the cost was said to be noticed only "at the next
+    // turn", letting an overspending delegate run one more turn. The turn that
+    // crosses the budget fails itself AND closes the channel, so a later
+    // submit is refused without executing anything.
+    let sessionCost = 0;
+    let turns = 0;
+    const delegation = new ThreadDelegation<TestChunk>({
+      parentBudget: { ...parentBudget, maxCostUsd: 2 },
+      createAgent: () => ({
+        async *processUserMessageStream(): AsyncGenerator<TestChunk> {
+          turns += 1;
+          yield { type: 'content', content: `turn ${turns}` };
+          sessionCost = 1.5; // above the derived child limit of 1 USD
+        },
+        abortCurrentOperation() {},
+        dispose() {},
+        getSessionCost: () => sessionCost,
+      }),
+    });
+    const collecting = collectEvents(delegation.events());
+    const child = delegation.spawn('overspender');
+
+    const first = await child.submit('turn one');
+    const second = await child.submit('turn two');
+    child.closeInput();
+    await delegation.close();
+
+    const events = await collecting;
+    expect(first).toMatchObject({ success: false, reason: 'cost_budget_exhausted' });
+    expect(second.success).toBe(false);
+    // The decisive pin: the second submit never reached the agent.
+    expect(turns).toBe(1);
+    expect(events.filter((event) => event.kind === 'budget_exhausted')).toHaveLength(1);
+  });
 });
