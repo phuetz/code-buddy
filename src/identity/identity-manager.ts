@@ -2,7 +2,7 @@
  * Identity Manager
  *
  * Handles loading, validating, and hot-reloading identity files
- * (SOUL.md, USER.md, AGENTS.md, TOOLS.md, IDENTITY.md).
+ * (SOUL.md, USER.md, IDENTITY.md and related identity files).
  *
  * Project-level files (.codebuddy/) override global files (~/.codebuddy/)
  * for the same name. File changes are watched and hot-reloaded.
@@ -54,13 +54,13 @@ export interface IdentityManagerEvents {
 // Defaults
 // ============================================================================
 
-// AGENTS.md and INSTRUCTIONS.md are intentionally NOT here — they are owned by
-// the unified project-context loader (src/context/project-context.ts). Identity
-// covers only the soul/identity tier.
+// AGENTS.md, INSTRUCTIONS.md and TOOLS.md are intentionally NOT here:
+// instruction files are owned by the unified project-context loader and tool
+// descriptions are already delivered as the model-facing function schema.
+// Identity covers only the soul/identity tier.
 const DEFAULT_IDENTITY_FILES = [
   'SOUL.md',
   'USER.md',
-  'TOOLS.md',
   'IDENTITY.md',
   'BOOT.md',
   'BOOTSTRAP.md',

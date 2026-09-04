@@ -104,6 +104,8 @@ const EXTERNAL_PROMPT_MANAGER_TOOLS = [
   'reason',
 ] as const;
 
+const STARTUP_PROJECT_CONTEXT_FILES = ['AGENTS.md', 'CODEBUDDY.md'] as const;
+
 const COLLECTIVE_KNOWLEDGE_START = '<collective_knowledge>';
 const COLLECTIVE_KNOWLEDGE_END = '</collective_knowledge>';
 
@@ -157,6 +159,26 @@ The actual model-facing tool schema for this turn has an active filter.
 - Trust the schema over generic prompt text. If a tool name appears elsewhere in this prompt but is absent from the schema, that instruction is inactive.
 - Do not claim unavailable tools exist, suggest calling them, or emit calls for them.
 </active_tool_filter>`;
+}
+
+export function buildKnowledgeIndexBlock(
+  entries: Array<{ title: string; tags: string[] }>,
+): string {
+  const lines = [
+    '<knowledge_index>',
+    `The knowledge base has ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}.`,
+    'Use `knowledge_search` with a focused query before relying on domain-specific details; full entries stay out of the startup prompt to preserve context.',
+  ];
+  let chars = lines.join('\n').length;
+  for (const entry of entries) {
+    const tags = entry.tags.length > 0 ? ` [${entry.tags.join(', ')}]` : '';
+    const line = `- ${entry.title}${tags}`;
+    if (chars + line.length + 1 > 1_600) break;
+    lines.push(line);
+    chars += line.length + 1;
+  }
+  lines.push('</knowledge_index>');
+  return lines.join('\n');
 }
 
 export class PromptBuilder {
@@ -456,7 +478,14 @@ export class PromptBuilder {
         // Publish for the JIT pass so it skips files injected here at startup.
         setActiveContextRegistry(this.contextRegistry);
         try {
-          const ctx = resolveProjectContext({ cwd: this.config.cwd, registry: this.contextRegistry });
+          const contextFileNames = process.env.CODEBUDDY_INCLUDE_INTEROP_CONTEXT === 'true'
+            ? undefined
+            : [...STARTUP_PROJECT_CONTEXT_FILES];
+          const ctx = resolveProjectContext({
+            cwd: this.config.cwd,
+            registry: this.contextRegistry,
+            ...(contextFileNames ? { fileNames: contextFileNames } : {}),
+          });
           if (ctx.text) {
             const workspaceBlock = '# Workspace Context\n\n' + ctx.text;
             systemPrompt = this.appendPromptBlock(
@@ -524,7 +553,12 @@ export class PromptBuilder {
           if (!km.isLoaded) {
             await km.load();
           }
-          const knowledgeBlock = km.buildContextBlock();
+          const knowledgeEntries = km.list();
+          const knowledgeBlock = knowledgeEntries.length > 0
+            ? isToolNameAllowed('knowledge_search', activeToolFilter)
+              ? buildKnowledgeIndexBlock(knowledgeEntries)
+              : km.buildContextBlock()
+            : '';
           if (knowledgeBlock) {
             systemPrompt = this.appendPromptBlock(
               systemPrompt,

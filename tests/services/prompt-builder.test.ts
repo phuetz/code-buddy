@@ -98,8 +98,10 @@ vi.mock('../../src/memory/collective-knowledge-graph.js', () => ({
 
 import {
   PromptBuilder,
+  buildKnowledgeIndexBlock,
   type PromptBuilderConfig,
 } from '../../src/services/prompt-builder.js';
+import { getBaseSystemPrompt } from '../../src/prompts/system-base.js';
 import { resetToolFilter, setToolFilter } from '../../src/utils/tool-filter.js';
 import {
   _resetFleetRegistryForTests,
@@ -731,6 +733,28 @@ describe('PromptBuilder — Phase T4', () => {
   });
 
   describe('budget truncation', () => {
+    it('keeps the knowledge startup index bounded and points to on-demand detail', () => {
+      const index = buildKnowledgeIndexBlock(
+        Array.from({ length: 200 }, (_, index) => ({
+          title: `Knowledge entry ${index} ${'x'.repeat(30)}`,
+          tags: ['domain', 'reference'],
+        })),
+      );
+
+      expect(index.length).toBeLessThanOrEqual(1_600);
+      expect(index).toContain('<knowledge_index>');
+      expect(index).toContain('knowledge_search');
+      expect(index).not.toContain('full entry body');
+    });
+
+    it('keeps the base security, confirmation, and sandbox rules available', () => {
+      const base = getBaseSystemPrompt(false, '/workspace');
+
+      expect(base).toMatch(/API keys, passwords, tokens, or credentials/i);
+      expect(base).toMatch(/confirmation/i);
+      expect(base).toMatch(/secure sandbox/i);
+    });
+
     it('exposes a byte-complete, text-free ledger for prompt measurement', async () => {
       const { builder } = buildBuilder({
         config: { memoryEnabled: false },

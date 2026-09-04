@@ -77,8 +77,39 @@ de bloc.
 
 ## 2. Réductions appliquées
 
-À compléter avec le correctif fonctionnel, les bornes conservées et les tests
-de présence des phrases de sécurité (`secrets`, `confirmation`, `sandbox`).
+Les réductions sûres suivantes sont appliquées :
+
+1. `IdentityManager` ne charge plus `TOOLS.md` par défaut. Les descriptions
+   fonctionnelles sont déjà livrées par le schéma d’outils ; le fichier de
+   134 751 caractères était donc une duplication fonctionnelle. Le chargement
+   explicite via `fileNames` reste possible pour les intégrations qui le
+   demandent.
+2. Le bloc de connaissance de démarrage est un index borné à 1 600 caractères
+   (`<knowledge_index>`), avec titres et tags. Le détail reste accessible par
+   `knowledge_search`; si cet outil est filtré, le code conserve le bloc
+   complet par précaution.
+3. Le contexte projet de démarrage charge seulement `AGENTS.md` et
+   `CODEBUDDY.md`, les deux sources canoniques du dépôt. Les fichiers
+   d’interopérabilité peuvent être réactivés explicitement avec
+   `CODEBUDDY_INCLUDE_INTEROP_CONTEXT=true` et le JIT reste disponible après
+   accès à un fichier.
+4. Le bloc de base n’a pas été résumé : il conserve les règles de secrets,
+   de confirmation et de sandbox. Le test ciblé vérifie leur présence.
+
+### Tableau réel, après réduction (avant troncature)
+
+| Modèle | Caractères | Jetons estimés | Budget caractères | Prompt livré | Jetons livrés |
+|---|---:|---:|---:|---:|---:|
+| gpt-5.6-luna | 49 489 | 12 373 | 128 000 | 49 489 | 12 373 |
+| mistral-medium-latest | 49 489 | 12 373 | 128 000 | 49 489 | 12 373 |
+| qwen3.8:27b | 49 489 | 12 373 | 128 000 | 49 489 | 12 373 |
+
+Le prompt par défaut passe donc de 203 674 à 49 489 caractères (-75,7 %),
+sous la cible de 60 000 caractères pour un modèle 128 k. Le gain principal
+vient de `TOOLS.md` (-134 751 caractères), puis du contexte projet canonique
+(24 631 caractères au lieu de 32 890) et de l’index de connaissance (504 au
+lieu de 11 679). Les trois modèles donnent le même assemblage hors ligne ;
+leurs fenêtres ne divergent qu’au calcul du budget.
 
 ## 3. Troncature par priorité
 
@@ -88,6 +119,7 @@ la suppression de blocs entiers et le journal `WARN … blocs retirés : …`.
 ## Vérifications
 
 Point 1 : `npx tsc --noEmit -p .` = 0 ; `HOME=... npx vitest run tests/services/prompt-builder.test.ts` = 1 fichier, 42 tests verts. Le script de mesure produit le tableau ci-dessus sans réseau.
+Point 2 : `HOME=... npx vitest run tests/services/prompt-builder.test.ts tests/identity/identity-manager.test.ts` = 2 fichiers, 84 tests verts ; `npx tsc --noEmit -p .` = 0.
 
 ## Bilan
 
