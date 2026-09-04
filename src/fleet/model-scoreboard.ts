@@ -26,12 +26,13 @@ import {
   readTurnMetricsAggregates,
   type TurnMetricsAggregate,
 } from '../observability/turn-metrics.js';
+import type { TaskType } from '../council/task-types.js';
 
 export interface OutcomeRecord {
   /** ISO timestamp of the run. */
   at: string;
   /** Inferred or supplied task category (e.g. 'code', 'reasoning', 'french'). */
-  taskType: string;
+  taskType: TaskType;
   /** Model id (e.g. 'gpt-5.5', 'grok-3'). */
   model: string;
   /** Provider id (e.g. 'chatgpt', 'grok'). */
@@ -95,6 +96,12 @@ export interface ModelScoreboardOptions {
   turnMetricsJournalPath?: string;
 }
 
+export interface ScoreboardImportResult {
+  imported: number;
+  skippedDuplicates: number;
+  rejected: number;
+}
+
 function defaultLedgerPath(): string {
   return path.join(os.homedir(), '.codebuddy', 'fleet-model-performance.jsonl');
 }
@@ -106,6 +113,36 @@ function defaultLedgerPath(): string {
  */
 function normalizeRole(role: string): string {
   return role.replace(/-\d+$/, '');
+}
+
+/** Stable append/import identity required by the SCORE1 bench importer. */
+export function outcomeKey(record: Pick<OutcomeRecord, 'at' | 'model' | 'taskType'>): string {
+  return `${record.at}\u0000${record.model}\u0000${record.taskType}`;
+}
+
+export function isOutcomeRecord(value: unknown): value is OutcomeRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Partial<OutcomeRecord>;
+  return Boolean(
+    typeof record.at === 'string' && record.at.length > 0
+      && typeof record.taskType === 'string' && record.taskType.length > 0
+      && typeof record.model === 'string' && record.model.length > 0
+      && typeof record.provider === 'string' && record.provider.length > 0
+      && typeof record.won === 'boolean'
+      && typeof record.quality === 'number' && Number.isFinite(record.quality)
+      && record.quality >= 0 && record.quality <= 1
+      && typeof record.latencyMs === 'number' && Number.isFinite(record.latencyMs)
+      && record.latencyMs >= 0
+      && typeof record.costUsd === 'number' && Number.isFinite(record.costUsd)
+      && record.costUsd >= 0
+      && (record.role === undefined || typeof record.role === 'string')
+      && (record.roleQuality === undefined
+        || (typeof record.roleQuality === 'number'
+          && Number.isFinite(record.roleQuality)
+          && record.roleQuality >= 0
+          && record.roleQuality <= 1))
+      && (record.failed === undefined || typeof record.failed === 'boolean'),
+  );
 }
 
 /** History weight saturation: with K=5, 5 runs ≈ half-trust, 20 runs ≈ 0.8. */
@@ -216,9 +253,7 @@ export class ModelScoreboard {
         this.records = Array.isArray(parsed) ? (parsed as OutcomeRecord[]) : [];
         this.rewriteAsJsonl();
       } else {
-        this.records = readJsonLinesAtomicSync<OutcomeRecord>(sourcePath, [], (value): value is OutcomeRecord => Boolean(
-          value && typeof value === 'object' && !Array.isArray(value),
-        ));
+      this.records = readJsonLinesAtomicSync<OutcomeRecord>(sourcePath, [], isOutcomeRecord);
       }
       this.cachedMtimeMs = this.statMtimeMs();
     } catch (err) {
@@ -258,6 +293,81 @@ export class ModelScoreboard {
         err: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  /**
+   * Append validated records while ignoring an already-known
+   * `(at, model, taskType)` identity. Existing council writes remain untouched;
+   * this stricter path is used by external benchmark imports.
+   */
+  importRecords(records: readonly OutcomeRecord[]): ScoreboardImportResult {
+    this.maybeReload();
+    const known = new Set(this.records.map(outcomeKey));
+    const pending: OutcomeRecord[] = [];
+    let skippedDuplicates = 0;
+
+    for (const record of records) {
+      const normalized = record.role ? { ...record, role: normalizeRole(record.role) } : record;
+      const key = outcomeKey(normalized);
+      if (known.has(key)) {
+        skippedDuplicates++;
+        continue;
+      }
+      known.add(key);
+      pending.push(normalized);
+    }
+
+    if (pending.length === 0) {
+      return { imported: 0, skippedDuplicates, rejected: 0 };
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      fs.appendFileSync(
+        this.file,
+        pending.map((record) => JSON.stringify(record)).join('\n') + '\n',
+        { encoding: 'utf8', mode: 0o600 },
+      );
+      this.records.push(...pending);
+      this.cachedMtimeMs = this.statMtimeMs();
+      return { imported: pending.length, skippedDuplicates, rejected: 0 };
+    } catch (err) {
+      logger.warn?.('[model-scoreboard] could not import ledger records', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return { imported: 0, skippedDuplicates, rejected: 0 };
+    }
+  }
+
+  /** Read a JSONL benchmark file and append only valid, unseen records. */
+  importJsonl(sourceFile: string): ScoreboardImportResult {
+    if (!fs.existsSync(sourceFile)) {
+      throw new Error(`Benchmark file not found: ${sourceFile}`);
+    }
+    const raw = fs.readFileSync(sourceFile, 'utf8');
+    const records: OutcomeRecord[] = [];
+    let rejected = 0;
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const parsed: unknown = JSON.parse(line);
+        if (!isOutcomeRecord(parsed)) {
+          rejected++;
+          continue;
+        }
+        records.push(parsed);
+      } catch {
+        rejected++;
+      }
+    }
+    const result = this.importRecords(records);
+    return { ...result, rejected };
+  }
+
+  /** Best measured model for a task, optionally restricted to active models. */
+  best(taskType: string, candidates?: readonly string[]): ModelStat | null {
+    const allowed = candidates ? new Set(candidates) : null;
+    return this.ranking(taskType).find((stat) => !allowed || allowed.has(stat.model)) ?? null;
   }
 
   private runsFor(taskType: string, model: string): OutcomeRecord[] {

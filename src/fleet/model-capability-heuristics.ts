@@ -14,7 +14,10 @@
  */
 
 import { getModelStrengths } from '../config/model-tools.js';
+import { inferLiteraryTaskType, type TaskType } from '../council/task-types.js';
 import type { ModelStrength } from './types.js';
+
+export type { KnownTaskType, TaskType } from '../council/task-types.js';
 
 /** Derive a model's likely strengths from its id (config-backed, see model-tools.ts). */
 export function inferStrengths(model: string): ModelStrength[] {
@@ -22,7 +25,8 @@ export function inferStrengths(model: string): ModelStrength[] {
 }
 
 /**
- * Classify a task from its text (code / reasoning / vision / french / general).
+ * Classify a task from its text. Literary categories are checked first;
+ * generic code/reasoning/language categories remain backward-compatible.
  *
  * Accents indicate the LANGUAGE of the task, not its TYPE: a technical task
  * written in French must route `code` (Architect/Implementer/Reviewer roles),
@@ -31,7 +35,10 @@ export function inferStrengths(model: string): ModelStrength[] {
  * and none of the technical vocabulary was French. The accent fallback stays,
  * but LAST, and only after a broadened bilingual technical vocabulary.
  */
-export function inferTaskType(task: string): string {
+export function inferTaskType(task: string): TaskType {
+  const literary = inferLiteraryTaskType(task);
+  if (literary) return literary;
+
   const t = task.toLowerCase();
   if (
     /\b(code|coder|fonction|function|bug|refactor|impl[ée]ment\w*|classe|class|api|script|compile|regex|sql\w*|json|ya?ml|cli|node(\.js)?|npm|git|docker|typescript|javascript|python|rust|serveur|server|backend|frontend|endpoint|database|db|bdd|stockage|storage|migr(er|ation)|d[ée]ploi\w*|deploy\w*|fichier\w*)\b/.test(

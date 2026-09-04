@@ -3407,7 +3407,8 @@ program
   .option("-n, --count <n>", "How many models to consult (default 3)")
   .option("--models <list>", "Restrict to these providers/models (comma list)")
   .option("--judge <model>", "Provider/model to use as the impartial judge")
-  .option("--task-type <tag>", "Override inferred task type (code|reasoning|french|vision|general)")
+  .option("--task-type <tag>", "Override inferred task type (code|reasoning|french|vision|general|literary categories)")
+  .option("--task <tag>", "Task type for `council scoreboard best`")
   .option("--no-consensus", "Skip the consensus/agreement summary")
   .option("--scoreboard", "Print the learned model ranking and exit")
   .option("--fleet", "Also consult connected fleet peers (other machines' Code Buddy) over the network")
@@ -3416,8 +3417,14 @@ program
   .action(
     async (
       taskParts: string[] = [],
-      options: { count?: string; models?: string; judge?: string; taskType?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean; conductor?: boolean; synthesis?: boolean },
+      options: { count?: string; models?: string; judge?: string; taskType?: string; task?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean; conductor?: boolean; synthesis?: boolean },
     ) => {
+      if (taskParts[0]?.toLowerCase() === 'scoreboard') {
+        const { runScoreboardCommand } = await import("./commands/council-scoreboard.js");
+        const ok = runScoreboardCommand(taskParts.slice(1), cli.stdout, undefined, { task: options.task });
+        if (!ok) process.exitCode = 1;
+        return;
+      }
       const { runCouncil } = await import("./commands/council.js");
       await runCouncil(
         (taskParts || []).join(" ").trim(),

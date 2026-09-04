@@ -11,6 +11,8 @@
  * Reference: FrugalGPT (Stanford), LLMProxy (arXiv 2024)
  */
 
+import type { TaskType } from '../council/task-types.js';
+
 /**
  * Model tier definitions
  */
@@ -87,6 +89,8 @@ export const GROK_MODELS: Record<string, ModelConfig> = {
  * Task classification for routing
  */
 export interface TaskClassification {
+  /** Optional shared council/fleet category, when the caller already inferred it. */
+  taskType?: TaskType;
   complexity: TaskComplexity;
   requiresVision: boolean;
   requiresReasoning: boolean;

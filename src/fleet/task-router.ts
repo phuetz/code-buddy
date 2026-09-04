@@ -33,6 +33,7 @@ import type {
   ModelStrength,
   PeerCapability,
 } from './types.js';
+import type { TaskType } from '../council/task-types.js';
 import {
   normalizeDispatchProfile,
   type FleetDispatchProfile,
@@ -84,6 +85,8 @@ export interface DispatchPlan {
 
 /** Constraints the caller imposes on the plan. */
 export interface DispatchConstraints {
+  /** Shared scoreboard category, carried for route explanations and consumers. */
+  taskType?: TaskType;
   /**
    * When true, a peer with `egress === 'cloud'` is vetoed regardless
    * of score. Used for sensitive prompts containing secrets, source
@@ -155,8 +158,13 @@ export class TaskRouter {
     constraints: DispatchConstraints = {},
   ): DispatchPlan {
     const dispatchProfile = normalizeDispatchProfile(constraints.dispatchProfile);
+    const taskType = constraints.taskType ?? classification.taskType;
+    const routedClassification =
+      taskType === classification.taskType
+        ? classification
+        : { ...classification, taskType };
     const requiredStrengths = inferRequiredStrengths(
-      classification,
+      routedClassification,
       dispatchProfile,
     );
     const roleHint = constraints.requiredRole ?? roleHintFromDispatchProfile(dispatchProfile);
@@ -292,7 +300,7 @@ export class TaskRouter {
         primary,
         fallback,
         requiredStrengths,
-        classification,
+        routedClassification,
         dispatchProfile,
         roleHint,
       ),
@@ -452,6 +460,23 @@ function inferRequiredStrengths(
   dispatchProfile: FleetDispatchProfile = 'balanced',
 ): ModelStrength[] {
   const set: Set<ModelStrength> = new Set();
+  switch (c.taskType) {
+    case 'redaction-fr':
+    case 'relecture-typo':
+      set.add('french');
+      break;
+    case 'arbitrage-litteraire':
+    case 'jugement-litteraire':
+      set.add('french');
+      set.add('reasoning');
+      break;
+    case 'audit-adversarial':
+      set.add('code');
+      set.add('reasoning');
+      break;
+    default:
+      break;
+  }
   if (c.requiresVision) set.add('vision');
   if (c.requiresReasoning || c.complexity === 'reasoning_heavy') {
     set.add('reasoning');
@@ -494,6 +519,7 @@ function buildRationale(
     required.length > 0 ? required.join(', ') : 'no specific strength';
   const parts = [
     `Primary: ${primary.peerId} ${primary.model} (score ${primary.score.toFixed(3)})`,
+    `Task type: ${c.taskType ?? 'unspecified'}`,
     `Required: ${reqStr}`,
     `Complexity: ${c.complexity}`,
     `Profile: ${dispatchProfile}`,
