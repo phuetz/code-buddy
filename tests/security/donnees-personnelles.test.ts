@@ -82,6 +82,59 @@ function termeApplicable(fichier: string, terme: string): boolean {
   return true;
 }
 
+function detecterMotifsInterdits(fichier: string, contenu: string): string[] {
+  const trouves = INTERDITS.filter(
+    (terme) => termeApplicable(fichier, terme) && contenu.toLowerCase().includes(terme),
+  );
+  const cheminNormalise = fichier.toLowerCase();
+  for (const terme of INTERDITS) {
+    if (!termeApplicable(fichier, terme)) continue;
+    if (cheminNormalise.includes(terme) && !trouves.includes(terme)) {
+      trouves.push(terme);
+    }
+  }
+  return trouves;
+}
+
+const DETECTION_FIXTURES = [
+  {
+    nom: 'chemin home auteur',
+    fichier: ['fixtures/', 'home-author', '.md'].join(''),
+    contenu: ['témoin : ', ['/', 'home', '/', 'pat', 'rice'].join('')].join(''),
+    motif: ['/', 'home', '/', 'pat', 'rice'].join(''),
+  },
+  {
+    nom: 'chemin Windows avec slash',
+    fichier: ['fixtures/', 'windows-forward', '.md'].join(''),
+    contenu: ['témoin : ', ['c:/users/', 'patri'].join('')].join(''),
+    motif: ['c:/users/', 'patri'].join(''),
+  },
+  {
+    nom: 'chemin Windows avec antislash',
+    fichier: ['fixtures/', 'windows-backslash', '.md'].join(''),
+    contenu: ['témoin : ', ['c:', '\\', 'users', '\\', 'patri'].join('')].join(''),
+    motif: ['c:', '\\', 'users', '\\', 'patri'].join(''),
+  },
+  {
+    nom: 'dépôt privé de passation',
+    fichier: ['fixtures/', 'handoff-repository', '.md'].join(''),
+    contenu: ['témoin : ', ['claude', '-et-', 'patrice'].join('')].join(''),
+    motif: ['claude', '-et-', 'patrice'].join(''),
+  },
+  {
+    nom: 'ancien moteur d’exploration privé',
+    fichier: ['fixtures/', 'old-explorer', '.md'].join(''),
+    contenu: ['témoin : ', ['gitnexus', '-rs'].join('')].join(''),
+    motif: ['gitnexus', '-rs'].join(''),
+  },
+  {
+    nom: 'outil éditorial hors pont MCP',
+    fichier: ['fixtures/', 'editorial-outside-mcp-bridge', '.md'].join(''),
+    contenu: ['témoin : ', ['pub', 'commander'].join('')].join(''),
+    motif: ['pub', 'commander'].join(''),
+  },
+] as const;
+
 function fichiersSuivis(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: RACINE, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
     .split('\n')
@@ -94,6 +147,10 @@ function fichiersSuivis(): string[] {
 }
 
 describe('aucune donnée personnelle dans un dépôt public', () => {
+  it.each(DETECTION_FIXTURES)('détecte isolément le motif : $nom', ({ fichier, contenu, motif }) => {
+    expect(detecterMotifsInterdits(fichier, contenu)).toEqual([motif]);
+  });
+
   it('aucun fichier suivi ne nomme la situation ou l’infrastructure privée de l’auteur', () => {
     const fautifs: string[] = [];
 
@@ -104,16 +161,7 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
       } catch {
         continue; // fichier supprimé ou illisible : rien à inspecter
       }
-      const trouves = INTERDITS.filter(
-        (terme) => termeApplicable(fichier, terme) && contenu.includes(terme),
-      );
-      const cheminNormalise = fichier.toLowerCase();
-      for (const terme of INTERDITS) {
-        if (!termeApplicable(fichier, terme)) continue;
-        if (cheminNormalise.includes(terme) && !trouves.includes(terme)) {
-          trouves.push(terme);
-        }
-      }
+      const trouves = detecterMotifsInterdits(fichier, contenu);
       if (trouves.length > 0) {
         fautifs.push(`${fichier} → ${trouves.join(', ')}`);
       }

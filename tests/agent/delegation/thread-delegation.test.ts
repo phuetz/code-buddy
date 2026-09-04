@@ -322,6 +322,54 @@ describe('ThreadDelegation multiplexed delegates', () => {
     await collecting;
   });
 
+  it('admits three queued children in arrival order with concurrency one', async () => {
+    const activeStarted = deferred();
+    const activeRelease = deferred();
+    const admissionOrder: string[] = [];
+    const factory: ThreadDelegateAgentFactory<TestChunk> = ({ agentId }) => ({
+      async *processUserMessageStream(): AsyncGenerator<TestChunk> {
+        admissionOrder.push(agentId);
+        if (agentId === 'active') {
+          activeStarted.resolve();
+          await activeRelease.promise;
+        }
+        yield { type: 'content', content: agentId };
+      },
+      abortCurrentOperation() {},
+      dispose() {},
+    });
+    const delegation = new ThreadDelegation({
+      concurrency: 1,
+      parentBudget,
+      createAgent: factory,
+    });
+    const collecting = collectEvents(delegation.events());
+    const active = delegation.spawn('active');
+    const first = delegation.spawn('first');
+    const second = delegation.spawn('second');
+    const third = delegation.spawn('third');
+
+    const activeTurn = active.submit('active');
+    await activeStarted.promise;
+    const firstTurn = first.submit('first');
+    const secondTurn = second.submit('second');
+    const thirdTurn = third.submit('third');
+
+    // Let all three workers reach the semaphore before releasing the active turn.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    activeRelease.resolve();
+    active.closeInput();
+    first.closeInput();
+    second.closeInput();
+    third.closeInput();
+
+    await Promise.all([activeTurn, firstTurn, secondTurn, thirdTurn]);
+    await delegation.close();
+    await collecting;
+
+    expect(admissionOrder).toEqual(['active', 'first', 'second', 'third']);
+  });
+
   it('derives finite child limits that are lower than finite parent limits', () => {
     const child = deriveChildThreadBudget(parentBudget);
     expect(child.maxTurns).toBeLessThan(parentBudget.maxTurns);
