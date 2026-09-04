@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### PRIV2 — plus rien de l'infrastructure de l'auteur dans le dépôt (4 septembre 2026)
+
+130 fichiers : adresses privées remplacées par des plages de documentation ou
+`<ip-du-hub>`, nom de machine devenu `hub` (flotte) ou `localGpu` (média, schémas
+d'outils inclus), identifiants de projet Flow lus dans `FLOW_PROJECT_ID` et
+`FLOW_PROJECT_URL`, soldes reformulés sans chiffre, sujet médical neutralisé.
+Le garde-fou gagne cinq motifs, cinq fixtures et une liste d'exemptions nommée :
+105 fichiers fautifs avant, vert après. L'historique de la branche a été
+réécrit pour les valeurs propres à la branche ; celles présentes dans `main`
+depuis l'été y restent.
+
 ### VERIFIX3A — dix-sept harnais qui ne gardaient qu'« un appel » (4 septembre 2026)
 
 Les tests réalignés après MEM1 assertent désormais le contrat réel : chemin

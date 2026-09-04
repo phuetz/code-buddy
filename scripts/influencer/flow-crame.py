@@ -115,7 +115,16 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
             return
         print(f'WARN: onglet Flow hors projet ({url}) — retour au projet configuré.', flush=True)
         self.c.cmd('Page.navigate', {'url': FLOW_PROJECT_URL})
-        time.sleep(8)
+        # L'application est une SPA : 8 s fixes ne suffisent pas toujours (mesuré le 04/09 :
+        # « Éditeur de prompt Flow introuvable »). On attend l'éditeur Slate jusqu'à 45 s.
+        for _ in range(45):
+            time.sleep(1)
+            if self.js("!!document.querySelector('[data-slate-editor=true]')"):
+                time.sleep(2)
+                return
+        etat = self.js("JSON.stringify({title:document.title,url:location.href,boutons:document.querySelectorAll('button').length,"
+                       "texte:(document.body&&document.body.innerText||'').slice(0,300)})")
+        print(f'WARN: éditeur toujours absent après 45 s : {etat}', flush=True)
 
     def show_videos_view(self):
         self.ensure_project()
