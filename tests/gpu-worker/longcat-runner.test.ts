@@ -45,6 +45,16 @@ afterEach(async () => {
   await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
+// Ces scénarios démarrent DEUX interpréteurs python (le pilote, puis le
+// petit-fils d'inférence). Le budget de 3 s tenait sous Linux mais pas sur
+// windows-latest, où la création de processus est nettement plus coûteuse :
+// execFile tuait le pilote avant que le garde thermique n'ait imprimé quoi que
+// ce soit (code null, stdout vide). Le budget suit donc la machine, comme
+// testTimeout/hookTimeout dans vitest.config.ts ; ce que le scénario prouve —
+// le garde arrête l'inférence et sort en 24 — est inchangé.
+const SLOW_PROCESS_HOST = process.platform === 'win32' || process.platform === 'darwin';
+const PYTHON_GUARD_TIMEOUT_MS = SLOW_PROCESS_HOST ? 20_000 : 3_000;
+
 describe('LongCat GPU runner hardening', () => {
   it('runs dependency-free checkpoint and layerwise INT8 unit tests', async () => {
     const { stderr } = await execFileAsync('python3', [LOWMEM_UNIT]);
@@ -153,9 +163,11 @@ describe('LongCat GPU runner hardening', () => {
       '    print(error, flush=True)',
       '    raise SystemExit(24)',
     ].join('\n');
-    await expect(execFileAsync('python3', ['-c', code, RUNNER], { timeout: 3_000 })).rejects.toMatchObject({
+    await expect(
+      execFileAsync('python3', ['-c', code, RUNNER], { timeout: PYTHON_GUARD_TIMEOUT_MS }),
+    ).rejects.toMatchObject({
       code: 24,
       stdout: expect.stringContaining('thermal guard stopped inference at 89 C'),
     });
-  });
+  }, PYTHON_GUARD_TIMEOUT_MS + 10_000);
 });

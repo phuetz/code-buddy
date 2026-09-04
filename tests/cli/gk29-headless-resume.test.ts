@@ -5,15 +5,27 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-// Plafond de tas EXPLICITE pour l'enfant. `spawn(process.execPath, …)` ne
-// reçoit ni l'execArgv du fork Vitest ni aucune consigne : il hérite du défaut
-// de V8, qui dépend de la RAM de l'hôte — ~4 Go sur les runners Linux et
-// Windows (16 Go), mais ~2 Go sur macos-latest (3 vCPU / 7 Go). Le tour CLI
-// mourait donc « JavaScript heap out of memory », code 134, sur le SEUL runner
-// macOS, pour une raison qui n'a rien à voir avec ce que le scénario mesure.
-// Fixer la valeur rend le budget identique partout au lieu de dépendre de la
-// machine.
+// Plafond de tas EXPLICITE pour le processus CLI. `spawn(process.execPath, …)`
+// ne reçoit ni l'execArgv du fork Vitest ni aucune consigne : le défaut de V8
+// dépend de la RAM de l'hôte — ~4 Go sur les runners Linux et Windows (16 Go),
+// mais ~2 Go sur macos-latest (3 vCPU / 7 Go). Or le tour mesuré demande
+// RÉELLEMENT entre 1 et 1,5 Go sous Linux (mesuré en abaissant le plafond :
+// rouge à 1024, vert à 1536) et davantage sous macOS : il mourait donc
+// « JavaScript heap out of memory », code 134, sur le SEUL runner macOS.
+//
+// Le drapeau passe par NODE_OPTIONS et NON par argv : tsx RELANCE un
+// petit-fils node avec son propre chargeur, et un drapeau V8 posé sur la ligne
+// de commande du parent ne le suit pas — NODE_OPTIONS, si. (Vérifié : avec le
+// drapeau en argv le plafond restait celui du défaut ; via NODE_OPTIONS, le
+// petit-fils meurt bien à 256 Mo.) La valeur d'origine est préservée pour ne
+// rien perdre de ce que l'hôte demandait.
 const CHILD_HEAP_MB = 4096;
+
+function childNodeOptions(inherited: string | undefined): string {
+  return [inherited, `--max-old-space-size=${CHILD_HEAP_MB}`]
+    .filter(Boolean)
+    .join(' ');
+}
 
 function getCleanChildEnv(): Record<string, string> {
   return Object.fromEntries(
@@ -29,7 +41,6 @@ function runHeadless(port: number, options: {
   resume?: string;
 }): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   const args = [
-    `--max-old-space-size=${CHILD_HEAP_MB}`,
     path.resolve('node_modules/tsx/dist/cli.mjs'),
     'src/index.ts',
   ];
@@ -58,6 +69,7 @@ function runHeadless(port: number, options: {
       cwd: process.cwd(),
       env: {
         ...getCleanChildEnv(),
+        NODE_OPTIONS: childNodeOptions(process.env.NODE_OPTIONS),
         HOME: options.homeDir,
         USERPROFILE: options.homeDir,
         CODEBUDDY_SESSIONS_DIR: path.join(options.homeDir, '.codebuddy', 'sessions'),

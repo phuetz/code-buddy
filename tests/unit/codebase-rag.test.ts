@@ -6,6 +6,7 @@
  */
 
 import { promises } from 'fs';
+import { join } from 'path';
 
 import {
   CodebaseRAG,
@@ -476,10 +477,14 @@ describe('CodebaseRAG', () => {
       // VERIF3 T4 : `saveIndex` écrit trois fichiers, l'unique assertion était
       // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
       // chunks, du file-index ou des stats restait vert.
+      // Les chemins écrits sortent de path.join : les attendre avec des barres
+      // obliques codées en dur ne tenait que sous POSIX. On les construit de la
+      // même façon que l'implémentation — ce que le scénario prouve est QUELS
+      // trois fichiers sont écrits, pas le séparateur de la plate-forme.
       expect(mockWriteJsonAtomic.mock.calls.map((call) => call[0])).toEqual([
-        '/test/index/chunks.json',
-        '/test/index/file-index.json',
-        '/test/index/stats.json',
+        join('/test/index', 'chunks.json'),
+        join('/test/index', 'file-index.json'),
+        join('/test/index', 'stats.json'),
       ]);
 
       const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];

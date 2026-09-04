@@ -182,7 +182,15 @@ afterEach(async () => {
   await fs.rm(scratchRoot, { recursive: true, force: true });
 });
 
-describe('lane ledger', () => {
+// Portée : POSIX. Ces scénarios lancent les scripts de lane PAR LEUR CHEMIN
+// (`spawnSync(script, …)`), ce qui repose sur le shebang — une notion que
+// Windows n'implémente pas : l'appel y rend `EFTYPE` avant même d'atteindre le
+// code mesuré. Le journal de lane est l'outillage POSIX de la flotte
+// (`env`, `git`, `comm`, `find`, permissions 0600) ; il n'est jamais exécuté
+// sous Windows. La sonde est la plate-forme, faute d'exécution de shebang.
+const POSIX_SHEBANG = process.platform !== 'win32';
+
+describe.runIf(POSIX_SHEBANG)('lane ledger', () => {
   it('appends canonical signed entries and verifies the hash chain', async () => {
     const ledgerDir = path.join(scratchRoot, 'delegations');
     const fixture = await createLaneFixture(scratchRoot);
@@ -367,7 +375,7 @@ describe('lane ledger', () => {
   });
 });
 
-describe('deleguer.sh ledger opt-in', () => {
+describe.runIf(POSIX_SHEBANG)('deleguer.sh ledger opt-in', () => {
   async function prepareDelegation(): Promise<{
     bin: string;
     ledgerDir: string;
@@ -446,7 +454,7 @@ describe('deleguer.sh ledger opt-in', () => {
   });
 });
 
-describe('fusionner-lane.sh approval gate', () => {
+describe.runIf(POSIX_SHEBANG)('fusionner-lane.sh approval gate', () => {
   it('runs typecheck and a supplied test command, records approval, then fast-forwards', async () => {
     const ledgerDir = path.join(scratchRoot, 'delegations');
     const fixture = await createLaneFixture(scratchRoot);

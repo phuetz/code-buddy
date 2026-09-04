@@ -33,7 +33,14 @@ describe('StrategyStore', () => {
   it('saves atomically with mode 0600, activates per scope, refuses a scope mismatch', () => {
     store.save(child);
     const file = path.join(work, '.codebuddy', 'strategies', `${child.id}.json`);
-    expect((fs.statSync(file).mode & 0o777).toString(8)).toBe('600');
+    // Windows n'a pas de bits de permission POSIX : NTFS rend systématiquement
+    // 666 quel que soit le mode demandé. Le reste du scénario (activation par
+    // portée, refus d'une portée qui ne correspond pas) est vérifié partout ;
+    // seule cette assertion est bornée aux systèmes qui ont la notion.
+    if (process.platform !== 'win32') {
+      expect((fs.statSync(file).mode & 0o777).toString(8)).toBe('600');
+    }
+    expect(fs.existsSync(file)).toBe(true);
     expect(() => store.activate('audit', child.id)).toThrow(/scope/);
     store.activate('headless', child.id);
     expect(store.resolveActive('headless').id).toBe(child.id);
