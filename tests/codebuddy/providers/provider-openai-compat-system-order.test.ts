@@ -93,6 +93,34 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
     return { create };
   }
 
+  /**
+   * Ollama is served over its NATIVE `/api/chat` (that is the only endpoint
+   * that honours `options.num_ctx`), so for that runtime the normalized
+   * payload must be read off the wire, not off the SDK stub. The assertion
+   * itself is unchanged: exactly one `system` message, in position 0.
+   */
+  function stubOllamaWire(): { seen: () => Array<Record<string, unknown>> } {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ message: { role: 'assistant', content: 'ok' }, done: true }),
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(
+              '{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}\n',
+            ));
+            controller.close();
+          },
+        }),
+      };
+    }));
+    return { seen: () => bodies };
+  }
+
   const scattered: CodeBuddyMessage[] = [
     { role: 'system', content: 'base system prompt' },
     { role: 'user', content: 'Reply PONG' },
@@ -101,12 +129,16 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
 
   it('LOCAL (Ollama): emits exactly one system message in position 0', async () => {
     const provider = makeProvider('http://localhost:11434/v1', 'qwen3.8:27b');
-    const { create } = stubClient(provider);
+    const { seen } = stubOllamaWire();
 
-    await provider.chat(structuredClone(scattered));
+    try {
+      await provider.chat(structuredClone(scattered));
+    } finally {
+      vi.unstubAllGlobals();
+    }
 
-    expect(create).toHaveBeenCalledTimes(1);
-    const sent = (create.mock.calls[0]![0] as { messages: CodeBuddyMessage[] }).messages;
+    expect(seen()).toHaveLength(1);
+    const sent = seen()[0]!.messages as CodeBuddyMessage[];
     const systemMsgs = sent.filter((m) => m.role === 'system');
     expect(systemMsgs).toHaveLength(1);
     expect(sent[0]?.role).toBe('system');
@@ -114,25 +146,20 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
 
   it('LOCAL (Ollama): also normalizes on the streaming path', async () => {
     const provider = makeProvider('http://127.0.0.1:11434/v1', 'qwen3.8:27b');
-    const create = vi.fn().mockResolvedValue(
-      (async function* () {
-        yield {
-          id: 'x',
-          choices: [{ delta: { content: 'ok' }, finish_reason: 'stop', index: 0 }],
-        };
-      })(),
-    );
-    (provider as unknown as { client: unknown }).client = {
-      chat: { completions: { create } },
-    };
+    const { seen } = stubOllamaWire();
 
-    const gen = provider.chatStream(structuredClone(scattered));
-    // Drain the generator so the request is actually issued.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    for await (const _ of gen) { /* consume */ }
+    try {
+      const gen = provider.chatStream(structuredClone(scattered));
+      // Drain the generator so the request is actually issued.
 
-    expect(create).toHaveBeenCalledTimes(1);
-    const sent = (create.mock.calls[0]![0] as { messages: CodeBuddyMessage[] }).messages;
+      for await (const _ of gen) { /* consume */ }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(seen()).toHaveLength(1);
+    expect(seen()[0]).toMatchObject({ stream: true });
+    const sent = seen()[0]!.messages as CodeBuddyMessage[];
     expect(sent.filter((m) => m.role === 'system')).toHaveLength(1);
     expect(sent[0]?.role).toBe('system');
   });
