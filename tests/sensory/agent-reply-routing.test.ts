@@ -36,7 +36,10 @@ vi.mock('../../src/fleet/model-selector.js', async (importOriginal) => {
         return actual.selectFastestModel(task, {
           ...options,
           candidates: routingState.candidates as never,
-          scoreboard: { ranking: () => [] } as never,
+          scoreboard: {
+            ranking: () => [],
+            measuredTurnLatency: () => null,
+          } as never,
         });
       },
     ),

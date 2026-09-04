@@ -3206,7 +3206,7 @@ program
           ...(settings.baseURL ? { baseURL: settings.baseURL } : {}),
         };
       }
-    } catch {
+    } catch (_error) {
       /* profile unreadable — ChatGPT status still prints */
     }
 
