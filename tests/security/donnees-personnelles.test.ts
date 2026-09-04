@@ -133,6 +133,66 @@ const DETECTION_FIXTURES = [
     contenu: ['témoin : ', ['pub', 'commander'].join('')].join(''),
     motif: ['pub', 'commander'].join(''),
   },
+  {
+    nom: 'organisme d’emploi (nom courant)',
+    fichier: ['fixtures/', 'employment-agency', '.md'].join(''),
+    contenu: ['témoin : ', ['fran', 'ce tra', 'vail'].join('')].join(''),
+    motif: ['fran', 'ce tra', 'vail'].join(''),
+  },
+  {
+    nom: 'ancien organisme, forme accentuée',
+    fichier: ['fixtures/', 'agency-accented', '.md'].join(''),
+    contenu: ['témoin : ', ['pô', 'le em', 'ploi'].join('')].join(''),
+    motif: ['pô', 'le em', 'ploi'].join(''),
+  },
+  {
+    nom: 'ancien organisme, forme non accentuée',
+    fichier: ['fixtures/', 'agency-plain', '.md'].join(''),
+    contenu: ['témoin : ', ['po', 'le em', 'ploi'].join('')].join(''),
+    motif: ['po', 'le em', 'ploi'].join(''),
+  },
+  {
+    nom: 'couverture des privations d’activité, forme accentuée',
+    fichier: ['fixtures/', 'coverage-accented', '.md'].join(''),
+    contenu: ['témoin : ', ['assur', 'ance chô', 'mage'].join('')].join(''),
+    motif: ['assur', 'ance chô', 'mage'].join(''),
+  },
+  {
+    nom: 'couverture des privations d’activité, forme non accentuée',
+    fichier: ['fixtures/', 'coverage-plain', '.md'].join(''),
+    contenu: ['témoin : ', ['assur', 'ance cho', 'mage'].join('')].join(''),
+    motif: ['assur', 'ance cho', 'mage'].join(''),
+  },
+  {
+    nom: 'cumul d’allocation',
+    fichier: ['fixtures/', 'allowance-overlap', '.md'].join(''),
+    contenu: ['témoin : ', ['cum', 'ul a', 're'].join('')].join(''),
+    motif: ['cum', 'ul a', 're'].join(''),
+  },
+  {
+    nom: 'qualité de prestataire du client public',
+    fichier: ['fixtures/', 'public-client-role', '.md'].join(''),
+    contenu: ['témoin : ', ['prestat', 'aire de la c', 'cas'].join('')].join(''),
+    motif: ['prestat', 'aire de la c', 'cas'].join(''),
+  },
+  {
+    nom: 'statut administratif de recherche d’activité',
+    fichier: ['fixtures/', 'administrative-status', '.md'].join(''),
+    contenu: ['témoin : ', ['deman', "deur d'em", 'ploi'].join('')].join(''),
+    motif: ['deman', "deur d'em", 'ploi'].join(''),
+  },
+  {
+    nom: 'préfixe d’adresse du réseau privé',
+    fichier: ['fixtures/', 'private-network-prefix', '.md'].join(''),
+    contenu: ['témoin : ', ['100', '73', ''].join('.')].join(''),
+    motif: ['100', '73', ''].join('.'),
+  },
+  {
+    nom: 'nom de la machine GPU',
+    fichier: ['fixtures/', 'gpu-host-name', '.md'].join(''),
+    contenu: ['témoin : ', ['dark', 'star'].join('')].join(''),
+    motif: ['dark', 'star'].join(''),
+  },
 ] as const;
 
 function fichiersSuivis(): string[] {

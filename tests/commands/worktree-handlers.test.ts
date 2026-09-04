@@ -1,4 +1,6 @@
 import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
+import * as path from 'path';
 import { handleWorktree } from '../../src/commands/handlers/worktree-handlers';
 
 jest.mock('child_process', () => ({
@@ -85,6 +87,76 @@ describe('Worktree Handlers', () => {
       const result = handleWorktree(['add', 'feature', '../my-worktree']);
 
       expect(result.handled).toBe(true);
+    });
+  });
+
+  // Les cas ci-dessus n'affirment que `handled === true` et la présence de la
+  // chaîne qu'ils ont eux-mêmes passée en argument : dévier l'argv, falsifier la
+  // branche rapportée ou masquer chemin et branche dans la réponse les laissait
+  // verts. Ici on lit les VRAIS arguments remis à git et ce que l'utilisateur
+  // reçoit en retour. `execFileSync` et `fs.existsSync` restent bouchonnés :
+  // aucun worktree n'est créé sur le disque.
+  describe('add worktree — arguments réellement passés à git', () => {
+    const appelsGit = (): string[][] =>
+      ((execFileSync as unknown as jest.Mock).mock.calls as unknown[][])
+        .filter((call) => call[0] === 'git')
+        .map((call) => call[1] as string[]);
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('creates a branch named after the directory when none is given', () => {
+      const cheminResolu = path.resolve('feature-branch');
+
+      const result = handleWorktree(['add', 'feature-branch']);
+
+      expect(appelsGit()).toEqual([
+        ['worktree', 'add', '-b', 'feature-branch', cheminResolu],
+      ]);
+      expect(result.entry?.content).toContain(`📁 Path: ${cheminResolu}`);
+      expect(result.entry?.content).toContain('🌿 Branch: feature-branch');
+    });
+
+    it('creates the requested branch when git says it does not exist yet', () => {
+      const cheminResolu = path.resolve('../wt-nouvelle');
+
+      const result = handleWorktree(['add', '../wt-nouvelle', 'sujet/nouvelle']);
+
+      expect(appelsGit()).toEqual([
+        ['rev-parse', '--verify', 'sujet/nouvelle'],
+        ['rev-parse', '--verify', 'sujet/nouvelle'],
+        ['worktree', 'add', '-b', 'sujet/nouvelle', cheminResolu],
+      ]);
+      expect(result.entry?.content).toContain(`📁 Path: ${cheminResolu}`);
+      expect(result.entry?.content).toContain('🌿 Branch: sujet/nouvelle');
+    });
+
+    it('checks out an existing branch without -b, keeping it as the worktree base', () => {
+      const cheminResolu = path.resolve('../wt-existante');
+      const mock = execFileSync as unknown as jest.Mock;
+      // Les deux sondes `rev-parse` réussissent : la branche existe déjà.
+      mock.mockImplementationOnce(() => Buffer.from(''));
+      mock.mockImplementationOnce(() => Buffer.from(''));
+
+      const result = handleWorktree(['add', '../wt-existante', 'sujet/existante']);
+
+      expect(appelsGit()).toEqual([
+        ['rev-parse', '--verify', 'sujet/existante'],
+        ['rev-parse', '--verify', 'sujet/existante'],
+        ['worktree', 'add', cheminResolu, 'sujet/existante'],
+      ]);
+      expect(result.entry?.content).toContain(`📁 Path: ${cheminResolu}`);
+      expect(result.entry?.content).toContain('🌿 Branch: sujet/existante');
+    });
+
+    it('refuses to touch an existing path and runs no git command at all', () => {
+      (existsSync as unknown as jest.Mock).mockReturnValueOnce(true);
+
+      const result = handleWorktree(['add', '../wt-deja-la']);
+
+      expect(appelsGit()).toEqual([]);
+      expect(result.entry?.content).toContain('Path already exists');
     });
   });
 

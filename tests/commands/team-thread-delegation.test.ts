@@ -91,6 +91,59 @@ describe('/team thread delegation', () => {
     expect(result.entry?.content).toContain('turn_budget_exhausted');
   });
 
+  it('admits three queued members in arrival order under the default concurrency of one', async () => {
+    // Le test « FIFO par membre » ci-dessus ne met qu'un candidat en attente :
+    // FIFO et LIFO y donnent le même ordre. Ici trois membres attendent
+    // ensemble derrière un quatrième qui tient l'unique créneau, donc l'ordre
+    // d'admission distingue réellement `waiters.shift()` de `waiters.pop()`.
+    const team = getTeamManager();
+    const active = team.addMember('coder', 'active-one').memberId;
+    const first = team.addMember('tester', 'first-one').memberId;
+    const second = team.addMember('reviewer', 'second-one').memberId;
+    const third = team.addMember('coder', 'third-one').memberId;
+    assignTask(active, 'active');
+    assignTask(first, 'first');
+    assignTask(second, 'second');
+    assignTask(third, 'third');
+
+    const admissionOrder: string[] = [];
+    let announceActiveStarted!: () => void;
+    let releaseActive!: () => void;
+    const activeStarted = new Promise<void>((resolve) => {
+      announceActiveStarted = resolve;
+    });
+    const activeReleased = new Promise<void>((resolve) => {
+      releaseActive = resolve;
+    });
+
+    const running = handleTeam(['run', 'all'], {
+      eventSink: () => undefined,
+      agentFactory: () => ({
+        async execute(input: TeamDelegatedTask): Promise<TeamDelegationOutput> {
+          admissionOrder.push(input.task.title);
+          if (input.task.title === 'active') {
+            announceActiveStarted();
+            await activeReleased;
+          }
+          return { type: 'result', success: true, summary: input.task.title };
+        },
+        abortCurrentOperation() {},
+        dispose() {},
+      }),
+    });
+
+    await activeStarted;
+    // Laisser les trois autres membres atteindre le sémaphore avant de rendre
+    // le créneau : c'est la file d'attente elle-même que l'on observe.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseActive();
+    const result = await running;
+
+    expect(admissionOrder).toEqual(['active', 'first', 'second', 'third']);
+    expect(result.entry?.content).toContain('Completed: 4/4');
+    expect(team.getTasks().every((task) => task.status === 'completed')).toBe(true);
+  });
+
   it('contains a throwing member and lets its sibling finish', async () => {
     const team = getTeamManager();
     const broken = team.addMember('coder', 'broken').memberId;

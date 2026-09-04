@@ -81,6 +81,37 @@ describe("ExecPolicy", () => {
       expect(evaluation.action).toBe("sandbox");
     });
 
+    // HEADLESS2 autorise explicitement la forme `git -C <racine> <lecture>`.
+    // Le test de bout en bout n'observait que l'action finale `sandbox`, que la
+    // couche d'exécution impose de toute façon à un `allow` : retirer
+    // l'autorisation restait invisible. On observe donc la décision BRUTE de la
+    // politique, seul endroit où l'autorisation se distingue du défaut.
+    it.each(["status", "log", "diff", "rev-parse", "ls-files"])(
+      "authorises the read-only git -C form for %s exactly like the bare form",
+      (sousCommande) => {
+        const avecRacine = policy.evaluate("git", ["-C", "/repo", sousCommande]);
+        const sansRacine = policy.evaluate("git", [sousCommande]);
+
+        expect(sansRacine.action).toBe("allow");
+        expect(sansRacine.matchedRule?.id).toBe("builtin-git-safe");
+        expect(avecRacine.action).toBe("allow");
+        expect(avecRacine.matchedRule?.id).toBe("builtin-git-safe");
+      },
+    );
+
+    it("keeps the -C authorisation narrow: a mutation still crosses the approval boundary", () => {
+      for (const args of [
+        ["-C", "/repo", "commit", "-m", "x"],
+        ["-C", "/repo", "push"],
+        ["-C", "/repo", "reset", "--hard"],
+      ]) {
+        const evaluation = policy.evaluate("git", args);
+
+        expect(evaluation.action).toBe("ask");
+        expect(evaluation.matchedRule?.id).toBe("builtin-git-boundary");
+      }
+    });
+
     it("should sandbox unknown commands instead of running them directly", () => {
       const evaluation = policy.evaluate("unknowncommand123", []);
 
