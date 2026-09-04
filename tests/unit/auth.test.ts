@@ -57,6 +57,15 @@ jest.mock('fs-extra', () => {
 };
   return { ...impl, default: impl };
 });
+
+const { mockWriteFileAtomic, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockWriteFileAtomic: vi.fn().mockResolvedValue(undefined),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFileAtomic,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
  
 const mockFsExtra = fsExtra as {
   pathExists: jest.Mock;
@@ -844,6 +853,7 @@ describe('Token Management - SessionEncryption', () => {
     mockFsExtra.readFile.mockResolvedValue(Buffer.alloc(32));
     mockFsExtra.writeFile.mockResolvedValue(undefined);
     mockFsExtra.ensureDir.mockResolvedValue(undefined);
+    mockWriteFileAtomic.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -879,7 +889,7 @@ describe('Token Management - SessionEncryption', () => {
       encryption = new SessionEncryption();
       await encryption.initialize();
 
-      expect(mockFsExtra.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteFileAtomic).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Buffer),
         { mode: 0o600 }
@@ -1172,7 +1182,7 @@ describe('Token Management - SessionEncryption', () => {
       await encryption.rotateKey();
 
       // writeFile should be called for the new key
-      expect(mockFsExtra.writeFile).toHaveBeenCalled();
+      expect(mockWriteFileAtomic).toHaveBeenCalled();
     });
 
     it('should throw error when rotating uninitialized encryption', async () => {
@@ -1295,6 +1305,7 @@ describe('Permission Checks - PermissionManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetPermissionManager();
+    mockWriteJsonAtomicSync.mockReset();
     mockFs.existsSync.mockReturnValue(false);
     manager = new PermissionManager(testConfigPath);
   });
@@ -1760,34 +1771,26 @@ describe('Permission Checks - PermissionManager', () => {
     });
 
     it('should save configuration to file', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(() => undefined);
-
       manager.saveConfig();
 
-      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         testConfigPath,
-        expect.any(String)
+        expect.objectContaining({ version: '1.0.0' }),
+        { mode: 0o600 },
       );
     });
 
     it('should create config directory if needed', () => {
-      mockFs.existsSync.mockReturnValue(false);
-
       manager.saveConfig();
 
-      expect(mockFs.mkdirSync).toHaveBeenCalledWith(
-        path.dirname(testConfigPath),
-        { recursive: true }
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+        testConfigPath,
+        expect.any(Object),
+        { mode: 0o600 },
       );
     });
 
     it('should emit config:saved event', () => {
-      // Mock existsSync to return true for directory check
-      mockFs.existsSync.mockReturnValue(true);
-      // Mock writeFileSync to succeed
-      mockFs.writeFileSync.mockImplementation(() => undefined);
-
       const listener = jest.fn();
       manager.on('config:saved', listener);
 
@@ -1797,8 +1800,7 @@ describe('Permission Checks - PermissionManager', () => {
     });
 
     it('should emit config:error on save failure', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
       const listener = jest.fn();

@@ -37,6 +37,15 @@ jest.mock('../../src/nodes/transports/local-transport.js', () => ({
   LocalTransport: jest.fn().mockImplementation(function() { return { ...mockTransport }; }),
 }));
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock fs to prevent device-node from persisting/loading to/from disk
 jest.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
@@ -314,6 +323,8 @@ describe('DeviceNodeManager', () => {
 
   beforeEach(async () => {
     jest.resetModules();
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
     mockTransport.execute.mockReset();
     mockTransport.execute.mockResolvedValue({ stdout: 'stub: executed', stderr: '', exitCode: 0 });
     mockTransport.getCalendarEvents.mockReset();

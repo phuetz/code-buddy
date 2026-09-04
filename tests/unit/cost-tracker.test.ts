@@ -15,6 +15,15 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock the analytics repository
 jest.mock('../../src/database/repositories/analytics-repository.js', () => ({
   getAnalyticsRepository: jest.fn().mockReturnValue({
@@ -44,7 +53,8 @@ describe('CostTracker', () => {
     jest.clearAllMocks();
     // Reset mock implementations
     mockFs.existsSync.mockReturnValue(false);
-    mockFs.readJsonSync.mockReturnValue({});
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
 
     // Create a fresh tracker for each test with SQLite disabled
     tracker = new CostTracker({ useSQLite: false, trackHistory: true });
@@ -78,18 +88,19 @@ describe('CostTracker', () => {
 
     it('should load config from file if exists', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockReturnValue({ budgetLimit: 50, dailyLimit: 5 });
+      mockReadJsonAtomicSync.mockReturnValue({ budgetLimit: 50, dailyLimit: 5 });
 
       const loadedTracker = new CostTracker({ useSQLite: false });
 
-      expect(mockFs.existsSync).toHaveBeenCalled();
-      expect(mockFs.readJsonSync).toHaveBeenCalled();
+      expect(mockReadJsonAtomicSync).toHaveBeenCalled();
+      expect(loadedTracker.getReport().budgetLimit).toBe(50);
+      expect(loadedTracker.getReport().dailyLimit).toBe(5);
       loadedTracker.dispose();
     });
 
     it('should handle config load errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('Read error');
       });
 
@@ -101,7 +112,7 @@ describe('CostTracker', () => {
 
     it('should load history from file if exists and tracking enabled', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation((path: unknown) => {
+      mockReadJsonAtomicSync.mockImplementation((path: unknown) => {
         if (String(path).includes('history')) {
           return [
             {
@@ -128,7 +139,7 @@ describe('CostTracker', () => {
       oldDate.setDate(oldDate.getDate() - 60); // 60 days ago
 
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation((path: unknown) => {
+      mockReadJsonAtomicSync.mockImplementation((path: unknown) => {
         if (String(path).includes('history')) {
           return [
             {
@@ -268,7 +279,7 @@ describe('CostTracker', () => {
         jsonTracker.recordUsage(100, 50, 'grok-3-latest');
       }
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
       jsonTracker.dispose();
     });
 
@@ -406,14 +417,14 @@ describe('CostTracker', () => {
     it('should set budget limit', () => {
       tracker.setBudgetLimit(100);
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
       expect(tracker.getReport().budgetLimit).toBe(100);
     });
 
     it('should set daily limit', () => {
       tracker.setDailyLimit(10);
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
       expect(tracker.getReport().dailyLimit).toBe(10);
     });
 
@@ -509,27 +520,25 @@ describe('CostTracker', () => {
     it('should save config when setting budget limit', () => {
       tracker.setBudgetLimit(50);
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         expect.stringContaining('cost-config.json'),
         expect.any(Object),
-        expect.any(Object)
+        { mode: 0o600 }
       );
     });
 
     it('should save config when setting daily limit', () => {
       tracker.setDailyLimit(5);
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         expect.stringContaining('cost-config.json'),
         expect.any(Object),
-        expect.any(Object)
+        { mode: 0o600 }
       );
     });
 
     it('should handle save config errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -541,7 +550,7 @@ describe('CostTracker', () => {
       tracker.recordUsage(1000, 500, 'grok-3-latest');
       tracker.clearHistory();
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
 
     it('should clear all history entries', () => {
@@ -554,7 +563,7 @@ describe('CostTracker', () => {
     });
 
     it('should handle history save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -568,8 +577,8 @@ describe('CostTracker', () => {
       noHistoryTracker.recordUsage(1000, 500, 'grok-3-latest');
       noHistoryTracker.clearHistory();
 
-      // writeJsonSync should not be called for history
-      const historySaveCalls = mockFs.writeJsonSync.mock.calls.filter(
+      // The atomic writer should not be called for history when tracking is disabled.
+      const historySaveCalls = mockWriteJsonAtomicSync.mock.calls.filter(
         (call) => (call[0] as string).includes('history')
       );
       expect(historySaveCalls.length).toBe(0);

@@ -25,6 +25,10 @@ jest.mock('fs', () => {
     watch: jest.fn(),
   };
 });
+const mockWriteFileAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFileAtomic,
+}));
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     warn: jest.fn(),
@@ -65,6 +69,7 @@ describe('IdentityManager', () => {
     mockStat.mockRejectedValue(new Error('ENOENT'));
     mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
+    mockWriteFileAtomic.mockResolvedValue(undefined);
 
     manager = new IdentityManager({
       globalDir: GLOBAL_DIR,
@@ -364,7 +369,11 @@ describe('IdentityManager', () => {
         path.join(CWD, '.codebuddy'),
         { recursive: true }
       );
-      expect(mockWriteFile).toHaveBeenCalledWith(expectedPath, '# New Soul', 'utf-8');
+      expect(mockWriteFileAtomic).toHaveBeenCalledWith(
+        expectedPath,
+        '# New Soul',
+        { mode: 0o600 },
+      );
     });
 
     it('should update the in-memory file map', async () => {
