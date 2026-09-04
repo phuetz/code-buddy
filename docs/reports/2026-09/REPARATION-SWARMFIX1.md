@@ -33,5 +33,45 @@ Le fichier `src/commands/handlers/swarm-handler.ts` est restauré sans diff.
 
 ## Point 2 — écriture mémoire
 
-À instruire : identifier le test de `tests/unit` qui écrit dans le dépôt réel,
-puis isoler son chemin de mémoire sous `_qa/swarmfix1/home` ou le mocker.
+Le coupable est `tests/unit/cc9-cc18.test.ts`, dans `CC14: SpawnOptions
+memory field`. `spawnAgent({ memory: 'project' })` puis `completeAgent()` ne
+fournissaient pas de racine de projet ; le chemin projet retombait donc sur
+`process.cwd()` et ajoutait une entrée datée à
+`.codebuddy/agent-memory/alice/MEMORY.md`.
+
+Le test utilise désormais des répertoires sous `_qa/swarmfix1/tmp`, substitue
+`process.cwd()` vers ce répertoire pendant le cycle spawn/complete, restaure le
+spy dans `finally`, nettoie le répertoire après chaque test et vérifie que le
+`MEMORY.md` du dépôt reste inchangé. Les trois répertoires temporaires du
+fichier `cc9-cc18.test.ts` sont confinés sous le clone ; `_qa/swarmfix1/` est
+ignoré par Git.
+
+Preuves :
+
+- `cc9-cc18.test.ts` avant correction : 53/53, puis `git status` →
+  `M .codebuddy/agent-memory/alice/MEMORY.md` ;
+- `imessage-adapter.test.ts` : 42/42, puis aucun changement mémoire ;
+- après correction : `cc9-cc18.test.ts` → 53/53 et aucun `MEMORY.md` modifié ;
+- mutation temporaire du spy vers le dépôt réel : 1 échec, 52 succès et
+  `MEMORY.md` à nouveau modifié ;
+- restauration du spy et du fichier suivi : 53/53 et aucun `MEMORY.md` modifié.
+
+## Vérifications finales
+
+- `npx vitest run tests/unit/swarm-handler.test.ts tests/commands` → code 1,
+  131 fichiers, 1 270 tests : 1 267 succès et 3 échecs dans les smokes Hermes
+  locaux (`tests/commands/hermes-commands.test.ts`), hors zone SWARMFIX1 ;
+- `npx vitest run --reporter=dot --maxWorkers=4 tests/unit` → code 0,
+  358 fichiers et 15 086 tests réussis ;
+- `npx tsc --noEmit -p .` → code 0 ;
+- `npx eslint --max-warnings=0 tests/unit/swarm-handler.test.ts
+  tests/unit/cc9-cc18.test.ts` → code 0 ;
+- `git diff --check` → code 0 ;
+- `git status --short` après la suite complète → propre.
+
+Les trois échecs Hermes sont reproductibles, liés à leur smoke navigateur local
+(`local-playwright`/`local` retournent `failed`) et ne concernent ni le handler
+SWARM ni l’écriture mémoire ; ils restent ouverts hors périmètre.
+
+Commits de la mission : `f2a0f772a` (point 1) et `8af8921c1` (point 2 et
+passation).
