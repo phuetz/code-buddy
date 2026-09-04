@@ -225,9 +225,13 @@ setInterval(() => {}, 1000);
     await writeFile(`${target}.tmp.1.aa`, '{}', 'utf8');
     const warn = vi.spyOn(logger, 'warn');
 
-    await cleanupOrphanedTemporaries(target, { maxAgeMs: 0 });
+    // Horloge décalée : un temporaire écrit dans la même milliseconde porte un mtime
+    // (précision nanoseconde) légèrement postérieur à Date.now(), et `maxAgeMs: 0` le
+    // jugeait « en vol » sous charge — le test rougissait une fois sur deux (04/09/2026).
+    const later = () => Date.now() + 10_000;
+    await cleanupOrphanedTemporaries(target, { maxAgeMs: 0, now: later });
     await writeFile(`${target}.tmp.2.bb`, '{}', 'utf8');
-    await cleanupOrphanedTemporaries(target, { maxAgeMs: 0 });
+    await cleanupOrphanedTemporaries(target, { maxAgeMs: 0, now: later });
 
     expect(warn).toHaveBeenCalledTimes(1);
   });
