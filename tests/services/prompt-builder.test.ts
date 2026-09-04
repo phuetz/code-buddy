@@ -731,6 +731,40 @@ describe('PromptBuilder — Phase T4', () => {
   });
 
   describe('budget truncation', () => {
+    it('exposes a byte-complete, text-free ledger for prompt measurement', async () => {
+      const { builder } = buildBuilder({
+        config: { memoryEnabled: false },
+      });
+      const prompt = await builder.buildSystemPrompt(undefined, 'grok-3', null, {
+        includeBootstrap: false,
+        includePersona: false,
+        includeKnowledge: false,
+        includeProjectDocs: false,
+        includeRules: false,
+        includeSkills: false,
+        includeIdentity: false,
+        includeFleet: false,
+        includeMemoryDirective: false,
+        includeLessonsDirective: false,
+        includeUserModelDirective: false,
+        includeWritingRules: false,
+        includeCodingStyle: false,
+        includeWorkflowRules: false,
+        includeExecutionDiscipline: false,
+        includeVariation: false,
+      });
+
+      const blocks = builder.getLastPromptBlocks();
+      expect(blocks.map(block => block.id)).toEqual(['base']);
+      expect(blocks[0]).toMatchObject({
+        source: 'src/prompts/system-base.ts',
+        chars: prompt.length,
+        estimatedTokens: Math.ceil(prompt.length / 4),
+      });
+      expect(blocks[0]).not.toHaveProperty('content');
+      expect(blocks[0]?.sha256).toMatch(/^[a-f0-9]{64}$/);
+    });
+
     it('keeps the reserved collective-knowledge section when the system prompt is truncated', async () => {
       vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', 'true');
       ckgMock.formatCollectiveContextMock.mockClear();

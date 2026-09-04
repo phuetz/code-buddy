@@ -12,6 +12,7 @@
 
 import { logger } from "../utils/logger.js";
 import { getErrorMessage } from "../errors/index.js";
+import { createHash } from "node:crypto";
 import {
   getSystemPromptForMode,
   getPromptManager,
@@ -60,6 +61,16 @@ export interface BuildOptions {
   includeWorkflowRules?: boolean;
   includeExecutionDiscipline?: boolean;
   includeVariation?: boolean;
+}
+
+/** A measured contribution to the assembled system prompt. */
+export interface PromptBlockMeasurement {
+  id: string;
+  source: string;
+  priority: number;
+  chars: number;
+  estimatedTokens: number;
+  sha256: string;
 }
 
 const ALL_BLOCKS: Required<BuildOptions> = {
@@ -157,6 +168,7 @@ export class PromptBuilder {
    */
   private contextRegistry: ContextRegistry | null = null;
   private codingStyleCache: { cwd: string; styleBlock: string; analyzedAt: number } | null = null;
+  private lastPromptBlocks: PromptBlockMeasurement[] = [];
 
   constructor(
     private config: PromptBuilderConfig,
@@ -169,6 +181,41 @@ export class PromptBuilder {
   /** The registry from the most recent system-prompt build (for the JIT pass). */
   getContextRegistry(): ContextRegistry | null {
     return this.contextRegistry;
+  }
+
+  /** Return the block ledger from the most recent build (without prompt text). */
+  getLastPromptBlocks(): PromptBlockMeasurement[] {
+    return this.lastPromptBlocks.map(block => ({ ...block }));
+  }
+
+  private recordPromptBlock(
+    id: string,
+    source: string,
+    content: string,
+    priority: number,
+    includesSeparator: boolean,
+  ): void {
+    const contribution = includesSeparator ? `\n\n${content}` : content;
+    this.lastPromptBlocks.push({
+      id,
+      source,
+      priority,
+      chars: contribution.length,
+      estimatedTokens: Math.ceil(contribution.length / 4),
+      sha256: createHash('sha256').update(content).digest('hex'),
+    });
+  }
+
+  private appendPromptBlock(
+    systemPrompt: string,
+    id: string,
+    source: string,
+    content: string,
+    priority: number,
+  ): string {
+    if (!content) return systemPrompt;
+    this.recordPromptBlock(id, source, content, priority, systemPrompt.length > 0);
+    return systemPrompt + (systemPrompt.length > 0 ? '\n\n' : '') + content;
   }
 
   /**
@@ -184,6 +231,7 @@ export class PromptBuilder {
     query?: string,
   ): Promise<string> {
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
+    this.lastPromptBlocks = [];
     // When the model can't actually call tools (Ollama small/medium without
     // OpenAI tool_calls support), the auto-memory + lessons directives just
     // confuse the LLM into hallucinating JSON tool calls. Force-off here.
@@ -323,6 +371,15 @@ export class PromptBuilder {
         );
       }
 
+      const baseSource = systemPromptId && systemPromptId !== 'auto'
+        ? `prompts/${systemPromptId}.md + src/prompts/prompt-manager.ts`
+        : systemPromptId === 'auto'
+          ? 'prompts/auto-selected.md + src/prompts/prompt-manager.ts'
+          : toolCfg.supportsToolCalls === false && !forceTools
+            ? 'src/prompts/system-base.ts (chat-only)'
+            : 'src/prompts/system-base.ts';
+      this.recordPromptBlock('base', baseSource, systemPrompt, 100, false);
+
       // Inject persistent memory context for paths that don't already
       // pass it to a PromptManager (legacy + chat-only). Without this,
       // the user's `remember`-stored facts (~/.codebuddy/memory.md)
@@ -335,7 +392,8 @@ export class PromptBuilder {
       const wentThroughPromptManager =
         (systemPromptId && systemPromptId !== 'auto') || systemPromptId === 'auto';
       if (memoryContext && !wentThroughPromptManager) {
-        systemPrompt += `\n\n<persistent_memory>\n${memoryContext}\n</persistent_memory>`;
+        const memoryBlock = `<persistent_memory>\n${memoryContext}\n</persistent_memory>`;
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'persistent-memory', 'memory', memoryBlock, 110);
         logger.debug('Injected persistent memory context into system prompt', {
           chars: memoryContext.length,
         });
@@ -343,7 +401,9 @@ export class PromptBuilder {
 
       // Prepend intro hook content if available (Moltbot-style role injection)
       if (introHookContent) {
-        systemPrompt = `# Role & Instructions (from intro_hook.txt)\n\n${introHookContent}\n\n---\n\n${systemPrompt}`;
+        const introBlock = `# Role & Instructions (from intro_hook.txt)\n\n${introHookContent}\n\n---`;
+        this.recordPromptBlock('intro-hook', 'intro_hook.txt', introBlock, 120, false);
+        systemPrompt = `${introBlock}\n\n${systemPrompt}`;
         logger.debug("Prepended intro hook content to system prompt");
       }
 
@@ -360,7 +420,13 @@ export class PromptBuilder {
       if (gates.includeExecutionDiscipline) {
         try {
           const { getExecutionDisciplineBlock } = await import('../prompts/execution-discipline.js');
-          systemPrompt += '\n\n' + getExecutionDisciplineBlock();
+          systemPrompt = this.appendPromptBlock(
+            systemPrompt,
+            'execution-discipline',
+            'src/prompts/execution-discipline.ts',
+            getExecutionDisciplineBlock(),
+            200,
+          );
           logger.debug('Injected execution-discipline guidance into system prompt');
         } catch (err) {
           logger.warn('Failed to inject execution-discipline block', { error: getErrorMessage(err) });
@@ -375,7 +441,7 @@ export class PromptBuilder {
           const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
           const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(query, 1_600);
           if (ckgBlock) {
-            systemPrompt += `\n\n${ckgBlock}`;
+            systemPrompt = this.appendPromptBlock(systemPrompt, 'collective-knowledge', 'memory', ckgBlock, 130);
             logger.debug('Injected collective knowledge into system prompt', { chars: ckgBlock.length });
           }
         } catch { /* collective graph optional */ }
@@ -392,7 +458,16 @@ export class PromptBuilder {
         try {
           const ctx = resolveProjectContext({ cwd: this.config.cwd, registry: this.contextRegistry });
           if (ctx.text) {
-            systemPrompt += '\n\n# Workspace Context\n\n' + ctx.text;
+            const workspaceBlock = '# Workspace Context\n\n' + ctx.text;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'workspace-context',
+              ctx.sources.length > 0
+                ? `project instruction files: ${ctx.sources.map(source => source.relPath).join(', ')}`
+                : 'project instruction files',
+              workspaceBlock,
+              150,
+            );
             logger.debug(`Loaded project context from ${ctx.sources.length} file(s)`, {
               sources: ctx.sources.map((s) => s.relPath),
               chars: ctx.bytes,
@@ -409,7 +484,13 @@ export class PromptBuilder {
           const { BootstrapLoader } = await import('../context/bootstrap-loader.js');
           const bootstrap = await new BootstrapLoader().load(this.config.cwd);
           if (bootstrap.content) {
-            systemPrompt += '\n\n' + bootstrap.content;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'bootstrap',
+              'SOUL.md / USER.md / PROJECT_KNOWLEDGE.md',
+              bootstrap.content,
+              160,
+            );
             logger.debug(`Loaded bootstrap/soul context from ${bootstrap.sources.length} file(s)`);
           }
         } catch (err) {
@@ -423,7 +504,13 @@ export class PromptBuilder {
           const { getPersonaManager } = await import('../personas/persona-manager.js');
           const personaBlock = getPersonaManager().buildSystemPrompt();
           if (personaBlock) {
-            systemPrompt += `\n\n<persona>\n${personaBlock}\n</persona>`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'persona',
+              'src/personas/persona-manager.ts',
+              `<persona>\n${personaBlock}\n</persona>`,
+              170,
+            );
             logger.debug('Injected active persona into system prompt');
           }
         } catch { /* personas module optional */ }
@@ -439,7 +526,13 @@ export class PromptBuilder {
           }
           const knowledgeBlock = km.buildContextBlock();
           if (knowledgeBlock) {
-            systemPrompt += `\n\n<knowledge>\n${knowledgeBlock}\n</knowledge>`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'knowledge',
+              '.codebuddy/knowledge + src/knowledge/knowledge-manager.ts',
+              `<knowledge>\n${knowledgeBlock}\n</knowledge>`,
+              180,
+            );
             logger.debug('Injected knowledge base into system prompt');
           }
         } catch { /* knowledge module optional */ }
@@ -455,7 +548,13 @@ export class PromptBuilder {
           }
           const architectureSummary = docsProvider.getArchitectureSummary();
           if (architectureSummary) {
-            systemPrompt += `\n\n<project_docs>\n${architectureSummary}\n</project_docs>`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'project-docs',
+              '.codebuddy/docs + src/docs/docs-context-provider.ts',
+              `<project_docs>\n${architectureSummary}\n</project_docs>`,
+              190,
+            );
           }
         } catch { /* docs context module optional */ }
       }
@@ -470,7 +569,13 @@ export class PromptBuilder {
           }
           const rulesBlock = rulesLoader.buildContextBlock();
           if (rulesBlock) {
-            systemPrompt += `\n\n<rules>\n${rulesBlock}\n</rules>`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'rules',
+              '.codebuddy/rules + src/rules/rules-loader.ts',
+              `<rules>\n${rulesBlock}\n</rules>`,
+              200,
+            );
             logger.debug('Injected modular rules into system prompt');
           }
         } catch { /* rules module optional */ }
@@ -499,8 +604,8 @@ export class PromptBuilder {
                 `approximate and suggest re-running \`code-explorer analyze --incremental\` if they look wrong.`;
             }
           } catch { /* freshness best-effort */ }
-          systemPrompt +=
-            `\n\n<code_explorer_priority>\n` +
+          const codeExplorerBlock =
+            `<code_explorer_priority>\n` +
             `Code Explorer is connected. For ANY question about code relationships — ` +
             `callers/callees, blast radius / impact ("what breaks if I change X"), dead code, cycles, ` +
             `coupling, complexity — PREFER its MCP tools (\`${p}impact\`, ` +
@@ -514,6 +619,13 @@ export class PromptBuilder {
             `Use the built-in \`code_graph\`/\`codebase_map\` only as a fallback if it errors.` +
             staleNote +
             `\n</code_explorer_priority>`;
+          systemPrompt = this.appendPromptBlock(
+            systemPrompt,
+            'code-explorer',
+            'src/codebuddy/tools.ts + Code Explorer MCP',
+            codeExplorerBlock,
+            210,
+          );
           logger.debug('Injected Code Explorer priority directive');
         }
       } catch { /* tools module optional */ }
@@ -525,7 +637,13 @@ export class PromptBuilder {
           const skillManager = getSkillManager();
           const skillBlock = skillManager.getSkillPromptEnhancement();
           if (skillBlock) {
-            systemPrompt += `\n\n${skillBlock}`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'skills',
+              'src/skills/skill-manager.ts + active skills',
+              skillBlock,
+              220,
+            );
             logger.debug('Injected active skill enhancement into system prompt');
           }
         } catch { /* skills module optional */ }
@@ -541,7 +659,16 @@ export class PromptBuilder {
             await identityMgr.load(this.config.cwd);
             const identityBlock = identityMgr.getPromptInjection();
             if (identityBlock) {
-              systemPrompt += `\n\n<identity>\n${identityBlock}\n</identity>`;
+              const identityFiles = typeof identityMgr.getAll === 'function' ? identityMgr.getAll() : [];
+              systemPrompt = this.appendPromptBlock(
+                systemPrompt,
+                'identity',
+                identityFiles.length > 0
+                  ? `identity files: ${identityFiles.map(file => `${file.source}:${file.name}`).join(', ')}`
+                  : 'identity files',
+                `<identity>\n${identityBlock}\n</identity>`,
+                230,
+              );
               logger.debug('Injected identity into system prompt');
             }
           }
@@ -559,8 +686,8 @@ export class PromptBuilder {
             const {
               FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT,
             } = await import('../fleet/dispatch-profile.js');
-            systemPrompt +=
-              `\n\n<fleet>Connected fleet peers: ${peerCount}. ` +
+            const fleetBlock =
+              `<fleet>Connected fleet peers: ${peerCount}. ` +
               `Use route_peer to choose the best peer/model for a task, ` +
               `pass dispatchProfile when the task has a clear posture ` +
               `(research, code, review, safe, or balanced), ` +
@@ -577,6 +704,13 @@ export class PromptBuilder {
               `into your context. Useful for delegating heavy compute, asking a ` +
               `peer with different domain knowledge, or coordinating across ` +
               `hosts.</fleet>`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'fleet',
+              'src/fleet + fleet tools',
+              fleetBlock,
+              240,
+            );
             logger.debug(`Injected fleet nudge into system prompt (${peerCount} peer(s))`);
           }
         } catch { /* fleet registry optional — module not loaded yet */ }
@@ -599,7 +733,7 @@ export class PromptBuilder {
         const closingMemoryInstruction = memoryProposeToolAllowed
           ? 'Prefer `memory_propose` over `remember` when the fact came from your interpretation rather than an explicit user instruction.'
           : 'Only call `remember` when the fact came from an explicit user instruction or correction.';
-        systemPrompt += `\n\n<auto_memory_directive>
+        const autoMemoryBlock = `<auto_memory_directive>
 You have a persistent memory system at .codebuddy/CODEBUDDY_MEMORY.md (project-scoped) and ~/.codebuddy/memory.md (user-scoped, all projects).
 ${memoryWriteInstruction}
 
@@ -626,6 +760,7 @@ Format:
 
 ${closingMemoryInstruction}
 </auto_memory_directive>`;
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'auto-memory-directive', 'memory tools', autoMemoryBlock, 250);
         logger.debug('Injected auto-memory directive into system prompt');
       }
 
@@ -636,7 +771,7 @@ ${closingMemoryInstruction}
       // because no system directive told it WHEN. This block fixes that
       // (mirror of the auto-memory directive above).
       if (this.config.memoryEnabled && this.persistentMemory && gates.includeLessonsDirective) {
-        systemPrompt += `\n\n<lessons_directive>
+        const lessonsBlock = `<lessons_directive>
 Code Buddy maintains a self-improvement loop via the \`lessons_add\`, \`lessons_search\`, and \`lessons_graph\` tools (Manus AI-inspired pattern). Lessons persist to .codebuddy/lessons.md (project-scoped) and ~/.codebuddy/lessons.md (global, all projects). They differ from \`remember\` by capturing actionable patterns rather than facts.
 
 Four categories — pick the right one:
@@ -670,6 +805,7 @@ What NOT to add:
 
 Lessons complement \`remember\`: \`remember\` stores facts (preferences, decisions); \`lessons_add\` stores actionable patterns and rules. Use whichever fits — both persist across sessions.
 </lessons_directive>`;
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'lessons-directive', 'memory tools', lessonsBlock, 260);
         logger.debug('Injected lessons directive into system prompt');
       }
 
@@ -678,13 +814,19 @@ Lessons complement \`remember\`: \`remember\` stores facts (preferences, decisio
       if (gates.includeIdentity && gates.includeExecutionDiscipline) {
         try {
           const { buildSelfKnowledgeBlock } = await import('../agent/self-improvement/self-knowledge.js');
-          systemPrompt += `\n\n<self_knowledge>\n${buildSelfKnowledgeBlock()}\n</self_knowledge>`;
+          systemPrompt = this.appendPromptBlock(
+            systemPrompt,
+            'self-knowledge',
+            'src/agent/self-improvement/self-knowledge.ts',
+            `<self_knowledge>\n${buildSelfKnowledgeBlock()}\n</self_knowledge>`,
+            270,
+          );
           logger.debug('Injected self-knowledge block into system prompt');
         } catch { /* extension module optional */ }
       }
 
       if (this.config.memoryEnabled && gates.includeUserModelDirective) {
-        systemPrompt += `\n\n<user_model_directive>
+        const userModelBlock = `<user_model_directive>
 You have a persistent user model that builds a deepening profile of who you are, your traits, preferences, expertise, and working style.
 
 When you learn something about the user that is stable across sessions (such as preferred libraries, styling choices, expertise level, or working style), you MUST use the \`user_model_observe\` tool to propose a structured observation.
@@ -702,6 +844,7 @@ Important Constraints:
 
 Use the \`user_model_observe\` tool proactively when you learn a stable coding preference or trait.
 </user_model_directive>`;
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'user-model-directive', 'memory tools', userModelBlock, 280);
         logger.debug('Injected user model directive into system prompt');
       }
 
@@ -716,7 +859,7 @@ Use the \`user_model_observe\` tool proactively when you learn a stable coding p
       //
       // Always-on (no `memoryEnabled` gate) — output discipline is
       // universally useful, even for sessions with no persistent memory.
-      systemPrompt += `\n\n<writing_rules>
+      const writingRulesBlock = `<writing_rules>
 Output formatting discipline:
 
 - Never emit model control tokens in your output: no \`<|im_start|>\`, \`<|im_end|>\`, \`<think>\`, \`<reasoning>\`, \`[INST]\`, \`<<SYS>>\`, GLM-5 full-width brackets, or any \`<|…|>\` variant. The runtime strips these as a safety net but the cost is wasted tokens.
@@ -736,6 +879,7 @@ Output formatting discipline:
 - File references: use \`path/to/file.ts:42\` format so the user can navigate by click.
 - When uncertain about facts, say "I don't know" rather than fabricating. When uncertain about correctness of code, mark it as untested.
 </writing_rules>`;
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'writing-rules', 'style', writingRulesBlock, 300);
         logger.debug('Injected writing_rules directive into system prompt');
       }
 
@@ -759,7 +903,13 @@ Output formatting discipline:
             this.codingStyleCache = { cwd: this.config.cwd, styleBlock, analyzedAt: now };
           }
           if (styleBlock) {
-            systemPrompt += `\n\n${styleBlock}`;
+            systemPrompt = this.appendPromptBlock(
+              systemPrompt,
+              'coding-style',
+              'src/memory/coding-style-analyzer.ts',
+              styleBlock,
+              310,
+            );
             logger.debug('Injected coding style conventions into system prompt');
           }
         } catch { /* coding-style module optional */ }
@@ -769,9 +919,16 @@ Output formatting discipline:
       if (gates.includeWorkflowRules) {
         try {
           const { getWorkflowRulesBlock } = await import('../prompts/workflow-rules.js');
-          systemPrompt += '\n\n' + getWorkflowRulesBlock({
-            isToolAvailable: toolName => isToolNameAllowed(toolName, activeToolFilter),
-          });
+          const workflowRulesBlock = getWorkflowRulesBlock({
+              isToolAvailable: toolName => isToolNameAllowed(toolName, activeToolFilter),
+            });
+          systemPrompt = this.appendPromptBlock(
+            systemPrompt,
+            'workflow-rules',
+            'src/prompts/workflow-rules.ts',
+            workflowRulesBlock,
+            320,
+          );
           logger.debug('Injected workflow orchestration rules into system prompt');
         } catch (err) {
           logger.warn('Failed to inject workflow rules', { error: getErrorMessage(err) });
@@ -801,7 +958,13 @@ Output formatting discipline:
 
       const activeToolFilterDirective = buildActiveToolFilterDirective(activeToolFilter);
       if (activeToolFilterDirective) {
-        systemPrompt += '\n\n' + activeToolFilterDirective;
+        systemPrompt = this.appendPromptBlock(
+          systemPrompt,
+          'active-tool-filter',
+          'tool schema/filter',
+          activeToolFilterDirective,
+          330,
+        );
         logger.debug('Injected active tool filter directive into system prompt', {
           enabledPatterns: activeToolFilter.enabledPatterns,
           disabledPatterns: activeToolFilter.disabledPatterns,
