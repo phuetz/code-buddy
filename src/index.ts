@@ -1058,11 +1058,12 @@ async function processPromptHeadless(
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
     // Evolved execution strategy (opt-in CODEBUDDY_SELF_IMPROVE_STRATEGIES): fills only what
     // the user left unset — an explicit --max-tool-rounds always wins. Off ⇒ empty overlay.
-    const { resolveStrategyOverlay } = await import('./agent/self-improvement/strategy-runtime.js');
+    const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
     const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
     if (strategy.strategyId && strategy.strategyId !== 'baseline') {
+      const cost = applyStrategyCostCap(strategy);
       logger.info(
-        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
+        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
       );
     }
     agent = new CodeBuddyAgent(
