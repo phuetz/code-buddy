@@ -81,18 +81,21 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 5. **Middleware pipeline** — `src/agent/middleware/` has composable before/after hooks. **Priorities matter:**
 
    | Middleware | Priority | Purpose |
-   | --------------------------- | -------- | ---------------------------------------------------------------------------- |
+   | --------------------------------- | -------- | ---------------------------------------------------------------------------- |
    | `TurnLimitMiddleware` | 10 | Enforce max turns per session |
    | `CostLimitMiddleware` | 20 | Enforce session cost budget |
    | `ContextWarningMiddleware` | 30 | Warn when nearing context limits |
    | `SessionDurationMiddleware` | 35 | Suggest a clean pause + snapshot past `CODEBUDDY_SESSION_PAUSE_HOURS` (12 h) |
    | `ReasoningMiddleware` | 42 | Auto-detect complex queries, inject `<reasoning_guidance>` |
    | `WorkflowGuardMiddleware` | 45 | Suggest plan init for complex first messages |
-   | `AutoObservationMiddleware` | 50 | Capture auto-observations (registered separately, ~line 1503) |
+   | `AutoObservationMiddleware` | 50 | Capture auto-observations (registered separately in `enableAutoObservation()`, line 1985) |
    | `AutoRepairMiddleware` | 150 | Detect errors, invoke fault localizer, suggest repairs |
-   | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian and SecurityReview agents |
+   | `VerificationEnforcementMiddleware` | 155 | After ≥3 file changes with no verify/test, nudge once to verify before finishing |
+   | `VisualValidationMiddleware` | 156 | Suggest a screenshot check for saved Office documents (Win32) |
+   | `PlanCompletionAuditMiddleware` | 157 | Nudge once to audit open `PLAN.md` items before concluding |
+   | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian/SecurityReview via `ThreadTaskRunner`/`ThreadDelegation` (`src/agent/delegation/`) |
 
-   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. `VerificationEnforcementMiddleware` (155) **is** wired (`codebuddy-agent.ts:~393`) — it nudges "verify before finishing" once per task (its `hasWarned` latch, and every middleware's per-task counters, are cleared by `MiddlewarePipeline.resetForNewTask()` at the start of each turn). The table plus the separately-registered `AutoObservationMiddleware` is now the exhaustive wired set. Two unwired factory scaffolds — `LearningFirstMiddleware` and `ToolFilterMiddleware` — were **removed 2026-07-04 as redundant**: correction/lesson capture is already covered by `memory-consolidation.ts` (same `MEMORY_SIGNALS` lineage) + the self-improvement lessons path, and tool gating/failure handling by `OperatingModeManager` plan-mode enforcement + `AutoRepairMiddleware`.
+   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. `VerificationEnforcementMiddleware` (155) **is** wired (`codebuddy-agent.ts:441`) — it nudges "verify before finishing" once per task (its `hasWarned` latch, and every middleware's per-task counters, are cleared by `MiddlewarePipeline.resetForNewTask()` at the start of each turn). The table above (12 entries) is the exhaustive wired set; `AutoObservationMiddleware` (50) is the one registered outside the main constructor block (in `enableAutoObservation()`, called for computer-use custom agents). Two unwired factory scaffolds — `LearningFirstMiddleware` and `ToolFilterMiddleware` — were **removed 2026-07-04 as redundant**: correction/lesson capture is already covered by `memory-consolidation.ts` (same `MEMORY_SIGNALS` lineage) + the self-improvement lessons path, and tool gating/failure handling by `OperatingModeManager` plan-mode enforcement + `AutoRepairMiddleware`.
 6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags → Guardian Agent.
 7. **Per-turn context injection** — Each LLM turn appends `<lessons_context>` (before) and `<todo_context>` (after). Must be applied in both agent-executor paths.
 8. **Pluggable ContextEngine** — Plugins can register a custom context pipeline via `PluginContext.registerContextEngine()`. If `ownsCompaction` is set, built-in auto-compact is skipped. Trust check blocks non-trusted plugins from owning compaction.
