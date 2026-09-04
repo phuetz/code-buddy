@@ -46,6 +46,8 @@
 #   spark  codex gpt-5.3-codex-spark    — quota Codex-Spark SÉPARÉ du général (à préférer
 #                                         quand le général est bas)
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
+#   vibe   Mistral Vibe (agent officiel) — ABONNEMENT Pro (login `vibe --setup`), $0 marginal
+#   mistral API Mistral pay-as-you-go via Code Buddy headless — clé media.env, plafond --max-price
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
 #
 # Aucun de ces moteurs ne touche au forfait Claude : c'est tout l'objet.
@@ -190,6 +192,24 @@ case "$MOTEUR" in
        --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
+  mistral)
+    # API Mistral pay-as-you-go (clé de ~/.codebuddy/media.env) via Code Buddy headless. Le catalogue
+    # /v1/models de Mistral déclare 32k pour les Medium (bouchon) : CODEBUDDY_MAX_CONTEXT force 128k.
+    MKEY=$(grep -E "^(export )?MISTRAL_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$MKEY" ] || { echo "MISTRAL_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=mistral MISTRAL_API_KEY="$MKEY" CODEBUDDY_MAX_CONTEXT="${CB_MAX_CONTEXT:-128000}" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MISTRAL_MODELE:-mistral-medium-latest}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-3}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  vibe)
+    # Mistral Vibe (agent officiel de Mistral) sur l'ABONNEMENT Pro : clé de plan obtenue par
+    # `vibe --setup` (login navigateur, keyring), quota « all-day coding » — pas de facturation API.
+    # Entrée fermée + --trust, sinon le prompt de confiance du dossier bloque en headless (04/09/2026).
+    command -v vibe >/dev/null || export PATH="$HOME/.local/bin:$PATH"
+    (cd "$DEPOT" && vibe --trust --workdir "$DEPOT" --auto-approve --output "${VIBE_OUTPUT:-text}" \
+       --max-turns "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-5}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
+    ;;
   openrouter)
     # OpenRouter, modèles `:free` — 1000 requêtes/jour gratuites dès que le compte porte > 10 $
     # de crédit (c'est le cas, deux clés). 17 modèles gratuits acceptent les appels d'outils au
