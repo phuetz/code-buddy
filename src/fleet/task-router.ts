@@ -158,8 +158,13 @@ export class TaskRouter {
     constraints: DispatchConstraints = {},
   ): DispatchPlan {
     const dispatchProfile = normalizeDispatchProfile(constraints.dispatchProfile);
+    const taskType = constraints.taskType ?? classification.taskType;
+    const routedClassification =
+      taskType === classification.taskType
+        ? classification
+        : { ...classification, taskType };
     const requiredStrengths = inferRequiredStrengths(
-      classification,
+      routedClassification,
       dispatchProfile,
     );
     const roleHint = constraints.requiredRole ?? roleHintFromDispatchProfile(dispatchProfile);
@@ -295,7 +300,7 @@ export class TaskRouter {
         primary,
         fallback,
         requiredStrengths,
-        classification,
+        routedClassification,
         dispatchProfile,
         roleHint,
       ),
@@ -455,6 +460,23 @@ function inferRequiredStrengths(
   dispatchProfile: FleetDispatchProfile = 'balanced',
 ): ModelStrength[] {
   const set: Set<ModelStrength> = new Set();
+  switch (c.taskType) {
+    case 'redaction-fr':
+    case 'relecture-typo':
+      set.add('french');
+      break;
+    case 'arbitrage-litteraire':
+    case 'jugement-litteraire':
+      set.add('french');
+      set.add('reasoning');
+      break;
+    case 'audit-adversarial':
+      set.add('code');
+      set.add('reasoning');
+      break;
+    default:
+      break;
+  }
   if (c.requiresVision) set.add('vision');
   if (c.requiresReasoning || c.complexity === 'reasoning_heavy') {
     set.add('reasoning');

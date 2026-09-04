@@ -67,7 +67,12 @@ const router = new TaskRouter();
 describe('TaskRouter — basic plan', () => {
   it('accepts the shared literary task category on a classification', () => {
     const plan = router.plan(classify({ taskType: 'redaction-fr' }), [
-      peer('hub', { models: [model('writer', { provider: 'openai' })] }),
+      peer('hub', {
+        models: [
+          model('generic', { provider: 'openai' }),
+          model('writer', { provider: 'mistral', strengths: ['french'] }),
+        ],
+      }),
     ], { taskType: 'redaction-fr' });
     expect(plan.primary.model).toBe('writer');
     expect(plan.rationale).toContain('redaction-fr');
