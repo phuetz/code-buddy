@@ -47,6 +47,13 @@ describe('checkAstNovelty', () => {
     expect(result.isNovel).toBe(true);
     expect(result.diffNodesCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('does not mistake moving an import across executable code for import reordering', () => {
+    const parent = `import { a } from 'a';\nexport const answer = 42;\nimport { b } from 'b';`;
+    const mutated = `import { a } from 'a';\nimport { b } from 'b';\nexport const answer = 42;`;
+
+    expect(checkAstNovelty(mutated, parent).isNovel).toBe(true);
+  });
 });
 
 describe('G0 in the evolution engine', () => {

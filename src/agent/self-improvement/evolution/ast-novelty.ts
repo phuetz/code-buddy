@@ -31,7 +31,8 @@ function orderedStatements(statements: readonly ts.Statement[]): ts.Statement[] 
   const imports = statements.filter(isImportStatement);
   const rest = statements.filter((statement) => !isImportStatement(statement));
   imports.sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)));
-  return [...imports, ...rest];
+  let importIndex = 0;
+  return statements.map((statement) => (isImportStatement(statement) ? imports[importIndex++]! : rest.shift()!));
 }
 
 function childNodes(node: ts.Node): ts.Node[] {

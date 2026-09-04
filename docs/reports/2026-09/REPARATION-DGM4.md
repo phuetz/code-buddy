@@ -39,7 +39,11 @@ moteur choisit le mode pénalisé par défaut.
 Rouge : `selectParentWithPenalty` et sa méthode de store étaient absents ; 2 tests R2 échouaient.
 Vert : évolution ciblée = 15 fichiers / 111 tests, dont la rotation déterministe sur 100 tirages.
 
-Commit R2 : à compléter après la vérification finale du lot.
+Commit R2 : `7552f7489`.
+
+Contre-épreuve R1 : le tri des imports est limité aux emplacements d’import existants ; une
+réorganisation d’un import autour d’une instruction exécutable reste donc une nouveauté AST.
+Correctif séparé : à compléter après vérification.
 
 ## Preuves
 
