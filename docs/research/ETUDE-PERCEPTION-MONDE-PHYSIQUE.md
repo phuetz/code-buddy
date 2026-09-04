@@ -21,7 +21,7 @@ Et il existe déjà, **dans le code de Code Buddy**, la couture (« seam ») nom
 
 ```
         CODE                          MONDE PHYSIQUE
-   Code Explorer (gitnexus)      buddy-sense / buddy-vision (capteurs)
+   Code Explorer                 buddy-sense / buddy-vision (capteurs)
           │                                │
           ▼                                ▼
    graphe de code            world model JEPA (prédiction latente)
