@@ -19,6 +19,8 @@
 // Mock fs-extra
 
 import { EventEmitter } from 'events';
+import nodePath from 'path';
+import nodeOs from 'os';
 
 const {
   mockEnsureDir, mockPathExists, mockReadJSON, mockWriteJSON,
@@ -571,13 +573,31 @@ describe('EnhancedMemory', () => {
 
   describe('Memory Persistence', () => {
     it('should save memories to JSON file', async () => {
-      await memory.store({ type: 'fact', content: 'Persistent memory' });
+      const entry = await memory.store({ type: 'fact', content: 'Persistent memory' });
 
-      expect(mockWriteJSON).toHaveBeenCalled();
-      const calls = mockWriteJSON.mock.calls;
-      expect(calls.some((call: unknown[]) =>
-        (call[0] as string).includes('memory-index.json')
-      )).toBe(true);
+      // VERIF3 T20 : persister un index vide restait vert, seule la
+      // disparition de l'appel rougissait. Chemin, contenu et mode sont
+      // désormais assertés.
+      const indexPath = nodePath.join(
+        nodeOs.homedir(),
+        '.codebuddy',
+        'memory',
+        'memory-index.json'
+      );
+      const indexCalls = mockWriteJSON.mock.calls.filter(
+        (call: unknown[]) => call[0] === indexPath
+      );
+      expect(indexCalls.length).toBeGreaterThan(0);
+
+      const [, persisted, options] = indexCalls[indexCalls.length - 1]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Array.isArray(persisted)).toBe(true);
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0]).toMatchObject({
+        id: entry.id,
+        type: 'fact',
+        content: 'Persistent memory',
+      });
     });
 
     it('should save user profile when updated', async () => {
