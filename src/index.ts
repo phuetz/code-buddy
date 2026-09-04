@@ -1056,7 +1056,25 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    agent = new CodeBuddyAgent(apiKey, baseURL, modelToUse, maxToolRounds);
+    // Evolved execution strategy (opt-in CODEBUDDY_SELF_IMPROVE_STRATEGIES): fills only what
+    // the user left unset — an explicit --max-tool-rounds always wins. Off ⇒ empty overlay.
+    const { resolveStrategyOverlay } = await import('./agent/self-improvement/strategy-runtime.js');
+    const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
+    if (strategy.strategyId && strategy.strategyId !== 'baseline') {
+      logger.info(
+        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
+      );
+    }
+    agent = new CodeBuddyAgent(
+      apiKey,
+      baseURL,
+      modelToUse,
+      maxToolRounds ?? strategy.maxToolRounds,
+      true,
+      undefined,
+      undefined,
+      strategy.systemPromptAppend,
+    );
     await applyActiveLlmFailover(agent);
 
     // A headless prompt is a real session unless --ephemeral was selected.
