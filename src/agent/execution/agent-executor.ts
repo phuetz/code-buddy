@@ -512,6 +512,17 @@ export interface ExecutorConfig {
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
   recordSessionCost: (input: number, output: number) => void;
+  /**
+   * Optional: publishes the counters the PROVIDER reported for the turn, summed
+   * over every round. Called exactly once per turn — with `undefined` when no
+   * round carried a real `usage` block, so the previous turn's measurement can
+   * never be replayed as if it belonged to this one. Never a local estimate:
+   * the consumer (the OpenAI-compatible HTTP route) must be able to tell a
+   * measured number from a guessed one.
+   */
+  recordTurnProviderUsage?: (
+    usage: { promptTokens: number; completionTokens: number } | undefined,
+  ) => void;
   /** Returns true if session cost limit has been reached */
   isSessionCostLimitReached: () => boolean;
   /** Estimate whether cost limit would be reached after recording given tokens (no side effects) */
@@ -1307,6 +1318,9 @@ export class AgentExecutor {
     let toolRounds = 0;
     let totalOutputTokens = 0;
     let totalInputTokensForCost = 0;
+    let providerPromptTokens = 0;
+    let providerCompletionTokens = 0;
+    let providerUsageSeen = false;
     let sessionCostRecorded = false;
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
@@ -1315,6 +1329,15 @@ export class AgentExecutor {
         this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
+      }
+      try {
+        this.config.recordTurnProviderUsage?.(
+          providerUsageSeen
+            ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+            : undefined,
+        );
+      } catch (error) {
+        logger.warn('Failed to record provider turn usage', { error: getErrorMessage(error) });
       }
     };
 
@@ -1804,6 +1827,15 @@ export class AgentExecutor {
 
         const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
         totalOutputTokens += currentOutputTokens;
+
+        // Sum the provider's own counters across rounds: one HTTP completion can
+        // cost several provider calls, exactly like the cost accounting above.
+        const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
+        if (roundProviderUsage) {
+          providerUsageSeen = true;
+          providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
+          providerCompletionTokens += roundProviderUsage.completionTokens ?? 0;
+        }
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (steeringRequestedDuringText && !hasToolCalls) {

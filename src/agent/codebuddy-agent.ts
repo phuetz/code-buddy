@@ -79,6 +79,13 @@ export class CodeBuddyAgent extends BaseAgent {
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
 
+  /**
+   * Counters the provider reported for the most recent completed turn, summed
+   * over its rounds. `null` when the provider reported none — the caller must
+   * then say so rather than pass an estimate off as a measurement.
+   */
+  private lastTurnProviderUsage: { promptTokens: number; completionTokens: number } | null = null;
+
   private toolSelectionStrategy: ToolSelectionStrategy;
 
   /** Optional peer routing config applied from channel route resolution */
@@ -351,6 +358,9 @@ export class CodeBuddyAgent extends BaseAgent {
       maxToolRounds: this.maxToolRounds,
       isGrokModel: this.isGrokModel.bind(this),
       recordSessionCost: this.recordSessionCost.bind(this),
+      recordTurnProviderUsage: (usage) => {
+        this.lastTurnProviderUsage = usage ? { ...usage } : null;
+      },
       isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
       estimateSessionCostLimitReached: this.estimateSessionCostLimitReached.bind(this),
       getSessionCost: this.getSessionCost.bind(this),
@@ -1645,6 +1655,15 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   getCurrentModel(): string {
     return this.codebuddyClient.getCurrentModel();
+  }
+
+  /**
+   * Token counters as reported by the PROVIDER for the last completed turn.
+   * Returns `undefined` when the provider reported none, so a consumer never
+   * mistakes an estimate for a measurement.
+   */
+  getLastTurnUsage(): { promptTokens: number; completionTokens: number } | undefined {
+    return this.lastTurnProviderUsage ? { ...this.lastTurnProviderUsage } : undefined;
   }
 
   override saveCurrentSession(): Promise<void> | void {

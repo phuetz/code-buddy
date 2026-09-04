@@ -14,6 +14,7 @@ import {
   runAgentCompletion,
   streamAgentDeltas,
   type ServerAgent,
+  type ServerTurnUsage,
 } from '../agent-adapter.js';
 import {
   buildHttpRequestSessionKey,
@@ -22,6 +23,51 @@ import {
 
 function requestSessionKey(req: Request, sessionId: unknown): string {
   return buildHttpRequestSessionKey(req, sessionId);
+}
+
+/** OpenAI-shaped usage block, with the estimation flagged as such. */
+interface OpenAIUsageBlock {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  /** Present and true ONLY when the numbers are our own estimate. */
+  estimated?: true;
+}
+
+/** Crude fallback tokenizer — 4 characters per token, the historical estimate. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Builds the `usage` block of an OpenAI-compatible response.
+ *
+ * The provider's own counters win whenever it reported any: the pre-SERV2 route
+ * always answered `length / 4` over the user text alone, which silently ignored
+ * the system prompt and the tool rounds and could be three orders of magnitude
+ * short. When the provider stays silent the estimate remains — but it says so,
+ * so a client that bills or budgets on this field is never misled.
+ */
+function buildOpenAIUsage(
+  usage: ServerTurnUsage | undefined,
+  promptText: string,
+  completionText: string,
+): OpenAIUsageBlock {
+  if (usage) {
+    return {
+      prompt_tokens: usage.promptTokens,
+      completion_tokens: usage.completionTokens,
+      total_tokens: usage.promptTokens + usage.completionTokens,
+    };
+  }
+  const promptTokens = estimateTokens(promptText);
+  const completionTokens = estimateTokens(completionText);
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+    estimated: true,
+  };
 }
 
 const router = Router();
@@ -568,10 +614,8 @@ async function handleOpenAIStreamingChat(
       connection.throwIfDisconnected();
       modelName = body.model || agent.getCurrentModel();
 
-      // Estimate prompt tokens from input messages
       const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
-      const promptTokens = Math.ceil(promptText.length / 4);
-      let completionTokens = 0;
+      let completionText = '';
 
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) {
@@ -585,7 +629,7 @@ async function handleOpenAIStreamingChat(
       );
 
       await connection.consume(stream, (delta) => {
-        completionTokens += Math.ceil(delta.length / 4);
+        completionText += delta;
 
         const openaiChunk = {
           id: requestId,
@@ -621,11 +665,7 @@ async function handleOpenAIStreamingChat(
               finish_reason: 'stop',
             },
           ],
-          usage: {
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            total_tokens: promptTokens + completionTokens,
-          },
+          usage: buildOpenAIUsage(agent.getLastTurnUsage?.(), promptText, completionText),
         };
 
         res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
@@ -740,10 +780,9 @@ router.post(
         return;
       }
 
-      // Estimate token counts when the provider doesn't return them
+      // Real provider counters when it gave any; a FLAGGED estimate otherwise.
       const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
-      const estimatedCompletionTokens = Math.ceil(completionText.length / 4);
+      const usage = buildOpenAIUsage(result.usage, promptText, completionText);
 
       // Return OpenAI-compatible response
       const response = {
@@ -761,11 +800,7 @@ router.post(
             finish_reason: result.finishReason || 'stop',
           },
         ],
-        usage: {
-          prompt_tokens: estimatedPromptTokens,
-          completion_tokens: estimatedCompletionTokens,
-          total_tokens: estimatedPromptTokens + estimatedCompletionTokens,
-        },
+        usage,
       };
 
       res.json(response);

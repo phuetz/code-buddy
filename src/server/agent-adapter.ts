@@ -30,6 +30,15 @@ export interface ServerConversationState {
   workingDirectory: string;
 }
 
+/**
+ * Token counters MEASURED by the provider for one completed turn. Absent when
+ * the provider reported none — the caller then has to label its own estimate.
+ */
+export interface ServerTurnUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface ServerAgent {
   processUserMessage(message: string, options?: { surface?: string }): Promise<ChatEntry[]>;
   processUserMessageStream(
@@ -38,6 +47,8 @@ export interface ServerAgent {
   ): AsyncIterable<StreamingChunk>;
   getChatHistory(): ChatEntry[];
   getCurrentModel(): string;
+  /** Provider-reported counters for the last completed turn, when it gave any. */
+  getLastTurnUsage?(): ServerTurnUsage | undefined;
   setModel(model: string): void;
   setRecoverySessionId?(sessionId: string | undefined): void;
   addToHistory?(message: { role: 'user' | 'assistant' | 'system'; content: string }): void;
@@ -56,6 +67,8 @@ export interface ServerAgent {
 export interface ServerAgentCompletion {
   content: string;
   finishReason: string;
+  /** Present only when the provider itself reported the counters. */
+  usage?: ServerTurnUsage;
   toolCalls?: Array<{
     name: string;
     id: string;
@@ -220,9 +233,12 @@ export async function runAgentCompletion(
         .map((entry) => entry.toolResult?.data)
         .find((value) => value !== undefined);
 
+    const usage = agent.getLastTurnUsage?.();
+
     return {
       content,
       finishReason: 'stop',
+      ...(usage ? { usage } : {}),
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       ...(data !== undefined ? { data } : {}),
       ...(published.widgetHtml ? { widgetHtml: published.widgetHtml } : {}),
