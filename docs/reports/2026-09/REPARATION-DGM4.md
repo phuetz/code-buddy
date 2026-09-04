@@ -43,7 +43,19 @@ Commit R2 : `7552f7489`.
 
 Contre-épreuve R1 : le tri des imports est limité aux emplacements d’import existants ; une
 réorganisation d’un import autour d’une instruction exécutable reste donc une nouveauté AST.
-Correctif séparé : à compléter après vérification.
+Correctif séparé : `9e20204c7`.
+
+## Scénario d’intégration hors réseau
+
+Le test `ast-novelty.test.ts` crée un dépôt et un store d’archive temporaires sous `_qa/dgm4/`.
+L’archive contient trois variants de référence : deux sont AST-identiques au parent (commentaire,
+ordre des imports), le troisième change un littéral. Une mutation commentaire-only est rejetée avant
+le composant d’évaluation : 0 exécution du composant, `evaluationsAvoided = 1`. Le même store est
+ensuite tiré 100 fois avec un générateur déterministe ; plusieurs parents sont sélectionnés et les
+`childrenCount` sont persistés. Aucun provider, service ou évolution réelle n’est utilisé.
+
+Preuve : `npx vitest run tests/agent/self-improvement/evolution/ast-novelty.test.ts` = 1 fichier / 7
+tests verts ; suite complète self-improvement = 34 fichiers / 242 tests verts.
 
 ## Preuves
 

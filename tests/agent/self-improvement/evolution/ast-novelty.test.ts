@@ -9,6 +9,7 @@ import { validateToolProposal } from '../../../../src/agent/self-improvement/too
 import { LiveToolMutator } from '../../../../src/agent/self-improvement/tool-skill-mutator.js';
 import type { AuthoredToolSpec } from '../../../../src/agent/self-improvement/authored-tool-runtime.js';
 import type { ToolBenchmarkScenario } from '../../../../src/agent/self-improvement/tool-types.js';
+import type { VariantRecord } from '../../../../src/agent/self-improvement/evolution/code-variant-store.js';
 
 const QA_ROOT = join(process.cwd(), '_qa', 'dgm4');
 
@@ -133,6 +134,69 @@ describe('G0 in the evolution engine', () => {
     expect(evaluations).toBe(1);
     expect(result.rejectionReason).toBeUndefined();
     expect(result.report.passedAll).toBe(true);
+  });
+
+  it('proves one avoided evaluation and parent rotation in a three-variant archive scenario', async () => {
+    const parentSource = `import { a } from 'a';\nimport { b } from 'b';\nexport const answer = 42;`;
+    const archiveSources = [
+      `${parentSource}\n// comment-only variant`,
+      `import { b } from 'b';\nimport { a } from 'a';\nexport const answer = 42;`,
+      `import { a } from 'a';\nimport { b } from 'b';\nexport const answer = 43;`,
+    ];
+    expect(archiveSources.slice(0, 2).map((source) => checkAstNovelty(source, parentSource).isNovel)).toEqual([
+      false,
+      false,
+    ]);
+    expect(checkAstNovelty(archiveSources[2]!, parentSource).isNovel).toBe(true);
+
+    const store = new CodeVariantStore(join(dir, 'integration-variants.json'));
+    const archiveRecord = (id: string, score: number): VariantRecord => ({
+      id,
+      branch: `missing/${id}`,
+      sha: `sha-${id}`,
+      score,
+      passedAll: true,
+      regressions: [],
+      createdAt: `2026-09-04T00:00:0${id.slice(-1)}.000Z`,
+    });
+    store.record(archiveRecord('p1', 0.9));
+    store.record(archiveRecord('p2', 0.85));
+    store.record(archiveRecord('p3', 0.8));
+
+    let evaluations = 0;
+    const result = await runEvolutionCycle({
+      baselineRef: 'HEAD',
+      basePath: dir,
+      variantId: 'integration-comment-only',
+      weakness: { id: 'w', goal: 'prove the DGM4 gates', kind: 'manual' },
+      planner: async () => null,
+      store,
+      inspirationCount: 1,
+      parentSelectionRandom: () => 0.000001,
+      components: [
+        {
+          name: 'integration-evaluator',
+          weight: 1,
+          deterministic: true,
+          run: async () => {
+            evaluations++;
+            return { name: 'integration-evaluator', weight: 1, score: 1, passed: true, detail: 'unexpected run' };
+          },
+        },
+      ],
+      mutate: async ({ worktreeDir }) => {
+        writeFileSync(join(worktreeDir, 'feature.ts'), `${readFileSync(join(worktreeDir, 'feature.ts'), 'utf8')}\n// only trivia\n`);
+        return { changed: true };
+      },
+    });
+
+    const selectedParents: string[] = [];
+    for (let i = 0; i < 100; i++) selectedParents.push(store.selectParentWithPenalty(0.5, () => 0.4)!.id);
+    expect(store.list()).toHaveLength(3);
+    expect(evaluations).toBe(0);
+    expect(result.rejectionReason).toBe('ast-identical');
+    expect(store.getEvaluationStats().evaluationsAvoided).toBe(1);
+    expect(new Set(selectedParents).size).toBeGreaterThan(1);
   });
 });
 
