@@ -58,7 +58,7 @@ Commandes exécutées sur `main` avec le Node courant `v24.14.1` :
 
 ```text
 npm run typecheck
-exit 0 — tsc principal puis tsconfig.darkstar-identity.json, 0 erreur
+exit 0 — tsc principal puis tsconfig.<machine-gpu>-identity.json, 0 erreur
 
 npm run lint
 exit 0 — 0 erreur, 2 441 warnings ESLint (8 potentiellement corrigeables)
@@ -209,7 +209,7 @@ vert ; elle est donc déconseillée comme solution finale.
 
 ## 5. Vérifications et état de passation
 
-- `npm run typecheck` : exit 0, principal + Darkstar.
+- `npm run typecheck` : exit 0, principal + <machine-gpu>.
 - `npm run lint` : exit 0, 0 erreur, 2 441 warnings préexistants.
 - Vitest complet requis avec `HOME=~/DEV/cb-cimain1-2026-09-04/_qa/cimain1/home` : exécuté, exit 1, comptes consignés ci-dessus.
 - `CI=1` avec le même `HOME` : tentative interrompue sans résumé ; non comptée.
