@@ -113,13 +113,37 @@ leurs fenêtres ne divergent qu’au calcul du budget.
 
 ## 3. Troncature par priorité
 
-À compléter avec la priorité déclarée (sécurité > outils > style > exemples),
-la suppression de blocs entiers et le journal `WARN … blocs retirés : …`.
+La troncature assemble d’abord le ledger des blocs, puis applique les
+priorités déclarées dans `src/services/prompt-builder.ts` :
+
+`sécurité (10) > contexte workspace (20) > outils (30) > style (40) > contexte (50) > exemples (60)`.
+
+Elle trie par priorité, conserve les blocs qui tiennent dans le budget et
+reconstruit le prompt avec leurs séparateurs. Un bloc n’est jamais découpé.
+Le cas pathologique où un bloc de sécurité unique dépasse à lui seul le
+budget est traité en fail-safe : il est conservé intégralement et le journal
+signale `blocs retirés : aucun`, plutôt que de couper une phrase de sécurité.
+Le prompt réel ne rencontre pas ce cas : son bloc de base fait 8 175
+caractères, contre un budget minimal mesuré de 128 000 caractères ici.
+
+Le journal produit désormais par exemple :
+
+```text
+WARN System prompt truncated for <model>: <avant> chars → <après> (budget: <tokens> tokens, 32K hard cap); blocs retirés : identity, knowledge
+```
+
+La variation structurée est exécutée après la sélection budgétaire : elle peut
+réordonner ou reformuler ses sections entières, mais ne peut plus provoquer une
+coupe au milieu d’un bloc. Les tests couvrent la priorité sécurité > outils >
+style, l’absence de suffixe `...`, le journal et le cas de bloc atomique trop
+grand.
 
 ## Vérifications
 
 Point 1 : `npx tsc --noEmit -p .` = 0 ; `HOME=... npx vitest run tests/services/prompt-builder.test.ts` = 1 fichier, 42 tests verts. Le script de mesure produit le tableau ci-dessus sans réseau.
 Point 2 : `HOME=... npx vitest run tests/services/prompt-builder.test.ts tests/identity/identity-manager.test.ts` = 2 fichiers, 84 tests verts ; `npx tsc --noEmit -p .` = 0.
+Point 3 : `HOME=... npx vitest run tests/services/prompt-builder* tests/services/prompt*` = 4 fichiers, 58 tests verts ; le scénario Mistral vérifie le budget nominal et le journal atomique. Les tests des fichiers touchés (`prompt-builder.test.ts`, `prompt-builder-catalogue-budget.test.ts`, `identity-manager.test.ts`) = 3 fichiers, 86 tests verts.
+Qualité finale : `npx tsc --noEmit -p .` = 0 ; ESLint ciblé avec `--max-warnings=0` = 0 erreur / 0 avertissement ; `git diff --check` = 0.
 
 ## Bilan
 

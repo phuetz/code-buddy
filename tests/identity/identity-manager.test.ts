@@ -12,7 +12,6 @@ import {
   getIdentityManager,
   resetIdentityManager,
 } from '../../src/identity/identity-manager.js';
-import type { IdentityFile } from '../../src/identity/identity-manager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { watch } from 'fs';

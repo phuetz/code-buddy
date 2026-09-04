@@ -73,6 +73,69 @@ export interface PromptBlockMeasurement {
   sha256: string;
 }
 
+/** Lower values survive budget pressure first. Keep safety ahead of tools,
+ * tools ahead of style, and style ahead of examples/context. */
+export const PROMPT_PRIORITIES = {
+  security: 10,
+  workspace: 20,
+  tools: 30,
+  style: 40,
+  context: 50,
+  examples: 60,
+} as const;
+
+export interface PromptBlockForTruncation {
+  id: string;
+  content: string;
+  priority: number;
+}
+
+export interface PromptBlockTruncation {
+  prompt: string;
+  removed: string[];
+}
+
+/**
+ * Select complete prompt blocks under a character budget. A block that is
+ * itself larger than the budget is retained intact as a fail-safe: partial
+ * security/tool instructions are more dangerous than a budget overrun.
+ */
+export function truncatePromptBlocksByPriority(
+  blocks: ReadonlyArray<PromptBlockForTruncation>,
+  budgetChars: number,
+): PromptBlockTruncation {
+  if (budgetChars <= 0) {
+    return { prompt: '', removed: blocks.map(block => block.id) };
+  }
+
+  const ranked = blocks
+    .map((block, index) => ({ block, index }))
+    .sort((left, right) => left.block.priority - right.block.priority || left.index - right.index);
+  const selected = new Set<number>();
+  const removed: number[] = [];
+  let used = 0;
+
+  for (const { block, index } of ranked) {
+    const separator = selected.size > 0 ? 2 : 0;
+    const candidateSize = used + separator + block.content.length;
+    if (candidateSize <= budgetChars || selected.size === 0) {
+      selected.add(index);
+      used = candidateSize;
+    } else {
+      removed.push(index);
+    }
+  }
+
+  const prompt = blocks
+    .filter((_block, index) => selected.has(index))
+    .map(block => block.content)
+    .join('\n\n');
+  return {
+    prompt,
+    removed: blocks.filter((_block, index) => removed.includes(index)).map(block => block.id),
+  };
+}
+
 const ALL_BLOCKS: Required<BuildOptions> = {
   includeBootstrap: true,
   includePersona: true,
@@ -191,6 +254,7 @@ export class PromptBuilder {
   private contextRegistry: ContextRegistry | null = null;
   private codingStyleCache: { cwd: string; styleBlock: string; analyzedAt: number } | null = null;
   private lastPromptBlocks: PromptBlockMeasurement[] = [];
+  private lastPromptParts: Array<PromptBlockForTruncation & { source: string }> = [];
 
   constructor(
     private config: PromptBuilderConfig,
@@ -216,16 +280,25 @@ export class PromptBuilder {
     content: string,
     priority: number,
     includesSeparator: boolean,
+    placement: 'append' | 'prepend' = 'append',
   ): void {
     const contribution = includesSeparator ? `\n\n${content}` : content;
-    this.lastPromptBlocks.push({
+    const measurement = {
       id,
       source,
       priority,
       chars: contribution.length,
       estimatedTokens: Math.ceil(contribution.length / 4),
       sha256: createHash('sha256').update(content).digest('hex'),
-    });
+    };
+    const part = { id, source, content, priority };
+    if (placement === 'prepend') {
+      this.lastPromptBlocks.unshift(measurement);
+      this.lastPromptParts.unshift(part);
+    } else {
+      this.lastPromptBlocks.push(measurement);
+      this.lastPromptParts.push(part);
+    }
   }
 
   private appendPromptBlock(
@@ -254,6 +327,7 @@ export class PromptBuilder {
   ): Promise<string> {
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
     this.lastPromptBlocks = [];
+    this.lastPromptParts = [];
     // When the model can't actually call tools (Ollama small/medium without
     // OpenAI tool_calls support), the auto-memory + lessons directives just
     // confuse the LLM into hallucinating JSON tool calls. Force-off here.
@@ -400,7 +474,7 @@ export class PromptBuilder {
           : toolCfg.supportsToolCalls === false && !forceTools
             ? 'src/prompts/system-base.ts (chat-only)'
             : 'src/prompts/system-base.ts';
-      this.recordPromptBlock('base', baseSource, systemPrompt, 100, false);
+      this.recordPromptBlock('base', baseSource, systemPrompt, PROMPT_PRIORITIES.security, false);
 
       // Inject persistent memory context for paths that don't already
       // pass it to a PromptManager (legacy + chat-only). Without this,
@@ -415,7 +489,7 @@ export class PromptBuilder {
         (systemPromptId && systemPromptId !== 'auto') || systemPromptId === 'auto';
       if (memoryContext && !wentThroughPromptManager) {
         const memoryBlock = `<persistent_memory>\n${memoryContext}\n</persistent_memory>`;
-        systemPrompt = this.appendPromptBlock(systemPrompt, 'persistent-memory', 'memory', memoryBlock, 110);
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'persistent-memory', 'memory', memoryBlock, PROMPT_PRIORITIES.context);
         logger.debug('Injected persistent memory context into system prompt', {
           chars: memoryContext.length,
         });
@@ -424,7 +498,7 @@ export class PromptBuilder {
       // Prepend intro hook content if available (Moltbot-style role injection)
       if (introHookContent) {
         const introBlock = `# Role & Instructions (from intro_hook.txt)\n\n${introHookContent}\n\n---`;
-        this.recordPromptBlock('intro-hook', 'intro_hook.txt', introBlock, 120, false);
+        this.recordPromptBlock('intro-hook', 'intro_hook.txt', introBlock, PROMPT_PRIORITIES.style, true, 'prepend');
         systemPrompt = `${introBlock}\n\n${systemPrompt}`;
         logger.debug("Prepended intro hook content to system prompt");
       }
@@ -447,7 +521,7 @@ export class PromptBuilder {
             'execution-discipline',
             'src/prompts/execution-discipline.ts',
             getExecutionDisciplineBlock(),
-            200,
+            PROMPT_PRIORITIES.tools,
           );
           logger.debug('Injected execution-discipline guidance into system prompt');
         } catch (err) {
@@ -463,7 +537,7 @@ export class PromptBuilder {
           const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
           const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(query, 1_600);
           if (ckgBlock) {
-            systemPrompt = this.appendPromptBlock(systemPrompt, 'collective-knowledge', 'memory', ckgBlock, 130);
+            systemPrompt = this.appendPromptBlock(systemPrompt, 'collective-knowledge', 'memory', ckgBlock, PROMPT_PRIORITIES.context);
             logger.debug('Injected collective knowledge into system prompt', { chars: ckgBlock.length });
           }
         } catch { /* collective graph optional */ }
@@ -495,7 +569,7 @@ export class PromptBuilder {
                 ? `project instruction files: ${ctx.sources.map(source => source.relPath).join(', ')}`
                 : 'project instruction files',
               workspaceBlock,
-              150,
+              PROMPT_PRIORITIES.workspace,
             );
             logger.debug(`Loaded project context from ${ctx.sources.length} file(s)`, {
               sources: ctx.sources.map((s) => s.relPath),
@@ -518,7 +592,7 @@ export class PromptBuilder {
               'bootstrap',
               'SOUL.md / USER.md / PROJECT_KNOWLEDGE.md',
               bootstrap.content,
-              160,
+              PROMPT_PRIORITIES.context,
             );
             logger.debug(`Loaded bootstrap/soul context from ${bootstrap.sources.length} file(s)`);
           }
@@ -538,7 +612,7 @@ export class PromptBuilder {
               'persona',
               'src/personas/persona-manager.ts',
               `<persona>\n${personaBlock}\n</persona>`,
-              170,
+              PROMPT_PRIORITIES.style,
             );
             logger.debug('Injected active persona into system prompt');
           }
@@ -565,7 +639,7 @@ export class PromptBuilder {
               'knowledge',
               '.codebuddy/knowledge + src/knowledge/knowledge-manager.ts',
               `<knowledge>\n${knowledgeBlock}\n</knowledge>`,
-              180,
+              PROMPT_PRIORITIES.context,
             );
             logger.debug('Injected knowledge base into system prompt');
           }
@@ -587,7 +661,7 @@ export class PromptBuilder {
               'project-docs',
               '.codebuddy/docs + src/docs/docs-context-provider.ts',
               `<project_docs>\n${architectureSummary}\n</project_docs>`,
-              190,
+              PROMPT_PRIORITIES.context,
             );
           }
         } catch { /* docs context module optional */ }
@@ -608,7 +682,7 @@ export class PromptBuilder {
               'rules',
               '.codebuddy/rules + src/rules/rules-loader.ts',
               `<rules>\n${rulesBlock}\n</rules>`,
-              200,
+              PROMPT_PRIORITIES.tools,
             );
             logger.debug('Injected modular rules into system prompt');
           }
@@ -658,7 +732,7 @@ export class PromptBuilder {
             'code-explorer',
             'src/codebuddy/tools.ts + Code Explorer MCP',
             codeExplorerBlock,
-            210,
+            PROMPT_PRIORITIES.tools,
           );
           logger.debug('Injected Code Explorer priority directive');
         }
@@ -676,7 +750,7 @@ export class PromptBuilder {
               'skills',
               'src/skills/skill-manager.ts + active skills',
               skillBlock,
-              220,
+              PROMPT_PRIORITIES.tools,
             );
             logger.debug('Injected active skill enhancement into system prompt');
           }
@@ -701,7 +775,7 @@ export class PromptBuilder {
                   ? `identity files: ${identityFiles.map(file => `${file.source}:${file.name}`).join(', ')}`
                   : 'identity files',
                 `<identity>\n${identityBlock}\n</identity>`,
-                230,
+                PROMPT_PRIORITIES.style,
               );
               logger.debug('Injected identity into system prompt');
             }
@@ -743,7 +817,7 @@ export class PromptBuilder {
               'fleet',
               'src/fleet + fleet tools',
               fleetBlock,
-              240,
+              PROMPT_PRIORITIES.tools,
             );
             logger.debug(`Injected fleet nudge into system prompt (${peerCount} peer(s))`);
           }
@@ -794,7 +868,7 @@ Format:
 
 ${closingMemoryInstruction}
 </auto_memory_directive>`;
-        systemPrompt = this.appendPromptBlock(systemPrompt, 'auto-memory-directive', 'memory tools', autoMemoryBlock, 250);
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'auto-memory-directive', 'memory tools', autoMemoryBlock, PROMPT_PRIORITIES.tools);
         logger.debug('Injected auto-memory directive into system prompt');
       }
 
@@ -839,7 +913,7 @@ What NOT to add:
 
 Lessons complement \`remember\`: \`remember\` stores facts (preferences, decisions); \`lessons_add\` stores actionable patterns and rules. Use whichever fits — both persist across sessions.
 </lessons_directive>`;
-        systemPrompt = this.appendPromptBlock(systemPrompt, 'lessons-directive', 'memory tools', lessonsBlock, 260);
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'lessons-directive', 'memory tools', lessonsBlock, PROMPT_PRIORITIES.tools);
         logger.debug('Injected lessons directive into system prompt');
       }
 
@@ -853,7 +927,7 @@ Lessons complement \`remember\`: \`remember\` stores facts (preferences, decisio
             'self-knowledge',
             'src/agent/self-improvement/self-knowledge.ts',
             `<self_knowledge>\n${buildSelfKnowledgeBlock()}\n</self_knowledge>`,
-            270,
+            PROMPT_PRIORITIES.tools,
           );
           logger.debug('Injected self-knowledge block into system prompt');
         } catch { /* extension module optional */ }
@@ -878,7 +952,7 @@ Important Constraints:
 
 Use the \`user_model_observe\` tool proactively when you learn a stable coding preference or trait.
 </user_model_directive>`;
-        systemPrompt = this.appendPromptBlock(systemPrompt, 'user-model-directive', 'memory tools', userModelBlock, 280);
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'user-model-directive', 'memory tools', userModelBlock, PROMPT_PRIORITIES.tools);
         logger.debug('Injected user model directive into system prompt');
       }
 
@@ -913,7 +987,7 @@ Output formatting discipline:
 - File references: use \`path/to/file.ts:42\` format so the user can navigate by click.
 - When uncertain about facts, say "I don't know" rather than fabricating. When uncertain about correctness of code, mark it as untested.
 </writing_rules>`;
-        systemPrompt = this.appendPromptBlock(systemPrompt, 'writing-rules', 'style', writingRulesBlock, 300);
+        systemPrompt = this.appendPromptBlock(systemPrompt, 'writing-rules', 'style', writingRulesBlock, PROMPT_PRIORITIES.style);
         logger.debug('Injected writing_rules directive into system prompt');
       }
 
@@ -942,7 +1016,7 @@ Output formatting discipline:
               'coding-style',
               'src/memory/coding-style-analyzer.ts',
               styleBlock,
-              310,
+              PROMPT_PRIORITIES.style,
             );
             logger.debug('Injected coding style conventions into system prompt');
           }
@@ -961,32 +1035,11 @@ Output formatting discipline:
             'workflow-rules',
             'src/prompts/workflow-rules.ts',
             workflowRulesBlock,
-            320,
+            PROMPT_PRIORITIES.tools,
           );
           logger.debug('Injected workflow orchestration rules into system prompt');
         } catch (err) {
           logger.warn('Failed to inject workflow rules', { error: getErrorMessage(err) });
-        }
-      }
-
-      // Manus AI structured variation — shuffle reminder blocks to prevent
-      // the model from falling into brittle repetition patterns.
-      // Only the footer guideline section is varied; the preamble/tools are left
-      // untouched so prompt caching remains effective on the stable prefix.
-      if (gates.includeVariation) {
-        try {
-          const { varySystemPrompt } = await import('../prompts/variation-injector.js');
-          // Use a daily seed so the variation is stable within a single day
-          // (same day → same order → consistent cache), but rotates across days.
-          const daySeed = Math.floor(Date.now() / 86_400_000);
-          systemPrompt = varySystemPrompt(systemPrompt, {
-            seed: daySeed,
-            shuffleOrder: true,
-            alternativePhrasing: true,
-            variationRate: 0.3,
-          });
-        } catch {
-          // non-critical — proceed with original prompt
         }
       }
 
@@ -997,7 +1050,7 @@ Output formatting discipline:
           'active-tool-filter',
           'tool schema/filter',
           activeToolFilterDirective,
-          330,
+          PROMPT_PRIORITIES.tools,
         );
         logger.debug('Injected active tool filter directive into system prompt', {
           enabledPatterns: activeToolFilter.enabledPatterns,
@@ -1007,8 +1060,9 @@ Output formatting discipline:
 
       // Truncate system prompt if it exceeds the model's context budget.
       // Reserve 50% of (contextWindow - maxOutputTokens) for the system prompt;
-      // the rest goes to conversation history. Simple head-truncation keeps the
-      // most critical instructions (always at the top) intact.
+      // the rest goes to conversation history. The selector below keeps whole
+      // blocks and ranks them by the declared security/tools/style/context
+      // priorities instead of cutting through arbitrary text.
       // Reuse `toolCfg` from the top of the function so test mocks that
       // use `mockReturnValueOnce` aren't consumed twice.
       const contextWindow = toolCfg.contextWindow ?? 8192;
@@ -1027,8 +1081,35 @@ Output formatting discipline:
         : Math.max(256, Math.min(rawBudget, 32_000));
       const budgetChars = budgetTokens * 4; // ~4 chars per token
       if (systemPrompt.length > budgetChars) {
-        logger.warn(`System prompt truncated for ${modelName}: ${systemPrompt.length} chars → ${budgetChars} (budget: ${budgetTokens} tokens, 32K hard cap)`);
-        systemPrompt = truncateSystemPromptPreservingReserved(systemPrompt, budgetChars);
+        const originalChars = systemPrompt.length;
+        const truncated = truncatePromptBlocksByPriority(this.lastPromptParts, budgetChars);
+        const removed = truncated.removed.length > 0 ? truncated.removed.join(', ') : 'aucun';
+        logger.warn(
+          `System prompt truncated for ${modelName}: ${originalChars} chars → ${truncated.prompt.length} ` +
+          `(budget: ${budgetTokens} tokens, 32K hard cap); blocs retirés : ${removed}`,
+        );
+        systemPrompt = truncated.prompt;
+      }
+
+      // Manus AI structured variation — shuffle reminder blocks to prevent
+      // the model from falling into brittle repetition patterns. It runs only
+      // after budget selection, so variation can reorder complete blocks but
+      // can never cause the truncator to cut one in half.
+      if (gates.includeVariation) {
+        try {
+          const { varySystemPrompt } = await import('../prompts/variation-injector.js');
+          // Use a daily seed so the variation is stable within a single day
+          // (same day → same order → consistent cache), but rotates across days.
+          const daySeed = Math.floor(Date.now() / 86_400_000);
+          systemPrompt = varySystemPrompt(systemPrompt, {
+            seed: daySeed,
+            shuffleOrder: true,
+            alternativePhrasing: true,
+            variationRate: 0.3,
+          });
+        } catch {
+          // non-critical — proceed with original prompt
+        }
       }
 
       // Cache system prompt for optimization

@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('PromptBuilder context budget after hosted catalogue discovery', () => {
-  it('keeps Mistral Medium at the nominative 128k and budgets 32k system tokens', async () => {
+  it('keeps Mistral Medium at the nominative 128k and preserves an oversized atomic block', async () => {
     delete process.env.CODEBUDDY_MAX_CONTEXT;
     const fetchImpl = vi.fn(async (url: string) => url.endsWith('/v1/models')
       ? response(mistralModelsCatalogue)
@@ -82,10 +82,12 @@ describe('PromptBuilder context budget after hosted catalogue discovery', () => 
       allBlocksOff(),
     );
 
-    expect(systemPrompt).toHaveLength(128_000); // 32,000 tokens × ~4 chars/token
-    expect(systemPrompt).toMatch(/\.\.\.$/);
+    // The synthetic base is one atomic block. Cutting it at 128K could split
+    // a security/tool sentence, so the fail-safe retains the block verbatim.
+    expect(systemPrompt).toHaveLength(200_000);
+    expect(systemPrompt).not.toMatch(/\.\.\.$/);
     expect(warning).toHaveBeenCalledWith(
-      expect.stringContaining('(budget: 32000 tokens, 32K hard cap)'),
+      expect.stringContaining('(budget: 32000 tokens, 32K hard cap); blocs retirés : aucun'),
     );
     expect(cacheSystemPrompt).toHaveBeenCalledWith(systemPrompt);
   });
