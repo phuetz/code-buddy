@@ -12,12 +12,13 @@ import { resetDatabaseManager } from '../../src/database/database-manager.js';
 import { canvasStore } from '../../src/server/routes/canvas.js';
 import { renderWidgetForData } from '../../src/widgets/widget-registry.js';
 import { publishAnswerWidget } from '../../src/widgets/canvas-publish.js';
+import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
 
 type StartedServer = Awaited<ReturnType<typeof import('../../src/server/index.js').startServer>>;
 
 const proofsDir = path.resolve('_qa/gk30/proofs');
 
-describe('GK30 canvas headless capture', () => {
+describe.skipIf(!chromiumExecutableExists())('GK30 canvas headless capture', () => {
   let tmpHome = '';
   let previousHome: string | undefined;
   let started: StartedServer | null = null;

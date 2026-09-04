@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +16,9 @@ function readRepoFile(...segments: string[]): string {
 }
 
 function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+  if (!existsSync(distIndex)) {
+    throw new Error('dist/index.js est absent — construire d’abord : npm run build');
+  }
   try {
     const stdout = execFileSync(process.execPath, [distIndex, ...args], {
       cwd: repoRoot,

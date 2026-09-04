@@ -12,6 +12,7 @@ import { BrowserExecuteTool, resetMiscInstances } from '../../src/tools/registry
 import { getAppServerTool, resetAppServerTool } from '../../src/tools/app-server-tool.js';
 import { resetDevOrigins } from '../../src/security/dev-origins.js';
 import { resetProcessTool } from '../../src/tools/process-tool.js';
+import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
 
 async function freePort(): Promise<number> {
   return await new Promise<number>((resolve) => {
@@ -34,7 +35,7 @@ function appCommand(port: number): string {
   return `node -e '${js}'`;
 }
 
-describe('GK21 web_test refuses PASSED without a screenshot', () => {
+describe.skipIf(!chromiumExecutableExists())('GK21 web_test refuses PASSED without a screenshot', () => {
   const webTest = new WebTestTool();
   const browser = new BrowserExecuteTool();
 

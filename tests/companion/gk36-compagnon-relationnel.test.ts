@@ -17,6 +17,7 @@ import {
   canSend,
   runProactiveTick,
 } from '../../src/companion/proactive-engine.js';
+import { resolveHouseholdClock } from '../../src/companion/household-time.js';
 import { detectRelationalSignal } from '../../src/companion/reply-augment.js';
 import {
   DEFAULT_TRAITS,
@@ -236,8 +237,13 @@ describe('GK36 — proactif : gap, cooldown, rest, Telegram, pas par-dessus', ()
   let dir: string;
   let statePath: string;
   let relPath: string;
+  let previousHostTimezone: string | undefined;
+  let previousHouseholdTimezone: string | undefined;
 
   beforeEach(() => {
+    previousHostTimezone = process.env.TZ;
+    previousHouseholdTimezone = process.env.CODEBUDDY_TIMEZONE;
+    process.env.CODEBUDDY_TIMEZONE = 'Europe/Paris';
     dir = makeWork();
     statePath = path.join(dir, 'proactive-state.json');
     relPath = path.join(dir, 'relationship-state.json');
@@ -254,6 +260,10 @@ describe('GK36 — proactif : gap, cooldown, rest, Telegram, pas par-dessus', ()
   });
   afterEach(() => {
     delete process.env.CODEBUDDY_COMPANION_PROACTIVE;
+    if (previousHostTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousHostTimezone;
+    if (previousHouseholdTimezone === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+    else process.env.CODEBUDDY_TIMEZONE = previousHouseholdTimezone;
     _resetConductorForTests();
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
@@ -345,6 +355,32 @@ describe('GK36 — proactif : gap, cooldown, rest, Telegram, pas par-dessus', ()
     });
     expect(later).toBeTruthy();
     expect(tg).toHaveBeenCalledTimes(2);
+  });
+
+  it('garde le même verdict à 08:00 sous TZ hôte UTC et Europe/Paris', async () => {
+    const morning = Date.parse('2026-09-03T08:00:00+02:00');
+    const verdicts: Array<string | null> = [];
+
+    for (const hostTimezone of ['UTC', 'Europe/Paris']) {
+      process.env.TZ = hostTimezone;
+      expect(resolveHouseholdClock(new Date(morning)).timeZone).toBe('Europe/Paris');
+      expect(resolveHouseholdClock(new Date(morning)).hour).toBe(8);
+      const isolated = makeWork();
+      const line = await runProactiveTick({
+        now: () => morning,
+        present: async () => false,
+        telegramVoice: async () => true,
+        statePath: path.join(isolated, 'proactive-state.json'),
+        relationshipStatePath: path.join(isolated, 'relationship-state.json'),
+        recentHearing: async () => [],
+        rng: () => 0,
+        conductor: new CompanionConductor(45_000, () => morning),
+      });
+      verdicts.push(line);
+      rmSync(isolated, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
+
+    expect(verdicts.map((line) => line !== null)).toEqual([true, true]);
   });
 
   it('politique Maison rest : silencieux en local et à distance', async () => {
