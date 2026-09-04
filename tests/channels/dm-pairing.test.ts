@@ -534,6 +534,10 @@ describe('DMPairingManager', () => {
     });
 
     afterEach(async () => {
+      // Un espion laissé en place par un test en échec contaminait les tests
+      // suivants (leurs assertions `not.toHaveBeenCalled` voyaient les appels
+      // du test précédent).
+      vi.restoreAllMocks();
       await fs.rm(allowlistDir, { recursive: true, force: true });
     });
 
@@ -543,11 +547,24 @@ describe('DMPairingManager', () => {
         pairingChannels: ['telegram'],
         allowlistPath: allowlistDir,
       });
-      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '{not-json');
+      const filePath = path.join(allowlistDir, 'telegram-allowFrom.json');
+      await fs.writeFile(filePath, '{not-json');
       const warnSpy = vi.spyOn(logger, 'warn');
 
-      await expect(pairing.loadAllowlist()).rejects.toThrow();
-      expect(warnSpy).toHaveBeenCalled();
+      // VERIF3 T11 : neutraliser la garde `senders === null` restait vert,
+      // parce que l'itération sur `null` lève de toute façon un TypeError.
+      // Le refus doit être explicite : message nommant le fichier illisible et
+      // avertissement journalisé pour ce fichier précis.
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist file is unreadable: ${filePath}`
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Corrupt DM pairing allowlist file',
+        expect.objectContaining({
+          path: filePath,
+          error: `Allowlist file is unreadable: ${filePath}`,
+        })
+      );
       expect(pairing.listApproved()).toEqual([]);
 
       pairing.dispose();
@@ -577,13 +594,30 @@ describe('DMPairingManager', () => {
         pairingChannels: ['telegram'],
         allowlistPath: allowlistDir,
       });
-      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '["bad"]');
-      await expect(pairing.loadAllowlist()).rejects.toThrow();
+      const filePath = path.join(allowlistDir, 'telegram-allowFrom.json');
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await fs.writeFile(filePath, '["bad"]');
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist entry is invalid: ${filePath}`
+      );
       expect(pairing.listApproved()).toEqual([]);
 
-      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), JSON.stringify([{}]));
-      await expect(pairing.loadAllowlist()).rejects.toThrow();
+      warnSpy.mockClear();
+      await fs.writeFile(filePath, JSON.stringify([{}]));
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist entry is invalid: ${filePath}`
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Corrupt DM pairing allowlist file',
+        expect.objectContaining({
+          path: filePath,
+          error: `Allowlist entry is invalid: ${filePath}`,
+        })
+      );
       expect(pairing.listApproved()).toEqual([]);
+
+      warnSpy.mockRestore();
       pairing.dispose();
     });
 

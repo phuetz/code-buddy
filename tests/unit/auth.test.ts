@@ -1176,13 +1176,24 @@ describe('Token Management - SessionEncryption', () => {
     });
 
     it('should save new key to file during rotation', async () => {
-      encryption = new SessionEncryption();
+      const keyPath = path.join('/test', 'keys', '.encryption-key');
+      encryption = new SessionEncryption({ keyPath });
       await encryption.initialize();
+      mockWriteFileAtomic.mockClear();
 
-      await encryption.rotateKey();
+      const { oldKey, newKey } = await encryption.rotateKey();
 
-      // writeFile should be called for the new key
-      expect(mockWriteFileAtomic).toHaveBeenCalled();
+      // VERIF3 T18 : la rotation n'avait aucune assertion de chemin, de
+      // contenu ni de permissions — passer en 0o644 restait vert.
+      expect(mockWriteFileAtomic).toHaveBeenCalledTimes(1);
+      const [writtenPath, writtenKey, options] = mockWriteFileAtomic.mock.calls[0]!;
+      expect(writtenPath).toBe(keyPath);
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Buffer.isBuffer(writtenKey)).toBe(true);
+      expect(writtenKey).toHaveLength(32);
+      // C'est bien la NOUVELLE clé qui est persistée, pas l'ancienne.
+      expect((writtenKey as Buffer).toString('base64')).toBe(newKey);
+      expect((writtenKey as Buffer).toString('base64')).not.toBe(oldKey);
     });
 
     it('should throw error when rotating uninitialized encryption', async () => {

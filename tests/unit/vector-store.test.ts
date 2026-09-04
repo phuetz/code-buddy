@@ -399,12 +399,25 @@ describe('InMemoryVectorStore', () => {
   describe('Persistence', () => {
     it('should save to disk when dirty', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
+      const persistPath = path.join(os.tmpdir(), 'test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(persistPath);
 
       await persistentStore.add('vec-1', [0.1, 0.2], { type: 'test' });
+      await persistentStore.add('vec-2', [0.3, 0.4], { type: 'other' });
       await persistentStore.saveToDisk();
 
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // VERIF3 T5 : un `toHaveBeenCalled()` nu laissait passer un chemin
+      // suffixé, un contenu réduit à sa version et des vecteurs vidés.
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      const [writtenPath, serialized] = (fs.writeFileSync as jest.Mock).mock.calls[0]!;
+      expect(writtenPath).toBe(persistPath);
+      expect(JSON.parse(serialized as string)).toEqual({
+        version: 1,
+        vectors: [
+          { id: 'vec-1', embedding: [0.1, 0.2], metadata: { type: 'test' } },
+          { id: 'vec-2', embedding: [0.3, 0.4], metadata: { type: 'other' } },
+        ],
+      });
     });
 
     it('should not save when not dirty', async () => {
@@ -732,7 +745,31 @@ describe('PartitionedVectorStore', () => {
 
       await persistentStore.saveToDisk();
 
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // VERIF3 T5 : chaque partition doit écrire son propre fichier avec ses
+      // propres vecteurs, pas seulement « au moins un writeFileSync ».
+      const writes = (fs.writeFileSync as jest.Mock).mock.calls.map(
+        ([writtenPath, serialized]: [string, string]) =>
+          [writtenPath, JSON.parse(serialized)] as const
+      );
+      expect(writes).toHaveLength(2);
+      expect(new Map(writes)).toEqual(
+        new Map([
+          [
+            path.join(os.tmpdir(), 'partitions', 'partition-ts.json'),
+            {
+              version: 1,
+              vectors: [{ id: 'vec-1', embedding: [0.1], metadata: { language: 'ts' } }],
+            },
+          ],
+          [
+            path.join(os.tmpdir(), 'partitions', 'partition-js.json'),
+            {
+              version: 1,
+              vectors: [{ id: 'vec-2', embedding: [0.2], metadata: { language: 'js' } }],
+            },
+          ],
+        ])
+      );
     });
   });
 

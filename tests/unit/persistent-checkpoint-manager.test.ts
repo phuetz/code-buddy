@@ -49,8 +49,10 @@ jest.mock('../../src/utils/atomic-write.js', () => ({
       return fallback;
     }
   },
-  writeJsonAtomicSync: (filePath: string, value: unknown) =>
-    mockWriteFileSync(filePath, JSON.stringify(value, null, 2)),
+  // VERIF3 T9 : le double ignorait l'argument `mode`, donc 0o600 n'était gardé
+  // pour aucun des deux fichiers. Il est désormais propagé au faux disque.
+  writeJsonAtomicSync: (filePath: string, value: unknown, options?: { mode?: number }) =>
+    mockWriteFileSync(filePath, JSON.stringify(value, null, 2), options),
 }));
 
 // Mock os
@@ -110,6 +112,11 @@ vi.setConfig({ testTimeout: 10000 });
 
 describe('PersistentCheckpointManager', () => {
   let manager: PersistentCheckpointManager;
+
+  // `crypto.createHash` et `path.join` sont doublés plus haut : le dossier de
+  // l'historique du projet est donc parfaitement déterministe.
+  const projectHistoryDir = '/home/testuser/.codebuddy/history/abcdef1234567890';
+  const indexPath = `${projectHistoryDir}/index.json`;
 
   // Sample index for testing
   const createSampleIndex = (): CheckpointIndex => ({
@@ -273,12 +280,39 @@ describe('PersistentCheckpointManager', () => {
     });
 
     it('should save checkpoint to disk', () => {
-      const checkpoint = manager.createCheckpoint('Save test');
+      const checkpoint = manager.createCheckpoint('Save test', ['/test/file1.ts']);
 
-      expect(mockWriteFileSync).toHaveBeenCalledWith(
-        expect.stringContaining(checkpoint.id),
-        expect.any(String)
+      // VERIF3 T9 : le fichier de checkpoint individuel n'était pas vérifié.
+      // Dévier son chemin, vider ses fichiers ou dégrader son mode restait
+      // vert : seul l'index était observé.
+      const checkpointCalls = mockWriteFileSync.mock.calls.filter(
+        (call) => call[0] === `${projectHistoryDir}/${checkpoint.id}.json`
       );
+      expect(checkpointCalls).toHaveLength(1);
+
+      const [, serialized, options] = checkpointCalls[0]!;
+      expect(options).toEqual({ mode: 0o600 });
+
+      const persisted = JSON.parse(serialized as string);
+      expect(persisted.id).toBe(checkpoint.id);
+      expect(persisted.description).toBe('Save test');
+      expect(persisted.files).toHaveLength(1);
+      expect(persisted.files[0]).toMatchObject({
+        path: '/test/file1.ts',
+        content: 'file content',
+        existed: true,
+      });
+    });
+
+    it('should save the checkpoint index at its own path in 0o600', () => {
+      const checkpoint = manager.createCheckpoint('Index mode test');
+
+      const indexCalls = mockWriteFileSync.mock.calls.filter((call) => call[0] === indexPath);
+      expect(indexCalls.length).toBeGreaterThan(0);
+
+      const [, serialized, options] = indexCalls[indexCalls.length - 1]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(JSON.parse(serialized as string).checkpoints).toContain(checkpoint.id);
     });
 
     it('should update index after creating checkpoint', () => {

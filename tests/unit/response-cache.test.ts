@@ -47,6 +47,8 @@ vi.mock('../../src/utils/atomic-write.js', () => ({
   writeJsonAtomic: mockWriteJsonAtomic,
 }));
 
+import nodePath from 'path';
+import nodeOs from 'os';
 import {
   ResponseCache,
   CacheEntry,
@@ -57,6 +59,7 @@ import {
 
 describe('ResponseCache', () => {
   let cache: ResponseCache;
+  const cacheFile = nodePath.join(nodeOs.homedir(), '.codebuddy', 'cache', 'response-cache.json');
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -463,14 +466,26 @@ describe('ResponseCache', () => {
       // Give time for async save
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
-        expect.stringContaining('response-cache.json'),
-        expect.objectContaining({
-          entries: expect.any(Object),
-          stats: expect.any(Object),
-          savedAt: expect.any(Number),
-        })
-      );
+      // VERIF3 T8 : `stringContaining` laissait passer un chemin suffixé et
+      // `entries: expect.any(Object)` un cache vidé de toutes ses entrées.
+      expect(mockWriteJsonAtomic).toHaveBeenCalledTimes(1);
+      const [writtenPath, payload] = mockWriteJsonAtomic.mock.calls[0]!;
+      expect(writtenPath).toBe(cacheFile);
+      expect(Object.keys(payload)).toEqual(['entries', 'stats', 'savedAt']);
+      expect(typeof payload.savedAt).toBe('number');
+      expect(payload.stats).toEqual({ hits: 0, misses: 0 });
+
+      const persistedEntries = Object.values(payload.entries as Record<string, CacheEntry>);
+      expect(persistedEntries).toHaveLength(1);
+      expect(persistedEntries[0]).toMatchObject({
+        query: 'query',
+        response: 'Response that is long enough to be cached by the system',
+        model: 'm1',
+        contextHash: 'h1',
+        hits: 0,
+      });
+      expect(typeof persistedEntries[0]!.timestamp).toBe('number');
+      expect(persistedEntries[0]!.ttl).toBeGreaterThan(0);
     });
 
     it('should clear pending save timeout', async () => {

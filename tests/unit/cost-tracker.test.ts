@@ -41,6 +41,7 @@ jest.mock('os', () => {
 });
 
 import * as fs from 'fs-extra';
+import * as nodePath from 'path';
 import { CostTracker, getCostTracker, TokenUsage, CostConfig, CostReport } from '../../src/utils/cost-tracker.js';
 import { getAnalyticsRepository } from '../../src/database/repositories/analytics-repository.js';
 
@@ -48,6 +49,8 @@ describe('CostTracker', () => {
   let tracker: CostTracker;
   const mockFs = fs as jest.Mocked<typeof fs>;
   const mockGetAnalyticsRepository = getAnalyticsRepository as jest.Mock;
+  const historyPath = nodePath.join('/home/testuser', '.codebuddy', 'cost-history.json');
+  const configPath = nodePath.join('/home/testuser', '.codebuddy', 'cost-config.json');
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -279,7 +282,27 @@ describe('CostTracker', () => {
         jsonTracker.recordUsage(100, 50, 'grok-3-latest');
       }
 
-      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
+      // VERIF3 T3 : un `toHaveBeenCalled()` nu laissait passer un historique
+      // tronqué et un chemin dévié. On garde chemin, contenu et mode.
+      const historyCalls = mockWriteJsonAtomicSync.mock.calls.filter(
+        (call) => call[0] === historyPath
+      );
+      expect(historyCalls).toHaveLength(1);
+
+      const [, entries, options] = historyCalls[0]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Array.isArray(entries)).toBe(true);
+      expect(entries).toHaveLength(10);
+      for (const entry of entries as TokenUsage[]) {
+        expect(entry).toMatchObject({
+          inputTokens: 100,
+          outputTokens: 50,
+          model: 'grok-3-latest',
+        });
+        expect(entry.timestamp).toBeInstanceOf(Date);
+        expect(entry.cost).toBeGreaterThan(0);
+      }
+
       jsonTracker.dispose();
     });
 
@@ -520,9 +543,11 @@ describe('CostTracker', () => {
     it('should save config when setting budget limit', () => {
       tracker.setBudgetLimit(50);
 
+      // VERIF3 T3 : `stringContaining` laissait passer un chemin suffixé et
+      // `expect.any(Object)` un contenu vide.
       expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
-        expect.stringContaining('cost-config.json'),
-        expect.any(Object),
+        configPath,
+        expect.objectContaining({ budgetLimit: 50 }),
         { mode: 0o600 }
       );
     });
@@ -531,8 +556,8 @@ describe('CostTracker', () => {
       tracker.setDailyLimit(5);
 
       expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
-        expect.stringContaining('cost-config.json'),
-        expect.any(Object),
+        configPath,
+        expect.objectContaining({ dailyLimit: 5 }),
         { mode: 0o600 }
       );
     });
@@ -550,7 +575,13 @@ describe('CostTracker', () => {
       tracker.recordUsage(1000, 500, 'grok-3-latest');
       tracker.clearHistory();
 
-      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
+      // VERIF3 T3 : le chemin de l'historique n'était gardé nulle part.
+      const historyCalls = mockWriteJsonAtomicSync.mock.calls.filter(
+        (call) => call[0] === historyPath
+      );
+      expect(historyCalls).toHaveLength(1);
+      expect(historyCalls[0]![1]).toEqual([]);
+      expect(historyCalls[0]![2]).toEqual({ mode: 0o600 });
     });
 
     it('should clear all history entries', () => {

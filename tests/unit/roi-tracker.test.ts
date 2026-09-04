@@ -41,6 +41,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe('ROITracker', () => {
   let tracker: ROITracker;
+  const dataPath = path.join(os.homedir(), '.codebuddy', 'roi-data.json');
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -160,8 +161,25 @@ describe('ROITracker', () => {
         success: true,
       });
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      // VERIF3 T6 : un `toHaveBeenCalled()` nu laissait passer un chemin
+      // suffixé, une liste de tâches vidée et un mode dégradé en 0o644.
+      expect(mockFs.ensureDirSync).toHaveBeenCalledWith(path.dirname(dataPath));
+      expect(mockWriteJsonSync).toHaveBeenCalledTimes(1);
+
+      const [writtenPath, tasks, options] = mockWriteJsonSync.mock.calls[0]!;
+      expect(writtenPath).toBe(dataPath);
+      expect(options).toEqual({ mode: 0o600 });
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({
+        type: 'documentation',
+        description: 'Added API docs',
+        apiCost: 0.01,
+        tokensUsed: 200,
+        actualMinutes: 1,
+        success: true,
+      });
+      expect(typeof tasks[0].id).toBe('string');
+      expect(tasks[0].timestamp).toBeInstanceOf(Date);
     });
   });
 
@@ -553,7 +571,8 @@ describe('ROITracker', () => {
     it('should save after clearing', () => {
       tracker.clear();
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      // VERIF3 T6 : le chemin et le mode n'étaient pas gardés ici non plus.
+      expect(mockWriteJsonSync).toHaveBeenCalledWith(dataPath, [], { mode: 0o600 });
     });
   });
 
