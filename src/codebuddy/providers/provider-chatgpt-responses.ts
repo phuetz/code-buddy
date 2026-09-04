@@ -128,9 +128,14 @@ function resolveCodexModel(
     configuredModel && isCodexServableModel(configuredModel)
       ? normalizeChatGptOAuthModel(configuredModel)
       : CHATGPT_OAUTH_DEFAULT_MODEL;
-  logger.warn(
-    `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`,
-  );
+  const warningMessage = `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`;
+  logger.warn(warningMessage);
+  // MODELLABEL1: Also write to stderr to ensure visibility even when stdout is being parsed
+  // Only warn once per process to avoid duplicate messages
+  if (!process.env.CODEBUDDY_MODEL_FALLBACK_WARNED) {
+    process.env.CODEBUDDY_MODEL_FALLBACK_WARNED = 'true';
+    process.stderr.write(`[WARN] ${warningMessage}\n`);
+  }
   return target;
 }
 
@@ -329,6 +334,10 @@ export class ChatGptResponsesProvider implements Provider {
    *  session model). Never mutated by per-call overrides or fallback, so it is
    *  the safe remap target when a mis-routed / non-Codex model arrives. */
   private readonly configuredModel: string;
+  /** The model actually sent to the Codex backend on the last request (after
+   *  the non-servable → servable remap and catalog selection). Read by the
+   *  client so headless output reports the EFFECTIVE model (MODELLABEL1). */
+  private lastEffectiveModel: string | undefined;
 
   constructor(opts: ChatGptResponsesProviderOptions) {
     this.authProvider = opts.authProvider;
@@ -343,6 +352,11 @@ export class ChatGptResponsesProvider implements Provider {
 
   setModel(model: string): void {
     this.currentModel = normalizeChatGptOAuthModel(model);
+  }
+
+  /** Model actually served on the last request, if any request was made. */
+  getEffectiveModel(): string | undefined {
+    return this.lastEffectiveModel;
   }
 
   setDefaultReasoningEffort(level: string): void {
@@ -457,6 +471,7 @@ export class ChatGptResponsesProvider implements Provider {
         this.configuredModel,
       );
       if (!opts.model) model = selectChatGptOAuthModel(model, catalog);
+      this.lastEffectiveModel = model;
 
     // If this is a brand-new conversational turn (last user message has
     // no preceding tool round in messages), drop any stale reasoning

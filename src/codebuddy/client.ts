@@ -226,6 +226,10 @@ export interface CodeBuddyResponse {
 
 export class CodeBuddyClient {
   private currentModel: string = "grok-code-fast-1";
+  /** Track the last model that was explicitly requested by the user */
+  private lastRequestedModel: string | undefined;
+  /** Track the last effective model that actually responded */
+  private lastEffectiveModel: string | undefined;
   private defaultMaxTokens: number;
   private baseURL: string;
   private apiKey: string;
@@ -527,6 +531,26 @@ export class CodeBuddyClient {
   }
 
   /**
+   * Get the last model that was explicitly requested by the user
+   */
+  getLastRequestedModel(): string | undefined {
+    return this.lastRequestedModel;
+  }
+
+  /**
+   * Get the last effective model that actually responded
+   */
+  getLastEffectiveModel(): string | undefined {
+    // A provider that remaps the requested model (ChatGPT/Codex) knows better
+    // than the response echo; prefer its record when it has served a request.
+    const providerEffective =
+      this.chatgptProvider && typeof this.chatgptProvider.getEffectiveModel === 'function'
+        ? this.chatgptProvider.getEffectiveModel()
+        : undefined;
+    return providerEffective ?? this.lastEffectiveModel;
+  }
+
+  /**
    * True when the active strategy is the ChatGPT Codex OAuth backend, which is
    * billed against the user's flat-fee Plus/Pro plan, not per token. Cost
    * displays should report $0 here regardless of the reported model slug — the
@@ -615,14 +639,25 @@ export class CodeBuddyClient {
       ? { model: options, searchOptions }
       : options || {};
 
+    // Track the requested model
+    const requestedModel = opts.model ?? this.currentModel;
+
     // Dispatch to the active strategy.
     try {
-      return await this.dispatchChat(messages, tools, opts, searchOptions);
+      const response = await this.dispatchChat(messages, tools, opts, searchOptions);
+      // Update tracking with effective model from response
+      this.lastRequestedModel = requestedModel;
+      this.lastEffectiveModel = response.model ?? requestedModel;
+      return response;
     } catch (error) {
       if (opts.signal?.aborted) {
         throw createAbortError('Chat request aborted by caller');
       }
-      return await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
+      const response = await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
+      // Update tracking with effective model from fallback response
+      this.lastRequestedModel = requestedModel;
+      this.lastEffectiveModel = response.model ?? requestedModel;
+      return response;
     }
   }
 
@@ -732,6 +767,8 @@ export class CodeBuddyClient {
     const callOptIn = opts.streamRetry;
     const retryEnabled = callOptIn !== undefined ? !!callOptIn : envOptIn;
     const retryOpts = typeof callOptIn === 'object' && callOptIn !== null ? callOptIn : {};
+    // Streaming is the headless path: record the requested model here too (MODELLABEL1).
+    this.lastRequestedModel = opts.model ?? this.currentModel;
     const primaryFactory = (): AsyncGenerator<ChatCompletionChunk, void, unknown> =>
       this.dispatchChatStream(messages, tools, opts, searchOptions);
     const primaryStream = retryEnabled
