@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DISCOVERY1 — un catalogue bouchon ne rabaisse plus une déclaration nominative (4 septembre 2026)
+
+Le `/v1/models` de Mistral déclare 32 768 et toutes les capacités à `false` pour chaque variante
+Medium (bouchon), et cette valeur écrasait la déclaration nominative `mistral-medium*` (128k) :
+prompt système tronqué à 8 192 jetons. Désormais une entrée de catalogue hébergé sans capacité
+vraie est ignorée (`logger.debug`), et un catalogue hébergé ne rabaisse jamais une déclaration
+nominative — il ne remplace qu'une estimation de famille ; seul un runtime local (Ollama, LM Studio,
+vLLM) peut abaisser. Fixture rejouant Medium (bouchon) et Magistral (sincère) ; le budget système
+de `mistral-medium-latest` revient à 32 000 jetons sans `CODEBUDDY_MAX_CONTEXT`.
+Rapport : `docs/reports/2026-09/REPARATION-DISCOVERY1.md`.
+
 ### MODELLABEL1 — en headless, le JSON annonce le modèle qui a vraiment répondu (4 septembre 2026)
 
 `buddy -m gpt-6-astra -p …` rendait `"model":"gpt-6-astra"` alors que le provider ChatGPT avait
