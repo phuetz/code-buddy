@@ -255,6 +255,13 @@ function responseModels(value: unknown): unknown[] {
   return [];
 }
 
+function containsTrueBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (Array.isArray(value)) return value.some(containsTrueBoolean);
+  const record = asRecord(value);
+  return record !== null && Object.values(record).some(containsTrueBoolean);
+}
+
 function findModelRecord(value: unknown, model: string): Record<string, unknown> | null {
   const candidates = responseModels(value).map(asRecord).filter((entry): entry is Record<string, unknown> => entry !== null);
   return candidates.find((entry) => sameModel(entry.id, model)
@@ -378,8 +385,9 @@ const CATALOG_CONTEXT_KEYS = new Set([
  * nests the serving provider's smaller limit under `top_provider`; the
  * recursive collection takes the minimum so the value cached is what will be
  * accepted, not the model card's theoretical maximum. A catalogue that lists
- * the model without any length (NVIDIA Build) yields `null`, and the family
- * table in model-tools.ts stays in charge.
+ * the model without any length or usable capability (NVIDIA Build, or a
+ * provider placeholder) yields `null`, and the family table in model-tools.ts
+ * stays in charge.
  */
 async function probeCatalog(
   catalogURLs: string[],
@@ -401,6 +409,13 @@ async function probeCatalog(
     if (record) break;
   }
   if (!record) return null;
+  if (!containsTrueBoolean(record.capabilities)) {
+    logger.debug('Ignoring hosted catalogue entry without usable capabilities', {
+      model,
+      reason: 'capabilities missing or all false',
+    });
+    return null;
+  }
   const contextWindow = minPositive(collectNumericFields(record, (key) => CATALOG_CONTEXT_KEYS.has(key)));
   if (contextWindow === null) return null;
   return { runtime: 'catalog', advertisedContextWindow: contextWindow, contextWindow };
@@ -455,7 +470,11 @@ export async function primeLocalRuntimeModelConfig(
   }
   const info = await pending;
   if (info) {
-    cacheRuntimeModelContextWindow(options.model, info.contextWindow);
+    cacheRuntimeModelContextWindow(
+      options.model,
+      info.contextWindow,
+      info.runtime === 'catalog' ? 'catalog' : 'local',
+    );
     logger.debug('Runtime context detected', {
       model: options.model,
       runtime: info.runtime,
