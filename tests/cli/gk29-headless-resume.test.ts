@@ -96,6 +96,15 @@ function runHeadless(port: number, options: {
   });
 }
 
+// Le scénario enchaîne QUATRE tours CLI complets, chacun démarrant tsx et tout
+// le graphe de modules. Sur macos-latest (3 vCPU / 7 Go), pendant la suite
+// parallèle, les 120 s d'origine ont été franchies sur le job Node 22 alors
+// que Node 20 passait — c'est un budget calé sur une machine rapide, pas une
+// propriété du code. Il suit donc la machine, comme testTimeout dans
+// vitest.config.ts ; un vrai blocage échoue toujours, simplement plus tard.
+const TURN_BUDGET_MS =
+  process.platform === 'win32' || process.platform === 'darwin' ? 300_000 : 120_000;
+
 describe('GK29 headless resume keeps one timeline session', () => {
   it('appends three --resume turns onto a single session and timeline', async () => {
     const server = http.createServer((req, res) => {
@@ -162,5 +171,5 @@ describe('GK29 headless resume keeps one timeline session', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
-  }, 120_000);
+  }, TURN_BUDGET_MS);
 });

@@ -138,6 +138,40 @@ Les 17 familles de la passe 1 sont fermées. Deux constats :
 | `gk35-stdio-timeout` | budget figé à 400 ms pour un scénario qui mesure une SÉQUENCE | seuils dérivés d'un budget unique, rapports inchangés |
 | `comfyui-recipe-runtime` (Ubuntu) | abandon après un délai FIXE de 10 ms, avant la mise en file | abandon déclenché par l'ÉVÉNEMENT, déterministe (5 exécutions) |
 
-### Run 2
+### Run 2 — `33925795787` et Run 3 — `33927528320`
 
-Voir la table ajoutée après le run de vérification.
+| Job | Run `33918143339` (départ) | Run `33925795787` | Run `33927528320` |
+| --- | --- | --- | --- |
+| Ubuntu Node 20 | succès | **succès** | **succès** |
+| Ubuntu Node 22 | succès | **succès** | **succès** |
+| macOS Node 20 | échec (19 tests) | **succès** | **succès** |
+| macOS Node 22 | échec (19 tests) | échec — 1 test | échec — 1 test |
+| Windows Node 20 | échec (15, shard 1) | échec — 2 tests | échec — vague suivante |
+| Windows Node 22 | échec (15, shard 1) | échec — 2 tests | échec — vague suivante |
+| Build and Package | — | **succès** | **succès** |
+
+Familles fermées au fil des trois runs : `wc` BSD, userland GNU, `/private/var` ×3
+(dont l'installateur), PTY macOS, bureau fabriqué, PowerShell `&`, doubles de `path` ×2,
+`$HOME` sous Windows, tas de l'enfant CLI, chien de garde orphelin, `EFTYPE` shebang,
+bits POSIX NTFS, budgets figés ×3, course d'abandon ComfyUI, parseur PowerShell présent,
+`os.killpg` absent de Windows. **Le tas macOS est confirmé résolu** : le même scénario ne
+meurt plus en OOM (code 134), il n'excède plus que son budget de temps.
+
+### Ce qui reste ouvert
+
+1. **macOS Node 22** — `gk29-headless-resume` enchaîne quatre tours CLI complets et a
+   franchi son budget explicite de 120 s (Node 20 passe le même scénario). Budget porté à
+   300 s sur les hôtes lents, **poussé mais pas encore vérifié en CI**.
+2. **Windows Node 20 et 22** — une VAGUE SUIVANTE, à nouveau révélée par la progression
+   dans les shards : `gk16-backup`, `backup-profile` ×2, `bash-tool` (« Safe Commands »),
+   `readme-truth` ×2. Ces scénarios n'avaient jamais tourné sous Windows : chaque correctif
+   fait avancer le job dans `--shard=N/6`, ce qui découvre l'étage suivant. Le travail
+   restant est donc borné mais non terminé — il demande le même traitement famille par
+   famille, avec les journaux de `33927528320` comme point de départ.
+
+**Constat structurel** : `npm test -- --shard=1/6 || npm test -- --shard=1/6` fait échouer
+l'étape, donc les shards 2 à 6 n'étaient JAMAIS lancés. Windows n'a jamais eu de mesure
+complète ; ce qui apparaît maintenant n'est pas une régression mais un inventaire qui
+commence enfin. Il serait plus honnête de faire tourner les six shards puis de conclure
+(`continue-on-error` par shard, verdict agrégé), sans quoi chaque réparation continuera de
+révéler l'étage suivant un run à la fois.
