@@ -534,3 +534,76 @@ async function recoverJsonLines<T>(
 export function resetAtomicReadWarningsForTests(): void {
   warnedReadPaths.clear();
 }
+
+export interface CleanupOrphanedTemporariesOptions extends AtomicWriteOptions {
+  /**
+   * A temporary older than this (in ms) is considered orphaned and removed.
+   * Defaults to 5 minutes — comfortably longer than any single write, short
+   * enough to reclaim leaked files left by a process killed mid-write
+   * (e.g. SIGTERM between `open` and `rename`).
+   */
+  maxAgeMs?: number;
+  /** Injectable clock, for deterministic tests. */
+  now?: () => number;
+}
+
+const warnedCleanupPaths = new Set<string>();
+
+/**
+ * Remove stale `<filePath>.tmp.*` (and legacy `<filePath>.tmp`) siblings left
+ * behind in the same directory as `filePath` by a writer that never reached
+ * `rename` (killed between `open` and `rename`, or a crash). Never touches
+ * `filePath` itself. Intended to run once at startup for any state file
+ * written through `writeFileAtomic`/`writeJsonAtomic`. Best-effort: read or
+ * unlink failures on individual candidates are swallowed so one bad entry
+ * never blocks the others.
+ */
+export async function cleanupOrphanedTemporaries(
+  filePath: string,
+  options: CleanupOrphanedTemporariesOptions = {},
+): Promise<string[]> {
+  const fileSystem = options.fileSystem ?? defaultFileSystem;
+  const maxAgeMs = options.maxAgeMs ?? 5 * 60 * 1000;
+  const now = options.now ?? Date.now;
+  const directory = path.dirname(filePath);
+  const basename = path.basename(filePath);
+
+  let entries: string[];
+  try {
+    entries = await fileSystem.readdir(directory);
+  } catch {
+    return [];
+  }
+
+  const removed: string[] = [];
+  for (const entry of entries) {
+    if (entry === basename) continue; // never the target itself
+    if (entry !== `${basename}.tmp` && !entry.startsWith(`${basename}.tmp.`)) continue;
+
+    const candidate = path.join(directory, entry);
+    try {
+      const fileStat = await fileSystem.stat(candidate);
+      if (now() - fileStat.mtimeMs < maxAgeMs) continue; // recent: may still be in flight
+      await fileSystem.unlink(candidate);
+      removed.push(candidate);
+    } catch {
+      // Best-effort: a candidate that vanished or can't be stat'd/unlinked
+      // is skipped rather than aborting the whole cleanup.
+    }
+  }
+
+  if (removed.length > 0 && !warnedCleanupPaths.has(filePath)) {
+    warnedCleanupPaths.add(filePath);
+    logger.warn(
+      `Removed ${removed.length} orphaned temporary file(s) for ${filePath}`,
+      { path: filePath, removed },
+    );
+  }
+
+  return removed;
+}
+
+/** Reset the process-local cleanup-warning guard; intended for isolated tests. */
+export function resetAtomicCleanupWarningsForTests(): void {
+  warnedCleanupPaths.clear();
+}
