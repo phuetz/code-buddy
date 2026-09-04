@@ -513,7 +513,11 @@ export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
 
 const HYBRID_CAPACITY_PROPERTIES = {
   gpuNode: { type: "boolean", description: "GPU node local GPU worker is available." },
-  localGpu: { type: "boolean", description: "Local GPU worker is available." },
+  localGpu: {
+    type: "boolean",
+    description:
+      "Local GPU worker is available. Generic compatibility aliases local_gpu, localGpuAvailable and local_gpu_available are accepted; machine-specific legacy keys are not read.",
+  },
   google_flow: { type: "boolean", description: "Google Flow (browser-assisted) is available." },
   remaining_flow_credits: { type: "number", description: "Remaining Google Flow credits." },
   max_flow_credits_per_batch: { type: "number", description: "Credit ceiling for this batch." },
@@ -706,7 +710,11 @@ export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
         remaining_flow_credits: { type: "number", description: "Remaining Flow credits (export)." },
         max_flow_credits_per_batch: { type: "number", description: "Batch credit ceiling (export)." },
         gpu_node_available: { type: "boolean", description: "GPU node available (export)." },
-        local_gpu_available: { type: "boolean", description: "Local GPU available (export)." },
+        local_gpu_available: {
+          type: "boolean",
+          description:
+            "Local GPU available (export). Generic compatibility aliases localGpuAvailable and local_gpu are accepted; machine-specific legacy keys are not read.",
+        },
         expected_receipt_sha256: { type: "string", description: "Expected import receipt digest (review_import)." },
         reviewer: { type: "string", description: "Reviewer name (review_import)." },
         reason: { type: "string", description: "Review reason (review_import)." },
