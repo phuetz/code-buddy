@@ -14,7 +14,11 @@ describe('Multi-Channel Identity', () => {
   beforeEach(() => {
     resetIdentityLinker();
     resetSessionIsolator();
-    linker = new IdentityLinker();
+    // autoPersist: false — this suite never asserts on-disk state, and the
+    // default persistPath is the REAL ~/.codebuddy/identity-links.json.
+    // Without this, every run of this file fired unawaited writes at the
+    // user's actual home directory (see docs/reports/2026-09/REPARATION-IDLINKS1.md).
+    linker = new IdentityLinker({ autoPersist: false });
     isolator = new SessionIsolator({ identityLinker: linker });
   });
 
