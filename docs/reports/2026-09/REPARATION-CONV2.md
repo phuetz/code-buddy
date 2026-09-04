@@ -8,8 +8,8 @@ aucun rappel parlé, aucun service et aucun appel ElevenLabs n’ont été lanc�
 
 ## Références lues en premier
 
-- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/CONTEXTE-LISA.md:1-13` — boucle actuelle, absence de barge-in fiable et AEC imparfaite.
-- `~/DEV/vitrine-drafts/vague-2026-09-02/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-495` — section 8 et ses cinq mécanismes : VAP, AEC-VAD/reference-aware barge-in, backchannels, réparation communicative, TTS local réactif.
+- `<espace-de-travail>/recherche-conversation/CONTEXTE-LISA.md:1-13` — boucle actuelle, absence de barge-in fiable et AEC imparfaite.
+- `<espace-de-travail>/recherche-conversation/RECH1-LITTERATURE-GEMINI.md:412-495` — section 8 et ses cinq mécanismes : VAP, AEC-VAD/reference-aware barge-in, backchannels, réparation communicative, TTS local réactif.
 - `docs/FABLE5-CODEX-COORDINATION.md:1-260` — zone CONV2 réservée avant les modifications.
 - Mémoire de session `voice-barge-in.md:1-22` (hors dépôt) — état antérieur : interruption programmatique déjà présente dans la boucle voix, déclenchement VAD/AEC live manquant.
 

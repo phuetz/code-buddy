@@ -99,7 +99,7 @@ Dont `tests/docs/gk35-mcp-docs.test.ts` (assertions qui citaient le chemin priv�
 
 ## Remplacements
 
-- Documentation, rapports, CHANGELOG, queue : `/home/<utilisateur>/…` → `~/…`. Noms de dépôts privés → « le dépôt privé de passation » / `private-handover-repo` / `code-explorer` (nom public) / « un outil éditorial tiers ».
+- Documentation, rapports, CHANGELOG, queue : `/home/<utilisateur>/…` → `~/…`. Noms de dépôts privés (dont l'ancien nom du dépôt de passation) → « le dépôt privé de passation » / `code-explorer` (nom public) / « un outil éditorial tiers ».
 - Liens `file:///…/clone/tests/…` dans les revues → chemins relatifs `tests/…` (un `file://~` n'est pas une URL).
 - Scripts shell : `$HOME/…`. `_qa/gk4` : `ROOT` dérivé du script, plus un autre clone. `gpuNode-dev.sh` : plus de défaut Windows d'auteur ; `GPU_NODE_HOTE_SSH` / `GPU_NODE_DEPOT` exigés.
 - Python : `os.path.expanduser('~/…')` (`from __future__` reste en tête).

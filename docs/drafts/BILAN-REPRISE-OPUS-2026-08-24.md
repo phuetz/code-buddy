@@ -6,7 +6,7 @@ Pilote : Codex + flotte disponible, Claude exclu à la demande de Patrice. Aucun
 
 ### Formation LISA IA
 
-Dépôt : `~/DEV/formation-lisa-ia`, branche `master` locale.
+Dépôt privé dédié, branche `master` locale.
 
 - PDF rendus reproductibles et métadonnées normalisées ;
 - 24 ancres internes cassées corrigées ;
