@@ -59,7 +59,7 @@ Antigravity a repris la branche sans perte d'historique, a levé les collisions 
 ### A. Vitest (Fichiers touchés et sécurité)
 Commande exécutée :
 ```bash
-HOME=/home/patrice/DEV/cb-homebackup1-2026-09-04/_qa/homebackup1/home npx vitest run tests/commands/backup-profile.test.ts tests/commands/backup* tests/backup tests/security/donnees-personnelles.test.ts
+HOME=~/DEV/cb-homebackup1-2026-09-04/_qa/homebackup1/home npx vitest run tests/commands/backup-profile.test.ts tests/commands/backup* tests/backup tests/security/donnees-personnelles.test.ts
 ```
 Résultat :
 ```text
@@ -109,7 +109,7 @@ Un test réel a été mené sans altération sur le profil utilisateur réel.
 ### Sortie observée
 ```text
 [DRY RUN] Would create backup: _qa/out/codebuddy-backup-2026-09-04T11-11-18-profile.json
-Source: /home/patrice/.codebuddy (profile)
+Source: ~/.codebuddy (profile)
 Files: 32
 Size: 66 KB
 Skipped: 179 (.encryption-key: not in whitelist; auth-profiles.json: blacklisted (secret file); channel-scoped-auth.json: blacklisted (secret file); codex-auth.json: blacklisted (secret file); cowork.env: blacklisted (secret file); credentials: blacklisted (secret file); credentials.enc: blacklisted (secret file); fleet.env: blacklisted (secret file); gpu-worker-client.env: blacklisted (secret file); lisa.env: blacklisted (secret file); media.env: blacklisted (secret file); secrets: blacklisted (secret file); vision.env: blacklisted (secret file); xai-auth.json: blacklisted (secret file); collective/ckg-ledger.jsonl: larger than 5.0 MB; logs: directory not in whitelist; comfyui: directory not in whitelist; backups: directory not in whitelist; ...)
