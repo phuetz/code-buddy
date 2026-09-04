@@ -66,6 +66,22 @@ const RE_IP_MAILLEE = new RegExp(
   AVANT + '100\\.(?:6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])\\.' + OCTET + '\\.' + OCTET + APRES,
 );
 /**
+ * Même couverture pour les identifiants de pair dérivés, où les points sont
+ * remplacés par des tirets. Le début accepte un préfixe de type `peer-`, mais
+ * la fin refuse une continuation alphanumérique, pointée ou tiretée.
+ */
+const RE_IP_PRIVEE_TIRETEE = new RegExp(
+  AVANT +
+    '(?:' +
+    [
+      ['192', '168', OCTET, OCTET].join('-'),
+      ['10', OCTET, OCTET, OCTET].join('-'),
+      ['172', '(?:1[6-9]|2[0-9]|3[01])', OCTET, OCTET].join('-'),
+      ['100', '(?:6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])', OCTET, OCTET].join('-'),
+    ].join('|') +
+    ')(?![\\w.-])',
+);
+/**
  * Identifiant de projet du service vidéo tiers écrit en dur. On n'interdit pas
  * tout UUID (le dépôt en contient légitimement) mais l'UUID posé DANS un contexte
  * de projet Flow : une URL de projet, ou l'affectation de la constante.
@@ -132,6 +148,7 @@ const MOTIFS_REGEX = [
   { nom: 'ip-lan-16', regex: RE_IP_LAN_16, exempte: FICHIERS_PLAGES_PRIVEES },
   { nom: 'ip-lan-8', regex: RE_IP_LAN_8, exempte: FICHIERS_PLAGES_PRIVEES },
   { nom: 'ip-maillee', regex: RE_IP_MAILLEE, exempte: FICHIERS_PLAGES_PRIVEES },
+  { nom: 'ip-privee-tiretee', regex: RE_IP_PRIVEE_TIRETEE, exempte: FICHIERS_PLAGES_PRIVEES },
   { nom: 'uuid-projet-video', regex: RE_UUID_PROJET_FLOW, exempte: new Set<string>() },
 ] as const;
 
@@ -262,6 +279,30 @@ const DETECTION_FIXTURES = [
     motif: 'ip-lan-8',
   },
   {
+    nom: 'identifiant privé tireté RFC 1918 /16',
+    fichier: ['fixtures/', 'private-ip-dashed-16', '.md'].join(''),
+    contenu: ['témoin : ws://', ['192', '168', '7', '9'].join('-'), ':3000/ws'].join(''),
+    motif: 'ip-privee-tiretee',
+  },
+  {
+    nom: 'identifiant privé tireté RFC 1918 /8',
+    fichier: ['fixtures/', 'private-ip-dashed-8', '.md'].join(''),
+    contenu: ['témoin : peer-', ['10', '3', '7', '9'].join('-'), ':3000'].join(''),
+    motif: 'ip-privee-tiretee',
+  },
+  {
+    nom: 'identifiant privé tireté RFC 1918 /12',
+    fichier: ['fixtures/', 'private-ip-dashed-12', '.md'].join(''),
+    contenu: ['témoin : ws://', ['172', '20', '7', '9'].join('-'), ':3000/ws'].join(''),
+    motif: 'ip-privee-tiretee',
+  },
+  {
+    nom: 'identifiant privé tireté RFC 6598',
+    fichier: ['fixtures/', 'private-ip-dashed-shared', '.md'].join(''),
+    contenu: ['témoin : ws://', ['100', '77', '5', '9'].join('-'), ':3000/ws'].join(''),
+    motif: 'ip-privee-tiretee',
+  },
+  {
     nom: 'adresse de réseau maillé RFC 6598',
     fichier: ['fixtures/', 'mesh-ip', '.md'].join(''),
     contenu: ['témoin : ws://', ['100', '77', '5', '9'].join('.'), ':3000/ws'].join(''),
@@ -365,10 +406,15 @@ const DETECTION_FIXTURES = [
  */
 const NON_DETECTIONS = [
   { nom: 'boucle locale', contenu: ['http://', ['127', '0', '0', '1'].join('.'), ':3000'].join('') },
+  { nom: 'boucle locale tiretée', contenu: ['peer-', ['127', '0', '0', '1'].join('-'), ':3000'].join('') },
   { nom: 'adresse de documentation RFC 5737 (TEST-NET-3)', contenu: ['ws://', ['203', '0', '113', '10'].join('.'), ':3000/ws'].join('') },
+  { nom: 'adresse de documentation RFC 5737 tiretée', contenu: ['ws://', ['203', '0', '113', '10'].join('-'), ':3000/ws'].join('') },
   { nom: 'adresse de documentation RFC 5737 (TEST-NET-2)', contenu: ['http://', ['198', '51', '100', '20'].join('.'), ':8080'].join('') },
+  { nom: 'adresse de documentation RFC 5737 tiretée', contenu: ['http://', ['198', '51', '100', '20'].join('-'), ':8080'].join('') },
   { nom: 'numéro de version à trois segments', contenu: ['"autoprefixer": "^', ['10', '5', '4'].join('.'), '"'].join('') },
+  { nom: 'numéro de version tireté à trois segments', contenu: ['version-', ['10', '5', '4'].join('-')].join('') },
   { nom: 'plage maillée hors 64-127', contenu: ['http://', ['100', '12', '0', '1'].join('.')].join('') },
+  { nom: 'plage maillée tiretée hors 64-127', contenu: ['peer-', ['100', '12', '0', '1'].join('-')].join('') },
   { nom: 'UUID hors contexte de projet vidéo', contenu: 'id: f65b8e2d-83ca-4b26-8bc2-b21ece813c4b' },
 ] as const;
 

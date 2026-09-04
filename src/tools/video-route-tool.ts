@@ -22,7 +22,11 @@ import {
 
 const CAPACITY_PROPERTIES = {
   gpuNode: { type: 'boolean', description: 'GPU node local GPU worker is available.' },
-  localGpu: { type: 'boolean', description: 'Local GPU worker is available.' },
+  localGpu: {
+    type: 'boolean',
+    description:
+      'Local GPU worker is available. Generic compatibility aliases local_gpu, localGpuAvailable and local_gpu_available are accepted; machine-specific legacy keys are not read.',
+  },
   google_flow: { type: 'boolean', description: 'Google Flow (browser-assisted) is available.' },
   remaining_flow_credits: { type: 'number', description: 'Remaining Google Flow credits.' },
   max_flow_credits_per_batch: { type: 'number', description: 'Credit ceiling for this batch.' },
