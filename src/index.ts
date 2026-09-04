@@ -1144,12 +1144,16 @@ async function processPromptHeadless(
         if (format === 'text' || format === 'markdown') {
           cli.stdout(resultText);
         } else {
-          cli.stdout(JSON.stringify({
+          const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+          const slashOutputData: Record<string, unknown> = {
             result: resultText,
             cost: { total: agent.getSessionCost() },
-            model: modelToUse || process.env.GROK_MODEL || 'unknown',
+            model: slashEffectiveModel,
             messages: [{ role: 'assistant', content: resultText }],
-          }));
+          };
+          // For slash commands, we don't have effective vs requested model tracking
+          // since the agent hasn't processed a user message yet
+          cli.stdout(JSON.stringify(slashOutputData));
         }
         return slash.denied ? 1 : 0;
       }
@@ -1286,7 +1290,19 @@ async function processPromptHeadless(
 
     // Gather cost and model info from the agent
     const sessionCost = agent.getSessionCost();
-    const usedModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+    const client = agent.getClient();
+    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
+    const requestedModel = client.getLastRequestedModel();
+    
+    // MODELLABEL1: Warn on stderr when requested model differs from effective model in headless mode
+    if (requestedModel && requestedModel !== effectiveModel) {
+      const fallbackWarning = `⚠️  Modèle "${requestedModel}" non disponible, repli sur "${effectiveModel}"`;
+      // Only warn once per process in headless mode
+      if (!process.env.CODEBUDDY_MODEL_FALLBACK_WARNED) {
+        process.env.CODEBUDDY_MODEL_FALLBACK_WARNED = 'true';
+        process.stderr.write(fallbackWarning + '\n');
+      }
+    }
 
     // Output in the requested format
     const format = outputFormat.toLowerCase();
@@ -1302,12 +1318,16 @@ async function processPromptHeadless(
         process.stdout.write(JSON.stringify(message) + '\n');
       }
       // Emit a final summary event
-      process.stdout.write(JSON.stringify({
+      const summaryData: Record<string, unknown> = {
         type: 'summary',
         result: resultText,
         cost: { total: sessionCost },
-        model: usedModel,
-      }) + '\n');
+        model: effectiveModel,
+      };
+      if (requestedModel && requestedModel !== effectiveModel) {
+        summaryData.requestedModel = requestedModel;
+      }
+      process.stdout.write(JSON.stringify(summaryData) + '\n');
     } else {
       // Default: json — structured output goes to stdout (pipeable).
       const { autoWidget } = await import('./widgets/auto-widget.js');
@@ -1320,16 +1340,20 @@ async function processPromptHeadless(
       // rendering is disabled. The matcher is pure and does not open the
       // registry; typed payloads also bypass the table length gate.
       const candidate = widget.candidate ?? detectWidgetable(resultText, widgetPayloads);
-      cli.stdout(JSON.stringify({
+      const outputData: Record<string, unknown> = {
         result: resultText,
         cost: {
           total: sessionCost,
         },
-        model: usedModel,
+        model: effectiveModel,
         messages,
         ...(candidate ? { data: candidate.data } : {}),
         ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
-      }));
+      };
+      if (requestedModel && requestedModel !== effectiveModel) {
+        outputData.requestedModel = requestedModel;
+      }
+      cli.stdout(JSON.stringify(outputData));
     }
     return exitCode;
   } catch (error: unknown) {
