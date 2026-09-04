@@ -17,8 +17,12 @@ sys_path_parent = str(SCRIPT.parent)
 
 
 def _load():
+    import os
     import sys
 
+    # Le script exige FLOW_PROJECT_ID (aucun identifiant de projet en dur dans le
+    # dépôt public) : on fournit une valeur factice pour pouvoir l'importer.
+    os.environ.setdefault('FLOW_PROJECT_ID', 'projet-de-test')
     sys.path.insert(0, sys_path_parent)
     spec = importlib.util.spec_from_file_location('flow_crame', SCRIPT)
     assert spec and spec.loader
@@ -67,6 +71,39 @@ class FlowCrameSendSelectorTest(unittest.TestCase):
         self.assertFalse(
             flow_crame.agent_send_is_ready(disabled=True, aria_disabled='false')
         )
+
+
+class FlowProjectIdIsMandatoryTest(unittest.TestCase):
+    """Sans FLOW_PROJECT_ID, le script s'arrête avec un message explicite."""
+
+    def test_missing_env_var_aborts_with_a_clear_message(self) -> None:
+        import importlib.util
+        import os
+        import sys
+
+        previous = os.environ.pop('FLOW_PROJECT_ID', None)
+        try:
+            sys.path.insert(0, sys_path_parent)
+            spec = importlib.util.spec_from_file_location('flow_crame_no_env', SCRIPT)
+            assert spec and spec.loader
+            module = importlib.util.module_from_spec(spec)
+            with self.assertRaises(SystemExit) as ctx:
+                spec.loader.exec_module(module)
+            self.assertIn('FLOW_PROJECT_ID', str(ctx.exception))
+        finally:
+            if previous is not None:
+                os.environ['FLOW_PROJECT_ID'] = previous
+            sys.modules.pop('flow_crame_no_env', None)
+
+    def test_no_hardcoded_project_uuid_in_the_script(self) -> None:
+        import re
+
+        source = SCRIPT.read_text(encoding='utf-8')
+        uuid_like = re.compile(
+            r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+            r'[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+        )
+        self.assertEqual([], uuid_like.findall(source))
 
 
 if __name__ == '__main__':
