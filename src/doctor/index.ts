@@ -11,7 +11,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
-import { homedir } from 'os';
+import { freemem, homedir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
@@ -23,6 +23,11 @@ import {
 } from '../security/native-sandbox.js';
 import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
 import type { UserSettings } from '../utils/settings-manager.js';
+import {
+  selectOllamaModel,
+  type OllamaModelSelection,
+} from './ollama-model-selection.js';
+import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 
 export interface FixResult {
   success: boolean;
@@ -661,6 +666,10 @@ async function fixStaleLockFiles(lockFiles: string[]): Promise<FixResult> {
 
 export type OllamaSelectionSettings = Pick<UserSettings, 'model' | 'defaultModel'>;
 
+export { selectOllamaModel } from './ollama-model-selection.js';
+export type { OllamaModelSelection } from './ollama-model-selection.js';
+export type { OllamaModelCandidate } from '../wizard/environment-detection.js';
+
 function advertisedModel(models: readonly string[], requested: string | undefined): string | undefined {
   const normalized = requested?.trim().toLowerCase();
   if (!normalized) return undefined;
@@ -719,24 +728,33 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
   // OLLAMA_HOST alone is not a saved model selection. Treating the grok
   // defaultModel that loadUserSettings() used to invent as "the user's
   // Ollama tag" made doctor lie on a virgin profile.
-  const ollamaExplicitlySelected = onboardedLocal;
-  const liveOllamaModel = ollama?.available && ollama.baseURL
-    ? resolveOllamaModel(ollama.models ?? [], userSettings)
+  const liveOllamaSelection: OllamaModelSelection | undefined = ollama?.available && ollama.baseURL
+    ? selectOllamaModel(
+      ollama.modelDetails ?? (ollama.models ?? []).map((name): OllamaModelCandidate => ({ name })),
+      freemem(),
+    )
     : undefined;
 
-  if (
-    ollamaExplicitlySelected &&
-    liveOllamaModel &&
-    ollama?.baseURL &&
-    !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)
-  ) {
+  if (ollama?.available && ollamaModels > 0 && ollama.baseURL && !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
+    const selection = liveOllamaSelection;
+    if (!selection?.model) {
+      const reason = selection?.reason ?? 'no model-selection data was returned by Ollama';
+      return {
+        name: 'AI provider ready',
+        status: 'warn',
+        message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but no suitable model was selected — ${reason}; --fix made no changes`,
+      };
+    }
     const savedModel = userSettings?.defaultModel ?? userSettings?.model ?? 'none';
+    const selectionContext = onboardedLocal
+      ? `saved model ${savedModel} is not currently advertised`
+      : 'no model is currently selected';
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but saved model ${savedModel} is not currently advertised — --fix to select ${liveOllamaModel} ($0)`,
+      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — --fix to select ${selection.model} ($0; ${selection.reason})`,
       fixable: true,
-      fix: async () => fixSelectRunningOllama(ollama.baseURL!, liveOllamaModel),
+      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason),
     };
   }
 
@@ -748,18 +766,6 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
       name: 'AI provider ready',
       status: 'ok',
       message: rec ? `${rec.label} — ${rec.detail}` : 'a provider is configured',
-    };
-  }
-
-  if (ollama?.available && ollamaModels > 0 && ollama.baseURL) {
-    const model = ollama.models![0]!;
-    const baseURL = ollama.baseURL;
-    return {
-      name: 'AI provider ready',
-      status: 'warn',
-      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but not selected — run \`buddy onboard\`, or --fix to select ${model} ($0)`,
-      fixable: true,
-      fix: async () => fixSelectRunningOllama(baseURL, model),
     };
   }
 
@@ -782,13 +788,13 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
 }
 
 /** Point buddy at an already-running Ollama by writing user-settings (no download). */
-async function fixSelectRunningOllama(baseURL: string, model: string): Promise<FixResult> {
+async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string): Promise<FixResult> {
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
     getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
     return {
       success: true,
-      message: `Selected local Ollama model ${model} (written to user-settings.json) — try: buddy try`,
+      message: `Selected local Ollama model ${model}: ${reason ?? 'selected from the installed model list'} (written to user-settings.json) — try: buddy try`,
       action: 'select-running-ollama',
     };
   } catch (err) {

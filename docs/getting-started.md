@@ -452,6 +452,19 @@ If you don't want to set up multiple peers but want the team-lead pattern, use t
 ```
 This auto-enables `MultiAgentSystem`, decomposes the task, and submits specialized workers (orchestrator, coder, reviewer, tester) through bounded thread delegation. The scheduler defaults to one active worker; set `CODEBUDDY_SWARM_CONCURRENCY` explicitly when the provider can sustain more. Every worker stream is tagged `[swarm:<agent>:<kind>]`. Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` (no `GROK_API_KEY`).
 
+### Parallel batch (`/batch`)
+
+For independent work units, use `/batch <goal>`. It multiplexes separate
+`ThreadDelegate` sub-agents; `CODEBUDDY_BATCH_CONCURRENCY` caps concurrent
+sub-agents and defaults to `1`.
+
+### Self-improvement (`buddy improve`)
+
+`buddy improve status` shows coverage and autonomy. The `cycle`, `tools`,
+`skills`, and `loop` subcommands are `propose-only` by default. Set
+`CODEBUDDY_SELF_IMPROVE=true` (or `auto-apply`) and add `--apply` only when you
+want to keep an empirically validated improvement.
+
 For a persistent lead-managed task list, `/team` uses the same transport:
 ```
 > /team start ship the toy feature
