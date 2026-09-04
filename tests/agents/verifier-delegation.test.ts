@@ -174,4 +174,55 @@ describe("AgentRegistry.executeOn('verifier') delegated execution (DELEG3)", () 
     });
     expect(result.error).toMatch(/cost budget exhausted/i);
   });
+  it('strips every parent conversation channel before the delegate sees the task (DELEGVERIF)', async () => {
+    // The Verifier's contract is a genuinely fresh context. The delegation
+    // boundary — not the Verifier's own prompt builder — must be the place
+    // that guarantees it, so a future reader of task.params cannot resurrect
+    // the parent's conversation.
+    const seen: Array<Record<string, unknown> | undefined> = [];
+    vi.spyOn(VerifierAgent.prototype, 'execute').mockImplementation(async function (
+      this: VerifierAgent,
+      task,
+    ) {
+      seen.push(task.params);
+      return {
+        success: true,
+        output: 'EVIDENCE: nothing to do\nFINAL VERDICT: NEEDS REVIEW',
+        metadata: { verdict: 'NEEDS REVIEW' },
+      };
+    });
+
+    await registry.executeOn('verifier', {
+      action: 'verify',
+      params: {
+        instruction: 'Verify the fix',
+        parentHistory: [{ role: 'assistant', content: 'parent-history-marker' }],
+        history: [{ role: 'user', content: 'parent-history-marker' }],
+        messages: [{ role: 'assistant', content: 'parent-history-marker' }],
+        parentMessages: [{ role: 'assistant', content: 'parent-history-marker' }],
+        conversation: [{ role: 'assistant', content: 'parent-history-marker' }],
+        chatHistory: [{ role: 'assistant', content: 'parent-history-marker' }],
+        executeTool: vi.fn(async () => ({ success: true, output: 'ok' })),
+        llmCall: vi.fn(async (): Promise<SWELLMResponse> => ({ content: 'done', tool_calls: [] })),
+      },
+    });
+
+    expect(seen).toHaveLength(1);
+    const params = seen[0]!;
+    expect(JSON.stringify(params)).not.toContain('parent-history-marker');
+    for (const leaked of [
+      'parentHistory',
+      'history',
+      'messages',
+      'parentMessages',
+      'conversation',
+      'chatHistory',
+    ]) {
+      expect(params).not.toHaveProperty(leaked);
+    }
+    // The legitimate delegation channel survives the scrub.
+    expect(params.instruction).toBe('Verify the fix');
+    expect(typeof params.llmCall).toBe('function');
+    expect(typeof params.executeTool).toBe('function');
+  });
 });

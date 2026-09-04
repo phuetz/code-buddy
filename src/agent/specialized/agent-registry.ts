@@ -54,6 +54,37 @@ const VERIFIER_DELEGATION_PARENT_BUDGET: ThreadParentBudget = {
   maxContextTokens: 32_000,
 };
 
+/**
+ * Parameter keys that would smuggle the PARENT conversation into the Verifier.
+ * The Verifier's public contract is an independent, fresh-context review: it
+ * must judge the work from the instruction, the files and its own oracles, not
+ * from the transcript that produced the work. The delegation boundary is where
+ * that contract is enforced, so a future reader of `task.params` cannot
+ * resurrect the parent's messages.
+ */
+const PARENT_CONTEXT_PARAM_KEYS = [
+  'parentHistory',
+  'history',
+  'messages',
+  'parentMessages',
+  'conversation',
+  'chatHistory',
+] as const;
+
+/** Drop the parent conversation channels from a delegated Verifier task. */
+function stripParentContext(task: AgentTask): AgentTask {
+  if (!task.params) return task;
+  const leaked = PARENT_CONTEXT_PARAM_KEYS.filter((key) => key in task.params!);
+  if (leaked.length === 0) return task;
+  const params: Record<string, unknown> = { ...task.params };
+  for (const key of leaked) delete params[key];
+  logger.debug(
+    `Verifier delegation dropped parent context params: ${leaked.join(', ')}`,
+    { source: 'AgentRegistry' },
+  );
+  return { ...task, params };
+}
+
 function boundedPositiveInteger(value: unknown, limit: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return limit;
   return Math.min(Math.floor(value), limit);
@@ -342,7 +373,7 @@ export class AgentRegistry extends EventEmitter {
     })();
 
     try {
-      const outcome = await runner.submit('verifier', task);
+      const outcome = await runner.submit('verifier', stripParentContext(task));
       if (!outcome.success || !outcome.output) {
         const detail = outcome.message ?? outcome.reason ?? 'delegate returned no result';
         return {
