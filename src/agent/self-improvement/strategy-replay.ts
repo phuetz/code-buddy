@@ -42,10 +42,15 @@ const NAMED_FAILURE_KEYS: ReadonlyArray<[RegExp, string]> = [
 const NAMED_FAILURES_RE = /(?:Échecs nommés|Named failures)\s*:\s*([^\n]+)/i;
 const EXIT_CODE_RE = /(?:Sortie|Exit(?: code)?)\s*:\s*(\d+)\b/i;
 
+const KNOWN_FAILURE_KEYS = new Set(['max-rounds', 'cost-cap', 'unverified', 'lost-uncommitted-work']);
+
 /** Extract run facts from an experience's context/detail. Tolerant; free prose never invents a fact. */
 export function parseRunFacts(experience: Pick<Experience, 'context' | 'detail'>): RunFacts {
   const facts: RunFacts = {};
-  const text = `${experience.detail}\n${experience.context}`;
+  const rawContext = experience.context || '';
+  // Strip quoted strings from detail to prevent free-text quotes from injecting facts
+  const cleanDetail = (experience.detail || '').replace(/["'«][^"'»]*["'»]/g, ' ');
+  const text = `${cleanDetail}\n${rawContext}`;
   const named = NAMED_FAILURES_RE.exec(text);
   if (named) {
     for (const [re, key] of NAMED_FAILURE_KEYS) {
@@ -58,16 +63,34 @@ export function parseRunFacts(experience: Pick<Experience, 'context' | 'detail'>
   }
   const exit = EXIT_CODE_RE.exec(text);
   if (exit && facts.failure === undefined) facts.outcome = exit[1] === '0' ? 'success' : 'failure';
-  for (const m of text.matchAll(FACT_RE)) {
-    const key = (m[1] ?? '').toLowerCase();
-    const value = m[2] ?? '';
-    const num = Number(value);
-    if (key === 'rounds' && Number.isFinite(num)) facts.rounds = num;
-    else if (key === 'limit' && Number.isFinite(num)) facts.limit = num;
-    else if (key === 'cost' && Number.isFinite(num)) facts.costUsd = num;
-    else if (key === 'cap' && Number.isFinite(num)) facts.capUsd = num;
-    else if (key === 'outcome' && (value === 'success' || value === 'failure')) facts.outcome = value;
-    else if (key === 'failure') facts.failure = value.toLowerCase();
+
+  // Parse structured key=value tokens from lines that are structured (context or telemetry lines)
+  const lines = [
+    ...rawContext.split('\n'),
+    ...cleanDetail.split('\n').filter((l) => {
+      const words = l.trim().split(/\s+/).filter(Boolean);
+      const factWords = words.filter((w) => w.includes('='));
+      const plainWords = words.filter((w) => !w.includes('='));
+      if (factWords.length <= 1 && plainWords.length > 3) return false;
+      return true;
+    }),
+  ];
+
+  for (const line of lines) {
+    for (const m of line.matchAll(FACT_RE)) {
+      const key = (m[1] ?? '').toLowerCase();
+      const value = m[2] ?? '';
+      const num = Number(value);
+      if (key === 'rounds' && Number.isFinite(num) && num >= 1 && num <= 1000) facts.rounds = num;
+      else if (key === 'limit' && Number.isFinite(num) && num >= 1 && num <= 1000) facts.limit = num;
+      else if (key === 'cost' && Number.isFinite(num) && num >= 0 && num <= 10000) facts.costUsd = num;
+      else if (key === 'cap' && Number.isFinite(num) && num >= 0 && num <= 10000) facts.capUsd = num;
+      else if (key === 'outcome' && (value === 'success' || value === 'failure')) facts.outcome = value;
+      else if (key === 'failure') {
+        const lower = value.toLowerCase();
+        if (KNOWN_FAILURE_KEYS.has(lower)) facts.failure = lower;
+      }
+    }
   }
   return facts;
 }

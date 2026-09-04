@@ -43,24 +43,109 @@ export interface ValidateStrategyOptions {
 }
 
 /**
+ * Normalize directive text to defeat obfuscation (homoglyphs, zero-width chars,
+ * HTML tags/comments, hyphenated word wraps).
+ */
+export function normalizeDirectiveText(text: string): string {
+  return text
+    // Remove zero-width characters and soft hyphens
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '')
+    // Rejoin hyphenated words across lines: e.g. "ign-\nore" -> "ignore"
+    .replace(/(\w+)-[\r\n]+\s*(\w+)/g, '$1$2')
+    // Remove HTML comments
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, ' ')
+    // Normalize unicode canonical composition
+    .normalize('NFKC')
+    // Map common Cyrillic confusable homoglyphs to Latin equivalents
+    .replace(/\u043e/gi, 'o')
+    .replace(/\u0430/gi, 'a')
+    .replace(/\u0435/gi, 'e')
+    .replace(/\u0440/gi, 'p')
+    .replace(/\u0441/gi, 'c')
+    .replace(/\u0456/gi, 'i')
+    .replace(/\u0443/gi, 'y')
+    .replace(/\u0445/gi, 'x')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * A directive that tries to switch off a guard. The schema already has no field
  * for that; this catches an attempt smuggled into prose ("skip the sandbox").
  */
 export const FORBIDDEN_DIRECTIVE_RE =
-  /\b(?:disable|bypass|skip|ignore|turn\s+off|désactiv\w*|contourn\w*|ignor\w*|saute\w*)\b.{0,60}\b(?:sandbox|confirmation|permission|firewall|pare-feu|guard|garde-fou|validator|validateur|middleware|safety|sécurité|approval|approbation)/is;
+  /\b(?:disable|bypass|skip|ignore|turn\s*off|désactiv\w*|contourn\w*|ignor\w*|saute\w*)\w*.{0,60}\b(?:sandbox|confirmation|permission\w*|firewall|pare-feu|guard\w*|garde-fou\w*|validator\w*|validateur\w*|middleware|safety|sécurité|approval\w*|approbation\w*)/is;
+
+export const FORBIDDEN_PERMISSION_BYPASS_RE =
+  /\b(?:bypassPermissions|bypass-permissions)\b|\b(?:bypass|disable|skip|override)[\s_-]*permissions?\b/i;
+
+export const FORBIDDEN_YOLO_RE =
+  /\b(?:--yolo|yolo(?:-mode)?)\b/i;
+
+export const FORBIDDEN_DESTRUCTIVE_FS_RE =
+  /\brm\s+(?:-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\s+-f|-f\s+-r|--recursive\s+--force|--force\s+--recursive)\b/i;
+
+export const FORBIDDEN_EXFILTRATION_RE =
+  /\b(?:exfiltrat\w*|exfiltr\w*|upload|send|transmit|post|leak|dump|reveal|print|cat|read|copy|expos\w*|affich\w*|divulgu\w*|copi\w*|transmet\w*|envoy\w*)\b.{0,180}(?:\.env|\.ssh|\.aws|\b(?:credentials?|private[_ -]?key|api[_ -]?key|secret|token))\b/is;
+
+export const PROMPT_OVERRIDE_EN_RE =
+  /\b(?:ignore|disregard|override|forget|bypass)\b.{0,80}\b(?:all|any|previous|prior|system|developer|past)\b.{0,80}\b(?:instruction|prompt|directive|message|rule)s?\b/is;
+
+export const PROMPT_OVERRIDE_FR_RE =
+  /\b(?:ignore\w*|oubli\w*|outrepass\w*|contourn\w*|annul\w*)\b.{0,80}\b(?:toutes|tous|tout|les|mes|tes|chaque|précédent\w*|antérieur\w*|système|développeur)\b.{0,80}\b(?:instruction|consigne|directive|règle|message|prompt)s?\b/is;
 
 export function staticStrategyProblems(candidate: StrategySpec): string[] {
   const problems: string[] = [];
+
   for (const directive of candidate.directives) {
-    if (FORBIDDEN_DIRECTIVE_RE.test(directive)) {
+    const norm = normalizeDirectiveText(directive);
+
+    if (FORBIDDEN_DIRECTIVE_RE.test(directive) || FORBIDDEN_DIRECTIVE_RE.test(norm)) {
       problems.push(`directive tries to switch off a guard: ${JSON.stringify(directive.slice(0, 80))}`);
     }
+    if (FORBIDDEN_PERMISSION_BYPASS_RE.test(directive) || FORBIDDEN_PERMISSION_BYPASS_RE.test(norm)) {
+      problems.push(`directive pushes to bypass permissions: ${JSON.stringify(directive.slice(0, 80))}`);
+    }
+    if (FORBIDDEN_YOLO_RE.test(directive) || FORBIDDEN_YOLO_RE.test(norm)) {
+      problems.push(`directive pushes to --yolo mode: ${JSON.stringify(directive.slice(0, 80))}`);
+    }
+    if (FORBIDDEN_DESTRUCTIVE_FS_RE.test(directive) || FORBIDDEN_DESTRUCTIVE_FS_RE.test(norm)) {
+      problems.push(`directive contains destructive command (rm -rf): ${JSON.stringify(directive.slice(0, 80))}`);
+    }
+    if (FORBIDDEN_EXFILTRATION_RE.test(directive) || FORBIDDEN_EXFILTRATION_RE.test(norm)) {
+      problems.push(`directive attempts to exfiltrate secrets or .env: ${JSON.stringify(directive.slice(0, 80))}`);
+    }
+    if (
+      PROMPT_OVERRIDE_EN_RE.test(directive) ||
+      PROMPT_OVERRIDE_EN_RE.test(norm) ||
+      PROMPT_OVERRIDE_FR_RE.test(directive) ||
+      PROMPT_OVERRIDE_FR_RE.test(norm)
+    ) {
+      problems.push(`directive attempts prompt injection: ${JSON.stringify(directive.slice(0, 80))}`);
+    }
   }
+
   if (candidate.directives.length > 0) {
-    const firewall = safetyGateSkill(candidate.directives.join('\n'));
+    const rawJoined = candidate.directives.join('\n');
+    const normJoined = normalizeDirectiveText(rawJoined);
+    if (
+      PROMPT_OVERRIDE_EN_RE.test(rawJoined) ||
+      PROMPT_OVERRIDE_EN_RE.test(normJoined) ||
+      PROMPT_OVERRIDE_FR_RE.test(rawJoined) ||
+      PROMPT_OVERRIDE_FR_RE.test(normJoined)
+    ) {
+      problems.push(`directives combined attempt prompt injection`);
+    }
+    const firewall = safetyGateSkill(rawJoined);
     if (!firewall.ok) problems.push(...firewall.reasons.map((r) => `firewall: ${r}`));
+    if (normJoined !== rawJoined) {
+      const firewallNorm = safetyGateSkill(normJoined);
+      if (!firewallNorm.ok) problems.push(...firewallNorm.reasons.map((r) => `firewall (normalized): ${r}`));
+    }
   }
-  return problems;
+  return [...new Set(problems)];
 }
 
 function specEquals(a: StrategySpec, b: StrategySpec): boolean {
@@ -126,15 +211,31 @@ export async function validateStrategyProposal(
     if (o.candidateOk && !o.parentOk) wins++;
     else if (!o.candidateOk && o.parentOk) losses++;
     else ties++;
-    if (typeof o.parentCostUsd === 'number' && typeof o.candidateCostUsd === 'number' && o.parentCostUsd > 0) {
-      costNum += o.candidateCostUsd;
-      costDen += o.parentCostUsd;
+    if (
+      typeof o.parentCostUsd === 'number' &&
+      typeof o.candidateCostUsd === 'number' &&
+      Number.isFinite(o.parentCostUsd) &&
+      Number.isFinite(o.candidateCostUsd)
+    ) {
+      if (o.parentCostUsd < 0 || o.candidateCostUsd < 0) {
+        return {
+          ...reject('cost', ['evaluator produced negative cost observation']),
+          paired: { wins, losses, ties, pImprove: 0, evidence: evaluation.evidence },
+        };
+      }
+      if (o.parentCostUsd > 0) {
+        costNum += o.candidateCostUsd;
+        costDen += o.parentCostUsd;
+      }
     }
   }
   const threshold = options.threshold ?? 0.95;
   const decision = pairedBayesianDecision(wins, losses, threshold);
   const paired = { wins, losses, ties, pImprove: decision.pImprove, evidence: evaluation.evidence };
   const costRatio = costDen > 0 ? costNum / costDen : 1;
+  if (!Number.isFinite(costRatio) || costRatio < 0) {
+    return { ...reject('cost', ['invalid cost ratio calculated from observations']), paired, costRatio: 1 };
+  }
   const minDecisive = options.minDecisive ?? 3;
 
   if (evaluation.observations.length === 0) {
@@ -160,9 +261,28 @@ export async function validateStrategyProposal(
   // Accepted.
   let appliedRef: string | undefined;
   if (options.keepOnAccept) {
-    store.save(candidate);
-    store.activate(candidate.scope, candidate.id);
-    appliedRef = candidate.id;
+    try {
+      const currentActive = store.resolveActive(candidate.scope);
+      if (currentActive.id !== parent.id) {
+        return {
+          ...reject('lineage', [`concurrent modification detected: active strategy changed from ${parent.id} to ${currentActive.id}`]),
+          paired,
+          costRatio,
+        };
+      }
+      store.save(candidate);
+      store.activate(candidate.scope, candidate.id);
+      appliedRef = candidate.id;
+    } catch (err) {
+      return {
+        ...base,
+        accepted: false,
+        rejectionReason: 'undecided',
+        reasons: [`storage failed: ${err instanceof Error ? err.message : String(err)}`],
+        paired,
+        costRatio,
+      };
+    }
   }
   return {
     ...base,
