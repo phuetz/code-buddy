@@ -48,7 +48,7 @@ Terminal multi-provider AI coding agent. **15 providers** via OpenAI-compatible 
 ```
 User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
                                          │
-                                Tool calls (max 50, YOLO 400)
+                                Tool rounds (max 50, YOLO 400)
                                          │
                               Execute + confirm → results → loop
 ```
