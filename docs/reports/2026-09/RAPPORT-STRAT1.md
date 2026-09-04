@@ -77,3 +77,19 @@ pas. Ce chantier la livre, avec une porte EMPIRIQUE et non un simple schéma.
   DGM5 (journaux de lanes) ; aujourd'hui `--experiences fichier.jsonl` ou la source `run` les portent.
 - Le rejeu est une preuve NÉCESSAIRE ; l'évaluateur « live » (runs appariés réels via
   `createHeadlessRunner`) reste à écrire — l'interface existe.
+
+## Complément 13 h 40 — pont avec DGM5 et preuve sur la journée RÉELLE
+DGM5 (Gemini) a livré la source d'expérience « journaux de lanes » ; ses expériences sont en prose
+(`Échecs nommés : Maximum tool execution rounds.`, `Sortie : 0.`). Le rejeu lit maintenant ces
+marqueurs (jamais le texte libre) et rejoue une lane coupée sans compte mesuré contre le plafond en
+vigueur ; `improve strategies` élargit la fenêtre à 200 journaux et dédoublonne (`76c3ae554`, suivant).
+
+Preuve réelle, 857 journaux de délégation de la machine, source activée, **propose-only** :
+```
+Autonomy: propose-only · scope: headless · experiences: 50
+Candidate: strat-headless-v2-489b5c — 9 run(s) with failure=max-rounds → rounds 75
+Gate: accepted (propose-only) wins=9 losses=0 ties=34 P=0.999 (replay)
+```
+Avec la fenêtre par défaut de 10 journaux, la même commande répondait `undecided` (1 gain, P=0,75) :
+la porte refuse une preuve mince, c'est le comportement voulu. La machine a donc dérivé seule, de la
+journée réelle, la correction que le pilote avait faite à la main le matin (plafond de tours headless).
