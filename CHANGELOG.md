@@ -1,5 +1,17 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### TESTWRITE1 — la suite Vitest écrivait dans le `.codebuddy/` réel (4 septembre 2026)
+
+Deux coupables mesurés (`strace`) : `tests/memory/memory-provider.test.ts` instanciait les
+adaptateurs réseau sans option, dont le repli local résout le singleton mémoire sur
+`process.cwd()/.codebuddy/CODEBUDDY_MEMORY.md` ; `tests/utils/settings-manager.test.ts`
+mockait `fs` partiellement pendant que `atomic-write.ts` utilisait le vrai `openSync`/
+`renameSync` — un temporaire vide remplaçait atomiquement `settings.json` (0 octet, tests
+pourtant verts). Le même mécanisme a vidé le `user-settings.json` de l'auteur. Options
+injectables sans changer les défauts, tests sous `mkdtemp`, et un `globalSetup`
+`tests/hygiene/no-repo-writes-global-setup.ts` qui prend l'empreinte des deux fichiers avant
+la suite et rougit si elle change. Rapport : `docs/reports/2026-09/REPARATION-TESTWRITE1.md`.
+
 ### IDLINKS1 — des dizaines de temporaires `identity-links.json.tmp.*` orphelins (4 septembre 2026)
 
 Trois causes : `IdentityLinker` réécrivait un contenu inchangé à chaque `link()` rapproché
