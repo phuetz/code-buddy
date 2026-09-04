@@ -39,6 +39,16 @@ processes of the same binary, not two listeners in one process.
    `openssl rand -hex 32`.
 2. **CORS is localhost-only by default.** Set `CORS_ORIGINS` to the
    exact origins of your clients. Avoid `*` in production.
+   **CORS is not an access control.** An HTTP request from an unlisted
+   origin still gets its normal response — measured: `200 OK`, body
+   served, simply **without** the `Access-Control-Allow-Origin` header,
+   which is what makes the *browser* refuse to hand the body to the
+   calling page. An unlisted HTTP origin is **not a 403** — the server
+   never refuses it — and a non-browser client (curl, a script, a fleet
+   peer) is unaffected. Real access
+   control is the JWT and the network — never the origin list. The
+   WebSocket is the one surface that refuses server-side: an unlisted
+   `Origin` is rejected at the handshake with `403 Forbidden origin`.
 3. **Behind a proxy, configure trusted proxies explicitly** — the
    gateway is origin-hardened (GHSA-5wcw-8jjv-m286); client IPs are only
    read from `X-Forwarded-For` when the proxy is trusted.

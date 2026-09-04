@@ -73,6 +73,13 @@ Client -> chat / session_create / session_join / session_patch / presence
 - **Bind modes**: `loopback` (127.0.0.1), `all` (0.0.0.0), `tailscale`
 - **TLS support**: `tlsEnabled`, `tlsCert`, `tlsKey`, `tlsCa`, `skipLocalPairing`
 - **Security**: GHSA-5wcw-8jjv-m286 fix, default `corsOrigins` localhost-only, `trustedProxies` config
+- **Origin, the two surfaces — they do NOT behave the same.** The WebSocket
+  refuses server-side: an unlisted `Origin` is turned away at the handshake with
+  `403 Forbidden origin` (a client sending no `Origin` at all — CLI, fleet peer —
+  is let through). HTTP does not refuse: an unlisted origin gets a normal `200`
+  with the body, only **without** the `Access-Control-Allow-Origin` header, so
+  the *browser* blocks the read. CORS is therefore not an access control; use the
+  JWT and the network for that.
 - Device identity with challenge nonce verification
 - Presence tracking (online/offline/away/typing)
 
