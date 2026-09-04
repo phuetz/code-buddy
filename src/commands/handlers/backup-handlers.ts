@@ -201,7 +201,7 @@ export async function handleBackup(
   const subcommand = parts[0]?.toLowerCase() || 'list';
 
   // HOMEBACKUP1: Extract profile-related flags that apply to all subcommands
-  const profileIndex = parts.indexOf('--profile');
+  const profileIndex = parts.indexOf('--home-profile');
   const profileMode = profileIndex >= 0;
   
   const scopeIndex = parts.indexOf('--scope');
@@ -224,7 +224,7 @@ export async function handleBackup(
       return {
         handled: true,
         exitCode: 1,
-        response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--profile] [--scope home|project|both] [--dry-run]`,
+        response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--home-profile] [--scope home|project|both] [--dry-run]`,
       };
   }
 }
@@ -251,7 +251,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   const dryRun = profileOpts?.dryRun || false;
 
   // Validate scope
-  if (doProfileBackup && scope && !['home', 'project', 'both'].includes(scope)) {
+  if (scope && !['home', 'project', 'both'].includes(scope)) {
     return {
       handled: true,
       exitCode: 1,
@@ -561,7 +561,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     return {
       handled: true,
       exitCode: 1,
-      response: 'Usage: backup restore <file> [--confirm] [--profile] [--scope home|project|both]',
+      response: 'Usage: backup restore <file> [--confirm] [--home-profile] [--scope home|project|both]',
     };
   }
 
@@ -640,8 +640,8 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
           `Created: ${manifest.createdAt}`,
           `Files: ${manifest.files.length}`,
           '',
-          'This merges into the current project .codebuddy/: archive files are overwritten, extra files are left in place.',
-          formatExtraFilesLine(extras) || 'No extra files are present in .codebuddy/.',
+          `This merges into ${destRoot}: archive files are overwritten, extra files are left in place.`,
+          formatExtraFilesLine(extras) || 'No extra files are present.',
           'To confirm, run: backup restore <file> --confirm',
         ].join('\n'),
       };
