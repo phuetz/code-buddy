@@ -304,6 +304,20 @@ export interface RemoteAgent {
  * A2A Agent Client — sends tasks to other agents.
  * Used by an orchestrator to delegate work to specialist agents.
  */
+/**
+ * Spoke names that earn the "always-on" bonus. Spokes name themselves after their host
+ * (`ollama-<hostname>`), so the patterns must be configurable per deployment:
+ * `CODEBUDDY_A2A_ALWAYS_ON_SPOKES` (csv of case-insensitive substrings), default `hub,linux`.
+ */
+export function isAlwaysOnSpokeName(spokeName: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const patterns = (env.CODEBUDDY_A2A_ALWAYS_ON_SPOKES ?? 'hub,linux')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+  const name = spokeName.toLowerCase();
+  return patterns.some((pattern) => name.includes(pattern));
+}
+
 export class A2AAgentClient {
   private agents: Map<string, A2AAgentServer> = new Map();
   private remoteCards: Map<string, RemoteAgent> = new Map();
@@ -400,7 +414,7 @@ export class A2AAgentClient {
     let score = 10;
 
     // Bonus for always-on spokes (assume names with "hub" or "linux" are always-on)
-    if (spokeName.toLowerCase().includes('hub') || spokeName.toLowerCase().includes('linux')) {
+    if (isAlwaysOnSpokeName(spokeName)) {
       score += 5;
     }
 

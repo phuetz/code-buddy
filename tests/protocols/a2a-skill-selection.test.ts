@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { A2AAgentClient, TaskStatus } from '../../src/protocols/a2a/index.js';
+import { A2AAgentClient, TaskStatus, isAlwaysOnSpokeName } from '../../src/protocols/a2a/index.js';
 import type { AgentCard } from '../../src/protocols/a2a/index.js';
 
 describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
@@ -52,6 +52,18 @@ describe('A2A Smart Skill Selection (POC Niveau 3)', () => {
     // Both have chat skill, but ollama-hub is "always-on" so should score higher
     const best = client.findBestSpokeForSkill('chat-qwen3.6-35b');
     expect(best).toBe('ollama-hub');
+  });
+
+  it('always-on spoke patterns are configurable (a spoke is named after its host)', () => {
+    // Revue GF3 (04/09/2026) : un nom de machine en dur dans le code ne survit pas à une
+    // substitution mécanique ; la vraie machine perdait son bonus « toujours allumée ».
+    expect(isAlwaysOnSpokeName('ollama-hub', {})).toBe(true);
+    expect(isAlwaysOnSpokeName('ollama-box', {})).toBe(false);
+    const env = { CODEBUDDY_A2A_ALWAYS_ON_SPOKES: 'box, Tower' };
+    expect(isAlwaysOnSpokeName('ollama-box', env)).toBe(true);
+    expect(isAlwaysOnSpokeName('OLLAMA-TOWER', env)).toBe(true);
+    expect(isAlwaysOnSpokeName('ollama-hub', env)).toBe(false);
+    expect(isAlwaysOnSpokeName('ollama-hub', { CODEBUDDY_A2A_ALWAYS_ON_SPOKES: ' , ' })).toBe(false);
   });
 
   it('should find best spoke for unique skill', () => {
