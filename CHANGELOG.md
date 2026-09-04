@@ -1,5 +1,13 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### SWARMFIX1 — dernier rouge du balayage et un test qui écrivait dans le dépôt (4 septembre 2026)
+
+`swarm-handler.test.ts` prouve désormais le routage de `/swarm` par les délégués
+avec l'override de stratégie honoré (mutation rouge). Le test `CC14 SpawnOptions`
+omettait `projectRoot` et faisait écrire `completeAgent` dans
+`.codebuddy/agent-memory/alice/MEMORY.md` du dépôt réel : fixture isolée, code
+produit inchangé.
+
 ### MEMFIX2 — 32 harnais de tests réalignés sur les écritures atomiques (4 septembre 2026)
 
 Le premier balayage complet depuis MEM1 (~34 800 tests) a trouvé 33 fichiers
