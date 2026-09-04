@@ -211,7 +211,7 @@
     "terminal-image": "^4.1.0",
     "tesseract.js": "^7.0.0",
     "tiktoken": "^1.0.22",
-    "undici": "^6.27.0",
+    "undici": "^6.28.0",
     "yaml": "^2.9.0",
     "youtube-caption-extractor": "^1.10.2",
     "zod": "^3.25.0"
@@ -288,9 +288,11 @@
     "@opentelemetry/otlp-transformer": {
       "protobufjs": "^8.4.2"
     },
+    "browserslist": "^4.28.9",
+    "undici": "^6.28.0",
     "simple-git": "^3.36.0",
     "vite": "^7.3.3",
     "ws": "^8.20.1",
-    "npm": "^11.19.0"
+    "npm": "^11.19.1"
   }
 }
