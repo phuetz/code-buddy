@@ -193,7 +193,7 @@ ROCm ~7.2 supporte officiellement PyTorch sur Strix Halo depuis début 2026, **m
 
 ## 4.8 Topologie de calcul — HUB + GPU_NODE + fleet (le point qui débloque tout)
 
-L'analyse « CUDA-only = hors de portée » n'est vraie que **localement sur le hub**. Le parc réel est **hétérogène et déjà en réseau** (tailnet, hub A2A `100.98.18.76:3000`) :
+L'analyse « CUDA-only = hors de portée » n'est vraie que **localement sur le hub**. Le parc réel est **hétérogène et déjà en réseau** (tailnet, hub A2A `<ip-du-hub>:3000`) :
 
 - **HUB** — mini-PC **AMD Ryzen AI / Strix Halo**, Linux, où tourne le robot **24/7** (`buddy-sense`, `buddy-vision`, réactions). Perception temps réel, local, autonome. iGPU ROCm/Vulkan.
 - **GPU_NODE** — machine **2× RTX 3090** (là où le world model a été entraîné ; référencée dans `world-model/scripts/ollama_a2a_spoke.py`). **CUDA disponible.**
