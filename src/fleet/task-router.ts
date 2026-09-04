@@ -33,6 +33,7 @@ import type {
   ModelStrength,
   PeerCapability,
 } from './types.js';
+import type { TaskType } from '../council/task-types.js';
 import {
   normalizeDispatchProfile,
   type FleetDispatchProfile,
@@ -84,6 +85,8 @@ export interface DispatchPlan {
 
 /** Constraints the caller imposes on the plan. */
 export interface DispatchConstraints {
+  /** Shared scoreboard category, carried for route explanations and consumers. */
+  taskType?: TaskType;
   /**
    * When true, a peer with `egress === 'cloud'` is vetoed regardless
    * of score. Used for sensitive prompts containing secrets, source
@@ -494,6 +497,7 @@ function buildRationale(
     required.length > 0 ? required.join(', ') : 'no specific strength';
   const parts = [
     `Primary: ${primary.peerId} ${primary.model} (score ${primary.score.toFixed(3)})`,
+    `Task type: ${c.taskType ?? 'unspecified'}`,
     `Required: ${reqStr}`,
     `Complexity: ${c.complexity}`,
     `Profile: ${dispatchProfile}`,
