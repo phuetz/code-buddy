@@ -1,5 +1,14 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### GF3FIX — les deux ouverts de la revue GF3 (4 septembre 2026)
+
+La capacité `localGpu` des trois outils vidéo accepte des alias génériques
+(`local_gpu`, `localGpuAvailable`, `local_gpu_available`) — jamais l'ancienne clé
+propre à une machine, qui reste non lue et le dit dans le schéma. Le garde-fou
+données personnelles attrape désormais les adresses privées écrites avec des tirets
+(la forme que `derivePeerId` produit), fixture isolée mutation-testée ; le dépôt
+suivi n'en contient aucune. Rapport : `docs/reports/2026-09/REPARATION-GF3FIX.md`.
+
 ### PERSONA1 — huit tests rouges qui lisaient l'état réel de la machine (4 septembre 2026)
 
 `tests/enhanced-memory.test.ts`, `tests/persona-manager.test.ts` et `tests/persona-handler.test.ts`
