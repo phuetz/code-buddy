@@ -16,6 +16,8 @@ describe('inferTaskType', () => {
     expect(inferTaskType('Juge ces quatre versions à l’aveugle')).toBe('jugement-litteraire');
     expect(inferTaskType('Attaque ce dispositif avec un audit adversarial')).toBe('audit-adversarial');
     expect(inferTaskType('Relis la typographie et la ponctuation')).toBe('relecture-typo');
+    expect(inferTaskType('Rédige une synthèse claire')).toBe('redaction-fr');
+    expect(inferTaskType('Tranche entre ces deux options')).toBe('arbitrage-litteraire');
   });
 
   it('routes French-written technical tasks to code, not french', () => {

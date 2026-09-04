@@ -54,6 +54,10 @@ export function inferLiteraryTaskType(task: string): KnownTaskType | undefined {
       /\b(?:tranche(?:r|z)?|decide\s+between|choose\s+between)\b/.test(t)
       && /\b(?:auteur|author|version\w*|candidate\w*|manuscrit\w*|texte\w*)\b/.test(t)
     )
+    || (
+      /\b(?:tranche(?:r|z)?|decide\s+between|choose\s+between)\b/.test(t)
+      && !/\b(?:code|cli|fichier|file|function|migration|plan|script|api|serveur|server|database|sql|json)\b/.test(t)
+    )
   ) {
     return 'arbitrage-litteraire';
   }
@@ -68,6 +72,13 @@ export function inferLiteraryTaskType(task: string): KnownTaskType | undefined {
   if (
     /\b(?:[ée]cri(?:s|re|vez)?|r[ée]dig(?:e|er|ez)?|draft|write|writes|writing|chapter|chapitre|roman|novel|short\s+story|prose|manuscrit)\b/.test(t)
     && /\b(?:chapter|chapitre|roman|novel|story|prose|manuscrit|litt[ée]raire|literary|scene|sc[èe]ne|fiction)\b/.test(t)
+  ) {
+    return 'redaction-fr';
+  }
+
+  if (
+    /\b(?:r[ée]dig(?:e|er|ez)?|draft|writing|write)\b/.test(t)
+    && !/\b(?:code|cli|fichier|file|function|migration|script|api|serveur|server|database|sql|json|po[èe]me|poem)\b/.test(t)
   ) {
     return 'redaction-fr';
   }
