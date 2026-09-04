@@ -36,6 +36,23 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+// MEM1 owns JSON parsing/formatting at this seam. The adapter keeps the
+// existing fake disk behavior while preventing low-level atomic fs calls.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: (filePath: string, fallback: unknown, options: {
+    isValid?: (value: unknown) => boolean;
+  } = {}) => {
+    try {
+      const value: unknown = JSON.parse(mockReadFileSync(filePath, 'utf-8'));
+      return options.isValid && !options.isValid(value) ? fallback : value;
+    } catch {
+      return fallback;
+    }
+  },
+  writeJsonAtomicSync: (filePath: string, value: unknown) =>
+    mockWriteFileSync(filePath, JSON.stringify(value, null, 2)),
+}));
+
 // Mock os
 jest.mock('os', () => {
   const impl = {

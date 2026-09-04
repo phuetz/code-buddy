@@ -7,15 +7,27 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Mock dependencies
+const { mockExistsSync, mockReadJsonSync, mockEnsureDirSync, mockWriteJsonSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn(),
+  mockReadJsonSync: vi.fn(),
+  mockEnsureDirSync: vi.fn(),
+  mockWriteJsonSync: vi.fn(),
+}));
+
 jest.mock('fs-extra', () => {
   const impl = {
-  existsSync: jest.fn(),
-  readJsonSync: jest.fn(),
-  ensureDirSync: jest.fn(),
-  writeJsonSync: jest.fn(),
+  existsSync: mockExistsSync,
+  readJsonSync: mockReadJsonSync,
+  ensureDirSync: mockEnsureDirSync,
+  writeJsonSync: mockWriteJsonSync,
 };
   return { ...impl, default: impl };
 });
+
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonSync,
+  writeJsonAtomicSync: mockWriteJsonSync,
+}));
 
 import {
   ROITracker,

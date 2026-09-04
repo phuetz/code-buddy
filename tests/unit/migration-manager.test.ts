@@ -55,6 +55,12 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+// MEM1 routes migration state through atomic persistence rather than fs-extra.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFile,
+  writeJsonAtomic: mockWriteJson,
+}));
+
 // Helper function to parse version
 const parseVersion = (v: string): { major: number; minor: number; patch: number } => {
   const [major, minor, patch] = v.split('.').map(Number);

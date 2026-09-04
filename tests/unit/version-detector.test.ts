@@ -32,6 +32,10 @@ vi.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  writeJsonAtomic: mockWriteJson,
+}));
+
 // Helper functions hoisted so they're available in vi.mock factories
 const { parseVersion, compareVersions, parseFullVersion } = vi.hoisted(() => {
   const parseVersion = (v: string): { major: number; minor: number; patch: number } => {

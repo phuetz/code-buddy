@@ -37,6 +37,16 @@ vi.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomic, mockWriteJsonAtomic } = vi.hoisted(() => ({
+  mockReadJsonAtomic: vi.fn(),
+  mockWriteJsonAtomic: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: mockReadJsonAtomic,
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
+
 import {
   ResponseCache,
   CacheEntry,
@@ -52,6 +62,13 @@ describe('ResponseCache', () => {
     jest.clearAllMocks();
     mockExistsSync.mockReturnValue(false);
     mockReadFile.mockResolvedValue(JSON.stringify({ entries: {}, stats: { hits: 0, misses: 0 } }));
+    mockReadJsonAtomic.mockImplementation(async (_path, fallback) => {
+      try {
+        return JSON.parse(await mockReadFile());
+      } catch {
+        return fallback;
+      }
+    });
 
     cache = new ResponseCache({
       maxEntries: 10,
@@ -84,13 +101,15 @@ describe('ResponseCache', () => {
       await customCache.dispose();
     });
 
-    it('should create cache directory if not exists', async () => {
-      mockExistsSync.mockReturnValue(false);
-
+    it('should initialize through the atomic reader when the cache is absent', async () => {
+      mockReadJsonAtomic.mockClear();
       const newCache = new ResponseCache();
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      expect(mockMkdirSync).toHaveBeenCalled();
+      expect(mockReadJsonAtomic).toHaveBeenCalledWith(
+        expect.stringContaining('response-cache.json'),
+        { entries: {}, stats: { hits: 0, misses: 0 } }
+      );
       await newCache.dispose();
     });
 
@@ -437,14 +456,21 @@ describe('ResponseCache', () => {
       cache.set('query', 'Response that is long enough to be cached by the system', 'h1', 'm1');
 
       // Clear mock to check new calls
-      mockWriteFile.mockClear();
+      mockWriteJsonAtomic.mockClear();
 
       await cache.dispose();
 
       // Give time for async save
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(mockWriteFile).toHaveBeenCalled();
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
+        expect.stringContaining('response-cache.json'),
+        expect.objectContaining({
+          entries: expect.any(Object),
+          stats: expect.any(Object),
+          savedAt: expect.any(Number),
+        })
+      );
     });
 
     it('should clear pending save timeout', async () => {
@@ -485,7 +511,7 @@ describe('ResponseCache', () => {
 
   describe('Debounced Saves', () => {
     it('should debounce multiple set operations', async () => {
-      mockWriteFile.mockClear();
+      mockWriteJsonAtomic.mockClear();
 
       cache.set('q1', 'Response 1 that is long enough to be cached by the system', 'h1', 'm1');
       cache.set('q2', 'Response 2 that is long enough to be cached by the system', 'h2', 'm1');
@@ -495,7 +521,7 @@ describe('ResponseCache', () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Should have been called once (or few times) due to debouncing
-      expect(mockWriteFile.mock.calls.length).toBeLessThan(3);
+      expect(mockWriteJsonAtomic.mock.calls.length).toBeLessThan(3);
     });
   });
 

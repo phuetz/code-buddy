@@ -78,6 +78,18 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+// MEM1 moved state persistence behind the atomic-write seam. Reuse the existing
+// filesystem spies at that seam so no real state leaks between unit tests.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: vi.fn(async (filePath: string, fallback: unknown) => {
+    const value = await mockReadJSON(filePath);
+    return fallback === null && Array.isArray(value) && value.length === 0 ? fallback : value;
+  }),
+  readTextAtomic: mockReadFile,
+  writeFileAtomic: mockWriteFile,
+  writeJsonAtomic: mockWriteJSON,
+}));
+
 // Mock database repository
 jest.mock('../../src/database/repositories/memory-repository', () => ({
   getMemoryRepository: jest.fn(function() { return {
