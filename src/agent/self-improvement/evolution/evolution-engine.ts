@@ -15,12 +15,22 @@
  */
 
 import { execFileSync, spawn } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../../../utils/logger.js';
 import { scoreBranchInWorktree } from './worktree-scorer.js';
 import { WorktreeSessionManager } from '../../../git/worktree-sessions.js';
-import { CodeVariantStore, behaviorDescriptor, diverseElites, computeGeneration, type VariantRecord } from './code-variant-store.js';
+import {
+  CodeVariantStore,
+  behaviorDescriptor,
+  diverseElites,
+  computeGeneration,
+  selectParentWithPenalty,
+  type VariantRecord,
+} from './code-variant-store.js';
 import { makeLlmVariantPlanner, renderVariantPlan, type VariantPlan, type VariantPlanner } from './variant-planner.js';
 import { changedPathsVsBase } from './protected-paths.js';
+import { checkAstNovelty, type AstNoveltyResult } from './ast-novelty.js';
 import type { FitnessComponent, FitnessReport } from './variant-fitness.js';
 import { pickModelUCB, type BanditScoreboard } from './model-bandit.js';
 import type { LlmCandidate } from '../../../fleet/model-selector.js';
@@ -109,6 +119,12 @@ export interface EvolutionCycleOptions extends ModelBanditWiring {
   compoundFrom?: string;
   /** Plans the variant before mutating (default: LLM planner). null result → mutator's ad-hoc prompt. */
   planner?: VariantPlanner;
+  /** Keep the pre-DGM2 max-score/MAP-Elites parent selection for comparison (default false). */
+  legacyParentSelection?: boolean;
+  /** Offspring-penalty coefficient for parent selection (default 0.5). */
+  parentPenaltyLambda?: number;
+  /** Injectable random source for deterministic parent-selection tests. */
+  parentSelectionRandom?: () => number;
 }
 
 export interface EvolutionCycleResult {
@@ -118,6 +134,7 @@ export interface EvolutionCycleResult {
   report: FitnessReport;
   beatsBaseline: boolean;
   kept: boolean;
+  rejectionReason?: 'ast-identical';
 }
 
 /** Pure decision: a candidate "wins" if it passed everything, regressed nothing, and beats baseline. */
@@ -152,17 +169,31 @@ export function chooseBranchBase(
 
 const MAX_INSPIRATION_DIFF = 4000;
 
-/** Top-k passing, above-baseline variants (with truncated diffs) to seed the mutator's prompt. */
+export interface InspirationSelectionOptions {
+  /** `'legacy'` keeps the previous top-score-per-niche behavior; omitted/`'penalized'` is DGM4. */
+  selectionMode?: 'legacy' | 'penalized';
+  lambda?: number;
+  random?: () => number;
+}
+
+/** Top-k eligible variants (with truncated diffs) to seed the mutator's prompt. */
 export function gatherInspirations(
   store: CodeVariantStore,
   baseRef: string,
   basePath: string,
   k: number,
   baselineScore?: number,
+  selection: InspirationSelectionOptions = {},
 ): Inspiration[] {
   if (k <= 0) return [];
-  // MAP-Elites: one elite per behavior niche → diverse inspirations, not k clones of one lineage.
-  const elites = diverseElites(store.list(), k, baselineScore);
+  const records = store.list();
+  // The penalized path is the default. Keep the old path available explicitly for comparisons.
+  const elites =
+    selection.selectionMode === 'penalized'
+      ? selectPenalizedInspirations(records, k, selection.lambda, selection.random)
+      : selection.selectionMode === 'legacy'
+        ? diverseElites(records, k, baselineScore)
+        : selectPenalizedInspirations(records, k, selection.lambda, selection.random);
   return elites.map((v) => {
     let diff = '';
     try {
@@ -173,6 +204,54 @@ export function gatherInspirations(
     if (diff.length > MAX_INSPIRATION_DIFF) diff = `${diff.slice(0, MAX_INSPIRATION_DIFF)}\n…(truncated)`;
     return { id: v.id, goal: v.detail ?? '', score: v.score, diff };
   });
+}
+
+function selectPenalizedInspirations(
+  records: VariantRecord[],
+  k: number,
+  lambda = 0.5,
+  random = Math.random,
+): VariantRecord[] {
+  const remaining = [...records];
+  const selected: VariantRecord[] = [];
+  for (let i = 0; i < k; i++) {
+    const parent = selectParentWithPenalty(remaining, lambda, random);
+    if (!parent) break;
+    selected.push(parent);
+    // One parent is used at most once in a single inspiration set. Descendant pressure across
+    // cycles comes from the persisted childrenCount written when the child record is appended.
+    const index = remaining.findIndex((record) => record.id === parent.id);
+    if (index >= 0) remaining.splice(index, 1);
+  }
+  return selected;
+}
+
+function checkBranchAstNovelty(
+  branch: string,
+  baselineRef: string,
+  basePath: string,
+  worktreeDir: string,
+): AstNoveltyResult {
+  const changed = changedPathsVsBase(branch, baselineRef, basePath).filter((file) => /\.(?:[cm]?tsx?|[cm]?jsx?)$/i.test(file));
+  if (changed.length === 0) return { isNovel: true, diffNodesCount: 0 };
+
+  let diffNodesCount = 0;
+  let allIdentical = true;
+  for (const file of changed) {
+    let parentCode = '';
+    try {
+      parentCode = git(['show', `${baselineRef}:${file}`], basePath);
+    } catch {
+      // A new file has an empty parent; the AST comparison below will conservatively mark it novel.
+    }
+    const mutatedCode = existsSync(join(worktreeDir, file)) ? readFileSync(join(worktreeDir, file), 'utf8') : '';
+    const result = checkAstNovelty(mutatedCode, parentCode);
+    diffNodesCount += result.diffNodesCount;
+    if (result.isNovel) allIdentical = false;
+  }
+  return allIdentical
+    ? { isNovel: false, diffNodesCount, reason: 'ast-identical' }
+    : { isNovel: true, diffNodesCount };
 }
 
 /** The bandit's pick for one cycle: the model + its provider + the scoreboard to record the outcome to. */
@@ -329,6 +408,11 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     basePath,
     opts.inspirationCount ?? 2,
     opts.baseline?.score,
+    {
+      selectionMode: opts.legacyParentSelection ? 'legacy' : 'penalized',
+      ...(opts.parentPenaltyLambda !== undefined ? { lambda: opts.parentPenaltyLambda } : {}),
+      ...(opts.parentSelectionRandom ? { random: opts.parentSelectionRandom } : {}),
+    },
   );
 
   // Deliberate planning: decide the approach (build-on / diverge / fresh) + concrete steps BEFORE
@@ -343,6 +427,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   // 2-3. mutate in an isolated worktree, then commit the change on the branch.
   let mutated = false;
   let mutationPlan: string | undefined; // the instruction that produced this variant (for audit)
+  let astNovelty: AstNoveltyResult = { isNovel: true, diffNodesCount: 0 };
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
   try {
@@ -369,6 +454,12 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
         { cwd: session.worktreePath, stdio: ['ignore', 'ignore', 'ignore'] },
       );
       mutated = true;
+      try {
+        astNovelty = checkBranchAstNovelty(branch, opts.baselineRef, basePath, session.worktreePath);
+      } catch (err) {
+        // A read/parse failure must fail open: only a proven AST identity may skip evaluation.
+        logger.warn(`[evolve] AST novelty check failed for ${branch}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     if (!mutated) logger.info(`[evolve] mutator produced no change for ${branch}${res.detail ? ` (${res.detail})` : ''}`);
   } finally {
@@ -392,6 +483,27 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
       report: { score: 0, passedAll: false, regressions: [], components: [] },
       beatsBaseline: false,
       kept: false,
+    };
+  }
+
+  // G0 — reject a formatting/comment/import-only mutation before materialising the scoring
+  // worktree. The counter is persisted in the same archive store as the variants.
+  if (!astNovelty.isNovel) {
+    store.recordEvaluationAvoided();
+    logger.info(`[evolve] G0 rejected AST-identical mutation ${branch} (${astNovelty.diffNodesCount} changed nodes)`);
+    try {
+      git(['branch', '-D', branch], basePath);
+    } catch {
+      /* keep the branch if cleanup fails; the evaluation was still avoided */
+    }
+    return {
+      variantId,
+      branch,
+      mutated: true,
+      report: { score: 0, passedAll: false, regressions: [], components: [] },
+      beatsBaseline: false,
+      kept: false,
+      rejectionReason: 'ast-identical',
     };
   }
 

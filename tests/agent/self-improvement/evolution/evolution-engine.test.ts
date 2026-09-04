@@ -68,7 +68,7 @@ describe('gatherInspirations (AlphaEvolve-style elites)', () => {
       store.record(vr({ id: 'e4', score: 0.6, behavior: 'src/d:single' })); // below baseline → excluded
       store.record(vr({ id: 'e5', score: 0.92, regressions: ['unit-tests'], behavior: 'src/e:single' })); // regressed → excluded
       // branches don't exist here → diffs come back empty, but SELECTION must be correct.
-      const insp = gatherInspirations(store, 'HEAD', process.cwd(), 2, 0.7);
+      const insp = gatherInspirations(store, 'HEAD', process.cwd(), 2, 0.7, { selectionMode: 'legacy' });
       expect(insp.map((i) => i.id)).toEqual(['e2', 'e1']);
       expect(insp.every((i) => typeof i.diff === 'string')).toBe(true);
     } finally {
