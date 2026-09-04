@@ -4,7 +4,8 @@
  * The engine improves the agent's reversible learnable layer (lessons today)
  * only when a deterministic capability benchmark empirically improves with zero
  * regressions, snapshot/rollback always. It is propose-only by default; pass
- * `--apply` (or set CODEBUDDY_SELF_IMPROVE=auto-apply) to keep validated improvements.
+ * `--apply` to keep validated improvements — it escalates only when the
+ * opt-in kill-switch `CODEBUDDY_SELF_IMPROVE` is already set (true|auto-apply).
  *
  * @module commands/cli/improve-command
  */
@@ -96,6 +97,28 @@ function print(payload: unknown, options: ImproveOptions, text: string): void {
   } else {
     console.log(text);
   }
+}
+
+/**
+ * The self-improvement layer is opt-in. `CLAUDE.md` promises that with
+ * `CODEBUDDY_SELF_IMPROVE` unset the behavior is byte-identical, yet `--apply`
+ * alone escalated the generative subcommands to `auto-apply` — authoring tools
+ * and skills and persisting them under `.codebuddy/` with the kill-switch off.
+ * The flag now only escalates INSIDE an explicit opt-in.
+ */
+const SELF_IMPROVE_OPT_IN = new Set(['true', 'auto-apply']);
+
+function refuseApplyWithoutOptIn(subcommand: string): boolean {
+  const raw = process.env.CODEBUDDY_SELF_IMPROVE?.trim().toLowerCase() ?? '';
+  if (SELF_IMPROVE_OPT_IN.has(raw)) return false;
+  logger.error(
+    `Refusing \`buddy improve ${subcommand} --apply\`: self-improvement is opt-in and ` +
+    `CODEBUDDY_SELF_IMPROVE is ${raw ? `set to "${raw}"` : 'unset'}. ` +
+    'Export CODEBUDDY_SELF_IMPROVE=true (or =auto-apply) before applying, ' +
+    'or re-run without --apply to stay propose-only.',
+  );
+  process.exitCode = 1;
+  return true;
 }
 
 export function registerImproveCommands(program: Command): void {
@@ -294,6 +317,7 @@ export function registerImproveCommands(program: Command): void {
     .option('--no-commit', 'do not version an applied improvement in the git learning store')
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('cycle')) return;
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
         useLlm: options.llm === true,
@@ -333,8 +357,9 @@ export function registerImproveCommands(program: Command): void {
     .command('tools')
     .description('Author + behaviorally validate NEW tools for the agent (held-out gated, anti-gaming)')
     .option('--json', 'output JSON')
-    .option('--apply', 'keep validated tools for this session (overrides propose-only)')
+    .option('--apply', 'keep validated tools for this session (requires CODEBUDDY_SELF_IMPROVE)')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('tools')) return;
       const { ToolImprovementEngine } = await import('../../agent/self-improvement/tool-engine.js');
       const { LlmToolProposer } = await import('../../agent/self-improvement/llm-tool-proposer.js');
       const { SEED_TOOL_SCENARIOS } = await import('../../agent/self-improvement/tool-benchmark.js');
@@ -371,8 +396,9 @@ export function registerImproveCommands(program: Command): void {
     .command('skills')
     .description('Author + safety-gate NEW skills for the agent (firewall + coverage)')
     .option('--json', 'output JSON')
-    .option('--apply', 'install validated skills (overrides propose-only)')
+    .option('--apply', 'install validated skills (requires CODEBUDDY_SELF_IMPROVE)')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('skills')) return;
       const { SkillImprovementEngine } = await import('../../agent/self-improvement/skill-engine.js');
       const { LlmSkillProposer } = await import('../../agent/self-improvement/skill-proposer.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
@@ -506,6 +532,7 @@ export function registerImproveCommands(program: Command): void {
     .option('--no-commit', 'do not version applied improvements in the git learning store')
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('loop')) return;
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
         useLlm: options.llm === true,

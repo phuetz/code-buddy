@@ -276,9 +276,9 @@ export const EXTENSION_FORGE_TOOL: CodeBuddyTool = {
             type: 'object',
             properties: {
               input: { type: 'object' },
-              expect_includes: { type: 'array', items: { type: 'string' } },
+              expect_output: { type: 'string' },
             },
-            required: ['input', 'expect_includes'],
+            required: ['input', 'expect_output'],
           },
           description: 'Tool only: functional examples the implementation must pass',
         },
@@ -288,9 +288,9 @@ export const EXTENSION_FORGE_TOOL: CodeBuddyTool = {
             type: 'object',
             properties: {
               input: { type: 'object' },
-              expect_includes: { type: 'array', items: { type: 'string' } },
+              expect_output: { type: 'string' },
             },
-            required: ['input', 'expect_includes'],
+            required: ['input', 'expect_output'],
           },
           description: 'Tool only: distinct edge inputs that catch hardcoding and fragile behavior',
         },

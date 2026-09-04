@@ -49,6 +49,16 @@ import {
   injectAnthropicCacheBreakpoints,
   injectJsonSystemPromptForAnthropic,
 } from './provider-openai-compat-hooks.js';
+import {
+  fromOllamaNativeResponse,
+  isOllamaEndpoint,
+  isOllamaNativeChatEnabled,
+  ollamaNativeChatUrl,
+  resolveOllamaNumCtx,
+  streamOllamaNative,
+  toOllamaNativeRequest,
+  type OpenAiChatPayload,
+} from './ollama-native-transport.js';
 import type { Provider } from './provider-interface.js';
 import type { ActiveTurnMetrics, TurnMetricsRecorder } from '../../observability/turn-metrics.js';
 
@@ -659,6 +669,71 @@ export class OpenAICompatProvider implements Provider {
     return this.isXaiProvider() && Boolean(searchParams?.mode && searchParams.mode !== 'off');
   }
 
+  /**
+   * Whether this provider talks to Ollama. Broader than
+   * `getOllamaReasoningEffort`'s historical check (which knew only the two
+   * loopback spellings), so a LAN Ollama is recognised too.
+   */
+  private isOllamaProvider(): boolean {
+    return isOllamaEndpoint(this.baseURL);
+  }
+
+  /**
+   * The ONE SDK seam. Ollama drops `options.num_ctx` on `/v1/chat/completions`
+   * and then loads the model at its full declared window (262 144 tokens for
+   * qwen3), so `CODEBUDDY_MAX_CONTEXT` never reached the server. For Ollama the
+   * already-built payload is sent to the native `/api/chat` instead, carrying
+   * the resolved context window; every other provider keeps the SDK call, byte
+   * for byte. The caller sees the same OpenAI shapes either way.
+   */
+  private async createChatCompletion(
+    payload: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const openAiPayload = payload as unknown as OpenAiChatPayload;
+    if (this.isOllamaProvider() && isOllamaNativeChatEnabled()) {
+      return this.createOllamaNativeCompletion(openAiPayload, signal);
+    }
+    return signal
+      ? await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming, { signal })
+      : await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming);
+  }
+
+  private async createOllamaNativeCompletion(
+    payload: OpenAiChatPayload,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const numCtx = resolveOllamaNumCtx(payload.model);
+    const body = toOllamaNativeRequest(payload, numCtx);
+    logger.debug('Ollama native chat', {
+      source: 'OpenAICompatProvider',
+      model: payload.model,
+      num_ctx: numCtx,
+      stream: payload.stream === true,
+    });
+
+    const response = await fetch(ollamaNativeChatUrl(this.baseURL), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      const error = new Error(
+        `Ollama API error: ${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+      );
+      (error as Error & { status: number }).status = response.status;
+      throw error;
+    }
+
+    if (payload.stream === true) return streamOllamaNative(response.body, payload.model);
+    return fromOllamaNativeResponse(
+      await response.json() as Parameters<typeof fromOllamaNativeResponse>[0],
+      payload.model,
+    );
+  }
+
   private getOllamaReasoningEffort(model: string): string | undefined {
     const modelInfo = getModelInfo(model);
     const isOllama =
@@ -916,9 +991,7 @@ export class OpenAICompatProvider implements Provider {
               // Preserve the one-argument SDK call when there is no signal. Apart
               // from keeping existing adapters compatible, this avoids presenting
               // `undefined` as an intentional transport-options override.
-              return opts.signal
-                ? await this.client.chat.completions.create(payload, { signal: opts.signal })
-                : await this.client.chat.completions.create(payload);
+              return await this.createChatCompletion(payload, opts.signal);
             },
             {
               ...RetryStrategies.llmApi,
@@ -1119,9 +1192,7 @@ export class OpenAICompatProvider implements Provider {
           async () => {
             const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
             ensureMeasuredTurn();
-            return opts.signal
-              ? await this.client.chat.completions.create(payload, { signal: opts.signal })
-              : await this.client.chat.completions.create(payload);
+            return await this.createChatCompletion(payload, opts.signal);
           },
           {
             ...RetryStrategies.llmApi,

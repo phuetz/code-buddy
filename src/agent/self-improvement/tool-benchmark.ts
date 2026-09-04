@@ -15,15 +15,15 @@ export const SEED_TOOL_SCENARIOS: ToolBenchmarkScenario[] = [
     capability: 'Slugify the string field `text`: lowercase it, replace runs of spaces with single hyphens, and print the slug.',
     description: 'authored__slugify converts text to a url slug',
     visibleCases: [
-      { input: { text: 'Hello World' }, expectIncludes: ['hello-world'] },
-      { input: { text: 'Foo Bar Baz' }, expectIncludes: ['foo-bar-baz'] },
+      { input: { text: 'Hello World' }, expectedOutput: 'hello-world' },
+      { input: { text: 'Foo Bar Baz' }, expectedOutput: 'foo-bar-baz' },
     ],
     heldOutCases: [
-      { input: { text: 'The Quick Brown' }, expectIncludes: ['the-quick-brown'] },
-      { input: { text: 'A B C' }, expectIncludes: ['a-b-c'] },
+      { input: { text: 'The Quick Brown' }, expectedOutput: 'the-quick-brown' },
+      { input: { text: 'A B C' }, expectedOutput: 'a-b-c' },
       // Capability says "runs of spaces" — a tool that only replace(' ','-')
       // would otherwise pass G4 on the single-space held-out pairs above.
-      { input: { text: 'Hello  World' }, expectIncludes: ['hello-world'] },
+      { input: { text: 'Hello  World' }, expectedOutput: 'hello-world' },
     ],
   },
   {
@@ -31,12 +31,12 @@ export const SEED_TOOL_SCENARIOS: ToolBenchmarkScenario[] = [
     capability: 'Count the whitespace-separated words in the string field `text` and print the integer count.',
     description: 'authored__word_count counts words',
     visibleCases: [
-      { input: { text: 'one two three' }, expectIncludes: ['3'] },
-      { input: { text: 'hello' }, expectIncludes: ['1'] },
+      { input: { text: 'one two three' }, expectedOutput: '3' },
+      { input: { text: 'hello' }, expectedOutput: '1' },
     ],
     heldOutCases: [
-      { input: { text: 'a b c d e' }, expectIncludes: ['5'] },
-      { input: { text: 'foo bar' }, expectIncludes: ['2'] },
+      { input: { text: 'a b c d e' }, expectedOutput: '5' },
+      { input: { text: 'foo bar' }, expectedOutput: '2' },
     ],
   },
 ];

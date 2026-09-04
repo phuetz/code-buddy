@@ -25,12 +25,12 @@ const REVERSE: ToolBenchmarkScenario = {
   capability: 'Reverse the input string s',
   description: 'authored__reverse should reverse s',
   visibleCases: [
-    { input: { s: 'abc' }, expectIncludes: ['cba'] },
-    { input: { s: 'hello' }, expectIncludes: ['olleh'] },
+    { input: { s: 'abc' }, expectedOutput: 'cba' },
+    { input: { s: 'hello' }, expectedOutput: 'olleh' },
   ],
   heldOutCases: [
-    { input: { s: 'world' }, expectIncludes: ['dlrow'] },
-    { input: { s: 'xyz' }, expectIncludes: ['zyx'] },
+    { input: { s: 'world' }, expectedOutput: 'dlrow' },
+    { input: { s: 'xyz' }, expectedOutput: 'zyx' },
   ],
 };
 

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { validateToolProposal } from '../../../src/agent/self-improvement/tool-gate.js';
+import { scoreToolCases } from '../../../src/agent/self-improvement/sandbox-scorer.js';
 import { LiveToolMutator } from '../../../src/agent/self-improvement/tool-skill-mutator.js';
 import { ToolImprovementEngine } from '../../../src/agent/self-improvement/tool-engine.js';
 import { StaticToolProposer } from '../../../src/agent/self-improvement/tool-proposer.js';
@@ -19,12 +20,12 @@ const REVERSE: ToolBenchmarkScenario = {
   capability: 'Reverse the input string s',
   description: 'authored__reverse should reverse s',
   visibleCases: [
-    { input: { s: 'abc' }, expectIncludes: ['cba'] },
-    { input: { s: 'hello' }, expectIncludes: ['olleh'] },
+    { input: { s: 'abc' }, expectedOutput: 'cba' },
+    { input: { s: 'hello' }, expectedOutput: 'olleh' },
   ],
   heldOutCases: [
-    { input: { s: 'world' }, expectIncludes: ['dlrow'] },
-    { input: { s: 'xyz' }, expectIncludes: ['zyx'] },
+    { input: { s: 'world' }, expectedOutput: 'dlrow' },
+    { input: { s: 'xyz' }, expectedOutput: 'zyx' },
   ],
 };
 
@@ -77,6 +78,41 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
     expect(out.visiblePassed).toBe(slugify.visibleCases.length);
     expect(out.accepted).toBe(false);
     expect(out.rejectionReason).toBe('heldout-fail');
+  });
+
+  it('REJECTS output that only contains the expected value as a substring', async () => {
+    const dishonest: AuthoredToolSpec = {
+      ...LEGIT,
+      code: "console.log('hello ok bye');",
+    };
+
+    const score = await scoreToolCases(dishonest, [{ input: {}, expectedOutput: 'ok' }]);
+
+    expect(score.passed).toBe(0);
+    expect(score.failures[0]).toMatch(/output/i);
+  });
+
+  it('REJECTS a chatty tool that prints the expected value plus commentary', async () => {
+    const chatty: AuthoredToolSpec = {
+      ...LEGIT,
+      code: "const i = JSON.parse(process.env.CODEBUDDY_TOOL_INPUT || '{}');"
+        + " console.log('The reversed string is: ' + [...i.s].reverse().join(''));",
+    };
+
+    const score = await scoreToolCases(chatty, REVERSE.visibleCases);
+
+    expect(score.passed).toBe(0);
+    expect(score.total).toBe(REVERSE.visibleCases.length);
+  });
+
+  it('ACCEPTS only the declared whitespace normalization, never a different word', async () => {
+    const padded: AuthoredToolSpec = { ...LEGIT, code: "console.log('  cba \\n');" };
+    const other: AuthoredToolSpec = { ...LEGIT, code: "console.log('cbaa');" };
+
+    await expect(scoreToolCases(padded, [{ input: {}, expectedOutput: 'cba' }]))
+      .resolves.toMatchObject({ passed: 1 });
+    await expect(scoreToolCases(other, [{ input: {}, expectedOutput: 'cba' }]))
+      .resolves.toMatchObject({ passed: 0 });
   });
 
   it('ACCEPTS a legitimate tool that passes visible AND held-out', async () => {
