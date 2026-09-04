@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### IDLINKS1 — des dizaines de temporaires `identity-links.json.tmp.*` orphelins (4 septembre 2026)
+
+Trois causes : `IdentityLinker` réécrivait un contenu inchangé à chaque `link()` rapproché
+(jusqu'à seize temporaires concurrents), `writeFileAtomic` ne pouvait pas nettoyer un
+temporaire laissé par un processus tué entre `open` et `rename`, et deux tests d'intégration
+écrivaient dans le vrai `~/.codebuddy/identity-links.json` de la machine (leurs fixtures s'y
+trouvaient). Désormais : pas d'écriture si le contenu sérialisé est identique, écritures
+coalescées, nettoyage des orphelins au démarrage journalisé une fois, tests isolés sous un
+répertoire temporaire. Rapport : `docs/reports/2026-09/REPARATION-IDLINKS1.md`.
+
 ### GF3FIX — les deux ouverts de la revue GF3 (4 septembre 2026)
 
 La capacité `localGpu` des trois outils vidéo accepte des alias génériques
