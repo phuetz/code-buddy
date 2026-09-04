@@ -154,6 +154,12 @@ export default defineConfig({
     // (Vitest 4 moved the old `poolOptions.forks` knobs to top-level maxWorkers/
     // minWorkers.)
     ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
+    // VITEST_MAX_WORKERS borne le pool hors CI : une lane de la flotte qui lance la suite avec
+    // 24 forks (8 Go de tas chacun) a fait couper deux tâches de fond par le moniteur mémoire
+    // du pilote (04/09/2026). `scripts/deleguer.sh` la fixe à 6 pour toutes les lanes.
+    ...(!process.env.CI && Number(process.env.VITEST_MAX_WORKERS) > 0
+      ? { maxWorkers: Number(process.env.VITEST_MAX_WORKERS) }
+      : {}),
   },
   resolve: {
     alias: {

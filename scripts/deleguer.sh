@@ -70,6 +70,9 @@ MOTEUR=${3:-luna}
 [ -f "$MISSION" ] || { echo "mission introuvable : $MISSION" >&2; exit 2; }
 
 JOURNAUX=${CODEBUDDY_DELEGATIONS_DIR:-"$HOME/.codebuddy/delegations"}
+# Vitest borné pour toutes les lanes (04/09/2026 : deux lanes tuées par le moniteur mémoire
+# pendant une suite à 24 forks). Voir vitest.config.ts. CB_VITEST_WORKERS pour ajuster.
+export VITEST_MAX_WORKERS="${CB_VITEST_WORKERS:-6}"
 mkdir -p "$JOURNAUX"
 NOM=$(basename "$MISSION" .md)
 LOG="$JOURNAUX/$(date +%Y-%m-%dT%H%M%S)-$MOTEUR-$NOM.log"
