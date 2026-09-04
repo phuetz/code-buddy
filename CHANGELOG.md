@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### DGM3 — la fitness de l'auto-amélioration passe de 3 à 15 scénarios (4 septembre 2026)
+
+Le banc de capacités qui sert de « fitness » à la Darwin-Gödel Machine ne comptait que trois
+vérifications de sous-chaînes. Il en compte quinze, chacune fondée sur un invariant documenté
+(`CLAUDE.md`, `docs/agents.md`) avec sa source, un test d'orthogonalité (aucune leçon ne couvre
+deux scénarios) et de non-trivialité ; le proposeur reste un amorçage déterministe à 0 $, avec
+une voie LLM opt-in `CODEBUDDY_SELF_IMPROVE_PROPOSER=llm`. Preuve réelle dans un clone :
+`buddy improve loop --apply` monte de 0/15 à 15/15 en seize cycles puis s'arrête. Première
+mission de code confiée à Gemini 3.8 Flash (10 min, cinq commits, preuves fournies).
+Rapport : `docs/reports/2026-09/REPARATION-DGM3.md`.
+
 ### COST1 — le coût headless dit la vérité (4 septembre 2026)
 
 `"cost":{"total":0.011604}` sortait pour n'importe quel modèle et n'importe quel volume. Le coût
