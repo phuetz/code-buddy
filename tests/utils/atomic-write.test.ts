@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../../src/utils/logger.js';
@@ -20,7 +21,7 @@ describe('atomic state writes', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(process.cwd(), '.mem1-atomic-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'mem1-atomic-'));
     resetAtomicReadWarningsForTests();
   });
 
@@ -117,7 +118,7 @@ describe('cleanupOrphanedTemporaries', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(process.cwd(), '.mem1-atomic-orphans-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'mem1-atomic-orphans-'));
     resetAtomicCleanupWarningsForTests();
   });
 
@@ -177,7 +178,15 @@ setInterval(() => {}, 1000);
     const tsxBin = join(process.cwd(), 'node_modules', '.bin', 'tsx');
     const child = spawn(tsxBin, [scriptPath, target, '6', '2000'], { stdio: 'ignore' });
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    // Sous charge, tsx met parfois > 400 ms à démarrer : un délai fixe tuait l'enfant
+    // avant qu'il n'ouvre le moindre temporaire (rouge une fois sur trois le 04/09/2026).
+    // On attend la preuve (au moins un temporaire présent), bornée à 10 s.
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const entries = await fsPromises.readdir(tempDir);
+      if (entries.some((e) => e.startsWith('state.json.tmp.'))) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
     child.kill('SIGKILL');
     await new Promise<void>((resolve) => child.once('exit', () => resolve()));
 
@@ -187,7 +196,7 @@ setInterval(() => {}, 1000);
     // The rename step never ran: content and mtime of the real target are untouched.
     await expect(readFile(target, 'utf8')).resolves.toBe('{"version":1}\n');
 
-    const removed = await cleanupOrphanedTemporaries(target, { maxAgeMs: 0 });
+    const removed = await cleanupOrphanedTemporaries(target, { maxAgeMs: 0, now: () => Date.now() + 10_000 });
     expect(removed.length).toBe(orphansBefore.length);
 
     const afterEntries = await fsPromises.readdir(tempDir);
