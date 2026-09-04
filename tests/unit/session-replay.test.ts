@@ -9,17 +9,31 @@ import SessionReplayManager, {
   ReplaySession,
 } from '../../src/advanced/session-replay';
 
+const { mockEnsureDir, mockWriteJson, mockReadJson, mockReaddir, mockPathExists } = vi.hoisted(() => ({
+  mockEnsureDir: vi.fn().mockResolvedValue(undefined),
+  mockWriteJson: vi.fn().mockResolvedValue(undefined),
+  mockReadJson: vi.fn(),
+  mockReaddir: vi.fn(),
+  mockPathExists: vi.fn(),
+}));
+
 // Mock fs-extra
 jest.mock('fs-extra', () => {
   const impl = {
-  ensureDir: jest.fn().mockResolvedValue(undefined),
-  writeJson: jest.fn().mockResolvedValue(undefined),
-  readJson: jest.fn(),
-  readdir: jest.fn(),
-  pathExists: jest.fn(),
+  ensureDir: mockEnsureDir,
+  writeJson: mockWriteJson,
+  readJson: mockReadJson,
+  readdir: mockReaddir,
+  pathExists: mockPathExists,
 };
   return { ...impl, default: impl };
 });
+
+// Session payloads moved to the MEM1 atomic persistence seam.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: mockReadJson,
+  writeJsonAtomic: mockWriteJson,
+}));
 
 // Mock crypto
 jest.mock('crypto', () => {

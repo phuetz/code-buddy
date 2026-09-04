@@ -5,6 +5,25 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const { mockTelemetryStore, mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => {
+  const mockTelemetryStore: { data: Record<string, unknown> } = { data: {} };
+  return {
+    mockTelemetryStore,
+    mockReadJsonAtomicSync: vi.fn((_path: string, fallback: unknown) =>
+      Object.keys(mockTelemetryStore.data).length > 0 ? { ...mockTelemetryStore.data } : fallback
+    ),
+    mockWriteJsonAtomicSync: vi.fn((_path: string, data: Record<string, unknown>) => {
+      mockTelemetryStore.data = { ...data };
+    }),
+  };
+});
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 import {
   getTelemetryConfig,
   setTelemetryEnabled,
@@ -15,27 +34,23 @@ import {
 
 // Mock fs-extra to avoid real filesystem operations
 vi.mock('fs-extra', () => {
-  let mockData: Record<string, unknown> = {};
   return {
     default: {
-      existsSync: vi.fn(() => Object.keys(mockData).length > 0),
-      readJsonSync: vi.fn(() => ({ ...mockData })),
-      writeJsonSync: vi.fn((_path: string, data: Record<string, unknown>) => {
-        mockData = { ...data };
-      }),
+      existsSync: vi.fn(() => Object.keys(mockTelemetryStore.data).length > 0),
+      readJsonSync: vi.fn(() => ({ ...mockTelemetryStore.data })),
+      writeJsonSync: mockWriteJsonAtomicSync,
       ensureDirSync: vi.fn(),
     },
-    existsSync: vi.fn(() => Object.keys(mockData).length > 0),
-    readJsonSync: vi.fn(() => ({ ...mockData })),
-    writeJsonSync: vi.fn((_path: string, data: Record<string, unknown>) => {
-      mockData = { ...data };
-    }),
+    existsSync: vi.fn(() => Object.keys(mockTelemetryStore.data).length > 0),
+    readJsonSync: vi.fn(() => ({ ...mockTelemetryStore.data })),
+    writeJsonSync: mockWriteJsonAtomicSync,
     ensureDirSync: vi.fn(),
   };
 });
 
 describe('telemetry-config', () => {
   beforeEach(() => {
+    mockTelemetryStore.data = {};
     resetTelemetryCache();
   });
 

@@ -27,6 +27,21 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: (filePath: string, fallback: unknown, options: {
+    isValid?: (value: unknown) => boolean;
+  } = {}) => {
+    try {
+      const value: unknown = JSON.parse((fs.readFileSync as jest.Mock)(filePath, 'utf8'));
+      return options.isValid && !options.isValid(value) ? fallback : value;
+    } catch {
+      return fallback;
+    }
+  },
+  writeJsonAtomicSync: (filePath: string, value: unknown) =>
+    (fs.writeFileSync as jest.Mock)(filePath, JSON.stringify(value, null, 2)),
+}));
+
 // Mock os module
 jest.mock('os', () => {
   const impl = {
