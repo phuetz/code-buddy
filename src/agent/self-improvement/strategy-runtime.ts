@@ -53,3 +53,19 @@ export function resolveStrategyOverlay(
   if (append) overlay.systemPromptAppend = append;
   return overlay;
 }
+
+/**
+ * Carry the overlay's cost cap into the environment the agent reads (`MAX_COST`),
+ * only when the user set none. Returns what was applied (for logging/tests).
+ * Never lowers or overrides an explicit value.
+ */
+export function applyStrategyCostCap(
+  overlay: StrategyOverlay,
+  env: NodeJS.ProcessEnv = process.env,
+): { maxCostUsd?: number } {
+  if (overlay.maxCostUsd === undefined) return {};
+  const explicit = env.MAX_COST?.trim();
+  if (explicit) return {};
+  env.MAX_COST = String(overlay.maxCostUsd);
+  return { maxCostUsd: overlay.maxCostUsd };
+}

@@ -84,3 +84,18 @@ describe('strategy runtime overlay (opt-in)', () => {
     expect(resolveStrategyOverlay('headless', {}, { env: { CODEBUDDY_SELF_IMPROVE_STRATEGIES: 'true' }, store })).toEqual({ strategyId: 'baseline' });
   });
 });
+
+describe('applyStrategyCostCap', () => {
+  it('sets MAX_COST from the overlay only when the user set none, never overrides', async () => {
+    const { applyStrategyCostCap } = await import('../../../src/agent/self-improvement/strategy-runtime.js');
+    const env: NodeJS.ProcessEnv = {};
+    expect(applyStrategyCostCap({ strategyId: 'x', maxCostUsd: 15 }, env)).toEqual({ maxCostUsd: 15 });
+    expect(env.MAX_COST).toBe('15');
+    const explicit: NodeJS.ProcessEnv = { MAX_COST: '2' };
+    expect(applyStrategyCostCap({ strategyId: 'x', maxCostUsd: 15 }, explicit)).toEqual({});
+    expect(explicit.MAX_COST).toBe('2');
+    const none: NodeJS.ProcessEnv = {};
+    expect(applyStrategyCostCap({ strategyId: 'baseline' }, none)).toEqual({});
+    expect(none.MAX_COST).toBeUndefined();
+  });
+});
