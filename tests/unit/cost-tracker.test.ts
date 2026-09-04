@@ -828,4 +828,106 @@ describe('CostTracker', () => {
       expect(dashboard).toContain('$0.0000');
     });
   });
+
+  // =============================================================================
+  // COST1 — Tests : coût headless dépend du modèle et des jetons réels
+  // =============================================================================
+  describe('COST1 — Mistral pricing and provider usage', () => {
+    describe('VERT: mistral-medium-latest uses PUBLIC pricing', () => {
+      it('COST1-VERT-1: mistral-medium-latest uses PUBLIC pricing (1.5/7.5 per M) not default', () => {
+        // Tarif public Mistral: 1,5 $/M entrée, 7,5 $/M sortie
+        // = 0,0015 $/1K entrée, 0,0075 $/1K sortie
+        // Pour 21 jetons entrée / 2 jetons sortie:
+        // Coût attendu = (21/1000) * 0.0015 + (2/1000) * 0.0075
+        //               = 0.0000315 + 0.000015 = 0.0000465 $
+        const expectedCost = 0.0000465;
+
+        const actualCost = tracker.calculateCost(21, 2, 'mistral-medium-latest');
+
+        // VERT: maintenant mistral-medium-latest a le bon tarif
+        expect(actualCost).toBeCloseTo(expectedCost, 6);
+      });
+
+      it('COST1-VERT-2: gpt-5.6-sol (ChatGPT subscription) costs 0', () => {
+        // ChatGPT forfait: coût marginal = 0 $
+        const expectedCost = 0;
+
+        const actualCost = tracker.calculateCost(21, 2, 'gpt-5.6-sol');
+
+        // VERT: gpt-5.6-sol est maintenant détecté comme forfait
+        expect(actualCost).toBe(expectedCost);
+      });
+
+      it('COST1-VERT-3: mistral-medium-latest is in MODEL_PRICING with public rates', () => {
+        // Tarif public: 1.5 $/M entrée, 7.5 $/M sortie
+        const cost = tracker.calculateCost(1000000, 0, 'mistral-medium-latest');
+        // Attendu: (1000000/1000) * 0.0015 = 1.5 $
+        expect(cost).toBeCloseTo(1.5, 2);
+      });
+    });
+
+    describe('VERT: provider usage takes precedence over local estimates', () => {
+      it('COST1-VERT-4: calculateCost uses provider usage when available', () => {
+        // Quand l'usage provider est fourni, il doit être utilisé
+        // même si les jetons locaux sont différents
+        const localInput = 100;
+        const localOutput = 50;
+        const providerInput = 21;
+        const providerOutput = 2;
+
+        // Sans usage provider: utilise les jetons locaux
+        const costLocal = tracker.calculateCost(localInput, localOutput, 'mistral-medium-latest');
+        // Avec usage provider: utilise les jetons provider
+        const costProvider = tracker.calculateCost(
+          localInput, localOutput, 'mistral-medium-latest', 0,
+          { promptTokens: providerInput, completionTokens: providerOutput }
+        );
+
+        // Le coût avec provider doit être basé sur 21/2 jetons, pas 100/50
+        const expectedProviderCost = (21 / 1000) * 0.0015 + (2 / 1000) * 0.0075;
+        expect(costProvider).toBeCloseTo(expectedProviderCost, 6);
+
+        // Le coût local doit être différent
+        const expectedLocalCost = (100 / 1000) * 0.0015 + (50 / 1000) * 0.0075;
+        expect(costLocal).toBeCloseTo(expectedLocalCost, 6);
+
+        // Ils doivent être différents
+        expect(costProvider).not.toBeCloseTo(costLocal, 6);
+      });
+
+      it('COST1-VERT-5: calculateCostExtended returns correct metadata', () => {
+        const result = tracker.calculateCostExtended(
+          21, 2, 'mistral-medium-latest', 0,
+          { promptTokens: 21, completionTokens: 2 }
+        );
+
+        expect(result.total).toBeCloseTo(0.0000465, 6);
+        expect(result.estimated).toBe(false); // provider usage disponible
+        expect(result.pricing).toBe('known'); // mistral-medium-latest a un tarif connu
+        expect(result.billing).toBe('pay-per-use'); // pas un forfait
+        expect(result.inputTokens).toBe(21);
+        expect(result.outputTokens).toBe(2);
+      });
+
+      it('COST1-VERT-6: calculateCostExtended with unknown model', () => {
+        const result = tracker.calculateCostExtended(
+          21, 2, 'unknown-model-xyz', 0
+        );
+
+        // Modèle inconnu utilise le tarif par défaut
+        const expectedCost = (21 / 1000) * 0.003 + (2 / 1000) * 0.015;
+        expect(result.total).toBeCloseTo(expectedCost, 6);
+        expect(result.pricing).toBe('unknown'); // modèle non connu
+        expect(result.estimated).toBe(true); // pas d'usage provider
+      });
+
+      it('COST1-VERT-7: ChatGPT subscription models have correct metadata', () => {
+        const result = tracker.calculateCostExtended(100, 50, 'gpt-5.6-sol');
+
+        expect(result.total).toBe(0);
+        expect(result.pricing).toBe('subscription');
+        expect(result.billing).toBe('subscription');
+      });
+    });
+  });
 });
