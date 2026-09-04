@@ -94,14 +94,20 @@ export default defineConfig({
     // each crossed 20 s once on a Windows job while finishing in < 5 s on
     // every other run. Give Windows hosts a 60 s budget; Linux/macOS keep the
     // historical 20 s / 30 s (a real hang still fails, just later).
-    testTimeout: process.platform === 'win32' ? 60000 : 20000,
+    // macos-latest tombe dans la MÊME catégorie que windows-latest : 3 vCPU /
+    // 7 Go, deux forks, et des rafales d'attente I/O. Le 04/09/2026, sur le run
+    // 33918143339, tests/commands/dev/dev-lifecycle.test.ts a franchi 20 s sur
+    // le SEUL job macOS Node 22 en finissant en quelques secondes partout
+    // ailleurs. Le budget suit donc la contrainte de la machine, pas la famille
+    // d'OS ; un vrai blocage échoue toujours, simplement plus tard.
+    testTimeout: process.platform === 'win32' || process.platform === 'darwin' ? 60000 : 20000,
     // Match the generous test timeout for setup/teardown hooks. Several suites do
     // heavy dynamic `import()` inside `beforeEach`; under the CPU/RAM pressure of a
     // full parallel run on constrained CI runners those imports occasionally cross
     // the Vitest default 10s hook timeout and fail spuriously (the same test passes
     // in ~3s in isolation). 30s removes the false timeout without masking a real
     // hang. See CI flakiness on macos-latest (3 vCPU / 7 GB).
-    hookTimeout: process.platform === 'win32' ? 60000 : 30000,
+    hookTimeout: process.platform === 'win32' || process.platform === 'darwin' ? 60000 : 30000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],

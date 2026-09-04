@@ -4,6 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
+// Plafond de tas EXPLICITE pour l'enfant. `spawn(process.execPath, …)` ne
+// reçoit ni l'execArgv du fork Vitest ni aucune consigne : il hérite du défaut
+// de V8, qui dépend de la RAM de l'hôte — ~4 Go sur les runners Linux et
+// Windows (16 Go), mais ~2 Go sur macos-latest (3 vCPU / 7 Go). Le tour CLI
+// mourait donc « JavaScript heap out of memory », code 134, sur le SEUL runner
+// macOS, pour une raison qui n'a rien à voir avec ce que le scénario mesure.
+// Fixer la valeur rend le budget identique partout au lieu de dépendre de la
+// machine.
+const CHILD_HEAP_MB = 4096;
+
 function getCleanChildEnv(): Record<string, string> {
   return Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] =>
@@ -21,6 +31,7 @@ function runCliAgainstFailingProvider(port: number): Promise<{
 
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
+      `--max-old-space-size=${CHILD_HEAP_MB}`,
       path.resolve('node_modules/tsx/dist/cli.mjs'),
       'src/index.ts',
       '--prompt',
@@ -88,6 +99,7 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
 
   return new Promise((resolve, reject) => {
     const args = [
+      `--max-old-space-size=${CHILD_HEAP_MB}`,
       path.resolve('node_modules/tsx/dist/cli.mjs'),
       'src/index.ts',
     ];
