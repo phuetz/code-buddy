@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main. Les rapports de mission (`RAPPORT-`, `REPARATION-`, `REVUE-`, `AUDIT-`, `BILAN-`, `BANC-`) vont sous `docs/reports/<AAAA-MM>/` (voir [`docs/reports/README.md`](docs/reports/README.md)).
 
+Les invariants opératoires non-négociables sont :
+- Rapport de mission créé avant toute inspection sous `docs/reports/<AAAA-MM>/`.
+- `git add` nommément fichier par fichier (jamais `-A` ni `git commit -a`).
+- Jamais de secret en clair dans les fichiers suivis (utiliser variables d'environnement ou SecretRef).
+- HOME isolé pour les tests sous `_qa/<mission>/home` (gitignoré).
+
 > **Status: 2.0.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v1.8.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
 
 ## Build, Test, Lint

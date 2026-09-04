@@ -318,11 +318,14 @@ export function registerImproveCommands(program: Command): void {
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('cycle')) return;
+      const wantsLlm =
+        options.llm === true ||
+        process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER?.trim().toLowerCase() === 'llm';
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
-        useLlm: options.llm === true,
+        useLlm: wantsLlm,
       });
-      const experiences = options.llm ? await collectExperiences() : [];
+      const experiences = wantsLlm ? await collectExperiences() : [];
       const result = await engine.runCycle(experiences);
       let committed: string | undefined;
       if (result.applied && options.apply && options.commit !== false) {
@@ -533,11 +536,14 @@ export function registerImproveCommands(program: Command): void {
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
       if (options.apply && refuseApplyWithoutOptIn('loop')) return;
+      const wantsLlm =
+        options.llm === true ||
+        process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER?.trim().toLowerCase() === 'llm';
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
-        useLlm: options.llm === true,
+        useLlm: wantsLlm,
       });
-      const experiences = options.llm ? await collectExperiences() : [];
+      const experiences = wantsLlm ? await collectExperiences() : [];
       const doCommit = options.apply === true && options.commit !== false;
       const store = doCommit ? createWorkspaceLearningStore() : null;
       const cap = options.max ? Math.max(1, Number.parseInt(options.max, 10)) : 25;
