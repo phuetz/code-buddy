@@ -94,6 +94,20 @@ const DEFAULT_PROJECT_SETTINGS: Partial<ProjectSettings> = {
 };
 
 /**
+ * Test-only path overrides (TESTWRITE1, 2026-09-04). Never used in production —
+ * every real call site constructs `SettingsManager` with zero arguments, which
+ * keeps resolving `~/.codebuddy/user-settings.json` and
+ * `<cwd>/.codebuddy/settings.json` exactly as before. Tests that need to
+ * exercise the real (non-mocked) `atomic-write.js` writers — which reach past
+ * a partial `fs` mock straight to `node:fs` — must point both paths at an
+ * `mkdtemp` directory instead of writing through the repo/home singleton.
+ */
+export interface SettingsManagerOverrides {
+  userSettingsPath?: string;
+  projectSettingsPath?: string;
+}
+
+/**
  * Unified settings manager that handles both user-level and project-level settings
  */
 export class SettingsManager {
@@ -103,16 +117,16 @@ export class SettingsManager {
   private projectSettingsPath: string;
   private configResolver: ConfigResolver | null = null;
 
-  private constructor() {
+  private constructor(overrides: SettingsManagerOverrides = {}) {
     // User settings path: ~/.codebuddy/user-settings.json
-    this.userSettingsPath = path.join(
+    this.userSettingsPath = overrides.userSettingsPath ?? path.join(
       os.homedir(),
       ".codebuddy",
       "user-settings.json"
     );
 
     // Project settings path: .codebuddy/settings.json (in current working directory)
-    this.projectSettingsPath = path.join(
+    this.projectSettingsPath = overrides.projectSettingsPath ?? path.join(
       process.cwd(),
       ".codebuddy",
       "settings.json"
@@ -120,11 +134,13 @@ export class SettingsManager {
   }
 
   /**
-   * Get singleton instance
+   * Get singleton instance. `overrides` only takes effect the first time the
+   * singleton is constructed (production call sites never pass it, so
+   * behavior is unchanged); tests must reset the singleton first.
    */
-  public static getInstance(): SettingsManager {
+  public static getInstance(overrides?: SettingsManagerOverrides): SettingsManager {
     if (!SettingsManager.instance) {
-      SettingsManager.instance = new SettingsManager();
+      SettingsManager.instance = new SettingsManager(overrides);
     }
     return SettingsManager.instance;
   }
@@ -702,8 +718,10 @@ export class SettingsManager {
 }
 
 /**
- * Convenience function to get the singleton instance
+ * Convenience function to get the singleton instance. `overrides` is
+ * test-only (see {@link SettingsManagerOverrides}) and has no effect on any
+ * production call site, which always calls this with zero arguments.
  */
-export function getSettingsManager(): SettingsManager {
-  return SettingsManager.getInstance();
+export function getSettingsManager(overrides?: SettingsManagerOverrides): SettingsManager {
+  return SettingsManager.getInstance(overrides);
 }
