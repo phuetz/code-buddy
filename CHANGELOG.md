@@ -1,5 +1,15 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### PERSONA1 — huit tests rouges qui lisaient l'état réel de la machine (4 septembre 2026)
+
+`tests/enhanced-memory.test.ts`, `tests/persona-manager.test.ts` et `tests/persona-handler.test.ts`
+étaient rouges sur `main` et sur la branche de travail : le magasin de mémoire fixait
+`~/.codebuddy/memory` sans option, et le gestionnaire de personnalités rechargeait la
+personnalité persistée de l'utilisateur avant celle du test (prouvé par `strace -f -e openat`).
+`EnhancedMemory({ dataDir })` et `PersonaManager({ persistActivePersona: false })` rendent
+les tests hermétiques ; les défauts de production sont inchangés et prouvés tels. Les trois
+fichiers restent verts avec un faux HOME peuplé. Rapport : `docs/reports/2026-09/REPARATION-PERSONA1.md`.
+
 ### STT2 — sherpa-rs rendait un transcript vide sur le robot (4 septembre 2026)
 
 Depuis le 03/09, chaque phrase entendue passait par le repli faster-whisper : le
