@@ -1,5 +1,16 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### SERV2 — `usage` réel, un seul port, CORS dit vrai (4 septembre 2026)
+
+`/v1/chat/completions` renvoie les compteurs du fournisseur : le flux ne
+demandait jamais `stream_options.include_usage` et jetait le chunk d'usage, ce
+qui laissait aussi les métriques TTFT1 sans `inputTokens`. Repli honnête marqué
+`usage.estimated: true` (`CODEBUDDY_STREAM_USAGE=false`). `buddy server` ouvre
+un seul port avec `/ws` dessus : neuf documents corrigés, test qui rougit si
+l'un d'eux redit « 3001 ». Une origine non listée reçoit 200 sans
+`Access-Control-Allow-Origin` ; le 403 n'existe que sur le WebSocket, la doc le
+dit désormais.
+
 ### VERIFIX3B / DELEGVERIF — suites de VERIF3 et du juge NVIDIA (4 septembre 2026)
 
 Dix fixtures isolées supplémentaires pour le garde-fou de données personnelles,
