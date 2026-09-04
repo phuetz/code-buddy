@@ -22,6 +22,31 @@ parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persi
 (28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
 `docs/reports/2026-09/REPARATION-DGM4.md`.
 
+### PROMPTBUDGET1 — le prompt système passe de 203 674 à 49 489 caractères (4 septembre 2026)
+
+Personne n'avait mesuré ce qui composait le prompt système : `scripts/measure-system-prompt.ts`
+le fait, hors ligne, bloc par bloc. Verdict : `.codebuddy/TOOLS.md` (134 751 caractères, 66 %)
+était injecté par l'identité alors que les outils sont déjà décrits par leur schéma de fonction ;
+il ne l'est plus. Les fichiers de démarrage canoniques sont `AGENTS.md` et `CODEBUDDY.md` ; les
+fichiers d'interopérabilité (`CLAUDE.md`…) restent servis par le JIT ou en opt-in
+`CODEBUDDY_INCLUDE_INTEROP_CONTEXT=true`. La connaissance passe par `knowledge_search` au lieu
+d'être collée. Quand une troncature reste nécessaire, elle retire des blocs ENTIERS par priorité
+(sécurité > workspace > outils > style > contexte > exemples) et journalise les blocs retirés ;
+l'ancienne coupe aveugle au milieu d'une phrase est supprimée. Mission luna (36 min). Rapport :
+`docs/reports/2026-09/REPARATION-PROMPTBUDGET1.md`.
+
+### HOMEBACKUP1 — sauvegarde du profil `~/.codebuddy` par liste blanche (4 septembre 2026)
+
+Le profil pèse 1,3 To (images, runtimes) et n'avait aucune copie de secours : ce matin un test a
+vidé `user-settings.json`. `buddy backup create|verify|restore --home` (ou `--scope home|both`)
+sauvegarde une LISTE BLANCHE (réglages, personas JSON, mémoire, rappels, MCP, skills, magasin
+d'auto-amélioration, registre CKG) avec plafonds de 5 Mo par fichier et 200 Mo au total, refuse les
+motifs secrets même demandés, rapporte ce qui est sauté et pourquoi, et `restore --confirm`
+garde une copie `.bak` avant tout écrasement. Preuve réelle en lecture seule : 32 fichiers, 66 Ko
+retenus, 179 sautés, aucun secret. Première passe Vibe (drapeau en collision avec `--profile`
+global, quatre tests rouges), réparée par Gemini 3.8 Flash. Rapport :
+`docs/reports/2026-09/REPARATION-HOMEBACKUP1.md`.
+
 ### AUDIT-STRAT1 — la couche stratégies attaquée, cinq failles fermées (4 septembre 2026)
 
 Audit adversarial confié à Gemini 3.8 Flash une heure après la livraison : onze attaques contre
