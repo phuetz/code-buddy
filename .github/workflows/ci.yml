@@ -68,6 +68,9 @@ jobs:
     - name: Run linter
       run: npm run lint
 
+    - name: Build project
+      run: npm run build
+
     - name: Run tests
       if: runner.os != 'Windows'
       run: npm test
@@ -101,9 +104,6 @@ jobs:
     - name: Run tests (shard 6/6)
       if: runner.os == 'Windows'
       run: npm test -- --shard=6/6 || npm test -- --shard=6/6
-
-    - name: Build project
-      run: npm run build
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
