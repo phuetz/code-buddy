@@ -27,7 +27,7 @@ buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
                     sensory-rules-engine.ts  (ruleMatches + seuils)
                                           │  (cooldown, plafonds, audit)
                                           ▼
-              action : alert · shell borné · agent · webhook loopback
+              action : alert · shell borné · agent · webhook loopback · kill_process (opt-in)
 ```
 
 - **Émetteur de signes vitaux** (`src/sensory/system-vitals-emitter.ts`) : à chaque passe, lit les
@@ -39,7 +39,8 @@ buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
   - `process_runaway` — un processus au-dessus de `CODEBUDDY_RUNAWAY_CPU_PCT` (défaut 90) pendant
     `CODEBUDDY_RUNAWAY_PASSES` passes CONSÉCUTIVES (défaut 3). Le payload porte `pid`, `ppid`,
     `comm`, `pcpu` / `pcpuTotal` (somme des cœurs, 100 % = un cœur plein — un process 8 threads
-    saturés = 800 %), `pcpuOfMachine` (`pcpuTotal / nproc`), `cores` (nproc), `etimeSec` et
+    saturés = 800 %), `pcpuOfMachine` (`pcpuTotal / nproc`), `cores` (nproc), `etimeSec`,
+    `startTime` (champ 22 de `/proc/<pid>/stat`, anti réutilisation de PID) et
     `scope`. Le seuil reste sur `pcpuTotal` (compat) ; `CODEBUDDY_RUNAWAY_CPU_BASIS=machine`
     le compare à `pcpuOfMachine` (défaut `core` = byte-identique).
     **CPU instantané** : le seuil s'applique au CPU INSTANTANÉ, calculé par delta de
@@ -97,6 +98,7 @@ que non installée :
 ```bash
 buddy rules templates                              # liste les modèles
 buddy rules add --template process-runaway-alert   # le correctif de l'incident
+buddy rules add --template process-runaway-kill    # remédiation bornée (dry-run par défaut)
 buddy rules add --template disk-low-alert          # diskPct >= 90 -> alerte
 buddy rules add --template fleet-saturated-alert
 buddy rules add --template codex-quota-probe       # tick 04:20 -> agent
@@ -126,6 +128,7 @@ Exemple de règle à seuil (installée par `disk-low-alert`) :
 | `CODEBUDDY_RUNAWAY_PASSES` | `3` | Passes consécutives au-dessus du seuil avant `process_runaway` |
 | `CODEBUDDY_RUNAWAY_SCOPE` | `server` | Portée du scan : `server` (descendants du serveur) ou `user` (tous les processus de l'utilisateur — attrape les boucles hors serveur) |
 | `CODEBUDDY_RUNAWAY_IGNORE_COMM` | ffmpeg,comfyui,python,python3,node,tsc,vitest,cargo,rustc,esbuild | csv des `comm` légitimement gourmands qui ne déclenchent jamais `process_runaway` (indispensable en mode `user`) |
+| `CODEBUDDY_RUNAWAY_KILL` | (off) | `true` arme un `kill` réel pour l'action `kill_process`. Double opt-in : la règle doit aussi porter `dryRun:false`. Défaut = dry-run (journalise, n'envoie aucun signal). Le pid vient UNIQUEMENT du percept `process_runaway` (jamais d'un pid dans la règle). Avant le signal : le pid doit encore exister, `comm`+`startTime` identiques au percept, pas le serveur, pas un ancêtre, pas pid 1, pas un autre uid. `SIGTERM` puis `SIGKILL` seulement si `escalate:true` (après `graceMs`, défaut 5000, borné 1000–60000). Jamais de pid négatif ni de groupe. Après l'action : percept `process_remediated` (`pid`, `comm`, `signal`, `dryRun`, `ok`, `reason`) — une règle `alert` sur ce kind notifie la remédiation comme `tpl-process-runaway-alert` notifie la détection. |
 | `CODEBUDDY_DISK_LOW_PCT` | `90` | Seuil de disque utilisé pour `disk_low` |
 | `CODEBUDDY_SCHEDULE_TICKS` | (off) | `true` active l'émetteur horaire (`time/tick`) |
 | `CODEBUDDY_SCHEDULE_TICKS_EVERY` | `20` | Cadence en battements de l'émetteur horaire (≈ 3/min, fenêtre anti-gigue) |

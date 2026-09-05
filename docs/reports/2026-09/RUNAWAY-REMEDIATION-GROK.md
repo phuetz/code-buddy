@@ -8,32 +8,25 @@
 **HOME Vitest** : `~/DEV/cb-heartwatch-2026-09-05/_qa/grok-kill/home` (gitignoré)
 **Rapport créé avant inspection du code.**
 
-Références à lire avant le code (après ce rapport) :
+Références lues après ce rapport :
 - `docs/surveillance-evenementielle.md`
-- `docs/reports/2026-09/VERIFICATION-FIX-AGY.md` §4.1.1 (le besoin)
-- `src/sensory/sensory-action-executor.ts` (actions `shell|webhook|alert|agent`, garde `isDestructive`)
-- `src/sensory/sensory-rules-engine.ts` (plafonds, audit `rule-runs.jsonl`)
-- `src/sensory/system-vitals-emitter.ts` (percept `process_runaway` : `pid`, `ppid`, `comm`, `pcpuTotal`, `etimeSec`, `scope`, `startTime` si présent)
+- `docs/reports/2026-09/VERIFICATION-FIX-AGY.md` §4.1.1
+- `src/sensory/sensory-action-executor.ts`
+- `src/sensory/sensory-rules-engine.ts`
+- `src/sensory/system-vitals-emitter.ts`
 
-Incident de référence (05/09) : trois `bash` à 99,9 % pendant 2 h 30, nés d'une session CLI, jamais tués. Le robot doit pouvoir s'auto-réparer, mais un `kill` automatique est dangereux : tout est BORNÉ.
+Incident de référence (05/09) : trois `bash` à 99,9 % pendant 2 h 30, nés d'une session CLI, jamais tués.
 
 ## Objectif
 
-Remédiation bornée, **opt-in, défaut OFF, byte-identique sans variable ni règle** (assert par test) :
-
-1. **Action `kill_process`** dans l'exécuteur : n'accepte QUE le `pid` porté par le percept `process_runaway` qui a déclenché la règle (jamais un pid libre dans la règle) ; revérifie AVANT de tuer que le pid existe encore, que son `comm` et son `startTime` (`/proc/<pid>/stat` champ 22) sont ceux du percept (anti PID-reuse) ; que ce n'est ni le serveur lui-même, ni un ancêtre du serveur, ni pid 1, ni un process d'un autre uid ; `SIGTERM` puis, après `graceMs` (défaut 5000, borné 1000–60000), `SIGKILL` seulement si `escalate: true` ; jamais de pid négatif, jamais de groupe. Option `dryRun` (défaut true) qui journalise sans tuer — un `kill` réel exige `dryRun:false` dans la règle ET `CODEBUDDY_RUNAWAY_KILL=true` côté serveur (double opt-in). `isDestructive`/`validateRule` : une règle `kill_process` sans `dryRun:false` est acceptée ; une règle `kill_process` dont `match.kind` n'est pas `process_runaway` est REFUSÉE à l'enregistrement.
-2. **Percept de remédiation** : après action, émettre `sensory:perception` `{modality:'system', kind:'process_remediated', payload:{pid, comm, signal, dryRun, ok, reason}}`. Gabarit `process-runaway-kill` dans `rule-templates.ts` (`dryRun:true` par défaut, cooldown 60 s, `escalate:false`) et `buddy rules add --template process-runaway-kill`.
-3. **Tests rouge→vert** (`tests/sensory/`) : pid absent → no-op journalisé ; comm différent → refus ; startTime différent → refus ; pid = `process.pid` ou ancêtre → refus ; dryRun → aucun `process.kill` (spy) ; double opt-in : sans env, `dryRun:false` reste un dry-run avec `reason:'CODEBUDDY_RUNAWAY_KILL unset'` ; avec env + `dryRun:false` → `process.kill(pid,'SIGTERM')` puis SIGKILL après `graceMs` (fake timers) si escalate ; `validateRule` refuse le mauvais `match.kind` ; sans variable ni règle, comportement byte-identique.
-
-Aucun push. `git add` fichier par fichier. Ne pas rédiger de verdict (le pilote le fera).
+Remédiation bornée, opt-in, défaut OFF, byte-identique sans variable ni règle.
 
 ## Invariants
 
-- Défaut OFF ⇒ aucun comportement nouveau sans variable ni règle (assert par test).
+- Défaut OFF ⇒ aucun `process.kill` sans `dryRun:false` **et** `CODEBUDDY_RUNAWAY_KILL=true`.
 - Jamais `git add -A` / `git commit -a` / `git push` / `git reset --hard` / `rm -rf`.
 - Ne pas écrire dans `~/code-buddy` ni `~/.codebuddy`.
-- Ne pas toucher ComfyUI 8188/8189 ni les services en cours.
-- `_qa/agy-v2/` et `_qa/verify/` (non suivis, hors mission) ne sont pas touchés.
+- Ne pas toucher ComfyUI 8188/8189.
 - Jamais `/home/<user>` dans les fichiers suivis ; écrire `~`.
 - HOME isolé : `HOME=$PWD/_qa/grok-kill/home` + `env -u FORCE_COLOR`.
 
@@ -41,27 +34,66 @@ Aucun push. `git add` fichier par fichier. Ne pas rédiger de verdict (le pilote
 
 | Heure | Action |
 |---|---|
-| 2026-09-05 | Rapport créé. Réservation du chantier. HEAD de départ `c89051551`. |
+| 2026-09-05 | Rapport créé. Réservation. HEAD de départ `c89051551`. SHA `d3322ce22`. |
+| 2026-09-05 | Point 1 : action `kill_process` + `validateRule` + `startTime` dans le percept. Tests 20/20 **ROUGE** (unknown action type) → **VERT**. SHA `06c287c9b`. |
+| 2026-09-05 | Point 2 : gabarit `process-runaway-kill`. SHA `080117da5`. |
+| 2026-09-05 | Point 3 : docs + env `CODEBUDDY_RUNAWAY_KILL` + eslint unused-var. Suite sensory+cli. |
 
 ## Tableau point → fichiers → tests rouge→vert → SHA
 
 | Point | Fichiers | Tests rouge→vert | SHA |
 |---|---|---|---|
-| 0. Réservation | `docs/reports/2026-09/RUNAWAY-REMEDIATION-GROK.md`, `docs/FABLE5-CODEX-COORDINATION.md`, `.gitignore` (`_qa/grok-kill/`) | — | *(à remplir)* |
-| 1. Action `kill_process` | *(à remplir)* | *(à remplir)* | *(à remplir)* |
-| 2. Percept `process_remediated` + gabarit | *(à remplir)* | *(à remplir)* | *(à remplir)* |
-| 3. Tests restants + docs | *(à remplir)* | *(à remplir)* | *(à remplir)* |
+| 0. Réservation | `docs/reports/2026-09/RUNAWAY-REMEDIATION-GROK.md`, `docs/FABLE5-CODEX-COORDINATION.md`, `.gitignore` (`_qa/grok-kill/`) | — | `d3322ce22a574084b30a618f8da7557864d16bee` |
+| 1. Action `kill_process` | `src/sensory/sensory-action-executor.ts`, `src/sensory/sensory-rules-engine.ts`, `src/sensory/system-vitals-emitter.ts` (`startTime` dans le payload), `tests/sensory/kill-process-action.test.ts`, assertion `startTime` dans `tests/sensory/system-vitals-emitter.test.ts` | **ROUGE** 20/20 (`unknown action type`) ; **VERT** 20/20. Pid absent / comm / startTime / self / ancêtre / pid 1 / autre uid / pid négatif / pid de la règle ignoré / dryRun / double opt-in / SIGTERM+SIGKILL (fake timers) / `process_remediated` / byte-identique shell / `validateRule`. | `06c287c9b4114c94cebef6984dcdd7dc837fc42d` |
+| 2. Gabarit | `src/sensory/rule-templates.ts`, `tests/sensory/rule-templates.test.ts` | Gabarit `process-runaway-kill` : `dryRun:true`, `escalate:false`, cooldown 60 s, pas de pid, `validateRule` ok. `buddy rules add --template process-runaway-kill` (chemin générique existant). | `080117da5e5d386313a05c415d3e8d1f2bb63a51` |
+| 3. Docs | `docs/surveillance-evenementielle.md`, `CLAUDE.md` (`CODEBUDDY_RUNAWAY_KILL`), rapport, coordination | — | *(ce commit)* |
 
 ## Preuves
 
-*(à remplir après les commandes demandées)*
+```text
+# ROUGE (HEAD avant l'action, tests nouveaux)
+HOME=$PWD/_qa/grok-kill/home env -u FORCE_COLOR npx vitest run tests/sensory/kill-process-action.test.ts
+# Test Files  1 failed (1)
+# Tests       20 failed (20)
+# detail: "unknown action type"
 
-- `HOME=$PWD/_qa/grok-kill/home env -u FORCE_COLOR npx vitest run tests/sensory tests/cli` — compte exact
-- `npx tsc --noEmit -p tsconfig.json | tail -2`
-- eslint ciblé 0
-- `git diff --check`
-- `tests/security/donnees-personnelles.test.ts` vert
+# VERT (exécuteur + validateRule)
+HOME=$PWD/_qa/grok-kill/home env -u FORCE_COLOR npx vitest run tests/sensory/kill-process-action.test.ts
+# Test Files  1 passed (1)
+# Tests       20 passed (20)
+
+# Suite demandée
+HOME=$PWD/_qa/grok-kill/home env -u FORCE_COLOR npx vitest run tests/sensory tests/cli
+# Test Files  100 passed | 1 skipped (101)
+# Tests       891 passed | 4 skipped | 1 todo (896)
+# Duration    101.00s
+
+env -u FORCE_COLOR npx tsc --noEmit -p tsconfig.json
+# exit 0 (aucune ligne)
+
+env -u FORCE_COLOR npx eslint --max-warnings=0 \
+  src/sensory/sensory-action-executor.ts \
+  src/sensory/sensory-rules-engine.ts \
+  src/sensory/system-vitals-emitter.ts \
+  src/sensory/rule-templates.ts \
+  tests/sensory/kill-process-action.test.ts \
+  tests/sensory/rule-templates.test.ts \
+  tests/sensory/system-vitals-emitter.test.ts
+# exit 0
+
+git diff --check
+# OK
+
+HOME=$PWD/_qa/grok-kill/home env -u FORCE_COLOR npx vitest run tests/security/donnees-personnelles.test.ts
+# Test Files  1 passed (1)
+# Tests       40 passed (40)
+```
 
 ## Bilan (≤ 10 lignes)
 
-*(à remplir en fin de mission, sans verdict)*
+Action `kill_process` dans l'exécuteur : pid uniquement depuis le percept `process_runaway`, relecture `/proc` (`comm` + `startTime` champ 22), refus self/ancêtre/pid 1/autre uid/pid ≤ 0, jamais de groupe.
+Double opt-in : `dryRun` défaut true ; un signal exige `dryRun:false` **et** `CODEBUDDY_RUNAWAY_KILL=true`.
+`validateRule` accepte le dry-run et refuse un `match.kind` autre que `process_runaway` ou un pid dans la règle.
+Après action : percept `process_remediated` ; gabarit `process-runaway-kill` (dryRun true, escalate false, cooldown 60 s).
+Tests 20/20 rouge→vert ; suite `tests/sensory`+`tests/cli` 100 fichiers / 891 verts ; `tsc` 0 ; eslint ciblé 0 ; `git diff --check` 0 ; `donnees-personnelles` 40/40.
+Aucun push. `~/code-buddy` et `~/.codebuddy` non touchés.

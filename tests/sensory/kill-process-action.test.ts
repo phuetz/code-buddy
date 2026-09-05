@@ -69,13 +69,12 @@ function collectRemediated(): { events: Array<Record<string, unknown>>; off: () 
 describe('kill_process action', () => {
   let killSpy: ReturnType<typeof vi.spyOn>;
   let warnSpy: ReturnType<typeof vi.spyOn>;
-  let infoSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     delete process.env.CODEBUDDY_RUNAWAY_KILL;
     killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
     warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
