@@ -224,7 +224,7 @@ export const DANGEROUS_CODE_PATTERNS: DangerousPattern[] = [
   // egress is already blocked (network + child_process), yet reading a secret
   // into the agent's own context still defeats the documented env-isolation.
   // Fail closed on any reference to a well-known credential/secret path.
-  { pattern: /(?:\.ssh\/|\bid_rsa\b|\bid_ed25519\b|\bid_ecdsa\b|\.aws\/(?:credentials|config)|\.gnupg\/|\.netrc\b|\.kube\/config|\.docker\/config|\/etc\/shadow\b|\/etc\/gshadow\b|\.codebuddy\/(?:auth|secret|[^'"`\s]*\.env)|(?:^|['"`/\s])\.env(?:\.[a-z]+)?['"`\s)]|\baws_secret_access_key\b)/i, severity: 'high', description: 'References a well-known credential/secret path', name: 'sensitive-credential-path', category: 'secret_exposure', appliesTo: ['code'] },
+  { pattern: /(?:\.ssh\/|\bid_rsa\b|\bid_ed25519\b|\bid_ecdsa\b|\.aws\/(?:credentials|config)|\.gnupg\/|\.netrc\b|\.kube\/config|\.docker\/config|\/etc\/shadow\b|\/etc\/gshadow\b|\.codebuddy\/(?:auth|secret|[^'"`\s]*\.env)|(?:^|['"`/\s])\.env(?:\.[a-z0-9]+)?['"`\s)]|\baws_secret_access_key\b|\.config\/gh\/|application_default_credentials\.json|\.config\/gcloud\/|(?:^|[/'"`~\s])\.azure\b|\.terraformrc\b|credentials\.tfrc\.json|\.npmrc\b|\.cargo\/credentials|\.pypirc\b|\.git-credentials\b)/i, severity: 'high', description: 'References a well-known credential/secret path', name: 'sensitive-credential-path', category: 'secret_exposure', appliesTo: ['code'] },
 
   // --- Unsafe deserialization ---
   { pattern: /\bpickle\.loads?\b/, severity: 'high', description: 'Python pickle deserialization', name: 'pickle-loads', category: 'code_execution', appliesTo: ['code'] },

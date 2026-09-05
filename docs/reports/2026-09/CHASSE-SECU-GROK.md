@@ -24,7 +24,19 @@ Pour chaque allégation : test qui construit le cas → exécution Vitest → si
 | 1.6 | Base64 de blobs ≥16 chars | **PROUVÉE** | test rouge (blob standard ≥16) → vert ; alphabet strict, un niveau, taille bornée, ASCII imprimable | *(commit point 1)* |
 | 1.7 | Fullwidth NFKC (`ＩＮＪＥＣＴ`) | **DÉMENTIE** | test vert d'emblée : `deobfuscateText` faisait déjà `.normalize('NFKC')` | — |
 | 1.8 | Non-régression : 3 skills légitimes (grec / URL encodée) non bloqués | **OK** | `web-search` / `git-commit` / `weather` + skill construit (coefficient α + `hello%20world`) : pas `quarantine` | — |
-| 2 | Motif `sensitive-credential-path` : chemins secrets manquants | *(en cours)* | | |
+| 2.1 | `~/.config/gh/hosts.yml` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.2 | `application_default_credentials.json` / gcloud | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.3 | `~/.azure` | **PROUVÉE** | test rouge → vert ; `foo.azure.com` non bloqué | *(commit point 2)* |
+| 2.4 | `.terraformrc` / `credentials.tfrc.json` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.5 | `~/.npmrc` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.6 | `~/.cargo/credentials` | **PROUVÉE** | test rouge → vert (y compris `.toml`) | *(commit point 2)* |
+| 2.7 | `~/.docker/config.json` | **DÉMENTIE** | déjà couvert par `\.docker\/config` | — |
+| 2.8 | `~/.kube/config` | **DÉMENTIE** | déjà dans le motif | — |
+| 2.9 | `~/.netrc` | **DÉMENTIE** | déjà dans le motif | — |
+| 2.10 | `~/.pypirc` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.11 | `~/.git-credentials` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.12 | `.env.*` | **DÉMENTIE** | `.env.local` et `.env.production` déjà bloqués | — |
+| 2.13 | Faux positifs `cat README.md` / `ls ~/.config` | **OK** | non bloqués avant et après | — |
 | 3 | `secrets-detector` / `secret-patterns` : formats de jetons manquants | *(en cours)* | | |
 
 ## Point 1 — déobfuscation + pare-feu skills
@@ -41,7 +53,15 @@ Après correctif : **10/10** sur le fichier chasse + **85/85** avec les suites s
 
 ## Point 2 — chemins d'identifiants
 
-*(à remplir après exécution)*
+Motif `sensitive-credential-path` (`dangerous-patterns.ts`, `appliesTo:['code']`). Premier run de `tests/security/chasse-secu-credential-paths.test.ts` **avant correctif** : **12 failed | 10 passed (22)**.
+
+Déjà couverts (allégation fausse) : `~/.docker/config.json`, `~/.kube/config`, `~/.netrc`, `.env.local`, `.env.production`.
+
+Manquants prouvés : gh `hosts.yml`, gcloud ADC, `~/.azure/`, `.terraformrc`, `credentials.tfrc.json`, `~/.npmrc`, `~/.cargo/credentials`, `~/.pypirc`, `~/.git-credentials`.
+
+Correctif : alternatives ajoutées au même motif. Garde `foo.azure.com` (exige un séparateur avant `.azure`). `ls ~/.config` et `cat README.md` restent non bloqués (bash et code).
+
+Après correctif : **22/22** + `audit-secaudit-authored-secret-read` + `dangerous-patterns` = **53/53**. ESLint ciblé 0. `git diff --check` 0.
 
 ## Point 3 — formats de secrets
 
