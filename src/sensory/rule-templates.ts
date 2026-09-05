@@ -69,6 +69,22 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
     }),
   },
   {
+    name: 'agent-loop-alert',
+    description:
+      'Alerte quand l’agent détecte une boucle (via le pont d’événements de domaine, kind:loop_detected).',
+    build: () => ({
+      id: 'tpl-agent-loop-alert',
+      name: 'Boucle agent détectée → alerte',
+      enabled: true,
+      match: { modality: 'agent', kind: 'loop_detected' },
+      action: {
+        type: 'alert',
+        message: '🔁 Boucle détectée dans l’agent. Vérifie la tâche en cours.',
+      },
+      cooldownMs: 300_000,
+    }),
+  },
+  {
     name: 'codex-quota-probe',
     description:
       'Chaque jour vers 04:20, lance un agent qui sonde le quota Codex et rapporte (surveillance horaire, sans boucle).',
