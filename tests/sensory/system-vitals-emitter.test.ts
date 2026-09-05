@@ -88,6 +88,7 @@ afterEach(() => {
   delete process.env.CODEBUDDY_DISK_LOW_PCT;
   delete process.env.CODEBUDDY_RUNAWAY_SCOPE;
   delete process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM;
+  delete process.env.CODEBUDDY_RUNAWAY_CPU_BASIS;
 });
 
 describe('runaway guard — INSTANTANEOUS CPU via jiffies delta (BUG-01)', () => {
@@ -301,6 +302,82 @@ describe('comm ignore list (BUG-08 empty, BUG-09 exact match)', () => {
   });
 });
 
+describe('multi-core payload + CODEBUDDY_RUNAWAY_CPU_BASIS (HEARTWATCH v2)', () => {
+  /**
+   * Fake `/proc` sample: 4 logical CPUs, one process burning 3.5 cores (350 % of one core).
+   * pcpuOfMachine = 350 / 4 = 87.5. Threshold 90 fires on `core` (compat) and does NOT fire
+   * on `machine`.
+   */
+  function fourCore350() {
+    const scn = makeSpinScenario({ comm: 'bash' });
+    return scn;
+  }
+
+  async function runUntilDelta(
+    scn: ReturnType<typeof makeSpinScenario>,
+    over: Partial<SystemVitalsDeps>,
+  ) {
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      nproc: 4,
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+      ...over,
+    });
+    await runSystemVitalsPass(deps); // baseline
+    scn.advance(1, 3.5); // 350 % of one core for 1 s
+    await runSystemVitalsPass(deps);
+    return { emitted };
+  }
+
+  it('350 % on 4 cores → pcpuOfMachine 87.5 and runaway under default core basis', async () => {
+    const { emitted } = await runUntilDelta(fourCore350(), {});
+    const ev = emitted.filter((e) => e.kind === 'process_runaway');
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.payload).toMatchObject({
+      pid: 4242,
+      comm: 'bash',
+      pcpu: 350,
+      pcpuTotal: 350,
+      pcpuOfMachine: 87.5,
+      cores: 4,
+    });
+  });
+
+  it('same 350 % on 4 cores does NOT runaway under basis=machine with threshold 90', async () => {
+    const { emitted } = await runUntilDelta(fourCore350(), { cpuBasis: 'machine' });
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+
+  it('CODEBUDDY_RUNAWAY_CPU_BASIS=machine (env, no dep) also refuses 87.5 < 90', async () => {
+    process.env.CODEBUDDY_RUNAWAY_CPU_BASIS = 'machine';
+    const { emitted } = await runUntilDelta(fourCore350(), { cpuBasis: undefined });
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+
+  it('unset BASIS is byte-identical: 100 % of one core still trips threshold 90 on an 8-core host', async () => {
+    // If the default accidentally compared pcpuOfMachine (100/8 = 12.5), this would miss.
+    const scn = makeSpinScenario({ comm: 'bash' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      nproc: 8,
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+    expect(emitted.find((e) => e.kind === 'process_runaway')!.payload).toMatchObject({
+      pcpuTotal: 100,
+      pcpuOfMachine: 12.5,
+      cores: 8,
+    });
+  });
+});
+
 describe('scope tagging', () => {
   it('user scope tags the payload and is honored', async () => {
     const scn = makeSpinScenario({ comm: 'bash' });
@@ -383,5 +460,16 @@ describe('robustness + byte-identical', () => {
     await runSystemVitalsPass(deps);
     bus.off(id);
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe('quota cgroup et borne pcpuOfMachine (vérif agy 05/09)', () => {
+  it('readCgroupCpuQuota : quota arrondi au cœur supérieur, null si max/illisible', async () => {
+    const { readCgroupCpuQuota } = await import('../../src/sensory/system-vitals-emitter.js');
+    expect(readCgroupCpuQuota(() => '150000 100000\n')).toBe(2);
+    expect(readCgroupCpuQuota(() => '400000 100000\n')).toBe(4);
+    expect(readCgroupCpuQuota(() => 'max 100000\n')).toBeNull();
+    expect(readCgroupCpuQuota(() => { throw new Error('ENOENT'); })).toBeNull();
+    expect(readCgroupCpuQuota(() => 'garbage')).toBeNull();
   });
 });

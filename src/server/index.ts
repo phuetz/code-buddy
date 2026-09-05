@@ -2082,6 +2082,23 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           }
           heart.start();
           sensoryTeardown.push(() => heart.stop());
+          // TS pacemaker (opt-in) — emits the same vital/heartbeat percept when
+          // buddy-sense is absent. Auto-disables on a real beat; re-arms after
+          // silence. Default OFF => no timer, byte-identical.
+          if (process.env.CODEBUDDY_HEARTBEAT_FALLBACK === 'true') {
+            const { startHeartbeatFallback } = await import('../sensory/heartbeat-fallback.js');
+            const fallback = startHeartbeatFallback();
+            sensoryTeardown.push(() => fallback.stop());
+            logger.info('Heartbeat fallback: Enabled (CODEBUDDY_HEARTBEAT_FALLBACK) - TS pacemaker until buddy-sense beats');
+          }
+          {
+            const { wireSensoryStatusSnapshot } = await import('../sensory/sensory-status.js');
+            sensoryTeardown.push(
+              wireSensoryStatusSnapshot({
+                treatments: heart.list().map((t) => ({ name: t.name, everyBeats: t.everyBeats })),
+              }),
+            );
+          }
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
         } catch (err) {
           logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);

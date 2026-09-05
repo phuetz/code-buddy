@@ -23,7 +23,7 @@
  * @module sensory/system-vitals-emitter
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { loadavg } from 'node:os';
+import { availableParallelism, cpus, loadavg } from 'node:os';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 
@@ -36,6 +36,14 @@ export type SystemVitalsKind =
 
 /** How wide the runaway-process scan reaches. */
 export type RunawayScope = 'server' | 'user';
+
+/**
+ * Unit the runaway CPU threshold is compared against.
+ * - `core` (default): `CODEBUDDY_RUNAWAY_CPU_PCT` is a percent of ONE core (Linux `top` style;
+ *   an 8-thread process can report 800 %). Backward-compatible.
+ * - `machine`: the threshold is a percent of the whole machine (`pcpuTotal / nproc`).
+ */
+export type RunawayCpuBasis = 'core' | 'machine';
 
 /**
  * One raw process sample. CPU is carried as CUMULATIVE jiffies (utime+stime), NOT a percentage:
@@ -115,6 +123,21 @@ export interface SystemVitalsDeps {
   scope?: RunawayScope;
   /** comm values that never raise process_runaway (else CODEBUDDY_RUNAWAY_IGNORE_COMM). */
   ignoreComm?: string[];
+  /**
+   * Logical CPU count (nproc). Default: `os.cpus().length` (at least 1). Injected by tests so a
+   * fake 4-core `/proc` does not depend on the host.
+   */
+  nproc?: number;
+  /**
+   * cgroup v2 quota file reader (`/sys/fs/cgroup/cpu.max`). Default: `readFileSync`. Injected by
+   * tests to simulate a container quota without touching the host.
+   */
+  readCgroupCpuMax?: () => string;
+  /**
+   * Threshold basis. Default: `CODEBUDDY_RUNAWAY_CPU_BASIS` or `core`. Unset = byte-identical
+   * comparison against the raw one-core percentage (`pcpuTotal`).
+   */
+  cpuBasis?: RunawayCpuBasis;
 }
 
 // Module-level runaway state so consecutive-pass counting + CPU deltas survive between beats.
@@ -233,6 +256,51 @@ function resolveClkTck(deps: SystemVitalsDeps): number {
   if (deps.clkTck && deps.clkTck > 0) return deps.clkTck;
   const env = Number(process.env.CODEBUDDY_CLK_TCK);
   return Number.isFinite(env) && env > 0 ? env : 100;
+}
+
+/**
+ * cgroup v2 CPU quota (`/sys/fs/cgroup/cpu.max` = "<quota> <period>" or "max <period>") rounded up
+ * to whole cores, or null when unlimited/unreadable. Only the v2 file is read (v1 is legacy).
+ */
+export function readCgroupCpuQuota(read?: () => string): number | null {
+  try {
+    const raw = (read ?? (() => readFileSync('/sys/fs/cgroup/cpu.max', 'utf8')))();
+    const [quota, period] = raw.trim().split(/\s+/);
+    if (!quota || quota === 'max') return null;
+    const q = Number(quota);
+    const per = Number(period ?? 100000);
+    if (!Number.isFinite(q) || !Number.isFinite(per) || q <= 0 || per <= 0) return null;
+    return Math.ceil(q / per);
+  } catch {
+    return null;
+  }
+}
+
+function resolveNproc(deps: SystemVitalsDeps): number {
+  if (typeof deps.nproc === 'number' && Number.isFinite(deps.nproc) && deps.nproc >= 1) {
+    return Math.floor(deps.nproc);
+  }
+  try {
+    // availableParallelism honours the affinity mask; the cgroup v2 CPU quota (containers) is
+    // read separately because neither os.cpus() nor availableParallelism() sees it.
+    let n = 0;
+    try { n = availableParallelism(); } catch { n = cpus()?.length ?? 0; }
+    if (n < 1) n = cpus()?.length ?? 0;
+    const quota = readCgroupCpuQuota(deps.readCgroupCpuMax);
+    if (quota !== null && quota >= 1 && quota < n) n = quota;
+    return n >= 1 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function resolveCpuBasis(deps: SystemVitalsDeps): RunawayCpuBasis {
+  if (deps.cpuBasis === 'machine' || deps.cpuBasis === 'core') return deps.cpuBasis;
+  return process.env.CODEBUDDY_RUNAWAY_CPU_BASIS === 'machine' ? 'machine' : 'core';
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 // ── default /proc reader — raw cumulative jiffies + start time (no ps average) ───────────
@@ -379,6 +447,8 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
   const diskLowPct = deps.diskLowPct ?? envNum('CODEBUDDY_DISK_LOW_PCT', 90);
   const scope = resolveScope(deps);
   const ignoreComm = resolveIgnoreComm(deps);
+  const cores = resolveNproc(deps);
+  const cpuBasis = resolveCpuBasis(deps);
   const emitted: SystemVitalsKind[] = [];
 
   try {
@@ -513,25 +583,37 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
           sampledAt: now,
         });
 
-        if (cpuPct !== null && cpuPct >= cpuThreshold) {
-          const next = (counters.get(s.pid) ?? 0) + 1;
-          counters.set(s.pid, next);
-          if (next >= runawayPasses) {
-            emit('process_runaway', 200, {
-              pid: s.pid,
-              ppid: s.ppid,
-              comm: s.comm,
-              pcpu: Math.round(cpuPct * 10) / 10,
-              etimeSec: s.etimeSec,
-              passes: next,
-              cpuThreshold,
-              scope,
-            });
-            emitted.push('process_runaway');
+        if (cpuPct !== null) {
+          // pcpuTotal = one-core percent (Linux top: 8 busy threads = 800). Threshold stays
+          // on this value when basis=core (default, byte-identical). basis=machine compares
+          // pcpuOfMachine = pcpuTotal / nproc instead.
+          const pcpuTotal = round1(cpuPct);
+          // Bounded to [0, 100]: sampling jitter can push a saturated box a hair above 100.
+          const pcpuOfMachine = Math.min(100, Math.max(0, round1(pcpuTotal / cores)));
+          const compared = cpuBasis === 'machine' ? pcpuOfMachine : pcpuTotal;
+          if (compared >= cpuThreshold) {
+            const next = (counters.get(s.pid) ?? 0) + 1;
+            counters.set(s.pid, next);
+            if (next >= runawayPasses) {
+              emit('process_runaway', 200, {
+                pid: s.pid,
+                ppid: s.ppid,
+                comm: s.comm,
+                pcpu: pcpuTotal,
+                pcpuTotal,
+                pcpuOfMachine,
+                cores,
+                etimeSec: s.etimeSec,
+                passes: next,
+                cpuThreshold,
+                scope,
+              });
+              emitted.push('process_runaway');
+            }
+          } else {
+            // Below threshold this pass → not consecutive anymore.
+            counters.delete(s.pid);
           }
-        } else if (cpuPct !== null) {
-          // Below threshold this pass → not consecutive anymore.
-          counters.delete(s.pid);
         }
       }
       // Prune counters + prev for pids that vanished from the table (only when the read succeeded).

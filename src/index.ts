@@ -40,6 +40,7 @@ import {
 import { validateOutputText } from './utils/output-schema-validator.js';
 import { resolveCliModelList } from './cli/model-listing.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
+import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
@@ -4098,6 +4099,7 @@ addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations
 
 // Backup — local backup management (Native Engine v2026.3.8 alignment)
 registerBackupCommand(program, (msg) => cli.stdout(msg));
+registerSensoryCommand(program, (msg) => cli.stdout(msg));
 
 // Cloud — background agent tasks (Cursor/Codex parity)
 program
