@@ -44,6 +44,8 @@ afterEach(() => {
   delete process.env.CODEBUDDY_RUNAWAY_CPU_PCT;
   delete process.env.CODEBUDDY_RUNAWAY_PASSES;
   delete process.env.CODEBUDDY_DISK_LOW_PCT;
+  delete process.env.CODEBUDDY_RUNAWAY_SCOPE;
+  delete process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM;
 });
 
 describe('runSystemVitalsPass — runaway guard', () => {
@@ -69,9 +71,10 @@ describe('runSystemVitalsPass — runaway guard', () => {
     expect(runawayEvents[0]!.payload).toMatchObject({
       pid: 4242,
       comm: 'bash',
-      cpuPct: 99.9,
+      pcpu: 99.9,
       etimeSec: 9000,
       passes: 3,
+      scope: 'server',
     });
   });
 
@@ -213,5 +216,81 @@ describe('byte-identical when unused (flag off)', () => {
     bus.off(id);
     // All emissions went through the injected emit, not the global bus.
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe('runaway scan scope + comm exceptions (incident-05/09 fix)', () => {
+  it('(a) scope:user catches a runaway OUTSIDE the server tree and tags the payload', async () => {
+    // A bash loop whose ppid is NOT the server pid — invisible to scope:server.
+    const { deps, emitted } = baseDeps({
+      readChildren: () => [
+        { pid: 55501, ppid: 999999, comm: 'bash', cpuPct: 99.9, etimeSec: 9000 },
+      ],
+      scope: 'user',
+      runawayCpuPct: 90,
+      runawayPasses: 2,
+    });
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    await runSystemVitalsPass(deps);
+    const ev = emitted.filter((e) => e.kind === 'process_runaway');
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.payload).toMatchObject({
+      pid: 55501,
+      ppid: 999999,
+      comm: 'bash',
+      pcpu: 99.9,
+      etimeSec: 9000,
+      scope: 'user',
+    });
+  });
+
+  it('(b) a comm in the ignore list never raises process_runaway (default: ffmpeg)', async () => {
+    const { deps, emitted } = baseDeps({
+      readChildren: () => [{ pid: 42, ppid: 1, comm: 'ffmpeg', cpuPct: 100, etimeSec: 12000 }],
+      scope: 'user',
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    for (let i = 0; i < 5; i++) await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+
+  it('(b) prefix match ignores python3 when "python" is on the list', async () => {
+    const { deps, emitted } = baseDeps({
+      readChildren: () => [{ pid: 7, ppid: 1, comm: 'python3.11', cpuPct: 99, etimeSec: 500 }],
+      ignoreComm: ['python'],
+      runawayPasses: 1,
+      runawayCpuPct: 90,
+    });
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+
+  it('(b) a custom ignore list via env is honored', async () => {
+    process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM = 'yes,sleep';
+    const { deps, emitted } = baseDeps({
+      readChildren: () => [{ pid: 9, ppid: 1, comm: 'yes', cpuPct: 100, etimeSec: 60 }],
+      ignoreComm: undefined,
+      runawayPasses: 1,
+      runawayCpuPct: 90,
+    });
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    delete process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM;
+  });
+
+  it('(c) scope:server is the default and unchanged (payload tagged server)', async () => {
+    const { deps, emitted } = baseDeps({
+      readChildren: () => [{ pid: 4242, ppid: 1, comm: 'bash', cpuPct: 99, etimeSec: 9000 }],
+      // no scope override → resolveScope defaults to 'server'
+      scope: undefined,
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    const ev = emitted.filter((e) => e.kind === 'process_runaway');
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.payload).toMatchObject({ scope: 'server', comm: 'bash' });
   });
 });

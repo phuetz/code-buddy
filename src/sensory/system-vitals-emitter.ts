@@ -35,9 +35,14 @@ export type SystemVitalsKind =
   | 'disk_low'
   | 'fleet_saturated';
 
-/** One child process observed in the OS process table. */
+/** How wide the runaway-process scan reaches. */
+export type RunawayScope = 'server' | 'user';
+
+/** One process observed in the OS process table. */
 export interface ChildProcInfo {
   pid: number;
+  /** Parent pid — carried into the alert so the operator knows the tree. */
+  ppid?: number;
   comm: string;
   /** Instantaneous CPU percentage (0–100+ across cores, as `ps` reports it). */
   cpuPct: number;
@@ -71,8 +76,9 @@ export interface SystemVitalsDeps {
   readFleet?: () => { utilization: number | null; saturated: boolean };
   /** Read disk free space for a path. Default: disk-guard `getFreeSpaceInfo(cwd)`. */
   readDisk?: () => { freePercent: number; freeBytes: number } | null;
-  /** Read this process's descendant processes. Default: `ps` snapshot filtered to descendants. */
-  readChildren?: () => Promise<ChildProcInfo[]> | ChildProcInfo[];
+  /** Read the candidate processes for the runaway scan. Default: `ps`, scoped by `scope`.
+   *  `server` = descendants of process.pid; `user` = all processes of the current uid. */
+  readChildren?: (scope: RunawayScope) => Promise<ChildProcInfo[]> | ChildProcInfo[];
   /** Emit a percept. Default: direct `getGlobalEventBus().emit('sensory:perception', …)`. */
   emit?: (kind: SystemVitalsKind, salience: number, payload: Record<string, unknown>) => void;
   /** Consecutive-pass counter map keyed by pid. Default: module singleton. */
@@ -81,6 +87,10 @@ export interface SystemVitalsDeps {
   runawayCpuPct?: number;
   runawayPasses?: number;
   diskLowPct?: number;
+  /** Runaway scan scope (else CODEBUDDY_RUNAWAY_SCOPE, default 'server'). */
+  scope?: RunawayScope;
+  /** comm values that never raise process_runaway (else CODEBUDDY_RUNAWAY_IGNORE_COMM). */
+  ignoreComm?: string[];
 }
 
 // Module-level runaway state so consecutive-pass counting survives between beats.
@@ -148,17 +158,54 @@ async function defaultReadDisk(): Promise<{ freePercent: number; freeBytes: numb
   }
 }
 
+/** comm values expected to run hot legitimately — never raise process_runaway on these. */
+const DEFAULT_IGNORE_COMM = [
+  'ffmpeg',
+  'comfyui',
+  'python',
+  'python3',
+  'node',
+  'tsc',
+  'vitest',
+  'cargo',
+  'rustc',
+  'esbuild',
+];
+
+function resolveScope(deps: SystemVitalsDeps): RunawayScope {
+  if (deps.scope) return deps.scope;
+  return process.env.CODEBUDDY_RUNAWAY_SCOPE === 'user' ? 'user' : 'server';
+}
+
+function resolveIgnoreComm(deps: SystemVitalsDeps): string[] {
+  const raw = deps.ignoreComm ?? process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM?.split(',');
+  const list = (raw ?? DEFAULT_IGNORE_COMM).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return list.length ? list : DEFAULT_IGNORE_COMM;
+}
+
+/** True when `comm` is on the ignore list (exact or prefix match, e.g. python3 vs python). */
+function isIgnoredComm(comm: string, ignore: string[]): boolean {
+  const c = comm.trim().toLowerCase();
+  if (!c) return false;
+  return ignore.some((entry) => c === entry || c.startsWith(entry));
+}
+
 /**
- * Default child reader: one `ps` snapshot, filtered to descendants of THIS process.
- * Linux `etimes` gives elapsed seconds. Never throws — returns [] on any failure.
+ * Default process reader: one `ps` snapshot. `scope:'server'` filters to descendants of THIS
+ * process; `scope:'user'` returns every process of the current uid (catches runaway loops born
+ * OUTSIDE the server, e.g. a CLI session — the 05/09 incident tree). Linux `etimes` = elapsed
+ * seconds. Never throws — returns [] on any failure.
  */
-async function defaultReadChildren(): Promise<ChildProcInfo[]> {
+async function defaultReadChildren(scope: RunawayScope): Promise<ChildProcInfo[]> {
   try {
-    const { stdout } = await execFileAsync(
-      'ps',
-      ['-eo', 'pid=,ppid=,pcpu=,etimes=,comm='],
-      { timeout: 5000, maxBuffer: 4 * 1024 * 1024 },
-    );
+    const args =
+      scope === 'user'
+        ? ['-u', String(process.getuid ? process.getuid() : ''), '-o', 'pid=,ppid=,pcpu=,etimes=,comm=']
+        : ['-eo', 'pid=,ppid=,pcpu=,etimes=,comm='];
+    const { stdout } = await execFileAsync('ps', args, {
+      timeout: 5000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
     interface Row {
       pid: number;
       ppid: number;
@@ -181,7 +228,20 @@ async function defaultReadChildren(): Promise<ChildProcInfo[]> {
         comm: (m[5] ?? '').trim(),
       });
     }
-    // Build ppid → children index, then walk descendants of our pid.
+    const toInfo = (r: Row): ChildProcInfo => ({
+      pid: r.pid,
+      ppid: r.ppid,
+      comm: r.comm,
+      cpuPct: r.cpuPct,
+      etimeSec: r.etimeSec,
+    });
+
+    // `user` scope: every process of the uid (catches loops born outside the server tree).
+    if (scope === 'user') {
+      return rows.filter((r) => r.pid !== process.pid).map(toInfo);
+    }
+
+    // `server` scope: walk descendants of our pid only.
     const byPpid = new Map<number, Row[]>();
     for (const r of rows) {
       const arr = byPpid.get(r.ppid) ?? [];
@@ -196,12 +256,7 @@ async function defaultReadChildren(): Promise<ChildProcInfo[]> {
       for (const child of byPpid.get(parent) ?? []) {
         if (seen.has(child.pid)) continue;
         seen.add(child.pid);
-        out.push({
-          pid: child.pid,
-          comm: child.comm,
-          cpuPct: child.cpuPct,
-          etimeSec: child.etimeSec,
-        });
+        out.push(toInfo(child));
         stack.push(child.pid);
       }
     }
@@ -245,6 +300,8 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
   const cpuThreshold = deps.runawayCpuPct ?? envNum('CODEBUDDY_RUNAWAY_CPU_PCT', 90);
   const runawayPasses = deps.runawayPasses ?? envInt('CODEBUDDY_RUNAWAY_PASSES', 3);
   const diskLowPct = deps.diskLowPct ?? envNum('CODEBUDDY_DISK_LOW_PCT', 90);
+  const scope = resolveScope(deps);
+  const ignoreComm = resolveIgnoreComm(deps);
   const emitted: SystemVitalsKind[] = [];
 
   try {
@@ -337,15 +394,19 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
     }
 
     // ── runaway process guard (consecutive-pass CPU counter per pid) ─────────
+    // Scope: 'server' = descendants of buddy server; 'user' = ALL uid processes
+    // (catches loops born outside the server tree — the 05/09 incident case).
     let children: ChildProcInfo[] = [];
     try {
-      children = await (deps.readChildren ?? defaultReadChildren)();
+      children = await (deps.readChildren ?? defaultReadChildren)(scope);
     } catch {
       children = [];
     }
     const livePids = new Set<number>();
     for (const child of children) {
       if (!Number.isFinite(child.pid)) continue;
+      // Never flag a legitimately hot process (ffmpeg, ComfyUI python, build node…).
+      if (isIgnoredComm(child.comm, ignoreComm)) continue;
       livePids.add(child.pid);
       if (Number.isFinite(child.cpuPct) && child.cpuPct >= cpuThreshold) {
         const next = (counters.get(child.pid) ?? 0) + 1;
@@ -353,11 +414,13 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
         if (next >= runawayPasses) {
           emit('process_runaway', 200, {
             pid: child.pid,
+            ppid: child.ppid,
             comm: child.comm,
-            cpuPct: child.cpuPct,
+            pcpu: child.cpuPct,
             etimeSec: child.etimeSec,
             passes: next,
             cpuThreshold,
+            scope,
           });
           emitted.push('process_runaway');
         }
