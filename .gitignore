@@ -315,3 +315,7 @@ _qa/strat1/
 _qa/dgm5/
 _qa/dgm6/
 _qa/heartwatch/
+
+# Audit sécurité flotte Opus 2026-09-05
+_qa/astrasec/
+_qa/grok-secu/

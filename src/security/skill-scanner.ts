@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { deobfuscateForScan } from './text-deobfuscation.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -328,21 +329,40 @@ function collectPromptInjectionFindings(
 ): ScanFinding[] {
   const extra: ScanFinding[] = [];
   const seen = new Set(existing.map((finding) => finding.pattern));
+  // SECAUDIT 2026-09-05: a skill is INJECTED into the LLM context, so a
+  // jailbreak / prompt-override hidden with zero-width chars, Cyrillic
+  // homoglyphs or a hyphenated line-wrap is read by the model but slips past a
+  // raw regex. Scan the de-obfuscated form too (same defence the strategy gate
+  // already has). Line position is lost after normalization → report line 1.
+  const normalized = deobfuscateForScan(content);
   for (const dp of DANGEROUS_PATTERNS) {
     if (dp.capability !== 'prompt-injection') continue;
     if (seen.has(dp.name)) continue;
     const flags = dp.pattern.flags.includes('s') ? dp.pattern.flags : `${dp.pattern.flags}s`;
     const re = new RegExp(dp.pattern.source, flags.replace('g', ''));
     const match = re.exec(content);
-    if (!match || match.index === undefined) continue;
+    if (match && match.index !== undefined) {
+      seen.add(dp.name);
+      extra.push({
+        severity: dp.severity,
+        pattern: dp.name,
+        description: dp.description,
+        file: filePath,
+        line: content.slice(0, match.index).split('\n').length,
+        evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+      });
+      continue;
+    }
+    const normMatch = re.exec(normalized);
+    if (!normMatch || normMatch.index === undefined) continue;
     seen.add(dp.name);
     extra.push({
       severity: dp.severity,
       pattern: dp.name,
-      description: dp.description,
+      description: `${dp.description} (obfuscated)`,
       file: filePath,
-      line: content.slice(0, match.index).split('\n').length,
-      evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+      line: 1,
+      evidence: normMatch[0].replace(/\s+/g, ' ').trim().slice(0, 120),
     });
   }
   return extra;
