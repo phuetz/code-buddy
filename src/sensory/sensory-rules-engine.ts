@@ -62,6 +62,9 @@ export function isNumericFilter(f: unknown): f is NumericFilter {
 /** Apply one filter to one payload value. String = exact equality (byte-identical to the historical path). */
 export function filterMatches(payloadValue: unknown, filter: RuleFilter): boolean {
   if (isNumericFilter(filter)) {
+    // BUG-03: an absent/null metric (e.g. vramPct:null on a GPU-less box) must NOT coerce to 0
+    // — Number(null)===0 would fire `lte 10` / `eq 0` spuriously. Missing ⇒ no match.
+    if (payloadValue === null || payloadValue === undefined || payloadValue === '') return false;
     const n = typeof payloadValue === 'number' ? payloadValue : Number(payloadValue);
     if (!Number.isFinite(n)) return false;
     switch (filter.op) {

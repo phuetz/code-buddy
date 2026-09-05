@@ -119,3 +119,29 @@ describe('validateRule accepts both filter forms and rejects garbage', () => {
     expect(bad.errors.join(' ')).toMatch(/match.filters must be an object/);
   });
 });
+
+describe('BUG-03: absent/null metric never coerces to 0', () => {
+  it('null payload value does NOT match lte/eq/gte numeric operators', () => {
+    // Number(null)===0 would spuriously fire `lte 10` and `eq 0` on a GPU-less box.
+    expect(matchWith({ vramPct: { op: 'lte', value: 10 } }, { vramPct: null })).toBe(false);
+    expect(matchWith({ vramPct: { op: 'eq', value: 0 } }, { vramPct: null })).toBe(false);
+    expect(matchWith({ vramPct: { op: 'gte', value: 90 } }, { vramPct: null })).toBe(false);
+  });
+
+  it('undefined / missing / empty-string payload never matches a numeric operator', () => {
+    expect(matchWith({ fleetUtilization: { op: 'lte', value: 1 } }, { fleetUtilization: undefined })).toBe(false);
+    expect(matchWith({ fleetUtilization: { op: 'lte', value: 1 } }, {})).toBe(false);
+    expect(matchWith({ x: { op: 'eq', value: 0 } }, { x: '' })).toBe(false);
+  });
+
+  it('a real 0 still matches (regression guard — only null/undefined/empty are excluded)', () => {
+    expect(matchWith({ x: { op: 'eq', value: 0 } }, { x: 0 })).toBe(true);
+    expect(matchWith({ x: { op: 'lte', value: 10 } }, { x: 0 })).toBe(true);
+  });
+
+  it('filterMatches helper: null vs numeric filter is false, 0 is honored', () => {
+    expect(engine.filterMatches(null, { op: 'lte', value: 10 })).toBe(false);
+    expect(engine.filterMatches(undefined, { op: 'eq', value: 0 })).toBe(false);
+    expect(engine.filterMatches(0, { op: 'eq', value: 0 })).toBe(true);
+  });
+});
