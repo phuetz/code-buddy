@@ -69,3 +69,54 @@ Début : 2026-09-05.
 2. `feat(sensory)` Phase 1 — émetteur + câblage serveur + test.
 3. `feat(sensory)` Phase 2 — opérateurs de seuil + test.
 4. `test(sensory)` — assertion byte-identique.
+
+## Phases 3 & 5 (2026-09-05, même session)
+
+### Phase 3 — `src/sensory/schedule-emitter.ts` (nouveau) + câblage serveur
+- `runSchedulePass(deps)` : passe pure/testable, horloge + emit injectables. Émet UN percept
+  `time/tick` par passe (`getGlobalEventBus().emit('sensory:perception', { source:'schedule',
+  metadata:{ modality:'time', kind:'tick', salience:1, payload:{ hhmm, weekday, iso, minuteOfDay } } })`).
+  Patron reminder-runner (lire l'horloge, agir une fois) mais SANS boucle. never-throws (retourne null).
+- Câblé dans `src/server/index.ts` après system-vitals : traitement `schedule-ticks`, opt-in
+  `CODEBUDDY_SCHEDULE_TICKS`, cadence `CODEBUDDY_SCHEDULE_TICKS_EVERY` (défaut 60 ≈ 1/min), teardown poussé.
+- Permet des règles à l'heure (`match.kind:'tick'` + `between`/`filters` sur `hhmm`) sans boucle occupée.
+
+### Phase 5 — règles-modèles + CLI + docs
+- `src/sensory/rule-templates.ts` (nouveau) : 4 modèles VALIDÉS par `validateRule`, non actifs tant
+  que non installés — `process-runaway-alert` (correctif incident), `disk-low-alert`
+  (`filters:{diskPct:{op:gte,value:90}}`), `fleet-saturated-alert`, `codex-quota-probe` (tick 04:20 → agent).
+  Actions conservatrices (alert/agent lecture) — aucun auto-kill livré.
+- CLI (`src/index.ts`, commande `rules`) : `buddy rules templates` liste, `buddy rules add --template
+  <nom>` installe via `upsertSensoryRule` APRÈS `validateRule`. Vérifié de bout en bout (tsx, HOME isolé) :
+  install → list → validate → JSON écrit correct.
+- Docs : `docs/surveillance-evenementielle.md` (flux battement→percept→règle→action + activation +
+  install + tableau des flags) ; pointeur ajouté à `docs/companion-guide.md` ; 3 lignes env ajoutées au
+  tableau de `CLAUDE.md` (`CODEBUDDY_SYSTEM_VITALS`/`_EVERY`, `RUNAWAY_CPU_PCT`/`PASSES`,
+  `SCHEDULE_TICKS`/`_EVERY`).
+
+### Preuves (Phases 3 & 5)
+- `HOME=<isolé> npx vitest run tests/sensory/schedule-emitter.test.ts tests/sensory/rule-templates.test.ts`
+  ⇒ **2 fichiers, 12 tests verts** (5 horaire + 7 templates).
+- Suite sensory complète : **avant P3&P5** 75 fichiers / 705 tests ; **après** 77 fichiers / 717 tests
+  (76 passés + 1 skipped ; 712 passés, 4 skipped, 1 todo). Delta = exactement mes 12 tests neufs, zéro
+  test existant modifié.
+- `npx tsc --noEmit -p .` code 0. ESLint ciblé (8 fichiers touchés) code 0. `git diff --check` code 0.
+- Byte-identique : flags off ⇒ traitements non enregistrés ; passes entièrement injectées n'atteignent
+  jamais le bus global (assert par test).
+
+### Commande exacte pour installer la règle anti-emballement
+```
+buddy rules add --template process-runaway-alert
+```
+(à faire une fois ; puis lancer le serveur avec `CODEBUDDY_SYSTEM_VITALS=true CODEBUDDY_SENSORY_RULES=true
+CODEBUDDY_SENSORY_TOKEN=<token> buddy server`).
+
+### Reste (hors périmètre — Phase 4)
+- Phase 4 : pont des événements de domaine déjà sur le bus (`fleet:activity`, `agent:loop_detected`,
+  `cost:*`, `context:pre_compact`) ré-émis en percepts sensoriels, pour qu'une seule grammaire de règles
+  couvre perception physique ET vie interne de l'agent.
+
+### Commits Phases 3 & 5 (fichier par fichier, aucun push)
+5. `feat(sensory)` Phase 3 — schedule-emitter + câblage + test.
+6. `feat(sensory)` Phase 5 — rule-templates + CLI + test.
+7. `docs(sensory)` Phase 5 — guide + companion-guide + CLAUDE.md.
