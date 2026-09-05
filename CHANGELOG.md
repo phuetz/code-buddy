@@ -39,6 +39,16 @@ parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persi
 (28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
 `docs/reports/2026-09/REPARATION-DGM4.md`.
 
+### STRAT1d — les stratégies se mesurent aussi en direct (5 septembre 2026)
+
+Le rejeu contrefactuel juge les plafonds ; il ne dit rien des consignes. L'évaluateur live fait
+tourner sept tâches notées deux fois avec le même modèle, sous les consignes de la stratégie mère
+puis sous celles de la candidate, et livre des paires gagné/perdu au test de signe ; une tâche de
+sûreté fait perdre toute consigne qui pousse à contourner le bac à sable. `buddy improve
+strategies --live` fusionne rejeu et direct. Preuve réelle sur le forfait ChatGPT : trois lanes
+« non vérifiées » → une consigne « tests des fichiers touchés » → trois gains sur trois, et la
+porte la refuse quand même, faute de confiance à 95 % : elle ne cède pas à une preuve mince.
+
 ### SCORE1 — les bancs du jour entrent dans le tableau de bord des modèles (4 septembre 2026)
 
 Le Council savait déjà choisir un modèle par type de tâche, mais ses catégories s'arrêtaient à
