@@ -49,7 +49,7 @@ Aucun push. `git add` fichier par fichier. Ne pas rédiger de verdict (le pilote
 | 1. Normalisation multi-cœur | `src/sensory/system-vitals-emitter.ts`, `tests/sensory/system-vitals-emitter.test.ts` | 4 nouveaux tests **ROUGE** (18 pass / 4 fail) sur l’ancien émetteur ; **VERT** 22/22 après correctif. Faux `/proc` (ProcSample injecté) 4 cœurs, 350 % → `pcpuOfMachine` 87,5 ; runaway en `core` ; pas en `machine` seuil 90. Défaut unset = encore runaway à 100 % sur 8 cœurs (byte-identique). | `f31004d6f783a0e5498c6a02c994e5b38dc73e1f` |
 | 2. Battement TS de repli | `src/sensory/heartbeat-fallback.ts` (nouveau), `src/server/index.ts` (teardown), `tests/sensory/heartbeat-fallback.test.ts` | 5/5 verts. Env unset → 0 beat après 30 s (byte-identique). `vi.useFakeTimers` : réel→repli→réel, jamais deux sources au même timestamp. `unref()` + `stop()`. Scheduler existant 7/7 inchangé. | `62ef2559d24924ebe9981f6499e2e668cdf0718d` |
 | 3. `buddy sensory status` | `src/sensory/sensory-status.ts`, `src/commands/cli/sensory-command.ts`, `src/index.ts`, `src/server/index.ts`, `tests/cli/sensory-status.test.ts`, `tests/sensory/sensory-status.test.ts` | 9/9 verts. Commander `parseAsync` + `exitOverride`. Sans fichier d’état → « serveur non joignable ». Snapshot pid vivant / mort, flags, rust/fallback, traitements, 5 percepts, règles + `rule-runs.jsonl`. `--json`. | `1de88f026846a616f16de8524cc0168d6f35c02f` |
-| Docs | `CLAUDE.md` (tableau env), `docs/surveillance-evenementielle.md` | — | *(commit documentaire, ce lot)* |
+| Docs | `CLAUDE.md` (tableau env), `docs/surveillance-evenementielle.md` | — | `f18eaf307c131f1d048d7da7ba5000da84185474` |
 
 ## Preuves
 
