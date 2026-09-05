@@ -46,7 +46,7 @@ Remédiation bornée, opt-in, défaut OFF, byte-identique sans variable ni règl
 | 0. Réservation | `docs/reports/2026-09/RUNAWAY-REMEDIATION-GROK.md`, `docs/FABLE5-CODEX-COORDINATION.md`, `.gitignore` (`_qa/grok-kill/`) | — | `d3322ce22a574084b30a618f8da7557864d16bee` |
 | 1. Action `kill_process` | `src/sensory/sensory-action-executor.ts`, `src/sensory/sensory-rules-engine.ts`, `src/sensory/system-vitals-emitter.ts` (`startTime` dans le payload), `tests/sensory/kill-process-action.test.ts`, assertion `startTime` dans `tests/sensory/system-vitals-emitter.test.ts` | **ROUGE** 20/20 (`unknown action type`) ; **VERT** 20/20. Pid absent / comm / startTime / self / ancêtre / pid 1 / autre uid / pid négatif / pid de la règle ignoré / dryRun / double opt-in / SIGTERM+SIGKILL (fake timers) / `process_remediated` / byte-identique shell / `validateRule`. | `06c287c9b4114c94cebef6984dcdd7dc837fc42d` |
 | 2. Gabarit | `src/sensory/rule-templates.ts`, `tests/sensory/rule-templates.test.ts` | Gabarit `process-runaway-kill` : `dryRun:true`, `escalate:false`, cooldown 60 s, pas de pid, `validateRule` ok. `buddy rules add --template process-runaway-kill` (chemin générique existant). | `080117da5e5d386313a05c415d3e8d1f2bb63a51` |
-| 3. Docs | `docs/surveillance-evenementielle.md`, `CLAUDE.md` (`CODEBUDDY_RUNAWAY_KILL`), rapport, coordination | — | *(ce commit)* |
+| 3. Docs | `docs/surveillance-evenementielle.md`, `CLAUDE.md` (`CODEBUDDY_RUNAWAY_KILL`), rapport, coordination | — | `084b512b16c45c870b11ab0af1d854fbcfc63971` |
 
 ## Preuves
 
