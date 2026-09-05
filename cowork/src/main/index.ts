@@ -278,7 +278,6 @@ import {
   getAutonomyModelTierForReview,
   getAutonomyServiceLogsForReview,
 } from './autonomy/autonomy-daemon-bridge';
-import { bootstrapDarkstarNetworkModel } from './config/darkstar-network-model';
 import {
   addColabTaskForReview,
   blockColabTaskForReview,
@@ -992,7 +991,12 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: THEME.background,
     icon: (() => {
-      const windowIconName = isMac ? 'icon.icns' : isWindows ? 'icon.ico' : 'icon.png';
+      if (!isMac && !isWindows) {
+        return app.isPackaged
+          ? join(app.getAppPath(), 'dist/logo.png')
+          : join(__dirname, '../../public/logo.png');
+      }
+      const windowIconName = isMac ? 'icon.icns' : 'icon.ico';
       return app.isPackaged
         ? join(process.resourcesPath, windowIconName)
         : join(__dirname, `../../resources/${windowIconName}`);
@@ -1629,13 +1633,6 @@ app
     // labelled concat). Runs regardless of the embedded engine: the Council
     // executes in this main process via saga-runner. Best-effort.
     void wireFleetAggregator(configStore);
-    const darkstarBootstrap = await bootstrapDarkstarNetworkModel(process.env);
-    if (darkstarBootstrap.applied) {
-      log('[main] Darkstar network model bootstrapped:', darkstarBootstrap.model, darkstarBootstrap.baseUrl);
-    } else {
-      log('[main] Darkstar network model bootstrap skipped:', darkstarBootstrap.reason);
-    }
-
     // Single source of truth for which runtime is in use. Logged AFTER
     // the load attempt so it never contradicts the engine init log
     // above (an earlier "[Runtime] Using pi-coding-agent SDK..." line
@@ -3649,6 +3646,30 @@ ipcMain.handle('dialog.selectFiles', async () => {
   }
 
   return result.filePaths;
+});
+
+ipcMain.handle('dialog.selectDirectory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Directory',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selectedPath = result.filePaths[0];
+  try {
+    if (!fs.statSync(selectedPath).isDirectory()) {
+      logWarn('[dialog.selectDirectory] Refusing a path that is not a directory:', selectedPath);
+      return null;
+    }
+  } catch (error) {
+    logWarn('[dialog.selectDirectory] Cannot inspect selected path:', selectedPath, error);
+    return null;
+  }
+
+  return selectedPath;
 });
 
 // Config IPC handlers

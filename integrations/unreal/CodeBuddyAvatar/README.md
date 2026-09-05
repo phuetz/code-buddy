@@ -24,7 +24,7 @@ capacité `audioDrivenAnimation` reste fausse tant qu'un sujet MetaHuman Audio L
 
 ## Installation sûre
 
-Depuis le dépôt Code Buddy copié sur Darkstar :
+Depuis le dépôt Code Buddy copié sur GPU node :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\unreal\Invoke-CodeBuddyAvatarV6.ps1 `
@@ -67,7 +67,7 @@ Cette cadence ne doit pas être confondue avec les 60 fps du rendu de la scène.
 Le transport recommandé reste un tunnel Tailscale/SSH vers le serveur lié à la boucle locale :
 
 ```powershell
-ssh -N -L 3055:127.0.0.1:3055 patrice@100.98.18.76
+ssh -N -L 3055:127.0.0.1:3055 patrice@203.0.113.10
 $env:CODEBUDDY_AVATAR_TOKEN = '<jwt-court-avatar-read-write>'
 ```
 

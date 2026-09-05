@@ -29,6 +29,7 @@
  */
 
 import type { SessionRegistry, SessionInfo, SessionMessage } from './session-registry.js';
+import { redactSecrets } from '../../fleet/privacy-lint.js';
 
 export type FleetEventBroadcaster = (type: any, payload: any, agentId?: string) => void;
 let _fleetBroadcaster: FleetEventBroadcaster | null = null;
@@ -101,7 +102,7 @@ export function enableSessionFleetBridge(
     try {
       const preview =
         typeof message.content === 'string'
-          ? message.content.slice(0, 200)
+          ? redactSecrets(message.content).slice(0, 200)
           : '<non-string content>';
       broadcastFleetEvent(
         'fleet:session:message',

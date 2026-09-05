@@ -290,7 +290,7 @@ describe('listActiveLlmModelPool — local expansion', () => {
 describe('classifyModelEgress', () => {
   it('distinguishes loopback, trusted LAN and public endpoints', () => {
     expect(classifyModelEgress('http://127.0.0.1:11434/v1', true)).toBe('local');
-    expect(classifyModelEgress('http://darkstar:11434/v1', true)).toBe('lan');
+    expect(classifyModelEgress('http://gpuNode:11434/v1', true)).toBe('lan');
     expect(classifyModelEgress('http://192.168.1.20:11434/v1', true)).toBe('lan');
     expect(classifyModelEgress('https://ollama.example.com/v1', true)).toBe('cloud');
   });

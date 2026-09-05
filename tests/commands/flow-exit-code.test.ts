@@ -72,6 +72,36 @@ describe('buddy flow exit status', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('returns exit code 1 when a step only emits unexecuted tool-call markup', async () => {
+    mocks.chat
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              steps: [{
+                id: 'step_1',
+                title: 'Create file',
+                description: 'write title-case.js',
+                dependencies: [],
+              }],
+            }),
+          },
+        }],
+      })
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            content: '<tool_call>\n<function=Bash>\n<parameter=command>\nls\n',
+          },
+        }],
+      });
+
+    const logs = await runFlow();
+
+    expect(logs.join('\n')).toContain('1 failed');
+    expect(process.exitCode).toBe(1);
+  });
+
   it('keeps a successful flow at exit code 0', async () => {
     mocks.chat
       .mockResolvedValueOnce({

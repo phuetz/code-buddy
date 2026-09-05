@@ -95,12 +95,15 @@ function allEntries(store: PersistentMemoryManager, scope?: MemoryScope): Array<
 
 /** Translate a store write rejection (char budget / security scan) to a 400. */
 async function rejectOn400<T>(work: () => Promise<T>): Promise<T> {
-  const { MemoryWriteRejectedError } = await import('../../memory/persistent-memory.js');
+  const { MemoryPersistenceError, MemoryWriteRejectedError } = await import('../../memory/persistent-memory.js');
   try {
     return await work();
   } catch (err) {
     if (err instanceof MemoryWriteRejectedError) {
       throw ApiServerError.badRequest(err.message);
+    }
+    if (err instanceof MemoryPersistenceError) {
+      throw ApiServerError.serviceUnavailable(err.message);
     }
     throw err;
   }

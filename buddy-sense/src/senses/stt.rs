@@ -22,13 +22,50 @@ const DEFAULT_MODEL_SUBDIR: &str = ".codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt
 const FEATURE_DIM: i32 = 128;
 
 pub fn resolve_model_dir() -> String {
-    if let Ok(dir) = std::env::var("BUDDY_SENSE_STT_MODEL_DIR") {
-        if !dir.trim().is_empty() {
-            return dir;
+    for name in [
+        "BUDDY_SENSE_STT_MODEL_DIR",
+        "CODEBUDDY_PARAKEET_MODEL_DIR",
+        "CODEBUDDY_SHERPA_ONNX_MODEL_DIR",
+    ] {
+        if let Ok(dir) = std::env::var(name) {
+            if !dir.trim().is_empty() {
+                return dir;
+            }
         }
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     format!("{home}/{DEFAULT_MODEL_SUBDIR}")
+}
+
+const MODEL_FILES: [&str; 4] = [
+    "encoder.int8.onnx",
+    "decoder.int8.onnx",
+    "joiner.int8.onnx",
+    "tokens.txt",
+];
+
+pub fn model_is_complete(model_dir: &str) -> bool {
+    MODEL_FILES
+        .iter()
+        .all(|name| std::path::Path::new(model_dir).join(name).is_file())
+}
+
+/// Evidence used only by the generic auto route. The installed Parakeet-TDT
+/// v3 model is known to support French; custom model bundles can carry the
+/// same local witness WAV without requiring a network lookup.
+pub fn model_is_french(model_dir: &str) -> bool {
+    if !model_is_complete(model_dir) {
+        return false;
+    }
+    let name = std::path::Path::new(model_dir)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    name.contains("parakeet-tdt-0.6b-v3")
+        || std::path::Path::new(model_dir)
+            .join("test_wavs/fr.wav")
+            .is_file()
 }
 
 fn num_threads() -> i32 {
@@ -48,12 +85,7 @@ impl Stt {
     /// Load the offline transducer from a sherpa-onnx model directory.
     pub fn load(model_dir: &str) -> Result<Self, String> {
         let f = |name: &str| format!("{model_dir}/{name}");
-        for name in [
-            "encoder.int8.onnx",
-            "decoder.int8.onnx",
-            "joiner.int8.onnx",
-            "tokens.txt",
-        ] {
+        for name in MODEL_FILES {
             if !std::path::Path::new(&f(name)).exists() {
                 return Err(format!("model file missing: {}", f(name)));
             }

@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
+import { EventEmitter } from 'events';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, sep } from 'path';
@@ -191,6 +192,34 @@ describe('reduceQuality', () => {
     expect(r.durationOk).toBe(false);
   });
 
+  // Régression mesurée le 2026-09-01 : une vidéo de présentation dont la narration
+  // avait été sautée (Piper absent) est sortie à -54,7 dB et le gate a rendu PASS.
+  // -54,7 dB est inaudible en pratique — l'ancien seuil de -60 dB ne l'attrapait pas.
+  it('fails a film that is inaudible in practice, not just digitally silent', () => {
+    const r = reduceQuality({
+      probedDuration: 27.6,
+      hasAudio: true,
+      meanDb: -54.7,
+      maxDb: -40,
+      blackIntervals: [],
+    });
+    expect(r.silent).toBe(true);
+    expect(r.pass).toBe(false);
+  });
+
+  it('warns on an abnormally quiet mix without failing it', () => {
+    const r = reduceQuality({
+      probedDuration: 30,
+      hasAudio: true,
+      meanDb: -38,
+      maxDb: -12,
+      blackIntervals: [],
+    });
+    expect(r.silent).toBe(false);
+    expect(r.pass).toBe(true);
+    expect(r.warnings.some((w) => /quiet/i.test(w))).toBe(true);
+  });
+
   it('fails a silent film with an audio track', () => {
     const r = reduceQuality({
       probedDuration: 10,
@@ -228,6 +257,122 @@ describe('reduceQuality', () => {
     });
     expect(r.silent).toBe(false);
     expect(r.pass).toBe(true);
+  });
+
+  // GK4: the assembled short was 11.43s video / 10.83s audio and still PASS'd —
+  // format duration follows the longer stream, so a truncated mix went unnoticed.
+  it('fails when the audio stream is shorter than the video', () => {
+    const r = reduceQuality({
+      probedDuration: 11.43,
+      expectedDuration: 11.45,
+      hasAudio: true,
+      meanDb: -20.2,
+      maxDb: -3,
+      blackIntervals: [{ start: 0, end: 0.2, duration: 0.2 }],
+      audioDuration: 10.83,
+    });
+    expect(r.pass).toBe(false);
+    expect(r.audioMatchesVideo).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/10\.83/);
+  });
+
+  it('fails when an audio track has no measured mean volume', () => {
+    const r = reduceQuality({
+      probedDuration: 10,
+      expectedDuration: 10,
+      hasAudio: true,
+      meanDb: null,
+      maxDb: null,
+      blackIntervals: [],
+    });
+    expect(r.pass).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/mean volume/i);
+  });
+});
+
+describe('assessFilmQuality — injected failures', () => {
+  it('fails when the ffmpeg analysis exits non-zero without statistics', async () => {
+    const fakeSpawn = ((cmd: string, args: string[]) => {
+      const child = new EventEmitter() as unknown as {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        kill: () => void;
+        on: EventEmitter['on'];
+      };
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => undefined;
+      setImmediate(() => {
+        if (cmd.includes('ffprobe')) {
+          child.stdout.emit(
+            'data',
+            Buffer.from(
+              JSON.stringify({
+                format: { duration: '10' },
+                streams: [{ codec_type: 'video' }, { codec_type: 'audio' }],
+              }),
+            ),
+          );
+          child.emit('close', 0);
+        } else if (args.includes('-f') && args.includes('null')) {
+          child.stderr.emit('data', Buffer.from('analysis failed'));
+          child.emit('close', 1);
+        } else {
+          child.emit('close', 0);
+        }
+      });
+      return child;
+    }) as never;
+
+    const r = await assessFilmQuality('/film.mp4', { expectedDuration: 10 }, { spawn: fakeSpawn });
+    expect(r.pass).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/analysis/i);
+  });
+
+  it('fails when ffprobe reports an audio stream shorter than the video', async () => {
+    const fakeSpawn = ((cmd: string, args: string[]) => {
+      const child = new EventEmitter() as unknown as {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        kill: () => void;
+        on: EventEmitter['on'];
+      };
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => undefined;
+      setImmediate(() => {
+        if (cmd.includes('ffprobe')) {
+          child.stdout.emit(
+            'data',
+            Buffer.from(
+              JSON.stringify({
+                format: { duration: '11.43' },
+                streams: [
+                  { codec_type: 'video', duration: '11.43' },
+                  { codec_type: 'audio', duration: '10.83' },
+                ],
+              }),
+            ),
+          );
+          child.emit('close', 0);
+        } else if (args.includes('-f') && args.includes('null')) {
+          child.stderr.emit(
+            'data',
+            Buffer.from('mean_volume: -20.2 dB\nmax_volume: -3.0 dB\n'),
+          );
+          child.emit('close', 0);
+        } else {
+          child.emit('close', 0);
+        }
+      });
+      return child;
+    }) as never;
+
+    const r = await assessFilmQuality('/film.mp4', { expectedDuration: 11.45 }, { spawn: fakeSpawn });
+    expect(r.audioDuration).toBe(10.83);
+    expect(r.audioMatchesVideo).toBe(false);
+    expect(r.pass).toBe(false);
+    expect(r.warnings.join(' ')).toMatch(/truncated/i);
   });
 });
 

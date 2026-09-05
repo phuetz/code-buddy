@@ -13,6 +13,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { pathToFileURL } from 'node:url';
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
@@ -557,8 +558,13 @@ export class PluginMarketplace extends EventEmitter {
         };
       } else {
         // Non-sandboxed mode (for trusted plugins only)
-        // Use dynamic import() for ESM compatibility
-        const pluginModule = await import(modulePath);
+        // Use dynamic import() for ESM compatibility.
+        // `modulePath` est un chemin de FICHIER absolu : le chargeur ESM n'accepte
+        // que des URL. Sous Windows `import('C:\\...\\index.js')` lève
+        // ERR_UNSUPPORTED_ESM_URL_SCHEME — tout chargement de greffon y était donc
+        // cassé. `pathToFileURL` est la conversion documentée ; sur POSIX elle rend
+        // la même URL que celle déduite aujourd'hui du chemin nu.
+        const pluginModule = await import(pathToFileURL(modulePath).href);
 
         instance = {
           plugin,

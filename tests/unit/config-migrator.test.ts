@@ -38,6 +38,10 @@ jest.mock('fs-extra', () => {
 };
   return { ...impl, default: impl };
 });
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: mockReadJson,
+  writeJsonAtomic: mockWriteJson,
+}));
 
 // Helper function to parse version
 const parseVersion = (v: string): { major: number; minor: number; patch: number } => {
@@ -289,7 +293,7 @@ describe('ConfigMigrator', () => {
       expect(mockWriteJson).toHaveBeenCalledWith(
         expect.stringContaining('settings.json'),
         config,
-        { spaces: 2 }
+        { mode: 0o600 }
       );
     });
 

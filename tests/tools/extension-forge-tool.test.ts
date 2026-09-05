@@ -80,10 +80,10 @@ describe('extension_forge', () => {
       },
       code: UPPERCASE_CODE,
       validation_cases: [
-        { input: { text: 'hello' }, expect_includes: ['HELLO'] },
+        { input: { text: 'hello' }, expect_output: 'HELLO' },
       ],
       robustness_cases: [
-        { input: { text: 'Edge 42' }, expect_includes: ['EDGE 42'] },
+        { input: { text: 'Edge 42' }, expect_output: 'EDGE 42' },
       ],
     }, { cwd });
 
@@ -117,10 +117,10 @@ describe('extension_forge', () => {
       language: 'javascript',
       code: "console.log('HELLO');",
       validation_cases: [
-        { input: { text: 'hello' }, expect_includes: ['HELLO'] },
+        { input: { text: 'hello' }, expect_output: 'HELLO' },
       ],
       robustness_cases: [
-        { input: { text: 'different' }, expect_includes: ['DIFFERENT'] },
+        { input: { text: 'different' }, expect_output: 'DIFFERENT' },
       ],
     }, { cwd });
 
@@ -141,10 +141,10 @@ describe('extension_forge', () => {
       language: 'javascript',
       code: UPPERCASE_CODE,
       validation_cases: [
-        { input: { text: 'same' }, expect_includes: ['SAME'] },
+        { input: { text: 'same' }, expect_output: 'SAME' },
       ],
       robustness_cases: [
-        { input: { text: 'same' }, expect_includes: ['SAME'] },
+        { input: { text: 'same' }, expect_output: 'SAME' },
       ],
     }, { cwd });
 

@@ -2,7 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Command } from 'commander';
 import { createForgeCommand } from '../../src/commands/forge.js';
+
+function withExitOverride(cmd: Command): Command {
+  cmd.exitOverride();
+  for (const sub of cmd.commands) withExitOverride(sub);
+  return cmd;
+}
 import { CounterfactualForge } from '../../src/goals/counterfactual-forge.js';
 import { getGoalManager, resetGoalManagers } from '../../src/goals/goal-manager.js';
 import { buildIntentGraph } from '../../src/goals/intent-graph.js';
@@ -63,5 +70,18 @@ describe('buddy forge', () => {
     const rendered = JSON.parse(String(log.mock.calls.at(-1)?.[0])) as Array<{ status: string }>;
     expect(rendered).toHaveLength(1);
     expect(rendered[0]?.status).toBe('selected');
+  });
+
+  it('create without a durable intent is a CLI error (exit 1), not an unhandled rejection', async () => {
+    await expect(
+      withExitOverride(createForgeCommand()).parseAsync([
+        'node', 'forge', 'create', 'AUDIT-E1-minimal',
+        '--hypothesis', 'A minimal branch can be persisted',
+        '--strategy', 'No-op audit strategy',
+      ]),
+    ).rejects.toMatchObject({
+      exitCode: 1,
+      message: expect.stringContaining('No durable intent'),
+    });
   });
 });

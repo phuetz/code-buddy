@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,13 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'balayage-test-'));
 });
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  // Le balayage vient de tuer des enfants (watchdog SIGTERM puis SIGKILL).
+  // Sous Windows un handle encore ouvert laisse le fichier en « suppression
+  // différée » et le répertoire compte toujours comme non vide : rmdir rend
+  // ENOTEMPTY alors que le scénario lui-même a réussi. Réessayer laisse le
+  // temps aux handles de se fermer, comme le fait déjà l'afterEach de
+  // tests/speculative/shadow-workspace.test.ts.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 /** Écrit un faux CLI node dont le comportement dépend des arguments. */
@@ -151,6 +157,57 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
 });
 
 describe('balayage-installation.sh — gardes', () => {
+    // Portée : POSIX. Ces deux scénarios exigent qu'une valeur de PATH traverse
+  // `env -i` INTACTE. Sous Git Bash, la couche de traduction MSYS réécrit toute
+  // variable qui ressemble à une liste de chemins en franchissant la frontière
+  // POSIX↔Windows (« C:\… » contient un deux-points, donc elle est découpée) :
+  // l'enfant ne peut pas recevoir la chaîne attendue, quel que soit le script.
+  // C'est la prémisse du scénario que le runtime casse, pas le comportement
+  // mesuré — et `scripts/balayage-installation.sh` est un contrôle de release
+  // POSIX (`env -i`, `/usr/bin:/bin`, `comm`), jamais lancé sous Windows. Les
+  // quatre autres scénarios du fichier, eux, tournent partout.
+  it.runIf(process.platform !== 'win32')('résout node avant env -i quand le PATH isolé ne contient pas node', () => {
+    const isolatedPath = join(dir, 'path-sans-node');
+    mkdirSync(isolatedPath);
+    const expectedPath = JSON.stringify(isolatedPath);
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        if (process.env.PATH !== ${expectedPath}) process.exit(19);
+        console.log('  alpha   ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/1\/1 commandes répondent/);
+  });
+
+    // Portée : POSIX. Ces deux scénarios exigent qu'une valeur de PATH traverse
+  // `env -i` INTACTE. Sous Git Bash, la couche de traduction MSYS réécrit toute
+  // variable qui ressemble à une liste de chemins en franchissant la frontière
+  // POSIX↔Windows (« C:\… » contient un deux-points, donc elle est découpée) :
+  // l'enfant ne peut pas recevoir la chaîne attendue, quel que soit le script.
+  // C'est la prémisse du scénario que le runtime casse, pas le comportement
+  // mesuré — et `scripts/balayage-installation.sh` est un contrôle de release
+  // POSIX (`env -i`, `/usr/bin:/bin`, `comm`), jamais lancé sous Windows. Les
+  // quatre autres scénarios du fichier, eux, tournent partout.
+  it.runIf(process.platform !== 'win32')('fonctionne sans timeout dans le PATH isolé', () => {
+    const isolatedPath = join(dir, 'path-sans-timeout');
+    mkdirSync(isolatedPath);
+    const cli = fakeCli(`
+      const { spawnSync } = require('node:child_process');
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        const probe = spawnSync('timeout', ['--version'], { encoding: 'utf8' });
+        if (probe.status === 0 || probe.error?.code !== 'ENOENT') process.exit(19);
+        console.log('  alpha   ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/1\/1 commandes répondent/);
+  });
+
   it('une extraction vide N’EST PAS un succès (garde total>0)', () => {
     // --help ne liste aucune commande au motif attendu : le balayage n'a rien à tester.
     const cli = fakeCli(`console.log('Aucune commande au format attendu ici.');`);

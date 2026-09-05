@@ -31,6 +31,7 @@
  */
 
 import { CodeBuddyClient } from '../../codebuddy/client.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import type {
   CodeBuddyMessage,
   CodeBuddyResponse,
@@ -48,6 +49,27 @@ import {
 
 const MAX_TURNS = 3;
 const MAX_TOKENS = 100_000;
+
+export function resolveA2AProviderCredentials():
+  | { ok: true; apiKey: string; baseURL?: string; model: string }
+  | { ok: false; error: string } {
+  const detected = detectProviderFromEnv();
+  const apiKey = process.env.GROK_API_KEY || detected?.apiKey || '';
+  if (!apiKey) {
+    if (!detected) {
+      return { ok: false, error: 'No LLM provider configured' };
+    }
+    return { ok: false, error: `Provider API key not configured (${detected.provider})` };
+  }
+  return {
+    ok: true,
+    apiKey,
+    ...(process.env.GROK_BASE_URL || detected?.baseURL
+      ? { baseURL: process.env.GROK_BASE_URL || detected?.baseURL }
+      : {}),
+    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+  };
+}
 
 const SYSTEM_PROMPT = `You are Code Buddy, exposed via the Agent-to-Agent (A2A) protocol.
 A remote peer agent has submitted a task to you. You only have access to read-only,
@@ -91,11 +113,11 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
       return failTask(task, 'Empty user message');
     }
 
-    // Provider credentials. We deliberately fail closed if missing rather
-    // than fall through to a default that might surface partial answers.
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    if (!apiKey) {
-      return failTask(task, 'Provider API key not configured (GROK_API_KEY)');
+    // Provider credentials. Local runtimes (Ollama) are valid without GROK_API_KEY.
+    // Hosted providers still fail closed when no key is configured.
+    const credentials = resolveA2AProviderCredentials();
+    if (!credentials.ok) {
+      return failTask(task, credentials.error);
     }
 
     // Fleet-safe tool list — the security boundary. If the legacy
@@ -110,9 +132,9 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
     }
 
     const client = new CodeBuddyClient(
-      apiKey,
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL ?? 'grok-3-latest'
+      credentials.apiKey,
+      credentials.model,
+      credentials.baseURL
     );
 
     const messages: CodeBuddyMessage[] = [

@@ -203,7 +203,7 @@ export function SettingsRemoteBackend() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={isConnected || busy}
-          placeholder="ws://192.168.1.10:3001"
+          placeholder="ws://203.0.113.10:3001"
           className="w-full px-3 py-1.5 text-sm rounded border border-border-muted bg-background text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"
         />
         <p className="text-[11px] text-text-muted">

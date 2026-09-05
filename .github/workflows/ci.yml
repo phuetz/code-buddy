@@ -57,6 +57,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: npm ci
 
+    - name: Install Chromium for blocking Ubuntu browser tests
+      if: matrix.os == 'ubuntu-latest'
+      run: npx playwright install --with-deps chromium
+
     - name: Rebuild native modules (better-sqlite3) for the CI Node ABI
       # Without this the better-sqlite3 .node binary often mismatches the runner's
       # Node version and the entire database test suite (~200 tests) is skipped.
@@ -68,11 +72,14 @@ jobs:
     - name: Run linter
       run: npm run lint
 
+    - name: Build project
+      run: npm run build
+
     - name: Run tests
       if: runner.os != 'Windows'
       run: npm test
 
-    # Windows: run the suite as three consecutive shards (fresh vitest parent +
+    # Windows: run the suite as six consecutive shards (fresh vitest parent +
     # fresh forks each time). On windows-latest the Node 20 job kept dying with
     # "[vitest-pool]: Worker forks emitted error … Worker exited unexpectedly"
     # (0 red tests, 1 file unreported — always the same file, the one the fork
@@ -82,28 +89,71 @@ jobs:
     # any single fork lives through (~270 with 6 shards — 3 shards of ~535 still
     # lost a fork on Node 20) without changing
     # what runs; Linux/macOS keep the single invocation.
+    #
+    # Chaque shard est `continue-on-error` et son verdict est agrege a la fin.
+    # Avant, un shard rouge arretait l'etape et les shards SUIVANTS n'etaient jamais
+    # lances : Windows n'a jamais eu de mesure complete, et chaque reparation ne
+    # revelait que l'etage suivant, un run a la fois. Ce n'est pas un assouplissement
+    # -- l'etape de verdict echoue si UN shard a echoue -- c'est un inventaire complet
+    # en un seul run.
     - name: Run tests (shard 1/6)
+      id: win_shard_1
       if: runner.os == 'Windows'
+      continue-on-error: true
       # One retry: a fork can still be killed off-heap on windows-latest (0 red tests).
       run: npm test -- --shard=1/6 || npm test -- --shard=1/6
     - name: Run tests (shard 2/6)
+      id: win_shard_2
       if: runner.os == 'Windows'
+      continue-on-error: true
       run: npm test -- --shard=2/6 || npm test -- --shard=2/6
     - name: Run tests (shard 3/6)
+      id: win_shard_3
       if: runner.os == 'Windows'
+      continue-on-error: true
       run: npm test -- --shard=3/6 || npm test -- --shard=3/6
     - name: Run tests (shard 4/6)
+      id: win_shard_4
       if: runner.os == 'Windows'
+      continue-on-error: true
       run: npm test -- --shard=4/6 || npm test -- --shard=4/6
     - name: Run tests (shard 5/6)
+      id: win_shard_5
       if: runner.os == 'Windows'
+      continue-on-error: true
       run: npm test -- --shard=5/6 || npm test -- --shard=5/6
     - name: Run tests (shard 6/6)
+      id: win_shard_6
       if: runner.os == 'Windows'
+      continue-on-error: true
       run: npm test -- --shard=6/6 || npm test -- --shard=6/6
 
-    - name: Build project
-      run: npm run build
+    - name: Windows shard verdict
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        SHARD_OUTCOMES: >-
+          1:${{ steps.win_shard_1.outcome }}
+          2:${{ steps.win_shard_2.outcome }}
+          3:${{ steps.win_shard_3.outcome }}
+          4:${{ steps.win_shard_4.outcome }}
+          5:${{ steps.win_shard_5.outcome }}
+          6:${{ steps.win_shard_6.outcome }}
+      run: |
+        failed=""
+        for entry in $SHARD_OUTCOMES; do
+          shard="${entry%%:*}"
+          outcome="${entry##*:}"
+          echo "shard ${shard}/6 -> ${outcome}"
+          if [ "$outcome" != "success" ]; then
+            failed="${failed} ${shard}"
+          fi
+        done
+        if [ -n "$failed" ]; then
+          echo "::error::Windows shards failed:${failed}"
+          exit 1
+        fi
+        echo "All six Windows shards passed."
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'

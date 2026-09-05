@@ -162,6 +162,16 @@ export class A2AAgentServer extends EventEmitter {
 
     try {
       const completed = await this.executor(task);
+      if (
+        completed.status.status === TaskStatus.FAILED ||
+        completed.status.status === TaskStatus.CANCELED
+      ) {
+        this.emit('task:failed', {
+          taskId: task.id,
+          error: completed.status.message || completed.status.status,
+        });
+        return completed;
+      }
       this.updateTaskStatus(completed, TaskStatus.COMPLETED);
       this.emit('task:completed', { taskId: task.id });
       return completed;
@@ -251,6 +261,16 @@ export class A2AAgentServer extends EventEmitter {
 
     try {
       const completed = await this.executor(task);
+      if (
+        completed.status.status === TaskStatus.FAILED ||
+        completed.status.status === TaskStatus.CANCELED
+      ) {
+        this.emit('task:failed', {
+          taskId,
+          error: completed.status.message || completed.status.status,
+        });
+        return completed;
+      }
       this.updateTaskStatus(completed, TaskStatus.COMPLETED);
       this.emit('task:completed', { taskId });
       return completed;
@@ -284,6 +304,20 @@ export interface RemoteAgent {
  * A2A Agent Client — sends tasks to other agents.
  * Used by an orchestrator to delegate work to specialist agents.
  */
+/**
+ * Spoke names that earn the "always-on" bonus. Spokes name themselves after their host
+ * (`ollama-<hostname>`), so the patterns must be configurable per deployment:
+ * `CODEBUDDY_A2A_ALWAYS_ON_SPOKES` (csv of case-insensitive substrings), default `hub,linux`.
+ */
+export function isAlwaysOnSpokeName(spokeName: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const patterns = (env.CODEBUDDY_A2A_ALWAYS_ON_SPOKES ?? 'hub,linux')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+  const name = spokeName.toLowerCase();
+  return patterns.some((pattern) => name.includes(pattern));
+}
+
 export class A2AAgentClient {
   private agents: Map<string, A2AAgentServer> = new Map();
   private remoteCards: Map<string, RemoteAgent> = new Map();
@@ -372,15 +406,15 @@ export class A2AAgentClient {
   }
 
   /** Score a spoke for a given skill (higher = better) */
-  private scoreSpokeForSkill(spokeName: string, skillId: string): number {
+  private scoreSpokeForSkill(spokeName: string, _skillId: string): number {
     const remote = this.remoteCards.get(spokeName);
     if (!remote) return 0;
 
     // Base score: has the skill
     let score = 10;
 
-    // Bonus for always-on spokes (assume names with "ministar" or "linux" are always-on)
-    if (spokeName.toLowerCase().includes('ministar') || spokeName.toLowerCase().includes('linux')) {
+    // Bonus for always-on spokes (assume names with "hub" or "linux" are always-on)
+    if (isAlwaysOnSpokeName(spokeName)) {
       score += 5;
     }
 

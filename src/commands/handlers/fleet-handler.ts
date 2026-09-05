@@ -7,7 +7,7 @@
  * path; the key must have the `fleet:listen` scope.
  *
  * Sub-actions:
- *   /fleet listen <ws-url> [--api-key <key>] [--name <id>]
+ *   /fleet listen <ws-url> [--jwt <token>] [--api-key <key>] [--name <id>]
  *                  [--auto-reconnect [--max-attempts <n>]]
  *                                              Connect + start streaming.
  *                                              --name (Phase (d).12) gives
@@ -30,9 +30,8 @@
  * own auto-reconnect, presence beacon, compaction state and event ring.
  *
  * Honest scope cuts (V0.4.1):
- * - apiKey can come from --api-key flag or CODEBUDDY_FLEET_API_KEY env;
- *   no TOML wiring yet (the rest of the codebase reads server keys from
- *   env, so this matches).
+ * - Credential can come from --jwt / CODEBUDDY_FLEET_TOKEN (buddy fleet token)
+ *   or --api-key / CODEBUDDY_FLEET_API_KEY; no TOML wiring yet.
  * - Routing actif (sending tasks to peers) is Phase (d).13.
  */
 
@@ -75,12 +74,14 @@ function sanitizeFleetStreamChunk(delta: string): string {
 const HELP = `Usage: /fleet <action> [args]
 
 Actions:
-  listen <ws-url> [--api-key <key>]   Connect to a peer Code Buddy's WS
-         [--name <id>]                and stream fleet:* events live.
-         [--auto-reconnect]           Example: /fleet listen ws://100.98.18.76:3000/ws
-         [--max-attempts <n>]         apiKey from --api-key flag or
-                                      CODEBUDDY_FLEET_API_KEY env. Must
-                                      have fleet:listen scope on the peer.
+  listen <ws-url> [--jwt <token>]     Connect to a peer Code Buddy's WS
+         [--api-key <key>]            and stream fleet:* events live.
+         [--name <id>]                Example: /fleet listen ws://203.0.113.10:3000/ws
+         [--auto-reconnect]           --jwt from buddy fleet token (or
+         [--max-attempts <n>]         CODEBUDDY_FLEET_TOKEN). --api-key
+                                      from flag or CODEBUDDY_FLEET_API_KEY.
+                                      Credential must have fleet:listen
+                                      scope on the peer.
                                       --name (d).12 gives the peer a stable
                                       id; default derived from the WS host.
                                       --auto-reconnect (d).6 keeps the
@@ -115,7 +116,7 @@ Actions:
                                       list_directory, search}. With
                                       --stream, prints peer:chunk frames
                                       live (uses peer.tool.invoke.stream).
-                                      Example: /fleet tool darkstar
+                                      Example: /fleet tool gpuNode
                                       view_file {"file_path":"README.md"}
   route <prompt>                      Choose the best peer/model for a task
             [--privacy public|sensitive]
@@ -179,6 +180,7 @@ function textResult(content: string): CommandHandlerResult {
 interface ParsedListenArgs {
   url: string | null;
   apiKey: string | null;
+  jwt: string | null;
   name: string | null;
   autoReconnect: boolean;
   maxAttempts: number | null;
@@ -323,7 +325,7 @@ function formatHistorySource(record: { hostname?: string; agentId?: string }): s
 
 /**
  * Phase (d).12 — derive a default peer id from the WS URL (host:port).
- * `ws://100.98.18.76:3000/ws` → `100-98-18-76:3000` (dots → dashes for
+ * `ws://203.0.113.10:3000/ws` → `203-0-113-10:3000` (dots → dashes for
  * easier shell typing in /fleet stop / --peer).
  */
 function deriveDefaultPeerId(url: string): string {
@@ -338,6 +340,7 @@ function deriveDefaultPeerId(url: string): string {
 function parseArgs(rest: string[]): ParsedListenArgs {
   let url: string | null = null;
   let apiKey: string | null = null;
+  let jwt: string | null = null;
   let name: string | null = null;
   let autoReconnect = false;
   let maxAttempts: number | null = null;
@@ -346,6 +349,9 @@ function parseArgs(rest: string[]): ParsedListenArgs {
     if (arg === undefined) continue;
     if (arg === '--api-key' && i + 1 < rest.length) {
       apiKey = rest[i + 1] ?? null;
+      i++;
+    } else if (arg === '--jwt' && i + 1 < rest.length) {
+      jwt = rest[i + 1] ?? null;
       i++;
     } else if (arg === '--name' && i + 1 < rest.length) {
       name = rest[i + 1] ?? null;
@@ -360,7 +366,7 @@ function parseArgs(rest: string[]): ParsedListenArgs {
       url = arg;
     }
   }
-  return { url, apiKey, name, autoReconnect, maxAttempts };
+  return { url, apiKey, jwt, name, autoReconnect, maxAttempts };
 }
 
 function parseStopArgs(rest: string[]): ParsedStopArgs {
@@ -1196,18 +1202,20 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
   }
 
   if (action === 'listen') {
-    const { url, apiKey: cliKey, name: explicitName, autoReconnect, maxAttempts } = parseArgs(rest);
+    const { url, apiKey: cliKey, jwt: cliJwt, name: explicitName, autoReconnect, maxAttempts } = parseArgs(rest);
     if (!url) {
       return textResult(
-        'Usage: /fleet listen <ws-url> [--api-key <key>] [--name <id>] [--auto-reconnect] [--max-attempts <n>]\n\n' + HELP,
+        'Usage: /fleet listen <ws-url> [--jwt <token>] [--api-key <key>] [--name <id>] [--auto-reconnect] [--max-attempts <n>]\n\n' + HELP,
       );
     }
     const apiKey = cliKey ?? process.env.CODEBUDDY_FLEET_API_KEY;
-    if (!apiKey) {
+    const jwt = cliJwt ?? process.env.CODEBUDDY_FLEET_TOKEN;
+    if (!apiKey && !jwt) {
       return textResult(
-        'Error: no apiKey provided.\n' +
-          'Pass --api-key <key> or set CODEBUDDY_FLEET_API_KEY env.\n' +
-          'Key must have fleet:listen scope on the peer.',
+        'Error: no apiKey or jwt provided.\n' +
+          'Pass --jwt <token> (from buddy fleet token) or --api-key <key>,\n' +
+          'or set CODEBUDDY_FLEET_TOKEN / CODEBUDDY_FLEET_API_KEY.\n' +
+          'The credential must have fleet:listen scope on the peer.',
       );
     }
 
@@ -1225,7 +1233,8 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
       const cap = maxAttempts ?? 5;
       const listener = new FleetListener({
         url,
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
+        ...(jwt ? { jwt } : {}),
         autoReconnect,
         reconnect: autoReconnect ? { maxRetries: cap } : undefined,
       });
@@ -1892,8 +1901,8 @@ async function handleAutonomous(rest: string[]): Promise<CommandHandlerResult> {
           'Enable in .codebuddy/config.toml:\n' +
           '  [autonomous_fleet]\n' +
           '  enabled = true\n' +
-          '  repo_path = "/path/to/claude-et-patrice"\n' +
-          '  host = "ministar/grok-cli"\n' +
+          '  repo_path = "/path/to/handover-repo"\n' +
+          '  host = "hub/grok-cli"\n' +
           '  interval_minutes = 30\n' +
           '  priority_threshold = "high"   # critical is always skipped\n' +
           '  llm_provider = "cloud"        # or "auto" / "ollama" / "grok" / etc.\n',

@@ -6,6 +6,10 @@
  */
 
 import { EventEmitter } from 'events';
+import fs from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 import type {
   TelegramConfig,
   TelegramUpdate,
@@ -28,14 +32,18 @@ import type {
   MessageButton,
 } from '../core.js';
 import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
-import { ReconnectionManager } from '../reconnection-manager.js';
 import { logger } from '../../utils/logger.js';
 import { ProFeatures } from '../pro/pro-features.js';
 import type { MessageButton as ProMessageButton } from '../pro/types.js';
 import { TelegramProFormatter } from './pro-formatter.js';
-
-const TELEGRAM_API_BASE = 'https://api.telegram.org';
+import { renderWidgetDataToPng, renderWidgetHtmlToPng } from '../../widgets/widget-image-renderer.js';
+import { resolveTelegramApiBase } from '../../utils/telegram-api-base.js';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
+export const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
+const POLL_REQUEST_MARGIN_MS = 5_000;
+const POLL_RETRY_INITIAL_MS = 2_000;
+const POLL_RETRY_MAX_MS = 60_000;
+const NEXT_POLL_DELAY_MS = 100;
 
 /**
  * Telegram channel implementation
@@ -43,9 +51,12 @@ const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
 export class TelegramChannel extends BaseChannel {
   private pollingActive = false;
   private pollingTimeout: NodeJS.Timeout | null = null;
+  private pollingWatchdog: NodeJS.Timeout | null = null;
+  private activePollController: AbortController | null = null;
+  private pollingGeneration = 0;
+  private watchdogBaselineAt = 0;
   private lastUpdateId = 0;
   private botInfo: TelegramUser | null = null;
-  private reconnectionManager: ReconnectionManager;
   private consecutiveErrors = 0;
   private readonly mediaGroups = new Map<string, {
     messages: TelegramMessage[];
@@ -60,12 +71,6 @@ export class TelegramChannel extends BaseChannel {
     if (!config.token) {
       throw new Error('Telegram bot token is required');
     }
-    this.reconnectionManager = new ReconnectionManager('telegram', {
-      maxRetries: 10,
-      initialDelayMs: 2000,
-      maxDelayMs: 60000,
-      keepProcessAlive: true,
-    });
   }
 
   private get telegramConfig(): TelegramConfig {
@@ -73,7 +78,40 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private get apiUrl(): string {
-    return `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}`;
+    return `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}`;
+  }
+
+  private offsetFilePath(): string {
+    const override = process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR?.trim();
+    const root = override
+      || process.env.HOME
+      || process.env.USERPROFILE
+      || homedir();
+    return path.join(root, '.codebuddy', `telegram-offset-${this.botId}.json`);
+  }
+
+  private loadPersistedOffset(): void {
+    const parsed = readJsonAtomicSync<{ lastUpdateId?: unknown } | null>(this.offsetFilePath(), null, {
+      mode: 0o600,
+      isValid: (value): value is { lastUpdateId?: unknown } => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    const value = Number(parsed?.lastUpdateId);
+    if (Number.isFinite(value) && value > 0) {
+      this.lastUpdateId = value;
+    }
+  }
+
+  private persistOffset(): void {
+    try {
+      const file = this.offsetFilePath();
+      writeJsonAtomicSync(file, { lastUpdateId: this.lastUpdateId }, { mode: 0o600 });
+    } catch (error) {
+      logger.warn('Telegram offset persist failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -120,7 +158,8 @@ export class TelegramChannel extends BaseChannel {
    */
   private async apiRequest<T>(
     method: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const url = `${this.apiUrl}/${method}`;
 
@@ -130,6 +169,7 @@ export class TelegramChannel extends BaseChannel {
         'Content-Type': 'application/json',
       },
       body: params ? JSON.stringify(params) : undefined,
+      ...(signal ? { signal } : {}),
     });
 
     const data = (await response.json()) as TelegramApiResponse<T>;
@@ -258,15 +298,21 @@ export class TelegramChannel extends BaseChannel {
    * Disconnect from Telegram
    */
   async disconnect(): Promise<void> {
-    this.reconnectionManager.cancel();
     this.pollingActive = false;
+    this.pollingGeneration++;
     this.consecutiveErrors = 0;
+    this.activePollController?.abort(new Error('Telegram polling stopped'));
+    this.activePollController = null;
 
     // Clean up pro features
     if (this._pro) this._pro.destroy();
     if (this.pollingTimeout) {
       clearTimeout(this.pollingTimeout);
       this.pollingTimeout = null;
+    }
+    if (this.pollingWatchdog) {
+      clearTimeout(this.pollingWatchdog);
+      this.pollingWatchdog = null;
     }
     for (const batch of this.mediaGroups.values()) clearTimeout(batch.timer);
     this.mediaGroups.clear();
@@ -296,6 +342,36 @@ export class TelegramChannel extends BaseChannel {
         disable_notification: message.silent ?? this.telegramConfig.disableNotification,
         disable_web_page_preview: message.disablePreview,
       };
+
+      const widget = message.channelData?.telegram;
+      if (widget?.widgetHtml || widget?.data !== undefined) {
+        let png: Buffer | null = null;
+        try {
+          png = widget.widgetHtml
+            ? await renderWidgetHtmlToPng(widget.widgetHtml)
+            : await renderWidgetDataToPng(widget.data);
+        } catch (error) {
+          logger.warn('[telegram] widget PNG render failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        if (png) {
+          return this.sendWithAttachments({
+            ...message,
+            content: message.content.slice(0, 1024),
+            attachments: [{
+              type: 'image',
+              data: png.toString('base64'),
+              fileName: 'code-buddy-widget.png',
+              mimeType: 'image/png',
+            }],
+          });
+        }
+        // Do not claim that a card was delivered when Chromium failed. The
+        // text remains useful and explicitly tells the recipient what happened.
+        params.text = `${message.content}\n\n[Carte visuelle indisponible : réponse texte envoyée.]`;
+        params.parse_mode = undefined;
+      }
 
       // Add reply
       if (message.replyTo) {
@@ -467,61 +543,184 @@ export class TelegramChannel extends BaseChannel {
    * Start polling for updates
    */
   private async startPolling(): Promise<void> {
-    this.pollingActive = true;
-
     // Delete any existing webhook
     await this.apiRequest('deleteWebhook');
+    this.loadPersistedOffset();
 
-    this.poll();
+    this.pollingActive = true;
+    this.consecutiveErrors = 0;
+    this.watchdogBaselineAt = Date.now();
+    const generation = ++this.pollingGeneration;
+    this.armPollingWatchdog(generation);
+    this.launchPoll(generation);
   }
 
   /**
-   * Poll for updates with reconnection support
+   * Poll for updates. Every failure schedules the next attempt; no detached
+   * promise is allowed to terminate the only polling loop.
    */
-  private async poll(): Promise<void> {
-    if (!this.pollingActive) return;
+  private async poll(generation: number): Promise<void> {
+    if (!this.isCurrentPoll(generation)) return;
 
     try {
-      const updates = await this.apiRequest<TelegramUpdate[]>('getUpdates', {
-        offset: this.lastUpdateId + 1,
-        timeout: this.telegramConfig.pollingTimeout ?? 30,
-        allowed_updates: ['message', 'edited_message', 'callback_query'],
-      });
+      const updates = await this.requestPollingUpdates();
+      if (!this.isCurrentPoll(generation)) return;
 
-      // Reset consecutive error count on success
       this.consecutiveErrors = 0;
-      this.reconnectionManager.onConnected();
+      this.status.connected = true;
+      this.status.error = undefined;
+      this.status.lastSuccessfulPoll = new Date();
+      this.watchdogBaselineAt = Date.now();
+      this.armPollingWatchdog(generation);
 
       for (const update of updates) {
         this.lastUpdateId = update.update_id;
         await this.handleUpdate(update);
+        this.persistOffset();
       }
     } catch (error) {
-      this.consecutiveErrors++;
-      this.emit('error', 'telegram', error);
+      if (!this.isCurrentPoll(generation)) return;
+      this.handlePollingFailure(error, generation);
+      return;
+    }
 
-      if (this.consecutiveErrors >= 5) {
-        // Too many consecutive errors -- use reconnection manager
-        logger.debug('Telegram: too many consecutive polling errors, attempting reconnect');
-        this.pollingActive = false;
-        this.status.connected = false;
-        this.reconnectionManager.scheduleReconnect(async () => {
-          this.consecutiveErrors = 0;
-          await this.connect();
-          this.reconnectionManager.onConnected();
+    if (this.isCurrentPoll(generation)) {
+      this.schedulePoll(NEXT_POLL_DELAY_MS, generation);
+    }
+  }
+
+  private get longPollTimeoutSeconds(): number {
+    const configured = this.telegramConfig.pollingTimeout ?? 30;
+    return Number.isFinite(configured) && configured > 0 ? configured : 30;
+  }
+
+  private async requestPollingUpdates(): Promise<TelegramUpdate[]> {
+    const timeoutMs = this.longPollTimeoutSeconds * 1_000 + POLL_REQUEST_MARGIN_MS;
+    const controller = new AbortController();
+    this.activePollController = controller;
+    const timeoutError = new Error(`Telegram getUpdates timed out after ${timeoutMs}ms`);
+
+    let rejectOnAbort: (() => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectOnAbort = () => {
+        const reason = controller.signal.reason;
+        reject(reason instanceof Error ? reason : new Error('Telegram getUpdates aborted'));
+      };
+      controller.signal.addEventListener('abort', rejectOnAbort, { once: true });
+    });
+    const hardTimeout = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+
+    try {
+      return await Promise.race([
+        this.apiRequest<TelegramUpdate[]>('getUpdates', {
+          offset: this.lastUpdateId + 1,
+          timeout: this.longPollTimeoutSeconds,
+          allowed_updates: ['message', 'edited_message', 'callback_query'],
+        }, controller.signal),
+        aborted,
+      ]);
+    } finally {
+      clearTimeout(hardTimeout);
+      if (rejectOnAbort) controller.signal.removeEventListener('abort', rejectOnAbort);
+      if (this.activePollController === controller) this.activePollController = null;
+    }
+  }
+
+  private launchPoll(generation: number): void {
+    void this.poll(generation).catch((error) => {
+      if (!this.isCurrentPoll(generation)) return;
+      this.handlePollingFailure(error, generation);
+    });
+  }
+
+  private schedulePoll(delayMs: number, generation: number): void {
+    if (!this.isCurrentPoll(generation)) return;
+    if (this.pollingTimeout) clearTimeout(this.pollingTimeout);
+    this.pollingTimeout = setTimeout(() => {
+      this.pollingTimeout = null;
+      this.launchPoll(generation);
+    }, delayMs);
+  }
+
+  private handlePollingFailure(error: unknown, generation: number): void {
+    this.consecutiveErrors++;
+    const retryInMs = this.getPollingRetryDelay();
+    const message = error instanceof Error ? error.message : String(error);
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : undefined;
+
+    this.status.connected = false;
+    this.status.error = `Telegram getUpdates failed: ${message}`;
+    logger.warn('Telegram getUpdates failed; retrying polling', {
+      error: message,
+      ...(code ? { code } : {}),
+      consecutiveErrors: this.consecutiveErrors,
+      retryInMs,
+    });
+
+    // Schedule before notifying listeners: a faulty error listener must not be
+    // able to kill the polling loop it is supposed to observe.
+    this.schedulePoll(retryInMs, generation);
+    if (this.listenerCount('error') > 0) {
+      try {
+        this.emit('error', 'telegram', error);
+      } catch (listenerError) {
+        logger.error('Telegram polling error listener failed', {
+          error: listenerError instanceof Error ? listenerError.message : String(listenerError),
         });
+      }
+    }
+  }
+
+  private getPollingRetryDelay(): number {
+    return Math.min(
+      POLL_RETRY_INITIAL_MS * 2 ** Math.max(0, this.consecutiveErrors - 1),
+      POLL_RETRY_MAX_MS,
+    );
+  }
+
+  private armPollingWatchdog(generation: number): void {
+    if (this.pollingWatchdog) clearTimeout(this.pollingWatchdog);
+    const staleAfterMs = this.longPollTimeoutSeconds * 3_000;
+    this.pollingWatchdog = setTimeout(() => {
+      this.pollingWatchdog = null;
+      if (!this.isCurrentPoll(generation)) return;
+
+      const staleForMs = Date.now() - this.watchdogBaselineAt;
+      if (staleForMs < staleAfterMs) {
+        this.armPollingWatchdog(generation);
         return;
       }
 
-      // Simple backoff for transient errors
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      if (!this.pollingActive) return;
-    }
+      const lastSuccessfulPoll = this.status.lastSuccessfulPoll?.toISOString() ?? null;
+      const errorMessage = `Telegram polling watchdog: no successful getUpdates for ${staleForMs}ms`;
+      this.status.connected = false;
+      this.status.error = errorMessage;
+      this.consecutiveErrors++;
+      const retryInMs = this.getPollingRetryDelay();
+      logger.error('Telegram polling watchdog detected a stale poll loop; restarting', {
+        staleForMs,
+        staleAfterMs,
+        lastSuccessfulPoll,
+        retryInMs,
+      });
 
-    // Schedule next poll
-    if (this.pollingActive) {
-      this.pollingTimeout = setTimeout(() => this.poll(), 100);
-    }
+      const nextGeneration = ++this.pollingGeneration;
+      this.activePollController?.abort(new Error(errorMessage));
+      this.activePollController = null;
+      if (this.pollingTimeout) {
+        clearTimeout(this.pollingTimeout);
+        this.pollingTimeout = null;
+      }
+      this.watchdogBaselineAt = Date.now();
+      this.armPollingWatchdog(nextGeneration);
+      this.schedulePoll(retryInMs, nextGeneration);
+    }, staleAfterMs);
+  }
+
+  private isCurrentPoll(generation: number): boolean {
+    return this.pollingActive && generation === this.pollingGeneration;
   }
 
   /**
@@ -620,18 +819,12 @@ export class TelegramChannel extends BaseChannel {
       message.raw = messages;
       if (!message.content.trim()) message.content = `Analyse ces ${message.attachments.length} photos.`;
     }
-    // Voice note → text: transcribe locally (faster-whisper, $0, offline) so you
-    // can TALK to the bot — the agent then sees a normal text message.
-    await this.maybeTranscribeVoice(message);
-    const parsed = this.parseCommand(message);
+    const gated = this.parseCommand(message);
+    gated.sessionKey = this.scopeSessionKey(getSessionKey(gated));
 
-    // Attach session key for session isolation
-    parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
-
-    // DM pairing check: gate unapproved DM senders
-    const pairingStatus = await checkDMPairing(parsed);
+    // DM pairing check: gate unapproved DM senders before any user-visible side effect.
+    const pairingStatus = await checkDMPairing(gated);
     if (!pairingStatus.approved) {
-      // Respond with pairing code and instructions
       const { getDMPairing } = await import('../dm-pairing.js');
       const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
       if (pairingMessage) {
@@ -654,6 +847,15 @@ export class TelegramChannel extends BaseChannel {
         return;
       }
     }
+
+    // Voice note → text only after pairing/auth, so a failed transcription never
+    // notifies an unapproved sender.
+    await this.maybeTranscribeVoice(message);
+    if (message.content === VOICE_TRANSCRIPTION_FAILED) {
+      return;
+    }
+    const parsed = this.parseCommand(message);
+    parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
 
     // Route enhanced commands — but let `council`/`conseil` fall through to the
     // normal message path so the channel AI handler can convene the multi-LLM
@@ -1038,6 +1240,19 @@ export class TelegramChannel extends BaseChannel {
    * this is what lets you *talk* to the bot. No-op (and never throws) when there
    * is already text, no audio attachment, or local Whisper isn't installed.
    */
+  private async markVoiceTranscriptionFailed(message: InboundMessage): Promise<void> {
+    message.content = VOICE_TRANSCRIPTION_FAILED;
+    const result = await this.send({
+      channelId: message.channel.id,
+      content: "Je n'ai pas pu transcrire ce message vocal. Envoie-le en texte, s'il te plaît.",
+    });
+    if (!result.success) {
+      logger.warn(
+        `[telegram] failed to notify user of voice transcription failure: ${result.error ?? 'unknown error'}`,
+      );
+    }
+  }
+
   private async maybeTranscribeVoice(message: InboundMessage): Promise<void> {
     if (message.content && message.content.trim()) return;
     const audio = message.attachments?.find((a) => a.type === 'voice' || a.type === 'audio');
@@ -1048,6 +1263,7 @@ export class TelegramChannel extends BaseChannel {
         logger.warn(
           '[telegram] voice note received but local Whisper is unavailable — install the ai-stack voice venv (faster-whisper) to enable speech',
         );
+        await this.markVoiceTranscriptionFailed(message);
         return;
       }
       const fileUrl = await this.getFileUrl(audio.url);
@@ -1065,6 +1281,8 @@ export class TelegramChannel extends BaseChannel {
           message.content = text.trim();
           message.contentType = 'text';
           logger.info(`[telegram] voice note transcribed → "${message.content.slice(0, 60)}…"`);
+        } else {
+          await this.markVoiceTranscriptionFailed(message);
         }
       } finally {
         await fs.unlink(tmp).catch(() => undefined);
@@ -1073,6 +1291,7 @@ export class TelegramChannel extends BaseChannel {
       logger.warn(
         `[telegram] voice transcription failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+      await this.markVoiceTranscriptionFailed(message);
     }
   }
 
@@ -1094,7 +1313,7 @@ export class TelegramChannel extends BaseChannel {
       const form = new FormData();
       form.append('chat_id', channelId);
       form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), 'voice.ogg');
-      const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendVoice`;
+      const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendVoice`;
       const res = await fetch(url, { method: 'POST', body: form });
       if (!res.ok) throw new Error(`sendVoice HTTP ${res.status}`);
     } finally {
@@ -1116,7 +1335,7 @@ export class TelegramChannel extends BaseChannel {
     form.append('chat_id', channelId);
     if (caption) form.append('caption', caption.slice(0, 1024));
     form.append('photo', new Blob([bytes], { type: mime }), path.basename(imagePath));
-    const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendPhoto`;
+    const url = `${resolveTelegramApiBase()}/bot${this.telegramConfig.token}/sendPhoto`;
     const res = await fetch(url, { method: 'POST', body: form });
     if (!res.ok) throw new Error(`sendPhoto HTTP ${res.status}`);
   }
@@ -1128,7 +1347,7 @@ export class TelegramChannel extends BaseChannel {
     const result = await this.apiRequest<{ file_path: string }>('getFile', {
       file_id: fileId,
     });
-    return `${TELEGRAM_API_BASE}/file/bot${this.telegramConfig.token}/${result.file_path}`;
+    return `${resolveTelegramApiBase()}/file/bot${this.telegramConfig.token}/${result.file_path}`;
   }
 
   /**

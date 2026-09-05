@@ -4,7 +4,7 @@ import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
 import { getTemplateEngine } from '../templates/project-scaffolding.js';
 
-const ALLOWED_TEMPLATES = ['react-ts', 'express-api', 'node-cli'] as const;
+const ALLOWED_TEMPLATES = ['react-tailwind', 'react-ts', 'express-api', 'node-cli'] as const;
 type ScaffoldTemplate = (typeof ALLOWED_TEMPLATES)[number];
 
 export interface ScaffoldAppInput {

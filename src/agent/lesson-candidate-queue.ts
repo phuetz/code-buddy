@@ -26,6 +26,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { getLessonsTracker } from './lessons-tracker.js';
 import type { LessonCategory, LessonItem } from './lessons-tracker.js';
 
@@ -301,8 +302,15 @@ export class LessonCandidateQueue {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as LessonCandidateFile;
+      const parsed = readJsonAtomicSync<LessonCandidateFile | null>(this.filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is LessonCandidateFile => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          (value as LessonCandidateFile).schemaVersion === LESSON_CANDIDATE_SCHEMA_VERSION &&
+          Array.isArray((value as LessonCandidateFile).candidates),
+        ),
+      });
+      if (!parsed) return;
       if (Array.isArray(parsed.candidates)) {
         this.candidates = parsed.candidates.filter(isValidCandidate);
       }
@@ -320,7 +328,7 @@ export class LessonCandidateQueue {
         schemaVersion: LESSON_CANDIDATE_SCHEMA_VERSION,
         candidates: this.candidates,
       };
-      fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
     } catch (err) {
       logger.warn('[lesson-candidates] failed to save queue', {
         error: err instanceof Error ? err.message : String(err),

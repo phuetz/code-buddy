@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { spawn } from 'node:child_process';
@@ -43,8 +43,16 @@ function fakeSpawn(seen: string[][]): typeof spawn {
             sample_aspect_ratio: '1:1',
           }],
         })));
+        child.emit('close', 0);
+        return;
       }
-      child.emit('close', 0);
+      // Since R1 (2026-09-02) a render is only a success once its artefact exists:
+      // the fake ffmpeg leaves a non-empty file at its destination, like the real one.
+      const destination = args.at(-1);
+      const writes = destination && /\.(mp4|wav|mkv|mov)$/i.test(destination)
+        ? writeFile(destination, 'rendered').catch(() => undefined)
+        : Promise.resolve();
+      void writes.then(() => child.emit('close', 0));
     });
     return child;
   }) as typeof spawn;
@@ -92,6 +100,11 @@ describe('film output confinement', () => {
     expect(result.outputPath).toBe(
       path.join(await realpath(rootDir), '.codebuddy', 'media-generation', 'films', 'finished.mp4'),
     );
-    expect(seen.some((call) => call.includes(result.outputPath!))).toBe(true);
+    // Since R1 (2026-09-02) ffmpeg renders into a unique temp file INSIDE the confined
+    // directory and the final name is installed atomically once the artefact is verified.
+    const confinedDir = path.dirname(result.outputPath!);
+    expect(seen.some((call) => call.some((arg) => arg.startsWith(confinedDir + path.sep) && /-render\.mp4$/.test(arg)))).toBe(true);
+    expect(seen.some((call) => call.some((arg) => arg.startsWith('/tmp/') && !arg.startsWith(confinedDir)))).toBe(false);
+    await expect(stat(result.outputPath!)).resolves.toMatchObject({ size: expect.any(Number) });
   });
 });

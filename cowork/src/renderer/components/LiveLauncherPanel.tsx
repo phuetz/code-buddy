@@ -385,7 +385,7 @@ export function LiveLauncherPanel({ isOpen, onClose }: LiveLauncherPanelProps) {
               disabled={running}
               placeholder={t(
                 'liveLauncher.ollamaUrlPlaceholder',
-                'Ollama endpoint (e.g. http://darkstar:11434)',
+                'Ollama endpoint (e.g. http://gpuNode:11434)',
               )}
               className="w-full px-2 py-1 rounded bg-background border border-border text-text-primary font-mono placeholder:text-text-muted disabled:opacity-50"
               data-testid="live-launcher-ollama-url"

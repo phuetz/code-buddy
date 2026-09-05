@@ -12,6 +12,7 @@ import {
   type InboundMessage,
   type OutboundMessage,
   type BaseChannel,
+  type DeliveryResult,
 } from '../../src/channels/index.js';
 
 describe('Multi-Channel Support', () => {
@@ -339,6 +340,66 @@ describe('Multi-Channel Support', () => {
       await manager.shutdown();
 
       expect(manager.getAllChannels().length).toBe(0);
+    });
+
+    it('D1: sendToUser ne rend pas success true quand cet appel n\'a rien envoyé', async () => {
+      const channel = new MockChannel({ type: 'telegram', enabled: true });
+      let release = () => {};
+      let firstSend = true;
+      channel.send = () => {
+        if (!firstSend) {
+          return Promise.resolve({ success: true, timestamp: new Date() });
+        }
+        firstSend = false;
+        return new Promise((resolve) => {
+          release = () => resolve({ success: true, timestamp: new Date() });
+        });
+      };
+      manager.registerChannel(channel);
+
+      try {
+        const first = manager.sendToUser('telegram', 'chat-1', 'hello');
+        await new Promise((r) => setImmediate(r));
+        const second = await manager.sendToUser('telegram', 'chat-1', 'world');
+
+        expect(second.success).not.toBe(true);
+        expect(second.queued).toBe(true);
+        release();
+        await first;
+      } finally {
+        release();
+      }
+    });
+
+    it('D8: processQueue agrège les échecs au lieu du seul dernier résultat', async () => {
+      const channel = new MockChannel({ type: 'telegram', enabled: true });
+      const outcomes: DeliveryResult[] = [
+        { success: true, timestamp: new Date() },
+        { success: false, error: 'ETIMEDOUT', timestamp: new Date() },
+        { success: true, timestamp: new Date() },
+      ];
+      let i = 0;
+      let releaseFirst = () => {};
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      channel.send = async () => {
+        const idx = i++;
+        if (idx === 0) await firstGate;
+        return outcomes[idx] ?? { success: false, error: 'missing', timestamp: new Date() };
+      };
+      manager.registerChannel(channel);
+
+      const first = manager.sendToUser('telegram', 'c', 'a');
+      await new Promise((r) => setImmediate(r));
+      void manager.sendToUser('telegram', 'c', 'b');
+      void manager.sendToUser('telegram', 'c', 'c');
+      releaseFirst();
+      const result = await first;
+
+      expect(result.success).toBe(false);
+      expect(result.sent).toBe(2);
+      expect(result.failed).toBe(1);
     });
   });
 

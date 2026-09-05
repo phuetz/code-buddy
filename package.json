@@ -55,6 +55,27 @@
     "buddy": "dist/index.js",
     "code-buddy": "dist/index.js"
   },
+  "allowScripts": {
+    "@google/genai@1.52.0": true,
+    "@vscode/ripgrep@1.17.0": true,
+    "@whiskeysockets/baileys@6.7.23": true,
+    "better-sqlite3@11.10.0": true,
+    "bufferutil@4.1.0": true,
+    "esbuild@0.27.1": true,
+    "node-llama-cpp@3.16.2": true,
+    "node-pty@1.1.0": true,
+    "onnxruntime-node@1.24.3": true,
+    "protobufjs@7.6.5": true,
+    "sharp@0.32.6": true,
+    "sharp@0.33.5": true,
+    "sharp@0.34.5": true,
+    "tesseract.js@7.0.0": true,
+    "tree-sitter@0.21.1": true,
+    "tree-sitter-bash@0.23.3": true,
+    "tree-sitter-javascript@0.23.1": true,
+    "tree-sitter-typescript@0.23.2": true,
+    "usearch@2.21.4": true
+  },
   "scripts": {
     "build": "tsc && node scripts/copy-bundled-skills.mjs && node scripts/write-runtime-manifest.mjs",
     "build:bun": "bun run tsc && node scripts/copy-bundled-skills.mjs && node scripts/write-runtime-manifest.mjs",
@@ -75,15 +96,16 @@
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "typecheck": "tsc --noEmit && npm run typecheck:darkstar-identity",
-    "typecheck:darkstar-identity": "tsc --project tsconfig.darkstar-identity.json",
+    "typecheck": "tsc --noEmit && npm run typecheck:gpuNode-identity",
+    "typecheck:gpuNode-identity": "tsc --project tsconfig.gpuNode-identity.json",
     "typecheck:watch": "tsc --noEmit --watch",
     "check:circular": "npx tsx scripts/check-circular-deps.ts",
+    "check:pack": "vitest run tests/security/npm-pack-contents.test.ts",
     "build:captured": "cd src-captured && cargo build --release",
     "autonomy:lab": "tsx scripts/autonomy-lab/run.ts",
-    "validate": "npm run lint && npm run typecheck && npm test",
+    "validate": "npm run lint && npm run typecheck && npm run check:pack && npm test",
     "prepublishOnly": "npm run clean && npm run build",
-    "prepack": "node scripts/strip-sourcemaps.mjs && node scripts/write-runtime-manifest.mjs --verify",
+    "prepack": "npm run build && node scripts/strip-sourcemaps.mjs && node scripts/write-runtime-manifest.mjs",
     "release": "semantic-release",
     "release:dry": "semantic-release --dry-run --no-ci",
     "install:bun": "bun install",
@@ -138,9 +160,10 @@
     "codebuddy-runtime.json",
     "examples/claude_desktop_config.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!dist/**/*.map"
   ],
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "dependencies": {
     "@browserbasehq/stagehand": "^3.6.0",
     "@huggingface/transformers": "^4.2.0",
@@ -188,7 +211,7 @@
     "terminal-image": "^4.1.0",
     "tesseract.js": "^7.0.0",
     "tiktoken": "^1.0.22",
-    "undici": "^6.27.0",
+    "undici": "^6.28.0",
     "yaml": "^2.9.0",
     "youtube-caption-extractor": "^1.10.2",
     "zod": "^3.25.0"
@@ -265,9 +288,11 @@
     "@opentelemetry/otlp-transformer": {
       "protobufjs": "^8.4.2"
     },
+    "browserslist": "^4.28.9",
+    "undici": "^6.28.0",
     "simple-git": "^3.36.0",
     "vite": "^7.3.3",
     "ws": "^8.20.1",
-    "npm": "^11.19.0"
+    "npm": "^11.19.1"
   }
 }

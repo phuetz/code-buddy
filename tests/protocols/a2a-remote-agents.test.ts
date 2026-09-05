@@ -29,31 +29,31 @@ function makeCard(name: string, skillIds: string[]): AgentCard {
 describe('A2AAgentClient — remote agents', () => {
   it('register + listRemoteAgents', () => {
     const client = new A2AAgentClient();
-    const card = makeCard('darkstar-ollama', ['embed-nomic', 'chat-gemma4']);
+    const card = makeCard('gpuNode-ollama', ['embed-nomic', 'chat-gemma4']);
 
-    client.registerRemoteCard('darkstar-ollama', {
-      url: 'http://100.73.222.64:11434',
+    client.registerRemoteCard('gpuNode-ollama', {
+      url: 'http://192.0.2.42:11434',
       card,
       lastHeartbeat: 1000,
     });
 
     const remotes = client.listRemoteAgents();
     expect(remotes).toHaveLength(1);
-    expect(remotes[0].name).toBe('darkstar-ollama');
-    expect(remotes[0].url).toBe('http://100.73.222.64:11434');
+    expect(remotes[0].name).toBe('gpuNode-ollama');
+    expect(remotes[0].url).toBe('http://192.0.2.42:11434');
     expect(remotes[0].card.skills).toHaveLength(2);
     expect(remotes[0].lastHeartbeat).toBe(1000);
   });
 
   it('getAgentCard fallback to remote', () => {
     const client = new A2AAgentClient();
-    const card = makeCard('ministar-ollama', ['chat-qwen3']);
-    client.registerRemoteCard('ministar-ollama', {
-      url: 'http://100.98.18.76:11434',
+    const card = makeCard('hub-ollama', ['chat-qwen3']);
+    client.registerRemoteCard('hub-ollama', {
+      url: 'http://203.0.113.10:11434',
       card,
       lastHeartbeat: Date.now(),
     });
-    expect(client.getAgentCard('ministar-ollama')?.name).toBe('ministar-ollama');
+    expect(client.getAgentCard('hub-ollama')?.name).toBe('hub-ollama');
   });
 
   it('touchRemoteAgent updates lastHeartbeat', () => {

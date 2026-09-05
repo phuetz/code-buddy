@@ -11,6 +11,7 @@ import { join } from 'path';
 import os from 'os';
 import { randomBytes } from 'crypto';
 import type { RunStatus, RunStep, RunArtifact, RunRecord } from './types.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 /** Max runs to retain */
 const MAX_RUNS = 100;
@@ -244,7 +245,7 @@ export class RunTracker {
   private saveRun(run: RunRecord): void {
     try {
       const filePath = join(this.runsDir, `${run.id}.json`);
-      writeFileSync(filePath, JSON.stringify(run, null, 2));
+      writeJsonAtomicSync(filePath, run, { mode: 0o600 });
     } catch {
       // Silently fail
     }
@@ -256,8 +257,13 @@ export class RunTracker {
       const files = readdirSync(this.runsDir).filter((f) => f.endsWith('.json'));
       for (const file of files) {
         try {
-          const data = JSON.parse(readFileSync(join(this.runsDir, file), 'utf-8'));
-          this.runs.set(data.id, data);
+          const data = readJsonAtomicSync<RunRecord | null>(join(this.runsDir, file), null, {
+            mode: 0o600,
+            isValid: (value): value is RunRecord => Boolean(
+              value && typeof value === 'object' && typeof (value as RunRecord).id === 'string',
+            ),
+          });
+          if (data) this.runs.set(data.id, data);
         } catch {
           // Skip malformed files
         }

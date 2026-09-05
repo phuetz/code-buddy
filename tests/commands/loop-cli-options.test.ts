@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { createLoopCommand, validateLoopCommandNumericOptions } from '../../src/commands/loop-cli.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  applyLocalLoopContextCap,
+  createLoopCommand,
+  loopRunSucceeded,
+  validateLoopCommandNumericOptions,
+} from '../../src/commands/loop-cli.js';
 
 describe('buddy loop — options de ligne de commande', () => {
   it('accepte --permission-mode APRÈS la sous-commande', () => {
@@ -26,5 +31,39 @@ describe('buddy loop — options de ligne de commande', () => {
     expect(() =>
       validateLoopCommandNumericOptions(['node', 'buddy', 'loop', 'x', '--budget', '-5']),
     ).toThrow(/received "-5"/);
+  });
+});
+
+describe('loopRunSucceeded', () => {
+  it('refuses exit-0 when the judge says done without an independent CONFIRMED verdict', () => {
+    expect(loopRunSucceeded({ status: 'done', lastVerifierVerdict: 'NEEDS REVIEW' }, false)).toBe(false);
+    expect(loopRunSucceeded({ status: 'done', lastVerifierVerdict: 'unverified' }, false)).toBe(false);
+    expect(loopRunSucceeded({ status: 'paused', lastVerifierVerdict: 'CONFIRMED' }, false)).toBe(false);
+    expect(loopRunSucceeded({ status: 'done', lastVerifierVerdict: 'CONFIRMED' }, false)).toBe(true);
+  });
+
+  it('accepts judge-only done when --no-verify is set', () => {
+    expect(loopRunSucceeded({ status: 'done', lastVerifierVerdict: 'unverified' }, true)).toBe(true);
+  });
+});
+
+describe('applyLocalLoopContextCap', () => {
+  const previous = process.env.CODEBUDDY_MAX_CONTEXT;
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env.CODEBUDDY_MAX_CONTEXT;
+    else process.env.CODEBUDDY_MAX_CONTEXT = previous;
+  });
+
+  it('caps an Ollama loop at 32768 unless the operator already set CODEBUDDY_MAX_CONTEXT', () => {
+    delete process.env.CODEBUDDY_MAX_CONTEXT;
+    applyLocalLoopContextCap({ apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', providerLabel: 'ollama' });
+    expect(process.env.CODEBUDDY_MAX_CONTEXT).toBe('32768');
+  });
+
+  it('does not override an explicit CODEBUDDY_MAX_CONTEXT', () => {
+    process.env.CODEBUDDY_MAX_CONTEXT = '8192';
+    applyLocalLoopContextCap({ apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', providerLabel: 'ollama' });
+    expect(process.env.CODEBUDDY_MAX_CONTEXT).toBe('8192');
   });
 });

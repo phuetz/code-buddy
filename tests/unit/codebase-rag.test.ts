@@ -6,6 +6,7 @@
  */
 
 import { promises } from 'fs';
+import { join } from 'path';
 
 import {
   CodebaseRAG,
@@ -33,15 +34,28 @@ jest.mock('fs', async () => {
   return { ...impl, default: impl };
 });
 
+const mockWriteJsonAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/utils/atomic-write.js')>()),
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
+
 // Mock path
+// CodebaseRAG fait « import path from 'path' » : il lit l'export DEFAULT.
+// Étaler ...originalPath réintroduisait ce default — le VRAI module path — si
+// bien que les doubles ne servaient qu'aux exports nommés. Sous POSIX la
+// coïncidence de séparateur masquait tout ; sous Windows l'implémentation
+// joignait avec des antislashs pendant que le scénario attendait le double.
+// Le default pointe désormais sur la même implémentation doublée.
 jest.mock('path', async () => {
   const originalPath = await vi.importActual('path');
-  return {
+  const impl = {
     ...originalPath,
     join: jest.fn((...args: string[]) => args.join('/')),
     relative: jest.fn((from: string, to: string) => to.replace(from + '/', '')),
     dirname: jest.fn((p: string) => p.split('/').slice(0, -1).join('/')),
   };
+  return { ...impl, default: impl };
 });
 
 // Mock logger
@@ -467,7 +481,43 @@ describe('CodebaseRAG', () => {
       await ragWithPath.indexFile('/test/file.ts');
       await ragWithPath.saveIndex();
 
-      expect(fsPromises.writeFile).toHaveBeenCalled();
+      // VERIF3 T4 : `saveIndex` écrit trois fichiers, l'unique assertion était
+      // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
+      // chunks, du file-index ou des stats restait vert.
+      // Les chemins écrits sortent de path.join : les attendre avec des barres
+      // obliques codées en dur ne tenait que sous POSIX. On les construit de la
+      // même façon que l'implémentation — ce que le scénario prouve est QUELS
+      // trois fichiers sont écrits, pas le séparateur de la plate-forme.
+      expect(mockWriteJsonAtomic.mock.calls.map((call) => call[0])).toEqual([
+        join('/test/index', 'chunks.json'),
+        join('/test/index', 'file-index.json'),
+        join('/test/index', 'stats.json'),
+      ]);
+
+      const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];
+      expect(Array.isArray(savedChunks)).toBe(true);
+      expect(savedChunks.length).toBeGreaterThan(0);
+      for (const chunk of savedChunks) {
+        expect(chunk.filePath).toBe('/test/file.ts');
+        expect(typeof chunk.id).toBe('string');
+        expect(typeof chunk.content).toBe('string');
+        // Les embeddings sont volontairement exclus du fichier de chunks.
+        expect(chunk.embedding).toBeUndefined();
+      }
+
+      const savedFileIndex = mockWriteJsonAtomic.mock.calls[1]![1] as Record<string, string[]>;
+      expect(Object.keys(savedFileIndex)).toEqual(['/test/file.ts']);
+      expect(savedFileIndex['/test/file.ts']).toEqual(savedChunks.map((chunk) => chunk.id));
+
+      const savedStats = mockWriteJsonAtomic.mock.calls[2]![1] as {
+        totalTokens: number;
+        languages: Record<string, number>;
+        chunkTypes: Record<string, number>;
+      };
+      expect(savedStats.totalTokens).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.languages).length).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.chunkTypes).length).toBeGreaterThan(0);
+
       await ragWithPath.dispose();
     });
   });

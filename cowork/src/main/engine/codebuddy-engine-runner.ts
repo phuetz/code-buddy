@@ -14,6 +14,7 @@ import { isBrowserOperatorTool, buildBrowserActionPayload } from './browser-acti
 import { getReasoningBridge } from '../reasoning/reasoning-bridge';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
 import { configStore } from '../config/config-store';
+import { resolveEngineRuntimeConfig } from '../config/engine-runtime-config';
 import {
   CoworkCrossChannelContinuity,
   classifyCoworkCanonicalAttachment,
@@ -377,6 +378,7 @@ export class CodeBuddyEngineRunner {
     const runtimeConfig = session.intelligence?.configSetId
       ? configStore.getConfigForSet(session.intelligence.configSetId)
       : configStore.getAll();
+    const engineRuntimeConfig = resolveEngineRuntimeConfig(runtimeConfig);
     const prepareTurn = () => Promise.all([
       this.createTurnCheckpoint(session, canonicalPrompt),
       this.resolveActivePersonaPrompt(),
@@ -436,9 +438,9 @@ export class CodeBuddyEngineRunner {
     const systemPromptAppend = [personaPrompt, sharedContinuity.systemPrompt]
       .filter((part): part is string => Boolean(part?.trim()))
       .join('\n\n') || undefined;
-    const effectiveModel = companionRoute?.model ?? session.model ?? runtimeConfig.model;
-    const effectiveApiKey = companionRoute?.apiKey ?? runtimeConfig.apiKey;
-    const effectiveBaseURL = companionRoute?.baseURL ?? runtimeConfig.baseUrl;
+    const effectiveModel = companionRoute?.model ?? session.model ?? engineRuntimeConfig.model;
+    const effectiveApiKey = companionRoute?.apiKey ?? engineRuntimeConfig.apiKey;
+    const effectiveBaseURL = companionRoute?.baseURL ?? engineRuntimeConfig.baseURL;
     let cognitiveTurn: CoworkCognitiveTurn | null = null;
     if (companionThread && this.cognition) {
       try {

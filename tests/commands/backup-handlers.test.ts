@@ -4,6 +4,7 @@
  * Phase 6: backup create/verify/list/restore
  */
 
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock fs module
@@ -80,11 +81,28 @@ describe('Backup Handlers', () => {
     it('should support --only-config flag', async () => {
       const { existsSync, readdirSync, readFileSync, statSync } = await import('fs');
       vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readdirSync).mockReturnValue([
+        { name: 'settings.json', isDirectory: () => false, isFile: () => true } as any,
+      ]);
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{"key": "value"}'));
+      vi.mocked(statSync).mockReturnValue({ size: 16, mtime: new Date() } as any);
+
+      const result = await handleBackup('create --only-config');
+      expect(result.handled).toBe(true);
+      expect(result.exitCode ?? 0).toBe(0);
+      expect(result.response).toContain('config only');
+    });
+
+    it('should refuse create when there are no files to back up', async () => {
+      const { existsSync, readdirSync } = await import('fs');
+      vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readdirSync).mockReturnValue([]);
 
       const result = await handleBackup('create --only-config');
       expect(result.handled).toBe(true);
-      expect(result.response).toContain('config only');
+      expect(result.exitCode).toBe(1);
+      expect(result.response).toMatch(/No files to back up/i);
+      expect(result.response).not.toMatch(/Backup created/i);
     });
   });
 
@@ -92,13 +110,19 @@ describe('Backup Handlers', () => {
     it('should verify valid backup', async () => {
       const { existsSync, readFileSync } = await import('fs');
       vi.mocked(existsSync).mockReturnValue(true);
+      const payload = Buffer.from('test');
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
         manifest: {
           version: '1.0.0',
           createdAt: '2026-03-18T00:00:00Z',
-          files: [{ path: 'settings.json', size: 100, checksum: 'abc123' }],
+          files: [{
+            path: 'settings.json',
+            size: payload.length,
+            checksum: createHash('sha256').update(payload).digest('hex').slice(0, 16),
+          }],
           flags: { onlyConfig: false, includeWorkspace: true },
         },
+        files: [{ path: 'settings.json', content: payload.toString('base64') }],
       }));
 
       const result = await handleBackup('verify test-backup.json');

@@ -244,6 +244,34 @@ describe('PermissionModeManager — Phase T1', () => {
       expect(d.prompted).toBe(false);
     });
 
+    it('auto-approves remind as a bounded local edit', () => {
+      expect(m.checkPermission('any', 'remind')).toEqual({
+        allowed: true,
+        reason: 'Edit tool auto-approved in acceptEdits mode',
+        prompted: false,
+      });
+    });
+
+    it('auto-approves replace_memory as a bounded local edit', () => {
+      const d = m.checkPermission('replace key', 'replace_memory');
+      expect(d).toEqual({
+        allowed: true,
+        prompted: false,
+        reason: 'Edit tool auto-approved in acceptEdits mode',
+      });
+    });
+
+    it.each(['remember', 'memory_propose'] as const)(
+      'auto-approves %s as a bounded local edit',
+      (toolName) => {
+        expect(m.checkPermission('store preference', toolName)).toEqual({
+          allowed: true,
+          prompted: false,
+          reason: 'Edit tool auto-approved in acceptEdits mode',
+        });
+      },
+    );
+
     it('prompts on destructive tools', () => {
       const d = m.checkPermission('any', 'bash');
       expect(d.allowed).toBe(true);

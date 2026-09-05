@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'fs/promises';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 import * as path from 'path';
 import {
   readCompanionMissionBoard,
@@ -201,8 +201,7 @@ export async function runNextCompanionMission(
     };
   }
 
-  await mkdir(path.dirname(targetPath), { recursive: true });
-  await writeFile(targetPath, brief, 'utf8');
+  await writeFileAtomic(targetPath, brief, { mode: 0o600 });
 
   let perceptId: string | undefined;
   let safetyEventId: string | undefined;

@@ -7,12 +7,14 @@
  * par le processus enfant n'apparaît plus.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
+import { getShellConfiguration, type ShellConfiguration } from '../../src/utils/shell-configuration.js';
+import type { PTYModule } from '../../src/tools/interactive-bash.js';
 import { InteractiveBashTool } from '../../src/tools/interactive-bash.js';
 
 const MARKER = 'CODEBUDDY_INTERACTIVE_ENV_INJECTION_MARKER';
@@ -28,8 +30,39 @@ const PYTHON = (() => {
 let environmentSnapshot: NodeJS.ProcessEnv;
 let workDir: string;
 
-function shellQuote(value: string): string {
+function posixShellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\\"'\\\"'")}'`;
+}
+
+function powershellShellQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+interface ShellFixture {
+  quote(value: string): string;
+}
+
+const POSIX_FIXTURE: ShellFixture = { quote: posixShellQuote };
+const POWERSHELL_FIXTURE: ShellFixture = { quote: powershellShellQuote };
+
+function fixtureForShell(configuration: ShellConfiguration = getShellConfiguration()): ShellFixture {
+  return configuration.shell === 'powershell' ? POWERSHELL_FIXTURE : POSIX_FIXTURE;
+}
+
+function commandForExecutable(
+  executable: string,
+  script: string,
+  configuration: ShellConfiguration = getShellConfiguration(),
+): string {
+  const fixture = fixtureForShell(configuration);
+  const invocation = `${fixture.quote(executable)} ${fixture.quote(script)}`;
+  // PowerShell traite une commande qui COMMENCE par une chaîne entre quotes
+  // comme une expression littérale, pas comme un appel : « 'C:\\…\\node.exe'
+  // 'C:\\…\\probe.cjs' » rendait « Unexpected token … in expression or
+  // statement » et aucun enfant n'était lancé. L'opérateur d'appel `&` est la
+  // façon canonique d'exécuter un chemin cité — bash n'en a pas besoin et
+  // garde sa forme historique.
+  return configuration.shell === 'powershell' ? `& ${invocation}` : invocation;
 }
 
 function combinedOutput(result: { stdout?: string | null; stderr?: string | null }): string {
@@ -102,7 +135,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     );
 
     const environment = parseJsonOutput(
-      await runInteractive(`${shellQuote(process.execPath)} ${shellQuote(envProbe)}`),
+      await runInteractive(commandForExecutable(process.execPath, envProbe)),
     );
     expect(normalizePortablePath(environment.PATH)).toContain(
       normalizePortablePath(pathMarker),
@@ -128,7 +161,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(combinedOutput(control)).toContain(MARKER);
 
     const output = await runInteractive(
-      `${shellQuote(process.execPath)} ${shellQuote(victimScript)}`,
+      commandForExecutable(process.execPath, victimScript),
       forceFallback,
     );
     expect(output).not.toContain(MARKER);
@@ -151,7 +184,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(combinedOutput(control)).toContain(MARKER);
 
     const output = await runInteractive(
-      `${shellQuote(process.execPath)} ${shellQuote(victimScript)}`,
+      commandForExecutable(process.execPath, victimScript),
       forceFallback,
     );
     expect(output).not.toContain(MARKER);
@@ -174,9 +207,110 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
       });
       expect(combinedOutput(control)).toContain(MARKER);
 
-      const output = await runInteractive(`${shellQuote(PYTHON as string)} ${shellQuote(script)}`, forceFallback);
+      const output = await runInteractive(
+        commandForExecutable(PYTHON as string, script),
+        forceFallback,
+      );
       expect(output).not.toContain(MARKER);
       expect(output).toContain('child ok');
     },
   );
+
+  it('dégrade vers le repli sans PTY quand node-pty se charge mais ne sait pas lancer', async () => {
+    // Reproduit le node-pty de macOS dont le `spawn-helper` a perdu son bit
+    // exécutable : le module se CHARGE (isPTYAvailable reste vrai) et pourtant
+    // chaque spawn rend « posix_spawnp failed ». Avant le correctif, l'appel
+    // rejetait et toute commande interactive était perdue ; le repli sans PTY
+    // existait déjà, il n'était simplement jamais emprunté.
+    const brokenPty: PTYModule = {
+      spawn() {
+        throw new Error('posix_spawnp failed.');
+      },
+    };
+    const victimScript = join(workDir, 'degraded-victim.cjs');
+    writeFileSync(victimScript, "process.stdout.write('child ok\\n');\n");
+    const tool = new InteractiveBashTool(brokenPty);
+    try {
+      const result = await tool.executeInteractive(
+        commandForExecutable(process.execPath, victimScript),
+        { cwd: workDir },
+      );
+      expect(result.output).toContain('child ok');
+    } finally {
+      tool.dispose();
+    }
+  });
+
+  it('exerce la fixture PowerShell quand getShellConfiguration() est mockée en win32', async () => {
+    const powerShellConfiguration: ShellConfiguration = {
+      executable: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      argsPrefix: ['-NoProfile', '-NonInteractive', '-Command'],
+      shell: 'powershell',
+    };
+    const getShellConfigurationMock = vi.fn(() => powerShellConfiguration);
+    const spawnCalls: Array<{
+      executable: string;
+      args: string[];
+      env: Record<string, string | undefined>;
+    }> = [];
+
+    vi.resetModules();
+    vi.doMock('../../src/utils/shell-configuration.js', () => ({
+      getShellConfiguration: getShellConfigurationMock,
+    }));
+
+    try {
+      const { InteractiveBashTool: MockedInteractiveBashTool } =
+        await import('../../src/tools/interactive-bash.js');
+      const fakePty: PTYModule = {
+        spawn(executable, args, options) {
+          spawnCalls.push({ executable, args, env: options.env });
+          return {
+            onData(callback) {
+              callback(options.env.NODE_OPTIONS ? `${MARKER}\n` : 'child ok\n');
+            },
+            onExit(callback) {
+              queueMicrotask(() => callback({ exitCode: 0 }));
+            },
+            write() {},
+            resize() {},
+            kill() {},
+          };
+        },
+      };
+      const victimScript = join(workDir, 'powershell-fixture-victim.cjs');
+      const evilScript = join(workDir, 'powershell-fixture-evil.cjs');
+      writeFileSync(evilScript, `process.stdout.write('${MARKER}\\n');\n`);
+      writeFileSync(victimScript, "process.stdout.write('child ok\\n');\n");
+      process.env.NODE_OPTIONS = `--require ${evilScript}`;
+      const configuration = getShellConfigurationMock();
+      const command = commandForExecutable(process.execPath, victimScript, configuration);
+      expect(
+        commandForExecutable(
+          "C:\\Program Files\\O'Brien\\node.exe",
+          "C:\\work\\victim's.cjs",
+          configuration,
+        ),
+      ).toBe("& 'C:\\Program Files\\O''Brien\\node.exe' 'C:\\work\\victim''s.cjs'");
+      const tool = new MockedInteractiveBashTool(fakePty);
+      const result = await tool.executeInteractive(command, { cwd: workDir });
+      tool.dispose();
+
+      expect(getShellConfigurationMock).toHaveBeenCalled();
+      expect(spawnCalls).toHaveLength(1);
+      expect(spawnCalls[0]?.executable).toBe(powerShellConfiguration.executable);
+      expect(spawnCalls[0]?.args).toEqual([
+        ...powerShellConfiguration.argsPrefix,
+        command,
+      ]);
+      expect(spawnCalls[0]?.env.NODE_OPTIONS).toBeUndefined();
+      // Même contrat de sécurité que les deux scénarios réels ci-dessus : le
+      // marqueur injecté ne doit jamais atteindre la sortie de la session.
+      expect(result.output).not.toContain(MARKER);
+      expect(result.output).toContain('child ok');
+    } finally {
+      vi.doUnmock('../../src/utils/shell-configuration.js');
+      vi.resetModules();
+    }
+  });
 });

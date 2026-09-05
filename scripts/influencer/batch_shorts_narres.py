@@ -35,7 +35,7 @@ DEST = [
 def qwen(prompt):
     body = json.dumps({"model": "qwen3.8:27b", "prompt": prompt, "stream": False, "think": False,
                        "options": {"temperature": 0.75, "num_ctx": 4096}}).encode()
-    for host in ("http://darkstar:11434", "http://127.0.0.1:11434"):
+    for host in ("http://gpuNode:11434", "http://127.0.0.1:11434"):
         try:
             r = json.loads(urllib.request.urlopen(urllib.request.Request(host + "/api/generate", data=body,
                 headers={"Content-Type": "application/json"}), timeout=180).read()).get("response", "")

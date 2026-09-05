@@ -170,7 +170,7 @@ function ExperimentRow({
             id={`review-note-${experiment.id}`}
             className="min-h-16 w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-xs"
             maxLength={2_000}
-            placeholder="Sources primaires, contraintes Darkstar, résultat du benchmark…"
+            placeholder="Sources primaires, contraintes GPU node, résultat du benchmark…"
             value={note}
             onChange={(event) => setNote(event.target.value)}
           />

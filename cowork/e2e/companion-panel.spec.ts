@@ -441,8 +441,8 @@ async function mockCompanionBackend(electronApp: ElectronApplication, workspaceP
         readyCount: 1,
         renderers: [
           {
-            rendererId: 'darkstar-metahuman-lisa',
-            displayName: 'Lisa MetaHuman on Darkstar',
+            rendererId: 'gpuNode-metahuman-lisa',
+            displayName: 'Lisa MetaHuman on GPU node',
             protocolVersion: 1,
             runtime: 'unreal',
             runtimeVersion: '5.8',
@@ -672,7 +672,7 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
   const avatarRenderer = appPage.getByTestId('companion-avatar-renderers');
   await avatarRenderer.scrollIntoViewIfNeeded();
   await expect(avatarRenderer).toContainText('Incarnation MetaHuman');
-  await expect(avatarRenderer).toContainText('Lisa MetaHuman on Darkstar');
+  await expect(avatarRenderer).toContainText('Lisa MetaHuman on GPU node');
   await expect(avatarRenderer).toContainText('voix → visage active');
   await expect(avatarRenderer).toContainText('72 ms');
   await avatarRenderer.screenshot({ path: '/tmp/cowork-companion-metahuman-status.png' });

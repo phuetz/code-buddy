@@ -11,6 +11,7 @@ import { cosineSimilarity } from "./embeddings.js";
 import fs from "fs";
 import path from "path";
 import { logger } from "../../utils/logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from "../../utils/atomic-write.js";
 
 interface VectorEntry {
   id: string;
@@ -184,11 +185,7 @@ export class InMemoryVectorStore implements VectorStore {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(
-      this.persistPath,
-      JSON.stringify(data),
-      "utf-8"
-    );
+    writeJsonAtomicSync(this.persistPath, data);
 
     this.dirty = false;
   }
@@ -200,10 +197,9 @@ export class InMemoryVectorStore implements VectorStore {
     if (!this.persistPath || !fs.existsSync(this.persistPath)) return;
 
     try {
-      const content = fs.readFileSync(this.persistPath, "utf-8");
-      const data = JSON.parse(content);
+      const data = readJsonAtomicSync<{ version?: unknown; vectors?: unknown } | null>(this.persistPath, null);
 
-      if (data.version === 1 && Array.isArray(data.vectors)) {
+      if (data?.version === 1 && Array.isArray(data.vectors)) {
         for (const entry of data.vectors) {
           this.vectors.set(entry.id, entry);
         }

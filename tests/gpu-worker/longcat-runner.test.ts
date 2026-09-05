@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const RUNNER = resolve('scripts/gpu-runners/longcat-runner.py');
 const LOWMEM_UNIT = resolve('tests/gpu-worker/longcat-lowmem-unit.py');
 const SETUP = resolve('scripts/gpu-runners/setup-longcat-env.sh');
-const DARKSTAR_START = resolve('scripts/gpu-runners/start-darkstar-worker.ps1');
+const GPU_NODE_START = resolve('scripts/gpu-runners/start-gpuNode-worker.ps1');
 const created: string[] = [];
 
 async function git(...args: string[]): Promise<string> {
@@ -45,6 +45,16 @@ afterEach(async () => {
   await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
+// Ces scénarios démarrent DEUX interpréteurs python (le pilote, puis le
+// petit-fils d'inférence). Le budget de 3 s tenait sous Linux mais pas sur
+// windows-latest, où la création de processus est nettement plus coûteuse :
+// execFile tuait le pilote avant que le garde thermique n'ait imprimé quoi que
+// ce soit (code null, stdout vide). Le budget suit donc la machine, comme
+// testTimeout/hookTimeout dans vitest.config.ts ; ce que le scénario prouve —
+// le garde arrête l'inférence et sort en 24 — est inchangé.
+const SLOW_PROCESS_HOST = process.platform === 'win32' || process.platform === 'darwin';
+const PYTHON_GUARD_TIMEOUT_MS = SLOW_PROCESS_HOST ? 20_000 : 3_000;
+
 describe('LongCat GPU runner hardening', () => {
   it('runs dependency-free checkpoint and layerwise INT8 unit tests', async () => {
     const { stderr } = await execFileAsync('python3', [LOWMEM_UNIT]);
@@ -60,10 +70,10 @@ describe('LongCat GPU runner hardening', () => {
     expect(setup).toContain('quantize_(linear, int8_weight_only())');
   });
 
-  it('keeps the Darkstar readiness gate aligned with runner version 2', async () => {
+  it('keeps the GPU node readiness gate aligned with runner version 2', async () => {
     const [runner, launcher] = await Promise.all([
       readFile(RUNNER, 'utf8'),
-      readFile(DARKSTAR_START, 'utf8'),
+      readFile(GPU_NODE_START, 'utf8'),
     ]);
     expect(runner).toContain('RUNNER_VERSION = "2"');
     expect(launcher).toContain("$longcatReady.runnerVersion -ne '2'");
@@ -139,7 +149,14 @@ describe('LongCat GPU runner hardening', () => {
     expect(() => globalThis.process.kill(childPid, 0)).toThrow();
   });
 
-  it('fails closed and kills inference after two over-temperature samples', async () => {
+  // `stream_inference` annule par os.killpg + start_new_session + gestionnaires
+  // SIGTERM/SIGINT : des primitives POSIX que Windows n'a pas (os.killpg n'y
+  // existe même pas). Le petit-fils d'inférence n'y est donc jamais tué, le
+  // pilote attend son time.sleep(60) et execFile le tue avant toute sortie
+  // (code null, stdout vide) — quel que soit le budget. Le worker GPU vise des
+  // machines Linux ; le scénario est borné à la plate-forme qui offre ces
+  // primitives. Le reste du fichier tourne partout.
+  it.runIf(process.platform !== 'win32')('fails closed and kills inference after two over-temperature samples', async () => {
     const code = [
       'import importlib.util, pathlib, sys, time',
       'spec = importlib.util.spec_from_file_location("longcat_runner", pathlib.Path(sys.argv[1]))',
@@ -153,9 +170,11 @@ describe('LongCat GPU runner hardening', () => {
       '    print(error, flush=True)',
       '    raise SystemExit(24)',
     ].join('\n');
-    await expect(execFileAsync('python3', ['-c', code, RUNNER], { timeout: 3_000 })).rejects.toMatchObject({
+    await expect(
+      execFileAsync('python3', ['-c', code, RUNNER], { timeout: PYTHON_GUARD_TIMEOUT_MS }),
+    ).rejects.toMatchObject({
       code: 24,
       stdout: expect.stringContaining('thermal guard stopped inference at 89 C'),
     });
-  });
+  }, PYTHON_GUARD_TIMEOUT_MS + 10_000);
 });

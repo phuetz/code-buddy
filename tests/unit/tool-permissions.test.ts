@@ -10,16 +10,21 @@
  */
 
 // Mock fs-extra module using vi.hoisted so mockFs is available inside vi.mock factory
-const { mockFs } = vi.hoisted(() => ({
+const { mockFs, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
   mockFs: {
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     ensureDirSync: vi.fn(),
   },
+  mockWriteJsonAtomicSync: vi.fn(),
 }));
 
 vi.mock('fs-extra', () => ({ ...mockFs, default: mockFs }));
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
 
 // Mock os module
 jest.mock('os', () => {
@@ -56,6 +61,7 @@ describe('ToolPermissionManager', () => {
     mockFs.existsSync.mockReturnValue(false);
     mockFs.ensureDirSync.mockReturnValue(undefined);
     mockFs.writeFileSync.mockReturnValue(undefined);
+    mockWriteJsonAtomicSync.mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -586,7 +592,7 @@ describe('ToolPermissionManager', () => {
         permission: ToolPermission.ALWAYS,
       });
 
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
 
     it('should remove a rule by pattern', () => {
@@ -609,11 +615,11 @@ describe('ToolPermissionManager', () => {
 
     it('should save config after removing rule', () => {
       manager.addRule({ pattern: 'temp_tool', permission: ToolPermission.ASK });
-      mockFs.writeFileSync.mockClear();
+      mockWriteJsonAtomicSync.mockClear();
 
       manager.removeRule('temp_tool');
 
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
   });
 
@@ -697,11 +703,11 @@ describe('ToolPermissionManager', () => {
     });
 
     it('should save config after reset', () => {
-      mockFs.writeFileSync.mockClear();
+      mockWriteJsonAtomicSync.mockClear();
 
       manager.resetToDefaults();
 
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
   });
 
@@ -766,24 +772,29 @@ describe('ToolPermissionManager', () => {
 
       manager.saveConfig();
 
-      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         testConfigPath,
-        expect.any(String)
+        expect.objectContaining({ default: ToolPermission.ASK }),
+        { mode: 0o600 }
       );
     });
 
-    it('should create directory if it does not exist', () => {
+    it('should delegate parent creation to the atomic writer', () => {
       mockFs.existsSync.mockReturnValue(false);
       const manager = new ToolPermissionManager(testConfigPath);
 
       manager.saveConfig();
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+        testConfigPath,
+        expect.any(Object),
+        { mode: 0o600 }
+      );
     });
 
     it('should handle save errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 

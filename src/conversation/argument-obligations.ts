@@ -129,11 +129,46 @@ function requiresDirectAnswer(plan: ConversationPlan, currentTurn: string | unde
   return plan.deliberation.phase === 'opening' && Boolean(plan.deliberation.openQuestion);
 }
 
-function requiresFreshSources(plan: ConversationPlan): boolean {
+function normalizeEvidenceQuestion(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Detect a question whose answer claims direct knowledge of a runtime event.
+ * These short confirmations need evidence just as much as a longer factual
+ * answer, even though the dialogue planner otherwise treats them as ordinary
+ * conversation.
+ */
+export function isRuntimeEvidenceVerificationRequest(value: string): boolean {
+  const normalized = normalizeEvidenceQuestion(value);
+  if (!normalized) return false;
+  const asksQuestion =
+    value.includes('?') ||
+    /^(?:est ce que|as tu|avez vous|did you|have you|can you confirm|peux tu confirmer)\b/u.test(
+      normalized
+    );
+  if (!asksQuestion) return false;
+  const refersToReceiver =
+    /\b(?:tu|te|t|toi|vous|you|lisa|robot|systeme|code buddy)\b/u.test(normalized);
+  const asksAboutObservedEvent =
+    /\b(?:transmis|transmise|transmettre|recu|recue|recevoir|entendu|entendue|entends|capt(?:e|ee|ure|uree)|arriv(?:e|ee)|received|receive|sent|transmitted|heard|captured)\b/u.test(
+      normalized
+    );
+  return refersToReceiver && asksAboutObservedEvent;
+}
+
+function requiresFreshSources(plan: ConversationPlan, currentTurn?: string): boolean {
   return (
     plan.analysis.needsFreshContext ||
     plan.act === 'fresh_information' ||
-    (plan.moves.includes('freshness') && plan.moves.includes('source'))
+    (plan.moves.includes('freshness') && plan.moves.includes('source')) ||
+    (currentTurn !== undefined && isRuntimeEvidenceVerificationRequest(currentTurn))
   );
 }
 
@@ -152,7 +187,7 @@ export function deriveArgumentObligations(
 ): ArgumentObligation[] {
   const obligations: ArgumentObligation[] = [];
   const topic = currentTurnTarget(currentTurn);
-  const freshSources = requiresFreshSources(plan);
+  const freshSources = requiresFreshSources(plan, currentTurn);
 
   if (requiresDirectAnswer(plan, currentTurn)) {
     const question = questionTarget(plan, currentTurn);

@@ -16,6 +16,7 @@ import {
   hasElectronBinary,
   resolveElectronBinaryPath,
 } from './electron-paths.js';
+import { electronLaunchArgs } from './electron-launch-args.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -92,7 +93,7 @@ export async function launchDesktop(options: LaunchOptions = {}): Promise<number
   });
 
   return new Promise<number>((resolvePromise) => {
-    const child = spawn(electronBin, [entryPoint], {
+    const child = spawn(electronBin, electronLaunchArgs(entryPoint), {
       cwd: coworkDir,
       env,
       stdio: options.detach ? 'ignore' : 'inherit',

@@ -1967,7 +1967,7 @@ Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker
 - `payload` (object) - Validated job payload. PanoWorld accepts single-2048 (1 view) or multi-1024 (max 5); avatar rendering is restricted to 480p.
 - `job_id` (string) - Required for status or cancel.
 
-**Keywords:** darkstar, gpu, panoworld, longcat, avatar, 3dgs, world model, reconstruction, render
+**Keywords:** gpuNode, gpu, panoworld, longcat, avatar, 3dgs, world model, reconstruction, render
 
 ---
 

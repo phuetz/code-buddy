@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface WorkspaceRepo {
   name: string;
@@ -103,7 +104,7 @@ export function resolveWorkspaceConfigPath(
 }
 
 function parseWorkspaceConfig(configPath: string): RawWorkspaceConfig {
-  const parsed: unknown = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const parsed = readJsonAtomicSync<unknown | null>(configPath, null, { mode: 0o600 });
   if (!isRecord(parsed) || !Array.isArray(parsed.repos)) {
     throw new Error('workspace.json must contain a repos array');
   }
@@ -245,6 +246,5 @@ export function readWorkspaceConfigForEdit(configPath: string): { repos: Workspa
 }
 
 export function writeWorkspaceConfig(configPath: string, repos: WorkspaceRepo[]): void {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, `${JSON.stringify({ repos }, null, 2)}\n`, 'utf8');
+  writeJsonAtomicSync(configPath, { repos }, { mode: 0o600 });
 }

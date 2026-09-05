@@ -256,10 +256,21 @@ describe('server startup', () => {
     }
   });
 
-  it('treats non-Grok providers as ready for readiness probes', async () => {
+  it('treats a configured non-Grok provider whose endpoint answers as ready for readiness probes', async () => {
+    // R33 (2026-09-02) : la sonde de disponibilité interroge le fournisseur
+    // configuré, quel qu'il soit. Un faux point d'accès local répond 200.
+    const { createServer } = await import('node:http');
+    const fakeProvider = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ object: 'list', data: [{ id: 'gpt-test-server' }] }));
+    });
+    await new Promise<void>((resolve) => fakeProvider.listen(0, '127.0.0.1', resolve));
+    const fakePort = (fakeProvider.address() as AddressInfo).port;
+    const previousOpenAiBase = process.env.OPENAI_BASE_URL;
     process.env.CODEBUDDY_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'test-openai-key';
     process.env.OPENAI_MODEL = 'gpt-test-server';
+    process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakePort}/v1`;
 
     const { startServer } = await import('../../src/server/index.js');
     const started = await startServer({
@@ -325,6 +336,9 @@ describe('server startup', () => {
         owned_by: 'openai',
       });
     } finally {
+      fakeProvider.close();
+      if (previousOpenAiBase === undefined) delete process.env.OPENAI_BASE_URL;
+      else process.env.OPENAI_BASE_URL = previousOpenAiBase;
       await new Promise<void>((resolve, reject) => {
         started.server.close((error) => (error ? reject(error) : resolve()));
       });

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { validateToolProposal } from '../../../src/agent/self-improvement/tool-gate.js';
+import { scoreToolCases } from '../../../src/agent/self-improvement/sandbox-scorer.js';
 import { LiveToolMutator } from '../../../src/agent/self-improvement/tool-skill-mutator.js';
 import { ToolImprovementEngine } from '../../../src/agent/self-improvement/tool-engine.js';
 import { StaticToolProposer } from '../../../src/agent/self-improvement/tool-proposer.js';
@@ -11,6 +12,7 @@ import type { AuthoredToolSpec } from '../../../src/agent/self-improvement/autho
 import type { ToolBenchmarkScenario, ToolProposal } from '../../../src/agent/self-improvement/tool-types.js';
 import { FormalToolRegistry } from '../../../src/tools/registry/tool-registry.js';
 import { getToolRegistry } from '../../../src/tools/registry.js';
+import { SEED_TOOL_SCENARIOS } from '../../../src/agent/self-improvement/tool-benchmark.js';
 
 // Capability: reverse the input string `s`.
 const REVERSE: ToolBenchmarkScenario = {
@@ -18,12 +20,12 @@ const REVERSE: ToolBenchmarkScenario = {
   capability: 'Reverse the input string s',
   description: 'authored__reverse should reverse s',
   visibleCases: [
-    { input: { s: 'abc' }, expectIncludes: ['cba'] },
-    { input: { s: 'hello' }, expectIncludes: ['olleh'] },
+    { input: { s: 'abc' }, expectedOutput: 'cba' },
+    { input: { s: 'hello' }, expectedOutput: 'olleh' },
   ],
   heldOutCases: [
-    { input: { s: 'world' }, expectIncludes: ['dlrow'] },
-    { input: { s: 'xyz' }, expectIncludes: ['zyx'] },
+    { input: { s: 'world' }, expectedOutput: 'dlrow' },
+    { input: { s: 'xyz' }, expectedOutput: 'zyx' },
   ],
 };
 
@@ -56,8 +58,65 @@ beforeEach(() => {
 });
 
 describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => {
+  it('seed slugify held-out includes a run-of-spaces input so replace(" ","-") cannot pass G4', async () => {
+    const slugify = SEED_TOOL_SCENARIOS.find((s) => s.id === 'slugify')!;
+    expect(slugify.heldOutCases.some((c) => /\s{2,}/.test(String(c.input.text)))).toBe(true);
+
+    const singleSpaceOnly: AuthoredToolSpec = {
+      name: 'authored__slugify',
+      description: 'slugify by replacing each single space',
+      parameters: { type: 'object', properties: { text: { type: 'string' } } },
+      language: 'javascript',
+      code: "const i=JSON.parse(process.env.CODEBUDDY_TOOL_INPUT||'{}'); console.log(String(i.text||'').toLowerCase().replace(/ /g,'-'));",
+    };
+    const out = await validateToolProposal(
+      { id: 'single-space', targetScenarioId: 'slugify', spec: singleSpaceOnly },
+      slugify,
+      new LiveToolMutator({ persist: false }),
+      { keepOnAccept: true },
+    );
+    expect(out.visiblePassed).toBe(slugify.visibleCases.length);
+    expect(out.accepted).toBe(false);
+    expect(out.rejectionReason).toBe('heldout-fail');
+  });
+
+  it('REJECTS output that only contains the expected value as a substring', async () => {
+    const dishonest: AuthoredToolSpec = {
+      ...LEGIT,
+      code: "console.log('hello ok bye');",
+    };
+
+    const score = await scoreToolCases(dishonest, [{ input: {}, expectedOutput: 'ok' }]);
+
+    expect(score.passed).toBe(0);
+    expect(score.failures[0]).toMatch(/output/i);
+  });
+
+  it('REJECTS a chatty tool that prints the expected value plus commentary', async () => {
+    const chatty: AuthoredToolSpec = {
+      ...LEGIT,
+      code: "const i = JSON.parse(process.env.CODEBUDDY_TOOL_INPUT || '{}');"
+        + " console.log('The reversed string is: ' + [...i.s].reverse().join(''));",
+    };
+
+    const score = await scoreToolCases(chatty, REVERSE.visibleCases);
+
+    expect(score.passed).toBe(0);
+    expect(score.total).toBe(REVERSE.visibleCases.length);
+  });
+
+  it('ACCEPTS only the declared whitespace normalization, never a different word', async () => {
+    const padded: AuthoredToolSpec = { ...LEGIT, code: "console.log('  cba \\n');" };
+    const other: AuthoredToolSpec = { ...LEGIT, code: "console.log('cbaa');" };
+
+    await expect(scoreToolCases(padded, [{ input: {}, expectedOutput: 'cba' }]))
+      .resolves.toMatchObject({ passed: 1 });
+    await expect(scoreToolCases(other, [{ input: {}, expectedOutput: 'cba' }]))
+      .resolves.toMatchObject({ passed: 0 });
+  });
+
   it('ACCEPTS a legitimate tool that passes visible AND held-out', async () => {
-    const out = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator(), {
+    const out = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator({ persist: false }), {
       keepOnAccept: false,
     });
     expect(out.accepted).toBe(true);
@@ -66,7 +125,7 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
   });
 
   it('REJECTS a tool that hardcodes the visible outputs (passes visible, fails held-out)', async () => {
-    const out = await validateToolProposal(proposal(GAMED), REVERSE, new LiveToolMutator(), {
+    const out = await validateToolProposal(proposal(GAMED), REVERSE, new LiveToolMutator({ persist: false }), {
       keepOnAccept: true,
     });
     expect(out.accepted).toBe(false);
@@ -74,11 +133,11 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
     expect(out.visiblePassed).toBe(2); // it DID pass the visible cases
     expect(out.heldOutPassed).toBeLessThan(out.heldOutTotal); // but not the fresh ones
     // and nothing was registered
-    expect(new LiveToolMutator().has('authored__reverse')).toBe(false);
+    expect(new LiveToolMutator({ persist: false }).has('authored__reverse')).toBe(false);
   });
 
   it('REJECTS statically dangerous code before running it', async () => {
-    const out = await validateToolProposal(proposal(DANGEROUS), REVERSE, new LiveToolMutator(), {
+    const out = await validateToolProposal(proposal(DANGEROUS), REVERSE, new LiveToolMutator({ persist: false }), {
       keepOnAccept: true,
     });
     expect(out.accepted).toBe(false);
@@ -87,7 +146,7 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
 
   it('REJECTS (fail-closed) a scenario with no held-out cases', async () => {
     const noHeldOut: ToolBenchmarkScenario = { ...REVERSE, heldOutCases: [] };
-    const out = await validateToolProposal(proposal(LEGIT), noHeldOut, new LiveToolMutator(), {
+    const out = await validateToolProposal(proposal(LEGIT), noHeldOut, new LiveToolMutator({ persist: false }), {
       keepOnAccept: true,
     });
     expect(out.accepted).toBe(false);
@@ -95,13 +154,13 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
   });
 
   it('propose-only accepts but does NOT register; auto-apply registers + is callable', async () => {
-    const proposeOnly = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator(), {
+    const proposeOnly = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator({ persist: false }), {
       keepOnAccept: false,
     });
     expect(proposeOnly.accepted).toBe(true);
-    expect(new LiveToolMutator().has('authored__reverse')).toBe(false);
+    expect(new LiveToolMutator({ persist: false }).has('authored__reverse')).toBe(false);
 
-    const autoApply = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator(), {
+    const autoApply = await validateToolProposal(proposal(LEGIT), REVERSE, new LiveToolMutator({ persist: false }), {
       keepOnAccept: true,
     });
     expect(autoApply.accepted).toBe(true);
@@ -112,7 +171,7 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
   });
 
   it('mutator register→unregister leaves both registries clean (proven inverse)', () => {
-    const m = new LiveToolMutator();
+    const m = new LiveToolMutator({ persist: false });
     m.register(LEGIT);
     expect(m.has('authored__reverse')).toBe(true);
     m.unregister('authored__reverse');
@@ -149,6 +208,7 @@ describe('ToolImprovementEngine — cycle', () => {
     const legitEngine = new ToolImprovementEngine({
       scenarios: [REVERSE],
       proposer: new StaticToolProposer(new Map([[REVERSE.id, LEGIT]])),
+      mutator: new LiveToolMutator({ persist: false }),
       archive,
       autonomy: 'auto-apply',
     });
@@ -162,6 +222,7 @@ describe('ToolImprovementEngine — cycle', () => {
     const gamedEngine = new ToolImprovementEngine({
       scenarios: [REVERSE],
       proposer: new StaticToolProposer(new Map([[REVERSE.id, GAMED]])),
+      mutator: new LiveToolMutator({ persist: false }),
       autonomy: 'auto-apply',
     });
     const r2 = await gamedEngine.runCycle();

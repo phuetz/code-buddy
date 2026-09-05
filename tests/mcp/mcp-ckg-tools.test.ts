@@ -43,7 +43,7 @@ describe('registerCkgTools', () => {
     // shared graph is just a bigger notebook.
     recallHybrid.mockResolvedValue([
       { id: '1', type: 'lesson', name: 'never-prune', text: 'Orphan commits hold real work.',
-        salience: 0.9, mentions: 4, confidence: 0.94, corroborations: 3, agentId: 'ministar/fleet', source: 'worklog' },
+        salience: 0.9, mentions: 4, confidence: 0.94, corroborations: 3, agentId: 'hub/fleet', source: 'worklog' },
       { id: '2', type: 'fact', name: 'solo', text: 'Only one agent said this.',
         salience: 0.4, mentions: 1, confidence: 0.6, corroborations: 1 },
     ]);

@@ -268,7 +268,7 @@ export async function compileNativeFashionPlan(
   if (!options.gateReportPath?.trim()) {
     throw new Error(
       '--gate-report is required for native-fashion-v1; produce it with ' +
-      'python scripts/darkstar/measure-visual-gates.py --clip <mp4> --reference-dir <dir> ' +
+      'python scripts/gpuNode/measure-visual-gates.py --clip <mp4> --reference-dir <dir> ' +
       '--output <report.json> --loop-check --profile native-fashion-v1',
     );
   }

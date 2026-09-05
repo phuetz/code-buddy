@@ -1,8 +1,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { BrowserProfileManager } from '../../src/browser-automation/profile-manager.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../src/utils/atomic-write.js';
 
 jest.mock('fs/promises');
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: jest.fn().mockResolvedValue(null),
+  writeJsonAtomic: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     info: jest.fn(),
@@ -13,6 +18,8 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 const mockFs = jest.mocked(fs);
+const mockReadJsonAtomic = jest.mocked(readJsonAtomic);
+const mockWriteJsonAtomic = jest.mocked(writeJsonAtomic);
 
 describe('BrowserProfileManager', () => {
   let manager: BrowserProfileManager;
@@ -33,24 +40,24 @@ describe('BrowserProfileManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReadJsonAtomic.mockResolvedValue(null);
+    mockWriteJsonAtomic.mockResolvedValue(undefined);
     manager = new BrowserProfileManager(testDir);
   });
 
   describe('constructor', () => {
-    it('should use provided profilesDir', () => {
+    it('should use provided profilesDir', async () => {
       const customManager = new BrowserProfileManager('/custom/dir');
       // Verify by saving and checking the path used
       mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      customManager.save('test', sampleProfileData);
+      await customManager.save('test', sampleProfileData);
       expect(mockFs.mkdir).toHaveBeenCalledWith('/custom/dir', { recursive: true });
     });
 
-    it('should use default directory when no profilesDir provided', () => {
+    it('should use default directory when no profilesDir provided', async () => {
       const defaultManager = new BrowserProfileManager();
       mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      defaultManager.save('test', sampleProfileData);
+      await defaultManager.save('test', sampleProfileData);
       expect(mockFs.mkdir).toHaveBeenCalledWith(
         expect.stringContaining('browser-profiles'),
         { recursive: true }
@@ -61,7 +68,6 @@ describe('BrowserProfileManager', () => {
   describe('save', () => {
     beforeEach(() => {
       mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
     });
 
     it('should create the profiles directory recursively', async () => {
@@ -70,23 +76,27 @@ describe('BrowserProfileManager', () => {
       expect(mockFs.mkdir).toHaveBeenCalledWith(testDir, { recursive: true });
     });
 
-    it('should write profile data as formatted JSON', async () => {
+    it('should write profile data through atomic JSON persistence', async () => {
       await manager.save('my-profile', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'my-profile.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({
+          name: 'my-profile',
+          cookies: sampleProfileData.cookies,
+          localStorage: sampleProfileData.localStorage,
+          sessionStorage: sampleProfileData.sessionStorage,
+          savedAt: expect.any(Date),
+        }),
+        { mode: 0o600 },
       );
 
-      const writtenData = JSON.parse(
-        (mockFs.writeFile as jest.Mock).mock.calls[0][1]
-      );
+      const writtenData = mockWriteJsonAtomic.mock.calls[0][1] as Record<string, unknown>;
       expect(writtenData.name).toBe('my-profile');
       expect(writtenData.cookies).toEqual(sampleProfileData.cookies);
       expect(writtenData.localStorage).toEqual(sampleProfileData.localStorage);
       expect(writtenData.sessionStorage).toEqual(sampleProfileData.sessionStorage);
-      expect(writtenData.savedAt).toBeDefined();
+      expect(writtenData.savedAt).toBeInstanceOf(Date);
     });
 
     it('should include savedAt timestamp in profile data', async () => {
@@ -94,10 +104,9 @@ describe('BrowserProfileManager', () => {
       await manager.save('timestamped', sampleProfileData);
       const after = new Date();
 
-      const writtenData = JSON.parse(
-        (mockFs.writeFile as jest.Mock).mock.calls[0][1]
-      );
-      const savedAt = new Date(writtenData.savedAt);
+      expect(mockWriteJsonAtomic).toHaveBeenCalledTimes(1);
+      const writtenData = mockWriteJsonAtomic.mock.calls[0][1] as { savedAt: Date };
+      const savedAt = writtenData.savedAt;
       expect(savedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
       expect(savedAt.getTime()).toBeLessThanOrEqual(after.getTime());
     });
@@ -105,19 +114,18 @@ describe('BrowserProfileManager', () => {
     it('should sanitize profile name in filename', async () => {
       await manager.save('my profile/../../etc', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'my_profile_______etc.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: 'my profile/../../etc' }),
+        { mode: 0o600 },
       );
     });
 
     it('should preserve the original name in the profile data', async () => {
       await manager.save('unsafe/name', sampleProfileData);
 
-      const writtenData = JSON.parse(
-        (mockFs.writeFile as jest.Mock).mock.calls[0][1]
-      );
+      expect(mockWriteJsonAtomic).toHaveBeenCalledTimes(1);
+      const writtenData = mockWriteJsonAtomic.mock.calls[0][1] as { name: string };
       expect(writtenData.name).toBe('unsafe/name');
     });
 
@@ -128,9 +136,12 @@ describe('BrowserProfileManager', () => {
         sessionStorage: {},
       });
 
-      const writtenData = JSON.parse(
-        (mockFs.writeFile as jest.Mock).mock.calls[0][1]
-      );
+      expect(mockWriteJsonAtomic).toHaveBeenCalledTimes(1);
+      const writtenData = mockWriteJsonAtomic.mock.calls[0][1] as {
+        cookies: unknown[];
+        localStorage: Record<string, unknown>;
+        sessionStorage: Record<string, unknown>;
+      };
       expect(writtenData.cookies).toEqual([]);
       expect(writtenData.localStorage).toEqual({});
       expect(writtenData.sessionStorage).toEqual({});
@@ -146,13 +157,13 @@ describe('BrowserProfileManager', () => {
         sessionStorage: sampleProfileData.sessionStorage,
         savedAt: '2025-01-15T10:30:00.000Z',
       };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(savedProfile));
+      mockReadJsonAtomic.mockResolvedValue(savedProfile);
 
       const result = await manager.load('test-profile');
 
-      expect(mockFs.readFile).toHaveBeenCalledWith(
+      expect(mockReadJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'test-profile.json'),
-        'utf-8'
+        null,
       );
       expect(result).not.toBeNull();
       expect(result!.name).toBe('test-profile');
@@ -169,7 +180,7 @@ describe('BrowserProfileManager', () => {
         sessionStorage: {},
         savedAt: '2025-06-01T12:00:00.000Z',
       };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(savedProfile));
+      mockReadJsonAtomic.mockResolvedValue(savedProfile);
 
       const result = await manager.load('dated');
 
@@ -177,18 +188,16 @@ describe('BrowserProfileManager', () => {
       expect(result!.savedAt.toISOString()).toBe('2025-06-01T12:00:00.000Z');
     });
 
-    it('should return null when profile does not exist', async () => {
-      mockFs.readFile.mockRejectedValue(
-        Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
-      );
+    it('should return null when atomic reader falls back for a missing profile', async () => {
+      mockReadJsonAtomic.mockResolvedValue(null);
 
       const result = await manager.load('nonexistent');
 
       expect(result).toBeNull();
     });
 
-    it('should return null when file contains invalid JSON', async () => {
-      mockFs.readFile.mockResolvedValue('not valid json {{{');
+    it('should return null when atomic reader falls back for invalid JSON', async () => {
+      mockReadJsonAtomic.mockResolvedValue(null);
 
       const result = await manager.load('corrupted');
 
@@ -196,28 +205,28 @@ describe('BrowserProfileManager', () => {
     });
 
     it('should sanitize name when loading', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockReadJsonAtomic.mockResolvedValue(null);
 
       await manager.load('../../etc/passwd');
 
-      expect(mockFs.readFile).toHaveBeenCalledWith(
+      expect(mockReadJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, '______etc_passwd.json'),
-        'utf-8'
+        null,
       );
     });
   });
 
   describe('save/load roundtrip', () => {
     it('should preserve data through save and load cycle', async () => {
-      let savedContent = '';
+      let savedProfile: Record<string, unknown> | null = null;
       mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockImplementation(async (_path, data) => {
-        savedContent = data as string;
+      mockWriteJsonAtomic.mockImplementation(async (_path, data) => {
+        savedProfile = data as Record<string, unknown>;
       });
 
       await manager.save('roundtrip', sampleProfileData);
 
-      mockFs.readFile.mockResolvedValue(savedContent);
+      mockReadJsonAtomic.mockImplementation(async () => savedProfile);
 
       const loaded = await manager.load('roundtrip');
 
@@ -236,7 +245,7 @@ describe('BrowserProfileManager', () => {
         'profile-a.json',
         'profile-b.json',
         'work-profile.json',
-      ] as any);
+      ] as string[]);
 
       const result = await manager.list();
 
@@ -251,7 +260,7 @@ describe('BrowserProfileManager', () => {
         'backup.json.bak',
         'another.json',
         '.hidden',
-      ] as any);
+      ] as string[]);
 
       const result = await manager.list();
 
@@ -269,7 +278,7 @@ describe('BrowserProfileManager', () => {
     });
 
     it('should return empty array when directory is empty', async () => {
-      mockFs.readdir.mockResolvedValue([] as any);
+      mockFs.readdir.mockResolvedValue([]);
 
       const result = await manager.list();
 
@@ -333,56 +342,55 @@ describe('BrowserProfileManager', () => {
   describe('name sanitization', () => {
     beforeEach(() => {
       mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
     });
 
     it('should allow alphanumeric characters, hyphens, and underscores', async () => {
       await manager.save('valid-name_123', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'valid-name_123.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: 'valid-name_123' }),
+        { mode: 0o600 },
       );
     });
 
     it('should replace spaces with underscores', async () => {
       await manager.save('my profile name', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'my_profile_name.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: 'my profile name' }),
+        { mode: 0o600 },
       );
     });
 
     it('should replace dots with underscores', async () => {
       await manager.save('profile.v2.backup', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'profile_v2_backup.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: 'profile.v2.backup' }),
+        { mode: 0o600 },
       );
     });
 
     it('should replace path separators to prevent traversal', async () => {
       await manager.save('../../../etc/passwd', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, '_________etc_passwd.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: '../../../etc/passwd' }),
+        { mode: 0o600 },
       );
     });
 
     it('should replace special characters', async () => {
       await manager.save('name@with#special$chars!', sampleProfileData);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomic).toHaveBeenCalledWith(
         path.join(testDir, 'name_with_special_chars_.json'),
-        expect.any(String),
-        'utf-8'
+        expect.objectContaining({ name: 'name@with#special$chars!' }),
+        { mode: 0o600 },
       );
     });
   });

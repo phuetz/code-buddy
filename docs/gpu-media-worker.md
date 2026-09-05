@@ -1,4 +1,4 @@
-# GPU media worker (Darkstar)
+# GPU media worker (GPU node)
 
 Code Buddy keeps heavyweight CUDA runtimes outside the CLI and Cowork processes. The
 `gpu_media_job` tool talks to one authenticated worker over HTTPS or a private/Tailscale
@@ -7,7 +7,7 @@ HTTP address.
 ## Configuration
 
 ```bash
-export CODEBUDDY_GPU_WORKER_URL=http://100.73.222.64:4310
+export CODEBUDDY_GPU_WORKER_URL=http://192.0.2.42:4310
 export CODEBUDDY_GPU_WORKER_TOKEN='use-a-random-secret-reference'
 ```
 
@@ -15,7 +15,7 @@ The token is sent only as `Authorization: Bearer …` and is never included in a
 or tool result. Plain HTTP is rejected for public addresses. Prefer a Tailscale ACL that
 only permits the Code Buddy host to reach the worker port.
 
-On Darkstar, the worker itself is started with runner executables and allowed filesystem
+On GPU node, the worker itself is started with runner executables and allowed filesystem
 roots. Runner arguments are JSON arrays so no command is interpreted by a shell. The
 reference deployment keeps PanoWorld in WSL2 and Node on Windows:
 
@@ -27,7 +27,7 @@ $env:WSLENV = 'CODEBUDDY_GPU_JOB_REQUEST/p:CODEBUDDY_GPU_JOB_RESULT/p:CODEBUDDY_
 $env:CODEBUDDY_LONGCAT_RUNNER = 'C:\Windows\System32\wsl.exe'
 $env:CODEBUDDY_LONGCAT_RUNNER_ARGS = '["-d","Ubuntu-22.04","--","bash","/mnt/d/DEV/code-buddy-gpu-worker/scripts/gpu-runners/longcat-wsl.sh"]'
 
-buddy gpu-worker --host 100.73.222.64 --port 4310 `
+buddy gpu-worker --host 192.0.2.42 --port 4310 `
   --root D:\DEV D:\LisaMedia --state-dir D:\CodeBuddyData\gpu-worker
 ```
 
@@ -41,8 +41,8 @@ scripts/gpu-runners/download-panoworld-checkpoint.sh 1024
 scripts/gpu-runners/download-panoworld-checkpoint.sh 2048
 ```
 
-`scripts/gpu-runners/start-darkstar-worker.ps1` is the persistent Windows launcher used
-by the reference Darkstar installation. It reads the bearer token from an ACL-restricted
+`scripts/gpu-runners/start-gpuNode-worker.ps1` is the persistent Windows launcher used
+by the reference GPU node installation. It reads the bearer token from an ACL-restricted
 file, enables only roots that exist, and never prints the token. The PanoWorld wrapper
 pins the WSL Conda environment, CUDA architecture `8.6`, compiler paths and extension
 cache before entering `panoworld-runner.py`.
@@ -55,7 +55,7 @@ restart is marked failed instead of silently re-executed.
 Runners can publish live progress with `CODEBUDDY_PROGRESS <0..1> <message>` lines on
 standard output. The worker parses split stream chunks safely, exposes the latest bounded
 message through job status, and checkpoints logs at each progress transition. Failed jobs
-include a bounded final runner diagnostic while the full logs remain on Darkstar.
+include a bounded final runner diagnostic while the full logs remain on GPU node.
 
 The request path is also available as `%CODEBUDDY_GPU_JOB_REQUEST%`. This is required
 for Windows-to-WSL runners because `WSLENV` translates `/p` path variables without
@@ -88,7 +88,7 @@ that job directory, rejects empty files and caps responses at 512 MiB. The clien
 the declared and received lengths before exposing the bytes to a channel adapter. When
 an avatar payload includes `channelTarget`, Code Buddy monitors the asynchronous job,
 downloads the completed MP4 and publishes it to the same conversation/thread. Telegram
-uses authenticated multipart upload (50 MiB Bot API limit); the Darkstar bearer URL is
+uses authenticated multipart upload (50 MiB Bot API limit); the GPU node bearer URL is
 never exposed to Telegram.
 
 Job states are `queued`, `running`, `succeeded`, `failed`, or `cancelled`. A worker must
@@ -122,7 +122,7 @@ Profiles are deliberately bounded:
 - `single-2048`: one 2048×1024 panorama, identity pose permitted;
 - `multi-1024`: one to five 1024×512 panoramas, with measured camera-to-world matrices.
 
-Darkstar measurements on GPU 0 (RTX 3090, 24,576 MiB) established the production cap:
+GPU node measurements on GPU 0 (RTX 3090, 24,576 MiB) established the production cap:
 
 | Profile | Views | Elapsed | Observed peak VRAM | Decision |
 |---|---:|---:|---:|---|
@@ -185,9 +185,9 @@ without waiting for it; the MP4 can be added later to the same channel conversat
 ```
 
 The current contract intentionally rejects 720p. The released multi-GPU loader replicates
-too much state for two 24 GiB cards, so it is not used by the Darkstar profile.
+too much state for two 24 GiB cards, so it is not used by the GPU node profile.
 
-The reference Darkstar deployment uses a more conservative single-GPU profile. It loads
+The reference GPU node deployment uses a more conservative single-GPU profile. It loads
 UMT5 and Whisper sequentially, returns their embeddings to CPU, then streams the official
 INT8 DiT shards and distilled LoRA before rendering on GPU 0. This design is derived from
 [community PR #115](https://github.com/meituan-longcat/LongCat-Video/pull/115), which is
@@ -208,7 +208,7 @@ scripts/gpu-runners/setup-longcat-env.sh
 scripts/gpu-runners/download-longcat-avatar.sh
 ```
 
-The validated Darkstar profile renders 93 frames at 25 FPS (3.72 seconds). A real Lisa
+The validated GPU node profile renders 93 frames at 25 FPS (3.72 seconds). A real Lisa
 portrait-and-French-voice smoke render completed all eight denoising steps in about
 4 minutes 14 seconds before VAE decoding. The measured portrait used latent grid
 `(24, 44, 34)`, peaked near 24.3 GiB on one RTX 3090, and produced a 544×704 H.264/AAC
@@ -216,11 +216,11 @@ MP4. Compile prewarming derives that grid from the actual oriented source image;
 fixed landscape grid caused WSL2 PCI memory paging and is no longer permitted. Longer
 source audio is reported as truncated in the result manifest rather than silently
 presented as fully rendered. Video continuation remains disabled until its peak VRAM and
-identity drift have been measured on Darkstar.
+identity drift have been measured on GPU node.
 
 The runner also owns a fail-closed thermal guard. It reads the physical GPU selected by
 `CUDA_VISIBLE_DEVICES` before startup and every three seconds during inference. The
-Darkstar launcher sets `CODEBUDDY_GPU_MAX_TEMP_C=88`; startup is refused at or above that
+GPU node launcher sets `CODEBUDDY_GPU_MAX_TEMP_C=88`; startup is refused at or above that
 limit, and two consecutive hot samples terminate the complete inference process group.
 An unreadable sensor also stops the job. The limit may be configured only between 70 and
 92 °C, so a deployment cannot accidentally turn the guard into an unbounded value. This
@@ -245,7 +245,7 @@ The first profile targets clean Lisa TTS audio directly; the optional 67 MB voca
 separator is intentionally omitted. Music/mixed-audio isolation can be enabled later as
 a distinct measured profile.
 
-`start-darkstar-worker.ps1` does not advertise `avatar_video_render` merely because files
+`start-gpuNode-worker.ps1` does not advertise `avatar_video_render` merely because files
 were downloaded. LongCat is enabled only when a successful real smoke render writes a
 JSON `D:\CodeBuddyData\gpu-worker\longcat-ready` marker containing the exact runner,
 upstream and two checkpoint revisions. The current hardened contract requires

@@ -23,6 +23,58 @@ package.json.backup
 tmp/
 tmp_*/
 _test-*/
+_gk1/
+_gk17/
+_qa/sandbox1/
+_qa/promptbudget1/
+_qa/tautfix1/home/
+_qa/gk20/home/
+_qa/delegverif/
+_qa/gk20/work/
+_qa/gk20/rules.json
+_qa/gk20/runs.jsonl
+_qa/gk20/*.jsonl
+_qa/gk30/home/
+_qa/gk30/npm-cache/
+_qa/gk30/tmp/
+_qa/gk30/work/
+_gk18/
+_qa/gk28/home/
+_qa/gk28/work/
+_qa/gk28/toy/.git/
+_qa/gk28/changelog-repo/.git/
+_qa/gk28/*.jsonl
+_qa/gk28/logs/
+_qa/gk25/home/
+_qa/gk25/work/
+_qa/gk25/images/
+_qa/gk25/*.png
+_qa/gk25/*.jpg
+_qa/gk25/*.jsonl
+_qa/gk27/
+_qa/gk36/
+_qa/gk29/
+_qa/gk26/
+_qa/gk31/
+_qa/gk32/home/
+_qa/gk32/home-virgin/
+_qa/gk32/work/
+_qa/gk32/logs/
+_qa/gk32/project/
+_qa/gk32/project-virgin/
+_qa/gk32/fix-project/
+_qa/gk32/*.jsonl
+_qa/gk32/*.sh
+_qa/gk32/*.py
+_qa/gk32/npm-registry/
+_qa/gk33/
+_qa/gk34/
+_qa/gk35/
+_qa/ttft1/
+_qa/priv1/
+_qa/headless2/
+_qa/auditstrat1/
+.codeexplorer/
 test-app/
 test-scripts/
 C\:Users*/
@@ -123,6 +175,7 @@ coverage/
 # Temporary folders
 tmp/
 temp/
+.gk6-work/
 
 # Editor directories and files
 .vscode/*
@@ -227,3 +280,37 @@ __pycache__/
 # Preuves d’audit : captures de tableaux de bord privés (HeyGen, blogs).
 # Le dépôt est public — elles sont sauvegardées hors dépôt dans ~/Sauvegardes-git/.
 docs/audits/**/evidence/
+
+# Artefacts GK14 (HOME isolé, journaux, expériences) — ne pas versionner
+_gk14/
+
+# Artefact généré par `buddy --init` (importe CLAUDE.md) — ne pas versionner
+/CODEBUDDY.md
+.env.sauvegarde-*
+_qa/gk10/
+_qa/gk23/
+_qa/serv1/
+_qa/improve1/
+_qa/flowfix1/
+_qa/rang1/home/
+_qa/deleg2/
+_qa/deleg3/
+_qa/verif2/home/
+node_modules
+_qa/verif2/
+_qa/branch1/
+_qa/swarmfix1/
+_qa/verifix3b/
+_qa/serv2/
+_qa/batchfix1/
+_qa/verifix3a/
+_qa/improve2/
+_qa/bashstream1/
+_qa/priv3/
+_qa/stt2/
+_qa/gf3fix/
+_qa/idlinks1/
+_qa/dgm4/
+_qa/strat1/
+_qa/dgm5/
+_qa/dgm6/

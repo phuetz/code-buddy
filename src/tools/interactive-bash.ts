@@ -10,6 +10,7 @@ import {
   getShellConfiguration,
   type ShellConfiguration,
 } from "../utils/shell-configuration.js";
+import { logger } from "../utils/logger.js";
 
 // Note: node-pty is an optional dependency for PTY support
 // If not available, falls back to regular child_process
@@ -208,7 +209,7 @@ export class InteractiveBashTool extends EventEmitter {
       : selectedConfiguration;
 
     if (!this.isPTYAvailable) {
-      return this.fallbackExecute(command, shellConfiguration);
+      return this.fallbackExecute(command, shellConfiguration, options);
     }
 
     const sessionId = `pty-${++this.sessionCounter}`;
@@ -270,7 +271,18 @@ export class InteractiveBashTool extends EventEmitter {
           }
         }, 30000);
       } catch (error) {
-        reject(new Error(`PTY execution failed: ${getErrorMessage(error)}`));
+        // node-pty peut se CHARGER et pourtant échouer à lancer : sur macOS son
+        // `spawn-helper` perd régulièrement son bit exécutable à l'installation
+        // et tout spawn rend « posix_spawnp failed ». Le repli sans PTY existe
+        // déjà pour node-pty ABSENT ; refuser de l'emprunter ici transformait
+        // une simple dégradation (pas de terminal interactif) en panne dure
+        // pour toute commande. La sonde est l'échec RÉEL du spawn, jamais une
+        // supposition de plate-forme : sur un node-pty sain rien ne change.
+        this.isPTYAvailable = false;
+        logger.warn(
+          `PTY unavailable, falling back to non-interactive execution: ${getErrorMessage(error)}`,
+        );
+        this.fallbackExecute(command, shellConfiguration, options).then(resolve, reject);
       }
     });
   }
@@ -307,6 +319,7 @@ export class InteractiveBashTool extends EventEmitter {
   private async fallbackExecute(
     command: string,
     shellConfiguration: ShellConfiguration,
+    options: PTYOptions = {},
   ): Promise<{ sessionId: string; output: string }> {
     const sessionId = `exec-${++this.sessionCounter}`;
 
@@ -317,7 +330,10 @@ export class InteractiveBashTool extends EventEmitter {
         {
           shell: false,
           timeout: 60000,
-          cwd: process.cwd(),
+          // Le chemin PTY honore options.cwd ; le repli l'ignorait et lançait
+          // la commande dans le cwd du processus. Deux chemins censés être
+          // interchangeables n'exécutaient pas au même endroit.
+          cwd: options.cwd || process.cwd(),
           env: {
             ...buildInteractiveEnv(),
             // Disable shell history for security

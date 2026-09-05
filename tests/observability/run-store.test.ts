@@ -74,6 +74,24 @@ describe('RunStore', () => {
       expect(fs.existsSync(path.join(tmpDir, runId, 'artifacts'))).toBe(true);
     });
 
+    it('counts tool_call events in metrics instead of leaving toolCallCount at 0', async () => {
+      const runId = startRun('headless prompt');
+      store.emit(runId, {
+        type: 'tool_call',
+        data: { toolName: 'view_file', args: { path: 'src/ledger.js' } },
+      });
+      store.emit(runId, {
+        type: 'tool_call',
+        data: { toolName: 'view_file', args: { path: 'HARVEST.md' } },
+      });
+      store.endRun(runId, 'completed');
+      activeRunIds = activeRunIds.filter((id) => id !== runId);
+      await new Promise((r) => setTimeout(r, 30));
+
+      const record = store.getRun(runId);
+      expect(record?.metrics.toolCallCount).toBe(2);
+    });
+
     it('should include run_start event in events.jsonl', async () => {
       const runId = startRun('my objective');
       // End run to flush stream

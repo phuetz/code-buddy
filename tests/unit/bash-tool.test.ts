@@ -20,6 +20,15 @@ import path from 'path';
 import os from 'os';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { BashTool } from '../../src/tools/bash';
+import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
+
+// BashTool lance la commande via getShellConfiguration() : sous Windows c'est
+// PowerShell avec son propre préfixe d'arguments, pas « bash -c ». Attendre
+// l'exécutable et le préfixe en dur ne tenait que sous POSIX. On les dérive de
+// la MÊME source que l'implémentation : ce que les scénarios prouvent — la
+// commande est remise au shell hôte configuré, en dernier argument, sans
+// shell: true — est inchangé.
+const HOST_SHELL = getShellConfiguration();
 import { validateWithSchema, validateCommand as validateCommandSafety, sanitizeForShell } from '../../src/utils/input-validator';
 import { isLikelyTestOutput, parseTestOutput } from '../../src/utils/test-output-parser';
 import { registerDisposable } from '../../src/utils/disposable';
@@ -226,6 +235,11 @@ jest.mock('../../src/security/bash-parser', () => ({
     redirects: [],
     isValid: true,
   }; }),
+  parseShellCommand: jest.fn(function() { return {
+    commands: [],
+    usedTreeSitter: false,
+    warnings: [],
+  }; }),
 }));
 
 // Mock checkpoint-manager
@@ -399,8 +413,8 @@ describe('BashTool', () => {
       await bashTool.execute('test-command');
 
       expect(mockSpawn).toHaveBeenCalledWith(
-        'bash',
-        ['-c', expect.stringContaining('test-command')],
+        HOST_SHELL.executable,
+        [...HOST_SHELL.argsPrefix, expect.stringContaining('test-command')],
         expect.objectContaining({
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -964,8 +978,8 @@ describe('BashTool', () => {
         const result = await bashTool.listFiles('.');
         expect(result.success).toBe(true);
         expect(mockSpawn).toHaveBeenCalledWith(
-          'bash',
-          ['-c', expect.stringContaining('ls -la')],
+          HOST_SHELL.executable,
+          [...HOST_SHELL.argsPrefix, expect.stringContaining('ls -la')],
           expect.any(Object)
         );
       });
@@ -1000,8 +1014,8 @@ describe('BashTool', () => {
         await bashTool.findFiles('*.ts', '.');
 
         expect(mockSpawn).toHaveBeenCalledWith(
-          'bash',
-          ['-c', expect.stringContaining('find')],
+          HOST_SHELL.executable,
+          [...HOST_SHELL.argsPrefix, expect.stringContaining('find')],
           expect.any(Object)
         );
       });

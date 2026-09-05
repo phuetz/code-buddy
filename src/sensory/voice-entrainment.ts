@@ -21,6 +21,8 @@ export interface VoiceTurnContext {
   captureMs?: number;
   speechStartedAtMs?: number;
   speechEndedAtMs?: number;
+  /** Internal cue cancellation hook fired immediately before response audio starts. */
+  onResponseAudioStart?: () => void;
   /** Optional current user emotion, normalized by the caller from `detectEmotion`. */
   emotion?: { label: string; intensity: number };
   /** Optional companion mood band, for example `radieuse`, `joyeuse` or `lasse`. */

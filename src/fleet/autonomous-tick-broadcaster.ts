@@ -40,7 +40,7 @@ const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 export interface AutonomousTickConfig {
   /** Absolute path to the fleet git bus. Falsy → daemon stays inactive. */
   repoPath: string | undefined;
-  /** Host identifier (e.g., `ministar/grok-cli`). */
+  /** Host identifier (e.g., `hub/grok-cli`). */
   host: string;
   /** Milliseconds between ticks. Default 300_000 (5 min). */
   intervalMs?: number;

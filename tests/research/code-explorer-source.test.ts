@@ -38,4 +38,19 @@ describe('code-explorer-source — Code Explorer insights → CKG discoveries', 
     const pubs = await fetchCodeExplorerInsights({ client: stubClient(false, { hotspots: 'x' }) });
     expect(pubs).toEqual([]);
   });
+
+  it('falls back to list_repos when default insight ops are empty', async () => {
+    const client = stubClient(true, {});
+    client.listRepos = async () => JSON.stringify([{ path: '/tmp/toy', id: 'toy' }]);
+    const pubs = await fetchCodeExplorerInsights({ client });
+    expect(pubs).toHaveLength(1);
+    expect(pubs[0]!.id).toBe('codeexplorer:list_repos:/tmp/toy');
+    expect(pubs[0]!.abstract).toContain('/tmp/toy');
+  });
+
+  it('does not treat an empty list_repos array as an insight', async () => {
+    const client = stubClient(true, {});
+    client.listRepos = async () => '[]';
+    expect(await fetchCodeExplorerInsights({ client })).toEqual([]);
+  });
 });

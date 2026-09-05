@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { BrowserProfileData, Cookie } from './types.js';
 
 // ============================================================================
@@ -44,7 +45,7 @@ export class BrowserProfileManager {
     };
 
     const filePath = this.getProfilePath(name);
-    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf-8');
+    await writeJsonAtomic(filePath, profile, { mode: 0o600 });
     logger.info(`Browser profile saved: ${name}`, { path: filePath });
   }
 
@@ -54,8 +55,8 @@ export class BrowserProfileManager {
   async load(name: string): Promise<BrowserProfileData | null> {
     try {
       const filePath = this.getProfilePath(name);
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const profile = JSON.parse(raw) as BrowserProfileData;
+      const profile = await readJsonAtomic<BrowserProfileData | null>(filePath, null);
+      if (!profile) return null;
       profile.savedAt = new Date(profile.savedAt);
       return profile;
     } catch {

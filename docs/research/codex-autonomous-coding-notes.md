@@ -2,7 +2,7 @@
 
 Date: 2026-06-28
 
-Local source reviewed: `/home/patrice/DEV/codex`.
+Local source reviewed: `~/DEV/codex`.
 
 ## Codex patterns worth importing
 

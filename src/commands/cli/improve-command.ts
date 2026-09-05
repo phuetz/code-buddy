@@ -4,7 +4,8 @@
  * The engine improves the agent's reversible learnable layer (lessons today)
  * only when a deterministic capability benchmark empirically improves with zero
  * regressions, snapshot/rollback always. It is propose-only by default; pass
- * `--apply` (or set CODEBUDDY_SELF_IMPROVE=true) to keep validated improvements.
+ * `--apply` to keep validated improvements — it escalates only when the
+ * opt-in kill-switch `CODEBUDDY_SELF_IMPROVE` is already set (true|auto-apply).
  *
  * @module commands/cli/improve-command
  */
@@ -28,6 +29,8 @@ import { EvolutionaryArchive } from '../../agent/self-improvement/evolutionary-a
 import {
   createDefaultRunExperienceSource,
   createDefaultSensorExperienceSource,
+  createDefaultEvolutionNotesExperienceSource,
+  createDefaultDelegationLogsExperienceSource,
 } from '../../agent/self-improvement/experience-source.js';
 import { CorpusStore } from '../../agent/self-improvement/rule-store.js';
 import { summarizeTrajectory } from '../../agent/self-improvement/execution-gate.js';
@@ -46,6 +49,8 @@ async function collectExperiences(): Promise<Experience[]> {
   const sources = [
     createDefaultRunExperienceSource({ limit: 10 }),
     createDefaultSensorExperienceSource({ limit: 10 }),
+    createDefaultEvolutionNotesExperienceSource({ workDir: process.cwd(), limit: 10 }),
+    createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 10 }),
   ];
   const collected = await Promise.all(
     sources.map(async (source) => {
@@ -59,6 +64,26 @@ async function collectExperiences(): Promise<Experience[]> {
   return collected.flat();
 }
 
+/** Optional JSONL of Experience records (one per line); malformed lines are skipped. */
+async function readExperiencesFile(file: string | undefined): Promise<Experience[]> {
+  if (!file) return [];
+  const { readFileSync } = await import('fs');
+  const out: Experience[] = [];
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const rec = JSON.parse(trimmed) as Partial<Experience>;
+      if (typeof rec.id === 'string' && typeof rec.context === 'string') {
+        out.push({ id: rec.id, source: rec.source ?? 'manual', kind: rec.kind ?? 'run', detail: rec.detail ?? '', context: rec.context, ...(typeof rec.severity === 'number' ? { severity: rec.severity } : {}) });
+      }
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  return out;
+}
+
 interface ImproveOptions {
   json?: boolean;
   apply?: boolean;
@@ -70,6 +95,9 @@ interface ImproveOptions {
   best?: boolean;
   pass?: boolean;
   fail?: boolean;
+  /** skills-consolidate: use this SKILL.md as the umbrella instead of calling an LLM. */
+  proposalFile?: string;
+  scenario?: string;
 }
 
 interface ImproveBenchOptions extends ImproveOptions {
@@ -92,6 +120,28 @@ function print(payload: unknown, options: ImproveOptions, text: string): void {
   } else {
     console.log(text);
   }
+}
+
+/**
+ * The self-improvement layer is opt-in. `CLAUDE.md` promises that with
+ * `CODEBUDDY_SELF_IMPROVE` unset the behavior is byte-identical, yet `--apply`
+ * alone escalated the generative subcommands to `auto-apply` — authoring tools
+ * and skills and persisting them under `.codebuddy/` with the kill-switch off.
+ * The flag now only escalates INSIDE an explicit opt-in.
+ */
+const SELF_IMPROVE_OPT_IN = new Set(['true', 'auto-apply']);
+
+function refuseApplyWithoutOptIn(subcommand: string): boolean {
+  const raw = process.env.CODEBUDDY_SELF_IMPROVE?.trim().toLowerCase() ?? '';
+  if (SELF_IMPROVE_OPT_IN.has(raw)) return false;
+  logger.error(
+    `Refusing \`buddy improve ${subcommand} --apply\`: self-improvement is opt-in and ` +
+    `CODEBUDDY_SELF_IMPROVE is ${raw ? `set to "${raw}"` : 'unset'}. ` +
+    'Export CODEBUDDY_SELF_IMPROVE=true (or =auto-apply) before applying, ' +
+    'or re-run without --apply to stay propose-only.',
+  );
+  process.exitCode = 1;
+  return true;
 }
 
 export function registerImproveCommands(program: Command): void {
@@ -290,11 +340,15 @@ export function registerImproveCommands(program: Command): void {
     .option('--no-commit', 'do not version an applied improvement in the git learning store')
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('cycle')) return;
+      const wantsLlm =
+        options.llm === true ||
+        process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER?.trim().toLowerCase() === 'llm';
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
-        useLlm: options.llm === true,
+        useLlm: wantsLlm,
       });
-      const experiences = options.llm ? await collectExperiences() : [];
+      const experiences = wantsLlm ? await collectExperiences() : [];
       const result = await engine.runCycle(experiences);
       let committed: string | undefined;
       if (result.applied && options.apply && options.commit !== false) {
@@ -329,13 +383,18 @@ export function registerImproveCommands(program: Command): void {
     .command('tools')
     .description('Author + behaviorally validate NEW tools for the agent (held-out gated, anti-gaming)')
     .option('--json', 'output JSON')
-    .option('--apply', 'keep validated tools for this session (overrides propose-only)')
+    .option('--apply', 'keep validated tools for this session (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('tools')) return;
       const { ToolImprovementEngine } = await import('../../agent/self-improvement/tool-engine.js');
       const { LlmToolProposer } = await import('../../agent/self-improvement/llm-tool-proposer.js');
       const { SEED_TOOL_SCENARIOS } = await import('../../agent/self-improvement/tool-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_TOOL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_TOOL_SCENARIOS;
       const engine = new ToolImprovementEngine({
-        scenarios: SEED_TOOL_SCENARIOS,
+        scenarios,
         proposer: new LlmToolProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });
@@ -367,13 +426,18 @@ export function registerImproveCommands(program: Command): void {
     .command('skills')
     .description('Author + safety-gate NEW skills for the agent (firewall + coverage)')
     .option('--json', 'output JSON')
-    .option('--apply', 'install validated skills (overrides propose-only)')
+    .option('--apply', 'install validated skills (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scenario <id>', 'target a specific scenario by id')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('skills')) return;
       const { SkillImprovementEngine } = await import('../../agent/self-improvement/skill-engine.js');
       const { LlmSkillProposer } = await import('../../agent/self-improvement/skill-proposer.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
+      const scenarios = options.scenario
+        ? SEED_SKILL_SCENARIOS.filter((s) => s.id === options.scenario)
+        : SEED_SKILL_SCENARIOS;
       const engine = new SkillImprovementEngine({
-        scenarios: SEED_SKILL_SCENARIOS,
+        scenarios,
         proposer: new LlmSkillProposer(),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });
@@ -397,6 +461,74 @@ export function registerImproveCommands(program: Command): void {
         kept.length ? `Installed: ${kept.join(', ')} (under .codebuddy/skills/authored)` : 'No skill installed this run',
       ].join('\n');
       print({ kind: 'self_improvement_skills', cycles: results }, options, text);
+    });
+
+  improve
+    .command('strategies')
+    .description('Evolve the EXECUTION STRATEGY (round/cost ceilings, verification, directives) — strict schema + firewall + replay-gated')
+    .option('--json', 'output JSON')
+    .option('--apply', 'install + activate an accepted strategy (requires CODEBUDDY_SELF_IMPROVE)')
+    .option('--scope <scope>', 'strategy scope: default|headless|code-edit|audit|research', 'headless')
+    .option('--experiences <file>', 'JSONL of Experience records carrying run facts (rounds=, cost=, outcome=, failure=)')
+    .action(async (options: ImproveOptions & { scope?: string; experiences?: string }) => {
+      if (options.apply && refuseApplyWithoutOptIn('strategies')) return;
+      const { StrategyImprovementEngine } = await import('../../agent/self-improvement/strategy-engine.js');
+      const { HeuristicStrategyProposer } = await import('../../agent/self-improvement/strategy-proposer.js');
+      const { STRATEGY_SCOPES } = await import('../../agent/self-improvement/strategy-types.js');
+      const scope = (STRATEGY_SCOPES as readonly string[]).includes(options.scope ?? '')
+        ? (options.scope as (typeof STRATEGY_SCOPES)[number])
+        : 'headless';
+      // A strategy is judged on RUNS: widen the delegation-log window (the generic collector
+      // keeps 10) so the sign test has enough paired lanes; opt-in via the source's own env.
+      const wide = await createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 200 })
+        .collect()
+        .catch(() => [] as Experience[]);
+      const seen = new Set<string>();
+      const experiences = [...(await collectExperiences()), ...wide, ...(await readExperiencesFile(options.experiences))].filter(
+        (e) => (seen.has(e.id) ? false : (seen.add(e.id), true)),
+      );
+      const engine = new StrategyImprovementEngine({
+        scope,
+        proposer: new HeuristicStrategyProposer(),
+        ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
+      });
+      const before = engine.activeStrategy;
+      const r = await engine.runCycle(experiences);
+      const paired = r.gate?.paired ? ` wins=${r.gate.paired.wins} losses=${r.gate.paired.losses} ties=${r.gate.paired.ties} P=${r.gate.paired.pImprove.toFixed(3)} (${r.gate.paired.evidence})` : '';
+      const text = [
+        `Autonomy: ${r.autonomy} · scope: ${scope} · experiences: ${experiences.length}`,
+        `Active before: ${before.id} (rounds ${before.limits.maxToolRounds}, cost $${before.limits.maxCostUsd}, ${before.directives.length} directive(s))`,
+        r.candidate
+          ? `Candidate: ${r.candidate.id} — ${r.rationale ?? ''} → rounds ${r.candidate.limits.maxToolRounds}, cost $${r.candidate.limits.maxCostUsd}, ${r.candidate.directives.length} directive(s)`
+          : `Candidate: none — ${r.notes.join('; ')}`,
+        r.gate
+          ? r.applied
+            ? `Gate: ACCEPTED + INSTALLED (${r.gate.appliedRef})${paired}`
+            : r.gate.accepted
+              ? `Gate: accepted (propose-only) — re-run with --apply to install${paired}`
+              : `Gate: rejected (${r.gate.rejectionReason})${paired} — ${r.gate.reasons.join('; ')}`
+          : '',
+        `Active after: ${engine.activeStrategy.id}`,
+      ].filter(Boolean).join('\n');
+      print({ kind: 'self_improvement_strategies', cycle: r }, options, text);
+    });
+
+  improve
+    .command('strategies-list')
+    .description('List stored execution strategies and which one is active per scope')
+    .option('--json', 'output JSON')
+    .action(async (options: ImproveOptions) => {
+      const { StrategyStore } = await import('../../agent/self-improvement/strategy-store.js');
+      const { STRATEGY_SCOPES } = await import('../../agent/self-improvement/strategy-types.js');
+      const store = new StrategyStore();
+      const strategies = store.list();
+      const active = Object.fromEntries(STRATEGY_SCOPES.map((s) => [s, store.activeId(s)]));
+      const text = [
+        `Stored: ${strategies.length} (under ${store.dir})`,
+        ...strategies.map((s) => `  ${s.id} v${s.version} ← ${s.parentId ?? '—'} [${s.scope}] rounds ${s.limits.maxToolRounds} cost $${s.limits.maxCostUsd} ${s.reasoning} tests:${s.verification.testsForTouchedFiles ? 'yes' : 'no'} commit:${s.verification.commitPerStep ? 'yes' : 'no'} directives:${s.directives.length} (${s.provenance.source}${s.provenance.operator ? `/${s.provenance.operator}` : ''})`),
+        'Active: ' + STRATEGY_SCOPES.map((s) => `${s}=${active[s]}`).join(' '),
+      ].join('\n');
+      print({ kind: 'self_improvement_strategies_list', strategies, active }, options, text);
     });
 
   improve
@@ -434,6 +566,21 @@ export function registerImproveCommands(program: Command): void {
     });
 
   improve
+    .command('skills-archive <name>')
+    .description('Archive an authored skill (recoverable; refuses pinned skills)')
+    .option('--json', 'output JSON')
+    .action(async (name: string, options: ImproveOptions) => {
+      const { LiveSkillMutator } = await import('../../agent/self-improvement/skill-mutator.js');
+      const mutator = new LiveSkillMutator();
+      const ok = mutator.archive(name);
+      print(
+        { kind: 'skill_archive', name, ok },
+        options,
+        ok ? `Archived ${name}` : `Could not archive ${name} (missing, not authored, or pinned)`,
+      );
+    });
+
+  improve
     .command('skills-restore <name>')
     .description('Restore a previously archived authored skill')
     .option('--json', 'output JSON')
@@ -448,13 +595,25 @@ export function registerImproveCommands(program: Command): void {
     .description('Merge overlapping authored skills into one umbrella (coverage-gated)')
     .option('--json', 'output JSON')
     .option('--apply', 'install the umbrella + archive merged siblings (else preview)')
+    .option('--proposal-file <path>', 'use this SKILL.md as the umbrella instead of calling an LLM')
     .action(async (options: ImproveOptions) => {
       const { LiveSkillMutator } = await import('../../agent/self-improvement/skill-mutator.js');
-      const { consolidateCluster, buildClusterFromInstalled, LlmUmbrellaProposer } = await import('../../agent/self-improvement/skill-consolidator.js');
+      const {
+        consolidateCluster,
+        buildClusterFromInstalled,
+        LlmUmbrellaProposer,
+        StaticUmbrellaProposer,
+      } = await import('../../agent/self-improvement/skill-consolidator.js');
       const { SEED_SKILL_SCENARIOS } = await import('../../agent/self-improvement/skill-benchmark.js');
       const mutator = new LiveSkillMutator();
       const cluster = buildClusterFromInstalled(mutator, SEED_SKILL_SCENARIOS);
-      const out = await consolidateCluster(cluster, new LlmUmbrellaProposer(), mutator, new EvolutionaryArchive(), {
+      const proposer = options.proposalFile
+        ? new StaticUmbrellaProposer({
+          name: 'consolidated-skills',
+          content: (await import('fs')).readFileSync(options.proposalFile, 'utf-8'),
+        })
+        : new LlmUmbrellaProposer();
+      const out = await consolidateCluster(cluster, proposer, mutator, new EvolutionaryArchive(), {
         keepOnAccept: options.apply === true,
       });
       const text = out.accepted
@@ -475,11 +634,15 @@ export function registerImproveCommands(program: Command): void {
     .option('--no-commit', 'do not version applied improvements in the git learning store')
     .option('--push', 'push the learning store to its configured git remote after committing')
     .action(async (options: ImproveOptions) => {
+      if (options.apply && refuseApplyWithoutOptIn('loop')) return;
+      const wantsLlm =
+        options.llm === true ||
+        process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER?.trim().toLowerCase() === 'llm';
       const engine = createWorkspaceEngine({
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
-        useLlm: options.llm === true,
+        useLlm: wantsLlm,
       });
-      const experiences = options.llm ? await collectExperiences() : [];
+      const experiences = wantsLlm ? await collectExperiences() : [];
       const doCommit = options.apply === true && options.commit !== false;
       const store = doCommit ? createWorkspaceLearningStore() : null;
       const cap = options.max ? Math.max(1, Number.parseInt(options.max, 10)) : 25;

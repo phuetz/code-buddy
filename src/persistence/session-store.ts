@@ -11,6 +11,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -32,6 +33,24 @@ export interface SessionMetadata {
   [key: string]: string | string[] | number | boolean | undefined;
 }
 
+export interface SessionTurnUsage {
+  timestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  model?: string;
+  provider?: string;
+}
+
+export interface SessionUsageSnapshot {
+  provider?: string;
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  turns?: SessionTurnUsage[];
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -41,6 +60,11 @@ export interface Session {
   createdAt: Date;
   lastAccessedAt: Date;
   metadata?: SessionMetadata;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalCost?: number;
+  turns?: SessionTurnUsage[];
 }
 
 export interface SessionMessage {
@@ -52,6 +76,11 @@ export interface SessionMessage {
   /** Task state for cross-session continuity */
   taskState?: Record<string, unknown>;
 }
+
+type PersistedSession = Omit<Session, 'createdAt' | 'lastAccessedAt'> & {
+  createdAt: string;
+  lastAccessedAt: string;
+};
 
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codebuddy', 'sessions');
 const FALLBACK_SESSIONS_DIR = path.join(os.tmpdir(), 'codebuddy', 'sessions');
@@ -226,7 +255,7 @@ export class SessionStore {
       createdAt: session.createdAt.toISOString(),
       lastAccessedAt: new Date().toISOString(),
     };
-    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2));
+    await writeJsonAtomic(filePath, data, { mode: 0o600 });
   }
 
   /**
@@ -245,8 +274,13 @@ export class SessionStore {
 
     try {
       await fsPromises.access(filePath);
-      const content = await fsPromises.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content);
+      const data = await readJsonAtomic<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
 
       if (typeof data !== 'object' || data === null) {
         logger.warn(`[session-store] invalid session file (not an object): ${sessionId}`);
@@ -256,15 +290,16 @@ export class SessionStore {
         logger.warn(`[session-store] invalid session file (messages is not an array): ${sessionId}`);
         return null;
       }
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         logger.warn(`[session-store] invalid session file (bad timestamps): ${sessionId}`);
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
         createdAt,
         lastAccessedAt,
       };
@@ -285,6 +320,29 @@ export class SessionStore {
     session.messages = this.convertChatEntriesToMessages(chatHistory);
     session.lastAccessedAt = new Date();
 
+    await this.saveSession(session);
+  }
+
+  /**
+   * Persist directional token usage and cost onto the current session JSON
+   * so `buddy cost` can report real tokens instead of "unknown $0".
+   */
+  async attachUsageToCurrentSession(usage: SessionUsageSnapshot): Promise<void> {
+    if (!this.currentSessionId || this.ephemeral) return;
+    const session = await this.loadSession(this.currentSessionId);
+    if (!session) return;
+
+    session.provider = usage.provider;
+    session.inputTokens = usage.inputTokens;
+    session.outputTokens = usage.outputTokens;
+    session.totalCost = usage.totalCost;
+    session.turns = usage.turns;
+    session.metadata = {
+      ...session.metadata,
+      tokenCount: usage.inputTokens + usage.outputTokens,
+      totalCost: usage.totalCost,
+      ...(usage.provider ? { provider: usage.provider } : {}),
+    };
     await this.saveSession(session);
   }
 
@@ -970,13 +1028,18 @@ export class SessionStore {
         const filePath = path.join(sessionsDir, fileName);
 
         try {
-          const raw = _fs.readFileSync(filePath, 'utf-8');
-          const data = JSON.parse(raw);
+          const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
           if (data && typeof data.id === 'string') {
+            const persisted = data as unknown as PersistedSession;
             sessions.push({
-              ...data,
-              createdAt: new Date(data.createdAt),
-              lastAccessedAt: new Date(data.lastAccessedAt),
+              ...persisted,
+              createdAt: new Date(persisted.createdAt),
+              lastAccessedAt: new Date(persisted.lastAccessedAt),
             });
           }
         } catch {
@@ -994,20 +1057,26 @@ export class SessionStore {
     const filePath = this.getSessionFilePath(sessionId);
 
     try {
-      const raw = _fs.readFileSync(filePath, 'utf-8');
-      const data = JSON.parse(raw);
+      const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
       if (typeof data !== 'object' || data === null || !Array.isArray(data.messages)) {
         return null;
       }
 
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
         createdAt,
         lastAccessedAt,
       };

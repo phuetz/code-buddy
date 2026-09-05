@@ -217,20 +217,29 @@ describe('ComfyUI recipe runtime', () => {
     await expect(timedRuntime.preflight('image.test')).rejects.toMatchObject({ code: 'NETWORK_TIMEOUT' });
 
     const calls: string[] = [];
+    const controller = new AbortController();
+    // L'abandon est déclenché par l'ÉVÉNEMENT « le prompt est en file et je le
+    // sonde », pas par un délai fixe de 10 ms : sous charge le minuteur
+    // expirait avant même la mise en file, il n'y avait donc rien à annuler et
+    // /queue n'était jamais appelé (vu sur ubuntu-latest Node 20 le
+    // 05/09/2026, `calls` valant ['/object_info']). Ce que le scénario prouve
+    // — un abandon utilisateur annule le prompt que le runtime a lui-même mis
+    // en file — est inchangé, et devient déterministe.
     const abortFetch = createFetchMock(async (url) => {
       calls.push(url.pathname);
       if (url.pathname === '/object_info') return jsonResponse(objectInfoFor(recipe));
       if (url.pathname === '/prompt') return jsonResponse({ prompt_id: 'abort-job' });
-      if (url.pathname === '/history/abort-job') return jsonResponse({});
+      if (url.pathname === '/history/abort-job') {
+        controller.abort();
+        return jsonResponse({});
+      }
       if (url.pathname === '/queue') return new Response(null, { status: 200 });
       throw new Error(`Unexpected URL ${url}`);
     });
     const abortRuntime = createRuntime([recipe], paths, abortFetch, {
       limits: { requestTimeoutMs: 100, maxRunMs: 1000, pollIntervalMs: 50 },
     });
-    const controller = new AbortController();
     const run = abortRuntime.run('image.test', { prompt: 'abort me' }, { signal: controller.signal });
-    setTimeout(() => controller.abort(), 10);
     await expect(run).rejects.toMatchObject({ code: 'ABORTED' });
     expect(calls).toContain('/queue');
   });

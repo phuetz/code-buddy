@@ -5,14 +5,14 @@
 # Electron avec les bons flags (--no-sandbox --disable-gpu).
 #
 # Usage :
-#   ./launch-cowork.sh                 # build si nécessaire, puis lance (avant-plan)
+#   xvfb-run -a ./launch-cowork.sh     # affichage X isolé, build si nécessaire
 #   ./launch-cowork.sh --bg            # lance en arrière-plan (nohup + log)
 #   ./launch-cowork.sh --fresh         # tue l'instance en cours d'abord
 #   ./launch-cowork.sh --build         # force un vite build même si dist-electron existe
 #   ./launch-cowork.sh --cdp           # active le remote-debugging (port 9222)
 #   ./launch-cowork.sh --dev           # mode dev live (vite + electron, rechargement à chaud)
 #   ./launch-cowork.sh --rebuild-native# recompile better-sqlite3 pour l'ABI Electron
-#   ./launch-cowork.sh --display :10.0 # X display (défaut : $DISPLAY sinon :0)
+#   ./launch-cowork.sh --display DISPLAY # serveur X explicite (sinon $DISPLAY ou :0)
 #   ./launch-cowork.sh --dry-run       # montre ce qui serait fait, sans lancer
 #
 set -euo pipefail
@@ -27,7 +27,9 @@ LOG="$COWORK_DIR/cowork.log"
 DISPLAY_ARG="${DISPLAY:-:0}"
 CDP=0 ; CDP_PORT=9222 ; FRESH=0 ; FORCE_BUILD=0 ; DEV=0 ; REBUILD_NATIVE=0 ; BG=0 ; DRY=0
 
-usage() { sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() {
+  sed -n '/^# Usage :/,/^#$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in

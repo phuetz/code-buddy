@@ -6,6 +6,7 @@ import {
   buildCouncilSynthesisPrompt,
   buildCouncilVerificationHint,
   computeCouncilDecisionSignals,
+  describeCouncilPanel,
   gatherPeerAnswers,
   shouldRecordCouncilLearning,
   type CouncilPeer,
@@ -164,5 +165,22 @@ describe('council conductor', () => {
     });
 
     expect(assigned.map((entry) => entry.c.model)).toEqual(['model-b', 'model-c', 'model-a']);
+  });
+
+  it('explains a one-member council when --count 1 caps a larger pool', () => {
+    const note = describeCouncilPanel({
+      type: 'panel',
+      taskType: 'general',
+      entries: [{ model: 'gpt-5.4-mini', histWinRate: 0 }],
+      peerCount: 0,
+      poolSize: 37,
+      requestedCount: 1,
+      modelsFilter: 'chatgpt/gpt-5.6-sol',
+      modelsMatched: true,
+    });
+    expect(note).toContain('1 membre');
+    expect(note).toContain('--count 1');
+    expect(note).toContain('37');
+    expect(note).toContain('chatgpt/gpt-5.6-sol');
   });
 });

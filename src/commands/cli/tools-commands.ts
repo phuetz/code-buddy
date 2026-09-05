@@ -249,10 +249,59 @@ function formatCandidateKind(candidate: ResearchScriptSkillCandidate): string {
   return candidate.kind === 'learning' ? 'Learning Agent' : 'Research script';
 }
 
+function runToolsProfile(
+  profileArg: string,
+  toolNames: string[],
+  options: ToolsProfileOptions,
+): void {
+  const normalized = normalizeToolsProfile(profileArg);
+  const inspectedTools = toolNames.length > 0 ? toolNames : getBuiltinToolNames();
+  const policy = getDispatchToolPolicy(normalized.profile);
+  const decisions = previewDispatchToolDecisions(normalized.profile, inspectedTools);
+  const filter = buildDispatchToolFilter(normalized.profile, inspectedTools);
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      requestedProfile: profileArg,
+      profile: normalized.profile,
+      profileId: normalized.profileId,
+      toolCount: inspectedTools.length,
+      policy,
+      filter,
+      decisions,
+    }, null, 2));
+    return;
+  }
+
+  console.log(`\nTool profile: ${normalized.profileId}`);
+  if (profileArg !== normalized.profile && profileArg !== normalized.profileId) {
+    console.log(`  Requested: ${profileArg} (normalized to ${normalized.profile})`);
+  }
+  console.log(`  Policy: ${policy.policyProfile} / ${policy.defaultAction}`);
+  console.log(`  Summary: ${policy.summary}`);
+  console.log(`  Inspected tools: ${inspectedTools.length}`);
+  console.log(`  Effective allow: ${formatList(filter.enabledPatterns)}`);
+  console.log(`  Effective deny: ${formatList(filter.disabledPatterns)}`);
+  console.log('\nTool decisions:\n');
+  for (const decision of decisions) {
+    console.log(`  ${decision.tool}: ${decision.action}`);
+    console.log(`    Groups: ${formatList(decision.groups)}`);
+    if (decision.matchedGroup) {
+      console.log(`    Matched group: ${decision.matchedGroup}`);
+    }
+    console.log(`    Reason: ${decision.reason}`);
+  }
+  console.log('');
+}
+
 export function registerToolsCommands(program: Command): void {
   const tools = program
     .command('tools')
     .description('Inspect tool profiles and effective tool availability');
+
+  tools.action(() => {
+    runToolsProfile('hermes-balanced', [], {});
+  });
 
   tools
     .command('profile')
@@ -261,44 +310,7 @@ export function registerToolsCommands(program: Command): void {
     .argument('[toolNames...]', 'optional tool names to inspect instead of the built-in list')
     .option('--json', 'output JSON')
     .action((profileArg: string, toolNames: string[], options: ToolsProfileOptions) => {
-      const normalized = normalizeToolsProfile(profileArg);
-      const inspectedTools = toolNames.length > 0 ? toolNames : getBuiltinToolNames();
-      const policy = getDispatchToolPolicy(normalized.profile);
-      const decisions = previewDispatchToolDecisions(normalized.profile, inspectedTools);
-      const filter = buildDispatchToolFilter(normalized.profile, inspectedTools);
-
-      if (options.json) {
-        console.log(JSON.stringify({
-          requestedProfile: profileArg,
-          profile: normalized.profile,
-          profileId: normalized.profileId,
-          toolCount: inspectedTools.length,
-          policy,
-          filter,
-          decisions,
-        }, null, 2));
-        return;
-      }
-
-      console.log(`\nTool profile: ${normalized.profileId}`);
-      if (profileArg !== normalized.profile && profileArg !== normalized.profileId) {
-        console.log(`  Requested: ${profileArg} (normalized to ${normalized.profile})`);
-      }
-      console.log(`  Policy: ${policy.policyProfile} / ${policy.defaultAction}`);
-      console.log(`  Summary: ${policy.summary}`);
-      console.log(`  Inspected tools: ${inspectedTools.length}`);
-      console.log(`  Effective allow: ${formatList(filter.enabledPatterns)}`);
-      console.log(`  Effective deny: ${formatList(filter.disabledPatterns)}`);
-      console.log('\nTool decisions:\n');
-      for (const decision of decisions) {
-        console.log(`  ${decision.tool}: ${decision.action}`);
-        console.log(`    Groups: ${formatList(decision.groups)}`);
-        if (decision.matchedGroup) {
-          console.log(`    Matched group: ${decision.matchedGroup}`);
-        }
-        console.log(`    Reason: ${decision.reason}`);
-      }
-      console.log('');
+      runToolsProfile(profileArg, toolNames, options);
     });
 
   const browserOperator = tools

@@ -37,6 +37,18 @@ vi.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomic, mockWriteJsonAtomic } = vi.hoisted(() => ({
+  mockReadJsonAtomic: vi.fn(),
+  mockWriteJsonAtomic: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: mockReadJsonAtomic,
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
+
+import nodePath from 'path';
+import nodeOs from 'os';
 import {
   ResponseCache,
   CacheEntry,
@@ -47,11 +59,19 @@ import {
 
 describe('ResponseCache', () => {
   let cache: ResponseCache;
+  const cacheFile = nodePath.join(nodeOs.homedir(), '.codebuddy', 'cache', 'response-cache.json');
 
   beforeEach(async () => {
     jest.clearAllMocks();
     mockExistsSync.mockReturnValue(false);
     mockReadFile.mockResolvedValue(JSON.stringify({ entries: {}, stats: { hits: 0, misses: 0 } }));
+    mockReadJsonAtomic.mockImplementation(async (_path, fallback) => {
+      try {
+        return JSON.parse(await mockReadFile());
+      } catch {
+        return fallback;
+      }
+    });
 
     cache = new ResponseCache({
       maxEntries: 10,
@@ -84,13 +104,15 @@ describe('ResponseCache', () => {
       await customCache.dispose();
     });
 
-    it('should create cache directory if not exists', async () => {
-      mockExistsSync.mockReturnValue(false);
-
+    it('should initialize through the atomic reader when the cache is absent', async () => {
+      mockReadJsonAtomic.mockClear();
       const newCache = new ResponseCache();
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      expect(mockMkdirSync).toHaveBeenCalled();
+      expect(mockReadJsonAtomic).toHaveBeenCalledWith(
+        expect.stringContaining('response-cache.json'),
+        { entries: {}, stats: { hits: 0, misses: 0 } }
+      );
       await newCache.dispose();
     });
 
@@ -437,14 +459,33 @@ describe('ResponseCache', () => {
       cache.set('query', 'Response that is long enough to be cached by the system', 'h1', 'm1');
 
       // Clear mock to check new calls
-      mockWriteFile.mockClear();
+      mockWriteJsonAtomic.mockClear();
 
       await cache.dispose();
 
       // Give time for async save
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(mockWriteFile).toHaveBeenCalled();
+      // VERIF3 T8 : `stringContaining` laissait passer un chemin suffixé et
+      // `entries: expect.any(Object)` un cache vidé de toutes ses entrées.
+      expect(mockWriteJsonAtomic).toHaveBeenCalledTimes(1);
+      const [writtenPath, payload] = mockWriteJsonAtomic.mock.calls[0]!;
+      expect(writtenPath).toBe(cacheFile);
+      expect(Object.keys(payload)).toEqual(['entries', 'stats', 'savedAt']);
+      expect(typeof payload.savedAt).toBe('number');
+      expect(payload.stats).toEqual({ hits: 0, misses: 0 });
+
+      const persistedEntries = Object.values(payload.entries as Record<string, CacheEntry>);
+      expect(persistedEntries).toHaveLength(1);
+      expect(persistedEntries[0]).toMatchObject({
+        query: 'query',
+        response: 'Response that is long enough to be cached by the system',
+        model: 'm1',
+        contextHash: 'h1',
+        hits: 0,
+      });
+      expect(typeof persistedEntries[0]!.timestamp).toBe('number');
+      expect(persistedEntries[0]!.ttl).toBeGreaterThan(0);
     });
 
     it('should clear pending save timeout', async () => {
@@ -485,7 +526,7 @@ describe('ResponseCache', () => {
 
   describe('Debounced Saves', () => {
     it('should debounce multiple set operations', async () => {
-      mockWriteFile.mockClear();
+      mockWriteJsonAtomic.mockClear();
 
       cache.set('q1', 'Response 1 that is long enough to be cached by the system', 'h1', 'm1');
       cache.set('q2', 'Response 2 that is long enough to be cached by the system', 'h2', 'm1');
@@ -495,7 +536,7 @@ describe('ResponseCache', () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Should have been called once (or few times) due to debouncing
-      expect(mockWriteFile.mock.calls.length).toBeLessThan(3);
+      expect(mockWriteJsonAtomic.mock.calls.length).toBeLessThan(3);
     });
   });
 

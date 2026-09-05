@@ -10,6 +10,16 @@ import { describe, expect, it } from 'vitest';
 import { inferTaskType } from '../../src/fleet/model-capability-heuristics.js';
 
 describe('inferTaskType', () => {
+  it('recognises the five literary scoreboard categories before generic fallbacks', () => {
+    expect(inferTaskType('Écris le chapitre 5 de ce roman en français')).toBe('redaction-fr');
+    expect(inferTaskType("Tranche cet arbitrage d'auteur entre les deux versions")).toBe('arbitrage-litteraire');
+    expect(inferTaskType('Juge ces quatre versions à l’aveugle')).toBe('jugement-litteraire');
+    expect(inferTaskType('Attaque ce dispositif avec un audit adversarial')).toBe('audit-adversarial');
+    expect(inferTaskType('Relis la typographie et la ponctuation')).toBe('relecture-typo');
+    expect(inferTaskType('Rédige une synthèse claire')).toBe('redaction-fr');
+    expect(inferTaskType('Tranche entre ces deux options')).toBe('arbitrage-litteraire');
+  });
+
   it('routes French-written technical tasks to code, not french', () => {
     expect(
       inferTaskType(

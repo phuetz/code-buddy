@@ -17,13 +17,19 @@ interface MinimalClient {
   ): Promise<{ choices?: Array<{ message?: { content?: string | null } }> }>;
 }
 
-export function createLlmDrafter(): LessonDrafter {
+export function createLlmDrafter(options: { explicitModel?: string } = {}): LessonDrafter {
   let clientPromise: Promise<MinimalClient | null> | null = null;
 
   const getClient = (): Promise<MinimalClient | null> => {
     if (!clientPromise) {
       clientPromise = (async () => {
         try {
+          const { resolveCommandProvider } = await import('../../commands/llm-provider-resolution.js');
+          const resolved = resolveCommandProvider(options.explicitModel ? { explicitModel: options.explicitModel } : {});
+          if (resolved?.apiKey) {
+            const { CodeBuddyClient } = await import('../../codebuddy/client.js');
+            return new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL) as unknown as MinimalClient;
+          }
           const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
           const { CodeBuddyClient } = await import('../../codebuddy/client.js');
           const detected = detectProviderFromEnv();

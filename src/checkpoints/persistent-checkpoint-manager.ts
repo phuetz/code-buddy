@@ -4,6 +4,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface FileSnapshot {
   path: string;
@@ -100,9 +101,14 @@ export class PersistentCheckpointManager extends EventEmitter {
    */
   private loadIndex(): CheckpointIndex {
     try {
-      if (fs.existsSync(this.indexPath)) {
-        const data = fs.readFileSync(this.indexPath, 'utf-8');
-        const index = JSON.parse(data);
+      const index = readJsonAtomicSync<CheckpointIndex | null>(this.indexPath, null, {
+        mode: 0o600,
+        isValid: (value): value is CheckpointIndex => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          Array.isArray((value as CheckpointIndex).checkpoints),
+        ),
+      });
+      if (index) {
         index.lastUpdated = new Date(index.lastUpdated);
         return index;
       }
@@ -123,7 +129,7 @@ export class PersistentCheckpointManager extends EventEmitter {
    */
   private saveIndex(index: CheckpointIndex): void {
     try {
-      fs.writeFileSync(this.indexPath, JSON.stringify(index, null, 2));
+      writeJsonAtomicSync(this.indexPath, index, { mode: 0o600 });
     } catch (error) {
       logger.warn(`Failed to save checkpoint index: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -191,7 +197,7 @@ export class PersistentCheckpointManager extends EventEmitter {
   private saveCheckpoint(checkpoint: PersistentCheckpoint): void {
     try {
       const checkpointPath = this.getCheckpointPath(checkpoint.id);
-      fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2));
+      writeJsonAtomicSync(checkpointPath, checkpoint, { mode: 0o600 });
     } catch (error) {
       logger.warn(`Failed to save checkpoint: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -208,9 +214,14 @@ export class PersistentCheckpointManager extends EventEmitter {
 
     try {
       const checkpointPath = this.getCheckpointPath(checkpointId);
-      if (fs.existsSync(checkpointPath)) {
-        const data = fs.readFileSync(checkpointPath, 'utf-8');
-        const checkpoint = JSON.parse(data);
+      const checkpoint = readJsonAtomicSync<PersistentCheckpoint | null>(checkpointPath, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistentCheckpoint => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          typeof (value as PersistentCheckpoint).id === 'string',
+        ),
+      });
+      if (checkpoint) {
         checkpoint.timestamp = new Date(checkpoint.timestamp);
         this.checkpointCache.set(checkpointId, checkpoint);
         return checkpoint;

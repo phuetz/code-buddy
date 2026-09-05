@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { whenRemindersPersisted } from '../../src/companion/reminders.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import {
   addReminder,
   listReminders,
@@ -48,6 +48,54 @@ describe('reminders — store', () => {
 
   it('rejects an invalid time', async () => {
     await expect(addReminder({ label: 'x', time: '25:00' })).rejects.toThrow();
+  });
+
+  it('treats a corrupt store as absent, warns once, and rebuilds it on write (MEM1)', async () => {
+    const file = process.env.CODEBUDDY_REMINDERS_FILE!;
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify(
+        [
+          {
+            id: 'r-meds',
+            label: 'médicaments',
+            time: '09:00',
+            enabled: true,
+            createdAt: '2026-06-26T00:00:00.000Z',
+          },
+          {
+            id: 'r-train',
+            label: 'train',
+            time: '18:00',
+            enabled: true,
+            createdAt: '2026-06-26T00:00:00.000Z',
+          },
+        ],
+        null,
+        2
+      ),
+      'utf8'
+    );
+    await writeFile(file, '{this is not json', 'utf8');
+
+    await expect(listReminders()).resolves.toEqual([]);
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).resolves.toMatchObject({ label: 'nouveau' });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([
+      expect.objectContaining({ label: 'nouveau' }),
+    ]);
+  });
+
+  it('treats an existing empty store as absent and rebuilds it on write (MEM1)', async () => {
+    const file = process.env.CODEBUDDY_REMINDERS_FILE!;
+    await mkdir(dir, { recursive: true });
+    await writeFile(file, '', 'utf8');
+
+    await expect(listReminders()).resolves.toEqual([]);
+    await expect(addReminder({ label: 'nouveau', time: '10:00' })).resolves.toMatchObject({ label: 'nouveau' });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([
+      expect.objectContaining({ label: 'nouveau' }),
+    ]);
   });
 });
 

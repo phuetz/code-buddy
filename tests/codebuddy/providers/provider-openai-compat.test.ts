@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -28,6 +28,8 @@ vi.mock('../../../src/agent/extended-thinking.js', () => ({
 }));
 
 import { OpenAICompatProvider } from '../../../src/codebuddy/providers/provider-openai-compat.js';
+import { TurnMetricsRecorder } from '../../../src/observability/turn-metrics.js';
+import { logger } from '../../../src/utils/logger.js';
 
 function createProvider(
   baseURL = 'https://api.x.ai/v1',
@@ -61,12 +63,133 @@ async function* successStream() {
   };
 }
 
+async function* emptyStream() {
+  // Deliberately empty: simulates a 200 response whose async iterator closes
+  // without producing an assistant chunk.
+}
+
 beforeEach(() => {
   providerMocks.create.mockReset();
   providerMocks.getModelInfo.mockReset().mockReturnValue({ provider: 'xai' });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('OpenAICompatProvider request payloads', () => {
+  it('measures from request send to the first token-bearing chunk and complete message', async () => {
+    const now = vi.fn()
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(130)
+      .mockReturnValueOnce(160)
+      .mockReturnValueOnce(165);
+    const recorder = new TurnMetricsRecorder({
+      persist: false,
+      clock: {
+        now,
+        timestamp: () => '2026-09-03T12:00:00.000Z',
+      },
+    });
+    const endSpy = vi.spyOn(recorder, 'endTurn');
+    providerMocks.create.mockResolvedValueOnce((async function* () {
+      yield {
+        id: 'role-only',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'grok-code-fast-1',
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+      };
+      yield {
+        id: 'first-token',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'grok-code-fast-1',
+        choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: null }],
+      };
+    })());
+
+    for await (const _chunk of createProvider().chatStream(
+      [{ role: 'user', content: 'hello' }],
+      [],
+      {
+        turnMetrics: {
+          recorder,
+          inputTokens: 11,
+          getOutputTokens: () => 3,
+        },
+      },
+    )) { /* drain */ }
+
+    expect(endSpy).toHaveBeenCalledTimes(1);
+    expect(endSpy.mock.results[0]?.value).toMatchObject({
+      provider: 'grok',
+      model: 'grok-code-fast-1',
+      ttftMs: 30,
+      ttfmMs: 60,
+      totalMs: 65,
+      inputTokens: 11,
+      outputTokens: 3,
+    });
+    expect(now).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects a non-streaming response with empty choices', async () => {
+    providerMocks.create.mockResolvedValueOnce({ choices: [] });
+
+    await expect(createProvider().chat([{ role: 'user', content: 'hello' }], []))
+      .rejects.toThrow('réponse vide du fournisseur');
+  });
+
+  it('rejects an empty stream when its non-streaming fallback is also empty', async () => {
+    providerMocks.create
+      .mockResolvedValueOnce(emptyStream())
+      .mockResolvedValueOnce({ choices: [] });
+
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of createProvider().chatStream(
+        [{ role: 'user', content: 'hello' }],
+        [],
+      )) {
+        /* drain */
+      }
+    };
+
+    await expect(drain()).rejects.toThrow('réponse vide du fournisseur');
+  });
+
+  it('warns and marks an xAI response when requested search is not honored', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn');
+    providerMocks.create.mockResolvedValueOnce(successResponse());
+
+    const response = await createProvider().chat(
+      [{ role: 'user', content: 'What is the latest news?' }],
+      [],
+      { searchOptions: { search_parameters: { mode: 'auto' } } },
+    );
+
+    const payload = providerMocks.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.search_parameters).toBeUndefined();
+    expect(response.searchHonored).toBe(false);
+    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('without search'))).toBe(true);
+  });
+
+  it('marks streamed xAI chunks as without search', async () => {
+    providerMocks.create.mockResolvedValueOnce(successStream());
+
+    const chunks = [];
+    for await (const chunk of createProvider().chatStream(
+      [{ role: 'user', content: 'What is the latest news?' }],
+      [],
+      { searchOptions: { search_parameters: { mode: 'auto' } } },
+    )) {
+      chunks.push(chunk as typeof chunk & { searchHonored?: boolean });
+    }
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.searchHonored).toBe(false);
+  });
+
   it('omits tools and tool_choice from non-streaming requests without tools', async () => {
     providerMocks.create.mockResolvedValueOnce(successResponse());
 

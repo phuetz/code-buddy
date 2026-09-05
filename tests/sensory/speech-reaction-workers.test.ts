@@ -1,11 +1,10 @@
 import { mkdtemp, rm } from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerHarness = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void;
-  type Response = 'timeout' | 'empty' | 'text';
+  type Response = 'timeout' | 'empty' | 'text' | 'error' | 'exit-error' | 'one-shot-error';
 
   class FakeEmitter {
     private readonly listeners = new Map<string, Listener[]>();
@@ -36,6 +35,7 @@ const workerHarness = vi.hoisted(() => {
     stdout: FakeStream;
     stderr: FakeStream;
     kill: ReturnType<typeof vi.fn>;
+    exitCode: number | null;
   };
 
   const responses: Response[] = [];
@@ -48,29 +48,45 @@ const workerHarness = vi.hoisted(() => {
       reader: undefined as FakeReader | undefined,
     });
     const stderr = Object.assign(new FakeEmitter(), { destroy: vi.fn() });
+    let proc: FakeProcess;
     const stdin = Object.assign(new FakeEmitter(), {
       destroy: vi.fn(),
       write: vi.fn((payload: string) => {
         if (response === 'timeout') return true;
         const request = JSON.parse(payload) as { id: string };
         queueMicrotask(() => {
+          if (response === 'exit-error') {
+            stderr.emit('data', 'decoder crashed');
+            proc.exitCode = 7;
+            proc.emit('close', 7);
+            return;
+          }
           stdout.reader?.emit(
             'line',
-            JSON.stringify({ id: request.id, text: response === 'text' ? 'bonjour' : '' })
+            response === 'error'
+              ? JSON.stringify({ id: request.id, error: 'decoder unavailable' })
+              : JSON.stringify({ id: request.id, text: response === 'text' ? 'bonjour' : '' }),
           );
         });
         return true;
       }),
     });
-    const proc = Object.assign(new FakeEmitter(), {
+    proc = Object.assign(new FakeEmitter(), {
       command,
       args,
       stdin,
       stdout,
       stderr,
       kill: vi.fn(() => true),
+      exitCode: null,
     });
     processes.push(proc);
+    if (response === 'one-shot-error') {
+      queueMicrotask(() => {
+        stderr.emit('data', 'decoder unavailable');
+        proc.emit('close', 1);
+      });
+    }
     return proc;
   });
 
@@ -114,6 +130,9 @@ beforeEach(() => {
   vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'false');
   vi.stubEnv('CODEBUDDY_SPEECH_PYTHON', 'fake-python');
   vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', '/tmp/fake-buddy-sense');
+  vi.stubEnv('BUDDY_SENSE_STT_MODEL_DIR', undefined);
+  vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', undefined);
+  vi.stubEnv('CODEBUDDY_SHERPA_ONNX_MODEL_DIR', undefined);
 });
 
 afterEach(() => {
@@ -122,6 +141,66 @@ afterEach(() => {
 });
 
 describe('speech reaction — persistent STT workers', () => {
+  it('logs actionable diagnostics once, then announces one inactive sherpa-rs streak', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    vi.stubEnv('CODEBUDDY_SHERPA_EMPTY_THRESHOLD', '3');
+    workerHarness.queueResponses('empty', 'text');
+    const { transcribeWavWithMetadata } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+    const wav = path.join(process.cwd(), 'tests/fixtures/stt-conv4/fr-reference.wav');
+
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await expect(transcribeWavWithMetadata(wav, 'sherpa-rs')).resolves.toEqual({
+          text: 'bonjour',
+          engine: 'faster-whisper',
+        });
+      }
+
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      const firstEmpty = messages.filter((message) =>
+        message.includes('sherpa-rs empty transcript'),
+      );
+      expect(firstEmpty).toHaveLength(1);
+      expect(firstEmpty[0]).toContain('reason=no_tokens');
+      expect(firstEmpty[0]).toContain('exit_code=running');
+      expect(firstEmpty[0]).toContain('stderr="<empty>"');
+      expect(firstEmpty[0]).toMatch(/audio_ms=\d+/);
+
+      const inactive = messages.filter((message) => message.includes('sherpa-rs inactif :'));
+      expect(inactive).toHaveLength(1);
+      expect(inactive[0]).toContain('consecutive_empty=3');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('includes worker exit, stderr and WAV duration when sherpa-rs reports an error', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    workerHarness.queueResponses('exit-error', 'text');
+    const { transcribeWavWithMetadata } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+    const wav = path.join(process.cwd(), 'tests/fixtures/stt-conv4/fr-reference.wav');
+
+    try {
+      await expect(transcribeWavWithMetadata(wav, 'sherpa-rs')).resolves.toEqual({
+        text: 'bonjour',
+        engine: 'faster-whisper',
+      });
+      const failure = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes('sherpa-rs failed; falling back'));
+      expect(failure).toContain('reason=sherpa-rs worker closed (code=7)');
+      expect(failure).toContain('exit_code=7');
+      expect(failure).toContain('stderr="decoder crashed"');
+      expect(failure).toMatch(/audio_ms=\d+/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it.each([
     ['faster-whisper', 'fake-python'],
     ['parakeet', 'fake-python'],
@@ -132,9 +211,10 @@ describe('speech reaction — persistent STT workers', () => {
     vi.useFakeTimers();
 
     const timedOut = transcribeWav('/tmp/first.wav', engine);
+    const timedOutAssertion = expect(timedOut).rejects.toThrow('timed out');
     await vi.runAllTimersAsync();
 
-    expect(await timedOut).toBe('');
+    await timedOutAssertion;
     expect(workerHarness.processes).toHaveLength(1);
     expect(workerHarness.processes[0]?.kill).toHaveBeenCalledOnce();
 
@@ -146,18 +226,77 @@ describe('speech reaction — persistent STT workers', () => {
     expect(workerHarness.processes[1]?.command).toBe(command);
   });
 
-  it('does not cascade auto STT when sherpa-rs returns an empty transcript', async () => {
-    const modelDir = await mkdtemp(path.join(os.tmpdir(), 'speech-auto-model-'));
+  it('rejects a worker error instead of returning an empty transcript', async () => {
+    workerHarness.queueResponses('error');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/failed.wav', 'faster-whisper'))
+      .rejects.toThrow('decoder unavailable');
+  });
+
+  it('rejects a non-zero one-shot STT process instead of returning its empty stdout', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_WORKER', 'false');
+    workerHarness.queueResponses('one-shot-error');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/failed-one-shot.wav', 'faster-whisper'))
+      .rejects.toThrow('faster-whisper STT failed');
+  });
+
+  it('routes an explicit pin outside Parakeet-TDT v3 languages (Japanese) to faster-whisper and propagates hotwords', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_ENGINE', 'parakeet');
+    vi.stubEnv('CODEBUDDY_SPEECH_LANG', 'ja');
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    vi.stubEnv('CODEBUDDY_SPEECH_HOTWORDS', 'Lisa');
+    workerHarness.queueResponses('text');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/lisa-ja.wav')).resolves.toBe('bonjour');
+
+    const workerScript = workerHarness.processes[0]?.args.join('\n') ?? '';
+    expect(workerScript).toContain('from faster_whisper import WhisperModel');
+    expect(workerScript).toContain('"language": "ja"');
+    expect(workerScript).toContain('"hotwords": "Lisa');
+    expect(workerScript).not.toContain('import sherpa_onnx');
+  });
+
+  it('does not choose sherpa-rs for an incomplete auto model directory', async () => {
+    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-model-'));
+    vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
     vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
     vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
-    workerHarness.queueResponses('empty');
+    workerHarness.queueResponses('text');
     const { transcribeWav } = await loadSpeechReaction();
 
     try {
-      await expect(transcribeWav('/tmp/silence.wav', 'auto')).resolves.toBe('');
+      await expect(transcribeWav('/tmp/silence.wav', 'auto')).resolves.toBe('bonjour');
       expect(workerHarness.spawn).toHaveBeenCalledOnce();
-      expect(workerHarness.processes[0]?.command).toBe('/tmp/fake-buddy-sense');
+      expect(workerHarness.processes[0]?.command).toBe('fake-python');
+      expect(workerHarness.processes[0]?.args.join('\n')).toContain('from faster_whisper import WhisperModel');
     } finally {
+      await rm(modelDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+
+  it('logs an auto fallback caused by a missing Rust/model pair only once per process', async () => {
+    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-missing-'));
+    vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
+    vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    workerHarness.queueResponses('text', 'text');
+    const { transcribeWav } = await loadSpeechReaction();
+    const loadedLogger = (await import('../../src/utils/logger.js')).logger;
+    const warn = vi.spyOn(loadedLogger, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(transcribeWav('/tmp/first.wav', 'auto')).resolves.toBe('bonjour');
+      await expect(transcribeWav('/tmp/second.wav', 'auto')).resolves.toBe('bonjour');
+      const autoFallbacks = warn.mock.calls.filter(([message]) =>
+        String(message).includes('auto STT fallback activated'),
+      );
+      expect(autoFallbacks).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
       await rm(modelDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });

@@ -145,7 +145,7 @@ export function CompanionAvatarRendererStatus({
           <Activity className="mx-auto h-4 w-4 text-text-muted" />
           <p className="mt-2 text-xs font-medium text-text-secondary">Aucun renderer Unreal connecté</p>
           <p className="mt-1 text-[10px] text-text-muted">
-            Lance le Gateway Code Buddy puis AvatarStudio sur Darkstar. L’animation audio restera
+            Lance le Gateway Code Buddy puis AvatarStudio sur GPU node. L’animation audio restera
             verrouillée jusqu’à ce que MetaHuman Audio Live Link soit réellement validé.
           </p>
         </div>

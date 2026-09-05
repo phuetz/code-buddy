@@ -152,7 +152,7 @@ describe('parseStooqCsv', () => {
     expect(d.high).toBe(227.1);
     expect(d.low).toBe(222.8);
     expect(d.volume).toBe(48200000);
-    expect(d.time).toBe('22:00');
+    expect(d.time).toBe('2026-07-09 22:00');
     expect(d.change).toBeUndefined();
     expect(d.market).toBe('Stooq');
   });

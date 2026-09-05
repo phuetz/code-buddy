@@ -224,7 +224,7 @@ describe('ComfyHealthSupervisor', () => {
       { relativePath: 'checkpoints/sd_turbo.safetensors', sizeBytes: 5_214_561_328 },
       { relativePath: 'controlnet/put_controlnets_here', sizeBytes: 0 },
       { relativePath: '../../etc/passwd', sizeBytes: 0 },
-      { relativePath: '/home/patrice/private/model.gguf', sizeBytes: 0 },
+      { relativePath: '/home/user/private/model.gguf', sizeBytes: 0 },
       { relativePath: 'directory.gguf', sizeBytes: 0, kind: 'directory' },
     ];
 
@@ -237,7 +237,7 @@ describe('ComfyHealthSupervisor', () => {
       'diffusion_models/wan2.2-14b-Q4_K_M.gguf',
     ]);
     expect(report.issues.some((issue) => issue.code === 'invalid_model_inventory')).toBe(true);
-    expect(JSON.stringify(report)).not.toContain('/home/patrice');
+    expect(JSON.stringify(report)).not.toContain('/home/user');
   });
 
   it('provides a pure zero-byte inventory helper', () => {
@@ -257,7 +257,7 @@ describe('ComfyHealthSupervisor', () => {
     const bearer = `Bearer ${'b'.repeat(40)}`;
     const raw = [
       `torch.AcceleratorError: CUDA error: an illegal memory access was encountered ${openAiKey} ${bearer}`,
-      `details at /home/patrice/private token=plain-secret-value ${'x'.repeat(1_000)}`,
+      `details at /home/user/private token=plain-secret-value ${'x'.repeat(1_000)}`,
     ];
 
     const report = await diagnoseComfyHealth({ fetch: healthyFetch() }, { runtimeErrors: raw });
@@ -270,7 +270,7 @@ describe('ComfyHealthSupervisor', () => {
     expect(report.issues.some((issue) => issue.code === 'runtime_accelerator_poisoned')).toBe(true);
     expect(serialized).not.toContain(openAiKey);
     expect(serialized).not.toContain('b'.repeat(40));
-    expect(serialized).not.toContain('/home/patrice');
+    expect(serialized).not.toContain('/home/user');
     expect(serialized).not.toContain('plain-secret-value');
     expect(report.issues.every((issue) => issue.message.length <= 320)).toBe(true);
   });

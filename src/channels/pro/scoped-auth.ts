@@ -20,6 +20,7 @@ import type {
   ScopeCheckContext,
 } from './types.js';
 import { SCOPE_LEVEL } from './types.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 /** Persisted auth state */
 interface AuthState {
@@ -362,7 +363,13 @@ export class ScopedAuthManager {
   private load(): void {
     try {
       if (existsSync(this.configPath)) {
-        const data: AuthState = JSON.parse(readFileSync(this.configPath, 'utf-8'));
+        const data = readJsonAtomicSync<AuthState | null>(this.configPath, null, {
+          mode: 0o600,
+          isValid: (value): value is AuthState => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value),
+          ),
+        });
+        if (!data) return;
         if (data.permissions) {
           for (const perm of data.permissions) {
             this.permissions.set(perm.userId, perm);
@@ -386,16 +393,12 @@ export class ScopedAuthManager {
 
   private save(): void {
     try {
-      const dir = dirname(this.configPath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
       const state: AuthState = {
         permissions: Array.from(this.permissions.values()),
         secrets: Array.from(this.secrets.values()),
         temporaryAccess: Array.from(this.temporaryAccess.values()),
       };
-      writeFileSync(this.configPath, JSON.stringify(state, null, 2));
+      writeJsonAtomicSync(this.configPath, state, { mode: 0o600 });
     } catch {
       // Silently fail on save errors
     }

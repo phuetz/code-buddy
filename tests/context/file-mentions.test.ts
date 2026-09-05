@@ -35,14 +35,31 @@ describe('file mentions', () => {
     );
   });
 
-  it('silently ignores missing paths, handles, and email addresses', async () => {
+  it('silently ignores handles and email addresses, but reports an explicit missing file', async () => {
     const result = await resolveFileMentions(
       'Email dev@example.com, ask @alice, then inspect @missing.ts',
       { projectRoot }
     );
 
     expect(result.files).toEqual([]);
-    expect(result.issues).toEqual([]);
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        status: 'ignored',
+        mention: '@missing.ts',
+        path: 'missing.ts',
+        reason: 'not-found',
+      }),
+    ]);
+  });
+
+  it('converts ENOENT of an explicit @path into a not-found issue', async () => {
+    const result = await resolveFileMentions('Review @definitely-missing.ts', { projectRoot });
+
+    expect(result.files).toEqual([]);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]?.reason).toBe('not-found');
+    expect(result.issues[0]?.mention).toBe('@definitely-missing.ts');
+    expect(result.issues[0]?.message).toMatch(/not found/i);
   });
 
   it('refuses paths outside the project root', async () => {

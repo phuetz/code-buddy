@@ -41,8 +41,17 @@ export interface SandboxConfig {
   runAsHostUser: boolean;
   /** Extra environment variables passed as literal Docker argv entries. */
   environment: Record<string, string>;
+  /** Additional host directories exposed read-only to the container. */
+  readOnlyMounts?: DockerReadOnlyMount[];
+  /** Ephemeral writable mount points, typically tool caches. */
+  tmpfsMounts?: string[];
   /** Timezone override (IANA format e.g. 'America/New_York') — Native Engine v2026.3.8 alignment */
   timezone?: string;
+}
+
+export interface DockerReadOnlyMount {
+  source: string;
+  target: string;
 }
 
 export interface SandboxResult {
@@ -682,6 +691,42 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         }
         args.push('-v', `${hostPath}:${containerWorkspace}/${normalizedRelative}:ro`);
       }
+    }
+
+    for (const mount of config.readOnlyMounts ?? []) {
+      const source = path.resolve(mount.source);
+      const rawTarget = mount.target.replace(/\\/g, '/');
+      if (
+        !path.isAbsolute(rawTarget) ||
+        rawTarget.includes('\0') ||
+        rawTarget.split('/').includes('..') ||
+        !fs.existsSync(source)
+      ) {
+        continue;
+      }
+      const target = path.posix.normalize(rawTarget);
+      args.push('--mount', `type=bind,source=${source},target=${target},readonly`);
+    }
+
+    for (const mountPoint of config.tmpfsMounts ?? []) {
+      const target = mountPoint.replace(/\\/g, '/');
+      if (
+        !path.isAbsolute(target) ||
+        target.includes('\0') ||
+        target.split('/').includes('..')
+      ) {
+        continue;
+      }
+      const ownership =
+        process.platform !== 'win32' &&
+        typeof process.getuid === 'function' &&
+        typeof process.getgid === 'function'
+          ? `,uid=${process.getuid()},gid=${process.getgid()}`
+          : '';
+      args.push(
+        '--tmpfs',
+        `${path.posix.normalize(target)}:rw,nosuid,nodev,size=64m${ownership}`,
+      );
     }
 
     // Inject CODEBUDDY_CLI env vars so child processes know they're inside Code Buddy

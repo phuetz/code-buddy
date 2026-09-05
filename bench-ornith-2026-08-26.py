@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rejoue le banc W5 sur l'endpoint Ollama local de Darkstar.
+"""Rejoue le banc W5 sur l'endpoint Ollama local de GPU node.
 
 Le script est volontairement séquentiel : il termine toutes les requêtes d'un
 modèle avant de demander le modèle suivant. Les cas et les critères sont
@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_ENDPOINT = "http://100.73.222.64:11434"
+DEFAULT_ENDPOINT = "http://192.0.2.42:11434"
 MODELS = ("ornith-1.5:35b", "qwen3.8:27b", "deepseek-r1:32b")
 RAW_PATH = ROOT / "BANC-ORNITH-RAW-2026-08-26-v2.json"
 
@@ -121,10 +121,10 @@ def case_specs() -> list[dict[str, Any]]:
             "title": "Lecture d'un message d'erreur : workers non entier",
             "kind": "error_reading",
             "num_ctx": 8192,
-            "references": ["DEFAUTS-ERREURS-2026-08-25.md, E4", "commit 80216860"],
+            "references": ["docs/reports/2026-08/DEFAUTS-ERREURS-2026-08-25.md, E4", "commit 80216860"],
             "prompt": (
                 "Voici une observation réelle du CLI Code Buddy, issue de "
-                "DEFAUTS-ERREURS-2026-08-25.md :\n\n"
+                "docs/reports/2026-08/DEFAUTS-ERREURS-2026-08-25.md :\n\n"
                 "$ buddy research x --workers abc\n"
                 "Wide Research démarre avec Items: 5, puis une Unhandled promise "
                 "rejection et un fichier dans ~/.codebuddy/recovery/.\n\n"
@@ -146,7 +146,7 @@ def case_specs() -> list[dict[str, Any]]:
             "kind": "concurrency",
             "num_ctx": 8192,
             "references": [
-                "DEFAUTS-MEMOIRE-PERSISTANTE-2026-08-25.md, Q2",
+                "docs/reports/2026-08/DEFAUTS-MEMOIRE-PERSISTANTE-2026-08-25.md, Q2",
                 "buddy-memory/src/store.rs",
                 "commit 6be941cc",
             ],
@@ -174,7 +174,7 @@ def case_specs() -> list[dict[str, Any]]:
             "title": "Format imposé : trois phrases sur ENOENT",
             "kind": "format",
             "num_ctx": 4096,
-            "references": ["DEFAUTS-ERREURS-2026-08-25.md, E6", "src/index.ts"],
+            "references": ["docs/reports/2026-08/DEFAUTS-ERREURS-2026-08-25.md, E6", "src/index.ts"],
             "prompt": (
                 "À partir de ce cas réel : la commande `buddy -d <absent> -p hi` "
                 "affichait une pile Node contenant ENOENT et "
@@ -461,7 +461,7 @@ def run_bench(endpoint: str, repetitions: int, selected_models: list[str], selec
     }
     runs = raw.setdefault("runs", [])
     for model in selected_models:
-        # OLLAMA_KEEP_ALIVE est long sur Darkstar. Décharger les autres modèles
+        # OLLAMA_KEEP_ALIVE est long sur GPU node. Décharger les autres modèles
         # cibles avant chaque changement garantit qu'un rejeu ne charge jamais
         # deux gros modèles simultanément.
         for other_model in selected_models:
@@ -668,19 +668,19 @@ def main() -> int:
             run["correct"], run["check_details"] = score_text(run.get("response", ""), case["checks"])
         raw.setdefault("metadata", {})["criterion_revision"] = "v2.1"
         RAW_PATH.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        write_report(raw, ROOT / "BANC-ORNITH-2026-08-26.md")
+        write_report(raw, ROOT / "docs/reports/2026-08/BANC-ORNITH-2026-08-26.md")
         return 0
     if args.report:
         if not RAW_PATH.exists():
             parser.error(f"résultats absents : {RAW_PATH}")
         raw = load_existing()
-        write_report(raw, ROOT / "BANC-ORNITH-2026-08-26.md")
+        write_report(raw, ROOT / "docs/reports/2026-08/BANC-ORNITH-2026-08-26.md")
         return 0
     selected_models = args.models or list(MODELS)
     raw = run_bench(args.endpoint, args.repetitions, selected_models, args.cases or [])
-    write_report(raw, ROOT / "BANC-ORNITH-2026-08-26.md")
+    write_report(raw, ROOT / "docs/reports/2026-08/BANC-ORNITH-2026-08-26.md")
     print(f"\nRésultats bruts : {RAW_PATH}")
-    print(f"Rapport : {ROOT / 'BANC-ORNITH-2026-08-26.md'}")
+    print(f"Rapport : {ROOT / 'docs/reports/2026-08/BANC-ORNITH-2026-08-26.md'}")
     return 0
 
 

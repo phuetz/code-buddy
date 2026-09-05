@@ -14,6 +14,7 @@ import {
   runAgentCompletion,
   streamAgentDeltas,
   type ServerAgent,
+  type ServerTurnUsage,
 } from '../agent-adapter.js';
 import {
   buildHttpRequestSessionKey,
@@ -22,6 +23,51 @@ import {
 
 function requestSessionKey(req: Request, sessionId: unknown): string {
   return buildHttpRequestSessionKey(req, sessionId);
+}
+
+/** OpenAI-shaped usage block, with the estimation flagged as such. */
+interface OpenAIUsageBlock {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  /** Present and true ONLY when the numbers are our own estimate. */
+  estimated?: true;
+}
+
+/** Crude fallback tokenizer — 4 characters per token, the historical estimate. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Builds the `usage` block of an OpenAI-compatible response.
+ *
+ * The provider's own counters win whenever it reported any: the pre-SERV2 route
+ * always answered `length / 4` over the user text alone, which silently ignored
+ * the system prompt and the tool rounds and could be three orders of magnitude
+ * short. When the provider stays silent the estimate remains — but it says so,
+ * so a client that bills or budgets on this field is never misled.
+ */
+function buildOpenAIUsage(
+  usage: ServerTurnUsage | undefined,
+  promptText: string,
+  completionText: string,
+): OpenAIUsageBlock {
+  if (usage) {
+    return {
+      prompt_tokens: usage.promptTokens,
+      completion_tokens: usage.completionTokens,
+      total_tokens: usage.promptTokens + usage.completionTokens,
+    };
+  }
+  const promptTokens = estimateTokens(promptText);
+  const completionTokens = estimateTokens(completionText);
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+    estimated: true,
+  };
 }
 
 const router = Router();
@@ -271,6 +317,53 @@ function openAIErrorType(error: ApiServerError): string {
   return 'server_error';
 }
 
+function writeOpenAIError(
+  res: Response,
+  status: number,
+  message: string,
+  code: string | null = null,
+  type = 'invalid_request_error',
+): void {
+  res.status(status).json({
+    error: { message, type, code },
+  });
+}
+
+function rejectOpenAICompletionsRequest(body: {
+  tools?: unknown;
+  tool_choice?: unknown;
+  functions?: unknown;
+  max_tokens?: unknown;
+}): { status: number; message: string; code: string | null } | null {
+  if (body.tools !== undefined || body.tool_choice !== undefined || body.functions !== undefined) {
+    return {
+      status: 400,
+      code: 'unsupported_parameter',
+      message:
+        'This endpoint does not accept OpenAI tools, tool_choice, or functions. It does not return tool_calls.',
+    };
+  }
+  if (body.max_tokens !== undefined) {
+    const maxTok = Number(body.max_tokens);
+    if (!Number.isInteger(maxTok) || maxTok < 1 || maxTok > 200000) {
+      return {
+        status: 400,
+        code: null,
+        message: 'max_tokens must be an integer between 1 and 200000',
+      };
+    }
+  }
+  return null;
+}
+
+function openaiModelNotFound(content: string): { model: string } | null {
+  const match = content.match(/404 model ['"]([^'"]+)['"] not found/i);
+  if (!match || match[1] === undefined) {
+    return null;
+  }
+  return { model: match[1] };
+}
+
 /**
  * POST /api/chat
  * Send a chat message and get a response
@@ -372,9 +465,13 @@ router.post(
           callId: tc.id,
           success: tc.success ?? true,
           output: tc.output,
+          data: tc.data,
           error: tc.error,
           executionTime: tc.executionTime || 0,
         })),
+        ...(result.data !== undefined ? { data: result.data } : {}),
+        ...(result.widgetHtml ? { widgetHtml: result.widgetHtml } : {}),
+        ...(result.canvasId ? { canvasId: result.canvasId, canvasPath: result.canvasPath } : {}),
         sessionId: body.sessionId,
         latency: Date.now() - startTime,
       };
@@ -517,10 +614,8 @@ async function handleOpenAIStreamingChat(
       connection.throwIfDisconnected();
       modelName = body.model || agent.getCurrentModel();
 
-      // Estimate prompt tokens from input messages
       const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
-      const promptTokens = Math.ceil(promptText.length / 4);
-      let completionTokens = 0;
+      let completionText = '';
 
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) {
@@ -534,7 +629,7 @@ async function handleOpenAIStreamingChat(
       );
 
       await connection.consume(stream, (delta) => {
-        completionTokens += Math.ceil(delta.length / 4);
+        completionText += delta;
 
         const openaiChunk = {
           id: requestId,
@@ -570,11 +665,7 @@ async function handleOpenAIStreamingChat(
               finish_reason: 'stop',
             },
           ],
-          usage: {
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            total_tokens: promptTokens + completionTokens,
-          },
+          usage: buildOpenAIUsage(agent.getLastTurnUsage?.(), promptText, completionText),
         };
 
         res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
@@ -586,23 +677,9 @@ async function handleOpenAIStreamingChat(
   } catch (error: unknown) {
     if (connection.disconnected || error instanceof SseClientDisconnectedError) return;
     const apiError = toProviderApiError(error);
-    const errorChunk = {
-      id: requestId,
-      object: 'chat.completion.chunk',
-      created,
-      model: modelName,
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: 'stop',
-        },
-      ],
-    };
-
-    // Send error as a final chunk then an error event
+    // A provider failure is the sole terminal event. Never announce a normal
+    // `stop` first: OpenAI-compatible clients may stop reading at that point.
     if (connection.canWrite()) {
-      res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       res.write(`data: ${JSON.stringify({
         error: {
           message: apiError.message,
@@ -648,6 +725,12 @@ router.post(
       return;
     }
 
+    const rejected = rejectOpenAICompletionsRequest(body);
+    if (rejected) {
+      writeOpenAIError(res, rejected.status, rejected.message, rejected.code);
+      return;
+    }
+
     // Convert to our format
     const chatRequest: ChatRequest = {
       messages: body.messages,
@@ -685,12 +768,21 @@ router.post(
         };
       }, messages.slice(0, -1));
       const { result } = completed;
-
-      // Estimate token counts when the provider doesn't return them
-      const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
       const completionText = result.content || '';
-      const estimatedCompletionTokens = Math.ceil(completionText.length / 4);
+      const missingModel = openaiModelNotFound(completionText);
+      if (missingModel) {
+        writeOpenAIError(
+          res,
+          404,
+          `The model '${missingModel.model}' does not exist or you do not have access to it`,
+          'model_not_found',
+        );
+        return;
+      }
+
+      // Real provider counters when it gave any; a FLAGGED estimate otherwise.
+      const promptText = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('');
+      const usage = buildOpenAIUsage(result.usage, promptText, completionText);
 
       // Return OpenAI-compatible response
       const response = {
@@ -708,11 +800,7 @@ router.post(
             finish_reason: result.finishReason || 'stop',
           },
         ],
-        usage: {
-          prompt_tokens: estimatedPromptTokens,
-          completion_tokens: estimatedCompletionTokens,
-          total_tokens: estimatedPromptTokens + estimatedCompletionTokens,
-        },
+        usage,
       };
 
       res.json(response);

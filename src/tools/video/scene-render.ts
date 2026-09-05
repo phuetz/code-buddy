@@ -42,6 +42,7 @@ export interface RenderSceneInput {
 export interface RenderSceneDeps {
   spawn?: typeof realSpawn;
   ffmpegBin?: string;
+  ffprobeBin?: string;
   convertBin?: string;
   identifyBin?: string;
   /** Working dir for intermediate stills / ass (default: alongside outPath). */
@@ -207,6 +208,46 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Title-band + image-box geometry for a framed still (pure, unit-tested). */
+export function computeFramedLayout(
+  w: number,
+  h: number,
+  hasSubtitle: boolean
+): {
+  side: number;
+  titleZone: number;
+  captionZone: number;
+  imgBoxW: number;
+  imgBoxH: number;
+  brandSize: number;
+  titleSize: number;
+  subSize: number;
+  tx: number;
+  brandY: number;
+  titleY: number;
+  subtitleY: number;
+} {
+  const side = Math.round(w * 0.06);
+  // Keep the title + subtitle in the reserved band. 0.14*h was too small on
+  // 9:16: the subtitle baseline sat *below* the diagram (GK4 scene 2).
+  const titleZone = Math.round(h * (hasSubtitle ? 0.2 : 0.14));
+  const captionZone = Math.round(h * 0.14);
+  return {
+    side,
+    titleZone,
+    captionZone,
+    imgBoxW: w - 2 * side,
+    imgBoxH: Math.max(120, h - titleZone - captionZone),
+    brandSize: Math.round(h * 0.028),
+    titleSize: Math.round(h * 0.05),
+    subSize: Math.round(h * 0.028),
+    tx: Math.round(w * 0.048),
+    brandY: Math.round(h * 0.05),
+    titleY: Math.round(h * 0.092),
+    subtitleY: Math.round(h * 0.152),
+  };
+}
+
 // ============================================================================
 // Spawn helpers (injectable)
 // ============================================================================
@@ -254,6 +295,40 @@ async function hasBinary(spawn: typeof realSpawn, bin: string): Promise<boolean>
   return code === 0;
 }
 
+async function verifyVideoArtifact(
+  spawn: typeof realSpawn,
+  ffprobeBin: string,
+  file: string,
+): Promise<boolean> {
+  try {
+    const metadata = await fs.lstat(file);
+    if (!metadata.isFile() || metadata.size <= 0) return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[scene-render] could not inspect ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return false;
+  }
+  const probe = await run(
+    spawn,
+    ffprobeBin,
+    ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
+    30_000,
+  );
+  if (probe.code !== 0) return false;
+  try {
+    const json = JSON.parse(probe.stdout) as {
+      format?: { duration?: string };
+      streams?: Array<{ codec_type?: string }>;
+    };
+    const duration = json.format?.duration ? Number(json.format.duration) : NaN;
+    return Number.isFinite(duration) && duration > 0 && !!json.streams?.some((s) => s.codec_type === 'video');
+  } catch (error) {
+    logger.warn(`[scene-render] invalid ffprobe metadata for ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
 // ============================================================================
 // Still composition
 // ============================================================================
@@ -268,16 +343,18 @@ async function composeFramedStill(
 ): Promise<boolean> {
   const c0 = input.c0 ?? '#0f2027';
   const c1 = input.c1 ?? '#243b55';
-  // Aspect-aware layout: reserve a title band on top + a caption band at the
-  // bottom, fit the framed image into what's left (works for wide and 9:16).
-  const side = Math.round(w * 0.06);
-  const titleZone = Math.round(h * 0.14);
-  const imgBoxW = w - 2 * side;
-  const imgBoxH = Math.max(120, h - titleZone - Math.round(h * 0.14));
-  const brandSize = Math.round(h * 0.028);
-  const titleSize = Math.round(h * 0.05);
-  const subSize = Math.round(h * 0.028);
-  const tx = Math.round(w * 0.048);
+  const {
+    titleZone,
+    imgBoxW,
+    imgBoxH,
+    brandSize,
+    titleSize,
+    subSize,
+    tx,
+    brandY,
+    titleY,
+    subtitleY,
+  } = computeFramedLayout(w, h, !!input.subtitle);
   const resized = `${stillPath}.rs.png`;
   const rounded = `${stillPath}.rnd.png`;
   const bg = `${stillPath}.bg.png`;
@@ -365,7 +442,7 @@ async function composeFramedStill(
       '-fill',
       '#9fb4ff',
       '-annotate',
-      `+${tx}+${Math.round(h * 0.05)}`,
+      `+${tx}+${brandY}`,
       '● code-buddy',
       '-font',
       FB,
@@ -374,7 +451,7 @@ async function composeFramedStill(
       '-fill',
       'white',
       '-annotate',
-      `+${tx}+${Math.round(h * 0.092)}`,
+      `+${tx}+${titleY}`,
       input.title,
     ];
     if (input.subtitle)
@@ -386,7 +463,7 @@ async function composeFramedStill(
         '-fill',
         '#cdd6f4',
         '-annotate',
-        `+${tx}+${Math.round(h * 0.152)}`,
+        `+${tx}+${subtitleY}`,
         input.subtitle
       );
     composeArgs.push(stillPath);
@@ -479,6 +556,7 @@ export async function renderScene(
   }
 
   let assPath: string | undefined;
+  let subtitleError: string | undefined;
   const wantSubs = input.subtitles ?? !!input.narrationText;
   if (wantSubs && input.narrationText && input.narrationWav) {
     assPath = path.join(workDir, `${input.id}.ass`);
@@ -492,9 +570,20 @@ export async function renderScene(
           playResY: h,
         })
       )
-      .catch(() => {
+      .catch((error: unknown) => {
         assPath = undefined;
+        subtitleError = error instanceof Error ? error.message : String(error);
       });
+  }
+
+  if (subtitleError) {
+    await fs.rm(stillPath, { force: true }).catch(() => undefined);
+    logger.warn(`[scene-render] ${input.id} subtitles could not be written: ${subtitleError}`);
+    return {
+      ok: false,
+      outPath: input.outPath,
+      error: `subtitle file could not be written: ${subtitleError}`,
+    };
   }
 
   const args = buildSceneVideoArgs({
@@ -515,6 +604,14 @@ export async function renderScene(
       `[scene-render] ${input.id} ffmpeg failed: ${stderr.trim().split('\n').slice(-3).join(' ')}`
     );
     return { ok: false, outPath: input.outPath, error: `ffmpeg render failed (exit ${code})` };
+  }
+  if (!(await verifyVideoArtifact(spawn, deps.ffprobeBin ?? 'ffprobe', input.outPath))) {
+    logger.warn(`[scene-render] ${input.id} ffmpeg exited 0 but produced no valid non-empty video artifact`);
+    return {
+      ok: false,
+      outPath: input.outPath,
+      error: 'ffmpeg render reported success but produced no valid non-empty video artifact',
+    };
   }
   return { ok: true, outPath: input.outPath };
 }

@@ -1,6 +1,7 @@
 import { constants as fsConstants } from 'fs';
-import { access, appendFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { access, appendFile, mkdir, readFile } from 'fs/promises';
 import { rotateIfLarge } from '../utils/disk-guard.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 import * as os from 'os';
 import * as path from 'path';
 import { createPublicKey, randomUUID, sign as signPayload } from 'crypto';
@@ -1697,7 +1698,7 @@ export async function prepareOpenClawFleetHandoffDraft(
     },
   };
   await mkdir(path.dirname(draftFile), { recursive: true });
-  await writeFile(draftFile, `${JSON.stringify(draft, null, 2)}\n`, 'utf8');
+  await writeFileAtomic(draftFile, `${JSON.stringify(draft, null, 2)}\n`, { mode: 0o600 });
   return draft;
 }
 

@@ -428,8 +428,8 @@ export async function runHandoffStage(
     aspectRatio,
     upscale4k: false,
     capacity: {
-      darkstar: false,
-      ministar: false,
+      gpuNode: false,
+      localGpu: false,
       googleFlow: true,
       remainingFlowCredits: remainingCredits,
       maxFlowCreditsPerBatch: remainingCredits,

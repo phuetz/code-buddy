@@ -15,9 +15,19 @@
  *   - a read of an arbitrary path (/etc/passwd) is STILL blocked.
  */
 import fs from 'fs';
-import os from 'os';
+import * as os from 'os';
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { isolatedHome } = vi.hoisted(() => ({
+  isolatedHome: `${process.cwd()}/.r32-tool-handler-home-${process.pid}`,
+}));
+
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: () => isolatedHome };
+});
 
 import { ToolHandler } from '../../src/agent/tool-handler.js';
 import {
@@ -44,6 +54,32 @@ function makeHandler(): ToolHandler {
 }
 
 const TRUST_ERROR = 'is not in a trusted directory';
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const originalCwd = process.cwd();
+let isolatedHomeIsInsideRepo = false;
+
+beforeAll(() => {
+  const relativeHome = path.relative(repoRoot, isolatedHome);
+  if (
+    relativeHome === '..' ||
+    relativeHome.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeHome)
+  ) {
+    throw new Error(`Refusing to create a test home outside the repository: ${isolatedHome}`);
+  }
+  isolatedHomeIsInsideRepo = true;
+
+  // Keep the fake home outside the automatically trusted cwd while remaining
+  // physically inside this repository.
+  process.chdir(path.join(repoRoot, 'tests'));
+});
+
+afterAll(() => {
+  process.chdir(originalCwd);
+  if (isolatedHomeIsInsideRepo) {
+    fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
+  }
+});
 
 describe('ToolHandler trust gate — read-only skills exception', () => {
   const skillsDir = path.join(os.homedir(), '.codebuddy', 'skills');
@@ -64,6 +100,7 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     fs.mkdirSync(root, { recursive: true });
     createdRoot = root;
     fs.writeFileSync(skillFile, '# Trust test skill\n');
+    expect(skillFile.startsWith(`${repoRoot}${path.sep}`)).toBe(true);
   });
 
   afterEach(() => {

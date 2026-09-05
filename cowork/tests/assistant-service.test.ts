@@ -59,20 +59,20 @@ describe('AssistantService Voicebox studio', () => {
   it('uses persisted assistant values for studio discovery', async () => {
     const probeVoiceboxStudio = vi.fn(async () => ({
       available: true,
-      baseUrl: 'http://darkstar:17493',
+      baseUrl: 'http://gpuNode:17493',
       profiles: [],
       models: [],
       languages: ['fr'],
       engine: 'qwen',
     }));
     const service = new AssistantService(
-      async () => ({ readAssistantConfig: () => ({ CODEBUDDY_VOICEBOX_URL: 'http://darkstar:17493' }) }),
+      async () => ({ readAssistantConfig: () => ({ CODEBUDDY_VOICEBOX_URL: 'http://gpuNode:17493' }) }),
       async () => ({ probeVoiceboxStudio })
     );
 
     await expect(service.voiceboxStudio()).resolves.toMatchObject({ available: true });
     expect(probeVoiceboxStudio).toHaveBeenCalledWith(expect.objectContaining({
-      CODEBUDDY_VOICEBOX_URL: 'http://darkstar:17493',
+      CODEBUDDY_VOICEBOX_URL: 'http://gpuNode:17493',
     }));
   });
 

@@ -930,7 +930,7 @@ describe('TestRunnerBridge catalog', () => {
     expect(labels).toContain('test:fail');
     expect(labels).toContain('Cowork / typecheck');
     expect(labels).toContain('Cowork / test:e2e');
-    expect(labels).toContain('Cowork / IPC chat flow');
+    expect(labels).toContain('Cowork / local OpenAI chat flow');
     expect(labels).toContain('Cowork / companion deterministic panel');
     expect(labels).toContain('Cowork / panel usage depth');
     expect(labels).toContain('Cowork / feature completion depth');
@@ -1011,7 +1011,7 @@ describe('TestRunnerBridge catalog', () => {
       safeToRun: false,
       requiresEnv: 'COWORK_REAL_GPT55',
     });
-    expect(catalog.find((item) => item.label === 'Cowork / IPC chat flow')).toMatchObject({
+    expect(catalog.find((item) => item.label === 'Cowork / local OpenAI chat flow')).toMatchObject({
       kind: 'e2e',
       safeToRun: true,
     });

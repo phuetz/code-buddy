@@ -341,9 +341,9 @@ describe('ContextManagerV3', () => {
         createMessage('assistant', 'y'.repeat(300))
       ];
 
-      const prepared = manager.prepareMessages(messages);
-      const systemMessage = prepared.find(m => m.role === 'system');
-      expect(systemMessage).toBeDefined();
+      // R29/R33 : une requête courante qui ne tient pas seule dans le budget est
+      // refusée explicitement ; le prompt système n'est jamais sacrifié pour la faire entrer.
+      expect(() => manager.prepareMessages(messages)).toThrow(/exceeds the context budget/u);
       manager.dispose();
     });
 

@@ -8,6 +8,7 @@ import { ClipboardTool } from '../../src/tools/clipboard-tool.js';
 import { BrowserTool } from '../../src/tools/browser-tool.js';
 import { VideoTool } from '../../src/tools/video-tool.js';
 import { UnifiedVfsRouter } from '../../src/services/vfs/unified-vfs-router.js';
+import nodePath from 'path';
 
 // Mock UnifiedVfsRouter
 const mockReadFile = jest.fn();
@@ -130,9 +131,19 @@ describe('Miscellaneous Tools VFS Migration Part 2', () => {
       // note: readImage might use spawn, but we check dir creation
       
       // copyFileContent
+      mockReadFile.mockResolvedValue('clipboard file content');
+      const writeTextSpy = vi.spyOn(tool, 'writeText').mockResolvedValue({
+        success: true,
+        output: 'copied',
+      });
       await tool.copyFileContent('test.txt');
-      expect(mockExists).toHaveBeenCalledWith(expect.stringContaining('test.txt'));
-      expect(mockReadFile).toHaveBeenCalled();
+      // VERIF3 T19 : `stringContaining('test.txt')` laissait passer un suffixe
+      // ajouté au chemin lu (seul l'encodage était discriminant). Le chemin
+      // résolu exact est désormais asserté des deux côtés.
+      const resolvedPath = nodePath.resolve(process.cwd(), 'test.txt');
+      expect(mockExists).toHaveBeenCalledWith(resolvedPath);
+      expect(mockReadFile).toHaveBeenCalledWith(resolvedPath, 'utf8');
+      expect(writeTextSpy).toHaveBeenCalledWith('clipboard file content');
     });
   });
 

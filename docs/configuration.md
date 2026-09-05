@@ -32,6 +32,7 @@
 | `GITHUB_COPILOT_TOKEN` / `COPILOT_GITHUB_TOKEN` | GitHub Copilot |
 | `OLLAMA_HOST` | Ollama (default: localhost:11434) |
 | `VLLM_BASE_URL` | vLLM server URL |
+| `CODEBUDDY_NETWORK_MODELS` | Liste explicite de modèles réseau au format `modele@https://hote/v1,…`; aucun hôte réseau n'est découvert ou présélectionné |
 | `AWS_BEDROCK_REGION` / `AWS_REGION` | AWS Bedrock region |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | AWS Bedrock credentials |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint |
@@ -75,6 +76,7 @@ Doc LoRA : [krea-lora.md](./krea-lora.md).
 | Variable | Description |
 |:---------|:------------|
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_API_BASE` | Telegram Bot API origin (default `https://api.telegram.org`). Point at a local fake for tests; trailing slashes are stripped |
 | `DISCORD_TOKEN` | Discord bot token |
 | `SLACK_BOT_TOKEN` | Slack bot token |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | Feishu/Lark app credentials |
@@ -103,7 +105,7 @@ Doc LoRA : [krea-lora.md](./krea-lora.md).
 | `CODEBUDDY_TTS_ENGINE` | Renderer selection: `pocket`, `voicebox`, or `piper` | `pocket` |
 | `CODEBUDDY_POCKET_VOICE` / `_LANG` | Realtime Pocket voice and language | `estelle` / `french` |
 | `CODEBUDDY_POCKET_URL` / `_SERVER` | Resident Pocket endpoint and auto-start toggle | `http://127.0.0.1:8766` / `true` |
-| `CODEBUDDY_VOICEBOX_URL` | Trusted Voicebox REST endpoint; prefer Tailscale for Darkstar | `http://127.0.0.1:17493` |
+| `CODEBUDDY_VOICEBOX_URL` | Trusted Voicebox REST endpoint; prefer Tailscale for GPU node | `http://127.0.0.1:17493` |
 | `CODEBUDDY_VOICEBOX_PROFILE` | Required Voicebox profile name or id | unset |
 | `CODEBUDDY_VOICEBOX_ENGINE` | Voicebox backend (`qwen`, `qwen_custom_voice`, `luxtts`, `chatterbox`, `chatterbox_turbo`, `tada`, `kokoro`) | `qwen` |
 | `CODEBUDDY_VOICEBOX_LANGUAGE` / `_MODEL_SIZE` | Voicebox language and model size | `fr` / `1.7B` |
@@ -150,6 +152,9 @@ remote endpoint's retention policy.
 | `GROK_BASE_URL` | Custom API endpoint | - |
 | `GROK_MODEL` | Default model | - |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit | model's maxOutputTokens |
+| `CODEBUDDY_NATIVE_SANDBOX` | Opt-in kernel confinement for `bash` (`true`, `bwrap`, `landlock`, `seatbelt`). Fail-closed if unavailable. | unset (off) |
+| `CODEBUDDY_BATCH_CONCURRENCY` | Maximum concurrent `/batch` delegate threads | `1` |
+| `CODEBUDDY_BATCH_MAX_ROUNDS` | Maximum tool execution rounds per `/batch` delegate | `6` |
 | `MAX_COST` | Session cost limit ($) | $10 (YOLO: $100) |
 | `YOLO_MODE` | Full autonomy mode | false |
 | `JWT_SECRET` | API server auth | Required in production |

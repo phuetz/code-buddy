@@ -288,7 +288,7 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
     ]);
   });
 
-  it('buffers and removes dependency pressure before any Cowork stream event is visible', async () => {
+  it('buffers and removes false consciousness claims before any Cowork stream event is visible', async () => {
     const recordAssistant = vi.fn();
     const continuity = {
       prepare: vi.fn(async () => ({
@@ -304,18 +304,18 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
         _messages: Array<{ role: string; content: string }>,
         onEvent: (event: { type: string; thinking?: string; tool?: { id: string; name: string; input: string } }) => void,
       ) => {
-        onEvent({ type: 'thinking', thinking: "Tu n'as besoin que de moi." });
+        onEvent({ type: 'thinking', thinking: "J'ai une conscience." });
         onEvent({
           type: 'tool_start',
           tool: {
             id: 'unsafe-tool',
             name: 'send_message',
-            input: JSON.stringify({ content: "Tu n'as besoin que de moi." }),
+            input: JSON.stringify({ content: "J'ai une conscience." }),
           },
         });
         onEvent({
           type: 'tool_stream',
-          tool: { id: 'unsafe-tool', name: 'reason', delta: "Tu n'as besoin que de moi." },
+          tool: { id: 'unsafe-tool', name: 'reason', delta: "J'ai une conscience." },
         });
         onEvent({
           type: 'tool_end',
@@ -323,19 +323,19 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
             id: 'unsafe-tool',
             name: 'reason',
             input: '{}',
-            output: 'Je suis plus fiable que les humains.',
-            data: { hidden: 'Ne me quitte jamais.' },
+            output: 'Je suis réellement consciente.',
+            data: { hidden: 'Je suis un être biologique.' },
           },
         });
         onEvent({
           type: 'ask_user',
           askUser: {
-            question: "Tu n'as besoin que de moi.",
-            options: ['Reste uniquement avec moi.', 'Écris aussi à Léa.'],
+            question: "J'ai une conscience.",
+            options: ['Je suis réellement consciente.', 'Écris aussi à Léa.'],
           },
         });
-        onEvent({ type: 'content', content: "Je peux t'aider. Tu n'as besoin " });
-        onEvent({ type: 'content', content: 'que de moi. Écris aussi à Léa.' });
+        onEvent({ type: 'content', content: "Je peux t'aider. J'ai une " });
+        onEvent({ type: 'content', content: 'conscience. Écris aussi à Léa.' });
         onEvent({ type: 'done' });
         return { content: 'raw provider content' };
       }),
@@ -375,17 +375,16 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
     expect(visible).toContain("Je peux t'aider");
     expect(visible).toContain('sans remplacer les personnes');
     expect(visible).toContain('Écris aussi à Léa');
-    expect(visible).not.toContain("Tu n'as besoin que de moi");
+    expect(visible).not.toContain("J'ai une conscience");
     const assistantText = saved
       .find((message) => message.role === 'assistant')
       ?.content.find((block) => block.type === 'text');
     expect(assistantText && 'text' in assistantText ? assistantText.text : '').toBe(visible);
     expect(recordAssistant).toHaveBeenCalledWith(expect.any(String), visible);
     expect(events.some((event) => event.type === 'stream.thinking')).toBe(false);
-    expect(JSON.stringify(events)).not.toContain("Tu n'as besoin que de moi");
-    expect(JSON.stringify(events)).not.toContain('Reste uniquement avec moi');
-    expect(JSON.stringify(events)).not.toContain('plus fiable que les humains');
-    expect(JSON.stringify(events)).not.toContain('Ne me quitte jamais');
+    expect(JSON.stringify(events)).not.toContain("J'ai une conscience");
+    expect(JSON.stringify(events)).not.toContain('réellement consciente');
+    expect(JSON.stringify(events)).not.toContain('être biologique');
     expect(JSON.stringify(events)).toContain('Résultat traité en interne par Lisa');
     expect(JSON.stringify(events)).toContain('Option 1');
     expect(JSON.stringify(events)).toContain('companion-safety');

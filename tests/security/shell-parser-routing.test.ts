@@ -1,8 +1,26 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 import { parseShellCommand, stripShellWrapper } from '../../src/security/bash-parser.js';
 import type { PowerShellParserRunner } from '../../src/security/powershell-parser.js';
 import { validateCommand } from '../../src/tools/bash/command-validator.js';
+
+// `validateCommand` n'expose pas le seam PowerShellParserRunner : les deux
+// scénarios « le parseur natif est indisponible » lancent le VRAI binaire.
+// Leur prémisse — nommée dans leur intitulé — n'est vraie que là où ni pwsh ni
+// powershell n'existent. Or les runners macOS et Windows de GitHub livrent
+// PowerShell : le parseur répond, la commande est analysée, et le refus
+// attendu n'a plus lieu d'être. La sonde est la présence RÉELLE du binaire, pas
+// une supposition de plate-forme : sur une machine sans PowerShell (le cas
+// habituel sous Linux) les deux scénarios tournent comme avant.
+const NATIVE_POWERSHELL_ABSENT = !['pwsh', 'powershell'].some((executable) => {
+  try {
+    const probe = spawnSync(executable, ['-NoProfile', '-Command', 'exit 0'], { timeout: 10_000 });
+    return !probe.error && probe.status === 0;
+  } catch {
+    return false;
+  }
+});
 
 const nativeReadOnlyResult: PowerShellParserRunner = () => ({
   status: 0,
@@ -87,13 +105,13 @@ describe('parseShellCommand routing', () => {
 });
 
 describe('validator parser fail-closed seam', () => {
-  it('refuses a wrapped PowerShell command when the native parser is unavailable', () => {
+  it.runIf(NATIVE_POWERSHELL_ABSENT)('refuses a wrapped PowerShell command when the native parser is unavailable', () => {
     const verdict = validateCommand('powershell -Command "Get-ChildItem"');
     expect(verdict.valid).toBe(false);
     expect(verdict.reason).toMatch(/PowerShell parser/i);
   });
 
-  it('cannot hide PowerShell behind cmd /c', () => {
+  it.runIf(NATIVE_POWERSHELL_ABSENT)('cannot hide PowerShell behind cmd /c', () => {
     const verdict = validateCommand('cmd /c "pwsh -Command \'Get-ChildItem\'"');
     expect(verdict.valid).toBe(false);
     expect(verdict.reason).toMatch(/PowerShell parser/i);

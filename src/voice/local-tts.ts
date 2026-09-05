@@ -23,11 +23,18 @@ import { DEFAULT_ELEVENLABS_MODEL } from '../talk-mode/providers/elevenlabs-clie
 import { normalizePcm16Wav, normalizeWavFile } from './tts-volume.js';
 import {
   DEFAULT_ELEVENLABS_TIMEOUT_MS,
+  openElevenLabsPcm24kStream,
   synthesizeElevenLabsPcm24k,
   type ElevenLabsVoiceSynthesisOptions,
+  elevenLabsVoiceSettingsSignature,
 } from './elevenlabs-voice.js';
+import {
+  openKyutaiPcm24kStream,
+  resolveKyutaiLocalTimeoutMs,
+  type KyutaiLocalVoiceOptions,
+} from './kyutai-local-voice.js';
 
-export type LocalTtsEngine = 'elevenlabs' | 'pocket' | 'voicebox' | 'piper';
+export type LocalTtsEngine = 'elevenlabs' | 'kyutai' | 'pocket' | 'voicebox' | 'piper';
 
 const DEFAULT_POCKET_SERVER_URL = 'http://127.0.0.1:8766';
 const DEFAULT_POCKET_SERVER_START_TIMEOUT_MS = 120_000;
@@ -43,7 +50,9 @@ let pocketCleanupRegistered = false;
 export function resolveTtsEngine(env: NodeJS.ProcessEnv = process.env): LocalTtsEngine {
   if (resolveElevenLabsVoiceId(env)) return 'elevenlabs';
   const configured = (env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase();
-  if (configured === 'piper' || configured === 'voicebox') return configured;
+  if (configured === 'piper' || configured === 'voicebox' || configured === 'kyutai') {
+    return configured;
+  }
   return 'pocket';
 }
 
@@ -71,7 +80,8 @@ export function resolveElevenLabsCacheVoice(
 ): string {
   const selectedVoice = env.CODEBUDDY_TTS_VOICE?.trim() || 'elevenlabs:missing';
   const model = env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL;
-  return `${selectedVoice}:model=${model}:format=pcm_24000`;
+  const settings = elevenLabsVoiceSettingsSignature(env);
+  return `${selectedVoice}:model=${model}:format=pcm_24000${settings ? `:settings=${settings}` : ''}`;
 }
 
 /** Local Pocket server URL. Port 8766 avoids the common AudioReader port 8000. */
@@ -255,29 +265,46 @@ function pocketRequestSignal(timeoutMs: number, signal?: AbortSignal): AbortSign
  * them available; callers can pipe this body straight to a player and hear the
  * first audio chunk while synthesis is still running.
  */
+/**
+ * Report why the native stream is gone, then hand back `null`.
+ *
+ * Losing this stream is not cosmetic: the caller falls back to synthesizing one
+ * sentence at a time and the listener hears choppy, gap-ridden speech. The cause
+ * used to be logged at debug level — invisible in production — so a degraded
+ * voice arrived at the operator as an unexplained defect. It is rare and always
+ * consequential, so it warns.
+ */
+function pocketStreamUnavailable(reason: string): null {
+  logger.warn(
+    `[pocket-tts] native stream unavailable (${reason}) — falling back to per-sentence synthesis`
+  );
+  return null;
+}
+
 export async function openPocketAudioStream(
   text: string,
   env: NodeJS.ProcessEnv = process.env,
   options: { timeoutMs?: number; signal?: AbortSignal } = {}
 ): Promise<ReadableStream<Uint8Array> | null> {
   try {
+    // A deliberate opt-out is a choice, not a degradation — stay quiet for it.
     if (env.CODEBUDDY_POCKET_SERVER === 'false') return null;
     const serverUrl = resolvePocketServerUrl(env);
-    if (!(await ensurePocketServer(env))) return null;
+    if (!(await ensurePocketServer(env))) {
+      return pocketStreamUnavailable(`resident server unreachable at ${serverUrl}`);
+    }
     const response = await fetch(new URL('/tts', serverUrl), {
       method: 'POST',
       body: buildPocketRequestBody(text, env),
       signal: pocketRequestSignal(options.timeoutMs ?? 180_000, options.signal),
     });
-    if (!response.ok || !response.body) return null;
+    if (!response.ok) return pocketStreamUnavailable(`HTTP ${response.status}`);
+    if (!response.body) return pocketStreamUnavailable('response carried no body');
     return response.body;
   } catch (err) {
-    if (!options.signal?.aborted) {
-      logger.debug(
-        `[pocket-tts] resident stream failed: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    return null;
+    // A barge-in aborts on purpose: that is the user interrupting, not a failure.
+    if (options.signal?.aborted) return null;
+    return pocketStreamUnavailable(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -380,6 +407,202 @@ export function pcm16Mono24kToWav(pcm: Buffer): Buffer {
 }
 
 /**
+ * 44-byte RIFF/WAVE header for a mono 16-bit 24 kHz PCM stream of UNKNOWN
+ * length. RIFF and `data` sizes are 0xFFFFFFFF, the streaming convention that
+ * `probePcm16Wav` accepts and `aplay` plays until EOF — the same open-ended
+ * shape `Pcm16WavStreamEdges` rewrites onto Pocket's streamed header.
+ */
+export function pcm16Mono24kStreamWavHeader(): Buffer {
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 4, 'ascii');
+  header.writeUInt32LE(0xffff_ffff, 4);
+  header.write('WAVE', 8, 4, 'ascii');
+  header.write('fmt ', 12, 4, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(24_000, 24);
+  header.writeUInt32LE(48_000, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36, 4, 'ascii');
+  header.writeUInt32LE(0xffff_ffff, 40);
+  return header;
+}
+
+/** Keep at most ~5 minutes of 24 kHz PCM for the cache writeback (a voice sentence is seconds). */
+const MAX_STREAM_CAPTURE_BYTES = 5 * 60 * 48_000;
+
+/**
+ * Prepend the streaming WAV header to a RAW PCM16/24k body (ElevenLabs
+ * `pcm_24000` carries no container) so the existing WAV-expecting chain —
+ * `Pcm16WavStreamGain`, `Pcm16WavStreamEdges`, `aplay -q -` — accepts it.
+ *
+ * `onComplete` fires with the FULL concatenated PCM only when the source body
+ * finished cleanly (never on cancel/error/oversize), so a barge-in-truncated
+ * clip can never be cached as the complete phrase.
+ */
+export function wrapPcm16Mono24kStreamAsWav(
+  source: ReadableStream<Uint8Array>,
+  onComplete?: (pcm: Buffer) => void,
+  maxCaptureBytes: number = MAX_STREAM_CAPTURE_BYTES,
+): ReadableStream<Uint8Array> {
+  let headerSent = false;
+  const captured: Buffer[] = [];
+  let capturedBytes = 0;
+  let overflow = false;
+  return source.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform: (chunk, controller) => {
+        if (!headerSent) {
+          headerSent = true;
+          controller.enqueue(pcm16Mono24kStreamWavHeader());
+        }
+        if (chunk.byteLength === 0) return;
+        if (!overflow && onComplete) {
+          capturedBytes += chunk.byteLength;
+          if (capturedBytes > maxCaptureBytes) {
+            overflow = true;
+            captured.length = 0;
+          } else {
+            captured.push(Buffer.from(chunk));
+          }
+        }
+        controller.enqueue(chunk);
+      },
+      flush: () => {
+        if (overflow || capturedBytes === 0 || !onComplete) return;
+        try {
+          onComplete(Buffer.concat(captured));
+        } catch {
+          /* cache writeback is best-effort — playback already succeeded */
+        }
+      },
+    })
+  );
+}
+
+/** Kyutai counterpart of openElevenLabsAudioStream: raw PCM → streaming WAV. */
+export async function openKyutaiAudioStream(
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiLocalVoiceOptions & {
+    signal?: AbortSignal;
+    onPcmComplete?: (pcm: Buffer) => void;
+  } = {},
+): Promise<ReadableStream<Uint8Array> | null> {
+  const stream = await openKyutaiPcm24kStream(
+    text,
+    env,
+    options.signal,
+    {
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    },
+  );
+  return stream
+    ? wrapPcm16Mono24kStreamAsWav(stream, options.onPcmComplete)
+    : null;
+}
+
+/** Buffer a complete Kyutai stream into the existing normalized WAV contract. */
+export async function synthesizeKyutaiWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiLocalVoiceOptions & {
+    signal?: AbortSignal;
+    frozenFactor?: number;
+  } = {},
+): Promise<boolean> {
+  try {
+    const stream = await openKyutaiPcm24kStream(
+      text,
+      env,
+      options.signal,
+      {
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      },
+    );
+    if (!stream || options.signal?.aborted) return false;
+    const reader = stream.getReader();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      chunks.push(chunk);
+      total += chunk.length;
+    }
+    if (total === 0 || total % 2 !== 0 || options.signal?.aborted) return false;
+    const wav = pcm16Mono24kToWav(Buffer.concat(chunks, total));
+    writeFileSync(wavPath, normalizePcm16Wav(wav, env, options.frozenFactor), { mode: 0o600 });
+    return true;
+  } catch (error) {
+    if (!options.signal?.aborted) {
+      logger.warn(
+        `[kyutai-voice] synthèse interrompue (${error instanceof Error ? error.message : String(error)}); repli ElevenLabs`,
+      );
+    }
+    return false;
+  }
+}
+
+/**
+ * Same visibility contract as `pocketStreamUnavailable`: losing the native
+ * ElevenLabs stream means per-sentence blocking synthesis (choppy speech) or a
+ * local-voice fallback, so the cause must reach the operator, not debug logs.
+ */
+function elevenLabsStreamUnavailable(reason: string): null {
+  logger.warn(
+    `[elevenlabs-voice] native stream unavailable (${reason}) — falling back to per-sentence synthesis`
+  );
+  return null;
+}
+
+/**
+ * Open the ElevenLabs native chunked audio stream wrapped as a playable WAV
+ * stream — the exact ElevenLabs counterpart of `openPocketAudioStream`. The
+ * monthly character budget is enforced inside `openElevenLabsPcm24kStream`
+ * BEFORE any network request. Returns `null` on every failure so the caller
+ * falls back to the blocking synth path (which itself falls back Pocket/Piper).
+ */
+export async function openElevenLabsAudioStream(
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    /** Full clean PCM writeback hook (used to store the paid clip in the TTS cache). */
+    onPcmComplete?: (pcm: Buffer) => void;
+  } = {}
+): Promise<ReadableStream<Uint8Array> | null> {
+  try {
+    const voiceId = resolveElevenLabsVoiceId(env);
+    if (!voiceId) return null;
+    if (options.signal?.aborted) return null;
+    const pcmStream = await openElevenLabsPcm24kStream(
+      text,
+      voiceId,
+      env,
+      options.signal,
+      options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}
+    );
+    if (!pcmStream) {
+      // A barge-in aborts on purpose: the user interrupting is not a failure.
+      if (options.signal?.aborted) return null;
+      return elevenLabsStreamUnavailable('budget, clé ou réseau indisponible');
+    }
+    return wrapPcm16Mono24kStreamAsWav(pcmStream, options.onPcmComplete);
+  } catch (err) {
+    if (options.signal?.aborted) return null;
+    return elevenLabsStreamUnavailable(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
  * Synthesize Lisa through ElevenLabs into the WAV contract used by the existing
  * player. Never throws: false tells the caller to use Pocket/Piper immediately.
  */
@@ -411,6 +634,64 @@ export async function synthesizeElevenLabsWav(
   } catch {
     return false;
   }
+}
+
+export interface KyutaiFallbackWavOptions {
+  signal?: AbortSignal;
+  frozenFactor?: number;
+  kyutai?: KyutaiLocalVoiceOptions;
+  elevenLabs?: ElevenLabsVoiceSynthesisOptions;
+  pocketTimeoutMs?: number;
+}
+
+/**
+ * Preserve the phrase across the complete DARK3 degradation chain:
+ * Kyutai → ElevenLabs → Pocket. A failed provider never changes or truncates
+ * the text handed to the next one.
+ */
+export async function synthesizeKyutaiWithFallbackWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: KyutaiFallbackWavOptions = {},
+): Promise<boolean> {
+  const signal = options.signal;
+  if (signal?.aborted) return false;
+  if (await synthesizeKyutaiWav(text, wavPath, env, {
+    ...(options.kyutai ?? {}),
+    timeoutMs: options.kyutai?.timeoutMs ?? resolveKyutaiLocalTimeoutMs(env),
+    ...(signal ? { signal } : {}),
+    ...(options.frozenFactor !== undefined ? { frozenFactor: options.frozenFactor } : {}),
+  })) {
+    return true;
+  }
+  if (signal?.aborted) return false;
+
+  if (resolveElevenLabsVoiceId(env)) {
+    logger.warn('[voice] Kyutai synthesis failed — falling back to ElevenLabs for this phrase');
+    if (await synthesizeElevenLabsWav(
+      text,
+      wavPath,
+      env,
+      DEFAULT_ELEVENLABS_TIMEOUT_MS,
+      signal,
+      options.frozenFactor,
+      options.elevenLabs,
+    )) {
+      return true;
+    }
+  }
+  if (signal?.aborted) return false;
+
+  logger.warn('[voice] Kyutai/ElevenLabs synthesis failed — falling back to Pocket for this phrase');
+  return synthesizePocketWav(
+    text,
+    wavPath,
+    env,
+    options.pocketTimeoutMs ?? 180_000,
+    signal,
+    options.frozenFactor,
+  );
 }
 
 /**
@@ -497,6 +778,7 @@ export function localTtsAvailable(): boolean {
     // this synchronous compatibility API only reports whether it is configured.
     return Boolean(process.env.CODEBUDDY_VOICEBOX_PROFILE?.trim());
   }
+  if (engine === 'kyutai') return true;
   // Pocket auto-resolves through `uvx pocket-tts` and keeps its model resident.
   if (engine === 'pocket') return true;
   return (
@@ -646,7 +928,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
         ...(options.signal ? { signal: options.signal } : {}),
       });
       // Voicebox is expressive but may be running on another machine. Pocket
-      // keeps voice notes available when Darkstar is offline or still loading.
+      // keeps voice notes available when GPU node is offline or still loading.
       if (!rendered && !options.signal?.aborted) {
         rendered = await synthesizePocketWav(clean, wav, process.env, timeoutMs, options.signal);
       }

@@ -3,6 +3,8 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Mock fs before importing the module
 jest.mock('fs', () => {
@@ -26,10 +28,38 @@ function resetSettingsManager(): void {
   (SettingsManager as unknown as { instance: SettingsManager | undefined }).instance = undefined;
 }
 
+// TESTWRITE1 (2026-09-04): `saveUserSettings`/`saveProjectSettings` persist
+// through `atomic-write.js`, which reaches `node:fs` directly (open/rename/
+// chmod/fsync). The `jest.mock('fs', …)` above only overrides four methods —
+// it never touches those atomic-write syscalls — so with the DEFAULT (no
+// override) paths this suite was silently renaming an EMPTY temp file onto
+// the real `<repo>/.codebuddy/settings.json` and `~/.codebuddy/user-settings.json`
+// on every run (measured: both truncated to 0 bytes). Every manager instance
+// in this file must be constructed with `settingsManagerOverrides()` so both
+// paths stay inside a per-test `mkdtemp` directory; the production default
+// (zero-arg `getSettingsManager()`) is untouched — see `SettingsManagerOverrides`
+// in `src/utils/settings-manager.ts`.
 describe('SettingsManager', () => {
   let manager: SettingsManager;
+  let tmpDir: string;
+  let userSettingsPath: string;
+  let projectSettingsPath: string;
 
-  beforeEach(() => {
+  function settingsManagerOverrides() {
+    return { userSettingsPath, projectSettingsPath };
+  }
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-settings-manager-test-'));
+    // Keep the `.codebuddy` segment in both paths: some tests below mock
+    // `fs.existsSync` by matching `p.includes('.codebuddy')`.
+    userSettingsPath = path.join(tmpDir, '.codebuddy', 'user-settings.json');
+    projectSettingsPath = path.join(tmpDir, '.codebuddy', 'settings.json');
+    // `fs.mkdirSync` is mocked to a no-op below, but the atomic writer's
+    // real (unmocked) `openSync`/`renameSync` still need this directory to
+    // exist on disk — create it through the untouched `fs.promises` surface.
+    await fs.promises.mkdir(path.join(tmpDir, '.codebuddy'), { recursive: true });
+
     resetSettingsManager();
     jest.clearAllMocks();
 
@@ -39,12 +69,13 @@ describe('SettingsManager', () => {
     (fs.writeFileSync as jest.Mock).mockImplementation(function() {});
     (fs.mkdirSync as jest.Mock).mockImplementation(function() {});
 
-    manager = getSettingsManager();
+    manager = getSettingsManager(settingsManagerOverrides());
   });
 
   afterEach(() => {
     resetSettingsManager();
     jest.clearAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe('Initialization', () => {
@@ -53,15 +84,15 @@ describe('SettingsManager', () => {
     });
 
     it('should return same instance on multiple calls', () => {
-      const instance1 = getSettingsManager();
-      const instance2 = getSettingsManager();
+      const instance1 = getSettingsManager(settingsManagerOverrides());
+      const instance2 = getSettingsManager(settingsManagerOverrides());
       expect(instance1).toBe(instance2);
     });
 
     it('should return new instance after reset', () => {
-      const instance1 = getSettingsManager();
+      const instance1 = getSettingsManager(settingsManagerOverrides());
       resetSettingsManager();
-      const instance2 = getSettingsManager();
+      const instance2 = getSettingsManager(settingsManagerOverrides());
       expect(instance1).not.toBe(instance2);
     });
   });
@@ -91,7 +122,7 @@ describe('SettingsManager', () => {
       );
 
       resetSettingsManager();
-      const newManager = getSettingsManager();
+      const newManager = getSettingsManager(settingsManagerOverrides());
       const model = newManager.getUserSetting('defaultModel');
       expect(model).toBe('grok-3-latest');
     });
@@ -101,7 +132,7 @@ describe('SettingsManager', () => {
       (fs.readFileSync as jest.Mock).mockReturnValue('invalid json');
 
       resetSettingsManager();
-      const newManager = getSettingsManager();
+      const newManager = getSettingsManager(settingsManagerOverrides());
 
       // Should not throw, returns defaults
       const settings = newManager.loadUserSettings();
@@ -134,7 +165,7 @@ describe('SettingsManager', () => {
       );
 
       resetSettingsManager();
-      const newManager = getSettingsManager();
+      const newManager = getSettingsManager(settingsManagerOverrides());
       const model = newManager.getProjectSetting('model');
       expect(model).toBe('test-model');
     });
@@ -204,7 +235,7 @@ describe('SettingsManager', () => {
       (fs.readFileSync as jest.Mock).mockReturnValue('{}');
 
       resetSettingsManager();
-      const newManager = getSettingsManager();
+      const newManager = getSettingsManager(settingsManagerOverrides());
       const settings = newManager.loadUserSettings();
 
       // Should still have default values
@@ -218,7 +249,7 @@ describe('SettingsManager', () => {
       );
 
       resetSettingsManager();
-      const newManager = getSettingsManager();
+      const newManager = getSettingsManager(settingsManagerOverrides());
       const settings = newManager.loadUserSettings();
 
       // Null should be preserved but defaults should be merged

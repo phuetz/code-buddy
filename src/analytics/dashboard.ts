@@ -16,6 +16,7 @@ import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 import { LRUCache } from '../utils/lru-cache.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface UsageMetrics {
   totalSessions: number;
@@ -196,21 +197,21 @@ export class AnalyticsDashboard extends EventEmitter {
       // Load sessions
       const sessionsPath = path.join(this.dataDir, 'sessions.json');
       if (await fs.pathExists(sessionsPath)) {
-        const data = await fs.readJSON(sessionsPath);
+        const data = await readJsonAtomic<Record<string, SessionMetrics>>(sessionsPath, {});
         this.sessions.fromObject(data);
       }
 
       // Load tools
       const toolsPath = path.join(this.dataDir, 'tools.json');
       if (await fs.pathExists(toolsPath)) {
-        const data = await fs.readJSON(toolsPath);
+        const data = await readJsonAtomic<Record<string, ToolMetrics>>(toolsPath, {});
         this.tools.fromObject(data);
       }
 
       // Load daily stats
       const statsPath = path.join(this.dataDir, 'daily-stats.json');
       if (await fs.pathExists(statsPath)) {
-        const data = await fs.readJSON(statsPath);
+        const data = await readJsonAtomic<Record<string, DailyStats>>(statsPath, {});
         this.dailyStats.fromObject(data);
       }
     } catch {
@@ -223,22 +224,22 @@ export class AnalyticsDashboard extends EventEmitter {
    */
   private async saveData(): Promise<void> {
     try {
-      await fs.writeJSON(
+      await writeJsonAtomic(
         path.join(this.dataDir, 'sessions.json'),
         this.sessions.toObject(),
-        { spaces: 2 }
+        { mode: 0o600 }
       );
 
-      await fs.writeJSON(
+      await writeJsonAtomic(
         path.join(this.dataDir, 'tools.json'),
         this.tools.toObject(),
-        { spaces: 2 }
+        { mode: 0o600 }
       );
 
-      await fs.writeJSON(
+      await writeJsonAtomic(
         path.join(this.dataDir, 'daily-stats.json'),
         this.dailyStats.toObject(),
-        { spaces: 2 }
+        { mode: 0o600 }
       );
     } catch {
       // Ignore save errors
@@ -813,7 +814,7 @@ export class AnalyticsDashboard extends EventEmitter {
    */
   private async saveConfig(): Promise<void> {
     const configPath = path.join(this.dataDir, 'config.json');
-    await fs.writeJSON(configPath, this.config, { spaces: 2 });
+    await writeJsonAtomic(configPath, this.config, { mode: 0o600 });
   }
 
   /**

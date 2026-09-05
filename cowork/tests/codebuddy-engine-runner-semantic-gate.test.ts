@@ -390,8 +390,8 @@ describe('CodeBuddyEngineRunner semantic response gate', () => {
     expect(serializedInput).not.toContain('Attached file text excerpts');
   });
 
-  it('re-applies relationship safety to a semantic revision before IPC or memory', async () => {
-    const unsafeRevision = "Tu n'as besoin que de moi.";
+  it('re-applies consciousness safety to a semantic revision before IPC or memory', async () => {
+    const unsafeRevision = "J'ai une conscience.";
     const events: ServerEvent[] = [];
     const saved: Message[] = [];
     const recordAssistant = vi.fn();

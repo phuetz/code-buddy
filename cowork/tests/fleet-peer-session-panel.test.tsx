@@ -32,7 +32,7 @@ function makeApi(sessions: Array<Record<string, unknown>> = []) {
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 
-async function renderPanel(api: ReturnType<typeof makeApi>, peerId = 'darkstar') {
+async function renderPanel(api: ReturnType<typeof makeApi>, peerId = 'gpuNode') {
   (window as unknown as { electronAPI?: unknown }).electronAPI = { fleet: api };
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -82,14 +82,14 @@ describe('FleetPeerSessionPanel', () => {
     const api = makeApi([{ sessionId: 'sess_old', turnCount: 3, model: 'qwen3.6:27b' }]);
     await renderPanel(api);
 
-    expect(api.peerSessionList).toHaveBeenCalledWith('darkstar');
+    expect(api.peerSessionList).toHaveBeenCalledWith('gpuNode');
     expect(query('fleet-peer-session-row-sess_old')).not.toBeNull();
     // No active session yet — no chat box.
     expect(query('fleet-peer-session-chat')).toBeNull();
 
     await click('fleet-peer-session-start');
 
-    expect(api.peerSessionStart).toHaveBeenCalledWith('darkstar');
+    expect(api.peerSessionStart).toHaveBeenCalledWith('gpuNode');
     expect(query('fleet-peer-session-chat')).not.toBeNull();
   });
 
@@ -101,7 +101,7 @@ describe('FleetPeerSessionPanel', () => {
     await type('fleet-peer-session-input', 'comment va la flotte ?');
     await click('fleet-peer-session-send');
 
-    expect(api.peerSessionSay).toHaveBeenCalledWith('darkstar', 'sess_new', 'comment va la flotte ?');
+    expect(api.peerSessionSay).toHaveBeenCalledWith('gpuNode', 'sess_new', 'comment va la flotte ?');
     const transcript = query('fleet-peer-session-transcript');
     expect(transcript?.textContent).toContain('comment va la flotte ?');
     expect(transcript?.textContent).toContain('réponse du peer');
@@ -121,7 +121,7 @@ describe('FleetPeerSessionPanel', () => {
 
     await type('fleet-peer-session-input', 'suite de la conversation');
     await click('fleet-peer-session-send');
-    expect(api.peerSessionSay).toHaveBeenCalledWith('darkstar', 'sess_old', 'suite de la conversation');
+    expect(api.peerSessionSay).toHaveBeenCalledWith('gpuNode', 'sess_old', 'suite de la conversation');
   });
 
   it('ends the session and closes the chat box', async () => {
@@ -131,7 +131,7 @@ describe('FleetPeerSessionPanel', () => {
 
     await click('fleet-peer-session-end');
 
-    expect(api.peerSessionEnd).toHaveBeenCalledWith('darkstar', 'sess_new');
+    expect(api.peerSessionEnd).toHaveBeenCalledWith('gpuNode', 'sess_new');
     expect(query('fleet-peer-session-chat')).toBeNull();
   });
 

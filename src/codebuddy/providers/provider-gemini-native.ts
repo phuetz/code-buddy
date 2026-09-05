@@ -479,7 +479,11 @@ export class GeminiNativeProvider implements Provider {
                   statusText: res.statusText,
                   errorBody: errorText?.substring(0, 500),
                 });
-                throw new Error(`${res.status} ${errorText || res.statusText}`);
+                // Audit 2026-09-02 (D8) : sans `.status`, RetryPredicates.llmApiError
+                // ne reconnaît jamais un 429/5xx Gemini — aucun retry/backoff.
+                const httpError = new Error(`${res.status} ${errorText || res.statusText}`);
+                (httpError as Error & { status?: number }).status = res.status;
+                throw httpError;
               }
 
               responseAbortControl = control;
@@ -589,21 +593,7 @@ export class GeminiNativeProvider implements Provider {
           );
         }
 
-        return {
-          choices: [{
-            message: {
-              role: 'assistant',
-              content: 'I generated a malformed function call. Let me retry with the correct tool format. I need to use proper JSON arguments, not Python syntax.',
-              tool_calls: undefined,
-            },
-            finish_reason: 'stop',
-          }],
-          usage: {
-            prompt_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-            completion_tokens: 0,
-            total_tokens: data.usageMetadata?.totalTokenCount ?? 0,
-          },
-        };
+        throw new Error('Gemini malformed function call retries exhausted');
       }
 
       if (!candidate || !candidate.content) {
@@ -618,26 +608,11 @@ export class GeminiNativeProvider implements Provider {
 
       // Handle empty content (Gemini may return content without parts for certain queries)
       if (!candidate.content.parts || candidate.content.parts.length === 0) {
-        logger.warn('Gemini returned empty content parts', {
+        logger.error('Gemini returned empty content parts', {
           source: 'GeminiNativeProvider',
           finishReason: candidate.finishReason,
         });
-        // Return a graceful response instead of throwing
-        return {
-          choices: [{
-            message: {
-              role: 'assistant',
-              content: "Je ne peux pas répondre à cette question. Il s'agit peut-être d'une requête nécessitant des données en temps réel (météo, actualités) auxquelles je n'ai pas accès, ou d'une question que le modèle ne peut pas traiter.",
-              tool_calls: undefined,
-            },
-            finish_reason: candidate.finishReason || 'stop',
-          }],
-          usage: {
-            prompt_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-            completion_tokens: 0,
-            total_tokens: data.usageMetadata?.totalTokenCount ?? 0,
-          },
-        };
+        throw new Error('Gemini returned empty content parts');
       }
 
       const toolCalls: CodeBuddyToolCall[] = [];
@@ -842,7 +817,12 @@ export class GeminiNativeProvider implements Provider {
           try {
             yield JSON.parse(jsonStr);
           } catch {
-            // Skip malformed JSON lines
+            // Audit 2026-09-02 (D2) : ne plus jeter une ligne en silence — le
+            // trou dans la réponse était invisible, même en debug.
+            logger.warn('Gemini SSE: malformed data line dropped (possible content gap)', {
+              source: 'GeminiNativeProvider',
+              linePreview: jsonStr.slice(0, 120),
+            });
           }
         }
       }
@@ -855,7 +835,10 @@ export class GeminiNativeProvider implements Provider {
         try {
           yield JSON.parse(jsonStr);
         } catch {
-          // Skip malformed JSON
+          logger.warn('Gemini SSE: malformed trailing data dropped (possible content gap)', {
+            source: 'GeminiNativeProvider',
+            linePreview: jsonStr.slice(0, 120),
+          });
         }
       }
     }
@@ -874,6 +857,12 @@ export class GeminiNativeProvider implements Provider {
     const requestTimeoutMs =
       opts?.timeoutMs && opts.timeoutMs >= 1000 ? opts.timeoutMs : this.geminiRequestTimeoutMs;
     const requestControl = createLinkedRequestAbortControl(opts?.signal, requestTimeoutMs);
+    // Audit 2026-09-02 (D3/D1) : suivre ce qui a déjà été émis pour ne jamais
+    // rejouer la requête après émission (duplication silencieuse), et signaler
+    // une fin de stream sans finishReason (troncature possible).
+    let emittedChunks = 0;
+    let sawFinishReason = false;
+    let terminalFinishReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | null | undefined;
 
     try {
       if (opts?.signal?.aborted) throw abortErrorForSignal(opts.signal);
@@ -926,16 +915,32 @@ export class GeminiNativeProvider implements Provider {
         if (!candidate) continue;
         // Grounding metadata typically arrives in the final chunk of the
         // stream — keep the latest non-empty payload around so we can
-        // emit the "Sources:" footer right before the stop chunk.
+        // emit the "Sources:" footer right before the terminal chunk.
         if (candidate.groundingMetadata) {
           lastGroundingMetadata = candidate.groundingMetadata;
         }
         const content = candidate.content as { parts?: Array<Record<string, unknown>> } | undefined;
+        const finishReason = candidate.finishReason as string | undefined;
+        if (finishReason) {
+          sawFinishReason = true;
+          // Keep one terminal reason for the final chunk. In particular, do
+          // not emit length/content_filter and then overwrite it with stop.
+          if (terminalFinishReason === undefined) {
+            const finishMap: Record<string, 'stop' | 'tool_calls' | 'length' | 'content_filter'> = {
+              'STOP': 'stop',
+              'MAX_TOKENS': 'length',
+              'SAFETY': 'content_filter',
+              'RECITATION': 'content_filter',
+            };
+            terminalFinishReason = finishMap[finishReason] || 'stop';
+          }
+        }
         const parts = content?.parts;
         if (!parts) continue;
 
         for (const part of parts) {
           if (part.text) {
+            emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
               object: 'chat.completion.chunk' as const,
@@ -954,6 +959,7 @@ export class GeminiNativeProvider implements Provider {
 
           if (part.functionCall) {
             const fc = part.functionCall as { name: string; args?: Record<string, unknown> };
+            emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
               object: 'chat.completion.chunk' as const,
@@ -978,32 +984,9 @@ export class GeminiNativeProvider implements Provider {
           }
         }
 
-        // Check for finish reason
-        const finishReason = candidate.finishReason as string | undefined;
-        if (finishReason && finishReason !== 'STOP') {
-          // Map Gemini finish reasons to OpenAI format
-          const finishMap: Record<string, string> = {
-            'STOP': 'stop',
-            'MAX_TOKENS': 'length',
-            'SAFETY': 'content_filter',
-            'RECITATION': 'content_filter',
-          };
-          const mappedReason = finishMap[finishReason] || 'stop';
-          yield {
-            id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
-            object: 'chat.completion.chunk' as const,
-            created: Math.floor(Date.now() / 1000),
-            model,
-            choices: [{
-              index: 0,
-              delta: {},
-              finish_reason: mappedReason as 'stop' | 'tool_calls' | 'length' | 'content_filter' | null,
-            }],
-          };
-        }
       }
 
-      // Emit the Sources footer (if any) BEFORE the final stop chunk so
+      // Emit the Sources footer (if any) BEFORE the final terminal chunk so
       // it lands in the assistant content rather than after finish_reason.
       const groundingFooter = GeminiNativeProvider.formatGroundingFooter(lastGroundingMetadata);
       if (groundingFooter) {
@@ -1023,7 +1006,17 @@ export class GeminiNativeProvider implements Provider {
         };
       }
 
-      // Final stop chunk
+      // Audit 2026-09-02 (D1) : un stream fermé par le serveur sans aucun
+      // finishReason est très probablement tronqué — on termine quand même en
+      // 'stop' (compat consommateurs) mais on le dit au lieu de se taire.
+      if (!sawFinishReason) {
+        logger.warn('Gemini stream ended without a finishReason — response may be truncated', {
+          source: 'GeminiNativeProvider',
+          emittedChunks,
+        });
+      }
+
+      // Final terminal chunk
       yield {
         id: `chatcmpl-gemini-${Date.now()}-${chunkIndex}`,
         object: 'chat.completion.chunk' as const,
@@ -1032,12 +1025,24 @@ export class GeminiNativeProvider implements Provider {
         choices: [{
           index: 0,
           delta: {},
-          finish_reason: 'stop',
+          finish_reason: terminalFinishReason ?? 'stop',
         }],
       };
     } catch (error) {
       requestControl.dispose(true);
       if (opts?.signal?.aborted) throw abortErrorForSignal(opts.signal);
+      // Audit 2026-09-02 (D3) : après émission, le repli non-stream rejouerait
+      // TOUTE la réponse à la suite du préfixe déjà livré — contenu dupliqué
+      // présenté comme une seule réponse, et requête facturée deux fois. On ne
+      // replie que si rien n'a été émis ; sinon l'erreur remonte au client.
+      if (emittedChunks > 0) {
+        logger.warn('Gemini stream failed after chunks were emitted — propagating (no non-stream fallback, it would duplicate content)', {
+          source: 'GeminiNativeProvider',
+          emittedChunks,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       logger.warn('Gemini streaming error, falling back to non-streaming', {
         source: 'GeminiNativeProvider',
         error: error instanceof Error ? error.message : String(error),

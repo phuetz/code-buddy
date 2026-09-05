@@ -55,7 +55,7 @@ describe('buddy science deps — F1: the Verifier review runs (registry populate
     expect(getAgentRegistry().getAll()).toHaveLength(0);
   });
 
-  it('returns a REAL verdict instead of the dead "no verifier output" sentinel', async () => {
+  it('returns a REAL fail-closed verdict instead of the dead "no verifier output" sentinel', async () => {
     const deps = buildScienceDeps({ provider, language: 'python' });
 
     const verdict = await deps.review(
@@ -67,8 +67,10 @@ describe('buddy science deps — F1: the Verifier review runs (registry populate
     // "Agent not found: verifier" ⇒ evidence collapsed to this exact sentinel.
     expect(verdict.evidence).not.toBe('no verifier output');
     expect(verdict.evidence.length).toBeGreaterThan(0);
-    // With a CONFIRMED-shaped LLM answer the verifier confirms.
-    expect(verdict.verdict).toBe('CONFIRMED');
+    // A verifier may no longer confirm from model prose alone: without a real
+    // oracle call the hardened verifier must retain its evidence but fail closed.
+    expect(verdict.verdict).toBe('NEEDS REVIEW');
+    expect(verdict.evidence).toMatch(/without running an oracle/i);
   });
 
   it('populates the built-in agents (incl. the verifier) on the science path', async () => {

@@ -5,8 +5,9 @@
  * install/uninstall, enable/disable, and env override support.
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { join, basename } from 'path';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 
 export interface SkillMetadata {
   name: string;
@@ -130,7 +131,7 @@ export class SkillRegistry {
     }
 
     const filePath = join(dir, 'SKILL.md');
-    writeFileSync(filePath, content, 'utf-8');
+    writeFileAtomicSync(filePath, content);
 
     const fm = SkillRegistry.parseFrontmatter(content);
 

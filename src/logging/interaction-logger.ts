@@ -5,10 +5,11 @@
  * Saves complete interaction history including messages, tool calls, metadata.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -323,7 +324,7 @@ export class InteractionLogger {
       mkdirSync(dir, { recursive: true });
     }
 
-    writeFileSync(this.logPath, JSON.stringify(this.currentSession, null, 2));
+    writeJsonAtomicSync(this.logPath, this.currentSession);
   }
 
   /**
@@ -351,12 +352,7 @@ export class InteractionLogger {
     // If multiple matches, return the most recent
     const path = files[0];
     if (path === undefined) return null;
-    try {
-      const content = readFileSync(path, 'utf-8');
-      return JSON.parse(content) as SessionData;
-    } catch {
-      return null;
-    }
+    return readJsonAtomicSync<SessionData | null>(path, null);
   }
 
   /**
@@ -367,12 +363,8 @@ export class InteractionLogger {
     const sessions: SessionData[] = [];
 
     for (const file of files) {
-      try {
-        const content = readFileSync(file, 'utf-8');
-        sessions.push(JSON.parse(content) as SessionData);
-      } catch {
-        // Skip invalid files
-      }
+      const session = readJsonAtomicSync<SessionData | null>(file, null);
+      if (session) sessions.push(session);
     }
 
     return sessions;
@@ -434,12 +426,8 @@ export class InteractionLogger {
 
       const latest = files[0];
       if (latest !== undefined) {
-        try {
-          const content = readFileSync(latest.path, 'utf-8');
-          return JSON.parse(content) as SessionData;
-        } catch {
-          continue;
-        }
+        const session = readJsonAtomicSync<SessionData | null>(latest.path, null);
+        if (session) return session;
       }
     }
 
@@ -472,29 +460,25 @@ export class InteractionLogger {
       const files = readdirSync(dir).filter(f => f.endsWith('.json'));
 
       for (const file of files) {
-        try {
-          const content = readFileSync(join(dir, file), 'utf-8');
-          const session = JSON.parse(content) as SessionData;
+        const session = readJsonAtomicSync<SessionData | null>(join(dir, file), null);
+        if (!session) continue;
 
-          // Apply filters
-          if (options?.tags?.length) {
-            const hasTag = options.tags.some(t => session.metadata.tags?.includes(t));
-            if (!hasTag) continue;
-          }
-          if (options?.model && session.metadata.model !== options.model) continue;
-          if (options?.startDate) {
-            const sessionDate = new Date(session.metadata.started_at);
-            if (sessionDate < options.startDate) continue;
-          }
-          if (options?.endDate) {
-            const sessionDate = new Date(session.metadata.started_at);
-            if (sessionDate > options.endDate) continue;
-          }
-
-          allSessions.push(session.metadata);
-        } catch {
-          // Skip invalid files
+        // Apply filters
+        if (options?.tags?.length) {
+          const hasTag = options.tags.some(t => session.metadata.tags?.includes(t));
+          if (!hasTag) continue;
         }
+        if (options?.model && session.metadata.model !== options.model) continue;
+        if (options?.startDate) {
+          const sessionDate = new Date(session.metadata.started_at);
+          if (sessionDate < options.startDate) continue;
+        }
+        if (options?.endDate) {
+          const sessionDate = new Date(session.metadata.started_at);
+          if (sessionDate > options.endDate) continue;
+        }
+
+        allSessions.push(session.metadata);
       }
     }
 

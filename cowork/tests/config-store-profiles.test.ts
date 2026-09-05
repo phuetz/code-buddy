@@ -305,6 +305,25 @@ describe('ConfigStore provider profiles', () => {
     expect(store.isConfigured()).toBe(true);
   });
 
+  it('selects vLLM as the active provider without requiring an api key', () => {
+    const store = new ConfigStore();
+
+    store.update({
+      provider: 'vllm',
+      activeProfileKey: 'vllm',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'local-vllm-model',
+    });
+
+    const config = store.getAll();
+    expect(config.provider).toBe('vllm');
+    expect(config.activeProfileKey).toBe('vllm');
+    expect(config.model).toBe('local-vllm-model');
+    expect(store.hasUsableCredentialsForActiveSet()).toBe(true);
+    expect(store.isConfigured()).toBe(true);
+  });
+
   it('falls back to the default lmstudio model when the model field is cleared', () => {
     const store = new ConfigStore();
 

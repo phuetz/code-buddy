@@ -20,7 +20,7 @@
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, unlink, writeFile } from 'fs/promises';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
@@ -56,6 +56,7 @@ import {
 } from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
+import { clockCompanionReply, voiceClockPromptBlock } from './voice-clock.js';
 import {
   DEFAULT_SENTENCE_CAP,
   safeCommitLength,
@@ -63,7 +64,7 @@ import {
 } from './voice-stream.js';
 import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
-import { normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
+import { normalizePcm16Wav, normalizeWavFile, Pcm16WavStreamGain, probePcm16Wav } from '../voice/tts-volume.js';
 import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
 import {
   resolveElevenLabsCacheVoice,
@@ -71,6 +72,13 @@ import {
   resolveTtsEngine,
   type LocalTtsEngine,
 } from '../voice/local-tts.js';
+import { resolveKyutaiCacheVoice } from '../voice/kyutai-local-voice.js';
+import {
+  selectTwoSpeedTtsRoute,
+  twoSpeedTtsEnabled,
+  type TwoSpeedTtsRouteHint,
+} from '../voice/two-speed-voice.js';
+export type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
@@ -109,9 +117,14 @@ import {
   isExplicitVisualGroundingRequest,
   type VisualGroundingFn,
 } from '../companion/visual-grounding.js';
+import type {
+  CameraShareOptions,
+  CameraShareResult,
+} from '../companion/camera-share.js';
 import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
+import type { ConversationCueRequest } from './conversation-cues.js';
 
 /** Derive relational prosody without changing the bare voice-loop default. */
 export function deriveSpokenDeliveryProfile(
@@ -151,6 +164,8 @@ export interface VoiceStepOptions {
   signal?: AbortSignal;
   /** Frozen gain measured from the first audio segment of this spoken turn. */
   ttsNormalizationFactor?: number;
+  /** Per-segment reason that forces the opt-in two-speed policy onto Kyutai. */
+  ttsRouteHint?: TwoSpeedTtsRouteHint;
   /** Insert the pipeline-owned fixed gap before a non-first sentence. */
   prependInterSentenceSilence?: boolean;
   /** The producer already applied the shared loudness law to this WAV. */
@@ -163,6 +178,8 @@ export interface VoiceStepOptions {
   delivery?: VoiceDeliveryProfile;
   /** Internal handoff: an outer reply router already applied relational drift for this turn. */
   relationshipEvolutionHandled?: boolean;
+  /** The previous spoken answer was cut; use it to continue without repeating it. */
+  interruption?: VoiceInterruptionContext;
   /**
    * Route-aware, transactional cognitive context. The caller is responsible
    * for enforcing the route's real egress clearance before returning a lease.
@@ -184,6 +201,15 @@ export interface VoiceStepOptions {
   onSpokenPrefixTelemetry?: (cause: SpokenPrefixTelemetryCause) => void;
   /** Register a non-blocking semantic correction for playback after the initial answer. */
   onSemanticCorrection?: (correction: Promise<string>) => void;
+  /** Opt-in contract owned by the fast chitchat route. */
+  shortFirst?: VoiceShortFirstConfig;
+  /** Tell the outer audio pipeline that the fast route accepted the short-first contract. */
+  onShortFirstReady?: (config: VoiceShortFirstConfig) => void;
+}
+
+export interface VoiceShortFirstConfig {
+  /** Total number of spoken answer sentences, including the first useful sentence. */
+  maxSentences: number;
 }
 
 export type VoiceReplyTimingPhase =
@@ -231,6 +257,14 @@ export interface VoiceCognitiveContextLease {
   release(): void;
 }
 
+export interface VoiceInterruptionContext {
+  interruptedTurnId: string;
+  /** One-based phrase number active when Lisa was cut. */
+  phraseNumber: number;
+  /** Only the phrases that fully reached the player; bounded and ephemeral. */
+  spokenText: string;
+}
+
 /** Think: turn what was heard into a short spoken reply ('' → stay silent). */
 export type ReplyFn = (heard: string, opts?: VoiceStepOptions) => Promise<string>;
 /**
@@ -251,14 +285,27 @@ export interface StreamSpeakOptions extends VoiceStepOptions {
   onFirstAudio?: () => void;
   /** Optional live copy of normalized WAV bytes for a remote avatar renderer. */
   onAudioChunk?: (chunk: Uint8Array) => void;
+  /** Cumulative PCM accepted by the local player, excluding the WAV header. */
+  onAudioProgress?: (progress: { pcmBytes: number; byteRate: number }) => void;
   /** Publishes the first measured gain so WAV fallback can preserve the turn level. */
   onTtsNormalizationFactor?: (factor: number) => void;
 }
 /** Synthesize and play one text segment progressively; false requests the WAV fallback. */
-export type StreamSpeakFn = (text: string, opts?: StreamSpeakOptions) => Promise<boolean>;
+export type StreamSpeakFn = ((text: string, opts?: StreamSpeakOptions) => Promise<boolean>) & {
+  /**
+   * Optional look-ahead: open the network/billed stream of the NEXT segment while the
+   * current one is still playing, so the gap between two sentences is the 280 ms breath
+   * and not a full TTS round trip (measured at 1.3–1.4 s per sentence on 2026-09-02, the
+   * "voix hachée"). Only engines that accept concurrent requests expose it (ElevenLabs);
+   * Pocket is single-request and never does. Never throws; a stale prefetch is cancelled.
+   */
+  prefetch?: (text: string, opts?: { signal?: AbortSignal }) => void;
+};
 
 export interface VoiceReplyTiming {
   mode: 'streamed' | 'blocking' | 'silent' | 'interrupted' | 'failed';
+  /** One-based phrase number that was active when barge-in interrupted playback. */
+  interruptedAtSentence?: number;
   /** Delay until routing, persona and prompt augmentation are ready for the provider. */
   promptReadyMs?: number;
   /** True provider TTFT, measured before any semantic buffering or safety release. */
@@ -356,6 +403,15 @@ export interface VoiceReplyOptions {
    * Injectable for tests or an alternate local camera bridge.
    */
   visualGrounding?: VisualGroundingFn;
+  /**
+   * On-demand room/camera share (« qu'est-ce que tu vois ? »). Runs before
+   * object-level visual grounding so a bare look does not ask for confirmation.
+   * Injectable for tests with a fake camera / fake Telegram client.
+   */
+  cameraShare?: (
+    heard: string,
+    options?: CameraShareOptions,
+  ) => Promise<CameraShareResult | null>;
 }
 
 export interface VoiceReadiness {
@@ -414,12 +470,15 @@ export function describeVoiceReadiness(
   const model = routed ? 'auto' : override;
   const ttsEngine = resolveTtsEngine(env);
   const piperVoice = env.CODEBUDDY_TTS_VOICE || env.CODEBUDDY_TTS_PIPER_MODEL || undefined;
+  const kyutaiUrl = env.CODEBUDDY_TTS_LOCAL_URL?.trim() || undefined;
   const voice = ttsEngine === 'pocket'
     ? (env.CODEBUDDY_POCKET_VOICE || 'estelle')
+    : ttsEngine === 'kyutai'
+      ? kyutaiUrl
     : ttsEngine === 'voicebox'
       ? (env.CODEBUDDY_VOICEBOX_PROFILE?.trim() || undefined)
       : piperVoice;
-  const speakReady = ttsEngine === 'pocket' || Boolean(voice);
+  const speakReady = ttsEngine === 'pocket' || ttsEngine === 'kyutai' || Boolean(voice);
   const modelReady = route?.reason !== 'fallback default';
   const warnings: string[] = [];
   if (ttsEngine === 'piper' && !piperVoice) {
@@ -432,6 +491,11 @@ export function describeVoiceReadiness(
     warnings.push(
       'Voicebox is selected but CODEBUDDY_VOICEBOX_PROFILE is empty — the robot will use its ' +
         'Pocket/Piper fallback. Set a profile name or id, then run `buddy assistant voicebox`.'
+    );
+  }
+  if ((ttsEngine === 'kyutai' || twoSpeedTtsEnabled(env)) && !kyutaiUrl) {
+    warnings.push(
+      'Kyutai local speech is not configured — set CODEBUDDY_TTS_LOCAL_URL; phrases will use ElevenLabs/Pocket fallback.',
     );
   }
   warnings.push(
@@ -495,6 +559,34 @@ export const SPEAK_SYSTEM_PROMPT =
   "Pour une question factuelle, donne l'explication correcte la plus simple et n'invente rien. " +
   "Pas de markdown, pas de listes, pas de code, pas d'emoji.";
 
+export const DEFAULT_SENSORY_REPLY_MAX_SENTENCES = 3;
+const MAX_SENSORY_REPLY_MAX_SENTENCES = 12;
+
+/** The pilot is deliberately exact opt-in; every other value preserves the established route. */
+export function sensoryShortFirstEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CODEBUDDY_SENSORY_SHORT_FIRST?.trim().toLowerCase() === 'true';
+}
+
+/** Bound the complete fast spoken answer. Invalid input falls back to the documented default. */
+export function sensoryReplyMaxSentences(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_SENSORY_REPLY_MAX_SENTENCES?.trim();
+  if (!raw) return DEFAULT_SENSORY_REPLY_MAX_SENTENCES;
+  const configured = Number(raw);
+  if (!Number.isFinite(configured)) return DEFAULT_SENSORY_REPLY_MAX_SENTENCES;
+  return Math.max(1, Math.min(MAX_SENSORY_REPLY_MAX_SENTENCES, Math.floor(configured)));
+}
+
+/** Model-facing contract for the fast route only. */
+export function buildShortFirstPrompt(config: VoiceShortFirstConfig): string {
+  return [
+    '<short_first_response>',
+    "Une phrase d'abord, puis développe si utile.",
+    'La première phrase doit être autonome, utile immédiatement et compter au plus 20 mots.',
+    `Ne dépasse pas ${config.maxSentences} phrases au total, première phrase comprise.`,
+    '</short_first_response>',
+  ].join('\n');
+}
+
 export const IMMEDIATE_THINKING_ACKNOWLEDGEMENTS = ['Alors…', 'Voyons ça.'] as const;
 export const MAX_SPOKEN_PREFIX_CHARS = 180;
 const INSTANT_BACKCHANNELS = new Set<string>([
@@ -525,6 +617,13 @@ export function voiceAudioPrebufferMs(env: NodeJS.ProcessEnv = process.env): num
   const configured = Number(env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS);
   if (!Number.isFinite(configured)) return 400;
   return Math.max(0, Math.min(5_000, Math.floor(configured)));
+}
+
+/** Real-time network stream jitter buffer duration before writing to audio player stdin. */
+export function resolveVoiceJitterBufferMs(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_VOICE_JITTER_BUFFER_MS);
+  if (!Number.isFinite(configured)) return 250;
+  return Math.max(0, Math.min(1_000, Math.floor(configured)));
 }
 
 /** Explicit true/false wins; otherwise latency buffers follow the resolved route. */
@@ -631,19 +730,41 @@ export function isFactualVoiceQuestion(heard: string): boolean {
   );
 }
 
+/**
+ * How many tokens the spoken reply may use.
+ *
+ * `CODEBUDDY_VOICE_MAX_TOKENS` is the operator saying how long the robot should
+ * talk, so an explicit value is the CEILING. It used to be only a lower bound
+ * outside the 'concise' style: `Math.max(64, min(512, max(base, planned)))` turned
+ * a deliberate 48 into at least 64 and, on any real exchange, into the 512 cap.
+ *
+ * Measured on Patrice's robot, 2026-09-02: he had set 48 and heard replies with a
+ * 479-character median, delivered as a dozen phrases with a silence between each
+ * — the gaps are what a listener calls choppy. Every one of those turns took the
+ * chitchat route, so this function, not the agent summary, is the one he hears.
+ *
+ * Unset, both the style handling and the automatic budget behave exactly as before.
+ */
 function voiceMaxTokens(
   heard: string,
   history: VoiceHistoryTurn[] = [],
   env: NodeJS.ProcessEnv = process.env
 ): number {
-  const configured = Number(env.CODEBUDDY_VOICE_MAX_TOKENS);
-  const base = Number.isFinite(configured) ? Math.floor(configured) : 48;
+  const raw = env.CODEBUDDY_VOICE_MAX_TOKENS?.trim();
+  const configured = raw ? Number(raw) : NaN;
+  if (Number.isFinite(configured) && configured > 0) {
+    // Clamped only against absurd input; the operator's number is respected.
+    return Math.max(16, Math.min(512, Math.floor(configured)));
+  }
   const style = (env.CODEBUDDY_VOICE_RESPONSE_STYLE ?? 'natural').toLowerCase();
-  if (style === 'concise') return Math.max(32, Math.min(256, base));
+  if (style === 'concise') return Math.max(32, Math.min(256, 48));
   const planned = conversationTokenBudget(heard, history);
   const multiplier = style === 'developed' ? 1.35 : 1;
-  return Math.max(64, Math.min(512, Math.round(Math.max(base, planned) * multiplier)));
+  return Math.max(64, Math.min(512, Math.round(Math.max(48, planned) * multiplier)));
 }
+
+/** Exposed for tests: the spoken-length budget is a user-visible contract. */
+export const __testVoiceMaxTokens = voiceMaxTokens;
 
 function voiceTemperature(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.CODEBUDDY_VOICE_TEMPERATURE);
@@ -714,6 +835,8 @@ export function fastCompanionReply(heard: string): string | null {
   ) {
     return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
   }
+  const clock = clockCompanionReply(heard);
+  if (clock) return clock;
   return matchVoiceInteraction(heard);
 }
 
@@ -1389,6 +1512,47 @@ export interface SpokenPromptAugmentationOptions {
   env?: NodeJS.ProcessEnv;
   /** Injectable latency-bounded relational snapshot. */
   relationalContext?: () => Promise<string>;
+  /** Ephemeral context from the previous interrupted spoken turn. */
+  interruption?: VoiceInterruptionContext;
+}
+
+function normalizedVoiceInterruptionText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Only continuation/correction requests deserve an explicit interruption acknowledgement. */
+export function shouldAcknowledgeVoiceInterruption(heard: string): boolean {
+  const normalized = normalizedVoiceInterruptionText(heard);
+  return /^(continue|reprends|ou en etais tu|tu m as coupee|tu m as interrompue|attends|non attends|je voulais dire|je disais|non je)/.test(normalized);
+}
+
+export function buildVoiceInterruptionGuidance(
+  heard: string,
+  interruption?: VoiceInterruptionContext,
+): string {
+  if (!interruption) return '';
+  const spoken = interruption.spokenText.trim().slice(0, 1_000);
+  const lines = [
+    '<interrupted_voice_turn>',
+    `Ta réponse précédente a été interrompue pendant la phrase ${Math.max(1, Math.round(interruption.phraseNumber))}.`,
+    spoken
+      ? `Les phrases déjà entendues étaient : « ${spoken} ».`
+      : 'Aucune phrase complète de cette réponse n’a été confirmée comme entièrement entendue.',
+    'Ne répète pas les phrases déjà entendues : reprends directement avec la prochaine idée utile.',
+  ];
+  if (shouldAcknowledgeVoiceInterruption(heard)) {
+    lines.push('Si c’est pertinent pour cette demande, reconnais brièvement : « Tu m\'as coupée, je disais… » puis poursuis sans recommencer.');
+  } else {
+    lines.push('N’évoque pas l’interruption si la nouvelle demande porte sur un autre sujet.');
+  }
+  lines.push('</interrupted_voice_turn>');
+  return lines.join('\n');
 }
 
 /** Explicit override, otherwise expressive text follows the existing relational opt-in. */
@@ -1563,6 +1727,7 @@ export async function buildSpokenPromptAugmentation(
     emotionGuidance(emotion),
     isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
+    buildVoiceInterruptionGuidance(heard, options.interruption),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
       : '',
@@ -1590,6 +1755,10 @@ export async function buildSpokenPromptAugmentation(
     }
   }
 
+  const evolutionGuard = relational.includes('<lisa_evolution>')
+    ? 'Les évolutions ci-dessous sont un contexte silencieux : ne les mentionne que si la personne te demande explicitement ce qui a changé chez toi.'
+    : '';
+
   // The shared snapshot contains only bounded symbolic observations (surface,
   // affect band, support/deliberation state and counters), never transcript
   // text. Unlike the richer facts/episode block above, it is part of the
@@ -1606,7 +1775,9 @@ export async function buildSpokenPromptAugmentation(
     /* continuity is best-effort and must never delay or break speech */
   }
 
-  return [memoryCallback, relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
+  return [memoryCallback, relational, evolutionGuard, sharedRelationship, guidance]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 async function prepareSpokenTurn(
@@ -1628,7 +1799,9 @@ async function prepareSpokenTurn(
     import('../codebuddy/client.js'),
     import('../personas/persona-manager.js').then((m) => m.getActivePersonaVoiceAsync()),
     resolvedRoute ?? resolveVoiceModel(heard, { history }),
-    buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery),
+    buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery, {
+      ...(replyOpts?.interruption ? { interruption: replyOpts.interruption } : {}),
+    }),
   ]);
   const basePrompt = personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT;
   // Re-anchor xAI/Lisa character + progressive intimacy on every spoken turn
@@ -1662,7 +1835,14 @@ async function prepareSpokenTurn(
   const cognitivePrompt = [cognitiveLease?.turnContext, cognitiveLease?.evidence]
     .filter(Boolean)
     .join('\n\n');
-  const systemPrompt = [basePrompt, characterBlock, augmentation, cognitivePrompt]
+  const systemPrompt = [
+    basePrompt,
+    characterBlock,
+    augmentation,
+    cognitivePrompt,
+    voiceClockPromptBlock(),
+    replyOpts?.shortFirst ? buildShortFirstPrompt(replyOpts.shortFirst) : '',
+  ]
     .filter(Boolean)
     .join('\n\n');
   return {
@@ -1703,6 +1883,24 @@ export async function defaultReply(
         `[voice] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+  try {
+    const { maybeHandleCameraShareRequest } = await import('../companion/camera-share.js');
+    const share = await maybeHandleCameraShareRequest(heard, {
+      surface: 'voice',
+      rootDir: process.cwd(),
+    });
+    if (share) {
+      if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
+      logger.info(
+        `[voice] camera-share success=${share.success} telegram=${share.telegramSent}`,
+      );
+      return share.spokenReply;
+    }
+  } catch (err) {
+    logger.warn(
+      `[voice] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
@@ -1782,7 +1980,11 @@ export async function defaultSpokenPrefix(
       history,
       undefined,
       delivery,
-      { signal: replyOpts?.signal, delivery },
+      {
+        signal: replyOpts?.signal,
+        delivery,
+        ...(replyOpts?.interruption ? { interruption: replyOpts.interruption } : {}),
+      },
     );
     const { CodeBuddyClient, route } = prepared;
     replyOpts?.onProviderResolved?.(route);
@@ -1846,7 +2048,7 @@ export async function* streamCompanionReply(
       await evolveRelationshipFromUtterance(heard);
     }
     const resolvedRoute = await resolveVoiceModel(heard, { history });
-    const acknowledgement = replyOpts?.spokenPrefix
+    const acknowledgement = replyOpts?.spokenPrefix || replyOpts?.shortFirst
       ? null
       : immediateEmotionAcknowledgement(detectEmotion(heard)) ??
         immediateThinkingAcknowledgement(heard, process.env, resolvedRoute.baseURL);
@@ -1956,7 +2158,7 @@ export async function* streamCompanionReply(
 /**
  * Default synth for the assistant's voice. Active engine picked from
  * Pocket TTS is the realtime default. Voicebox can render a more expressive
- * voice locally or on Darkstar; Pocket and Piper remain fail-open fallbacks.
+ * voice locally or on GPU node; Pocket and Piper remain fail-open fallbacks.
  */
 function resolveBaseCacheVoice(
   engine: LocalTtsEngine,
@@ -1984,6 +2186,9 @@ function resolveBaseCacheVoice(
   if (engine === 'elevenlabs') {
     return resolveElevenLabsCacheVoice(env);
   }
+  if (engine === 'kyutai') {
+    return resolveKyutaiCacheVoice(env);
+  }
   return voice || resolveDefaultPiperVoiceModel() || 'piper:default';
 }
 
@@ -2007,6 +2212,49 @@ function makeDefaultSynth(
     text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
     let selectedEngine = engine;
+    if (selectedEngine === 'kyutai') {
+      const {
+        resolveElevenLabsVoiceId,
+        synthesizeElevenLabsWav,
+        synthesizeKyutaiWav,
+        synthesizePocketWav,
+      } = await import('../voice/local-tts.js');
+      if (await synthesizeKyutaiWav(text, wavPath, process.env, {
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.ttsNormalizationFactor !== undefined
+          ? { frozenFactor: opts.ttsNormalizationFactor }
+          : {}),
+      })) {
+        return { wav: wavPath, cacheable: true };
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      if (resolveElevenLabsVoiceId(process.env)) {
+        logger.warn('[voice] Kyutai synthesis failed — falling back to ElevenLabs for this phrase');
+        if (await synthesizeElevenLabsWav(
+          text,
+          wavPath,
+          process.env,
+          6_000,
+          opts.signal,
+          opts.ttsNormalizationFactor,
+        )) {
+          return { wav: wavPath, cacheable: false };
+        }
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      logger.warn('[voice] Kyutai/ElevenLabs synthesis failed — falling back to Pocket for this phrase');
+      if (await synthesizePocketWav(
+        text,
+        wavPath,
+        process.env,
+        180_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
+        return { wav: wavPath, cacheable: false };
+      }
+      throw new Error('Kyutai, ElevenLabs and Pocket TTS synthesis failed');
+    }
     if (selectedEngine === 'elevenlabs') {
       const { synthesizeElevenLabsWav } = await import('../voice/local-tts.js');
       if (await synthesizeElevenLabsWav(
@@ -2020,10 +2268,13 @@ function makeDefaultSynth(
         return { wav: wavPath, cacheable: true };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      // Degrade to the local engine below (Pocket by default, Piper on request)
+      // instead of throwing: the throw that lived here silenced the phrase
+      // outright whenever the ElevenLabs stream was refused — the "ne me parle
+      // plus" of 2026-09-02 — while the documented contract promises an
+      // automatic local fallback without interrupting speech.
       selectedEngine = resolveElevenLabsFallbackEngine(process.env);
-      if (selectedEngine === 'pocket') {
-        throw new Error('ElevenLabs and Pocket TTS synthesis failed');
-      }
+      logger.warn(`[voice] ElevenLabs synthesis failed — falling back to ${selectedEngine} for this phrase`);
     }
     if (selectedEngine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
@@ -2083,15 +2334,40 @@ function makeDefaultSynth(
     // A cache entry carries the gain of the turn that created it. Once the
     // current turn has frozen its own factor, synthesize fresh so it is applied
     // to raw engine output instead of compounding two independent gains.
-    if (opts.ttsNormalizationFactor !== undefined && engine !== 'elevenlabs') {
+    if (
+      opts.ttsNormalizationFactor !== undefined &&
+      engine !== 'elevenlabs' &&
+      engine !== 'kyutai'
+    ) {
       return (await synthFresh(text, opts)).wav;
     }
-    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS && engine !== 'elevenlabs') {
+    if (
+      text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS &&
+      engine !== 'elevenlabs' &&
+      engine !== 'kyutai'
+    ) {
       return (await synthFresh(text, opts)).wav;
     }
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
       : baseCacheVoice;
+    // Paid ElevenLabs library FIRST: 6 400+ short replies were synthesized once in
+    // Lisa's real voice and are shared with MySoulmate and the phone assistant.
+    // Playing one costs nothing and sounds better than any local engine. Read-only
+    // and copy-on-hit — the caller unlinks what it plays, and those files were paid for.
+    if (engine !== 'kyutai') {
+      try {
+        const { getVoiceLibrary } = await import('./elevenlabs-library.js');
+        const paid = getVoiceLibrary().copyForPlayback(text);
+        if (paid) {
+          logger.info('[voice] paid ElevenLabs library hit');
+          return paid;
+        }
+      } catch {
+        /* best-effort: an unavailable library must never delay or break speaking */
+      }
+    }
+
     let cache: TtsCache;
     try {
       const { getTtsCache } = await import('./tts-cache.js');
@@ -2127,12 +2403,12 @@ async function resolveVoiceAudioPlayer(): Promise<VoiceAudioPlayer | null> {
   const candidates: VoiceAudioPlayer[] = [
     {
       cmd: 'aplay',
-      stdinArgs: ['-q', '-'],
+      stdinArgs: ['-q', '--buffer-time=300000', '-'],
       fileArgs: (file) => ['-q', file],
     },
     {
       cmd: 'ffplay',
-      stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-i', 'pipe:0'],
+      stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-infbuf', '-buffer_size', '300000', '-i', 'pipe:0'],
       fileArgs: (file) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', file],
     },
   ];
@@ -2164,11 +2440,89 @@ function waitForPlayerDrain(
 }
 
 /**
- * Pocket and Voicebox expose WAV response streams. Pipe the selected one into a
- * stdin-capable player so the first PCM frame is heard while Pocket is still
- * generating the rest, instead of calling `arrayBuffer()` and waiting for the
- * complete clip. Any setup/runtime failure returns false and the caller uses
- * the established temporary-WAV/Piper fallback.
+ * Already-paid audio for an ElevenLabs sentence: the permanent library first
+ * (6 400+ phrases synthesized once in Lisa's real voice), then the TTS cache.
+ * Returns a throwaway WAV copy the caller plays and unlinks, or null to open
+ * the (billed) network stream. Best-effort and never-throws — an unavailable
+ * library or cache must never delay or break speaking.
+ */
+async function lookupPaidElevenLabsWav(
+  text: string,
+  cacheVoice: string,
+): Promise<string | null> {
+  try {
+    const { getVoiceLibrary } = await import('./elevenlabs-library.js');
+    const paid = getVoiceLibrary().copyForPlayback(text);
+    if (paid) {
+      logger.info('[voice] paid ElevenLabs library hit (stream path)');
+      return paid;
+    }
+  } catch {
+    /* best-effort */
+  }
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return null;
+  try {
+    const { getTtsCache } = await import('./tts-cache.js');
+    const hit = getTtsCache().lookup(text, cacheVoice);
+    if (hit) logger.info('[voice] tts cache hit (stream path)');
+    return hit;
+  } catch {
+    return null;
+  }
+}
+
+/** Project TTS-cache lookup without consulting the paid ElevenLabs library. */
+async function lookupTtsCacheWav(text: string, cacheVoice: string): Promise<string | null> {
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return null;
+  try {
+    const { getTtsCache } = await import('./tts-cache.js');
+    const hit = getTtsCache().lookup(text, cacheVoice);
+    if (hit) logger.info('[voice] tts cache hit (stream path)');
+    return hit;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a completed streamed ElevenLabs clip into the TTS cache (same WAV
+ * shape as the blocking path: 24 kHz PCM16 container + file-level RMS
+ * normalization), so the NEXT occurrence of this phrase plays from disk for
+ * free instead of being re-billed. Fire-and-forget; failures only log.
+ */
+async function storePcmStreamInTtsCache(
+  text: string,
+  cacheVoice: string,
+  pcm: Buffer,
+  frozenFactor?: number,
+): Promise<void> {
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return;
+  if (pcm.length < 2) return;
+  try {
+    const { pcm16Mono24kToWav } = await import('../voice/local-tts.js');
+    const wav = normalizePcm16Wav(pcm16Mono24kToWav(pcm), process.env, frozenFactor);
+    const tmp = join(tmpdir(), `cb-voice-pcmstream-${process.pid}-${Date.now()}.wav`);
+    await writeFile(tmp, wav, { mode: 0o600 });
+    try {
+      const { getTtsCache } = await import('./tts-cache.js');
+      getTtsCache().store(text, cacheVoice, tmp);
+      logger.info('[voice] tts cache store (stream path)');
+    } finally {
+      await unlink(tmp).catch(() => undefined);
+    }
+  } catch (err) {
+    logger.debug(`[voice] PCM stream cache store failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Pocket and Voicebox expose WAV response streams; ElevenLabs exposes a raw
+ * PCM `/stream` endpoint that `openElevenLabsAudioStream` wraps in a streaming
+ * WAV header. Pipe the selected one into a stdin-capable player so the first
+ * PCM frame is heard while the engine is still generating the rest, instead of
+ * calling `arrayBuffer()` and waiting for the complete clip. Any setup/runtime
+ * failure returns false and the caller uses the established temporary-WAV
+ * fallback (which itself falls back Pocket/Piper — never silence).
  */
 function makeDefaultStreamSpeak(
   playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
@@ -2176,14 +2530,92 @@ function makeDefaultStreamSpeak(
 ): StreamSpeakFn | undefined {
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
-    : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
-  if ((engine !== 'pocket' && engine !== 'voicebox') || !streamEnabled) {
+    : engine === 'elevenlabs'
+      ? process.env.CODEBUDDY_ELEVENLABS_AUDIO_STREAM !== 'false'
+      : engine === 'kyutai'
+        ? process.env.CODEBUDDY_TTS_LOCAL_AUDIO_STREAM !== 'false'
+        : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
+  if (
+    (engine !== 'pocket' && engine !== 'voicebox' && engine !== 'elevenlabs' && engine !== 'kyutai') ||
+    !streamEnabled
+  ) {
     return undefined;
   }
 
   let turnFactor: number | undefined;
 
-  return async (text, opts = {}): Promise<boolean> => {
+  // Look-ahead slots (ElevenLabs only). A prefetched segment is either a paid
+  // WAV already copied from the library/cache, or an HTTP stream whose body is
+  // arriving while the previous sentence plays. Keyed by the prepared text so
+  // the later `streamSpeak(text)` call finds it; anything older than the TTL
+  // (a turn that was interrupted before reaching that sentence) is cancelled.
+  interface PrefetchedSegment {
+    ready: Promise<{ wav?: string; stream?: ReadableStream<Uint8Array> | null }>;
+    createdAt: number;
+    cancel: () => void;
+  }
+  const prefetched = new Map<string, PrefetchedSegment>();
+  const PREFETCH_TTL_MS = 45_000;
+  const purgeStalePrefetches = (): void => {
+    const now = Date.now();
+    for (const [key, entry] of prefetched) {
+      if (now - entry.createdAt > PREFETCH_TTL_MS) {
+        prefetched.delete(key);
+        entry.cancel();
+      }
+    }
+  };
+  const takePrefetched = (key: string): PrefetchedSegment | undefined => {
+    const entry = prefetched.get(key);
+    if (entry) prefetched.delete(key);
+    return entry;
+  };
+  const prefetch = (text: string, opts: { signal?: AbortSignal } = {}): void => {
+    if (engine !== 'elevenlabs' || opts.signal?.aborted) return;
+    const prepared = prepareSpeech(text);
+    if (!prepared || prefetched.has(prepared)) return;
+    purgeStalePrefetches();
+    const cacheVoice = resolveBaseCacheVoice(engine);
+    let cancelled = false;
+    let opened: ReadableStream<Uint8Array> | null = null;
+    let wavPath: string | undefined;
+    const entry: PrefetchedSegment = {
+      createdAt: Date.now(),
+      cancel: () => {
+        cancelled = true;
+        if (opened) void opened.cancel().catch(() => undefined);
+        if (wavPath) void unlink(wavPath).catch(() => undefined);
+      },
+      ready: (async () => {
+        const cached = await lookupPaidElevenLabsWav(prepared, cacheVoice);
+        if (cached) {
+          wavPath = cached;
+          return { wav: cached };
+        }
+        if (cancelled) return {};
+        const { openElevenLabsAudioStream } = await import('../voice/local-tts.js');
+        const stream = await openElevenLabsAudioStream(prepared, process.env, {
+          ...(opts.signal ? { signal: opts.signal } : {}),
+          onPcmComplete: (pcm) => {
+            void storePcmStreamInTtsCache(prepared, cacheVoice, pcm, turnFactor);
+          },
+        });
+        if (cancelled) {
+          if (stream) void stream.cancel().catch(() => undefined);
+          return {};
+        }
+        opened = stream;
+        return { stream };
+      })().catch(() => ({})),
+    };
+    prefetched.set(prepared, entry);
+    opts.signal?.addEventListener('abort', () => {
+      if (prefetched.get(prepared) === entry) prefetched.delete(prepared);
+      entry.cancel();
+    }, { once: true });
+  };
+
+  const speak = async (text: string, opts: StreamSpeakOptions = {}): Promise<boolean> => {
     const signal = opts.signal;
     if (signal?.aborted) return false;
     const player = await playerPromise;
@@ -2197,31 +2629,64 @@ function makeDefaultStreamSpeak(
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
       : baseCacheVoice;
-    const cachedBackchannel = await lookupInstantBackchannelWav(
-      text,
-      process.env,
-      undefined,
-      cacheVoice,
-    );
-    if (cachedBackchannel) {
+    // A look-ahead opened for this exact sentence is consumed first: its paid
+    // copy or its already-arriving stream. A prefetch that failed to open falls
+    // through to the regular lookup + open below (one honest retry).
+    const lookahead = engine === 'elevenlabs' ? takePrefetched(text) : undefined;
+    const lookaheadReady = lookahead ? await lookahead.ready : undefined;
+    if (signal?.aborted) {
+      lookahead?.cancel();
+      return false;
+    }
+    let prefetchedStream: ReadableStream<Uint8Array> | null = null;
+    let cachedWav: string | null = null;
+    if (lookaheadReady?.wav) {
+      cachedWav = lookaheadReady.wav;
+    } else if (lookaheadReady?.stream) {
+      prefetchedStream = lookaheadReady.stream;
+    } else {
+      // ElevenLabs is billed per character: a phrase already paid for — in the
+      // 6 400+ entry permanent library or in the TTS cache — must NEVER reopen
+      // the network stream. Local engines keep the narrower backchannel-only
+      // lookup (a fresh local synth is free and streams faster than a file copy).
+      cachedWav = engine === 'elevenlabs'
+        ? await lookupPaidElevenLabsWav(text, cacheVoice)
+        : engine === 'kyutai'
+          ? await lookupTtsCacheWav(text, cacheVoice)
+          : await lookupInstantBackchannelWav(
+            text,
+            process.env,
+            undefined,
+            cacheVoice,
+          );
+    }
+    if (cachedWav) {
       try {
         // The player starts reading a ready local WAV immediately: no HTTP,
         // model queue, or synthesis step remains on this acknowledgement.
         opts.onFirstAudio?.();
-        await defaultPlay(cachedBackchannel, { signal, alreadyNormalized: true }, playerPromise);
-        logger.info('[voice] instant backchannel cache hit');
+        await defaultPlay(
+          cachedWav,
+          {
+            signal,
+            alreadyNormalized: true,
+            ...(opts.prependInterSentenceSilence ? { prependInterSentenceSilence: true } : {}),
+          },
+          playerPromise,
+        );
+        if (engine !== 'elevenlabs') logger.info('[voice] instant backchannel cache hit');
         return !signal?.aborted;
       } finally {
         try {
-          const { unlink } = await import('node:fs/promises');
-          await unlink(cachedBackchannel);
+          await unlink(cachedWav);
         } catch {
           /* throwaway cache copy */
         }
       }
     }
 
-    const stream = engine === 'voicebox'
+    const preparedText = text;
+    const stream = prefetchedStream ?? (engine === 'voicebox'
       ? await (async () => {
           const { openVoiceboxAudioStream } = await import('../voice/voicebox-tts.js');
           return openVoiceboxAudioStream(text, process.env, {
@@ -2231,10 +2696,42 @@ function makeDefaultStreamSpeak(
               : {}),
           });
         })()
-      : await (async () => {
-          const { openPocketAudioStream } = await import('../voice/local-tts.js');
-          return openPocketAudioStream(text, process.env, { signal });
-        })();
+      : engine === 'elevenlabs'
+        ? await (async () => {
+            const { openElevenLabsAudioStream } = await import('../voice/local-tts.js');
+            return openElevenLabsAudioStream(text, process.env, {
+              ...(signal ? { signal } : {}),
+              // Every streamed character was billed — write the completed clip
+              // back to the TTS cache so repeating the phrase costs zero.
+              onPcmComplete: (pcm) => {
+                void storePcmStreamInTtsCache(
+                  preparedText,
+                  cacheVoice,
+                  pcm,
+                  opts.ttsNormalizationFactor,
+                );
+              },
+            });
+          })()
+        : engine === 'kyutai'
+          ? await (async () => {
+              const { openKyutaiAudioStream } = await import('../voice/local-tts.js');
+              return openKyutaiAudioStream(text, process.env, {
+                ...(signal ? { signal } : {}),
+                onPcmComplete: (pcm) => {
+                  void storePcmStreamInTtsCache(
+                    preparedText,
+                    cacheVoice,
+                    pcm,
+                    opts.ttsNormalizationFactor,
+                  );
+                },
+              });
+            })()
+          : await (async () => {
+            const { openPocketAudioStream } = await import('../voice/local-tts.js');
+            return openPocketAudioStream(text, process.env, { signal });
+          })());
     if (!stream || signal?.aborted) return false;
 
     const child = spawn(player.cmd, player.stdinArgs, { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -2263,17 +2760,120 @@ function makeDefaultStreamSpeak(
     const headTimeoutMs = Number.isFinite(configuredHeadTimeoutMs) && configuredHeadTimeoutMs > 0
       ? Math.max(50, Math.min(1_000, configuredHeadTimeoutMs))
       : 250;
-    const writePlayerParts = (parts: Buffer[]): boolean => {
+    const jitterBufferMs = resolveVoiceJitterBufferMs(process.env);
+    let jitterPrimed = jitterBufferMs <= 0;
+    let jitterQueue: Buffer[] = [];
+    let jitterAudioBytes = 0;
+    let detectedByteRate = 48_000;
+    let jitterReleaseTimer: NodeJS.Timeout | undefined;
+    let playerSawWavHeader = false;
+    let playerPcmBytes = 0;
+
+    const writePlayerChunk = (part: Buffer): boolean => {
+      opts.onAudioChunk?.(part);
+      const accepted = stdin.write(part);
+      if (part.length >= 12 && part.subarray(0, 4).toString('ascii') === 'RIFF') {
+        const probe = probePcm16Wav(part);
+        if (probe.status === 'ready') {
+          playerSawWavHeader = true;
+          detectedByteRate = probe.layout.byteRate;
+          playerPcmBytes += Math.max(0, part.length - probe.layout.dataOffset);
+        }
+      } else if (playerSawWavHeader) {
+        playerPcmBytes += part.length;
+      }
+      if (playerPcmBytes > 0) {
+        opts.onAudioProgress?.({ pcmBytes: playerPcmBytes, byteRate: detectedByteRate });
+      }
+      return accepted;
+    };
+
+    const targetJitterBytes = (): number =>
+      Math.round((detectedByteRate * jitterBufferMs) / 1_000);
+
+    const flushJitterBuffer = (force = false): boolean => {
+      if (!force && jitterAudioBytes === 0) return true;
+      if (jitterReleaseTimer) {
+        clearTimeout(jitterReleaseTimer);
+        jitterReleaseTimer = undefined;
+      }
+      jitterPrimed = true;
+      if (jitterQueue.length === 0) return true;
       let accepted = true;
-      for (const part of parts) {
-        opts.onAudioChunk?.(part);
-        accepted = stdin.write(part) && accepted;
+      const partsToWrite = jitterQueue;
+      jitterQueue = [];
+      jitterAudioBytes = 0;
+      const firstPart = partsToWrite[0];
+      const secondPart = partsToWrite[1];
+      if (
+        firstPart &&
+        secondPart &&
+        firstPart.length <= 1024 &&
+        firstPart.length >= 12 &&
+        firstPart.subarray(0, 4).toString('ascii') === 'RIFF'
+      ) {
+        const probe = probePcm16Wav(firstPart);
+        if (probe.status === 'ready' && firstPart.length === probe.layout.dataOffset) {
+          partsToWrite.shift();
+          partsToWrite[0] = Buffer.concat([firstPart, secondPart]);
+        }
+      }
+      for (const part of partsToWrite) {
+        accepted = writePlayerChunk(part) && accepted;
       }
       if (!firstAudio && edges.hasOutputAudio()) {
         firstAudio = true;
         opts.onFirstAudio?.();
       }
       return accepted;
+    };
+
+    const writePlayerParts = (parts: Buffer[]): boolean => {
+      if (jitterPrimed) {
+        let accepted = true;
+        for (const part of parts) {
+          accepted = writePlayerChunk(part) && accepted;
+        }
+        if (!firstAudio && edges.hasOutputAudio()) {
+          firstAudio = true;
+          opts.onFirstAudio?.();
+        }
+        return accepted;
+      }
+
+      for (const part of parts) {
+        if (part.length === 0) continue;
+        if (part.length >= 12 && part.subarray(0, 4).toString('ascii') === 'RIFF') {
+          const probe = probePcm16Wav(part);
+          if (probe.status === 'ready') {
+            detectedByteRate = probe.layout.byteRate;
+            jitterAudioBytes += Math.max(0, part.length - probe.layout.dataOffset);
+          } else {
+            jitterAudioBytes += Math.max(0, part.length - 44);
+          }
+        } else {
+          jitterAudioBytes += part.length;
+        }
+        jitterQueue.push(part);
+      }
+
+      if (jitterAudioBytes >= targetJitterBytes()) {
+        return flushJitterBuffer();
+      }
+
+      if (!jitterReleaseTimer && jitterBufferMs > 0 && jitterAudioBytes > 0) {
+        jitterReleaseTimer = setTimeout(() => {
+          jitterReleaseTimer = undefined;
+          if (settled || signal?.aborted) return;
+          try {
+            flushJitterBuffer(true);
+          } catch {
+            /* best effort */
+          }
+        }, jitterBufferMs);
+      }
+
+      return true;
     };
     const writeGainParts = (parts: Buffer[]): boolean => {
       let accepted = true;
@@ -2293,6 +2893,7 @@ function makeDefaultStreamSpeak(
           // A slow/stalled HTTP body must not hold the look-ahead forever.
           // The small partial head is safe to write without awaiting backpressure.
           writeGainParts(gain.releaseHead());
+          flushJitterBuffer();
         } catch (err) {
           logger.debug(
             `[voice] streaming head release failed open: ${err instanceof Error ? err.message : String(err)}`
@@ -2346,8 +2947,11 @@ function makeDefaultStreamSpeak(
       }
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
       headReleaseTimer = undefined;
+      if (jitterReleaseTimer) clearTimeout(jitterReleaseTimer);
+      jitterReleaseTimer = undefined;
       if (!writeGainParts(gain.flush())) await waitForPlayerDrain(child, stdin, signal);
       if (!writePlayerParts(edges.flush())) await waitForPlayerDrain(child, stdin, signal);
+      if (!flushJitterBuffer()) await waitForPlayerDrain(child, stdin, signal);
       if (!stdin.destroyed) stdin.end();
       await closed;
       return firstAudio && closedOk && !signal?.aborted;
@@ -2366,6 +2970,7 @@ function makeDefaultStreamSpeak(
     } finally {
       clearTimeout(killTimer);
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
+      if (jitterReleaseTimer) clearTimeout(jitterReleaseTimer);
       signal?.removeEventListener('abort', onAbort);
       try {
         await reader.cancel();
@@ -2374,6 +2979,108 @@ function makeDefaultStreamSpeak(
       }
     }
   };
+  return engine === 'elevenlabs' ? Object.assign(speak, { prefetch }) : speak;
+}
+
+const ESTIMATED_TTS_WORD_MS = 400;
+
+/** Resume on a lexical boundary after the PCM duration already accepted by the player. */
+function resumeTextAfterStreamFailure(
+  text: string,
+  progress: { pcmBytes: number; byteRate: number } | undefined,
+): string {
+  if (!progress || progress.pcmBytes <= 0 || progress.byteRate <= 0) return text;
+  const words = [...text.matchAll(/\S+/gu)];
+  if (words.length <= 1) return '';
+  const playedMs = progress.pcmBytes / progress.byteRate * 1_000;
+  const completedWords = Math.max(1, Math.floor(playedMs / ESTIMATED_TTS_WORD_MS));
+  const resumeAt = words[Math.min(completedWords, words.length - 1)]?.index;
+  return resumeAt === undefined ? '' : text.slice(resumeAt).trimStart();
+}
+
+/** Select one provider per segment while retaining the pre-DARK3 path verbatim when disabled. */
+function makeRoutedSynth(
+  voice?: string,
+  rootDir?: string,
+  engine: LocalTtsEngine = resolveTtsEngine(),
+  env: NodeJS.ProcessEnv = process.env,
+): SynthFn {
+  const established = makeDefaultSynth(voice, rootDir, engine);
+  if (!twoSpeedTtsEnabled(env) && engine !== 'kyutai') return established;
+  const local = engine === 'kyutai' ? established : makeDefaultSynth(voice, rootDir, 'kyutai');
+  const cloud = engine === 'elevenlabs' ? established : makeDefaultSynth(voice, rootDir, 'elevenlabs');
+
+  return async (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env, opts.ttsRouteHint)
+      : { route: 'local' as const, reason: 'configured-engine' };
+    if (decision.route === 'default') return established(text, opts);
+    logger.info(`[voice] route=${decision.route} reason=${decision.reason}`);
+    return decision.route === 'local' ? local(text, opts) : cloud(text, opts);
+  };
+}
+
+/** Progressive Kyutai → ElevenLabs → Pocket chain without replaying accepted local PCM. */
+function makeRoutedStreamSpeak(
+  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
+  engine: LocalTtsEngine = resolveTtsEngine(),
+  env: NodeJS.ProcessEnv = process.env,
+): StreamSpeakFn | undefined {
+  const established = makeDefaultStreamSpeak(playerPromise, engine);
+  if (!twoSpeedTtsEnabled(env) && engine !== 'kyutai') return established;
+  const local = engine === 'kyutai'
+    ? established
+    : makeDefaultStreamSpeak(playerPromise, 'kyutai');
+  const cloud = engine === 'elevenlabs'
+    ? established
+    : makeDefaultStreamSpeak(playerPromise, 'elevenlabs');
+  const pocket = makeDefaultStreamSpeak(playerPromise, 'pocket');
+
+  const speak: StreamSpeakFn = async (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env, opts.ttsRouteHint)
+      : { route: 'local' as const, reason: 'configured-engine' };
+    if (decision.route === 'default') return established?.(text, opts) ?? false;
+    logger.info(`[voice] route=${decision.route} reason=${decision.reason}`);
+    if (decision.route === 'elevenlabs') {
+      if (await cloud?.(text, opts)) return true;
+      if (opts.signal?.aborted) return false;
+      logger.warn('[voice] ElevenLabs stream failed — falling back to Pocket for this phrase');
+      return await pocket?.(text, opts) ?? false;
+    }
+    let localProgress: { pcmBytes: number; byteRate: number } | undefined;
+    const localOptions: StreamSpeakOptions = {
+      ...opts,
+      onAudioProgress: (progress) => {
+        localProgress = progress;
+        opts.onAudioProgress?.(progress);
+      },
+    };
+    if (await local?.(text, localOptions)) return true;
+    if (opts.signal?.aborted) return false;
+    const fallbackText = resumeTextAfterStreamFailure(text, localProgress);
+    if (!fallbackText) {
+      logger.warn('[voice] Kyutai stream failed after partial playback — no safe text remains');
+      return localProgress !== undefined;
+    }
+    logger.warn(
+      localProgress
+        ? '[voice] Kyutai stream failed — resuming with ElevenLabs after played audio'
+        : '[voice] Kyutai stream failed — falling back to ElevenLabs for this phrase',
+    );
+    if (await cloud?.(fallbackText, opts)) return true;
+    if (opts.signal?.aborted) return false;
+    logger.warn('[voice] Kyutai/ElevenLabs stream failed — falling back to Pocket for this phrase');
+    return await pocket?.(fallbackText, opts) ?? false;
+  };
+  speak.prefetch = (text, opts = {}) => {
+    const decision = twoSpeedTtsEnabled(env)
+      ? selectTwoSpeedTtsRoute(text, env)
+      : { route: 'local' as const };
+    if (decision.route === 'elevenlabs') cloud?.prefetch?.(text, opts);
+    else if (decision.route === 'default') established?.prefetch?.(text, opts);
+  };
+  return speak;
 }
 
 /** Default speak: play a WAV with the first available local player, blocking until done.
@@ -2448,9 +3155,13 @@ async function defaultPlay(
 /** Narrow test seam for verifying the shared per-turn player contract. */
 export const __voiceAudioPlayerTest = {
   resolveVoiceAudioPlayer,
+  resolveVoiceJitterBufferMs,
   resolveBaseCacheVoice,
   makeDefaultSynth,
   makeDefaultStreamSpeak,
+  makeRoutedSynth,
+  makeRoutedStreamSpeak,
+  resumeTextAfterStreamFailure,
   defaultPlay,
 };
 
@@ -2458,6 +3169,7 @@ export const __voiceAudioPlayerTest = {
  * Speak an arbitrary string aloud RIGHT NOW (proactively), not as a reply to something heard.
  * The missing primitive for reminders/announcements: synthesize → play → clean up.
  * Injectable synth/play for tests. Never-throws ($0 with local Pocket/Piper).
+ * Returns true only when the local player actually ran.
  */
 export async function sayNow(
   text: string,
@@ -2469,7 +3181,7 @@ export async function sayNow(
     /** `never` prevents a caller with its own bridge/notification from double-sending. */
     phoneDelivery?: 'env' | 'never';
   } = {}
-): Promise<void> {
+): Promise<boolean> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
   // meaningful remains. Clean once so speech, Telegram voice, and logs all use the same text.
@@ -2478,7 +3190,7 @@ export async function sayNow(
     if ((text ?? '').trim()) {
       logger.info(`[voice] sayNow muted after sanitize inputChars=${(text ?? '').length}`);
     }
-    return;
+    return false;
   }
   // A persona-specific .onnx remains meaningful for the Piper fallback. Pocket uses its
   // own preset/clone selection from CODEBUDDY_POCKET_VOICE.
@@ -2492,10 +3204,14 @@ export async function sayNow(
     }
   }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
+  let played = false;
   try {
-    const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
+    const synth = options.synth ?? makeRoutedSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
-    const wav = await synth(t, { signal: options.signal });
+    const wav = await synth(t, {
+      signal: options.signal,
+      ...(options.ttsRouteHint ? { ttsRouteHint: options.ttsRouteHint } : {}),
+    });
     if (wav) {
       // Half-duplex: mute the ear while speaking. The signal lets barge-in kill this player too.
       await withSpeakingGuard(() => {
@@ -2505,6 +3221,7 @@ export async function sayNow(
           alreadyNormalized: options.synth === undefined,
         });
       });
+      played = true;
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);
@@ -2530,6 +3247,54 @@ export async function sayNow(
       logger.warn(
         `[voice] sayNow (telegram) failed: ${err instanceof Error ? err.message : String(err)}`
       );
+    }
+  }
+  return played;
+}
+
+let conversationCueTempSequence = 0;
+
+/**
+ * Play a pre-recorded repository WAV without invoking TTS. The source asset is
+ * copied to a throwaway attenuated WAV so playback never mutates the cache.
+ */
+export async function playCachedConversationCue(
+  cue: ConversationCueRequest,
+): Promise<boolean> {
+  if (cue.signal.aborted || !existsSync(cue.assetPath)) return false;
+  const factor = 10 ** (cue.gainDb / 20);
+  const tempPath = join(
+    tmpdir(),
+    `cb-conversation-cue-${process.pid}-${Date.now()}-${++conversationCueTempSequence}.wav`,
+  );
+  try {
+    const source = await readFile(cue.assetPath);
+    if (cue.signal.aborted) return false;
+    const attenuated = normalizePcm16Wav(source, process.env, factor);
+    if (attenuated.equals(source) && factor !== 1) {
+      logger.warn(`[voice] conversation cue is not a supported PCM16 WAV: ${cue.assetPath}`);
+      return false;
+    }
+    await writeFile(tempPath, attenuated, { mode: 0o600 });
+    if (cue.signal.aborted) return false;
+    await withSpeakingGuard(() => {
+      noteSpokenText(cue.text);
+      return defaultPlay(tempPath, {
+        signal: cue.signal,
+        alreadyNormalized: true,
+      });
+    });
+    return !cue.signal.aborted;
+  } catch (error) {
+    logger.warn(
+      `[voice] cached conversation cue failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  } finally {
+    try {
+      await unlink(tempPath);
+    } catch {
+      /* no temporary cue was created, or cleanup can remain best-effort */
     }
   }
 }
@@ -2586,6 +3351,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const visualConsent = new VisualConsentGate();
   const turnCoordinator = getVoiceTurnCoordinator();
   const env = options.env ?? process.env;
+  const interruptionContextEnabled = env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
   const shortSegmentCache = new Map<string, Uint8Array>();
   let shortSegmentTempSequence = 0;
 
@@ -2601,7 +3367,8 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         /* keep env default */
       }
     }
-    const baseSynth = options.synth ?? makeDefaultSynth(voice, options.rootDir, engine);
+    const baseSynth = options.synth ?? makeRoutedSynth(voice, options.rootDir, engine, env);
+    if (twoSpeedTtsEnabled(env) && !options.synth) return baseSynth;
     return cacheShortSegments(
       baseSynth,
       shortSegmentVoiceIdentity(voice, env, engine),
@@ -2615,10 +3382,13 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   // of letting the newest turn overwrite the previous controller.
   const activeAborts = new Map<string, AbortController>();
   let latestTurnId: string | undefined;
+  let pendingInterruption: VoiceInterruptionContext | undefined;
 
   const handler = async (heard: string, context?: VoiceTurnContext): Promise<void> => {
     const controller = new AbortController();
     const voiceTurnId = context?.turnId ?? createAvatarTurnId();
+    const interruption = pendingInterruption;
+    pendingInterruption = undefined;
     activeAborts.set(voiceTurnId, controller);
     latestTurnId = voiceTurnId;
     const { signal } = controller;
@@ -2637,7 +3407,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     // native stream rule so older injected synth/player tests keep their contract.
     const nativeStreamSpeak = options.streamSpeak ?? (
       !options.synth && !options.play
-        ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
+        ? makeRoutedStreamSpeak(playerPromise, turnTtsEngine, env)
         : undefined
     );
     const delivery = deriveSpokenDeliveryProfile(heard, context, env);
@@ -2666,7 +3436,18 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     let firstSegmentMs: number | undefined;
     let firstAudioMs: number | undefined;
     let firstContentAudioMs: number | undefined;
+    let responseAudioStartSignalled = false;
+    const signalResponseAudioStart = (): void => {
+      if (responseAudioStartSignalled) return;
+      responseAudioStartSignalled = true;
+      try {
+        context?.onResponseAudioStart?.();
+      } catch {
+        /* cue cancellation must never alter response playback */
+      }
+    };
     let streamFallbackSegments = 0;
+    let interruptedAtSentence: number | undefined;
     let streamRouteRemote = false;
     let semanticCorrectionPromise: Promise<string> | undefined;
     let mode: VoiceReplyTiming['mode'] = 'silent';
@@ -2878,6 +3659,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       const metadata = streamedWavMetadata.get(wav);
       if (metadata) noteSpokenText(metadata.text);
       if (firstAudioMs === undefined) firstAudioMs = Date.now() - startedAt;
+      signalResponseAudioStart();
       await publishAvatarBufferedWav(wav);
       markAvatarSpeechStarted();
       if (
@@ -2914,6 +3696,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
                 },
                 onFirstAudio: () => {
                   if (firstAudioMs === undefined) firstAudioMs = Date.now() - startedAt;
+                  signalResponseAudioStart();
                   markAvatarSpeechStarted();
                   if (!isBackchannel && firstContentAudioMs === undefined) {
                     firstContentAudioMs = Date.now() - startedAt;
@@ -2927,6 +3710,11 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             }
           }
       : undefined;
+    // The look-ahead seam must survive the timing wrapper, or the pipeline
+    // below never sees it and every sentence pays a full round trip again.
+    if (timedStreamSpeak && nativeStreamSpeak?.prefetch) {
+      timedStreamSpeak.prefetch = nativeStreamSpeak.prefetch;
+    }
     const speakSemanticCorrection = async (): Promise<string> => {
       const pending = semanticCorrectionPromise;
       semanticCorrectionPromise = undefined;
@@ -2962,51 +3750,83 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       }
     };
     try {
+      // ---- CAMERA SHARE: on-demand « qu'est-ce que tu vois ? » / « regarde » ----
+      // Must precede object-level visual grounding: a scene look is not an
+      // ambiguous consent prompt, and voice never sends a photo unless asked.
+      let visualReply: string | undefined;
+      try {
+        const cameraShare = options.cameraShare ?? (
+          async (utterance: string, shareOptions?: CameraShareOptions) => {
+            const { maybeHandleCameraShareRequest } = await import(
+              '../companion/camera-share.js'
+            );
+            return maybeHandleCameraShareRequest(utterance, shareOptions);
+          }
+        );
+        const share = await cameraShare(heard, {
+          surface: 'voice',
+          rootDir: options.rootDir ?? process.cwd(),
+          ...(options.env ? { env: options.env } : {}),
+        });
+        if (share) {
+          visualReply = share.spokenReply;
+          logger.info(
+            `[voice] camera-share success=${share.success} telegram=${share.telegramSent}`,
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          `[voice] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
       // ---- VISUAL GROUNDING: explicit one-shot camera request ----
       // This must precede both the stream and blocking reply functions. In
       // production those functions are the hybrid brain, whose first branch is
       // the phatic/prefetch shortcut and whose grounded branch depends on
       // SPEAK_ACT. Seeing is a perception capability, not an action-mode perk.
-      let visualReply: string | undefined;
-      let visualRequest = heard;
-      const consent = visualConsent.consume(heard);
-      if (consent.decision === 'confirmed') {
-        visualRequest = consent.utterance;
-      } else if (consent.decision === 'declined') {
-        visualReply = "D'accord, je n'ouvre pas la caméra.";
-      } else if (consent.decision === 'expired') {
-        visualReply =
-          "J'ai laissé expirer l'autorisation. Redis-moi simplement ce que tu veux me montrer.";
-      } else if (isAmbiguousVisualGroundingRequest(heard)) {
-        armedVisualConsent = visualConsent.request(heard);
-        visualReply =
-          "Oui, je peux regarder. Tu veux que j'ouvre la caméra juste le temps de prendre une image ?";
-      }
-      const shouldGroundVisual =
-        consent.decision === 'confirmed' ||
-        (visualReply === undefined && isExplicitVisualGroundingRequest(heard));
-      if (shouldGroundVisual) {
-        const visualStartedAt = Date.now();
-        try {
-          const result = await visualGrounding(visualRequest, {
-            cwd: options.rootDir ?? process.cwd(),
-            signal,
-          });
-          replyMs = Date.now() - visualStartedAt;
-          if (signal.aborted || result?.status === 'aborted') return;
-          visualReply = result?.response ||
-            "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
-          logger.info(
-            `[voice] explicit visual grounding status=${result?.status ?? 'unavailable'} ` +
-              `evidenceChars=${result?.evidence?.summary.length ?? 0}`,
-          );
-        } catch (error) {
-          replyMs = Date.now() - visualStartedAt;
-          logger.warn(
-            `[voice] explicit visual grounding failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+      // Skipped when camera-share already answered a scene-level look.
+      if (visualReply === undefined) {
+        let visualRequest = heard;
+        const consent = visualConsent.consume(heard);
+        if (consent.decision === 'confirmed') {
+          visualRequest = consent.utterance;
+        } else if (consent.decision === 'declined') {
+          visualReply = "D'accord, je n'ouvre pas la caméra.";
+        } else if (consent.decision === 'expired') {
           visualReply =
-            "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+            "J'ai laissé expirer l'autorisation. Redis-moi simplement ce que tu veux me montrer.";
+        } else if (isAmbiguousVisualGroundingRequest(heard)) {
+          armedVisualConsent = visualConsent.request(heard);
+          visualReply =
+            "Oui, je peux regarder. Tu veux que j'ouvre la caméra juste le temps de prendre une image ?";
+        }
+        const shouldGroundVisual =
+          consent.decision === 'confirmed' ||
+          (visualReply === undefined && isExplicitVisualGroundingRequest(heard));
+        if (shouldGroundVisual) {
+          const visualStartedAt = Date.now();
+          try {
+            const result = await visualGrounding(visualRequest, {
+              cwd: options.rootDir ?? process.cwd(),
+              signal,
+            });
+            replyMs = Date.now() - visualStartedAt;
+            if (signal.aborted || result?.status === 'aborted') return;
+            visualReply = result?.response ||
+              "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+            logger.info(
+              `[voice] explicit visual grounding status=${result?.status ?? 'unavailable'} ` +
+                `evidenceChars=${result?.evidence?.summary.length ?? 0}`,
+            );
+          } catch (error) {
+            replyMs = Date.now() - visualStartedAt;
+            logger.warn(
+              `[voice] explicit visual grounding failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            visualReply =
+              "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+          }
         }
       }
 
@@ -3015,7 +3835,10 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // the blocking path below (which is the original, unchanged tour-par-tour behavior).
       if (streamFn && visualReply === undefined) {
         try {
-          const relationshipSafety = new RelationshipSafetyStreamGuard();
+          let shortFirstConfig: VoiceShortFirstConfig | undefined;
+          const relationshipSafety = new RelationshipSafetyStreamGuard(
+            () => shortFirstConfig !== undefined,
+          );
           const timedReplyStream = (async function* (): AsyncGenerator<string> {
             let atStreamStart = true;
             let spokenPrefix = '';
@@ -3023,6 +3846,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               const candidate = await spokenPrefixFn(heard, {
                 signal,
                 delivery,
+                ...(interruption ? { interruption } : {}),
                 onReplyTimingPhase: markReplyTimingPhase,
                 onSpokenPrefixTelemetry: noteSpokenPrefixCause,
               });
@@ -3051,8 +3875,12 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             for await (const delta of streamFn(heard, {
               signal,
               delivery,
+              ...(interruption ? { interruption } : {}),
               ...(spokenPrefix ? { spokenPrefix } : {}),
               onReplyTimingPhase: markReplyTimingPhase,
+              onShortFirstReady: (config) => {
+                shortFirstConfig = config;
+              },
               onProviderResolved: (route) => {
                 streamRouteRemote = isRemoteVoiceRoute(route.baseURL);
               },
@@ -3127,12 +3955,37 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               };
             })(),
             ...(timedStreamSpeak ? { streamSpeak: timedStreamSpeak } : {}),
+            ttsRouteHint: (() => {
+              let firstContentPending = true;
+              return (text: string): TwoSpeedTtsRouteHint | undefined => {
+                if (INSTANT_BACKCHANNELS.has(text.trim())) return 'backchannel';
+                if (shortFirstConfig && firstContentPending) {
+                  firstContentPending = false;
+                  return 'conv3-first';
+                }
+                return undefined;
+              };
+            })(),
             signal,
             cap: options.sentenceCap ?? voiceSentenceCap(),
             audioPrebufferMs: () => streamRouteRemote ? voiceAudioPrebufferMs(env) : 0,
           });
           streamFallbackSegments = result.fallbackSegments ?? 0;
+          if (shortFirstConfig && (result.played || result.aborted)) {
+            logger.info(
+              `[voice] short-first: firstContentMs=${firstContentAudioMs ?? -1}, ` +
+                `sentences=${result.sentences.length}`,
+            );
+          }
           if (signal.aborted) {
+            if (interruptionContextEnabled) {
+              interruptedAtSentence = result.interruptedSentence ?? Math.max(1, result.sentences.length + 1);
+              pendingInterruption = {
+                interruptedTurnId: voiceTurnId,
+                phraseNumber: interruptedAtSentence,
+                spokenText: result.spoken,
+              };
+            }
             // Preserve only sentences whose playback completed before the
             // interruption. The partial in-flight segment is deliberately
             // absent from `result.spoken` and must not enter continuity.
@@ -3186,6 +4039,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         rawReply = await replyFn(heard, {
           signal,
           delivery,
+          ...(interruption ? { interruption } : {}),
           onReplyTimingPhase: markReplyTimingPhase,
           onSemanticCorrection: (correction) => {
             semanticCorrectionPromise = correction.catch(() => '');
@@ -3310,6 +4164,14 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
       // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
       // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
+      if (signal.aborted && interruptionContextEnabled) {
+        interruptedAtSentence ??= 1;
+        pendingInterruption ??= {
+          interruptedTurnId: voiceTurnId,
+          phraseNumber: interruptedAtSentence,
+          spokenText: '',
+        };
+      }
       if (signal.aborted) {
         mode = 'interrupted';
         spoke = false;
@@ -3322,6 +4184,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       if (signal.aborted) {
         turnCoordinator.transition(avatarTurnId, 'interrupted', {
           suppressionReason: 'barge-in',
+          ...(interruptedAtSentence !== undefined ? { interruptedAtSentence } : {}),
           totalMs: Date.now() - startedAt,
         });
         emitAvatarEvent({
@@ -3369,6 +4232,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         continuationSemanticReviewCompleteMs !== undefined;
       const timing: VoiceReplyTiming = {
         mode,
+        ...(interruptedAtSentence !== undefined ? { interruptedAtSentence } : {}),
         totalMs: Date.now() - startedAt,
         spoke,
         delivery,

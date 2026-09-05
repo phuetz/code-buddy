@@ -477,7 +477,7 @@ personal operating system, not just a chat wrapper.
      `word/document.xml` still contains an XML-invalid character, which guards
      against Word refusing a generated file.
    - Real smoke proof: `npm run smoke:docx` copied
-     `gitnexus-rs-from-c/questions/Questions - Impacts.docx`, kept the source
+     `code-explorer-from-c/questions/Questions - Impacts.docx`, kept the source
      hash unchanged, read 33,082 characters, extracted 27 screenshots,
      generated a DOCX deliverable with 27 embedded images, and validated DOCX
      relationships/media.

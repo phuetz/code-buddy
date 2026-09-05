@@ -144,13 +144,21 @@ export class WebTestTool implements ITool {
     const snapshot = await this.snapshotTool.execute({ interactiveOnly: true, maxElements: 15 });
     const snapshotSummary = snapshot.success ? (snapshot.output ?? '').split('\n').slice(0, 18).join('\n') : `snapshot failed: ${snapshot.error}`;
 
-    // 5. Screenshot as reviewable evidence.
+    // 5. Screenshot as reviewable evidence. A missing capture is a failed
+    //    check — never announce PASSED without the file the report claims.
     let screenshotPath: string | undefined;
     if (wantScreenshot) {
       const shot = await this.browser.execute({ action: 'screenshot' });
       if (shot.success) {
-        screenshotPath = ((shot.data as { path?: string } | undefined)?.path) ?? shot.output?.match(/saved to (\S+)/)?.[1];
+        screenshotPath =
+          ((shot.data as { path?: string } | undefined)?.path) ??
+          shot.output?.match(/saved to (\S+)/)?.[1] ??
+          shot.output?.match(/Screenshot saved:\s+(\S+)/)?.[1];
       }
+      const detail = screenshotPath
+        ? screenshotPath
+        : (shot.success ? 'no path returned' : (shot.error ?? 'screenshot failed'));
+      push('screenshot', Boolean(screenshotPath), detail);
     }
 
     // 6. Server face of the bug, when we manage this origin.

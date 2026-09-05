@@ -13,6 +13,7 @@
  */
 
 import { EventEmitter } from 'events';
+import path from 'path';
 
 // Mock fs-extra before importing the module
 const {
@@ -54,6 +55,12 @@ jest.mock('fs-extra', () => {
 };
   return { ...impl, default: impl };
 });
+
+// MEM1 routes migration state through atomic persistence rather than fs-extra.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFile,
+  writeJsonAtomic: mockWriteJson,
+}));
 
 // Helper function to parse version
 const parseVersion = (v: string): { major: number; minor: number; patch: number } => {
@@ -457,7 +464,80 @@ describe('MigrationManager', () => {
 
       await manager.migrate();
 
-      expect(mockWriteJson).toHaveBeenCalled();
+      // VERIF3 T1 : un `toHaveBeenCalled()` nu laissait passer un historique
+      // vidé, un chemin dévié et même la suppression complète de l'écriture.
+      // On garde ici le chemin exact, le contenu sérialisé et le mode 0o600.
+      const historyPath = path.join('/test/data', 'migration-history.json');
+      const historyCalls = mockWriteJson.mock.calls.filter((call) => call[0] === historyPath);
+      expect(historyCalls.length).toBeGreaterThan(0);
+
+      const [, payload, options] = historyCalls[historyCalls.length - 1]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Object.keys(payload)).toEqual(['history']);
+      expect(payload.history).toHaveLength(1);
+      expect(payload.history[0]).toMatchObject({
+        version: '1.0.0',
+        name: 'test',
+        status: 'success',
+      });
+      expect(typeof payload.history[0].transactionId).toBe('string');
+      expect(payload.history[0].transactionId).not.toHaveLength(0);
+    });
+
+    it('should persist the audit log entries at the audit path in 0o600', async () => {
+      manager.registerMigration({
+        version: '1.0.0',
+        name: 'test',
+        up: mockUp,
+        down: mockDown,
+      });
+
+      await manager.migrate();
+
+      // VERIF3 T1 : vider `entries` restait vert, le journal d'audit n'était
+      // jamais lu par le harnais.
+      const auditPath = path.join('/test/data', 'migration-audit.json');
+      const auditCalls = mockWriteJson.mock.calls.filter((call) => call[0] === auditPath);
+      expect(auditCalls.length).toBeGreaterThan(0);
+
+      const [, payload, options] = auditCalls[auditCalls.length - 1]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(typeof payload.lastUpdated).toBe('string');
+      expect(Array.isArray(payload.entries)).toBe(true);
+      expect(payload.entries.length).toBeGreaterThan(0);
+      expect(
+        payload.entries.some(
+          (entry: { operation: string; version: string; status: string }) =>
+            entry.operation === 'migrate' &&
+            entry.version === '1.0.0' &&
+            entry.status === 'completed'
+        )
+      ).toBe(true);
+    });
+
+    it('should restore the backed-up file content verbatim when a migration fails', async () => {
+      const backedUpPath = path.join('/test/data', 'touched.json');
+      const originalContent = Buffer.from('{"avant":"migration"}');
+      mockPathExists.mockImplementation(async (p: string) => p === backedUpPath);
+      mockReadFile.mockResolvedValue(originalContent);
+
+      manager.registerMigration({
+        version: '1.0.0',
+        name: 'test',
+        up: jest.fn().mockImplementation(async (ctx: MigrationContext) => {
+          await ctx.backupFile!(backedUpPath);
+          throw new Error('migration boom');
+        }),
+        down: mockDown,
+      });
+
+      await manager.migrate();
+
+      // VERIF3 T1 : remplacer le contenu restauré par '' restait vert.
+      const restoreCalls = mockWriteFile.mock.calls.filter((call) => call[0] === backedUpPath);
+      expect(restoreCalls).toHaveLength(1);
+      expect(restoreCalls[0]![1]).toEqual(originalContent);
+      expect(restoreCalls[0]![2]).toEqual({ mode: 0o600 });
     });
 
     it('should pass correct context to migration', async () => {

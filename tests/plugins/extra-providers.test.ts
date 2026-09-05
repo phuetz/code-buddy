@@ -205,30 +205,30 @@ describe('Groq Provider', () => {
         ok: true,
         json: async () => ({
           data: [
-            { id: 'llama-3.3-70b-versatile', owned_by: 'meta', context_window: 131072 },
-            { id: 'mixtral-8x7b-32768', owned_by: 'mistral', context_window: 32768 },
+            { id: 'qwen/qwen3.8-27b', owned_by: 'qwen', context_window: 131072 },
+            { id: 'openai/gpt-oss-120b', owned_by: 'openai', context_window: 131072 },
           ],
         }),
       });
 
       const models = await provider.onboarding!['discovery.run']!();
       expect(models).toHaveLength(2);
-      expect(models[0].id).toBe('llama-3.3-70b-versatile');
+      expect(models[0].id).toBe('qwen/qwen3.8-27b');
       expect(models[0].contextWindow).toBe(131072);
-      expect(models[1].id).toBe('mixtral-8x7b-32768');
+      expect(models[1].id).toBe('openai/gpt-oss-120b');
     });
 
-    it('model picker should prefer llama-3.3-70b-versatile', async () => {
+    it('model picker should prefer qwen/qwen3.8-27b', async () => {
       process.env.GROQ_API_KEY = 'test-groq-key';
       const provider = createGroqProvider()!;
 
       const models = [
-        { id: 'mixtral-8x7b-32768', name: 'Mixtral', contextWindow: 32768 },
-        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', contextWindow: 131072 },
+        { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B', contextWindow: 131072 },
+        { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B', contextWindow: 131072 },
       ];
 
       const picked = await provider.onboarding!['wizard.modelPicker']!(models);
-      expect(picked).toBe('llama-3.3-70b-versatile');
+      expect(picked).toBe('qwen/qwen3.8-27b');
     });
   });
 });

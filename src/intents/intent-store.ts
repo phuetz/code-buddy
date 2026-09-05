@@ -10,6 +10,7 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import * as yaml from 'js-yaml';
 import { logger } from '../utils/logger.js';
+import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 
 export type IntentStatus = 'active' | 'done' | 'archived';
 export type IntentLedgerEventType = 'created' | 'checked' | 'drifted' | 'archived';
@@ -239,7 +240,8 @@ export class IntentStore {
     const filePath = this.getPath(id);
     let markdown: string;
     try {
-      markdown = await readFile(filePath, 'utf8');
+      markdown = await readTextAtomic(filePath, '');
+      if (!markdown) return null;
     } catch (error) {
       const code = isRecord(error) && typeof error.code === 'string' ? error.code : '';
       if (code === 'ENOENT') return null;
@@ -287,7 +289,7 @@ export class IntentStore {
     if (!current) throw new Error(`Intent "${id}" not found.`);
     if (current.status === status) return current;
     const updated: Intent = { ...current, status };
-    await writeFile(this.getPath(id), serializeIntent(updated), 'utf8');
+    await writeFileAtomic(this.getPath(id), serializeIntent(updated), { mode: 0o600 });
     if (status === 'archived') {
       await this.appendEvent({
         type: 'archived',

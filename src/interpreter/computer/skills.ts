@@ -705,9 +705,10 @@ export class ComputerSkills extends EventEmitter {
 
   private async getLLMClient(): Promise<import('../../codebuddy/client.js').CodeBuddyClient> {
     if (this.llmClient) return this.llmClient;
-    const apiKey = process.env.GROK_API_KEY;
+    const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+    const apiKey = resolveActiveProviderApiKey();
     if (!apiKey) {
-      throw new Error('GROK_API_KEY is required for LLM skill steps.');
+      throw new Error('An AI provider API key is required for LLM skill steps.');
     }
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
     this.llmClient = new CodeBuddyClient(apiKey);

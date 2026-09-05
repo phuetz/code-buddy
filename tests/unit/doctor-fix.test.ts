@@ -1,13 +1,57 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync } from 'child_process';
 import { runDoctorChecks, runFixes } from '../../src/doctor/index.js';
 import type { DoctorCheck, FixResult } from '../../src/doctor/index.js';
+import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection.js';
 
 // Mock external commands so doctor checks don't depend on system state
 vi.mock('child_process', () => ({
   execSync: vi.fn(() => ''),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
+
+// VERIF3 T16 : la réparation `ollama pull` n'était couverte par aucun test.
+// La sonde d'environnement et le gestionnaire de settings sont doublés pour
+// rendre `checkProviderReadiness` déterministe (et pour ne jamais écrire dans
+// le vrai user-settings.json).
+const { mockDetectEnvironment, mockSaveUserSettings, mockReadUserSettingsIfPresent } = vi.hoisted(
+  () => ({
+    mockDetectEnvironment: vi.fn(),
+    mockSaveUserSettings: vi.fn(),
+    mockReadUserSettingsIfPresent: vi.fn(),
+  })
+);
+
+vi.mock('../../src/wizard/environment-detection.js', () => ({
+  detectEnvironment: mockDetectEnvironment,
+}));
+
+vi.mock('../../src/utils/settings-manager.js', () => ({
+  getSettingsManager: () => ({
+    saveUserSettings: mockSaveUserSettings,
+    readUserSettingsIfPresent: mockReadUserSettingsIfPresent,
+  }),
+}));
+
+const EMPTY_ENVIRONMENT: EnvironmentSnapshot = { capabilities: [], ready: false };
+
+const OLLAMA_WITHOUT_MODEL: EnvironmentSnapshot = {
+  capabilities: [
+    {
+      id: 'ollama',
+      label: 'Ollama',
+      kind: 'local',
+      free: true,
+      available: true,
+      detail: 'running - 0 models',
+      models: [],
+      baseURL: 'http://127.0.0.1:11434',
+    },
+  ],
+  ready: false,
+};
 
 vi.mock('../../src/utils/logger.js', () => ({
   logger: {
@@ -30,15 +74,113 @@ function cleanupDir(dir: string): void {
   }
 }
 
+/**
+ * Point `os.homedir()` at a throwaway directory. `checkProfilePermissions()`
+ * inspects `~/.codebuddy`, so a suite that stages "everything healthy" in a temp
+ * cwd is only hermetic once the HOME the checks read is staged too. `os.homedir()`
+ * reads $HOME on POSIX and %USERPROFILE% on Windows — set both.
+ *
+ * @returns a restore function for the `finally` block.
+ */
+function isolateHome(home: string): () => void {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  expect(os.homedir()).toBe(home); // the fixture is worthless if this ever fails
+  return () => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = originalUserProfile;
+  };
+}
+
+/**
+ * Does this filesystem give back the permission bits it was asked for? Windows
+ * (and FAT/exFAT mounts) synthesise `st_mode` from a read-only attribute and
+ * report 0o666 for anything writable, so "world-writable" is unknowable there.
+ * Probed independently of the production helper, so the assertion below is a
+ * real cross-check rather than a tautology.
+ */
+function permissionBitsEnforcedIn(dir: string): boolean {
+  const probe = fs.mkdtempSync(path.join(dir, 'perm-probe-'));
+  try {
+    fs.chmodSync(probe, 0o700);
+    return (fs.statSync(probe).mode & 0o077) === 0;
+  } finally {
+    cleanupDir(probe);
+  }
+}
+
 describe('doctor --fix', () => {
   let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
+    vi.mocked(execSync).mockReset().mockReturnValue('');
+    mockSaveUserSettings.mockReset();
+    mockReadUserSettingsIfPresent.mockReset().mockReturnValue(undefined);
+    mockDetectEnvironment.mockReset().mockResolvedValue(EMPTY_ENVIRONMENT);
   });
 
   afterEach(() => {
     cleanupDir(tmpDir);
+  });
+
+  describe('Ollama running without a model', () => {
+    beforeEach(() => {
+      mockDetectEnvironment.mockResolvedValue(OLLAMA_WITHOUT_MODEL);
+    });
+
+    it('should mark the missing Ollama model as fixable', async () => {
+      const checks = await runDoctorChecks(tmpDir);
+      const providerCheck = checks.find(c => c.name === 'AI provider ready');
+
+      expect(providerCheck).toBeDefined();
+      expect(providerCheck!.status).toBe('warn');
+      expect(providerCheck!.fixable).toBe(true);
+      expect(providerCheck!.message).toContain('qwen2.5-coder:7b');
+    });
+
+    it('should pull the model with `ollama pull` then select it', async () => {
+      const checks = await runDoctorChecks(tmpDir);
+      const results = await runFixes(checks);
+
+      // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
+      expect(execSync).toHaveBeenCalledWith('ollama pull qwen2.5-coder:7b', {
+        stdio: 'inherit',
+      });
+      expect(mockSaveUserSettings).toHaveBeenCalledWith({
+        provider: 'ollama',
+        baseURL: 'http://127.0.0.1:11434',
+        model: 'qwen2.5-coder:7b',
+        defaultModel: 'qwen2.5-coder:7b',
+      });
+
+      const selection = results.find(r => r.action === 'select-running-ollama');
+      expect(selection).toBeDefined();
+      expect(selection!.success).toBe(true);
+      expect(selection!.message).toContain('qwen2.5-coder:7b');
+    });
+
+    it('should report a failure and select nothing when the pull fails', async () => {
+      vi.mocked(execSync).mockImplementation((command: string) => {
+        if (String(command).startsWith('ollama pull')) {
+          throw new Error('ollama introuvable');
+        }
+        return '';
+      });
+
+      const checks = await runDoctorChecks(tmpDir);
+      const results = await runFixes(checks);
+
+      const pullFix = results.find(r => r.action === 'pull-ollama-model');
+      expect(pullFix).toBeDefined();
+      expect(pullFix!.success).toBe(false);
+      expect(pullFix!.message).toContain('Failed to pull qwen2.5-coder:7b');
+      expect(mockSaveUserSettings).not.toHaveBeenCalled();
+    });
   });
 
   describe('missing .codebuddy directory', () => {
@@ -224,11 +366,50 @@ describe('doctor --fix', () => {
         JSON.stringify({ model: 'grok-code-fast-1', maxRounds: 30, thinkingLevel: 'high' })
       );
 
-      const checks = await runDoctorChecks(tmpDir);
-      const results = await runFixes(checks);
+      // "Everything healthy" includes the profile `checkProfilePermissions()`
+      // reads — otherwise the real ~/.codebuddy leaks into this assertion.
+      const homeDir = path.join(tmpDir, 'home');
+      fs.mkdirSync(homeDir, { recursive: true });
+      const restoreHome = isolateHome(homeDir);
+      try {
+        const checks = await runDoctorChecks(tmpDir);
+        const results = await runFixes(checks);
 
-      // With everything healthy, no fixes should be attempted
-      expect(results.length).toBe(0);
+        // With everything healthy, no fixes should be attempted
+        expect(results.length).toBe(0);
+      } finally {
+        restoreHome();
+      }
+    });
+  });
+
+  describe('profile permissions', () => {
+    it('only calls the profile world-writable when the filesystem enforces the bits', async () => {
+      const homeDir = path.join(tmpDir, 'home');
+      const profileDir = path.join(homeDir, '.codebuddy');
+      fs.mkdirSync(profileDir, { recursive: true });
+      fs.chmodSync(profileDir, 0o777);
+      const restoreHome = isolateHome(homeDir);
+      try {
+        const checks = await runDoctorChecks(tmpDir);
+        const permCheck = checks.find(c => c.name === 'Profile permissions');
+        expect(permCheck).toBeDefined();
+
+        if (permissionBitsEnforcedIn(homeDir)) {
+          // POSIX: a genuinely world-writable profile is a real finding.
+          expect(permCheck!.status).toBe('warn');
+          expect(permCheck!.fixable).toBe(true);
+          expect(permCheck!.message).toContain('world-writable');
+        } else {
+          // Windows/FAT: stat() reports 0o666 for everything writable, so the
+          // bits carry no access-control meaning — no false alarm, no fix.
+          expect(permCheck!.status).toBe('ok');
+          expect(permCheck!.fixable).toBeFalsy();
+          expect(permCheck!.message).toContain('does not enforce POSIX permission bits');
+        }
+      } finally {
+        restoreHome();
+      }
     });
   });
 

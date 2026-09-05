@@ -37,23 +37,24 @@ import { DEFAULT_COLAB_GOAL_MAX_TURNS, type ColabGoalJudge } from './colab-goal.
 import * as fs from 'fs';
 import * as path from 'path';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Read the persisted last-self-improve timestamp (ms). Best-effort → null. */
 function readSelfImproveState(file: string): number | null {
-  try {
-    const raw = fs.readFileSync(file, 'utf-8');
-    const at = (JSON.parse(raw) as { lastSelfImproveAt?: unknown }).lastSelfImproveAt;
-    return typeof at === 'number' && Number.isFinite(at) ? at : null;
-  } catch {
-    return null;
-  }
+  const data = readJsonAtomicSync<{ lastSelfImproveAt?: unknown } | null>(file, null, {
+    mode: 0o600,
+    isValid: (value): value is { lastSelfImproveAt?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  const at = data?.lastSelfImproveAt;
+  return typeof at === 'number' && Number.isFinite(at) ? at : null;
 }
 
 /** Persist the last-self-improve timestamp (ms). Best-effort, never-throws. */
 function writeSelfImproveState(file: string, at: number): void {
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ lastSelfImproveAt: at }), 'utf-8');
+    writeJsonAtomicSync(file, { lastSelfImproveAt: at }, { mode: 0o600 });
   } catch {
     /* the cooldown persistence is best-effort — never block the loop */
   }
@@ -129,6 +130,30 @@ async function defaultSelfImproveHook(): Promise<{ applied: boolean; detail: str
       autonomy: 'auto-apply',
     }).runCycle();
     if (r.applied) return { applied: true, detail: `authored skill ${r.gate?.appliedRef}` };
+  }
+
+  // Then the execution strategy — only when the strategy layer itself is opted in
+  // (CODEBUDDY_SELF_IMPROVE_STRATEGIES), since an installed strategy changes how
+  // headless runs execute. Replay-gated on the recent runs' facts; $0.
+  const { strategiesEnabled } = await import('../agent/self-improvement/strategy-runtime.js');
+  if (strategiesEnabled()) {
+    const { StrategyImprovementEngine } = await import('../agent/self-improvement/strategy-engine.js');
+    const { HeuristicStrategyProposer } = await import('../agent/self-improvement/strategy-proposer.js');
+    const { createDefaultRunExperienceSource, createDefaultDelegationLogsExperienceSource } = await import(
+      '../agent/self-improvement/experience-source.js'
+    );
+    // Run friction points + the delegation-log facts (the ones the replay gate can judge on).
+    const [runs, lanes] = await Promise.all([
+      createDefaultRunExperienceSource({ limit: 20 }).collect().catch(() => []),
+      createDefaultDelegationLogsExperienceSource({ workDir: process.cwd(), limit: 200 }).collect().catch(() => []),
+    ]);
+    const experiences = [...runs, ...lanes];
+    const r = await new StrategyImprovementEngine({
+      scope: 'headless',
+      proposer: new HeuristicStrategyProposer(),
+      autonomy: 'auto-apply',
+    }).runCycle(experiences);
+    if (r.applied) return { applied: true, detail: `evolved execution strategy ${r.gate?.appliedRef}` };
   }
 
   return { applied: false, detail: 'all seed tool + skill scenarios already covered (or no proposal)' };

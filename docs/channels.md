@@ -46,9 +46,11 @@ Code Buddy supports 20+ messaging channels for remote interaction.
 ## Starting a Channel
 
 ```bash
-buddy --channel telegram        # Start with Telegram
+buddy --channel telegram        # Start with Telegram (polling stays alive)
 buddy --channel discord         # Start with Discord
-buddy daemon start              # 24/7 background with configured channels
+buddy channels start --type telegram   # same Telegram start, explicit subcommand
+# buddy daemon start launches the HTTP server; Telegram intake there is opt-in
+# via CODEBUDDY_SERVER_CHANNEL_INTAKE=true (otherwise use --channel / channels start).
 ```
 
 ## DM Pairing (Access Control)
@@ -157,8 +159,10 @@ uses the normal channel outbox path.
 Telegram is the most feature-rich channel. Setup:
 
 1. Create a bot with [@BotFather](https://t.me/BotFather)
-2. Set `TELEGRAM_BOT_TOKEN` or configure in `.codebuddy/settings.json`
-3. Start: `buddy --channel telegram` or `buddy daemon start`
+2. Set `TELEGRAM_BOT_TOKEN` or configure in `.codebuddy/settings.json` (object) or `.codebuddy/channels.json` (array)
+3. Start: `buddy --channel telegram` or `buddy channels start --type telegram`
+
+Voice notes from `sayNow` (reminders, `CODEBUDDY_VOICE_TO_TELEGRAM=true`) reuse `TELEGRAM_BOT_TOKEN` when `CODEBUDDY_SENSORY_ALERT_TOKEN` is unset, and still need `CODEBUDDY_SENSORY_ALERT_CHAT` (your numeric chat id).
 
 **Deployment modes**: Polling (default, works behind NAT) or Webhook (lower latency).
 

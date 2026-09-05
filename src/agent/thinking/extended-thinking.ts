@@ -123,7 +123,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
     this.config = { ...DEFAULT_THINKING_CONFIG, ...config };
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || "grok-3-latest",
+      config.model || process.env.GROK_MODEL || "grok-3-latest",
       baseURL
     );
   }

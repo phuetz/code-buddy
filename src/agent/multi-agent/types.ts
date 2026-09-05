@@ -10,6 +10,10 @@
 
 import { CodeBuddyToolCall } from "../../codebuddy/client.js";
 import { ToolResult } from "../../types/index.js";
+import type {
+  ThreadDelegationEvent,
+  ThreadParentBudget,
+} from "../delegation/thread-delegation.js";
 
 /**
  * Agent roles in the multi-agent system
@@ -256,6 +260,14 @@ export type CollaborationStrategy =
   | "peer_review"     // Agents review each other's work
   | "iterative";      // Feedback loop until consensus
 
+/** Opt-in worker transport used by `/swarm`; ordinary `/agents` stays unchanged. */
+export interface WorkflowThreadDelegationOptions {
+  concurrency?: number;
+  parentBudget: ThreadParentBudget;
+  parentSignal?: AbortSignal;
+  onEvent?: (event: ThreadDelegationEvent<AgentExecutionResult>) => void;
+}
+
 /**
  * Options for running a multi-agent workflow
  */
@@ -270,6 +282,7 @@ export interface WorkflowOptions {
   autoApprove?: boolean;
   onProgress?: (event: WorkflowEvent) => void;
   onAgentMessage?: (message: AgentMessage) => void;
+  threadDelegation?: WorkflowThreadDelegationOptions;
   /** Phase J (V0.3) — resume from a previously persisted workflow.
    *  When set, MAS pre-populates the in-memory `results` Map and marks
    *  the matching `plan.phases[*].tasks[*]` as `completed`, so the 5

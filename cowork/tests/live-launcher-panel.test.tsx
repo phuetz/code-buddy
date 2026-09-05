@@ -35,7 +35,12 @@ function makeApi() {
   return {
     listeners,
     api: {
-      onEvent: vi.fn((cb: EventListenerFn) => {
+      onEvent: vi.fn((
+        typesOrCallback: string | string[] | EventListenerFn,
+        typedCallback?: EventListenerFn,
+      ) => {
+        const cb = typeof typesOrCallback === 'function' ? typesOrCallback : typedCallback;
+        if (!cb) return () => undefined;
         listeners.push(cb);
         return () => {
           const index = listeners.indexOf(cb);
@@ -48,7 +53,7 @@ function makeApi() {
           ladder: [],
           currentChoice: {
             model: 'qwen3.6:27b',
-            baseUrl: 'http://darkstar:11434/v1',
+            baseUrl: 'http://gpuNode:11434/v1',
             tier: 'network',
             paid: false,
             reason: 'free',
@@ -145,7 +150,7 @@ describe('LiveLauncherPanel', () => {
       prompt: 'état de l art des agents locaux',
       model: 'qwen3.6:27b',
       provider: 'ollama',
-      ollamaUrl: 'http://darkstar:11434/v1',
+      ollamaUrl: 'http://gpuNode:11434/v1',
     });
     expect(query('live-launcher-status')?.textContent).toBe('running');
     expect(query('live-launcher-cancel')).not.toBeNull();
@@ -188,6 +193,10 @@ describe('LiveLauncherPanel', () => {
     await setValue('live-launcher-prompt', 'topic');
     await click('live-launcher-start');
 
+    expect(harness.api.onEvent).toHaveBeenCalledWith(
+      'liveLauncher.event',
+      expect.any(Function),
+    );
     await pushEvent(harness, {
       type: 'liveLauncher.event',
       payload: { runId: 'll_1', kind: 'log', stream: 'stdout', lines: ['📋 Subtopics (3):'] },

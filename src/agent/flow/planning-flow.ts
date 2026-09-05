@@ -8,6 +8,8 @@
  */
 
 import { EventEmitter } from 'events';
+import { findUnexecutedProseToolCall } from '../../cli/headless-options.js';
+import { parseJsonResponse } from '../../utils/llm-retry.js';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 
 /* ── Types ── */
@@ -44,6 +46,32 @@ export interface ExecutionPlan {
   steps: PlanStep[];
   createdAt: number;
   completedAt?: number;
+}
+
+/**
+ * True when the agent printed a tool call as text instead of executing it.
+ * The CLI flow agent is chat-only (`client.chat` with no tools), so this
+ * markup means the step did not actually create files or run commands.
+ */
+const FLOW_KNOWN_TOOLS = [
+  'create_file',
+  'str_replace_editor',
+  'bash',
+  'apply_patch',
+  'write_file',
+  'view_file',
+  'search',
+];
+
+export function looksLikeUnexecutedToolMarkup(text: string): boolean {
+  if (
+    /<tool_call\b/i.test(text) ||
+    /<function\s*=/i.test(text) ||
+    /<(?:invoke|function|tool)\b[^>]*\bname\s*=/i.test(text)
+  ) {
+    return true;
+  }
+  return findUnexecutedProseToolCall(text, FLOW_KNOWN_TOOLS, []) !== null;
 }
 
 /** Minimal agent interface for flow execution */
@@ -112,7 +140,10 @@ export class PlanningFlow extends EventEmitter {
       // Phase 1: Create plan
       this.emit('flow:phase', { phase: 'planning', goal });
       this.activePlan = await this.createPlan(goal);
-      this.emit('flow:plan_created', { plan: this.activePlan });
+      this.emit('flow:plan_created', {
+        plan: this.activePlan,
+        stepCount: this.activePlan.steps.length,
+      });
 
       // Phase 2: Execute steps
       this.emit('flow:phase', { phase: 'execution' });
@@ -181,12 +212,16 @@ Respond ONLY with the JSON object, no markdown fences.`;
 
     const response = await this.config.planWithLLM(prompt);
 
-    // Parse LLM response
+    // Parse LLM response. Live GK33: local models wrap the JSON in prose or
+    // markdown fences; JSON.parse on the whole string then silently collapsed
+    // the plan to a single "Execute task" step and skipped real decomposition.
     let parsed: { steps: Array<{ id: string; title: string; description: string; agentKey?: string; dependencies?: string[] }> };
     try {
-      // Strip markdown fences if present
-      const cleaned = response.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      parsed = JSON.parse(cleaned);
+      const candidate = parseJsonResponse(response) as { steps?: unknown };
+      if (!Array.isArray(candidate.steps)) {
+        throw new Error('plan JSON missing steps');
+      }
+      parsed = candidate as typeof parsed;
     } catch {
       // Fallback: single step with the full goal
       parsed = {
@@ -298,6 +333,12 @@ Respond ONLY with the JSON object, no markdown fences.`;
       const context = this.buildStepContext(step);
       const result = await agent.run(context);
 
+      if (looksLikeUnexecutedToolMarkup(result)) {
+        throw new Error(
+          'Step result is an unexecuted tool call (chat-only agent cannot run tools)',
+        );
+      }
+
       step.status = PlanStepStatus.COMPLETED;
       step.result = result;
       step.duration = Date.now() - startTime;
@@ -306,6 +347,7 @@ Respond ONLY with the JSON object, no markdown fences.`;
         stepId: step.id,
         title: step.title,
         duration: step.duration,
+        status: step.status,
         resultPreview: result.substring(0, 200),
       });
     } catch (err) {

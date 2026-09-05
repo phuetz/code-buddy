@@ -1,6 +1,6 @@
 # Vague — Panneaux OS agentique manquants (props-driven, dashboards)
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/os-panels`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/os-panels`.
 
 ## But
 Crée les composants de dashboard de l'« OS agentique » qui manquent — **props-driven** (données par props typées,

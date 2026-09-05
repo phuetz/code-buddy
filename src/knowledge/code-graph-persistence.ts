@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { KnowledgeGraph, Triple } from './knowledge-graph.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 const CODE_GRAPH_FILENAME = '.codebuddy/code-graph.json';
 
@@ -38,10 +39,7 @@ export function saveCodeGraph(graph: KnowledgeGraph, cwd: string): void {
       triples: graph.toJSON(),
     };
 
-    // Atomic write: write to temp file then rename to prevent corruption
-    const tmpPath = filePath + '.tmp';
-    fs.writeFileSync(tmpPath, JSON.stringify(data));
-    fs.renameSync(tmpPath, filePath);
+    writeJsonAtomicSync(filePath, data, { mode: 0o600 });
     logger.debug(`CodeGraph: saved ${data.tripleCount} triples to ${CODE_GRAPH_FILENAME}`);
   } catch (err) {
     logger.debug('CodeGraph: failed to save', { err });
@@ -56,23 +54,20 @@ export function loadCodeGraph(graph: KnowledgeGraph, cwd: string): boolean {
   const filePath = path.join(cwd, CODE_GRAPH_FILENAME);
 
   try {
-    if (!fs.existsSync(filePath)) return false;
-
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const data: CodeGraphFile = JSON.parse(raw);
-
-    if (data.version !== 1 || !Array.isArray(data.triples)) {
-      logger.debug('CodeGraph: invalid file format, skipping load');
-      return false;
-    }
+    const data = readJsonAtomicSync<CodeGraphFile | null>(filePath, null, {
+      isValid: (value): value is CodeGraphFile => Boolean(
+        value && typeof value === 'object' &&
+        (value as CodeGraphFile).version === 1 &&
+        Array.isArray((value as CodeGraphFile).triples)
+      ),
+    });
+    if (!data) return false;
 
     graph.loadJSON(data.triples);
     logger.debug(`CodeGraph: loaded ${data.tripleCount} triples from ${CODE_GRAPH_FILENAME}`);
     return true;
   } catch (err) {
     logger.warn('CodeGraph: failed to load (file may be corrupted)', { error: String(err) });
-    // Remove corrupted file so next save creates a clean one
-    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
     return false;
   }
 }

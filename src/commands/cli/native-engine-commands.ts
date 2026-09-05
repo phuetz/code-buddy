@@ -30,6 +30,12 @@ function parsePositiveIntegerCliOption(value: string | undefined, flagName: stri
   return n;
 }
 
+function splitCsv(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : undefined;
+}
+
 export function registerHeartbeatCommands(program: Command): void {
   const heartbeat = program
     .command('heartbeat')
@@ -181,6 +187,8 @@ export function registerHubCommands(program: Command): void {
         console.log(`Uninstalled ${name}`);
       } else {
         console.log(`Skill not found: ${name}`);
+        process.exit(1);
+        return;
       }
     });
 
@@ -209,11 +217,22 @@ export function registerHubCommands(program: Command): void {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       const installed = skillsHub.list();
+      const { getBundledSkillsPath } = await import('../../skills/index.js');
+      const { countBundledSkillEntries } = await import('../skills-cli/index.js');
+      const bundledCount = countBundledSkillEntries(getBundledSkillsPath());
       if (opts.json) {
-        console.log(JSON.stringify({ count: installed.length, skills: installed }, null, 2));
+        console.log(JSON.stringify({ count: installed.length, skills: installed, bundledCount }, null, 2));
         return;
       }
       if (installed.length === 0) {
+        if (bundledCount > 0) {
+          console.log('No hub-installed skills.');
+          console.log(
+            `${bundledCount} bundled skill(s) shipped with the package are still available to the agent.`,
+          );
+          console.log('Install more with: buddy hub search');
+          return;
+        }
         console.log('No skills installed from the hub.');
         return;
       }
@@ -797,26 +816,54 @@ export function registerFleetAutonomyCommands(program: Command): void {
     .option('--max-ticks <n>', 'stop after N ticks')
     .option('--dir <path>', 'colab dir (default: CODEBUDDY_FLEET_COLAB_DIR or <cwd>/.codebuddy)')
     .option('--output-dir <path>', 'artifact output dir')
+    .option('--executor <mode>', 'artifact (default, scoped .md) or agent (real repo edits)')
+    .option('--workspace <dir>', 'bounded dir the agent edits (required for --executor agent)')
+    .option('--verify', 'run each task verifyCommand after the agent (operator-trusted queue)')
     .option('--json', 'output JSON summary')
     .action(async (opts: {
       watch?: boolean; interval: string; maxTicks?: string;
       dir?: string; outputDir?: string; json?: boolean;
+      executor?: string; workspace?: string; verify?: boolean;
     }) => {
       const { createDefaultAutonomousLoop, FleetAutonomousDaemon, watchFleetTasks } = await import('../../daemon/autonomous-daemon.js');
       const { AutonomyBriefingJournal } = await import('../../daemon/autonomy-briefing.js');
+      const { openAutonomyRun, recordAutonomyTick, closeAutonomyRun } = await import('../../daemon/autonomy-run-journal.js');
+      const { RunStore } = await import('../../observability/run-store.js');
       const path = await import('path');
+      const executorModeRaw = (opts.executor ?? process.env['CODEBUDDY_AUTONOMY_EXECUTOR'] ?? 'artifact').toLowerCase();
+      if (executorModeRaw !== 'artifact' && executorModeRaw !== 'agent') {
+        console.error(`Invalid --executor "${opts.executor}" (use artifact|agent).`);
+        process.exit(1);
+        return;
+      }
+      const executorMode = executorModeRaw as 'artifact' | 'agent';
+      const workspaceRoot = opts.workspace
+        ? path.resolve(opts.workspace)
+        : process.env['CODEBUDDY_AUTONOMY_WORKSPACE_ROOT'];
+      if (executorMode === 'agent' && !workspaceRoot?.trim()) {
+        console.error('--executor agent requires --workspace <dir> (or CODEBUDDY_AUTONOMY_WORKSPACE_ROOT).');
+        process.exit(1);
+        return;
+      }
+      const allowVerify = Boolean(opts.verify) || process.env['CODEBUDDY_AUTONOMY_VERIFY_COMMANDS'] === '1';
       const loop = await createDefaultAutonomousLoop({
         ...(opts.dir ? { dir: opts.dir } : {}),
         ...(opts.outputDir ? { outputDir: opts.outputDir } : {}),
+        executorMode,
+        ...(workspaceRoot ? { workspaceRoot } : {}),
+        ...(allowVerify ? { allowVerifyCommand: true } : {}),
       });
       // Same dir resolution the store uses, so the watcher observes the live queue.
       const colabDir = opts.dir || process.env['CODEBUDDY_FLEET_COLAB_DIR'] || path.join(process.cwd(), '.codebuddy');
       const briefing = new AutonomyBriefingJournal({ dir: colabDir });
       let briefingErrorReported = false;
+      const runStore = RunStore.getInstance();
+      const autonomyRunId = openAutonomyRun(runStore, 'autonomy run');
       const daemon = new FleetAutonomousDaemon({
         loop,
         intervalMs: parseInt(opts.interval, 10) || 30000,
         onTick: (result, n) => {
+          recordAutonomyTick(runStore, autonomyRunId, result, n);
           const recorded = briefing.recordTick(result, n);
           if (!recorded.ok && !briefingErrorReported && !opts.json) {
             briefingErrorReported = true;
@@ -845,11 +892,13 @@ export function registerFleetAutonomyCommands(program: Command): void {
         ? (opts.maxTicks ? parseInt(opts.maxTicks, 10) : undefined)
         : 1;
       const summary = await daemon.run(maxTicks !== undefined ? { maxTicks } : {});
+      closeAutonomyRun(runStore, autonomyRunId, summary);
 
       if (opts.json) {
-        console.log(JSON.stringify(summary, null, 2));
+        console.log(JSON.stringify({ ...summary, runId: autonomyRunId }, null, 2));
       } else {
         console.log(`\nDone: ${summary.ticks} tick(s), ${JSON.stringify(summary.outcomes)} (${summary.stoppedReason}).`);
+        console.log(`Run journal: ${autonomyRunId}  (buddy run show ${autonomyRunId})`);
       }
     });
 
@@ -912,40 +961,29 @@ export function registerFleetAutonomyCommands(program: Command): void {
         writeBenchmarkIndex,
         defaultBenchmarkIndexPath,
       } = await import('../../agent/model-benchmark.js');
+      const { resolveModelTierConfig } = await import('../../agent/model-tier.js');
+      const { collectAutonomyBenchCandidates } = await import('../../daemon/autonomy-bench-candidates.js');
 
       const peers = await TailscaleManager.getInstance().discoverOllamaPeers();
-      const filteredPeers = opts.peer
-        ? peers.filter((peer) =>
-            peer.hostname.toLowerCase().includes(opts.peer!.toLowerCase())
-            || peer.ip.includes(opts.peer!.trim()),
-          )
-        : peers;
+      const local = resolveModelTierConfig();
       const modelFilters = opts.models
         ? opts.models.split(',').map((part) => part.trim()).filter(Boolean)
         : [];
-      const candidates = filteredPeers.flatMap((peer) =>
-        peer.models
-          .filter((model) =>
-            modelFilters.length === 0
-              ? true
-              : modelFilters.some((filter) => model.toLowerCase().includes(filter.toLowerCase())),
-          )
-          .map((model) => ({
-            model,
-            baseUrl: peer.baseURL,
-            label: peer.hostname,
-          })),
-      );
+      const { candidates, error } = collectAutonomyBenchCandidates({
+        local: { model: local.localModel, baseUrl: local.localBaseUrl, label: 'local' },
+        tailnet: peers,
+        ...(opts.peer ? { peerFilter: opts.peer } : {}),
+        ...(modelFilters.length ? { modelFilters } : {}),
+      });
 
       if (candidates.length === 0) {
-        const message = opts.peer
-          ? `No Tailnet Ollama peers matched "${opts.peer}".`
-          : 'No Tailnet Ollama peers were discovered.';
+        const message = error ?? 'No Ollama candidates to benchmark.';
         if (opts.json) {
           console.log(JSON.stringify({ ok: false, error: message }, null, 2));
-          return;
+        } else {
+          console.log(message);
         }
-        console.log(message);
+        process.exit(1);
         return;
       }
 
@@ -974,7 +1012,7 @@ export function registerFleetAutonomyCommands(program: Command): void {
         return;
       }
 
-      console.log(`\nTailnet Ollama benchmark (${suite})`);
+      console.log(`\nOllama benchmark (${suite})`);
       if (indexPath) console.log(`  Cache: ${indexPath}`);
       console.log(`  Candidates: ${ranked.length}`);
       if (best) {
@@ -1029,13 +1067,27 @@ export function registerFleetAutonomyCommands(program: Command): void {
     .option('--priority <p>', 'critical | high | medium | low', 'medium')
     .option('--depends-on <ids>', 'comma-separated task ids this task depends on')
     .option('--description <text>', 'task description')
+    .option('--verify-command <cmd>', 'acceptance gate run after the agent (e.g. node add.check.mjs); requires run --verify or CODEBUDDY_AUTONOMY_VERIFY_COMMANDS=1')
+    .option('--files-to-modify <paths>', 'comma-separated repo files this task is allowed to change')
+    .option('--acceptance-criteria <item>', 'acceptance criterion (repeatable)', (v: string, acc: string[]) => { acc.push(v); return acc; }, [] as string[])
     .option('--goal-mode', 'judge-gated loop: the worker keeps going until an LLM judge confirms the task is done, then blocks for human review when the budget is spent')
     .option('--goal-max-turns <n>', 'goal-mode turn budget (default 5)')
     .option('--dir <path>', 'colab dir')
     .option('--json', 'output JSON')
     .action(async (
       title: string,
-      opts: { priority?: string; dependsOn?: string; description?: string; goalMode?: boolean; goalMaxTurns?: string; dir?: string; json?: boolean },
+      opts: {
+        priority?: string;
+        dependsOn?: string;
+        description?: string;
+        verifyCommand?: string;
+        filesToModify?: string;
+        acceptanceCriteria?: string[];
+        goalMode?: boolean;
+        goalMaxTurns?: string;
+        dir?: string;
+        json?: boolean;
+      },
     ) => {
       let goalMaxTurns: number | undefined;
       try {
@@ -1048,17 +1100,24 @@ export function registerFleetAutonomyCommands(program: Command): void {
       const { FleetColabStore } = await import('../../fleet/colab-store.js');
       const store = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) });
       const priority = (['critical', 'high', 'medium', 'low'] as const).find((p) => p === opts.priority) ?? 'medium';
+      const filesToModify = splitCsv(opts.filesToModify);
+      const acceptanceCriteria = (opts.acceptanceCriteria ?? []).map((s) => s.trim()).filter(Boolean);
+      const verifyCommand = opts.verifyCommand?.trim();
       const task = store.addTask({
         title,
         priority,
         ...(opts.description ? { description: opts.description } : {}),
         ...(opts.dependsOn ? { dependsOn: opts.dependsOn.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+        ...(verifyCommand ? { verifyCommand } : {}),
+        ...(filesToModify ? { filesToModify } : {}),
+        ...(acceptanceCriteria.length ? { acceptanceCriteria } : {}),
         ...(opts.goalMode ? { goalMode: true } : {}),
         ...(goalMaxTurns !== undefined ? { goalMaxTurns } : {}),
       });
       if (opts.json) { console.log(JSON.stringify({ task }, null, 2)); return; }
       const goalNote = task.goalMode ? ` goal-mode(${task.goalMaxTurns ?? 5} turns)` : '';
-      console.log(`Added task ${task.id} [${task.priority}]${goalNote}${task.dependsOn ? ` depends on ${task.dependsOn.join(', ')}` : ''}`);
+      const gateNote = task.verifyCommand ? ` verify:${task.verifyCommand}` : '';
+      console.log(`Added task ${task.id} [${task.priority}]${goalNote}${gateNote}${task.dependsOn ? ` depends on ${task.dependsOn.join(', ')}` : ''}`);
     });
 
   tasks
@@ -2236,6 +2295,62 @@ export function registerCompanionCommands(program: Command): void {
       const limit = opts.limit ? Math.max(1, parseInt(opts.limit, 10) || 1) : undefined;
       const result = await prewarmVoiceReplyCache({ ...(phrases ? { phrases } : {}), ...(limit ? { limit } : {}) });
       console.log(`TTS cache prewarmed: ${result.cached}/${result.attempted} phrase(s).`);
+    });
+
+  const ttsBank = companion
+    .command('tts-bank')
+    .description('Build or verify the fixed-phrase TTS bank without playing audio');
+
+  const parseTtsBankProvider = (value: string): 'local' | 'elevenlabs' => {
+    const provider = value.trim().toLowerCase();
+    if (provider !== 'local' && provider !== 'elevenlabs') {
+      throw new Error("--provider must be 'local' or 'elevenlabs'");
+    }
+    return provider;
+  };
+
+  ttsBank
+    .command('build')
+    .description('Synthesize missing fixed phrases into the selected provider cache')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { buildTtsBank } = await import('../../voice/tts-bank.js');
+      const result = await buildTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(
+        `TTS bank (${result.provider}): built=${result.built} present=${result.present} ` +
+          `failed=${result.failed} expected=${result.expected} rejected=${result.rejected.length}.`,
+      );
+      if (result.failed > 0) process.exitCode = 1;
+    });
+
+  ttsBank
+    .command('list')
+    .description('List fixed phrases and their cache presence without synthesis or playback')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { listTtsBank } = await import('../../voice/tts-bank.js');
+      const result = listTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(`TTS bank (${result.provider}) voice=${result.voice}`);
+      for (const entry of result.entries) {
+        console.log(`${entry.present ? 'present' : 'missing'}\t${entry.text}`);
+      }
+      for (const rejected of result.rejected) {
+        console.log(`rejected:${rejected.reason}\t${rejected.text}`);
+      }
+    });
+
+  ttsBank
+    .command('verify')
+    .description('Verify fixed-phrase cache presence without synthesis or playback')
+    .option('--provider <provider>', 'local (Kyutai) or elevenlabs', 'local')
+    .action(async (opts: { provider: string }) => {
+      const { verifyTtsBank } = await import('../../voice/tts-bank.js');
+      const result = verifyTtsBank({ provider: parseTtsBankProvider(opts.provider) });
+      console.log(
+        `TTS bank (${result.provider}): present=${result.present}/${result.expected} ` +
+          `missing=${result.missing.length} rejected=${result.rejected.length}.`,
+      );
+      if (result.missing.length > 0 || result.rejected.length > 0) process.exitCode = 1;
     });
 }
 

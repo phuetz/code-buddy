@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.js';
 import { isDangerousCommand, matchAllDangerousPatterns } from '../security/dangerous-patterns.js';
 import { sendTelegramAlert } from './alert.js';
 import { buildFilteredSubprocessEnv } from '../utils/subprocess-env.js';
-import { assertSafeUrl } from '../security/ssrf-guard.js';
+import { assertSafeUrl, isLoopbackHttpUrl } from '../security/ssrf-guard.js';
 import { safeFetchFollow } from '../security/safe-fetch.js';
 
 export interface SensoryEventContext {
@@ -100,17 +100,32 @@ async function runWebhook(
   ctx: SensoryEventContext,
 ): Promise<ActionResult> {
   try {
-    const ssrfCheck = await assertSafeUrl(action.url);
-    if (!ssrfCheck.safe) {
-      return { ok: false, detail: `blocked by SSRF guard: ${ssrfCheck.reason}` };
+    const loopback = isLoopbackHttpUrl(action.url);
+    if (!loopback) {
+      const ssrfCheck = await assertSafeUrl(action.url);
+      if (!ssrfCheck.safe) {
+        return { ok: false, detail: `blocked by SSRF guard: ${ssrfCheck.reason}` };
+      }
     }
 
-    const res = await safeFetchFollow(action.url, {
+    const init: RequestInit = {
       method: action.method ?? 'POST',
       headers: { 'Content-Type': 'application/json', ...(action.headers ?? {}) },
       body: JSON.stringify({ event: ctx }),
       signal: AbortSignal.timeout(10_000),
-    });
+    };
+
+    // Loopback is user-authored local automation (HA / n8n / a test hook).
+    // Fetch it directly with redirects refused so a 30x cannot hop to metadata.
+    if (loopback) {
+      const res = await fetch(action.url, { ...init, redirect: 'manual' });
+      if (res.status >= 300 && res.status < 400) {
+        return { ok: false, detail: 'blocked: loopback webhook redirected' };
+      }
+      return { ok: res.ok, detail: `HTTP ${res.status}` };
+    }
+
+    const res = await safeFetchFollow(action.url, init);
     return { ok: res.ok, detail: `HTTP ${res.status}` };
   } catch (err) {
     return { ok: false, detail: err instanceof Error ? err.message : String(err) };

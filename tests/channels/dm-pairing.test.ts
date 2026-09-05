@@ -5,6 +5,8 @@
  * revocation, blocking, persistence, and configuration.
  */
 
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import {
   DMPairingManager,
   getDMPairing,
@@ -13,6 +15,7 @@ import {
   type PairingStatus,
 } from '../../src/channels/dm-pairing.js';
 import type { InboundMessage, ChannelType } from '../../src/channels/index.js';
+import { logger } from '../../src/utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,7 +110,7 @@ describe('DMPairingManager', () => {
       expect(first.approved).toBe(false);
 
       // Approve the sender
-      manager.approve('telegram', first.code!);
+      await manager.approve('telegram', first.code!);
 
       // Next check should be approved
       const second = await manager.checkSender(message);
@@ -159,7 +162,7 @@ describe('DMPairingManager', () => {
       const message = makeMessage();
       const status = await manager.checkSender(message);
 
-      const sender = manager.approve('telegram', status.code!);
+      const sender = await manager.approve('telegram', status.code!);
 
       expect(sender).not.toBeNull();
       expect(sender!.channelType).toBe('telegram');
@@ -167,8 +170,8 @@ describe('DMPairingManager', () => {
       expect(sender!.displayName).toBe('Alice');
     });
 
-    it('should return null for invalid code', () => {
-      const result = manager.approve('telegram', 'BADCODE');
+    it('should return null for invalid code', async () => {
+      const result = await manager.approve('telegram', 'BADCODE');
       expect(result).toBeNull();
     });
 
@@ -176,7 +179,7 @@ describe('DMPairingManager', () => {
       const message = makeMessage();
       const status = await manager.checkSender(message);
 
-      const result = manager.approve('discord', status.code!);
+      const result = await manager.approve('discord', status.code!);
       expect(result).toBeNull();
     });
 
@@ -186,7 +189,7 @@ describe('DMPairingManager', () => {
 
       const message = makeMessage();
       const status = await manager.checkSender(message);
-      manager.approve('telegram', status.code!);
+      await manager.approve('telegram', status.code!);
 
       expect(events.length).toBe(1);
     });
@@ -194,7 +197,7 @@ describe('DMPairingManager', () => {
     it('should remove pending request after approval', async () => {
       const message = makeMessage();
       const status = await manager.checkSender(message);
-      manager.approve('telegram', status.code!);
+      await manager.approve('telegram', status.code!);
 
       const pending = manager.listPending();
       expect(pending.length).toBe(0);
@@ -206,8 +209,8 @@ describe('DMPairingManager', () => {
   // =========================================================================
 
   describe('approveDirectly', () => {
-    it('should approve a sender without a pairing code', () => {
-      const sender = manager.approveDirectly('discord', 'user-99', 'owner', 'Bob');
+    it('should approve a sender without a pairing code', async () => {
+      const sender = await manager.approveDirectly('discord', 'user-99', 'owner', 'Bob');
 
       expect(sender.channelType).toBe('discord');
       expect(sender.senderId).toBe('user-99');
@@ -215,7 +218,7 @@ describe('DMPairingManager', () => {
     });
 
     it('should make the sender approved for subsequent checks', async () => {
-      manager.approveDirectly('telegram', 'user-42');
+      await manager.approveDirectly('telegram', 'user-42');
 
       const message = makeMessage();
       const status = await manager.checkSender(message);
@@ -230,24 +233,24 @@ describe('DMPairingManager', () => {
 
   describe('revoke', () => {
     it('should revoke an approved sender', async () => {
-      manager.approveDirectly('telegram', 'user-42');
-      const revoked = manager.revoke('telegram', 'user-42');
+      await manager.approveDirectly('telegram', 'user-42');
+      const revoked = await manager.revoke('telegram', 'user-42');
 
       expect(revoked).toBe(true);
       expect(manager.isApproved('telegram', 'user-42')).toBe(false);
     });
 
-    it('should return false for unknown sender', () => {
-      const result = manager.revoke('telegram', 'unknown');
+    it('should return false for unknown sender', async () => {
+      const result = await manager.revoke('telegram', 'unknown');
       expect(result).toBe(false);
     });
 
-    it('should emit pairing:revoked event', () => {
+    it('should emit pairing:revoked event', async () => {
       const events: unknown[] = [];
       manager.on('pairing:revoked', (sender) => events.push(sender));
 
-      manager.approveDirectly('telegram', 'user-42');
-      manager.revoke('telegram', 'user-42');
+      await manager.approveDirectly('telegram', 'user-42');
+      await manager.revoke('telegram', 'user-42');
 
       expect(events.length).toBe(1);
     });
@@ -279,6 +282,32 @@ describe('DMPairingManager', () => {
       shortManager.dispose();
     });
 
+    it('D3: au blocage, checkSender ne renvoie pas le code', async () => {
+      const shortManager = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        maxAttempts: 1,
+        blockDurationMs: 60 * 1000,
+        allowlistPath: undefined,
+      });
+
+      const message = makeMessage();
+      const firstTurn = await shortManager.checkSender(message);
+      const blockedTurn = await shortManager.checkSender(message);
+
+      expect(blockedTurn.approved).toBe(false);
+      expect(blockedTurn.blocked).toBe(true);
+      expect(blockedTurn.blockedUntil).toEqual(expect.any(Number));
+      expect(blockedTurn.code).toBeUndefined();
+      expect(shortManager.isBlocked('telegram:user-42')).toBe(true);
+      const blockedMessage = shortManager.getPairingMessage(blockedTurn);
+      expect(blockedMessage.length).toBeGreaterThan(0);
+      expect(blockedMessage).not.toContain(firstTurn.code ?? 'never');
+      expect(blockedMessage.toLowerCase()).toMatch(/block/);
+
+      shortManager.dispose();
+    });
+
     it('should return unapproved for blocked senders without a code', async () => {
       const shortManager = new DMPairingManager({
         enabled: true,
@@ -306,18 +335,18 @@ describe('DMPairingManager', () => {
   // =========================================================================
 
   describe('query methods', () => {
-    it('should list approved senders', () => {
-      manager.approveDirectly('telegram', 'user-1');
-      manager.approveDirectly('discord', 'user-2');
+    it('should list approved senders', async () => {
+      await manager.approveDirectly('telegram', 'user-1');
+      await manager.approveDirectly('discord', 'user-2');
 
       const approved = manager.listApproved();
       expect(approved.length).toBe(2);
     });
 
-    it('should list approved senders for a specific channel', () => {
-      manager.approveDirectly('telegram', 'user-1');
-      manager.approveDirectly('discord', 'user-2');
-      manager.approveDirectly('telegram', 'user-3');
+    it('should list approved senders for a specific channel', async () => {
+      await manager.approveDirectly('telegram', 'user-1');
+      await manager.approveDirectly('discord', 'user-2');
+      await manager.approveDirectly('telegram', 'user-3');
 
       const telegramApproved = manager.listApprovedForChannel('telegram');
       expect(telegramApproved.length).toBe(2);
@@ -339,8 +368,8 @@ describe('DMPairingManager', () => {
       expect(manager.requiresPairing('web')).toBe(false);
     });
 
-    it('should check isApproved', () => {
-      manager.approveDirectly('telegram', 'user-42');
+    it('should check isApproved', async () => {
+      await manager.approveDirectly('telegram', 'user-42');
 
       expect(manager.isApproved('telegram', 'user-42')).toBe(true);
       expect(manager.isApproved('telegram', 'user-99')).toBe(false);
@@ -353,8 +382,8 @@ describe('DMPairingManager', () => {
 
   describe('getStats', () => {
     it('should return accurate statistics', async () => {
-      manager.approveDirectly('telegram', 'user-1');
-      manager.approveDirectly('discord', 'user-2');
+      await manager.approveDirectly('telegram', 'user-1');
+      await manager.approveDirectly('discord', 'user-2');
       await manager.checkSender(makeMessage({
         sender: { id: 'user-99', username: 'pending' },
       }));
@@ -404,13 +433,207 @@ describe('DMPairingManager', () => {
   // =========================================================================
 
   describe('dispose', () => {
-    it('should clear all data', () => {
-      manager.approveDirectly('telegram', 'user-1');
+    it('should clear all data', async () => {
+      await manager.approveDirectly('telegram', 'user-1');
 
       manager.dispose();
 
       expect(manager.listApproved().length).toBe(0);
       expect(manager.listPending().length).toBe(0);
+    });
+  });
+
+  // =========================================================================
+  // Persistence — D2 (mutation confirmée seulement après écriture durable)
+  // =========================================================================
+
+  describe('persistence D2', () => {
+    let allowlistDir: string;
+
+    beforeEach(async () => {
+      const tmpRoot = path.join(process.cwd(), 'tmp');
+      await fs.mkdir(tmpRoot, { recursive: true });
+      allowlistDir = await fs.mkdtemp(path.join(tmpRoot, 'r3-pairing-'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(allowlistDir, { recursive: true, force: true });
+    });
+
+    it('D2: approve n\'est pas confirmé si persistAllowlist échoue', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const status = await pairing.checkSender(makeMessage());
+      pairing.persistAllowlist = async () => {
+        throw new Error('ENOSPC');
+      };
+
+      await expect(pairing.approve('telegram', status.code!)).rejects.toThrow(/ENOSPC/);
+      expect(pairing.isApproved('telegram', 'user-42')).toBe(false);
+
+      pairing.dispose();
+    });
+
+    it('D2: le fichier allowlist est un fichier régulier non vide après approve', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const status = await pairing.checkSender(makeMessage());
+      const sender = await pairing.approve('telegram', status.code!);
+
+      expect(sender).not.toBeNull();
+      const filePath = path.join(allowlistDir, 'telegram-allowFrom.json');
+      const stat = await fs.stat(filePath);
+      expect(stat.isFile()).toBe(true);
+      expect(stat.size).toBeGreaterThan(0);
+      const parsed = JSON.parse(await fs.readFile(filePath, 'utf8')) as Array<{ senderId: string }>;
+      expect(parsed[0]?.senderId).toBe('user-42');
+      const leftovers = (await fs.readdir(allowlistDir)).filter((f) => f.endsWith('.tmp'));
+      expect(leftovers).toEqual([]);
+
+      pairing.dispose();
+    });
+
+    it('D2: checkSender recharge l\'allowlist persistée sans loadAllowlist explicite', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const status = await pairing.checkSender(makeMessage());
+      await pairing.approve('telegram', status.code!);
+      pairing.dispose();
+
+      const restarted = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const live = await restarted.checkSender(makeMessage());
+      expect(live.approved).toBe(true);
+      restarted.dispose();
+    });
+  });
+
+  // =========================================================================
+  // Load — D4 (ENOENT = premier boot ; toute autre erreur est explicite)
+  // =========================================================================
+
+  describe('loadAllowlist D4', () => {
+    let allowlistDir: string;
+
+    beforeEach(async () => {
+      const tmpRoot = path.join(process.cwd(), 'tmp');
+      await fs.mkdir(tmpRoot, { recursive: true });
+      allowlistDir = await fs.mkdtemp(path.join(tmpRoot, 'r3-pairing-load-'));
+    });
+
+    afterEach(async () => {
+      // Un espion laissé en place par un test en échec contaminait les tests
+      // suivants (leurs assertions `not.toHaveBeenCalled` voyaient les appels
+      // du test précédent).
+      vi.restoreAllMocks();
+      await fs.rm(allowlistDir, { recursive: true, force: true });
+    });
+
+    it('D4: un allowlist corrompu ne démarre pas comme une liste vide', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const filePath = path.join(allowlistDir, 'telegram-allowFrom.json');
+      await fs.writeFile(filePath, '{not-json');
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      // VERIF3 T11 : neutraliser la garde `senders === null` restait vert,
+      // parce que l'itération sur `null` lève de toute façon un TypeError.
+      // Le refus doit être explicite : message nommant le fichier illisible et
+      // avertissement journalisé pour ce fichier précis.
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist file is unreadable: ${filePath}`
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Corrupt DM pairing allowlist file',
+        expect.objectContaining({
+          path: filePath,
+          error: `Allowlist file is unreadable: ${filePath}`,
+        })
+      );
+      expect(pairing.listApproved()).toEqual([]);
+
+      pairing.dispose();
+      warnSpy.mockRestore();
+    });
+
+    it('D4: ENOENT au premier démarrage n\'est pas une erreur', async () => {
+      const missingDir = path.join(allowlistDir, 'does-not-exist');
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: missingDir,
+      });
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await expect(pairing.loadAllowlist()).resolves.toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(pairing.listApproved()).toEqual([]);
+
+      pairing.dispose();
+      warnSpy.mockRestore();
+    });
+
+    it('D4: une entrée d\'allowlist mal typée n\'est pas fusionnée', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      const filePath = path.join(allowlistDir, 'telegram-allowFrom.json');
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await fs.writeFile(filePath, '["bad"]');
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist entry is invalid: ${filePath}`
+      );
+      expect(pairing.listApproved()).toEqual([]);
+
+      warnSpy.mockClear();
+      await fs.writeFile(filePath, JSON.stringify([{}]));
+      await expect(pairing.loadAllowlist()).rejects.toThrow(
+        `Allowlist entry is invalid: ${filePath}`
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Corrupt DM pairing allowlist file',
+        expect.objectContaining({
+          path: filePath,
+          error: `Allowlist entry is invalid: ${filePath}`,
+        })
+      );
+      expect(pairing.listApproved()).toEqual([]);
+
+      warnSpy.mockRestore();
+      pairing.dispose();
+    });
+
+    it('D4: un second chargement remplace l\'état au lieu de fusionner', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      await pairing.approveDirectly('telegram', 'user-42');
+      expect(pairing.listApproved()).toHaveLength(1);
+
+      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '[]');
+      await pairing.loadAllowlist();
+      expect(pairing.listApproved()).toEqual([]);
+      pairing.dispose();
     });
   });
 });

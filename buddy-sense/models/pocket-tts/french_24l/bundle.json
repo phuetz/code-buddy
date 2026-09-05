@@ -1,0 +1,1855 @@
+{
+  "bos_before_voice_file": "bos_before_voice.npy",
+  "bundle_name": "french_24l",
+  "conditioning_dim": 1024,
+  "flow_lm_state_manifest": [
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 0,
+      "input_name": "state_0",
+      "key": "cache",
+      "module": "transformer.layers.0.self_attn",
+      "output_name": "out_state_0",
+      "path": "transformer.layers.0.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 1,
+      "input_name": "state_1",
+      "key": "current_end",
+      "module": "transformer.layers.0.self_attn",
+      "output_name": "out_state_1",
+      "path": "transformer.layers.0.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 2,
+      "input_name": "state_2",
+      "key": "step",
+      "module": "transformer.layers.0.self_attn",
+      "output_name": "out_state_2",
+      "path": "transformer.layers.0.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 3,
+      "input_name": "state_3",
+      "key": "cache",
+      "module": "transformer.layers.1.self_attn",
+      "output_name": "out_state_3",
+      "path": "transformer.layers.1.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 4,
+      "input_name": "state_4",
+      "key": "current_end",
+      "module": "transformer.layers.1.self_attn",
+      "output_name": "out_state_4",
+      "path": "transformer.layers.1.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 5,
+      "input_name": "state_5",
+      "key": "step",
+      "module": "transformer.layers.1.self_attn",
+      "output_name": "out_state_5",
+      "path": "transformer.layers.1.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 6,
+      "input_name": "state_6",
+      "key": "cache",
+      "module": "transformer.layers.10.self_attn",
+      "output_name": "out_state_6",
+      "path": "transformer.layers.10.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 7,
+      "input_name": "state_7",
+      "key": "current_end",
+      "module": "transformer.layers.10.self_attn",
+      "output_name": "out_state_7",
+      "path": "transformer.layers.10.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 8,
+      "input_name": "state_8",
+      "key": "step",
+      "module": "transformer.layers.10.self_attn",
+      "output_name": "out_state_8",
+      "path": "transformer.layers.10.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 9,
+      "input_name": "state_9",
+      "key": "cache",
+      "module": "transformer.layers.11.self_attn",
+      "output_name": "out_state_9",
+      "path": "transformer.layers.11.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 10,
+      "input_name": "state_10",
+      "key": "current_end",
+      "module": "transformer.layers.11.self_attn",
+      "output_name": "out_state_10",
+      "path": "transformer.layers.11.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 11,
+      "input_name": "state_11",
+      "key": "step",
+      "module": "transformer.layers.11.self_attn",
+      "output_name": "out_state_11",
+      "path": "transformer.layers.11.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 12,
+      "input_name": "state_12",
+      "key": "cache",
+      "module": "transformer.layers.12.self_attn",
+      "output_name": "out_state_12",
+      "path": "transformer.layers.12.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 13,
+      "input_name": "state_13",
+      "key": "current_end",
+      "module": "transformer.layers.12.self_attn",
+      "output_name": "out_state_13",
+      "path": "transformer.layers.12.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 14,
+      "input_name": "state_14",
+      "key": "step",
+      "module": "transformer.layers.12.self_attn",
+      "output_name": "out_state_14",
+      "path": "transformer.layers.12.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 15,
+      "input_name": "state_15",
+      "key": "cache",
+      "module": "transformer.layers.13.self_attn",
+      "output_name": "out_state_15",
+      "path": "transformer.layers.13.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 16,
+      "input_name": "state_16",
+      "key": "current_end",
+      "module": "transformer.layers.13.self_attn",
+      "output_name": "out_state_16",
+      "path": "transformer.layers.13.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 17,
+      "input_name": "state_17",
+      "key": "step",
+      "module": "transformer.layers.13.self_attn",
+      "output_name": "out_state_17",
+      "path": "transformer.layers.13.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 18,
+      "input_name": "state_18",
+      "key": "cache",
+      "module": "transformer.layers.14.self_attn",
+      "output_name": "out_state_18",
+      "path": "transformer.layers.14.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 19,
+      "input_name": "state_19",
+      "key": "current_end",
+      "module": "transformer.layers.14.self_attn",
+      "output_name": "out_state_19",
+      "path": "transformer.layers.14.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 20,
+      "input_name": "state_20",
+      "key": "step",
+      "module": "transformer.layers.14.self_attn",
+      "output_name": "out_state_20",
+      "path": "transformer.layers.14.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 21,
+      "input_name": "state_21",
+      "key": "cache",
+      "module": "transformer.layers.15.self_attn",
+      "output_name": "out_state_21",
+      "path": "transformer.layers.15.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 22,
+      "input_name": "state_22",
+      "key": "current_end",
+      "module": "transformer.layers.15.self_attn",
+      "output_name": "out_state_22",
+      "path": "transformer.layers.15.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 23,
+      "input_name": "state_23",
+      "key": "step",
+      "module": "transformer.layers.15.self_attn",
+      "output_name": "out_state_23",
+      "path": "transformer.layers.15.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 24,
+      "input_name": "state_24",
+      "key": "cache",
+      "module": "transformer.layers.16.self_attn",
+      "output_name": "out_state_24",
+      "path": "transformer.layers.16.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 25,
+      "input_name": "state_25",
+      "key": "current_end",
+      "module": "transformer.layers.16.self_attn",
+      "output_name": "out_state_25",
+      "path": "transformer.layers.16.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 26,
+      "input_name": "state_26",
+      "key": "step",
+      "module": "transformer.layers.16.self_attn",
+      "output_name": "out_state_26",
+      "path": "transformer.layers.16.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 27,
+      "input_name": "state_27",
+      "key": "cache",
+      "module": "transformer.layers.17.self_attn",
+      "output_name": "out_state_27",
+      "path": "transformer.layers.17.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 28,
+      "input_name": "state_28",
+      "key": "current_end",
+      "module": "transformer.layers.17.self_attn",
+      "output_name": "out_state_28",
+      "path": "transformer.layers.17.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 29,
+      "input_name": "state_29",
+      "key": "step",
+      "module": "transformer.layers.17.self_attn",
+      "output_name": "out_state_29",
+      "path": "transformer.layers.17.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 30,
+      "input_name": "state_30",
+      "key": "cache",
+      "module": "transformer.layers.18.self_attn",
+      "output_name": "out_state_30",
+      "path": "transformer.layers.18.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 31,
+      "input_name": "state_31",
+      "key": "current_end",
+      "module": "transformer.layers.18.self_attn",
+      "output_name": "out_state_31",
+      "path": "transformer.layers.18.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 32,
+      "input_name": "state_32",
+      "key": "step",
+      "module": "transformer.layers.18.self_attn",
+      "output_name": "out_state_32",
+      "path": "transformer.layers.18.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 33,
+      "input_name": "state_33",
+      "key": "cache",
+      "module": "transformer.layers.19.self_attn",
+      "output_name": "out_state_33",
+      "path": "transformer.layers.19.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 34,
+      "input_name": "state_34",
+      "key": "current_end",
+      "module": "transformer.layers.19.self_attn",
+      "output_name": "out_state_34",
+      "path": "transformer.layers.19.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 35,
+      "input_name": "state_35",
+      "key": "step",
+      "module": "transformer.layers.19.self_attn",
+      "output_name": "out_state_35",
+      "path": "transformer.layers.19.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 36,
+      "input_name": "state_36",
+      "key": "cache",
+      "module": "transformer.layers.2.self_attn",
+      "output_name": "out_state_36",
+      "path": "transformer.layers.2.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 37,
+      "input_name": "state_37",
+      "key": "current_end",
+      "module": "transformer.layers.2.self_attn",
+      "output_name": "out_state_37",
+      "path": "transformer.layers.2.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 38,
+      "input_name": "state_38",
+      "key": "step",
+      "module": "transformer.layers.2.self_attn",
+      "output_name": "out_state_38",
+      "path": "transformer.layers.2.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 39,
+      "input_name": "state_39",
+      "key": "cache",
+      "module": "transformer.layers.20.self_attn",
+      "output_name": "out_state_39",
+      "path": "transformer.layers.20.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 40,
+      "input_name": "state_40",
+      "key": "current_end",
+      "module": "transformer.layers.20.self_attn",
+      "output_name": "out_state_40",
+      "path": "transformer.layers.20.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 41,
+      "input_name": "state_41",
+      "key": "step",
+      "module": "transformer.layers.20.self_attn",
+      "output_name": "out_state_41",
+      "path": "transformer.layers.20.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 42,
+      "input_name": "state_42",
+      "key": "cache",
+      "module": "transformer.layers.21.self_attn",
+      "output_name": "out_state_42",
+      "path": "transformer.layers.21.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 43,
+      "input_name": "state_43",
+      "key": "current_end",
+      "module": "transformer.layers.21.self_attn",
+      "output_name": "out_state_43",
+      "path": "transformer.layers.21.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 44,
+      "input_name": "state_44",
+      "key": "step",
+      "module": "transformer.layers.21.self_attn",
+      "output_name": "out_state_44",
+      "path": "transformer.layers.21.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 45,
+      "input_name": "state_45",
+      "key": "cache",
+      "module": "transformer.layers.22.self_attn",
+      "output_name": "out_state_45",
+      "path": "transformer.layers.22.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 46,
+      "input_name": "state_46",
+      "key": "current_end",
+      "module": "transformer.layers.22.self_attn",
+      "output_name": "out_state_46",
+      "path": "transformer.layers.22.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 47,
+      "input_name": "state_47",
+      "key": "step",
+      "module": "transformer.layers.22.self_attn",
+      "output_name": "out_state_47",
+      "path": "transformer.layers.22.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 48,
+      "input_name": "state_48",
+      "key": "cache",
+      "module": "transformer.layers.23.self_attn",
+      "output_name": "out_state_48",
+      "path": "transformer.layers.23.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 49,
+      "input_name": "state_49",
+      "key": "current_end",
+      "module": "transformer.layers.23.self_attn",
+      "output_name": "out_state_49",
+      "path": "transformer.layers.23.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 50,
+      "input_name": "state_50",
+      "key": "step",
+      "module": "transformer.layers.23.self_attn",
+      "output_name": "out_state_50",
+      "path": "transformer.layers.23.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 51,
+      "input_name": "state_51",
+      "key": "cache",
+      "module": "transformer.layers.3.self_attn",
+      "output_name": "out_state_51",
+      "path": "transformer.layers.3.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 52,
+      "input_name": "state_52",
+      "key": "current_end",
+      "module": "transformer.layers.3.self_attn",
+      "output_name": "out_state_52",
+      "path": "transformer.layers.3.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 53,
+      "input_name": "state_53",
+      "key": "step",
+      "module": "transformer.layers.3.self_attn",
+      "output_name": "out_state_53",
+      "path": "transformer.layers.3.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 54,
+      "input_name": "state_54",
+      "key": "cache",
+      "module": "transformer.layers.4.self_attn",
+      "output_name": "out_state_54",
+      "path": "transformer.layers.4.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 55,
+      "input_name": "state_55",
+      "key": "current_end",
+      "module": "transformer.layers.4.self_attn",
+      "output_name": "out_state_55",
+      "path": "transformer.layers.4.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 56,
+      "input_name": "state_56",
+      "key": "step",
+      "module": "transformer.layers.4.self_attn",
+      "output_name": "out_state_56",
+      "path": "transformer.layers.4.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 57,
+      "input_name": "state_57",
+      "key": "cache",
+      "module": "transformer.layers.5.self_attn",
+      "output_name": "out_state_57",
+      "path": "transformer.layers.5.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 58,
+      "input_name": "state_58",
+      "key": "current_end",
+      "module": "transformer.layers.5.self_attn",
+      "output_name": "out_state_58",
+      "path": "transformer.layers.5.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 59,
+      "input_name": "state_59",
+      "key": "step",
+      "module": "transformer.layers.5.self_attn",
+      "output_name": "out_state_59",
+      "path": "transformer.layers.5.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 60,
+      "input_name": "state_60",
+      "key": "cache",
+      "module": "transformer.layers.6.self_attn",
+      "output_name": "out_state_60",
+      "path": "transformer.layers.6.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 61,
+      "input_name": "state_61",
+      "key": "current_end",
+      "module": "transformer.layers.6.self_attn",
+      "output_name": "out_state_61",
+      "path": "transformer.layers.6.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 62,
+      "input_name": "state_62",
+      "key": "step",
+      "module": "transformer.layers.6.self_attn",
+      "output_name": "out_state_62",
+      "path": "transformer.layers.6.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 63,
+      "input_name": "state_63",
+      "key": "cache",
+      "module": "transformer.layers.7.self_attn",
+      "output_name": "out_state_63",
+      "path": "transformer.layers.7.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 64,
+      "input_name": "state_64",
+      "key": "current_end",
+      "module": "transformer.layers.7.self_attn",
+      "output_name": "out_state_64",
+      "path": "transformer.layers.7.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 65,
+      "input_name": "state_65",
+      "key": "step",
+      "module": "transformer.layers.7.self_attn",
+      "output_name": "out_state_65",
+      "path": "transformer.layers.7.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 66,
+      "input_name": "state_66",
+      "key": "cache",
+      "module": "transformer.layers.8.self_attn",
+      "output_name": "out_state_66",
+      "path": "transformer.layers.8.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 67,
+      "input_name": "state_67",
+      "key": "current_end",
+      "module": "transformer.layers.8.self_attn",
+      "output_name": "out_state_67",
+      "path": "transformer.layers.8.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 68,
+      "input_name": "state_68",
+      "key": "step",
+      "module": "transformer.layers.8.self_attn",
+      "output_name": "out_state_68",
+      "path": "transformer.layers.8.self_attn/step",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "nan",
+      "index": 69,
+      "input_name": "state_69",
+      "key": "cache",
+      "module": "transformer.layers.9.self_attn",
+      "output_name": "out_state_69",
+      "path": "transformer.layers.9.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        1000,
+        16,
+        64
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 70,
+      "input_name": "state_70",
+      "key": "current_end",
+      "module": "transformer.layers.9.self_attn",
+      "output_name": "out_state_70",
+      "path": "transformer.layers.9.self_attn/current_end",
+      "shape": [
+        0
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 71,
+      "input_name": "state_71",
+      "key": "step",
+      "module": "transformer.layers.9.self_attn",
+      "output_name": "out_state_71",
+      "path": "transformer.layers.9.self_attn/step",
+      "shape": [
+        1
+      ]
+    }
+  ],
+  "frame_rate": 12.5,
+  "insert_bos_before_voice": true,
+  "language": "french_24l",
+  "latent_dim": 32,
+  "max_token_per_chunk": 50,
+  "mimi_state_manifest": [
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 0,
+      "input_name": "state_0",
+      "key": "first",
+      "module": "decoder.model.0",
+      "output_name": "out_state_0",
+      "path": "decoder.model.0/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 1,
+      "input_name": "state_1",
+      "key": "previous",
+      "module": "decoder.model.0",
+      "output_name": "out_state_1",
+      "path": "decoder.model.0/previous",
+      "shape": [
+        1,
+        512,
+        6
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 2,
+      "input_name": "state_2",
+      "key": "first",
+      "module": "decoder.model.11",
+      "output_name": "out_state_2",
+      "path": "decoder.model.11/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 3,
+      "input_name": "state_3",
+      "key": "previous",
+      "module": "decoder.model.11",
+      "output_name": "out_state_3",
+      "path": "decoder.model.11/previous",
+      "shape": [
+        1,
+        64,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 4,
+      "input_name": "state_4",
+      "key": "partial",
+      "module": "decoder.model.2",
+      "output_name": "out_state_4",
+      "path": "decoder.model.2/partial",
+      "shape": [
+        1,
+        256,
+        6
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 5,
+      "input_name": "state_5",
+      "key": "first",
+      "module": "decoder.model.3.block.1",
+      "output_name": "out_state_5",
+      "path": "decoder.model.3.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 6,
+      "input_name": "state_6",
+      "key": "previous",
+      "module": "decoder.model.3.block.1",
+      "output_name": "out_state_6",
+      "path": "decoder.model.3.block.1/previous",
+      "shape": [
+        1,
+        256,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 7,
+      "input_name": "state_7",
+      "key": "first",
+      "module": "decoder.model.3.block.3",
+      "output_name": "out_state_7",
+      "path": "decoder.model.3.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 8,
+      "input_name": "state_8",
+      "key": "previous",
+      "module": "decoder.model.3.block.3",
+      "output_name": "out_state_8",
+      "path": "decoder.model.3.block.3/previous",
+      "shape": [
+        1,
+        128,
+        0
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 9,
+      "input_name": "state_9",
+      "key": "partial",
+      "module": "decoder.model.5",
+      "output_name": "out_state_9",
+      "path": "decoder.model.5/partial",
+      "shape": [
+        1,
+        128,
+        5
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 10,
+      "input_name": "state_10",
+      "key": "first",
+      "module": "decoder.model.6.block.1",
+      "output_name": "out_state_10",
+      "path": "decoder.model.6.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 11,
+      "input_name": "state_11",
+      "key": "previous",
+      "module": "decoder.model.6.block.1",
+      "output_name": "out_state_11",
+      "path": "decoder.model.6.block.1/previous",
+      "shape": [
+        1,
+        128,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 12,
+      "input_name": "state_12",
+      "key": "first",
+      "module": "decoder.model.6.block.3",
+      "output_name": "out_state_12",
+      "path": "decoder.model.6.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 13,
+      "input_name": "state_13",
+      "key": "previous",
+      "module": "decoder.model.6.block.3",
+      "output_name": "out_state_13",
+      "path": "decoder.model.6.block.3/previous",
+      "shape": [
+        1,
+        64,
+        0
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 14,
+      "input_name": "state_14",
+      "key": "partial",
+      "module": "decoder.model.8",
+      "output_name": "out_state_14",
+      "path": "decoder.model.8/partial",
+      "shape": [
+        1,
+        64,
+        4
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 15,
+      "input_name": "state_15",
+      "key": "first",
+      "module": "decoder.model.9.block.1",
+      "output_name": "out_state_15",
+      "path": "decoder.model.9.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 16,
+      "input_name": "state_16",
+      "key": "previous",
+      "module": "decoder.model.9.block.1",
+      "output_name": "out_state_16",
+      "path": "decoder.model.9.block.1/previous",
+      "shape": [
+        1,
+        64,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 17,
+      "input_name": "state_17",
+      "key": "first",
+      "module": "decoder.model.9.block.3",
+      "output_name": "out_state_17",
+      "path": "decoder.model.9.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 18,
+      "input_name": "state_18",
+      "key": "previous",
+      "module": "decoder.model.9.block.3",
+      "output_name": "out_state_18",
+      "path": "decoder.model.9.block.3/previous",
+      "shape": [
+        1,
+        32,
+        0
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 19,
+      "input_name": "state_19",
+      "key": "cache",
+      "module": "decoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_19",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        8,
+        1000,
+        64
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 20,
+      "input_name": "state_20",
+      "key": "end_offset",
+      "module": "decoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_20",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/end_offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 21,
+      "input_name": "state_21",
+      "key": "offset",
+      "module": "decoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_21",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 22,
+      "input_name": "state_22",
+      "key": "cache",
+      "module": "decoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_22",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        8,
+        1000,
+        64
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 23,
+      "input_name": "state_23",
+      "key": "end_offset",
+      "module": "decoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_23",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/end_offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 24,
+      "input_name": "state_24",
+      "key": "offset",
+      "module": "decoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_24",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 25,
+      "input_name": "state_25",
+      "key": "first",
+      "module": "downsample.conv",
+      "output_name": "out_state_25",
+      "path": "downsample.conv/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 26,
+      "input_name": "state_26",
+      "key": "previous",
+      "module": "downsample.conv",
+      "output_name": "out_state_26",
+      "path": "downsample.conv/previous",
+      "shape": [
+        1,
+        512,
+        16
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 27,
+      "input_name": "state_27",
+      "key": "first",
+      "module": "encoder.model.0",
+      "output_name": "out_state_27",
+      "path": "encoder.model.0/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 28,
+      "input_name": "state_28",
+      "key": "previous",
+      "module": "encoder.model.0",
+      "output_name": "out_state_28",
+      "path": "encoder.model.0/previous",
+      "shape": [
+        1,
+        1,
+        6
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 29,
+      "input_name": "state_29",
+      "key": "first",
+      "module": "encoder.model.1.block.1",
+      "output_name": "out_state_29",
+      "path": "encoder.model.1.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 30,
+      "input_name": "state_30",
+      "key": "previous",
+      "module": "encoder.model.1.block.1",
+      "output_name": "out_state_30",
+      "path": "encoder.model.1.block.1/previous",
+      "shape": [
+        1,
+        64,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 31,
+      "input_name": "state_31",
+      "key": "first",
+      "module": "encoder.model.1.block.3",
+      "output_name": "out_state_31",
+      "path": "encoder.model.1.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 32,
+      "input_name": "state_32",
+      "key": "previous",
+      "module": "encoder.model.1.block.3",
+      "output_name": "out_state_32",
+      "path": "encoder.model.1.block.3/previous",
+      "shape": [
+        1,
+        32,
+        0
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 33,
+      "input_name": "state_33",
+      "key": "first",
+      "module": "encoder.model.11",
+      "output_name": "out_state_33",
+      "path": "encoder.model.11/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 34,
+      "input_name": "state_34",
+      "key": "previous",
+      "module": "encoder.model.11",
+      "output_name": "out_state_34",
+      "path": "encoder.model.11/previous",
+      "shape": [
+        1,
+        512,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 35,
+      "input_name": "state_35",
+      "key": "first",
+      "module": "encoder.model.3",
+      "output_name": "out_state_35",
+      "path": "encoder.model.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 36,
+      "input_name": "state_36",
+      "key": "previous",
+      "module": "encoder.model.3",
+      "output_name": "out_state_36",
+      "path": "encoder.model.3/previous",
+      "shape": [
+        1,
+        64,
+        4
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 37,
+      "input_name": "state_37",
+      "key": "first",
+      "module": "encoder.model.4.block.1",
+      "output_name": "out_state_37",
+      "path": "encoder.model.4.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 38,
+      "input_name": "state_38",
+      "key": "previous",
+      "module": "encoder.model.4.block.1",
+      "output_name": "out_state_38",
+      "path": "encoder.model.4.block.1/previous",
+      "shape": [
+        1,
+        128,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 39,
+      "input_name": "state_39",
+      "key": "first",
+      "module": "encoder.model.4.block.3",
+      "output_name": "out_state_39",
+      "path": "encoder.model.4.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 40,
+      "input_name": "state_40",
+      "key": "previous",
+      "module": "encoder.model.4.block.3",
+      "output_name": "out_state_40",
+      "path": "encoder.model.4.block.3/previous",
+      "shape": [
+        1,
+        64,
+        0
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 41,
+      "input_name": "state_41",
+      "key": "first",
+      "module": "encoder.model.6",
+      "output_name": "out_state_41",
+      "path": "encoder.model.6/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 42,
+      "input_name": "state_42",
+      "key": "previous",
+      "module": "encoder.model.6",
+      "output_name": "out_state_42",
+      "path": "encoder.model.6/previous",
+      "shape": [
+        1,
+        128,
+        5
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 43,
+      "input_name": "state_43",
+      "key": "first",
+      "module": "encoder.model.7.block.1",
+      "output_name": "out_state_43",
+      "path": "encoder.model.7.block.1/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 44,
+      "input_name": "state_44",
+      "key": "previous",
+      "module": "encoder.model.7.block.1",
+      "output_name": "out_state_44",
+      "path": "encoder.model.7.block.1/previous",
+      "shape": [
+        1,
+        256,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 45,
+      "input_name": "state_45",
+      "key": "first",
+      "module": "encoder.model.7.block.3",
+      "output_name": "out_state_45",
+      "path": "encoder.model.7.block.3/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "empty",
+      "index": 46,
+      "input_name": "state_46",
+      "key": "previous",
+      "module": "encoder.model.7.block.3",
+      "output_name": "out_state_46",
+      "path": "encoder.model.7.block.3/previous",
+      "shape": [
+        1,
+        128,
+        0
+      ]
+    },
+    {
+      "dtype": "bool",
+      "fill": "ones",
+      "index": 47,
+      "input_name": "state_47",
+      "key": "first",
+      "module": "encoder.model.9",
+      "output_name": "out_state_47",
+      "path": "encoder.model.9/first",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 48,
+      "input_name": "state_48",
+      "key": "previous",
+      "module": "encoder.model.9",
+      "output_name": "out_state_48",
+      "path": "encoder.model.9/previous",
+      "shape": [
+        1,
+        256,
+        6
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 49,
+      "input_name": "state_49",
+      "key": "cache",
+      "module": "encoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_49",
+      "path": "encoder_transformer.transformer.layers.0.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        8,
+        1000,
+        64
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 50,
+      "input_name": "state_50",
+      "key": "end_offset",
+      "module": "encoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_50",
+      "path": "encoder_transformer.transformer.layers.0.self_attn/end_offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 51,
+      "input_name": "state_51",
+      "key": "offset",
+      "module": "encoder_transformer.transformer.layers.0.self_attn",
+      "output_name": "out_state_51",
+      "path": "encoder_transformer.transformer.layers.0.self_attn/offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 52,
+      "input_name": "state_52",
+      "key": "cache",
+      "module": "encoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_52",
+      "path": "encoder_transformer.transformer.layers.1.self_attn/cache",
+      "shape": [
+        2,
+        1,
+        8,
+        1000,
+        64
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 53,
+      "input_name": "state_53",
+      "key": "end_offset",
+      "module": "encoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_53",
+      "path": "encoder_transformer.transformer.layers.1.self_attn/end_offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "int64",
+      "fill": "zeros",
+      "index": 54,
+      "input_name": "state_54",
+      "key": "offset",
+      "module": "encoder_transformer.transformer.layers.1.self_attn",
+      "output_name": "out_state_54",
+      "path": "encoder_transformer.transformer.layers.1.self_attn/offset",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "fill": "zeros",
+      "index": 55,
+      "input_name": "state_55",
+      "key": "partial",
+      "module": "upsample.convtr",
+      "output_name": "out_state_55",
+      "path": "upsample.convtr/partial",
+      "shape": [
+        1,
+        512,
+        16
+      ]
+    }
+  ],
+  "model_recommended_frames_after_eos": 8,
+  "pad_with_spaces_for_short_inputs": false,
+  "predefined_voices": [
+    "alba",
+    "azelma",
+    "cosette",
+    "eponine",
+    "fantine",
+    "javert",
+    "jean",
+    "marius"
+  ],
+  "remove_semicolons": true,
+  "sample_rate": 24000,
+  "samples_per_frame": 1920,
+  "schema_version": 2,
+  "tokenizer_file": "tokenizer.model"
+}

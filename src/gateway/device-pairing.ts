@@ -20,6 +20,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type DeviceRole = 'operator' | 'node' | 'control' | 'webchat';
 
@@ -275,25 +276,20 @@ export class DevicePairingStore {
   }
 
   private readFile<T>(filePath: string): DeviceFile<T> {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Partial<DeviceFile<T>>;
-      if (parsed.version === STORE_VERSION && parsed.devices && typeof parsed.devices === 'object') {
-        return { version: STORE_VERSION, updatedAt: parsed.updatedAt ?? '', devices: parsed.devices };
-      }
-    } catch {
-      // Missing or corrupt file — start empty.
+    const parsed = readJsonAtomicSync<Partial<DeviceFile<T>> | null>(filePath, null, { mode: 0o600 });
+    if (parsed?.version === STORE_VERSION && parsed.devices && typeof parsed.devices === 'object') {
+      return { version: STORE_VERSION, updatedAt: parsed.updatedAt ?? '', devices: parsed.devices };
     }
     return { version: STORE_VERSION, updatedAt: '', devices: {} };
   }
 
   private writeFile<T>(filePath: string, file: DeviceFile<T>): void {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const payload: DeviceFile<T> = {
       version: STORE_VERSION,
       updatedAt: new Date(this.now()).toISOString(),
       devices: file.devices,
     };
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: 'utf-8', mode: 0o600 });
+    writeJsonAtomicSync(filePath, payload, { mode: 0o600 });
   }
 
   /** Directory backing this store (for diagnostics/CLI). */

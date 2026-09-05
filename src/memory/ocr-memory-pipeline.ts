@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -295,15 +296,22 @@ export class OCRMemoryPipeline {
 
   private load(): void {
     try {
-      if (fs.existsSync(this.indexPath)) {
-        const raw = fs.readFileSync(this.indexPath, 'utf-8');
-        const data = JSON.parse(raw) as OCRIndex;
-        if (data.version === INDEX_VERSION && Array.isArray(data.entries)) {
-          for (const entry of data.entries) {
-            this.entries.set(entry.id, entry);
-          }
-          logger.debug(`Loaded ${this.entries.size} OCR memory entries`);
-        }
+      const data = readJsonAtomicSync<OCRIndex>(this.indexPath, {
+        version: INDEX_VERSION,
+        entries: [],
+      }, {
+        mode: 0o600,
+        isValid: (value): value is OCRIndex => Boolean(
+          value && typeof value === 'object'
+            && (value as { version?: unknown }).version === INDEX_VERSION
+            && Array.isArray((value as { entries?: unknown }).entries),
+        ),
+      });
+      for (const entry of data.entries) {
+        this.entries.set(entry.id, entry);
+      }
+      if (this.entries.size > 0) {
+        logger.debug(`Loaded ${this.entries.size} OCR memory entries`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -321,7 +329,7 @@ export class OCRMemoryPipeline {
         version: INDEX_VERSION,
         entries: Array.from(this.entries.values()),
       };
-      fs.writeFileSync(this.indexPath, JSON.stringify(data, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.indexPath, data, { mode: 0o600 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.warn('Failed to save OCR index', { error: msg });

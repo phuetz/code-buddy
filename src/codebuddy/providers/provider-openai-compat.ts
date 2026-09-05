@@ -49,7 +49,18 @@ import {
   injectAnthropicCacheBreakpoints,
   injectJsonSystemPromptForAnthropic,
 } from './provider-openai-compat-hooks.js';
+import {
+  fromOllamaNativeResponse,
+  isOllamaEndpoint,
+  isOllamaNativeChatEnabled,
+  ollamaNativeChatUrl,
+  resolveOllamaNumCtx,
+  streamOllamaNative,
+  toOllamaNativeRequest,
+  type OpenAiChatPayload,
+} from './ollama-native-transport.js';
 import type { Provider } from './provider-interface.js';
+import type { ActiveTurnMetrics, TurnMetricsRecorder } from '../../observability/turn-metrics.js';
 
 /** Chat completion request payload — OpenAI-shaped with a few provider-specific fields. */
 interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming, 'tools' | 'tool_choice'> {
@@ -70,12 +81,24 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   chat_template_kwargs?: { enable_thinking: boolean };
 }
 
+type SearchAwareChatCompletionChunk = ChatCompletionChunk & {
+  searchHonored?: boolean;
+};
+
 type ReasoningCompatiblePayload = {
   model: string;
   temperature?: number | null;
   max_tokens?: number | null;
   max_completion_tokens?: number | null;
 };
+
+const EMPTY_PROVIDER_RESPONSE_ERROR = 'réponse vide du fournisseur';
+
+/** `CODEBUDDY_STREAM_USAGE=false` (or `0`/`off`) opts out of `stream_options`. */
+function streamUsageRequested(): boolean {
+  const raw = process.env.CODEBUDDY_STREAM_USAGE?.trim().toLowerCase();
+  return raw !== 'false' && raw !== '0' && raw !== 'off';
+}
 
 function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
   payload: T,
@@ -98,6 +121,16 @@ function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayloa
   }
   delete payload.temperature;
   return payload;
+}
+
+function chunkContainsGeneratedToken(chunk: ChatCompletionChunk): boolean {
+  return chunk.choices.some((choice) => {
+    const delta = choice.delta as unknown as Record<string, unknown>;
+    return [delta.content, delta.reasoning, delta.reasoning_content]
+      .some((value) => typeof value === 'string' && value.length > 0)
+      || (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0)
+      || (typeof delta.function_call === 'object' && delta.function_call !== null);
+  });
 }
 
 export interface OpenAICompatProviderOptions {
@@ -619,13 +652,86 @@ export class OpenAICompatProvider implements Provider {
     }
 
     if (this.isXaiProvider()) {
-      logger.debug('Skipping deprecated search_parameters for xAI provider', {
-        source: 'OpenAICompatProvider',
-      });
+      logger.warn(
+        'xAI search_parameters is unsupported; returning response without search (sans recherche)',
+        {
+          source: 'OpenAICompatProvider',
+          searchHonored: false,
+        },
+      );
       return false;
     }
 
     return true;
+  }
+
+  private isSearchOmittedForXai(searchParams?: SearchParameters): boolean {
+    return this.isXaiProvider() && Boolean(searchParams?.mode && searchParams.mode !== 'off');
+  }
+
+  /**
+   * Whether this provider talks to Ollama. Broader than
+   * `getOllamaReasoningEffort`'s historical check (which knew only the two
+   * loopback spellings), so a LAN Ollama is recognised too.
+   */
+  private isOllamaProvider(): boolean {
+    return isOllamaEndpoint(this.baseURL);
+  }
+
+  /**
+   * The ONE SDK seam. Ollama drops `options.num_ctx` on `/v1/chat/completions`
+   * and then loads the model at its full declared window (262 144 tokens for
+   * qwen3), so `CODEBUDDY_MAX_CONTEXT` never reached the server. For Ollama the
+   * already-built payload is sent to the native `/api/chat` instead, carrying
+   * the resolved context window; every other provider keeps the SDK call, byte
+   * for byte. The caller sees the same OpenAI shapes either way.
+   */
+  private async createChatCompletion(
+    payload: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const openAiPayload = payload as unknown as OpenAiChatPayload;
+    if (this.isOllamaProvider() && isOllamaNativeChatEnabled()) {
+      return this.createOllamaNativeCompletion(openAiPayload, signal);
+    }
+    return signal
+      ? await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming, { signal })
+      : await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming);
+  }
+
+  private async createOllamaNativeCompletion(
+    payload: OpenAiChatPayload,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const numCtx = resolveOllamaNumCtx(payload.model);
+    const body = toOllamaNativeRequest(payload, numCtx);
+    logger.debug('Ollama native chat', {
+      source: 'OpenAICompatProvider',
+      model: payload.model,
+      num_ctx: numCtx,
+      stream: payload.stream === true,
+    });
+
+    const response = await fetch(ollamaNativeChatUrl(this.baseURL), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      const error = new Error(
+        `Ollama API error: ${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+      );
+      (error as Error & { status: number }).status = response.status;
+      throw error;
+    }
+
+    if (payload.stream === true) return streamOllamaNative(response.body, payload.model);
+    return fromOllamaNativeResponse(
+      await response.json() as Parameters<typeof fromOllamaNativeResponse>[0],
+      payload.model,
+    );
   }
 
   private getOllamaReasoningEffort(model: string): string | undefined {
@@ -661,7 +767,19 @@ export class OpenAICompatProvider implements Provider {
     );
   }
 
-  private *nonStreamingResponseToChunks(response: CodeBuddyResponse): Generator<ChatCompletionChunk, void, unknown> {
+  private isEmptyProviderResponse(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const choices = (value as { choices?: unknown }).choices;
+    return Array.isArray(choices) && choices.length === 0;
+  }
+
+  private *nonStreamingResponseToChunks(
+    response: CodeBuddyResponse,
+    searchOmitted = false,
+  ): Generator<ChatCompletionChunk, void, unknown> {
+    if (!Array.isArray(response?.choices) || response.choices.length === 0) {
+      throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+    }
     const created = Math.floor(Date.now() / 1000);
 
     for (const [index, choice] of response.choices.entries()) {
@@ -691,7 +809,8 @@ export class OpenAICompatProvider implements Provider {
           finish_reason: choice.finish_reason as ChatCompletionChunk.Choice['finish_reason'],
         }],
         ...(response.usage ? { usage: response.usage } : {}),
-      } as ChatCompletionChunk;
+        ...(searchOmitted ? { searchHonored: false } : {}),
+      } as SearchAwareChatCompletionChunk;
     }
   }
 
@@ -773,6 +892,22 @@ export class OpenAICompatProvider implements Provider {
     return 'provider';
   }
 
+  /** Canonical provider id shared with fleet candidate identities. */
+  private getMetricsProviderId(): string {
+    const url = this.baseURL.toLowerCase();
+    if (url.includes('api.x.ai') || url.includes('xai')) return 'grok';
+    if (url.includes('openai.com')) return 'openai';
+    if (url.includes('anthropic.com')) return 'anthropic';
+    if (url.includes('openrouter.ai')) return 'openrouter';
+    if (url.includes('groq.com')) return 'groq';
+    if (url.includes('together.xyz')) return 'together';
+    if (url.includes('fireworks.ai')) return 'fireworks';
+    if (url.includes(':11434') || url.includes('ollama')) return 'ollama';
+    if (url.includes(':1234') || url.includes('lmstudio')) return 'lmstudio';
+    if (url.includes('vllm')) return 'vllm';
+    return this.detectProviderLabel();
+  }
+
   // ===========================================================================
   // chat() / chatStream()
   // ===========================================================================
@@ -817,6 +952,7 @@ export class OpenAICompatProvider implements Provider {
 
       const searchOpts = opts.searchOptions || searchOptions;
       const searchParameters = searchOpts?.search_parameters;
+      const searchOmitted = this.isSearchOmittedForXai(searchParameters);
       if (this.shouldIncludeSearchParameters(searchParameters)) {
         requestPayload.search_parameters = searchParameters;
       }
@@ -855,9 +991,7 @@ export class OpenAICompatProvider implements Provider {
               // Preserve the one-argument SDK call when there is no signal. Apart
               // from keeping existing adapters compatible, this avoids presenting
               // `undefined` as an intentional transport-options override.
-              return opts.signal
-                ? await this.client.chat.completions.create(payload, { signal: opts.signal })
-                : await this.client.chat.completions.create(payload);
+              return await this.createChatCompletion(payload, opts.signal);
             },
             {
               ...RetryStrategies.llmApi,
@@ -886,6 +1020,10 @@ export class OpenAICompatProvider implements Provider {
           // Non-critical
         }
 
+        const choices = (response as unknown as { choices?: unknown } | null)?.choices;
+        if (!Array.isArray(choices) || choices.length === 0) {
+          throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+        }
         const codeBuddyResponse = response as unknown as CodeBuddyResponse;
         const rawUsage = (response as unknown as Record<string, unknown>).usage as Record<string, unknown> | undefined;
         if (rawUsage) {
@@ -923,10 +1061,12 @@ export class OpenAICompatProvider implements Provider {
             },
             finish_reason: 'stop',
           }],
+          ...(searchOmitted ? { searchHonored: false } : {}),
         };
       }
 
-      return await performCall(finalMessages);
+      const response = await performCall(finalMessages);
+      return searchOmitted ? { ...response, searchHonored: false } : response;
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {
         throw error;
@@ -950,6 +1090,25 @@ export class OpenAICompatProvider implements Provider {
     opts: ChatOptions = {},
     searchOptions?: SearchOptions,
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+    let metricsRecorder: TurnMetricsRecorder | undefined;
+    let measuredTurn: ActiveTurnMetrics | undefined;
+    let usageInputTokens: number | undefined;
+    let usageOutputTokens: number | undefined;
+    const observeChunk = (chunk: ChatCompletionChunk): void => {
+      if (metricsRecorder && measuredTurn && chunkContainsGeneratedToken(chunk)) {
+        metricsRecorder.markFirstChunk(measuredTurn);
+      }
+      const usage = chunk.usage;
+      if (usage) {
+        usageInputTokens = usage.prompt_tokens;
+        usageOutputTokens = usage.completion_tokens;
+      }
+    };
+    const markMessageComplete = (): void => {
+      if (metricsRecorder && measuredTurn) {
+        metricsRecorder.markFirstMessage(measuredTurn);
+      }
+    };
     try {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
@@ -995,6 +1154,7 @@ export class OpenAICompatProvider implements Provider {
 
       const searchOpts = opts.searchOptions || searchOptions;
       const searchParameters = searchOpts?.search_parameters;
+      const searchOmitted = this.isSearchOmittedForXai(searchParameters);
       const searchParams = this.shouldIncludeSearchParameters(searchParameters)
         ? { search_parameters: searchParameters }
         : {};
@@ -1006,18 +1166,33 @@ export class OpenAICompatProvider implements Provider {
         ...requestPayload,
         ...searchParams,
         stream: true,
+        // OpenAI's own opt-in for real counters on a stream. Without it every
+        // usage number downstream (turn metrics, the OpenAI-compatible HTTP
+        // route) can only be a `length / 4` guess. Ollama, vLLM, LM Studio and
+        // the hosted OpenAI-compatible gateways all honour it; a server that
+        // does not simply ignores the field. `CODEBUDDY_STREAM_USAGE=false` is
+        // the escape hatch for a gateway that rejects unknown parameters.
+        ...(streamUsageRequested() ? { stream_options: { include_usage: true } } : {}),
         ...(thinkingConfig.thinking ? { thinking: thinkingConfig.thinking } : {}),
         ...(opts.service_tier ? { service_tier: opts.service_tier } : {}),
         ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
+      };
+
+      metricsRecorder = opts.turnMetrics?.recorder;
+      const ensureMeasuredTurn = (): void => {
+        if (!metricsRecorder || measuredTurn) return;
+        measuredTurn = metricsRecorder.startTurn(
+          this.getMetricsProviderId(),
+          streamingPayload.model,
+        );
       };
 
       const stream = await this.withCircuitBreaker(opts.circuitBreaker, () =>
         retry(
           async () => {
             const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
-            return opts.signal
-              ? await this.client.chat.completions.create(payload, { signal: opts.signal })
-              : await this.client.chat.completions.create(payload);
+            ensureMeasuredTurn();
+            return await this.createChatCompletion(payload, opts.signal);
           },
           {
             ...RetryStrategies.llmApi,
@@ -1037,31 +1212,48 @@ export class OpenAICompatProvider implements Provider {
           logger.debug('Streaming request returned a non-streaming chat response; adapting it to chunks', {
             source: 'OpenAICompatProvider',
           });
-          yield* this.nonStreamingResponseToChunks(stream);
+          for (const chunk of this.nonStreamingResponseToChunks(stream, searchOmitted)) {
+            observeChunk(chunk);
+            yield chunk;
+          }
+          markMessageComplete();
           return;
         }
 
-        logger.debug('Streaming request returned no async iterator; retrying as non-streaming chat', {
+        if (this.isEmptyProviderResponse(stream)) {
+          throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
+        }
+
+        logger.warn('Streaming request returned no async iterator; retrying as non-streaming chat', {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
-        yield* this.nonStreamingResponseToChunks(response);
+        for (const chunk of this.nonStreamingResponseToChunks(response)) {
+          observeChunk(chunk);
+          yield chunk;
+        }
+        markMessageComplete();
         return;
       }
 
       let yieldedChunks = 0;
       for await (const chunk of stream) {
         yieldedChunks++;
-        yield chunk;
+        observeChunk(chunk);
+        yield searchOmitted ? { ...chunk, searchHonored: false } as SearchAwareChatCompletionChunk : chunk;
       }
 
       if (yieldedChunks === 0) {
-        logger.debug('Streaming request yielded zero chunks; retrying as non-streaming chat', {
+        logger.warn('Streaming request yielded zero chunks; retrying as non-streaming chat', {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
-        yield* this.nonStreamingResponseToChunks(response);
+        for (const chunk of this.nonStreamingResponseToChunks(response, searchOmitted)) {
+          observeChunk(chunk);
+          yield chunk;
+        }
       }
+      markMessageComplete();
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {
         throw error;
@@ -1076,6 +1268,19 @@ export class OpenAICompatProvider implements Provider {
         new Error(mapProviderError(message, this.detectProviderLabel())),
         error,
       );
+    } finally {
+      if (metricsRecorder && measuredTurn) {
+        let outputTokens = usageOutputTokens;
+        try {
+          outputTokens = opts.turnMetrics?.getOutputTokens?.() ?? outputTokens;
+        } catch {
+          // Token accounting is optional; latency recording must still finish.
+        }
+        metricsRecorder.endTurn(measuredTurn, {
+          inputTokens: opts.turnMetrics?.inputTokens ?? usageInputTokens,
+          outputTokens,
+        });
+      }
     }
   }
 }

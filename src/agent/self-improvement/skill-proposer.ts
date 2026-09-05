@@ -32,11 +32,12 @@ interface MinimalClient {
 }
 
 export function buildSkillDraftPrompt(scenario: SkillBenchmarkScenario): string {
+  const visible = scenario.visibleIncludes ?? scenario.expectIncludes;
   return [
     `Write a SKILL.md that gives you reusable guidance for this situation:`,
     `  ${scenario.query}`,
     ``,
-    `It MUST clearly cover these points (use these exact terms): ${JSON.stringify(scenario.expectIncludes)}.`,
+    `It MUST clearly cover these points (use these exact terms): ${JSON.stringify(visible)}.`,
     ``,
     `Format: a short markdown skill — a title line, a one-line "when to use", then`,
     `concrete steps/notes. Keep it focused. Do NOT include any instruction to ignore`,

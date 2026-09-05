@@ -34,7 +34,8 @@ function repoRoot(): string {
   }
 }
 
-function resolveBin(): string | null {
+/** On-disk binary only (no PATH fallback). Used by the Phase-4 auto-default. */
+export function resolveBuddyMemoryBin(): string | null {
   const env = process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
   if (env && existsSync(env)) return env;
   // Prefer the in-tree sidecar (like buddy-sense); fall back to a standalone ~/DEV checkout.
@@ -49,7 +50,11 @@ function resolveBin(): string | null {
       if (existsSync(p)) return p;
     }
   }
-  return 'buddy-memory'; // PATH; spawn error → unavailable (graceful)
+  return null;
+}
+
+function resolveBin(): string | null {
+  return resolveBuddyMemoryBin() ?? 'buddy-memory'; // PATH; spawn error → unavailable (graceful)
 }
 
 export interface BuddyMemoryClientOptions {
@@ -101,6 +106,8 @@ export class BuddyMemoryClient {
       logger.debug(`[buddy-memory] process error: ${msg(err)}`);
       this.fail();
     });
+    this.child.stdin.on('error', () => this.fail());
+    this.child.stdout.on('error', () => this.fail());
     this.child.on('exit', () => this.fail());
     this.rl = createInterface({ input: this.child.stdout });
     this.rl.on('line', (line) => this.onLine(line));

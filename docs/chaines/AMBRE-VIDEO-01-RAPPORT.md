@@ -9,13 +9,13 @@ Rendu le 1er août 2026 selon
 Le master final est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4
 ```
 
 Son sidecar est placé à côté :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4.meta.json
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v01.mp4.meta.json
 ```
 
 SHA-256 du master :
@@ -27,12 +27,12 @@ publication.
 ## Re-scoring des douze plans du chalet
 
 Le re-scoring a été exécuté avant montage avec
-`scripts/darkstar/score-arcface-images.py`. Le script n’accepte qu’un fichier de
+`scripts/gpuNode/score-arcface-images.py`. Le script n’accepte qu’un fichier de
 référence, pas un dossier. La référence utilisée est donc l’image canonique V3
 du kit, et jamais un composite généré :
 
 ```text
-/home/patrice/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
+~/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
 ```
 
 Son SHA-256 est

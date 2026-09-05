@@ -8,13 +8,13 @@ Rendu et revu le 1er août 2026 sur la branche
 Le master livré est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v02.mp4
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v02.mp4
 ```
 
 Son sidecar reproductible est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v02.mp4.meta.json
+~/.codebuddy/media-video/ambre-chalet-automne/ambre-chalet-automne-v02.mp4.meta.json
 ```
 
 Le master mesure 34 709 653 octets. Son SHA-256 est
@@ -76,7 +76,7 @@ Chaque vidéo a été inspectée à 0,5 s, 2,5 s et 5,5 s. Les 91 bandes de troi
 images et les dix planches d’inventaire sont conservées hors dépôt dans :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/qc-v02/broll-library/
+~/.codebuddy/media-video/ambre-chalet-automne/qc-v02/broll-library/
 ```
 
 Quatre fichiers seulement passent le critère sémantique :
@@ -144,7 +144,7 @@ Les 21 autres sont écartées :
 - **continuité architecturale, lumineuse ou narrative insuffisante — 5 :**
   `ambre-002`, `ambre-015`, `ambre-016`, `ambre-021`, `ambre-038`.
 
-Deux essais de décor ont été calculés sur Darkstar, sans interrompre ni tuer de
+Deux essais de décor ont été calculés sur GPU node, sans interrompre ni tuer de
 processus. L’un contenait Ambre et n’était donc pas un B-roll ; l’autre était
 une variante trop lisse et redondante du salon déjà disponible. Aucun média
 nouvellement généré n’est monté dans le master : les plaques exactes donnent un
@@ -195,7 +195,7 @@ conservé par exception.
 La planche finale est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-chalet-automne/qc-v02/contact/final-v02-31.jpg
+~/.codebuddy/media-video/ambre-chalet-automne/qc-v02/contact/final-v02-31.jpg
 ```
 
 Son SHA-256 est
@@ -334,16 +334,16 @@ plan 11/13 devait être reconstruit, la commande déterministe utilisée est :
 
 ```bash
 /tmp/codebuddy-visual-gate-20260801/bin/python3 \
-  scripts/darkstar/restore-canonical-face.py \
-  --source /home/patrice/.codebuddy/personas/ambre/wardrobe-automne/ambre-velours-cognac-echarpe.png \
-  --composite /home/patrice/Videos/personas/ambre-scenes/automne-composites/ambre-024-salon-cocooning-velours.png \
-  --output /home/patrice/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct.png \
-  --report /home/patrice/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct.json \
-  --edit-mask /home/patrice/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct-mask.png
+  scripts/gpuNode/restore-canonical-face.py \
+  --source ~/.codebuddy/personas/ambre/wardrobe-automne/ambre-velours-cognac-echarpe.png \
+  --composite ~/Videos/personas/ambre-scenes/automne-composites/ambre-024-salon-cocooning-velours.png \
+  --output ~/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct.png \
+  --report ~/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct.json \
+  --edit-mask ~/.codebuddy/media-video/ambre-chalet-automne/assets-v02/persona/ambre-024-face-protected-direct-mask.png
 ```
 
 Les six sources uniques sont ensuite scorées contre l’unique référence V3 avec
-`scripts/darkstar/score-arcface-images.py`; le JSON obtenu est conservé dans
+`scripts/gpuNode/score-arcface-images.py`; le JSON obtenu est conservé dans
 `qc-v02/arcface/ambre-v3-preview-v02.json`. Le rendu complet et toutes ses
 portes sont relancés par :
 

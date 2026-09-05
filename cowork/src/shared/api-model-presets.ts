@@ -207,10 +207,13 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     name: 'Groq',
     baseUrl: 'https://api.groq.com/openai/v1',
     models: [
-      { id: 'llama-3.3-70b-versatile', name: 'llama-3.3-70b-versatile' },
-      { id: 'llama-3.1-8b-instant', name: 'llama-3.1-8b-instant' },
-      { id: 'deepseek-r1-distill-llama-70b', name: 'deepseek-r1-distill-llama-70b' },
-      { id: 'qwen-2.5-32b', name: 'qwen-2.5-32b' },
+      { id: 'qwen/qwen3.8-27b', name: 'qwen/qwen3.8-27b' },
+      { id: 'openai/gpt-oss-120b', name: 'openai/gpt-oss-120b' },
+      { id: 'openai/gpt-oss-20b', name: 'openai/gpt-oss-20b' },
+      { id: 'qwen/qwen3.6-27b', name: 'qwen/qwen3.6-27b' },
+      { id: 'groq/compound', name: 'groq/compound' },
+      { id: 'groq/compound-mini', name: 'groq/compound-mini' },
+      { id: 'whisper-large-v3', name: 'whisper-large-v3' },
     ],
     keyPlaceholder: 'gsk_...',
     keyHint: 'Get it from console.groq.com/keys.',
@@ -343,7 +346,7 @@ export function getModelInputGuidance(
 
   const openAiCompatPlaceholders: Partial<Record<SharedProviderType, string>> = {
     grok: 'grok-3-latest, grok-3, grok-3-mini',
-    groq: 'llama-3.3-70b-versatile, deepseek-r1-distill-llama-70b',
+    groq: 'qwen/qwen3.8-27b, openai/gpt-oss-120b',
     together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo, deepseek-ai/DeepSeek-R1',
     fireworks: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
     vllm: 'model (your served model id)',

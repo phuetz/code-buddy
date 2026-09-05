@@ -10,9 +10,14 @@ function numberOption(value: string): number {
   return parsed;
 }
 
-function currentForge(): { forge: CounterfactualForge; graph: ReturnType<typeof buildIntentGraph> } {
+const NO_DURABLE_INTENT = 'No durable intent. Start one with buddy loop "<goal>" first.';
+
+function currentForge(command: Command): { forge: CounterfactualForge; graph: ReturnType<typeof buildIntentGraph> } {
   const state = getGoalManager().state;
-  if (!state) throw new Error('No durable intent. Start one with buddy loop "<goal>" first.');
+  if (!state) {
+    command.error(NO_DURABLE_INTENT);
+  }
+  if (!state) throw new Error(NO_DURABLE_INTENT);
   return { forge: new CounterfactualForge(state.goalId), graph: buildIntentGraph(state) };
 }
 
@@ -36,8 +41,8 @@ export function createForgeCommand(): Command {
     .requiredOption('--hypothesis <text>', 'What this branch expects to improve')
     .requiredOption('--strategy <text>', 'Execution strategy to test')
     .option('--parent <branchId>', 'Parent branch lineage')
-    .action((label: string, options: { hypothesis: string; strategy: string; parent?: string }) => {
-      const { forge, graph } = currentForge();
+    .action((label: string, options: { hypothesis: string; strategy: string; parent?: string }, command: Command) => {
+      const { forge, graph } = currentForge(command);
       const branch = forge.create(graph, {
         label,
         hypothesis: options.hypothesis,
@@ -62,8 +67,8 @@ export function createForgeCommand(): Command {
       latencyMs?: number;
       costUsd?: number;
       regression?: string[];
-    }) => {
-      const { forge, graph } = currentForge();
+    }, command: Command) => {
+      const { forge, graph } = currentForge(command);
       const proofs = new ProofLedger(graph.goalId).list(1000);
       const branch = forge.evaluate(branchId, {
         graph,
@@ -81,8 +86,8 @@ export function createForgeCommand(): Command {
     .command('compare')
     .description('Rank every counterfactual branch')
     .option('--json', 'Print structured JSON')
-    .action((options: { json?: boolean }) => {
-      const { forge } = currentForge();
+    .action((options: { json?: boolean }, command: Command) => {
+      const { forge } = currentForge(command);
       const branches = forge.list().sort(
         (left, right) => (right.metrics?.score ?? -1) - (left.metrics?.score ?? -1),
       );
@@ -95,10 +100,13 @@ export function createForgeCommand(): Command {
     .command('select')
     .description('Select an eligible winner; omit id to choose the best score')
     .argument('[branchId]')
-    .action((branchId?: string) => {
-      const { forge } = currentForge();
+    .action((branchId: string | undefined, _options: unknown, command: Command) => {
+      const { forge } = currentForge(command);
       const winner = forge.select(branchId);
-      if (!winner) throw new Error('No eligible branch. Full criterion proof coverage is required.');
+      if (!winner) {
+        command.error('No eligible branch. Full criterion proof coverage is required.');
+        return;
+      }
       console.log(`Selected ${formatBranch(winner)}`);
     });
 

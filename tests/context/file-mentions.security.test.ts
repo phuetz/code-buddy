@@ -58,7 +58,9 @@ describe('file mentions — security audit', () => {
   it('does not expand ~ : @~/.ssh/id_rsa is a literal in-project path, never the home directory', async () => {
     const missing = await resolveFileMentions('Use @~/.ssh/id_rsa', { projectRoot });
     expect(missing.files).toEqual([]);
-    expect(missing.issues).toEqual([]);
+    expect(missing.issues).toEqual([
+      expect.objectContaining({ reason: 'not-found', path: '~/.ssh/id_rsa' }),
+    ]);
 
     // A directory literally named "~" inside the project is what gets resolved.
     await mkdir(path.join(projectRoot, '~', '.ssh'), { recursive: true });
@@ -74,7 +76,9 @@ describe('file mentions — security audit', () => {
       projectRoot,
     });
     expect(encodedTraversal.files).toEqual([]);
-    expect(encodedTraversal.issues).toEqual([]);
+    expect(encodedTraversal.issues).toEqual([
+      expect.objectContaining({ reason: 'not-found' }),
+    ]);
 
     await mkdir(path.join(projectRoot, '%2e%2e'), { recursive: true });
     await writeFile(path.join(projectRoot, '%2e%2e', 'note.txt'), 'literal percent dir\n');

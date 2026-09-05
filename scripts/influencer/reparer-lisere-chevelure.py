@@ -60,7 +60,7 @@ La largeur de transition n'a été dégradée sur aucune image : 5→5, 7→8, 7
 ## Le matte
 
 `--mattes DIR` doit contenir `<nom-du-fichier>-alpha.png`, produit par BiRefNet
-`Matting-HR` (nœuds `ComfyUI_BiRefNet_ll` du ComfyUI de darkstar). Sans matte
+`Matting-HR` (nœuds `ComfyUI_BiRefNet_ll` du ComfyUI de gpuNode). Sans matte
 fiable il n'y a pas de réparation possible : l'outil refuse plutôt que de
 deviner.
 """

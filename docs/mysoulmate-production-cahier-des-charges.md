@@ -10,7 +10,7 @@ Bâtir un **écosystème de contenu média haut de gamme** — chaînes d'influe
 (Shorts) + bandes-annonces de romans (cinéma) — pour **financer le robot**. Qualité
 **« sans concession »**. Deux moteurs complémentaires :
 
-- **Local (darkstar 2×3090)** — LoRA d'identité stricte, **$0, illimité, sans urgence**.
+- **Local (gpuNode 2×3090)** — LoRA d'identité stricte, **$0, illimité, sans urgence**.
 - **Google Flow / Veo (Ultra)** — **audio natif + cohérence personnage**, crédits qui
   **expirent le 28/07** → à prioriser sur ce que le local ne fait PAS.
 

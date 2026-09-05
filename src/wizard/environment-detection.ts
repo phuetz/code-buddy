@@ -12,6 +12,15 @@
 
 export type CapabilityKind = 'local' | 'oauth' | 'api-key';
 
+/** Metadata returned by Ollama `/api/tags`, retained for safe local-model selection. */
+export interface OllamaModelCandidate {
+  name: string;
+  sizeBytes?: number;
+  family?: string;
+  parameterSize?: string;
+  quantizationLevel?: string;
+}
+
 export interface DetectedCapability {
   /** Stable id used by the wizard / try command. */
   id: string;
@@ -26,6 +35,8 @@ export interface DetectedCapability {
   detail: string;
   /** Installed/served models, when the probe returned them. */
   models?: string[];
+  /** Ollama model metadata, when the local runtime returned it. */
+  modelDetails?: OllamaModelCandidate[];
   /** OpenAI-compatible base URL, for local runtimes. */
   baseURL?: string;
   /** Command that finishes setup for this capability (login / pull / etc.). */
@@ -64,7 +75,18 @@ function normalizeHost(raw: string): string {
 /** Probe a local Ollama runtime (respects OLLAMA_HOST when set). */
 export async function detectOllama(): Promise<DetectedCapability> {
   const host = normalizeHost(process.env.OLLAMA_HOST || OLLAMA_DEFAULT_HOST);
-  const body = (await fetchJson(`${host}/api/tags`)) as { models?: { name: string }[] } | null;
+  const body = (await fetchJson(`${host}/api/tags`)) as {
+    models?: Array<{
+      name: string;
+      model?: string;
+      size?: number;
+      details?: {
+        family?: string;
+        parameter_size?: string;
+        quantization_level?: string;
+      };
+    }>;
+  } | null;
   const base: DetectedCapability = {
     id: 'ollama',
     label: 'Ollama (local, $0)',
@@ -76,11 +98,29 @@ export async function detectOllama(): Promise<DetectedCapability> {
     setupCommand: 'ollama serve',
   };
   if (!body) return base;
-  const models = (body.models ?? []).map((m) => m.name).filter(Boolean);
+  const modelDetails = (body.models ?? [])
+    .map((model): OllamaModelCandidate | null => {
+      const name = model.name || model.model || '';
+      if (!name) return null;
+      return {
+        name,
+        ...(typeof model.size === 'number' && Number.isFinite(model.size) && model.size > 0
+          ? { sizeBytes: model.size }
+          : {}),
+        ...(model.details?.family ? { family: model.details.family } : {}),
+        ...(model.details?.parameter_size ? { parameterSize: model.details.parameter_size } : {}),
+        ...(model.details?.quantization_level
+          ? { quantizationLevel: model.details.quantization_level }
+          : {}),
+      };
+    })
+    .filter((model): model is OllamaModelCandidate => model !== null);
+  const models = modelDetails.map((model) => model.name);
   return {
     ...base,
     available: true,
     models,
+    modelDetails,
     detail: models.length
       ? `running · ${models.length} model${models.length === 1 ? '' : 's'}`
       : 'running · no model pulled yet (run: ollama pull qwen2.5-coder:7b)',

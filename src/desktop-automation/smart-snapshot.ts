@@ -713,9 +713,18 @@ export class SmartSnapshotManager extends EventEmitter {
         elements.push(this.createMockElement(name, this.nextRef++));
       }
     } catch (error) {
-      logger.debug('macOS accessibility detection failed', { error });
-      // Return mock elements for testing
-      elements.push(...this.getMockElements());
+      // NE JAMAIS fabriquer un bureau. Sans session Aqua, sans autorisation
+      // d'accessibilité ou hors GUI (un runner CI, une session ssh), osascript
+      // échoue — et le repli sur getMockElements() rendait cinq éléments
+      // INVENTÉS (« OK », « Cancel », « Search »…) présentés comme un vrai
+      // instantané. Le modèle recevait alors un bureau imaginaire et pouvait
+      // cliquer à des coordonnées fictives. Le contrat est le même que celui
+      // déjà tenu côté Linux sans DISPLAY : un no-op HONNÊTE, liste vide.
+      logger.warn(
+        'macOS accessibility enumeration unavailable (no Aqua session, missing permission, or headless): ' +
+          'returning an empty snapshot (honest no-op, never a fabricated desktop)',
+        { error },
+      );
     }
 
     return elements;
@@ -970,6 +979,13 @@ if ($focused) {
    */
   private async detectLinuxATSPIElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
+
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      logger.warn(
+        'AT-SPI skipped: no DISPLAY/WAYLAND_DISPLAY (honest no-op, not a session scrape)',
+      );
+      return elements;
+    }
 
     const python = this.resolveAtspiPython();
     if (!python) {
@@ -1447,6 +1463,9 @@ if ($focused) {
           return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
         }
       } else if (process.platform === 'linux') {
+        if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+          return { width: 1920, height: 1080 };
+        }
         try {
           const output = execSync(`xdpyinfo | grep dimensions`, { encoding: 'utf-8' });
           const match = output.match(/(\d+)x(\d+)/);

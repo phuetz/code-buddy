@@ -10,9 +10,9 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { execFileSync } from 'child_process';
 import { mkdtemp, rm, mkdir, readFile } from 'fs/promises';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 import {
   extractYoutubeVideoId,
@@ -58,7 +58,7 @@ function hasBinary(bin: string): boolean {
 const FFMPEG = hasBinary('ffmpeg') && hasBinary('ffprobe');
 
 /** A fake child process that emits a close/error after the current tick. */
-function makeFakeChild(opts: { code?: number | null; error?: Error; stdout?: string; stderr?: string }): EventEmitter & {
+function makeFakeChild(opts: { code?: number | null; error?: Error; stdout?: string; stderr?: string; artifactPath?: string }): EventEmitter & {
   stdout: EventEmitter;
   stderr: EventEmitter;
   kill: () => void;
@@ -68,12 +68,21 @@ function makeFakeChild(opts: { code?: number | null; error?: Error; stdout?: str
   child.stderr = new EventEmitter();
   child.kill = () => {};
   setImmediate(() => {
+    if (opts.artifactPath) {
+      mkdirSync(dirname(opts.artifactPath), { recursive: true });
+      writeFileSync(opts.artifactPath, 'fake media');
+    }
     if (opts.stdout) child.stdout.emit('data', Buffer.from(opts.stdout));
     if (opts.stderr) child.stderr.emit('data', Buffer.from(opts.stderr));
     if (opts.error) child.emit('error', opts.error);
     else child.emit('close', opts.code ?? 0);
   });
   return child;
+}
+
+function outputFromYtdlpArgs(args: string[]): string {
+  const template = args[args.indexOf('-o') + 1]!;
+  return template.replace('%(ext)s', args.includes('--recode-video') ? 'mp4' : 'wav');
 }
 
 // ---------------------------------------------------------------------------
@@ -187,8 +196,11 @@ describe('media-fetch', () => {
   });
 
   it('downloadAudioWav spawns yt-dlp with the correct command and resolves the wav path', async () => {
-    const spawnSpy = vi.fn(() => makeFakeChild({ code: 0 }));
-    const result = await downloadAudioWav('https://youtu.be/x', '/out', {
+    const outDir = await mkdtemp(join(process.cwd(), '.video-fetch-audio-'));
+    const spawnSpy = vi.fn((_cmd: string, args: string[]) =>
+      makeFakeChild({ code: 0, stdout: '', stderr: '', artifactPath: outputFromYtdlpArgs(args) }),
+    );
+    const result = await downloadAudioWav('https://youtu.be/x', outDir, {
       env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
       existsSync: (p) => p === '/opt/yt-dlp',
       which: () => null,
@@ -205,9 +217,34 @@ describe('media-fetch', () => {
     expect(isDownloadOk(result)).toBe(true);
     if (isDownloadOk(result)) {
       // path.join spelling: native separators on Windows.
-      expect(result.wavPath.startsWith(join('/out', 'ytdl-audio-'))).toBe(true);
+      expect(result.wavPath.startsWith(join(outDir, 'ytdl-audio-'))).toBe(true);
       expect(result.wavPath.endsWith('.wav')).toBe(true);
     }
+    await rm(outDir, { recursive: true, force: true });
+  });
+
+  it('rejects close(0) when yt-dlp did not create the expected WAV', async () => {
+    const spawnSpy = vi.fn(() => makeFakeChild({ code: 0 }));
+    const result = await downloadAudioWav('https://youtu.be/x', '/out', {
+      env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
+      existsSync: (p) => p === '/opt/yt-dlp',
+      which: () => null,
+      spawn: spawnSpy as never,
+    });
+    expect(isDownloadOk(result)).toBe(false);
+    if (!isDownloadOk(result)) expect(result.error).toMatch(/did not create|artifact|wav/i);
+  });
+
+  it('rejects close(0) when yt-dlp did not create the expected MP4', async () => {
+    const spawnSpy = vi.fn(() => makeFakeChild({ code: 0 }));
+    const result = await downloadVideoFile('https://youtu.be/x', '/out', {
+      env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
+      existsSync: (p) => p === '/opt/yt-dlp',
+      which: () => null,
+      spawn: spawnSpy as never,
+    });
+    expect(isVideoDownloadOk(result)).toBe(false);
+    if (!isVideoDownloadOk(result)) expect(result.error).toMatch(/did not create|artifact|mp4/i);
   });
 
   it('downloadAudioWav returns an error on non-zero exit (never throws)', async () => {
@@ -258,12 +295,13 @@ describe('media-fetch YouTube player-client fallbacks', () => {
   });
 
   it('retries the video download with player_client=android after a 403', async () => {
-    const spawnSpy = vi.fn(() =>
+    const outDir = await mkdtemp(join(process.cwd(), '.video-fetch-video-'));
+    const spawnSpy = vi.fn((_cmd: string, args: string[]) =>
       spawnSpy.mock.calls.length === 1
         ? makeFakeChild({ code: 1, stderr: 'ERROR: unable to download video data: HTTP Error 403: Forbidden' })
-        : makeFakeChild({ code: 0 }),
+        : makeFakeChild({ code: 0, artifactPath: outputFromYtdlpArgs(args) }),
     );
-    const result = await downloadVideoFile('https://youtu.be/x', '/out', {
+    const result = await downloadVideoFile('https://youtu.be/x', outDir, {
       env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
       existsSync: (p) => p === '/opt/yt-dlp',
       which: () => null,
@@ -275,6 +313,7 @@ describe('media-fetch YouTube player-client fallbacks', () => {
     expect(firstArgs).not.toContain('--extractor-args');
     expect(secondArgs[secondArgs.indexOf('--extractor-args') + 1]).toBe('youtube:player_client=android');
     expect(isVideoDownloadOk(result)).toBe(true);
+    await rm(outDir, { recursive: true, force: true });
   });
 
   it('does not retry a genuine failure', async () => {

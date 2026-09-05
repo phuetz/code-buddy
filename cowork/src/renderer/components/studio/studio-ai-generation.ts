@@ -14,6 +14,18 @@ import { findDesignSystem } from './design-systems-catalog.js';
 import { findStack } from './generation-stacks.js';
 import { APP_STUDIO_PLAN_PROMPT_MARKER } from './dev-plan.js';
 
+export const APP_STUDIO_DESIGN_GUIDE = `CONTRAT DE DESIGN — exécute chaque règle :
+- Direction et palette : définis une palette tirée du sujet (ou du système de design explicitement choisi), avec 3 à 5 couleurs sémantiques en variables CSS ; aucun choix générique par défaut.
+- Typographie : choisis deux familles de polices distinctes et donne un seul rôle à chacune — display/titres pour la première, corps/interface pour la seconde. Déclare les fallbacks. Inter par défaut est interdit.
+- Hiérarchie typographique : rends display, h1, h2, corps et légende visiblement distincts par taille, graisse, interlignage et espacement ; la page doit rester lisible au premier balayage.
+- Contraste vérifié : respecte WCAG AA (4.5:1 pour le texte courant, 3:1 pour grand texte et composants) et vérifie les états normal, hover, focus et disabled.
+- Livre les thèmes clair ET sombre, cohérents et complets, avec préférence système et bascule utilisable ; ne simule pas le sombre par un filtre d'inversion.
+- Interdits nommés : aucun dégradé violet sur fond blanc, ne pas tout centrer, pas de coins arrondis sur tous les éléments, aucun emoji comme puce ou icône. Utilise alignements, bordures, rayons et SVG avec intention.`;
+
+export const APP_STUDIO_COMPONENT_CATALOG_GUIDE = `CATALOGUE DE COMPOSANTS (optionnel, réseau seulement) :
+- Pour un composant React/Tailwind important, tu peux consulter le catalogue public https://21st.dev/community/components avec \`web_search\` (charge-le via \`tool_search("web_search")\` s'il est absent), puis adapter l'idée et le code aux jetons locaux.
+- Ne bloque jamais la génération sur 21st.dev, n'exige ni compte, ni clé, ni CLI, et n'ajoute aucune dépendance uniquement pour consulter le catalogue. Si le réseau, la recherche ou le composant est indisponible, continue immédiatement avec les primitives locales.`;
+
 export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   const stack = findStack(req.stack)!;
   const lines: string[] = [];
@@ -87,14 +99,8 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   );
   lines.push(`- ${stack.guidance}`);
   lines.push(`- Preview : ${stack.previewNote}`);
-  lines.push(
-    "- DESIGN OBLIGATOIRE : l'app doit être VISUELLEMENT SOIGNÉE et MODERNE, jamais du HTML brut sans style. " +
-      'Écris un CSS conséquent : palette de couleurs cohérente (pas les blancs/noirs par défaut du navigateur), ' +
-      'typographie hiérarchisée (titres et corps, tailles et interlignage lisibles), mise en page RESPONSIVE ' +
-      '(flexbox/grid, mobile-first), espacements généreux, boutons et cartes stylés, états `:hover` et transitions ' +
-      "douces. Vise la qualité d'une landing page professionnelle. Si un système de design est fourni ci-dessus, " +
-      'respecte-le fidèlement ; sinon choisis une direction élégante et applique-la partout dans l\'interface.',
-  );
+  lines.push(APP_STUDIO_DESIGN_GUIDE);
+  if (stack.id === 'react-vite') lines.push(APP_STUDIO_COMPONENT_CATALOG_GUIDE);
   lines.push("- Termine par un court résumé de ce que tu as créé et comment ouvrir l'app (ouvrir index.html).");
 
   return lines.join('\n');

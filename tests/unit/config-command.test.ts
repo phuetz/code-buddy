@@ -169,6 +169,7 @@ jest.mock('../../src/codebuddy/tools', () => ({
     { function: { name: 'file_viewer' } },
     { function: { name: 'git_status' } },
   ]),
+  initializeMCPServers: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock interactive setup
@@ -208,8 +209,12 @@ describe('Theme Handler', () => {
       mockGetCurrentTheme.mockReturnValue({ id: 'dark', name: 'Dark' });
 
       const result = handleTheme([]);
+      const content = result.entry?.content ?? '';
 
       expect(mockGetCurrentTheme).toHaveBeenCalled();
+      expect(content).toContain('▶ Dark');
+      expect(content).not.toMatch(/▶ Default/);
+      expect(content).not.toMatch(/▶ Neon/);
     });
 
     it('should set theme when valid theme name provided', () => {
@@ -754,6 +759,17 @@ describe('Compact Handler', () => {
 
 describe('Tools Handler', () => {
   describe('handleTools', () => {
+    const previousDisableMcp = process.env.CODEBUDDY_DISABLE_MCP;
+
+    beforeEach(() => {
+      process.env.CODEBUDDY_DISABLE_MCP = 'true';
+    });
+
+    afterEach(() => {
+      if (previousDisableMcp === undefined) delete process.env.CODEBUDDY_DISABLE_MCP;
+      else process.env.CODEBUDDY_DISABLE_MCP = previousDisableMcp;
+    });
+
     it('should list tools when no action provided', async () => {
       const result = await handleTools([]);
 
@@ -835,7 +851,7 @@ describe('Vim Mode Handler', () => {
     it('should toggle with "toggle" action', async () => {
       process.env.GROK_VIM_MODE = 'false';
 
-      const result = await handleVimMode(['toggle']);
+      await handleVimMode(['toggle']);
 
       expect(process.env.GROK_VIM_MODE).toBe('true');
     });
@@ -879,12 +895,12 @@ describe('Edge Cases and Error Handling', () => {
   });
 
   it('should parse numeric arguments correctly', () => {
-    const result = handleCost(['budget', '10.50']);
+    handleCost(['budget', '10.50']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(10.50);
   });
 
   it('should handle invalid numeric arguments', () => {
-    const result = handleCost(['budget', 'invalid']);
+    handleCost(['budget', 'invalid']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(NaN);
   });
 });
