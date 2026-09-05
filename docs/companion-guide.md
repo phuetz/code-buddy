@@ -524,7 +524,10 @@ modèle payant. Tout le reste reste une **suggestion**, pas une action.
 ### 🛠️ Être administré
 Tu pilotes mes rappels et mes **règles déclenchables** (event → action) en CLI (`buddy remind`, `buddy rules`)
 ou dans le panneau **Automatisations** de Cowork. Les règles se **rechargent à chaud** (pas de redémarrage).
-`sensory-rules-engine.ts`, `reminders.ts`.
+Je surveille aussi mes ressources et l'heure **par battements** (pas de boucle) : un processus emballé,
+un disque plein ou une heure donnée deviennent des percepts qu'une règle peut traiter — voir
+`docs/surveillance-evenementielle.md`.
+`sensory-rules-engine.ts`, `system-vitals-emitter.ts`, `schedule-emitter.ts`, `rule-templates.ts`, `reminders.ts`.
 
 ### 🛰️ Collaborer avec mes autres machines (Fleet)
 Plusieurs Code Buddy sur ton réseau peuvent réfléchir ensemble : `buddy council --fleet` pose une question à
