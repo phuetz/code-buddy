@@ -16,41 +16,41 @@ Pour chaque allégation : test qui construit le cas → exécution Vitest → si
 
 | # | Allégation | Statut | Preuve | SHA correctif |
 |---|------------|--------|--------|---------------|
-| 1.1 | Homoglyphes grecs (α → a) contourne `deobfuscateForScan` + `scanSkillFirewall` | **PROUVÉE** | test rouge (`allow` sur `ιgnοrε αll ρrεvιοus…`) → vert après table d'homoglyphes (avant+après NFKC : ϲ lunaire sinon → `instrustions`) | *(commit point 1)* |
-| 1.2 | Homoglyphes latin étendu (ă → a) | **PROUVÉE** | test rouge → vert ; NFKD + suppression `\p{Mn}` (ă → a) | *(commit point 1)* |
-| 1.3 | Contrôles bidi LRO/RLO | **PROUVÉE** | test rouge (`ig`+U+202E+`nore`) → vert ; strip `\p{Cf}` | *(commit point 1)* |
-| 1.4 | Contrôles bidi RLI / isolates | **PROUVÉE** | test rouge (`ig`+U+2067+`nore`) → vert ; strip `\p{Cf}` | *(commit point 1)* |
-| 1.5 | URL-encoding `%XX` | **PROUVÉE** | test rouge (phrase entièrement `%XX`, sans le mot `ignore` en clair) → vert ; un seul `decodeURIComponent` borné | *(commit point 1)* |
-| 1.6 | Base64 de blobs ≥16 chars | **PROUVÉE** | test rouge (blob standard ≥16) → vert ; alphabet strict, un niveau, taille bornée, ASCII imprimable | *(commit point 1)* |
+| 1.1 | Homoglyphes grecs (α → a) contourne `deobfuscateForScan` + `scanSkillFirewall` | **PROUVÉE** | test rouge (`allow` sur `ιgnοrε αll ρrεvιοus…`) → vert après table d'homoglyphes (avant+après NFKC : ϲ lunaire sinon → `instrustions`) | `a14d8012b` |
+| 1.2 | Homoglyphes latin étendu (ă → a) | **PROUVÉE** | test rouge → vert ; NFKD + suppression `\p{Mn}` (ă → a) | `a14d8012b` |
+| 1.3 | Contrôles bidi LRO/RLO | **PROUVÉE** | test rouge (`ig`+U+202E+`nore`) → vert ; strip `\p{Cf}` | `a14d8012b` |
+| 1.4 | Contrôles bidi RLI / isolates | **PROUVÉE** | test rouge (`ig`+U+2067+`nore`) → vert ; strip `\p{Cf}` | `a14d8012b` |
+| 1.5 | URL-encoding `%XX` | **PROUVÉE** | test rouge (phrase entièrement `%XX`, sans le mot `ignore` en clair) → vert ; un seul `decodeURIComponent` borné | `a14d8012b` |
+| 1.6 | Base64 de blobs ≥16 chars | **PROUVÉE** | test rouge (blob standard ≥16) → vert ; alphabet strict, un niveau, taille bornée, ASCII imprimable | `a14d8012b` |
 | 1.7 | Fullwidth NFKC (`ＩＮＪＥＣＴ`) | **DÉMENTIE** | test vert d'emblée : `deobfuscateText` faisait déjà `.normalize('NFKC')` | — |
 | 1.8 | Non-régression : 3 skills légitimes (grec / URL encodée) non bloqués | **OK** | `web-search` / `git-commit` / `weather` + skill construit (coefficient α + `hello%20world`) : pas `quarantine` | — |
-| 2.1 | `~/.config/gh/hosts.yml` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
-| 2.2 | `application_default_credentials.json` / gcloud | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
-| 2.3 | `~/.azure` | **PROUVÉE** | test rouge → vert ; `foo.azure.com` non bloqué | *(commit point 2)* |
-| 2.4 | `.terraformrc` / `credentials.tfrc.json` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
-| 2.5 | `~/.npmrc` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
-| 2.6 | `~/.cargo/credentials` | **PROUVÉE** | test rouge → vert (y compris `.toml`) | *(commit point 2)* |
+| 2.1 | `~/.config/gh/hosts.yml` | **PROUVÉE** | test rouge → vert | `baa21afbc` |
+| 2.2 | `application_default_credentials.json` / gcloud | **PROUVÉE** | test rouge → vert | `baa21afbc` |
+| 2.3 | `~/.azure` | **PROUVÉE** | test rouge → vert ; `foo.azure.com` non bloqué | `baa21afbc` |
+| 2.4 | `.terraformrc` / `credentials.tfrc.json` | **PROUVÉE** | test rouge → vert | `baa21afbc` |
+| 2.5 | `~/.npmrc` | **PROUVÉE** | test rouge → vert | `baa21afbc` |
+| 2.6 | `~/.cargo/credentials` | **PROUVÉE** | test rouge → vert (y compris `.toml`) | `baa21afbc` |
 | 2.7 | `~/.docker/config.json` | **DÉMENTIE** | déjà couvert par `\.docker\/config` | — |
 | 2.8 | `~/.kube/config` | **DÉMENTIE** | déjà dans le motif | — |
 | 2.9 | `~/.netrc` | **DÉMENTIE** | déjà dans le motif | — |
-| 2.10 | `~/.pypirc` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
-| 2.11 | `~/.git-credentials` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
+| 2.10 | `~/.pypirc` | **PROUVÉE** | test rouge → vert | `baa21afbc` |
+| 2.11 | `~/.git-credentials` | **PROUVÉE** | test rouge → vert | `baa21afbc` |
 | 2.12 | `.env.*` | **DÉMENTIE** | `.env.local` et `.env.production` déjà bloqués | — |
 | 2.13 | Faux positifs `cat README.md` / `ls ~/.config` | **OK** | non bloqués avant et après | — |
-| 3.1 | Hugging Face `hf_…` | **PROUVÉE** | test rouge → vert ; `hf_home` non matché | *(commit point 3)* |
-| 3.2 | Azure (clé 32 hex / client secret générique) | **PROUVÉE** (forme `AccountKey=`) | motif `AccountKey=` 80+ ; une clé hex 32 sans préfixe est refusée (faux positifs) | *(commit point 3)* |
-| 3.3 | DigitalOcean `dop_v1_` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
-| 3.4 | Cloudflare (token 40+ sans préfixe) | **PROUVÉE** (forme `CF_API_TOKEN=`) | token nu 40 chars refusé (FP) ; assignment `CF_API_TOKEN` / `cloudflare_api_token` couvert | *(commit point 3)* |
+| 3.1 | Hugging Face `hf_…` | **PROUVÉE** | test rouge → vert ; `hf_home` non matché | `22f2934b3` |
+| 3.2 | Azure (clé 32 hex / client secret générique) | **PROUVÉE** (forme `AccountKey=`) | motif `AccountKey=` 80+ ; une clé hex 32 sans préfixe est refusée (faux positifs) | `22f2934b3` |
+| 3.3 | DigitalOcean `dop_v1_` | **PROUVÉE** | test rouge → vert | `22f2934b3` |
+| 3.4 | Cloudflare (token 40+ sans préfixe) | **PROUVÉE** (forme `CF_API_TOKEN=`) | token nu 40 chars refusé (FP) ; assignment `CF_API_TOKEN` / `cloudflare_api_token` couvert | `22f2934b3` |
 | 3.5 | GitLab `glpat-` | **DÉMENTIE** | déjà dans `SECRET_PATTERNS` | — |
 | 3.6 | Slack `xoxb-` | **DÉMENTIE** | déjà `xox[bpors]-` | — |
 | 3.7 | Stripe `sk_live_` | **DÉMENTIE** | déjà couvert | — |
-| 3.8 | SendGrid `SG.` | **PROUVÉE** | test rouge → vert (`SG.{22}.{43}`) | *(commit point 3)* |
-| 3.9 | Twilio `SK`/`AC` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
-| 3.10 | npm `npm_` | **PROUVÉE** | test rouge → vert ; `npm_package_name` non matché | *(commit point 3)* |
-| 3.11 | PyPI `pypi-` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
-| 3.12 | Vercel `vcp_`/`vci_`/`vca_`/`vcr_`/`vck_` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
-| 3.13 | Supabase `sb_secret_` | **PROUVÉE** | test rouge → vert (`sb_secret_` / `sb_publishable_`) | *(commit point 3)* |
-| 3.14 | MongoDB `mongodb+srv://` | **PROUVÉE** | le motif existant `mongodb://` ratait `+srv` | *(commit point 3)* |
+| 3.8 | SendGrid `SG.` | **PROUVÉE** | test rouge → vert (`SG.{22}.{43}`) | `22f2934b3` |
+| 3.9 | Twilio `SK`/`AC` | **PROUVÉE** | test rouge → vert | `22f2934b3` |
+| 3.10 | npm `npm_` | **PROUVÉE** | test rouge → vert ; `npm_package_name` non matché | `22f2934b3` |
+| 3.11 | PyPI `pypi-` | **PROUVÉE** | test rouge → vert | `22f2934b3` |
+| 3.12 | Vercel `vcp_`/`vci_`/`vca_`/`vcr_`/`vck_` | **PROUVÉE** | test rouge → vert | `22f2934b3` |
+| 3.13 | Supabase `sb_secret_` | **PROUVÉE** | test rouge → vert (`sb_secret_` / `sb_publishable_`) | `22f2934b3` |
+| 3.14 | MongoDB `mongodb+srv://` | **PROUVÉE** | le motif existant `mongodb://` ratait `+srv` | `22f2934b3` |
 | 3.15 | Faux positifs sur `src/**/*.ts` | **OK** | 0 hit des nouveaux motifs à préfixe sur le TypeScript sous `src/` | — |
 
 ## Point 1 — déobfuscation + pare-feu skills
@@ -93,8 +93,42 @@ Après correctif : **17/17** chasse + secrets-detector existant = **49/49**. ESL
 
 ## Preuves de commande
 
-*(à remplir)*
+```
+# avant tout correctif (HEAD 47f91b3b8, HOME=_qa/grok-secu/home)
+npx vitest run tests/security
+# Test Files  49 passed (49)
+# Tests       928 passed (928)
+
+# après les 3 points
+npx vitest run tests/security
+# Test Files  52 passed (52)
+# Tests       977 passed (977)
+
+npx tsc --noEmit -p tsconfig.json 2>&1 | tail -3
+# exit 0 (aucune erreur TypeScript ; seul l'avertissement Node NO_COLOR)
+
+npx eslint src/security/text-deobfuscation.ts src/security/skill-scanner.ts \
+  src/security/dangerous-patterns.ts src/security/secret-patterns.ts \
+  tests/security/chasse-secu-skill-obfuscation.test.ts \
+  tests/security/chasse-secu-credential-paths.test.ts \
+  tests/security/chasse-secu-secret-formats.test.ts --max-warnings=0
+# exit 0
+
+git diff --check
+# exit 0, aucune ligne
+```
+
+HOME Vitest : `_qa/grok-secu/home`. Fichiers de cas : `_qa/grok-secu/work/` (gitignoré). `PLAN.md` racine non touché (déjà non suivi). Aucun push. `~/code-buddy` et le vrai `~/.codebuddy` non ouverts.
 
 ## Bilan
 
-*(à remplir — 10 lignes, sans verdict)*
+1. Rapport créé avant inspection (`47f91b3b8`) ; HOME QA gitignoré ; zone `src/security/` + `tests/security/`.
+2. Point 1 : 6/7 contournements d'obfuscation **prouvés rouges** puis fermés dans `deobfuscateForScan` (`a14d8012b`) ; fullwidth NFKC **démenti** (déjà NFKC).
+3. Point 1 non-régression : 3 skills bundled + skill α/`%20` non mis en quarantaine.
+4. Point 2 : 9 chemins d'identifiants **prouvés manquants** et ajoutés (`baa21afbc`) ; docker/kube/netrc/`.env.*` **déjà couverts**.
+5. Point 2 faux positifs : `cat README.md`, `ls ~/.config`, `foo.azure.com` non bloqués.
+6. Point 3 : 12 formats **prouvés manquants** ajoutés (`22f2934b3`) ; glpat-/xoxb-/sk_live_ **déjà couverts**.
+7. Point 3 : token Cloudflare nu 40 chars et clé Azure hex 32 isolée **non ajoutés** (faux positifs) ; 0 hit des nouveaux motifs sur le TypeScript sous `src/`.
+8. `npx vitest run tests/security` : **49 fichiers / 928 tests** → **52 / 977**, tous verts.
+9. `npx tsc --noEmit -p tsconfig.json` exit 0 ; eslint ciblé `--max-warnings=0` exit 0 ; `git diff --check` exit 0.
+10. Reste ouvert : token Cloudflare sans préfixe, clé Azure hex isolée, Base64/`%XX` à un seul niveau (pas de chaînage mixte), confinement FS runtime authored (résidu C de l'audit Opus, hors périmètre).
