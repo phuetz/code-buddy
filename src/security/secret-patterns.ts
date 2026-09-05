@@ -13,6 +13,9 @@ export type SecretType =
   | 'slack_token' | 'stripe_key' | 'google_api_key' | 'jwt_secret'
   | 'private_key' | 'password_in_code' | 'connection_string'
   | 'anthropic_key' | 'openai_key' | 'xai_key'
+  | 'huggingface_token' | 'digitalocean_token' | 'sendgrid_key'
+  | 'npm_token' | 'pypi_token' | 'twilio_key' | 'vercel_token'
+  | 'supabase_key' | 'azure_key' | 'cloudflare_token'
   | 'generic_api_key' | 'generic_secret';
 
 export interface SecretPattern {
@@ -147,10 +150,91 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     description: 'Hardcoded password detected',
     suggestion: 'Use environment variable or secrets manager instead of hardcoding passwords',
   },
-  // Connection strings
+  // Hugging Face token — hf_… (≥20 body chars; short identifiers like hf_home do not match)
+  {
+    type: 'huggingface_token',
+    pattern: /(?<![A-Za-z0-9])hf_[A-Za-z0-9]{20,}/,
+    severity: 'critical',
+    description: 'Hugging Face API token detected',
+    suggestion: 'Use environment variable HF_TOKEN or HUGGING_FACE_HUB_TOKEN',
+  },
+  // DigitalOcean PAT — dop_v1_ + 64 hex
+  {
+    type: 'digitalocean_token',
+    pattern: /(?<![A-Za-z0-9])dop_v1_[a-fA-F0-9]{64}/,
+    severity: 'critical',
+    description: 'DigitalOcean personal access token detected',
+    suggestion: 'Use environment variable DIGITALOCEAN_ACCESS_TOKEN',
+  },
+  // SendGrid API key — SG.{22}.{43}
+  {
+    type: 'sendgrid_key',
+    pattern: /(?<![A-Za-z0-9])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/,
+    severity: 'critical',
+    description: 'SendGrid API key detected',
+    suggestion: 'Use environment variable SENDGRID_API_KEY',
+  },
+  // npm access token — npm_ + 36 alnum (underscored env vars like npm_package_name do not match)
+  {
+    type: 'npm_token',
+    pattern: /(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36}/,
+    severity: 'critical',
+    description: 'npm access token detected',
+    suggestion: 'Use environment variable NPM_TOKEN',
+  },
+  // PyPI API token
+  {
+    type: 'pypi_token',
+    pattern: /(?<![A-Za-z0-9])pypi-[A-Za-z0-9_-]{50,}/,
+    severity: 'critical',
+    description: 'PyPI API token detected',
+    suggestion: 'Use environment variable TWINE_PASSWORD or a secrets manager',
+  },
+  // Twilio API key SK… / Account SID AC… (32 hex)
+  {
+    type: 'twilio_key',
+    pattern: /(?<![A-Za-z0-9])(?:SK|AC)[0-9a-fA-F]{32}(?![0-9a-fA-F])/,
+    severity: 'critical',
+    description: 'Twilio API key or Account SID detected',
+    suggestion: 'Use environment variable TWILIO_AUTH_TOKEN / TWILIO_ACCOUNT_SID',
+  },
+  // Vercel prefixed tokens (vcp/vci/vca/vcr/vck)
+  {
+    type: 'vercel_token',
+    pattern: /(?<![A-Za-z0-9])vc[piark]_[A-Za-z0-9]{20,}/,
+    severity: 'critical',
+    description: 'Vercel API token detected',
+    suggestion: 'Use environment variable VERCEL_TOKEN',
+  },
+  // Supabase secret / publishable keys
+  {
+    type: 'supabase_key',
+    pattern: /(?<![A-Za-z0-9])sb_(?:secret|publishable)_[A-Za-z0-9_-]{20,}/,
+    severity: 'critical',
+    description: 'Supabase API key detected',
+    suggestion: 'Use environment variable SUPABASE_SECRET_KEY / SUPABASE_ANON_KEY',
+  },
+  // Azure Storage account key inside a connection string
+  {
+    type: 'azure_key',
+    pattern: /AccountKey=[A-Za-z0-9+/=]{80,}/,
+    severity: 'critical',
+    description: 'Azure Storage account key detected',
+    suggestion: 'Use environment variable AZURE_STORAGE_CONNECTION_STRING or a secrets manager',
+  },
+  // Cloudflare API token — only the distinctive assignment; a bare 40-char
+  // token has no prefix and would false-positive on ordinary source.
+  {
+    type: 'cloudflare_token',
+    pattern: /(?:CF_API_TOKEN|cloudflare[_-]?api[_-]?token)\s*[:=]\s*['"][A-Za-z0-9_-]{40,}['"]/i,
+    severity: 'critical',
+    description: 'Cloudflare API token detected',
+    suggestion: 'Use environment variable CLOUDFLARE_API_TOKEN',
+  },
+  // Connection strings (including mongodb+srv)
   {
     type: 'connection_string',
-    pattern: /(?:mysql|postgres|postgresql|mongodb|redis):\/\/[^\s'"]+/i,
+    pattern: /(?:mysql|postgres|postgresql|mongodb(?:\+srv)?|redis):\/\/[^\s'"]+/i,
     severity: 'high',
     description: 'Database connection string with potential credentials detected',
     suggestion: 'Use environment variable DATABASE_URL or a secrets manager',

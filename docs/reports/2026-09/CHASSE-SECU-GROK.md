@@ -37,7 +37,21 @@ Pour chaque allégation : test qui construit le cas → exécution Vitest → si
 | 2.11 | `~/.git-credentials` | **PROUVÉE** | test rouge → vert | *(commit point 2)* |
 | 2.12 | `.env.*` | **DÉMENTIE** | `.env.local` et `.env.production` déjà bloqués | — |
 | 2.13 | Faux positifs `cat README.md` / `ls ~/.config` | **OK** | non bloqués avant et après | — |
-| 3 | `secrets-detector` / `secret-patterns` : formats de jetons manquants | *(en cours)* | | |
+| 3.1 | Hugging Face `hf_…` | **PROUVÉE** | test rouge → vert ; `hf_home` non matché | *(commit point 3)* |
+| 3.2 | Azure (clé 32 hex / client secret générique) | **PROUVÉE** (forme `AccountKey=`) | motif `AccountKey=` 80+ ; une clé hex 32 sans préfixe est refusée (faux positifs) | *(commit point 3)* |
+| 3.3 | DigitalOcean `dop_v1_` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
+| 3.4 | Cloudflare (token 40+ sans préfixe) | **PROUVÉE** (forme `CF_API_TOKEN=`) | token nu 40 chars refusé (FP) ; assignment `CF_API_TOKEN` / `cloudflare_api_token` couvert | *(commit point 3)* |
+| 3.5 | GitLab `glpat-` | **DÉMENTIE** | déjà dans `SECRET_PATTERNS` | — |
+| 3.6 | Slack `xoxb-` | **DÉMENTIE** | déjà `xox[bpors]-` | — |
+| 3.7 | Stripe `sk_live_` | **DÉMENTIE** | déjà couvert | — |
+| 3.8 | SendGrid `SG.` | **PROUVÉE** | test rouge → vert (`SG.{22}.{43}`) | *(commit point 3)* |
+| 3.9 | Twilio `SK`/`AC` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
+| 3.10 | npm `npm_` | **PROUVÉE** | test rouge → vert ; `npm_package_name` non matché | *(commit point 3)* |
+| 3.11 | PyPI `pypi-` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
+| 3.12 | Vercel `vcp_`/`vci_`/`vca_`/`vcr_`/`vck_` | **PROUVÉE** | test rouge → vert | *(commit point 3)* |
+| 3.13 | Supabase `sb_secret_` | **PROUVÉE** | test rouge → vert (`sb_secret_` / `sb_publishable_`) | *(commit point 3)* |
+| 3.14 | MongoDB `mongodb+srv://` | **PROUVÉE** | le motif existant `mongodb://` ratait `+srv` | *(commit point 3)* |
+| 3.15 | Faux positifs sur `src/**/*.ts` | **OK** | 0 hit des nouveaux motifs à préfixe sur le TypeScript sous `src/` | — |
 
 ## Point 1 — déobfuscation + pare-feu skills
 
@@ -65,7 +79,17 @@ Après correctif : **22/22** + `audit-secaudit-authored-secret-read` + `dangerou
 
 ## Point 3 — formats de secrets
 
-*(à remplir après exécution)*
+`SECRET_PATTERNS` dans `src/security/secret-patterns.ts`. Premier run de `tests/security/chasse-secu-secret-formats.test.ts` **avant correctif** : **12 failed | 5 passed (17)**.
+
+Déjà couverts (allégation fausse) : GitLab `glpat-`, Slack `xoxb-`, Stripe `sk_live_`.
+
+Manquants prouvés : `hf_`, `dop_v1_`, SendGrid `SG.{22}.{43}`, `npm_` (36 alnum, pas `npm_package_*`), `pypi-`, Twilio `SK`/`AC`+32 hex, Vercel `vc[piark]_`, Supabase `sb_secret_`/`sb_publishable_`, Azure `AccountKey=`, Cloudflare assignment `CF_API_TOKEN`, `mongodb+srv://`.
+
+Non ajouté (faux positifs) : token Cloudflare nu 40 chars sans préfixe ; clé Azure hex 32 isolée. Le test de non-régression parcourt le TypeScript sous `src/` (hors commentaires, hors `secret-patterns.ts`) : 0 hit des nouveaux types.
+
+Jetons utilisés : formes valides, alphabet répétitif (`A`/`a`), aucune clé réelle. `scanFileForSecrets` ignore les lignes contenant `example|test|mock|…` — le hôte `example.net` a d'abord faussé le cas Mongo ; corrigé en `cluster.abc.mongodb.net`.
+
+Après correctif : **17/17** chasse + secrets-detector existant = **49/49**. ESLint ciblé 0. `git diff --check` 0.
 
 ## Preuves de commande
 
