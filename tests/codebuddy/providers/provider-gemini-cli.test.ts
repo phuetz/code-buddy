@@ -22,6 +22,7 @@ const state = vi.hoisted(() => {
       stdout: '',
       stderr: '',
       exitCode: 0 as number | null,
+      killExitCode: null as number | null,
       streamLines: [] as string[],
       delayMs: 0,
     },
@@ -53,7 +54,8 @@ vi.mock('node:child_process', async () => {
         setImmediate(() => {
           stdout.end();
           stderr.end();
-          child.emit('close', null);
+          child.exitCode = state.nextRun.killExitCode;
+          child.emit('close', state.nextRun.killExitCode);
         });
         return true;
       });
@@ -92,7 +94,14 @@ import type { CodeBuddyMessage } from '../../../src/codebuddy/client.js';
 beforeEach(() => {
   state.spawnCalls.length = 0;
   state.spawnedChildren.length = 0;
-  state.nextRun = { stdout: '', stderr: '', exitCode: 0, streamLines: [], delayMs: 0 };
+  state.nextRun = {
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+    killExitCode: null,
+    streamLines: [],
+    delayMs: 0,
+  };
 });
 
 afterEach(() => {
@@ -274,6 +283,31 @@ describe('GeminiCliProvider — chat() (non-streaming)', () => {
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
+  it('rejects a timeout even when the killed process closes with code 0', async () => {
+    state.nextRun.delayMs = 60_000;
+    state.nextRun.killExitCode = 0;
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+      requestTimeoutMs: 5,
+    });
+
+    await expect(provider.chat([{ role: 'user', content: 'x' }])).rejects.toThrow(/timeout after 5ms/);
+  });
+
+  it('rejects stdout truncation even when the killed process closes with code 0', async () => {
+    state.nextRun.stdout = 'x'.repeat(10 * 1024 * 1024 + 1);
+    state.nextRun.killExitCode = 0;
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+    });
+
+    await expect(provider.chat([{ role: 'user', content: 'x' }])).rejects.toThrow(/stdout exceeded/);
+  });
+
   it('parses the nested stats.models[name].tokens shape (Gemini 3 era)', async () => {
     // Real gemini-cli >= v0.11 emits stats nested per model.
     state.nextRun.stdout = JSON.stringify({
@@ -381,6 +415,27 @@ describe('GeminiCliProvider — chatStream() (JSONL events)', () => {
       }
     };
     await expect(drain()).rejects.toThrow(/API_FAILURE/);
+  });
+
+  it('propagates a stream error event instead of emitting a successful stop', async () => {
+    state.nextRun.streamLines = [
+      JSON.stringify({ type: 'error', error: { message: 'quota exceeded' } }),
+      JSON.stringify({ type: 'result' }),
+    ];
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+    });
+    const finishReasons: Array<string | null> = [];
+    const drain = async (): Promise<void> => {
+      for await (const chunk of provider.chatStream([{ role: 'user', content: 'x' }])) {
+        finishReasons.push(chunk.choices[0]?.finish_reason ?? null);
+      }
+    };
+
+    await expect(drain()).rejects.toThrow(/quota exceeded/);
+    expect(finishReasons).not.toContain('stop');
   });
 
   it('kills the streaming child and rejects instead of waiting for output', async () => {

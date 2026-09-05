@@ -383,4 +383,35 @@ describe('ConfirmationService', () => {
     });
   });
 
+  describe('acceptEdits file posture', () => {
+    it('auto-approves file edits but not bash commands', async () => {
+      const { getPermissionModeManager, resetPermissionModeManager } = await import('../../src/security/permission-modes.js');
+      resetPermissionModeManager();
+      getPermissionModeManager().setMode('acceptEdits');
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+      try {
+        for (const toolName of ['create_file', 'str_replace_editor']) {
+          const result = await service.requestConfirmation({
+            operation: `Execute tool: ${toolName}`,
+            filename: `/workspace/${toolName}.txt`,
+            toolName,
+            riskLevel: 'medium',
+          }, 'file');
+          expect(result.confirmed, toolName).toBe(true);
+        }
+
+        const bashResult = await service.requestConfirmation({
+          operation: 'Run command',
+          filename: 'printf hello',
+          riskLevel: 'medium',
+        }, 'bash');
+        expect(bashResult.confirmed).toBe(false);
+        expect(bashResult.feedback).toContain('interactive terminal');
+      } finally {
+        resetPermissionModeManager();
+      }
+    });
+  });
+
 });

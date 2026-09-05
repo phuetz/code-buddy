@@ -12,7 +12,10 @@ import type { ChatEntry } from '../../agent/types.js';
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
 import type { CompanionRuntimeRoute } from '../../conversation/companion-model-routing.js';
 import type { PreparedConversationTurn } from '../../conversation/conversation-orchestrator.js';
-import { deriveArgumentObligations } from '../../conversation/argument-obligations.js';
+import {
+  deriveArgumentObligations,
+  isRuntimeEvidenceVerificationRequest,
+} from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
 import {
@@ -24,7 +27,7 @@ import {
   __resetSessionModelOverridesForTests,
 } from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
-import { resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
+import { channelEnvToken, resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
 import type { ModelEgress } from '../../providers/model-egress.js';
 import {
   getChannelCognitivePort,
@@ -88,6 +91,7 @@ export interface ChannelStatusReport {
       connected: boolean;
       authenticated: boolean;
       lastActivity?: string;
+      lastSuccessfulPoll?: string;
       error?: string;
       info?: Record<string, unknown>;
     }>;
@@ -205,7 +209,12 @@ export async function startConfiguredChannels(
       const channel = await instantiateChannel(chConfig);
       if (channel) {
         manager.registerChannel(channel);
-        await channel.connect();
+        try {
+          await channel.connect();
+        } catch (connectErr) {
+          manager.unregisterChannel(channelType);
+          throw connectErr;
+        }
         result.registered.push(chConfig.type);
       }
     } catch (err) {
@@ -220,14 +229,72 @@ export async function startConfiguredChannels(
 
 function getChannelConfigPaths(configPath?: string): string[] {
   const envConfigPath = process.env.CODEBUDDY_CHANNEL_CONFIG?.trim();
+  const home = process.env.HOME || process.env.USERPROFILE || '';
   return configPath
     ? [configPath]
     : envConfigPath
       ? [envConfigPath]
     : [
         path.join(process.cwd(), '.codebuddy', 'channels.json'),
-        path.join(process.env.HOME || process.env.USERPROFILE || '', '.codebuddy', 'channels.json'),
+        path.join(home, '.codebuddy', 'channels.json'),
+        path.join(process.cwd(), '.codebuddy', 'settings.json'),
+        path.join(home, '.codebuddy', 'settings.json'),
       ];
+}
+
+function mapSettingsChannelEntry(key: string, value: unknown): ChannelConfigEntry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const type = typeof entry.type === 'string' && entry.type.trim() ? entry.type.trim() : key;
+  const options: Record<string, unknown> = {
+    ...(entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)
+      ? (entry.options as Record<string, unknown>)
+      : {}),
+  };
+  if (Array.isArray(entry.adminUsers)) options.adminUsers = entry.adminUsers;
+  const mapped: ChannelConfigEntry = {
+    type,
+    enabled: entry.enabled !== false,
+  };
+  if (typeof entry.token === 'string') mapped.token = entry.token;
+  if (typeof entry.webhookUrl === 'string') mapped.webhookUrl = entry.webhookUrl;
+  if (Array.isArray(entry.allowedUsers)) {
+    mapped.allowedUsers = entry.allowedUsers.filter((item): item is string => typeof item === 'string');
+  }
+  if (Array.isArray(entry.allowedChannels)) {
+    mapped.allowedChannels = entry.allowedChannels.filter((item): item is string => typeof item === 'string');
+  }
+  if (Object.keys(options).length > 0) mapped.options = options;
+  return mapped;
+}
+
+function asChannelConfig(raw: unknown): ChannelsConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const channelsField = (raw as { channels?: unknown }).channels;
+  if (Array.isArray(channelsField)) {
+    return { channels: channelsField as ChannelConfigEntry[] };
+  }
+  if (channelsField && typeof channelsField === 'object') {
+    const channels = Object.entries(channelsField as Record<string, unknown>)
+      .map(([key, value]) => mapSettingsChannelEntry(key, value))
+      .filter((entry): entry is ChannelConfigEntry => entry !== null);
+    if (channels.length === 0) return null;
+    return { channels };
+  }
+  return null;
+}
+
+function applyEnvChannelTokens(config: ChannelsConfig): ChannelsConfig {
+  const telegramToken = channelEnvToken('telegram');
+  if (!telegramToken) return config;
+  const existing = config.channels.find((channel) => channel.type === 'telegram');
+  if (existing) {
+    if (!existing.token) existing.token = telegramToken;
+    return config;
+  }
+  return {
+    channels: [...config.channels, { type: 'telegram', enabled: true, token: telegramToken }],
+  };
 }
 
 export function loadChannelConfigWithPath(configPath?: string): { config: ChannelsConfig; path: string } | null {
@@ -235,11 +302,17 @@ export function loadChannelConfigWithPath(configPath?: string): { config: Channe
     try {
       if (fs.existsSync(p)) {
         const content = fs.readFileSync(p, 'utf-8');
-        return { config: JSON.parse(content) as ChannelsConfig, path: p };
+        const parsed = asChannelConfig(JSON.parse(content));
+        if (!parsed) continue;
+        return { config: applyEnvChannelTokens(parsed), path: p };
       }
     } catch (err) {
       logger.debug(`Failed to load channel config from ${p}`, { error: err instanceof Error ? err.message : String(err) });
     }
+  }
+  const fromEnv = applyEnvChannelTokens({ channels: [] });
+  if (fromEnv.channels.length > 0) {
+    return { config: fromEnv, path: 'env:TELEGRAM_BOT_TOKEN' };
   }
   return null;
 }
@@ -361,6 +434,9 @@ export function buildChannelStatusReport(
       connected: status.connected,
       authenticated: status.authenticated,
       ...(status.lastActivity ? { lastActivity: status.lastActivity.toISOString() } : {}),
+      ...(status.lastSuccessfulPoll
+        ? { lastSuccessfulPoll: status.lastSuccessfulPoll.toISOString() }
+        : {}),
       ...(status.error ? { error: status.error } : {}),
       ...(status.info ? { info: status.info } : {}),
     }))
@@ -436,7 +512,10 @@ export async function handleChannels(action: string, options: ChannelOptions): P
       }
       console.log('Channel Status:\n');
       for (const [type, status] of Object.entries(allStatus)) {
-        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${status.error ? ` (error: ${status.error})` : ''}`);
+        const pollStatus = type === 'telegram'
+          ? `, last successful poll: ${status.lastSuccessfulPoll?.toISOString() ?? 'never'}`
+          : '';
+        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${pollStatus}${status.error ? ` (error: ${status.error})` : ''}`);
       }
       if (Object.keys(allStatus).length === 0) {
         console.log('  No channels registered.');
@@ -1091,9 +1170,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
       const pairingStatus = await checkDMPairing(message);
       if (!pairingStatus.approved) {
-        if (pairingStatus.code) {
-          const pairing = getDMPairing();
-          const pairingMsg = pairing.getPairingMessage(pairingStatus);
+        const pairing = getDMPairing();
+        const pairingMsg = pairing.getPairingMessage(pairingStatus);
+        if (pairingMsg) {
           await channel.send({
             channelId: message.channel.id,
             content: pairingMsg,
@@ -1109,6 +1188,67 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       }
 
       const sessionKey = message.sessionKey || 'default-global';
+
+      // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
+      // The photo sender is scoped to the requesting chat, not the global alert chat.
+      if (channel.type === 'telegram') {
+        try {
+          const { maybeHandleCameraShareRequest } = await import('../../companion/camera-share.js');
+          const share = await maybeHandleCameraShareRequest(message.content, {
+            surface: 'telegram',
+            inboundChatId: message.channel.id,
+            rootDir: process.cwd(),
+            sendPhoto: async (caption, imagePath) => {
+              const imageChannel = channel as {
+                sendImageFile?: (channelId: string, imagePath: string, caption?: string) => Promise<void>;
+                send: (outbound: {
+                  channelId: string;
+                  content: string;
+                  replyTo?: string;
+                  attachments?: Array<{
+                    type: 'image';
+                    filePath?: string;
+                    fileName?: string;
+                    mimeType?: string;
+                  }>;
+                }) => Promise<{ success: boolean }>;
+              };
+              if (typeof imageChannel.sendImageFile === 'function') {
+                await imageChannel.sendImageFile(message.channel.id, imagePath, caption);
+                return true;
+              }
+              const path = await import('node:path');
+              const extension = path.extname(imagePath).slice(1).toLowerCase();
+              const sent = await imageChannel.send({
+                channelId: message.channel.id,
+                content: caption,
+                replyTo: message.id,
+                attachments: [{
+                  type: 'image',
+                  filePath: imagePath,
+                  fileName: path.basename(imagePath),
+                  mimeType: extension === 'jpg' || extension === 'jpeg'
+                    ? 'image/jpeg'
+                    : `image/${extension || 'png'}`,
+                }],
+              });
+              return Boolean(sent?.success);
+            },
+          });
+          if (share) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: share.spokenReply,
+              replyTo: message.id,
+            });
+            return;
+          }
+        } catch (cameraShareErr) {
+          logger.warn('Camera share channel path failed', {
+            error: cameraShareErr instanceof Error ? cameraShareErr.message : String(cameraShareErr),
+          });
+        }
+      }
 
       // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
       if (
@@ -1632,11 +1772,17 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ].filter((part): part is string => Boolean(part?.trim())).join('\n\n') || undefined;
       }
 
+      const semanticReviewProfile = isRuntimeEvidenceVerificationRequest(message.content)
+        ? ('factual_analytical' as const)
+        : undefined;
       const semanticReviewPlanned =
         companionConversation &&
         !prefetchedDirectResponse &&
         preparedConversation !== undefined &&
-        shouldRunSemanticResponseGate({ plan: preparedConversation.plan }) &&
+        shouldRunSemanticResponseGate({
+          plan: preparedConversation.plan,
+          ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
+        }) &&
         deriveArgumentObligations(preparedConversation.plan, message.content).length > 0;
       if (semanticReviewPlanned) {
         agent.suspendTranscriptSnapshots();
@@ -1661,6 +1807,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       let hasGeneratedResponse = false;
       let successfulLisaSelfieToolResult = false;
       let shouldPersistChannelSession = true;
+      let telegramWidget: { widgetHtml?: string; data?: unknown } | undefined;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
         if (!agent.recordTrustedExternalConversationTurn(agentInput, response)) {
@@ -1694,6 +1841,21 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         turn.throwIfAborted();
         const lastEntry = entries[entries.length - 1];
         response = lastEntry ? String(lastEntry.content) : '';
+        if (channel.type === 'telegram') {
+          const { autoWidget } = await import('../../widgets/auto-widget.js');
+          const widget = await autoWidget(
+            response,
+            entries
+              .filter((entry) => entry.type === 'tool_result')
+              .map((entry) => entry.toolResult ?? { output: entry.content }),
+          );
+          if (widget.widgetHtml || widget.candidate) {
+            telegramWidget = {
+              ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
+              ...(widget.candidate?.kind === 'payload' ? { data: widget.candidate.data } : {}),
+            };
+          }
+        }
         rawAgentFailure = isAgentFailureResponse(response);
         hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
       }
@@ -1749,6 +1911,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             request: message.content,
             draft: unreviewedResponse,
             plan: preparedConversation.plan,
+            ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
             history: companionConversationHistory,
             ...(semanticEvidence ? { evidence: semanticEvidence } : {}),
             mainProvider: {
@@ -1843,7 +2006,20 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       turn.throwIfAborted();
       turn.phase('delivery');
       deliveryState = 'started';
-      if (channel.type === 'telegram' && response.trim()) {
+      if (channel.type === 'telegram' && response.trim() && telegramWidget) {
+        const result = await channel.send({
+          channelId: message.channel.id,
+          content: response,
+          parseMode: 'plain',
+          replyTo: message.id,
+          channelData: { telegram: telegramWidget },
+        });
+        delivered = result?.success === true;
+        deliveredChunks = delivered ? 1 : 0;
+        if (delivered) deliveredAssistantContent = response;
+        if (delivered) deliveryMode = 'telegram-widget';
+        else deliveryMode = 'failed';
+      } else if (channel.type === 'telegram' && response.trim()) {
         const {
           renderTelegramHtml,
           renderPlain,

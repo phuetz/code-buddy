@@ -207,9 +207,9 @@ describe('capability-registry — env-based detection', () => {
   });
 
   it('respects CODEBUDDY_FLEET_HOSTNAME override for machineLabel', async () => {
-    process.env.CODEBUDDY_FLEET_HOSTNAME = 'darkstar';
+    process.env.CODEBUDDY_FLEET_HOSTNAME = 'gpuNode';
     const cap = await getLocalCapabilities();
-    expect(cap.machineLabel).toBe('darkstar');
+    expect(cap.machineLabel).toBe('gpuNode');
   });
 
   it('parses machineSpec from CODEBUDDY_FLEET_GPU + CODEBUDDY_FLEET_RAM_GB', async () => {
@@ -275,14 +275,14 @@ describe('capability-registry — Ollama probe', () => {
     process.env.OLLAMA_BASE_URL = 'http://192.168.1.20:11434';
     global.fetch = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url).includes('/api/tags')) {
-        return new Response(JSON.stringify({ models: [{ name: 'darkstar-qwen' }] }), {
+        return new Response(JSON.stringify({ models: [{ name: 'gpuNode-qwen' }] }), {
           status: 200,
         });
       }
       throw new Error('econn');
     }) as unknown as typeof fetch;
     const cap = await getLocalCapabilities();
-    expect(cap.models.find((model) => model.id === 'darkstar-qwen')?.egress).toBe('lan');
+    expect(cap.models.find((model) => model.id === 'gpuNode-qwen')?.egress).toBe('lan');
     expect(cap.egress).toBe('lan');
   });
 

@@ -19,6 +19,7 @@ import {
   type RuntimeProviderId,
 } from '../providers/provider-catalog.js';
 import { buildModelInventory } from '../fleet/model-inventory.js';
+import { fetchOllamaStatus } from './ollama.js';
 
 interface ProviderInfo {
   name: string;
@@ -125,6 +126,66 @@ export const PROVIDERS: Record<string, ProviderInfo> = Object.fromEntries(
     }),
 );
 
+function firstEnvValue(keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+async function probeOpenAiCompatibleRuntime(baseUrl: string, timeoutMs = 800): Promise<boolean> {
+  const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/+$/, '');
+  if (!root) return false;
+  try {
+    const response = await fetch(`${root}/v1/models`, { signal: AbortSignal.timeout(timeoutMs) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function collectRuntimeActiveProviderIds(overrides: {
+  ollamaUrl?: string;
+  lmStudioUrl?: string;
+  vllmUrl?: string;
+  lemonadeUrl?: string;
+  omnirouteUrl?: string;
+} = {}): Promise<Set<string>> {
+  const lmStudioUrl = overrides.lmStudioUrl
+    ?? firstEnvValue(['LMSTUDIO_HOST', 'LM_STUDIO_HOST', 'LMSTUDIO_BASE_URL', 'LM_STUDIO_BASE_URL'])
+    ?? PROVIDERS.lmstudio?.baseURL
+    ?? 'http://localhost:1234/v1';
+  const vllmUrl = overrides.vllmUrl
+    ?? firstEnvValue(['VLLM_BASE_URL'])
+    ?? PROVIDERS.vllm?.baseURL
+    ?? 'http://localhost:8000/v1';
+  const lemonadeUrl = overrides.lemonadeUrl
+    ?? firstEnvValue(['LEMONADE_HOST'])
+    ?? PROVIDERS.lemonade?.baseURL
+    ?? 'http://127.0.0.1:13305/api/v1';
+  const omnirouteUrl = overrides.omnirouteUrl
+    ?? firstEnvValue(['OMNIROUTE_BASE_URL'])
+    ?? PROVIDERS.omniroute?.baseURL
+    ?? 'http://localhost:20128/v1';
+
+  const [ollamaStatus, lmStudioOk, vllmOk, lemonadeOk, omnirouteOk] = await Promise.all([
+    fetchOllamaStatus(overrides.ollamaUrl ?? process.env.OLLAMA_HOST),
+    probeOpenAiCompatibleRuntime(lmStudioUrl),
+    probeOpenAiCompatibleRuntime(vllmUrl),
+    probeOpenAiCompatibleRuntime(lemonadeUrl),
+    probeOpenAiCompatibleRuntime(omnirouteUrl),
+  ]);
+
+  const active = new Set<string>();
+  if (ollamaStatus.reachable) active.add('ollama');
+  if (lmStudioOk) active.add('lmstudio');
+  if (vllmOk) active.add('vllm');
+  if (lemonadeOk) active.add('lemonade');
+  if (omnirouteOk) active.add('omniroute');
+  return active;
+}
+
 function getConfiguredProviders(): string[] {
   const configured: string[] = [];
 
@@ -194,17 +255,18 @@ export function createProviderCommand(): Command {
     .alias('ls')
     .description('List available AI providers')
     .option('--free', 'List only providers with a free tier')
-    .action((options: { free?: boolean }) => {
+    .action(async (options: { free?: boolean }) => {
       const configured = getConfiguredProviders();
       const configuredPluginProviders = getConfiguredPluginNativeProviders();
       const current = resolveProviderCommandKey(getCurrentProvider()) || getCurrentProvider();
+      const runtimeActive = await collectRuntimeActiveProviderIds();
 
       console.log(options.free ? '\nFree-tier AI Providers:\n' : '\nAvailable AI Providers:\n');
 
       for (const [key, info] of Object.entries(PROVIDERS)) {
         if (options.free && !info.freeTier) continue;
 
-        const isConfigured = configured.includes(key);
+        const isConfigured = configured.includes(key) || runtimeActive.has(info.providerId);
         const isCurrent = key === current;
         const status = isConfigured ? '✅' : '❌';
         const marker = isCurrent ? ' (active)' : '';

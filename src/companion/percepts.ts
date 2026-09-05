@@ -1,6 +1,7 @@
-import { appendFile, mkdir, readFile, rename, stat } from 'fs/promises';
+import { appendFile, mkdir, rename, stat } from 'fs/promises';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { readJsonLinesAtomic } from '../utils/atomic-write.js';
 
 export type CompanionPerceptModality =
   | 'vision'
@@ -496,7 +497,8 @@ export async function recordCompanionPercept<TPayload extends Record<string, unk
   try {
     const info = await stat(storePath);
     if (info.size > 1024 * 1024) await rename(storePath, `${storePath}.1`);
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     /* no file yet */
   }
   await appendFile(storePath, `${JSON.stringify(storedPercept)}\n`, 'utf8');
@@ -509,17 +511,13 @@ export async function readRecentCompanionPercepts(
   const storePath = resolveStorePath(options);
   const limit = Math.max(1, Math.min(MAX_RECENT_LIMIT, options.limit || DEFAULT_RECENT_LIMIT));
 
-  let content: string;
-  try {
-    content = await readFile(storePath, 'utf8');
-  } catch {
-    return [];
-  }
-
-  const matches = content
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map(parsePercept)
+  const rawPercepts = await readJsonLinesAtomic<unknown>(
+    storePath,
+    [],
+    (value): value is unknown => parsePercept(JSON.stringify(value) ?? '') !== null,
+  );
+  const matches = rawPercepts
+    .map(value => parsePercept(JSON.stringify(value) ?? ''))
     .filter((percept): percept is CompanionPercept => Boolean(percept))
     .filter(percept => !options.modality || percept.modality === options.modality);
 
@@ -540,11 +538,13 @@ export async function getCompanionPerceptStats(
     return { storePath, exists: false, total: 0, byModality: {} };
   }
 
-  const content = await readFile(storePath, 'utf8');
-  const percepts = content
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map(parsePercept)
+  const rawPercepts = await readJsonLinesAtomic<unknown>(
+    storePath,
+    [],
+    (value): value is unknown => parsePercept(JSON.stringify(value) ?? '') !== null,
+  );
+  const percepts = rawPercepts
+    .map(value => parsePercept(JSON.stringify(value) ?? ''))
     .filter((percept): percept is CompanionPercept => Boolean(percept));
 
   const byModality: Partial<Record<CompanionPerceptModality, number>> = {};

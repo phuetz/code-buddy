@@ -19,17 +19,23 @@ let activeTimer: HeartbeatTimer | null = null;
 
 /**
  * Best-effort detection of the provider URL to ping. Order:
- * 1. Explicit `OLLAMA_BASE_URL` (Ollama-only).
+ * 1. Explicit `OLLAMA_BASE_URL` or `OLLAMA_HOST` (Ollama-only).
  * 2. `OPENAI_BASE_URL` (OpenAI / Ollama-via-OAI / LM Studio / …).
  * 3. `ANTHROPIC_BASE_URL`.
  * 4. `GROK_BASE_URL` / `XAI_BASE_URL`.
  * 5. `GEMINI_BASE_URL`.
  * 6. Skip — no probe.
  */
+export function resolveHeartbeatProbeTarget(): { url: string; label: string } | null {
+  return pickProbeUrl();
+}
+
 function pickProbeUrl(): { url: string; label: string } | null {
   const env = process.env;
-  if (env.OLLAMA_BASE_URL) {
-    return { url: `${env.OLLAMA_BASE_URL.replace(/\/$/, '')}/api/tags`, label: 'ollama' };
+  const ollamaBase = env.OLLAMA_BASE_URL || env.OLLAMA_HOST;
+  if (ollamaBase) {
+    const origin = ollamaBase.replace(/\/$/, '').replace(/\/v1$/i, '');
+    return { url: `${origin}/api/tags`, label: 'ollama' };
   }
   if (env.OPENAI_BASE_URL) {
     const base = env.OPENAI_BASE_URL.replace(/\/$/, '');

@@ -16,6 +16,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -189,9 +190,7 @@ export class ToolPermissionManager {
    */
   saveConfig(): void {
     try {
-      const dir = path.dirname(this.configPath);
-      fs.ensureDirSync(dir);
-      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+      writeJsonAtomicSync(this.configPath, this.config, { mode: 0o600 });
     } catch (error) {
       logger.warn(`Failed to save tool permissions config: ${error instanceof Error ? error.message : String(error)}`);
     }

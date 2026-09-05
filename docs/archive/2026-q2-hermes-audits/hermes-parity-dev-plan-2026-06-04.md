@@ -1,6 +1,6 @@
 # Hermes Agent — écosystème, écarts & plan de développement
 
-Date : 2026-06-04 · Machine : Ministar Linux (Ryzen AI 9 HX 470, Ollama Vulkan local)
+Date : 2026-06-04 · Machine : Hub Linux (Ryzen AI 9 HX 470, Ollama Vulkan local)
 Auteur : session Code Buddy `codex/hermes-final-polish`
 
 > Objectif de session : **atteindre le même niveau que Hermes Agent**. Ce doc
@@ -111,7 +111,7 @@ runtime-backends, mobile-supervision, mcp-acp, openclaw-migration.
 
 ## 3. Analyse des écarts — 3 tiers
 
-### Tier A — réalisable MAINTENANT sur Ministar, sans dépendance payante
+### Tier A — réalisable MAINTENANT sur le hub, sans dépendance payante
 - **memory-providers** *(en cours)*. Honcho déjà live-validé. Reste à valider en
   live sur cette machine : **Mem0** (serveur up sur :18888 ; blocage = extraction
   LLM **synchrone** trop lente → lui donner un LLM rapide), **ByteRover** (`brv`

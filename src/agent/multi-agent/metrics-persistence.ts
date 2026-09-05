@@ -35,6 +35,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import type { AgentMetrics } from './enhanced-coordination.js';
 import type { AgentRole } from './types.js';
 
@@ -118,7 +119,6 @@ function deserializeMetrics(s: SerializedAgentMetrics): AgentMetrics {
  */
 export async function saveMetrics(map: Map<AgentRole, AgentMetrics>): Promise<void> {
   const metricsPath = resolveMetricsPath();
-  const tmpPath = `${metricsPath}.tmp`;
   try {
     await ensureDir(metricsPath);
     const envelope: PersistedMetrics = {
@@ -126,9 +126,7 @@ export async function saveMetrics(map: Map<AgentRole, AgentMetrics>): Promise<vo
       savedAt: new Date().toISOString(),
       metrics: Array.from(map.entries()).map(([role, m]) => [role, serializeMetrics(m)]),
     };
-    const json = JSON.stringify(envelope, null, 2);
-    await fs.writeFile(tmpPath, json, 'utf8');
-    await fs.rename(tmpPath, metricsPath);
+    await writeJsonAtomic(metricsPath, envelope, { mode: 0o600 });
   } catch (err) {
     logger.warn('[multi-agent] metrics persistence save failed', { error: String(err) });
   }
@@ -149,8 +147,13 @@ export interface LoadedMetrics {
 export async function loadMetrics(): Promise<LoadedMetrics | null> {
   const metricsPath = resolveMetricsPath();
   try {
-    const raw = await fs.readFile(metricsPath, 'utf8');
-    const parsed = JSON.parse(raw) as PersistedMetrics;
+    const parsed = await readJsonAtomic<PersistedMetrics | null>(metricsPath, null, {
+      mode: 0o600,
+      isValid: (value): value is PersistedMetrics => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    if (!parsed) return null;
 
     if (parsed.schemaVersion !== 'v0.4') {
       logger.warn(

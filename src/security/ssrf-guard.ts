@@ -18,6 +18,7 @@
 
 import * as dns from 'dns/promises';
 import { logger } from '../utils/logger.js';
+import { isLoopbackHost } from './dev-origins.js';
 
 // ============================================================================
 // Types
@@ -433,6 +434,24 @@ export function getSSRFGuard(config?: SSRFGuardConfig): SSRFGuard {
 
 export function resetSSRFGuard(): void {
   _guard = null;
+}
+
+/**
+ * True for http(s) URLs that target THIS machine's loopback only
+ * (`127.0.0.0/8`, `::1`, `localhost`). Used by user-authored sensory
+ * webhooks (local Home Assistant / n8n / a test listener). Does not
+ * weaken the global SSRF guard: RFC1918, link-local and metadata stay
+ * blocked, and callers must refuse redirects off loopback.
+ */
+export function isLoopbackHttpUrl(rawUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+  return isLoopbackHost(parsed.hostname);
 }
 
 /**

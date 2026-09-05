@@ -84,7 +84,7 @@ describe('CostTracker — summary aggregation', () => {
     const now = new Date().toISOString();
     await t.charge({
       at: now,
-      peerId: 'ministar',
+      peerId: 'hub',
       provider: 'anthropic',
       model: 'claude-opus-4',
       usd: 1.5,
@@ -98,7 +98,7 @@ describe('CostTracker — summary aggregation', () => {
     });
     await t.charge({
       at: now,
-      peerId: 'ministar',
+      peerId: 'hub',
       provider: 'anthropic',
       model: 'claude-haiku-4',
       usd: 0.1,
@@ -107,7 +107,7 @@ describe('CostTracker — summary aggregation', () => {
     expect(summary.todayUsd).toBeCloseTo(2.1);
     expect(summary.todayByProvider.anthropic).toBeCloseTo(1.6);
     expect(summary.todayByProvider.openai).toBe(0.5);
-    expect(summary.todayByPeer.ministar).toBeCloseTo(1.6);
+    expect(summary.todayByPeer.hub).toBeCloseTo(1.6);
     expect(summary.todayByPeer.cloud).toBe(0.5);
   });
 

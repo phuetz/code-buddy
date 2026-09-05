@@ -22,6 +22,11 @@ const mockFsExtra = vi.hoisted(() => ({
 }));
 vi.mock('fs-extra', () => ({ ...mockFsExtra, default: mockFsExtra }));
 
+const mockWriteFileAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFileAtomic,
+}));
+
 // Import modules after mocks
 import {
   SessionEncryption,
@@ -47,6 +52,7 @@ describe('SessionEncryption', () => {
     mockFsExtra.readFile.mockResolvedValue(Buffer.alloc(0));
     mockFsExtra.writeFile.mockResolvedValue(undefined);
     mockFsExtra.ensureDir.mockResolvedValue(undefined);
+    mockWriteFileAtomic.mockResolvedValue(undefined);
 
     encryption = new SessionEncryption({
       keyPath: tempKeyPath,
@@ -313,7 +319,7 @@ describe('SessionEncryption', () => {
 
         await encryption.initialize();
 
-        expect(mockFsExtra.writeFile).toHaveBeenCalled();
+        expect(mockWriteFileAtomic).toHaveBeenCalled();
         expect(encryption.isReady()).toBe(true);
       });
 
@@ -325,7 +331,7 @@ describe('SessionEncryption', () => {
         await encryption.initialize();
 
         expect(mockFsExtra.readFile).toHaveBeenCalled();
-        expect(mockFsExtra.writeFile).not.toHaveBeenCalled();
+        expect(mockWriteFileAtomic).not.toHaveBeenCalled();
         expect(encryption.isReady()).toBe(true);
       });
 
@@ -342,7 +348,7 @@ describe('SessionEncryption', () => {
 
         await encryption.initialize();
 
-        expect(mockFsExtra.writeFile).toHaveBeenCalledWith(
+        expect(mockWriteFileAtomic).toHaveBeenCalledWith(
           expect.any(String),
           expect.any(Buffer),
           { mode: 0o600 }
@@ -373,11 +379,11 @@ describe('SessionEncryption', () => {
         mockFsExtra.pathExists.mockResolvedValue(false);
 
         await encryption.initialize();
-        const callCount = mockFsExtra.writeFile.mock.calls.length;
+        const callCount = mockWriteFileAtomic.mock.calls.length;
 
         await encryption.initialize();
 
-        expect(mockFsExtra.writeFile.mock.calls.length).toBe(callCount);
+        expect(mockWriteFileAtomic.mock.calls.length).toBe(callCount);
       });
     });
 
@@ -461,11 +467,11 @@ describe('SessionEncryption', () => {
         mockFsExtra.pathExists.mockResolvedValue(false);
         await encryption.initialize();
 
-        mockFsExtra.writeFile.mockClear();
+        mockWriteFileAtomic.mockClear();
 
         await encryption.rotateKey();
 
-        expect(mockFsExtra.writeFile).toHaveBeenCalled();
+        expect(mockWriteFileAtomic).toHaveBeenCalled();
       });
 
       it('should allow decryption with new key after rotation', async () => {
@@ -825,6 +831,7 @@ describe('SessionEncryption Integration', () => {
     mockFsExtra.pathExists.mockResolvedValue(false);
     mockFsExtra.writeFile.mockResolvedValue(undefined);
     mockFsExtra.ensureDir.mockResolvedValue(undefined);
+    mockWriteFileAtomic.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

@@ -19,6 +19,7 @@ import { canonicalizeTimeZone } from '../life-rhythm/day-context.js';
 import { findNextZonedMinute } from '../life-rhythm/zoned-minute.js';
 import type { CronPreCheck } from './pre-check-runner.js';
 import type { CronWatchdog } from './watchdog-handlers.js';
+import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Exponential backoff delays in ms: 30s, 1m, 5m, 15m, 60m */
 const BACKOFF_DELAYS_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000];
@@ -1003,8 +1004,10 @@ export class CronScheduler extends EventEmitter {
 
   private async loadJobs(): Promise<void> {
     try {
-      const data = await fs.readFile(this.config.persistPath, 'utf-8');
-      const persisted = JSON.parse(data) as CronJob[];
+      const persisted = await readJsonAtomic<CronJob[]>(this.config.persistPath, [], {
+        mode: 0o600,
+        isValid: (value): value is CronJob[] => Array.isArray(value),
+      });
 
       for (const job of persisted) {
         job.createdAt = new Date(job.createdAt);
@@ -1013,14 +1016,7 @@ export class CronScheduler extends EventEmitter {
         this.jobs.set(job.id, job);
       }
     } catch (error) {
-      // Warn if file exists but failed to parse (corruption vs missing file)
-      try {
-        await fs.access(this.config.persistPath);
-        // File exists but failed to parse — likely corrupted
-        this.emit('error', new Error(`Failed to load persisted jobs: ${error instanceof Error ? error.message : String(error)}`));
-      } catch {
-        // File doesn't exist — normal first run
-      }
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -1028,9 +1024,8 @@ export class CronScheduler extends EventEmitter {
     try {
       // Ensure the persist directory exists — addJob can be called before
       // start() (e.g. from the `buddy cron` CLI), which would otherwise fail.
-      await fs.mkdir(path.dirname(this.config.persistPath), { recursive: true });
       const jobs = Array.from(this.jobs.values());
-      await fs.writeFile(this.config.persistPath, JSON.stringify(jobs, null, 2));
+      await writeJsonAtomic(this.config.persistPath, jobs, { mode: 0o600 });
     } catch (error) {
       this.emit('error', error instanceof Error ? error : new Error(String(error)));
     }
@@ -1042,7 +1037,7 @@ export class CronScheduler extends EventEmitter {
       const historyFile = path.join(this.config.historyPath, `${run.jobId}.jsonl`);
 
       // Append to JSONL
-      await fs.appendFile(historyFile, JSON.stringify(run) + '\n');
+      await fs.appendFile(historyFile, JSON.stringify(run) + '\n', { encoding: 'utf8', mode: 0o600 });
 
       // Prune old entries
       await this.pruneRunHistory(run.jobId);
@@ -1054,12 +1049,13 @@ export class CronScheduler extends EventEmitter {
   private async pruneRunHistory(jobId: string): Promise<void> {
     try {
       const historyFile = path.join(this.config.historyPath, `${jobId}.jsonl`);
-      const data = await fs.readFile(historyFile, 'utf-8');
+      const data = await readTextAtomic(historyFile, '');
+      if (!data) return;
       const lines = data.trim().split('\n');
 
       if (lines.length > this.config.maxHistoryPerJob) {
         const pruned = lines.slice(-this.config.maxHistoryPerJob);
-        await fs.writeFile(historyFile, pruned.join('\n') + '\n');
+        await writeFileAtomic(historyFile, pruned.join('\n') + '\n', { mode: 0o600 });
       }
     } catch {
       // Ignore errors during pruning
@@ -1072,7 +1068,8 @@ export class CronScheduler extends EventEmitter {
   async getRunHistory(jobId: string, limit?: number): Promise<JobRun[]> {
     try {
       const historyFile = path.join(this.config.historyPath, `${jobId}.jsonl`);
-      const data = await fs.readFile(historyFile, 'utf-8');
+      const data = await readTextAtomic(historyFile, '');
+      if (!data) return [];
       const lines = data.trim().split('\n').filter(l => l);
 
       let runs = lines.map(line => {

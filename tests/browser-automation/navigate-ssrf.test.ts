@@ -66,7 +66,7 @@ describe('navigate SSRF guard (parity with batch-mode)', () => {
   // followed by get_html would otherwise read arbitrary local files (creds, keys)
   // into the model context.
   it.each([
-    ['file:// local read', 'file:///home/patrice/.aws/credentials'],
+    ['file:// local read', 'file:///home/user/.aws/credentials'],
     ['file:// etc passwd', 'file:///etc/passwd'],
     ['data: url', 'data:text/html,<script>1</script>'],
     ['about:config', 'about:config'],

@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { AutonomousModelChoice } from '../agent/model-tier.js';
 import type { ColabTask } from '../fleet/colab-store.js';
+import { sanitizeModelOutput } from '../utils/output-sanitizer.js';
 import type { TaskExecutor, TaskExecutionResult } from './autonomous-loop.js';
 
 export interface LocalModelTaskExecutorOptions {
@@ -56,6 +57,13 @@ export function createLocalModelTaskExecutor(opts: LocalModelTaskExecutorOptions
 
   return async (task: ColabTask, model: AutonomousModelChoice): Promise<TaskExecutionResult> => {
     const start = now();
+    if (task.filesToModify?.length || task.verifyCommand?.trim()) {
+      return {
+        ok: false,
+        summary: 'artifact executor cannot edit a repo',
+        error: 'task has filesToModify/verifyCommand — use the agent executor (buddy autonomy run --executor agent --workspace <dir>)',
+      };
+    }
     if (!model.baseUrl) {
       return { ok: false, summary: 'no endpoint for the chosen model tier', error: `tier ${model.tier} has no baseUrl` };
     }
@@ -80,7 +88,7 @@ export function createLocalModelTaskExecutor(opts: LocalModelTaskExecutorOptions
         return { ok: false, summary: `model returned HTTP ${res.status}`, error: `${res.status} ${res.statusText}` };
       }
       const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-      const content = data.choices?.[0]?.message?.content?.trim() ?? '';
+      const content = sanitizeModelOutput(data.choices?.[0]?.message?.content ?? '').trim();
       if (!content) {
         return { ok: false, summary: 'model returned empty output', error: 'no content' };
       }

@@ -404,6 +404,41 @@ interface DispatchState {
 
 const dispatchedTasks: Map<string, DispatchState> = new Map();
 
+// Audit 2026-09-02 — bornes mémoire : chaque entrée retient le prompt et le
+// résultat complets, `clearDispatch` n'a aucun appelant en production, et un
+// pair distant peut créer des entrées à volonté (fire-and-forget). Sans borne,
+// un serveur qui tourne des semaines fuit. Cap dur + TTL des états terminaux.
+const DISPATCH_MAX_ENTRIES = 500;
+const DISPATCH_TERMINAL_TTL_MS = 15 * 60_000;
+
+function pruneDispatchedTasks(now: number = Date.now()): void {
+  // 1. TTL : les états terminaux consultables expirent.
+  for (const [runId, state] of dispatchedTasks) {
+    if (
+      (state.status === 'completed' || state.status === 'failed')
+      && (state.completedAt ?? state.startedAt) < now - DISPATCH_TERMINAL_TTL_MS
+    ) {
+      dispatchedTasks.delete(runId);
+    }
+  }
+  if (dispatchedTasks.size < DISPATCH_MAX_ENTRIES) return;
+  // 2. Cap dur : évincer les plus anciens, terminaux d'abord, mais évincer
+  // quand même du pending/running si un flood ne laisse que ça — la borne
+  // doit tenir face à un pair distant hostile.
+  const byAge = [...dispatchedTasks.values()].sort((a, b) => a.startedAt - b.startedAt);
+  const terminalFirst = [
+    ...byAge.filter((s) => s.status === 'completed' || s.status === 'failed'),
+    ...byAge.filter((s) => s.status === 'pending' || s.status === 'running'),
+  ];
+  for (const state of terminalFirst) {
+    if (dispatchedTasks.size < DISPATCH_MAX_ENTRIES) break;
+    dispatchedTasks.delete(state.runId);
+  }
+  logger.warn('[peer-chat-bridge] dispatch store hit its cap — oldest entries evicted', {
+    max: DISPATCH_MAX_ENTRIES,
+  });
+}
+
 /**
  * Fire-and-forget LLM call for `peer.dispatch`. Returns immediately
  * after queuing; the actual chat happens asynchronously and updates
@@ -438,6 +473,7 @@ export function dispatchPeerTask(input: {
     status: 'pending',
     startedAt: Date.now(),
   };
+  pruneDispatchedTasks();
   dispatchedTasks.set(input.runId, state);
 
   // Run in background — never await.

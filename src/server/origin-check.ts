@@ -1,14 +1,42 @@
 /**
  * Origin / host safety helpers for the HTTP + WebSocket server.
  *
- * `isOriginAllowed` mirrors the Gateway's check (src/gateway/ws-transport.ts) but
- * lives in a dependency-free leaf module so both the REST server (src/server/index.ts)
- * and the WS handler (src/server/websocket/handler.ts) can share it without importing
- * the gateway — avoiding an import cycle.
+ * `isOriginAllowed` lives in a dependency-free leaf module shared by the REST
+ * server, both WebSocket handlers, and the Gateway transport without creating
+ * an import cycle.
  */
 
 /** Default CORS / WS origins: localhost on any port (matches the Gateway default). */
 export const DEFAULT_LOCALHOST_ORIGINS = ['http://localhost:*', 'http://127.0.0.1:*'];
+
+const ORIGIN_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(\[[^\]]+\]|[^/:?#]+)(?::(\*|\d+))?$/i;
+const CONCRETE_ORIGIN = /^([a-z][a-z0-9+.-]*):\/\/(\[[^\]]+\]|[^/:?#]+)(?::(\d+))?$/i;
+
+function matchesWildcardOrigin(origin: string, pattern: string): boolean {
+  const expected = ORIGIN_PATTERN.exec(pattern);
+  const candidate = CONCRETE_ORIGIN.exec(origin);
+  if (!expected || !candidate) return false;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    return false;
+  }
+  if (expected[1]!.toLowerCase() !== candidate[1]!.toLowerCase()) return false;
+
+  const hostnamePattern = expected[2]!
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '[a-z0-9.-]*');
+  if (!new RegExp(`^${hostnamePattern}$`, 'i').test(parsed.hostname)) return false;
+
+  const expectedPort = expected[3];
+  const candidatePort = candidate[3];
+  return expectedPort === '*' ? candidatePort !== undefined : expectedPort === candidatePort;
+}
 
 /**
  * Returns true if `origin` matches one of `allowedOrigins`. Supports `*` (any),
@@ -22,8 +50,7 @@ export function isOriginAllowed(origin: string | undefined, allowedOrigins: stri
     if (pattern === '*') return true;
     if (pattern === origin) return true;
     if (pattern.includes('*')) {
-      const escaped: string = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-      if (new RegExp(`^${escaped}$`).test(origin)) return true;
+      if (matchesWildcardOrigin(origin, pattern)) return true;
     }
   }
   return false;

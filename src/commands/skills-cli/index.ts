@@ -28,9 +28,11 @@
  */
 
 import type { Command } from 'commander';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { InstalledSkillStatus } from '../../skills/hub.js';
+import { logger } from '../../utils/logger.js';
 
 interface SkillDoctorIssue {
   commands: string[];
@@ -129,6 +131,28 @@ function buildSkillListHealth(
   };
 }
 
+/** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
+export function countBundledSkillEntries(dir: string): number {
+  if (!dir || !fs.existsSync(dir)) {
+    return 0;
+  }
+  let count = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && (entry.name.endsWith('.skill.md') || entry.name === 'SKILL.md')) {
+      count += 1;
+    } else if (entry.isDirectory() && fs.existsSync(path.join(dir, entry.name, 'SKILL.md'))) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 export function registerSkillsCommands(program: Command): void {
   const skills = program
     .command('skills')
@@ -152,7 +176,22 @@ export function registerSkillsCommands(program: Command): void {
         return;
       }
       if (shown.length === 0) {
-        console.log(all.length === 0 ? 'No skills installed.' : 'No enabled skills (use --all to see disabled).');
+        if (all.length === 0) {
+          const { getBundledSkillsPath } = await import('../../skills/index.js');
+          const bundledDir = getBundledSkillsPath();
+          const bundledCount = countBundledSkillEntries(bundledDir);
+          if (bundledCount > 0) {
+            console.log('No hub-installed skills.');
+            console.log(
+              `${bundledCount} bundled skill(s) shipped with the package are still available to the agent.`,
+            );
+            console.log('Install more with: buddy hub search');
+            return;
+          }
+          console.log('No skills installed from the hub.');
+          return;
+        }
+        console.log('No enabled skills (use --all to see disabled).');
         return;
       }
       const counts = opts.all
@@ -817,13 +856,17 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`Directory not found: ${dir}`);
         return;
       }
-      const report = importSkills(dir, {
+      const report = await importSkills(dir, {
         source: label,
         dryRun: opts.apply !== true,
         includeReview: opts.includeReview === true,
         overwrite: opts.overwrite === true,
         ...(opts.category ? { category: opts.category } : {}),
       });
+      if (opts.apply === true && report.imported.length > 0) {
+        const { getSkillRegistry } = await import('../../skills/registry.js');
+        getSkillRegistry().stopWatching();
+      }
       if (opts.json) {
         console.log(JSON.stringify({ source: label, report }, null, 2));
         return;
@@ -847,11 +890,16 @@ export function registerSkillsCommands(program: Command): void {
     .action(async (opts: { json?: boolean }) => {
       const fs = await import('fs');
       const { parseSkillFile } = await import('../../skills/parser.js');
-      const root = path.join(os.homedir(), '.codebuddy', 'skills', 'managed');
+      const roots = [
+        path.join(os.homedir(), '.codebuddy', 'skills'),
+        path.join(os.homedir(), '.codebuddy', 'skills', 'managed'),
+      ];
       const items: Array<{ name: string; pinned: boolean; source?: string }> = [];
-      if (fs.existsSync(root)) {
+      const seen = new Set<string>();
+      for (const root of roots) {
+        if (!fs.existsSync(root)) continue;
         for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-          if (!e.isDirectory() || !e.name.startsWith('imported-')) continue;
+          if (!e.isDirectory() || !e.name.startsWith('imported-') || seen.has(e.name)) continue;
           const md = path.join(root, e.name, 'SKILL.md');
           if (!fs.existsSync(md)) continue;
           let pinned = false;
@@ -860,7 +908,12 @@ export function registerSkillsCommands(program: Command): void {
             const sk = parseSkillFile(fs.readFileSync(md, 'utf-8'), md, 'managed');
             pinned = sk.metadata.pinned === true;
             source = sk.metadata.source;
-          } catch { /* ignore */ }
+          } catch (error) {
+            logger.warn(`Failed to read imported skill "${e.name}"`, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          seen.add(e.name);
           items.push({ name: e.name, pinned, ...(source ? { source } : {}) });
         }
       }
@@ -882,15 +935,20 @@ export function registerSkillsCommands(program: Command): void {
     .option('--out <dir>', 'package registry/output directory', path.join(process.cwd(), 'skill-exchange'))
     .option('--json', 'output JSON')
     .action(async (name: string, opts: { json?: boolean; out: string }) => {
-      const { exportSkill } = await import('../../skills/skill-exchange.js');
-      const manifest = exportSkill(name, expandHome(opts.out));
-      const packagePath = path.resolve(expandHome(opts.out), name);
-      if (opts.json) {
-        console.log(JSON.stringify({ manifest, path: packagePath }, null, 2));
-        return;
+      try {
+        const { exportSkill } = await import('../../skills/skill-exchange.js');
+        const manifest = exportSkill(name, expandHome(opts.out));
+        const packagePath = path.resolve(expandHome(opts.out), name);
+        if (opts.json) {
+          console.log(JSON.stringify({ manifest, path: packagePath }, null, 2));
+          return;
+        }
+        console.log(`Exported ${manifest.name} v${manifest.version} → ${packagePath}`);
+        console.log(`Author: ${manifest.author}`);
+      } catch (error) {
+        logger.error(`skills exchange export failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Exported ${manifest.name} v${manifest.version} → ${packagePath}`);
-      console.log(`Author: ${manifest.author}`);
     });
 
   exchange
@@ -899,13 +957,31 @@ export function registerSkillsCommands(program: Command): void {
     .option('--trust', 'explicitly trust an unknown author key (TOFU)')
     .option('--json', 'output JSON')
     .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
-      const { installSkill } = await import('../../skills/skill-exchange.js');
-      const result = installSkill(expandHome(dir), { trust: opts.trust === true });
-      if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
+      try {
+        const { installSkill } = await import('../../skills/skill-exchange.js');
+        const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
+        // Keep the exchange install visible to `skills delete`, which consumes
+        // the Skills Hub lockfile in a subsequent CLI process.
+        const { getSkillsHub } = await import('../../skills/hub.js');
+        getSkillsHub().registerLocalSkillFile(
+          result.name,
+          path.join(result.path, 'SKILL.md'),
+          'local',
+        );
+        // `installSkill` reloads the registry so the package is immediately
+        // visible. The CLI is a one-shot process, so close the reload watchers
+        // before returning to avoid keeping the command alive indefinitely.
+        const { getSkillRegistry } = await import('../../skills/registry.js');
+        getSkillRegistry().stopWatching();
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        console.log(`Installed ${result.name} v${result.version} from author ${result.author}`);
+      } catch (error) {
+        logger.error(`skills exchange install failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Installed ${result.name} v${result.version} from author ${result.author}`);
     });
 
   exchange
@@ -913,14 +989,19 @@ export function registerSkillsCommands(program: Command): void {
     .description('Verify a signed package without installing it')
     .option('--json', 'output JSON')
     .action(async (dir: string, opts: { json?: boolean }) => {
-      const { verifySkill } = await import('../../skills/skill-exchange.js');
-      const result = verifySkill(expandHome(dir));
-      if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
+      try {
+        const { verifySkill } = await import('../../skills/skill-exchange.js');
+        const result = verifySkill(expandHome(dir));
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        console.log(`Valid signed package: ${result.name} v${result.version}`);
+        console.log(`Author: ${result.author} (${result.trusted ? 'trusted' : 'not trusted'})`);
+      } catch (error) {
+        logger.error(`skills exchange verify failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      console.log(`Valid signed package: ${result.name} v${result.version}`);
-      console.log(`Author: ${result.author} (${result.trusted ? 'trusted' : 'not trusted'})`);
     });
 
   exchange
@@ -928,21 +1009,26 @@ export function registerSkillsCommands(program: Command): void {
     .description('Show the local public key and trusted exchange author keys')
     .option('--json', 'output JSON')
     .action(async (opts: { json?: boolean }) => {
-      const exchangeModule = await import('../../skills/skill-exchange.js');
-      if (!exchangeModule.isSkillExchangeEnabled()) {
-        throw new Error(`Skill exchange is disabled; set ${exchangeModule.SKILL_EXCHANGE_ENV}=true to opt in`);
+      try {
+        const exchangeModule = await import('../../skills/skill-exchange.js');
+        if (!exchangeModule.isSkillExchangeEnabled()) {
+          throw new Error(`Skill exchange is disabled; set ${exchangeModule.SKILL_EXCHANGE_ENV}=true to opt in`);
+        }
+        const signing = await import('../../skills/skill-signing.js');
+        const local = { id: signing.getPublicKeyId(), publicKey: signing.getPublicKey() };
+        const trusted = exchangeModule.listTrustedKeys();
+        if (opts.json) {
+          console.log(JSON.stringify({ local, trusted }, null, 2));
+          return;
+        }
+        console.log(`Local public key (${local.id}):\n${local.publicKey.trim()}`);
+        console.log(trusted.length
+          ? `Trusted keys:\n${trusted.map((key) => `  ${key.id}  trusted ${key.trustedAt}`).join('\n')}`
+          : 'Trusted keys: none');
+      } catch (error) {
+        logger.error(`skills exchange keys failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      const signing = await import('../../skills/skill-signing.js');
-      const local = { id: signing.getPublicKeyId(), publicKey: signing.getPublicKey() };
-      const trusted = exchangeModule.listTrustedKeys();
-      if (opts.json) {
-        console.log(JSON.stringify({ local, trusted }, null, 2));
-        return;
-      }
-      console.log(`Local public key (${local.id}):\n${local.publicKey.trim()}`);
-      console.log(trusted.length
-        ? `Trusted keys:\n${trusted.map((key) => `  ${key.id}  trusted ${key.trustedAt}`).join('\n')}`
-        : 'Trusted keys: none');
     });
 
   const sources = skills.command('sources').description('Manage skill sources (the import referential)');

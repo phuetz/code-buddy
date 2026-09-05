@@ -21,6 +21,15 @@ export interface PolicyResult {
   reason: string;
 }
 
+interface PolicyGlobalState {
+  CODEBUDDY_KILL_SWITCH?: boolean;
+  CODEBUDDY_KILL_SWITCH_REASON?: string;
+}
+
+function policyGlobalState(): typeof globalThis & PolicyGlobalState {
+  return globalThis as typeof globalThis & PolicyGlobalState;
+}
+
 export class PolicyEngine {
   private static instance: PolicyEngine | null = null;
 
@@ -33,25 +42,25 @@ export class PolicyEngine {
 
   /** Coupe-circuit global : tout passe en `deny`. */
   engageKillSwitch(reason: string): void {
-    (globalThis as any).CODEBUDDY_KILL_SWITCH = true;
-    (globalThis as any).CODEBUDDY_KILL_SWITCH_REASON = reason;
+    policyGlobalState().CODEBUDDY_KILL_SWITCH = true;
+    policyGlobalState().CODEBUDDY_KILL_SWITCH_REASON = reason;
     process.env.CODEBUDDY_KILL_SWITCH = 'true';
     process.env.CODEBUDDY_KILL_SWITCH_REASON = reason;
   }
 
   releaseKillSwitch(): void {
-    (globalThis as any).CODEBUDDY_KILL_SWITCH = false;
-    delete (globalThis as any).CODEBUDDY_KILL_SWITCH_REASON;
+    policyGlobalState().CODEBUDDY_KILL_SWITCH = false;
+    delete policyGlobalState().CODEBUDDY_KILL_SWITCH_REASON;
     delete process.env.CODEBUDDY_KILL_SWITCH;
     delete process.env.CODEBUDDY_KILL_SWITCH_REASON;
   }
 
   isKilled(): boolean {
-    return (globalThis as any).CODEBUDDY_KILL_SWITCH === true || process.env.CODEBUDDY_KILL_SWITCH === 'true';
+    return policyGlobalState().CODEBUDDY_KILL_SWITCH === true || process.env.CODEBUDDY_KILL_SWITCH === 'true';
   }
 
   getKillReason(): string {
-    return (globalThis as any).CODEBUDDY_KILL_SWITCH_REASON || process.env.CODEBUDDY_KILL_SWITCH_REASON || 'No reason provided';
+    return policyGlobalState().CODEBUDDY_KILL_SWITCH_REASON || process.env.CODEBUDDY_KILL_SWITCH_REASON || 'No reason provided';
   }
 
   /** Décision déclarative ; par défaut tout ce qui touche prod/réseau/secret = needs_approval. */
@@ -120,9 +129,26 @@ export class PolicyEngine {
           reason: `${req.risk} risk shell execution requires approval.`,
         };
 
+      case 'peer:invoke':
+        if (
+          req.risk === 'low'
+          && req.detail?.fleetSafe === true
+          && req.detail.readOnly === true
+          && req.detail.scopeAuthorized === true
+          && req.detail.workspaceRestricted === true
+        ) {
+          return {
+            decision: 'allow',
+            reason: 'Workspace-restricted, scope-authorized read-only peer tool allowed.',
+          };
+        }
+        return {
+          decision: 'needs_approval',
+          reason: 'peer:invoke operations require explicit approval.',
+        };
+
       case 'net:listed':
       case 'fleet:listen':
-      case 'peer:invoke':
       case 'self_improvement':
         return {
           decision: 'needs_approval',

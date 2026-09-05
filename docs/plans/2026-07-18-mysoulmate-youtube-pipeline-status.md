@@ -11,7 +11,7 @@
 
 ## Résultat disponible
 
-- Plan local : `/home/patrice/DEV/MySoulmate/youtube-shorts-workspace/plan.json`
+- Plan local : `~/DEV/MySoulmate/youtube-shorts-workspace/plan.json`
 - Trois masters privés FR planifiés : trois histoires Lisa
 - 9 clips LongCat ; gate éditorial final : 100/100 pour les trois masters
 - Manifeste Flow local : neuf plans `ambient-only`, 90 crédits Fast estimés,
@@ -53,8 +53,8 @@
 
 ## Gates mesurés
 
-- `scripts/darkstar/measure-visual-gates.py` produit un rapport JSON V1 lié au
-  SHA-256 du clip. Dans un venv Python 3.10+ sur darkstar, installer exactement
+- `scripts/gpuNode/measure-visual-gates.py` produit un rapport JSON V1 lié au
+  SHA-256 du clip. Dans un venv Python 3.10+ sur gpuNode, installer exactement
   `opencv-python`, `numpy`, `insightface`, `onnxruntime-gpu` et `mediapipe`, et
   rendre `ffprobe` disponible dans le `PATH`.
 - Le mesureur compare les embeddings ArcFace au centroïde des références Lisa,

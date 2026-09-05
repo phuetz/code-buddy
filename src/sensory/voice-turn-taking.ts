@@ -9,11 +9,33 @@
  */
 
 export const DEFAULT_INCOMPLETE_TURN_HOLD_MS = 900;
+/** Recommended VAD endpoint for an explicitly completed conversational turn. */
+export const COMPLETED_TURN_END_SILENCE_MS = 350;
+/** Total silence budget for a transcript that still looks syntactically suspended. */
+export const SUSPENDED_TURN_END_SILENCE_MS = 900;
 
 export function resolveIncompleteTurnHoldMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.CODEBUDDY_VOICE_INCOMPLETE_HOLD_MS);
   if (!Number.isFinite(configured)) return DEFAULT_INCOMPLETE_TURN_HOLD_MS;
   return Math.max(0, Math.min(3_000, Math.floor(configured)));
+}
+
+/**
+ * Semantic endpoint target for the opt-in conversational pilot.
+ *
+ * This returns a total silence target, not an extra delay. The Rust endpoint
+ * reports how much silence it already waited, allowing the consumer to add
+ * only the remainder for a suspended thought. A disabled pilot returns null
+ * so the legacy continuation hold remains byte-for-byte authoritative.
+ */
+export function resolveConversationalTurnEndSilenceMs(
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+): number | null {
+  if (env.CODEBUDDY_SENSORY_TURN_HEURISTIC !== 'true') return null;
+  return isLikelyIncompleteVoiceTurn(text)
+    ? SUSPENDED_TURN_END_SILENCE_MS
+    : COMPLETED_TURN_END_SILENCE_MS;
 }
 
 export function isLikelyIncompleteVoiceTurn(text: string): boolean {

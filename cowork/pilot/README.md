@@ -79,7 +79,7 @@ the MCP channel).
       "transport": {
         "type": "stdio",
         "command": "node",
-        "args": ["/home/patrice/code-buddy/cowork/pilot/mcp-server.mjs"],
+        "args": ["~/code-buddy/cowork/pilot/mcp-server.mjs"],
         "env": { "DISPLAY": ":10.0" }
       },
       "enabled": true,

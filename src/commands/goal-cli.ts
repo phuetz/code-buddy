@@ -268,7 +268,7 @@ async function loadGoalCliEnv(directory: string): Promise<void> {
   dotenv.config({ path: path.join(directory, '.env') });
 }
 
-async function prepareGoalCliWorkspace(command?: Command): Promise<string> {
+export async function prepareGoalCliWorkspace(command?: Command): Promise<string> {
   const launchDirectory = process.cwd();
   await loadGoalCliEnv(launchDirectory);
 

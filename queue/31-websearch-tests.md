@@ -1,6 +1,6 @@
 # Vague — Tests réels (no-mocks) du WebSearchTool (chaîne de providers)
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/websearch-tests`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/websearch-tests`.
 
 ## But
 Tests Vitest **no-mocks** du `WebSearchTool` (`src/tools/web-search.ts`) via un **vrai serveur HTTP local** qui joue

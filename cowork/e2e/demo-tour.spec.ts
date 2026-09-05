@@ -9,16 +9,14 @@
  *   RECORD_DEMO=1 npx playwright test e2e/demo-tour.spec.ts
  */
 import { _electron as electron, test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import electronBinary from 'electron';
 
 async function launchCowork(videoDir: string): Promise<{ app: ElectronApplication; page: Page }> {
   const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'cowork-demo-'));
-  const modelPath = path.join(userDataDir, 'models', 'buffalo_s.onnx');
-  mkdirSync(path.dirname(modelPath), { recursive: true });
-  writeFileSync(modelPath, '');
+  // No Buffalo_S ONNX planted: empty files lie about install (BUFFALO_ONNX_FIXTURE_SKIP_REASON).
 
   const app = await electron.launch({
     executablePath: electronBinary as unknown as string,

@@ -3,6 +3,16 @@
  */
 
 import { WritePolicy, WRITE_TOOL_NAMES } from '../../src/security/write-policy.js';
+import { TOOL_ALIASES, toLegacyName } from '../../src/tools/registry/tool-aliases.js';
+import { vi } from 'vitest';
+
+const { runStoreEmit } = vi.hoisted(() => ({ runStoreEmit: vi.fn() }));
+
+vi.mock('../../src/observability/run-store.js', () => ({
+  RunStore: {
+    getInstance: () => ({ emit: runStoreEmit }),
+  },
+}));
 
 describe('WritePolicy', () => {
   let policy: WritePolicy;
@@ -64,6 +74,31 @@ describe('WritePolicy', () => {
       const result = await policy.gate({ toolName: 'apply_patch', paths: [] });
       expect(result.allowed).toBe(true);
     });
+
+    it('should record the decision in RunStore when a run ID is supplied', async () => {
+      runStoreEmit.mockClear();
+      const operation = {
+        toolName: 'str_replace_editor',
+        paths: ['/workspace/file.ts'],
+        description: 'Update file',
+      };
+
+      const result = await policy.gate(operation, 'run-r22');
+
+      expect(result.allowed).toBe(true);
+      expect(runStoreEmit).toHaveBeenCalledWith('run-r22', {
+        type: 'decision',
+        data: {
+          kind: 'write_policy',
+          mode: 'confirm',
+          allowed: true,
+          requiresPatch: false,
+          toolName: operation.toolName,
+          paths: operation.paths,
+          description: operation.description,
+        },
+      });
+    });
   });
 
   describe('mode: strict', () => {
@@ -91,6 +126,14 @@ describe('WritePolicy', () => {
       expect(result.allowed).toBe(true);
     });
 
+    it('blocks bash redirects and allows read-only shell in strict mode', async () => {
+      const blocked = await policy.gateShell('echo x > src/add.js');
+      expect(blocked.allowed).toBe(false);
+      expect(blocked.reason).toMatch(/apply_patch/);
+      const allowed = await policy.gateShell('npm test');
+      expect(allowed.allowed).toBe(true);
+    });
+
     it('should allow write tools when patch is provided', async () => {
       const result = await policy.gate({
         toolName: 'str_replace_editor',
@@ -114,6 +157,17 @@ describe('WritePolicy', () => {
       expect(policy.isWriteTool('bash')).toBe(false);
       expect(policy.isWriteTool('view_file')).toBe(false);
       expect(policy.isWriteTool('search')).toBe(false);
+    });
+
+    it('should identify every alias targeting a write tool', () => {
+      const writeAliases = Object.entries(TOOL_ALIASES)
+        .filter(([, target]) => WRITE_TOOL_NAMES.has(target));
+
+      expect(writeAliases.length).toBeGreaterThan(0);
+      for (const [alias, target] of writeAliases) {
+        expect(toLegacyName(alias)).toBe(target);
+        expect(policy.isWriteTool(alias), alias).toBe(true);
+      }
     });
   });
 

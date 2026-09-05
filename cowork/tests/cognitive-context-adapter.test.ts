@@ -94,7 +94,7 @@ describe('Cowork cognitive context adapter', () => {
     expect(resolveCoworkModelEgress(undefined, 'local://gemini-cli')).toBe('cloud');
     expect(resolveCoworkModelEgress('cloud', 'http://127.0.0.1:9999')).toBe('cloud');
     expect(resolveCoworkModelEgress(undefined, 'http://127.0.0.1:11434')).toBe('local');
-    expect(resolveCoworkModelEgress(undefined, 'http://darkstar.local:11434')).toBe('cloud');
+    expect(resolveCoworkModelEgress(undefined, 'http://gpuNode.local:11434')).toBe('cloud');
   });
 
   it('is fail-soft when no central cognitive authority is running', async () => {

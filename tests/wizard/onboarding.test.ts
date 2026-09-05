@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
@@ -12,8 +12,14 @@ import {
   ONBOARDING_PHASES,
   renderOnboardingRoadmap,
   writeConfig,
+  applyOnboardingProjectConfig,
+  resolveOnboardingProjectDir,
+  PROJECT_FOLDER_QUESTION,
+  renderCapabilitiesFooter,
+  persistProviderSelection,
   OnboardingResult,
 } from '../../src/wizard/onboarding.js';
+import { SettingsManager } from '../../src/utils/settings-manager.js';
 
 describe('onboarding', () => {
   it('explains how to proceed when no interactive terminal is available', () => {
@@ -204,6 +210,61 @@ describe('onboarding', () => {
 
       const config = JSON.parse(readFileSync(join(nested, 'config.json'), 'utf-8'));
       expect(config.provider).toBe('ollama');
+    });
+  });
+
+  describe('persistProviderSelection', () => {
+    it('does not leave grok catalog entries in an Ollama profile', async () => {
+      const home = join(tmpdir(), `onboarding-home-${Date.now()}`);
+      const previousHome = process.env.HOME;
+      process.env.HOME = home;
+      (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
+      try {
+        await persistProviderSelection(getProviderGuide('ollama'), 'qwen3:4b-instruct', '');
+        const saved = JSON.parse(readFileSync(join(home, '.codebuddy', 'user-settings.json'), 'utf-8'));
+        expect(saved.provider).toBe('ollama');
+        expect(saved.model).toBe('qwen3:4b-instruct');
+        expect(saved.models).toEqual(['qwen3:4b-instruct']);
+        expect(saved.models).not.toContain('grok-code-fast-1');
+      } finally {
+        if (previousHome === undefined) delete process.env.HOME;
+        else process.env.HOME = previousHome;
+        (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
+        rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      }
+    });
+  });
+
+  describe('capabilities footer', () => {
+    it('advertises Pocket TTS / ElevenLabs, not the retired edge-tts path', () => {
+      const footer = renderCapabilitiesFooter();
+      expect(footer).toMatch(/Pocket TTS|ElevenLabs/);
+      expect(footer).not.toMatch(/edge-tts/);
+    });
+  });
+
+  describe('project folder', () => {
+    it('asks for a project folder and writes .codebuddy there, not only cwd', () => {
+      expect(PROJECT_FOLDER_QUESTION).toMatch(/project folder/i);
+      const cwd = join(tmpdir(), `onboarding-cwd-${Date.now()}`);
+      const chosen = resolveOnboardingProjectDir('chosen-app', cwd);
+      expect(chosen).toBe(join(cwd, 'chosen-app'));
+      expect(resolveOnboardingProjectDir('', cwd)).toBe(cwd);
+
+      const result: OnboardingResult = {
+        provider: 'ollama',
+        apiKey: '',
+        model: 'qwen3:4b-instruct',
+        ttsEnabled: false,
+      };
+      try {
+        applyOnboardingProjectConfig(chosen, result);
+        const written = join(chosen, '.codebuddy', 'config.json');
+        expect(JSON.parse(readFileSync(written, 'utf-8')).provider).toBe('ollama');
+        expect(existsSync(join(cwd, '.codebuddy', 'config.json'))).toBe(false);
+      } finally {
+        rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      }
     });
   });
 });

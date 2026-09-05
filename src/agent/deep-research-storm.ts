@@ -53,6 +53,8 @@ import {
   toSourceRegistry,
   renderReferences,
   stripInvalidCitationMarkers,
+  stripTrailingReferences,
+  groundCitedClaims,
   resolveDeepResearchOptions,
   type DeepResearchBoundaries,
   type DeepResearchOptions,
@@ -611,7 +613,9 @@ export async function writeSectionBody(
   if (boundaries.writeSection) {
     try {
       const body = (await boundaries.writeSection({ topic, section, relevant, registry })).trim();
-      if (body.length > 0) return { body: stripSectionReferences(body), llmUsed: true };
+      if (body.length > 0) {
+        return { body: stripLeadingSectionHeading(stripSectionReferences(body), section.title), llmUsed: true };
+      }
     } catch (err) {
       logger.debug(`[storm] writeSection boundary failed for "${section.title}": ${errMsg(err)}`);
     }
@@ -638,7 +642,7 @@ export async function writeSectionBody(
           ].join('\n'),
         },
       ]);
-      const body = stripSectionReferences((raw || '').trim());
+      const body = stripLeadingSectionHeading(stripSectionReferences((raw || '').trim()), section.title);
       if (body.length > 0) return { body, llmUsed: true };
     } catch (err) {
       logger.debug(`[storm] section LLM failed for "${section.title}": ${errMsg(err)}`);
@@ -736,7 +740,10 @@ async function coWriteArticle(
   });
   // Drop any fabricated `[n]` beyond the shared registry so no co-written section leaves a phantom
   // citation the single renumbered "## Références" (rendered from `registry`) can't resolve.
-  const body = stripInvalidCitationMarkers(stripSectionReferences(parts.join('\n')), registry.length);
+  const body = groundCitedClaims(
+    stripInvalidCitationMarkers(stripSectionReferences(parts.join('\n')), registry.length),
+    sources,
+  );
   emit({ stage: 'written', sections: usableOutline.sections.length, coWritten: true });
   return {
     report: `${body}\n\n${references}`,
@@ -864,7 +871,17 @@ function extractJsonObject(raw: string): string | null {
 
 /** Strip a trailing references/sources heading a section writer may have added. */
 function stripSectionReferences(body: string): string {
-  return body.replace(/\n+#{1,6}\s*(références|references|sources|bibliographie)\b[\s\S]*$/i, '').trimEnd();
+  return stripTrailingReferences(body);
+}
+
+/**
+ * Drop a leading ATX heading that repeats the section title. The assembler
+ * already emits `## ${title}`; live GK33 STORM left `# Title` then `## Title`.
+ */
+export function stripLeadingSectionHeading(body: string, title: string): string {
+  if (typeof body !== 'string' || body.length === 0 || !title.trim()) return typeof body === 'string' ? body : '';
+  const escaped = title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return body.replace(new RegExp(`^#{1,6}\\s*${escaped}\\s*(?:\\n+|$)`, 'i'), '').trimStart();
 }
 
 function tokenize(text: string): string[] {

@@ -10,19 +10,17 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
-  mkdirSync,
   readFileSync,
-  renameSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import {
   DEFAULT_TRAITS,
   MOOD_BASELINE,
   loadRelationshipState,
 } from './relationship-state.js';
+import { readJsonAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 interface JsonRecord {
   [key: string]: unknown;
@@ -123,15 +121,7 @@ function inWindow(record: JsonRecord, from: number, to: number): boolean {
 }
 
 function atomicWrite(filePath: string, value: string): void {
-  mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 });
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporaryPath, value, { encoding: 'utf8', mode: 0o600 });
-  renameSync(temporaryPath, filePath);
-  try {
-    chmodSync(filePath, 0o600);
-  } catch {
-    /* advisory on Windows */
-  }
+  writeFileAtomicSync(filePath, value, { mode: 0o600 });
 }
 
 function backup(filePath: string, stamp: string, backups: string[]): void {
@@ -147,20 +137,20 @@ function backup(filePath: string, stamp: string, backups: string[]): void {
 }
 
 function readJson(filePath: string): JsonRecord | undefined {
-  try {
-    return JSON.parse(readFileSync(filePath, 'utf8')) as JsonRecord;
-  } catch {
-    return undefined;
-  }
+  return readJsonAtomicSync<JsonRecord | undefined>(filePath, undefined, {
+    mode: 0o600,
+    isValid: (value): value is JsonRecord => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
 }
 
 function countGuidance(filePath: string): number {
-  try {
-    const value = JSON.parse(readFileSync(filePath, 'utf8')) as unknown;
-    return Array.isArray(value) ? value.length : 0;
-  } catch {
-    return 0;
-  }
+  const value = readJsonAtomicSync<unknown[]>(filePath, [], {
+    mode: 0o600,
+    isValid: (candidate): candidate is unknown[] => Array.isArray(candidate),
+  });
+  return value.length;
 }
 
 function discardPendingObservations(

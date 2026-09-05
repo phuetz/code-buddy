@@ -8,9 +8,9 @@
  * - Time-based filtering
  */
 
-import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface ConversationMessage {
   id: string;
@@ -580,18 +580,14 @@ export class SemanticSearchEngine {
    */
   private loadIndex(): void {
     try {
-      if (fs.existsSync(this.indexPath)) {
-        const data = fs.readJsonSync(this.indexPath);
-
-        if (data.messages) {
-          this.messages = data.messages.map((m: Record<string, unknown>) => ({
-            ...m,
-            timestamp: new Date(m.timestamp as string),
-          }));
-        }
-
-        this.rebuildIndex();
+      const data = readJsonAtomicSync<{ messages?: Record<string, unknown>[] }>(this.indexPath, {});
+      if (data.messages) {
+        this.messages = data.messages.map((m: Record<string, unknown>) => ({
+          ...m,
+          timestamp: new Date(m.timestamp as string),
+        })) as ConversationMessage[];
       }
+      this.rebuildIndex();
     } catch {
       this.messages = [];
     }
@@ -602,8 +598,7 @@ export class SemanticSearchEngine {
    */
   private saveIndex(): void {
     try {
-      fs.ensureDirSync(path.dirname(this.indexPath));
-      fs.writeJsonSync(this.indexPath, { messages: this.messages }, { spaces: 2 });
+      writeJsonAtomicSync(this.indexPath, { messages: this.messages });
     } catch {
       // Ignore save errors
     }

@@ -162,7 +162,7 @@ describe('ComfyUI local image provider (real HTTP)', () => {
     const primary = await startServer(async (_req, res) => {
       primaryAttempts += 1;
       res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Darkstar unavailable' }));
+      res.end(JSON.stringify({ error: 'GPU node unavailable' }));
     });
     const promptId = 'fallback-prompt';
     const fallback = await startServer(async (req, res) => {

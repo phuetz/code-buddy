@@ -50,7 +50,7 @@ import subprocess
 import sys
 import urllib.request
 
-DEFAULT_YTDLP = '/home/patrice/miniforge3/bin/yt-dlp'
+DEFAULT_YTDLP = os.path.expanduser('~/miniforge3/bin/yt-dlp')
 DEFAULT_OUT = os.path.expanduser('~/.codebuddy/channel-decode')
 NM = 'non mesuré'
 

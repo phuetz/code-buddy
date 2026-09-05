@@ -71,9 +71,9 @@ describe('registerFleetIpcHandlers', () => {
     const handler = electronMock.handlers.get('fleet.refreshCapabilities');
     expect(handler).toBeDefined();
 
-    const result = await handler?.({}, 'ministar-linux');
-    expect(refreshCapabilities).toHaveBeenCalledWith('ministar-linux');
-    expect(result).toEqual({ success: true, peer: { id: 'ministar-linux' } });
+    const result = await handler?.({}, 'hub-linux');
+    expect(refreshCapabilities).toHaveBeenCalledWith('hub-linux');
+    expect(result).toEqual({ success: true, peer: { id: 'hub-linux' } });
   });
 
   it('returns a structured refresh error when FleetBridge is unavailable', async () => {
@@ -96,7 +96,7 @@ describe('registerFleetIpcHandlers', () => {
     expect(listHandler).toBeDefined();
     await expect(listHandler?.({})).resolves.toEqual([]);
 
-    const peers = [{ id: 'ministar-linux', status: 'connected' }];
+    const peers = [{ id: 'hub-linux', status: 'connected' }];
     bridge = {
       listPeers: vi.fn(async () => peers),
     } as unknown as FleetBridge;
@@ -107,7 +107,7 @@ describe('registerFleetIpcHandlers', () => {
   it('refuses Fleet dispatch when no peer has known capabilities', async () => {
     const modules = installDispatchCoreModules();
     const bridge = {
-      listPeers: vi.fn(async () => [{ id: 'ministar-linux' }]),
+      listPeers: vi.fn(async () => [{ id: 'hub-linux' }]),
     } as unknown as FleetBridge;
 
     registerFleetIpcHandlers(bridge);
@@ -128,7 +128,7 @@ describe('registerFleetIpcHandlers', () => {
     const bridge = {
       listPeers: vi.fn(async () => [
         {
-          id: 'ministar-linux',
+          id: 'hub-linux',
           capability: {
             egress: 'cloud',
             models: [
@@ -177,7 +177,7 @@ describe('registerFleetIpcHandlers', () => {
       ],
     };
     const bridge = {
-      listPeers: vi.fn(async () => [{ id: 'ministar-linux', capability }]),
+      listPeers: vi.fn(async () => [{ id: 'hub-linux', capability }]),
     } as unknown as FleetBridge;
 
     registerFleetIpcHandlers(bridge, activityFeed as never);
@@ -190,8 +190,8 @@ describe('registerFleetIpcHandlers', () => {
       parallelism: 2,
       privacyTag: 'public',
       dispatchProfile: 'review',
-      targetPeerIds: [' ministar-linux ', 'ministar-linux', ''],
-      targetPeerLabels: [' MiniStar ', ''],
+      targetPeerIds: [' hub-linux ', 'hub-linux', ''],
+      targetPeerLabels: [' HubLinux ', ''],
       agentRunId: 'run-dispatch123456',
       parentRunId: 'run-parent123456',
       outcomeId: 'outcome-abcdef123456',
@@ -203,12 +203,12 @@ describe('registerFleetIpcHandlers', () => {
 
     expect(modules.plan).toHaveBeenCalledWith(
       { kind: 'coding' },
-      [{ peerId: 'ministar-linux', capability }],
+      [{ peerId: 'hub-linux', capability }],
       expect.objectContaining({
         parallelism: 2,
         privacyTag: 'public',
         dispatchProfile: 'review',
-        targetPeerIds: ['ministar-linux'],
+        targetPeerIds: ['hub-linux'],
       }),
     );
     expect(modules.createSaga).toHaveBeenCalledWith(
@@ -216,8 +216,8 @@ describe('registerFleetIpcHandlers', () => {
         goal: 'Audit the CLI',
         plan: modules.dispatchPlan,
         metadata: expect.objectContaining({
-          targetPeerIds: ['ministar-linux'],
-          targetPeerLabels: ['MiniStar'],
+          targetPeerIds: ['hub-linux'],
+          targetPeerLabels: ['HubLinux'],
           agentRunId: 'run-dispatch123456',
           parentRunId: 'run-parent123456',
           outcomeId: 'outcome-abcdef123456',
@@ -246,8 +246,8 @@ describe('registerFleetIpcHandlers', () => {
           privacyTag: 'public',
           dispatchProfile: 'review',
           parallelism: 2,
-          targetPeerIds: ['ministar-linux'],
-          targetPeerLabels: ['MiniStar'],
+          targetPeerIds: ['hub-linux'],
+          targetPeerLabels: ['HubLinux'],
           targetPeerCount: 1,
           agentRunId: 'run-dispatch123456',
           parentRunId: 'run-parent123456',
@@ -277,7 +277,7 @@ describe('registerFleetIpcHandlers', () => {
       ],
     };
     const bridge = {
-      listPeers: vi.fn(async () => [{ id: 'ministar-linux', capability }]),
+      listPeers: vi.fn(async () => [{ id: 'hub-linux', capability }]),
     } as unknown as FleetBridge;
 
     const result = await dispatchFleetSaga(
@@ -288,8 +288,8 @@ describe('registerFleetIpcHandlers', () => {
         hermesPlanId: 'hermes-integration-plan',
         hermesPlanProfile: 'safe',
         hermesPlanSurface: 'cowork',
-        targetPeerIds: ['ministar-linux'],
-        targetPeerLabels: ['MiniStar'],
+        targetPeerIds: ['hub-linux'],
+        targetPeerLabels: ['HubLinux'],
         agentRunId: 'run-scheduled123456',
         agentRunSchemaVersion: 1,
         parentRunId: 'run-parent123456',
@@ -314,11 +314,11 @@ describe('registerFleetIpcHandlers', () => {
     });
     expect(modules.plan).toHaveBeenCalledWith(
       { kind: 'coding' },
-      [{ peerId: 'ministar-linux', capability }],
+      [{ peerId: 'hub-linux', capability }],
       expect.objectContaining({
         privacyTag: 'sensitive',
         dispatchProfile: 'review',
-        targetPeerIds: ['ministar-linux'],
+        targetPeerIds: ['hub-linux'],
       }),
     );
     expect(modules.createSaga).toHaveBeenCalledWith(
@@ -327,7 +327,7 @@ describe('registerFleetIpcHandlers', () => {
           hermesPlanId: 'hermes-integration-plan',
           hermesPlanProfile: 'safe',
           hermesPlanSurface: 'cowork',
-          targetPeerLabels: ['MiniStar'],
+          targetPeerLabels: ['HubLinux'],
           agentRunId: 'run-scheduled123456',
           agentRunSchemaVersion: 1,
           parentRunId: 'run-parent123456',
@@ -348,7 +348,7 @@ describe('registerFleetIpcHandlers', () => {
           hermesPlanId: 'hermes-integration-plan',
           hermesPlanProfile: 'safe',
           hermesPlanSurface: 'cowork',
-          targetPeerLabels: ['MiniStar'],
+          targetPeerLabels: ['HubLinux'],
           agentRunId: 'run-scheduled123456',
           agentRunSchemaVersion: 1,
           parentRunId: 'run-parent123456',
@@ -377,7 +377,7 @@ describe('registerFleetIpcHandlers', () => {
       ],
     };
     const bridge = {
-      listPeers: vi.fn(async () => [{ id: 'ministar-linux', capability }]),
+      listPeers: vi.fn(async () => [{ id: 'hub-linux', capability }]),
     } as unknown as FleetBridge;
 
     registerFleetIpcHandlers(bridge, activityFeed as never);
@@ -446,7 +446,7 @@ function installDispatchCoreModules() {
   const dispatchPlan = {
     steps: [
       {
-        peerId: 'ministar-linux',
+        peerId: 'hub-linux',
         model: 'gpt-5.1-codex',
         lane: 'primary',
       },
@@ -588,7 +588,7 @@ describe('fleet.costSummary', () => {
           summary: async () => ({
             todayUsd: 0.42,
             todayByProvider: { grok: 0.42 },
-            todayByPeer: { 'darkstar/repo': 0.42 },
+            todayByPeer: { 'gpuNode/repo': 0.42 },
             weekUsd: 1.1,
           }),
         }),
@@ -660,20 +660,20 @@ describe('previewFleetRoute', () => {
   it('returns sanitized lanes + rationale without creating a saga or starting a runner', async () => {
     const { previewFleetRoute } = await import('../src/main/ipc/fleet-ipc');
     installPreviewCoreModules({
-      rationale: 'best match: darkstar (free local)',
+      rationale: 'best match: gpuNode (free local)',
       primary: {
-        peerId: 'darkstar/repo',
+        peerId: 'gpuNode/repo',
         model: 'qwen3.6:27b',
         score: 0.91,
         breakdown: { match: 1, cost: 1, load: 0.8, latency: 0.7 },
         internal: 'should-not-leak',
       },
-      fallback: { peerId: 'ministar/repo', model: 'qwen2.5:7b', score: 0.6 },
+      fallback: { peerId: 'hub/repo', model: 'qwen2.5:7b', score: 0.6 },
     });
     const bridge = {
       listPeers: vi.fn(async () => [
-        { id: 'darkstar/repo', capability: { roles: ['code'] } },
-        { id: 'ministar/repo', capability: { roles: ['code'] } },
+        { id: 'gpuNode/repo', capability: { roles: ['code'] } },
+        { id: 'hub/repo', capability: { roles: ['code'] } },
       ]),
     } as unknown as FleetBridge;
 
@@ -681,13 +681,13 @@ describe('previewFleetRoute', () => {
 
     expect(result.ok).toBe(true);
     expect(result.primary).toEqual({
-      peerId: 'darkstar/repo',
+      peerId: 'gpuNode/repo',
       model: 'qwen3.6:27b',
       score: 0.91,
       breakdown: { match: 1, cost: 1, load: 0.8, latency: 0.7 },
     });
-    expect(result.fallback?.peerId).toBe('ministar/repo');
-    expect(result.rationale).toContain('darkstar');
+    expect(result.fallback?.peerId).toBe('hub/repo');
+    expect(result.rationale).toContain('gpuNode');
     // Dry-run only: no saga store touched, no runner started.
     expect(sagaRunnerMock.instances.every((r) => r.start.mock.calls.length === 0)).toBe(true);
   });
@@ -746,7 +746,7 @@ describe('fleet.peerSession* IPC', () => {
           case 'peer.chat-session.start':
             return { sessionId: 'sess_1', expiresAt: 123, traceId: 't' };
           case 'peer.chat-session.continue':
-            return { text: 'bonjour de darkstar', finishReason: 'stop', usage: {} };
+            return { text: 'bonjour de gpuNode', finishReason: 'stop', usage: {} };
           case 'peer.chat-session.end':
             return { closed: true, traceId: 't' };
           case 'peer.chat-session.list':
@@ -776,7 +776,7 @@ describe('fleet.peerSession* IPC', () => {
     const { bridge, calls } = makeSessionBridge();
     registerFleetIpcHandlers(bridge);
 
-    const start = (await electronMock.handlers.get('fleet.peerSessionStart')?.({}, 'darkstar')) as {
+    const start = (await electronMock.handlers.get('fleet.peerSessionStart')?.({}, 'gpuNode')) as {
       ok: boolean;
       sessionId?: string;
     };
@@ -785,14 +785,14 @@ describe('fleet.peerSession* IPC', () => {
 
     const say = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
       {},
-      'darkstar',
+      'gpuNode',
       'sess_1',
       'salut'
     )) as { ok: boolean; text?: string };
     expect(say.ok).toBe(true);
-    expect(say.text).toBe('bonjour de darkstar');
+    expect(say.text).toBe('bonjour de gpuNode');
 
-    const list = (await electronMock.handlers.get('fleet.peerSessionList')?.({}, 'darkstar')) as {
+    const list = (await electronMock.handlers.get('fleet.peerSessionList')?.({}, 'gpuNode')) as {
       ok: boolean;
       sessions: Array<Record<string, unknown>>;
     };
@@ -803,7 +803,7 @@ describe('fleet.peerSession* IPC', () => {
 
     const end = (await electronMock.handlers.get('fleet.peerSessionEnd')?.(
       {},
-      'darkstar',
+      'gpuNode',
       'sess_1'
     )) as { ok: boolean; closed?: boolean };
     expect(end.ok).toBe(true);
@@ -815,7 +815,7 @@ describe('fleet.peerSession* IPC', () => {
       'peer.chat-session.list',
       'peer.chat-session.end',
     ]);
-    expect(calls.every((c) => c.peerId === 'darkstar')).toBe(true);
+    expect(calls.every((c) => c.peerId === 'gpuNode')).toBe(true);
   });
 
   it('fails closed on missing prompt/sessionId/bridge', async () => {
@@ -824,7 +824,7 @@ describe('fleet.peerSession* IPC', () => {
 
     const noPrompt = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
       {},
-      'darkstar',
+      'gpuNode',
       'sess_1',
       '  '
     )) as { ok: boolean; error?: string };
@@ -833,7 +833,7 @@ describe('fleet.peerSession* IPC', () => {
 
     const noSession = (await electronMock.handlers.get('fleet.peerSessionEnd')?.(
       {},
-      'darkstar',
+      'gpuNode',
       ''
     )) as { ok: boolean; error?: string };
     expect(noSession.ok).toBe(false);
@@ -842,7 +842,7 @@ describe('fleet.peerSession* IPC', () => {
     registerFleetIpcHandlers(null);
     const noBridge = (await electronMock.handlers.get('fleet.peerSessionList')?.(
       {},
-      'darkstar'
+      'gpuNode'
     )) as { ok: boolean; error?: string; sessions: unknown[] };
     expect(noBridge.ok).toBe(false);
     expect(noBridge.sessions).toEqual([]);
@@ -858,7 +858,7 @@ describe('fleet.peerSession* IPC', () => {
 
     const say = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
       {},
-      'darkstar',
+      'gpuNode',
       'sess_9',
       'salut'
     )) as { ok: boolean; error?: string };

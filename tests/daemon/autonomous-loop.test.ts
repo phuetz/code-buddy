@@ -22,7 +22,7 @@ describe('FleetAutonomousLoop', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'auto-loop-'));
-    store = new FleetColabStore({ dir, agentId: 'ministar-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
+    store = new FleetColabStore({ dir, agentId: 'hub-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
   });
 
   afterEach(() => {
@@ -46,7 +46,7 @@ describe('FleetAutonomousLoop', () => {
     seedTasks([]);
     const result = await makeLoop(async () => ({ ok: true, summary: 'n/a' })).tick();
     expect(result.outcome).toBe('idle');
-    expect(store.listPresence()['ministar-linux/code-buddy']?.status).toBe('idle');
+    expect(store.listPresence()['hub-linux/code-buddy']?.status).toBe('idle');
   });
 
   it('never auto-claims a critical task (guardrail)', async () => {
@@ -127,7 +127,7 @@ describe('FleetAutonomousLoop — fleet load + saturation backpressure', () => {
 
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'auto-loop-load-'));
-    store = new FleetColabStore({ dir, agentId: 'ministar-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
+    store = new FleetColabStore({ dir, agentId: 'hub-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
     const { _resetFleetLoadForTests } = await import('../../src/fleet/fleet-load.js');
     _resetFleetLoadForTests();
   });

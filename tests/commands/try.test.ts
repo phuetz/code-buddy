@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Command } from 'commander';
 import type { ChatEntry } from '../../src/agent/types.js';
 import {
   NO_TRY_PROVIDER_MESSAGE,
   TRY_DEMO_PROMPT,
   chooseOllamaModel,
+  createTryCommand,
   resolveTryProvider,
   runTryDemo,
   type TryProvider,
@@ -59,6 +61,40 @@ describe('buddy try', () => {
       apiKey: 'ollama',
       baseURL: 'http://localhost:11434/v1',
       model: 'qwen3-coder:30b',
+    });
+  });
+
+  it('uses the requested model when it is installed on Ollama', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      models: [{ name: 'qwen2.5:1.5b-instruct' }, { name: 'devstral:latest' }],
+    }), { status: 200 }));
+
+    const provider = await resolveTryProvider({
+      env: {},
+      hasChatGptCredentials: () => false,
+      modelOverride: 'qwen2.5:1.5b-instruct',
+      fetchImpl,
+    });
+
+    expect(provider?.model).toBe('qwen2.5:1.5b-instruct');
+  });
+
+  it('keeps an explicit Ollama provider local even when ChatGPT OAuth exists', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      models: [{ name: 'qwen2.5:1.5b-instruct' }],
+    }), { status: 200 }));
+
+    const provider = await resolveTryProvider({
+      env: { CODEBUDDY_PROVIDER: 'ollama' },
+      hasChatGptCredentials: () => true,
+      modelOverride: 'qwen2.5:1.5b-instruct',
+      fetchImpl,
+    });
+
+    expect(provider).toMatchObject({
+      kind: 'ollama',
+      model: 'qwen2.5:1.5b-instruct',
+      apiKey: 'ollama',
     });
   });
 
@@ -267,11 +303,11 @@ describe('buddy try', () => {
       // Des identifiants ChatGPT sont presents : sans respect de l'override,
       // la demo partait dans le cloud en annoncant un succes.
       hasChatGptCredentials: () => true,
-      baseUrlOverride: 'http://darkstar:11434/v1',
+      baseUrlOverride: 'http://gpuNode:11434/v1',
       modelOverride: 'qwen3.8:27b',
     });
 
-    expect(provider?.baseURL).toBe('http://darkstar:11434/v1');
+    expect(provider?.baseURL).toBe('http://gpuNode:11434/v1');
     expect(provider?.model).toBe('qwen3.8:27b');
     expect(provider?.kind).not.toBe('chatgpt');
   });
@@ -286,13 +322,27 @@ describe('buddy try', () => {
     const provider = await resolveTryProvider({
       env: {} as NodeJS.ProcessEnv,
       hasChatGptCredentials: () => true,
-      baseUrlOverride: 'http://darkstar:11434/v1/',
+      baseUrlOverride: 'http://gpuNode:11434/v1/',
       fetchImpl,
     });
 
     expect(provider?.model).toBe('ornith-1.5:35b');
     // la barre oblique finale ne doit pas se retrouver dans l'URL construite
-    expect(provider?.baseURL).toBe('http://darkstar:11434/v1');
+    expect(provider?.baseURL).toBe('http://gpuNode:11434/v1');
+  });
+
+  it('transmet le modele placé après le sous-commande `try`', async () => {
+    const runTryDemoMock = vi.fn(async () => 0);
+    const program = new Command();
+    program
+      .option('--model <model>', 'global model')
+      .addCommand(createTryCommand({ runTryDemo: runTryDemoMock }));
+
+    await program.parseAsync(['node', 'test', 'try', '--model', 'qwen2.5:1.5b-instruct']);
+
+    expect(runTryDemoMock).toHaveBeenCalledWith(expect.objectContaining({
+      modelOverride: 'qwen2.5:1.5b-instruct',
+    }));
   });
 
 });

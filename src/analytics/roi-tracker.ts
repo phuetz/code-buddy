@@ -11,6 +11,7 @@
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface TaskCompletion {
   id: string;
@@ -389,14 +390,15 @@ export class ROITracker {
    */
   private loadData(): void {
     try {
-      if (fs.existsSync(this.config.dataPath)) {
-        const data = fs.readJsonSync(this.config.dataPath);
-        if (Array.isArray(data)) {
-          this.tasks = data.map(t => ({
-            ...t,
-            timestamp: new Date(t.timestamp),
-          }));
-        }
+      const data = readJsonAtomicSync<unknown>(this.config.dataPath, []);
+      if (Array.isArray(data)) {
+          this.tasks = data.map((t) => {
+            const task = t as TaskCompletion;
+            return {
+            ...task,
+            timestamp: new Date(task.timestamp),
+          };
+        });
       }
     } catch (_error) {
       this.tasks = [];
@@ -409,7 +411,7 @@ export class ROITracker {
   private saveData(): void {
     try {
       fs.ensureDirSync(path.dirname(this.config.dataPath));
-      fs.writeJsonSync(this.config.dataPath, this.tasks, { spaces: 2 });
+      writeJsonAtomicSync(this.config.dataPath, this.tasks, { mode: 0o600 });
     } catch (_error) {
       // Ignore save errors
     }

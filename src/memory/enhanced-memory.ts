@@ -21,6 +21,7 @@ import { getMemoryRepository, MemoryRepository } from '../database/repositories/
 import type { Memory as DBMemory, MemoryType as DBMemoryType } from '../database/schema.js';
 import { getEmbeddingProvider } from '../embeddings/embedding-provider.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { BayesianQualifier } from '../ml/bayesian-qualifier.js';
 import { mmrSelect, type RankedCandidate } from './hybrid-mmr.js';
 
@@ -129,6 +130,8 @@ export interface MemorySearchOptions {
 }
 
 export interface MemoryConfig {
+  /** Directory used for the JSON memory store (defaults to ~/.codebuddy/memory). */
+  dataDir?: string;
   enabled: boolean;
   maxMemories: number;
   maxMemoryAge: number; // days
@@ -142,6 +145,13 @@ export interface MemoryConfig {
   useSQLite: boolean;
 }
 
+export class EnhancedMemoryInitializationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EnhancedMemoryInitializationError';
+  }
+}
+
 const DEFAULT_CONFIG: MemoryConfig = {
   enabled: true,
   maxMemories: 10000,
@@ -153,6 +163,11 @@ const DEFAULT_CONFIG: MemoryConfig = {
   embeddingEnabled: true, // Enable local embeddings with @xenova/transformers
   useSQLite: true, // SQLite by default
 };
+
+/** Preserve the production JSON-store location while keeping it observable in tests. */
+export function getDefaultMemoryDataDir(): string {
+  return path.join(os.homedir(), '.codebuddy', 'memory');
+}
 
 /**
  * Enhanced Memory Manager
@@ -176,13 +191,14 @@ export class EnhancedMemory extends EventEmitter {
   private bayesianQualifier = new BayesianQualifier();
   private disposed = false;
   private pendingDisposeSave: Promise<void> | null = null;
+  private initialized = false;
   /** Resolves when initialize() finished (dirs ensured, stores loaded). */
   private readonly ready: Promise<void>;
 
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.dataDir = path.join(os.homedir(), '.codebuddy', 'memory');
+    this.dataDir = config.dataDir ?? getDefaultMemoryDataDir();
 
     // Initialize SQLite repository if enabled
     if (this.config.useSQLite) {
@@ -212,10 +228,19 @@ export class EnhancedMemory extends EventEmitter {
     // ensureDir (ENOENT) and loadMemories() could overwrite entries stored
     // before the load completed. Every async public method awaits `ready`.
     this.ready = this.initialize().catch((err) => {
+      const failure = err instanceof EnhancedMemoryInitializationError
+        ? err
+        : new EnhancedMemoryInitializationError(
+          `EnhancedMemory initialize failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       logger.warn('EnhancedMemory initialization failed — continuing best-effort', {
-        error: err instanceof Error ? err.message : String(err),
+        error: failure.message,
       });
+      throw failure;
     });
+    // Keep the rejection observable to every public awaiter without creating
+    // an unhandled rejection when construction itself is the last operation.
+    void this.ready.catch(() => undefined);
   }
 
   /** Await full initialization (dirs + persisted state loaded). */
@@ -244,15 +269,16 @@ export class EnhancedMemory extends EventEmitter {
 
     // Load GPR state if exists
     const qualifierPath = path.join(this.dataDir, 'bayesian-state.json');
-    if (await fs.pathExists(qualifierPath)) {
+    const qualifierState = await readTextAtomic(qualifierPath, '');
+    if (qualifierState) {
       try {
-        const state = await fs.readFile(qualifierPath, 'utf8');
-        this.bayesianQualifier.loadState(state);
-      } catch (err: any) {
-        logger.error(`Failed to load bayesian-state: ${err.message}`);
+        this.bayesianQualifier.loadState(qualifierState);
+      } catch (err) {
+        logger.error(`Failed to load bayesian-state: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
+    this.initialized = true;
     if (this.disposed) return;
 
     // Start decay timer
@@ -296,15 +322,15 @@ export class EnhancedMemory extends EventEmitter {
     // Fallback: Load from JSON
     const indexPath = path.join(this.dataDir, 'memory-index.json');
 
-    if (await fs.pathExists(indexPath)) {
-      try {
-        const entries = await fs.readJSON(indexPath);
-        for (const entry of entries) {
-          this.memories.set(entry.id, entry);
-        }
-      } catch {
-        // Start fresh
+    const entries = await readJsonAtomic<unknown[]>(indexPath, [], {
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object' || typeof (entry as { id?: unknown }).id !== 'string') {
+        continue;
       }
+      const memoryEntry = entry as MemoryEntry;
+      this.memories.set(memoryEntry.id, memoryEntry);
     }
   }
 
@@ -325,13 +351,15 @@ export class EnhancedMemory extends EventEmitter {
     const jsonFiles = files.filter(file => file.endsWith('.json'));
     const loadResults = await Promise.allSettled(
       jsonFiles.map(async file => {
-        const project = await fs.readJSON(path.join(projectsDir, file));
+        const project = await readJsonAtomic<ProjectMemory | null>(path.join(projectsDir, file), null, {
+          isValid: (value): value is ProjectMemory => Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+        });
         return project;
       })
     );
 
     for (const result of loadResults) {
-      if (result.status === 'fulfilled') {
+      if (result.status === 'fulfilled' && result.value) {
         this.projects.set(result.value.projectId, result.value);
       }
       // Skip rejected promises (invalid files)
@@ -344,13 +372,9 @@ export class EnhancedMemory extends EventEmitter {
   private async loadUserProfile(): Promise<void> {
     const profilePath = path.join(this.dataDir, 'user-profile.json');
 
-    if (await fs.pathExists(profilePath)) {
-      try {
-        this.userProfile = await fs.readJSON(profilePath);
-      } catch {
-        this.userProfile = null;
-      }
-    }
+    this.userProfile = await readJsonAtomic<UserProfile | null>(profilePath, null, {
+      isValid: (value): value is UserProfile => Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+    });
   }
 
   /**
@@ -359,55 +383,53 @@ export class EnhancedMemory extends EventEmitter {
   private async loadSummaries(): Promise<void> {
     const summariesPath = path.join(this.dataDir, 'summaries.json');
 
-    if (await fs.pathExists(summariesPath)) {
-      try {
-        this.summaries = await fs.readJSON(summariesPath);
-      } catch {
-        this.summaries = [];
-      }
-    }
+    this.summaries = await readJsonAtomic<ConversationSummary[]>(summariesPath, [], {
+      isValid: (value): value is ConversationSummary[] => Array.isArray(value),
+    });
   }
 
   /**
    * Save all data
    */
   private async saveAll(): Promise<void> {
+    if (!this.initialized) {
+      throw new EnhancedMemoryInitializationError(
+        'EnhancedMemory initialize did not complete; refusing to persist an unloaded store',
+      );
+    }
     // Save all data files in parallel for better performance
     const saveOperations: Promise<void>[] = [
       // Save memory index
-      fs.writeJSON(
+      writeJsonAtomic(
         path.join(this.dataDir, 'memory-index.json'),
         Array.from(this.memories.values()),
-        { spaces: 2 }
-      ),
-      // Save summaries
-      fs.writeJSON(
-        path.join(this.dataDir, 'summaries.json'),
-        this.summaries,
-        { spaces: 2 }
+        { mode: 0o600 }
       ),
     ];
 
-    // Save user profile if exists
+    saveOperations.push(writeJsonAtomic(
+      path.join(this.dataDir, 'summaries.json'),
+      this.summaries,
+      { mode: 0o600 }
+    ));
+
     if (this.userProfile) {
       saveOperations.push(
-        fs.writeJSON(
+        writeJsonAtomic(
           path.join(this.dataDir, 'user-profile.json'),
           this.userProfile,
-          { spaces: 2 }
+          { mode: 0o600 }
         )
       );
     }
 
-    if (this.bayesianQualifier) {
-      saveOperations.push(
-        fs.writeFile(
-          path.join(this.dataDir, 'bayesian-state.json'),
-          this.bayesianQualifier.saveState(),
-          'utf8'
-        )
-      );
-    }
+    saveOperations.push(
+      writeFileAtomic(
+        path.join(this.dataDir, 'bayesian-state.json'),
+        this.bayesianQualifier.saveState(),
+        { mode: 0o600 }
+      )
+    );
 
     await Promise.all(saveOperations);
   }
@@ -600,7 +622,7 @@ export class EnhancedMemory extends EventEmitter {
     if (options.query) {
       const query = options.query.toLowerCase();
 
-      if (this.bayesianQualifier && (this.bayesianQualifier as any).isTrained) {
+      if (this.bayesianQualifier && (this.bayesianQualifier as unknown as { isTrained: boolean }).isTrained) {
         const queryEmbedding = this.config.embeddingEnabled
           ? await this.generateEmbedding(options.query)
           : undefined;
@@ -837,7 +859,7 @@ export class EnhancedMemory extends EventEmitter {
       'projects',
       `${project.projectId}.json`
     );
-    await fs.writeJSON(projectPath, project, { spaces: 2 });
+    await writeJsonAtomic(projectPath, project, { mode: 0o600 });
   }
 
   /**
@@ -995,8 +1017,10 @@ export class EnhancedMemory extends EventEmitter {
     const parts: string[] = [];
 
     // Add user preferences
-    if (options.includePreferences && this.userProfile) {
-      parts.push(`User preferences:\n${JSON.stringify(this.userProfile.preferences, null, 2)}`);
+    if (options.includePreferences) {
+      if (this.userProfile) {
+        parts.push(`User preferences:\n${JSON.stringify(this.userProfile.preferences, null, 2)}`);
+      }
     }
 
     // Add project context
@@ -1193,7 +1217,7 @@ export class EnhancedMemory extends EventEmitter {
   async getActiveLearningTargets(limit: number = 5, query?: string): Promise<{
     memory: MemoryEntry; baldScore: number }[]> {
     await this.ready;
-    if (!this.bayesianQualifier || !(this.bayesianQualifier as any).isTrained) {
+    if (!this.bayesianQualifier || !(this.bayesianQualifier as unknown as { isTrained: boolean }).isTrained) {
       return [];
     }
 

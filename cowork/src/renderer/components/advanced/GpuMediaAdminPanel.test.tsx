@@ -26,7 +26,7 @@ function makeApi() {
     gpuMedia: {
       capabilities: vi.fn().mockResolvedValue({
         protocolVersion: 1,
-        workerId: 'darkstar-test',
+        workerId: 'gpuNode-test',
         jobs: ['panoworld_reconstruct', 'avatar_video_render'],
         queueDepth: 0,
         gpus: [{ name: 'RTX 3090', vramMb: 24_576, busy: false }],
@@ -60,7 +60,7 @@ describe('GpuMediaAdminPanel', () => {
     (window as unknown as { electronAPI: unknown }).electronAPI = api;
     render(<GpuMediaAdminPanel />);
 
-    expect(await screen.findByText(/darkstar-test/)).toBeTruthy();
+    expect(await screen.findByText(/gpuNode-test/)).toBeTruthy();
     fireEvent.change(screen.getByTestId('gpu-scene-id'), { target: { value: 'kitchen' } });
     fireEvent.change(screen.getByTestId('gpu-room-id'), { target: { value: 'living-room' } });
     fireEvent.change(screen.getByTestId('gpu-image-path'), {

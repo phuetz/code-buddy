@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "endpoint": "http://100.73.222.64:11434",
+    "endpoint": "http://192.0.2.42:11434",
     "models": [
       "ornith-1.5:35b",
       "qwen3.8:27b",

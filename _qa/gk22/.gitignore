@@ -1,0 +1,9 @@
+# Generated HOME trees contain ed25519 private keys.
+home/
+home-*/
+attacker-home/
+attacker-project/
+project/
+exchange/
+exchange-attacker/
+**/skill-signing/

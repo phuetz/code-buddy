@@ -17,8 +17,9 @@ import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import type { SessionStore } from "../persistence/session-store.js";
-import type { CostTracker } from "../utils/cost-tracker.js";
+import type { Session, SessionStore } from "../persistence/session-store.js";
+import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
+import { MODEL_PRICING, isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -40,6 +41,7 @@ import { resetPluginMarketplace } from "../plugins/marketplace.js";
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
 import { primeLocalRuntimeModelConfig } from '../config/local-runtime-context.js';
 import { getModelToolConfig } from '../config/model-tools.js';
+import { inferCostProvider } from '../analytics/cost-report.js';
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -77,6 +79,13 @@ export class CodeBuddyAgent extends BaseAgent {
   private visionGroundingModel: string | undefined;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
+
+  /**
+   * Counters the provider reported for the most recent completed turn, summed
+   * over its rounds. `null` when the provider reported none — the caller must
+   * then say so rather than pass an estimate off as a measurement.
+   */
+  private lastTurnProviderUsage: { promptTokens: number; completionTokens: number } | null = null;
 
   private toolSelectionStrategy: ToolSelectionStrategy;
 
@@ -161,7 +170,7 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Create infrastructure - encapsulates all manager dependencies
     this.infrastructure = createAgentInfrastructureSync(
-      { apiKey, model: modelToUse, baseURL, maxContextTokens },
+      { apiKey, model: modelToUse, baseURL, maxContextTokens, workingDirectory: initialWorkingDirectory },
       { memoryEnabled: this.memoryEnabled, useModelRouting: this.useModelRouting }
     );
 
@@ -272,16 +281,6 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Initialize Executor
     const timelineEnabled = process.env.CODEBUDDY_TIMELINE === 'true';
-    let lastTimelineCheckpointId: string | undefined;
-    if (timelineEnabled) {
-      try {
-        lastTimelineCheckpointId = this.checkpointManager.getCheckpoints().at(-1)?.id;
-      } catch (error) {
-        logger.warn('[session-timeline] failed to inspect initial checkpoint state', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
     this.executor = new AgentExecutor({
       client: this.codebuddyClient,
       toolHandler: this.toolHandler,
@@ -298,12 +297,20 @@ export class CodeBuddyAgent extends BaseAgent {
               const sessionId = this.sessionStore.getCurrentSessionId();
               if (!sessionId) return;
               const { SessionTimeline } = await import('../sessions/timeline.js');
-              const latestCheckpoint = this.checkpointManager.getCheckpoints().at(-1);
-              const turnCheckpoint = turn.filesTouched.length > 0 &&
-                latestCheckpoint?.id !== lastTimelineCheckpointId
-                ? latestCheckpoint
-                : undefined;
-              lastTimelineCheckpointId = latestCheckpoint?.id;
+              let checkpointId: string | undefined;
+              try {
+                const { captureAndSaveTimelineSnapshot } = await import('../sessions/timeline-snapshot.js');
+                const cwd = this.toolHandler.getWorkingDirectory() || process.cwd();
+                checkpointId = captureAndSaveTimelineSnapshot({
+                  sessionId,
+                  turn: turn.turn,
+                  cwd,
+                }).id;
+              } catch (error) {
+                logger.warn('[session-timeline] failed to snapshot working tree', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
               await new SessionTimeline(sessionId).record({
                 turn: turn.turn,
                 ts: turn.ts,
@@ -311,7 +318,7 @@ export class CodeBuddyAgent extends BaseAgent {
                 textPreview: turn.text,
                 toolCalls: turn.toolCalls,
                 filesTouched: turn.filesTouched,
-                ...(turnCheckpoint ? { checkpointId: turnCheckpoint.id } : {}),
+                ...(checkpointId ? { checkpointId } : {}),
               });
             },
           }
@@ -352,6 +359,9 @@ export class CodeBuddyAgent extends BaseAgent {
       maxToolRounds: this.maxToolRounds,
       isGrokModel: this.isGrokModel.bind(this),
       recordSessionCost: this.recordSessionCost.bind(this),
+      recordTurnProviderUsage: (usage) => {
+        this.lastTurnProviderUsage = usage ? { ...usage } : null;
+      },
       isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
       estimateSessionCostLimitReached: this.estimateSessionCostLimitReached.bind(this),
       getSessionCost: this.getSessionCost.bind(this),
@@ -518,8 +528,12 @@ export class CodeBuddyAgent extends BaseAgent {
     }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
 
     // Load SKILL.md skills so findSkill() returns results
-    import('../skills/index.js').then(({ initializeSkills }) => {
-      initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
+    this.skillsReady = import('../skills/index.js').then(async ({ initializeSkills }) => {
+      try {
+        await initializeSkills();
+      } catch (e) {
+        logger.debug('Skills initialization failed (optional)', { error: String(e) });
+      }
     }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
 
     // Initialize MCP servers if configured (can be disabled for headless/one-shot runs).
@@ -633,6 +647,12 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
   public systemPromptReady: Promise<void>;
+  /** Resolves when the asynchronous skill registry startup has settled. */
+  private skillsReady: Promise<void> = Promise.resolve();
+
+  public getSkillsReady(): Promise<void> {
+    return this.skillsReady;
+  }
 
   /**
    * Set the model override to use specifically for visual grounding fallback calls.
@@ -988,21 +1008,25 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // enabled=true. The /agents slash command can also instantiate it manually
     // at runtime. Wired via audit OpenClaw heritage findings (2026-05-02 — top 4).
     // V0.1: only instantiates the singleton (boot does NOT auto-run a workflow).
-    // Requires GROK_API_KEY env var; logs a warning and skips if absent.
-    import('../config/toml-config.js').then(({ getConfigManager }) => {
+    // Requires any configured provider API key; logs a warning and skips if absent.
+    import('../config/toml-config.js').then(async ({ getConfigManager }) => {
       const masCfg = getConfigManager().getConfig().multi_agent_system;
       if (!masCfg?.enabled) return;
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn('MultiAgentSystem boot skipped: GROK_API_KEY not set');
+        logger.warn('MultiAgentSystem boot skipped: no API key set');
         return;
       }
-      import('../agent/multi-agent/multi-agent-system.js').then(({ getMultiAgentSystem }) => {
+      try {
+        const { getMultiAgentSystem } = await import('../agent/multi-agent/multi-agent-system.js');
         getMultiAgentSystem(apiKey, process.env.GROK_BASE_URL);
         logger.info('MultiAgentSystem auto-instantiated from TOML config', {
           default_strategy: masCfg.default_strategy ?? 'hierarchical',
         });
-      }).catch((e) => { logger.debug('MultiAgentSystem module load failed (optional)', { error: String(e) }); });
+      } catch (e) {
+        logger.debug('MultiAgentSystem module load failed (optional)', { error: String(e) });
+      }
     }).catch((e) => { logger.debug('Multi-agent system config check failed (optional)', { error: String(e) }); });
 
     // Boot-time auto-instantiate of EnhancedCoordinator + SessionRegistry
@@ -1570,6 +1594,22 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.promptBuilder.updateConfig({ cwd: dir || process.cwd() });
   }
 
+  /** Rehydrate chat and LLM history from a persisted session (headless --resume). */
+  hydratePersistedSession(session: Session): void {
+    const entries = this.sessionStore.convertMessagesToChatEntries(session.messages);
+    const llmMessages: CodeBuddyMessage[] = [];
+    for (const entry of entries) {
+      if (entry.type === 'user' || entry.type === 'assistant') {
+        llmMessages.push({ role: entry.type, content: entry.content });
+      }
+    }
+    this.historyManager.setChatHistory(entries);
+    this.historyManager.setMessages(llmMessages);
+    if (session.workingDirectory) {
+      this.setWorkingDirectory(session.workingDirectory);
+    }
+  }
+
   setSystemPromptAppend(append: string | undefined): void {
     this.systemPromptAppend = append;
   }
@@ -1618,6 +1658,82 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.codebuddyClient.getCurrentModel();
   }
 
+  /**
+   * Token counters as reported by the PROVIDER for the last completed turn.
+   * Returns `undefined` when the provider reported none, so a consumer never
+   * mistakes an estimate for a measurement.
+   */
+  getLastTurnUsage(): { promptTokens: number; completionTokens: number } | undefined {
+    return this.lastTurnProviderUsage ? { ...this.lastTurnProviderUsage } : undefined;
+  }
+
+  /**
+   * Get extended cost information for the current session.
+   * Returns metadata about whether the cost is based on provider usage or local estimates,
+   * the pricing model used, and billing type.
+   */
+  getSessionCostExtended(): ExtendedCostInfo {
+    const model = this.getCurrentModel();
+    const report = this.costTracker.getReport();
+    const lastProviderUsage = this.lastTurnProviderUsage;
+
+    // Determine if we have provider usage
+    const estimated = lastProviderUsage === null || lastProviderUsage === undefined;
+
+    // Get billing and pricing status
+    const billing: 'pay-per-use' | 'subscription' =
+      isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
+        ? 'subscription'
+        : 'pay-per-use';
+
+    const pricing: 'known' | 'unknown' | 'subscription' =
+      billing === 'subscription'
+        ? 'subscription'
+        : MODEL_PRICING[model] ? 'known' : 'unknown';
+
+    return {
+      total: this.sessionCost,
+      estimated,
+      pricing,
+      billing,
+      inputTokens: report.sessionTokens.input,
+      outputTokens: report.sessionTokens.output,
+    };
+  }
+
+  override saveCurrentSession(): Promise<void> | void {
+    const report = this.costTracker.getReport();
+    const sessionTokens = report.sessionTokens ?? { input: 0, output: 0 };
+    const currentModel = this.getCurrentModel();
+    const model = typeof currentModel === 'string' && currentModel.trim()
+      ? currentModel
+      : 'unknown';
+    const provider = process.env.CODEBUDDY_PROVIDER?.trim() || inferCostProvider(model);
+    const sessionUsage = typeof this.costTracker.getSessionUsage === 'function'
+      ? this.costTracker.getSessionUsage()
+      : [];
+    const turns = sessionUsage.map((row) => ({
+      timestamp: row.timestamp.toISOString(),
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      costUsd: row.cost,
+      model: row.model,
+      provider: process.env.CODEBUDDY_PROVIDER?.trim() || inferCostProvider(row.model),
+    }));
+    return this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory(), {
+      provider,
+      model,
+      inputTokens: sessionTokens.input,
+      outputTokens: sessionTokens.output,
+      totalCost: this.getSessionCost(),
+      turns,
+    });
+  }
+
+  getCurrentSessionId(): string | null {
+    return this.sessionStore.getCurrentSessionId();
+  }
+
   getClient(): CodeBuddyClient {
     return this.codebuddyClient;
   }
@@ -1660,6 +1776,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
     if (this.abortController) {
       this.abortController.abort();
     }
+  }
+
+  requestManualCompaction(): void {
+    this.contextManager.requestManualCompaction();
   }
 
   // Clear chat and reset
@@ -1982,15 +2102,41 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /**
    * Record cost for current request
-   * @param inputTokens - Number of input tokens
-   * @param outputTokens - Number of output tokens
+   * @param inputTokens - Number of input tokens (local estimate)
+   * @param outputTokens - Number of output tokens (local estimate)
+   * @param providerUsage - Optional provider-reported usage (takes precedence over local estimates)
    */
-  private recordSessionCost(inputTokens: number, outputTokens: number): void {
+  private recordSessionCost(
+    inputTokens: number,
+    outputTokens: number,
+    providerUsage?: { promptTokens: number; completionTokens: number }
+  ): void {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
-    this.costTracker.recordUsage(inputTokens, outputTokens, model);
+
+    // Record usage with effective tokens (provider if available, otherwise local estimate)
+    const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
+    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
+    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+
+    // Store provider usage for extended cost info retrieval
+    if (providerUsage) {
+      this.lastTurnProviderUsage = { ...providerUsage };
+    }
+
+    const activeRun = getActiveRunStore();
+    const runId = activeRun?.getCurrentRunId();
+    if (activeRun && runId) {
+      const report = this.costTracker.getReport();
+      activeRun.updateMetrics(runId, {
+        promptTokens: report.sessionTokens.input,
+        completionTokens: report.sessionTokens.output,
+        totalTokens: report.sessionTokens.input + report.sessionTokens.output,
+        totalCost: this.sessionCost,
+      });
+    }
 
     // Check budget alerts after recording cost
     if (this.sessionCostLimit !== Infinity) {

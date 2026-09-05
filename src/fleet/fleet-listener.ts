@@ -55,7 +55,7 @@ import {
 } from '../channels/reconnection-manager.js';
 
 export interface FleetListenerOptions {
-  /** Peer Gateway WS URL, e.g. ws://100.98.18.76:3000/ws */
+  /** Peer Gateway WS URL, e.g. ws://203.0.113.10:3000/ws */
   url: string;
   /** API key with `fleet:listen` scope on the peer. Either this or jwt. */
   apiKey?: string;

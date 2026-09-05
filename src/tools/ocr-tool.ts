@@ -143,10 +143,10 @@ export class OCRTool {
       }
 
       // 4. Try Cloud Vision API
-      const codebuddyKey = process.env.GROK_API_KEY;
-      const openaiKey = process.env.OPENAI_API_KEY;
-      if (codebuddyKey || openaiKey) {
-        return await this.runVisionOCR(resolvedPath, (openaiKey || codebuddyKey) as string);
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
+      if (apiKey) {
+        return await this.runVisionOCR(resolvedPath, apiKey);
       }
 
       return {

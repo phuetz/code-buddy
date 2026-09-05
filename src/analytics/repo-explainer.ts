@@ -382,6 +382,7 @@ function summarizeLanguages(input: RepoExplanationInput): RepoLanguageSummary[] 
 
   const measuredTotal = [...counts.values()].reduce((sum, count) => sum + count, 0);
   return [...counts.entries()]
+    .filter(([, files]) => files > 0)
     .map(([name, files]) => ({
       name,
       files,

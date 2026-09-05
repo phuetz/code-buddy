@@ -68,8 +68,8 @@ JWT_SECRET=<shared-secret> CODEBUDDY_PEER_MODEL=qwen3.6:27b \
 JWT_SECRET=<shared-secret> buddy fleet token --ttl 30d   # prints a JWT (peer:invoke + fleet:listen)
 
 # On the coordinator machine (A), connect to each worker (Tailscale / LAN address), then ask all:
-/fleet listen ws://100.73.222.64:3010/ws --jwt <token> --name darkstar
-/fleet listen ws://100.98.18.76:3010/ws  --jwt <token> --name ministar-linux
+/fleet listen ws://192.0.2.42:3010/ws --jwt <token> --name gpuNode
+/fleet listen ws://203.0.113.10:3010/ws  --jwt <token> --name hub-linux
 buddy council "Propose une architecture pour X" --fleet
 # → the conductor assigns complementary roles across local models + connected machines,
 #   then the council judges, synthesizes, reconciles all answers and the scoreboard learns winners
@@ -110,8 +110,8 @@ the same recipe with your real hosts.
 
 The "hub" is just another Code Buddy server — there's no special hub
 role. Any peer can host other peers' listen connections. In Patrice's
-lab the convention is: **Ministar Linux** (`100.98.18.76:3000`) is
-the always-on hub, **MINISTAR G7 PT** + **DARKSTAR PC 3090** are
+lab the convention is: **Hub Linux** (`203.0.113.10:3000`) is
+the always-on hub, **HUB G7 PT** + **GPU_NODE PC 3090** are
 intermittent peers that connect when active.
 
 Topology is **star, not mesh** — simpler than DHT/gossip. A peer
@@ -132,11 +132,11 @@ Connect to a peer Code Buddy's WebSocket and subscribe to its
 `fleet:*` events.
 
 ```bash
-/fleet listen ws://100.98.18.76:3000/ws \
+/fleet listen ws://203.0.113.10:3000/ws \
   --api-key cb_sk_xxx \
   --auto-reconnect \
   --max-attempts 5 \
-  --name ministar-linux
+  --name hub-linux
 ```
 
 Options:
@@ -145,7 +145,7 @@ Options:
   must hold the `fleet:listen` scope.
 - `--name <id>` — stable peer id used by `/fleet stop`, `/fleet send`,
   `/fleet history --peer`. Default = host:port of the WS URL with
-  dots → dashes (`100.98.18.76:3000` → `100-98-18-76:3000`).
+  dots → dashes (`203.0.113.10:3000` → `203-0-113-10:3000`).
 - `--auto-reconnect` — opt in to exponential-backoff reconnect on ws
   drops (Phase (d).6, uses the shared `ReconnectionManager`).
 - `--max-attempts <n>` — cap for `--auto-reconnect` (default 5).
@@ -153,8 +153,8 @@ Options:
 The streaming output to your terminal is prefixed with the peer id
 + source identifier:
 ```
-  [fleet:ministar-linux ministar-ubuntu:abc12345] fleet:agent:tool_started
-  [fleet:darkstar darkstar:def67890] fleet:workflow:start
+  [fleet:hub-linux hub-ubuntu:abc12345] fleet:agent:tool_started
+  [fleet:gpuNode gpuNode:def67890] fleet:workflow:start
 ```
 
 ### `/fleet send <peer> <method> [json-params] [--timeout <ms>]`
@@ -163,12 +163,12 @@ Invoke a `peer.*` RPC method on a connected peer and print the
 response.
 
 ```bash
-/fleet send ministar-linux peer.ping
-# → Peer "ministar-linux" → peer.ping OK (12ms): { "pong": true, ... }
+/fleet send hub-linux peer.ping
+# → Peer "hub-linux" → peer.ping OK (12ms): { "pong": true, ... }
 
-/fleet send ministar-linux peer.chat \
+/fleet send hub-linux peer.chat \
   {"prompt":"Explain CEM-MPC briefly","model":"gemini-2.5-flash"}
-# → Peer "ministar-linux" → peer.chat OK (2300ms):
+# → Peer "hub-linux" → peer.chat OK (2300ms):
 #   { "text": "CEM-MPC is...", "modelRequested":"gemini-2.5-flash", ... }
 
 /fleet send (default) peer.chat {"prompt":"..."} --timeout 60000
@@ -186,7 +186,7 @@ see methods, `peer.chat` provider status, and advertised model
 capabilities.
 
 ```bash
-/fleet describe ministar-linux
+/fleet describe hub-linux
 # -> Hostname, role, methods, peer chat provider, providers, top models
 
 /fleet describe --json
@@ -200,10 +200,10 @@ Use it when you want the CLI shape to feel like a normal Code Buddy
 tool call instead of manually wrapping the `peer.tool.invoke` JSON.
 
 ```bash
-/fleet tool darkstar view_file {"file_path":"world-model/README.md"}
-# -> Remote view_file output from DARKSTAR, scoped to its workspace root
+/fleet tool gpuNode view_file {"file_path":"world-model/README.md"}
+# -> Remote view_file output from GPU_NODE, scoped to its workspace root
 
-/fleet tool darkstar search {"query":"TODO","path":"src"} --stream
+/fleet tool gpuNode search {"query":"TODO","path":"src"} --stream
 # -> Streams sanitized peer:chunk output live while ripgrep runs remotely
 ```
 
@@ -224,7 +224,7 @@ when model capability scores are otherwise close.
 
 ```bash
 /fleet route "think deeply about this multi-agent architecture" --privacy public
-# -> Primary: ministar-linux / gpt-5.1-codex (score ...)
+# -> Primary: hub-linux / gpt-5.1-codex (score ...)
 # -> Next call: peer_delegate {...}
 
 /fleet route "audit this private source tree" --privacy sensitive
@@ -254,16 +254,16 @@ Useful flags:
 ```
 Fleet listeners — 2 active
 
-Peer "ministar-linux"
-  URL:     ws://100.98.18.76:3000/ws
+Peer "hub-linux"
+  URL:     ws://203.0.113.10:3000/ws
   Uptime:  127s
   Events:  18 received
   Reconnect: enabled (0/5 attempts since last connect)
   Last seen: 12s ago (heartbeat)
   Last compaction: hybrid in 1234ms (saved 12000 tokens)
 
-Peer "darkstar"
-  URL:     ws://100.73.222.64:3000/ws
+Peer "gpuNode"
+  URL:     ws://192.0.2.42:3000/ws
   Uptime:  93s
   Events:  4 received
   Reconnect: enabled (0/5 attempts since last connect)
@@ -281,7 +281,7 @@ stale here.
 ### `/fleet stop [name|--all]`
 
 ```bash
-/fleet stop ministar-linux    # disconnect that peer
+/fleet stop hub-linux    # disconnect that peer
 /fleet stop                   # only valid when 1 peer active
 /fleet stop --all             # disconnect every peer
 ```
@@ -292,13 +292,13 @@ Show the last N `fleet:*` events received from a peer (default 20,
 capped at the listener's ring capacity, default 50).
 
 ```bash
-/fleet history --peer ministar-linux
-# → [22:14:03] fleet:agent:tool_started [ministar-ubuntu] tool=view_file
-#   [22:14:05] fleet:agent:tool_completed [ministar-ubuntu] tool=view_file
-#   [22:14:08] fleet:peer:heartbeat [ministar-ubuntu] (heartbeat)
+/fleet history --peer hub-linux
+# → [22:14:03] fleet:agent:tool_started [hub-ubuntu] tool=view_file
+#   [22:14:05] fleet:agent:tool_completed [hub-ubuntu] tool=view_file
+#   [22:14:08] fleet:peer:heartbeat [hub-ubuntu] (heartbeat)
 #   ...
 
-/fleet history 5 --peer darkstar     # last 5 events from darkstar
+/fleet history 5 --peer gpuNode     # last 5 events from gpuNode
 ```
 
 The history is **in-memory** per listener — kill the session, the
@@ -319,7 +319,7 @@ modules under `src/fleet/` register their methods at boot via
 Returns the peer's identity + method catalogue + provider info:
 ```json
 {
-  "hostname": "ministar-ubuntu",
+  "hostname": "hub-ubuntu",
   "pid": 4823,
   "methods": ["peer.describe", "peer.ping", "peer.echo", "peer.chat"],
   "apiVersion": "d.16",
@@ -494,7 +494,7 @@ under message `[fleet] peer.tool.invoke`.
 
 Concrete cross-host call from Cowork or `buddy` CLI:
 ```bash
-> /fleet send darkstar peer.tool.invoke {"tool":"view_file","args":{"file_path":"world-model/README.md"}}
+> /fleet send gpuNode peer.tool.invoke {"tool":"view_file","args":{"file_path":"world-model/README.md"}}
 ```
 
 Or programmatically from a peer agent:
@@ -586,7 +586,7 @@ future roadmap idea.
 
 - **`CODEBUDDY_FLEET_HOSTNAME`** — overrides `os.hostname()` in the
   `source.hostname` field of every fleet:* event. Useful when you
-  want a peer to advertise itself as "darkstar-gpu" instead of the
+  want a peer to advertise itself as "gpuNode-gpu" instead of the
   raw OS hostname.
 
 ### Backpressure (Phase (d).7 + (d).8)
@@ -612,47 +612,47 @@ future roadmap idea.
 
 | Host | Tailscale IP | Role | Provider |
 |------|-------------|------|----------|
-| **MINISTAR** (G7 PT) | `100.90.108.4` | Dev principal | Claude Max + Gemini Ultra |
-| **DARKSTAR** (PC 3090) | `100.73.222.64` | Heavy GPU | Ollama (qwen3.6:35b) + cloud fallback |
-| **Ministar Linux** | `100.98.18.76` | Always-on hub | Ollama (qwen3.6, qwen3, gemma4, nomic-embed) |
+| **HUB** (G7 PT) | `203.0.113.14` | Dev principal | Claude Max + Gemini Ultra |
+| **GPU_NODE** (PC 3090) | `192.0.2.42` | Heavy GPU | Ollama (qwen3.6:35b) + cloud fallback |
+| **Hub Linux** | `203.0.113.10` | Always-on hub | Ollama (qwen3.6, qwen3, gemma4, nomic-embed) |
 
-### Bootstrap the hub on Ministar Linux (Ubuntu)
+### Bootstrap the hub on the Linux host (Ubuntu)
 
 ```bash
-# In /home/patrice/code-buddy
+# In ~/code-buddy
 export GOOGLE_API_KEY="AIza..."         # → cloud fallback when needed
 export OLLAMA_HOST="http://localhost:11434"   # → priority 1
-export CODEBUDDY_FLEET_HOSTNAME="ministar-ubuntu"
+export CODEBUDDY_FLEET_HOSTNAME="hub-ubuntu"
 export CODEBUDDY_FLEET_API_KEY="cb_sk_xxx"
 
 buddy server --port 3000
 # log: [fleet] peer.chat wired: ollama (qwen2.5-coder:7b, local)
 ```
 
-### Connect from MINISTAR (Windows G7 PT)
+### Connect from HUB (Windows G7 PT)
 
 ```bash
 # In D:\CascadeProjects\grok-cli
 # .env already loads the keys
 buddy
-> /fleet listen ws://100.98.18.76:3000/ws --auto-reconnect --name ministar-linux --api-key $env:CODEBUDDY_FLEET_API_KEY
+> /fleet listen ws://203.0.113.10:3000/ws --auto-reconnect --name hub-linux --api-key $env:CODEBUDDY_FLEET_API_KEY
 > /fleet status
 # → 1 active. Provider on remote = ollama qwen2.5-coder:7b.
 
-> /fleet send ministar-linux peer.chat {"prompt":"Refactor this for clarity:\n\nfunction f(x) { return x.split(',').map(s => s.trim()).filter(Boolean) }"}
+> /fleet send hub-linux peer.chat {"prompt":"Refactor this for clarity:\n\nfunction f(x) { return x.split(',').map(s => s.trim()).filter(Boolean) }"}
 # → REAL response from local Qwen on the Linux host. Zero cloud cost.
 ```
 
-### Connect from DARKSTAR (Windows PC 3090)
+### Connect from GPU_NODE (Windows PC 3090)
 
-Same as MINISTAR but pointing at its own Tailscale IP if it also
+Same as HUB but pointing at its own Tailscale IP if it also
 runs a `buddy server` exposing its local Ollama. Then any peer can
-delegate code drafts to DARKSTAR's heavier model:
+delegate code drafts to GPU_NODE's heavier model:
 
 ```bash
 # On any peer
-> /fleet send darkstar peer.chat {"prompt":"Generate Rust impl for trait Foo with method bar"}
-# → DARKSTAR's qwen3.6:35b answers. Free + fast.
+> /fleet send gpuNode peer.chat {"prompt":"Generate Rust impl for trait Foo with method bar"}
+# → GPU_NODE's qwen3.6:35b answers. Free + fast.
 ```
 
 ---
@@ -746,6 +746,10 @@ Two new tools registered on every Code Buddy:
   stage receives earlier stage output as handoff context, so Review
   can audit Code and Safe can verify the accumulated result.
 - `/fleet route "..."` — human-facing version of the same router.
+  Before choosing a model for a known work type, consult the measured council
+  scoreboard: `buddy council scoreboard best --task redaction-fr` (or another
+  task type). The result is a recommendation from observed outcomes; keep
+  `CODEBUDDY_COUNCIL_ROUTING=true` enabled when the main chat must apply it.
   Add `--profile review` (or another dispatch profile) to select a
   posture, and `--delegate` to route and immediately perform one
   `peer.chat` call on the selected peer/model.
@@ -775,9 +779,9 @@ When the human runs `/fleet listen ws://peer …`, the LLM thereafter
 can autonomously decide to delegate without a copy-paste step:
 
 ```
-User: ask the darkstar peer how it would index a 50M-row table
-LLM: [calls route_peer({prompt: '...'}), gets darkstar/qwen, calls peer_delegate({peer: 'darkstar', model: 'qwen3.6:35b', ...})]
-LLM (continuing with peer's answer in context): "darkstar suggests …"
+User: ask the gpuNode peer how it would index a 50M-row table
+LLM: [calls route_peer({prompt: '...'}), gets gpuNode/qwen, calls peer_delegate({peer: 'gpuNode', model: 'qwen3.6:35b', ...})]
+LLM (continuing with peer's answer in context): "gpuNode suggests …"
 ```
 
 ### Autonomous Fleet Protocol v0.1 (Phase d.18)
@@ -787,12 +791,19 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 > `critical` never auto-claimed) on the **free-first model ladder** (`CODEBUDDY_LOCAL_MODEL` →
 > `CODEBUDDY_NETWORK_MODELS=model@url,…` → `CODEBUDDY_ESCALATION_MODEL`), and `buddy autonomy install`
 > runs it as an always-on service.
-> - **Two executors.** Default v0 writes scoped artifacts (no repo edits). Opt-in `CODEBUDDY_AUTONOMY_EXECUTOR=agent`
->   (or `buddy autonomy install --executor agent --workspace <dir>`) runs the **real agent** to edit files —
->   *fail-closed*: it refuses without `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT` (a cwd bound, not a hard sandbox;
->   tighten with `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"`).
-> - **Verified completion.** A task's optional `verifyCommand` (e.g. `node x.check.mjs`, `npm test`) must exit 0,
->   else the task is released for retry. **Auto-escalation**: repeated failures climb the model ladder.
+> - **Two executors.** Default v0 writes a scoped `.md` artifact (no repo edits) and will **refuse**
+>   a task that carries `filesToModify` / `verifyCommand`. For real edits:
+>   `buddy autonomy run --executor agent --workspace <dir>` (or env
+>   `CODEBUDDY_AUTONOMY_EXECUTOR=agent` + `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`). Fail-closed without a
+>   workspace (a cwd bound, not a hard sandbox; tighten with
+>   `CODEBUDDY_AUTONOMY_AGENT_ARGS="--disallowedTools bash,run_command"`).
+> - **Verified completion.** `buddy autonomy tasks add "<title>" --verify-command "node x.check.mjs"
+>   --files-to-modify add.mjs` stores the gate. It only *runs* when the operator also passes
+>   `buddy autonomy run --verify` (or `CODEBUDDY_AUTONOMY_VERIFY_COMMANDS=1`) on an **agent**
+>   executor — otherwise the task is released, not marked done. A listed `filesToModify` path that
+>   did not change is also a failure. **Auto-escalation**: repeated failures climb the model ladder.
+> - **Journal.** Each `autonomy run` is a `buddy run` entry (`buddy run list` / `buddy run show <id>`).
+> - **Bench.** `buddy autonomy bench` ranks the **local** Ollama model plus any Tailnet peers.
 > - **Local agentic models:** use qwen3+/devstral/mistral (qwen2.5:7b is chat-only). Runnable demo: `npm run autonomy:lab`.
 > - **Service lifecycle.** `buddy autonomy service start|stop|restart|status` controls the installed
 >   `codebuddy-autonomy` service (systemd user unit / launchd / Task Scheduler) without touching the unit by hand.
@@ -831,7 +842,7 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 >   Fleet clients disable hidden `CodeBuddyClient` fallbacks, and each durable saga step records
 >   a secret-redacted `attempts[]` provenance trail (peer/model/provider/run/timestamps).
 
-Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
+Fleet bus = the handover repo's `.codebuddy/` directory on a shared
 Tailscale mesh. Each peer periodically:
 
 1. `git pull --rebase`
@@ -847,7 +858,8 @@ Tailscale mesh. Each peer periodically:
 7. Append `colab-worklog.json` entry, mark task completed, push.
 
 **Goal-mode tasks** (Hermes kanban goal-mode parity): add a task with
-`buddy fleet tasks add "<title>" --goal-mode [--goal-max-turns N]` and a
+`buddy autonomy tasks add "<title>" --goal-mode [--goal-max-turns N]` (also
+available through the `buddy colab` alias) and a
 successful worker attempt is no longer enough — an LLM judge (fail-open,
 free local tier by default, overridable via `goals.judgeModel`) checks the
 task title/description with `acceptanceCriteria` as strict numbered
@@ -862,8 +874,8 @@ Configure via TOML `[autonomous_fleet]`:
 ```toml
 [autonomous_fleet]
 enabled = true
-repo_path = "/path/to/claude-et-patrice"
-host = "ministar/grok-cli"
+repo_path = "/path/to/handover-repo"
+host = "hub/grok-cli"
 interval_minutes = 30
 max_task_ms = 600000
 priority_threshold = "high"   # critical always skipped
@@ -872,7 +884,7 @@ llm_provider = "auto"         # cloud (default) | auto | ollama | grok | …
 
 Slash commands: `/fleet autonomous status` (preview resolved provider),
 `/fleet autonomous tick-now` (one-shot tick). The Python wrapper
-`claude-et-patrice/tools/heartbeat_tick.py` remains as the V0
+`tools/heartbeat_tick.py` in the handover repo remains as the V0
 reference — same protocol, same files.
 
 ### `peer.chat-stream` V1.1 (Phase d.19)
@@ -1015,19 +1027,19 @@ renderer state.
 #### Example
 
 ```bash
-> /fleet send ministar-linux peer.chat-session.start \
+> /fleet send hub-linux peer.chat-session.start \
     {"dispatchProfile":"review","provider":"lemonade","model":"qwen2.5-coder:7b"}
 # → { sessionId: "sess_lpz4xy_h2k1", providerResolved: "lemonade", dispatchProfile: "review", ... }
 
-> /fleet send ministar-linux peer.chat-session.continue \
+> /fleet send hub-linux peer.chat-session.continue \
     {"sessionId":"sess_lpz4xy_h2k1","prompt":"Donne-moi un exemple de borrow checker"}
 # → { text: "Voici un exemple..." }
 
-> /fleet send ministar-linux peer.chat-session.continue \
+> /fleet send hub-linux peer.chat-session.continue \
     {"sessionId":"sess_lpz4xy_h2k1","prompt":"Maintenant montre comment le fixer avec des lifetimes"}
 # → { text: "Tu peux écrire..." }    # ← le peer se souvient du précédent
 
-> /fleet send ministar-linux peer.chat-session.end \
+> /fleet send hub-linux peer.chat-session.end \
     {"sessionId":"sess_lpz4xy_h2k1"}
 # → { closed: true }
 ```
@@ -1038,24 +1050,24 @@ UX wrapper over `peer.chat-session.*` that drops the need to copy
 `sessionId` between turns. Sub-actions: `start`, `say`, `end`, `list`.
 
 ```bash
-> /fleet chat start ministar-linux --provider lemonade --profile review --model qwen2.5-coder:7b
-# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…). Provider: lemonade. Profile: review.
+> /fleet chat start hub-linux --provider lemonade --profile review --model qwen2.5-coder:7b
+# → Chat session "hub-linux-1" opened with hub-linux (sessionId=sess_lpz4xy_h2k…). Provider: lemonade. Profile: review.
 #   Send turns with /fleet chat say <message>.
 
 > /fleet chat say Donne-moi un exemple de borrow checker
-# ← ministar-linux-1 (ministar-linux) [turn 1, 2300ms]:
+# ← hub-linux-1 (hub-linux) [turn 1, 2300ms]:
 # Voici un exemple...
 
 > /fleet chat say Maintenant montre comment le fixer avec des lifetimes
-# ← ministar-linux-1 (ministar-linux) [turn 2, 3100ms]:
+# ← hub-linux-1 (hub-linux) [turn 2, 3100ms]:
 # Tu peux écrire...
 
 > /fleet chat list
 # Active chat sessions (1):
-#   ministar-linux-1     → ministar-linux     [turn 2, 5s ago, model qwen2.5-coder:7b, profile review]   ← active
+#   hub-linux-1     → hub-linux     [turn 2, 5s ago, model qwen2.5-coder:7b, profile review]   ← active
 
 > /fleet chat end
-# Chat session "ministar-linux-1" closed.
+# Chat session "hub-linux-1" closed.
 ```
 
 Aliases default to `<peer>-1`, `<peer>-2`, … and can be overridden with
@@ -1196,7 +1208,7 @@ complémentaires**. Ne pas confondre :
 | Aspect | **Code Buddy Gateway** | **OpenClaw Gateway** |
 |---|---|---|
 | Daemon | `buddy --serve` / `buddy server` | `openclaw gateway` (repo upstream) |
-| Port défaut | 3001 (WS) / 3000 (HTTP) | configurable, ≠ 3001 |
+| Port défaut | 3000 — **un seul port**, WebSocket `/ws` dessus (`--port` pour en choisir un autre) | configurable, ≠ celui de Code Buddy |
 | Lockfile | aucun | `~/.openclaw/gateway.json` |
 | Workspace | `~/.codebuddy/` | `~/.openclaw/workspace/` |
 | Implémentation | propriétaire `src/gateway/server.ts` + `src/server/websocket/` | upstream openclaw, daemon séparé |
@@ -1209,10 +1221,10 @@ Les deux gateways peuvent tourner **côte à côte sur la même machine**.
 Pas de collision de port, fichiers ou socket :
 
 ```
-Ministar Linux
+Hub Linux
 ├─ port 3001 ─── Code Buddy Gateway   (buddy --serve)
 │                ├─ Cowork local
-│                ├─ peer DARKSTAR via Tailscale
+│                ├─ peer GPU_NODE via Tailscale
 │                └─ peer cloud agent
 │
 └─ port ???? ─── OpenClaw Gateway     (openclaw gateway)
@@ -1227,7 +1239,7 @@ Ministar Linux
 | Tu veux… | Tu lances… |
 |---|---|
 | Multi-provider AI parallèle (Claude+Ollama+Gemini sur même goal) | **Code Buddy Gateway seul** |
-| Multi-machine via Tailscale (Ministar + DARKSTAR + G7 PT) | **Code Buddy Gateway seul** |
+| Multi-machine via Tailscale (Hub + GPU_NODE + G7 PT) | **Code Buddy Gateway seul** |
 | Dispatch automatique avec scoring capability/cost/load/latency | **Code Buddy Gateway seul** |
 | Recevoir messages Telegram/WhatsApp/Discord et les router à un agent | **+ OpenClaw Gateway** |
 | Skills via marketplace ClawHub | **+ OpenClaw Gateway** |
@@ -1246,7 +1258,7 @@ Pour rejouer le chemin minimal sans lire toute cette page, utilise
 Telegram → OpenClaw Gateway → openclaw-node bridge → Cowork ServerEvent
                                                   → TaskRouter (e.3)
                                                   → peer.dispatch sur Code Buddy Gateway
-                                                  → peer DARKSTAR fait le travail
+                                                  → peer GPU_NODE fait le travail
                                                   → résultat remonte
                                                   → openclaw-node → OpenClaw Gateway → Telegram
 ```
@@ -1345,7 +1357,7 @@ boutons du bridge, puis écrit la capture cropée
 ### Trois scénarios concrets
 
 **1. Tout local, sans OpenClaw** (état au 2026-05-09)
-- `buddy --serve` sur Ministar et DARKSTAR
+- `buddy --serve` sur le hub et GPU_NODE
 - Cowork dispatche depuis le FleetCommandCenter
 - Pas besoin d'OpenClaw
 
@@ -1357,7 +1369,7 @@ boutons du bridge, puis écrit la capture cropée
 **3. Full multi-channel**
 - `openclaw gateway` + canal Telegram configuré (`openclaw onboard`)
 - Message Telegram → Gateway → openclaw-node → Cowork → TaskRouter
-  dispatche sur Ollama DARKSTAR
+  dispatche sur Ollama GPU_NODE
 - Réponse remonte par le même chemin
 
 ---
@@ -1409,8 +1421,8 @@ buddy autonomy briefing --date 2026-07-12 --dir ~/.codebuddy/fleet
 
 The cross-host POC ("Niveau 2": one Code Buddy on machine A drives another
 on machine B over Tailscale) is validated end-to-end with a **100% local
-LLM** on the receiving side — a Windows workstation → `ministar-linux`
-(Tailscale `100.98.18.76`), answered by ministar's local Ollama
+LLM** on the receiving side — a Windows workstation → `hub-linux`
+(Tailscale `203.0.113.10`), answered by hub's local Ollama
 `devstral-small-2:24b`. Connect+auth **58 ms**, `peer.chat` answer
 **15–22 s**, **$0**. A real coding task (a `chunk<T>` implementation) was
 also delegated and returned over the same channel.
@@ -1490,5 +1502,5 @@ and saves the request+response artifact.
 - `src/fleet/peer-chat-client-factory.ts` — env-driven detection
 - `scripts/fleet-roundtrip-smoke.ts` — cross-host round-trip smoke test (this section)
 - `src/server/websocket/peer-rpc.ts` — registry + dispatcher
-- `claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md` —
+- the handover repo's `propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md` —
   comparative audit that informed two recent fixes

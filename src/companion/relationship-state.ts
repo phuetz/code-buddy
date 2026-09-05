@@ -13,17 +13,9 @@
  *
  * @module companion/relationship-state
  */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Personality traits (0–100) that slowly DRIFT with the kind of time spent together. */
 export interface RelationshipTraits {
@@ -65,6 +57,8 @@ export const MILESTONE_DAYS = [7, 30, 100, 200, 365, 730] as const;
 export const REUNION_DAYS = 2;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Hard ceiling for a non-gamified reunion metric once the highest rapport tier is reached. */
+export const MAX_RELATIONSHIP_SESSIONS = 100;
 
 function defaultStatePath(): string {
   return (
@@ -74,66 +68,47 @@ function defaultStatePath(): string {
 }
 
 export function loadRelationshipState(statePath = defaultStatePath()): RelationshipState {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      const parsed: RelationshipState = {
-        firstSeenAt: typeof data.firstSeenAt === 'number' ? data.firstSeenAt : undefined,
-        lastPresentAt: typeof data.lastPresentAt === 'number' ? data.lastPresentAt : undefined,
-        celebratedMilestones: Array.isArray(data.celebratedMilestones)
-          ? data.celebratedMilestones.filter((n: unknown): n is number => typeof n === 'number')
-          : [],
-      };
-      // Richer relational fields — only surfaced when present, so an old file (and the shape-exact
-      // round-trip tests) round-trips identically. `personalityOf` supplies defaults on read.
-      if (typeof data.mood === 'number') parsed.mood = data.mood;
-      if (data.traits && typeof data.traits === 'object') {
-        const raw = data.traits as Record<string, unknown>;
-        const traits: Partial<RelationshipTraits> = {};
-        for (const k of ['warmth', 'humor', 'depth', 'energy'] as const) {
-          if (typeof raw[k] === 'number') traits[k] = raw[k] as number;
-        }
-        if (Object.keys(traits).length > 0) parsed.traits = traits;
+  const data = readJsonAtomicSync<Record<string, unknown> | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Record<string, unknown> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+        && ((value as { celebratedMilestones?: unknown }).celebratedMilestones === undefined
+          || Array.isArray((value as { celebratedMilestones?: unknown }).celebratedMilestones)),
+    ),
+  });
+  if (!data) return { celebratedMilestones: [] };
+  const record = data as Record<string, unknown>;
+  const parsed: RelationshipState = {
+    firstSeenAt: typeof record.firstSeenAt === 'number' ? record.firstSeenAt : undefined,
+    lastPresentAt: typeof record.lastPresentAt === 'number' ? record.lastPresentAt : undefined,
+    celebratedMilestones: Array.isArray(record.celebratedMilestones)
+      ? record.celebratedMilestones.filter((n: unknown): n is number => typeof n === 'number')
+      : [],
+  };
+  // Richer relational fields — only surfaced when present, so an old file (and the shape-exact
+  // round-trip tests) round-trips identically. `personalityOf` supplies defaults on read.
+  if (typeof record.mood === 'number') parsed.mood = clampMetric(record.mood, MOOD_BASELINE);
+  if (record.traits && typeof record.traits === 'object') {
+    const rawTraits = record.traits as Record<string, unknown>;
+    const traits: Partial<RelationshipTraits> = {};
+    for (const k of ['warmth', 'humor', 'depth', 'energy'] as const) {
+      if (typeof rawTraits[k] === 'number') {
+        traits[k] = clampMetric(rawTraits[k], DEFAULT_TRAITS[k]);
       }
-      if (typeof data.sessions === 'number') parsed.sessions = data.sessions;
-      return parsed;
     }
-  } catch {
-    /* best effort */
+    if (Object.keys(traits).length > 0) parsed.traits = traits;
   }
-  return { celebratedMilestones: [] };
+  if (typeof record.sessions === 'number') parsed.sessions = clampSessions(record.sessions);
+  return parsed;
 }
 
-export function saveRelationshipState(state: RelationshipState, statePath = defaultStatePath()): void {
-  const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
+export function saveRelationshipState(state: RelationshipState, statePath = defaultStatePath()): boolean {
+  const normalizedState = normalizeStateForPersistence(state);
   try {
-    mkdirSync(dirname(statePath), { recursive: true, mode: 0o700 });
-    writeFileSync(temporaryPath, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
-    try {
-      renameSync(temporaryPath, statePath);
-    } catch {
-      // Windows can reject replacing an existing destination. Preserve the
-      // cross-platform best-effort contract while keeping the temp-first path
-      // atomic on platforms that support replacement rename.
-      writeFileSync(statePath, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
-      try {
-        unlinkSync(temporaryPath);
-      } catch {
-        /* already moved/removed */
-      }
-    }
-    try {
-      chmodSync(statePath, 0o600);
-    } catch {
-      /* chmod is advisory on some Windows filesystems */
-    }
+    writeJsonAtomicSync(statePath, normalizedState, { mode: 0o600 });
+    return true;
   } catch {
-    try {
-      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
-    } catch {
-      /* best effort cleanup */
-    }
-    /* best effort */
+    return false;
   }
 }
 
@@ -222,6 +197,29 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(100, n));
 }
 
+function clampMetric(value: number, fallback: number): number {
+  return clamp01(Number.isFinite(value) ? value : fallback);
+}
+
+function clampSessions(value: number): number {
+  return Math.max(0, Math.min(MAX_RELATIONSHIP_SESSIONS, Math.floor(Number.isFinite(value) ? value : 0)));
+}
+
+function normalizeStateForPersistence(state: RelationshipState): RelationshipState {
+  const normalized: RelationshipState = { ...state };
+  if (state.mood !== undefined) normalized.mood = clampMetric(state.mood, MOOD_BASELINE);
+  if (state.traits !== undefined) {
+    const traits: Partial<RelationshipTraits> = {};
+    for (const key of ['warmth', 'humor', 'depth', 'energy'] as const) {
+      const value = state.traits[key];
+      if (value !== undefined) traits[key] = clampMetric(value, DEFAULT_TRAITS[key]);
+    }
+    normalized.traits = traits;
+  }
+  if (state.sessions !== undefined) normalized.sessions = clampSessions(state.sessions);
+  return normalized;
+}
+
 /**
  * Normalised view of the expressive state: mood/traits/sessions with defaults filled and clamped. Use
  * this (not the raw optional fields) everywhere a concrete value is needed.
@@ -240,7 +238,7 @@ export function personalityOf(state: RelationshipState): {
       depth: clamp01(t.depth ?? DEFAULT_TRAITS.depth),
       energy: clamp01(t.energy ?? DEFAULT_TRAITS.energy),
     },
-    sessions: Math.max(0, Math.floor(state.sessions ?? 0)),
+    sessions: clampSessions(state.sessions ?? 0),
   };
 }
 
@@ -266,7 +264,7 @@ export function evolveTraits(state: RelationshipState, signal: RelationalSignal)
 
 /** Count one more reunion. Pure; drives `rapportTier`. */
 export function recordReunion(state: RelationshipState): RelationshipState {
-  return { ...state, sessions: personalityOf(state).sessions + 1 };
+  return { ...state, sessions: Math.min(MAX_RELATIONSHIP_SESSIONS, personalityOf(state).sessions + 1) };
 }
 
 export type MoodBand = 'radieuse' | 'joyeuse' | 'sereine' | 'songeuse' | 'lasse';

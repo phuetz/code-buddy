@@ -52,18 +52,6 @@ const ENDPOINT_PRESETS: EndpointPreset[] = [
     badge: 'Auto-start',
     endpoint: 'http://localhost:3000',
   },
-  {
-    id: 'darkstar',
-    label: 'DARKSTAR',
-    badge: 'Remote',
-    endpoint: 'http://100.73.222.64:3000',
-  },
-  {
-    id: 'ministar-linux',
-    label: 'Ministar Linux',
-    badge: 'Remote',
-    endpoint: 'http://100.98.18.76:3000',
-  },
 ];
 
 function parseLocalServerEndpoint(endpoint: string): { host: string; port: number } | null {

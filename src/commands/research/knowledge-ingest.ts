@@ -154,7 +154,9 @@ export async function runIngestCode(
   deps.log(`🔎 Insights Code Explorer${opts.repo ? ` (${opts.repo})` : ''}…`);
   const pubs = await deps.fetchCodeInsights(opts.repo ? { repo: opts.repo } : {});
   if (pubs.length === 0) {
-    deps.log('Aucun insight (Code Explorer non connecté ? lance `buddy server` ou vérifie mcp.json).');
+    deps.log(
+      'Aucun insight Code Explorer (serveur absent, dépôt non indexé, ou ops vides). Indexe avec `code-explorer analyze` puis `buddy mcp test code-explorer`.',
+    );
     return { ingested: 0, linksCreated: 0 };
   }
   const classifier = opts.classify && deps.makeClassifier ? deps.makeClassifier() : undefined;
@@ -319,7 +321,12 @@ export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise
     .description('Pull first-hand lessons/facts from an opted-in fleet peer')
     .option('--dry-run', 'Show entries that would be ingested without writing ledger or sync state', false)
     .action(async (peer: string, opts: { dryRun?: boolean }) => {
-      await runSync(peer, opts, await depsFactory());
+      try {
+        await runSync(peer, opts, await depsFactory());
+      } catch (error) {
+        logger.error(`research sync failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
+      }
     });
 
   cmd

@@ -36,6 +36,12 @@ explicitly with `--yes`:
 buddy replay <sessionId> --at 3 --yes
 ```
 
+Each recorded turn stores a complete working-tree snapshot under
+`~/.codebuddy/timelines/snapshots/` (tracked and untracked non-ignored files).
+Restore rematerializes **exactly** that tree: files are rewritten to their
+contents at that turn, and files created in later turns are removed. The
+in-memory `CheckpointManager` is only a same-process fallback.
+
 Fork the canonical session history through a recorded turn without changing the
 source session or restoring files:
 

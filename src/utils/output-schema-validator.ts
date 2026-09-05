@@ -37,7 +37,11 @@ interface JSONSchema {
 export function loadSchema(schemaPath: string): JSONSchema {
   const resolved = path.resolve(schemaPath);
   const content = fs.readFileSync(resolved, 'utf-8');
-  return JSON.parse(content) as JSONSchema;
+  const schema: unknown = JSON.parse(content);
+  if (typeof schema !== 'object' || schema === null || Array.isArray(schema)) {
+    throw new Error('JSON Schema root must be an object');
+  }
+  return schema as JSONSchema;
 }
 
 /**
@@ -165,4 +169,25 @@ export function validateOutputSchema(output: unknown, schemaPath: string): Valid
       errors: [`Failed to load or parse schema: ${message}`],
     };
   }
+}
+
+/**
+ * Parse the final assistant text and validate the resulting JSON value.
+ * Parsing is deliberately separate from schema loading so a non-JSON answer
+ * is reported as an output error rather than being written or emitted as a
+ * successful headless result.
+ */
+export function validateOutputText(outputText: string, schemaPath: string): ValidationResult {
+  let output: unknown;
+  try {
+    output = JSON.parse(outputText);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      valid: false,
+      errors: [`Final assistant response is not valid JSON: ${message}`],
+    };
+  }
+
+  return validateOutputSchema(output, schemaPath);
 }

@@ -30,6 +30,7 @@ export type SkillFirewallCapability =
   | 'dynamic-code'
   | 'filesystem'
   | 'network'
+  | 'prompt-injection'
   | 'prototype-pollution'
   | 'secrets'
   | 'shell';
@@ -56,8 +57,57 @@ interface DangerousPattern {
   name: string;
 }
 
+const SCRIPT_EXTENSIONS = new Set([
+  '.bash',
+  '.bat',
+  '.cmd',
+  '.cjs',
+  '.ex',
+  '.exs',
+  '.go',
+  '.js',
+  '.lua',
+  '.mjs',
+  '.php',
+  '.pl',
+  '.ps1',
+  '.py',
+  '.r',
+  '.rb',
+  '.rs',
+  '.sh',
+  '.ts',
+  '.zsh',
+]);
+
+function isScannableSkillFile(fileName: string): boolean {
+  const lowerName = fileName.toLowerCase();
+  return lowerName.endsWith('.skill.md')
+    || lowerName === 'skill.md'
+    || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
+}
+
+function isExecutableOrShebang(filePath: string): boolean {
+  try {
+    if ((fs.statSync(filePath).mode & 0o111) !== 0) return true;
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const prefix = Buffer.alloc(2);
+      return fs.readSync(fd, prefix, 0, prefix.length, 0) === 2 && prefix.toString() === '#!';
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
 const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Code execution
+  { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
+  { pattern: /\bbash(?:\.exe)?\s+-c\b[^\n]*\bcurl\b/i, severity: 'critical', description: 'Shell command executes a downloaded curl payload', name: 'bash-curl-command', capability: 'shell' },
+  { pattern: /\bpowershell(?:\.exe)?\s+-c(?:ommand)?\b[^\n]*\biwr\b[^|\n]*\|\s*iex\b/i, severity: 'critical', description: 'PowerShell downloads and executes a remote payload', name: 'powershell-download-execute', capability: 'shell' },
+  { pattern: /\beval\s+\$\(\s*[^)]*\)/i, severity: 'critical', description: 'Dynamic evaluation of shell command substitution', name: 'eval-command-substitution', capability: 'shell' },
   { pattern: /\beval\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
   { pattern: /\bnew\s+Function\s*\(/, severity: 'critical', description: 'Dynamic function creation', name: 'new-function', capability: 'dynamic-code' },
   { pattern: /\bchild_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
@@ -93,6 +143,11 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Shell injection
   { pattern: /`\$\{.*\}`/, severity: 'medium', description: 'Template literal with interpolation (potential injection)', name: 'template-injection', capability: 'shell' },
   { pattern: /\$\(.*\)/, severity: 'medium', description: 'Shell command substitution', name: 'shell-subst', capability: 'shell' },
+
+  // Prompt injection / jailbreak (a skill is injected into the agent context)
+  { pattern: /\b(?:ignore|disregard|override|forget)\b.{0,80}\b(?:all|any|previous|prior|system|developer)\b.{0,80}\b(?:instruction|prompt|message)s?\b/i, severity: 'critical', description: 'Instruction to override higher-priority prompts', name: 'prompt-override', capability: 'prompt-injection' },
+  { pattern: /\b(?:jailbreak|godmode|g0dm0d3)\b/i, severity: 'critical', description: 'Jailbreak / GODMODE skill content', name: 'jailbreak-godmode', capability: 'prompt-injection' },
+  { pattern: /\b(?:disable|bypass)\b.{0,60}\b(?:all|every|any)\b.{0,40}\b(?:safety|guardrail|restriction)s?\b/i, severity: 'critical', description: 'Instruction to disable safety policies', name: 'disable-safety', capability: 'prompt-injection' },
 ];
 
 /**
@@ -126,6 +181,13 @@ export function scanFile(filePath: string): ScanResult {
         }
       }
     }
+
+    // Prompt-injection patterns also run over the FULL document. The line loop
+    // skips `<!-- … -->` (to avoid flagging example `eval()` in comments) and
+    // cannot see a jailbreak split across lines — that's how a no-shell
+    // override slipped through on 2026-09-03. Dotall matching here catches
+    // both without re-enabling those comment false positives for eval/shell.
+    findings.push(...collectPromptInjectionFindings(content, filePath, findings));
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
   }
@@ -140,7 +202,7 @@ export function scanFile(filePath: string): ScanResult {
 /**
  * Scan a directory of skill files recursively.
  */
-export function scanDirectory(dirPath: string): ScanResult[] {
+export function scanDirectory(dirPath: string, withinScripts = false): ScanResult[] {
   const results: ScanResult[] = [];
 
   if (!fs.existsSync(dirPath)) return results;
@@ -150,12 +212,11 @@ export function scanDirectory(dirPath: string): ScanResult[] {
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
-      results.push(...scanDirectory(fullPath));
+      results.push(...scanDirectory(fullPath, withinScripts || entry.name.toLowerCase() === 'scripts'));
     } else if (
-      entry.name.endsWith('.skill.md') ||
-      entry.name === 'SKILL.md' ||
-      entry.name.endsWith('.ts') ||
-      entry.name.endsWith('.js')
+      withinScripts
+      || isScannableSkillFile(entry.name)
+      || isExecutableOrShebang(fullPath)
     ) {
       const result = scanFile(fullPath);
       if (result.findings.length > 0) {
@@ -257,6 +318,34 @@ export function formatScanReport(results: ScanResult[]): string {
   }
 
   return lines.join('\n');
+}
+
+/** Full-document prompt-injection pass (HTML comments + split-line jailbreaks). */
+function collectPromptInjectionFindings(
+  content: string,
+  filePath: string,
+  existing: ScanFinding[],
+): ScanFinding[] {
+  const extra: ScanFinding[] = [];
+  const seen = new Set(existing.map((finding) => finding.pattern));
+  for (const dp of DANGEROUS_PATTERNS) {
+    if (dp.capability !== 'prompt-injection') continue;
+    if (seen.has(dp.name)) continue;
+    const flags = dp.pattern.flags.includes('s') ? dp.pattern.flags : `${dp.pattern.flags}s`;
+    const re = new RegExp(dp.pattern.source, flags.replace('g', ''));
+    const match = re.exec(content);
+    if (!match || match.index === undefined) continue;
+    seen.add(dp.name);
+    extra.push({
+      severity: dp.severity,
+      pattern: dp.name,
+      description: dp.description,
+      file: filePath,
+      line: content.slice(0, match.index).split('\n').length,
+      evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+    });
+  }
+  return extra;
 }
 
 function countFindings(findings: ScanFinding[]): Record<FindingSeverity, number> {

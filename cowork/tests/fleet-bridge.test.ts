@@ -57,7 +57,7 @@ class FakeFleetListener extends EventEmitter {
       },
       capabilities: {
         egress: 'cloud',
-        machineLabel: 'Ministar Linux',
+        machineLabel: 'Hub Linux',
         models: [
           {
             id: 'gpt-5.1-codex',
@@ -94,12 +94,12 @@ describe('FleetBridge', () => {
     await bridge.init();
 
     const result = await bridge.addPeer({
-      url: 'ws://100.98.18.76:3000/ws',
+      url: 'ws://203.0.113.10:3000/ws',
       apiKey: 'test-key',
-      label: 'Ministar Linux',
+      label: 'Hub Linux',
     });
     expect(result.success).toBe(true);
-    expect(result.peer?.id).toBe('ministar-linux');
+    expect(result.peer?.id).toBe('hub-linux');
 
     // Wait for the listener event chain
     await new Promise((r) => setImmediate(r));
@@ -116,7 +116,7 @@ describe('FleetBridge', () => {
       'utf-8'
     );
     const parsed = JSON.parse(raw);
-    expect(parsed.peers[0].url).toBe('ws://100.98.18.76:3000/ws');
+    expect(parsed.peers[0].url).toBe('ws://203.0.113.10:3000/ws');
     expect(parsed.peers[0].apiKey).toBe('test-key');
   });
 
@@ -126,9 +126,9 @@ describe('FleetBridge', () => {
     await bridge.init();
 
     const result = await bridge.addPeer({
-      url: 'ws://100.98.18.76:3000/ws',
+      url: 'ws://203.0.113.10:3000/ws',
       apiKey: 'test-key',
-      label: 'Ministar Linux',
+      label: 'Hub Linux',
     });
     expect(result.success).toBe(true);
 
@@ -144,7 +144,7 @@ describe('FleetBridge', () => {
     });
     expect(peers[0].capability).toMatchObject({
       egress: 'cloud',
-      machineLabel: 'Ministar Linux',
+      machineLabel: 'Hub Linux',
       models: [
         {
           id: 'gpt-5.1-codex',
@@ -184,7 +184,7 @@ describe('FleetBridge', () => {
       type: 'fleet:agent:tool_started',
       payload: {
         toolName: 'view_file',
-        source: { hostname: 'ministar', agentId: 'agent-1' },
+        source: { hostname: 'hub', agentId: 'agent-1' },
       },
     });
 
@@ -192,7 +192,7 @@ describe('FleetBridge', () => {
     const fleetEvents = events.filter((e) => e.type === 'fleet.event');
     expect(fleetEvents).toHaveLength(1);
     expect(fleetEvents[0].payload.type).toBe('fleet:agent:tool_started');
-    expect(fleetEvents[0].payload.hostname).toBe('ministar');
+    expect(fleetEvents[0].payload.hostname).toBe('hub');
   });
 
   it('tracks chat-session metadata on the peer without adding content to peer state', async () => {
@@ -216,7 +216,7 @@ describe('FleetBridge', () => {
         sessionId: 'sess_review_123456',
         model: 'gpt-5.1-codex',
         dispatchProfile: 'review',
-        source: { hostname: 'ministar' },
+        source: { hostname: 'hub' },
       },
     });
     listener.emit('fleet:event', {
@@ -226,7 +226,7 @@ describe('FleetBridge', () => {
         turnCount: 2,
         prompt: 'must not be kept',
         content: 'must not be kept either',
-        source: { hostname: 'ministar' },
+        source: { hostname: 'hub' },
       },
     });
 

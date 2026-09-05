@@ -7,10 +7,17 @@ import { spawn } from 'child_process';
 import {
   buildPuppeteerConfig,
   buildMmdcArgs,
+  orientMermaidForPortrait,
   renderMermaidPng,
 } from '../../../src/tools/video/mermaid-render.js';
 
 describe('pure builders', () => {
+  it('flips LR/RL flowcharts to TD for a portrait short', () => {
+    expect(orientMermaidForPortrait('flowchart LR\nA-->B')).toBe('flowchart TD\nA-->B');
+    expect(orientMermaidForPortrait('graph RL\nX-->Y')).toBe('graph TD\nX-->Y');
+    expect(orientMermaidForPortrait('flowchart TD\nA-->B')).toBe('flowchart TD\nA-->B');
+  });
+
   it('buildPuppeteerConfig includes --no-sandbox and the chromium path', () => {
     const cfg = JSON.parse(buildPuppeteerConfig('/opt/chrome'));
     expect(cfg.args).toContain('--no-sandbox');

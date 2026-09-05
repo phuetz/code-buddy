@@ -5,6 +5,25 @@ import { describe, expect, it } from 'vitest';
 import { ScaffoldAppTool } from '../../src/tools/scaffold-app-tool.js';
 
 describe('ScaffoldAppTool', () => {
+  it('exposes the presentation-ready React template to agent scaffolding', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-app-tool-'));
+    const targetDir = path.join(tmp, 'styled-react');
+
+    const result = await new ScaffoldAppTool().execute({
+      template: 'react-tailwind',
+      targetDir,
+      vars: { description: 'Styled from the first render' },
+    });
+
+    expect(result.success).toBe(true);
+    const data = result.data as { filesCreated: string[] };
+    expect(data.filesCreated).toEqual(expect.arrayContaining([
+      'tailwind.config.ts',
+      'src/styles/tokens.css',
+      'src/components/ui/Button.tsx',
+    ]));
+  });
+
   it('scaffolds a node-cli project into an explicit target directory', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-app-tool-'));
     const targetDir = path.join(tmp, 'demo-cli');

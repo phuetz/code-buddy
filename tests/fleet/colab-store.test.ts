@@ -22,7 +22,7 @@ describe('FleetColabStore', () => {
     idSeq = 0;
     store = new FleetColabStore({
       dir,
-      agentId: 'ministar-linux/code-buddy',
+      agentId: 'hub-linux/code-buddy',
       now: () => 1_000_000,
       generateId: (p) => `${p}-${++idSeq}`,
     });
@@ -77,7 +77,7 @@ describe('FleetColabStore', () => {
     it('marks the task in_progress with claimant + timestamp', () => {
       const claimed = store.claim('t1');
       expect(claimed.status).toBe('in_progress');
-      expect(claimed.claimedBy).toBe('ministar-linux/code-buddy');
+      expect(claimed.claimedBy).toBe('hub-linux/code-buddy');
       expect(claimed.claimedAt).toBe(new Date(1_000_000).toISOString());
     });
 
@@ -135,7 +135,7 @@ describe('FleetColabStore', () => {
       const task = store.addTask({ title: 'new work', priority: 'low' });
       expect(task.status).toBe('open');
       expect(task.priority).toBe('low');
-      expect(task.createdBy).toBe('ministar-linux/code-buddy');
+      expect(task.createdBy).toBe('hub-linux/code-buddy');
       expect(store.listTasks({ status: 'open' }).map((t) => t.title)).toContain('new work');
     });
 

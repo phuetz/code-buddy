@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+import os
+
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-ROOT = Path('/home/patrice/Videos/publication-2026-07-30/shorts-ambre')
-SOURCE = Path('/home/patrice/Videos/personas/ambre-scenes/tenues')
+ROOT = Path(os.path.expanduser('~/Videos/publication-2026-07-30/shorts-ambre'))
+SOURCE = Path(os.path.expanduser('~/Videos/personas/ambre-scenes/tenues'))
 THUMBNAILS = ROOT.parent / 'miniatures'
 FONT_SANS = '/usr/share/fonts/truetype/noto/NotoSansDisplay-Regular.ttf'
 FONT_SERIF = '/usr/share/fonts/truetype/noto/NotoSerifDisplay-Regular.ttf'

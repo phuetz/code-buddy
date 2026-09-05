@@ -14,6 +14,18 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: (filePath: string, fallback: unknown) => {
+    try {
+      return JSON.parse((fs.readFileSync as jest.Mock)(filePath, 'utf8'));
+    } catch {
+      return fallback;
+    }
+  },
+  writeJsonAtomicSync: (filePath: string, value: unknown) =>
+    (fs.writeFileSync as jest.Mock)(filePath, JSON.stringify(value, null, 2)),
+}));
+
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     debug: jest.fn(),
@@ -41,6 +53,8 @@ jest.mock('../../src/context/codebase-rag/embeddings', () => ({
 }));
 
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { vi } from 'vitest';
 import {
   InMemoryVectorStore,
@@ -75,7 +89,7 @@ describe('InMemoryVectorStore', () => {
 
     it('should create store with persistence path', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const store = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const store = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
       expect(store).toBeDefined();
     });
 
@@ -88,7 +102,7 @@ describe('InMemoryVectorStore', () => {
         ],
       }));
 
-      const store = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const store = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
       expect(store.has('test-1')).toBe(true);
     });
 
@@ -96,14 +110,14 @@ describe('InMemoryVectorStore', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('invalid json');
 
-      const store = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const store = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
       expect(store.getAllIds()).toHaveLength(0);
     });
 
     it('should handle missing file gracefully', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-      const store = new InMemoryVectorStore('/tmp/nonexistent.json');
+      const store = new InMemoryVectorStore(path.join(os.tmpdir(), 'nonexistent.json'));
       expect(store.getAllIds()).toHaveLength(0);
     });
   });
@@ -385,17 +399,30 @@ describe('InMemoryVectorStore', () => {
   describe('Persistence', () => {
     it('should save to disk when dirty', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const persistPath = path.join(os.tmpdir(), 'test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(persistPath);
 
       await persistentStore.add('vec-1', [0.1, 0.2], { type: 'test' });
+      await persistentStore.add('vec-2', [0.3, 0.4], { type: 'other' });
       await persistentStore.saveToDisk();
 
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // VERIF3 T5 : un `toHaveBeenCalled()` nu laissait passer un chemin
+      // suffixé, un contenu réduit à sa version et des vecteurs vidés.
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      const [writtenPath, serialized] = (fs.writeFileSync as jest.Mock).mock.calls[0]!;
+      expect(writtenPath).toBe(persistPath);
+      expect(JSON.parse(serialized as string)).toEqual({
+        version: 1,
+        vectors: [
+          { id: 'vec-1', embedding: [0.1, 0.2], metadata: { type: 'test' } },
+          { id: 'vec-2', embedding: [0.3, 0.4], metadata: { type: 'other' } },
+        ],
+      });
     });
 
     it('should not save when not dirty', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
 
       await persistentStore.saveToDisk();
 
@@ -408,7 +435,7 @@ describe('InMemoryVectorStore', () => {
         return false;
       });
 
-      const persistentStore = new InMemoryVectorStore('/tmp/subdir/test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'subdir', 'test-vectors.json'));
       await persistentStore.add('vec-1', [0.1]);
       await persistentStore.saveToDisk();
 
@@ -417,7 +444,7 @@ describe('InMemoryVectorStore', () => {
 
     it('should save on auto-save interval', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
 
       await persistentStore.add('vec-1', [0.1]);
 
@@ -432,7 +459,7 @@ describe('InMemoryVectorStore', () => {
 
     it('should stop auto-save on dispose', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
 
       await persistentStore.add('vec-1', [0.1]);
       await persistentStore.dispose();
@@ -470,7 +497,7 @@ describe('InMemoryVectorStore', () => {
   describe('dispose', () => {
     it('should save and cleanup', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new InMemoryVectorStore('/tmp/test-vectors.json');
+      const persistentStore = new InMemoryVectorStore(path.join(os.tmpdir(), 'test-vectors.json'));
 
       await persistentStore.add('vec-1', [0.1]);
       await persistentStore.dispose();
@@ -511,7 +538,7 @@ describe('PartitionedVectorStore', () => {
     });
 
     it('should create with persist directory', () => {
-      const store = new PartitionedVectorStore('language', '/tmp/partitions');
+      const store = new PartitionedVectorStore('language', path.join(os.tmpdir(), 'partitions'));
       expect(store).toBeDefined();
     });
   });
@@ -709,7 +736,7 @@ describe('PartitionedVectorStore', () => {
   describe('saveToDisk', () => {
     it('should save all partitions', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const persistentStore = new PartitionedVectorStore('language', '/tmp/partitions');
+      const persistentStore = new PartitionedVectorStore('language', path.join(os.tmpdir(), 'partitions'));
 
       await persistentStore.addBatch([
         { id: 'vec-1', embedding: [0.1], metadata: { language: 'ts' } },
@@ -718,7 +745,31 @@ describe('PartitionedVectorStore', () => {
 
       await persistentStore.saveToDisk();
 
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // VERIF3 T5 : chaque partition doit écrire son propre fichier avec ses
+      // propres vecteurs, pas seulement « au moins un writeFileSync ».
+      const writes = (fs.writeFileSync as jest.Mock).mock.calls.map(
+        ([writtenPath, serialized]: [string, string]) =>
+          [writtenPath, JSON.parse(serialized)] as const
+      );
+      expect(writes).toHaveLength(2);
+      expect(new Map(writes)).toEqual(
+        new Map([
+          [
+            path.join(os.tmpdir(), 'partitions', 'partition-ts.json'),
+            {
+              version: 1,
+              vectors: [{ id: 'vec-1', embedding: [0.1], metadata: { language: 'ts' } }],
+            },
+          ],
+          [
+            path.join(os.tmpdir(), 'partitions', 'partition-js.json'),
+            {
+              version: 1,
+              vectors: [{ id: 'vec-2', embedding: [0.2], metadata: { language: 'js' } }],
+            },
+          ],
+        ])
+      );
     });
   });
 
@@ -759,13 +810,13 @@ describe('createVectorStore', () => {
   });
 
   it('should create memory store with persist path', () => {
-    const store = createVectorStore('memory', { persistPath: '/tmp/test.json' });
+    const store = createVectorStore('memory', { persistPath: path.join(os.tmpdir(), 'test.json') });
     expect(store).toBeInstanceOf(InMemoryVectorStore);
   });
 
   it('should create partitioned store with options', () => {
     const store = createVectorStore('partitioned', {
-      persistDir: '/tmp/partitions',
+      persistDir: path.join(os.tmpdir(), 'partitions'),
       partitionKey: 'type',
     });
     expect(store).toBeInstanceOf(PartitionedVectorStore);

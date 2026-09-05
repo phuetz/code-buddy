@@ -63,12 +63,12 @@ describe('buildLeadScoutPlan', () => {
       goal: 'reprendre les donnees Elec existantes',
       target: 'architectes',
       localDatasetPaths: [
-        '/home/patrice/claude/elec/public/architectes-france.json',
+        '/home/user/claude/elec/public/architectes-france.json',
         '   ',
       ],
     });
 
-    expect(plan.localDatasetPaths).toEqual(['/home/patrice/claude/elec/public/architectes-france.json']);
+    expect(plan.localDatasetPaths).toEqual(['/home/user/claude/elec/public/architectes-france.json']);
     expect(plan.pipelineSteps[0]).toMatchObject({
       id: 'import-local-datasets',
       required: true,

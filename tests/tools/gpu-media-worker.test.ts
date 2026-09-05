@@ -28,13 +28,21 @@ describe('gpu media worker contracts', () => {
   });
 
   it('allows private/Tailscale HTTP but rejects public clear-text endpoints', () => {
-    expect(validateGpuWorkerUrl('http://100.73.222.64:4310').hostname).toBe('100.73.222.64');
-    expect(validateGpuWorkerUrl('http://darkstar.tail-example.ts.net:4310').protocol).toBe('http:');
+    expect(validateGpuWorkerUrl('http://192.168.0.42:4310').hostname).toBe('192.168.0.42');
+    expect(validateGpuWorkerUrl('http://gpuNode.tail-example.ts.net:4310').protocol).toBe('http:');
     expect(() => validateGpuWorkerUrl('http://example.com:4310')).toThrow(/Unencrypted/);
     expect(validateGpuWorkerUrl('https://gpu.example.com').protocol).toBe('https:');
   });
 
-  it('bounds PanoWorld profiles to the measured Darkstar targets', () => {
+  it('allows unencrypted HTTP to a bare hostname or a local suffix', () => {
+    expect(validateGpuWorkerUrl('http://gpunode:4310').hostname).toBe('gpunode');
+    expect(validateGpuWorkerUrl('http://render.local:4310').hostname).toBe('render.local');
+    expect(validateGpuWorkerUrl('http://lab.lan:4310').hostname).toBe('lab.lan');
+    expect(validateGpuWorkerUrl('http://box.internal:4310').hostname).toBe('box.internal');
+    expect(validateGpuWorkerUrl('http://nas.home.arpa:4310').hostname).toBe('nas.home.arpa');
+  });
+
+  it('bounds PanoWorld profiles to the measured GPU node targets', () => {
     const single = parsePanoWorldPayload({
       scene_id: 'kitchen',
       profile: 'single-2048',
@@ -104,7 +112,7 @@ describe('gpu media worker contracts', () => {
   it('submits a validated job without placing the token in the body', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jobResponse());
     const client = new GpuMediaWorkerClient(
-      { baseUrl: 'http://100.73.222.64:4310', token: 'secret-token' },
+      { baseUrl: 'http://192.168.0.42:4310', token: 'secret-token' },
       { fetch: fetchMock }
     );
 
@@ -154,7 +162,7 @@ describe('gpu media worker contracts', () => {
       new Response(
         JSON.stringify({
           protocolVersion: 1,
-          workerId: 'darkstar',
+          workerId: 'gpuNode',
           jobs: ['panoworld_reconstruct', 'avatar_video_render'],
           gpus: [{ name: 'RTX 3090', vramMb: 24_576, busy: false }],
           queueDepth: 0,
@@ -163,11 +171,11 @@ describe('gpu media worker contracts', () => {
       )
     );
     const client = new GpuMediaWorkerClient(
-      { baseUrl: 'http://100.73.222.64:4310' },
+      { baseUrl: 'http://192.168.0.42:4310' },
       { fetch: fetchMock }
     );
     await expect(client.capabilities()).resolves.toMatchObject({
-      workerId: 'darkstar',
+      workerId: 'gpuNode',
       queueDepth: 0,
     });
   });

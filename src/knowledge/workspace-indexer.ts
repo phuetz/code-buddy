@@ -14,6 +14,7 @@ import { logger } from '../utils/logger.js';
 import glob from 'fast-glob';
 import { EmbeddingProvider } from '../embeddings/embedding-provider.js';
 import type { VectorSearchResult } from '../search/usearch-index.js';
+import { readJsonAtomicSync, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // Fallback brute-force index if USearch is not available
 class BruteForceIndex {
@@ -50,13 +51,13 @@ class BruteForceIndex {
   }
   
   save(filePath: string): void {
-      fs.writeFileSync(filePath, JSON.stringify(Array.from(this.vectors.entries())));
+      writeJsonAtomicSync(filePath, Array.from(this.vectors.entries()));
   }
   
   load(filePath: string): void {
       if (fs.existsSync(filePath)) {
-          const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-          this.vectors = new Map(data);
+          const data = readJsonAtomicSync<unknown>(filePath, []);
+          if (Array.isArray(data)) this.vectors = new Map(data as Array<[number, number[]]>);
       }
   }
 
@@ -130,9 +131,10 @@ export class WorkspaceIndexer extends EventEmitter {
       const metaPath = this.config.indexPath + '.meta.json';
       if (fs.existsSync(metaPath)) {
           try {
-              const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+              const meta = readJsonAtomicSync<{ entries?: unknown; nextId?: unknown } | null>(metaPath, null);
+              if (!meta || !Array.isArray(meta.entries)) return;
               this.entries = new Map(meta.entries);
-              this.nextId = meta.nextId;
+              this.nextId = typeof meta.nextId === 'number' ? meta.nextId : 0;
               
               if (this.vectorIndex.load) {
                   await this.vectorIndex.load(this.config.indexPath);
@@ -150,7 +152,7 @@ export class WorkspaceIndexer extends EventEmitter {
           entries: Array.from(this.entries.entries()),
           nextId: this.nextId
       };
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+      writeJsonAtomicSync(metaPath, meta);
       if (this.vectorIndex.save) {
           await this.vectorIndex.save(this.config.indexPath);
       }
@@ -177,9 +179,7 @@ export class WorkspaceIndexer extends EventEmitter {
       const mtimeCachePath = path.join(path.dirname(this.config.indexPath), 'mtimes.json');
       let mtimeCache: Record<string, number> = {};
       try {
-        if (fs.existsSync(mtimeCachePath)) {
-          mtimeCache = JSON.parse(await fs.readFile(mtimeCachePath, 'utf-8'));
-        }
+        mtimeCache = readJsonAtomicSync<Record<string, number>>(mtimeCachePath, {});
       } catch (_e) {
         logger.warn('Failed to load mtime cache, starting fresh.');
       }
@@ -267,7 +267,7 @@ export class WorkspaceIndexer extends EventEmitter {
         }
       }
 
-      await fs.writeFile(mtimeCachePath, JSON.stringify(newMtimeCache, null, 2));
+      await writeJsonAtomic(mtimeCachePath, newMtimeCache);
 
       await this.saveIndexMetadata();
       logger.info(`Workspace indexing complete: ${processedFiles} files, ${totalChunks} chunks.`);

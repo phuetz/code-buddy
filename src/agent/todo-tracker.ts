@@ -15,6 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -86,9 +87,9 @@ export class TodoTracker {
   load(): void {
     if (this.loaded) return;
     this.loaded = true;
-    if (!fs.existsSync(this.todoPath)) return;
     try {
-      const content = fs.readFileSync(this.todoPath, 'utf-8');
+      const content = readTextAtomicSync(this.todoPath, '');
+      if (!content) return;
       this.items = this.parseMd(content);
     } catch {
       this.items = [];
@@ -98,7 +99,7 @@ export class TodoTracker {
   save(): void {
     try {
       if (!fs.existsSync(this.workDir)) return;
-      fs.writeFileSync(this.todoPath, this.serialise(), 'utf-8');
+      writeFileAtomicSync(this.todoPath, this.serialise(), { mode: 0o600 });
     } catch {
       // non-fatal
     }

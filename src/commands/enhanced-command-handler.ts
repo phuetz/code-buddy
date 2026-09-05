@@ -102,7 +102,9 @@ import {
   // Team handler (Agent Teams multi-agent coordination)
   handleTeam,
   // Batch handler (CC13 — parallel task decomposition)
-  handleBatchCommand,
+  handleBatchSlashCommand,
+  createBatchChatFn,
+  createDefaultBatchSpawnFn,
   // Starter pack handler
   handleStarter,
   // Fast mode handler (Enterprise-aligned)
@@ -174,6 +176,11 @@ import {
   handleTrigger,
   // Infra handlers (TurboQuant health dashboard)
   handleInfra,
+  // R5 handlers backed by existing services
+  handleRedo,
+  handleTimeline,
+  handleKnowledgeGraph,
+  handleApprovals,
 } from "./handlers/index.js";
 
 import { handleLessonsCommand } from "./handlers/index.js";
@@ -280,6 +287,7 @@ export interface AgentContextProxy {
   getContextStats: () => unknown;
   formatContextStats: () => string;
   getCurrentModel: () => string;
+  getCurrentSessionId?: () => string | null;
   getContextMemoryMetrics?: () => {
     summaryCount: number;
     summaryTokens: number;
@@ -423,6 +431,10 @@ export class EnhancedCommandHandler {
     ['__DIFF_CHECKPOINTS__', (args) => handleDiffCheckpoints(args)],
 
     // Extra UX commands
+    ['__REDO__', (args) => handleRedo(args)],
+    ['__TIMELINE__', (args) => handleTimeline(args, this.agentProxy?.getCurrentSessionId?.())],
+    ['__KNOWLEDGE_GRAPH__', (args) => handleKnowledgeGraph(args)],
+    ['__APPROVALS__', (args) => handleApprovals(args)],
     ['__UNDO__', (args) => handleUndo(args)],
     ['__DIFF__', (args) => args.length > 0 ? handleDiffCheckpoints(args) : handleDiff(args)],
     ['__SEARCH__', (args) => handleSearch(args)],
@@ -439,15 +451,11 @@ export class EnhancedCommandHandler {
     ['__TEAM__', (args) => handleTeam(args)],
 
     // CC13: Batch parallel task decomposition
-    ['__BATCH__', (args) => {
-      const result = handleBatchCommand(args.join(' '));
-      // handleBatchCommand is async, wrap in a sync-compatible result
-      return {
-        handled: true,
-        entry: { type: 'assistant' as const, content: 'Batch command initiated...', timestamp: new Date() },
-        asyncAction: result,
-      };
-    }],
+    ['__BATCH__', (args) => handleBatchSlashCommand(
+      args,
+      this.createBatchChatFn(),
+      this.createBatchSpawnFn(),
+    )],
 
     // Commands previously handled inline in client-dispatcher
     ['__CLEAR_CHAT__', () => handleClearChat()],
@@ -594,6 +602,21 @@ export class EnhancedCommandHandler {
   setCodeBuddyClient(client: CodeBuddyClient): void {
     this.codebuddyClient = client;
     setBtwClient(client);
+  }
+
+  private createBatchChatFn() {
+    return createBatchChatFn(this.codebuddyClient);
+  }
+
+  private createBatchSpawnFn() {
+    const client = this.codebuddyClient;
+    if (!client) return undefined;
+    return createDefaultBatchSpawnFn({
+      cwd: process.cwd(),
+      apiKey: client.getApiKey(),
+      baseURL: client.getBaseURL(),
+      model: client.getCurrentModel(),
+    });
   }
 
   /**

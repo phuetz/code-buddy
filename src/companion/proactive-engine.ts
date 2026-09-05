@@ -15,9 +15,9 @@
  *
  * @module companion/proactive-engine
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import {
   loadRelationshipState,
@@ -180,34 +180,33 @@ function defaultProactiveStatePath(): string {
 }
 
 export function loadProactiveState(statePath = defaultProactiveStatePath()): ProactiveState {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      return {
-        lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
-        recentLines: Array.isArray(data.recentLines)
-          ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
-          : [],
-      };
-    }
-  } catch {
-    /* best effort */
-  }
-  return { recentLines: [] };
+  const data = readJsonAtomicSync<{ lastSentAt?: unknown; recentLines?: unknown } | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is { lastSentAt?: unknown; recentLines?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!data) return { recentLines: [] };
+  return {
+    lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
+    recentLines: Array.isArray(data.recentLines)
+      ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
+      : [],
+  };
 }
 
 export function saveProactiveState(
   state: ProactiveState,
   statePath = defaultProactiveStatePath()
-): void {
+): boolean {
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(
-      statePath,
-      JSON.stringify({ ...state, recentLines: state.recentLines.slice(-8) })
+    writeJsonAtomicSync(statePath, { ...state, recentLines: state.recentLines.slice(-8) }, { mode: 0o600 });
+    return true;
+  } catch (err) {
+    logger.warn(
+      `[proactive] could not persist state: ${err instanceof Error ? err.message : String(err)}`
     );
-  } catch {
-    /* best effort */
+    return false;
   }
 }
 
@@ -235,8 +234,10 @@ export interface ProactiveDeps {
   now?: () => number;
   /** Someone is in front of the camera right now (→ speak vs Telegram). */
   present?: () => boolean | Promise<boolean>;
-  /** Deliver aloud (present). Default: sayNow (Piper). */
-  say?: (text: string) => Promise<void>;
+  /** True while the mouth (or its echo tail) is already taken — do not talk over it. */
+  speaking?: (now: number) => boolean | Promise<boolean>;
+  /** Deliver aloud (present). Default: sayNow (Piper). True only when speech actually played. */
+  say?: (text: string) => Promise<boolean>;
   /** Deliver to the phone (absent). Default: sendTelegramVoice (falls back to text). */
   telegramVoice?: (text: string) => Promise<boolean>;
   /** Append an already-delivered remote initiative without echoing it. */
@@ -271,19 +272,34 @@ async function defaultPresent(): Promise<boolean> {
   }
 }
 
+async function defaultSpeaking(now: number): Promise<boolean> {
+  try {
+    const { isSpeaking } = await import('../sensory/voice-activity.js');
+    return isSpeaking(now);
+  } catch {
+    return false;
+  }
+}
+
 async function defaultRecentHearing(): Promise<string[]> {
   return readRecentDialogueHearing(6);
 }
 
-async function defaultSay(text: string): Promise<void> {
-  const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
-    import('../sensory/voice-loop.js'),
-    import('../conversation/voice-continuity.js'),
-  ]);
-  await speakCanonicalVoiceInitiative(
-    text,
-    (content) => sayNow(content, { phoneDelivery: 'never' }),
-  );
+async function defaultSay(text: string): Promise<boolean> {
+  try {
+    const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
+      import('../sensory/voice-loop.js'),
+      import('../conversation/voice-continuity.js'),
+    ]);
+    return speakCanonicalVoiceInitiative(text, (content) =>
+      sayNow(content, { phoneDelivery: 'never' }),
+    );
+  } catch (err) {
+    logger.warn(
+      `[proactive] local say failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
+  }
 }
 
 async function defaultTelegramVoice(text: string): Promise<boolean> {
@@ -313,6 +329,7 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       ? await deps.homePolicy(present ? 'proactive-local' : 'proactive-remote', new Date(now))
       : null;
     if (homeDecision && !homeDecision.allowed) return null;
+    if (present && (await (deps.speaking ?? defaultSpeaking)(now))) return null;
 
     const cooldownMs =
       deps.cooldownMs ??
@@ -371,18 +388,19 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       }
     }
 
-    // Deliver: aloud if he's here, otherwise reach his phone. A spoken ritual
-    // yields to the conductor; a denied floor releases the budget reservation.
-    if (present) {
-      const conductor = deps.conductor ?? getCompanionConductor();
-      if (!conductor.claim('proactive')) {
-        await reservation?.release();
-        return null;
-      }
+    // Deliver: aloud if he's here, otherwise reach his phone. Every initiative
+    // yields to the conductor (spoken or Telegram) so two surfaces cannot land
+    // inside CODEBUDDY_COMPANION_MIN_GAP_MS. A denied floor releases the budget.
+    const conductor = deps.conductor ?? getCompanionConductor();
+    if (!conductor.claim('proactive')) {
+      await reservation?.release();
+      return null;
     }
     try {
       if (present) {
-        await (deps.say ?? defaultSay)(line);
+        if (!(await (deps.say ?? defaultSay)(line))) {
+          throw new Error('local proactive delivery was not accepted');
+        }
       } else {
         if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
           throw new Error('remote proactive delivery was not accepted');
@@ -399,10 +417,14 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     }
 
     // Persist throttle + per-occurrence locks so a trigger fires exactly once.
-    saveProactiveState(
+    const saved = saveProactiveState(
       { lastSentAt: now, recentLines: [...state.recentLines, line].slice(-8) },
       deps.statePath
     );
+    if (!saved) {
+      logger.warn('[proactive] cooldown cursor was not persisted; not treating the tick as sent');
+      return null;
+    }
     if (candidate.trigger === 'milestone') {
       rel.celebratedMilestones = markMilestonesUpTo(rel.celebratedMilestones, daysTogether);
       saveRelationshipState(rel, deps.relationshipStatePath);

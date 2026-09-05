@@ -1286,3 +1286,62 @@ describe('defaultStreamReply — instant prefixes and phatic fallback', () => {
     expect(synthTexts).toEqual(["Bonjour ! Je t'écoute."]); // one synth of the whole line, not per-sentence
   });
 });
+
+describe('native stream look-ahead (prefetch of the next sentence)', () => {
+  it('asks the engine to prefetch sentence N+1 while sentence N is still playing', async () => {
+    const events: string[] = [];
+    const nativeSpeak = Object.assign(
+      vi.fn(async (text: string) => {
+        events.push(`speak:${text}`);
+        await new Promise((r) => setTimeout(r, 30));
+        events.push(`done:${text}`);
+        return true;
+      }),
+      { prefetch: vi.fn((text: string) => { events.push(`prefetch:${text}`); }) },
+    );
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. ';
+      await new Promise((r) => setTimeout(r, 5));
+      yield 'Deuxième phrase.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      synth: vi.fn(async () => 'unused.wav'),
+      play: vi.fn(async () => undefined),
+      streamSpeak: nativeSpeak,
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    // The look-ahead fires after the first sentence started and BEFORE it finished playing —
+    // that is the whole point: the second round trip overlaps the first playback.
+    const prefetchAt = events.indexOf('prefetch:Deuxième phrase.');
+    expect(prefetchAt).toBeGreaterThan(events.indexOf('speak:Première phrase.'));
+    expect(prefetchAt).toBeLessThan(events.indexOf('done:Première phrase.'));
+    expect(nativeSpeak.mock.calls.map((c) => c[0])).toEqual(['Première phrase.', 'Deuxième phrase.']);
+    // Never prefetch the sentence currently playing, and nothing after the last one.
+    expect(nativeSpeak.prefetch).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ played: true, spoken: 'Première phrase. Deuxième phrase.' });
+  });
+
+  it('stops prefetching once the native stream degraded to the WAV fallback', async () => {
+    const prefetch = vi.fn();
+    const nativeSpeak = Object.assign(vi.fn(async () => false), { prefetch });
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. Deuxième phrase. Troisième phrase.';
+    }
+    await streamToSpeech({
+      stream: stream(),
+      synth: async (text) => `wav:${text}`,
+      play: async () => undefined,
+      streamSpeak: nativeSpeak,
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+    // Only the very first segment could trigger a look-ahead; after its failure the turn is
+    // on the blocking synth/play couple and a billed prefetch would be wasted money.
+    expect(prefetch.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(nativeSpeak).toHaveBeenCalledTimes(1);
+  });
+});

@@ -16,6 +16,7 @@ import { GeminiCliProvider } from "./providers/provider-gemini-cli.js";
 import { AgyCliProvider } from './providers/provider-agy-cli.js';
 import { withStreamRetry } from "./stream-retry.js";
 import { createAbortError } from './abort-signal.js';
+import type { TurnMetricsRecorder } from '../observability/turn-metrics.js';
 import {
   recordRuntimeFallbackFailure,
   recordRuntimeFallbackSuccess,
@@ -177,6 +178,15 @@ export interface ChatOptions {
     initialDelayMs?: number;
     maxDelayMs?: number;
   };
+  /**
+   * Internal streamed-turn observer. `runTurnLoop` supplies this once; the
+   * provider owns the request-send/first-chunk/message-complete lifecycle.
+   */
+  turnMetrics?: {
+    recorder: TurnMetricsRecorder;
+    inputTokens?: number;
+    getOutputTokens?: () => number;
+  };
 }
 
 export interface CodeBuddyClientOptions {
@@ -191,6 +201,12 @@ export interface CodeBuddyClientOptions {
 }
 
 export interface CodeBuddyResponse {
+  /** Model that actually produced the response, when the provider exposes it. */
+  model?: string;
+  /** True when the provider stopped at an output-token ceiling. */
+  truncated?: boolean;
+  /** False when the caller requested search but the provider could not honor it. */
+  searchHonored?: boolean;
   choices: Array<{
     message: {
       role: string;
@@ -210,6 +226,10 @@ export interface CodeBuddyResponse {
 
 export class CodeBuddyClient {
   private currentModel: string = "grok-code-fast-1";
+  /** Track the last model that was explicitly requested by the user */
+  private lastRequestedModel: string | undefined;
+  /** Track the last effective model that actually responded */
+  private lastEffectiveModel: string | undefined;
   private defaultMaxTokens: number;
   private baseURL: string;
   private apiKey: string;
@@ -511,6 +531,26 @@ export class CodeBuddyClient {
   }
 
   /**
+   * Get the last model that was explicitly requested by the user
+   */
+  getLastRequestedModel(): string | undefined {
+    return this.lastRequestedModel;
+  }
+
+  /**
+   * Get the last effective model that actually responded
+   */
+  getLastEffectiveModel(): string | undefined {
+    // A provider that remaps the requested model (ChatGPT/Codex) knows better
+    // than the response echo; prefer its record when it has served a request.
+    const providerEffective =
+      this.chatgptProvider && typeof this.chatgptProvider.getEffectiveModel === 'function'
+        ? this.chatgptProvider.getEffectiveModel()
+        : undefined;
+    return providerEffective ?? this.lastEffectiveModel;
+  }
+
+  /**
    * True when the active strategy is the ChatGPT Codex OAuth backend, which is
    * billed against the user's flat-fee Plus/Pro plan, not per token. Cost
    * displays should report $0 here regardless of the reported model slug — the
@@ -522,6 +562,10 @@ export class CodeBuddyClient {
 
   getBaseURL(): string {
     return this.baseURL;
+  }
+
+  getApiKey(): string {
+    return this.apiKey;
   }
 
   /**
@@ -595,14 +639,25 @@ export class CodeBuddyClient {
       ? { model: options, searchOptions }
       : options || {};
 
+    // Track the requested model
+    const requestedModel = opts.model ?? this.currentModel;
+
     // Dispatch to the active strategy.
     try {
-      return await this.dispatchChat(messages, tools, opts, searchOptions);
+      const response = await this.dispatchChat(messages, tools, opts, searchOptions);
+      // Update tracking with effective model from response
+      this.lastRequestedModel = requestedModel;
+      this.lastEffectiveModel = response.model ?? requestedModel;
+      return response;
     } catch (error) {
       if (opts.signal?.aborted) {
         throw createAbortError('Chat request aborted by caller');
       }
-      return await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
+      const response = await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
+      // Update tracking with effective model from fallback response
+      this.lastRequestedModel = requestedModel;
+      this.lastEffectiveModel = response.model ?? requestedModel;
+      return response;
     }
   }
 
@@ -712,6 +767,8 @@ export class CodeBuddyClient {
     const callOptIn = opts.streamRetry;
     const retryEnabled = callOptIn !== undefined ? !!callOptIn : envOptIn;
     const retryOpts = typeof callOptIn === 'object' && callOptIn !== null ? callOptIn : {};
+    // Streaming is the headless path: record the requested model here too (MODELLABEL1).
+    this.lastRequestedModel = opts.model ?? this.currentModel;
     const primaryFactory = (): AsyncGenerator<ChatCompletionChunk, void, unknown> =>
       this.dispatchChatStream(messages, tools, opts, searchOptions);
     const primaryStream = retryEnabled
@@ -778,6 +835,8 @@ export class CodeBuddyClient {
     };
 
     for (const fallback of fallbackCandidates) {
+      // Audit 2026-09-02 (D5) : visible du catch — déclaré hors du try.
+      let yieldedFromThisFallback = false;
       try {
         logger.warn('Primary provider stream failed before first chunk; trying fallback provider', {
           source: 'CodeBuddyClient',
@@ -799,10 +858,15 @@ export class CodeBuddyClient {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
 
+        // Audit 2026-09-02 (D5) : si CE secours échoue après avoir émis des
+        // chunks, passer au secours suivant rejouerait toute la réponse à la
+        // suite du préfixe déjà livré — réponse HYBRIDE de deux modèles sans
+        // erreur. Après émission, l'échec doit se propager.
         for await (const chunk of fallbackClient.chatStream(messages, tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {
+          yieldedFromThisFallback = true;
           yield chunk;
         }
         recordRuntimeFallbackSuccess(fallback);
@@ -810,6 +874,16 @@ export class CodeBuddyClient {
       } catch (fallbackError) {
         if (opts.signal?.aborted) {
           throw createAbortError('Chat stream aborted by caller');
+        }
+        if (yieldedFromThisFallback) {
+          recordRuntimeFallbackFailure(fallback, fallbackError);
+          logger.warn('Fallback provider stream failed AFTER emitting chunks — propagating (a further fallback would duplicate content)', {
+            source: 'CodeBuddyClient',
+            fallbackProvider: fallback.provider,
+            fallbackModel: fallback.model,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
         logger.warn('Fallback provider stream failed', {

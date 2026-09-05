@@ -205,7 +205,7 @@ export function registerEvolveCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
-      const { runEvolutionRound, agentMutator } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
+      const { runEvolutionRound, agentMutator, formatEvolveRoundSummary } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
       const { makeLlmVariantPlanner } = await import('../../agent/self-improvement/evolution/variant-planner.js');
       const { computeFitness, defaultDeterministicComponents } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
       const baselineRef = options.baseline ?? 'main';
@@ -292,11 +292,6 @@ export function registerEvolveCommands(program: Command): void {
         allResults.push(...results);
       }
 
-      const winner = allResults.filter((r) => r.beatsBaseline).sort((a, b) => b.report.score - a.report.score)[0];
-      logger.info(
-        winner
-          ? `\nBest: ${winner.variantId} (fitness ${winner.report.score.toFixed(3)}). Review: \`buddy evolve review ${winner.variantId}\`; keep: \`buddy evolve keep ${winner.variantId} --confirm\`.`
-          : '\nNo candidate beat the baseline. Try more rounds, a sharper goal, or a stronger --model.',
-      );
+      logger.info(`\n${formatEvolveRoundSummary(allResults)}`);
     });
 }

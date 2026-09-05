@@ -16,7 +16,7 @@ The same daemon pattern is the home for everything below.
 |---|---|---|
 | **Embeddings** | ✅ `src/embeddings/embedding-provider.ts` (@xenova/transformers `all-MiniLM-L6-v2` local; or openai/grok) | redundant |
 | **Vector search / ANN** | ✅ `src/context/codebase-rag/hnsw-store.ts` (`HNSWVectorStore`) + `usearch` native dep | redundant |
-| **Codebase indexing & search** | ✅ **`gitnexus-rs`** (`src/plugins/gitnexus`, `src/tools/gitnexus-tool.ts`) + `@vscode/ripgrep` + tree-sitter | redundant |
+| **Codebase indexing & search** | ✅ **`code-explorer`** (`src/plugins/gitnexus`, `src/tools/gitnexus-tool.ts`) + `@vscode/ripgrep` + tree-sitter | redundant |
 | **Tokenization / token counting** | ✅ `tiktoken` (`src/context/token-counter.ts`) | redundant |
 
 So the Rust daemon's **genuine, non-redundant niche is media/screen work** the JS stack doesn't already cover natively:

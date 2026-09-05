@@ -24,7 +24,7 @@
 import { Command } from 'commander';
 import { writeFile } from 'fs/promises';
 import { logger } from '../../utils/logger.js';
-import { runExperiment, type ExperimentRun } from '../../agent/science/experiment-orchestrator.js';
+import { runExperiment, type ExperimentRun, type ExperimentStatus } from '../../agent/science/experiment-orchestrator.js';
 import type { ExperimentLoopResult } from '../../agent/science/experiment-loop.js';
 import type { ExecuteCodeLanguage } from '../../tools/execute-code-runner.js';
 
@@ -63,6 +63,16 @@ interface ScienceCliOptions {
   maxCost?: string;
   /** Phase 3: cost charged per executed experiment (drives --max-cost). */
   costPerExperiment?: string;
+}
+
+/**
+ * CLI exit code for a finished pass. A declined plan gate means the experiment
+ * never ran — that is a failure for scripts (non-TTY default "non"), not a
+ * successful no-op. Publish-gate decline after a real run stays 0.
+ */
+export function sciencePassExitCode(status: ExperimentStatus): number {
+  if (status === 'failed' || status === 'declined-at-plan-gate') return 1;
+  return 0;
 }
 
 /** Human-readable one-pass summary. */
@@ -352,7 +362,7 @@ export function createScienceCommand(): Command {
         console.log(`\n${run.report.report}`);
       }
 
-      if (run.status === 'failed') process.exitCode = 1;
+      if (sciencePassExitCode(run.status) !== 0) process.exitCode = 1;
     });
 
   return cmd;

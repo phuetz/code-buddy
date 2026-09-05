@@ -18,7 +18,7 @@ d'exécution détaillé vit dans `~/.claude/plans/cozy-spinning-finch.md` et les
    régressée). Dataset v3 : 30-36 images ≥1024×1536, ≥2 éditeurs d'identité,
    gate ArcFace contre la référence originale, + LoRA Wan 2.2 complémentaire.
    Le LoRA actuel = réglages de pipeline uniquement.
-3. **La répartition des moteurs est tranchée.** Lisa = 100 % local darkstar
+3. **La répartition des moteurs est tranchée.** Lisa = 100 % local gpuNode
    (LoRA identité impossible sur Veo ; 0 crédit ; chaîne 720×1280 → SeedVR2 →
    RIFE, ~25-35 min/clip sur 2×3090). Trailers = Veo 3.1 Flow (audio natif,
    rendu ciné ; Fast 10 cr pour prototyper, Quality 100 cr pour les plans
@@ -59,7 +59,7 @@ d'exécution détaillé vit dans `~/.claude/plans/cozy-spinning-finch.md` et les
 
 ## État d'avancement au moment de la synthèse
 
-- Phase 0 : téléchargements darkstar en cours (~30 Go : Fun-Control, SeedVR2,
+- Phase 0 : téléchargements gpuNode en cours (~30 Go : Fun-Control, SeedVR2,
   DepthAnythingV2, 5 custom nodes). Restera : deps Python + smoke tests.
 - Vague sol « durcissement qualité » en cours (import Flow, bitrate master,
   loudnorm/LUT).

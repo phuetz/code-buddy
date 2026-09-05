@@ -44,8 +44,13 @@ export interface AppStudioState {
   devPid: number | null;
 }
 
-const DEFAULT_TEMPLATES: StudioTemplateCard[] = [
-  { id: 'react-ts', label: 'React + TypeScript', description: 'Vite web app with React and TypeScript.' },
+export const DEFAULT_TEMPLATES: StudioTemplateCard[] = [
+  {
+    id: 'react-tailwind',
+    label: 'React + Tailwind Studio',
+    description: 'Styled Vite app with tokens, reusable components, and light/dark themes.',
+  },
+  { id: 'react-ts', label: 'React + TypeScript (bare)', description: 'Minimal Vite web app with React and TypeScript.' },
   { id: 'express-api', label: 'Express API', description: 'Node/Express API with a TypeScript structure.' },
   { id: 'node-cli', label: 'Node CLI', description: 'Node.js TypeScript CLI ready to compile.' },
 ];

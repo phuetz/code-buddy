@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'yaml';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { generateDiff } from '../utils/diff-generator.js';
 import { parseSkillFile, validateSkill } from './parser.js';
 import {
@@ -582,8 +583,8 @@ export class SkillsHub extends EventEmitter {
   private readLockfile(): Lockfile {
     try {
       if (fs.existsSync(this.config.lockfilePath)) {
-        const raw = fs.readFileSync(this.config.lockfilePath, 'utf-8');
-        const parsed = JSON.parse(raw) as Lockfile;
+        const parsed = readJsonAtomicSync<Lockfile | null>(this.config.lockfilePath, null);
+        if (!parsed) throw new Error('lockfile unavailable');
         if (parsed.version === LOCKFILE_VERSION && parsed.skills) {
           return parsed;
         }
@@ -607,8 +608,7 @@ export class SkillsHub extends EventEmitter {
    */
   private writeLockfile(): void {
     this.lockfile.updatedAt = new Date().toISOString();
-    const content = JSON.stringify(this.lockfile, null, 2);
-    fs.writeFileSync(this.config.lockfilePath, content, 'utf-8');
+    writeJsonAtomicSync(this.config.lockfilePath, this.lockfile);
     logger.debug('Hub lockfile written', { path: this.config.lockfilePath });
   }
 
@@ -838,8 +838,8 @@ export class SkillsHub extends EventEmitter {
   private readTapsFile(): TapsFile {
     try {
       if (fs.existsSync(this.config.tapsPath)) {
-        const raw = fs.readFileSync(this.config.tapsPath, 'utf-8');
-        const parsed = JSON.parse(raw) as Partial<TapsFile>;
+        const parsed = readJsonAtomicSync<Partial<TapsFile> | null>(this.config.tapsPath, null);
+        if (!parsed) throw new Error('taps file unavailable');
         if (
           parsed.version === TAPS_FILE_VERSION
           && Array.isArray(parsed.taps)
@@ -871,7 +871,7 @@ export class SkillsHub extends EventEmitter {
   private writeTapsFile(tapsFile: TapsFile): void {
     tapsFile.updatedAt = new Date().toISOString();
     tapsFile.taps.sort((left, right) => left.repo.localeCompare(right.repo));
-    fs.writeFileSync(this.config.tapsPath, JSON.stringify(tapsFile, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.config.tapsPath, tapsFile);
     logger.debug('Hub taps file written', { path: this.config.tapsPath });
   }
 
@@ -1035,7 +1035,7 @@ export class SkillsHub extends EventEmitter {
       version ? path.join(this.config.cacheDir, `${skillName}@${version}.skill.md`) : null,
     ].filter((target): target is string => Boolean(target));
     for (const target of targets) {
-      fs.writeFileSync(target, content, 'utf-8');
+      writeFileAtomicSync(target, content);
     }
   }
 
@@ -1069,8 +1069,8 @@ export class SkillsHub extends EventEmitter {
       if (!fs.existsSync(cacheFile)) {
         return [];
       }
-      const raw = fs.readFileSync(cacheFile, 'utf-8');
-      const parsed = JSON.parse(raw) as { skills?: DiscoveredHubSkill[] };
+      const parsed = readJsonAtomicSync<{ skills?: DiscoveredHubSkill[] } | null>(cacheFile, null);
+      if (!parsed) return [];
       return Array.isArray(parsed.skills) ? parsed.skills : [];
     } catch {
       return [];
@@ -1080,7 +1080,7 @@ export class SkillsHub extends EventEmitter {
   private writeTapCache(skills: DiscoveredHubSkill[], cachedAt: string): void {
     const cacheFile = this.getTapCacheFile();
     fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
-    fs.writeFileSync(cacheFile, JSON.stringify({ cachedAt, skills }, null, 2), 'utf-8');
+    writeJsonAtomicSync(cacheFile, { cachedAt, skills });
   }
 
   private mergeTapCache(skills: DiscoveredHubSkill[], cachedAt: string): void {
@@ -1396,6 +1396,15 @@ export class SkillsHub extends EventEmitter {
   }
 
   private enforceSignaturePolicy(skillName: string, verification: SkillSignatureVerification): void {
+    // A supplied signature is an explicit trust claim. Never downgrade a bad
+    // or unknown signer to the same posture as an intentionally unsigned local
+    // skill, even when signed installs are optional.
+    if (verification.status === 'invalid' || verification.status === 'untrusted') {
+      throw new Error(
+        `Refusing to install '${skillName}': signature is '${verification.status}'`
+          + (verification.reason ? ` (${verification.reason})` : ''),
+      );
+    }
     if (!this.config.requireSignedInstalls) {
       return;
     }
@@ -1417,8 +1426,8 @@ export class SkillsHub extends EventEmitter {
   private readTrustedKeysFile(): TrustedKeysFile {
     try {
       if (fs.existsSync(this.config.trustedKeysPath)) {
-        const raw = fs.readFileSync(this.config.trustedKeysPath, 'utf-8');
-        const parsed = JSON.parse(raw) as Partial<TrustedKeysFile>;
+        const parsed = readJsonAtomicSync<Partial<TrustedKeysFile> | null>(this.config.trustedKeysPath, null);
+        if (!parsed) throw new Error('trusted keys file unavailable');
         if (parsed.version === TRUSTED_KEYS_FILE_VERSION && Array.isArray(parsed.keys)) {
           const keys = parsed.keys
             .map((key) => this.normalizeTrustedKeyRecord(key))
@@ -1448,7 +1457,7 @@ export class SkillsHub extends EventEmitter {
     keysFile.keys = keysFile.keys.filter((key) => !this.isOfficialSkillPublisherKey(key.keyId));
     keysFile.updatedAt = new Date().toISOString();
     keysFile.keys.sort((left, right) => left.keyId.localeCompare(right.keyId));
-    fs.writeFileSync(this.config.trustedKeysPath, JSON.stringify(keysFile, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.config.trustedKeysPath, keysFile);
     logger.debug('Hub trusted keys file written', { path: this.config.trustedKeysPath });
   }
 
@@ -1627,8 +1636,8 @@ export class SkillsHub extends EventEmitter {
     const cacheFile = path.join(this.config.cacheDir, 'registry-cache.json');
     try {
       if (fs.existsSync(cacheFile)) {
-        const raw = fs.readFileSync(cacheFile, 'utf-8');
-        const data = JSON.parse(raw) as { skills?: HubSkill[] };
+        const data = readJsonAtomicSync<{ skills?: HubSkill[] } | null>(cacheFile, null);
+        if (!data) return [];
         return data.skills || [];
       }
     } catch {
@@ -1643,7 +1652,7 @@ export class SkillsHub extends EventEmitter {
   private writeLocalCache(skills: HubSkill[]): void {
     const cacheFile = path.join(this.config.cacheDir, 'registry-cache.json');
     try {
-      fs.writeFileSync(cacheFile, JSON.stringify({ skills, cachedAt: new Date().toISOString() }), 'utf-8');
+      writeJsonAtomicSync(cacheFile, { skills, cachedAt: new Date().toISOString() });
     } catch {
       logger.debug('Failed to write local cache');
     }
@@ -1701,7 +1710,7 @@ export class SkillsHub extends EventEmitter {
     }
 
     const skillPath = path.join(skillDir, 'SKILL.md');
-    fs.writeFileSync(skillPath, content, 'utf-8');
+    writeFileAtomicSync(skillPath, content);
 
     // Update lockfile
     const installed: InstalledSkill = {
@@ -1790,7 +1799,7 @@ export class SkillsHub extends EventEmitter {
     }
 
     const skillPath = path.join(skillDir, 'SKILL.md');
-    fs.writeFileSync(skillPath, content, 'utf-8');
+    writeFileAtomicSync(skillPath, content);
 
     const installed: InstalledSkill = {
       name: skillName,
@@ -1876,7 +1885,7 @@ export class SkillsHub extends EventEmitter {
     logger.info('Uninstalling skill', { name: skillName });
 
     // Remove skill directory
-    const skillDir = path.join(this.config.skillsDir, skillName);
+    const skillDir = path.dirname(installed.path);
     if (fs.existsSync(skillDir)) {
       fs.rmSync(skillDir, { recursive: true, force: true });
     }
@@ -2102,7 +2111,7 @@ export class SkillsHub extends EventEmitter {
     });
     const fromVersion = installed.version;
 
-    fs.writeFileSync(installed.path, content, 'utf-8');
+    writeFileAtomicSync(installed.path, content);
     installed.version = resolvedVersion;
     installed.checksum = computeChecksum(content);
     installed.lifecycle = {
@@ -2156,7 +2165,7 @@ export class SkillsHub extends EventEmitter {
     const fromVersion = installed.version;
 
     fs.mkdirSync(path.dirname(installed.path), { recursive: true });
-    fs.writeFileSync(installed.path, content, 'utf-8');
+    writeFileAtomicSync(installed.path, content);
     installed.version = resolvedVersion;
     installed.checksum = toChecksum;
     installed.lifecycle = {
@@ -2445,7 +2454,7 @@ export class SkillsHub extends EventEmitter {
       updatedAt: options.updatedAt,
     });
 
-    fs.writeFileSync(installed.path, content, 'utf-8');
+    writeFileAtomicSync(installed.path, content);
     installed.checksum = computeChecksum(content);
     installed.version = this.extractVersionFromContent(content) || installed.version;
     installed.lifecycle = {
@@ -2522,7 +2531,7 @@ export class SkillsHub extends EventEmitter {
       updatedAt: options.updatedAt,
     });
 
-    fs.writeFileSync(targetPath, updatedContent, 'utf-8');
+    writeFileAtomicSync(targetPath, updatedContent);
     if (targetIsSkillMd) {
       installed.checksum = computeChecksum(updatedContent);
       installed.version = this.extractVersionFromContent(updatedContent) || installed.version;
@@ -2569,7 +2578,7 @@ export class SkillsHub extends EventEmitter {
     });
 
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.writeFileSync(targetPath, fileContent, 'utf-8');
+    writeFileAtomicSync(targetPath, fileContent);
     installed.lifecycle = {
       status: installed.enabled === false ? 'disabled' : 'active',
       updatedAt: options.updatedAt ?? Date.now(),
@@ -2680,7 +2689,7 @@ export class SkillsHub extends EventEmitter {
       updatedAt: options.updatedAt,
     });
 
-    fs.writeFileSync(installed.path, restoredContent, 'utf-8');
+    writeFileAtomicSync(installed.path, restoredContent);
     installed.checksum = computeChecksum(restoredContent);
     installed.version = this.extractVersionFromContent(restoredContent) || restoredSnapshot.version;
     installed.lifecycle = {
@@ -2814,7 +2823,7 @@ export class SkillsHub extends EventEmitter {
     const snapshotPath = path.join(snapshotDir, `${id}.SKILL.md`);
 
     fs.mkdirSync(snapshotDir, { recursive: true });
-    fs.writeFileSync(snapshotPath, content, 'utf-8');
+    writeFileAtomicSync(snapshotPath, content);
 
     return {
       id,

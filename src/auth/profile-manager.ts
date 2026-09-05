@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -555,7 +556,7 @@ export class AuthProfileManager extends EventEmitter {
         };
       }
 
-      fs.writeFileSync(this.config.persistPath, JSON.stringify(state, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.config.persistPath, state, { mode: 0o600 });
     } catch (err) {
       logger.warn(`Failed to save auth profile state: ${err}`);
     }
@@ -570,10 +571,15 @@ export class AuthProfileManager extends EventEmitter {
         return;
       }
 
-      const raw = fs.readFileSync(this.config.persistPath, 'utf-8');
-      const state: PersistedState = JSON.parse(raw);
+      const state = readJsonAtomicSync<PersistedState | null>(this.config.persistPath, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistedState => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          typeof (value as PersistedState).cooldowns === 'object',
+        ),
+      });
 
-      if (!state || !state.cooldowns) {
+      if (!state) {
         return;
       }
 

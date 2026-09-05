@@ -51,6 +51,7 @@ import {
   createA2AProtocolRoutes,
   createACPRoutes,
   createK8sHealthAliases,
+  createCanvasRouter,
   createDashboardRouter,
   createCloudTaskRoutes,
   createWebhookRoutes,
@@ -64,6 +65,8 @@ import {
   wireCognitionBridge,
 } from './websocket/index.js';
 import { setupDesktopWebSocket, closeDesktopWebSocket } from './websocket/desktop-handler.js';
+import { getPeerMethodHandler } from './websocket/peer-rpc.js';
+import { fleetHttpDescribeEnvelope } from '../fleet/fleet-http-surface.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startAutonomousTick, stopAutonomousTick } from '../fleet/autonomous-tick-broadcaster.js';
 import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
@@ -279,6 +282,40 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // network-reachable. All general agent/session/tool/workflow routes below are
   // direct-loopback only; otherwise remote chat could invoke tools indirectly.
   app.use(requireLocalAnonymousAccess);
+
+  // Read-only Fleet diagnostics for the CLI. These HTTP wrappers expose the
+  // same server state and peer description as the Gateway WebSocket methods.
+  app.get('/api/fleet/status', (_req, res) => {
+    res.json({
+      status: 'ok',
+      connections: getConnectionStats(),
+    });
+  });
+
+  app.get('/api/fleet/describe', async (_req, res) => {
+    const describe = getPeerMethodHandler('peer.describe');
+    if (!describe) {
+      res.status(503).json({ error: 'Fleet peer description is unavailable' });
+      return;
+    }
+    try {
+      const description = await describe({}, {
+        connectionId: 'http-fleet-cli',
+        scopes: ['peer:invoke'],
+        traceId: `http-fleet-${Date.now().toString(36)}`,
+        depth: 0,
+      });
+      res.json(fleetHttpDescribeEnvelope(
+        description && typeof description === 'object'
+          ? description as Record<string, unknown>
+          : { description },
+      ));
+    } catch (error) {
+      res.status(503).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   // CSRF protection for state-changing endpoints (POST/PUT/DELETE)
   // Applied AFTER A2A routes so they are never touched by CSRF middleware
@@ -1033,6 +1070,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
     });
   });
 
+  // Canvas / A2UI (documented at /__codebuddy__/canvas/:id and /__codebuddy__/a2ui/)
+  app.use('/__codebuddy__', createCanvasRouter());
+
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
 
@@ -1394,6 +1434,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             if (process.env.CODEBUDDY_SENSORY_SPEAK === 'true') {
               const {
                 makeVoiceReply,
+                playCachedConversationCue,
                 describeVoiceReadiness,
                 prewarmVoiceModel,
                 prewarmVoiceRuntime,
@@ -1626,7 +1667,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     return;
                   }
                   // Snooze a pending reminder ("dans 10 minutes" / "plus tard") before anything else.
-                  const snoozed = rem.snoozePending(t, Date.now());
+                  const snoozed = await rem.snoozePending(t, Date.now());
                   if (snoozed) {
                     const mins = Math.max(1, Math.round(snoozed.delayMs / 60_000));
                     await sayCanonical(`D'accord, je te le rappelle dans ${mins} minute${mins > 1 ? 's' : ''}.`);
@@ -1746,6 +1787,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 // MCP set. It is never published, remembered, or treated as a
                 // committed request; only transcript_final can enter cognition.
                 onSpeechPartial: ({ text }) => replyFn.prewarm(text),
+                onBargeInStart: (_payload, interruptedTurnId) => {
+                  reply.interrupt(interruptedTurnId);
+                  if (interruptedTurnId) {
+                    embodiedCognition.mesh.cancelCorrelation(interruptedTurnId);
+                  }
+                },
                 onBargeIn: (_text, interruptedTurnId) => {
                   reply.interrupt(interruptedTurnId);
                   if (interruptedTurnId) {
@@ -1758,7 +1805,14 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   return timing;
                 },
                 getAttentionSnapshot: () => responseDecider.snapshot(),
+                isAddressed: (text) => responseDecider.isAddressed(text),
               };
+              if (
+                process.env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true'
+                || process.env.CODEBUDDY_SENSORY_REPAIR === 'true'
+              ) {
+                wireOpts.onConversationCue = playCachedConversationCue;
+              }
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.

@@ -121,6 +121,29 @@ describe('session-fleet-bridge — Phase (d).4 V0.4.1', () => {
       handle.disable();
     });
 
+    it('redacts the full message before truncating its preview', () => {
+      process.env.CODEBUDDY_FLEET_STREAM = '1';
+      const reg = makeFakeRegistry();
+      const handle = enableSessionFleetBridge(reg);
+      const secret = `sk-ant-${'a'.repeat(32)}`;
+
+      reg.emit('session:message', 's1', {
+        sessionId: 's1',
+        role: 'user',
+        content: `${'x'.repeat(180)}${secret}`,
+      });
+
+      const payload = broadcastFleetEventMock.mock.calls[0][1] as {
+        contentPreview: string;
+        truncated: boolean;
+      };
+      expect(payload.contentPreview).toContain('[REDACTED:env-key]');
+      expect(payload.contentPreview).not.toContain(secret.slice(0, 10));
+      expect(payload.truncated).toBe(true);
+
+      handle.disable();
+    });
+
     it('handles non-string content gracefully', () => {
       process.env.CODEBUDDY_FLEET_STREAM = '1';
       const reg = makeFakeRegistry();

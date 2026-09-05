@@ -204,6 +204,12 @@ export interface OutboundMessage {
   buttons?: MessageButton[];
   /** Channel-specific data passthrough (Native Engine v2026.3.12 alignment) */
   channelData?: {
+    telegram?: {
+      /** Full inert widget document to render locally before sendPhoto. */
+      widgetHtml?: string;
+      /** Structured widget payload, rendered through the shared widget registry. */
+      data?: unknown;
+    };
     slack?: {
       blocks?: unknown[];
     };
@@ -237,6 +243,12 @@ export interface DeliveryResult {
   error?: string;
   /** Timestamp */
   timestamp: Date;
+  /** This call did not send; the message remains (or was already) in the queue */
+  queued?: boolean;
+  /** Messages actually handed to a channel during this drain */
+  sent?: number;
+  /** Messages whose channel.send reported failure during this drain */
+  failed?: number;
 }
 
 /**
@@ -251,6 +263,8 @@ export interface ChannelStatus {
   authenticated: boolean;
   /** Last activity time */
   lastActivity?: Date;
+  /** Last successful long-poll request, for polling-based channels */
+  lastSuccessfulPoll?: Date;
   /** Error if any */
   error?: string;
   /** Additional info */
@@ -760,23 +774,41 @@ export class ChannelManager extends EventEmitter {
    */
   private async processQueue(): Promise<DeliveryResult> {
     if (this.processingQueue || this.outgoingQueue.length === 0) {
-      return { success: true, timestamp: new Date() };
+      logger.debug('Channel outgoing queue not drained in this call', {
+        processing: this.processingQueue,
+        queued: this.outgoingQueue.length,
+      });
+      return { success: false, queued: true, sent: 0, failed: 0, timestamp: new Date() };
     }
 
     this.processingQueue = true;
     let lastResult: DeliveryResult = { success: true, timestamp: new Date() };
+    let sent = 0;
+    let failed = 0;
 
     try {
       while (this.outgoingQueue.length > 0) {
         const item = this.outgoingQueue.shift()!;
         lastResult = await this.send(item.type, item.message);
         this.emit('message:sent', { type: item.type, result: lastResult });
+        if (lastResult.success) {
+          sent++;
+        } else {
+          failed++;
+        }
       }
     } finally {
       this.processingQueue = false;
     }
 
-    return lastResult;
+    return {
+      success: failed === 0,
+      sent,
+      failed,
+      messageId: lastResult.messageId,
+      error: lastResult.error,
+      timestamp: lastResult.timestamp,
+    };
   }
 
   /**

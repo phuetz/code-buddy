@@ -64,8 +64,11 @@ buddy -p "Add input validation to parseConfig and a test" --permission-mode acce
 # Same, free + local (tool-capable model), via the helper
 scripts/buddy-local.sh "Implement slugify in slugify.mjs so node slugify.check.mjs exits 0"
 
-# Golden-path workflows (force strict write policy)
-buddy dev plan "<goal>" ; buddy dev run ; buddy dev pr ; buddy dev fix-ci
+# Golden-path workflows (WritePolicy.strict / apply_patch)
+buddy dev plan "<goal>"          # writes PLAN.md, exit 1 if empty
+buddy dev run -y --type fix-tests
+buddy dev pr                     # title/body + gh or local origin push
+buddy dev fix-ci --log ci.log    # do not omit --log on a non-TTY
 
 # Diagnose the environment
 buddy doctor
@@ -74,7 +77,7 @@ buddy doctor
 ## 6. Server, fleet, and autonomous loop
 
 ```bash
-buddy server --port 3000          # HTTP (3000) + Gateway WS (3001) — required for the multi-AI fleet
+buddy server --port 3000          # HTTP + WebSocket `/ws` on ONE port — required for the multi-AI fleet
 buddy autonomy run --watch        # continuous autonomous loop: claim + run colab tasks, free-first models
 buddy autonomy install            # install it as an always-on systemd/launchd service
 buddy colab status                # inspect the shared fleet task queue

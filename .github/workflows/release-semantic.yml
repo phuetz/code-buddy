@@ -6,7 +6,7 @@ name: Release (semantic-release)
 #   computes the next version → updates CHANGELOG.md → bumps package.json →
 #   creates the git tag → publishes to npm → opens the GitHub Release.
 #
-# ⚠️ PREREQUISITES — read RELEASING.md before the first real run:
+# ⚠️ PREREQUISITES — read docs/RELEASING.md before the first real run:
 #   1. Repo secret NPM_TOKEN must be an npm *automation/granular* token with
 #      "bypass two-factor authentication" enabled (a plain web-login token can't
 #      publish under 2FA — this is the exact wall we hit publishing rc.8 by hand).

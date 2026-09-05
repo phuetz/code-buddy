@@ -31,14 +31,17 @@ describe('GoalManager', () => {
   let originalGoalMaxTurnsEnv: string | undefined;
   let originalGoalJudgeModelEnv: string | undefined;
   let originalGoalPlannerModelEnv: string | undefined;
+  let originalGoalJudgeTimeoutEnv: string | undefined;
 
   beforeEach(() => {
     originalGoalMaxTurnsEnv = process.env.CODEBUDDY_GOAL_MAX_TURNS;
     originalGoalJudgeModelEnv = process.env.CODEBUDDY_GOAL_JUDGE_MODEL;
     originalGoalPlannerModelEnv = process.env.CODEBUDDY_GOAL_PLANNER_MODEL;
+    originalGoalJudgeTimeoutEnv = process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS;
     delete process.env.CODEBUDDY_GOAL_MAX_TURNS;
     delete process.env.CODEBUDDY_GOAL_JUDGE_MODEL;
     delete process.env.CODEBUDDY_GOAL_PLANNER_MODEL;
+    delete process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-manager-test-'));
     store = new GoalStore({ storeDir: tmpDir });
     resetGoalManagers(store);
@@ -59,6 +62,11 @@ describe('GoalManager', () => {
       delete process.env.CODEBUDDY_GOAL_PLANNER_MODEL;
     } else {
       process.env.CODEBUDDY_GOAL_PLANNER_MODEL = originalGoalPlannerModelEnv;
+    }
+    if (originalGoalJudgeTimeoutEnv === undefined) {
+      delete process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS;
+    } else {
+      process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS = originalGoalJudgeTimeoutEnv;
     }
     resetGoalManagers();
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -327,6 +335,11 @@ describe('GoalManager', () => {
     expect(mgr.statusLine()).toBe('No active goal. Set one with /goal <text>.');
     mgr.set('fix the build');
     expect(mgr.statusLine()).toBe('⊙ Goal (active, 0/20 turns): fix the build');
+  });
+
+  it('honours CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS over the 30s default', () => {
+    process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS = '180000';
+    expect(resolveGoalsConfig().judgeTimeoutMs).toBe(180000);
   });
 
   it('does not truncate decimal CODEBUDDY_GOAL_MAX_TURNS values', () => {

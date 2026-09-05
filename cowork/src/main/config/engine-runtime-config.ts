@@ -3,6 +3,7 @@ import {
   resolveLmStudioCredentials,
   resolveOllamaCredentials,
   resolveOpenAICredentials,
+  resolveVllmCredentials,
   shouldAllowEmptyAnthropicApiKey,
   shouldAllowEmptyGeminiApiKey,
 } from './auth-utils';
@@ -52,6 +53,15 @@ export function resolveEngineRuntimeConfig(config: AppConfig): EngineRuntimeConf
     };
   }
 
+  if (projected.provider === 'vllm') {
+    const resolved = resolveVllmCredentials(projected);
+    return {
+      apiKey: resolved?.apiKey ?? '',
+      baseURL: resolved?.baseUrl,
+      model: projected.model,
+    };
+  }
+
   const isGemini =
     projected.provider === 'gemini' ||
     (projected.provider === 'custom' && projected.customProtocol === 'gemini');
@@ -70,6 +80,11 @@ export function resolveEngineRuntimeConfig(config: AppConfig): EngineRuntimeConf
     projected.provider === 'chatgpt' ||
     projected.provider === 'openai' ||
     projected.provider === 'openrouter' ||
+    projected.provider === 'grok' ||
+    projected.provider === 'groq' ||
+    projected.provider === 'together' ||
+    projected.provider === 'fireworks' ||
+    projected.provider === 'mistral' ||
     (projected.provider === 'custom' && projected.customProtocol === 'openai');
   if (isOpenAICompatible) {
     const resolved = resolveOpenAICredentials(projected);

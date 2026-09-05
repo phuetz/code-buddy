@@ -12,6 +12,7 @@ import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 // AES-256-GCM parameters
 const ALGORITHM = 'aes-256-gcm';
@@ -86,7 +87,7 @@ export class SessionEncryption {
         this.key = crypto.randomBytes(KEY_LENGTH);
         // Store key securely
         await fs.ensureDir(path.dirname(this.config.keyPath));
-        await fs.writeFile(this.config.keyPath, this.key, { mode: 0o600 });
+        await writeFileAtomic(this.config.keyPath, this.key, { mode: 0o600 });
       }
 
       this.initialized = true;
@@ -267,7 +268,7 @@ export class SessionEncryption {
     const newKey = crypto.randomBytes(KEY_LENGTH);
 
     // Store new key
-    await fs.writeFile(this.config.keyPath, newKey, { mode: 0o600 });
+    await writeFileAtomic(this.config.keyPath, newKey, { mode: 0o600 });
 
     this.key = newKey;
 

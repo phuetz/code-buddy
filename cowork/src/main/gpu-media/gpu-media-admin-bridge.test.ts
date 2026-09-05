@@ -26,7 +26,7 @@ function harness(job = panoJob) {
   const client = {
     capabilities: vi.fn().mockResolvedValue({
       protocolVersion: 1,
-      workerId: 'darkstar',
+      workerId: 'gpuNode',
       jobs: ['panoworld_reconstruct', 'avatar_video_render'],
     }),
     submit: vi.fn().mockResolvedValue(job),
@@ -79,7 +79,7 @@ describe('GpuMediaAdminBridge', () => {
 
   it('delegates status and cancellation to the authenticated core client', async () => {
     const { bridge, client } = harness();
-    await expect(bridge.capabilities()).resolves.toMatchObject({ workerId: 'darkstar' });
+    await expect(bridge.capabilities()).resolves.toMatchObject({ workerId: 'gpuNode' });
     await expect(bridge.status('gpu-pano')).resolves.toEqual(panoJob);
     await expect(bridge.cancel('gpu-pano')).resolves.toMatchObject({ status: 'cancelled' });
     expect(client.status).toHaveBeenCalledWith('gpu-pano');

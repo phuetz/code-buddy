@@ -331,10 +331,6 @@ export class Pcm16WavStreamGain {
     const header = this.prefix.subarray(0, probe.layout.dataOffset);
     const payload = this.prefix.subarray(probe.layout.dataOffset);
     this.prefix = Buffer.alloc(0);
-    if (this.frozenFactor !== undefined) {
-      this.mode = 'gain';
-      return [header, ...this.transformPayload(payload)].filter((part) => part.length > 0);
-    }
 
     this.mode = 'buffering';
     this.headBytes = Math.max(
@@ -377,9 +373,11 @@ export class Pcm16WavStreamGain {
       this.pendingByte = payload[payload.length - 1] ?? null;
     }
     const paired = payload.subarray(0, pairedLength);
-    const plan = planNormalization(paired, this.env, resolveStreamGainDb(this.env));
-    this.normalizationFactor = plan.factor;
-    this.peakLimit = plan.peakLimit;
+    if (this.frozenFactor === undefined) {
+      const plan = planNormalization(paired, this.env, resolveStreamGainDb(this.env));
+      this.normalizationFactor = plan.factor;
+      this.peakLimit = plan.peakLimit;
+    }
     if (paired.length === 0) return [];
     this.outputAudio = true;
     return [transformPcm16(paired, this.normalizationFactor ?? 1, this.peakLimit)];

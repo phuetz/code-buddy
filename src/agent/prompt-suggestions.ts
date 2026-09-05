@@ -159,7 +159,8 @@ export class PromptSuggestionEngine {
       return this.client;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
+    const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+    const apiKey = resolveActiveProviderApiKey();
     if (!apiKey) {
       return null;
     }

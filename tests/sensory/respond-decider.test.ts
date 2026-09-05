@@ -143,13 +143,15 @@ describe('isVocativeAddress — addressed vs merely mentioned', () => {
 });
 
 describe('isDirectedFollowUp', () => {
-  it('directed: questions, 2nd person, imperatives, continuations', () => {
-    expect(isDirectedFollowUp('et demain ?')).toBe(true);
+  it('directed: explicit requests and second-person statements', () => {
+    expect(isDirectedFollowUp('peux-tu vérifier demain ?')).toBe(true);
     expect(isDirectedFollowUp('tu peux répéter')).toBe(true);
     expect(isDirectedFollowUp('raconte encore')).toBe(true);
-    expect(isDirectedFollowUp('ok et ensuite')).toBe(true);
+    expect(isDirectedFollowUp('je vous écoute')).toBe(true);
   });
-  it('ambient: plain 3rd-person statements', () => {
+  it('ambient: bare questions, continuations, and plain 3rd-person statements', () => {
+    expect(isDirectedFollowUp('et demain ?')).toBe(false);
+    expect(isDirectedFollowUp('ok et ensuite')).toBe(false);
     expect(isDirectedFollowUp('on prépare le dîner de ce soir')).toBe(false);
     expect(isDirectedFollowUp('il fait beau aujourd’hui')).toBe(false);
   });
@@ -165,6 +167,14 @@ describe('isDirectedFollowUp', () => {
 });
 
 describe('respond-decider — addressed + engagement window (no LLM)', () => {
+  it('exposes a deterministic address probe for repair without opening dialogue', async () => {
+    const d = createResponseDecider({ robotName: 'Lisa', now: () => 0 });
+
+    expect(await d.isAddressed('Lisa, tu m’entends ?')).toBe(true);
+    expect(await d.isAddressed("J'ai vu Lisa hier.")).toBe(false);
+    expect(d.snapshot().engaged).toBe(false);
+  });
+
   it('answers a human closing once and immediately closes continuity', async () => {
     let t = 1_000;
     const d = createResponseDecider({
@@ -368,9 +378,9 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
       reason: 'addressed',
     });
 
-    // A follow-up WITHOUT the name, inside the window → still responds (continuity).
+    // A bare question without the name is not enough evidence of an address.
     t = 1000 + 10_000;
-    expect(await d.decide('et demain ?')).toEqual({ respond: true, reason: 'engaged' });
+    expect(await d.decide('et demain ?')).toEqual({ respond: false, reason: 'ambient-in-window' });
 
     // Far later, an ambient statement (chime-in off) → silent.
     t = 1000 + 10_000 + 180_000;
@@ -380,6 +390,23 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     });
     expect(judge).not.toHaveBeenCalled();
   });
+
+  it.each(['oui', "d'accord", 'pas vraiment', 'pourquoi pas'])(
+    'accepts the bounded conversational answer %s only inside an engagement window',
+    async (answer) => {
+      let t = 1_000;
+      const d = createResponseDecider({
+        robotName: 'Lisa',
+        now: () => t,
+        engageWindowMs: 30_000,
+      });
+
+      expect(await d.decide(answer)).toEqual({ respond: false, reason: 'ambient' });
+      expect((await d.decide('Lisa, tu m’entends ?')).respond).toBe(true);
+      t = 2_000;
+      expect(await d.decide(answer)).toEqual({ respond: true, reason: 'engaged' });
+    },
+  );
 
   it('conversation mode: extends on DIRECTED follow-ups, stays silent on ambient in-window', async () => {
     let t = 0;
@@ -393,9 +420,9 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     });
     expect((await d.decide('Buddy tu es là ?')).reason).toBe('addressed'); // dialogue starts t=0
     t = 20_000;
-    expect((await d.decide('et la météo demain ?')).reason).toBe('engaged'); // directed → extend
+    expect((await d.decide('explique la météo de demain')).reason).toBe('engaged'); // direct imperative → extend
     t = 45_000; // 45k − 20k = 25k < 30k window (extended) → still engaged
-    expect((await d.decide('et le café tu as vu ?')).reason).toBe('engaged'); // directed → extend
+    expect((await d.decide('raconte ce que tu as vu')).reason).toBe('engaged'); // direct imperative → extend
     // Ambient cross-talk inside the window → silent (do NOT answer the room).
     t = 50_000;
     expect(await d.decide('on prépare le dîner de ce soir')).toEqual({
@@ -409,9 +436,9 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
       respond: false,
       reason: 'ambient-in-window',
     });
-    // A directed follow-up still lands (window was extended to 75k by the 45k turn).
+    // A direct follow-up still lands (window was extended to 75k by the 45k turn).
     t = 60_000;
-    expect((await d.decide('et sinon quoi ?')).reason).toBe('engaged');
+    expect((await d.decide('dis-moi sinon quoi')).reason).toBe('engaged');
   });
 
   it('caps the dialogue: past conversationMaxMs a directed follow-up no longer extends', async () => {
@@ -425,13 +452,13 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     });
     await d.decide('Buddy tu es là ?'); // dialogue anchor t=0
     t = 20_000;
-    await d.decide('et quoi ?'); // extend → lastEngaged=20k
+    await d.decide('raconte encore'); // extend → lastEngaged=20k
     t = 40_000;
-    expect((await d.decide('et encore ?')).respond).toBe(true); // in window, cap ok → extend to 40k
+    expect((await d.decide('explique encore')).respond).toBe(true); // in window, cap ok → extend to 40k
     t = 55_000; // in window (55−40<30) BUT cap 55k ≥ 50k → answered, NOT extended
-    expect((await d.decide('et toujours ?')).respond).toBe(true);
+    expect((await d.decide('continue encore')).respond).toBe(true);
     t = 75_000; // 75−40=35k > 30k window (never extended past 40k) → dialogue ended
-    expect((await d.decide('et la suite ?')).respond).toBe(false);
+    expect((await d.decide('raconte la suite')).respond).toBe(false);
   });
 
   it('markEngaged opens the window manually', async () => {
@@ -443,7 +470,7 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     });
     d.markEngaged();
     t = 4000;
-    expect((await d.decide('et ça ?')).respond).toBe(true);
+    expect((await d.decide('tu peux continuer')).respond).toBe(true);
     t = 11000;
     expect((await d.decide('autre chose')).respond).toBe(false);
   });

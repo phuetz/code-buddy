@@ -14,7 +14,14 @@ import type { CostTracker } from '../../utils/cost-tracker.js';
 import type { ModelPairsConfig } from '../../config/toml-config.js';
 import { getModelScoreboard, type ModelScoreboard } from '../../fleet/model-scoreboard.js';
 import { inferTaskType } from '../../fleet/model-capability-heuristics.js';
+import { SCOREBOARD_TASK_TYPES } from '../../council/task-types.js';
 import { logger } from '../../utils/logger.js';
+
+const SCOREBOARD_DIRECT_ROUTING_TASKS = new Set<string>(
+  SCOREBOARD_TASK_TYPES.filter((taskType) =>
+    ['redaction-fr', 'arbitrage-litteraire', 'jugement-litteraire', 'audit-adversarial', 'relecture-typo'].includes(taskType),
+  ),
+);
 
 /**
  * Task intent classification used for architect/editor model pair routing.
@@ -193,6 +200,30 @@ export class ModelRoutingFacade {
       const sb = scoreboardOverride ?? getModelScoreboard();
       const taskType = inferTaskType(userMessage);
       const rec = decision.recommendedModel;
+
+      // Literary benchmark categories are not represented by the legacy Grok
+      // complexity table. When one is observed in the scoreboard, select the
+      // best available measured model directly; all legacy categories retain
+      // the original recommended/alternative-only tie-break below.
+      if (SCOREBOARD_DIRECT_ROUTING_TASKS.has(taskType)) {
+        const best = sb.best(taskType, models);
+        if (best && sb.runCount(taskType, best.model) > 0 && best.model !== rec) {
+          logger.debug(
+            `[council-routing] scoreboard selects ${best.model} for ${taskType} `
+              + `(win ${best.winRate.toFixed(2)}, quality ${best.avgQuality.toFixed(2)})`,
+          );
+          return {
+            ...decision,
+            recommendedModel: best.model,
+            tier: GROK_MODELS[best.model]?.tier ?? 'standard',
+            reason: `${decision.reason} | council-routing: ${best.model} measured best for ${taskType}`,
+            alternativeModel: rec,
+            alternativeReason: decision.reason,
+          };
+        }
+        return decision;
+      }
+
       const recBias = sb.selectionBias(taskType, rec);
       const altBias = sb.selectionBias(taskType, alt);
 

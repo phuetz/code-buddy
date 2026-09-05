@@ -25,7 +25,7 @@ vi.mock('../../src/council/council-engine.js', () => ({
 
 import { runCouncil } from '../../src/commands/council.js';
 import { resetLessonCandidateQueues } from '../../src/agent/lesson-candidate-queue.js';
-import type { CouncilRunResult } from '../../src/council/types.js';
+import { CouncilError, type CouncilRunResult } from '../../src/council/types.js';
 
 /** A direct-mode run with sub-threshold agreement — a learnable disagreement. */
 function cannedResult(): CouncilRunResult {
@@ -123,6 +123,19 @@ afterEach(() => {
 });
 
 describe('runCouncil — lesson bridge host policy', () => {
+  it('does not exit 0 when every council member failed', async () => {
+    runCouncilPipeline.mockRejectedValueOnce(
+      new CouncilError('all-failed', 'all council models failed'),
+    );
+    const previousExit = process.exitCode;
+    process.exitCode = 0;
+    const lines: string[] = [];
+    await runCouncil('Combien font 17 × 19 ?', {}, (s) => lines.push(s));
+    expect(lines.join('\n')).toContain('Toutes les IA ont échoué');
+    expect(process.exitCode).toBe(1);
+    process.exitCode = previousExit;
+  });
+
   it('outside a project: proposes nothing and never creates .codebuddy', async () => {
     const lines: string[] = [];
     await runCouncil('Compare les deux approches', {}, (s) => lines.push(s));

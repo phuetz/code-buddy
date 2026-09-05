@@ -85,7 +85,7 @@ describe('peer_delegate tool', () => {
     });
 
     it('errors when no peers connected', async () => {
-      const result = await executePeerDelegate({ peer: 'darkstar', prompt: 'hi' });
+      const result = await executePeerDelegate({ peer: 'gpuNode', prompt: 'hi' });
       expect(result.success).toBe(false);
       expect(result.error).toContain('No fleet peers connected');
       expect(result.error).toContain('/fleet listen');
@@ -129,16 +129,16 @@ describe('peer_delegate tool', () => {
   describe('happy path', () => {
     it('calls peer.chat with default timeout and returns formatted output', async () => {
       const request = vi.fn().mockResolvedValue({
-        text: 'hello from darkstar',
+        text: 'hello from gpuNode',
         modelRequested: 'grok-3',
         finishReason: 'stop',
         usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
         traceId: 'tr-abc',
       });
-      registerPeer('darkstar', request);
+      registerPeer('gpuNode', request);
 
       const result = await executePeerDelegate({
-        peer: 'darkstar',
+        peer: 'gpuNode',
         prompt: 'say hi',
       });
 
@@ -149,14 +149,14 @@ describe('peer_delegate tool', () => {
       expect(params).toEqual({ prompt: 'say hi' });
       expect(options).toMatchObject({ timeoutMs: 60_000 });
 
-      expect(result.output).toContain('[peer: darkstar]');
-      expect(result.output).toContain('hello from darkstar');
+      expect(result.output).toContain('[peer: gpuNode]');
+      expect(result.output).toContain('hello from gpuNode');
       expect(result.output).toContain('[tokens: 12 in / 5 out | total: 17]');
       expect(result.output).toContain('[model: grok-3]');
 
       const data = result.data as { text: string; peer: string; traceId: string };
-      expect(data.text).toBe('hello from darkstar');
-      expect(data.peer).toBe('darkstar');
+      expect(data.text).toBe('hello from gpuNode');
+      expect(data.peer).toBe('gpuNode');
       expect(data.traceId).toBe('tr-abc');
     });
 

@@ -29,6 +29,11 @@ The installer ([`install.sh`](../install.sh)) is POSIX `sh`, idempotent, and
 - Installs the `@phuetz/code-buddy` package globally, falling back to a
   user-local npm prefix when the global one would need root — so it **never runs
   `sudo` behind your back**.
+- Creates `~/.codebuddy/bin/buddy`, a package-relative launcher, and prepends
+  that managed directory to your shell `PATH`. The wrapper contains no absolute
+  source-checkout path, so an obsolete `~/.local/bin/buddy` cannot silently win
+  after a reinstall. The adjacent `.code-buddy-package` symlink is relative and
+  is refreshed idempotently whenever the installer runs.
 
 Prefer to read before you run? Inspect the script first:
 
@@ -55,6 +60,10 @@ buddy onboard     # guided setup — pick a model, keys optional
 buddy login       # ChatGPT Plus/Pro OAuth, $0 marginal cost   (or: buddy login xai)
 buddy             # start chatting
 ```
+
+If `buddy` ever resolves to an older manual wrapper, run the one-command
+installer again, open a new shell, and check `command -v buddy`. It should print
+`~/.codebuddy/bin/buddy`; the installer never edits or deletes the older file.
 
 ---
 

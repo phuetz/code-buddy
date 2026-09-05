@@ -38,7 +38,12 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
   const approvals = useAppStore((state) => state.pendingApprovals);
   const setPrimaryView = useAppStore((state) => state.setPrimaryView);
   const queued = useActiveQueuedIntents();
-  const [open, setOpen] = useState(true);
+  // The rail lives inside the dock's Chat panel, which can be much narrower
+  // than the application window when Context is open. Starting expanded at
+  // 460px can reduce the conversation column (and its composer) to zero.
+  // Keep the explicit open button and the file/artifact auto-open effects,
+  // but give every newly mounted chat a usable composer first.
+  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RailTab>('activity');
   const [externalSessions, setExternalSessions] = useState<Array<{ id: string; name: string; model: string; messageCount: number; lastAccessedAt: string }>>([]);
 

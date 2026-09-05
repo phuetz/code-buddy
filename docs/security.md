@@ -38,15 +38,13 @@ Singleton for destructive operations. Check order:
 
 ### OS Sandbox (Native)
 
-Three tiers for native OS-level isolation:
+Native kernel confinement for `bash` is opt-in through `CODEBUDDY_NATIVE_SANDBOX=true` (or the explicit `bwrap`, `landlock`, or `seatbelt` backend values). When the variable is unset, the host spawn is returned unchanged and no native sandbox is applied. When enabled, backend selection is fail-closed: on Linux, usable Bubblewrap is preferred and Landlock is selected if Bubblewrap is unusable but its ABI and Python helper are available; execution is refused when no backend can be applied. On macOS, `sandbox-exec` is selected when available.
 
 | Mode | Write Access | Use Case |
 |:-----|:------------|:---------|
 | `read-only` | None | Untrusted analysis |
-| `workspace-write` | Git workspace root only | Normal development (default) |
+| `workspace-write` | Git workspace root only | Normal development (native confinement opt-in) |
 | `danger-full-access` | Unrestricted | Deployment scripts |
-
-`.git`, `.codebuddy`, `.ssh`, `.gnupg`, `.aws` are always read-only. Implemented via bubblewrap (Linux), landlock (Linux 5.13+), seatbelt (macOS).
 
 ### Docker Sandbox
 

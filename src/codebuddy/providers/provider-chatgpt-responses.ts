@@ -128,9 +128,14 @@ function resolveCodexModel(
     configuredModel && isCodexServableModel(configuredModel)
       ? normalizeChatGptOAuthModel(configuredModel)
       : CHATGPT_OAUTH_DEFAULT_MODEL;
-  logger.debug(
-    `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`,
-  );
+  const warningMessage = `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`;
+  logger.warn(warningMessage);
+  // MODELLABEL1: Also write to stderr to ensure visibility even when stdout is being parsed
+  // Only warn once per process to avoid duplicate messages
+  if (!process.env.CODEBUDDY_MODEL_FALLBACK_WARNED) {
+    process.env.CODEBUDDY_MODEL_FALLBACK_WARNED = 'true';
+    process.stderr.write(`[WARN] ${warningMessage}\n`);
+  }
   return target;
 }
 
@@ -329,6 +334,10 @@ export class ChatGptResponsesProvider implements Provider {
    *  session model). Never mutated by per-call overrides or fallback, so it is
    *  the safe remap target when a mis-routed / non-Codex model arrives. */
   private readonly configuredModel: string;
+  /** The model actually sent to the Codex backend on the last request (after
+   *  the non-servable → servable remap and catalog selection). Read by the
+   *  client so headless output reports the EFFECTIVE model (MODELLABEL1). */
+  private lastEffectiveModel: string | undefined;
 
   constructor(opts: ChatGptResponsesProviderOptions) {
     this.authProvider = opts.authProvider;
@@ -345,6 +354,11 @@ export class ChatGptResponsesProvider implements Provider {
     this.currentModel = normalizeChatGptOAuthModel(model);
   }
 
+  /** Model actually served on the last request, if any request was made. */
+  getEffectiveModel(): string | undefined {
+    return this.lastEffectiveModel;
+  }
+
   setDefaultReasoningEffort(level: string): void {
     this.defaultReasoningEffort = level;
   }
@@ -359,10 +373,13 @@ export class ChatGptResponsesProvider implements Provider {
     // Non-streaming consumes the streaming path and aggregates.
     let content = '';
     const toolCalls: CodeBuddyToolCall[] = [];
-    let finishReason = 'stop';
+    let finishReason: string | undefined;
+    let truncated = false;
+    let actualModel: string | undefined;
     let usage: CodeBuddyResponse['usage'];
 
     for await (const chunk of this.chatStream(messages, tools, opts)) {
+      actualModel = chunk.model;
       const delta = chunk.choices[0]?.delta;
       if (delta?.content) content += delta.content;
       if (delta?.tool_calls) {
@@ -384,6 +401,9 @@ export class ChatGptResponsesProvider implements Provider {
       if (chunk.choices[0]?.finish_reason) {
         finishReason = chunk.choices[0].finish_reason;
       }
+      if ((chunk as ChatCompletionChunk & { truncated?: boolean }).truncated) {
+        truncated = true;
+      }
       if (chunk.usage) {
         const chunkUsage = chunk.usage as typeof chunk.usage & { cached_tokens?: number };
         usage = {
@@ -397,7 +417,12 @@ export class ChatGptResponsesProvider implements Provider {
       }
     }
 
+    if (!finishReason) {
+      throw new Error('ChatGPT Responses stream ended without a terminal finish reason');
+    }
+
     return {
+      model: actualModel ?? this.currentModel,
       choices: [{
         message: {
           role: 'assistant',
@@ -406,6 +431,7 @@ export class ChatGptResponsesProvider implements Provider {
         },
         finish_reason: finishReason,
       }],
+      ...(truncated ? { truncated: true } : {}),
       ...(usage ? { usage } : {}),
     };
   }
@@ -445,6 +471,7 @@ export class ChatGptResponsesProvider implements Provider {
         this.configuredModel,
       );
       if (!opts.model) model = selectChatGptOAuthModel(model, catalog);
+      this.lastEffectiveModel = model;
 
     // If this is a brand-new conversational turn (last user message has
     // no preceding tool round in messages), drop any stale reasoning
@@ -966,6 +993,10 @@ type DeltaWithReasoning = ChatCompletionChunk['choices'][0]['delta'] & {
   reasoning_content?: string;
 };
 
+type ResponsesChatCompletionChunk = ChatCompletionChunk & {
+  truncated?: boolean;
+};
+
 type ChunkUsage = NonNullable<ChatCompletionChunk['usage']> & {
   cached_tokens?: number;
 };
@@ -986,6 +1017,7 @@ export async function* parseSseStream(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let terminalEventSeen = false;
   let chunkIndex = 0;
   // Monotonic index per function_call so the downstream message-reducer keeps
   // parallel tool calls in separate slots. Hardcoding 0 made every parallel
@@ -998,7 +1030,8 @@ export async function* parseSseStream(
     delta: DeltaWithReasoning,
     finishReason?: string,
     usage?: ChunkUsage,
-  ): ChatCompletionChunk => ({
+    truncated?: boolean,
+  ): ResponsesChatCompletionChunk => ({
     id: `chatcmpl-codex-${chunkIndex++}`,
     object: 'chat.completion.chunk',
     created: Math.floor(Date.now() / 1000),
@@ -1008,6 +1041,7 @@ export async function* parseSseStream(
       delta: delta as ChatCompletionChunk['choices'][0]['delta'],
       finish_reason: (finishReason as ChatCompletionChunk['choices'][0]['finish_reason']) ?? null,
     }],
+    ...(truncated ? { truncated: true } : {}),
     ...(usage ? { usage } : {}),
   });
 
@@ -1037,9 +1071,18 @@ export async function* parseSseStream(
         if (idleTimer) clearTimeout(idleTimer);
       }
       const { value, done } = readResult;
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
+      if (done) {
+        // TextDecoder keeps an incomplete UTF-8 sequence until its final
+        // decode call. Flush it before processing the last SSE event.
+        buffer += decoder.decode();
+        if (buffer.length === 0) break;
+        // SSE normally uses a blank line to terminate an event. A server may
+        // close immediately after the last data line, so make the remainder
+        // visible to the same parser below.
+        buffer += '\n\n';
+      } else {
+        buffer += decoder.decode(value, { stream: true });
+      }
 
       // Process complete SSE events. Each event is delimited by `\n\n`,
       // with each line prefixed by `data: ` (or `event:`, which we ignore).
@@ -1054,6 +1097,7 @@ export async function* parseSseStream(
         if (dataLines.length === 0) continue;
         const dataStr = dataLines.join('\n');
         if (dataStr === '[DONE]') {
+          terminalEventSeen = true;
           yield makeChunk({}, 'stop');
           return;
         }
@@ -1061,8 +1105,11 @@ export async function* parseSseStream(
         let parsed: {
           type?: string;
           delta?: string;
+          code?: string;
+          message?: string;
           item_id?: string;
           call_id?: string;
+          error?: { code?: string; message?: string };
           item?: {
             type?: string;
             id?: string;
@@ -1075,6 +1122,7 @@ export async function* parseSseStream(
           };
           response?: {
             error?: { code?: string; message?: string };
+            incomplete_details?: { reason?: string };
             usage?: {
               input_tokens?: number;
               output_tokens?: number;
@@ -1086,10 +1134,17 @@ export async function* parseSseStream(
         try {
           parsed = JSON.parse(dataStr);
         } catch {
-          continue; // malformed event, skip
+          throw new Error('ChatGPT Responses stream contained malformed SSE data');
         }
 
         const type = parsed.type;
+
+        if (type === 'error') {
+          throw new Error(
+            `ChatGPT Responses backend failure (${parsed.code ?? parsed.error?.code ?? 'unknown'}): ` +
+            `${parsed.message ?? parsed.error?.message ?? 'no message'}`,
+          );
+        }
 
         if (type === 'response.output_item.added' && parsed.item?.type === 'custom_tool_call') {
           const key = parsed.item.id ?? parsed.item.call_id;
@@ -1214,6 +1269,7 @@ export async function* parseSseStream(
         }
 
         if (type === 'response.completed') {
+          terminalEventSeen = true;
           const responseUsage = parsed.response?.usage;
           let chunkUsage: ChunkUsage | undefined;
           if (responseUsage) {
@@ -1231,6 +1287,16 @@ export async function* parseSseStream(
           return;
         }
 
+        if (type === 'response.incomplete') {
+          terminalEventSeen = true;
+          const reason = parsed.response?.incomplete_details?.reason ?? 'unknown';
+          logger.warn(
+            `[chatgpt-responses] Response incomplete (${reason}); marking output as truncated`,
+          );
+          yield makeChunk({}, 'length', undefined, true);
+          return;
+        }
+
         if (type === 'response.failed') {
           const err = parsed.response?.error;
           throw new Error(
@@ -1241,6 +1307,13 @@ export async function* parseSseStream(
         // Other events (response.created, response.in_progress,
         // response.reasoning_text.delta, etc.) are ignored.
       }
+
+      if (done) break;
+
+    }
+
+    if (!terminalEventSeen) {
+      throw new Error('ChatGPT Responses stream ended without a terminal event');
     }
   } finally {
     try { reader.releaseLock(); } catch { /* ignore */ }

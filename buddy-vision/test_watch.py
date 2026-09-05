@@ -1,10 +1,13 @@
 import unittest
 
+import numpy as np
+
 from watch import (
     AnonymousMultiTracker,
     MOTION_FRAME_SLOTS,
     SEMANTIC_FRAME_SLOTS,
     CameraLivenessState,
+    MotionGate,
     MotionEventState,
     PersonState,
     VisionSample,
@@ -35,21 +38,20 @@ class NormalizedBoxTests(unittest.TestCase):
 
 class PersonStateTests(unittest.TestCase):
     def test_tracker_is_opaque_stable_for_one_presence_episode_and_then_rotates(self):
-        state = PersonState(episode_prefix="testscope")
-        state.grace = 2
+        state = PersonState(episode_prefix="testscope", lost_secs=20)
 
-        entered = state.update(True)
+        entered = state.update(True, at=0)
         self.assertEqual(entered, ("person_entered", 200, "anon-testscope-1"))
         self.assertEqual(state.presence_episode_id, "anon-testscope-1")
-        self.assertIsNone(state.update(True))
-        self.assertIsNone(state.update(False))
+        self.assertIsNone(state.update(True, at=1))
+        self.assertIsNone(state.update(False, at=2))
         self.assertEqual(
-            state.update(False),
+            state.update(False, at=21),
             ("person_lost", 120, "anon-testscope-1"),
         )
         self.assertIsNone(state.presence_episode_id)
         self.assertEqual(
-            state.update(True),
+            state.update(True, at=22),
             ("person_entered", 200, "anon-testscope-2"),
         )
 
@@ -92,14 +94,14 @@ class AnonymousMultiTrackerTests(unittest.TestCase):
 
     def test_total_detector_loss_is_delayed_and_reacquisition_keeps_episode(self):
         tracker = AnonymousMultiTracker(
-            episode_prefix="grace", max_persons=4, grace=2, iou_threshold=0.2
+            episode_prefix="grace", max_persons=4, lost_secs=20, iou_threshold=0.2
         )
-        episode_id = tracker.update([detection(0.3)])["visible"][0]["episodeId"]
-        self.assertEqual(tracker.update([])["lost"], [])
-        reacquired = tracker.update([detection(0.31)])
+        episode_id = tracker.update([detection(0.3)], at=0)["visible"][0]["episodeId"]
+        self.assertEqual(tracker.update([], at=2)["lost"], [])
+        reacquired = tracker.update([detection(0.31)], at=3)
         self.assertEqual(reacquired["visible"][0]["episodeId"], episode_id)
-        self.assertEqual(tracker.update([])["lost"], [])
-        lost = tracker.update([])
+        self.assertEqual(tracker.update([], at=22.9)["lost"], [])
+        lost = tracker.update([], at=23)
         self.assertEqual(lost["visible"], [])
         self.assertEqual(lost["lost"][0]["episodeId"], episode_id)
         self.assertFalse(tracker.present)
@@ -275,6 +277,45 @@ class MotionEventTests(unittest.TestCase):
         self.assertLessEqual(MOTION_FRAME_SLOTS, 128)
         self.assertGreaterEqual(SEMANTIC_FRAME_SLOTS, 64)
         self.assertLessEqual(SEMANTIC_FRAME_SLOTS, 256)
+
+    def test_dark_gaussian_sensor_noise_never_emits_motion(self):
+        rng = np.random.default_rng(42)
+        gate = MotionGate(motion_threshold=0.02, min_luma=12, noise_window=16)
+        events = MotionEventState(cooldown_secs=2)
+        emitted = 0
+        darkness_logs = 0
+
+        for index in range(20):
+            frame = np.clip(rng.normal(6, 5, size=(120, 160)), 0, 255).astype(np.uint8)
+            decision = gate.update(frame, at=float(index))
+            emitted += int(events.should_emit(decision["moved"], at=float(index)))
+            darkness_logs += int(decision["logDarkness"])
+
+        self.assertEqual(emitted, 0)
+        self.assertLessEqual(darkness_logs, 1)
+        self.assertLess(decision["meanLuma"], 12)
+        self.assertIn("noiseFloor", decision)
+
+    def test_moving_rectangle_emits_exactly_one_motion_event(self):
+        gate = MotionGate(motion_threshold=0.02, min_luma=12, noise_window=16)
+        events = MotionEventState(cooldown_secs=2)
+        base = np.full((120, 160), 80, dtype=np.uint8)
+        moved = base.copy()
+        moved[30:80, 40:100] = 220
+
+        decisions = [
+            gate.update(base, at=0),
+            gate.update(moved, at=1),
+            gate.update(moved, at=2),
+        ]
+        emitted = sum(
+            events.should_emit(decision["moved"], at=float(index))
+            for index, decision in enumerate(decisions)
+        )
+
+        self.assertEqual(emitted, 1)
+        self.assertGreater(decisions[1]["score"], decisions[1]["effectiveThreshold"])
+        self.assertGreaterEqual(decisions[1]["meanLuma"], 12)
 
 
 if __name__ == "__main__":

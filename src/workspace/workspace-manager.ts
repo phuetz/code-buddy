@@ -31,6 +31,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { EventEmitter } from 'events';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -412,10 +413,7 @@ export class WorkspaceManager extends EventEmitter {
       const config: WorkspaceState = {
         lastAccessed: new Date().toISOString(),
       };
-      fs.writeFileSync(
-        path.join(localDir, 'config.json'),
-        JSON.stringify(config, null, 2)
-      );
+      writeJsonAtomicSync(path.join(localDir, 'config.json'), config, { mode: 0o600 });
 
       // Add .grok to .gitignore if it exists
       this.addToGitignore(ws.rootPath);
@@ -456,9 +454,13 @@ export class WorkspaceManager extends EventEmitter {
     const statePath = path.join(this.getWorkspaceDataDir(ws), 'state.json');
 
     try {
-      if (fs.existsSync(statePath)) {
-        return JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-      }
+      return readJsonAtomicSync<WorkspaceState | null>(statePath, null, {
+        mode: 0o600,
+        isValid: (value): value is WorkspaceState => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          typeof (value as WorkspaceState).lastAccessed === 'string',
+        ),
+      });
     } catch {
       // Ignore read errors
     }
@@ -477,7 +479,7 @@ export class WorkspaceManager extends EventEmitter {
     const statePath = path.join(dataDir, 'state.json');
 
     state.lastAccessed = new Date().toISOString();
-    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    writeJsonAtomicSync(statePath, state, { mode: 0o600 });
   }
 
   /**
@@ -500,9 +502,10 @@ export class WorkspaceManager extends EventEmitter {
     let recent: WorkspaceInfo[] = [];
 
     try {
-      if (fs.existsSync(recentPath)) {
-        recent = JSON.parse(fs.readFileSync(recentPath, 'utf-8'));
-      }
+      recent = readJsonAtomicSync<WorkspaceInfo[]>(recentPath, [], {
+        mode: 0o600,
+        isValid: (value): value is WorkspaceInfo[] => Array.isArray(value),
+      });
     } catch {
       // Ignore read errors
     }
@@ -519,7 +522,7 @@ export class WorkspaceManager extends EventEmitter {
     // Keep only last 20 workspaces
     recent = recent.slice(0, 20);
 
-    fs.writeFileSync(recentPath, JSON.stringify(recent, null, 2));
+    writeJsonAtomicSync(recentPath, recent, { mode: 0o600 });
   }
 
   /**
@@ -529,11 +532,12 @@ export class WorkspaceManager extends EventEmitter {
     const recentPath = path.join(this.globalDataDir, 'recent.json');
 
     try {
-      if (fs.existsSync(recentPath)) {
-        const recent = JSON.parse(fs.readFileSync(recentPath, 'utf-8')) as WorkspaceInfo[];
-        // Filter out non-existent workspaces
-        return recent.filter(w => fs.existsSync(w.rootPath));
-      }
+      const recent = readJsonAtomicSync<WorkspaceInfo[]>(recentPath, [], {
+        mode: 0o600,
+        isValid: (value): value is WorkspaceInfo[] => Array.isArray(value),
+      });
+      // Filter out non-existent workspaces
+      return recent.filter(w => fs.existsSync(w.rootPath));
     } catch {
       // Ignore read errors
     }

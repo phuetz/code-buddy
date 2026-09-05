@@ -1,6 +1,7 @@
 a2ui
 advisor
 app_server
+apply_patch
 archive
 ask_human
 ask_user_question
@@ -32,6 +33,7 @@ code_stats
 codebase_map
 codebase_replace
 comfy_recipe
+community_search
 computer_control
 context_expand
 create_file
@@ -42,12 +44,14 @@ csv_preview
 deep_research
 delegate_agent
 dep_inspect
+deploy
 device_manage
 diagram
 diff_files
 discord
 discord_admin
 docker
+docs_search
 document
 edit_file
 env_doctor
@@ -81,6 +85,7 @@ ha_list_services
 http_probe
 image_edit
 image_generate
+interactive_shell
 internet_scout_plan
 internet_scout_run
 js_repl
@@ -95,6 +100,7 @@ kanban_list
 kanban_show
 kanban_unblock
 knowledge_add
+knowledge_graph
 knowledge_search
 kubernetes
 lead_scout_enrichment_plan
@@ -118,7 +124,9 @@ lsp_hover
 lsp_references
 lsp_rename
 lsp_symbols
+markdown_convert
 meeting_notes
+memory_propose
 mixture_of_agents
 multi_edit
 object_detect
@@ -139,6 +147,8 @@ reason
 recall
 relationship_context
 remember
+remind
+replace_memory
 resolve_conflicts
 restore_context
 route_peer
@@ -147,11 +157,13 @@ sbom_generate
 scaffold_app
 scan_secrets
 scan_vulnerabilities
+screen_memory
 screenshot
 search
 search_files
 search_multi
 self_describe
+self_evolution
 send_message
 session_search
 sessions_history
@@ -173,6 +185,7 @@ spotify_queue
 spotify_search
 stock_quote
 str_replace_editor
+submit_plan
 task_verify
 terminal
 test_runner

@@ -112,7 +112,7 @@ describe('DM Pairing Integration', () => {
       expect(first.approved).toBe(false);
 
       // Owner approves via the pairing manager
-      pairing.approve('telegram', first.code!);
+      await pairing.approve('telegram', first.code!);
 
       // Subsequent check should pass
       const second = await checkDMPairing(message);
@@ -175,7 +175,7 @@ describe('DM Pairing Integration', () => {
       expect(pending.some(r => r.code === code)).toBe(true);
 
       // Step 4: Owner approves via CLI command handler
-      const approveResult = handlePairing(['approve', 'discord', code]);
+      const approveResult = await handlePairing(['approve', 'discord', code]);
       expect(approveResult.handled).toBe(true);
       expect(approveResult.entry?.content).toContain('approved');
 
@@ -184,11 +184,11 @@ describe('DM Pairing Integration', () => {
       expect(check2.approved).toBe(true);
 
       // Step 6: Verify user appears in approved list
-      const listResult = handlePairing(['list']);
+      const listResult = await handlePairing(['list']);
       expect(listResult.entry?.content).toContain('new-user-123');
 
       // Step 7: Owner revokes access
-      const revokeResult = handlePairing(['revoke', 'discord', 'new-user-123']);
+      const revokeResult = await handlePairing(['revoke', 'discord', 'new-user-123']);
       expect(revokeResult.entry?.content).toContain('revoked');
 
       // Step 8: User is no longer approved
@@ -202,40 +202,40 @@ describe('DM Pairing Integration', () => {
   // =========================================================================
 
   describe('handlePairing command', () => {
-    it('should show help with no arguments', () => {
-      const result = handlePairing([]);
+    it('should show help with no arguments', async () => {
+      const result = await handlePairing([]);
       expect(result.handled).toBe(true);
       expect(result.entry?.content).toContain('Commands');
       expect(result.entry?.content).toContain('/pairing approve');
     });
 
-    it('should show help with "help" argument', () => {
-      const result = handlePairing(['help']);
+    it('should show help with "help" argument', async () => {
+      const result = await handlePairing(['help']);
       expect(result.handled).toBe(true);
       expect(result.entry?.content).toContain('DM Pairing');
     });
 
-    it('should show status', () => {
-      pairing.approveDirectly('telegram', 'user-1');
+    it('should show status', async () => {
+      await pairing.approveDirectly('telegram', 'user-1');
 
-      const result = handlePairing(['status']);
+      const result = await handlePairing(['status']);
       expect(result.handled).toBe(true);
       expect(result.entry?.content).toContain('Enabled: Yes');
       expect(result.entry?.content).toContain('Approved: 1');
     });
 
-    it('should list approved senders', () => {
-      pairing.approveDirectly('telegram', 'user-1', 'owner', 'Alice');
-      pairing.approveDirectly('discord', 'user-2', 'owner', 'Bob');
+    it('should list approved senders', async () => {
+      await pairing.approveDirectly('telegram', 'user-1', 'owner', 'Alice');
+      await pairing.approveDirectly('discord', 'user-2', 'owner', 'Bob');
 
-      const result = handlePairing(['list']);
+      const result = await handlePairing(['list']);
       expect(result.entry?.content).toContain('Alice');
       expect(result.entry?.content).toContain('Bob');
       expect(result.entry?.content).toContain('Approved Senders (2)');
     });
 
-    it('should list empty approved senders', () => {
-      const result = handlePairing(['list']);
+    it('should list empty approved senders', async () => {
+      const result = await handlePairing(['list']);
       expect(result.entry?.content).toContain('No approved senders');
     });
 
@@ -243,13 +243,13 @@ describe('DM Pairing Integration', () => {
       const message = makeDMMessage('telegram', 'pending-user');
       await pairing.checkSender(message);
 
-      const result = handlePairing(['pending']);
+      const result = await handlePairing(['pending']);
       expect(result.entry?.content).toContain('Pending Pairing Requests');
       expect(result.entry?.content).toContain('pending-user');
     });
 
-    it('should list empty pending requests', () => {
-      const result = handlePairing(['pending']);
+    it('should list empty pending requests', async () => {
+      const result = await handlePairing(['pending']);
       expect(result.entry?.content).toContain('No pending pairing requests');
     });
 
@@ -257,45 +257,45 @@ describe('DM Pairing Integration', () => {
       const message = makeDMMessage('telegram', 'user-to-approve');
       const status = await pairing.checkSender(message);
 
-      const result = handlePairing(['approve', 'telegram', status.code!]);
+      const result = await handlePairing(['approve', 'telegram', status.code!]);
       expect(result.entry?.content).toContain('approved');
       expect(result.entry?.content).toContain('user-to-approve');
     });
 
-    it('should fail to approve with invalid code', () => {
-      const result = handlePairing(['approve', 'telegram', 'BADCODE']);
+    it('should fail to approve with invalid code', async () => {
+      const result = await handlePairing(['approve', 'telegram', 'BADCODE']);
       expect(result.entry?.content).toContain('failed');
     });
 
-    it('should fail to approve with invalid channel', () => {
-      const result = handlePairing(['approve', 'invalid_channel', 'CODE']);
+    it('should fail to approve with invalid channel', async () => {
+      const result = await handlePairing(['approve', 'invalid_channel', 'CODE']);
       expect(result.entry?.content).toContain('Invalid channel');
     });
 
-    it('should show usage for approve without arguments', () => {
-      const result = handlePairing(['approve']);
+    it('should show usage for approve without arguments', async () => {
+      const result = await handlePairing(['approve']);
       expect(result.entry?.content).toContain('Usage');
     });
 
-    it('should revoke an approved sender', () => {
-      pairing.approveDirectly('slack', 'user-to-revoke');
+    it('should revoke an approved sender', async () => {
+      await pairing.approveDirectly('slack', 'user-to-revoke');
 
-      const result = handlePairing(['revoke', 'slack', 'user-to-revoke']);
+      const result = await handlePairing(['revoke', 'slack', 'user-to-revoke']);
       expect(result.entry?.content).toContain('revoked');
     });
 
-    it('should fail to revoke unknown sender', () => {
-      const result = handlePairing(['revoke', 'slack', 'unknown']);
+    it('should fail to revoke unknown sender', async () => {
+      const result = await handlePairing(['revoke', 'slack', 'unknown']);
       expect(result.entry?.content).toContain('No approved sender');
     });
 
-    it('should fail to revoke with invalid channel', () => {
-      const result = handlePairing(['revoke', 'invalid_channel', 'user-1']);
+    it('should fail to revoke with invalid channel', async () => {
+      const result = await handlePairing(['revoke', 'invalid_channel', 'user-1']);
       expect(result.entry?.content).toContain('Invalid channel');
     });
 
-    it('should show usage for revoke without arguments', () => {
-      const result = handlePairing(['revoke']);
+    it('should show usage for revoke without arguments', async () => {
+      const result = await handlePairing(['revoke']);
       expect(result.entry?.content).toContain('Usage');
     });
   });
@@ -307,7 +307,7 @@ describe('DM Pairing Integration', () => {
   describe('multi-channel scenarios', () => {
     it('should isolate approval per channel', async () => {
       // Approve on telegram
-      pairing.approveDirectly('telegram', 'user-42');
+      await pairing.approveDirectly('telegram', 'user-42');
 
       // Same user should still be unapproved on discord
       const discordMsg = makeDMMessage('discord', 'user-42');
@@ -316,19 +316,19 @@ describe('DM Pairing Integration', () => {
       expect(status.approved).toBe(false);
     });
 
-    it('should allow same user approved on multiple channels', () => {
-      pairing.approveDirectly('telegram', 'user-42');
-      pairing.approveDirectly('discord', 'user-42');
+    it('should allow same user approved on multiple channels', async () => {
+      await pairing.approveDirectly('telegram', 'user-42');
+      await pairing.approveDirectly('discord', 'user-42');
 
       expect(pairing.isApproved('telegram', 'user-42')).toBe(true);
       expect(pairing.isApproved('discord', 'user-42')).toBe(true);
     });
 
-    it('should revoke only the specified channel', () => {
-      pairing.approveDirectly('telegram', 'user-42');
-      pairing.approveDirectly('discord', 'user-42');
+    it('should revoke only the specified channel', async () => {
+      await pairing.approveDirectly('telegram', 'user-42');
+      await pairing.approveDirectly('discord', 'user-42');
 
-      pairing.revoke('telegram', 'user-42');
+      await pairing.revoke('telegram', 'user-42');
 
       expect(pairing.isApproved('telegram', 'user-42')).toBe(false);
       expect(pairing.isApproved('discord', 'user-42')).toBe(true);

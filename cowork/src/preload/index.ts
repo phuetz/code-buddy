@@ -87,6 +87,23 @@ import type {
   MissionStatus,
   SubTask,
 } from '../main/missions/mission-types';
+import type { Studio2Result } from '../main/studio2/archive-utils';
+import type {
+  DeployRequest,
+  DeployResult,
+  DeployTarget,
+} from '../main/studio2/deploy-service';
+import type {
+  ExportProjectRequest,
+  ExportProjectResult,
+  ImportFolderRequest,
+  ImportFolderResult,
+} from '../main/studio2/export-service';
+import type {
+  GitCommitResult,
+  GitLogEntry,
+  GitStatus,
+} from '../main/studio2/git-service';
 import type { VoiceBackgroundMissionInput } from '../shared/voice-background-mission';
 import type { LiveLauncherRunView, LiveLauncherStartInput } from '../shared/live-launcher-types';
 import type {
@@ -537,6 +554,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Select files using native dialog
   selectFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog.selectFiles'),
+  selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog.selectDirectory'),
 
   artifacts: {
     listRecentFiles: (
@@ -678,6 +696,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     modelInventory: (payload?: {
       includeTailnetPeers?: boolean;
     }): Promise<ModelInventorySnapshot> => ipcRenderer.invoke('config.model-inventory', payload),
+    geminiOauthLogin: (): Promise<{ success: boolean; tokens?: unknown; error?: string }> =>
+      ipcRenderer.invoke('config.geminiOauthLogin'),
+    geminiOauthClear: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('config.geminiOauthClear'),
+    codexOauthLogin: (): Promise<{
+      success: boolean;
+      email?: string | null;
+      plan_type?: string | null;
+      account_id?: string | null;
+      is_fedramp?: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke('config.codexOauthLogin'),
+    codexOauthClear: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('config.codexOauthClear'),
+    codexOauthStatus: (): Promise<{
+      success: boolean;
+      signedIn: boolean;
+      email?: string | null;
+      plan_type?: string | null;
+      account_id?: string | null;
+      is_fedramp?: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke('config.codexOauthStatus'),
   },
 
   // Workflow Builder Pro API
@@ -1315,6 +1356,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     github: {
       push: (request: { root: string; name?: string; private?: boolean }) =>
         ipcRenderer.invoke('studio.github.push', request),
+    },
+  },
+
+  // App Studio V2 deploy, archive, and Git operations.
+  studio2: {
+    deploy: {
+      run: (request: DeployRequest): Promise<Studio2Result<DeployResult>> =>
+        ipcRenderer.invoke('studio2.deploy.run', request),
+      detect: (target: Exclude<DeployTarget, 'zip'>): Promise<string | null> =>
+        ipcRenderer.invoke('studio2.deploy.detect', target),
+    },
+    export: {
+      project: (
+        request: ExportProjectRequest
+      ): Promise<Studio2Result<ExportProjectResult>> =>
+        ipcRenderer.invoke('studio2.export.project', request),
+      importFolder: (
+        request: ImportFolderRequest
+      ): Promise<Studio2Result<ImportFolderResult>> =>
+        ipcRenderer.invoke('studio2.import.folder', request),
+    },
+    git: {
+      init: (projectRoot: string): Promise<Studio2Result<{ initialized: boolean }>> =>
+        ipcRenderer.invoke('studio2.git.init', projectRoot),
+      status: (projectRoot: string): Promise<Studio2Result<GitStatus>> =>
+        ipcRenderer.invoke('studio2.git.status', projectRoot),
+      commit: (
+        projectRoot: string,
+        message: string
+      ): Promise<Studio2Result<GitCommitResult>> =>
+        ipcRenderer.invoke('studio2.git.commit', projectRoot, message),
+      log: (
+        projectRoot: string,
+        limit?: number
+      ): Promise<Studio2Result<GitLogEntry[]>> =>
+        ipcRenderer.invoke('studio2.git.log', projectRoot, limit),
     },
   },
 
@@ -2028,7 +2105,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Projects (Claude Cowork parity)
   project: {
-    list: (): Promise<{ projects: Project[] }> => ipcRenderer.invoke('project.list'),
+    list: (): Promise<Project[]> => ipcRenderer.invoke('project.list'),
     get: (id: string): Promise<Project | null> => ipcRenderer.invoke('project.get', id),
     create: (input: ProjectCreateInput): Promise<Project> =>
       ipcRenderer.invoke('project.create', input),
@@ -5622,6 +5699,7 @@ declare global {
         render: (data: unknown, theme?: 'dark' | 'light') => Promise<string | null>;
       };
       selectFiles: () => Promise<string[]>;
+      selectDirectory: () => Promise<string | null>;
       artifacts: {
         listRecentFiles: (
           cwd: string,
@@ -5713,6 +5791,30 @@ declare global {
         modelInventory: (payload?: {
           includeTailnetPeers?: boolean;
         }) => Promise<ModelInventorySnapshot>;
+        geminiOauthLogin: () => Promise<{
+          success: boolean;
+          tokens?: unknown;
+          error?: string;
+        }>;
+        geminiOauthClear: () => Promise<{ success: boolean; error?: string }>;
+        codexOauthLogin: () => Promise<{
+          success: boolean;
+          email?: string | null;
+          plan_type?: string | null;
+          account_id?: string | null;
+          is_fedramp?: boolean;
+          error?: string;
+        }>;
+        codexOauthClear: () => Promise<{ success: boolean; error?: string }>;
+        codexOauthStatus: () => Promise<{
+          success: boolean;
+          signedIn: boolean;
+          email?: string | null;
+          plan_type?: string | null;
+          account_id?: string | null;
+          is_fedramp?: boolean;
+          error?: string;
+        }>;
       };
       workflowBuilder: {
         start: () => Promise<{ success: boolean; error?: string }>;
@@ -6044,6 +6146,29 @@ declare global {
             name?: string;
             private?: boolean;
           }) => Promise<unknown>;
+        };
+      };
+      studio2: {
+        deploy: {
+          run: (request: DeployRequest) => Promise<Studio2Result<DeployResult>>;
+          detect: (target: Exclude<DeployTarget, 'zip'>) => Promise<string | null>;
+        };
+        export: {
+          project: (
+            request: ExportProjectRequest
+          ) => Promise<Studio2Result<ExportProjectResult>>;
+          importFolder: (
+            request: ImportFolderRequest
+          ) => Promise<Studio2Result<ImportFolderResult>>;
+        };
+        git: {
+          init: (projectRoot: string) => Promise<Studio2Result<{ initialized: boolean }>>;
+          status: (projectRoot: string) => Promise<Studio2Result<GitStatus>>;
+          commit: (
+            projectRoot: string,
+            message: string
+          ) => Promise<Studio2Result<GitCommitResult>>;
+          log: (projectRoot: string, limit?: number) => Promise<Studio2Result<GitLogEntry[]>>;
         };
       };
       checkpoint: {
@@ -6631,7 +6756,7 @@ declare global {
         install: () => void;
       };
       project: {
-        list: () => Promise<{ projects: Project[] }>;
+        list: () => Promise<Project[]>;
         get: (id: string) => Promise<Project | null>;
         create: (input: ProjectCreateInput) => Promise<Project>;
         update: (id: string, updates: ProjectUpdateInput) => Promise<Project | null>;

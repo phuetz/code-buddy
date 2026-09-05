@@ -66,7 +66,7 @@ describe('avatar renderer Gateway feedback', () => {
   it('authenticates, registers, reports playback, and exposes bounded status', async () => {
     const url = await start();
     const token = generateToken(
-      { sub: 'darkstar-avatar', scopes: ['avatar:read', 'avatar:write'], type: 'user' },
+      { sub: 'gpuNode-avatar', scopes: ['avatar:read', 'avatar:write'], type: 'user' },
       JWT_SECRET,
       '1h'
     );
@@ -87,7 +87,7 @@ describe('avatar renderer Gateway feedback', () => {
           ws.send(JSON.stringify({
             type: 'avatar.renderer.hello',
             payload: {
-              rendererId: 'darkstar-metahuman',
+              rendererId: 'gpuNode-metahuman',
               protocolVersion: 1,
               runtime: 'unreal',
               runtimeVersion: '5.8',
@@ -98,7 +98,7 @@ describe('avatar renderer Gateway feedback', () => {
           ws.send(JSON.stringify({
             type: 'avatar.renderer.status',
             payload: {
-              rendererId: 'darkstar-metahuman',
+              rendererId: 'gpuNode-metahuman',
               phase: 'playing',
               activeTurnId: 'turn-live',
               lastSequence: 7,
@@ -124,7 +124,7 @@ describe('avatar renderer Gateway feedback', () => {
     const status = frames.find((frame) => frame.type === 'avatar.status');
     expect(status?.payload?.renderers).toEqual([
       expect.objectContaining({
-        rendererId: 'darkstar-metahuman',
+        rendererId: 'gpuNode-metahuman',
         runtime: 'unreal',
         phase: 'playing',
         activeTurnId: 'turn-live',

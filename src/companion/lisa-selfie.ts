@@ -22,6 +22,7 @@ import {
 } from '../lora/lisa-avatar-bible.js';
 import { normalizeVoiceInteractionText } from '../sensory/voice-interactions.js';
 import { resolveUserName } from './user-name.js';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export type LisaSelfieMood = LisaAvatarMood;
 
@@ -443,22 +444,18 @@ export async function createAndMaybeSendLisaSelfie(
       const dest = path.join(archiveDir, `${stamp}-${mood}${path.extname(gen.outputPath) || '.png'}`);
       await fs.copyFile(gen.outputPath, dest);
       imagePath = dest;
-      await fs.writeFile(
+      await writeJsonAtomic(
         dest.replace(/\.[^.]+$/, '.json'),
-        JSON.stringify(
-          {
-            prompt,
-            trigger,
-            mood,
-            generatedAt: new Date().toISOString(),
-            hasLoraHint,
-            cached: Boolean(cachedImage),
-            contentTier,
-          },
-          null,
-          2,
-        ) + '\n',
-        'utf8',
+        {
+          prompt,
+          trigger,
+          mood,
+          generatedAt: new Date().toISOString(),
+          hasLoraHint,
+          cached: Boolean(cachedImage),
+          contentTier,
+        },
+        { mode: 0o600 },
       );
     } catch (err) {
       logger.warn(

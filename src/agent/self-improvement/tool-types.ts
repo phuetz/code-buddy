@@ -8,10 +8,10 @@
 
 import type { AuthoredToolSpec } from './authored-tool-runtime.js';
 
-/** One behavioural assertion: run the tool on `input`, output must contain ALL of `expectIncludes`. */
+/** One behavioural assertion: run the tool on `input`, output must equal `expectedOutput` after whitespace normalization. */
 export interface ToolCase {
   input: Record<string, unknown>;
-  expectIncludes: string[];
+  expectedOutput: string;
 }
 
 /**
@@ -35,9 +35,12 @@ export interface ToolProposal {
   targetScenarioId: string;
   experienceId?: string;
   spec: AuthoredToolSpec;
+  /** Optional source of the tool before mutation; enables the shared G0 AST novelty gate. */
+  parentCode?: string;
 }
 
 export type ToolGateRejection =
+  | 'ast-identical'
   | 'static-scan'
   | 'name-invalid'
   | 'visible-fail'

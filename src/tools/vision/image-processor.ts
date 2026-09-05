@@ -4,10 +4,10 @@
  * Uses sharp for native image manipulation, resizing, and analysis.
  */
 
-import sharp from 'sharp';
 import { logger } from '../../utils/logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadSharp, type SharpFn } from './load-sharp.js';
 
 // ============================================================================
 // Types
@@ -46,12 +46,17 @@ export class ImageProcessorTool {
     return ImageProcessorTool.instance;
   }
 
+  private async sharp(): Promise<SharpFn> {
+    return loadSharp();
+  }
+
   async analyze(imagePath: string): Promise<ImageAnalysisResult> {
     if (!this.isValidImage(imagePath)) {
       throw new Error(`Unsupported image format: ${path.extname(imagePath)}`);
     }
 
     try {
+      const sharp = await this.sharp();
       const metadata = await sharp(imagePath).metadata();
       const stat = fs.statSync(imagePath);
       
@@ -85,6 +90,7 @@ export class ImageProcessorTool {
     const outPath = outputPath || this.generateOutputPath(imagePath, `resized-${options.width || 'auto'}x${options.height || 'auto'}`);
 
     try {
+        const sharp = await this.sharp();
         await sharp(imagePath)
             .resize({
                 width: options.width,
@@ -110,6 +116,7 @@ export class ImageProcessorTool {
       const outPath = outputPath || this.generateOutputPath(imagePath, 'converted', `.${format}`);
       
       try {
+          const sharp = await this.sharp();
           const image = sharp(imagePath);
           switch(format) {
               case 'jpeg': await image.jpeg().toFile(outPath); break;
@@ -128,6 +135,7 @@ export class ImageProcessorTool {
 
   // Basic diff/comparison using sharp (metadata comparison for now, pixel diff requires more advanced logic or pixelmatch)
   async compare(path1: string, path2: string): Promise<{ similarity: number; description: string; sameDimensions: boolean }> {
+      const sharp = await this.sharp();
       const meta1 = await sharp(path1).metadata();
       const meta2 = await sharp(path2).metadata();
       

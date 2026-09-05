@@ -95,7 +95,7 @@ describe('route_peer privacy lint enforcement', () => {
     registerPeer('local-peer', 'local', 'ollama', ['reasoning']);
 
     const result = await executeRoutePeer({
-      prompt: 'Review the files under /home/patrice/private-project',
+      prompt: 'Review the files under /home/user/private-project',
       privacyTag: 'public',
     });
 
@@ -104,6 +104,42 @@ describe('route_peer privacy lint enforcement', () => {
       privacyTag: 'sensitive',
       privacyLint: { hasSecrets: true, highConfidence: false },
       recommendation: { peer: 'local-peer' },
+    });
+  });
+
+  it('reports IBAN privacy lint even when no fleet peer is connected', async () => {
+    const result = await executeRoutePeer({
+      prompt: 'Virement vers FR76 3000 6000 0112 3456 7890 189 pour le fournisseur test.',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/No fleet peers connected/i);
+    expect(result.error).toMatch(/pii-iban/i);
+    expect(result.data).toMatchObject({
+      privacyTag: 'sensitive',
+      privacyLint: {
+        hasSecrets: true,
+        matchKinds: expect.arrayContaining(['pii-iban']),
+      },
+    });
+  });
+
+  it('forces sensitive routing and refuses cloud peers for a valid IBAN', async () => {
+    registerPeer('cloud-peer', 'cloud', 'openai', ['reasoning', 'code']);
+
+    const result = await executeRoutePeer({
+      prompt: 'Virement vers FR76 3000 6000 0112 3456 7890 189 pour le fournisseur test.',
+      privacyTag: 'public',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No peer can satisfy');
+    expect(result.data).toMatchObject({
+      privacyTag: 'sensitive',
+      privacyLint: {
+        hasSecrets: true,
+        matchKinds: expect.arrayContaining(['pii-iban']),
+      },
     });
   });
 

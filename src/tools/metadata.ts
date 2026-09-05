@@ -82,6 +82,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: "Inspect the robot's attested core, bounded code structure, turn metadata, configured faculties, and epistemic limits without live probes",
     fleetSafe: true,
   },
+  {
+    name: 'self_evolution',
+    category: 'file_read',
+    keywords: ['self', 'evolution', 'evolutions', 'changement', 'changements', 'recent', 'récemment', 'release', 'changelog', 'notes de version', 'version', 'appris', 'learned', 'voice', 'voix', 'memory', 'mémoire', 'companion', 'fiabilité', 'reliability'],
+    priority: 50,
+    description: "Read documented recent changes to Code Buddy's own behavior without modifying files or probing services",
+  },
 
   // Directory listing
   {
@@ -173,6 +180,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['terminal', 'bash', 'shell', 'command', 'execute', 'run', 'hermes'],
     priority: 9,
     description: 'Execute shell commands through the existing bash safety checks',
+  },
+  {
+    name: 'interactive_shell',
+    category: 'system',
+    keywords: [
+      'interactive', 'pty', 'handoff', 'vim', 'rebase', 'prompt', 'manual',
+      'shell', 'terminal', 'user', 'intervention', 'conflict',
+    ],
+    priority: 6,
+    description:
+      'Hand control of an interactive PTY shell to the user until they type exit',
   },
   {
     name: 'process',
@@ -860,9 +878,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'camera_analyze',
     category: 'media',
-    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see'],
+    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see', 'image_path'],
     priority: 7,
-    description: 'Capture a local webcam frame and describe it with a local multimodal vision model'
+    description: 'Describe a still image (image_path) or a webcam frame with a local VLM (default moondream); refuses dark frames'
   },
   {
     name: 'audio',
@@ -942,6 +960,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate a video through the configured video backend and cache returned media when possible'
   },
   {
+    name: 'markdown_convert',
+    category: 'document',
+    keywords: ['markdown', 'convert', 'convertir', 'pdf', 'docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'html', 'csv', 'json', 'xml', 'zip', 'epub', 'ocr', 'transcription', 'table', 'tableau', 'structure', 'extract', 'extraire', 'lire', 'document', 'markitdown'],
+    priority: 8,
+    description: 'Convert any document (Office, PDF, HTML, CSV, ZIP, EPub, image, audio, URL) to structured Markdown for the model — preserves headings, lists and tables. Optional MarkItDown sidecar; falls back cleanly with install instructions when absent'
+  },
+  {
     name: 'video_stitch',
     category: 'media',
     keywords: ['video', 'stitch', 'montage', 'film', 'concatenate', 'concat', 'chain', 'transition', 'xfade', 'crossfade', 'enchainer', 'assembler', 'monter', 'clip', 'produire', 'production', 'long', 'music', 'voiceover'],
@@ -997,7 +1022,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'media',
     keywords: [
       'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
-      'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+      'gpuNode', 'localGpu', 'credits', 'engine', 'routage', 'moteur',
     ],
     priority: 8,
     description:
@@ -1013,7 +1038,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'gpu_media_job',
     category: 'media',
-    keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
+    keywords: ['gpuNode', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
     priority: 8,
     description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker'
   },
@@ -1266,6 +1291,18 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['memory', 'replace', 'rewrite', 'update', 'persist', 'preference'],
     priority: 5,
     description: 'Replace an existing persistent memory entry under the memory char budget'
+  },
+  {
+    name: 'remind',
+    category: 'utility',
+    keywords: [
+      'remind', 'reminder', 'rappel', 'rappelle-moi', 'rappelle moi', 'remind me',
+      'alarm', 'alarme', 'notify me', 'préviens-moi', 'previens moi', 'schedule',
+      'todo', 'tâche', 'one-shot', 'dated',
+    ],
+    priority: 6,
+    description:
+      'Set a dated one-shot or daily recurring reminder without shelling buddy remind add',
   },
   {
     name: 'memory_propose',
@@ -1569,6 +1606,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 7,
     description: 'Request user approval to leave plan mode and start executing'
   },
+  {
+    name: 'submit_plan',
+    category: 'planning' as ToolCategory,
+    keywords: [
+      'plan', 'submit', 'approval', 'approve', 'research', 'execution plan',
+      'current.md', 'plan mode', 'sign-off',
+    ],
+    priority: 7,
+    description:
+      'Write .codebuddy/plans/current.md and request user approval to leave plan mode',
+  },
 
   // Codebase replace
   {
@@ -1634,6 +1682,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['screen', 'memory', 'screenpipe', 'recall', 'what did i see', 'history', 'ocr', 'audio', 'transcript', 'said', 'heard'],
     priority: 5,
     description: 'Recall what was on screen / said / heard via a local screenpipe instance (read-only, redacted)',
+    fleetSafe: true,
   },
 
   // ---- 20 pre-authored tools (wired 2026-07-05) ----
@@ -1798,6 +1847,12 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
 ];
+
+/** Metadata visible to RAG / BM25. Gated tools stay out of the index when disabled. */
+export function getActiveToolMetadata(): ToolMetadata[] {
+  if (process.env.CODEBUDDY_CONTEXT_ZOOM === 'true') return TOOL_METADATA;
+  return TOOL_METADATA.filter((metadata) => metadata.name !== 'context_expand');
+}
 
 /**
  * Category keyword mappings for query classification

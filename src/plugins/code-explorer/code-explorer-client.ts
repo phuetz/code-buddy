@@ -83,3 +83,30 @@ export function getCodeExplorerClient(): CodeExplorerClient {
     listRepos: () => call('list_repos', {}),
   };
 }
+
+/**
+ * Pick the graph to query: explicit path/id, else the indexed repo that contains
+ * cwd, else the first indexed repo. Code Explorer fails closed when several
+ * graphs exist and `repo` is omitted.
+ */
+export async function resolveCodeExplorerRepo(
+  client: Pick<CodeExplorerClient, 'listRepos'>,
+  explicit?: string,
+): Promise<string | undefined> {
+  if (explicit) return explicit;
+  try {
+    const txt = await client.listRepos();
+    if (!txt.trim()) return undefined;
+    const arr = JSON.parse(txt) as Array<{ path?: string; id?: string }>;
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    const cwd = process.cwd();
+    const match =
+      arr.find((r) => typeof r.path === 'string' && (cwd === r.path || cwd.startsWith(r.path))) ??
+      arr.find((r) => typeof r.path === 'string' && r.path.startsWith(cwd)) ??
+      arr.find((r) => r.path) ??
+      arr[0];
+    return match?.path ?? match?.id;
+  } catch {
+    return undefined;
+  }
+}

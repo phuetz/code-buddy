@@ -75,21 +75,15 @@ describe('ClientCommandDispatcher slash fallback', () => {
     expect(context.processUserMessage).not.toHaveBeenCalled();
   });
 
-  it.each(['/redo', '/timeline', '/approvals', '/batch-review', '/knowledge-graph'])(
-    'does not silently drop registered slash command %s when its token has no handler',
-    async (command) => {
-      const context = createContext();
+  it('does not announce the removed batch-review command', async () => {
+    const context = createContext();
 
-      const handled = await ClientCommandDispatcher.dispatch(command, context);
+    const handled = await ClientCommandDispatcher.dispatch('/batch-review', context);
 
-      expect(handled).toBe(true);
-      expect(context.entries).toHaveLength(1);
-      expect(context.entries[0]?.content).toContain('registered but has no conversation-loop handler yet');
-      expect(context.entries[0]?.content).toContain(command);
-      expect(context.clearInput).toHaveBeenCalledTimes(1);
-      expect(context.setIsProcessing).toHaveBeenCalledWith(false);
-      expect(context.setIsStreaming).toHaveBeenCalledWith(false);
-      expect(context.processUserMessage).not.toHaveBeenCalled();
-    },
-  );
+    expect(handled).toBe(true);
+    expect(context.entries).toHaveLength(1);
+    expect(context.entries[0]?.content).toContain('Unknown command: /batch-review');
+    expect(context.entries[0]?.content).not.toContain('registered but has no conversation-loop handler yet');
+    expect(context.clearInput).toHaveBeenCalledTimes(1);
+  });
 });

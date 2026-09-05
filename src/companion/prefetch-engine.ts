@@ -10,10 +10,10 @@
  *
  * @module companion/prefetch-engine
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   formatMarketDigest,
   formatNewsDigest,
@@ -98,9 +98,11 @@ export function defaultPrefetchCachePath(env: NodeJS.ProcessEnv = process.env): 
 
 export function loadPrefetchCache(path: string = defaultPrefetchCachePath()): PrefetchEntry[] {
   try {
-    if (!existsSync(path)) return [];
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    return Array.isArray(raw) ? (raw as PrefetchEntry[]).filter((e) => e && e.key && e.answer) : [];
+    const raw = readJsonAtomicSync<unknown[]>(path, [], {
+      mode: 0o600,
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
+    return raw.filter((e): e is PrefetchEntry => Boolean(e && typeof e === 'object' && 'key' in e && 'answer' in e));
   } catch {
     return [];
   }
@@ -111,8 +113,7 @@ export function savePrefetchCache(
   path: string = defaultPrefetchCachePath()
 ): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(entries, null, 2));
+    writeJsonAtomicSync(path, entries, { mode: 0o600 });
   } catch {
     /* best-effort */
   }

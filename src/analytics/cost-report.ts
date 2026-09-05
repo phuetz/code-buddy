@@ -387,8 +387,8 @@ function normalizeProviderName(provider: string): string {
 }
 
 /** Infer a user-facing provider when an old session only persisted the model. */
-export function inferCostProvider(model: string): string {
-  const lower = model.trim().toLowerCase();
+export function inferCostProvider(model?: string | null): string {
+  const lower = typeof model === 'string' ? model.trim().toLowerCase() : '';
   if (!lower || lower === UNKNOWN_MODEL) return UNKNOWN_PROVIDER;
   if (lower === 'openrouter/free' || lower.endsWith(':free')) return 'openrouter';
 

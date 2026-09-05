@@ -8,10 +8,7 @@ import {
 import {
   existsSync,
   lstatSync,
-  mkdirSync,
   readFileSync,
-  renameSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -21,6 +18,7 @@ import {
   type CompanionContinuityOptions,
   type ContinuityScope,
 } from './continuity.js';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 
 export const COMPANION_MIGRATION_SCHEMA_VERSION = 1 as const;
 
@@ -175,10 +173,7 @@ function defaultBundlePath(cwd: string, companionName: string, now: Date): strin
 }
 
 function atomicWrite(target: string, content: string | Buffer): void {
-  mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-  const tmp = `${target}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-  writeFileSync(tmp, content, { mode: 0o600 });
-  renameSync(tmp, target);
+  writeFileAtomicSync(target, content, { mode: 0o600 });
 }
 
 export function getCompanionMigrationKeyPath(homeDir = homedir()): string {

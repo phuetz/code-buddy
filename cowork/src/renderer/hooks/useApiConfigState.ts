@@ -35,6 +35,8 @@ interface UseApiConfigStateOptions {
   enabled?: boolean;
   initialConfig?: AppConfig | null;
   onSave?: (config: Partial<AppConfig>) => Promise<AppConfig | void>;
+  /** When opening from onboarding "Local runtimes", land on Ollama instead of OpenRouter. */
+  preferredProvider?: ProviderType;
 }
 
 interface UIProviderProfile {
@@ -999,7 +1001,7 @@ function apiConfigReducer(state: ApiConfigState, action: ApiConfigAction): ApiCo
 
 export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
   const { t } = useTranslation();
-  const { enabled = true, initialConfig, onSave } = options;
+  const { enabled = true, initialConfig, onSave, preferredProvider } = options;
   const setAppConfig = useAppStore((s) => s.setAppConfig);
   const setIsConfigured = useAppStore((s) => s.setIsConfigured);
   const initialBootstrapRef = useRef<ApiConfigBootstrap | null>(null);
@@ -1320,8 +1322,11 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
   const applyLoadedState = useCallback(
     (config: AppConfig | null | undefined, loadedPresets: ProviderPresets) => {
       const bootstrap = buildApiConfigBootstrap(config, loadedPresets);
+      const hintedProfileKey = preferredProvider
+        ? profileKeyFromProvider(preferredProvider)
+        : bootstrap.snapshot.activeProfileKey;
 
-      const activeMeta = profileKeyToProvider(bootstrap.snapshot.activeProfileKey);
+      const activeMeta = profileKeyToProvider(hintedProfileKey);
       const resolvedLastCustomProtocol: CustomProtocolType =
         activeMeta.provider === 'custom'
           ? activeMeta.customProtocol
@@ -1336,7 +1341,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
         payload: {
           presets: loadedPresets,
           profiles: bootstrap.snapshot.profiles,
-          activeProfileKey: bootstrap.snapshot.activeProfileKey,
+          activeProfileKey: hintedProfileKey,
           enableThinking: bootstrap.snapshot.enableThinking,
           configSets: bootstrap.configSets,
           activeConfigSetId: bootstrap.activeConfigSetId,
@@ -1349,7 +1354,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
         },
       });
     },
-    []
+    [preferredProvider]
   );
 
   const applyPersistedConfigToStore = useCallback(

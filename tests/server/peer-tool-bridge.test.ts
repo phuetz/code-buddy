@@ -84,7 +84,7 @@ beforeEach(async () => {
   tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-peer-tool-'));
   // The realpath check normalises symlinks (e.g. /tmp → /private/tmp on macOS).
   tmpRoot = await fs.realpath(tmpRoot);
-  await fs.writeFile(path.join(tmpRoot, 'hello.txt'), 'hello world\nline 2\n');
+  await fs.writeFile(path.join(tmpRoot, 'hello.md'), 'hello world\nline 2\n');
   await fs.mkdir(path.join(tmpRoot, 'sub'));
   await fs.writeFile(path.join(tmpRoot, 'sub', 'nested.md'), 'inner content with hello pattern\n');
   process.env.CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT = tmpRoot;
@@ -157,6 +157,25 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       expect(r.error?.message).toContain('missing string tool name');
     });
 
+    it('headless view_file succeeds when ConfirmationService has no operator (GK17)', async () => {
+      vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockResolvedValue({
+        confirmed: false,
+        feedback: 'Human approval was rejected or timed out',
+      });
+      wirePeerToolBridge();
+      const r = await dispatchPeerRequest(
+        {
+          id: 'p-headless',
+          method: 'peer.tool.invoke',
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
+        },
+        baseCtx,
+      );
+      expect(r.ok).toBe(true);
+      expect((r.payload as { output?: string }).output).toContain('hello world');
+      expect(ConfirmationService.getInstance().requestConfirmation).not.toHaveBeenCalled();
+    });
+
     it('TOOL_NOT_ALLOWED for tool outside V1 allowlist (bash)', async () => {
       wirePeerToolBridge();
       const r = await dispatchPeerRequest(
@@ -186,7 +205,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p3',
           method: 'peer.tool.invoke',
-          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
         },
         baseCtx,
       );
@@ -236,7 +255,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p5',
           method: 'peer.tool.invoke.stream',
-          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
         },
         baseCtx,
       );
@@ -277,7 +296,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p6',
           method: 'peer.tool.invoke',
-          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
         },
         baseCtx,
       );
@@ -294,7 +313,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p7',
           method: 'peer.tool.invoke',
-          params: { tool: 'view_file', args: { file_path: path.join(tmpRoot, 'hello.txt') } },
+          params: { tool: 'view_file', args: { file_path: path.join(tmpRoot, 'hello.md') } },
         },
         baseCtx,
       );
@@ -316,7 +335,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       );
       expect(r.ok).toBe(true);
       const payload = r.payload as { output: string };
-      expect(payload.output).toContain('hello.txt');
+      expect(payload.output).toContain('hello.md');
       expect(payload.output).toContain('sub');
     });
 
@@ -360,7 +379,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       );
       expect(r.ok).toBe(true);
       const payload = r.payload as { output: string };
-      expect(payload.output).toMatch(/hello\.txt/);
+      expect(payload.output).toMatch(/hello\.md/);
       expect(payload.output).toMatch(/nested\.md/);
     });
 
@@ -428,7 +447,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p_env_2',
           method: 'peer.tool.invoke',
-          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
         },
         baseCtx,
       );
@@ -487,7 +506,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
         {
           id: 'p11',
           method: 'peer.tool.invoke',
-          params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+          params: { tool: 'view_file', args: { file_path: 'hello.md' } },
           depth: 999,
         },
         baseCtx,
@@ -509,7 +528,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
           {
             id: 'p12',
             method: 'peer.tool.invoke',
-            params: { tool: 'view_file', args: { file_path: 'hello.txt' } },
+            params: { tool: 'view_file', args: { file_path: 'hello.md' } },
             traceId: 'trace-test-tool',
             depth: 1,
           },

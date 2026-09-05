@@ -5,6 +5,13 @@
  * Provides validation, documentation, and a CLI summary.
  */
 
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import {
+  getDirectRuntimeProviderCatalog,
+  getPluginNativeRuntimeProviderCatalog,
+  isProviderConfigured,
+} from '../providers/provider-catalog.js';
+
 export interface EnvVarDef {
   /** Environment variable name */
   name: string;
@@ -76,8 +83,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_API_KEY',
     type: 'string',
-    description: 'Primary API key (xAI / Grok)',
-    required: true,
+    description: 'xAI / Grok API key (one of several supported provider authentications)',
     sensitive: true,
     category: 'core',
   },
@@ -511,7 +517,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROQ_MODEL',
     type: 'string',
-    default: 'llama-3.3-70b-versatile',
+    default: 'qwen/qwen3.8-27b',
     description: 'Default Groq model',
     category: 'provider',
   },
@@ -957,7 +963,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'CEREBRAS_MODEL',
     type: 'string',
-    default: 'zai-glm-4.7',
+    default: 'gpt-oss-120b',
     description: 'Cerebras default model',
     category: 'provider',
   },
@@ -2056,6 +2062,30 @@ export interface ValidationResult {
   errors: string[];
 }
 
+export function hasActiveProvider(env: Record<string, string | undefined> = process.env): boolean {
+  const hasChatGptOAuth = Boolean(env.CODEBUDDY_CHATGPT_OAUTH?.trim())
+    || (env === process.env && hasCodexCredentials());
+  const entries = [
+    ...getDirectRuntimeProviderCatalog(),
+    ...getPluginNativeRuntimeProviderCatalog(),
+  ];
+  return entries.some((entry) => isProviderConfigured(entry, env, hasChatGptOAuth));
+}
+
+export function resolveActiveProviderApiKey(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const grok = env.GROK_API_KEY?.trim();
+  if (grok) return grok;
+  for (const entry of getDirectRuntimeProviderCatalog()) {
+    for (const key of entry.apiKeyEnvKeys) {
+      const value = env[key]?.trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Validate the current `process.env` against the schema.
  *
@@ -2065,6 +2095,12 @@ export interface ValidationResult {
 export function validateEnv(env: Record<string, string | undefined> = process.env): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+
+  if (!hasActiveProvider(env)) {
+    errors.push(
+      'No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.',
+    );
+  }
 
   for (const def of ENV_SCHEMA) {
     const raw = env[def.name];
@@ -2228,7 +2264,7 @@ export function getEnvSummary(env: Record<string, string | undefined> = process.
     return v !== undefined && v !== '';
   }).length;
   lines.push(`${setCount}/${ENV_SCHEMA.length} variables set`);
-  lines.push(`Legend: * = set, [required] = must be configured`);
+  lines.push('Legend: * = set; validation requires at least one provider authentication');
 
   return lines.join('\n');
 }

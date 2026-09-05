@@ -44,8 +44,13 @@ const hoisted = vi.hoisted(() => {
     cognitiveComplete: vi.fn(),
     cognitiveFail: vi.fn(),
     cognitiveCancel: vi.fn(),
+    maybeHandleCameraShareRequest: vi.fn(),
   };
 });
+
+vi.mock('../../src/companion/camera-share.js', () => ({
+  maybeHandleCameraShareRequest: hoisted.maybeHandleCameraShareRequest,
+}));
 
 vi.mock('../../src/channels/core.js', () => ({
   checkDMPairing: hoisted.checkDMPairing,
@@ -219,6 +224,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.cognitiveComplete.mockResolvedValue(undefined);
     hoisted.cognitiveFail.mockResolvedValue(undefined);
     hoisted.cognitiveCancel.mockResolvedValue(undefined);
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue(null);
   });
 
   it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
@@ -264,6 +270,31 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     } finally {
       selfie.mockRestore();
     }
+  });
+
+  it('handles an inbound Telegram camera-share request before the agent turn', async () => {
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue({
+      success: true,
+      telegramSent: false,
+      spokenReply: 'Un bureau avec un écran allumé.',
+      description: 'Un bureau avec un écran allumé.',
+    });
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage("qu'est-ce que tu vois ?"), { type: 'telegram', send });
+
+    expect(hoisted.maybeHandleCameraShareRequest).toHaveBeenCalledOnce();
+    expect(hoisted.maybeHandleCameraShareRequest.mock.calls[0]?.[1]).toMatchObject({
+      surface: 'telegram',
+      inboundChatId: 'chan-42',
+    });
+    expect(send).toHaveBeenCalledWith({
+      channelId: 'chan-42',
+      content: 'Un bureau avec un écran allumé.',
+      replyTo: expect.any(String),
+    });
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
@@ -362,6 +393,28 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.processUserMessage).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].content).toContain('pair');
+  });
+
+  it('replies to a blocked sender instead of staying silent (jumeau D3)', async () => {
+    hoisted.checkDMPairing.mockResolvedValue({
+      approved: false,
+      blocked: true,
+      senderId: 'user-42',
+      channelType: 'telegram',
+    });
+    hoisted.getDMPairing.mockReturnValue({
+      getPairingMessage: () => 'This sender is temporarily blocked after too many pairing attempts.',
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('hello'), { send });
+
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].content).toMatch(/blocked/i);
   });
 
   it('reuses the same session across follow-up messages (no re-create)', async () => {
@@ -787,18 +840,18 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       order.push('telegram:delivered');
       return { success: true, timestamp: new Date() };
     });
-    const message = makeMessage('Que vois-tu ?', 'sess-cognitive', 'lisa-cognitive');
+    const message = makeMessage('Que penses-tu de cet objet rouge ?', 'sess-cognitive', 'lisa-cognitive');
 
     await manager.emit(message, { type: 'telegram', send });
 
     expect(hoisted.cognitiveBegin).toHaveBeenCalledWith(expect.objectContaining({
       channelType: 'telegram',
       messageId: message.id,
-      content: 'Que vois-tu ?',
+      content: 'Que penses-tu de cet objet rouge ?',
       egress: 'cloud',
     }));
     expect(hoisted.processUserMessage).toHaveBeenCalledWith(
-      'Que vois-tu ?',
+      'Que penses-tu de cet objet rouge ?',
       expect.objectContaining({
         surface: 'telegram',
         transientContext: expect.stringContaining('objet rouge détecté'),
@@ -1098,6 +1151,49 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         }),
       }),
     );
+  });
+
+  it('reviews a short Telegram claim about what the sensory system received', async () => {
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
+    resetCrossChannelConversationBridge();
+    const bridge = getCrossChannelConversationBridge();
+    await bridge.recordVoiceTurn({
+      role: 'assistant',
+      content: 'Je ne peux confirmer que ce que les traces me donnent.',
+    });
+    const request = "Il t'as transmis Lisa tu m'entends ?";
+    const unsupported = 'Oui, il me l’a transmis exactement.';
+    const honest = 'Je ne peux pas le confirmer sans une trace sensorielle correspondante.';
+    hoisted.processUserMessage.mockResolvedValue([{ role: 'assistant', content: unsupported }]);
+    hoisted.getChatHistory.mockReturnValue([
+      { type: 'user', content: request, timestamp: new Date() },
+      { type: 'assistant', content: unsupported, timestamp: new Date() },
+    ]);
+    hoisted.reviewSemanticResponse.mockResolvedValue({
+      response: honest,
+      outcome: 'revised',
+      reason: 'revision_completed',
+      revisionAttempts: 1,
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage(request, 'sess-runtime-evidence'), {
+      type: 'telegram',
+      send,
+    });
+
+    expect(hoisted.reviewSemanticResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request,
+        draft: unsupported,
+        profile: 'factual_analytical',
+      }),
+    );
+    expect(send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n'))
+      .toContain('sans une trace sensorielle');
   });
 
   it('runs relationship safety after semantic revision before any Telegram persistence', async () => {

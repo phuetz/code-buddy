@@ -23,6 +23,11 @@ import { injectPresenceBlock } from '../memory/presence-injector.js';
 import { loadRelationshipState, getPersonalitySummary } from './relationship-state.js';
 import { loadVoiceGuidance, formatVoiceGuidance } from './voice-guidance.js';
 import { readInnerLifeVignette, isInnerLifeEnabled } from './inner-life.js';
+import {
+  formatEvolutionNotesForCompanion,
+  queryEvolutionNotes,
+  readEvolutionNotes,
+} from '../self-model/evolution-notes.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
@@ -38,6 +43,8 @@ export interface RelationalContextOptions {
   includeGuidance?: boolean;
   /** Include Lisa's own recent inner-life vignette ("what I did"). Default: `isInnerLifeEnabled()`. */
   includeInnerLife?: boolean;
+  /** Include Lisa's documented recent evolution. Default: `CODEBUDDY_COMPANION_SELF_EVOLUTION=true`. */
+  includeSelfEvolution?: boolean;
   /** Injectable seams (tests) — each defaults to the real source above. */
   factsBlock?: () => string | null;
   personalitySummary?: () => string;
@@ -45,6 +52,7 @@ export interface RelationalContextOptions {
   episodeBlock?: () => Promise<string | null>;
   guidanceBlock?: () => string | null;
   innerLifeBlock?: () => Promise<string | null>;
+  selfEvolutionBlock?: () => Promise<string | null>;
   /** Override the relationship-state file (tests). */
   relationshipStatePath?: string;
 }
@@ -164,6 +172,18 @@ function envNonNegative(name: string, fallback: number): number {
   return normalizeNonNegative(Number(raw), fallback);
 }
 
+function safeEvolutionLines(value: string): string {
+  return value
+    .replace(/`[^`]*`/g, '')
+    .replace(/\b(?:src|tests|docs|cowork|dist)\/[\w./-]+/gi, '')
+    .replace(/\b[0-9a-f]{12,}\b/gi, '')
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*+] |\d+[.)] )/, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n');
+}
+
 /** Read the consolidated recent conversation episode from persistent memory (see episodic-journal.ts). */
 async function defaultReadEpisode(): Promise<string | null> {
   try {
@@ -233,6 +253,23 @@ export async function buildRelationalContext(
       return '';
     }
   });
+  const selfEvolution = Promise.resolve().then(async () => {
+    const enabled = options.includeSelfEvolution ?? process.env.CODEBUDDY_COMPANION_SELF_EVOLUTION === 'true';
+    if (!enabled) return '';
+    try {
+      const value = options.selfEvolutionBlock
+        ? await options.selfEvolutionBlock()
+        : formatEvolutionNotesForCompanion(
+            queryEvolutionNotes(await readEvolutionNotes({ workDir: options.cwd }), { limit: 3 }),
+          );
+      const safeValue = value ? safeEvolutionLines(value) : '';
+      // Keep the wrapper on the first/last content lines so the injected
+      // block remains at most three physical lines as well as three facts.
+      return safeValue ? `<lisa_evolution>${safeValue}</lisa_evolution>` : '';
+    } catch {
+      return '';
+    }
+  });
   const personality = Promise.resolve().then(() => {
     if (options.includePersonality === false) return '';
     try {
@@ -256,7 +293,7 @@ export async function buildRelationalContext(
     }
   });
 
-  return (await Promise.all([facts, guidance, episode, innerLife, personality, presence]))
+  return (await Promise.all([facts, guidance, episode, innerLife, selfEvolution, personality, presence]))
     .filter(Boolean)
     .join('\n\n');
 }

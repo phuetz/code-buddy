@@ -22,10 +22,11 @@
  * @module hooks/user-hooks
  */
 
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import type { ContextCompactionPayload } from '../events/types.js';
 
 // ─── Event Types ──────────────────────────────────────────────────────────────
 
@@ -48,7 +49,8 @@ export type UserHookEvent =
   | 'SubagentStart'
   | 'SubagentStop'
   | 'TaskCreated'
-  | 'TaskCompleted';
+  | 'TaskCompleted'
+  | 'pre_compact';
 
 // ─── Handler Types ────────────────────────────────────────────────────────────
 
@@ -276,6 +278,91 @@ export class UserHooksManager {
     }
 
     return combined;
+  }
+
+  /**
+   * Run command handlers configured for the synchronous compaction boundary.
+   * ContextManagerV2 deliberately remains synchronous, so this uses the same
+   * hooks.json command format with a bounded synchronous child process.
+   * Hook output is advisory: failures are logged and never block compaction.
+   */
+  runPreCompact(payload: ContextCompactionPayload): string | undefined {
+    const handlers = [
+      ...(this.hooksMap.pre_compact ?? []),
+      ...(this.hooksMap.PreCompact ?? []),
+    ];
+    if (handlers.length === 0) return undefined;
+    const hookContext: HookContext = { ...payload };
+
+    const preserved: string[] = [];
+    for (const handler of handlers) {
+      if (!matchesCondition(handler, hookContext)) continue;
+      if (handler.type !== 'command') {
+        logger.warn('[user-hooks] pre_compact hooks currently support command handlers only');
+        continue;
+      }
+
+      const output = this.executePreCompactCommand(handler, payload, hookContext);
+      if (output) preserved.push(output);
+      if (preserved.join('\n').length >= 2_000) break;
+    }
+
+    const result = preserved.join('\n').trim().slice(0, 2_000);
+    return result || undefined;
+  }
+
+  private executePreCompactCommand(
+    handler: UserHookHandler,
+    payload: ContextCompactionPayload,
+    hookContext: HookContext,
+  ): string | undefined {
+    if (!handler.command) {
+      logger.warn('[user-hooks] pre_compact command handler missing `command` field');
+      return undefined;
+    }
+
+    const timeout = Math.min(Math.max(handler.timeout ?? 5_000, 1), 5_000);
+    const event: UserHookEvent = 'pre_compact';
+    const expandedCommand = expandCommandVars(handler.command, hookContext, event);
+    const isWindows = process.platform === 'win32';
+    const shell = isWindows ? 'cmd' : 'sh';
+    const shellFlag = isWindows ? '/c' : '-c';
+    let result: ReturnType<typeof spawnSync>;
+    try {
+      result = spawnSync(shell, [shellFlag, expandedCommand], {
+        input: JSON.stringify(payload),
+        encoding: 'utf8',
+        timeout,
+        killSignal: 'SIGTERM',
+        windowsHide: true,
+        env: {
+          ...process.env,
+          CODEBUDDY_HOOK_EVENT: event,
+          TOOL_NAME: '',
+          TOOL_INPUT: '{}',
+          FILE: '',
+          SESSION_ID: '',
+          CWD: process.cwd(),
+        },
+      });
+    } catch (error: unknown) {
+      logger.warn(`[user-hooks] pre_compact hook failed: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+
+    if (result.error) {
+      logger.warn(`[user-hooks] pre_compact hook failed: ${result.error.message}`);
+      return undefined;
+    }
+    if (result.status !== 0) {
+      const detail = String(result.stderr ?? result.stdout ?? '').trim();
+      logger.warn(
+        `[user-hooks] pre_compact hook exited ${result.status ?? 'without a status'}${detail ? `: ${detail}` : ''}`,
+      );
+      return undefined;
+    }
+
+    return String(result.stdout ?? '').trim() || undefined;
   }
 
   // ─── Command Handler ──────────────────────────────────────────────────────

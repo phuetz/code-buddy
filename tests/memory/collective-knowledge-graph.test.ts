@@ -90,7 +90,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
   });
 
   it('THESIS: agent B benefits from what agent A learned (shared ledger)', () => {
-    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
+    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy' });
     const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
 
     // B knows nothing yet.
@@ -103,7 +103,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     const hits = agentB.recall('router la voix vers gpt-5.5');
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0]!.text).toContain('gpt-5.5');
-    expect(hits[0]!.agentId).toBe('ministar/code-buddy');
+    expect(hits[0]!.agentId).toBe('hub/code-buddy');
   });
 
   it('reinforces: the SAME fact remembered twice accumulates mentions (not lost-update)', () => {
@@ -186,6 +186,57 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     expect(block).toContain('host/repo');
   }, 60000);
 
+  it('injects an on-topic ingested node and skips a recent off-topic one', async () => {
+    // Recency-first packing used to fill the 600-char budget with a long
+    // recent YouTube blob, hiding a keyword-relevant discovery that
+    // `research recall` would have returned for the same question.
+    const topicalEmbedder: CkgEmbedder = {
+      async embed(text: string) {
+        const t = text.toLowerCase();
+        // Wrapper words of a meta-question ("mémoire collective") cluster
+        // with the YouTube node — the production failure mode.
+        if (t.includes('youtube') || t.includes('memoire') || t.includes('collective') || t.includes('video')) {
+          return { embedding: Float32Array.from([0, 1, 0, 0, 0, 0, 0, 0]) };
+        }
+        if (t.includes('inpainting') || t.includes('diffusion')) {
+          return { embedding: Float32Array.from([1, 0, 0, 0, 0, 0, 0, 0]) };
+        }
+        return { embedding: Float32Array.from([0.2, 0.2, 0.2, 0, 0, 0, 0, 0]) };
+      },
+    };
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      embedder: topicalEmbedder,
+    });
+    ckg.remember({
+      name: 'arxiv:2305.15266v3',
+      type: 'discovery',
+      text: 'Diffusion-Based Audio Inpainting. A method for restoring missing audio.',
+      source: 'publication',
+    });
+    ckg.remember({
+      name: 'youtube:recent-watch',
+      type: 'discovery',
+      text: `youtube video recente : extraits de la memoire collective. ${'clip '.repeat(120)}`,
+      source: 'video',
+    });
+
+    const aboutPaper = await ckg.formatCollectiveContext(
+      'La memoire collective injectee contient-elle Diffusion-Based Audio Inpainting ?',
+      600,
+    );
+    expect(aboutPaper).toContain('Diffusion-Based Audio Inpainting');
+    expect(aboutPaper.toLowerCase()).not.toContain('youtube');
+
+    const aboutVideo = await ckg.formatCollectiveContext(
+      'quelle est la derniere video youtube recemment vue',
+      600,
+    );
+    expect(aboutVideo.toLowerCase()).toContain('youtube');
+    expect(aboutVideo).not.toContain('Diffusion-Based Audio Inpainting');
+  }, 60000);
+
   it('filters by type', () => {
     const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
     ckg.remember({ text: 'un fait quelconque sur les tokens', type: 'fact' });
@@ -262,7 +313,7 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   }, 60000);
 
   it('METRIC — agent B answers paraphrased queries correctly thanks to A (≥2/3 vs 0/3 baseline)', async () => {
-    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy', embedder: deterministicEmbedder });
+    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy', embedder: deterministicEmbedder });
     const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy', embedder: deterministicEmbedder });
 
     // Three semantically well-separated lessons (no shared keywords with the probes).
@@ -414,7 +465,7 @@ describe('CollectiveKnowledgeGraph — cross-agent corroboration', () => {
   });
 
   it('two DISTINCT agents agreeing raises corroboration + confidence', () => {
-    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
+    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy' });
     const b = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
     const fact = { type: 'fact' as const, name: 'ledger', text: 'le journal append-only évite les pertes concurrentes', confidence: 0.6 };
     a.remember(fact);

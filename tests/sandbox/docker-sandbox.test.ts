@@ -199,6 +199,42 @@ describe('DockerSandbox', () => {
       expect(args).toContain('/workspace');
     });
 
+    it('should expose explicitly declared dependency mounts as read-only', async () => {
+      const proc = createMockProcess();
+      mockSpawn.mockReturnValue(proc);
+
+      const sandbox = new DockerSandbox({
+        readOnlyMounts: [{ source: process.cwd(), target: '/readonly/dependencies' }],
+      });
+      const promise = sandbox.execute('node --version');
+
+      proc.emit('close', 0);
+      await promise;
+
+      const args = mockSpawn.mock.calls[0][1] as string[];
+      expect(args).toContain('--mount');
+      expect(args).toContain(
+        `type=bind,source=${path.resolve(process.cwd())},target=/readonly/dependencies,readonly`,
+      );
+    });
+
+    it('should expose declared cache points as ephemeral tmpfs mounts', async () => {
+      const proc = createMockProcess();
+      mockSpawn.mockReturnValue(proc);
+
+      const sandbox = new DockerSandbox({ tmpfsMounts: ['/workspace/.cache'] });
+      const promise = sandbox.execute('true');
+
+      proc.emit('close', 0);
+      await promise;
+
+      const args = mockSpawn.mock.calls[0][1] as string[];
+      expect(args).toContain('--tmpfs');
+      expect(args).toContain(
+        `/workspace/.cache:rw,nosuid,nodev,size=64m,uid=${process.getuid?.() ?? 0},gid=${process.getgid?.() ?? 0}`,
+      );
+    });
+
     it('can preserve the host workspace path for compatible tool output', async () => {
       const proc = createMockProcess();
       mockSpawn.mockReturnValue(proc);

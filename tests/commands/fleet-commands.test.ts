@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerFleetCommands } from '../../src/commands/cli/fleet-commands.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 function createProgram(): Command {
   const program = new Command();
@@ -22,10 +23,15 @@ function getLogOutput(): string {
 describe('Fleet CLI commands', () => {
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.exitCode = 0;
   });
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    vi.restoreAllMocks();
+    process.exitCode = 0;
   });
 
   it('prints JSON policy decisions for a dispatch profile', async () => {
@@ -164,5 +170,84 @@ describe('Fleet CLI commands', () => {
     expect(output).toContain('fleet.hermes.balanced');
     expect(output).toContain('fleet.hermes.review');
     expect(output).toContain('Policy: minimal / confirm');
+  });
+
+  it('queries the configured server for status and describe', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/fleet/status')) {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          connections: { total: 2, authenticated: 2, streaming: 0, totalBroadcastsDropped: 0 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        hostname: 'fleet-test-peer',
+        pid: 1234,
+        methods: ['peer.describe', 'peer.ping'],
+        apiVersion: 'd.21',
+        role: 'main',
+        maxDepth: 3,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    try {
+      const program = createProgram();
+      registerFleetCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'fleet',
+        'status',
+        '--server-url',
+        'http://127.0.0.1:3123',
+        '--json',
+      ]);
+      const status = JSON.parse(getLogOutput()) as { status: string; connections: { total: number } };
+      expect(status.status).toBe('ok');
+      expect(status.connections.total).toBe(2);
+
+      consoleLogSpy.mockClear();
+      await program.parseAsync([
+        'node',
+        'test',
+        'fleet',
+        'describe',
+        '--server-url',
+        'http://127.0.0.1:3123',
+        '--json',
+      ]);
+      const description = JSON.parse(getLogOutput()) as { hostname: string; methods: string[] };
+      expect(description.hostname).toBe('fleet-test-peer');
+      expect(description.methods).toContain('peer.describe');
+      expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
+        'http://127.0.0.1:3123/api/fleet/status',
+        'http://127.0.0.1:3123/api/fleet/describe',
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('fails clearly and non-zero when fleet status has no server', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'));
+    const program = createProgram();
+    registerFleetCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'fleet',
+      'status',
+      '--server-url',
+      'http://127.0.0.1:39991',
+    ]);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Serveur Fleet indisponible sur http://127.0.0.1:39991 (fetch failed). ' +
+        'Lancez-le avec `buddy server` puis réessayez.',
+    );
+    expect(process.exitCode).toBe(1);
   });
 });

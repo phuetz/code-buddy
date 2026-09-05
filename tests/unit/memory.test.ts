@@ -19,6 +19,8 @@
 // Mock fs-extra
 
 import { EventEmitter } from 'events';
+import nodePath from 'path';
+import nodeOs from 'os';
 
 const {
   mockEnsureDir, mockPathExists, mockReadJSON, mockWriteJSON,
@@ -43,6 +45,14 @@ const {
   }),
 }));
 
+// The persistent memory file is written under a cross-process session lock (G3R, 2026-09-03).
+// This suite mocks the whole filesystem, so the lock must run the critical section directly.
+jest.mock('../../src/persistence/session-lock', () => ({
+  withSessionLock: async (_path: string, fn: () => Promise<unknown>) => fn(),
+}));
+
+const fakeDisk = new Map<string, string>();
+
 jest.mock('fs-extra', () => {
   const impl = {
   ensureDir: mockEnsureDir,
@@ -52,9 +62,35 @@ jest.mock('fs-extra', () => {
   writeFile: mockWriteFile,
   readFile: mockReadFile,
   readdir: mockReaddir,
+  // Atomic save (G3R): write to a sibling temp file, rename over the target, remove leftovers.
+  // The save re-reads the file to merge concurrent changes, so the fake disk must remember what
+  // was written — otherwise every save looks like an external wipe and unchanged entries vanish.
+  rename: jest.fn(async (from: string, to: string) => {
+    const content = fakeDisk.get(String(from));
+    if (content !== undefined) {
+      fakeDisk.set(String(to), content);
+      fakeDisk.delete(String(from));
+    }
+  }),
+  remove: jest.fn(async (target: string) => { fakeDisk.delete(String(target)); }),
+  appendFile: jest.fn(async (target: string, data: string) => {
+    fakeDisk.set(String(target), (fakeDisk.get(String(target)) ?? '') + String(data));
+  }),
 };
   return { ...impl, default: impl };
 });
+
+// MEM1 moved state persistence behind the atomic-write seam. Reuse the existing
+// filesystem spies at that seam so no real state leaks between unit tests.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: vi.fn(async (filePath: string, fallback: unknown) => {
+    const value = await mockReadJSON(filePath);
+    return fallback === null && Array.isArray(value) && value.length === 0 ? fallback : value;
+  }),
+  readTextAtomic: mockReadFile,
+  writeFileAtomic: mockWriteFile,
+  writeJsonAtomic: mockWriteJSON,
+}));
 
 // Mock database repository
 jest.mock('../../src/database/repositories/memory-repository', () => ({
@@ -537,13 +573,31 @@ describe('EnhancedMemory', () => {
 
   describe('Memory Persistence', () => {
     it('should save memories to JSON file', async () => {
-      await memory.store({ type: 'fact', content: 'Persistent memory' });
+      const entry = await memory.store({ type: 'fact', content: 'Persistent memory' });
 
-      expect(mockWriteJSON).toHaveBeenCalled();
-      const calls = mockWriteJSON.mock.calls;
-      expect(calls.some((call: unknown[]) =>
-        (call[0] as string).includes('memory-index.json')
-      )).toBe(true);
+      // VERIF3 T20 : persister un index vide restait vert, seule la
+      // disparition de l'appel rougissait. Chemin, contenu et mode sont
+      // désormais assertés.
+      const indexPath = nodePath.join(
+        nodeOs.homedir(),
+        '.codebuddy',
+        'memory',
+        'memory-index.json'
+      );
+      const indexCalls = mockWriteJSON.mock.calls.filter(
+        (call: unknown[]) => call[0] === indexPath
+      );
+      expect(indexCalls.length).toBeGreaterThan(0);
+
+      const [, persisted, options] = indexCalls[indexCalls.length - 1]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Array.isArray(persisted)).toBe(true);
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0]).toMatchObject({
+        id: entry.id,
+        type: 'fact',
+        content: 'Persistent memory',
+      });
     });
 
     it('should save user profile when updated', async () => {
@@ -1083,8 +1137,12 @@ describe('PersistentMemoryManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    fakeDisk.clear();
     mockPathExists.mockResolvedValue(false);
-    mockReadFile.mockResolvedValue('');
+    mockReadFile.mockImplementation(async (target: string) => fakeDisk.get(String(target)) ?? '');
+    mockWriteFile.mockImplementation(async (target: string, data: string) => {
+      fakeDisk.set(String(target), String(data));
+    });
 
     manager = new PersistentMemoryManager({
       projectMemoryPath: '/test/.codebuddy/CODEBUDDY_MEMORY.md',

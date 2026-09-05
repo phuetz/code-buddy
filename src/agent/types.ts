@@ -32,6 +32,9 @@ export interface ChatEntry {
   
   /** Whether this entry is currently being streamed/updated */
   isStreaming?: boolean;
+
+  /** True when the provider stopped at the output length cap and continuations are exhausted. */
+  truncated?: boolean;
 }
 
 /**

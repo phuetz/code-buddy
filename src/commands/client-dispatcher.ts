@@ -123,7 +123,7 @@ export class ClientCommandDispatcher {
          return true;
       }
 
-      if (input === "/exit") {
+      if (input === "/exit" || input === "/quit") {
           process.exit(0);
       }
 
@@ -209,6 +209,7 @@ export class ClientCommandDispatcher {
       getContextStats: () => context.agent.getContextStats(),
       formatContextStats: () => context.agent.formatContextStats(),
       getCurrentModel: () => context.agent.getCurrentModel(),
+      getCurrentSessionId: () => context.agent.getCurrentSessionId?.() ?? null,
       getContextMemoryMetrics: () => context.agent.getContextMemoryMetrics(),
       getCompressionStats: () => context.agent.getCompressionStats(),
       getContextBudgetBreakdown: () => context.agent.getContextBudgetBreakdown(),
@@ -218,6 +219,9 @@ export class ClientCommandDispatcher {
     const handlerResult = await enhancedHandler.handleCommand(token, args, originalInput);
 
     if (handlerResult.handled) {
+      if (handlerResult.compactionRequested) {
+        context.agent.requestManualCompaction();
+      }
       if (handlerResult.entry) {
         context.setChatHistory((prev) => [...prev, handlerResult.entry!]);
       }
