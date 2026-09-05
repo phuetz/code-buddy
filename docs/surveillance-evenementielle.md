@@ -13,11 +13,12 @@ est byte-identique.
 
 ```
 buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
+        ▲  (si absent, pacemaker TS opt-in CODEBUDDY_HEARTBEAT_FALLBACK)
                                           │  (tous les N battements)
                           ┌───────────────┼────────────────────┐
                           ▼                                      ▼
            system-vitals-emitter.ts                    schedule-emitter.ts
-     (lit memory/gpu/fleet/disk + ps)              (émet l'heure courante)
+     (lit memory/gpu/fleet/disk + /proc)           (émet l'heure courante)
                           │  emit('sensory:perception')          │
                           ▼                                      ▼
                     Bus d'événements  (modality:'system' | 'time')
@@ -37,7 +38,10 @@ buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
   - `fleet_saturated` — capacité flotte atteinte.
   - `process_runaway` — un processus au-dessus de `CODEBUDDY_RUNAWAY_CPU_PCT` (défaut 90) pendant
     `CODEBUDDY_RUNAWAY_PASSES` passes CONSÉCUTIVES (défaut 3). Le payload porte `pid`, `ppid`,
-    `comm`, `pcpu`, `etimeSec` et `scope` (pour savoir quel processus arrêter).
+    `comm`, `pcpu` / `pcpuTotal` (somme des cœurs, 100 % = un cœur plein — un process 8 threads
+    saturés = 800 %), `pcpuOfMachine` (`pcpuTotal / nproc`), `cores` (nproc), `etimeSec` et
+    `scope`. Le seuil reste sur `pcpuTotal` (compat) ; `CODEBUDDY_RUNAWAY_CPU_BASIS=machine`
+    le compare à `pcpuOfMachine` (défaut `core` = byte-identique).
     **CPU instantané** : le seuil s'applique au CPU INSTANTANÉ, calculé par delta de
     `/proc/<pid>/stat` (utime+stime en jiffies) entre deux passes — PAS la moyenne `ps pcpu`
     (qui est `cputime/vie` et mettrait des heures à franchir 90 % pour un vieux processus qui
@@ -55,9 +59,20 @@ buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
     remise à zéro sur un timeout transitoire).
 - **Déclencheur horaire** (`src/sensory/schedule-emitter.ts`) : émet un percept `time/tick`
   (`hhmm`, `weekday`, `iso`, `minuteOfDay`) à chaque passe, pour des règles à l'heure.
+- **Battement TS de repli** (`src/sensory/heartbeat-fallback.ts`) : si le daemon Rust
+  `buddy-sense` n'est pas connecté, le scheduler ne bat pas et la surveillance est muette.
+  Opt-in `CODEBUDDY_HEARTBEAT_FALLBACK=true` : un `setInterval` (`unref()`, période
+  `CODEBUDDY_HEARTBEAT_FALLBACK_MS`, défaut 1000) émet le même percept `vital/heartbeat`.
+  Un battement réel (`source` ≠ `heartbeat-fallback`) coupe l'intervalle immédiatement ; il
+  se réarme après `CODEBUDDY_HEARTBEAT_FALLBACK_SILENCE_MS` (défaut 15000) de silence.
+  Jamais deux horloges. Teardown dans `stopServer`. Défaut OFF = aucun timer.
 - **Moteur de règles** (`src/sensory/sensory-rules-engine.ts`) : les filtres acceptent l'égalité
   string historique ET une forme numérique `{op:'gt'|'gte'|'lt'|'lte'|'eq'|'ne', value:number}`
   comparée à `payload[clé]`.
+- **CLI** `buddy sensory status [--json]` : lecture seule (flags, source du battement rust /
+  fallback / aucun, cadence des traitements, 5 dernières perceptions `system`/`time`, règles
+  + dernier déclenchement d'après `rule-runs.jsonl`). Sans serveur : lit les fichiers d'état
+  s'ils existent, sinon « serveur non joignable ».
 
 ## Activer
 
@@ -67,7 +82,11 @@ CODEBUDDY_SENSORY=true \
 CODEBUDDY_SYSTEM_VITALS=true \
 CODEBUDDY_SCHEDULE_TICKS=true \
 CODEBUDDY_SENSORY_RULES=true CODEBUDDY_SENSORY_TOKEN=<token> \
+CODEBUDDY_HEARTBEAT_FALLBACK=true \   # optionnel : pacemaker TS si buddy-sense absent
 buddy server
+
+buddy sensory status                 # inspection lecture seule
+buddy sensory status --json
 ```
 
 ## Installer une règle-modèle
@@ -102,13 +121,18 @@ Exemple de règle à seuil (installée par `disk-low-alert`) :
 | --- | --- | --- |
 | `CODEBUDDY_SYSTEM_VITALS` | (off) | `true` active l'émetteur de signes vitaux système |
 | `CODEBUDDY_SYSTEM_VITALS_EVERY` | `30` | Cadence en battements de l'émetteur système |
-| `CODEBUDDY_RUNAWAY_CPU_PCT` | `90` | Seuil CPU d'un processus « emballé » |
+| `CODEBUDDY_RUNAWAY_CPU_PCT` | `90` | Seuil CPU d'un processus « emballé » (sur `pcpuTotal`, % d'un cœur) |
+| `CODEBUDDY_RUNAWAY_CPU_BASIS` | `core` | `core` = seuil sur `pcpuTotal` (compat) ; `machine` = seuil sur `pcpuOfMachine` |
 | `CODEBUDDY_RUNAWAY_PASSES` | `3` | Passes consécutives au-dessus du seuil avant `process_runaway` |
 | `CODEBUDDY_RUNAWAY_SCOPE` | `server` | Portée du scan : `server` (descendants du serveur) ou `user` (tous les processus de l'utilisateur — attrape les boucles hors serveur) |
 | `CODEBUDDY_RUNAWAY_IGNORE_COMM` | ffmpeg,comfyui,python,python3,node,tsc,vitest,cargo,rustc,esbuild | csv des `comm` légitimement gourmands qui ne déclenchent jamais `process_runaway` (indispensable en mode `user`) |
 | `CODEBUDDY_DISK_LOW_PCT` | `90` | Seuil de disque utilisé pour `disk_low` |
 | `CODEBUDDY_SCHEDULE_TICKS` | (off) | `true` active l'émetteur horaire (`time/tick`) |
-| `CODEBUDDY_SCHEDULE_TICKS_EVERY` | `60` | Cadence en battements de l'émetteur horaire (≈ 1/min) |
+| `CODEBUDDY_SCHEDULE_TICKS_EVERY` | `20` | Cadence en battements de l'émetteur horaire (≈ 3/min, fenêtre anti-gigue) |
+| `CODEBUDDY_DOMAIN_EVENTS` | (off) | `true` re-émet les événements de domaine (`fleet:activity`, `cost:*`, …) sur le bus sensoriel |
+| `CODEBUDDY_HEARTBEAT_FALLBACK` | (off) | `true` active le pacemaker TS si `buddy-sense` n'émet rien |
+| `CODEBUDDY_HEARTBEAT_FALLBACK_MS` | `1000` | Période du pacemaker TS (`unref()`) |
+| `CODEBUDDY_HEARTBEAT_FALLBACK_SILENCE_MS` | `15000` | Silence d'un battement réel avant de réarmer le repli |
 
 Les actions déclenchées héritent des garde-fous existants du moteur de règles : plafonds
 (`CODEBUDDY_RULE_MAX_IN_FLIGHT` / `CODEBUDDY_RULE_MAX_FIRES_PER_SEC`), garde `isDestructive`, token
