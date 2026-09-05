@@ -21,13 +21,24 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 
 | # | Surface | Attaque | Résultat | Gravité | Correctif (SHA) | Test |
 |---|---------|---------|----------|---------|-----------------|------|
-| _(en cours)_ | | | | | | |
+| 1.1 | peer.tool.invoke | chemin absolu `/etc/passwd` | REFUSÉE | — | (garde existante) | audit-secaudit-peer-traversal |
+| 1.2 | peer.tool.invoke | `../` profond hors workspace | REFUSÉE | — | (garde existante) | audit-secaudit-peer-traversal |
+| 1.3 | peer.tool.invoke | encodage `%2e%2e` | REFUSÉE (littéral, pas de fuite) | — | (garde existante) | audit-secaudit-peer-traversal |
+| 1.4 | peer.tool.invoke | symlink interne → `/etc` (existant + pendant) | REFUSÉE | — | (garde existante) | audit-secaudit-peer-traversal |
+| 1.5 | peer.tool.invoke | alias non-fleetSafe → exécuteur | REFUSÉE (`UNKNOWN_PEER_TOOL`) | — | (par conception) | (analyse) |
+| 1.6 | peer.tool.invoke | needs_approval sans confirmant (headless) | REFUSÉE (fail-closed) | — | (garde existante) | audit-secaudit-peer-needs-approval |
 
 ---
 
-## Détail par surface
+## Surface 1 — `peer.tool.invoke` / `.stream` : SOLIDE (aucune faille)
 
-_(rempli au fil de l'inspection)_
+Les trois gardes tiennent, dans l'ordre : allowlist (match exact, `permissions.ts`) → `fleetSafe` (`registry.isFleetSafe`) → conteneur workspace (`assertPathInsideWorkspace`). La garde de chemin re-résout tout via `realpathFollowingExistingAncestors` + `resolveDanglingSymlink`, puis `isPathInsideOrEqual` — donc `../`, chemin absolu, symlink interne pointant dehors (existant OU pendant) et racine `/` sont tous rejetés. `%2e` n'est jamais décodé par `path` : traité comme littéral, il ne peut pas remonter. Les seuls exécuteurs sont `view_file`/`list_directory`/`search`, donc un alias non-`fleetSafe` n'atteint aucun exécuteur (`UNKNOWN_PEER_TOOL`). Enfin, toute décision `needs_approval` (garde secrets du PolicyEngine, ou peer:invoke non read-only) passe par `ConfirmationService`, qui **échoue fermé** sur un pair headless (pas de TTY, pas de canal distant, pas d'auto-confirm) — ligne 448-450.
+
+Profondeur (`CODEBUDDY_PEER_MAX_DEPTH`) et `role=leaf` sont des gardes **anti-boucle coopératives** (le champ `depth` est fourni par l'appelant, `leaf` tague sans bloquer) — documentées comme telles, ce ne sont pas des frontières de sécurité, et la vraie frontière (les 3 gardes) tient. Aucun correctif nécessaire.
+
+Preuves ajoutées (refus) : `tests/fleet/audit-secaudit-peer-traversal.test.ts` (7) + `tests/fleet/audit-secaudit-peer-needs-approval.test.ts` (1).
+
+## Détail par surface (suite)
 
 ## Récapitulatif failles A/B fermées
 
