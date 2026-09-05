@@ -5,9 +5,9 @@
  * anti-runaway fix (and the other monitors) is one command away, not hand-typed JSON.
  *
  * Each template returns a fresh `SensoryRule` (disabled:false but only present once
- * installed). They deliberately stay conservative: `alert` (Telegram/log) actions and
- * one read-only `agent` probe — never a `shell kill`, which the operator must opt into
- * explicitly (the destructive gate would vet it, but we don't ship an auto-kill).
+ * installed). They stay conservative: `alert` / read-only `agent`, plus a
+ * `kill_process` template that ships `dryRun:true` (journals, does not signal). A
+ * live kill still needs the operator to set `dryRun:false` AND `CODEBUDDY_RUNAWAY_KILL=true`.
  *
  * @module sensory/rule-templates
  */
@@ -38,6 +38,19 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
           '⚠️ Processus emballé détecté (CPU élevé sur plusieurs passes). Vérifie et arrête-le si besoin.',
       },
       cooldownMs: 300_000,
+    }),
+  },
+  {
+    name: 'process-runaway-kill',
+    description:
+      'Remédiation bornée d’un processus emballé (dry-run par défaut ; SIGTERM seulement, pas de groupe). Un kill réel exige dryRun:false dans la règle ET CODEBUDDY_RUNAWAY_KILL=true.',
+    build: () => ({
+      id: 'tpl-process-runaway-kill',
+      name: 'Processus emballé → SIGTERM borné (dry-run)',
+      enabled: true,
+      match: { modality: 'system', kind: 'process_runaway' },
+      action: { type: 'kill_process', dryRun: true, escalate: false },
+      cooldownMs: 60_000,
     }),
   },
   {

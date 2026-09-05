@@ -37,6 +37,19 @@ describe('rule templates', () => {
     expect(rule.action.type).toBe('alert');
   });
 
+  it('ships process-runaway-kill (dryRun true, escalate false, cooldown 60s)', () => {
+    const tpl = getRuleTemplate('process-runaway-kill');
+    expect(tpl).toBeDefined();
+    const rule = tpl!.build();
+    expect(rule.id).toBe('tpl-process-runaway-kill');
+    expect(rule.match).toMatchObject({ modality: 'system', kind: 'process_runaway' });
+    expect(rule.action).toMatchObject({ type: 'kill_process', dryRun: true, escalate: false });
+    expect(rule.cooldownMs).toBe(60_000);
+    expect(Object.prototype.hasOwnProperty.call(rule.action, 'pid')).toBe(false);
+    const v = validateRule(rule);
+    expect(v.ok).toBe(true);
+  });
+
   it('the disk-low template uses a numeric-threshold filter', () => {
     const rule = getRuleTemplate('disk-low-alert')!.build();
     const f = rule.match.filters?.diskPct;
