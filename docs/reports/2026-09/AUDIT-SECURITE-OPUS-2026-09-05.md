@@ -34,6 +34,14 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 | 2.5 | gate authored (tools) | outil authored lit `/etc/shadow` / `.aws/credentials` / `.env` | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-authored-secret-read |
 | 2.6 | runtime authored | `child_process`/`execSync`/`spawn` + réseau (exfiltration) | REFUSÉE (gate statique) | — | (garde existante) | authored-artifact-gate (existant) |
 | 2.7 | runtime authored | `isolate` confine-t-il les lectures par chemin absolu ? | RÉSIDU C (non confiné ; egress bloqué) | C | (documenté, non fermé) | audit-secaudit-authored-secret-read (résidu) |
+| 3.1 | SSRF | IP décimale/hex/octale/short (127.0.0.1) | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
+| 3.2 | SSRF | metadata cloud 169.254.169.254 (pointée + décimale) | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
+| 3.3 | SSRF | IPv6 loopback/mapped/link-local/ULA | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
+| 3.4 | SSRF | DNS-rebinding (TOCTOU résolution→fetch) | REFUSÉE (IP épinglée) | — | (garde existante) | ssrf-dns-pinning (existant) |
+| 3.5 | SSRF | protocole file://, gopher:// | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
+| 3.6 | HTTP | JWT_SECRET absent en production | REFUSÉE (throw module-load) | — | (garde existante) | (analyse index.ts:123) |
+| 3.7 | webhook | cible RFC1918/metadata via règle sensorielle | REFUSÉE (assertSafeUrl + redirect manual) | — | (garde existante) | webhook-ssrf (existant) |
+| 4.x | (secrets — surface 4 en cours) | | | | | |
 
 ---
 
@@ -57,6 +65,14 @@ Un outil authored tourne « lit l'entrée depuis l'env, imprime sur stdout », s
 
 ### 2c. Résidu C — le runtime `isolate` ne confine pas les lectures FS
 `envMode:'isolate'` ne fait que scrubber l'env et rediriger HOME : aucun confinement FS kernel (bwrap/Landlock) dans ce chemin. Un chemin absolu **calculé/injecté au runtime** (via l'entrée de l'outil) peut donc encore lire un fichier arbitraire. Mitigé par : (1) l'egress réseau/sous-processus bloqué (le secret ne sort pas) ; (2) l'entrée provient de l'agent lui-même, pas d'un pair distant ; (3) le nouveau gate statique ferme le cas réaliste (chemin en dur). Le confinement FS runtime complet (activer `CODEBUDDY_NATIVE_SANDBOX` pour ce chemin, ou un allowlist de lecture) touche `authored-tool-runtime.ts`/`execute-code-runner.ts` — recommandé à la lane self-improvement (zone réservée), non fermé ici. Gravité C (défense en profondeur).
+
+## Surface 3 — serveur HTTP/WS + SSRF : SOLIDE (aucune faille), 2 résidus D
+
+Le garde SSRF (`src/security/ssrf-guard.ts`) couvre TOUTES les formes de littéral IPv4 obfusqué (décimal `2130706433`, hex `0x7f000001`, octal `0177.0.0.1`, short `127.1`), toutes les plages RFC1918/loopback/link-local/metadata, et l'IPv6 (loopback, IPv4-mapped, NAT64, 6to4, Teredo, ULA, link-local, multicast). Il résout le DNS et valide CHAQUE IP retournée, fail-closed sur erreur. `src/security/safe-fetch.ts` **épingle l'IP validée** dans un dispatcher undici custom (`lookup` renvoie l'IP exacte validée) → la fenêtre DNS-rebinding/TOCTOU est fermée ; chaque redirection est re-validée et re-épinglée, `authorization` est retiré cross-origin. Le consommateur webhook (`sensory-action-executor.ts`) route non-loopback via `assertSafeUrl` + `safeFetchFollow`, loopback via fetch direct `redirect:'manual'` (tout 3xx bloqué). `JWT_SECRET` absent en production ⇒ `getJwtSecret` **throw** au démarrage (`index.ts:123`). Rate-limit 60/min par défaut. CORS documenté comme non-contrôle-d'accès (WS refuse l'Origin, HTTP 200 sans en-tête) — la frontière reste le JWT + le réseau.
+
+Résidus (défense en profondeur, gravité D, NON fermés — hors valeur/risque) :
+- **`*.localhost` webhook** : `isLoopbackHost` traite `*.localhost` comme loopback par nom SANS vérifier l'IP résolue. Un résolveur empoisonné + un webhook opérateur `x.localhost` pourrait atteindre une IP non-loopback. Exige un résolveur compromis ET une règle opérateur `.localhost` (opt-in + jeton) — théorique. Recommandation : résoudre et exiger que TOUTES les IP soient 127/8 ou ::1 sur le chemin loopback.
+- **`DEFAULT_SERVER_CONFIG.jwtSecret='change-me-in-production'`** (`types.ts:107`) : secret faible codé en dur, mais **inatteignable** — `startServer` construit sa config depuis `DEFAULT_CONFIG` et écrase toujours `jwtSecret` via `getJwtSecret` (throw prod) ; aucun consommateur ne lit `DEFAULT_SERVER_CONFIG`. Footgun latent ; recommandation : le mettre à `''` (fail-closed) plutôt qu'un secret utilisable.
 
 ## Détail par surface (suite)
 
