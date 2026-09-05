@@ -23,7 +23,7 @@
  * @module sensory/system-vitals-emitter
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { cpus, loadavg } from 'node:os';
+import { availableParallelism, cpus, loadavg } from 'node:os';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 
@@ -128,6 +128,11 @@ export interface SystemVitalsDeps {
    * fake 4-core `/proc` does not depend on the host.
    */
   nproc?: number;
+  /**
+   * cgroup v2 quota file reader (`/sys/fs/cgroup/cpu.max`). Default: `readFileSync`. Injected by
+   * tests to simulate a container quota without touching the host.
+   */
+  readCgroupCpuMax?: () => string;
   /**
    * Threshold basis. Default: `CODEBUDDY_RUNAWAY_CPU_BASIS` or `core`. Unset = byte-identical
    * comparison against the raw one-core percentage (`pcpuTotal`).
@@ -253,12 +258,36 @@ function resolveClkTck(deps: SystemVitalsDeps): number {
   return Number.isFinite(env) && env > 0 ? env : 100;
 }
 
+/**
+ * cgroup v2 CPU quota (`/sys/fs/cgroup/cpu.max` = "<quota> <period>" or "max <period>") rounded up
+ * to whole cores, or null when unlimited/unreadable. Only the v2 file is read (v1 is legacy).
+ */
+export function readCgroupCpuQuota(read?: () => string): number | null {
+  try {
+    const raw = (read ?? (() => readFileSync('/sys/fs/cgroup/cpu.max', 'utf8')))();
+    const [quota, period] = raw.trim().split(/\s+/);
+    if (!quota || quota === 'max') return null;
+    const q = Number(quota);
+    const per = Number(period ?? 100000);
+    if (!Number.isFinite(q) || !Number.isFinite(per) || q <= 0 || per <= 0) return null;
+    return Math.ceil(q / per);
+  } catch {
+    return null;
+  }
+}
+
 function resolveNproc(deps: SystemVitalsDeps): number {
   if (typeof deps.nproc === 'number' && Number.isFinite(deps.nproc) && deps.nproc >= 1) {
     return Math.floor(deps.nproc);
   }
   try {
-    const n = cpus()?.length ?? 0;
+    // availableParallelism honours the affinity mask; the cgroup v2 CPU quota (containers) is
+    // read separately because neither os.cpus() nor availableParallelism() sees it.
+    let n = 0;
+    try { n = availableParallelism(); } catch { n = cpus()?.length ?? 0; }
+    if (n < 1) n = cpus()?.length ?? 0;
+    const quota = readCgroupCpuQuota(deps.readCgroupCpuMax);
+    if (quota !== null && quota >= 1 && quota < n) n = quota;
     return n >= 1 ? n : 1;
   } catch {
     return 1;
@@ -559,7 +588,8 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
           // on this value when basis=core (default, byte-identical). basis=machine compares
           // pcpuOfMachine = pcpuTotal / nproc instead.
           const pcpuTotal = round1(cpuPct);
-          const pcpuOfMachine = round1(pcpuTotal / cores);
+          // Bounded to [0, 100]: sampling jitter can push a saturated box a hair above 100.
+          const pcpuOfMachine = Math.min(100, Math.max(0, round1(pcpuTotal / cores)));
           const compared = cpuBasis === 'machine' ? pcpuOfMachine : pcpuTotal;
           if (compared >= cpuThreshold) {
             const next = (counters.get(s.pid) ?? 0) + 1;

@@ -462,3 +462,14 @@ describe('robustness + byte-identical', () => {
     expect(seen).toHaveLength(0);
   });
 });
+
+describe('quota cgroup et borne pcpuOfMachine (vérif agy 05/09)', () => {
+  it('readCgroupCpuQuota : quota arrondi au cœur supérieur, null si max/illisible', async () => {
+    const { readCgroupCpuQuota } = await import('../../src/sensory/system-vitals-emitter.js');
+    expect(readCgroupCpuQuota(() => '150000 100000\n')).toBe(2);
+    expect(readCgroupCpuQuota(() => '400000 100000\n')).toBe(4);
+    expect(readCgroupCpuQuota(() => 'max 100000\n')).toBeNull();
+    expect(readCgroupCpuQuota(() => { throw new Error('ENOENT'); })).toBeNull();
+    expect(readCgroupCpuQuota(() => 'garbage')).toBeNull();
+  });
+});

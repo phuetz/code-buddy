@@ -42,7 +42,7 @@ Une vérification allégée et indépendante sur pièces (code source et tests u
 
 Commande exécutée dans l'environnement de vérification hermétique :
 ```bash
-HOME=/home/patrice/DEV/cb-heartwatch-2026-09-05/_qa/verify/home npx vitest run \
+HOME=~/DEV/cb-heartwatch-2026-09-05/_qa/verify/home npx vitest run \
   tests/sensory/system-vitals-emitter.test.ts \
   tests/sensory/sensory-rules-engine.test.ts \
   tests/sensory/schedule-emitter.test.ts \

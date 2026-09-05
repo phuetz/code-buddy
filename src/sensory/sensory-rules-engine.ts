@@ -11,7 +11,7 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { appendFile, mkdir, stat, rename, rm } from 'node:fs/promises';
+import { appendFile, mkdir, open, stat, rename, rm } from 'node:fs/promises';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic, readJsonLinesAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
@@ -254,11 +254,60 @@ export interface RuleRun {
 
 /** Recent rule fires (newest first) from the audit log — the observe surface. */
 export async function readRuleRuns(limit = 20): Promise<RuleRun[]> {
-  const runs = await readJsonLinesAtomic<RuleRun>(auditPath(), [], (value): value is RuleRun => Boolean(
+  const isRun = (value: unknown): value is RuleRun => Boolean(
     value && typeof value === 'object' && typeof (value as RuleRun).ts === 'number' &&
     typeof (value as RuleRun).rule === 'string',
-  ));
+  );
+  const tail = await readJsonLinesTail<RuleRun>(auditPath(), Math.max(1, limit), isRun);
+  if (tail !== null) return tail.reverse();
+  const runs = await readJsonLinesAtomic<RuleRun>(auditPath(), [], isRun);
   return runs.slice(-limit).reverse();
+}
+
+/** Above this size the audit log is read from its tail instead of whole (a 100 MB log must not
+ *  be loaded to show the last 20 runs). */
+const RULE_RUNS_TAIL_THRESHOLD = 1024 * 1024;
+const RULE_RUNS_TAIL_WINDOW = 512 * 1024;
+
+/**
+ * Last `limit` valid JSON lines of a large append-only file, oldest first, read from a bounded
+ * window at the end of the file. Returns null when the file is small (caller uses the whole-file
+ * reader) or unreadable; a window that holds fewer than `limit` complete lines returns what it has.
+ */
+async function readJsonLinesTail<T>(
+  path: string,
+  limit: number,
+  guard: (value: unknown) => value is T,
+): Promise<T[] | null> {
+  let size: number;
+  try {
+    size = (await stat(path)).size;
+  } catch {
+    return null;
+  }
+  if (size <= RULE_RUNS_TAIL_THRESHOLD) return null;
+  const window = Math.min(size, RULE_RUNS_TAIL_WINDOW);
+  const handle = await open(path, 'r');
+  try {
+    const buf = Buffer.alloc(window);
+    await handle.read(buf, 0, window, size - window);
+    const lines = buf.toString('utf8').split('\n');
+    lines.shift(); // first line is almost surely cut at the window boundary
+    const out: T[] = [];
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const v: unknown = JSON.parse(t);
+        if (guard(v)) out.push(v);
+      } catch {
+        // a torn or foreign line is skipped, like the whole-file reader does
+      }
+    }
+    return out.slice(-limit);
+  } finally {
+    await handle.close();
+  }
 }
 
 /** Is `now` (local HH:MM) within [start,end], wrapping past midnight (e.g. 22:00→06:00)? */
