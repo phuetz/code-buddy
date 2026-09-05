@@ -27,6 +27,13 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 | 1.4 | peer.tool.invoke | symlink interne → `/etc` (existant + pendant) | REFUSÉE | — | (garde existante) | audit-secaudit-peer-traversal |
 | 1.5 | peer.tool.invoke | alias non-fleetSafe → exécuteur | REFUSÉE (`UNKNOWN_PEER_TOOL`) | — | (par conception) | (analyse) |
 | 1.6 | peer.tool.invoke | needs_approval sans confirmant (headless) | REFUSÉE (fail-closed) | — | (garde existante) | audit-secaudit-peer-needs-approval |
+| 2.1 | firewall skills | jailbreak/prompt-override via homoglyphe cyrillique | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
+| 2.2 | firewall skills | prompt-override via césure inter-lignes | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
+| 2.3 | firewall skills | jailbreak via zero-width / soft-hyphen | REFUSÉE (partiel avant, robuste après) | B | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
+| 2.4 | gate authored (tools) | outil authored lit `~/.ssh/id_rsa` en dur + stdout | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-authored-secret-read |
+| 2.5 | gate authored (tools) | outil authored lit `/etc/shadow` / `.aws/credentials` / `.env` | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-authored-secret-read |
+| 2.6 | runtime authored | `child_process`/`execSync`/`spawn` + réseau (exfiltration) | REFUSÉE (gate statique) | — | (garde existante) | authored-artifact-gate (existant) |
+| 2.7 | runtime authored | `isolate` confine-t-il les lectures par chemin absolu ? | RÉSIDU C (non confiné ; egress bloqué) | C | (documenté, non fermé) | audit-secaudit-authored-secret-read (résidu) |
 
 ---
 
@@ -37,6 +44,19 @@ Les trois gardes tiennent, dans l'ordre : allowlist (match exact, `permissions.t
 Profondeur (`CODEBUDDY_PEER_MAX_DEPTH`) et `role=leaf` sont des gardes **anti-boucle coopératives** (le champ `depth` est fourni par l'appelant, `leaf` tague sans bloquer) — documentées comme telles, ce ne sont pas des frontières de sécurité, et la vraie frontière (les 3 gardes) tient. Aucun correctif nécessaire.
 
 Preuves ajoutées (refus) : `tests/fleet/audit-secaudit-peer-traversal.test.ts` (7) + `tests/fleet/audit-secaudit-peer-needs-approval.test.ts` (1).
+
+## Surface 2 — bac à sable natif + outils/skills authored : 2 failles B fermées + 1 résidu C
+
+### 2a. Firewall des skills contourné par obfuscation — FAILLE B, fermée
+Le gate des stratégies a été durci le 04/09 (`normalizeDirectiveText` : zero-width, soft-hyphen, césures, NFKC, homoglyphes cyrilliques). Le firewall des skills (`src/security/skill-scanner.ts`) ne faisait AUCUNE de ces normalisations : `scanFile` teste les patterns sur la ligne brute, et `collectPromptInjectionFindings` sur le contenu brut. Un skill est INJECTÉ dans le contexte de l'agent — un LLM lit "ignore all previous instructions" ou "jailbreak" même écrit avec un homoglyphe cyrillique (`ignоre`), un zero-width, ou une césure (`jail-\nbreak`), mais le regex les manquait. Prouvé rouge (homoglyphe + césure passaient en verdict `allow`).
+**Correctif** : nouveau helper partagé `src/security/text-deobfuscation.ts` (`deobfuscateText`, copie indépendante de la logique stratégies — la zone self-improvement est réservée à une autre lane), appliqué à la passe prompt-injection full-document. La passe brute reste (numéros de ligne exacts) ; la passe normalisée ajoute les captures obfusquées (ligne 1, description « (obfuscated) »). Vert : 6/6.
+
+### 2b. Outil authored lisant un secret par chemin absolu — FAILLE B, fermée
+Un outil authored tourne « lit l'entrée depuis l'env, imprime sur stdout », sandboxé par `authored-tool-runtime.ts` (`envMode:'isolate'` → env scrubbé, HOME redirigé). Mais `inspectAuthoredCode` bloque écritures + réseau + `child_process`/`exec` (donc pas d'exfiltration directe) **sans bloquer les LECTURES**, et un chemin ABSOLU en dur (`/home/x/.ssh/id_rsa`, `/etc/shadow`, `.aws/credentials`, `.env`) contourne la redirection HOME. Prouvé rouge : `inspectAuthoredCode` renvoyait `ok=true` pour un tel outil ; et le runtime `isolate` lit bien un fichier hors du runDir (test résidu).
+**Correctif** : pattern `sensitive-credential-path` (severity high, `appliesTo:['code']`) dans `src/security/dangerous-patterns.ts` — bloque les références aux chemins d'identifiants bien connus. Fail-closed, ciblé (n'affecte pas un outil qui lit `/var/log/app.log` ou calcule sur son entrée). Vert : 6/6 gate + 1 résidu documenté.
+
+### 2c. Résidu C — le runtime `isolate` ne confine pas les lectures FS
+`envMode:'isolate'` ne fait que scrubber l'env et rediriger HOME : aucun confinement FS kernel (bwrap/Landlock) dans ce chemin. Un chemin absolu **calculé/injecté au runtime** (via l'entrée de l'outil) peut donc encore lire un fichier arbitraire. Mitigé par : (1) l'egress réseau/sous-processus bloqué (le secret ne sort pas) ; (2) l'entrée provient de l'agent lui-même, pas d'un pair distant ; (3) le nouveau gate statique ferme le cas réaliste (chemin en dur). Le confinement FS runtime complet (activer `CODEBUDDY_NATIVE_SANDBOX` pour ce chemin, ou un allowlist de lecture) touche `authored-tool-runtime.ts`/`execute-code-runner.ts` — recommandé à la lane self-improvement (zone réservée), non fermé ici. Gravité C (défense en profondeur).
 
 ## Détail par surface (suite)
 

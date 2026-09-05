@@ -218,6 +218,13 @@ export const DANGEROUS_CODE_PATTERNS: DangerousPattern[] = [
   // --- Hardcoded secrets ---
   { pattern: /(?:password|passwd|pwd|secret|token|api_key|apikey)\s*[:=]\s*['"][^'"]{8,}['"]/i, severity: 'high', description: 'Hardcoded secret in code', name: 'hardcoded-secret', category: 'secret_exposure', appliesTo: ['code'] },
   { pattern: /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----/, severity: 'critical', description: 'Private key in code', name: 'private-key', category: 'secret_exposure', appliesTo: ['code', 'skill'] },
+  // SECAUDIT 2026-09-05: an authored tool ("read input from env, print to
+  // stdout") has no reason to touch a credential file. The runtime redirects
+  // HOME away from the real one, but a HARDCODED absolute path defeats that;
+  // egress is already blocked (network + child_process), yet reading a secret
+  // into the agent's own context still defeats the documented env-isolation.
+  // Fail closed on any reference to a well-known credential/secret path.
+  { pattern: /(?:\.ssh\/|\bid_rsa\b|\bid_ed25519\b|\bid_ecdsa\b|\.aws\/(?:credentials|config)|\.gnupg\/|\.netrc\b|\.kube\/config|\.docker\/config|\/etc\/shadow\b|\/etc\/gshadow\b|\.codebuddy\/(?:auth|secret|[^'"`\s]*\.env)|(?:^|['"`/\s])\.env(?:\.[a-z]+)?['"`\s)]|\baws_secret_access_key\b)/i, severity: 'high', description: 'References a well-known credential/secret path', name: 'sensitive-credential-path', category: 'secret_exposure', appliesTo: ['code'] },
 
   // --- Unsafe deserialization ---
   { pattern: /\bpickle\.loads?\b/, severity: 'high', description: 'Python pickle deserialization', name: 'pickle-loads', category: 'code_execution', appliesTo: ['code'] },
