@@ -165,7 +165,17 @@ export async function executeSensoryAction(action: SensoryAction, ctx: SensoryEv
       const msg =
         action.message ??
         `${ctx.kind ?? 'event'}${ctx.camera ? ` (${ctx.camera})` : ''}${ctx.description ? `: ${ctx.description}` : ''}`;
-      await sendTelegramAlert(msg, action.photo === false ? undefined : ctx.imagePath);
+      // BUG-02: propagate the real delivery result. sendTelegramAlert returns false when the
+      // token/chat is unconfigured or delivery fails — a silent {ok:true} makes the audit lie
+      // and leaves the operator unwarned. Fail closed + log locally as a fallback.
+      const delivered = await sendTelegramAlert(
+        msg,
+        action.photo === false ? undefined : ctx.imagePath,
+      );
+      if (!delivered) {
+        logger.warn(`[sensory] alert NOT delivered (Telegram unconfigured or failed): ${msg}`);
+        return { ok: false, detail: 'telegram alert unconfigured or delivery failed' };
+      }
       return { ok: true };
     }
     case 'agent':
