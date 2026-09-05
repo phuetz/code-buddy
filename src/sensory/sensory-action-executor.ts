@@ -504,9 +504,14 @@ export async function executeSensoryAction(
     case 'kill_process':
       return runKillProcess(action, ctx, deps);
     case 'alert': {
-      const msg =
+      const base =
         action.message ??
         `${ctx.kind ?? 'event'}${ctx.camera ? ` (${ctx.camera})` : ''}${ctx.description ? `: ${ctx.description}` : ''}`;
+      // A runaway alert that does not name the process is useless to the operator (2026-09-05:
+      // seven « processus emballé » pings with no pid). Append a sanitized summary of the
+      // system percept — numbers as numbers, comm reduced to a safe token, never interpolated
+      // into anything but this text.
+      const msg = `${base}${describeSystemPercept(ctx)}`;
       // BUG-02: propagate the real delivery result. sendTelegramAlert returns false when the
       // token/chat is unconfigured or delivery fails — a silent {ok:true} makes the audit lie
       // and leaves the operator unwarned. Fail closed + log locally as a fallback.
@@ -525,6 +530,33 @@ export async function executeSensoryAction(
     default:
       return { ok: false, detail: 'unknown action type' };
   }
+}
+
+/**
+ * Short operator-facing tail for `system` percepts (`process_runaway`, `process_remediated`,
+ * `resource_threshold`…): « — bash (pid 12345, 99,9 %, 2 h 31) ». Empty for other modalities.
+ */
+export function describeSystemPercept(ctx: SensoryEventContext): string {
+  if (ctx.modality !== 'system' || !ctx.payload) return '';
+  const p = ctx.payload;
+  const parts: string[] = [];
+  const comm = typeof p.comm === 'string' ? p.comm.replace(/[^\w.+-]/g, '').slice(0, 32) : '';
+  if (comm) parts.push(comm);
+  const pid = typeof p.pid === 'number' && Number.isFinite(p.pid) ? Math.trunc(p.pid) : null;
+  if (pid !== null) parts.push(`pid ${pid}`);
+  const pcpu = typeof p.pcpuTotal === 'number' ? p.pcpuTotal : typeof p.pcpu === 'number' ? p.pcpu : null;
+  if (pcpu !== null && Number.isFinite(pcpu)) parts.push(`${pcpu.toFixed(1).replace('.', ',')} %`);
+  const etime = typeof p.etimeSec === 'number' && Number.isFinite(p.etimeSec) ? Math.trunc(p.etimeSec) : null;
+  if (etime !== null) {
+    const h = Math.floor(etime / 3600);
+    const m = Math.floor((etime % 3600) / 60);
+    parts.push(h > 0 ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`);
+  }
+  for (const key of ['diskPct', 'rssMb', 'vramPct'] as const) {
+    const v = p[key];
+    if (typeof v === 'number' && Number.isFinite(v)) parts.push(`${key} ${v}`);
+  }
+  return parts.length ? ` — ${parts.join(', ')}` : '';
 }
 
 /** Exported for tests. */
