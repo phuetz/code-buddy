@@ -1923,6 +1923,22 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             sensoryTeardown.push(() => heart.unregister('system-vitals'));
             logger.info(`System vitals: Enabled (CODEBUDDY_SYSTEM_VITALS) - heartbeat-paced resource percepts every ${vitalsEvery} beats`);
           }
+          // Schedule ticks (opt-in) — emit a `time/tick` percept each pass so rules can fire at a
+          // time of day (match.kind:'tick' + between/filters on hhmm) with no busy loop. The
+          // heartbeat is the clock. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_SCHEDULE_TICKS === 'true') {
+            const ticksEvery = Math.max(1, Number(process.env.CODEBUDDY_SCHEDULE_TICKS_EVERY ?? 60));
+            heart.register({
+              name: 'schedule-ticks',
+              everyBeats: ticksEvery,
+              handler: async () => {
+                const { runSchedulePass } = await import('../sensory/schedule-emitter.js');
+                runSchedulePass();
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('schedule-ticks'));
+            logger.info(`Schedule ticks: Enabled (CODEBUDDY_SCHEDULE_TICKS) - time/tick percept every ${ticksEvery} beats`);
+          }
           // Episodic journal (opt-in) — consolidate the heard DIALOGUE into "what we talked about"
           // so the arrival opener / follow-ups can reference it. Distinct from dreaming (sensor stats).
           if (process.env.CODEBUDDY_EPISODE_JOURNAL === 'true') {
