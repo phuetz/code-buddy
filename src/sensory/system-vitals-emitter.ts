@@ -4,29 +4,28 @@
  * on resource pressure the same way they act on camera/mic/screen events.
  *
  * This is the event-driven replacement for busy-loop monitoring. It measures NOTHING
- * new: it reads memory-monitor / gpu-monitor / fleet-load / disk-guard and the OS
- * process table, then emits `sensory:perception` events with `modality:'system'`.
- * The heartbeat scheduler's per-organ `inFlight` lock guarantees a slow pass never
- * overlaps itself — one sample per beat, never a loop.
+ * new for the resource snapshot: it reads memory-monitor / gpu-monitor / fleet-load /
+ * disk-guard, then emits `sensory:perception` events with `modality:'system'`. The
+ * heartbeat scheduler's per-organ `inFlight` lock guarantees a slow pass never overlaps
+ * itself — one sample per beat, never a loop.
  *
  * The "runaway process" guard is the direct fix for the 2026-09-05 incident (three
- * `bash` children pinned at 99.9 % CPU for 2 h 30, left by an agent): a child above
- * `CODEBUDDY_RUNAWAY_CPU_PCT` (default 90) for `CODEBUDDY_RUNAWAY_PASSES` consecutive
- * passes (default 3) emits a `process_runaway` percept a rule can turn into an alert
- * or a bounded `kill <pid>`.
+ * `bash` loops pinned at 99.9 % CPU for 2 h 30, left by an agent). CRITICAL (audit BUG-01):
+ * `ps -o pcpu` is the LIFETIME average (cputime/realtime), NOT the instantaneous rate — an
+ * old process that suddenly spins takes hours to cross 90 %. So we compute INSTANTANEOUS CPU
+ * from the delta of `/proc/<pid>/stat` (utime+stime jiffies) between two consecutive passes:
+ * `(Δjiffies / clk_tck) / Δwallclock_sec × 100`. A pid seen for the first time has no delta
+ * (it does not count that pass). PID reuse is rejected by comparing the process start time.
  *
- * Injection follows `episodic-journal.ts` `runEpisodeConsolidation`: every reader is
- * a dep with a real default, so the pass is hermetically testable. Never throws.
+ * Injection follows `episodic-journal.ts` `runEpisodeConsolidation`: every reader is a dep
+ * with a real default, so the pass is hermetically testable. Never throws.
  *
  * @module sensory/system-vitals-emitter
  */
-import { execFile } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { promisify } from 'node:util';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
-
-const execFileAsync = promisify(execFile);
 
 /** Perceptual kinds this emitter can raise (modality is always `system`). */
 export type SystemVitalsKind =
@@ -38,16 +37,30 @@ export type SystemVitalsKind =
 /** How wide the runaway-process scan reaches. */
 export type RunawayScope = 'server' | 'user';
 
-/** One process observed in the OS process table. */
-export interface ChildProcInfo {
+/**
+ * One raw process sample. CPU is carried as CUMULATIVE jiffies (utime+stime), NOT a percentage:
+ * the pass derives the instantaneous rate from the delta between passes (audit BUG-01).
+ */
+export interface ProcSample {
   pid: number;
   /** Parent pid — carried into the alert so the operator knows the tree. */
   ppid?: number;
   comm: string;
-  /** Instantaneous CPU percentage (0–100+ across cores, as `ps` reports it). */
-  cpuPct: number;
+  /** Cumulative CPU time in clock ticks (utime+stime from /proc/<pid>/stat). */
+  cpuJiffies: number;
+  /** Process start time in jiffies (field 22) — identity guard against PID reuse (BUG-05). */
+  startTime: number;
   /** Elapsed wall-clock seconds since the process started. */
   etimeSec: number;
+}
+
+/** Per-pid snapshot kept between passes to compute the instantaneous CPU delta. */
+interface PrevProcSnapshot {
+  cpuJiffies: number;
+  startTime: number;
+  etimeSec: number;
+  /** Monotonic-ish wall clock (ms) when this snapshot was taken. */
+  sampledAt: number;
 }
 
 /** Normalized resource snapshot. Any field may be null/undefined when unavailable. */
@@ -76,13 +89,24 @@ export interface SystemVitalsDeps {
   readFleet?: () => { utilization: number | null; saturated: boolean };
   /** Read disk free space for a path. Default: disk-guard `getFreeSpaceInfo(cwd)`. */
   readDisk?: () => { freePercent: number; freeBytes: number } | null;
-  /** Read the candidate processes for the runaway scan. Default: `ps`, scoped by `scope`.
-   *  `server` = descendants of process.pid; `user` = all processes of the current uid. */
-  readChildren?: (scope: RunawayScope) => Promise<ChildProcInfo[]> | ChildProcInfo[];
+  /**
+   * Read the candidate processes for the runaway scan (raw jiffies). Default: `/proc`, scoped by
+   * `scope` (`server` = descendants of process.pid; `user` = all processes of the current uid).
+   * Returns `null` to signal a READ FAILURE — the pass then skips the runaway section WITHOUT
+   * purging its consecutive counters (audit BUG-06). An empty array means "no processes", which
+   * DOES purge dead pids.
+   */
+  readProcesses?: (scope: RunawayScope) => Promise<ProcSample[] | null> | ProcSample[] | null;
   /** Emit a percept. Default: direct `getGlobalEventBus().emit('sensory:perception', …)`. */
   emit?: (kind: SystemVitalsKind, salience: number, payload: Record<string, unknown>) => void;
   /** Consecutive-pass counter map keyed by pid. Default: module singleton. */
   runawayCounters?: Map<number, number>;
+  /** Previous per-pid CPU snapshot map. Default: module singleton. */
+  runawayPrev?: Map<number, PrevProcSnapshot>;
+  /** Wall clock in ms. Default: `Date.now()`. */
+  now?: () => number;
+  /** Clock ticks per second (sysconf _SC_CLK_TCK). Default: CODEBUDDY_CLK_TCK or 100. */
+  clkTck?: number;
   /** Override thresholds (else read from env at call time). */
   runawayCpuPct?: number;
   runawayPasses?: number;
@@ -93,12 +117,14 @@ export interface SystemVitalsDeps {
   ignoreComm?: string[];
 }
 
-// Module-level runaway state so consecutive-pass counting survives between beats.
+// Module-level runaway state so consecutive-pass counting + CPU deltas survive between beats.
 const moduleRunawayCounters = new Map<number, number>();
+const moduleRunawayPrev = new Map<number, PrevProcSnapshot>();
 
 /** Reset the module runaway state (tests). */
 export function _resetSystemVitalsState(): void {
   moduleRunawayCounters.clear();
+  moduleRunawayPrev.clear();
 }
 
 function envNum(name: string, fallback: number): number {
@@ -158,6 +184,8 @@ async function defaultReadDisk(): Promise<{ freePercent: number; freeBytes: numb
   }
 }
 
+// ── comm ignore list (BUG-08: distinguish undefined from empty; BUG-09: exact match) ─────
+
 /** comm values expected to run hot legitimately — never raise process_runaway on these. */
 const DEFAULT_IGNORE_COMM = [
   'ffmpeg',
@@ -172,98 +200,144 @@ const DEFAULT_IGNORE_COMM = [
   'esbuild',
 ];
 
+/**
+ * Resolve the ignore list. An EXPLICITLY-SET env var (even "") wins over the defaults, so
+ * `CODEBUDDY_RUNAWAY_IGNORE_COMM=""` means "ignore nothing" (audit BUG-08). Only a fully unset
+ * source falls back to the defaults.
+ */
+function resolveIgnoreComm(deps: SystemVitalsDeps): string[] {
+  let raw: string[] | undefined;
+  if (deps.ignoreComm !== undefined) {
+    raw = deps.ignoreComm;
+  } else if (process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM !== undefined) {
+    raw = process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM.split(',');
+  } else {
+    raw = DEFAULT_IGNORE_COMM;
+  }
+  return raw.map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+/** BUG-09: EXACT comm match only — `startsWith` would immunize `nodemapper`, `python_loop`, … */
+function isIgnoredComm(comm: string, ignore: string[]): boolean {
+  const c = comm.trim().toLowerCase();
+  if (!c) return false;
+  return ignore.includes(c);
+}
+
 function resolveScope(deps: SystemVitalsDeps): RunawayScope {
   if (deps.scope) return deps.scope;
   return process.env.CODEBUDDY_RUNAWAY_SCOPE === 'user' ? 'user' : 'server';
 }
 
-function resolveIgnoreComm(deps: SystemVitalsDeps): string[] {
-  const raw = deps.ignoreComm ?? process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM?.split(',');
-  const list = (raw ?? DEFAULT_IGNORE_COMM).map((s) => s.trim().toLowerCase()).filter(Boolean);
-  return list.length ? list : DEFAULT_IGNORE_COMM;
+function resolveClkTck(deps: SystemVitalsDeps): number {
+  if (deps.clkTck && deps.clkTck > 0) return deps.clkTck;
+  const env = Number(process.env.CODEBUDDY_CLK_TCK);
+  return Number.isFinite(env) && env > 0 ? env : 100;
 }
 
-/** True when `comm` is on the ignore list (exact or prefix match, e.g. python3 vs python). */
-function isIgnoredComm(comm: string, ignore: string[]): boolean {
-  const c = comm.trim().toLowerCase();
-  if (!c) return false;
-  return ignore.some((entry) => c === entry || c.startsWith(entry));
+// ── default /proc reader — raw cumulative jiffies + start time (no ps average) ───────────
+
+/** Parse one `/proc/<pid>/stat` line into a ProcSample (without etimeSec, filled by caller). */
+function parseStat(pid: number, content: string): Omit<ProcSample, 'etimeSec'> | null {
+  // comm (field 2) is wrapped in parens and may itself contain spaces/parens → split on the
+  // LAST ')' so the numeric fields after it align.
+  const open = content.indexOf('(');
+  const close = content.lastIndexOf(')');
+  if (open < 0 || close < 0 || close < open) return null;
+  const comm = content.slice(open + 1, close);
+  const after = content.slice(close + 1).trim().split(/\s+/);
+  // after[0]=state(3), after[1]=ppid(4); utime(14)=after[11], stime(15)=after[12], starttime(22)=after[19]
+  const ppid = Number(after[1]);
+  const utime = Number(after[11]);
+  const stime = Number(after[12]);
+  const startTime = Number(after[19]);
+  if (!Number.isFinite(utime) || !Number.isFinite(stime) || !Number.isFinite(startTime)) return null;
+  return {
+    pid,
+    ppid: Number.isFinite(ppid) ? ppid : undefined,
+    comm,
+    cpuJiffies: utime + stime,
+    startTime,
+  };
 }
 
 /**
- * Default process reader: one `ps` snapshot. `scope:'server'` filters to descendants of THIS
- * process; `scope:'user'` returns every process of the current uid (catches runaway loops born
- * OUTSIDE the server, e.g. a CLI session — the 05/09 incident tree). Linux `etimes` = elapsed
- * seconds. Never throws — returns [] on any failure.
+ * Default reader: read `/proc` directly for cumulative CPU jiffies + start time. `scope:'server'`
+ * keeps descendants of process.pid; `scope:'user'` keeps every process of the current uid (the
+ * orphan-safe mode that catches loops born outside the server tree). Returns `null` on total
+ * failure so the pass skips WITHOUT purging counters (BUG-06). Never throws.
  */
-async function defaultReadChildren(scope: RunawayScope): Promise<ChildProcInfo[]> {
+function defaultReadProcesses(scope: RunawayScope): ProcSample[] | null {
+  let uptimeSec: number;
+  let clkTck: number;
   try {
-    const args =
-      scope === 'user'
-        ? ['-u', String(process.getuid ? process.getuid() : ''), '-o', 'pid=,ppid=,pcpu=,etimes=,comm=']
-        : ['-eo', 'pid=,ppid=,pcpu=,etimes=,comm='];
-    const { stdout } = await execFileAsync('ps', args, {
-      timeout: 5000,
-      maxBuffer: 4 * 1024 * 1024,
-    });
-    interface Row {
-      pid: number;
-      ppid: number;
-      cpuPct: number;
-      etimeSec: number;
-      comm: string;
-    }
-    const rows: Row[] = [];
-    for (const line of stdout.split('\n')) {
-      const t = line.trim();
-      if (!t) continue;
-      // pid ppid pcpu etimes comm(may contain spaces)
-      const m = t.match(/^(\d+)\s+(\d+)\s+([\d.]+)\s+(\d+)\s+(.*)$/);
-      if (!m) continue;
-      rows.push({
-        pid: Number(m[1]),
-        ppid: Number(m[2]),
-        cpuPct: Number(m[3]),
-        etimeSec: Number(m[4]),
-        comm: (m[5] ?? '').trim(),
-      });
-    }
-    const toInfo = (r: Row): ChildProcInfo => ({
-      pid: r.pid,
-      ppid: r.ppid,
-      comm: r.comm,
-      cpuPct: r.cpuPct,
-      etimeSec: r.etimeSec,
-    });
+    uptimeSec = Number(readFileSync('/proc/uptime', 'utf8').split(/\s+/)[0]);
+    clkTck = Number(process.env.CODEBUDDY_CLK_TCK) > 0 ? Number(process.env.CODEBUDDY_CLK_TCK) : 100;
+    if (!Number.isFinite(uptimeSec)) return null;
+  } catch {
+    return null; // /proc unavailable (non-Linux, container without procfs) → skip, don't purge.
+  }
 
-    // `user` scope: every process of the uid (catches loops born outside the server tree).
-    if (scope === 'user') {
-      return rows.filter((r) => r.pid !== process.pid).map(toInfo);
-    }
+  let entries: string[];
+  try {
+    entries = readdirSync('/proc');
+  } catch {
+    return null;
+  }
 
-    // `server` scope: walk descendants of our pid only.
-    const byPpid = new Map<number, Row[]>();
-    for (const r of rows) {
-      const arr = byPpid.get(r.ppid) ?? [];
-      arr.push(r);
-      byPpid.set(r.ppid, arr);
-    }
-    const out: ChildProcInfo[] = [];
-    const seen = new Set<number>();
-    const stack = [process.pid];
-    while (stack.length) {
-      const parent = stack.pop() as number;
-      for (const child of byPpid.get(parent) ?? []) {
-        if (seen.has(child.pid)) continue;
-        seen.add(child.pid);
-        out.push(toInfo(child));
-        stack.push(child.pid);
+  const myUid = process.getuid ? process.getuid() : -1;
+  const raw: Array<Omit<ProcSample, 'etimeSec'> & { startTime: number }> = [];
+  for (const name of entries) {
+    if (!/^\d+$/.test(name)) continue;
+    const pid = Number(name);
+    // user scope: keep only the current uid's processes (per-pid stat can vanish → skip).
+    if (scope === 'user' && myUid >= 0) {
+      try {
+        if (statSync(`/proc/${pid}`).uid !== myUid) continue;
+      } catch {
+        continue;
       }
     }
-    return out;
-  } catch {
-    return [];
+    let content: string;
+    try {
+      content = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch {
+      continue; // process exited between readdir and read — normal race, skip.
+    }
+    const parsed = parseStat(pid, content);
+    if (parsed) raw.push(parsed);
   }
+
+  const withEtime = (s: Omit<ProcSample, 'etimeSec'>): ProcSample => ({
+    ...s,
+    etimeSec: Math.max(0, Math.round(uptimeSec - s.startTime / clkTck)),
+  });
+
+  if (scope === 'user') {
+    return raw.filter((r) => r.pid !== process.pid).map(withEtime);
+  }
+
+  // server scope: walk descendants of our pid.
+  const byPpid = new Map<number, typeof raw>();
+  for (const r of raw) {
+    const key = r.ppid ?? -1;
+    const arr = byPpid.get(key) ?? [];
+    arr.push(r);
+    byPpid.set(key, arr);
+  }
+  const out: ProcSample[] = [];
+  const seen = new Set<number>();
+  const stack = [process.pid];
+  while (stack.length) {
+    const parent = stack.pop() as number;
+    for (const child of byPpid.get(parent) ?? []) {
+      if (seen.has(child.pid)) continue;
+      seen.add(child.pid);
+      out.push(withEtime(child));
+      stack.push(child.pid);
+    }
+  }
+  return out;
 }
 
 function defaultEmit(
@@ -288,15 +362,18 @@ function clampSalience(n: number): number {
 }
 
 /**
- * One system-vitals pass: read the existing monitors, emit a `resource_threshold`
- * pulse carrying the full snapshot (rules attach numeric thresholds to it), then
- * raise the specific `disk_low` / `fleet_saturated` / `process_runaway` percepts.
+ * One system-vitals pass: read the existing monitors, emit a `resource_threshold` pulse carrying
+ * the full snapshot (rules attach numeric thresholds to it), then raise the specific `disk_low` /
+ * `fleet_saturated` / `process_runaway` percepts.
  *
  * Returns the emitted kinds (for tests/observability). Never throws.
  */
 export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<SystemVitalsKind[]> {
   const emit = deps.emit ?? defaultEmit;
   const counters = deps.runawayCounters ?? moduleRunawayCounters;
+  const prev = deps.runawayPrev ?? moduleRunawayPrev;
+  const now = (deps.now ?? Date.now)();
+  const clkTck = resolveClkTck(deps);
   const cpuThreshold = deps.runawayCpuPct ?? envNum('CODEBUDDY_RUNAWAY_CPU_PCT', 90);
   const runawayPasses = deps.runawayPasses ?? envInt('CODEBUDDY_RUNAWAY_PASSES', 3);
   const diskLowPct = deps.diskLowPct ?? envNum('CODEBUDDY_DISK_LOW_PCT', 90);
@@ -371,8 +448,6 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
     };
 
     // ── resource_threshold pulse (the percept rules threshold against) ───────
-    // Salience scales with the worst normalized pressure so a rule can also gate
-    // on salience if it wants; the numbers themselves live in the payload.
     const pressure = Math.max(
       diskPct ?? 0,
       vramPct ?? 0,
@@ -393,45 +468,79 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
       emitted.push('fleet_saturated');
     }
 
-    // ── runaway process guard (consecutive-pass CPU counter per pid) ─────────
-    // Scope: 'server' = descendants of buddy server; 'user' = ALL uid processes
-    // (catches loops born outside the server tree — the 05/09 incident case).
-    let children: ChildProcInfo[] = [];
+    // ── runaway process guard: INSTANTANEOUS CPU via jiffies delta ───────────
+    // Scope: 'server' = descendants of buddy server; 'user' = ALL uid processes (catches
+    // orphans reparented to PID 1 — the 05/09 incident case).
+    let samples: ProcSample[] | null;
     try {
-      children = await (deps.readChildren ?? defaultReadChildren)(scope);
+      samples = await (deps.readProcesses ?? defaultReadProcesses)(scope);
     } catch {
-      children = [];
+      samples = null;
     }
-    const livePids = new Set<number>();
-    for (const child of children) {
-      if (!Number.isFinite(child.pid)) continue;
-      // Never flag a legitimately hot process (ffmpeg, ComfyUI python, build node…).
-      if (isIgnoredComm(child.comm, ignoreComm)) continue;
-      livePids.add(child.pid);
-      if (Number.isFinite(child.cpuPct) && child.cpuPct >= cpuThreshold) {
-        const next = (counters.get(child.pid) ?? 0) + 1;
-        counters.set(child.pid, next);
-        if (next >= runawayPasses) {
-          emit('process_runaway', 200, {
-            pid: child.pid,
-            ppid: child.ppid,
-            comm: child.comm,
-            pcpu: child.cpuPct,
-            etimeSec: child.etimeSec,
-            passes: next,
-            cpuThreshold,
-            scope,
-          });
-          emitted.push('process_runaway');
+
+    // BUG-06: a read FAILURE (null) skips the section WITHOUT purging counters/prev.
+    if (samples !== null) {
+      const livePids = new Set<number>();
+      for (const s of samples) {
+        if (!Number.isFinite(s.pid)) continue;
+        // BUG-09: never flag a legitimately-hot process (exact comm match).
+        if (isIgnoredComm(s.comm, ignoreComm)) continue;
+        livePids.add(s.pid);
+
+        const before = prev.get(s.pid);
+        // BUG-05: PID reuse — a different startTime (or a process that got "younger") is a NEW
+        // process on the same pid → reset, establish a fresh baseline, do not count this pass.
+        const sameProcess =
+          !!before && before.startTime === s.startTime && s.etimeSec + 2 >= before.etimeSec;
+
+        let cpuPct: number | null = null;
+        if (sameProcess) {
+          const dJiffies = s.cpuJiffies - before.cpuJiffies;
+          const dtSec = (now - before.sampledAt) / 1000;
+          if (dtSec > 0 && dJiffies >= 0) {
+            cpuPct = (dJiffies / clkTck / dtSec) * 100;
+          }
+        } else {
+          // First sighting or PID reuse → no valid delta; drop any stale counter.
+          counters.delete(s.pid);
         }
-      } else {
-        // Below threshold this pass → not consecutive anymore.
-        counters.delete(child.pid);
+
+        // Record this pass's baseline for the next delta.
+        prev.set(s.pid, {
+          cpuJiffies: s.cpuJiffies,
+          startTime: s.startTime,
+          etimeSec: s.etimeSec,
+          sampledAt: now,
+        });
+
+        if (cpuPct !== null && cpuPct >= cpuThreshold) {
+          const next = (counters.get(s.pid) ?? 0) + 1;
+          counters.set(s.pid, next);
+          if (next >= runawayPasses) {
+            emit('process_runaway', 200, {
+              pid: s.pid,
+              ppid: s.ppid,
+              comm: s.comm,
+              pcpu: Math.round(cpuPct * 10) / 10,
+              etimeSec: s.etimeSec,
+              passes: next,
+              cpuThreshold,
+              scope,
+            });
+            emitted.push('process_runaway');
+          }
+        } else if (cpuPct !== null) {
+          // Below threshold this pass → not consecutive anymore.
+          counters.delete(s.pid);
+        }
       }
-    }
-    // Prune counters for pids that have vanished from the table.
-    for (const pid of [...counters.keys()]) {
-      if (!livePids.has(pid)) counters.delete(pid);
+      // Prune counters + prev for pids that vanished from the table (only when the read succeeded).
+      for (const pid of [...counters.keys()]) {
+        if (!livePids.has(pid)) counters.delete(pid);
+      }
+      for (const pid of [...prev.keys()]) {
+        if (!livePids.has(pid)) prev.delete(pid);
+      }
     }
   } catch (err) {
     logger.warn(

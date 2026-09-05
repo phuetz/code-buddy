@@ -1,14 +1,15 @@
 /**
- * System vitals emitter (Phase 1) — hermetic, no hardware, no real `ps`.
- * Proves: runaway detection after N CONSECUTIVE passes, no premature/under-threshold
- * emission, disk_low / fleet_saturated convenience percepts, the resource_threshold
- * pulse, and that a below-threshold pass resets the consecutive counter.
+ * System vitals emitter (Phase 1 + audit fixes) — hermetic, no hardware, no real /proc.
+ * The runaway tests exercise the REAL instantaneous-CPU semantics: they inject two-snapshot
+ * jiffies deltas (not a pre-baked cpuPct), so they would FAIL against the old `ps -o pcpu`
+ * lifetime-average approach (audit BUG-01). Also covers PID reuse (BUG-05), no-purge on read
+ * failure (BUG-06), ignore-list emptying (BUG-08) and exact comm match (BUG-09).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   runSystemVitalsPass,
   _resetSystemVitalsState,
-  type ChildProcInfo,
+  type ProcSample,
   type SystemVitalsDeps,
   type SystemVitalsKind,
 } from '../../src/sensory/system-vitals-emitter.js';
@@ -19,6 +20,8 @@ interface Emitted {
   salience: number;
   payload: Record<string, unknown>;
 }
+
+const CLK = 100; // clock ticks per second for the tests
 
 function baseDeps(over: Partial<SystemVitalsDeps> = {}): {
   deps: SystemVitalsDeps;
@@ -31,12 +34,51 @@ function baseDeps(over: Partial<SystemVitalsDeps> = {}): {
     readGpu: async () => null,
     readFleet: () => ({ utilization: null, saturated: false }),
     readDisk: () => ({ freePercent: 80, freeBytes: 8_000_000_000 }),
-    readChildren: () => [],
+    readProcesses: () => [],
     emit: (kind, salience, payload) => emitted.push({ kind, salience, payload }),
     runawayCounters: new Map<number, number>(),
+    runawayPrev: new Map(),
+    clkTck: CLK,
     ...over,
   };
   return { deps, emitted };
+}
+
+/**
+ * A single mutable process whose cumulative CPU jiffies + wall clock advance between passes,
+ * modeling REAL /proc sampling. `cpuFraction` is the instantaneous CPU used over the interval.
+ */
+function makeSpinScenario(opts: {
+  pid?: number;
+  comm?: string;
+  startTime?: number;
+  etimeStart?: number;
+}) {
+  let clock = 1_000_000; // ms
+  let jiffies = 3_000; // cumulative CPU jiffies so far (could be large for an "old" process)
+  let etime = opts.etimeStart ?? 7200; // seconds of life (default: a 2h-old process)
+  let startTime = opts.startTime ?? 500;
+  const pid = opts.pid ?? 4242;
+  const comm = opts.comm ?? 'bash';
+
+  return {
+    now: () => clock,
+    readProcesses: (): ProcSample[] => [
+      { pid, ppid: 1, comm, cpuJiffies: jiffies, startTime, etimeSec: etime },
+    ],
+    /** Advance one sampling interval: dtSec of wall time, using cpuFraction of a core. */
+    advance(dtSec: number, cpuFraction: number) {
+      clock += dtSec * 1000;
+      jiffies += Math.round(cpuFraction * CLK * dtSec);
+      etime += dtSec;
+    },
+    /** Simulate PID reuse: a brand-new process takes the same pid. */
+    reuse(newStartTime: number) {
+      startTime = newStartTime;
+      jiffies = 0;
+      etime = 0;
+    },
+  };
 }
 
 beforeEach(() => _resetSystemVitalsState());
@@ -48,116 +90,257 @@ afterEach(() => {
   delete process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM;
 });
 
-describe('runSystemVitalsPass — runaway guard', () => {
-  it('(a) emits process_runaway only after N consecutive over-threshold passes', async () => {
-    const runaway: ChildProcInfo[] = [
-      { pid: 4242, comm: 'bash', cpuPct: 99.9, etimeSec: 9000 },
-    ];
+describe('runaway guard — INSTANTANEOUS CPU via jiffies delta (BUG-01)', () => {
+  it('detects an OLD process that suddenly spins at 100% (the ps-average approach would miss it)', async () => {
+    const scn = makeSpinScenario({ etimeStart: 7200 });
     const { deps, emitted } = baseDeps({
-      readChildren: () => runaway,
+      readProcesses: scn.readProcesses,
+      now: scn.now,
       runawayCpuPct: 90,
-      runawayPasses: 3,
+      runawayPasses: 2,
     });
 
-    await runSystemVitalsPass(deps);
-    await runSystemVitalsPass(deps);
-    // passes 1 and 2: no runaway yet
+    await runSystemVitalsPass(deps); // pass 1: first sighting → baseline, no delta, no count
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
 
-    await runSystemVitalsPass(deps);
-    // pass 3 (== N): runaway fires
-    const runawayEvents = emitted.filter((e) => e.kind === 'process_runaway');
-    expect(runawayEvents).toHaveLength(1);
-    expect(runawayEvents[0]!.payload).toMatchObject({
-      pid: 4242,
-      comm: 'bash',
-      pcpu: 99.9,
-      etimeSec: 9000,
-      passes: 3,
-      scope: 'server',
-    });
-  });
-
-  it('(b) emits nothing runaway below threshold', async () => {
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 7, comm: 'node', cpuPct: 12, etimeSec: 100 }],
-      runawayCpuPct: 90,
-      runawayPasses: 3,
-    });
-    for (let i = 0; i < 5; i++) await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0); // 100% CPU for 1s
+    await runSystemVitalsPass(deps); // pass 2: delta → 100% → count 1
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // pass 3: count 2 == runawayPasses → emit
+    const ev = emitted.filter((e) => e.kind === 'process_runaway');
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.payload).toMatchObject({ pid: 4242, comm: 'bash', scope: 'server', passes: 2 });
+    expect(ev[0]!.payload.pcpu as number).toBeGreaterThanOrEqual(95);
+    expect(ev[0]!.payload.etimeSec as number).toBeGreaterThanOrEqual(7200);
   });
 
-  it('(b) emits nothing runaway with fewer than N passes', async () => {
+  it('does NOT flag a long-lived process with a high lifetime average but currently idle', async () => {
+    const scn = makeSpinScenario({ etimeStart: 7200 });
     const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 8, comm: 'bash', cpuPct: 99, etimeSec: 500 }],
+      readProcesses: scn.readProcesses,
+      now: scn.now,
       runawayCpuPct: 90,
-      runawayPasses: 4,
+      runawayPasses: 2,
     });
-    await runSystemVitalsPass(deps);
-    await runSystemVitalsPass(deps);
-    await runSystemVitalsPass(deps);
+    await runSystemVitalsPass(deps); // baseline
+    for (let i = 0; i < 5; i++) {
+      scn.advance(1, 0.0); // idle
+      await runSystemVitalsPass(deps);
+    }
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
   });
 
-  it('a below-threshold pass RESETS the consecutive counter', async () => {
-    let cpu = 99;
+  it('a first-sighting pass never counts (no delta available yet)', async () => {
+    const scn = makeSpinScenario({});
     const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 9, comm: 'bash', cpuPct: cpu, etimeSec: 500 }],
+      readProcesses: scn.readProcesses,
+      now: scn.now,
       runawayCpuPct: 90,
-      runawayPasses: 3,
+      runawayPasses: 1,
     });
-    await runSystemVitalsPass(deps); // 1
-    await runSystemVitalsPass(deps); // 2
-    cpu = 5; // dips below → resets
-    await runSystemVitalsPass(deps);
-    cpu = 99;
-    await runSystemVitalsPass(deps); // count restarts at 1
-    await runSystemVitalsPass(deps); // 2
+    await runSystemVitalsPass(deps); // even with passes:1, first sighting has no delta
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
-    await runSystemVitalsPass(deps); // 3 → fires
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // now a delta exists → 100% → emit
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
   });
 
-  it('reads the runaway thresholds from env when not injected', async () => {
-    process.env.CODEBUDDY_RUNAWAY_CPU_PCT = '50';
-    process.env.CODEBUDDY_RUNAWAY_PASSES = '2';
+  it('a dip below threshold resets the consecutive counter', async () => {
+    const scn = makeSpinScenario({});
     const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 11, comm: 'yes', cpuPct: 60, etimeSec: 30 }],
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      runawayCpuPct: 90,
+      runawayPasses: 2,
+    });
+    await runSystemVitalsPass(deps); // baseline
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 1
+    scn.advance(1, 0.1); // 10% → below → reset
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count restarts at 1
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 2 → emit
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+  });
+
+  it('reads thresholds from env when not injected', async () => {
+    process.env.CODEBUDDY_RUNAWAY_CPU_PCT = '50';
+    process.env.CODEBUDDY_RUNAWAY_PASSES = '1';
+    const scn = makeSpinScenario({ comm: 'weird' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
       runawayCpuPct: undefined,
       runawayPasses: undefined,
     });
-    await runSystemVitalsPass(deps);
-    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    await runSystemVitalsPass(deps); // baseline
+    scn.advance(1, 0.6); // 60% > 50%
     await runSystemVitalsPass(deps);
     expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
   });
 });
 
-describe('runSystemVitalsPass — resource percepts', () => {
+describe('PID reuse (BUG-05)', () => {
+  it('a reused pid does not inherit the previous counter', async () => {
+    const scn = makeSpinScenario({});
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      runawayCpuPct: 90,
+      runawayPasses: 2,
+    });
+    await runSystemVitalsPass(deps); // baseline
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 1 for the ORIGINAL process
+    scn.reuse(9999); // original dies, a new young process takes pid 4242
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // reuse detected → counter reset, new baseline, no count
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // new process count 1
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // new process count 2 → emit (fresh, not inherited)
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+  });
+});
+
+describe('read failure does NOT purge counters (BUG-06)', () => {
+  it('a null read keeps the consecutive counter intact', async () => {
+    const scn = makeSpinScenario({});
+    let failNext = false;
+    const { deps, emitted } = baseDeps({
+      readProcesses: () => (failNext ? null : scn.readProcesses()),
+      now: scn.now,
+      runawayCpuPct: 90,
+      runawayPasses: 3,
+    });
+    await runSystemVitalsPass(deps); // baseline
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 1
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 2
+    failNext = true; // ps times out → reader returns null. Must NOT purge the counter.
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // skipped, count stays 2
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+    failNext = false;
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps); // count 3 → emit (would be < 3 if purge had happened)
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+  });
+});
+
+describe('comm ignore list (BUG-08 empty, BUG-09 exact match)', () => {
+  it('a default-ignored comm (ffmpeg) never raises process_runaway', async () => {
+    const scn = makeSpinScenario({ comm: 'ffmpeg' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      ignoreComm: undefined,
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    for (let i = 0; i < 4; i++) {
+      scn.advance(1, 1.0);
+      await runSystemVitalsPass(deps);
+    }
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+
+  it('BUG-08: CODEBUDDY_RUNAWAY_IGNORE_COMM="" empties the list (node becomes watchable)', async () => {
+    process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM = '';
+    const scn = makeSpinScenario({ comm: 'node' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      ignoreComm: undefined, // env is set to '' → ignore NOTHING
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+  });
+
+  it('BUG-09: exact match only — "nodemapper" is NOT immunized by "node"', async () => {
+    const scn = makeSpinScenario({ comm: 'nodemapper' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      ignoreComm: ['node'],
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(1);
+  });
+
+  it('BUG-09: the exact comm IS ignored', async () => {
+    const scn = makeSpinScenario({ comm: 'node' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      ignoreComm: ['node'],
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps);
+    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
+  });
+});
+
+describe('scope tagging', () => {
+  it('user scope tags the payload and is honored', async () => {
+    const scn = makeSpinScenario({ comm: 'bash' });
+    const { deps, emitted } = baseDeps({
+      readProcesses: scn.readProcesses,
+      now: scn.now,
+      scope: 'user',
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
+    await runSystemVitalsPass(deps);
+    const ev = emitted.filter((e) => e.kind === 'process_runaway');
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.payload).toMatchObject({ scope: 'user', pid: 4242, ppid: 1 });
+  });
+});
+
+describe('resource percepts', () => {
   it('always emits a resource_threshold pulse carrying the snapshot', async () => {
     const { deps, emitted } = baseDeps();
     await runSystemVitalsPass(deps);
     const pulse = emitted.find((e) => e.kind === 'resource_threshold');
     expect(pulse).toBeDefined();
-    // disk 80% free → 20% used
     expect(pulse!.payload).toMatchObject({ rssMb: 100, heapUsedMb: 50, load1: 0.5, diskPct: 20 });
   });
 
   it('emits disk_low when used disk >= threshold', async () => {
     const { deps, emitted } = baseDeps({
-      readDisk: () => ({ freePercent: 5, freeBytes: 100 }), // 95% used
+      readDisk: () => ({ freePercent: 5, freeBytes: 100 }),
       diskLowPct: 90,
     });
     await runSystemVitalsPass(deps);
-    const disk = emitted.find((e) => e.kind === 'disk_low');
-    expect(disk).toBeDefined();
-    expect(disk!.payload).toMatchObject({ diskPct: 95 });
+    expect(emitted.find((e) => e.kind === 'disk_low')!.payload).toMatchObject({ diskPct: 95 });
   });
 
   it('does NOT emit disk_low below threshold', async () => {
     const { deps, emitted } = baseDeps({
-      readDisk: () => ({ freePercent: 50, freeBytes: 100 }), // 50% used
+      readDisk: () => ({ freePercent: 50, freeBytes: 100 }),
       diskLowPct: 90,
     });
     await runSystemVitalsPass(deps);
@@ -169,128 +352,36 @@ describe('runSystemVitalsPass — resource percepts', () => {
       readFleet: () => ({ utilization: 1.2, saturated: true }),
     });
     await runSystemVitalsPass(deps);
-    const fleet = emitted.find((e) => e.kind === 'fleet_saturated');
-    expect(fleet).toBeDefined();
-    expect(fleet!.payload).toMatchObject({ fleetUtilization: 1.2 });
+    expect(emitted.find((e) => e.kind === 'fleet_saturated')!.payload).toMatchObject({
+      fleetUtilization: 1.2,
+    });
   });
 });
 
-describe('runSystemVitalsPass — robustness', () => {
+describe('robustness + byte-identical', () => {
   it('never throws when a reader throws; still emits the pulse', async () => {
     const { deps, emitted } = baseDeps({
       readGpu: async () => {
         throw new Error('nvidia-smi missing');
       },
-      readChildren: () => {
-        throw new Error('ps failed');
+      readProcesses: () => {
+        throw new Error('proc failed');
       },
     });
     await expect(runSystemVitalsPass(deps)).resolves.toBeDefined();
     expect(emitted.find((e) => e.kind === 'resource_threshold')).toBeDefined();
   });
-});
 
-describe('byte-identical when unused (flag off)', () => {
-  it('(e) importing the module and never invoking the pass emits nothing on the bus', async () => {
+  it('(flag off) a fully-injected pass never touches the real global bus', async () => {
     const seen: unknown[] = [];
     const bus = getGlobalEventBus();
     const id = bus.on('sensory:perception', (evt) => seen.push(evt));
-    // The wiring in server/index.ts only registers the pass when CODEBUDDY_SYSTEM_VITALS==='true';
-    // with the flag off the pass is never called, so nothing reaches the bus.
-    delete process.env.CODEBUDDY_SYSTEM_VITALS;
-    await Promise.resolve();
-    bus.off(id);
-    expect(seen).toHaveLength(0);
-  });
-
-  it('(e) a fully-injected pass NEVER touches the real global bus (uses the injected emit)', async () => {
-    const seen: unknown[] = [];
-    const bus = getGlobalEventBus();
-    const id = bus.on('sensory:perception', (evt) => seen.push(evt));
-    const { deps } = baseDeps({
-      readChildren: () => [{ pid: 1, comm: 'bash', cpuPct: 99, etimeSec: 10 }],
-      runawayCpuPct: 90,
-      runawayPasses: 1,
-    });
+    const scn = makeSpinScenario({});
+    const { deps } = baseDeps({ readProcesses: scn.readProcesses, now: scn.now });
+    await runSystemVitalsPass(deps);
+    scn.advance(1, 1.0);
     await runSystemVitalsPass(deps);
     bus.off(id);
-    // All emissions went through the injected emit, not the global bus.
     expect(seen).toHaveLength(0);
-  });
-});
-
-describe('runaway scan scope + comm exceptions (incident-05/09 fix)', () => {
-  it('(a) scope:user catches a runaway OUTSIDE the server tree and tags the payload', async () => {
-    // A bash loop whose ppid is NOT the server pid — invisible to scope:server.
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [
-        { pid: 55501, ppid: 999999, comm: 'bash', cpuPct: 99.9, etimeSec: 9000 },
-      ],
-      scope: 'user',
-      runawayCpuPct: 90,
-      runawayPasses: 2,
-    });
-    await runSystemVitalsPass(deps);
-    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
-    await runSystemVitalsPass(deps);
-    const ev = emitted.filter((e) => e.kind === 'process_runaway');
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.payload).toMatchObject({
-      pid: 55501,
-      ppid: 999999,
-      comm: 'bash',
-      pcpu: 99.9,
-      etimeSec: 9000,
-      scope: 'user',
-    });
-  });
-
-  it('(b) a comm in the ignore list never raises process_runaway (default: ffmpeg)', async () => {
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 42, ppid: 1, comm: 'ffmpeg', cpuPct: 100, etimeSec: 12000 }],
-      scope: 'user',
-      runawayCpuPct: 90,
-      runawayPasses: 1,
-    });
-    for (let i = 0; i < 5; i++) await runSystemVitalsPass(deps);
-    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
-  });
-
-  it('(b) prefix match ignores python3 when "python" is on the list', async () => {
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 7, ppid: 1, comm: 'python3.11', cpuPct: 99, etimeSec: 500 }],
-      ignoreComm: ['python'],
-      runawayPasses: 1,
-      runawayCpuPct: 90,
-    });
-    await runSystemVitalsPass(deps);
-    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
-  });
-
-  it('(b) a custom ignore list via env is honored', async () => {
-    process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM = 'yes,sleep';
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 9, ppid: 1, comm: 'yes', cpuPct: 100, etimeSec: 60 }],
-      ignoreComm: undefined,
-      runawayPasses: 1,
-      runawayCpuPct: 90,
-    });
-    await runSystemVitalsPass(deps);
-    expect(emitted.filter((e) => e.kind === 'process_runaway')).toHaveLength(0);
-    delete process.env.CODEBUDDY_RUNAWAY_IGNORE_COMM;
-  });
-
-  it('(c) scope:server is the default and unchanged (payload tagged server)', async () => {
-    const { deps, emitted } = baseDeps({
-      readChildren: () => [{ pid: 4242, ppid: 1, comm: 'bash', cpuPct: 99, etimeSec: 9000 }],
-      // no scope override → resolveScope defaults to 'server'
-      scope: undefined,
-      runawayCpuPct: 90,
-      runawayPasses: 1,
-    });
-    await runSystemVitalsPass(deps);
-    const ev = emitted.filter((e) => e.kind === 'process_runaway');
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.payload).toMatchObject({ scope: 'server', comm: 'bash' });
   });
 });
