@@ -112,7 +112,7 @@ describe('runaway guard — INSTANTANEOUS CPU via jiffies delta (BUG-01)', () =>
     await runSystemVitalsPass(deps); // pass 3: count 2 == runawayPasses → emit
     const ev = emitted.filter((e) => e.kind === 'process_runaway');
     expect(ev).toHaveLength(1);
-    expect(ev[0]!.payload).toMatchObject({ pid: 4242, comm: 'bash', scope: 'server', passes: 2 });
+    expect(ev[0]!.payload).toMatchObject({ pid: 4242, comm: 'bash', scope: 'server', passes: 2, startTime: 500 });
     expect(ev[0]!.payload.pcpu as number).toBeGreaterThanOrEqual(95);
     expect(ev[0]!.payload.etimeSec as number).toBeGreaterThanOrEqual(7200);
   });

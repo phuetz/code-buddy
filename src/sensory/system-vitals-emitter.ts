@@ -604,6 +604,7 @@ export async function runSystemVitalsPass(deps: SystemVitalsDeps = {}): Promise<
                 pcpuOfMachine,
                 cores,
                 etimeSec: s.etimeSec,
+                startTime: s.startTime,
                 passes: next,
                 cpuThreshold,
                 scope,

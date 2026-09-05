@@ -173,6 +173,13 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
       const urlCheck = getSSRFGuard().isSafeUrlSync(a.url ?? '');
       if (!urlCheck.safe) errors.push(`webhook url rejected by SSRF guard: ${urlCheck.reason}`);
     }
+  } else if (a.type === 'kill_process') {
+    if (rule.match?.kind !== 'process_runaway') {
+      errors.push('kill_process requires match.kind process_runaway');
+    }
+    if (Object.prototype.hasOwnProperty.call(a, 'pid') && (a as { pid?: unknown }).pid !== undefined) {
+      errors.push('kill_process must not set pid (pid comes from the process_runaway percept)');
+    }
   } else if (a.type !== 'alert') {
     errors.push(`unknown action.type '${(a as { type?: string }).type}'`);
   }

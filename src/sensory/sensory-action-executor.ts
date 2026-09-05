@@ -11,12 +11,14 @@
  * @module sensory/sensory-action-executor
  */
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { logger } from '../utils/logger.js';
 import { isDangerousCommand, matchAllDangerousPatterns } from '../security/dangerous-patterns.js';
 import { sendTelegramAlert } from './alert.js';
 import { buildFilteredSubprocessEnv } from '../utils/subprocess-env.js';
 import { assertSafeUrl, isLoopbackHttpUrl } from '../security/ssrf-guard.js';
 import { safeFetchFollow } from '../security/safe-fetch.js';
+import { getGlobalEventBus } from '../events/event-bus.js';
 
 export interface SensoryEventContext {
   modality?: string;
@@ -28,15 +30,52 @@ export interface SensoryEventContext {
   payload?: Record<string, unknown>;
 }
 
+export type KillProcessAction = {
+  type: 'kill_process';
+  /** Default true: journalise without signalling. A live kill also needs CODEBUDDY_RUNAWAY_KILL=true. */
+  dryRun?: boolean;
+  /** After SIGTERM, send SIGKILL if the same process is still alive. Default false. */
+  escalate?: boolean;
+  /** Wait before SIGKILL when escalate is true. Default 5000, clamped 1000–60000. */
+  graceMs?: number;
+};
+
 export type SensoryAction =
   | { type: 'shell'; command: string; timeoutMs?: number }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string> }
   | { type: 'alert'; message?: string; photo?: boolean }
-  | { type: 'agent'; prompt: string; timeoutMs?: number };
+  | { type: 'agent'; prompt: string; timeoutMs?: number }
+  | KillProcessAction;
 
 export interface ActionResult {
   ok: boolean;
   detail?: string;
+}
+
+/** Live identity re-read from /proc before a kill (anti PID-reuse). */
+export interface ProcIdentity {
+  pid: number;
+  ppid?: number;
+  comm: string;
+  /** /proc/<pid>/stat field 22 (starttime, clock ticks). */
+  startTime: number;
+  uid: number | null;
+}
+
+export interface ProcessRemediatedPayload {
+  pid?: number;
+  comm?: string;
+  signal?: string;
+  dryRun: boolean;
+  ok: boolean;
+  reason: string;
+}
+
+export interface KillProcessDeps {
+  readProc?: (pid: number) => ProcIdentity | null;
+  getuid?: () => number;
+  selfPid?: number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** Injection-safe context exposed to a shell/agent action (env, not interpolation). */
@@ -60,6 +99,14 @@ function actionEnv(ctx: SensoryEventContext): NodeJS.ProcessEnv {
 export function isDestructive(command: string): boolean {
   const firstWord = command.trim().split(/\s+/)[0] ?? '';
   return isDangerousCommand(firstWord) || matchAllDangerousPatterns(command, 'bash').length > 0;
+}
+
+/** Action-level destructive flag: a live kill_process (dryRun:false) is destructive.
+ *  validateRule still accepts it when match.kind is process_runaway — fire-time is double opt-in. */
+export function isDestructiveAction(action: SensoryAction): boolean {
+  if (action.type === 'shell') return isDestructive(action.command);
+  if (action.type === 'kill_process') return action.dryRun === false;
+  return false;
 }
 
 function runShell(command: string, ctx: SensoryEventContext, timeoutMs: number): Promise<ActionResult> {
@@ -155,12 +202,294 @@ function runAgent(prompt: string, ctx: SensoryEventContext, timeoutMs: number): 
   });
 }
 
-export async function executeSensoryAction(action: SensoryAction, ctx: SensoryEventContext): Promise<ActionResult> {
+/** Parse `/proc/<pid>/stat`: comm (field 2, parenthesized) + ppid (4) + starttime (22). */
+export function parseProcStat(content: string): { comm: string; ppid: number; startTime: number } | null {
+  const open = content.indexOf('(');
+  const close = content.lastIndexOf(')');
+  if (open < 0 || close < 0 || close < open) return null;
+  const comm = content.slice(open + 1, close);
+  const after = content.slice(close + 1).trim().split(/\s+/);
+  const ppid = Number(after[1]);
+  const startTime = Number(after[19]);
+  if (!Number.isFinite(startTime)) return null;
+  return { comm, ppid: Number.isFinite(ppid) ? ppid : 0, startTime };
+}
+
+export function readProcIdentity(pid: number): ProcIdentity | null {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    const parsed = parseProcStat(readFileSync(`/proc/${pid}/stat`, 'utf8'));
+    if (!parsed) return null;
+    let uid: number | null = null;
+    try {
+      const status = readFileSync(`/proc/${pid}/status`, 'utf8');
+      const m = /^Uid:\s+(\d+)/m.exec(status);
+      if (m?.[1] !== undefined) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) uid = n;
+      }
+    } catch {
+      /* uid unreadable → fail closed later */
+    }
+    return { pid, ppid: parsed.ppid, comm: parsed.comm, startTime: parsed.startTime, uid };
+  } catch {
+    return null;
+  }
+}
+
+function perceptPid(payload: Record<string, unknown> | undefined): number | null {
+  const raw = payload?.pid;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isInteger(n)) return null;
+  return n;
+}
+
+function clampGraceMs(raw: unknown): number {
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : 5000;
+  return Math.min(60_000, Math.max(1_000, Math.floor(n)));
+}
+
+function isRunawayKillArmed(): boolean {
+  return process.env.CODEBUDDY_RUNAWAY_KILL === 'true';
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    if (typeof t === 'object' && t && 'unref' in t) (t as NodeJS.Timeout).unref();
+  });
+}
+
+function currentUid(getuid?: () => number): number | null {
+  try {
+    if (getuid) return getuid();
+    if (typeof process.getuid === 'function') return process.getuid();
+  } catch {
+    /* */
+  }
+  return null;
+}
+
+function isAncestorOfSelf(
+  targetPid: number,
+  selfPid: number,
+  readProc: (pid: number) => ProcIdentity | null,
+): boolean {
+  let current = selfPid;
+  const seen = new Set<number>();
+  while (current > 1) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const info = readProc(current);
+    const ppid = info?.ppid;
+    if (!ppid || ppid <= 0) break;
+    if (ppid === targetPid) return true;
+    current = ppid;
+  }
+  return false;
+}
+
+function emitProcessRemediated(payload: ProcessRemediatedPayload): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'kill-process',
+    metadata: {
+      modality: 'system',
+      kind: 'process_remediated',
+      salience: 180,
+      payload,
+    },
+  });
+}
+
+function finishKill(
+  result: ActionResult & { payload: ProcessRemediatedPayload },
+): ActionResult {
+  const { payload, ...res } = result;
+  if (res.ok) logger.info(`[rules] kill_process ${payload.reason} pid=${payload.pid ?? ''} comm=${payload.comm ?? ''}`);
+  else logger.warn(`[rules] kill_process ${payload.reason}${payload.pid ? ` pid=${payload.pid}` : ''}`);
+  try {
+    emitProcessRemediated(payload);
+  } catch {
+    /* never throw from the action path */
+  }
+  return res;
+}
+
+async function runKillProcess(
+  action: KillProcessAction,
+  ctx: SensoryEventContext,
+  deps: KillProcessDeps = {},
+): Promise<ActionResult> {
+  const readProc = deps.readProc ?? readProcIdentity;
+  const selfPid = deps.selfPid ?? process.pid;
+  const sleep = deps.sleep ?? defaultSleep;
+  const requestedDry = action.dryRun !== false;
+  const armed = isRunawayKillArmed();
+  const dryRun = requestedDry || !armed;
+  const dryReason = !requestedDry && !armed ? 'CODEBUDDY_RUNAWAY_KILL unset' : 'dryRun';
+
+  if (ctx.kind !== 'process_runaway') {
+    return finishKill({
+      ok: false,
+      detail: 'kind not process_runaway',
+      payload: { dryRun: true, ok: false, reason: 'kind not process_runaway' },
+    });
+  }
+
+  const pid = perceptPid(ctx.payload);
+  const commExpected = typeof ctx.payload?.comm === 'string' ? ctx.payload.comm : '';
+  const startExpectedRaw = ctx.payload?.startTime;
+  const startExpected =
+    typeof startExpectedRaw === 'number'
+      ? startExpectedRaw
+      : typeof startExpectedRaw === 'string'
+        ? Number(startExpectedRaw)
+        : NaN;
+
+  if (pid === null || pid <= 0) {
+    return finishKill({
+      ok: false,
+      detail: pid === null ? 'pid absent' : 'invalid pid',
+      payload: { pid: pid ?? undefined, comm: commExpected || undefined, dryRun: true, ok: false, reason: pid === null ? 'pid absent' : 'invalid pid' },
+    });
+  }
+
+  const live = readProc(pid);
+  if (!live) {
+    return finishKill({
+      ok: false,
+      detail: 'pid absent',
+      payload: { pid, comm: commExpected || undefined, dryRun: true, ok: false, reason: 'pid absent' },
+    });
+  }
+
+  if (!commExpected || live.comm !== commExpected) {
+    return finishKill({
+      ok: false,
+      detail: 'comm mismatch',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'comm mismatch' },
+    });
+  }
+
+  if (!Number.isFinite(startExpected)) {
+    return finishKill({
+      ok: false,
+      detail: 'startTime missing',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'startTime missing' },
+    });
+  }
+  if (live.startTime !== startExpected) {
+    return finishKill({
+      ok: false,
+      detail: 'startTime mismatch',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'startTime mismatch' },
+    });
+  }
+
+  if (pid === 1) {
+    return finishKill({
+      ok: false,
+      detail: 'pid 1',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'pid 1' },
+    });
+  }
+  if (pid === selfPid) {
+    return finishKill({
+      ok: false,
+      detail: 'self',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'self' },
+    });
+  }
+  if (isAncestorOfSelf(pid, selfPid, readProc)) {
+    return finishKill({
+      ok: false,
+      detail: 'ancestor',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'ancestor' },
+    });
+  }
+
+  const uid = currentUid(deps.getuid);
+  if (uid === null || live.uid === null || live.uid !== uid) {
+    return finishKill({
+      ok: false,
+      detail: 'other uid',
+      payload: { pid, comm: live.comm, dryRun: true, ok: false, reason: 'other uid' },
+    });
+  }
+
+  if (dryRun) {
+    return finishKill({
+      ok: true,
+      detail: dryReason,
+      payload: {
+        pid,
+        comm: live.comm,
+        signal: 'SIGTERM',
+        dryRun: true,
+        ok: true,
+        reason: dryReason,
+      },
+    });
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return finishKill({
+      ok: false,
+      detail: reason,
+      payload: { pid, comm: live.comm, signal: 'SIGTERM', dryRun: false, ok: false, reason },
+    });
+  }
+
+  if (action.escalate === true) {
+    await sleep(clampGraceMs(action.graceMs));
+    const still = readProc(pid);
+    if (
+      still &&
+      still.comm === commExpected &&
+      still.startTime === startExpected &&
+      still.pid !== 1 &&
+      still.pid !== selfPid
+    ) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        return finishKill({
+          ok: false,
+          detail: reason,
+          payload: { pid, comm: live.comm, signal: 'SIGKILL', dryRun: false, ok: false, reason },
+        });
+      }
+      return finishKill({
+        ok: true,
+        detail: 'SIGKILL',
+        payload: { pid, comm: live.comm, signal: 'SIGKILL', dryRun: false, ok: true, reason: 'SIGKILL' },
+      });
+    }
+  }
+
+  return finishKill({
+    ok: true,
+    detail: 'SIGTERM',
+    payload: { pid, comm: live.comm, signal: 'SIGTERM', dryRun: false, ok: true, reason: 'SIGTERM' },
+  });
+}
+
+export async function executeSensoryAction(
+  action: SensoryAction,
+  ctx: SensoryEventContext,
+  deps: KillProcessDeps = {},
+): Promise<ActionResult> {
   switch (action.type) {
     case 'shell':
       return runShell(action.command, ctx, action.timeoutMs ?? 15_000);
     case 'webhook':
       return runWebhook(action, ctx);
+    case 'kill_process':
+      return runKillProcess(action, ctx, deps);
     case 'alert': {
       const msg =
         action.message ??
@@ -186,4 +515,4 @@ export async function executeSensoryAction(action: SensoryAction, ctx: SensoryEv
 }
 
 /** Exported for tests. */
-export const __test = { isDestructive, actionEnv };
+export const __test = { isDestructive, isDestructiveAction, actionEnv, parseProcStat, readProcIdentity };
