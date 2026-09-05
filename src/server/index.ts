@@ -1906,6 +1906,23 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               await runDreamingPass();
             },
           });
+          // System vitals (opt-in) — turn the EXISTING system monitors into heartbeat-paced
+          // percepts on the bus (resource_threshold / disk_low / fleet_saturated / process_runaway),
+          // so declarative rules replace busy-loop monitoring. The scheduler's inFlight lock means
+          // one sample per beat, never a loop. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_SYSTEM_VITALS === 'true') {
+            const vitalsEvery = Math.max(1, Number(process.env.CODEBUDDY_SYSTEM_VITALS_EVERY ?? 30));
+            heart.register({
+              name: 'system-vitals',
+              everyBeats: vitalsEvery,
+              handler: async () => {
+                const { runSystemVitalsPass } = await import('../sensory/system-vitals-emitter.js');
+                await runSystemVitalsPass();
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('system-vitals'));
+            logger.info(`System vitals: Enabled (CODEBUDDY_SYSTEM_VITALS) - heartbeat-paced resource percepts every ${vitalsEvery} beats`);
+          }
           // Episodic journal (opt-in) — consolidate the heard DIALOGUE into "what we talked about"
           // so the arrival opener / follow-ups can reference it. Distinct from dreaming (sensor stats).
           if (process.env.CODEBUDDY_EPISODE_JOURNAL === 'true') {
