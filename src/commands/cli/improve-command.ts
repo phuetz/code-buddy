@@ -470,7 +470,8 @@ export function registerImproveCommands(program: Command): void {
     .option('--apply', 'install + activate an accepted strategy (requires CODEBUDDY_SELF_IMPROVE)')
     .option('--scope <scope>', 'strategy scope: default|headless|code-edit|audit|research', 'headless')
     .option('--experiences <file>', 'JSONL of Experience records carrying run facts (rounds=, cost=, outcome=, failure=)')
-    .action(async (options: ImproveOptions & { scope?: string; experiences?: string }) => {
+    .option('--live', 'also run live paired tasks (directives) on the configured provider, merged with the replay')
+    .action(async (options: ImproveOptions & { scope?: string; experiences?: string; live?: boolean }) => {
       if (options.apply && refuseApplyWithoutOptIn('strategies')) return;
       const { StrategyImprovementEngine } = await import('../../agent/self-improvement/strategy-engine.js');
       const { HeuristicStrategyProposer } = await import('../../agent/self-improvement/strategy-proposer.js');
@@ -487,9 +488,18 @@ export function registerImproveCommands(program: Command): void {
       const experiences = [...(await collectExperiences()), ...wide, ...(await readExperiencesFile(options.experiences))].filter(
         (e) => (seen.has(e.id) ? false : (seen.add(e.id), true)),
       );
+      let evaluator: ((exps: Experience[]) => import('../../agent/self-improvement/strategy-gate.js').StrategyEvaluator) | undefined;
+      if (options.live) {
+        const { LiveStrategyEvaluator, CompositeStrategyEvaluator } = await import('../../agent/self-improvement/strategy-live.js');
+        const { ReplayStrategyEvaluator } = await import('../../agent/self-improvement/strategy-replay.js');
+        const { createHeadlessRunner } = await import('../../agent/self-improvement/paired-runner.js');
+        const live = new LiveStrategyEvaluator(createHeadlessRunner());
+        evaluator = (exps) => new CompositeStrategyEvaluator([new ReplayStrategyEvaluator(exps), live]);
+      }
       const engine = new StrategyImprovementEngine({
         scope,
         proposer: new HeuristicStrategyProposer(),
+        ...(evaluator ? { evaluator } : {}),
         ...(options.apply ? { autonomy: 'auto-apply' as const } : {}),
       });
       const before = engine.activeStrategy;
