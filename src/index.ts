@@ -2874,9 +2874,10 @@ program
 
 program
   .command("rules [action] [args...]")
-  .description("Administer sensory rules (event→action) — list|enable|disable|rm|runs|validate|add")
+  .description("Administer sensory rules (event→action) — list|templates|enable|disable|rm|runs|validate|add")
   .option("--json <rule>", "rule JSON (for `add`)")
   .option("--from-file <path>", "read rule JSON from a file (for `add`)")
+  .option("--template <name>", "install a bundled rule template (for `add`)")
   .option("--limit <n>", "max rows (for `runs`)", "20")
   .action(async (action: string | undefined, args: string[] = [], options) => {
     const r = await import("./sensory/sensory-rules-engine.js");
@@ -2941,6 +2942,35 @@ program
           }
         }
         cli.stdout(bad ? `${bad} invalid rule(s).` : `✅ ${rules.length} rule(s) valid.`);
+      } else if (act === "templates") {
+        const { listRuleTemplates } = await import("./sensory/rule-templates.js");
+        const templates = listRuleTemplates();
+        cli.stdout("Available rule templates (install with: buddy rules add --template <name>):");
+        for (const t of templates) {
+          cli.stdout(`• ${t.name}  — ${t.description}`);
+        }
+      } else if (act === "add" && options.template) {
+        const { getRuleTemplate } = await import("./sensory/rule-templates.js");
+        const tpl = getRuleTemplate(String(options.template));
+        if (!tpl) {
+          cli.stdout(`❌ unknown template '${options.template}'. See: buddy rules templates`);
+          process.exitCode = 1;
+          return;
+        }
+        const rule = tpl.build();
+        const validation = r.validateRule(rule);
+        if (!validation.ok) {
+          cli.stdout(`❌ template '${tpl.name}' failed validation:\n  - ${validation.errors.join("\n  - ")}`);
+          process.exitCode = 1;
+          return;
+        }
+        const res = await r.upsertSensoryRule(rule);
+        cli.stdout(
+          res.ok
+            ? `✅ Installed template '${tpl.name}' as rule ${rule.id} (disabled? ${rule.enabled === false ? "yes" : "no"})`
+            : `❌ rejected:\n  - ${res.errors.join("\n  - ")}`,
+        );
+        if (!res.ok) process.exitCode = 1;
       } else if (act === "add") {
         let raw = options.json as string | undefined;
         if (!raw && options.fromFile) {
@@ -2965,7 +2995,7 @@ program
         cli.stdout(res.ok ? `✅ Saved rule ${rule.id}` : `❌ rejected:\n  - ${res.errors.join("\n  - ")}`);
         if (!res.ok) process.exitCode = 1;
       } else {
-        cli.stdout("Usage: buddy rules list|enable|disable|rm|runs|validate|add");
+        cli.stdout("Usage: buddy rules list|templates|enable|disable|rm|runs|validate|add [--template <name>]");
         process.exitCode = 1;
       }
     } catch (e) {
