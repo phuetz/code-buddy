@@ -38,12 +38,21 @@ buddy-sense (vital.rs)  ──beat/s──▶  HeartbeatScheduler (pacemaker)
   - `process_runaway` — un processus au-dessus de `CODEBUDDY_RUNAWAY_CPU_PCT` (défaut 90) pendant
     `CODEBUDDY_RUNAWAY_PASSES` passes CONSÉCUTIVES (défaut 3). Le payload porte `pid`, `ppid`,
     `comm`, `pcpu`, `etimeSec` et `scope` (pour savoir quel processus arrêter).
+    **CPU instantané** : le seuil s'applique au CPU INSTANTANÉ, calculé par delta de
+    `/proc/<pid>/stat` (utime+stime en jiffies) entre deux passes — PAS la moyenne `ps pcpu`
+    (qui est `cputime/vie` et mettrait des heures à franchir 90 % pour un vieux processus qui
+    s'emballe). Un pid vu pour la 1re fois n'a pas de delta (il ne compte pas cette passe) ; un
+    changement de `startTime` (réutilisation de PID) réinitialise le compteur.
     **Portée de scan** (`CODEBUDDY_RUNAWAY_SCOPE`) : `server` (défaut, conservateur) ne regarde que
-    les descendants du serveur ; `user` regarde TOUS les processus de l'utilisateur — c'est le mode qui
-    aurait attrapé l'incident du 05/09, dont les boucles étaient nées dans la session CLI (hors de
-    l'arbre du serveur). En mode `user`, la liste d'exceptions `CODEBUDDY_RUNAWAY_IGNORE_COMM` est
-    **indispensable** : elle empêche les processus légitimement gourmands (ffmpeg, ComfyUI/python,
-    node de build/vitest, tsc, cargo, rustc…) de déclencher une fausse alerte.
+    les descendants du serveur ; `user` regarde TOUS les processus de l'utilisateur. **`user` est
+    requis** pour attraper (a) les boucles nées hors du serveur (session CLI — le cas de l'incident
+    du 05/09) et (b) les orphelins reparentés à PID 1 quand leur parent meurt : `server` s'arrête à
+    l'arbre du serveur et ne les voit pas. En mode `user`, la liste d'exceptions
+    `CODEBUDDY_RUNAWAY_IGNORE_COMM` est **indispensable** : elle empêche les processus légitimement
+    gourmands (ffmpeg, ComfyUI/python, node de build/vitest, tsc, cargo, rustc…) de déclencher une
+    fausse alerte. Comparaison par `comm` EXACT (jamais par préfixe), et `CODEBUDDY_RUNAWAY_IGNORE_COMM=""`
+    vide la liste (ne rien ignorer). Un échec de lecture `/proc` NE purge PAS les compteurs (pas de
+    remise à zéro sur un timeout transitoire).
 - **Déclencheur horaire** (`src/sensory/schedule-emitter.ts`) : émet un percept `time/tick`
   (`hhmm`, `weekday`, `iso`, `minuteOfDay`) à chaque passe, pour des règles à l'heure.
 - **Moteur de règles** (`src/sensory/sensory-rules-engine.ts`) : les filtres acceptent l'égalité
