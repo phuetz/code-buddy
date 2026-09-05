@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { deobfuscateText } from './text-deobfuscation.js';
+import { deobfuscateForScan } from './text-deobfuscation.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -334,7 +334,7 @@ function collectPromptInjectionFindings(
   // homoglyphs or a hyphenated line-wrap is read by the model but slips past a
   // raw regex. Scan the de-obfuscated form too (same defence the strategy gate
   // already has). Line position is lost after normalization → report line 1.
-  const normalized = deobfuscateText(content);
+  const normalized = deobfuscateForScan(content);
   for (const dp of DANGEROUS_PATTERNS) {
     if (dp.capability !== 'prompt-injection') continue;
     if (seen.has(dp.name)) continue;
