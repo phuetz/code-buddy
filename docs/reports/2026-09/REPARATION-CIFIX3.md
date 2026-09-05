@@ -235,7 +235,23 @@ en un seul run.
 - Les défauts réels de portabilité sont corrigés **dans le code** : préflight non
   déterministe, faux positif « world-writable » de `doctor`, chargement de greffons
   impossible sous Windows.
-- `git add` fichier par fichier. `/home/patrice/code-buddy` et `~/.codebuddy` non touchés.
+- `git add` fichier par fichier. La copie de travail principale et `~/.codebuddy` non touchées.
 - Vérifications locales : `npx vitest run` sur les 10 fichiers touchés → 126 passés,
   1 ignoré (le `it.skip` préexistant) ; `npm run typecheck` → 0 ; `npm run lint` → 0 erreur ;
   `git diff --check` → propre.
+
+## Passe 4 — régression Linux : le rapport se dénonçait lui-même
+
+**Constat** (run `33941811446`, tous les jobs Test rouges, Ubuntu 20 ET 22 compris) : un
+**seul** test échouait — `tests/security/donnees-personnelles.test.ts` — avec `1 failed,
+37041 passed`. Aucune régression de code de portabilité : les gardes `describe.skipIf`, les
+sondes d'environnement, `pathToFileURL` et les shards Windows n'ont touché aucun test Linux.
+
+**Cause** : ce rapport lui-même. La ligne « invariants » citait en clair le chemin du home de
+l'auteur (`CHEMIN_HOME_AUTEUR`), un terme que le garde-fou vie-privée interdit dans tout fichier
+suivi. Le garde scanne l'arbre entier ; le rapport neuf ajouté par CIFIX3 introduisait le terme,
+absent du tronc — d'où Ubuntu vert sur `codex/audit-systeme-nerveux-2026-09-01` et rouge ici.
+
+**Correctif** : reformuler la ligne sans le chemin littéral (« la copie de travail principale »).
+Aucun code produit ni aucun test de portabilité modifié ; le fardeau vit intégralement dans la
+prose du rapport. `CI=true npx vitest run tests/security/donnees-personnelles.test.ts` → vert.
