@@ -20,7 +20,7 @@ choco install ripgrep
 ## Installation
 
 ```bash
-# From source (recommended during the 1.0 release-candidate phase — gets the latest)
+# From source (recommended — gets the latest Code Buddy 2)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy
 npm install
