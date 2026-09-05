@@ -26,13 +26,63 @@ import {
 } from './sensory-action-executor.js';
 import { assertSafeUrl, getSSRFGuard, isLoopbackHttpUrl } from '../security/ssrf-guard.js';
 
+/**
+ * Numeric threshold filter — the Phase-2 extension to the historical string-equality
+ * filters. `{ op:'gte', value:90 }` on `payload.diskPct` fires when disk is >= 90 % full.
+ */
+export type FilterOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'ne';
+export interface NumericFilter {
+  op: FilterOp;
+  value: number;
+}
+/** A filter is either an exact string equality (historical) or a numeric threshold. */
+export type RuleFilter = string | NumericFilter;
+
 export interface SensoryRule {
   id: string;
   name?: string;
   enabled?: boolean;
-  match: { modality?: string; kind: string; filters?: Record<string, string>; between?: [string, string] };
+  match: { modality?: string; kind: string; filters?: Record<string, RuleFilter>; between?: [string, string] };
   action: SensoryAction;
   cooldownMs?: number;
+}
+
+/** Type guard: is this filter the numeric-threshold form? */
+export function isNumericFilter(f: unknown): f is NumericFilter {
+  return (
+    !!f &&
+    typeof f === 'object' &&
+    typeof (f as NumericFilter).op === 'string' &&
+    ['gt', 'gte', 'lt', 'lte', 'eq', 'ne'].includes((f as NumericFilter).op) &&
+    typeof (f as NumericFilter).value === 'number' &&
+    Number.isFinite((f as NumericFilter).value)
+  );
+}
+
+/** Apply one filter to one payload value. String = exact equality (byte-identical to the historical path). */
+export function filterMatches(payloadValue: unknown, filter: RuleFilter): boolean {
+  if (isNumericFilter(filter)) {
+    const n = typeof payloadValue === 'number' ? payloadValue : Number(payloadValue);
+    if (!Number.isFinite(n)) return false;
+    switch (filter.op) {
+      case 'gt':
+        return n > filter.value;
+      case 'gte':
+        return n >= filter.value;
+      case 'lt':
+        return n < filter.value;
+      case 'lte':
+        return n <= filter.value;
+      case 'eq':
+        return n === filter.value;
+      case 'ne':
+        return n !== filter.value;
+      default:
+        return false;
+    }
+  }
+  // Historical string-equality path — unchanged.
+  return String(payloadValue ?? '') === String(filter);
 }
 
 // Path helpers read env at call-time (test isolation), mirroring reminders.ts.
@@ -94,6 +144,20 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
   const b = rule?.match?.between;
   if (b && (!Array.isArray(b) || b.length !== 2 || !HHMM.test(b[0]) || !HHMM.test(b[1])))
     errors.push('match.between must be [HH:MM, HH:MM]');
+  const filters = rule?.match?.filters;
+  if (filters !== undefined) {
+    if (typeof filters !== 'object' || filters === null || Array.isArray(filters)) {
+      errors.push('match.filters must be an object of {key: string | {op,value}}');
+    } else {
+      for (const [k, v] of Object.entries(filters)) {
+        const isString = typeof v === 'string';
+        const isNumeric = isNumericFilter(v);
+        if (!isString && !isNumeric) {
+          errors.push(`filter '${k}' must be a string (exact match) or {op:gt|gte|lt|lte|eq|ne, value:number}`);
+        }
+      }
+    }
+  }
   const a = rule?.action;
   if (!a?.type) errors.push('action.type is required');
   else if (a.type === 'shell') {
@@ -219,7 +283,7 @@ export function ruleMatches(
   if (rule.match.filters) {
     const payload = (p.payload ?? {}) as Record<string, unknown>;
     for (const [k, v] of Object.entries(rule.match.filters)) {
-      if (String(payload[k] ?? '') !== String(v)) return false;
+      if (!filterMatches(payload[k], v)) return false;
     }
   }
   return true;
@@ -346,4 +410,4 @@ export function wireSensoryRules(
   return () => bus.off(id);
 }
 
-export const __test = { ruleMatches, withinWindow, loadSensoryRules };
+export const __test = { ruleMatches, withinWindow, loadSensoryRules, filterMatches, isNumericFilter };
