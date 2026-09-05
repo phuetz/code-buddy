@@ -23,6 +23,9 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 export interface SensoryEventContext {
   modality?: string;
   kind?: string;
+  /** Emitter of the percept (`BaseEvent.source`): `system-vitals` for the in-process monitor,
+   *  `buddy-sense` for frames that crossed the WS bridge. Destructive actions key off it. */
+  source?: string;
   camera?: string;
   description?: string;
   imagePath?: string;
@@ -333,6 +336,16 @@ async function runKillProcess(
       ok: false,
       detail: 'kind not process_runaway',
       payload: { dryRun: true, ok: false, reason: 'kind not process_runaway' },
+    });
+  }
+  // Trust boundary: only the in-process vitals emitter may name a pid to kill. A frame that
+  // crossed the WS bridge (any client on loopback holding the token) can carry
+  // kind=process_runaway under another modality — it must never reach process.kill.
+  if (ctx.modality !== 'system' || ctx.source !== 'system-vitals') {
+    return finishKill({
+      ok: false,
+      detail: 'percept not from the in-process system-vitals emitter',
+      payload: { dryRun: true, ok: false, reason: 'untrusted percept source' },
     });
   }
 

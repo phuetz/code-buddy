@@ -35,6 +35,7 @@ function identity(over: Partial<ProcIdentity> = {}): ProcIdentity {
 function runawayCtx(over: Partial<SensoryEventContext> = {}): SensoryEventContext {
   return {
     modality: 'system',
+    source: 'system-vitals',
     kind: 'process_runaway',
     payload: {
       pid: TARGET_PID,
@@ -196,6 +197,20 @@ describe('kill_process action', () => {
     expect(killSpy).not.toHaveBeenCalled();
   });
 
+  it('refuse un percept forgé via le bridge WS (modality vital / source buddy-sense) même armé : trou A du re-audit agy', async () => {
+    process.env.CODEBUDDY_RUNAWAY_KILL = 'true';
+    for (const forged of [
+      runawayCtx({ modality: 'vital', source: 'buddy-sense' }),
+      runawayCtx({ modality: 'system', source: 'buddy-sense' }),
+      runawayCtx({ modality: 'system', source: undefined }),
+    ]) {
+      const res = await executeSensoryAction({ type: 'kill_process', dryRun: false }, forged, deps());
+      expect(res.ok).toBe(false);
+      expect(String(res.detail)).toMatch(/system-vitals/);
+    }
+    expect(killSpy).not.toHaveBeenCalled();
+  });
+
   it('ignore un pid porté par la règle : seul le pid du percept compte', async () => {
     process.env.CODEBUDDY_RUNAWAY_KILL = 'true';
     const res = await executeSensoryAction(
@@ -318,6 +333,14 @@ describe('validateRule — kill_process', () => {
     match: { modality: 'system', kind: 'process_runaway' },
     action: { type: 'kill_process' },
     ...over,
+  });
+
+  it('refuse une règle kill_process sans match.modality system (un percept vital/… du bridge WS ne doit jamais tuer)', () => {
+    const v = validateRule(base({ match: { kind: 'process_runaway' } }));
+    expect(v.ok).toBe(false);
+    expect(v.errors.join(' ')).toMatch(/match\.modality system/);
+    const v2 = validateRule(base({ match: { modality: 'vital', kind: 'process_runaway' } }));
+    expect(v2.ok).toBe(false);
   });
 
   it('accepte une règle kill_process sans dryRun:false (défaut dry-run)', () => {

@@ -177,6 +177,9 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
     if (rule.match?.kind !== 'process_runaway') {
       errors.push('kill_process requires match.kind process_runaway');
     }
+    if (rule.match?.modality !== 'system') {
+      errors.push('kill_process requires match.modality system (the in-process vitals emitter)');
+    }
     if (Object.prototype.hasOwnProperty.call(a, 'pid') && (a as { pid?: unknown }).pid !== undefined) {
       errors.push('kill_process must not set pid (pid comes from the process_runaway percept)');
     }
@@ -436,6 +439,7 @@ export function wireSensoryRules(
       const ctx: SensoryEventContext = {
         modality: p.modality,
         kind: p.kind,
+        source: typeof evt.source === 'string' ? evt.source : undefined,
         salience: p.salience,
         camera: typeof payload.camera === 'string' ? payload.camera : undefined,
         description: typeof payload.description === 'string' ? payload.description : undefined,
