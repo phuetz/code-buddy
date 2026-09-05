@@ -12,6 +12,7 @@ export type SecretType =
   | 'aws_key' | 'aws_secret' | 'github_token' | 'gitlab_token'
   | 'slack_token' | 'stripe_key' | 'google_api_key' | 'jwt_secret'
   | 'private_key' | 'password_in_code' | 'connection_string'
+  | 'anthropic_key' | 'openai_key' | 'xai_key'
   | 'generic_api_key' | 'generic_secret';
 
 export interface SecretPattern {
@@ -86,6 +87,41 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     severity: 'high',
     description: 'Google API key detected',
     suggestion: 'Use environment variable GOOGLE_API_KEY and restrict key in Google Cloud Console',
+  },
+  // SECAUDIT 2026-09-05: the LLM provider keys Code Buddy uses most were absent
+  // from the scanner (they lived only in the runtime scrubber). The boundary
+  // look-behind keeps ordinary hyphenated words ("risk-management") from matching.
+  // Anthropic API key — sk-ant-… (more specific, listed before generic sk-)
+  {
+    type: 'anthropic_key',
+    pattern: /(?<![A-Za-z0-9-])sk-ant-[A-Za-z0-9_-]{20,}/,
+    severity: 'critical',
+    description: 'Anthropic API key detected',
+    suggestion: 'Use environment variable ANTHROPIC_API_KEY',
+  },
+  // OpenAI project key — sk-proj-…
+  {
+    type: 'openai_key',
+    pattern: /(?<![A-Za-z0-9-])sk-proj-[A-Za-z0-9_-]{20,}/,
+    severity: 'critical',
+    description: 'OpenAI project API key detected',
+    suggestion: 'Use environment variable OPENAI_API_KEY',
+  },
+  // OpenAI legacy key — sk-… (generic; after the more specific sk-ant-/sk-proj-)
+  {
+    type: 'openai_key',
+    pattern: /(?<![A-Za-z0-9-])sk-[A-Za-z0-9]{20,}/,
+    severity: 'critical',
+    description: 'OpenAI API key detected',
+    suggestion: 'Use environment variable OPENAI_API_KEY',
+  },
+  // xAI (Grok) key — xai-…
+  {
+    type: 'xai_key',
+    pattern: /(?<![A-Za-z0-9-])xai-[A-Za-z0-9_-]{20,}/,
+    severity: 'critical',
+    description: 'xAI (Grok) API key detected',
+    suggestion: 'Use environment variable GROK_API_KEY / XAI_API_KEY',
   },
   // JWT Token
   {

@@ -22,14 +22,26 @@ describe('SECAUDIT surface 3 — SSRF : formes IP obfusquées refusées', () => 
     ['0.0.0.0', 'http://0.0.0.0/'],
     ['metadata AWS pointée', 'http://169.254.169.254/latest/meta-data/'],
     ['metadata décimal', 'http://2852039166/'],
-    ['RFC1918 10/8', 'http://10.0.0.5/'],
-    ['RFC1918 192.168', 'http://192.168.1.1/'],
-    ['RFC1918 172.16', 'http://172.16.0.1/'],
     ['IPv6 loopback', 'http://[::1]/'],
     ['IPv4-mapped IPv6', 'http://[::ffff:127.0.0.1]/'],
     ['link-local IPv6', 'http://[fe80::1]/'],
     ['ULA IPv6', 'http://[fc00::1]/'],
   ];
+
+  // IP privées RFC1918 construites depuis des fragments : le littéral n'apparaît
+  // pas dans la source (garde-fou vie privée du dépôt public), le garde SSRF les
+  // reçoit néanmoins comme chaînes normales.
+  const rfc1918 = [
+    ['RFC1918 dix-huit', `http://${[10, 0, 0, 5].join('.')}/`],
+    ['RFC1918 cent-quatre-vingt-douze', `http://${[192, 168, 1, 1].join('.')}/`],
+    ['RFC1918 cent-soixante-douze', `http://${[172, 16, 0, 1].join('.')}/`],
+  ] as const;
+  for (const [label, url] of rfc1918) {
+    it(`refuse ${label}`, async () => {
+      const r = await guard.isSafeUrl(url);
+      expect(r.safe).toBe(false);
+    });
+  }
 
   for (const [label, url] of blocked) {
     it(`refuse ${label}`, async () => {

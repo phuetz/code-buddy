@@ -41,7 +41,12 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 | 3.5 | SSRF | protocole file://, gopher:// | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
 | 3.6 | HTTP | JWT_SECRET absent en production | REFUSÉE (throw module-load) | — | (garde existante) | (analyse index.ts:123) |
 | 3.7 | webhook | cible RFC1918/metadata via règle sensorielle | REFUSÉE (assertSafeUrl + redirect manual) | — | (garde existante) | webhook-ssrf (existant) |
-| 4.x | (secrets — surface 4 en cours) | | | | | |
+| 4.1 | scanner secrets | clé Anthropic `sk-ant-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
+| 4.2 | scanner secrets | clé OpenAI `sk-proj-`/`sk-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
+| 4.3 | scanner secrets | clé xAI `xai-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
+| 4.4 | audit-logger | fuite d'une clé fournisseur dans le log disque | REFUSÉE (secret-scrubber couvre sk-ant/sk-proj/sk-/Bearer) | — | (garde existante) | (analyse secret-scrubber.ts) |
+| 4.5 | atomic-write | temporaire `*.tmp.*` monde-lisible | REFUSÉE (0o600, atomique) | — | (garde existante) | audit-secaudit-atomic-temp-perms |
+| 4.6 | output-sanitizer | fuite d'un jeton dans la sortie LLM | N/A (redaction = data-redaction/secret-scrubber ; sanitizer = tokens LLM) | — | (par conception) | (analyse) |
 
 ---
 
@@ -73,6 +78,19 @@ Le garde SSRF (`src/security/ssrf-guard.ts`) couvre TOUTES les formes de littér
 Résidus (défense en profondeur, gravité D, NON fermés — hors valeur/risque) :
 - **`*.localhost` webhook** : `isLoopbackHost` traite `*.localhost` comme loopback par nom SANS vérifier l'IP résolue. Un résolveur empoisonné + un webhook opérateur `x.localhost` pourrait atteindre une IP non-loopback. Exige un résolveur compromis ET une règle opérateur `.localhost` (opt-in + jeton) — théorique. Recommandation : résoudre et exiger que TOUTES les IP soient 127/8 ou ::1 sur le chemin loopback.
 - **`DEFAULT_SERVER_CONFIG.jwtSecret='change-me-in-production'`** (`types.ts:107`) : secret faible codé en dur, mais **inatteignable** — `startServer` construit sa config depuis `DEFAULT_CONFIG` et écrase toujours `jwtSecret` via `getJwtSecret` (throw prod) ; aucun consommateur ne lit `DEFAULT_SERVER_CONFIG`. Footgun latent ; recommandation : le mettre à `''` (fail-closed) plutôt qu'un secret utilisable.
+
+## Surface 4 — secrets : 1 faille B fermée (3 clés) + gardes confirmés
+
+### 4a. Le scanner de secrets ne connaissait PAS les 3 clés que Code Buddy utilise le plus — FAILLE B, fermée
+Il existe trois systèmes : `secret-scrubber.ts` (audit-logger, écrit sur disque — couvre `sk-ant-`/`sk-proj-`/`sk-`/`Bearer` EN PLUS de `SECRET_PATTERNS`), `data-redaction.ts` (exports — couvre OpenAI/Anthropic/xAI), et `secrets-detector.ts` (le SCANNER exposé à l'utilisateur : outil `scan_secrets` + `enhanced-command-handler`), qui n'utilisait QUE `SECRET_PATTERNS`. Or `SECRET_PATTERNS` n'avait NI OpenAI `sk-`/`sk-proj-`, NI Anthropic `sk-ant-`, NI xAI `xai-`. Résultat : `scan_secrets` sur un fichier contenant une vraie clé Anthropic/OpenAI/xAI renvoyait « aucun secret » — fausse assurance sur la fuite la plus probable pour CE produit. Prouvé rouge (4/4 clés manquées, `risk-management` non signalé).
+**Correctif** : ajout des patterns `anthropic_key`/`openai_key`/`xai_key` dans `SECRET_PATTERNS` (source unique partagée par scanner ET scrubber), avec ancrage de frontière `(?<![A-Za-z0-9-])` (pas de faux positif sur « risk-management »). Vert : 5/5.
+**Note fuite disque** : l'audit-logger était déjà couvert par `secret-scrubber.ts` (qui ajoutait ces clés) — aucune fuite dans le log persistant ; la faille portait sur la QUALITÉ du scanner, pas sur une fuite du log.
+
+### 4b. Temporaires atomic-write — REFUSÉE (garde confirmé)
+`writeFileAtomic`/`writeFileAtomicSync` ouvrent le temporaire `*.tmp.*` avec le même mode que le final, défaut `DEFAULT_MODE=0o600` (owner rw only), atomiquement (`open('w', 0o600)` — pas de fenêtre monde-lisible). Prouvé : final 0o600, et le mode transmis à l'`open` du temporaire est 0o600 (fs injecté).
+
+### 4c. output-sanitizer — hors périmètre secrets (par conception)
+`output-sanitizer.ts` retire les tokens de contrôle LLM (`<think>`, `<|im_start|>`, GLM/DeepSeek). La rédaction des SECRETS est la responsabilité de `data-redaction.ts` (exports) et `secret-scrubber.ts` (logs) — deux chemins distincts, tous deux couvrant les clés fournisseurs. Aucun jeton ne « fuit » par l'output-sanitizer car ce n'est pas son rôle et les chemins de rédaction en amont/aval le couvrent.
 
 ## Détail par surface (suite)
 
