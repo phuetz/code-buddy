@@ -81,9 +81,9 @@ Toutes les commandes ont été exécutées avec `HOME=~/DEV/cb-install-test-2026
 
 ---
 
-## 5. Audit des fuites (recherche du nom `patrice` et chemins absolus)
+## 5. Audit des fuites (recherche du nom `<prénom-auteur>` et chemins absolus)
 
-Une recherche systématique de la chaîne `patrice` et de chemins `/home/<autre>` a été menée sur :
+Une recherche systématique de la chaîne `<prénom-auteur>` et de chemins `/home/<autre>` a été menée sur :
 - L'ensemble des sorties standards et d'erreur des commandes exécutées ;
 - Les logs de démarrage et d'exécution du serveur (`server.log`) ;
 - Les fichiers générés dans le dossier de test et le `$HOME` isolé.
@@ -96,7 +96,7 @@ Une recherche systématique de la chaîne `patrice` et de chemins `/home/<autre>
    `ChatGPT OAuth: not signed in (...) — file: ~/DEV/cb-install-test-2026-09-05/home/.codebuddy/codex-auth.json`
    → Correspond dynamiquement au `$HOME` isolé passé en variable d'environnement (`os.homedir()`).
 3. **Sortie `server.log`** :
-   → **0 occurrence** de `patrice`.
+   → **0 occurrence** de `<prénom-auteur>`.
 4. **Sortie `npm run build`** :
    `Generated Code Buddy runtime manifest: ~/DEV/cb-install-test-2026-09-05/code-buddy/codebuddy-runtime.json`
    → Chemin de destination affiché lors de l'écriture du manifest d'exécution dans le répertoire courant.
