@@ -64,3 +64,46 @@ describe('runSchedulePass', () => {
     expect(out).toBeNull();
   });
 });
+
+describe('BUG-04: jitter must not skip the target minute', () => {
+  // Same jittered 60s sampling for both rules: 04:19:59, 04:21:00, 04:22:01.
+  const jitteredTimes = [
+    new Date(2026, 8, 5, 4, 19, 59),
+    new Date(2026, 8, 5, 4, 21, 0),
+    new Date(2026, 8, 5, 4, 22, 1),
+  ];
+
+  function ticksFor(times: Date[]): TickPayload[] {
+    const out: TickPayload[] = [];
+    for (const t of times) {
+      const p = runSchedulePass({ now: () => t, emit: (payload) => out.push(payload) });
+      if (p) { /* emitted */ }
+    }
+    return out;
+  }
+
+  it('OLD strict hhmm:04:20 equality misses the minute under jitter (bug reproduced)', async () => {
+    const { __test: engine } = await import('../../src/sensory/sensory-rules-engine.js');
+    const strictRule = {
+      id: 'strict',
+      match: { modality: 'time', kind: 'tick', filters: { hhmm: '04:20' } },
+      action: { type: 'alert' as const },
+    };
+    const ticks = ticksFor(jitteredTimes);
+    const matches = jitteredTimes.filter((t, i) =>
+      engine.ruleMatches(strictRule, { modality: 'time', kind: 'tick', payload: ticks[i] }, t),
+    );
+    expect(matches).toHaveLength(0); // 04:20 minute never sampled → sonde never runs
+  });
+
+  it('FIXED codex-quota-probe (between window) catches the window under the same jitter', async () => {
+    const { __test: engine } = await import('../../src/sensory/sensory-rules-engine.js');
+    const { getRuleTemplate } = await import('../../src/sensory/rule-templates.js');
+    const rule = getRuleTemplate('codex-quota-probe')!.build();
+    const ticks = ticksFor(jitteredTimes);
+    const matches = jitteredTimes.filter((t, i) =>
+      engine.ruleMatches(rule, { modality: 'time', kind: 'tick', payload: ticks[i] }, t),
+    );
+    expect(matches.length).toBeGreaterThanOrEqual(1); // window [04:20,04:22] hit reliably
+  });
+});

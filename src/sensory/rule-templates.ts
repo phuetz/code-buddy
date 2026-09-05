@@ -92,7 +92,9 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
       id: 'tpl-codex-quota-probe',
       name: 'Sonde quota Codex à 04:20',
       enabled: true,
-      match: { modality: 'time', kind: 'tick', filters: { hhmm: '04:20' } },
+      // BUG-04: a strict hhmm equality drops the target minute on any sampling jitter.
+      // A 3-minute window + the 1h cooldown guarantees exactly one reliable daily fire.
+      match: { modality: 'time', kind: 'tick', between: ['04:20', '04:22'] },
       action: {
         type: 'agent',
         prompt:

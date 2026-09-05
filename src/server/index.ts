@@ -1927,7 +1927,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           // time of day (match.kind:'tick' + between/filters on hhmm) with no busy loop. The
           // heartbeat is the clock. Default OFF => byte-identical behavior.
           if (process.env.CODEBUDDY_SCHEDULE_TICKS === 'true') {
-            const ticksEvery = Math.max(1, Number(process.env.CODEBUDDY_SCHEDULE_TICKS_EVERY ?? 60));
+            const ticksEvery = Math.max(1, Number(process.env.CODEBUDDY_SCHEDULE_TICKS_EVERY ?? 20));
             heart.register({
               name: 'schedule-ticks',
               everyBeats: ticksEvery,

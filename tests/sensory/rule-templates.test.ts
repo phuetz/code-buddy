@@ -47,7 +47,8 @@ describe('rule templates', () => {
   it('the codex-quota-probe is a time/tick agent rule', () => {
     const rule = getRuleTemplate('codex-quota-probe')!.build();
     expect(rule.match).toMatchObject({ modality: 'time', kind: 'tick' });
-    expect(rule.match.filters?.hhmm).toBe('04:20');
+    // BUG-04 fix: a between window (not strict hhmm equality) so jitter can't skip the minute.
+    expect(rule.match.between).toEqual(['04:20', '04:22']);
     expect(rule.action.type).toBe('agent');
   });
 

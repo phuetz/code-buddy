@@ -22,7 +22,7 @@ export interface TickPayload {
   hhmm: string;
   /** Day of week, 0 = Sunday … 6 = Saturday (matches `Date.getDay()` / reminders `days`). */
   weekday: number;
-  /** Full local ISO-ish timestamp of the tick. */
+  /** Full ISO-8601 timestamp of the tick (UTC, `toISOString`). */
   iso: string;
   /** Minutes since local midnight (0–1439) — handy for numeric-threshold rules. */
   minuteOfDay: number;
@@ -42,7 +42,7 @@ export function tickPayloadOf(now: Date): TickPayload {
   return {
     hhmm: `${hh}:${mm}`,
     weekday: now.getDay(),
-    iso: now.toString(),
+    iso: now.toISOString(),
     minuteOfDay: now.getHours() * 60 + now.getMinutes(),
   };
 }
