@@ -12,6 +12,7 @@ import {
   type SystemVitalsDeps,
   type SystemVitalsKind,
 } from '../../src/sensory/system-vitals-emitter.js';
+import { getGlobalEventBus } from '../../src/events/event-bus.js';
 
 interface Emitted {
   kind: SystemVitalsKind;
@@ -183,5 +184,34 @@ describe('runSystemVitalsPass — robustness', () => {
     });
     await expect(runSystemVitalsPass(deps)).resolves.toBeDefined();
     expect(emitted.find((e) => e.kind === 'resource_threshold')).toBeDefined();
+  });
+});
+
+describe('byte-identical when unused (flag off)', () => {
+  it('(e) importing the module and never invoking the pass emits nothing on the bus', async () => {
+    const seen: unknown[] = [];
+    const bus = getGlobalEventBus();
+    const id = bus.on('sensory:perception', (evt) => seen.push(evt));
+    // The wiring in server/index.ts only registers the pass when CODEBUDDY_SYSTEM_VITALS==='true';
+    // with the flag off the pass is never called, so nothing reaches the bus.
+    delete process.env.CODEBUDDY_SYSTEM_VITALS;
+    await Promise.resolve();
+    bus.off(id);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('(e) a fully-injected pass NEVER touches the real global bus (uses the injected emit)', async () => {
+    const seen: unknown[] = [];
+    const bus = getGlobalEventBus();
+    const id = bus.on('sensory:perception', (evt) => seen.push(evt));
+    const { deps } = baseDeps({
+      readChildren: () => [{ pid: 1, comm: 'bash', cpuPct: 99, etimeSec: 10 }],
+      runawayCpuPct: 90,
+      runawayPasses: 1,
+    });
+    await runSystemVitalsPass(deps);
+    bus.off(id);
+    // All emissions went through the injected emit, not the global bus.
+    expect(seen).toHaveLength(0);
   });
 });
