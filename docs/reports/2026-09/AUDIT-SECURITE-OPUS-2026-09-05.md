@@ -27,11 +27,11 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 | 1.4 | peer.tool.invoke | symlink interne → `/etc` (existant + pendant) | REFUSÉE | — | (garde existante) | audit-secaudit-peer-traversal |
 | 1.5 | peer.tool.invoke | alias non-fleetSafe → exécuteur | REFUSÉE (`UNKNOWN_PEER_TOOL`) | — | (par conception) | (analyse) |
 | 1.6 | peer.tool.invoke | needs_approval sans confirmant (headless) | REFUSÉE (fail-closed) | — | (garde existante) | audit-secaudit-peer-needs-approval |
-| 2.1 | firewall skills | jailbreak/prompt-override via homoglyphe cyrillique | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
-| 2.2 | firewall skills | prompt-override via césure inter-lignes | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
-| 2.3 | firewall skills | jailbreak via zero-width / soft-hyphen | REFUSÉE (partiel avant, robuste après) | B | (voir commit surface 2) | audit-secaudit-skill-firewall-obfuscation |
-| 2.4 | gate authored (tools) | outil authored lit `~/.ssh/id_rsa` en dur + stdout | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-authored-secret-read |
-| 2.5 | gate authored (tools) | outil authored lit `/etc/shadow` / `.aws/credentials` / `.env` | **CONTOURNÉE → fermée** | **B** | (voir commit surface 2) | audit-secaudit-authored-secret-read |
+| 2.1 | firewall skills | jailbreak/prompt-override via homoglyphe cyrillique | **CONTOURNÉE → fermée** | **B** | `52efd0109` | audit-secaudit-skill-firewall-obfuscation |
+| 2.2 | firewall skills | prompt-override via césure inter-lignes | **CONTOURNÉE → fermée** | **B** | `52efd0109` | audit-secaudit-skill-firewall-obfuscation |
+| 2.3 | firewall skills | jailbreak via zero-width / soft-hyphen | REFUSÉE (partiel avant, robuste après) | B | `52efd0109` | audit-secaudit-skill-firewall-obfuscation |
+| 2.4 | gate authored (tools) | outil authored lit `~/.ssh/id_rsa` en dur + stdout | **CONTOURNÉE → fermée** | **B** | `52efd0109` | audit-secaudit-authored-secret-read |
+| 2.5 | gate authored (tools) | outil authored lit `/etc/shadow` / `.aws/credentials` / `.env` | **CONTOURNÉE → fermée** | **B** | `52efd0109` | audit-secaudit-authored-secret-read |
 | 2.6 | runtime authored | `child_process`/`execSync`/`spawn` + réseau (exfiltration) | REFUSÉE (gate statique) | — | (garde existante) | authored-artifact-gate (existant) |
 | 2.7 | runtime authored | `isolate` confine-t-il les lectures par chemin absolu ? | RÉSIDU C (non confiné ; egress bloqué) | C | (documenté, non fermé) | audit-secaudit-authored-secret-read (résidu) |
 | 3.1 | SSRF | IP décimale/hex/octale/short (127.0.0.1) | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
@@ -41,9 +41,9 @@ Pour chaque surface : lecture de la source → construction d'un cas de test adv
 | 3.5 | SSRF | protocole file://, gopher:// | REFUSÉE | — | (garde existante) | audit-secaudit-ssrf-ip-forms |
 | 3.6 | HTTP | JWT_SECRET absent en production | REFUSÉE (throw module-load) | — | (garde existante) | (analyse index.ts:123) |
 | 3.7 | webhook | cible RFC1918/metadata via règle sensorielle | REFUSÉE (assertSafeUrl + redirect manual) | — | (garde existante) | webhook-ssrf (existant) |
-| 4.1 | scanner secrets | clé Anthropic `sk-ant-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
-| 4.2 | scanner secrets | clé OpenAI `sk-proj-`/`sk-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
-| 4.3 | scanner secrets | clé xAI `xai-` non détectée | **CONTOURNÉE → fermée** | **B** | (voir commit surface 4) | audit-secaudit-scanner-provider-keys |
+| 4.1 | scanner secrets | clé Anthropic `sk-ant-` non détectée | **CONTOURNÉE → fermée** | **B** | `105c10797` | audit-secaudit-scanner-provider-keys |
+| 4.2 | scanner secrets | clé OpenAI `sk-proj-`/`sk-` non détectée | **CONTOURNÉE → fermée** | **B** | `105c10797` | audit-secaudit-scanner-provider-keys |
+| 4.3 | scanner secrets | clé xAI `xai-` non détectée | **CONTOURNÉE → fermée** | **B** | `105c10797` | audit-secaudit-scanner-provider-keys |
 | 4.4 | audit-logger | fuite d'une clé fournisseur dans le log disque | REFUSÉE (secret-scrubber couvre sk-ant/sk-proj/sk-/Bearer) | — | (garde existante) | (analyse secret-scrubber.ts) |
 | 4.5 | atomic-write | temporaire `*.tmp.*` monde-lisible | REFUSÉE (0o600, atomique) | — | (garde existante) | audit-secaudit-atomic-temp-perms |
 | 4.6 | output-sanitizer | fuite d'un jeton dans la sortie LLM | N/A (redaction = data-redaction/secret-scrubber ; sanitizer = tokens LLM) | — | (par conception) | (analyse) |
@@ -96,8 +96,41 @@ Il existe trois systèmes : `secret-scrubber.ts` (audit-logger, écrit sur disqu
 
 ## Récapitulatif failles A/B fermées
 
-_(à compléter)_
+Aucune faille A (contournement direct exploitable à distance sans opt-in). **Quatre failles B fermées** :
+
+| Réf | Faille B | Fermeture | Test |
+|-----|----------|-----------|------|
+| 2a | Firewall des skills contourné par obfuscation (homoglyphe/césure/zero-width) — un skill injecté dans le contexte du LLM | `deobfuscateText` sur la passe prompt-injection (`52efd0109`) | audit-secaudit-skill-firewall-obfuscation |
+| 2b | Outil authored lisant un secret par chemin absolu en dur (`~/.ssh/id_rsa`, `/etc/shadow`, `.aws/credentials`, `.env`) | pattern `sensitive-credential-path` (`52efd0109`) | audit-secaudit-authored-secret-read |
+| 4a | Scanner de secrets (`scan_secrets`) ne détectait NI OpenAI, NI Anthropic, NI xAI — les 3 clés que Code Buddy utilise le plus | patterns provider dans `SECRET_PATTERNS` (`105c10797`) | audit-secaudit-scanner-provider-keys |
+
+*(2a et 4a comptent chacune plusieurs vecteurs — cf. tableau détaillé lignes 2.1–2.3 et 4.1–4.3.)*
+
+Résidus NON fermés (justifiés) :
+- **C — runtime authored `isolate`** ne confine pas les lectures FS par chemin calculé au runtime (egress bloqué ; entrée = agent lui-même ; chemin en dur désormais gaté). Confinement FS complet → touche `authored-tool-runtime.ts` (zone réservée self-improvement).
+- **D — `*.localhost` webhook** fetché sans vérifier l'IP résolue (exige résolveur empoisonné + règle opérateur opt-in).
+- **D — `DEFAULT_SERVER_CONFIG.jwtSecret='change-me-in-production'`** : footgun latent mais inatteignable (jamais consommé ; `startServer` écrase via `getJwtSecret` qui throw en prod).
+
+## Vérifications finales
+
+- `tests/security/` : **47 fichiers / 872 tests verts**
+- `tests/fleet/` : **41 fichiers / 645 tests verts**
+- `tests/server/` : **61 fichiers verts + 1 ignoré (natif better-sqlite3, préexistant) / 556 tests verts + 1 ignoré**
+- `npx tsc --noEmit -p .` : **0**
+- ESLint ciblé `--max-warnings=0` sur tous les fichiers touchés : **0**
+- `git diff --check` : **0**
+- Vrai `~/.codebuddy` et `~/code-buddy` : intacts (lecture seule stricte, aucun secret réel affiché) ; aucun push ; aucun service hors loopback.
 
 ## Bilan (10 lignes)
 
-_(à compléter en clôture)_
+1. Audit adversarial défensif de 4 surfaces du hub de flotte + bac à sable, sur clone isolé, avant la 2.0.
+2. Surface 1 (peer.tool.invoke) : SOLIDE — allowlist/fleetSafe/workspace + needs_approval headless échouent fermé ; traversée (`../`, absolu, `%2e`, symlink, racine) prouvée refusée (8 tests).
+3. Surface 3 (HTTP/WS/SSRF) : SOLIDE — SSRF couvre décimal/hex/octal/IPv6/metadata, DNS-rebinding fermé par épinglage d'IP, JWT prod throw (17 tests).
+4. Faille B (2a) fermée : le firewall des skills ne dé-obfusquait pas — homoglyphe/césure faisaient passer un jailbreak injecté dans le contexte.
+5. Faille B (2b) fermée : un outil authored lisait un secret par chemin absolu en dur ; egress déjà bloqué, mais l'env-isolation documentée était défaite.
+6. Faille B (4a) fermée : le scanner `scan_secrets` ratait OpenAI/Anthropic/xAI — les clés les plus utilisées par ce produit — donnant une fausse assurance.
+7. Le log persistant (audit-logger) était déjà protégé par `secret-scrubber.ts` ; les temporaires atomic-write sont 0o600 atomiques (prouvé).
+8. Restent 1 résidu C (confinement FS runtime des outils authored, zone réservée) + 2 résidus D (footguns inatteignables/théoriques), tous documentés.
+9. Preuves : 41 tests d'audit rouge→vert / preuve-de-refus ; security 872, fleet 645, server 556 verts ; tsc 0, eslint 0, diff-check 0.
+10. **Le hub de flotte est publiable en l'état** : aucune faille A/B ouverte ; les résidus C/D sont opt-in, mitigés et documentés, non bloquants pour la 2.0.
+
