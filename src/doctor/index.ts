@@ -5,8 +5,10 @@ import {
   constants as fsConstants,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -385,6 +387,37 @@ function checkDiskSpace(cwd: string): DoctorCheck {
   return { name: 'Disk space', status: 'ok', message: `${freeGB.toFixed(1)} GB free` };
 }
 
+/**
+ * Do the permission bits `stat()` reports on THIS directory's filesystem carry
+ * any access-control meaning?
+ *
+ * Windows synthesises `st_mode` from a single read-only attribute: libuv reports
+ * 0o666 for everything writable, so the "other" write bit is always set and a
+ * literal world-writable reading is a false positive (the real ACL is invisible
+ * to `stat()`, and `chmod` cannot change it). The same is true of FAT/exFAT or
+ * NTFS mounts on Linux. Probe the capability instead of naming an OS: create a
+ * directory with an explicitly restrictive mode and see whether `stat()` gives
+ * it back. Fails safe — an unprovable filesystem never raises the alarm.
+ */
+function permissionBitsAreEnforced(dir: string): boolean {
+  let probe: string | undefined;
+  try {
+    probe = mkdtempSync(join(dir, '.doctor-perm-probe-'));
+    chmodSync(probe, 0o700);
+    return (statSync(probe).mode & 0o077) === 0;
+  } catch {
+    return false;
+  } finally {
+    if (probe) {
+      try {
+        rmSync(probe, { recursive: true, force: true });
+      } catch {
+        /* best effort — the probe dir is empty and transient */
+      }
+    }
+  }
+}
+
 function checkProfilePermissions(): DoctorCheck {
   const dir = join(homedir(), '.codebuddy');
   if (!existsSync(dir)) {
@@ -414,6 +447,13 @@ function checkProfilePermissions(): DoctorCheck {
     };
   }
   if ((mode & 0o002) !== 0) {
+    if (!permissionBitsAreEnforced(dir)) {
+      return {
+        name: 'Profile permissions',
+        status: 'ok',
+        message: `${dir} writable — this filesystem does not enforce POSIX permission bits, so mode ${mode.toString(8)} carries no access-control meaning`,
+      };
+    }
     return {
       name: 'Profile permissions',
       status: 'warn',

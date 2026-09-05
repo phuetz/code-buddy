@@ -23,6 +23,32 @@ function tmp(): string {
   return path.join(os.tmpdir(), `cb-import-${randomUUID()}`);
 }
 
+/**
+ * Point `os.homedir()` — which is what the managed skills root is derived from —
+ * at a throwaway directory, and prove the redirection took.
+ *
+ * `os.homedir()` reads $HOME on POSIX but %USERPROFILE% on Windows, so setting
+ * HOME alone leaves the import writing into the REAL user profile: the fixture
+ * assertion fails AND an `imported-*` directory leaks into the developer's (or
+ * CI runner's) home, where the listing test below then finds it. Set both, like
+ * the sibling `skill-import-command-lifecycle` suite does.
+ *
+ * @returns a restore function for the `finally` block.
+ */
+function isolateHome(home: string): () => void {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  expect(os.homedir()).toBe(home); // the fixture is worthless if this ever fails
+  return () => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = originalUserProfile;
+  };
+}
+
 /** Write a Hermes-style skill fixture (frontmatter + body + optional support files). */
 function writeSkill(dir: string, frontmatter: string, body: string, support: Record<string, string> = {}): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -76,8 +102,7 @@ describe('skill-importer — discovery', () => {
 
   it('installs by default directly under the managed skills root', async () => {
     const home = tmp();
-    const originalHome = process.env.HOME;
-    process.env.HOME = home;
+    const restoreHome = isolateHome(home);
     try {
       writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
 
@@ -87,8 +112,7 @@ describe('skill-importer — discovery', () => {
       expect(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'imported-git-helper', 'SKILL.md'))).toBe(true);
       expect(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'managed', 'imported-git-helper'))).toBe(false);
     } finally {
-      if (originalHome === undefined) delete process.env.HOME;
-      else process.env.HOME = originalHome;
+      restoreHome();
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
@@ -169,8 +193,7 @@ describe('skill-importer — discovery', () => {
 
   it('lists imported skills from both the current and legacy managed roots', async () => {
     const home = tmp();
-    const originalHome = process.env.HOME;
-    process.env.HOME = home;
+    const restoreHome = isolateHome(home);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       writeSkill(path.join(home, '.codebuddy', 'skills', 'imported-current'), BENIGN_FM, BENIGN_BODY);
@@ -187,8 +210,7 @@ describe('skill-importer — discovery', () => {
       expect(listed.imported.map((skill) => skill.name).sort()).toEqual(['imported-current', 'imported-legacy']);
     } finally {
       logSpy.mockRestore();
-      if (originalHome === undefined) delete process.env.HOME;
-      else process.env.HOME = originalHome;
+      restoreHome();
       fs.rmSync(home, { recursive: true, force: true });
     }
   });

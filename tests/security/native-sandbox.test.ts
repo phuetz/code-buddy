@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import path from 'node:path';
 import {
   NATIVE_SANDBOX_ENV,
   buildBwrapArgv,
@@ -242,7 +243,12 @@ describe('confineSpawn', () => {
     expect(result.file).toBe('/usr/bin/python3');
     expect(result.args[0]).toBe(helper);
     expect(result.args).toContain('--project');
-    expect(result.args).toContain(PROJECT);
+    // `confineSpawn` construit sa politique avec `path.resolve(cwd)` : la racine qui
+    // atteint le helper est le chemin ABSOLU de l'hôte. Sur POSIX c'est PROJECT
+    // inchangé ; sous le `path` win32 le même littéral devient `<lecteur>:\home\...`.
+    // On vérifie donc la valeur que le code calcule, toujours en UN seul jeton argv
+    // La racine reste UN seul jeton argv : l'espace de « my project » ne la scinde pas.
+    expect(result.args).toContain(path.resolve(PROJECT));
     expect(result.args.slice(-3)).toEqual(['bash', '-c', 'echo ok']);
   });
 });

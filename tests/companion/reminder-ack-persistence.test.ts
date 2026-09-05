@@ -14,7 +14,10 @@ import { runReminderTick } from '../../src/companion/reminder-runner.js';
 
 let dir: string;
 let n = 0;
-const flush = () => new Promise((r) => setTimeout(r, 40)); // let the fire-and-forget persist land
+// Les miroirs disque sont lancés en `void savePendingAcks()` : les attendre par un délai
+// FIXE (40 ms) tenait sur un runner rapide et tombait sur un runner Windows chargé.
+// `whenRemindersPersisted()` est la barrière réelle — déterministe, sans budget de temps.
+const flush = () => whenRemindersPersisted();
 
 beforeEach(() => {
   dir = path.join(os.tmpdir(), `cb-ackpersist-${process.pid}-${n++}`);

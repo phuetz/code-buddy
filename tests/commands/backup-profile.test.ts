@@ -26,11 +26,23 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+/**
+ * Fixture home root.
+ *
+ * The product runs every restore destination through `path.resolve`. On win32 a
+ * bare `/home/testuser` gains the cwd drive letter there (`C:\home\testuser`) and
+ * would stop matching the mock filesystem, so the fixture root must already be
+ * fully qualified — `resolve` is then a no-op on both platforms.
+ */
+const TEST_HOME = vi.hoisted(() =>
+  process.platform === 'win32' ? 'C:\\home\\testuser' : '/home/testuser',
+);
+
 vi.mock('os', async (importOriginal) => {
   const original = await importOriginal<typeof import('os')>();
   return {
     ...original,
-    homedir: vi.fn(() => '/home/testuser'),
+    homedir: vi.fn(() => TEST_HOME),
   };
 });
 
@@ -43,6 +55,22 @@ vi.mock('path', async (importOriginal) => {
   };
 });
 
+/** POSIX spelling of the fixture root, used by the path literals below. */
+const POSIX_TEST_HOME = '/home/testuser';
+/** `~/.codebuddy` for the fixture home, in the platform's native spelling. */
+const HOME_PROFILE_DIR = path.join(TEST_HOME, '.codebuddy');
+
+/**
+ * Fixture paths are written POSIX-style around `/home/testuser`. The fs mocks below
+ * compare paths after normalising `\` to `/`, so a mock key must be the
+ * forward-slash form of the platform-native path (`C:/home/testuser/...` on win32).
+ */
+function mockKey(fixturePath: string): string {
+  const posix = fixturePath.replace(/\\/g, '/');
+  if (posix !== POSIX_TEST_HOME && !posix.startsWith(`${POSIX_TEST_HOME}/`)) return posix;
+  return `${TEST_HOME}${posix.slice(POSIX_TEST_HOME.length)}`.replace(/\\/g, '/');
+}
+
 // Import the handlers after mocking
 let backupHandlers: any;
 let handleBackup: any;
@@ -54,12 +82,17 @@ let DEFAULT_MAX_FILE_SIZE: any;
 let DEFAULT_MAX_TOTAL_SIZE: any;
 
 // Helper to create a mock file system
-function createMockFileSystem(files: Record<string, { content?: string; size?: number; isDir?: boolean; isSymlink?: boolean }>) {
+function createMockFileSystem(fixtureFiles: Record<string, { content?: string; size?: number; isDir?: boolean; isSymlink?: boolean }>) {
+  const files: Record<string, { content?: string; size?: number; isDir?: boolean; isSymlink?: boolean }> = {};
+  for (const [fixturePath, info] of Object.entries(fixtureFiles)) {
+    files[mockKey(fixturePath)] = info;
+  }
+
   vi.mocked(fs.existsSync).mockImplementation((path: string) => {
     const normalizedPath = path.replace(/\\/g, '/');
     // Home profile directory always exists for our tests
-    if (normalizedPath === '/home/testuser/.codebuddy') return true;
-    if (normalizedPath === '/home/testuser/.codebuddy/backups') return true;
+    if (normalizedPath === mockKey('/home/testuser/.codebuddy')) return true;
+    if (normalizedPath === mockKey('/home/testuser/.codebuddy/backups')) return true;
     
     // Check if the path exists in our mock filesystem
     for (const filePath of Object.keys(files)) {
@@ -347,7 +380,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
 
       // Mock process.cwd to return our test project
       const originalCwd = process.cwd;
-      process.cwd = vi.fn(() => '/home/testuser/test-project');
+      process.cwd = vi.fn(() => path.join(TEST_HOME, 'test-project'));
 
       const result = await handleBackup('create --scope both --output /tmp/backup');
       
@@ -558,7 +591,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
       expect(result.exitCode).toBeUndefined();
       expect(result.response).toContain('[DRY RUN]');
       expect(result.response).toContain('Actual scope: home');
-      expect(result.response).toContain('/home/testuser/.codebuddy (profile)');
+      expect(result.response).toContain(`${HOME_PROFILE_DIR} (profile)`);
     });
 
     it('should verify a valid home profile backup archive', async () => {
@@ -645,15 +678,13 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
       expect(result.response).toContain('Restored backup');
 
       // Verify existing file was backed up before overwrite
+      const restoredSettings = path.join(HOME_PROFILE_DIR, 'settings.json');
       expect(vi.mocked(fs.copyFileSync)).toHaveBeenCalledWith(
-        path.resolve('/home/testuser/.codebuddy/settings.json'),
-        path.resolve('/home/testuser/.codebuddy/settings.json.bak'),
+        restoredSettings,
+        `${restoredSettings}.bak`,
       );
       // Verify restored file was written
-      expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(
-        path.resolve('/home/testuser/.codebuddy/settings.json'),
-        payload,
-      );
+      expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(restoredSettings, payload);
     });
 
     it('should refuse restore if archive contains blacklisted secret files', async () => {

@@ -157,21 +157,85 @@ bits POSIX NTFS, budgets figés ×3, course d'abandon ComfyUI, parseur PowerShel
 `os.killpg` absent de Windows. **Le tas macOS est confirmé résolu** : le même scénario ne
 meurt plus en OOM (code 134), il n'excède plus que son budget de temps.
 
+### Run 4 — `33929245982` (HEAD `ee3106333`)
+
+| Job | Run 3 `33927528320` | Run 4 `33929245982` |
+| --- | --- | --- |
+| Ubuntu Node 20 (**bloquant**) | succès | **succès** |
+| Ubuntu Node 22 (**bloquant**) | succès | **succès** |
+| Security Audit (**bloquant**) | succès | **succès** |
+| Build and Package (**bloquant**) | succès | **succès** |
+| macOS Node 20 | succès | **succès** |
+| macOS Node 22 | échec — 1 test (`gk29`, 120 s) | échec — 1 test (**autre famille**) |
+| Windows Node 20 | échec — vague suivante | échec — 10 tests (shard 3) |
+| Windows Node 22 | échec — vague suivante | échec — 1 test (shard 2) |
+
+**Le budget `gk29-headless-resume` est confirmé réparé** : macOS Node 22 ne le cite plus.
+Le seul rouge macOS restant est une famille NEUVE, révélée derrière lui.
+
+### Passe 3 — familles fermées
+
+| Famille | Racine | Correctif |
+| --- | --- | --- |
+| `render-native-fashion-clip` (macOS 22) | **course `Promise.all`** : cinq lectures concurrentes, le message d'erreur venait de la PREMIÈRE promesse rejetée — donc de l'ordonnancement d'E/S, donc de la plateforme (Linux citait `i2v-wan-lightx2v.json`, macOS `upscale-seedvr2.json`) | **code de production** : `allSettled` + verdict dans l'ordre de déclaration ; le préflight nomme désormais TOUS les gabarits absents d'un coup au lieu de les révéler un par un |
+| `readme-truth` ×2 (Windows) | `execFileSync(node_modules/.bin/tsx)` : sous Windows ce shim est un script shell (l'exécutable est `tsx.cmd`), `CreateProcess` échoue et rend `status: null` — que le harnais traduisait en « exit 1, stderr vide » pour les 11 commandes citées | spawn de `process.execPath` + l'entrée JS résolue de tsx (`tsx/cli`) ; l'échec de spawn n'est plus effacé (`[no exit status] <message>`) ; `USERPROFILE` posé avec `HOME` |
+| `skill-importer` ×2 (Windows) | `os.homedir()` lit `%USERPROFILE%` sous Windows : l'isolation ne posait que `HOME`, l'import écrivait donc dans le VRAI profil — le test A y laissait `imported-git-helper`, que le test B listait ensuite | helper `isolateHome()` (les deux variables) qui **prouve** la redirection (`expect(os.homedir()).toBe(home)`) — l'idiome déjà employé par la suite sœur |
+| `doctor-fix` (Windows) | **défaut de production réel** : libuv synthétise `st_mode` à partir du seul attribut lecture-seule, tout objet inscriptible rend `0o666` — doctor déclarait donc TOUT profil Windows « world-writable » et proposait un `chmod 700` incapable de changer une ACL | `permissionBitsAreEnforced()` : sonde d'exécution (mkdtemp + chmod 0o700 + relecture du mode) évaluée seulement dans la branche suspecte, **fail-safe** ; couvre aussi FAT/exFAT/NTFS montés sous Linux. POSIX inchangé |
+| `gk16-backup` (Windows) | `chmod 0o555` ne rend pas un répertoire non-inscriptible sur NTFS : la prémisse « l'écriture échoue » est fausse, aucun chemin d'erreur n'était atteint | sonde `directoryRefusesWrites()` — une écriture jetable réelle ; les assertions ne sont ni supprimées ni affaiblies, et sur Linux la sonde rend `true` donc le test s'exécute pour de bon |
+| `backup-profile` ×2 (Windows) | (1) attendu écrit en barres obliques littérales alors que le produit rend les séparateurs natifs ; (2) racine de fixture `/home/testuser` non pleinement qualifiée : `path.resolve` y préfixe le lecteur courant, la clé ne correspondait plus au double de `fs` | attendus construits par `path.join` depuis la racine de la fixture ; racine rendue pleinement qualifiée (`C:\home\testuser` sous win32) donc `resolve` idempotent. **Aucun changement produit nécessaire** |
+| `bash-tool` (Windows) | `ls -la` n'est pas de la syntaxe PowerShell (`ls` y alias `Get-ChildItem`, `-la` n'est pas un de ses paramètres) : l'échec était syntaxique, pas sécuritaire | commande de listage dérivée de `getShellConfiguration()`, la MÊME source que celle qu'utilise `BashTool` |
+| `native-sandbox` (Windows) | `confineSpawn` bâtit sa politique avec `path.resolve(cwd)` : sous le `path` win32 le littéral POSIX devient `<lecteur>:\home\...` | l'assertion porte sur la racine que le code calcule, toujours en un seul jeton argv |
+| `reminder-ack-persistence` (Windows) | budget FIXE de 40 ms pour attendre un miroir disque lancé en `void savePendingAcks()` — tenait sur une machine rapide, tombait sur un runner Windows chargé | `whenRemindersPersisted()`, la barrière réelle déjà exportée par le module : déterministe, sans budget de temps |
+
+### Défaut de production trouvé hors périmètre (corrigé)
+
+`src/plugins/marketplace.ts` et `src/plugins/plugin-manager.ts` faisaient `await import(<chemin
+absolu>)`. Le chargeur ESM n'accepte que des URL : sous Windows cela lève
+`ERR_UNSUPPORTED_ESM_URL_SCHEME` — **aucun greffon ne pouvait s'y charger**. Les deux sites
+passent désormais par `pathToFileURL(...).href` (sur POSIX, URL équivalente au chemin nu).
+Aucun test ne couvrait ce chemin sous Windows ; il a été trouvé en remontant la piste
+(fausse pour `readme-truth`) des imports dynamiques.
+
+### Correctif structurel — les six shards Windows tournent enfin
+
+`npm test -- --shard=N/6 || npm test -- --shard=N/6` faisait échouer l'étape, donc les shards
+SUIVANTS n'étaient jamais lancés : Windows n'a jamais eu de mesure complète, et chaque
+réparation ne révélait que l'étage suivant, un run à la fois (run 2 → shard 1, run 3 → shard 2,
+run 4 → shard 3). Chaque shard est maintenant `continue-on-error` et une étape
+« Windows shard verdict » agrège les six `outcome` et échoue si l'un a échoué. Ce n'est **pas**
+un assouplissement — le job reste rouge dès qu'un shard est rouge — c'est un inventaire complet
+en un seul run.
+
+> **Attendu au prochain run** : Windows peut afficher PLUS de tests rouges qu'au run 4, parce que
+> les shards 3→6 (Node 20) et 2→6 (Node 22) n'ont **jamais** été exécutés. Ce serait un inventaire
+> qui s'ouvre, pas une régression.
+
 ### Ce qui reste ouvert
 
-1. **macOS Node 22** — `gk29-headless-resume` enchaîne quatre tours CLI complets et a
-   franchi son budget explicite de 120 s (Node 20 passe le même scénario). Budget porté à
-   300 s sur les hôtes lents, **poussé mais pas encore vérifié en CI**.
-2. **Windows Node 20 et 22** — une VAGUE SUIVANTE, à nouveau révélée par la progression
-   dans les shards : `gk16-backup`, `backup-profile` ×2, `bash-tool` (« Safe Commands »),
-   `readme-truth` ×2. Ces scénarios n'avaient jamais tourné sous Windows : chaque correctif
-   fait avancer le job dans `--shard=N/6`, ce qui découvre l'étage suivant. Le travail
-   restant est donc borné mais non terminé — il demande le même traitement famille par
-   famille, avec les journaux de `33927528320` comme point de départ.
+1. **L'inventaire Windows n'est pas clos.** Les shards 3→6 (Node 20) et 2→6 (Node 22) n'ont
+   jamais tourné. Le correctif structurel ci-dessus les fait tourner tous au prochain run :
+   c'est la première mesure COMPLÈTE de Windows. Les familles qui en sortiront demandent le
+   même traitement — une racine par famille, une sonde plutôt qu'un nom d'OS.
+2. **`CODEBUDDY_HOME` ignoré par tout le sous-système skills** (observation de la passe 3, non
+   corrigée). L'importeur, la CLI `skills imported`, le registre, `skill-exchange` et
+   `skill-sources` codent en dur `os.homedir()/.codebuddy` alors que
+   `src/utils/codebuddy-home.ts` fournit l'override partout ailleurs. Ne réparer que
+   l'importeur le ferait écrire là où le registre ne lit jamais : c'est un balayage
+   coordonné, à mener comme un chantier à part.
+3. **Deux familles de prémisses fausses restent à balayer** (repérées, non traitées) : les
+   tests qui construisent une prémisse « non-inscriptible » par `chmod` (4 fichiers) et ceux
+   qui attendent un miroir asynchrone par un `setTimeout` fixe (66 fichiers). Chacun est un
+   faux vert ou un rouge de machine lente en puissance ; aucun n'est visible sous Linux.
 
-**Constat structurel** : `npm test -- --shard=1/6 || npm test -- --shard=1/6` fait échouer
-l'étape, donc les shards 2 à 6 n'étaient JAMAIS lancés. Windows n'a jamais eu de mesure
-complète ; ce qui apparaît maintenant n'est pas une régression mais un inventaire qui
-commence enfin. Il serait plus honnête de faire tourner les six shards puis de conclure
-(`continue-on-error` par shard, verdict agrégé), sans quoi chaque réparation continuera de
-révéler l'étage suivant un run à la fois.
+## Invariants respectés
+
+- Aucun test désactivé en bloc : chaque garde de plateforme est adossée à une **sonde
+  d'environnement** (écriture réelle, relecture de mode, `os.homedir()` prouvé), jamais à un
+  simple `process.platform`.
+- Les défauts réels de portabilité sont corrigés **dans le code** : préflight non
+  déterministe, faux positif « world-writable » de `doctor`, chargement de greffons
+  impossible sous Windows.
+- `git add` fichier par fichier. `/home/patrice/code-buddy` et `~/.codebuddy` non touchés.
+- Vérifications locales : `npx vitest run` sur les 10 fichiers touchés → 126 passés,
+  1 ignoré (le `it.skip` préexistant) ; `npm run typecheck` → 0 ; `npm run lint` → 0 erreur ;
+  `git diff --check` → propre.

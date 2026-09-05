@@ -262,6 +262,22 @@ async function defaultProbeFinal(filename: string, run: NativeFashionRenderDepen
   };
 }
 
+/**
+ * Levée quand un gabarit OBLIGATOIRE est absent. Typée pour que `loadTemplates`
+ * puisse les rassembler tous et rendre un verdict unique, dans l'ordre de
+ * déclaration — au lieu de laisser la course des lectures concurrentes décider
+ * quel nom de fichier l'utilisateur voit.
+ */
+class MissingTemplateError extends Error {
+  readonly fullPath: string;
+
+  constructor(fullPath: string) {
+    super(`Required ComfyUI API template is missing: ${fullPath}`);
+    this.name = 'MissingTemplateError';
+    this.fullPath = fullPath;
+  }
+}
+
 async function loadTemplate(
   directory: string,
   filename: string,
@@ -275,7 +291,7 @@ async function loadTemplate(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT' && !required) return {};
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`Required ComfyUI API template is missing: ${fullPath}`);
+      throw new MissingTemplateError(fullPath);
     }
     throw error;
   }
@@ -290,13 +306,42 @@ async function loadTemplate(
 
 async function loadTemplates(options: NativeFashionRenderOptions): Promise<LoadedTemplates> {
   const needKeyframe = !options.keyframe || options.segments > 1;
-  const [keyframe, i2v, flf2v, upscale, interpolate] = await Promise.all([
+  // Les cinq lectures restent concurrentes, mais le VERDICT est rendu dans l'ordre
+  // de déclaration : avec `Promise.all`, quand plusieurs gabarits manquent, c'est la
+  // course des `readFile` qui décide du message d'erreur — l'utilisateur (et le test)
+  // voyaient un nom de fichier différent selon la plateforme. `allSettled` + tri par
+  // position rend le préflight déterministe ET signale d'un coup TOUS les gabarits
+  // à fournir, au lieu de les révéler un par un à chaque relance.
+  const settled = await Promise.allSettled([
     loadTemplate(options.workflowsDir, 'keyframe-flux.json', KEYFRAME_FLUX_TEMPLATE_CONTRACT, needKeyframe),
     loadTemplate(options.workflowsDir, 'i2v-wan-lightx2v.json', I2V_WAN_LIGHTX2V_TEMPLATE_CONTRACT, true),
     loadTemplate(options.workflowsDir, 'i2v-wan-flf2v.json', I2V_WAN_FLF2V_TEMPLATE_CONTRACT, false),
     loadTemplate(options.workflowsDir, 'upscale-seedvr2.json', UPSCALE_SEEDVR2_TEMPLATE_CONTRACT, !options.skipUpscale),
     loadTemplate(options.workflowsDir, 'interpolate-rife.json', INTERPOLATE_RIFE_TEMPLATE_CONTRACT, !options.skipInterpolate),
   ]);
+
+  const missing = settled.flatMap((outcome) =>
+    outcome.status === 'rejected' && outcome.reason instanceof MissingTemplateError
+      ? [outcome.reason.fullPath]
+      : []);
+  if (missing.length > 0) {
+    throw new Error(missing.length === 1
+      ? `Required ComfyUI API template is missing: ${missing[0]}`
+      : `Required ComfyUI API templates are missing: ${missing.join(', ')}`);
+  }
+  // Toute autre erreur (JSON invalide, contrat non respecté, I/O) est relancée
+  // telle quelle, elle aussi dans l'ordre de déclaration.
+  const otherFailure = settled.find((outcome) => outcome.status === 'rejected');
+  if (otherFailure && otherFailure.status === 'rejected') throw otherFailure.reason;
+
+  const [keyframe, i2v, flf2v, upscale, interpolate] = settled.map((outcome) =>
+    outcome.status === 'fulfilled' ? outcome.value : {}) as [
+      Awaited<ReturnType<typeof loadTemplate>>,
+      Awaited<ReturnType<typeof loadTemplate>>,
+      Awaited<ReturnType<typeof loadTemplate>>,
+      Awaited<ReturnType<typeof loadTemplate>>,
+      Awaited<ReturnType<typeof loadTemplate>>,
+    ];
   if (!i2v.template || !i2v.digest) throw new Error('Internal error: required i2v template did not load');
   const digests: Record<string, string> = { 'i2v-wan-lightx2v.json': i2v.digest };
   for (const [name, value] of [

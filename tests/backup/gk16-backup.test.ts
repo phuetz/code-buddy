@@ -10,6 +10,29 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { handleBackup } from '../../src/commands/handlers/backup-handlers.js';
 import { makeTmpDir, removeTmpDir } from '../helpers/tmp.js';
 
+/**
+ * True when the OS really refuses to create a file inside `dir`.
+ *
+ * `chmod 0o555` is only advisory on some systems: NTFS ignores POSIX mode bits for
+ * the owning user (so the write succeeds on Windows), and root bypasses them on
+ * POSIX too. The only honest way to know the premise of a test — "this directory
+ * cannot be written" — actually holds here is to attempt a throwaway write.
+ */
+function directoryRefusesWrites(dir: string): boolean {
+  const probe = path.join(dir, `.write-probe-${process.pid}-${Date.now()}`);
+  try {
+    fs.writeFileSync(probe, 'probe');
+  } catch {
+    return true;
+  }
+  try {
+    fs.unlinkSync(probe);
+  } catch {
+    // Best effort: the probe file goes away with the workspace teardown.
+  }
+  return false;
+}
+
 describe('GK16 backup create must not announce success with nothing to restore', () => {
   let workspace: string;
   let previousCwd: string;
@@ -58,10 +81,20 @@ describe('GK16 backup I/O failures must not crash or pretend to have read the ar
     removeTmpDir(workspace);
   });
 
-  it('returns a user-facing error when create cannot write the archive (unwritable directory)', async () => {
+  it('returns a user-facing error when create cannot write the archive (unwritable directory)', async (ctx) => {
     const output = path.join(workspace, 'backups');
     fs.mkdirSync(output);
     fs.chmodSync(output, 0o555);
+    // Probe the capability instead of guessing from `process.platform`: if this
+    // filesystem still lets us write, the "unwritable directory" premise does not
+    // exist here and asserting the error path would test nothing.
+    if (!directoryRefusesWrites(output)) {
+      fs.chmodSync(output, 0o755);
+      ctx.skip(
+        'this filesystem does not enforce a read-only directory for the current user ' +
+          '(NTFS ignores POSIX mode bits, and root bypasses them) — the unwritable premise cannot be created here',
+      );
+    }
     let thrown: unknown;
     let created: Awaited<ReturnType<typeof handleBackup>> | undefined;
     try {

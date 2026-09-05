@@ -1,4 +1,5 @@
 import fs from 'fs-extra';
+import { pathToFileURL } from 'node:url';
 import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'events';
@@ -351,7 +352,10 @@ export class PluginManager extends EventEmitter {
         // Legacy: Load in main thread (not recommended)
         // Only allowed for plugins with minimal permissions
         this.logger.warn(`Plugin ${manifest.id} running in main thread (not isolated)`);
-        const module = await import(entryPoint);
+        // `entryPoint` est un chemin de FICHIER absolu ; le chargeur ESM veut une URL.
+        // Sans cette conversion, Windows lève ERR_UNSUPPORTED_ESM_URL_SCHEME et aucun
+        // greffon ne se charge. Sur POSIX, l'URL produite est équivalente au chemin nu.
+        const module = await import(pathToFileURL(entryPoint).href);
         pluginInstance = new module.default();
       }
       // If isolated, the instance will be created in the worker thread

@@ -132,9 +132,30 @@ function fakeDependencies(calls: string[]): NativeFashionRenderDependencies {
 describe('native fashion clip render orchestrator', () => {
   it('fails preflight explicitly when required exported templates are missing', async () => {
     const value = await fixture(false);
+    // Le verdict doit nommer TOUS les gabarits obligatoires absents, dans l'ordre de
+    // déclaration : les cinq lectures sont concurrentes, et tant que le message venait
+    // de la première promesse rejetée, le nom cité dépendait de la course d'E/S — donc
+    // de la plateforme (Linux citait `i2v-wan-lightx2v.json`, macOS `upscale-seedvr2.json`).
+    // Les chemins sont construits avec `path.join` : l'attendu vaut sur les deux familles
+    // de séparateurs.
+    const expected = [
+      path.join(value.options.workflowsDir, 'i2v-wan-lightx2v.json'),
+      path.join(value.options.workflowsDir, 'upscale-seedvr2.json'),
+      path.join(value.options.workflowsDir, 'interpolate-rife.json'),
+    ].join(', ');
     await expect(renderNativeFashionClip(value.options, {
       probeComfy: async () => ({ ok: true, devices: [] }),
-    })).rejects.toThrow(/Required ComfyUI API template is missing.*i2v-wan-lightx2v\.json/u);
+    })).rejects.toThrow(`Required ComfyUI API templates are missing: ${expected}`);
+  });
+
+  it('names the single missing template when only one required export is absent', async () => {
+    const value = await fixture();
+    await fs.rm(path.join(value.options.workflowsDir, 'upscale-seedvr2.json'));
+    await expect(renderNativeFashionClip(value.options, {
+      probeComfy: async () => ({ ok: true, devices: [] }),
+    })).rejects.toThrow(
+      `Required ComfyUI API template is missing: ${path.join(value.options.workflowsDir, 'upscale-seedvr2.json')}`,
+    );
   });
 
   it('runs the complete pipeline with injected ComfyUI and ffmpeg implementations', async () => {

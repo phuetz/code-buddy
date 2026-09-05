@@ -3,6 +3,7 @@
  */
 
 import { BashTool } from '../src/tools/bash';
+import { getShellConfiguration } from '../src/utils/shell-configuration';
 import path from 'path';
 import os from 'os';
 
@@ -115,8 +116,14 @@ describe('BashTool', () => {
   });
 
   describe('Safe Commands', () => {
-    it('should allow ls command', async () => {
-      const result = await bashTool.execute('ls -la');
+    it('should allow a directory listing', async () => {
+      // La commande doit parler la langue du shell qui l'exécute : `getShellConfiguration()`
+      // est la MÊME source que celle qu'utilise BashTool. Sous PowerShell, `ls` est un alias
+      // de Get-ChildItem et `-la` n'est pas un de ses paramètres — la commande échouait donc
+      // pour une raison de syntaxe, pas de sécurité. Ce que le test prouve reste intact :
+      // une commande de listage inoffensive n'est pas bloquée et s'exécute.
+      const listing = getShellConfiguration().shell === 'bash' ? 'ls -la' : 'Get-ChildItem';
+      const result = await bashTool.execute(listing);
       expect(result.success).toBe(true);
     });
 

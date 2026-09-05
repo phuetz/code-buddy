@@ -4,13 +4,30 @@
  */
 import { execFileSync } from 'child_process';
 import fs from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readmePath = path.join(repoRoot, 'README.md');
-const tsxBin = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
+
+/**
+ * Resolve tsx's JavaScript entry point, never the `node_modules/.bin/tsx` shim.
+ * On Windows that shim is an extensionless shell script (the executable one is
+ * `tsx.cmd`), so `execFileSync` without a shell dies inside CreateProcess: the
+ * result carries `status: null` and null stdout/stderr, which every command
+ * then reports as an indistinguishable "exit 1 with no output".
+ */
+function resolveTsxCli(): string {
+  try {
+    return createRequire(import.meta.url).resolve('tsx/cli');
+  } catch {
+    return path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  }
+}
+
+const tsxCli = resolveTsxCli();
 
 function isolatedEnv(): NodeJS.ProcessEnv {
   const home = path.join(repoRoot, 'node_modules', '.gk31-readme-home');
@@ -21,13 +38,18 @@ function isolatedEnv(): NodeJS.ProcessEnv {
     CODEBUDDY_HOME: path.join(home, '.codebuddy'),
     NO_COLOR: '1',
   };
+  if (process.platform === 'win32') {
+    // os.homedir() reads USERPROFILE on Windows, so HOME alone would leave the
+    // spawned CLI pointed at the CI runner's real profile.
+    env.USERPROFILE = home;
+  }
   delete env.FORCE_COLOR;
   return env;
 }
 
 function runBuddy(args: string[]): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execFileSync(tsxBin, ['src/index.ts', ...args], {
+    const stdout = execFileSync(process.execPath, [tsxCli, 'src/index.ts', ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       env: isolatedEnv(),
@@ -37,12 +59,22 @@ function runBuddy(args: string[]): { stdout: string; stderr: string; exitCode: n
     });
     return { stdout, stderr: '', exitCode: 0 };
   } catch (error: unknown) {
-    const execError = error as { stdout?: string; stderr?: string; status?: number };
-    return {
-      stdout: execError.stdout ?? '',
-      stderr: execError.stderr ?? '',
-      exitCode: execError.status ?? 1,
+    const execError = error as {
+      stdout?: string | null;
+      stderr?: string | null;
+      status?: number | null;
+      message?: string;
     };
+    const stdout = execError.stdout ?? '';
+    const stderr = execError.stderr ?? '';
+    if (typeof execError.status === 'number') {
+      return { stdout, stderr, exitCode: execError.status };
+    }
+    // No exit status means the child never ran to completion (spawn error,
+    // timeout, signal). Reporting a bare "exit 1" with empty output here is what
+    // made the Windows failure undiagnosable, so carry the reason through.
+    const reason = `[no exit status] ${execError.message ?? 'unknown spawn failure'}`;
+    return { stdout, stderr: stderr ? `${stderr}\n${reason}` : reason, exitCode: 1 };
   }
 }
 
@@ -107,7 +139,7 @@ describe('README truth (GK31)', () => {
   });
 
   it('only names buddy commands that appear in buddy --help', () => {
-    expect(fs.existsSync(tsxBin), 'tsx is required to spawn the CLI from source').toBe(true);
+    expect(fs.existsSync(tsxCli), 'tsx is required to spawn the CLI from source').toBe(true);
 
     const help = runBuddy(['--help']);
     expect(help.exitCode, help.stderr).toBe(0);
