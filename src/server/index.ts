@@ -1939,6 +1939,15 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             sensoryTeardown.push(() => heart.unregister('schedule-ticks'));
             logger.info(`Schedule ticks: Enabled (CODEBUDDY_SCHEDULE_TICKS) - time/tick percept every ${ticksEvery} beats`);
           }
+          // Domain-event bridge (opt-in) — re-emit the agent's internal domain events
+          // (fleet:activity, agent:loop_detected, cost:*, context:pre_compact) as sensory
+          // percepts, so ONE rule grammar covers physical perception AND inner life. Anti-loop:
+          // it never subscribes to sensory:perception. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_DOMAIN_EVENTS === 'true') {
+            const { wireDomainEventBridge } = await import('../sensory/domain-event-bridge.js');
+            sensoryTeardown.push(wireDomainEventBridge());
+            logger.info('Domain-event bridge: Enabled (CODEBUDDY_DOMAIN_EVENTS) - domain events -> sensory:perception');
+          }
           // Episodic journal (opt-in) — consolidate the heard DIALOGUE into "what we talked about"
           // so the arrival opener / follow-ups can reference it. Distinct from dreaming (sensor stats).
           if (process.env.CODEBUDDY_EPISODE_JOURNAL === 'true') {
