@@ -85,6 +85,15 @@ describe('resolveFirstTokenStallTimeoutMs', () => {
     expect(resolveFirstTokenStallTimeoutMs(5604, { CODEBUDDY_PROVIDER: 'xai', OLLAMA_HOST: 'http://127.0.0.1:11434' })).toBe(120_000);
   });
 
+  it('gives adaptive budget when targetIsLocal is true despite cloud origin, keeps 120s without fallback', () => {
+    const cloud = { CODEBUDDY_PROVIDER: 'chatgpt' };
+    // Origine cloud + cible ollama => budget adaptatif
+    expect(resolveFirstTokenStallTimeoutMs(5604, cloud, { targetIsLocal: true })).toBe(1_120_800);
+    // Origine cloud sans bascule => 120 s (non-régression du trou B de VERIF-HEADLESS)
+    expect(resolveFirstTokenStallTimeoutMs(5604, cloud, { targetIsLocal: false })).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, cloud)).toBe(120_000);
+  });
+
   it('honours CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN and CODEBUDDY_STALL_MAX_MS', () => {
     expect(resolveFirstTokenStallTimeoutMs(100, {
       ...local, CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',

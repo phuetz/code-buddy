@@ -25,6 +25,7 @@ import {
   resolveRuntimeFallbackProviders,
   type RuntimeFallbackProvider,
 } from "../providers/provider-fallback.js";
+import { isLocalLlmProvider } from "../config/headless-local-prompt.js";
 import {
   classifyFailoverKind,
   extractResetsInSeconds,
@@ -299,6 +300,7 @@ export class CodeBuddyClient {
   private fallbackProviders: RuntimeFallbackProvider[] = [];
   /** True after a declared failover until the original provider is healthy again. */
   private didDeclaredFailover = false;
+  private activeFallback?: RuntimeFallbackProvider;
   /** Lazy default chain (authenticated registry) for CODEBUDDY_PROVIDER_FALLBACK. */
   private defaultDeclaredChain?: Promise<RuntimeFallbackProvider[]>;
 
@@ -545,8 +547,8 @@ export class CodeBuddyClient {
     return inferRuntimeProviderIdFromBaseURL(this.baseURL) ?? 'custom';
   }
 
-  private usesDeclaredFailover(opts: ChatOptions): boolean {
-    return isDeclaredProviderFallbackEnabled() && !opts.disableProviderFallback;
+  private usesDeclaredFailover(opts?: ChatOptions): boolean {
+    return isDeclaredProviderFallbackEnabled() && !opts?.disableProviderFallback;
   }
 
   private unavailablePrimaryError(): Error {
@@ -562,6 +564,7 @@ export class CodeBuddyClient {
     const id = this.getRuntimeProviderId();
     if (isProviderUnavailable(id)) return;
     notifyProviderReturn(id);
+    this.activeFallback = undefined;
     this.didDeclaredFailover = false;
     recordProviderSuccess(id);
   }
@@ -670,6 +673,23 @@ export class CodeBuddyClient {
     if (url.includes('fireworks.ai')) return 'Fireworks';
     if (url.includes('localhost') || url.includes('127.0.0.1')) return 'Local';
     return 'API';
+  }
+
+  getCurrentProvider(): string {
+    return this.activeFallback?.provider ?? this.getRuntimeProviderId();
+  }
+
+  getCurrentBaseUrl(): string {
+    return this.activeFallback?.baseURL ?? this.baseURL;
+  }
+
+  isEffectiveTargetLocal(): boolean {
+    if (this.activeFallback) return isLocalFailoverCandidate(this.activeFallback);
+    if (this.usesDeclaredFailover() && isProviderUnavailable(this.getRuntimeProviderId())) {
+      const first = this.fallbackProviders[0] ?? this.credentialPoolProviders[0];
+      if (first) return isLocalFailoverCandidate(first);
+    }
+    return isLocalLlmProvider();
   }
 
   /**
@@ -956,6 +976,7 @@ export class CodeBuddyClient {
           attempts.push(skipped);
           continue;
         }
+        this.activeFallback = fallback;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -1005,6 +1026,7 @@ export class CodeBuddyClient {
       }
     }
 
+    this.activeFallback = undefined;
     throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
@@ -1240,6 +1262,7 @@ export class CodeBuddyClient {
           attempts.push(skipped);
           continue;
         }
+        this.activeFallback = fallback;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -1304,6 +1327,7 @@ export class CodeBuddyClient {
       }
     }
 
+    this.activeFallback = undefined;
     throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 

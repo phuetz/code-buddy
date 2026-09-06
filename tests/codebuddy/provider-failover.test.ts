@@ -425,4 +425,29 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     expect(system?.content.length).toBeLessThan(huge.length);
     expect(sent.some((m) => m.content?.includes('conversation reprise par'))).toBe(true);
   });
+
+  it('exposes effective target and local status after failover', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));
+    const localTarget: RuntimeFallbackProvider = {
+      provider: 'ollama',
+      label: 'Ollama',
+      apiMode: 'openai-compatible',
+      model: 'qwen3.8-ctx32k:latest',
+      baseURL: 'https://mock.ollama.internal/v1',
+      apiKey: 'ollama',
+      authMode: 'local',
+      fallbackSource: 'environment',
+    };
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [localTarget],
+    });
+    expect(client.getCurrentProvider()).toBe('grok');
+    expect(client.isEffectiveTargetLocal()).toBe(false);
+
+    await client.chat([{ role: 'user', content: 'hello' }], []);
+    expect(client.getCurrentProvider()).toBe('ollama');
+    expect(client.getCurrentBaseUrl()).toBe('https://mock.ollama.internal/v1');
+    expect(client.isEffectiveTargetLocal()).toBe(true);
+  });
 });
