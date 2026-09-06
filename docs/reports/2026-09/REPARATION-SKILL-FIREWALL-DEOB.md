@@ -88,3 +88,28 @@ L'objectif est d'étendre la déobfuscation à toutes les classes de motifs tout
   - Mise à jour de la documentation :
     - `docs/RELEASE-NOTES-2.0.0.md` : mise à jour de la « Limite connue » désormais levée grâce à la déobfuscation sûre multi-classes.
     - `CHANGELOG.md` : mise à jour de la section Sécurité pour acter l'extension à toutes les classes via `deobfuscateSafeForScan` et la conservation du décodage agressif pour prompt-injection.
+
+## 4. Suivi après contre-vérification Opus
+
+La contre-vérification indépendante et adversariale menée par Claude Opus (`docs/reports/2026-09/VERIF-SKILL-FIREWALL-OPUS.md`) a validé la fermeture effective du trou B-4 et l'absence de régression sur corpus réel (191 skills, 0 flip de verdict). Elle a néanmoins identifié trois points à traiter en suivi :
+
+1. **B-1 — Bourrage au-delà de 256 Ko (cas G03)** :
+   - *Constat* : `deobfuscateSafeForScan` tronquait à `MAX_SCAN_CHARS = 256 * 1024` avant normalisation. Un document de 300 Ko contenant une charge obfusquée en fin de fichier (`r<U+200B>m -rf /`) échappait au scanner et obtenait `allow`.
+   - *Résolution retenue* : Balayage fenêtré (fenêtres de 256 Ko avec recouvrement de 4 Ko, sur le texte brut et le texte normalisé). Cette approche évite les dénis de service liés à des allocations ou des expressions régulières sur documents géants tout en garantissant qu'aucune charge ne soit ignorée, y compris à la frontière entre fenêtres grâce au recouvrement de 4 Ko.
+   - *Test rouge→vert* : Cas G03 (`quarantine`).
+
+2. **B-2 — Kill-switch non byte-identique (cas D01)** :
+   - *Constat* : `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL=false` ne désactivait que la passe de déobfuscation étendue, mais le motif `dynamic-import` conservait son lookbehind négatif `(?<!\bfrom\s+[\w.]+\s+)` inconditionnellement. Sur le cas adverse D01 (`const m = await from lib import(nomModule);`), la base `f7c4eedde` donnait `quarantine` (score 76) alors que HEAD avec drapeau `false` donnait `allow` (score 100).
+   - *Résolution* : Conditionner le lookbehind du motif `dynamic-import` à l'activation du drapeau `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL`. Si le drapeau vaut `false` ou `0`, le motif d'origine de `f7c4eedde` est restauré exactement, garantissant une restauration byte-identique et verdict-identique du comportement d'origine.
+   - *Test* : Cas D01 avec drapeau `false` ⇒ verdict identique à la base `f7c4eedde` (`quarantine`).
+
+3. **C-2 — Aplatissement du document et faux positifs inter-paragraphes (cas F01)** :
+   - *Constat* : `deobfuscateText` terminait par `.replace(/\s+/g, ' ')`, fusionnant tous les retours à la ligne du document. Les motifs utilisant `[^|\n]*` (comme `remote-download-pipe-shell`) ou `.*` pouvaient ainsi traverser des paragraphes entiers (ex. `curl` cité dans un paragraphe et `| bash` dans un autre à 3 paragraphes de distance).
+   - *Résolution* : Conserver les retours à la ligne `\n` dans la couche « sûre » de `src/security/text-deobfuscation.ts` en ne repliant que les espaces horizontales (`[^\S\n]+` -> `' '`), tout en continuant de fusionner les césures mot-tiret-retour ligne (`(\w+)-[\r\n]+\s*(\w+)`).
+   - *Test* : Cas F01 (`curl` dans un paragraphe, `| bash` dans un autre) ⇒ `allow`, et `curl ... | sh` sur une ligne ⇒ `quarantine`.
+
+4. **Preuves et métriques de performance** :
+   - Exécution de la campagne sur le corpus élargi (191 skills) : 0 flip attendu.
+   - Validation de l'ensemble des suites `tests/security` et `tests/skills`.
+   - Types (`tsc`), lint (`eslint`), espacements (`git diff --check`) et données personnelles (`donnees-personnelles.test.ts`).
+   - Mesure des temps de scan corpus avant/après pour s'assurer du respect du plafond de 1,5 s.
