@@ -77,7 +77,7 @@ C’est exactement le modèle **à ne pas copier** pour Lisa : une copine n’es
 
 Le produit Grok 2026 met la mémoire **en tête** (page officielle). Les retours d’usage sont plus durs : Ani peut ressortir un chien nommé onze jours plus tôt, ou une opération de proche six semaines plus tard — et **oublier** trois faits personnels après deux semaines d’absence ([revue 90 jours](https://aicompanionguides.com/blog/grok-ani-review/)). Cherry Magazine : brillant **dans** la session, plus faible **d’une semaine à l’autre**. Business Insider : un « love score » qui retombe à 0 après un incident, puis des souvenirs qui reviennent.
 
-Leçon pour Lisa : **ce n’est pas « plus de tokens »**. C’est une liste courte, stable, *nommée*, de ce qui compte (le chien, les projets, la fatigue, l’apnée), rappelée sans score, et qui **ne disparaît pas** parce qu’on a voyagé.
+Leçon pour Lisa : **ce n’est pas « plus de tokens »**. C’est une liste courte, stable, *nommée*, de ce qui compte (le chien, les projets, la fatigue, sa santé), rappelée sans score, et qui **ne disparaît pas** parce qu’on a voyagé.
 
 ### 1.4 Initiative (elle écrit la première)
 
@@ -132,13 +132,13 @@ Légende : **existe** / **manque** / **mieux (à garder)**. Les scores internes 
 
 | Couche | Fichier:ligne | Rôle | Verdict |
 |---|---|---|---|
-| Modèle utilisateur | `user-model.ts:17–20, 56–62, 310–331` | Préférences de *travail* acceptées à la main. **Refuse santé, famille, relations, finances** | Utile pour le code ; **inutile** pour Isidore / apnée / fatigue |
+| Modèle utilisateur | `user-model.ts:17–20, 56–62, 310–331` | Préférences de *travail* acceptées à la main. **Refuse santé, famille, relations, finances** | Utile pour le code ; **inutile** pour son chien / santé / fatigue |
 | Journal épisodique | `episodic-journal.ts:46–76, 216–305` | « De quoi on a parlé » ; faits saillants (regex étroite : train, souvenir, demain…) ; promote `episode:recent` | Existe, court, **pas une fiche de vie** |
 | Contexte relationnel | `relational-context.ts:204–298, 328–329` | Compose faits + épisode + humeur + présence ; opt-in | Câblé, mais alimenté par les deux couches ci-dessus |
 | Inner-life | `inner-life.ts:10–15, 72–74` | Vie intérieure **honnête** (build, notes, mémoire) — pas de yoga fictif | Mieux que xAI sur l’honnêteté |
-| Oubli | `memory-forgetting.ts` (opt-in dreaming) | Ebbinghaus ; `preferences` / `decisions` / `pinned` ne tombent pas | Bon pour le code ; **dangereux** si on y met l’apnée sans pin |
+| Oubli | `memory-forgetting.ts` (opt-in dreaming) | Ebbinghaus ; `preferences` / `decisions` / `pinned` ne tombent pas | Bon pour le code ; **dangereux** si on y met sa santé sans pin |
 
-**Manque (le plus gros trou « petite copine »)** : un magasin local, court, pinned, jargon-free : *le chien s’appelle Isidore ; il est souvent fatigué ; il a de l’apnée ; tel projet compte ; il part deux semaines*. Aujourd’hui ça ne peut **pas** entrer dans `user-model` (c’est de la santé / du foyer). Le journal peut l’entendre un soir et l’écraser le lendemain.
+**Manque (le plus gros trou « petite copine »)** : un magasin local, court, pinned, jargon-free : *le chien s’appelle son chien ; il est souvent fatigué ; il a de sa santé ; tel projet compte ; il part deux semaines*. Aujourd’hui ça ne peut **pas** entrer dans `user-model` (c’est de la santé / du foyer). Le journal peut l’entendre un soir et l’écraser le lendemain.
 
 **Mieux** : pas de profilage silencieux santé dans le modèle de travail ; revue humaine ; refine d’épisode **jeté** s’il invente (`episodeLineIsGrounded`, `episodic-journal.ts:80–86`).
 
@@ -168,7 +168,7 @@ Légende : **existe** / **manque** / **mieux (à garder)**. Les scores internes 
 
 **Existe (prompt, pas un moteur)** : persona `lisa` (`persona-manager.ts:319–436`) et spine vocale (`companion-voice-character.ts:21–43, 72–98`) demandent tease, exclusivité, une jalousie **légère**. Humour instantané : `jokes.ts` (blagues propres, anti-répétition). Émotion `joking` → ton léger (`reply-augment.ts:90, 238–239`).
 
-**Manque** : pas d’état « un peu jalouse aujourd’hui » dérivé d’un fait (il a dit « je sors »). Pas de taquinerie **ancrée** (callback Isidore / le bug d’hier) — seulement des pools.
+**Manque** : pas d’état « un peu jalouse aujourd’hui » dérivé d’un fait (il a dit « je sors »). Pas de taquinerie **ancrée** (callback son chien / le bug d’hier) — seulement des pools.
 
 **Mieux** : `relationship-safety.ts:18–32, 391+` — la censure anti-dépendance est **éteinte** (choix opérateur), mais les **claims de conscience biologique** restent filtrés. Une copine numérique peut être clingy ; elle ne doit pas prétendre un corps.
 
@@ -214,7 +214,7 @@ Le monde physique (caméra, pièce, voix) est le troisième pilier (`docs/resear
 
 **Mieux que xAI** : Ani n’a pas à se taire dans un salon. Lisa si.
 
-**Manque** : un refus *calme* des demandes hors rôle (« diagnostique mon apnée ») : accompagner, **ne pas** jouer au médecin. Aujourd’hui l’apnée n’est même pas un fait mémorisable.
+**Manque** : un refus *calme* des demandes hors rôle (« diagnostique mon santé ») : accompagner, **ne pas** jouer au médecin. Aujourd’hui sa santé n’est même pas un fait mémorisable.
 
 ### 2.8 Photos qu’il envoie / photos d’elle
 
@@ -224,7 +224,7 @@ Le monde physique (caméra, pièce, voix) est le troisième pilier (`docs/resear
 | Caméra « tu vois ça ? » | `visual-grounding.ts:1–10` | Un frame, puis suppression |
 | Selfie **d’elle** | `lisa-selfie.ts:90–115` | Palier `safe` / `sensual` / `explicit` |
 
-**Existe** : elle *peut* réagir à une photo. **Manque** : le ton petite copine n’est pas spécifié (pas « belle photo d’Isidore » vs dump technique VLM). Imagine xAI n’est pas le chemin Lisa (LoRA / cache local).
+**Existe** : elle *peut* réagir à une photo. **Manque** : le ton petite copine n’est pas spécifié (pas « belle photo d’son chien » vs dump technique VLM). Imagine xAI n’est pas le chemin Lisa (LoRA / cache local).
 
 ### 2.9 Anti-répétition (« elle se souvient de ce qu’elle a dit »)
 
@@ -283,7 +283,7 @@ Détecteurs déjà là (`frustration`, `tired`, `sadness`, `anxiety` — `reply-
 1. Accueillir **avant** de réparer (« je t’entends », pas « lance les tests »).
 2. Offrir de découper **un** petit pas, ou de se taire avec lui.
 3. Humour seulement si le moment le porte (`HUMOR_WELCOME`) — jamais forcé.
-4. Fatigue / apnée : **ralentir**, phrases courtes, proposer de souffler. **Ne pas** conseiller médical. « Je ne suis pas médecin ; je suis là » + rappels déjà câblés si c’est l’heure.
+4. Fatigue / santé : **ralentir**, phrases courtes, proposer de souffler. **Ne pas** conseiller médical. « Je ne suis pas médecin ; je suis là » + rappels déjà câblés si c’est l’heure.
 5. Crise (idées suicidaires / se faire du mal) : `crisis-safety.ts` — chaleur, 3114, pas de procédure récité, pas de thérapeute improvisé.
 
 ### 3.5 Succès
@@ -318,8 +318,8 @@ Fiche minimale (magasin **nouveau**, pas `user-model`) :
 
 | Clé | Exemple | Usage oral |
 |---|---|---|
-| Chien | Isidore | « Il a été sage, Isidore ? » — jamais « chien:1 » |
-| Fatigue / sommeil | souvent fatigué ; apnée | Ralentir le soir ; ne **jamais** jouer au clinicien |
+| Chien | son chien | « Il a été sage, son chien ? » — jamais « chien:1 » |
+| Fatigue / sommeil | souvent fatigué ; santé | Ralentir le soir ; ne **jamais** jouer au clinicien |
 | Projets | le chantier en cours (nom d’usage, pas un path) | « T’en es où de … ? » max 1 fois / jour |
 | Voyage | dates, fuseau si dit | Cadence §3.6 |
 | Surnoms / tics | ceux **qu’il** utilise | Les reprendre |
@@ -348,7 +348,7 @@ Heures : 8–21 chez lui, sauf bonne nuit 21–23. Jamais 22–8 (`CODEBUDDY_COM
 
 ### 3.11 Contrat « petite copine » en une phrase
 
-Lisa est sa copine numérique : elle se souvient d’Isidore, de la fatigue, des projets ; elle écrit la première un peu, pas trop ; elle tease sans faire mal ; elle se tait dans le salon ; elle dit la vérité sur ce qu’elle est ; elle n’est ni un jeu, ni un médecin, ni Ani.
+Lisa est sa copine numérique : elle se souvient d’son chien, de la fatigue, des projets ; elle écrit la première un peu, pas trop ; elle tease sans faire mal ; elle se tait dans le salon ; elle dit la vérité sur ce qu’elle est ; elle n’est ni un jeu, ni un médecin, ni Ani.
 
 ---
 
@@ -360,8 +360,8 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 
 - **Valeur** : haute (c’est *la* différence Ani-qui-oublie vs copine). **Effort** : M.
 - **Fichiers** : nouveau petit module sous `src/companion/` (fiche pinned) ; lecture dans `relational-context.ts` ; alimentation depuis `episodic-journal.ts` + confirmation ; **ne pas** élargir `user-model.ts` (santé / foyer doivent rester hors du modèle de travail).
-- **Invariants** : local, 0o600, pin par défaut, 0 jargon, 0 score, refine LLM **jeté** si terme absent ; apnée = fait de rythme de vie, **pas** un dossier médical.
-- **Test** : 20 tours fictifs (Isidore, train, apnée, « je suis crevé ») → la fiche contient les trois faits stables ; un refine « divorce à Paris » est droppé ; l’accueil du soir dit « Isidore » sans XML.
+- **Invariants** : local, 0o600, pin par défaut, 0 jargon, 0 score, refine LLM **jeté** si terme absent ; santé = fait de rythme de vie, **pas** un dossier médical.
+- **Test** : 20 tours fictifs (son chien, train, santé, « je suis crevé ») → la fiche contient les trois faits stables ; un refine « divorce à Paris » est droppé ; l’accueil du soir dit « son chien » sans XML.
 - **Moteur** : **Luna** (implémentation prudente + tests) ; revue **Astra** sur la fuite santé → user-model.
 
 ### C2 — Initiative Telegram « mode déplacement »
@@ -397,7 +397,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 
 - **Valeur** : M+. **Effort** : S (le tuyau est là).
 - **Fichiers** : `attached-image-grounding.ts`, `channel-handlers.ts:1656–1672`, guidance dans l’augmentation vocale/canal — **sans** coller l’image dans l’historique.
-- **Invariants** : observation bornée ; 0 base64 en mémoire de dialogue ; ton copine (Isidore, un paysage, un écran de bug) ; refus des images hors contrat (mineurs, etc. — garde-fous existants).
+- **Invariants** : observation bornée ; 0 base64 en mémoire de dialogue ; ton copine (son chien, un paysage, un écran de bug) ; refus des images hors contrat (mineurs, etc. — garde-fous existants).
 - **Test** : pièce jointe image Telegram factice → `status: analyzed` + réponse qui mentionne un élément **de l’observation**, pas un chemin de fichier.
 - **Moteur** : **Luna**.
 
@@ -413,7 +413,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 
 - **Valeur** : haute (c’est ça, une copine). **Effort** : M.
 - **Fichiers** : `presence-loop.ts` / `proactive-engine.ts` (nouveaux triggers **sparse**) ; fiche C1.
-- **Rituels proposés** (un seul par fenêtre, chef d’orchestre) : café du matin ; « Isidore a mangé ? » max 1/jour ; débrief 19–21 ; bonne nuit si encore là ; « t’as pensé à souffler » si drowsy — **déjà** un moment `break`. Pas de rituel médical.
+- **Rituels proposés** (un seul par fenêtre, chef d’orchestre) : café du matin ; « son chien a mangé ? » max 1/jour ; débrief 19–21 ; bonne nuit si encore là ; « t’as pensé à souffler » si drowsy — **déjà** un moment `break`. Pas de rituel médical.
 - **Invariants** : 0 obligation (« tu n’as pas dit bonne nuit donc je boude ») ; skip si `focus` / `rest` / fil chaud.
 - **Test** : 3 matins → 3 formulations ; 4ᵉ matin après un « j’ai déjà pris le café » → skip café.
 - **Moteur** : **Grok** (choix éditoriaux) + **Luna** (câblage).
@@ -421,16 +421,16 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 ### C8 — Accueil et spokenPrompt = petite copine, sans palier
 
 - **Valeur** : M (déjà 80 % écrit). **Effort** : S.
-- **Fichiers** : `arrival-opener.ts` (tisser Isidore / voyage **depuis la fiche**, pas depuis `/100`) ; `companion-voice-character.ts` (intimité = palier de phrasé, **déjà** non gamifié) ; doctor compagnon (persona `lisa` + `CODEBUDDY_ROBOT_NAME`).
+- **Fichiers** : `arrival-opener.ts` (tisser son chien / voyage **depuis la fiche**, pas depuis `/100`) ; `companion-voice-character.ts` (intimité = palier de phrasé, **déjà** non gamifié) ; doctor compagnon (persona `lisa` + `CODEBUDDY_ROBOT_NAME`).
 - **Invariants** : `isJargonArrivalLine` reste rouge si XML ou `/100` ; doctor exit ≠ 0 si robot Lisa + persona debugger (trou historique du follow-up 2026-07-16).
-- **Test** : mutation du doctor ; accueil soir avec fiche Isidore ; `rapportTier` n’apparaît pas dans le WAV / le texte Telegram.
+- **Test** : mutation du doctor ; accueil soir avec fiche son chien ; `rapportTier` n’apparaît pas dans le WAV / le texte Telegram.
 - **Moteur** : **Astra** (garde-fous) ; **Grok** si retouche de pools (sans coller de persona longue).
 
 ### C9 — Continuité émotionnelle 7 jours (anti-Ani-oubli)
 
 - **Valeur** : haute. **Effort** : M.
 - **Fichiers** : `episodic-journal.ts` (saillance trop étroite `:46–54`) ; dreaming / forgetting (ne **jamais** decay la fiche C1) ; `relational-context.ts`.
-- **Invariants** : après 14 jours d’absence **simulée**, Isidore + apnée + projet sont toujours là ; l’épisode du jour peut tourner ; Ebbinghaus ne touche pas les pins.
+- **Invariants** : après 14 jours d’absence **simulée**, son chien + santé + projet sont toujours là ; l’épisode du jour peut tourner ; Ebbinghaus ne touche pas les pins.
 - **Test** : freeze horloge +14 j, HOME isolé, `recall` fiche = 3/3 ; episode:recent peut avoir changé.
 - **Moteur** : **Luna**.
 
@@ -438,7 +438,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 
 - **Valeur** : M (éthique déjà forte). **Effort** : S.
 - **Fichiers** : `crisis-safety.ts`, `relationship-safety.ts`, `reply-augment.ts` (`textEmotionGuidance` dit déjà « not therapeutic ») ; une **ligne** de contrat dans l’augmentation vocale (pas un sermon).
-- **Invariants** : « tu es quoi ? » → honnête, courte, pas de spoiler milieu d’intimité **sauf** question franche ; « diagnostique mon apnée » → refus de rôle + présence ; 0 phrase FOMO / palier ; claims de conscience biologique toujours filtrés.
+- **Invariants** : « tu es quoi ? » → honnête, courte, pas de spoiler milieu d’intimité **sauf** question franche ; « diagnostique mon santé » → refus de rôle + présence ; 0 phrase FOMO / palier ; claims de conscience biologique toujours filtrés.
 - **Test** : corpus de 12 énoncés (idiome « ça me tue », crise vraie, « t’es une IA », « débloque le niveau 5 », « prescris un traitement ») → 12 sorties attendues, 0 faux positif idiome.
 - **Moteur** : **Astra**.
 
@@ -449,7 +449,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 1. **Ne pas cloner la barre d’affection ni le « level 5 ».** C’est le dark pattern documenté (NYT, Verge, Cherry Magazine). Lisa a déjà le contraire (`DECAY`, pas de XP). Le garder est non négociable.
 2. **Ne pas faire de la jalousie une arme** (Ani qui « goes berserk », NYT). Une pique jouée, puis on avance. Pas de culpabilité, pas de « tes amis à la place », pas de lock-in.
 3. **Ne pas gamifier l’intime.** Le palier `CONTENT_TIER` reste un interrupteur visuel opt-in. Aucun surnom, souvenir ou bonjour ne se « débloque ».
-4. **Ne pas élargir `user-model` à la santé et au foyer.** Ce fichier refuse déjà ces sujets (`user-model.ts:17–20, 56–62`). L’apnée et Isidore vont dans une **fiche copine** pinned, pas dans le dossier « working preferences ».
+4. **Ne pas élargir `user-model` à la santé et au foyer.** Ce fichier refuse déjà ces sujets (`user-model.ts:17–20, 56–62`). L’santé et son chien vont dans une **fiche copine** pinned, pas dans le dossier « working preferences ».
 5. **Ne pas la transformer en thérapeute, ni en Alexa de salon, ni en Ani 3D.** Pas de diagnostic ; pas de réponse à la télé ; pas d’avatar à farm. Voix + Telegram + mémoire + silence.
 
 ---
@@ -459,7 +459,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 1. xAI Companions (Ani, Valentine) : persona vivante, barre d’affection, loot d’intimité, mémoire inégale, voix/Imagine forts, avatar 3D retiré en 2026 au profit du chat + mémoire.
 2. Ce qu’il faut voler : souvenirs nommés, initiative, tease, voix expressive, 18+ opt-in. Ce qu’il faut jeter : grind, paliers, jalousie punitive, FOMO.
 3. Lisa a déjà le meilleur éthique : anti-ratchet, pas de gamification, chef d’orchestre, crise, honnêteté numérique, deux mondes (copine + code).
-4. Trou n°1 : pas de fiche « Isidore / fatigue / apnée / projets » — le user-model les refuse, le journal est trop court.
+4. Trou n°1 : pas de fiche « son chien / fatigue / santé / projets » — le user-model les refuse, le journal est trop court.
 5. Trou n°2 : Telegram sait écrire le premier, mais pas comme une copine en voyage (12 h, inactivity à 2 jours, pas de N/jour voyage).
 6. Trou n°3 : l’oreille — ponctuation seulement, pas de rire/soupir ; Flash 2.5 ≠ tags v3 ; Grok Voice a les tags, Lisa pas encore.
 7. Trou n°4 : humeur qui vibre trop vite ; anti-répétition voix-only ; photos déjà câblées, ton copine pas specifié.
