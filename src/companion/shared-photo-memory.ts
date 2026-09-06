@@ -26,6 +26,10 @@
 import { logger } from '../utils/logger.js';
 import { photoMemoryLine, type PreparedCompanionPhoto } from './companion-photo.js';
 import {
+  toFrenchPhotoMemory,
+  type PhotoFrSummarizer,
+} from './photo-memory-fr.js';
+import {
   storeSharedPhoto,
   type SharedPhotoRecord,
   type SharedPhotoStoreOptions,
@@ -57,6 +61,12 @@ export interface RememberSharedPhotosOptions extends SharedPhotoStoreOptions {
   memory?: PhotoMemoryPort;
   /** `false` stores the album entry without touching persistent memory. */
   writeMemory?: boolean;
+  /**
+   * Test seam — production asks the current companion model for a ≤ 25-word
+   * French souvenir when the VLM caption is English. Returning null (or
+   * throwing) uses the deterministic color/shape/place lexicon.
+   */
+  summarizeFr?: PhotoFrSummarizer;
 }
 
 async function defaultMemory(): Promise<PhotoMemoryPort | null> {
@@ -96,15 +106,21 @@ export async function rememberSharedPhotos(
     ...(options.env ? { env: options.env } : {}),
   };
 
+  const summarizeOpts = options.summarizeFr ? { summarizeFr: options.summarizeFr } : {};
+  const frenchDescriptions: string[] = [];
   const records: SharedPhotoRecord[] = [];
   for (const photo of photos) {
+    const french = photo.description?.trim()
+      ? await toFrenchPhotoMemory(photo.description, summarizeOpts)
+      : '';
+    if (french) frenchDescriptions.push(french);
     const record = await storeSharedPhoto(
       {
         bytes: photo.bytes,
         mimeType: photo.mimeType,
         surface: options.surface,
         ...(options.caption ? { captionUser: options.caption } : {}),
-        ...(photo.description ? { descriptionLisa: photo.description } : {}),
+        ...(french ? { descriptionLisa: french } : {}),
       },
       storeOptions,
     );
@@ -113,8 +129,7 @@ export async function rememberSharedPhotos(
 
   if (options.writeMemory === false) return records;
 
-  const described = photos.find((photo) => photo.description?.trim());
-  const line = photoMemoryLine(described?.description ?? options.caption ?? '', now);
+  const line = photoMemoryLine(frenchDescriptions[0] ?? options.caption ?? '', now);
   try {
     const memory = options.memory ?? (await defaultMemory());
     if (!memory) return records;

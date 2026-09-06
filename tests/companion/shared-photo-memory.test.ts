@@ -143,6 +143,46 @@ describe('the rolling photo memory', () => {
     expect(await listSharedPhotos({ dir })).toHaveLength(1);
   });
 
+  it('writes a French souvenir when the VLM caption is English', async () => {
+    const memory = fakeMemory();
+    const records = await rememberSharedPhotos(
+      [photo('a large red circle on a table under a blue sky')],
+      {
+        surface: 'mobile',
+        dir,
+        memory,
+        now: new Date('2026-09-06T18:00:00Z'),
+        summarizeFr: async () => "tu m'as montré un grand cercle rouge sur une table",
+      },
+    );
+    expect(records[0]!.descriptionLisa).toBe('un grand cercle rouge sur une table');
+    expect(memory.store[SHARED_PHOTO_MEMORY_KEY]).toBe(
+      "2026-09-06 : tu m'as montré un grand cercle rouge sur une table",
+    );
+    expect(memory.store[SHARED_PHOTO_MEMORY_KEY]).not.toMatch(/\b(red|circle|large|sky|blue)\b/i);
+  });
+
+  it('falls back to the lexicon without English when the companion model is missing', async () => {
+    const memory = fakeMemory();
+    const records = await rememberSharedPhotos(
+      [photo('a large red circle on a table under a blue sky')],
+      {
+        surface: 'mobile',
+        dir,
+        memory,
+        now: new Date('2026-09-06T18:00:00Z'),
+        summarizeFr: async () => null,
+      },
+    );
+    const written = memory.store[SHARED_PHOTO_MEMORY_KEY]!;
+    expect(written.startsWith("2026-09-06 : tu m'as montré ")).toBe(true);
+    expect(written).toContain('cercle');
+    expect(written).toContain('rouge');
+    expect(written).not.toMatch(/\b(a|large|red|circle|on|under|blue|sky)\b/i);
+    expect(records[0]!.descriptionLisa).not.toMatch(/\b(a|large|red|circle|on|under|blue|sky)\b/i);
+    expect(records[0]!.descriptionLisa).toBe(written.slice('2026-09-06 : tu m\'as montré '.length));
+  });
+
   it('never throws when memory is broken', async () => {
     const broken: PhotoMemoryPort = {
       recall: () => {
