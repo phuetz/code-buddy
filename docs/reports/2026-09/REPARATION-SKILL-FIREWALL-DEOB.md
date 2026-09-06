@@ -113,3 +113,30 @@ La contre-vérification indépendante et adversariale menée par Claude Opus (`d
    - Validation de l'ensemble des suites `tests/security` et `tests/skills`.
    - Types (`tsc`), lint (`eslint`), espacements (`git diff --check`) et données personnelles (`donnees-personnelles.test.ts`).
    - Mesure des temps de scan corpus avant/après pour s'assurer du respect du plafond de 1,5 s.
+
+### Résultats et validation des preuves de suivi
+
+1. **Vérification B-1 (Bourrage > 256 Ko)** :
+   - Implémentation du balayage fenêtré (`sliceScanWindows`, 256 Ko avec 4 Ko de recouvrement) sur le texte brut et le texte normalisé dans `src/security/text-deobfuscation.ts` et `src/security/skill-scanner.ts`.
+   - Optimisation de la réunion des césures via lookaround O(N) `(?<=\w)-[\r\n]+\s*(?=\w)` éliminant tout retour en arrière catastrophique.
+   - Cas G03 : `quarantine` (score 0, finding `rm-rf`). Test rouge→vert validé.
+
+2. **Vérification B-2 (Kill-switch byte-identique)** :
+   - Conditionnement du lookbehind `dynamic-import` à `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== 'false'`.
+   - Avec le drapeau à `false`, les 29 cas adverses d'Opus reproduisent à 100% (29/29) les verdicts, scores et motifs de la base `f7c4eedde`.
+   - Cas D01 avec drapeau `false` : `quarantine`, score 76, finding `dynamic-import`.
+
+3. **Vérification C-2 (Conservation des retours à la ligne)** :
+   - Dans `src/security/text-deobfuscation.ts`, `deobfuscateSafeText` préserve les `\n` et ne fusionne que les césures et espaces horizontaux.
+   - Restriction du drapeau dotall `s` aux seuls motifs de `prompt-injection`.
+   - Cas F01 (`curl` en paragraphe 1 et `| bash` en paragraphe 2) : `allow` (score 100, 0 finding).
+   - Commande d'installation `curl ... | sh` sur une ligne : `quarantine`.
+
+4. **Mesures et validation globale** :
+   - Campagne corpus élargi (191 skills) : 128 allow, 24 review, 39 quarantine. **0 flip de verdict** par rapport à la base `f7c4eedde`.
+   - Temps de scan corpus : médiane **1 130 ms** (5,92 ms par skill), largement sous le plafond de 1,5 s.
+   - Tests vitest : `HOME=~/DEV/cb-firewall-2026-09-06/_qa/fw2/home env -u FORCE_COLOR npx vitest run tests/security tests/skills` : **78 fichiers passés, 1 ignoré ; 1375 tests passés, 3 ignorés, 0 échec**.
+   - Types : `npx tsc --noEmit -p tsconfig.json` : code 0, 0 erreur.
+   - Lint : `npx eslint` sur les fichiers modifiés : 0 erreur, 0 avertissement.
+   - Données personnelles : `tests/security/donnees-personnelles.test.ts` : 40/40 passés (vert).
+   - Espacements : `git diff --check` : code 0.
