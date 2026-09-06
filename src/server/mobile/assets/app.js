@@ -1288,8 +1288,18 @@ function checkForExistingToken() {
 // Initialize Application
 // ============================================================================
 
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker
+    .register('/__codebuddy__/mobile/sw.js', { scope: '/__codebuddy__/mobile/' })
+    .catch(() => {
+      /* registration is best-effort on loopback */
+    });
+}
+
 function init() {
   console.log('Code Buddy Mobile PWA v1.0.0');
+  registerServiceWorker();
   
   // Check for existing token
   checkForExistingToken();

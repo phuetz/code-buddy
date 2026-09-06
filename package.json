@@ -77,8 +77,8 @@
     "usearch@2.21.4": true
   },
   "scripts": {
-    "build": "tsc && node scripts/copy-bundled-skills.mjs && node scripts/write-runtime-manifest.mjs",
-    "build:bun": "bun run tsc && node scripts/copy-bundled-skills.mjs && node scripts/write-runtime-manifest.mjs",
+    "build": "tsc && node scripts/copy-bundled-skills.mjs && node scripts/copy-mobile-pwa-assets.mjs && node scripts/write-runtime-manifest.mjs",
+    "build:bun": "bun run tsc && node scripts/copy-bundled-skills.mjs && node scripts/copy-mobile-pwa-assets.mjs && node scripts/write-runtime-manifest.mjs",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist coverage .nyc_output *.tsbuildinfo codebuddy-runtime.json",
     "dev": "bun run src/index.ts",

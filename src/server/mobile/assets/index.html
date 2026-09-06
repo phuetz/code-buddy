@@ -3,14 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1a1a2e">
+  <meta name="theme-color" content="#0a0a0f">
   <meta name="description" content="Code Buddy Mobile - PWA pour piloter Code Buddy">
   
   <!-- PWA Manifest -->
   <link rel="manifest" href="/__codebuddy__/mobile/manifest.webmanifest">
-  
-  <!-- Security: CSP -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self';">
   
   <!-- Icons -->
   <link rel="icon" type="image/svg+xml" href="/__codebuddy__/mobile/assets/icon.svg">
@@ -188,23 +185,6 @@
     </div>
   </div>
 
-  <!-- Service Worker Registration -->
-  <script>
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/__codebuddy__/mobile/sw.js', { 
-          scope: '/__codebuddy__/mobile/' 
-        }).then(registration => {
-          console.log('ServiceWorker registration successful');
-        }).catch(err => {
-          console.log('ServiceWorker registration failed: ', err);
-        });
-      });
-    }
-  </script>
-
-  <!-- Main App Script -->
   <script src="/__codebuddy__/mobile/assets/app.js"></script>
 </body>
 </html>

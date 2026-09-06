@@ -3,7 +3,7 @@
  * Minimal cache-only strategy for offline support
  */
 
-const CACHE_NAME = 'codebuddy-mobile-v1';
+const CACHE_NAME = 'codebuddy-mobile-v2';
 const ASSETS_TO_CACHE = [
   '/__codebuddy__/mobile/',
   '/__codebuddy__/mobile/manifest.webmanifest',
@@ -11,7 +11,10 @@ const ASSETS_TO_CACHE = [
   '/__codebuddy__/mobile/assets/index.html',
   '/__codebuddy__/mobile/assets/styles.css',
   '/__codebuddy__/mobile/assets/app.js',
-  '/__codebuddy__/mobile/assets/icon.svg'
+  '/__codebuddy__/mobile/assets/icon.svg',
+  '/__codebuddy__/mobile/assets/icon-96.png',
+  '/__codebuddy__/mobile/assets/icon-192.png',
+  '/__codebuddy__/mobile/assets/icon-512.png'
 ];
 
 // Cache assets on install
@@ -19,10 +22,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('Service Worker: Caching assets');
-      return cache.addAll(ASSETS_TO_CACHE).then(() => {
-        console.log('Service Worker: All assets cached');
-        return self.skipWaiting();
-      });
+      return Promise.all(
+        ASSETS_TO_CACHE.map((url) => cache.add(url).catch(() => undefined)),
+      ).then(() => self.skipWaiting());
     })
   );
 });
