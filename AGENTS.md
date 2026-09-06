@@ -207,6 +207,11 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `CODEBUDDY_COMPANION_AWAY_HOURS` | Allowed hours for away messages (default `08:30-22:00`) |
 | `CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS` | Mobile PWA confirmation request timeout (default 30000 ms) |
 | `CODEBUDDY_COMFYUI_FALLBACK_URLS` | CSV of ComfyUI fallback endpoints (alias `COMFYUI_FALLBACK_URLS` also honoured) |
+| `CODEBUDDY_MOBILE_HISTORY` | **Opt-out (default ON)**: mobile PWA companion conversation history persistence per identity; `false` keeps in-memory only; files SHA256-named under `~/.codebuddy/companion/mobile-history/` (0600), 0700 directory |
+| `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` | First-token stall budget for local runtime eval only (default 200 ms/token): `max(120s, promptTokens × this)`; cloud keeps plain 120 s |
+| `CODEBUDDY_STALL_MAX_MS` | Ceiling on first-token stall budget (default 1200000 = 20 min) |
+| `CODEBUDDY_PROMPT_COMPACT` | Headless `-p` on local provider uses compact prompt (≤ 1500 tokens, RAG tools ≤ 8); default ON for local, opt-out with `false` |
+| `CODEBUDDY_COMPANION_PHOTO_VISION` | Companion photo vision mode: `local` (default, private) uses moondream, `cloud` sends to vision-capable cloud model |
 
 ## Special Modes
 
