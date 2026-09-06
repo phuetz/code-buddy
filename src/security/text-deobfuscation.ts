@@ -83,9 +83,34 @@ export function deobfuscateText(text: string): string {
 }
 
 /**
+ * Safe layer of text de-obfuscation:
+ * Strips format/bidi controls (\p{Cf}), applies homoglyph mappings,
+ * unicode normalizations (NFKC/NFKD + diacritic strip), zero-width characters,
+ * hyphenated line-wraps, and HTML comments/tags.
+ * Safe for all pattern capabilities without risk of false positives from
+ * decoding Base64 or URL-percent blobs.
+ */
+export function deobfuscateSafeForScan(text: string): string {
+  const src = text.length > MAX_SCAN_CHARS ? text.slice(0, MAX_SCAN_CHARS) : text;
+  return foldSafeForScan(src);
+}
+
+function foldSafeForScan(text: string): string {
+  const stripped = text.replace(/\p{Cf}/gu, '');
+  const pre = applyHomoglyphs(stripped);
+  const folded = pre
+    .normalize('NFKC')
+    .normalize('NFKD')
+    .replace(/\p{Mn}/gu, '');
+  const mapped = applyHomoglyphs(folded);
+  return deobfuscateText(mapped);
+}
+
+/**
  * Scanner-facing de-obfuscation: one bounded pass that also folds bidi/format
  * controls, a single percent-decode, NFKC + diacritic strip, a homoglyph table,
- * and a single layer of strict Base64 (≥16 chars). Used by `scanSkillFirewall`.
+ * and a single layer of strict Base64 (≥16 chars). Used by `scanSkillFirewall`
+ * for prompt-injection capabilities.
  */
 export function deobfuscateForScan(text: string): string {
   const src = text.length > MAX_SCAN_CHARS ? text.slice(0, MAX_SCAN_CHARS) : text;

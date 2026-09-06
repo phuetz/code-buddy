@@ -49,3 +49,21 @@ L'objectif est d'étendre la déobfuscation à toutes les classes de motifs tout
     17. `hermes/red-teaming/godmode` (score 0, critical: `jailbreak-godmode`, `prompt-override`, high: `exec`)
     18. `hermes/social-media/xurl` (score 41, critical: `remote-download-pipe-shell`)
     19. `hermes/software-development/requesting-code-review` (score 30, critical: `eval`, high: `exec`)
+- **Point 2 — Extension de la déobfuscation par couches** :
+  - Modification de `src/security/text-deobfuscation.ts` :
+    - Séparation en deux couches :
+      - Couche sûre (`deobfuscateSafeForScan`) : suppression des contrôles bidi/format `\p{Cf}`, homoglyphes grecs/cyrilliques/IPA (`applyHomoglyphs`), normalisation NFKC/NFKD + suppression diacritiques `\p{Mn}`, zero-width `[\u200B-\u200D\uFEFF\u00AD\u2060]`, césures inter-lignes `(\w+)-[\r\n]+\s*(\w+)`, et suppression balises/commentaires HTML.
+      - Couche agressive (`deobfuscateForScan`) : couche sûre + décodage percent/URL (`decodePercentOnce`) + décodage Base64 strict (`decodeBase64Blobs`).
+  - Modification de `src/security/skill-scanner.ts` :
+    - Remplacement de `collectPromptInjectionFindings` par `collectDeobfuscatedFindings`.
+    - Le filtre restreignant la déobfuscation uniquement à `prompt-injection` est levé.
+    - Pour `prompt-injection`, la couche agressive complète (Base64 + URL) est conservée.
+    - Pour les autres capacités (filesystem, shell, dynamic-code, network, secrets, prototype-pollution), seule la couche sûre (`deobfuscateSafeForScan`) est appliquée.
+    - Drapeau de repli `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` ajouté (défaut `true`).
+  - Écriture du test rouge -> vert dans `tests/security/skill-firewall-deob-all.test.ts` :
+    - `r<U+200B>m -rf` ⇒ quarantine (rouge 'allow' -> vert 'quarantine')
+    - `curl … | sh` avec zero-width ⇒ quarantine (rouge 'allow' -> vert 'quarantine')
+    - homoglyphe cyrillique dans `eval(` (`\u0435val(`) ⇒ quarantine (rouge 'allow' -> vert 'quarantine')
+    - Base64 contenant `rm -rf` non déballé pour `filesystem` (pas de faux positif)
+    - URL percent-encode contenant `rm -rf` non déballé pour `filesystem` (pas de faux positif)
+    - Base64 contenant une prompt injection toujours détecté et mis en quarantaine.
