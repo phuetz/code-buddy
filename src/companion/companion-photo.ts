@@ -175,17 +175,14 @@ function decodeBase64(payload: string): Buffer {
 
 /**
  * Resize to `COMPANION_PHOTO_MAX_DIMENSION` and re-encode to JPEG under
- * `COMPANION_PHOTO_MAX_BYTES`. `sharp` is an optional dependency: when it is
- * absent or fails, the original bytes are returned unchanged.
+ * `COMPANION_PHOTO_MAX_BYTES`. Always re-encodes (even a small JPEG) so EXIF
+ * GPS and a trailing polyglot payload cannot survive. `sharp` is optional:
+ * when it is absent or fails, the original bytes are returned unchanged.
  */
 export async function normalizeCompanionPhoto(
   bytes: Buffer,
   mimeType: string,
 ): Promise<{ bytes: Buffer; mimeType: string }> {
-  if (bytes.length <= COMPANION_PHOTO_MAX_BYTES && mimeType === 'image/jpeg') {
-    // Already small and already JPEG: re-encoding would only lose quality.
-    return { bytes, mimeType };
-  }
   try {
     const sharpModule = (await import('sharp')) as unknown as {
       default?: (input: Buffer) => SharpLike;

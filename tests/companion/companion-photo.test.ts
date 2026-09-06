@@ -144,6 +144,35 @@ describe('normalization and bounds', () => {
     expect(result.bytes.equals(JPEG_STUB)).toBe(true);
   });
 
+  it('strips GPS EXIF and a trailing HTML payload from a small JPEG', async () => {
+    const sharpMod = await import('sharp');
+    const jpeg = await sharpMod.default({
+      create: { width: 16, height: 16, channels: 3, background: { r: 4, g: 5, b: 6 } },
+    })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    const marker = Buffer.from('HOUSEGPS');
+    const app1 = Buffer.alloc(4 + marker.length);
+    app1[0] = 0xff;
+    app1[1] = 0xe1;
+    app1.writeUInt16BE(marker.length + 2, 2);
+    marker.copy(app1, 4);
+    const poisoned = Buffer.concat([
+      jpeg.subarray(0, 2),
+      app1,
+      jpeg.subarray(2),
+      Buffer.from('<html>HOUSEGPS</html>'),
+    ]);
+    expect(poisoned.includes(marker)).toBe(true);
+    const prepared = await prepareCompanionPhotos([{ bytes: poisoned }], {
+      env: env({ CODEBUDDY_COMPANION_PHOTO_VISION: 'cloud' }),
+    });
+    const out = prepared!.photos[0]!.bytes;
+    expect(out.includes(marker)).toBe(false);
+    expect(out.includes(Buffer.from('<html>'))).toBe(false);
+    expect(prepared!.photos[0]!.mimeType).toBe('image/jpeg');
+  });
+
   it('never throws when the optional resizer cannot handle the payload', async () => {
     const result = await normalizeCompanionPhoto(PNG_1X1, 'image/png');
     expect(result.bytes.length).toBeGreaterThan(0);
