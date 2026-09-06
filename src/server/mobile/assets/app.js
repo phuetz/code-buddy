@@ -182,7 +182,7 @@
 
   function connectWs() {
     if (state.ws) {
-      try { state.ws.close(); } catch (e) { /* ignore */ }
+      try { state.ws.close(); } catch (_e) { /* ignore */ }
     }
     const ws = new WebSocket(wsUrl());
     state.ws = ws;
@@ -192,7 +192,7 @@
     ws.addEventListener('message', function (ev) {
       try {
         handleFrame(JSON.parse(ev.data));
-      } catch (err) {
+      } catch (_err) {
         addBubble('system', 'Trame WS illisible');
       }
     });
@@ -302,7 +302,7 @@
     try {
       const data = await fetchJson('/api/fleet/peers');
       state.peers = Array.isArray(data.peers) ? data.peers : [];
-    } catch (err) {
+    } catch (_err) {
       state.peers = [];
     }
     renderAssistants();
@@ -329,7 +329,7 @@
         btn.addEventListener('click', function () { viewTrajectory(run.runId); });
         list.appendChild(btn);
       });
-    } catch (err) {
+    } catch (_err) {
       list.innerHTML = '<p class="empty">Runs indisponibles</p>';
     }
   }
@@ -340,7 +340,7 @@
       const data = await fetchJson('/api/runs/' + encodeURIComponent(runId) + '/trajectory');
       traj.textContent = JSON.stringify(data, null, 2);
       traj.classList.remove('hidden');
-    } catch (err) {
+    } catch (_err) {
       traj.textContent = 'Trajectoire indisponible';
       traj.classList.remove('hidden');
     }
@@ -368,7 +368,7 @@
         '<article class="status-card"><h3>Repli (fichier)</h3><div>' + escapeHtml(file) + '</div></article>' +
         '<article class="status-card"><h3>Repli (chaîne)</h3><div>' + escapeHtml(fallback) + '</div></article>' +
         '<article class="status-card"><h3>Flotte</h3><div>' + peers + ' pair(s), ' + conn + ' WS</div></article>';
-    } catch (err) {
+    } catch (_err) {
       box.innerHTML = '<p class="empty">Statut indisponible</p>';
     }
   }
