@@ -74,7 +74,7 @@ function loadAuditEntries(homeDir: string): { entries: TrajectoryAuditEntry[]; f
     }
   }
   const entries: TrajectoryAuditEntry[] = [];
-  let found = false;
+  let found = files.length > 0;
   for (const file of files) {
     const rows = safeReadJsonl(file, (value) => {
       if (!value || typeof value !== 'object') return null;
