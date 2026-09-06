@@ -48,6 +48,7 @@ import {
   type ChatGptModelCatalogProvider,
 } from '../../providers/chatgpt-models.js';
 import { logger } from '../../utils/logger.js';
+import { preserveProviderErrorMetadata } from '../provider-error-classifier.js';
 import { getInstallationId } from '../../utils/installation-id.js';
 
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
@@ -1324,27 +1325,51 @@ export async function* parseSseStream(
 // Error enrichment
 // ─────────────────────────────────────────────────────────────────────
 
+function parseChatGptErrorBody(body: string): Record<string, unknown> | undefined {
+  const trimmed = body.trim();
+  const start = trimmed.indexOf('{');
+  if (start < 0) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed.slice(start));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function enrichError(
   status: number,
   body: string,
   model: string,
   fallbackModels: string[] = [CHATGPT_OAUTH_SAFE_FALLBACK_MODEL],
 ): Error {
+  const parsed = parseChatGptErrorBody(body);
+  const source: Record<string, unknown> = { status };
+  if (typeof parsed?.type === 'string') source.type = parsed.type;
+  if (typeof parsed?.code === 'string') source.code = parsed.code;
+  if (typeof parsed?.resets_in_seconds === 'number') source.resets_in_seconds = parsed.resets_in_seconds;
+
+  let err: Error;
   // Try to surface the model_not_found case with a helpful suggestion.
   if (isChatGptModelCompatibilityError(status, body)) {
     const fallbackHint = fallbackModels.length > 0
       ? `Suggested fallbacks: ${fallbackModels.join(', ')}. `
       : 'No alternate model was discovered for this account. ';
-    return new Error(
+    err = new Error(
       `Model "${model}" not available on the ChatGPT Codex backend. ` +
         fallbackHint +
         `Switch with \`/switch <model>\` or set CHATGPT_MODEL.`,
     );
-  }
-  if (status === 401 || status === 403) {
-    return new Error(
+  } else if (status === 401 || status === 403) {
+    err = new Error(
       `ChatGPT auth rejected (${status}). Run \`/login chatgpt\` to re-authenticate.`,
     );
+  } else {
+    err = new Error(`ChatGPT Responses backend error (${status}): ${body.slice(0, 500)}`);
   }
-  return new Error(`ChatGPT Responses backend error (${status}): ${body.slice(0, 500)}`);
+  const enriched = preserveProviderErrorMetadata(err, source);
+  if (typeof source.resets_in_seconds === 'number') {
+    (enriched as Error & { resets_in_seconds?: number }).resets_in_seconds = source.resets_in_seconds;
+  }
+  return enriched;
 }

@@ -276,11 +276,14 @@ export function classifyProviderError(
     type === 'insufficient_balance' ||
     code === 'insufficient_funds' ||
     type === 'insufficient_funds' ||
+    code === 'usage_limit_reached' ||
+    type === 'usage_limit_reached' ||
     message.includes('insufficient_quota') ||
     message.includes('insufficient balance') ||
     message.includes('insufficient funds') ||
     message.includes('exceeded your current quota') ||
     message.includes('exceeded your quota') ||
+    message.includes('usage_limit_reached') ||
     message.includes('billing details') ||
     (hasQuota &&
       (message.includes('exceed') || message.includes('insufficient') || message.includes('billing')));
