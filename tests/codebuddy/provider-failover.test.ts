@@ -77,6 +77,7 @@ import {
   setProviderHealthPathForTests,
 } from '../../src/providers/provider-health.js';
 import { getGlobalEventBus, resetEventBus } from '../../src/events/event-bus.js';
+import { resetUserFacingFailoverNoticeForTests } from '../../src/providers/provider-failover-user-notice.js';
 
 function quotaError(): Error {
   const err = new Error(
@@ -161,6 +162,7 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     else process.env.HOME = previousHome;
     for (const key of envKeys) delete process.env[key];
     resetEventBus();
+    resetUserFacingFailoverNoticeForTests();
     removeTmpDir(tmp);
   });
 

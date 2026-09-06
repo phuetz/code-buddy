@@ -30,6 +30,7 @@ import {
 } from '../channels/companion-channel-profile.js';
 import { runCompanionChannelTurn } from '../channels/companion-channel-turn.js';
 import { speakChannelProviderFailure } from '../channels/provider-failure-speech.js';
+import { prependUserFacingFailoverNotice } from '../providers/provider-failover-user-notice.js';
 import type { CodeBuddyMessage, CodeBuddyResponse } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
 import type { CompanionHistoryTurn } from './companion-history.js';
@@ -165,7 +166,11 @@ export async function runCompanionTurn(
     if (!text) {
       return { text: speakChannelProviderFailure('empty', { copine }), kind: 'text' };
     }
-    return { text, kind: 'text', model: generated.model };
+    return {
+      text: prependUserFacingFailoverNotice(text, 'companion-turn'),
+      kind: 'text',
+      model: generated.model,
+    };
   } catch (error) {
     logger.warn('[companion-turn] provider failure spoken to the conversation', {
       surface: options.surface,

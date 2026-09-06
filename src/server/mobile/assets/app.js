@@ -1155,10 +1155,14 @@
       var peers = data.fleet && Array.isArray(data.fleet.peers) ? data.fleet.peers.length : 0;
       var conn = data.fleet && data.fleet.connections ? data.fleet.connections.total : 0;
       var mood = data.companion && data.companion.label ? data.companion.label : '—';
+      var failoverLine = typeof data.failoverNotice === 'string' && data.failoverNotice
+        ? '<article class="status-card"><h3>Repli</h3><div>' + escapeHtml(data.failoverNotice) + '</div></article>'
+        : '';
       box.innerHTML =
         '<article class="status-card"><h3>Fournisseur</h3><div>' + escapeHtml(provider) + '</div></article>' +
         '<article class="status-card"><h3>Repli (fichier)</h3><div>' + escapeHtml(file) + '</div></article>' +
         '<article class="status-card"><h3>Repli (chaîne)</h3><div>' + escapeHtml(fallback) + '</div></article>' +
+        failoverLine +
         '<article class="status-card"><h3>Flotte</h3><div>' + peers + ' pair(s), ' + conn + ' WS</div></article>' +
         '<article class="status-card"><h3>Humeur</h3><div>' + escapeHtml(String(mood)) + '</div></article>';
     } catch (_err) {

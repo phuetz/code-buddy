@@ -42,6 +42,7 @@ import {
 } from '../../channels/companion-channel-profile.js';
 import { runCompanionChannelTurn } from '../../channels/companion-channel-turn.js';
 import { speakChannelProviderFailure } from '../../channels/provider-failure-speech.js';
+import { prependUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 
 interface ChannelOptions {
   type?: string;
@@ -1967,6 +1968,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         }
         rawAgentFailure = isAgentFailureResponse(response);
         hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
+      }
+      if (hasGeneratedResponse) {
+        response = prependUserFacingFailoverNotice(response, `channel:${channel.type}`);
       }
       if (!response.trim() || rawAgentFailure) {
         const { conversationFailureReply } = await import(
