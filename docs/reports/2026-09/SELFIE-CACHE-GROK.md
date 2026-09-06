@@ -36,4 +36,52 @@ Dans cet ordre, chacun avec tests rouge→vert :
 
 ### 2026-09-06 — création du rapport (avant inspection)
 
-HEAD `8c878d393`. Branche déjà extraite (persona copine, profil compagnon, Gemini 3.x). Working tree propre.
+HEAD `8c878d393`. Branche déjà extraite (persona copine, profil compagnon, Gemini 3.x). Working tree propre. Réservation `427572c2f`.
+
+### Inspection
+
+Cause racine : le profil compagnon n’a **pas d’outils** (`runCompanionChannelTurn` : `tools: []`, `tool_choice: 'none'`). `lisa_selfie` n’est donc jamais choisi. Sur la PWA, `assistant=companion` appelle `produceCompanionReply` → `defaultReply` (texte seul). L’interception Telegram existait mais (a) telegram-only, (b) sautait le cache dès qu’un style était nommé (`inferLisaSelfieScene`), (c) tombait sur `generateImage` / ComfyUI. Phrase d’échec vue par l’utilisateur = parole du LLM (« backend non configuré »), pas le cache.
+
+Cache déjà là : `selectCachedLisaSelfie` + `CODEBUDDY_LISA_SELFIE_CACHE_DIR/<tier>/<style>/`. Rotation par `atime` seulement. Les images générées allaient dans `lora/lisa/selfies/`, pas dans le cache.
+
+### Correctifs
+
+1. **Router cache-first** (`src/companion/lisa-selfie-router.ts`) — `tryServeCompanionSelfie` AVANT le LLM, sur Telegram (tous canaux compagnon), WS mobile, voix (`defaultReply` + hybrid). Palier `CONTENT_TIER` + gate adulte (refus poli, pas de substitution). Style FR/EN (plage, pull, …) → dossier si présent, sinon n’importe quelle image du palier. Rotation persistée (`recent-selfies.json`, atomic-write). Légendes persona copine. Jamais de génération sur ce chemin.
+2. **Ingest** (`lisa-selfie-ingest.ts`) — copie après `lisa_selfie` et après `image_generate` si le prompt est un selfie Lisa (LoRA / `ohwx lisa`). Nom horodaté + hash, sidecar JSON. Plafond 200, éviction des plus anciennes non `favorite`.
+3. **Refill** (`lisa-selfie-refill.ts`) — opt-in `CODEBUDDY_LISA_SELFIE_REFILL=true`, heartbeat comme `system-vitals`. Une image par battement si générateur joignable et load < N. Tests : générateur factice. Never-throws.
+
+### Preuves
+
+Ciblé (10 fichiers) : **167/167**.
+Suites exigées `tests/companion` + `tests/channels` + `tests/sensory` + `donnees-personnelles` : **225 fichiers verts / 3 skip**, **2979 verts / 12 skip / 1 todo** ; **1 rouge préexistant** `tests/channels/provider-failure-speech.test.ts` (`out_of_credits` classé `quota` avant `credits` — fichier hors lane).
+Privacy : **40/40**. `tsc --noEmit` **0**. ESLint ciblé **0 erreur** (4 warnings préexistants). `git diff --check` **0**.
+
+Essai headless (HOME isolé, cache de test = 3 PNG 1×1) :
+
+```
+[lisa-selfie-router] cache hit surface=mobile tier=safe image=one.png
+handled true  reason ok  mimeType image/png  bytes 70
+[lisa-selfie-router] cache hit surface=voice tier=safe image=two.png
+[voice] lisa-selfie cache=ok image=true
+defaultReply: Voilà. Celle-ci, là, tout de suite.
+```
+
+ComfyUI 8188/8189 non contactés. Aucun push.
+
+### Ouvert
+
+- Le refill production appelle ComfyUI seulement si `CODEBUDDY_LISA_SELFIE_REFILL=true` (défaut off).
+- Rouge préexistant `provider-failure-speech` (crédits vs quota), hors zone.
+
+## Bilan
+
+Router cache-first avant le LLM (Telegram, PWA, voix) ; génération hors chemin de demande.
+Tout selfie généré (`lisa_selfie` / `image_generate` Lisa) entre dans le cache borné, hors dépôt.
+Refill heartbeat opt-in, une image/cycle, générateur injectable, stop si injoignable.
+Preuve ciblée 167/167 ; suites exigées 2979 verts + 1 rouge hors lane ; privacy 40/40.
+`tsc` 0, ESLint ciblé 0 erreur, `git diff --check` 0.
+Essai headless : cache hit `one.png` puis `two.png`, légende persona, 70 octets PNG.
+Byte-identique sans persona (légendes historiques, refill off).
+ComfyUI 8188/8189 intacts. `~/code-buddy` et `~/.codebuddy` non ouverts.
+Aucun push.
+Reste : activer `CODEBUDDY_LISA_SELFIE_REFILL` en production (humain) ; rouge `out_of_credits` hors lane.
