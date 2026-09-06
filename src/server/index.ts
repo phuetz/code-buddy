@@ -57,6 +57,7 @@ import {
   createWebhookRoutes,
   createCognitionRoutes,
   mobileRoutes,
+  mobilePwaRouter,
 } from './routes/index.js';
 import {
   setupWebSocket,
@@ -1072,6 +1073,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
 
   // Canvas / A2UI (documented at /__codebuddy__/canvas/:id and /__codebuddy__/a2ui/)
   app.use('/__codebuddy__', createCanvasRouter());
+
+  // Mobile PWA
+  app.use('/__codebuddy__/mobile', mobilePwaRouter);
 
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
