@@ -250,4 +250,29 @@ describe('Fleet CLI commands', () => {
     );
     expect(process.exitCode).toBe(1);
   });
+
+  // Un serveur qui répond 401 est bien démarré : lui conseiller `buddy server`
+  // envoyait l'utilisateur sur une fausse piste alors qu'il lui manque un jeton.
+  it('tells an unauthenticated caller to mint a token, not to start the server', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 401 }) as never,
+    );
+    const program = createProgram();
+    registerFleetCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'fleet',
+      'status',
+      '--server-url',
+      'http://127.0.0.1:4201',
+    ]);
+
+    const reported = consoleErrorSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(reported).toContain('refusé la requête');
+    expect(reported).toContain('buddy fleet token');
+    expect(reported).not.toContain('Lancez-le avec');
+    expect(process.exitCode).toBe(1);
+  });
 });

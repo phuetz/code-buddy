@@ -66,9 +66,16 @@ async function fetchFleetEndpoint(
     return payload as Record<string, unknown>;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
+    // Un 401/403 vient d'un serveur bien vivant : conseiller de le démarrer
+    // envoie sur une fausse piste. La vraie action est de fournir un jeton.
+    const isAuth = /HTTP 40[13]\b/.test(detail);
     throw new Error(
-      `Serveur Fleet indisponible sur ${baseUrl} (${detail}). ` +
-        'Lancez-le avec `buddy server` puis réessayez.',
+      isAuth
+        ? `Serveur Fleet joignable sur ${baseUrl} mais il a refusé la requête (${detail}). ` +
+            'Il tourne avec authentification : passez un jeton avec `--token`, ' +
+            'que vous frappez via `JWT_SECRET=<secret du serveur> buddy fleet token --user <nom>`.'
+        : `Serveur Fleet indisponible sur ${baseUrl} (${detail}). ` +
+            'Lancez-le avec `buddy server` puis réessayez.',
     );
   }
 }
