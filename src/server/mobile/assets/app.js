@@ -169,7 +169,7 @@
     const ws = new WebSocket(wsUrl());
     state.ws = ws;
     ws.addEventListener('open', function () {
-      send('authenticate', { token: state.token });
+      send('authenticate', { token: state.token, approvalCapable: true });
     });
     ws.addEventListener('message', function (ev) {
       try {

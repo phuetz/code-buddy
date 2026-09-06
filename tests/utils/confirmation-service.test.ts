@@ -2,6 +2,7 @@
  * Tests for Confirmation Service
  */
 
+import { vi } from 'vitest';
 import {
   ConfirmationService,
 } from '../../src/utils/confirmation-service.js';
@@ -411,6 +412,28 @@ describe('ConfirmationService', () => {
       } finally {
         resetPermissionModeManager();
       }
+    });
+  });
+
+  describe('WebSocket approval bridge fallthrough', () => {
+    it('uses remoteApproval when the WS bridge returns null', async () => {
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+      const requestApproval = vi.fn(async () => true);
+      service.setRemoteApprovalService({
+        hasChannels: () => true,
+        requestApproval,
+      } as never);
+      service.setWsApprovalBridge(async () => null);
+
+      const result = await service.requestConfirmation({
+        operation: 'write',
+        filename: 'notes.md',
+        toolName: 'write_file',
+        forcePrompt: true,
+      }, 'file');
+
+      expect(result).toEqual({ confirmed: true });
+      expect(requestApproval).toHaveBeenCalledTimes(1);
     });
   });
 

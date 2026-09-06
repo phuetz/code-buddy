@@ -508,8 +508,8 @@ export class ConfirmationService extends EventEmitter {
       return this.auditGate('interactive-bridge', false, options, bridged);
     }
 
-    // Mobile PWA WebSocket bridge: only when an authenticated socket is present.
-    // null = no client, fall through to TTY / fail-closed.
+    // Mobile PWA WebSocket bridge: only when an approval-capable tools socket
+    // is present. null = no such client, fall through to Telegram / TTY.
     if (this.wsApprovalBridge) {
       const bridged = await this.wsApprovalBridge(options);
       if (bridged) {

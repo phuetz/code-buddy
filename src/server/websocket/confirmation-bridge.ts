@@ -6,13 +6,15 @@
  *
  * Fail-closed: timeout or missing clients = deny.
  * One response per id. JWT/auth required (empty principal scopes).
+ * Bound to the approval-capable `tools` sockets that received the prompt.
  */
 
 import { randomUUID } from 'node:crypto';
 import type { ConfirmationOptions, ConfirmationResult } from '../../utils/confirmation-service.js';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
+import { logger } from '../../utils/logger.js';
 import type { WebSocketResponse } from '../types.js';
-import type { WebSocketExtensionRegistration } from './handler.js';
+import type { WebSocketExtensionRegistration, WsBroadcastTarget } from './handler.js';
 
 export const DEFAULT_MOBILE_CONFIRM_TIMEOUT_MS = 30_000;
 
@@ -20,6 +22,7 @@ interface PendingConfirmation {
   resolve: (result: ConfirmationResult) => void;
   timer: ReturnType<typeof setTimeout>;
   answered: boolean;
+  recipientIds: Set<string>;
 }
 
 const pending = new Map<string, PendingConfirmation>();
@@ -55,8 +58,12 @@ function riskOf(options: ConfirmationOptions): string {
 }
 
 export function wireMobileConfirmationBridge(deps: {
-  broadcast: (message: WebSocketResponse, scopeFilter?: string) => void;
-  authenticatedCount: () => number;
+  broadcast: (
+    message: WebSocketResponse,
+    scopeFilter?: string,
+    targetFilter?: (target: WsBroadcastTarget) => boolean,
+  ) => string[] | void;
+  collectApprovalSurfaceIds: () => string[];
   registerExtension: (registration: WebSocketExtensionRegistration) => () => void;
 }): () => void {
   if (wired && unwireFn) return unwireFn;
@@ -74,6 +81,14 @@ export function wireMobileConfirmationBridge(deps: {
       ctx.send({
         type: 'error',
         error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    if (!ctx.principal.scopes.includes('tools')) {
+      ctx.send({
+        type: 'error',
+        error: { code: 'FORBIDDEN', message: 'tools scope required' },
         timestamp: new Date().toISOString(),
       });
       return;
@@ -117,6 +132,13 @@ export function wireMobileConfirmationBridge(deps: {
       });
       return;
     }
+    if (!entry.recipientIds.has(ctx.connectionId)) {
+      logger.warn('[ws] confirmation_response ignored — socket is not a recipient', {
+        connectionId: ctx.connectionId,
+        confirmationId: id,
+      });
+      return;
+    }
 
     entry.answered = true;
     clearTimeout(entry.timer);
@@ -131,7 +153,9 @@ export function wireMobileConfirmationBridge(deps: {
   });
 
   ConfirmationService.getInstance().setWsApprovalBridge(async (options) => {
-    if (deps.authenticatedCount() <= 0) return null;
+    const recipientIds = deps.collectApprovalSurfaceIds();
+    if (recipientIds.length === 0) return null;
+    const recipientSet = new Set(recipientIds);
 
     const id = randomUUID();
     const tool = options.toolName ?? options.operation;
@@ -147,17 +171,21 @@ export function wireMobileConfirmationBridge(deps: {
         resolve({ confirmed: false, feedback: 'Confirmation timed out' });
       }, timeoutMs);
       timer.unref();
-      pending.set(id, { resolve, timer, answered: false });
-      deps.broadcast({
-        type: 'confirmation_required',
-        payload: {
-          id,
-          tool,
-          summary,
-          risk: riskOf(options),
+      pending.set(id, { resolve, timer, answered: false, recipientIds: recipientSet });
+      deps.broadcast(
+        {
+          type: 'confirmation_required',
+          payload: {
+            id,
+            tool,
+            summary,
+            risk: riskOf(options),
+          },
+          timestamp: new Date().toISOString(),
         },
-        timestamp: new Date().toISOString(),
-      });
+        'tools',
+        (target) => recipientSet.has(target.id),
+      );
     });
   });
 

@@ -1,7 +1,8 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket, { type WebSocketServer } from 'ws';
+import { logger } from '../../src/utils/logger.js';
 
 import { createUserToken } from '../../src/server/auth/jwt.js';
 import { DEFAULT_SERVER_CONFIG } from '../../src/server/types.js';
@@ -84,8 +85,8 @@ describe('Mobile WS confirmations', () => {
 
   async function authedClient(): Promise<{ ws: WebSocket; events: Frame[] }> {
     const { ws, events } = await connect(`${wsBase}/ws`);
-    const token = createUserToken('mobile-user', ['chat'], SECRET);
-    ws.send(JSON.stringify({ type: 'authenticate', payload: { token } }));
+    const token = createUserToken('mobile-user', ['chat', 'tools'], SECRET);
+    ws.send(JSON.stringify({ type: 'authenticate', payload: { token, approvalCapable: true } }));
     await waitUntil(() => events.some((event) => event.type === 'authenticated'));
     return { ws, events };
   }
@@ -199,6 +200,8 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
     const loopback = await connect(`${wsBase}/ws`);
     await waitUntil(() => remote.events.some((event) => event.type === 'connected'));
     await waitUntil(() => loopback.events.some((event) => event.type === 'connected'));
+    loopback.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => loopback.events.some((event) => event.type === 'status'));
 
     const pending = ConfirmationService.getInstance().requestConfirmation(
       { operation: 'write', filename: 'notes.md', toolName: 'write_file', forcePrompt: true },
@@ -229,5 +232,150 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
 
     remote.ws.close();
     loopback.ws.close();
+  });
+});
+
+describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface', () => {
+  let server: HttpServer;
+  let wss: WebSocketServer;
+  let wsBase: string;
+  const previousSecret = process.env.JWT_SECRET;
+  const previousTimeout = process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
+  const originalStdinIsTTY = process.stdin.isTTY;
+
+  beforeEach(async () => {
+    process.env.JWT_SECRET = SECRET;
+    process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = '2000';
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    server = createServer((_req, res) => {
+      res.statusCode = 404;
+      res.end();
+    });
+    wss = await setupWebSocket(server, {
+      ...DEFAULT_SERVER_CONFIG,
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      jwtSecret: SECRET,
+      websocketEnabled: true,
+      cors: false,
+      logging: false,
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address() as AddressInfo;
+    wsBase = `ws://127.0.0.1:${address.port}`;
+  });
+
+  afterEach(async () => {
+    closeAllConnections();
+    for (const client of wss.clients) client.terminate();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    Object.defineProperty(process.stdin, 'isTTY', { value: originalStdinIsTTY, configurable: true });
+    if (previousSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previousSecret;
+    if (previousTimeout === undefined) delete process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
+    else process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = previousTimeout;
+  });
+
+  async function clientWith(
+    scopes: Parameters<typeof createUserToken>[1],
+    extra: { approvalCapable?: boolean; userId?: string } = {},
+  ): Promise<{ ws: WebSocket; events: Frame[] }> {
+    const { ws, events } = await connect(`${wsBase}/ws`);
+    const token = createUserToken(extra.userId ?? 'mobile-user', scopes, SECRET);
+    ws.send(JSON.stringify({
+      type: 'authenticate',
+      payload: extra.approvalCapable ? { token, approvalCapable: true } : { token },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'authenticated'));
+    return { ws, events };
+  }
+
+  it('does not capture when only a fleet listen socket is present — Telegram fallback runs', async () => {
+    const fleet = await clientWith(['fleet:listen', 'chat'], { userId: 'fleet-peer' });
+    const requestApproval = vi.fn(async () => true);
+    ConfirmationService.getInstance().setRemoteApprovalService({
+      hasChannels: () => true,
+      requestApproval,
+    } as never);
+
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'notes.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await expect(pending).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(fleet.events.some((event) => event.type === 'confirmation_required')).toBe(false);
+    fleet.ws.close();
+  });
+
+  it('sends confirmation_required only to the PWA and ignores a fleet listen reply', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    const fleet = await clientWith(['fleet:listen', 'chat', 'tools'], { userId: 'fleet-peer' });
+
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'secret.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await waitUntil(() => pwa.events.some((event) => event.type === 'confirmation_required'));
+    expect(fleet.events.some((event) => event.type === 'confirmation_required')).toBe(false);
+
+    const id = pwa.events.find((event) => event.type === 'confirmation_required')?.payload?.id;
+    expect(typeof id).toBe('string');
+
+    let settled: unknown;
+    void pending.then((value) => { settled = value; });
+
+    fleet.ws.send(JSON.stringify({
+      type: 'confirmation_response',
+      payload: { id, approved: true },
+    }));
+    await waitUntil(() => warn.mock.calls.some((call) => String(call[0]).includes('not a recipient')
+      || String(call[0]).includes('non destinataire')
+      || String(call[0]).includes('ignored')));
+    expect(settled).toBeUndefined();
+
+    pwa.ws.send(JSON.stringify({
+      type: 'confirmation_response',
+      payload: { id, approved: true },
+    }));
+    await expect(pending).resolves.toEqual({ confirmed: true });
+
+    warn.mockRestore();
+    pwa.ws.close();
+    fleet.ws.close();
+  });
+
+  it('requires the tools scope to answer confirmation_response', async () => {
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    const chatOnly = await clientWith(['chat'], { approvalCapable: true, userId: 'chat-user' });
+
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'a.ts', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await waitUntil(() => pwa.events.some((event) => event.type === 'confirmation_required'));
+    expect(chatOnly.events.some((event) => event.type === 'confirmation_required')).toBe(false);
+    const id = pwa.events.find((event) => event.type === 'confirmation_required')?.payload?.id;
+
+    let settled: unknown;
+    void pending.then((value) => { settled = value; });
+
+    chatOnly.ws.send(JSON.stringify({
+      type: 'confirmation_response',
+      payload: { id, approved: true },
+    }));
+    await waitUntil(() => chatOnly.events.some((event) => event.error?.code === 'FORBIDDEN'));
+    expect(settled).toBeUndefined();
+
+    pwa.ws.send(JSON.stringify({
+      type: 'confirmation_response',
+      payload: { id, approved: false },
+    }));
+    await expect(pending).resolves.toEqual({ confirmed: false });
+    pwa.ws.close();
+    chatOnly.ws.close();
   });
 });

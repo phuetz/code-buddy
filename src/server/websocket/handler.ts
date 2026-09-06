@@ -90,6 +90,8 @@ interface ConnectionState {
   scopes: string[];
   /** No-auth network clients remain transport-visible but cannot run agent chat. */
   anonymousRemote?: boolean;
+  /** Client declared itself as a human approval surface (PWA / status). */
+  approvalCapable?: boolean;
   lastActivity: number;
   agent?: ServerAgent;
   agentInitializing?: Promise<void>;
@@ -328,6 +330,8 @@ interface AuthPayload {
   displayName?: string;
   clientId?: string;
   requestedScopes?: string[];
+  /** PWA / interactive UI: this socket can answer confirmation_required. */
+  approvalCapable?: boolean;
 }
 interface ChatPayload {
   message?: string;
@@ -520,7 +524,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     return;
   }
 
-  const { token, apiKey } = payload as AuthPayload;
+  const { token, apiKey, approvalCapable } = payload as AuthPayload;
 
   if (apiKey) {
     const key = validateApiKey(apiKey);
@@ -532,6 +536,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
       state.deviceId = undefined;
       state.scopes = key.scopes;
       state.anonymousRemote = false;
+      if (approvalCapable === true) state.approvalCapable = true;
       send(ws, {
         type: 'authenticated',
         payload: { keyId: key.id, scopes: key.scopes },
@@ -557,6 +562,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
       state.deviceId = undefined;
       state.scopes = decoded.scopes || ['chat'];
       state.anonymousRemote = false;
+      if (approvalCapable === true) state.approvalCapable = true;
       send(ws, {
         type: 'authenticated',
         payload: { userId: state.userId, scopes: state.scopes },
@@ -585,6 +591,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     state.keyId = undefined;
     state.scopes = deviceOutcome.scopes ?? [];
     state.anonymousRemote = false;
+    if (approvalCapable === true) state.approvalCapable = true;
     send(ws, {
       type: 'authenticated',
       payload: { deviceId: deviceOutcome.deviceId, scopes: state.scopes, paired: true },
@@ -966,7 +973,15 @@ messageHandlers.set('ping', async (ws, _state, _payload) => {
 /**
  * Handle get status
  */
-messageHandlers.set('status', async (ws, state, _payload) => {
+messageHandlers.set('status', async (ws, state, payload) => {
+  if (
+    payload
+    && typeof payload === 'object'
+    && !Array.isArray(payload)
+    && (payload as { approvalCapable?: unknown }).approvalCapable === true
+  ) {
+    state.approvalCapable = true;
+  }
   send(ws, buildGatewayStatus({
     connection: {
       connectionId: state.id,
@@ -1290,7 +1305,7 @@ export async function setupWebSocket(
 
   wireMobileConfirmationBridge({
     broadcast,
-    authenticatedCount: () => getConnectionStats().authenticated,
+    collectApprovalSurfaceIds,
     registerExtension: registerWebSocketExtension,
   });
 
@@ -1492,11 +1507,47 @@ function getBroadcastBufferLimit(): number {
  * Drops are logged at debug level once per 100 drops per client to keep
  * logs informative without spamming under sustained backpressure.
  */
-export function broadcast(message: WebSocketResponse, scopeFilter?: string): void {
+export interface WsBroadcastTarget {
+  readonly id: string;
+  readonly authenticated: boolean;
+  readonly scopes: readonly string[];
+  readonly anonymousRemote: boolean;
+  readonly approvalCapable: boolean;
+}
+
+function toBroadcastTarget(state: ConnectionState): WsBroadcastTarget {
+  return {
+    id: state.id,
+    authenticated: state.authenticated,
+    scopes: state.scopes,
+    anonymousRemote: state.anonymousRemote === true,
+    approvalCapable: state.approvalCapable === true,
+  };
+}
+
+export function collectApprovalSurfaceIds(): string[] {
+  const ids: string[] = [];
+  for (const state of connections.values()) {
+    if (!state.authenticated) continue;
+    if (state.anonymousRemote) continue;
+    if (state.approvalCapable !== true) continue;
+    if (!state.scopes.includes('tools')) continue;
+    ids.push(state.id);
+  }
+  return ids;
+}
+
+export function broadcast(
+  message: WebSocketResponse,
+  scopeFilter?: string,
+  targetFilter?: (target: WsBroadcastTarget) => boolean,
+): string[] {
+  const delivered: string[] = [];
   const limit = getBroadcastBufferLimit();
   for (const [ws, state] of connections.entries()) {
     if (!state.authenticated) continue;
     if (scopeFilter && !state.scopes.includes(scopeFilter)) continue;
+    if (targetFilter && !targetFilter(toBroadcastTarget(state))) continue;
 
     if (ws.bufferedAmount > limit) {
       state.droppedBroadcasts++;
@@ -1512,7 +1563,9 @@ export function broadcast(message: WebSocketResponse, scopeFilter?: string): voi
     }
 
     send(ws, message);
+    delivered.push(state.id);
   }
+  return delivered;
 }
 
 /**
