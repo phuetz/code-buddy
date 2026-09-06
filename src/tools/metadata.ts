@@ -1684,7 +1684,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Vulnerability scanning
   {
     name: 'scan_vulnerabilities',
-    effect: 'read',
+    effect: 'emission',
     category: 'system',
     keywords: ['vulnerability', 'security', 'audit', 'dependency', 'npm', 'pip', 'cargo', 'cve', 'scan', 'advisory'],
     priority: 7,
@@ -1934,7 +1934,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'git_summary',
-    effect: 'read',
+    effect: 'emission',
     category: 'git',
     keywords: ['git', 'summary', 'status', 'branch', 'commit', 'ahead', 'behind'],
     priority: 82,
@@ -1970,7 +1970,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'env_doctor',
-    effect: 'read',
+    effect: 'emission',
     category: 'system',
     keywords: ['environment', 'doctor', 'node', 'node_modules', 'scripts', 'config', 'git', 'docker'],
     priority: 75,
@@ -1979,7 +1979,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'port_check',
-    effect: 'read',
+    effect: 'emission',
     category: 'system',
     keywords: ['port', 'check', 'loopback', 'available', 'listening', 'server'],
     priority: 74,
@@ -2006,7 +2006,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'format_project',
-    effect: 'reversible',
+    effect: 'emission',
     category: 'system',
     keywords: ['format', 'prettier'],
     priority: 70,
