@@ -155,6 +155,30 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\b(?:disable|bypass)\b.{0,60}\b(?:all|every|any)\b.{0,40}\b(?:safety|guardrail|restriction)s?\b/i, severity: 'critical', description: 'Instruction to disable safety policies', name: 'disable-safety', capability: 'prompt-injection' },
 ];
 
+const DYNAMIC_IMPORT_PATTERN_LEGACY = /\bimport\s*\(\s*[a-zA-Z_$[]/;
+
+function isDeobAllEnabled(): boolean {
+  return (
+    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== 'false' &&
+    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== '0'
+  );
+}
+
+function getDangerousPatterns(): DangerousPattern[] {
+  if (isDeobAllEnabled()) {
+    return DANGEROUS_PATTERNS;
+  }
+  return DANGEROUS_PATTERNS.map((dp) => {
+    if (dp.name === 'dynamic-import') {
+      return {
+        ...dp,
+        pattern: DYNAMIC_IMPORT_PATTERN_LEGACY,
+      };
+    }
+    return dp;
+  });
+}
+
 /**
  * Scan a single file for dangerous patterns.
  */
@@ -164,6 +188,7 @@ export function scanFile(filePath: string): ScanResult {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
+    const patterns = getDangerousPatterns();
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -173,7 +198,7 @@ export function scanFile(filePath: string): ScanResult {
       // Skip markdown comments and frontmatter delimiters
       if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
 
-      for (const dp of DANGEROUS_PATTERNS) {
+      for (const dp of patterns) {
         if (dp.pattern.test(line)) {
           findings.push({
             severity: dp.severity,
@@ -338,15 +363,14 @@ function collectDeobfuscatedFindings(
   const extra: ScanFinding[] = [];
   const seen = new Set(existing.map((finding) => finding.pattern));
 
-  const deobAll =
-    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== 'false' &&
-    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== '0';
+  const deobAll = isDeobAllEnabled();
+  const patterns = getDangerousPatterns();
 
   const rawWindows = sliceScanWindows(content);
   let safeWindows: string[] | null = null;
   let aggressiveWindows: string[] | null = null;
 
-  for (const dp of DANGEROUS_PATTERNS) {
+  for (const dp of patterns) {
     const isInjection = dp.capability === 'prompt-injection';
     if (!isInjection && !deobAll) continue;
     if (seen.has(dp.name)) continue;

@@ -82,4 +82,22 @@ describe('AGY-FIREWALL Trou B-4 — déobfuscation étendue à toutes les capaci
     expect(rep.verdict).toBe('quarantine');
     expect(rep.findings.some((f) => f.pattern === 'rm-rf')).toBe(true);
   });
+
+  it('B-2 — kill-switch CODEBUDDY_SKILL_FIREWALL_DEOB_ALL=false restaure le comportement de base f7c4eedde sur dynamic-import (D01)', () => {
+    const prev = process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL;
+    try {
+      process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL = 'false';
+      // Cas D01 d'Opus : const m = await from lib import(nomModule);
+      const rep = scanSkillFirewall(makeSkill('const m = await from lib import(nomModule);'));
+      expect(rep.verdict).toBe('quarantine');
+      expect(rep.findings.some((f) => f.pattern === 'dynamic-import')).toBe(true);
+      expect(rep.score).toBe(76);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL;
+      } else {
+        process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL = prev;
+      }
+    }
+  });
 });
