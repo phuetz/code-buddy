@@ -689,20 +689,27 @@ async function loadModel(): Promise<string | undefined> {
 }
 
 /**
- * Active-LLM auto-failover. When `[llm] enabled` (or CODEBUDDY_LLM_FAILOVER=1),
- * build the registry of the user's live logins and inject it into the agent's
- * client fallback list — so a failing primary transparently fails over to the
- * next active LLM (resilience order by default: capable/subscription first,
- * local last). OFF by default → single-provider behavior is unchanged.
+ * Active-LLM auto-failover. `CODEBUDDY_LLM_FAILOVER` is a deprecated alias of
+ * `CODEBUDDY_PROVIDER_FALLBACK` — both take the declared client path. When no
+ * `CODEBUDDY_FALLBACK_CHAIN` is set, the authenticated registry is injected as
+ * the candidate list (resilience order by default).
  */
 async function applyActiveLlmFailover(
   agent: import('./agent/codebuddy-agent.js').CodeBuddyAgent,
 ): Promise<void> {
   try {
     const { getConfigManager } = await import('./config/toml-config.js');
+    const { isDeclaredProviderFallbackEnabled, warnLegacyLlmFailoverAlias } = await import(
+      './providers/provider-failover-policy.js'
+    );
     const llmCfg = getConfigManager().getConfig().llm;
-    const enabled = Boolean(llmCfg?.enabled) || process.env.CODEBUDDY_LLM_FAILOVER === '1';
+    warnLegacyLlmFailoverAlias();
+    const enabled = isDeclaredProviderFallbackEnabled() || Boolean(llmCfg?.enabled);
     if (!enabled) return;
+    if (process.env.CODEBUDDY_FALLBACK_CHAIN) {
+      logger.info('Active-LLM failover: CODEBUDDY_FALLBACK_CHAIN wins over the registry list');
+      return;
+    }
 
     const primary = await getDetectedProvider();
     const { buildActiveLlmRegistry } = await import('./providers/active-llm-registry.js');
@@ -3491,11 +3498,14 @@ program
       cli.stdout("\nNo additional active LLMs available for failover.");
     }
     const { getConfigManager } = await import("./config/toml-config.js");
+    const { isDeclaredProviderFallbackEnabled } = await import(
+      "./providers/provider-failover-policy.js"
+    );
     const on =
-      Boolean(getConfigManager().getConfig().llm?.enabled) ||
-      process.env.CODEBUDDY_LLM_FAILOVER === "1";
+      isDeclaredProviderFallbackEnabled() ||
+      Boolean(getConfigManager().getConfig().llm?.enabled);
     cli.stdout(
-      `Auto-failover: ${on ? "ON" : "OFF  (enable with [llm].enabled = true, or CODEBUDDY_LLM_FAILOVER=1)"}`,
+      `Auto-failover: ${on ? "ON" : "OFF  (enable with CODEBUDDY_PROVIDER_FALLBACK=true; CODEBUDDY_LLM_FAILOVER is a deprecated alias)"}`,
     );
   });
 

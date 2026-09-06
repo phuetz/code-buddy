@@ -78,6 +78,7 @@ import {
 } from '../../src/providers/provider-health.js';
 import { getGlobalEventBus, resetEventBus } from '../../src/events/event-bus.js';
 import { resetUserFacingFailoverNoticeForTests } from '../../src/providers/provider-failover-user-notice.js';
+import { resetLegacyLlmFailoverAliasWarnForTests } from '../../src/providers/provider-failover-policy.js';
 
 function quotaError(): Error {
   const err = new Error(
@@ -133,6 +134,7 @@ function openaiFallback(model = 'gpt-4o'): RuntimeFallbackProvider {
 
 const envKeys = [
   'CODEBUDDY_PROVIDER_FALLBACK',
+  'CODEBUDDY_LLM_FAILOVER',
   'CODEBUDDY_FALLBACK_CHAIN',
   'CODEBUDDY_FALLBACK_PROVIDERS',
   'CODEBUDDY_LOCAL_ONLY',
@@ -152,6 +154,7 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     setProviderHealthPathForTests(path.join(tmp, '.codebuddy', 'provider-health.json'));
     resetProviderHealthStoreForTests();
     resetEventBus();
+    resetLegacyLlmFailoverAliasWarnForTests();
     for (const key of envKeys) delete process.env[key];
   });
 
@@ -181,6 +184,26 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
       expect.any(Object),
     );
     expect(fs.existsSync(path.join(tmp, '.codebuddy', 'provider-health.json'))).toBe(false);
+  });
+
+  it('CODEBUDDY_LLM_FAILOVER=1 is the same declared path as PROVIDER_FALLBACK', async () => {
+    process.env.CODEBUDDY_LLM_FAILOVER = '1';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('legacy alias ok'));
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback()],
+    });
+    const response = await client.chat([{ role: 'user', content: 'hello' }], []);
+    expect(response.choices[0]?.message.content).toBe('legacy alias ok');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('CODEBUDDY_LLM_FAILOVER is deprecated'),
+      expect.any(Object),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[fallback] grok → openai:gpt-4o \(quota_exhausted/),
+      expect.any(Object),
+    );
+    const fallbackMessages = mockCreate.mock.calls[1]?.[0]?.messages as Array<{ content?: string }>;
+    expect(fallbackMessages.some((m) => m.content?.includes('conversation reprise'))).toBe(true);
   });
 
   it('429 quota → switch, resume note, persisted health, no retry of the benched provider', async () => {
