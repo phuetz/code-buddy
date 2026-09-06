@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldUseCompanionChannelProfile } from '../../src/channels/companion-channel-profile.js';
+import {
+  isCompanionSurfaceEnabled,
+  shouldUseCompanionChannelProfile,
+} from '../../src/channels/companion-channel-profile.js';
 import { isLisaSelfieRequest } from '../../src/companion/lisa-selfie.js';
 
 describe('companion channel selfie intercept contract', () => {
+  it('companion surface is off with an empty env', () => {
+    expect(isCompanionSurfaceEnabled({})).toBe(false);
+  });
+
+  it('companion surface is on for profile=companion or persona copine', () => {
+    expect(isCompanionSurfaceEnabled({ CODEBUDDY_CHANNEL_PROFILE: 'companion' })).toBe(true);
+    expect(isCompanionSurfaceEnabled({ CODEBUDDY_COMPANION_PERSONA: 'copine' })).toBe(true);
+  });
+
   it('companion profile is on for a photo request when the persona is set', () => {
     expect(shouldUseCompanionChannelProfile({
       text: 'Envoie-moi une photo de toi',

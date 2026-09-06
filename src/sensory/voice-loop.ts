@@ -1871,7 +1871,10 @@ export async function defaultReply(
     return fast;
   }
   // Lisa selfie — cache-first router BEFORE the LLM. Generation is not on this path.
-  if (process.env.CODEBUDDY_LISA_SELFIE !== 'false') {
+  if (
+    process.env.CODEBUDDY_LISA_SELFIE !== 'false'
+    && (await import('../channels/companion-channel-profile.js')).isCompanionSurfaceEnabled()
+  ) {
     try {
       const { tryServeCompanionSelfie } = await import('../companion/lisa-selfie-router.js');
       const selfie = await tryServeCompanionSelfie(heard, {

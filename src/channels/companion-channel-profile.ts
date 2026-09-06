@@ -35,16 +35,19 @@ export function isChannelAgentIntent(text: string, isCommand = false): boolean {
   return AGENT_INTENT_RE.test(trimmed);
 }
 
-export function shouldUseCompanionChannelProfile(
-  input: CompanionChannelProfileInput,
-): boolean {
-  const env = input.env ?? process.env;
-  if (isChannelAgentIntent(input.text, input.isCommand === true)) return false;
+/** Same gate as the companion channel turn: profile=companion or a persona. */
+export function isCompanionSurfaceEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const profile = (env.CODEBUDDY_CHANNEL_PROFILE ?? '').trim().toLowerCase();
   if (profile === 'agent' || profile === 'full') return false;
   if (profile === 'companion') return true;
-  const persona = (env.CODEBUDDY_COMPANION_PERSONA ?? '').trim();
-  return persona.length > 0;
+  return (env.CODEBUDDY_COMPANION_PERSONA ?? '').trim().length > 0;
+}
+
+export function shouldUseCompanionChannelProfile(
+  input: CompanionChannelProfileInput,
+): boolean {
+  if (isChannelAgentIntent(input.text, input.isCommand === true)) return false;
+  return isCompanionSurfaceEnabled(input.env ?? process.env);
 }
 
 export function channelWaitNoticeMs(env: NodeJS.ProcessEnv = process.env): number {

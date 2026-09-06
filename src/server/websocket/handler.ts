@@ -601,23 +601,26 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
 });
 
-async function produceCompanionReply(
+export async function produceCompanionReply(
   message: string,
 ): Promise<string | { text: string; image?: { mimeType: string; data: string } }> {
   try {
-    const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
-    const served = await tryServeCompanionSelfie(message, {
-      surface: 'mobile',
-      includeImageBytes: true,
-    });
-    if (served) {
-      if (served.imageBase64 && served.mimeType) {
-        return {
-          text: served.caption,
-          image: { mimeType: served.mimeType, data: served.imageBase64 },
-        };
+    const { isCompanionSurfaceEnabled } = await import('../../channels/companion-channel-profile.js');
+    if (process.env.CODEBUDDY_LISA_SELFIE !== 'false' && isCompanionSurfaceEnabled()) {
+      const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
+      const served = await tryServeCompanionSelfie(message, {
+        surface: 'mobile',
+        includeImageBytes: true,
+      });
+      if (served) {
+        if (served.imageBase64 && served.mimeType) {
+          return {
+            text: served.caption,
+            image: { mimeType: served.mimeType, data: served.imageBase64 },
+          };
+        }
+        return served.caption;
       }
-      return served.caption;
     }
   } catch (err) {
     logger.warn('[ws] companion selfie router skipped', {

@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MOBILE_PWA_CSP, mobilePwaRouter } from '../../src/server/mobile/index.js';
 
@@ -275,5 +275,35 @@ describe('Mobile PWA Express 5 route table', () => {
     const stack = (router as unknown as { stack: Array<{ route?: { path: string } }> }).stack;
     const paths = stack.map((layer) => layer.route?.path).filter(Boolean);
     expect(paths).not.toContain('/assets/*');
+  });
+});
+
+describe('Mobile companion selfie router gate', () => {
+  afterEach(() => {
+    delete process.env.CODEBUDDY_COMPANION_PERSONA;
+    delete process.env.CODEBUDDY_CHANNEL_PROFILE;
+    delete process.env.CODEBUDDY_LISA_SELFIE;
+    vi.restoreAllMocks();
+  });
+
+  it('does not call the selfie router without a companion surface', async () => {
+    const { produceCompanionReply } = await import('../../src/server/websocket/handler.js');
+    const router = await import('../../src/companion/lisa-selfie-router.js');
+    const spy = vi.spyOn(router, 'tryServeCompanionSelfie');
+    vi.spyOn(await import('../../src/sensory/voice-loop.js'), 'defaultReply')
+      .mockResolvedValue('fallback');
+    await produceCompanionReply('envoie-moi une photo de toi');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('calls the selfie router when the copine persona is set', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const { produceCompanionReply } = await import('../../src/server/websocket/handler.js');
+    const router = await import('../../src/companion/lisa-selfie-router.js');
+    const spy = vi.spyOn(router, 'tryServeCompanionSelfie').mockResolvedValue(null);
+    vi.spyOn(await import('../../src/sensory/voice-loop.js'), 'defaultReply')
+      .mockResolvedValue('fallback');
+    await produceCompanionReply('envoie-moi une photo de toi');
+    expect(spy).toHaveBeenCalled();
   });
 });

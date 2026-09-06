@@ -790,8 +790,9 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       }
       // Lisa selfie — cache-first, before the LLM (companion profile has no tools).
       if (
-        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
-        !introspectionIntent
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false'
+        && (await import('../channels/companion-channel-profile.js')).isCompanionSurfaceEnabled()
+        && !introspectionIntent
       ) {
         try {
           const { tryServeCompanionSelfie } = await import(

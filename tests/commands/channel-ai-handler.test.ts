@@ -239,6 +239,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
   });
 
   it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
     const tiers: string[] = [];
     const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie')
       .mockImplementation(async (text, options) => {
@@ -294,7 +295,39 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       await manager.emit(makeMessage('Génère une image de chat', session), channel);
       expect(selfie).toHaveBeenCalledTimes(5);
       expect(selfie.mock.calls[4]?.[0]).toBe('Génère une image de chat');
-      expect(hoisted.processUserMessage).toHaveBeenCalledTimes(1);
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
+  it('does not call the selfie router on Telegram without a companion surface', async () => {
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie');
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(
+        makeMessage('Lisa, envoie-moi une photo de toi'),
+        { type: 'telegram', send: makeSuccessfulSend() },
+      );
+      expect(selfie).not.toHaveBeenCalled();
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
+  it('calls the selfie router on Telegram when the copine persona is set', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie').mockResolvedValue(null);
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(
+        makeMessage('Lisa, envoie-moi une photo de toi'),
+        { type: 'telegram', send: makeSuccessfulSend() },
+      );
+      expect(selfie).toHaveBeenCalled();
     } finally {
       selfie.mockRestore();
     }

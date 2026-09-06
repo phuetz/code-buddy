@@ -37,6 +37,7 @@ import {
   assembleCompanionChannelPrompt,
   channelWaitNoticeMs,
   companionWaitNoticeText,
+  isCompanionSurfaceEnabled,
   shouldUseCompanionChannelProfile,
 } from '../../channels/companion-channel-profile.js';
 import { runCompanionChannelTurn } from '../../channels/companion-channel-turn.js';
@@ -1319,15 +1320,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       // Lisa selfie — cache-first, BEFORE the LLM. Companion profile has no tools,
       // so a description of lisa_selfie / image_generate never fires here.
-      const companionProfile = shouldUseCompanionChannelProfile({
-        text: message.content,
-        isCommand: message.isCommand === true,
-      });
       if (
-        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
-        (channel.type === 'telegram'
-          || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all'
-          || companionProfile)
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false'
+        && isCompanionSurfaceEnabled()
       ) {
         try {
           const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
