@@ -70,8 +70,9 @@ describe('isOllamaEndpoint', () => {
     expect(isOllamaEndpoint('http://ollama.lan:8080/v1', {})).toBe(false);
   });
 
-  it('does not treat :11434 as Ollama without a provider, host, or probe', () => {
-    expect(isOllamaEndpoint('http://localhost:11434/v1', {})).toBe(false);
+  it('treats :11434 on loopback as Ollama by default', () => {
+    expect(isOllamaEndpoint('http://localhost:11434/v1', {})).toBe(true);
+    expect(isOllamaEndpoint('http://localhost:11434/v1', { CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(false);
   });
 });
 
