@@ -31,29 +31,49 @@
     </section>
 
     <section id="main-screen" class="screen hidden">
-      <header class="app-header">
-        <button type="button" id="assistant-btn" class="btn ghost" aria-haspopup="dialog">
-          <span id="current-assistant">Agent</span>
-        </button>
+      <header class="app-header chat-header">
+        <img id="lisa-avatar" class="header-avatar" src="/__codebuddy__/mobile/assets/icon-192.png" alt="">
+        <div class="header-meta">
+          <button type="button" id="assistant-btn" class="btn ghost header-name" aria-haspopup="dialog">
+            <span id="current-assistant">Lisa</span>
+          </button>
+          <p id="presence-line" class="presence-line">hors ligne</p>
+        </div>
+        <span id="mood-chip" class="mood-chip hidden" aria-label="Humeur"></span>
         <span id="connection-status" class="status-dot" title="Connexion">●</span>
-        <button type="button" id="logout-btn" class="btn icon" aria-label="Déconnexion">✕</button>
+        <button type="button" id="settings-btn" class="btn icon touch" aria-label="Réglages">⚙</button>
+        <button type="button" id="logout-btn" class="btn icon touch" aria-label="Déconnexion">✕</button>
       </header>
 
       <main class="main-content">
         <section id="chat-section" class="panel active">
           <div id="messages" class="messages" aria-live="polite"></div>
+          <div id="typing-indicator" class="typing-indicator hidden" aria-live="polite">
+            <span class="typing-label">Lisa écrit</span>
+            <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+          <button type="button" id="jump-bottom" class="jump-bottom hidden" aria-label="Aller en bas">
+            ↓ <span id="unread-count" class="unread-count hidden">0</span>
+          </button>
+          <div id="suggestions" class="suggestions" aria-label="Suggestions"></div>
           <form id="composer" class="composer">
-            <button type="button" id="mic-btn" class="btn icon" aria-label="Dictée">🎤</button>
-            <textarea id="message-input" rows="1" placeholder="Message…"></textarea>
-            <button type="submit" id="send-btn" class="btn primary icon" aria-label="Envoyer">→</button>
-            <button type="button" id="stop-btn" class="btn danger icon hidden" aria-label="Arrêter">■</button>
+            <button type="button" id="emoji-btn" class="btn icon touch" aria-label="Émojis" aria-expanded="false" aria-controls="emoji-picker">😊</button>
+            <button type="button" id="mic-btn" class="btn icon touch" aria-label="Dictée">🎤</button>
+            <textarea id="message-input" rows="1" placeholder="Message…" aria-label="Message"></textarea>
+            <button type="submit" id="send-btn" class="btn primary icon touch" aria-label="Envoyer">→</button>
+            <button type="button" id="stop-btn" class="btn danger icon touch hidden" aria-label="Arrêter">■</button>
           </form>
+          <div id="emoji-picker" class="emoji-picker hidden" role="dialog" aria-label="Sélecteur d'émojis">
+            <input id="emoji-search" type="search" placeholder="Rechercher (cœur, rire, kiss…)" aria-label="Rechercher un émoji" autocomplete="off">
+            <div id="emoji-cats" class="emoji-cats" role="tablist"></div>
+            <div id="emoji-grid" class="emoji-grid" role="tabpanel"></div>
+          </div>
         </section>
 
         <section id="runs-section" class="panel hidden">
           <div class="section-header">
             <h2>Runs</h2>
-            <button type="button" id="refresh-runs" class="btn icon" aria-label="Actualiser">↻</button>
+            <button type="button" id="refresh-runs" class="btn icon touch" aria-label="Actualiser">↻</button>
           </div>
           <div id="runs-list" class="list"></div>
           <pre id="trajectory-view" class="trajectory hidden"></pre>
@@ -86,7 +106,7 @@
     <form method="dialog" class="modal-card">
       <header>
         <h2>Assistant</h2>
-        <button type="submit" class="btn icon" value="close" aria-label="Fermer">✕</button>
+        <button type="submit" class="btn icon touch" value="close" aria-label="Fermer">✕</button>
       </header>
       <div id="assistants-list" class="list"></div>
     </form>
@@ -105,6 +125,39 @@
     </form>
   </dialog>
 
+  <dialog id="settings-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Réglages</h2>
+        <button type="submit" class="btn icon touch" value="close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="modal-body">
+        <p>L’historique (200 messages) et les réactions restent sur cet appareil.</p>
+        <button type="button" id="clear-chat-btn" class="btn danger">Effacer la conversation</button>
+        <p id="clear-chat-confirm" class="hidden clear-confirm">
+          <span>Supprimer les messages locaux ?</span>
+          <button type="button" id="clear-chat-yes" class="btn danger">Confirmer</button>
+          <button type="button" id="clear-chat-no" class="btn secondary">Annuler</button>
+        </p>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Image en plein écran">
+    <img id="lightbox-img" alt="Image">
+  </div>
+
+  <div id="reaction-bar" class="reaction-bar hidden" role="toolbar" aria-label="Réactions">
+    <button type="button" class="react-btn touch" data-emoji="❤️" aria-label="Cœur">❤️</button>
+    <button type="button" class="react-btn touch" data-emoji="😂" aria-label="Rire">😂</button>
+    <button type="button" class="react-btn touch" data-emoji="😮" aria-label="Surprise">😮</button>
+    <button type="button" class="react-btn touch" data-emoji="😢" aria-label="Triste">😢</button>
+    <button type="button" class="react-btn touch" data-emoji="👍" aria-label="Pouce">👍</button>
+    <button type="button" class="react-btn touch" data-emoji="🔥" aria-label="Feu">🔥</button>
+    <button type="button" id="copy-msg-btn" class="react-btn touch" aria-label="Copier">📋</button>
+  </div>
+
+  <script src="/__codebuddy__/mobile/assets/emoji-data.js"></script>
   <script src="/__codebuddy__/mobile/assets/app.js"></script>
 </body>
 </html>

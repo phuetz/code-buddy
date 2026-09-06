@@ -3,7 +3,7 @@
  * Minimal cache-only strategy for offline support
  */
 
-const CACHE_NAME = 'codebuddy-mobile-v2';
+const CACHE_NAME = 'codebuddy-mobile-v3';
 const ASSETS_TO_CACHE = [
   '/__codebuddy__/mobile/',
   '/__codebuddy__/mobile/manifest.webmanifest',
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
   '/__codebuddy__/mobile/assets/index.html',
   '/__codebuddy__/mobile/assets/styles.css',
   '/__codebuddy__/mobile/assets/app.js',
+  '/__codebuddy__/mobile/assets/emoji-data.js',
   '/__codebuddy__/mobile/assets/icon.svg',
   '/__codebuddy__/mobile/assets/icon-96.png',
   '/__codebuddy__/mobile/assets/icon-192.png',

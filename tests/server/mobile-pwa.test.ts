@@ -142,6 +142,13 @@ describe('Mobile PWA Router', () => {
       expect(response.status).toBe(200);
     });
 
+    it('should serve emoji-data.js', async () => {
+      const response = await fetch(`${baseUrl}/__codebuddy__/mobile/assets/emoji-data.js`);
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).toContain('CODEBUDDY_EMOJI_DATA');
+    });
+
     it('should serve icon.svg', async () => {
       const response = await fetch(`${baseUrl}/__codebuddy__/mobile/assets/icon.svg`);
       expect(response.status).toBe(200);
@@ -196,6 +203,7 @@ describe('Mobile PWA Assets Validation', () => {
       'index.html',
       'styles.css',
       'app.js',
+      'emoji-data.js',
       'sw.js',
       'manifest.webmanifest',
       'icon.svg',
@@ -237,6 +245,26 @@ describe('Mobile PWA Assets Validation', () => {
     expect(app).toContain('approvalCapable');
     expect(app).not.toContain('auth_success');
     expect(app).not.toContain('chat_stream');
+    expect(app).toContain('local-only');
+    expect(app).not.toMatch(/send\(\s*['"]reaction['"]/);
+  });
+
+  it('should ship a chat composer with emoji picker markup', () => {
+    const html = readFileSync(path.join(assetsDir, 'index.html'), 'utf-8');
+    expect(html).toContain('id="emoji-btn"');
+    expect(html).toContain('id="emoji-picker"');
+    expect(html).toContain('id="lightbox"');
+    expect(html).toContain('id="reaction-bar"');
+    expect(html).toContain('id="suggestions"');
+    expect(html).toContain('id="typing-indicator"');
+    expect(html).toContain('emoji-data.js');
+    expect(html).not.toContain('unsafe-inline');
+  });
+
+  it('should bump the service worker cache to include emoji-data.js', () => {
+    const sw = readFileSync(path.join(assetsDir, 'sw.js'), 'utf-8');
+    expect(sw).toContain('codebuddy-mobile-v3');
+    expect(sw).toContain('/__codebuddy__/mobile/assets/emoji-data.js');
   });
 });
 
