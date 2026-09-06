@@ -85,3 +85,26 @@ Byte-identique sans persona (légendes historiques, refill off).
 ComfyUI 8188/8189 intacts. `~/code-buddy` et `~/.codebuddy` non ouverts.
 Aucun push.
 Reste : activer `CODEBUDDY_LISA_SELFIE_REFILL` en production (humain) ; rouge `out_of_credits` hors lane.
+
+## Correctifs après vérification croisée
+
+Date : 2026-09-06 (Europe/Paris)
+Agent : Grok 4.6
+Source : `docs/reports/2026-09/VERIF-SELFIE-CACHE-AGY.md` (verdict NON PUSHABLE, HEAD audité `aaa9c96ea`)
+Branche : `feat/selfie-cache-2026-09-06`
+HEAD au départ des correctifs : `b51bbd7f5`
+HOME QA : `_qa/selfie2/home` (gitignoré). Vitest : `HOME=…/_qa/selfie2/home` et `env -u FORCE_COLOR`.
+Original `~/code-buddy` et `~/.codebuddy` : interdits.
+Section créée **avant toute modification de code**.
+
+### Trous à lever (agy)
+
+| Id | Gravité | Fait | Correctif prévu |
+|---|---|---|---|
+| A | A | Sidecar JSON du refill persiste le prompt avec `resolveUserName()` | Refill sans prénom ; sidecar = `{tier, style, hash, createdAt, source, favorite}` (+ `promptHash` sha256) |
+| B1 | B | Cache défaut = `.codebuddy/lora/lisa/selfie-cache` du clone | Défaut unique `~/.codebuddy/companion/lisa/selfie-cache` via `os.homedir()` ; `CODEBUDDY_LISA_SELFIE_CACHE_DIR` prioritaire |
+| B2 | B | Router atteint sans persona (Telegram `channel.type`, voix) | `isCompanionSurfaceEnabled(env)` identique à `runCompanionChannelTurn`, 3 surfaces |
+| B3 | B | 4/16 motifs faux (FN « t'as une photo ? », « montre-toi », « send me a pic » ; FP « le selfie de Marie ») | Demande visant Lisa uniquement ; 16 phrases agy + 4 nouvelles |
+| Opus b | B | Endpoint ComfyUI primaire mort toujours en tête | Mémoriser l'endpoint sain 5 min (`healthyComfyEndpoint`), le remettre en tête |
+
+Chaque point : test rouge avant, vert après. Un commit par point. Aucun push.
