@@ -62,6 +62,14 @@ export function wireMobileConfirmationBridge(deps: {
   if (wired && unwireFn) return unwireFn;
 
   const handleResponse: WebSocketExtensionRegistration['handle'] = (ctx, payload) => {
+    if (ctx.principal.anonymousRemote) {
+      ctx.send({
+        type: 'error',
+        error: { code: 'UNAUTHORIZED', message: 'Remote confirmation requires authentication' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
     if (ctx.principal.scopes.length === 0) {
       ctx.send({
         type: 'error',

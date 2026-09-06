@@ -162,6 +162,8 @@ export interface WebSocketExtensionPrincipal {
   readonly scopes: readonly string[];
   readonly loopback: boolean;
   readonly secure: boolean;
+  /** True for `--no-auth` clients that are not direct loopback. */
+  readonly anonymousRemote: boolean;
 }
 
 export interface WebSocketExtensionContext {
@@ -204,6 +206,7 @@ function extensionPrincipal(state: ConnectionState): WebSocketExtensionPrincipal
     scopes: Object.freeze(state.authenticated ? [...state.scopes] : []),
     loopback: state.loopback === true,
     secure: state.secure === true,
+    anonymousRemote: state.anonymousRemote === true,
   });
 }
 
