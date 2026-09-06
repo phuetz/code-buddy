@@ -230,10 +230,40 @@ export function isLisaSelfieRequest(text: string): boolean {
 }
 
 /**
- * Resolve elliptical follow-ups only after this session successfully produced
- * a Lisa selfie. This deliberately does not classify arbitrary image requests:
- * callers must provide the trusted, short-lived `hasRecentSelfie` state.
+ * Elliptical follow-ups ("encore une ?", "et une à la plage ?") only mean
+ * "another photo of you" when the PREVIOUS assistant turn served a selfie —
+ * that trusted, short-lived state is the caller's `hasRecentSelfie`. This
+ * function deliberately does not classify arbitrary image requests.
  */
+
+/** Openings that read as "another one" once a selfie is on screen. */
+const CONTINUATION_HEADS: RegExp[] = [
+  // encore / encore une / encore une photo
+  /^(?:et\s+)?encore(?:\s+une?)?(?:\s+(?:photo|image|selfie|portrait|pic))?\b/,
+  // une autre / un autre / une autre photo
+  /^(?:et\s+)?(?:une|un)\s+autre(?:\s+(?:photo|image|selfie|portrait|pic))?\b/,
+  // la même / le même (en plus sexy, à la plage…)
+  /^(?:et\s+)?(?:la|le)\s+meme\b/,
+  // une de plus
+  /^(?:et\s+)?(?:une|un)\s+de\s+plus\b/,
+  // another / another one / one more / more
+  /^(?:another|one\s+more|more)(?:\s+(?:one|photo|pic|picture|selfie|shot))?\b/,
+  // « et une à la plage », « une en pyjama », « une avec … »
+  /^(?:et\s+)?(?:une|un)(?=\s+(?:a|en|au|aux|dans|avec|sur|plus)\b)/,
+  // « génère la photo », « envoie-moi une autre »
+  /^(?:genere|cree|fais|envoie|envoies|montre)(?:\s+moi)?\s+(?:en\s+)?(?:une|la|cette)\b/,
+];
+
+/**
+ * Words that betray a different subject even behind a continuation opening
+ * ("encore une FOIS explique", "une autre QUESTION").
+ */
+const CONTINUATION_STOP_RE =
+  /\b(?:fois|question|questions|chose|truc|idee|idees|explique|explication|explications|dis|raconte|histoire|parle|essaie|essaye|coup|tentative|reponse|reponses|time|thing|round)\b/;
+
+/** A follow-up is short; a sentence is something else. */
+const CONTINUATION_MAX_WORDS = 8;
+
 export function isLisaSelfieContinuationRequest(
   text: string,
   hasRecentSelfie: boolean,
@@ -241,10 +271,13 @@ export function isLisaSelfieContinuationRequest(
   if (!hasRecentSelfie) return false;
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
-  if (/\b(?:image|photo|portrait|picture)\s+(?:de|du|des|of)\s+(?!(?:toi|lisa)\b)/.test(t)) {
+  if (t.split(/\s+/).length > CONTINUATION_MAX_WORDS) return false;
+  // "une autre image DE CHAT" is not a photo of Lisa.
+  if (/\b(?:image|photo|portrait|picture|selfie)\s+(?:de|du|des|of)\s+(?!(?:toi|lisa)\b)/.test(t)) {
     return false;
   }
-  return /^(?:(?:une|encore une)\s+autre(?:\s+(?:photo|image|selfie|portrait))?|(?:genere|cree|fais)\s+(?:moi\s+)?(?:la|cette|une)\s+(?:photo|image|selfie|portrait))(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?(?:\s+(?:s il te plait|stp|please))?$/.test(t);
+  if (CONTINUATION_STOP_RE.test(t)) return false;
+  return CONTINUATION_HEADS.some((head) => head.test(t));
 }
 
 export function inferSelfieMood(text: string): LisaSelfieMood {

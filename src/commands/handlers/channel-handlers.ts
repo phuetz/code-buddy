@@ -1384,6 +1384,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
                 replyTo: message.id,
               });
             }
+            // The selfie IS a turn of the conversation: without this the next
+            // companion prompt has no trace of the photo that was just sent.
+            rememberCompanionChannelTurn(sessionKey, message.content, served.caption);
             return;
           }
         } catch (selfieErr) {

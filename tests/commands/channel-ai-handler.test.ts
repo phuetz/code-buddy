@@ -302,6 +302,43 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     }
   });
 
+  it('records the served selfie as a conversation turn for the next companion prompt', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie')
+      .mockImplementation(async (text) => {
+        if (!lisaSelfieRuntime.isLisaSelfieRequest(text)) return null;
+        return {
+          handled: true,
+          caption: 'Hop. Photo de moi, sans attendre le générateur.',
+          imagePath: join('cache', 'hit.png'),
+          mimeType: 'image/png',
+          refused: false,
+          reason: 'ok',
+          contentTier: 'safe',
+          style: 'portrait',
+        };
+      });
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const channel = { type: 'telegram', send: makeSuccessfulSend() };
+      const session = 'sess-lisa-selfie-history';
+
+      await manager.emit(makeMessage('Lisa, envoie-moi une photo de toi', session), channel);
+      await manager.emit(makeMessage('Coucou', session), channel);
+
+      expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
+      const payload = hoisted.runCompanionChannelTurn.mock.calls[0]?.[0] as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      const roles = payload.messages.map((entry) => entry.role);
+      expect(roles).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(payload.messages[2]?.content).toContain('Photo de moi');
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
   it('does not call the selfie router on Telegram without a companion surface', async () => {
     const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie');
     try {

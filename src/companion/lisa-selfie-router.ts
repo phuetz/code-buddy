@@ -30,6 +30,10 @@ import {
   resolveLisaSelfieRecentPath,
   resolveSelfieCacheDir,
 } from './lisa-selfie-ingest.js';
+import {
+  historyHasRecentSelfie,
+  type CompanionHistoryTurn,
+} from './companion-history.js';
 
 export type CompanionSelfieSurface = 'telegram' | 'mobile' | 'voice';
 
@@ -49,7 +53,13 @@ export interface TryServeCompanionSelfieOptions {
   surface: CompanionSelfieSurface;
   env?: NodeJS.ProcessEnv;
   rootDir?: string;
+  /** Explicit "the previous assistant turn was a selfie" state. */
   hasRecentSelfie?: boolean;
+  /**
+   * The conversation so far. A follow-up is resolved when the LAST assistant
+   * turn served a selfie — equivalent to, and combined with, `hasRecentSelfie`.
+   */
+  history?: readonly CompanionHistoryTurn[];
   cacheDir?: string;
   rotationPath?: string;
   now?: () => Date;
@@ -86,7 +96,9 @@ export async function tryServeCompanionSelfie(
 ): Promise<CompanionSelfieServeResult | null> {
   const env = options.env ?? process.env;
   if (env.CODEBUDDY_LISA_SELFIE === 'false') return null;
-  const continuation = isLisaSelfieContinuationRequest(text, options.hasRecentSelfie === true);
+  const hasRecentSelfie =
+    options.hasRecentSelfie === true || historyHasRecentSelfie(options.history);
+  const continuation = isLisaSelfieContinuationRequest(text, hasRecentSelfie);
   if (!isLisaSelfieRequest(text) && !continuation) return null;
 
   const inferredTier = inferLisaContentTier(text);

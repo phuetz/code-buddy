@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { logger } from '../utils/logger.js';
-import type { CompanionHistoryTurn } from './companion-turn.js';
+import type { CompanionHistoryTurn } from './companion-history.js';
 
 /** user+assistant entries kept, all surfaces. */
 export const MOBILE_HISTORY_MAX_TURNS = 20;

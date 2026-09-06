@@ -32,6 +32,7 @@ import { runCompanionChannelTurn } from '../channels/companion-channel-turn.js';
 import { speakChannelProviderFailure } from '../channels/provider-failure-speech.js';
 import type { CodeBuddyMessage, CodeBuddyResponse } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
+import type { CompanionHistoryTurn } from './companion-history.js';
 import type {
   CompanionSelfieServeResult,
   CompanionSelfieSurface,
@@ -41,16 +42,7 @@ import type {
 /** A companion surface. `voice` keeps its own loop; it is listed for symmetry. */
 export type CompanionSurface = CompanionSelfieSurface;
 
-/**
- * One recorded conversation turn. `kind` marks an assistant turn that served a
- * selfie so an elliptical follow-up ("encore une ?") can be resolved. Image
- * bytes are NEVER stored here.
- */
-export interface CompanionHistoryTurn {
-  role: 'user' | 'assistant';
-  content: string;
-  kind?: 'selfie';
-}
+export type { CompanionHistoryTurn } from './companion-history.js';
 
 export interface CompanionTurnResult {
   text: string;
@@ -89,15 +81,7 @@ export interface RunCompanionTurnOptions {
 /** Fallback when no provider is configured — spoken, never a silent empty reply. */
 const NO_PROVIDER_MESSAGE = 'unreachable: no configured provider for the companion turn';
 
-/** The last assistant turn served a selfie ⇒ an elliptical follow-up makes sense. */
-export function historyHasRecentSelfie(history: readonly CompanionHistoryTurn[] = []): boolean {
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const turn = history[i];
-    if (!turn || turn.role !== 'assistant') continue;
-    return turn.kind === 'selfie';
-  }
-  return false;
-}
+export { historyHasRecentSelfie } from './companion-history.js';
 
 async function defaultResolveProvider(
   env: NodeJS.ProcessEnv,
@@ -134,7 +118,7 @@ export async function runCompanionTurn(
       const served = await serve(message, {
         surface: options.surface,
         env,
-        hasRecentSelfie: historyHasRecentSelfie(history),
+        history,
         ...(options.includeImageBytes === true ? { includeImageBytes: true } : {}),
       });
       if (served) {
