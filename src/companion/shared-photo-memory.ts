@@ -8,6 +8,14 @@
  *    `episode:recent` (`sensory/episodic-journal.ts` writes it,
  *    `companion/relational-context.ts` reads it back into the prompt).
  *
+ * The photo line is written in the **user** scope (`~/.codebuddy/memory.md`),
+ * never the project scope: the project memory is `.codebuddy/CODEBUDDY_MEMORY.md`
+ * RELATIVE TO THE CWD, which is a git-TRACKED file when the server runs inside a
+ * repository. A description of a private photo must never land in a tracked
+ * file of a public repository. It is also the right scope on the merits — what
+ * he showed her belongs to the two of them, not to whichever project directory
+ * the server happened to start in.
+ *
  * One key, capped to a handful of lines, is deliberate: persistent memory has a
  * character budget (`MemoryConfig.projectCharLimit`), and one fact per photo
  * would evict everything else she knows about him within a week.
@@ -28,6 +36,9 @@ import {
 export const SHARED_PHOTO_MEMORY_KEY = 'photos:recent';
 /** How many photo lines the relational context carries. */
 export const SHARED_PHOTO_MEMORY_LINES = 5;
+
+/** User scope, never project — the project memory file is git-tracked. */
+export const SHARED_PHOTO_MEMORY_SCOPE = 'user' as const;
 
 /** Minimal surface of the persistent-memory manager this module needs. */
 export interface PhotoMemoryPort {
@@ -108,12 +119,12 @@ export async function rememberSharedPhotos(
     const memory = options.memory ?? (await defaultMemory());
     if (!memory) return records;
     const merged = mergePhotoMemory(
-      memory.recall(SHARED_PHOTO_MEMORY_KEY, 'project'),
+      memory.recall(SHARED_PHOTO_MEMORY_KEY, SHARED_PHOTO_MEMORY_SCOPE),
       line,
       SHARED_PHOTO_MEMORY_LINES,
     );
     await memory.remember(SHARED_PHOTO_MEMORY_KEY, merged, {
-      scope: 'project',
+      scope: SHARED_PHOTO_MEMORY_SCOPE,
       category: 'context',
       tags: ['companion', 'photo'],
     });
@@ -132,7 +143,7 @@ export async function readSharedPhotoMemory(
   try {
     const port = memory ?? (await defaultMemory());
     if (!port) return null;
-    const value = port.recall(SHARED_PHOTO_MEMORY_KEY, 'project');
+    const value = port.recall(SHARED_PHOTO_MEMORY_KEY, SHARED_PHOTO_MEMORY_SCOPE);
     return value?.trim() ? value.trim() : null;
   } catch {
     return null;

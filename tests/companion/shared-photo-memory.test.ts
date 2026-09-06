@@ -12,6 +12,7 @@ import type { PreparedCompanionPhoto } from '../../src/companion/companion-photo
 import {
   SHARED_PHOTO_MEMORY_KEY,
   SHARED_PHOTO_MEMORY_LINES,
+  SHARED_PHOTO_MEMORY_SCOPE,
   mergePhotoMemory,
   readSharedPhotoMemory,
   rememberSharedPhotos,
@@ -36,12 +37,19 @@ function photo(description?: string): PreparedCompanionPhoto {
 /** In-memory stand-in for the persistent-memory manager. */
 function fakeMemory(initial: Record<string, string> = {}): PhotoMemoryPort & {
   store: Record<string, string>;
+  scopes: string[];
 } {
   const store: Record<string, string> = { ...initial };
+  const scopes: string[] = [];
   return {
     store,
-    recall: (key: string) => store[key] ?? null,
-    remember: async (key: string, value: string) => {
+    scopes,
+    recall: (key: string, scope?: string) => {
+      if (scope) scopes.push(scope);
+      return store[key] ?? null;
+    },
+    remember: async (key: string, value: string, options?: { scope?: string }) => {
+      if (options?.scope) scopes.push(options.scope);
       store[key] = value;
     },
   };
@@ -84,6 +92,18 @@ describe('the rolling photo memory', () => {
     const written = memory.store[SHARED_PHOTO_MEMORY_KEY]!;
     expect(written).toBe("2026-09-06 : tu m'as montré un lac au coucher du soleil");
     expect(Object.keys(memory.store)).toEqual([SHARED_PHOTO_MEMORY_KEY]);
+  });
+
+  it('writes in the USER scope — the project memory file is git-tracked', async () => {
+    // `.codebuddy/CODEBUDDY_MEMORY.md` is resolved RELATIVE TO THE CWD and is a
+    // tracked file when the server runs inside a repository. The description of
+    // a private photo must never be written there.
+    expect(SHARED_PHOTO_MEMORY_SCOPE).toBe('user');
+    const memory = fakeMemory();
+    await rememberSharedPhotos([photo('un lac')], { surface: 'mobile', dir, memory });
+    expect(memory.scopes.length).toBeGreaterThan(0);
+    expect(memory.scopes.every((scope) => scope === 'user')).toBe(true);
+    expect(memory.scopes).not.toContain('project');
   });
 
   it('keeps one key however many photos are shared', async () => {
