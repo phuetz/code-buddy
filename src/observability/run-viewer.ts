@@ -790,6 +790,40 @@ export async function showRunRecallPack(
 }
 
 /**
+ * Unified read-only trajectory assembled from existing journals. Never writes.
+ */
+export async function showRunTrajectory(
+  runId: string,
+  json = false,
+  sinceRaw?: string,
+): Promise<void> {
+  const { loadTrajectory, parseTrajectorySince } = await import('./run-trajectory-load.js');
+  const { renderTrajectory } = await import('./run-trajectory.js');
+  let since: number | undefined;
+  try {
+    since = parseTrajectorySince(sinceRaw);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+    return;
+  }
+
+  const store = RunStore.getInstance();
+  if (!store.getRun(runId)) {
+    console.error(`Run not found: ${runId}`);
+    process.exit(1);
+    return;
+  }
+
+  const trajectory = loadTrajectory(runId, { since, store });
+  if (json) {
+    console.log(JSON.stringify(trajectory, null, 2));
+    return;
+  }
+  console.log(renderTrajectory(trajectory));
+}
+
+/**
  * Export a redacted run trajectory for debugging, evals, or operator review.
  * This is read-only: it does not replay tools or mutate local state.
  */
