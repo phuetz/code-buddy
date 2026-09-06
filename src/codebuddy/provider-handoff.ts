@@ -9,6 +9,7 @@
 import { getModelToolConfig } from '../config/model-tools.js';
 import { repairToolCallPairs } from '../context/transcript-repair.js';
 import { truncatePromptBlocksByPriority } from '../services/prompt-builder.js';
+import { logger } from '../utils/logger.js';
 import type { CodeBuddyMessage, CodeBuddyTool } from './client.js';
 import { hasToolCalls } from './message-guards.js';
 
@@ -67,7 +68,8 @@ export function estimateToolsTokens(tools: CodeBuddyTool[] | undefined): number 
   for (const tool of tools) {
     chars += JSON.stringify(tool).length;
   }
-  return Math.ceil(chars / 4);
+  // JSON schemas tokenize denser than prose; chars/4 under-counts Ollama's 400s.
+  return Math.ceil(chars / 3);
 }
 
 export function estimateHandoffTokens(
@@ -196,14 +198,18 @@ async function pruneToolsForHandoff(
   if (!tools || tools.length === 0) return tools;
   const messageTokens = estimateMessageTokens(messages);
   const combined = messageTokens + estimateToolsTokens(tools);
-  if (combined <= budgetTokens) return tools;
+  const tightWindow = budgetTokens <= 30_000;
+  if (combined <= budgetTokens && !(tightWindow && tools.length > HANDOFF_TOOL_CAP)) {
+    return tools;
+  }
 
   const always = [...calledToolNames(messages), TOOL_SEARCH].filter(
     (name, index, all) => all.indexOf(name) === index && tools.some((tool) => tool.function.name === name),
   );
   const alwaysSet = new Set(always);
   const query = lastUserQuery(messages);
-  const selected = await ragSelectTools(query, tools, HANDOFF_TOOL_CAP, always);
+  const cap = tightWindow ? Math.min(HANDOFF_TOOL_CAP, 6) : HANDOFF_TOOL_CAP;
+  const selected = await ragSelectTools(query, tools, cap, always);
   const remainingForTools = Math.max(256, budgetTokens - messageTokens);
   return shrinkToolsToBudget(selected, alwaysSet, remainingForTools);
 }
@@ -226,8 +232,12 @@ export function buildResumeNote(options: HandoffOptions): string {
   return `<${RESUME_TAG}>conversation reprise par ${to} après indisponibilité de ${from}</${RESUME_TAG}>`;
 }
 
-function retruncateSystemPrompt(messages: CodeBuddyMessage[], toModel: string): CodeBuddyMessage[] {
-  const budget = systemPromptBudgetChars(toModel);
+function retruncateSystemPrompt(
+  messages: CodeBuddyMessage[],
+  toModel: string,
+  charBudget?: number,
+): CodeBuddyMessage[] {
+  const budget = charBudget ?? systemPromptBudgetChars(toModel);
   return messages.map((message) => {
     if (message.role !== 'system') return message;
     const text = messageText(message);
@@ -318,7 +328,10 @@ export async function prepareFailoverHandoff(
   const contextWindow = resolveFailoverContextWindow(options.toModel);
   const budgetTokens = failoverPromptBudgetTokens(options.toModel);
   const repaired = repairToolCallPairs(messages);
-  const retruncated = retruncateSystemPrompt(repaired, options.toModel);
+  const systemChars = tools && tools.length > 0
+    ? Math.min(systemPromptBudgetChars(options.toModel), Math.floor(budgetTokens * 0.25) * 4)
+    : systemPromptBudgetChars(options.toModel);
+  const retruncated = retruncateSystemPrompt(repaired, options.toModel, systemChars);
   const prunedTools = await pruneToolsForHandoff(tools, retruncated, budgetTokens);
   const remainingForMessages = Math.max(
     256,
@@ -331,10 +344,14 @@ export async function prepareFailoverHandoff(
   );
   const closed = repairToolCallPairs(compacted);
   const withNote = injectResumeNote(closed, options);
+  const estimatedTokens = estimateHandoffTokens(withNote, prunedTools);
+  logger.info(
+    `[fallback] handoff ${options.toProvider}:${options.toModel} tools ${tools?.length ?? 0}→${prunedTools?.length ?? 0} (~${estimatedTokens} tok, fenêtre ${contextWindow})`,
+  );
   return {
     messages: withNote,
     tools: prunedTools,
-    estimatedTokens: estimateHandoffTokens(withNote, prunedTools),
+    estimatedTokens,
     contextWindow,
     budgetTokens,
   };
