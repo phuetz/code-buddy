@@ -60,6 +60,7 @@ describe('produceCompanionReply — single companion path', () => {
     expect(reply).toEqual({
       text: 'Hop. Photo de moi.',
       image: { mimeType: 'image/png', data: 'AAAA' },
+      kind: 'selfie',
     });
   });
 });

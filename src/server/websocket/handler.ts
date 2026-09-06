@@ -62,6 +62,11 @@ import { isMobilePwaEnabled } from '../mobile/index.js';
 import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
 import type { CompanionHistoryTurn } from '../../companion/companion-turn.js';
+import {
+  appendCompanionHistory,
+  loadMobileCompanionHistory,
+  saveMobileCompanionHistory,
+} from '../../companion/mobile-history.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -118,6 +123,11 @@ interface ConnectionState {
   /** Transport facts captured from the server-side upgrade request. */
   loopback?: boolean;
   secure?: boolean;
+  /**
+   * Bounded companion conversation for this connection (`assistant:'companion'`).
+   * Text only — a served selfie leaves a `kind:'selfie'` marker, never its bytes.
+   */
+  companionHistory?: CompanionHistoryTurn[];
   /** Opaque extension lifecycle hooks. Never exposed with the socket itself. */
   extensionCloseHandlers?: Set<() => void>;
   extensionsCleaned?: boolean;
@@ -265,6 +275,9 @@ function cleanupWebSocketExtensions(state: ConnectionState): void {
 function resetWebSocketExtensionsForIdentityChange(state: ConnectionState): void {
   cleanupWebSocketExtensions(state);
   state.extensionsCleaned = false;
+  // A new principal on the same socket must never inherit the previous one's
+  // companion conversation.
+  state.companionHistory = undefined;
 }
 
 /**
@@ -625,17 +638,58 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
 export async function produceCompanionReply(
   message: string,
   options: { history?: CompanionHistoryTurn[] } = {},
-): Promise<string | { text: string; image?: { mimeType: string; data: string } }> {
+): Promise<
+  string | { text: string; image?: { mimeType: string; data: string }; kind?: 'selfie' | 'text' }
+> {
   const { runCompanionTurn } = await import('../../companion/companion-turn.js');
   const result = await runCompanionTurn(message, {
     surface: 'mobile',
     includeImageBytes: true,
     ...(options.history ? { history: options.history } : {}),
   });
-  if (result.image) {
-    return { text: result.text, image: result.image };
+  if (result.image || result.kind === 'selfie') {
+    return {
+      text: result.text,
+      ...(result.image ? { image: result.image } : {}),
+      kind: result.kind,
+    };
   }
   return result.text;
+}
+
+/** Persistence identity for this connection, or undefined (memory-only). */
+function companionHistoryIdentity(state: ConnectionState): string | undefined {
+  return state.userId ?? state.deviceId ?? state.keyId;
+}
+
+/**
+ * The connection's companion history, restored once from disk on first use so
+ * a phone that reconnected mid-conversation does not start from nothing.
+ */
+function companionHistoryFor(state: ConnectionState): CompanionHistoryTurn[] {
+  if (!state.companionHistory) {
+    state.companionHistory = loadMobileCompanionHistory(companionHistoryIdentity(state));
+  }
+  return state.companionHistory;
+}
+
+/** Record one companion exchange; never stores image bytes. */
+function rememberCompanionTurn(
+  state: ConnectionState,
+  userText: string,
+  produced: string | { text: string; kind?: 'selfie' | 'text' },
+): void {
+  const assistantText = typeof produced === 'string' ? produced : produced.text;
+  const kind = typeof produced === 'string' ? undefined : produced.kind;
+  state.companionHistory = appendCompanionHistory(companionHistoryFor(state), [
+    { role: 'user', content: userText },
+    {
+      role: 'assistant',
+      content: assistantText,
+      ...(kind === 'selfie' ? { kind: 'selfie' as const } : {}),
+    },
+  ]);
+  saveMobileCompanionHistory(companionHistoryIdentity(state), state.companionHistory);
 }
 
 async function producePeerReply(peerId: string, message: string): Promise<string> {
@@ -764,7 +818,12 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     if (assistant === 'companion') {
       await runPlainChatTurn(ws, state, turn, {
         stream,
-        produce: () => produceCompanionReply(message),
+        produce: async () => {
+          const history = companionHistoryFor(state);
+          const produced = await produceCompanionReply(message, { history });
+          if (!turn.cancelled) rememberCompanionTurn(state, message, produced);
+          return produced;
+        },
       });
       return;
     }
