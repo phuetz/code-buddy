@@ -1,6 +1,14 @@
+import { sanitizeModelOutput } from '../utils/output-sanitizer.js';
+
 export interface HeadlessOutputOptions {
   output?: string;
   outputFormat?: string;
+}
+
+export interface EmptyHeadlessResponseInfo {
+  provider: string;
+  model: string;
+  durationMs: number;
 }
 
 export interface UnexecutedProseToolCall {
@@ -12,7 +20,25 @@ export function resolveHeadlessOutputFormat(options: HeadlessOutputOptions): str
   return options.outputFormat || options.output || 'json';
 }
 
+export function visibleHeadlessResultText(resultText: string): string {
+  return sanitizeModelOutput(resultText ?? '').trim();
+}
+
+export function isHeadlessFinalResponseEmpty(resultText: string): boolean {
+  const visible = visibleHeadlessResultText(resultText);
+  if (visible === '') return true;
+  return /réponse vide du fournisseur|empty provider response/i.test(visible);
+}
+
+export function formatEmptyHeadlessResponseError(info: EmptyHeadlessResponseInfo): string {
+  const seconds = Math.max(0, Math.round(info.durationMs / 1000));
+  return `le modèle n'a rien renvoyé ; provider=${info.provider} modèle=${info.model} durée=${seconds}s`;
+}
+
 export function resolveHeadlessResultExitCode(resultText: string): number {
+  if (isHeadlessFinalResponseEmpty(resultText)) {
+    return 1;
+  }
   const normalized = resultText.trim().toLowerCase();
   if (normalized.startsWith('sorry, i encountered an error:')) {
     return 1;
