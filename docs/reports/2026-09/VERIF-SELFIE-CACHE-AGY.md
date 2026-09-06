@@ -1,12 +1,12 @@
 # VERIF-SELFIE-CACHE-AGY — Vérification croisée de la lane « selfie cache-first » (Grok) avant fusion
 
-Date : 2026-09-06 (Europe/Paris)  
-Auteur : Agent Antigravity (AGY)  
-Dépôt : `~/DEV/cb-selfie-2026-09-06`  
-Branche : `feat/selfie-cache-2026-09-06`  
-HEAD vérifié : `aaa9c96ea` (au-dessus de `533b32d47`)  
-Rapport audité : `docs/reports/2026-09/SELFIE-CACHE-GROK.md`  
-Environnement de test isolé : `HOME=~/DEV/cb-selfie-2026-09-06/_qa/verif/home` et `env -u FORCE_COLOR`  
+Date : 2026-09-06 (Europe/Paris)
+Auteur : Agent Antigravity (AGY)
+Dépôt : `~/DEV/cb-selfie-2026-09-06`
+Branche : `feat/selfie-cache-2026-09-06`
+HEAD vérifié : `aaa9c96ea` (au-dessus de `533b32d47`)
+Rapport audité : `docs/reports/2026-09/SELFIE-CACHE-GROK.md`
+Environnement de test isolé : `HOME=~/DEV/cb-selfie-2026-09-06/_qa/verif/home` et `env -u FORCE_COLOR`
 Règle de sécurité : aucun accès à `~/code-buddy` ni `~/.codebuddy`. Chemins en `~`, aucun prénom ni donnée personnelle.
 
 ---
