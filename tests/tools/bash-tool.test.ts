@@ -110,6 +110,7 @@ describe('BashTool', () => {
   let confirmationService: ConfirmationService;
 
   beforeEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     // Reset confirmation service singleton
     (ConfirmationService as unknown as { instance: ConfirmationService | undefined }).instance = undefined;
     confirmationService = ConfirmationService.getInstance();
@@ -124,6 +125,7 @@ describe('BashTool', () => {
   });
 
   afterEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     bashTool.dispose();
     if (confirmationService) {
       clearSandboxEscalationBridge(confirmationService);

@@ -162,6 +162,26 @@ export function wireMobileConfirmationBridge(deps: {
     const summary = `${options.operation}: ${options.filename}`;
     const timeoutMs = resolveMobileConfirmTimeoutMs();
 
+    const delivered = deps.broadcast(
+      {
+        type: 'confirmation_required',
+        payload: {
+          id,
+          tool,
+          summary,
+          risk: riskOf(options),
+        },
+        timestamp: new Date().toISOString(),
+      },
+      'tools',
+      (target) => recipientSet.has(target.id),
+    );
+
+    const servedIds = Array.isArray(delivered) ? delivered : [];
+    if (servedIds.length === 0) {
+      return null;
+    }
+
     return new Promise<ConfirmationResult>((resolve) => {
       const timer = setTimeout(() => {
         const current = pending.get(id);
@@ -171,21 +191,7 @@ export function wireMobileConfirmationBridge(deps: {
         resolve({ confirmed: false, feedback: 'Confirmation timed out' });
       }, timeoutMs);
       timer.unref();
-      pending.set(id, { resolve, timer, answered: false, recipientIds: recipientSet });
-      deps.broadcast(
-        {
-          type: 'confirmation_required',
-          payload: {
-            id,
-            tool,
-            summary,
-            risk: riskOf(options),
-          },
-          timestamp: new Date().toISOString(),
-        },
-        'tools',
-        (target) => recipientSet.has(target.id),
-      );
+      pending.set(id, { resolve, timer, answered: false, recipientIds: new Set(servedIds) });
     });
   });
 
@@ -201,5 +207,10 @@ export function wireMobileConfirmationBridge(deps: {
 }
 
 export function unwireMobileConfirmationBridge(): void {
-  if (unwireFn) unwireFn();
+  if (unwireFn) {
+    unwireFn();
+  } else {
+    ConfirmationService.getInstance().setWsApprovalBridge(null);
+    clearPendingMobileConfirmations();
+  }
 }

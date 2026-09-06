@@ -330,5 +330,88 @@ describe('Mobile chat UI (DOM)', () => {
       expect(api.state.unread).toBeGreaterThanOrEqual(1);
       expect(document.getElementById('jump-bottom')?.classList.contains('hidden')).toBe(false);
     });
+
+    it('handles QuotaExceededError without unhandled exception and truncates history', () => {
+      for (let i = 0; i < 20; i += 1) {
+        api.addMessage({ role: 'user', text: `Message number ${i} with enough text to measure size` });
+      }
+
+      const originalSetItem = localStorage.setItem.bind(localStorage);
+      const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation((key, val) => {
+        if (key === api.STORAGE.history) {
+          const parsed = JSON.parse(val);
+          if (parsed.length > 5) {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+        }
+        return originalSetItem(key, val);
+      });
+
+      expect(() => {
+        api.persistHistory();
+      }).not.toThrow();
+
+      const saved = JSON.parse(localStorage.getItem(api.STORAGE.history) || '[]');
+      expect(saved.length).toBeLessThanOrEqual(5);
+      expect(saved.length).toBeGreaterThan(0);
+      expect(saved[saved.length - 1].text).toContain('Message number 19');
+
+      setItemSpy.mockRestore();
+    });
+
+    it('handles QuotaExceededError safely when setItem always throws', () => {
+      const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        const err = new Error('Quota exceeded');
+        err.name = 'QuotaExceededError';
+        throw err;
+      });
+
+      expect(() => {
+        api.addMessage({ role: 'user', text: 'will fail to persist' });
+        api.persistHistory();
+      }).not.toThrow();
+
+      setItemSpy.mockRestore();
+    });
+
+    it('retains at most MAX_HISTORY_IMAGES (5) in persisted history', () => {
+      for (let i = 0; i < 8; i += 1) {
+        api.addMessage({ role: 'assistant', text: `img ${i}`, image: TINY_PNG });
+      }
+      api.persistHistory();
+      const saved = JSON.parse(localStorage.getItem(api.STORAGE.history) || '[]');
+      const savedWithImages = saved.filter((m: { image?: string }) => Boolean(m.image));
+      expect(savedWithImages.length).toBeLessThanOrEqual(5);
+    });
+  });
+
+  describe('speech recognition and mic button', () => {
+    it('hides the mic button when SpeechRecognition is absent', () => {
+      const micBtn = document.getElementById('mic-btn');
+      expect(micBtn).not.toBeNull();
+      expect(micBtn?.classList.contains('hidden')).toBe(true);
+      expect(micBtn?.hidden).toBe(true);
+    });
+
+    it('shows the mic button and starts dictation when SpeechRecognition is present', () => {
+      const startMock = vi.fn();
+      class MockSpeechRecognition {
+        start = startMock;
+        lang = '';
+        interimResults = false;
+        onresult = null;
+      }
+      (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = MockSpeechRecognition;
+      api.destroy();
+      api = mount();
+      const micBtn = document.getElementById('mic-btn');
+      expect(micBtn?.classList.contains('hidden')).toBe(false);
+      expect(micBtn?.hidden).toBe(false);
+      micBtn?.click();
+      expect(startMock).toHaveBeenCalledTimes(1);
+      delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+    });
   });
 });

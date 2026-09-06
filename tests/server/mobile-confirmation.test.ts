@@ -8,6 +8,7 @@ import { createUserToken } from '../../src/server/auth/jwt.js';
 import { DEFAULT_SERVER_CONFIG } from '../../src/server/types.js';
 import {
   closeAllConnections,
+  collectApprovalSurfaceIds,
   setupWebSocket,
 } from '../../src/server/websocket/handler.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
@@ -247,6 +248,21 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
     remote.ws.close();
     loopback.ws.close();
   });
+
+  it('C-1 status ignores approvalCapable on anonymous remote socket with warn', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const remote = await connect(`${wsBase}/ws`, { 'X-Forwarded-For': '203.0.113.50' });
+    await waitUntil(() => remote.events.some((event) => event.type === 'connected'));
+    remote.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => remote.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ anonymousRemote: true }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+    warn.mockRestore();
+    remote.ws.close();
+  });
 });
 
 describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface', () => {
@@ -393,5 +409,127 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
     await expect(pending).resolves.toEqual({ confirmed: false });
     pwa.ws.close();
     chatOnly.ws.close();
+  });
+
+  it('C-1 status only sets approvalCapable for authenticated non-anonymous socket with tools scope', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    // 1. Unauthenticated socket sends status with approvalCapable: true
+    const unauthed = await connect(`${wsBase}/ws`);
+    await waitUntil(() => unauthed.events.some((event) => event.type === 'connected'));
+    unauthed.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => unauthed.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ authenticated: false }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 2. Authenticated socket missing 'tools' scope
+    warn.mockClear();
+    const chatOnly = await clientWith(['chat'], { userId: 'chat-user' });
+    chatOnly.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => chatOnly.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ authenticated: true }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 3. Authenticated socket with 'tools' scope
+    warn.mockClear();
+    const toolsUser = await clientWith(['chat', 'tools'], { userId: 'tools-user' });
+    toolsUser.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => toolsUser.events.some((event) => event.type === 'status'));
+    expect(warn).not.toHaveBeenCalled();
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    warn.mockRestore();
+    unauthed.ws.close();
+    chatOnly.ws.close();
+    toolsUser.ws.close();
+  });
+
+  it('C-2 approvalCapable is cleared when omitted or false in status, and on socket close — Telegram fallback resumes', async () => {
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    expect(collectApprovalSurfaceIds()).toEqual([expect.any(String)]);
+
+    const requestApproval = vi.fn(async () => true);
+    ConfirmationService.getInstance().setRemoteApprovalService({
+      hasChannels: () => true,
+      requestApproval,
+    } as never);
+
+    // 1. Send status omitting approvalCapable (payload: {})
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: {} }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+
+    // Verify approvalCapable is now false / collectApprovalSurfaceIds is empty
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // Request confirmation: PWA must NOT receive confirmation_required, and Telegram fallback must resume
+    pwa.events.length = 0;
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'fallback.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await expect(pending).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(pwa.events.some((e) => e.type === 'confirmation_required')).toBe(false);
+
+    // 2. Re-enable via status
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    // 3. Clear explicitly with approvalCapable: false
+    pwa.events.length = 0;
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: false } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 4. Re-enable, then close socket: verify collectApprovalSurfaceIds is empty and fallback resumes
+    pwa.events.length = 0;
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    pwa.ws.close();
+    await waitUntil(() => collectApprovalSurfaceIds().length === 0);
+
+    requestApproval.mockClear();
+    const pendingAfterClose = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'fallback-after-close.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await expect(pendingAfterClose).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+  });
+
+  it('C-3 falls back to Telegram immediately if all approval sockets drop under backpressure', async () => {
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    // Mock high bufferedAmount on the server-side socket to simulate backpressure
+    const serverWs = Array.from(wss.clients).find((c) => c !== pwa.ws);
+    expect(serverWs).toBeDefined();
+    Object.defineProperty(serverWs, 'bufferedAmount', { value: 10_000_000, configurable: true });
+
+    const requestApproval = vi.fn(async () => true);
+    ConfirmationService.getInstance().setRemoteApprovalService({
+      hasChannels: () => true,
+      requestApproval,
+    } as never);
+
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'backpressure.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    // Must fall back to Telegram immediately without waiting for timeout
+    await expect(pending).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(pwa.events.some((e) => e.type === 'confirmation_required')).toBe(false);
+
+    pwa.ws.close();
   });
 });

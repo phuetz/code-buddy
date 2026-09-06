@@ -15,9 +15,11 @@ import {
   executableIdentitiesStillMatch,
   isSandboxBoundaryFailure,
 } from '../../src/tools/bash/execution-policy.js';
+import { sandboxAvailable } from '../helpers/sandbox-availability.js';
 
 describe('Bash runtime execution policy', () => {
   beforeEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     resetExecPolicy();
     resetPermissionModeManager();
     clearPermissionsCache();
@@ -26,6 +28,7 @@ describe('Bash runtime execution policy', () => {
   });
 
   afterEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     PolicyEngine.getInstance().releaseKillSwitch();
     resetExecPolicy();
     resetPermissionModeManager();
@@ -63,13 +66,16 @@ describe('Bash runtime execution policy', () => {
     ).resolves.toMatchObject({ action: 'sandbox' });
   });
 
-  it('keeps the caller HOME spelling available to the Docker workspace sandbox', async () => {
-    const sandboxed = await executeInWorkspaceSandbox('printf %s "$HOME"', process.cwd(), 30000);
+  it.skipIf(!sandboxAvailable())(
+    'keeps the caller HOME spelling available to the Docker workspace sandbox',
+    async () => {
+      const sandboxed = await executeInWorkspaceSandbox('printf %s "$HOME"', process.cwd(), 30000);
 
-    if (!sandboxed.available || sandboxed.result?.backend !== 'docker') return;
+      if (!sandboxed.available || sandboxed.result?.backend !== 'docker') return;
 
-    expect(sandboxed.result.stdout.trim()).toBe(os.homedir());
-  });
+      expect(sandboxed.result.stdout.trim()).toBe(os.homedir());
+    },
+  );
 
   it('asks for exact authority when an operation crosses the sandbox boundary', async () => {
     await expect(evaluateShellExecution('npm install', process.cwd())).resolves.toMatchObject({

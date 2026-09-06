@@ -148,4 +148,26 @@ describe('PolicyEngine', () => {
     });
     expect(resultDeploy.decision).toBe('needs_approval');
   });
+
+  it('does not mistake a workspace or worktree path containing "release" or "prod" for a deployment command', () => {
+    const result = policyEngine.evaluate({
+      capability: 'shell:safe',
+      risk: 'low',
+      detail: {
+        command: 'cat README.md',
+        path: '/home/user/DEV/cb-release-audit-2026-09-06',
+      },
+    });
+    expect(result.decision).toBe('allow');
+
+    const resultProd = policyEngine.evaluate({
+      capability: 'shell:safe',
+      risk: 'low',
+      detail: {
+        command: 'git status',
+        path: '/workspace/prod-deploy-branch',
+      },
+    });
+    expect(resultProd.decision).toBe('allow');
+  });
 });
