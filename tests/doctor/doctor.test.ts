@@ -23,11 +23,14 @@ describe('Doctor', () => {
   it('should pass Node.js version check', () => {
     const nodeCheck = checks.find(c => c.name === 'Node.js version');
     expect(nodeCheck).toBeDefined();
-    // checkNodeVersion() legitimately returns 'warn' on Node 18/20/21 (Cowork needs
-    // >= 22) and 'ok' on >= 22 — both are a passing outcome for the CLI (>= 18). The
-    // CI matrix runs 18.x/20.x, so accept ok OR warn like the sibling checks; only a
-    // hard 'error' (Node < 18) should fail this.
+    // checkNodeVersion() legitimately returns 'warn' on Node 20/21 (Cowork needs
+    // >= 22) and 'ok' on >= 22 — both are a passing outcome for the CLI (>= 20). The
+    // CI matrix runs 20.x/22.x, so accept ok OR warn like the sibling checks; only a
+    // hard 'error' (Node < 20) should fail this. The floor is 20, not 18: the tool
+    // registry statically imports playwright-core, which calls process.exit(1) on
+    // Node < 20 — so the CLI cannot start at all there.
     expect(['ok', 'warn']).toContain(nodeCheck!.status);
+    expect(nodeCheck!.message).not.toContain('>= 18');
   });
 
   it('should detect git in a git repo', () => {

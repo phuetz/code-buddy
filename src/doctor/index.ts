@@ -96,17 +96,17 @@ function getCommandAvailability(cmd: string): 'installed' | 'not found' {
 
 function checkNodeVersion(): DoctorCheck {
   const major = parseInt(process.version.slice(1), 10);
-  if (major < 18) {
-    return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 18 is required` };
+  if (major < 20) {
+    return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 20 is required (playwright-core, loaded by the browser tools, exits on < 20)` };
   }
   if (major < 22) {
     return {
       name: 'Node.js version',
       status: 'warn',
-      message: `${process.version} — OK for the CLI (>= 18), but the Cowork desktop app needs >= 22`,
+      message: `${process.version} — OK for the CLI (>= 20), but the Cowork desktop app needs >= 22`,
     };
   }
-  return { name: 'Node.js version', status: 'ok', message: `${process.version} (CLI >= 18 and Cowork >= 22 OK)` };
+  return { name: 'Node.js version', status: 'ok', message: `${process.version} (CLI >= 20 and Cowork >= 22 OK)` };
 }
 
 // The SQLite layer (memory/sessions/cache/analytics) is a native module. On a
