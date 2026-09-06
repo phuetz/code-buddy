@@ -1497,12 +1497,23 @@ function comfyEndpointTimeout(envSource: NodeJS.ProcessEnv): number {
   return Number.isFinite(configured) && configured >= 250 ? configured : 10_000;
 }
 
+/**
+ * Declared ComfyUI fallback endpoints. Two spellings are in field use
+ * (`CODEBUDDY_COMFYUI_FALLBACK_URLS` and the shorter `COMFYUI_FALLBACK_URLS`
+ * that sits next to `COMFYUI_URL`); honour both, in that order, de-duplicated.
+ */
+function comfyFallbackUrls(envSource: NodeJS.ProcessEnv): string[] {
+  const declared = ['CODEBUDDY_COMFYUI_FALLBACK_URLS', 'COMFYUI_FALLBACK_URLS'].flatMap((key) =>
+    (env(envSource, key) ?? '')
+      .split(/[\s,;]+/)
+      .map((value) => value.trim().replace(/\/+$/, ''))
+      .filter(Boolean),
+  );
+  return [...new Set(declared)];
+}
+
 function comfyBaseUrls(config: ProviderConfig, envSource: NodeJS.ProcessEnv): string[] {
-  const fallbacks = (env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_URLS') ?? '')
-    .split(/[\s,;]+/)
-    .map((value) => value.trim().replace(/\/+$/, ''))
-    .filter(Boolean);
-  return [...new Set([config.baseUrl.replace(/\/+$/, ''), ...fallbacks])];
+  return [...new Set([config.baseUrl.replace(/\/+$/, ''), ...comfyFallbackUrls(envSource)])];
 }
 
 async function generateComfyUIImageWithFallback(
@@ -1833,11 +1844,18 @@ async function materializeVideoResult(
 
 function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
   let requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
-  // Prefer ComfyUI when explicitly requested OR when COMFYUI_URL is set and no
-  // other provider was chosen (selfie / local-first companion path).
+  // Prefer ComfyUI when explicitly requested OR when a ComfyUI endpoint is
+  // declared and no other provider was chosen (selfie / local-first companion
+  // path). A declared FALLBACK endpoint counts: an installation whose primary
+  // box is off keeps only fallbacks, and dropping to the cloud provider there
+  // fails with "No image generation credentials configured for provider openai"
+  // even though a reachable local ComfyUI was configured all along.
+  const declaredFallbacks = comfyFallbackUrls(envSource);
   if (
     !requested &&
-    (envSource.COMFYUI_URL?.trim() || envSource.CODEBUDDY_IMAGE_BASE_URL?.includes('8188'))
+    (envSource.COMFYUI_URL?.trim()
+      || envSource.CODEBUDDY_IMAGE_BASE_URL?.includes('8188')
+      || declaredFallbacks.length > 0)
   ) {
     requested = 'comfyui';
   }
@@ -1845,6 +1863,7 @@ function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
   if (requested === 'comfyui') {
     const baseUrl = (envSource.COMFYUI_URL
       ?? envSource.CODEBUDDY_IMAGE_BASE_URL
+      ?? declaredFallbacks[0]
       ?? 'http://127.0.0.1:8188').trim().replace(/\/+$/, '');
     // Prefer CODEBUDDY_LORA_INFER_CHECKPOINT when set so LoRA train/infer stay monostack
     // (e.g. both Krea 2). Falls back to CODEBUDDY_IMAGE_MODEL / COMFYUI_CHECKPOINT / sd_turbo.
