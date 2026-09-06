@@ -18,7 +18,7 @@ L'objectif est d'étendre la déobfuscation à toutes les classes de motifs tout
 - Initialisation du rapport avant inspection.
 - **Point 1 — Corpus et mesure AVANT** :
   - Constitution du corpus dans `_qa/fw/corpus/` (ignoré dans `.gitignore`) :
-    - `bundled` (8 skills : 7 fichiers `.skill.md`, 1 dossier `pubcommander-control`)
+    - `bundled` (8 skills : 7 fichiers `.skill.md`, 1 dossier de contrôle éditorial)
     - `hermes` (`~/.hermes/skills`, 75 dossiers de skills)
     - `codebuddy` (`~/code-buddy/.codebuddy/skills`, 5 dossiers de skills)
     - `openclaw` (`~/mem0/openclaw/skills`, 2 dossiers de skills)
@@ -78,3 +78,13 @@ L'objectif est d'étendre la déobfuscation à toutes les classes de motifs tout
     - Correction sans exception nominative : affinement du motif `dynamic-import` dans `DANGEROUS_PATTERNS` avec un lookbehind négatif `/(?<!\bfrom\s+[\w.]+\s+)\bimport\s*\(\s*[a-zA-Z_$[]/` pour exclure la syntaxe d'import statique multiligne Python tout en conservant la détection des `import(var)` dynamiques JS/TS.
     - Après affinement : **0 faux positif** sur l'ensemble des 90 skills du corpus.
     - Le drapeau `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` est activé par défaut (`true`) comme prévu par la doctrine en cas de 0 FP.
+- **Point 4 — Preuves et clôture de la limite connue** :
+  - `HOME=~/DEV/cb-firewall-2026-09-06/_qa/fw/home env -u FORCE_COLOR npx vitest run tests/security tests/skills` :
+    - 78 fichiers passés, 1 ignoré (sandbox natif), 1371 tests passés, 3 ignorés, **0 échec**.
+  - `npx tsc --noEmit -p tsconfig.json` : code 0, 0 erreur de type.
+  - `npx eslint scripts/skill-firewall-campaign.ts src/security/skill-scanner.ts src/security/text-deobfuscation.ts tests/security/skill-firewall-deob-all.test.ts` : 0 erreur lint.
+  - `git diff --check` : 0 erreur d'espacement / blanc.
+  - `HOME=~/DEV/cb-firewall-2026-09-06/_qa/fw/home env -u FORCE_COLOR npx vitest run tests/security/donnees-personnelles.test.ts` : 40/40 passés (vert). Le corpus de travail et les artefacts de QA restent sous `_qa/fw/`, ignorés par git et non commités.
+  - Mise à jour de la documentation :
+    - `docs/RELEASE-NOTES-2.0.0.md` : mise à jour de la « Limite connue » désormais levée grâce à la déobfuscation sûre multi-classes.
+    - `CHANGELOG.md` : mise à jour de la section Sécurité pour acter l'extension à toutes les classes via `deobfuscateSafeForScan` et la conservation du décodage agressif pour prompt-injection.
