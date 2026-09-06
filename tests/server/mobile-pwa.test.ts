@@ -238,6 +238,35 @@ describe('Mobile PWA Assets Validation', () => {
   });
 });
 
+describe('Mobile PWA shell is public under JWT', () => {
+  it('serves the HTML shell without a token when auth is on', async () => {
+    const previous = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'mobile-pwa-shell-public-test-secret-32b';
+    const { startServer, stopServer } = await import('../../src/server/index.js');
+    const started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      websocketEnabled: false,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+    });
+    try {
+      const { port } = started.server.address() as { port: number };
+      const res = await fetch(`http://127.0.0.1:${port}/__codebuddy__/mobile/`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      const api = await fetch(`http://127.0.0.1:${port}/api/runs`);
+      expect(api.status).toBe(401);
+    } finally {
+      await stopServer(started.server);
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+    }
+  });
+});
+
 describe('Mobile PWA Express 5 route table', () => {
   it('constructs without throwing on Express 5 wildcards', async () => {
     const { mobilePwaRouter: router } = await import('../../src/server/mobile/index.js');

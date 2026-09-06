@@ -274,6 +274,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // Mobile remote-supervision routes (custom pairing-token auth)
   app.use('/api/mobile', mobileRoutes);
 
+  // PWA shell (HTML/CSS/JS/manifest/SW) is public; /api and /ws still require JWT.
+  app.use('/__codebuddy__/mobile', mobilePwaRouter);
+
   // Authentication (applied after public health/metrics/mobile endpoints)
   app.use(createAuthMiddleware(config));
 
@@ -1075,9 +1078,6 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
 
   // Canvas / A2UI (documented at /__codebuddy__/canvas/:id and /__codebuddy__/a2ui/)
   app.use('/__codebuddy__', createCanvasRouter());
-
-  // Mobile PWA
-  app.use('/__codebuddy__/mobile', mobilePwaRouter);
 
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
