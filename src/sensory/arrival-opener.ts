@@ -196,7 +196,7 @@ export function buildArrivalOpener(ctx: ArrivalContext): ArrivalOpener {
   // When the whole pool was used recently, still avoid the SINGLE most-recent
   // line so it's never the exact same phrase twice in a row (the core complaint).
   let choices = fresh.length > 0 ? fresh : pool.filter((t) => t !== recent[0]);
-  if (choices.length === 0) choices = pool; // pool of one — nothing else to pick
+  if (choices.length === 0) choices = [...pool]; // pool of one — nothing else to pick
   const idx = Math.min(choices.length - 1, Math.floor(rng() * choices.length));
   const template = choices[idx] as string;
   const safeName = ctx.recognizedUser === false ? undefined : ctx.name;
