@@ -148,7 +148,15 @@ Repli automatique de fournisseur opt-in, profil de canal léger pour les compagn
   *Fichiers clés* : `src/channels/provider-failure-speech.ts`, `src/server/mobile/assets/app.js`.
   *Preuves* : `tests/channels/provider-failure-speech.test.ts` vert (65 fichiers / 1 587 tests), `npx eslint src/server/mobile/assets/app.js` passe de 6 erreurs à 0.
 
+- **Pare-feu de skills (catalogue de motifs C-3 : droppers encodés, exfiltration, imports dynamiques Python, commentaires HTML)** :
+  Fermeture du trou C-3 relevé lors de l'audit de release (`docs/reports/2026-09/VERIF-SKILL-FIREWALL-OPUS.md`) par enrichissement de `DANGEROUS_PATTERNS` dans `src/security/skill-scanner.ts` (commit `597a89729`). Dix nouveaux motifs spécialisés avec justification intégrée : droppers shell encodés (`base64 -d | sh`, `printf '\xNN' | sh`), imports dynamiques Python (`__import__('os')`, `importlib.import_module()`), accès aux clés privées SSH (`~/.ssh/id_*`), lecture de variables d'environnement sensibles (`.env`), accès aux identifiants cloud et profil CodeBuddy (`~/.aws/credentials`, `~/.codebuddy/*.env`), exfiltration réseau active vers endpoints distants (paramètres `@` ou pipes vers `curl`, `wget`, `nc`, `scp`), et neutralisation des injections ou commandes dissimulées dans les commentaires HTML mono-lignes (cas E01 d'Opus et overrides de prompt).
+  *Variables d'environnement* : Aucune (protection statique fail-closed intégrée au pare-feu de compétences).
+  *Opt-in / défaut* : Actif par défaut dans le scanner de compétences.
+  *Fichiers clés* : `src/security/skill-scanner.ts`, `tests/security/skill-firewall-catalogue.test.ts`, `docs/reports/2026-09/REPARATION-SKILL-FIREWALL-CATALOGUE.md`.
+  *Preuves* : 49 tests neufs passés dans `tests/security/skill-firewall-catalogue.test.ts` ; campagne sur 191 compétences réelles confirmant 0 basculement de verdict (128 allow, 24 review, 39 quarantine identiques), 0 faux positif et détection de 2 vrais positifs documentés (`github-repo-management`) ; médiane d'exécution de 1,36 s (≤ 1,5 s).
+
 ### SCORE1 — les bancs du jour entrent dans le tableau de bord des modèles (4 septembre 2026)
+
 
 Le Council savait déjà choisir un modèle par type de tâche, mais ses catégories s'arrêtaient à
 code, français, raisonnement et vision, et les mesures de la journée restaient dans la mémoire du

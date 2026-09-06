@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { scanSkillFirewall, scanFile } from '../../src/security/skill-scanner.js';
+import { scanSkillFirewall } from '../../src/security/skill-scanner.js';
 
 /**
  * MISSION AGY-FW-CATALOGUE (Trou C-3 relevé par Opus)
@@ -14,6 +14,9 @@ import { scanSkillFirewall, scanFile } from '../../src/security/skill-scanner.js
  */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WORK_ROOT = path.join(REPO_ROOT, '_qa', 'cat', 'test-work');
+
+// Isolation HOME pour le runner de test
+process.env.HOME = process.env.HOME || WORK_ROOT;
 
 describe('AGY-FW-CATALOGUE Trou C-3 — enrichissement du catalogue de motifs', () => {
   let dir: string;
@@ -216,10 +219,11 @@ describe('AGY-FW-CATALOGUE Trou C-3 — enrichissement du catalogue de motifs', 
       expect(rep.findings.some((f) => f.pattern === 'cloud-credential-access')).toBe(false);
     });
 
-    it('négatif 2: chemin .codebuddy/skills normal', () => {
-      const rep = scanSkillFirewall(makeSkill('ls -la ~/.codebuddy/skills'));
+    it('négatif 2: chemin .codebuddy/plugins normal', () => {
+      const rep = scanSkillFirewall(makeSkill('ls -la ~/.codebuddy/plugins'));
       expect(rep.findings.some((f) => f.pattern === 'cloud-credential-access')).toBe(false);
     });
+
   });
 
   // --------------------------------------------------------------------------

@@ -150,7 +150,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\brequire\s*\(\s*['"`]https?['"`]\s*\)/, severity: 'medium', description: 'HTTP module import', name: 'http-require', capability: 'network' },
   { pattern: /\bWebSocket\b/, severity: 'medium', description: 'WebSocket usage', name: 'websocket', capability: 'network' },
   {
-    pattern: /(?:(?:curl|wget)\b[^|\n]*(?:-d|--data|--data-binary|--data-raw|-F|--upload-file|-T)\s+[@<]?(?:~|\$HOME|\/home\/[^\/\s]+|\.)?\/?(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b))|(?:\bcat\s+[^|\n]*(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b)[^|\n]*\|\s*(?:curl|wget|nc|ncat|netcat|socat)\b)|(?:\b(?:nc|ncat|netcat|socat)\b[^<\n]*<\s*(?:~|\$HOME|\/home\/[^\/\s]+|\.)?\/?(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b))|(?:\bscp\b[^|\n]*(?:~|\$HOME|\/home\/[^\/\s]+|\.)?\/?(?:\.ssh\/id_|\.aws\/credentials|\.codebuddy\/[^\s|&;]*\.env|\.env(?!\.(?:example|sample|template|dist))\b)\s+[^\s]+:)/i,
+    pattern: /(?:(?:curl|wget)\b[^|\n]*(?:-d|--data|--data-binary|--data-raw|-F|--upload-file|-T)\s+[@<]?(?:~|\$HOME|\/home\/[^/\s]+|\.)?\/?(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b))|(?:\bcat\s+[^|\n]*(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b)[^|\n]*\|\s*(?:curl|wget|nc|ncat|netcat|socat)\b)|(?:\b(?:nc|ncat|netcat|socat)\b[^<\n]*<\s*(?:~|\$HOME|\/home\/[^/\s]+|\.)?\/?(?:\.ssh\/|\.aws\/|\.codebuddy\/|\.env(?!\.(?:example|sample|template|dist))\b))|(?:\bscp\b[^|\n]*(?:~|\$HOME|\/home\/[^/\s]+|\.)?\/?(?:\.ssh\/id_|\.aws\/credentials|\.codebuddy\/[^\s|&;]*\.env|\.env(?!\.(?:example|sample|template|dist))\b)\s+[^\s]+:)/i,
     severity: 'critical',
     description: 'Exfiltration of credentials or sensitive environment files via network',
     name: 'credential-network-exfiltration',
@@ -182,7 +182,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic', capability: 'secrets' },
   { pattern: /\b(API_KEY|SECRET|PASSWORD|TOKEN)\b/i, severity: 'info', description: 'Possible secret reference', name: 'secret-ref', capability: 'secrets' },
   {
-    pattern: /(?<!\bssh-keygen\b[^\n]*)(?:~|\$HOME|\/home\/[^\/\s]+)\/\.ssh\/id_(?:rsa|ecdsa|ed25519|dsa)\b(?!\.pub\b)/i,
+    pattern: /(?<!\bssh-keygen\b[^\n]*)(?:~|\$HOME|\/home\/[^/\s]+)\/\.ssh\/id_(?:rsa|ecdsa|ed25519|dsa)\b(?!\.pub\b)/i,
     severity: 'high',
     description: 'Access or reading of private SSH keys',
     name: 'ssh-private-key-access',
@@ -190,7 +190,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: 'Direct access to SSH private keys allows unauthorized server access and identity impersonation',
   },
   {
-    pattern: /\b(?:cat|head|tail|grep|source)\s+(?:(?:\.\/)?\.env|~[^\s\/]*\/\.env)(?!\.(?:example|sample|template|dist|test|local\.example))\b/i,
+    pattern: /\b(?:cat|head|tail|grep|source)\s+(?:(?:\.\/)?\.env|~[^\s/]*\/\.env)(?!\.(?:example|sample|template|dist|test|local\.example))\b/i,
     severity: 'high',
     description: 'Access or extraction of sensitive .env environment file',
     name: 'dotenv-file-access',
@@ -198,7 +198,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: '.env files contain local application secrets, API keys, and connection credentials',
   },
   {
-    pattern: /(?:~|\$HOME|\/home\/[^\/\s]+)\/(?:\.aws\/(?:credentials|config)|\.codebuddy\/[^\s|&;]*\.env)\b/i,
+    pattern: /(?:~|\$HOME|\/home\/[^/\s]+)\/(?:\.aws\/(?:credentials|config)|\.codebuddy\/[^\s|&;]*\.env)\b/i,
     severity: 'high',
     description: 'Access to cloud provider credentials or CodeBuddy environment files',
     name: 'cloud-credential-access',

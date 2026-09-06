@@ -111,4 +111,28 @@ Mesurée sur les 191 skills réels (3 passes après échauffement) :
 - **Médiane : 1 364,9 ms** (environ 7,15 ms par skill).
 - Critère respecté : médiane ≤ 1 500 ms (1,5 s).
 
+## 4. Preuves et Validation
 
+| Contrôle | Commande | Résultat |
+| --- | --- | --- |
+| Suites ciblées | `env -u FORCE_COLOR HOME=~/DEV/cb-fw-catalogue-2026-09-06/_qa/cat/home npx vitest run tests/security tests/skills` | **79 fichiers passés, 1 ignoré ; 1 424 tests passés, 3 ignorés, 0 échec** |
+| Suite dédiée C-3 | `env -u FORCE_COLOR HOME=~/DEV/cb-fw-catalogue-2026-09-06/_qa/cat/home npx vitest run tests/security/skill-firewall-catalogue.test.ts` | **49/49 passés (0 échec)** |
+| Typage TypeScript | `npx tsc --noEmit -p tsconfig.json` | **Code 0 (0 erreur)** |
+| Lint global | `npm run lint` | **Code 0 (0 erreur, 2 484 avertissements préexistants)** |
+| Lint ciblée | `npx eslint src/security/skill-scanner.ts tests/security/skill-firewall-catalogue.test.ts` | **Code 0 (0 erreur, 0 avertissement)** |
+| Espaces blancs | `git diff --check 06036279e` | **Code 0 (aucune anomalie)** |
+| Données personnelles | `env -u FORCE_COLOR HOME=~/DEV/cb-fw-catalogue-2026-09-06/_qa/cat/home npx vitest run tests/security/donnees-personnelles.test.ts` | **40/40 passés (0 fuite)** |
+| Ligne CHANGELOG | `CHANGELOG.md` (section 6 septembre 2026) | Entrée insérée avec hash vérifiable `597a89729` |
+
+## Bilan (10 lignes)
+
+1. Le trou C-3 du rapport Opus est entièrement fermé : les 7 vecteurs adverses mesurés passent de `allow` à `quarantine`.
+2. Dix motifs spécialisés (≤ 12) ont été intégrés dans `DANGEROUS_PATTERNS` avec une propriété `justification`.
+3. Droppers couverts : décodage Base64 pipé vers shell (`base64-decode-pipe-shell`) et payloads hex/octal (`hex-printf-pipe-shell`).
+4. Secrets protégés : clés privées SSH (`ssh-private-key-access`), fichiers `.env` (`dotenv-file-access`), credentials AWS/CodeBuddy (`cloud-credential-access`).
+5. Exfiltration réseau active (`credential-network-exfiltration`) bloquant l'envoi de secrets via `curl -d @`, `nc`, `scp` et `wget`.
+6. Imports dynamiques Python neutralisés : `__import__` (`py-dunder-import`) et `importlib.import_module` (`py-importlib-import`).
+7. Commentaires HTML surveillés : prompt injections cachées (`html-comment-prompt-injection`) et commandes shell masquées (cas E01).
+8. Validation sur corpus réel élargi (191 skills) : 0 basculement de verdict, 0 faux positif et 2 vrais positifs documentés.
+9. Performance confirmée : médiane de 1 364,9 ms sur les 191 skills, strictement inférieure au plafond de 1,5 s.
+10. Toutes les vérifications sont au vert : 1 424 tests passés, tsc code 0, lint 0 erreur, git diff --check propre et 40/40 données personnelles.
