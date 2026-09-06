@@ -682,6 +682,23 @@ export class OpenAICompatProvider implements Provider {
 
   private async ensureOllamaEndpoint(): Promise<boolean> {
     if (this.ollamaEndpointResolved !== undefined) return this.ollamaEndpointResolved;
+    if (isOllamaEndpoint(this.baseURL)) {
+      this.ollamaEndpointResolved = true;
+      return true;
+    }
+    const port = (() => {
+      try {
+        const url = new URL(this.baseURL.startsWith('http') ? this.baseURL : `http://${this.baseURL}`);
+        return url.port;
+      } catch {
+        return '';
+      }
+    })();
+    const isCandidate = port === '11435' || process.env.CODEBUDDY_PROVIDER?.toLowerCase() === 'ollama';
+    if (!isCandidate) {
+      this.ollamaEndpointResolved = false;
+      return false;
+    }
     this.ollamaEndpointResolved = await resolveOllamaEndpoint(this.baseURL);
     return this.ollamaEndpointResolved;
   }
