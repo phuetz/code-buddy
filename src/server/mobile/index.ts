@@ -32,7 +32,14 @@ export const MOBILE_PWA_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  // `blob:` is required by the photo features and is NOT a weakening: a blob
+  // URL is minted by this page for bytes it already holds, it cannot be forged
+  // by a third party, and it is strictly narrower than the `data:` already
+  // allowed. Two paths need it — the composer resizes a picked photo through an
+  // <img> fed by URL.createObjectURL, and an album thumbnail must be FETCHED
+  // (the album route is authenticated, so a plain <img src> would carry no
+  // token) and then displayed from the resulting blob.
+  "img-src 'self' data: blob:",
   "connect-src 'self' ws: wss:",
   "font-src 'self'",
   "form-action 'self'",

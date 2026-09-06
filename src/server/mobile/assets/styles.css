@@ -526,11 +526,21 @@ textarea, input {
   border-radius: 10px;
 }
 
+/* `.section-header` carried no rule at all: the refresh button wrapped onto its
+   own line in Runs as well as in Album. One rule fixes both. */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .album-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 6px;
-  padding: 8px 12px 24px;
+  /* The panel already pads horizontally; only the bottom needs breathing room. */
+  padding: 8px 0 24px;
 }
 
 .album-tile {
