@@ -71,18 +71,18 @@ export function classifyChannelProviderFailure(
   const resetsAt = parseResetsAt(raw, nowMs);
 
   if (
-    lower.includes('usage_limit_reached') ||
-    classified.reason === 'quota_exhausted' ||
-    (classified.status === 429 && lower.includes('limit'))
-  ) {
-    return { kind: 'quota', raw, ...(resetsAt ? { resetsAt } : {}) };
-  }
-  if (
     lower.includes('out_of_credits') ||
     lower.includes('insufficient_quota') ||
     (classified.status === 403 && (lower.includes('credit') || lower.includes('quota')))
   ) {
     return { kind: 'credits', raw };
+  }
+  if (
+    lower.includes('usage_limit_reached') ||
+    classified.reason === 'quota_exhausted' ||
+    (classified.status === 429 && lower.includes('limit'))
+  ) {
+    return { kind: 'quota', raw, ...(resetsAt ? { resetsAt } : {}) };
   }
   if (
     classified.reason === 'model_not_found' ||
