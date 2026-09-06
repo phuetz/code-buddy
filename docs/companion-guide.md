@@ -492,7 +492,8 @@ Chef d’orchestre `CODEBUDDY_COMPANION_MIN_GAP_MS` inchangé. Défaut off = inc
 Opt-in `CODEBUDDY_COMPANION_PERSONA=copine`. Les textes vivent dans un **profil de persona**
 (`src/companion/personas/copine.ts`) : bonjour / bonsoir / bonne nuit, journée dure, succès,
 surnoms rares. Défaut unset = les pools historiques, inchangés. Aucun texte intime ; le palier
-visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée.
+visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée. L’humeur du jour dérive
+avec inertie (plafond de saut, reset doux au réveil) — une pente, pas un sismographe.
 
 ### 🪑 Te tenir compagnie (présence)
 De temps en temps, au bon moment, je dis un petit mot qui réchauffe : *« comment s'est passée ta journée ? »*,
