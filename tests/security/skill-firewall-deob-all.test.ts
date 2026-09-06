@@ -74,4 +74,12 @@ describe('AGY-FIREWALL Trou B-4 — déobfuscation étendue à toutes les capaci
     const rep = scanSkillFirewall(makeSkill(`Notes:\n${b64}`));
     expect(rep.verdict).toBe('quarantine');
   });
+
+  it('B-1 — bourrage > 256 Ko suivi d\'une charge obfusquée (G03) ⇒ quarantine', () => {
+    // Cas G03 d'Opus : 300 Ko de bourrage puis charge obfusquée en fin
+    const padding = 'x'.repeat(300 * 1024);
+    const rep = scanSkillFirewall(makeSkill(`${padding}\nr\u200Bm -rf / --no-preserve-root`));
+    expect(rep.verdict).toBe('quarantine');
+    expect(rep.findings.some((f) => f.pattern === 'rm-rf')).toBe(true);
+  });
 });

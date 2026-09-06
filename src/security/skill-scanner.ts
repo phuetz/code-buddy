@@ -8,7 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { deobfuscateForScan, deobfuscateSafeForScan } from './text-deobfuscation.js';
+import {
+  deobfuscateForScanWindows,
+  deobfuscateSafeForScanWindows,
+  sliceScanWindows,
+} from './text-deobfuscation.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -338,8 +342,9 @@ function collectDeobfuscatedFindings(
     process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== 'false' &&
     process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== '0';
 
-  let normalizedSafe: string | null = null;
-  let normalizedAggressive: string | null = null;
+  const rawWindows = sliceScanWindows(content);
+  let safeWindows: string[] | null = null;
+  let aggressiveWindows: string[] | null = null;
 
   for (const dp of DANGEROUS_PATTERNS) {
     const isInjection = dp.capability === 'prompt-injection';
@@ -351,45 +356,44 @@ function collectDeobfuscatedFindings(
 
     // Prompt-injection patterns also match against raw content across lines/comments
     if (isInjection) {
-      const match = re.exec(content);
-      if (match && match.index !== undefined) {
-        seen.add(dp.name);
-        extra.push({
-          severity: dp.severity,
-          pattern: dp.name,
-          description: dp.description,
-          file: filePath,
-          line: content.slice(0, match.index).split('\n').length,
-          evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
-        });
-        continue;
+      let rawMatched = false;
+      for (const win of rawWindows) {
+        const match = re.exec(win);
+        if (match && match.index !== undefined) {
+          seen.add(dp.name);
+          extra.push({
+            severity: dp.severity,
+            pattern: dp.name,
+            description: dp.description,
+            file: filePath,
+            line: 1,
+            evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+          });
+          rawMatched = true;
+          break;
+        }
       }
+      if (rawMatched) continue;
     }
 
-    let targetText: string;
-    if (isInjection) {
-      if (normalizedAggressive === null) {
-        normalizedAggressive = deobfuscateForScan(content);
-      }
-      targetText = normalizedAggressive;
-    } else {
-      if (normalizedSafe === null) {
-        normalizedSafe = deobfuscateSafeForScan(content);
-      }
-      targetText = normalizedSafe;
-    }
+    const targetWindows = isInjection
+      ? (aggressiveWindows ??= deobfuscateForScanWindows(content))
+      : (safeWindows ??= deobfuscateSafeForScanWindows(content));
 
-    const normMatch = re.exec(targetText);
-    if (!normMatch || normMatch.index === undefined) continue;
-    seen.add(dp.name);
-    extra.push({
-      severity: dp.severity,
-      pattern: dp.name,
-      description: `${dp.description} (obfuscated)`,
-      file: filePath,
-      line: 1,
-      evidence: normMatch[0].replace(/\s+/g, ' ').trim().slice(0, 120),
-    });
+    for (const win of targetWindows) {
+      const normMatch = re.exec(win);
+      if (!normMatch || normMatch.index === undefined) continue;
+      seen.add(dp.name);
+      extra.push({
+        severity: dp.severity,
+        pattern: dp.name,
+        description: `${dp.description} (obfuscated)`,
+        file: filePath,
+        line: 1,
+        evidence: normMatch[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+      });
+      break;
+    }
   }
   return extra;
 }
