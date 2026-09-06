@@ -670,6 +670,7 @@ buddy run search <query> [--json]   # Search run summaries, events, artifacts
 buddy run index-doctor [--repair]   # Report/repair stale artifact index rows (pruned/moved runs)
 buddy run lineage <run-id>          # Show the fork family tree of a run (ancestors + descendants)
 buddy run recall-pack <query>       # Build a cited context handoff from runs
+buddy run trajectory <run-id> [--json] [--since]  # Unified read-only trajectory (tools, permissions, cost, side effects)
 buddy run trajectory-export <run-id> # Export a redacted run trajectory for audit/evals
 buddy run trajectory-batch [query]  # Export redacted trajectory batch + compressed context
 buddy run retrospective <run-id>    # Run the Learning Agent over a trajectory
@@ -702,6 +703,15 @@ for error reporting (see `docs/configuration.md`).
 ages, event counts, artifact counts, and only generic run sources; arbitrary
 run channel labels are collapsed to `custom` so operator diagnostics can be
 pasted into handoffs without exposing private channel names.
+
+`buddy run trajectory <run-id> [--json] [--since]` is a **read-only** unified
+view of one run assembled from journals that already exist (RunStore events,
+metrics, audit JSONL if present, session timeline when `CODEBUDDY_TIMELINE=true`,
+session turn usage, `cost-history.json`, `rule-runs.jsonl`). It does not write
+new telemetry. Missing fields print `non journalisé` and are listed in
+`unlogged`. `--since` accepts an ISO-8601 timestamp or epoch milliseconds.
+JSON is schemaVersion 1 (`kind: run_trajectory`), distinct from the redacted
+eval export below. Always available: no opt-in flag.
 
 `buddy run trajectory-export <run-id> --json` exports the run objective,
 selected context, tool calls, tool results, artifacts and final answer through
