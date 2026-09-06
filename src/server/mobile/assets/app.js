@@ -143,9 +143,9 @@
         if (typeof delta === 'string') {
           state.streamEl.dataset.raw = (state.streamEl.dataset.raw || '') + delta;
         }
-        var html = renderMarkdown(state.streamEl.dataset.raw || '');
+        let html = renderMarkdown(state.streamEl.dataset.raw || '');
         if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
-          var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+          const mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
             ? image.mimeType
             : 'image/png';
           html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
@@ -163,9 +163,9 @@
     if (type === 'chat_response') {
       const content = data.payload && data.payload.content;
       const image = data.payload && data.payload.image;
-      var html = typeof content === 'string' ? renderMarkdown(content) : '';
+      let html = typeof content === 'string' ? renderMarkdown(content) : '';
       if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
-        var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+        const mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
           ? image.mimeType
           : 'image/png';
         html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
