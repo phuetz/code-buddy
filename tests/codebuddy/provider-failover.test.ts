@@ -284,6 +284,23 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('skips a 32k target when the pruned prompt is still 41k and tries the next', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('roomy ok'));
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct'), openaiFallback('gpt-4o')],
+    });
+    const huge = 'H'.repeat(41_000 * 4);
+    const response = await client.chat([{ role: 'user', content: huge }], []);
+    expect(response.choices[0]?.message.content).toBe('roomy ok');
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[fallback] openai:qwen3:4b-instruct ignorée (contexte 32 k < 41 k)',
+      expect.objectContaining({ toModel: 'qwen3:4b-instruct' }),
+    );
+    const models = mockCreate.mock.calls.map((call) => (call[0] as { model?: string }).model);
+    expect(models).toEqual(['grok-code-fast-1', 'gpt-4o']);
+  });
+
   it('prunes a 110-tool catalogue when failing over to a 32k model', async () => {
     process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
     mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));

@@ -3,7 +3,9 @@ import {
   buildResumeNote,
   estimateHandoffTokens,
   failoverPromptBudgetTokens,
+  formatSkippedFailoverTargetLog,
   HANDOFF_TOOL_CAP,
+  isFailoverTargetTooSmall,
   prepareFailoverHandoff,
   prepareFailoverMessages,
   resolveFailoverContextWindow,
@@ -116,5 +118,20 @@ describe('provider handoff', () => {
     const toolResults = handoff.messages.filter((m) => m.role === 'tool');
     expect(toolResults).toHaveLength(1);
     expect((toolResults[0] as { tool_call_id?: string }).tool_call_id).toBe('call_list');
+  });
+
+  it('flags a pruned prompt that still exceeds the backup window', async () => {
+    const huge = 'H'.repeat(41_000 * 4);
+    const handoff = await prepareFailoverHandoff(
+      [{ role: 'user', content: huge }],
+      [],
+      { fromProvider: 'chatgpt', toProvider: 'ollama', toModel: 'qwen3:4b-instruct' },
+    );
+    expect(isFailoverTargetTooSmall(handoff.estimatedTokens, handoff.contextWindow)).toBe(true);
+    expect(formatSkippedFailoverTargetLog(
+      'ollama:qwen3:4b-instruct',
+      32_000,
+      41_000,
+    )).toBe('[fallback] ollama:qwen3:4b-instruct ignorée (contexte 32 k < 41 k)');
   });
 });

@@ -29,7 +29,12 @@ import {
   classifyFailoverKind,
   extractResetsInSeconds,
 } from "./provider-failover-kind.js";
-import { prepareFailoverHandoff } from "./provider-handoff.js";
+import {
+  formatSkippedFailoverTargetLog,
+  isFailoverTargetTooSmall,
+  prepareFailoverHandoff,
+  type FailoverHandoffResult,
+} from "./provider-handoff.js";
 import {
   filterHealthyFallbacks,
   isDeclaredProviderFallbackEnabled,
@@ -836,6 +841,28 @@ export class CodeBuddyClient {
     throw primaryError;
   }
 
+  private skipDeclaredTargetIfTooSmall(
+    fallback: RuntimeFallbackProvider,
+    handed: FailoverHandoffResult,
+  ): boolean {
+    if (!isFailoverTargetTooSmall(handed.estimatedTokens, handed.contextWindow)) return false;
+    logger.warn(
+      formatSkippedFailoverTargetLog(
+        `${fallback.provider}:${fallback.model}`,
+        handed.contextWindow,
+        handed.estimatedTokens,
+      ),
+      {
+        source: 'CodeBuddyClient',
+        toProvider: fallback.provider,
+        toModel: fallback.model,
+        estimatedTokens: handed.estimatedTokens,
+        contextWindow: handed.contextWindow,
+      },
+    );
+    return true;
+  }
+
   private async listDeclaredFailoverCandidates(): Promise<RuntimeFallbackProvider[]> {
     const localOnly = isFailoverLocalOnly();
     const listed = filterHealthyFallbacks([
@@ -919,6 +946,7 @@ export class CodeBuddyClient {
           toModel: fallback.model,
           kind: classification.kind,
         });
+        if (this.skipDeclaredTargetIfTooSmall(fallback, handed)) continue;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -1196,6 +1224,7 @@ export class CodeBuddyClient {
           toModel: fallback.model,
           kind: classification.kind,
         });
+        if (this.skipDeclaredTargetIfTooSmall(fallback, handed)) continue;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
