@@ -67,3 +67,14 @@ L'objectif est d'étendre la déobfuscation à toutes les classes de motifs tout
     - Base64 contenant `rm -rf` non déballé pour `filesystem` (pas de faux positif)
     - URL percent-encode contenant `rm -rf` non déballé pour `filesystem` (pas de faux positif)
     - Base64 contenant une prompt injection toujours détecté et mis en quarantaine.
+- **Point 3 — Mesure APRÈS sur le corpus réel et élimination des faux positifs** :
+  - Campagne APRÈS exécutée sur les 90 skills via `scripts/skill-firewall-campaign.ts` (`_qa/fw/campaign-apres.json`).
+  - Résultats comparatifs AVANT vs APRÈS :
+    - AVANT : 61 allow, 10 review, 19 quarantine.
+    - APRÈS : 61 allow, 10 review, 19 quarantine.
+    - Changements de verdict : **0** (aucun verdict n'a basculé).
+  - Analyse des findings :
+    - Un faux finding résiduel a été identifié lors de l'extension dans les tests Python de `hermes/creative/comfyui` : `from <module> import (\n Node` était interprété comme un `dynamic-import` JS (`import ( Node`) suite à la normalisation.
+    - Correction sans exception nominative : affinement du motif `dynamic-import` dans `DANGEROUS_PATTERNS` avec un lookbehind négatif `/(?<!\bfrom\s+[\w.]+\s+)\bimport\s*\(\s*[a-zA-Z_$[]/` pour exclure la syntaxe d'import statique multiligne Python tout en conservant la détection des `import(var)` dynamiques JS/TS.
+    - Après affinement : **0 faux positif** sur l'ensemble des 90 skills du corpus.
+    - Le drapeau `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` est activé par défaut (`true`) comme prévu par la doctrine en cas de 0 FP.

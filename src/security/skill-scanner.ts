@@ -131,7 +131,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
 
   // Dynamic imports
   { pattern: /\brequire\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require', capability: 'dynamic-code' },
-  { pattern: /\bimport\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', capability: 'dynamic-code' },
+  { pattern: /(?<!\bfrom\s+[\w.]+\s+)\bimport\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', capability: 'dynamic-code' },
 
   // Environment/secrets
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic', capability: 'secrets' },
