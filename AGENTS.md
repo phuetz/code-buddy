@@ -195,7 +195,8 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `PICOVOICE_ACCESS_KEY` | Porcupine wake word (text-match fallback if absent) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
-| `CODEBUDDY_PROVIDER_FALLBACK` | **Opt-in** (`true`): automatic failover between LLM providers on classified failures (`quota_exhausted`, `overloaded`, `unreachable`); 401/403 auth never fails over |
+| `CODEBUDDY_PROVIDER_FALLBACK` | **Opt-in** (`true`): automatic failover between LLM providers on classified failures (`quota_exhausted`, `overloaded`, `unreachable`); 401/403 auth never fails over. Handoff prunes tools for a smaller window. |
+| `CODEBUDDY_LLM_FAILOVER` | **Deprecated alias** of `CODEBUDDY_PROVIDER_FALLBACK` (same path, one-shot deprecation warning) |
 | `CODEBUDDY_FALLBACK_CHAIN` | Declared failover order `provider[:model]>provider[:model]`; unset → current provider then catalog then local Ollama |
 | `CODEBUDDY_CHANNEL_PROFILE` | `companion` = spokenPrompt + relational context + last 10 turns, no agent system prompt, no tools; auto-on when `CODEBUDDY_COMPANION_PERSONA` is set and message is not a command |
 | `CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS` | Per-conversation channel turn timeout (default 180000 ms) |
