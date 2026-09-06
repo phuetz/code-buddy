@@ -40,6 +40,7 @@ Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` fi
 - ESM project (`"type": "module"`). Use `import.meta.url` + `fileURLToPath` for `__dirname`. `@` alias → `./src` (see `vitest.config.ts`). Source imports need `.js` extensions even for `.ts` files.
 - Use `logger` (`src/utils/logger.js`) not `console.*` in production — tests spy on `logger.warn`.
 - **`BashTool`** tests: call `ConfirmationService.setSessionFlag('bashCommands', true)` first, and mock every transitive import (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`). `execute()` has async pre-spawn logic, so defer mock process events with `setImmediate()` — don't emit synchronously.
+- **`BashTool` sandbox / env:** `approveSandboxUnavailableEscalations()` handles hosts without Docker/bwrap; isolate `CODEBUDDY_NATIVE_SANDBOX` in `beforeEach`; workspace paths (e.g. `*release*`) must not trip `PolicyEngine` deploy gates.
 - **CLI command tests:** Commander `parseAsync()` + `exitOverride()`, mock `console.log` / `process.exit`.
 - **Channel adapter tests:** mock `global.fetch` for health checks, mock dynamic imports via virtual modules.
 - **`DeviceNodeManager` tests:** mock `ssh-transport` / `adb-transport` / `local-transport` and `fs` (prevents `devices.json` bleed between tests). `pairDevice()` is async.
