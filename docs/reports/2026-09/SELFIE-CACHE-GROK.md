@@ -108,3 +108,41 @@ Section créée **avant toute modification de code**.
 | Opus b | B | Endpoint ComfyUI primaire mort toujours en tête | Mémoriser l'endpoint sain 5 min (`healthyComfyEndpoint`), le remettre en tête |
 
 Chaque point : test rouge avant, vert après. Un commit par point. Aucun push.
+
+### Journal des correctifs
+
+HEAD de départ `b51bbd7f5`. Commits : `7073a714f` (réservation) → `4149eaa25` (A) → `db6da3599` (B1) → `39878e273` (B2) → `8c3214272` (B3) → `49ba2101c` (Opus b).
+
+| Id | Correctif | Test rouge → vert | Commit |
+|---|---|---|---|
+| A | Refill sans `userName` ; `buildLisaSelfiePrompt` n'appelle plus `resolveUserName()` si omis (`looking at camera`) ; sidecar `{tier, style, hash, createdAt, source, favorite, promptHash}` sans prompt | prompt Camille dans le JSON ; refill « looking at » un prénom | `4149eaa25` |
+| B1 | `resolveSelfieCacheDir(env)` unique : `CODEBUDDY_LISA_SELFIE_CACHE_DIR` sinon `homedir()/.codebuddy/companion/lisa/selfie-cache`. Ingest, router, refill, `lisa-selfie.ts`, cache generator. | HOME isolé `/opt/isolated-companion-home` ⇒ pas sous cwd, pas sous `.codebuddy/lora` | `db6da3599` |
+| B2 | `isCompanionSurfaceEnabled(env)` = profil `companion` ou persona définie (même garde que le tour canal). Telegram / WS mobile (`produceCompanionReply`) / voix (`defaultReply` + hybrid) n'importent le router que si la garde est vraie | spy `tryServeCompanionSelfie` jamais appelé env vide ; appelé avec `copine` | `39878e273` |
+| B3 | Demande visant Lisa (`de toi`, `te voir`, `montre-toi`, `of you`, `ur pic`, `t'as une photo ?`, `pic`) ; autre sujet (`de Marie`, `du contrat`, `cette photo`, `comment prendre`) ⇒ non | 12 positives + 8 pièges (16 agy + 4) | `8c3214272` |
+| Opus b | `healthyComfyEndpoint` 5 min, `getPrioritizedComfyUrls` remet l'URL saine en tête ; `isFallback` reste « pas l'URL primaire déclarée » | 2ᵉ `generateImage` n'interroge plus le primaire mort | `49ba2101c` |
+
+### Preuves
+
+Commande :
+
+```
+HOME=~/DEV/cb-selfie-2026-09-06/_qa/selfie2/home env -u FORCE_COLOR \
+  npx vitest run tests/companion tests/channels tests/sensory/lisa-selfie-voice.test.ts \
+  tests/server/mobile-pwa.test.ts tests/tools/comfyui-fallback-detection.test.ts \
+  tests/tools/media-generation-tool.test.ts tests/security/donnees-personnelles.test.ts
+```
+
+Résultat : **145 fichiers verts / 2 skip / 1 rouge** ; **2238 verts / 8 skip / 1 rouge**. Le rouge est préexistant hors lane : `tests/channels/provider-failure-speech.test.ts` (`out_of_credits` classé `quota`, attend `/crédits/i`). Privacy isolée : **40/40**. `npx tsc --noEmit -p tsconfig.json` **0**. ESLint ciblé **0 erreur** (warnings préexistants). `git diff --check` **0**.
+
+### Bilan
+
+1. Sidecar d'ingest : plus de prompt ni de prénom ; hash sha256 seulement (`4149eaa25`).
+2. Refill générique : `looking at camera`, pas `resolveUserName()`.
+3. Cache défaut : `~/.codebuddy/companion/lisa/selfie-cache` via `os.homedir()`, un seul `resolveSelfieCacheDir` (`db6da3599`).
+4. Router injoignable sans persona/profil compagnon sur Telegram, WS mobile et voix (`39878e273`).
+5. 16 phrases agy + 4 extras : Lisa-dirigé oui, autre sujet non (`8c3214272`).
+6. ComfyUI : endpoint sain mémorisé 5 min, retenté en premier (`49ba2101c`).
+7. Preuve exigée : 2238 verts, 1 rouge préexistant `provider-failure-speech` ; privacy 40/40 ; tsc 0 ; eslint 0 err ; diff-check 0.
+8. `CLAUDE.md` : défaut du cache documenté sous HOME, plus le LoRA projet.
+9. ComfyUI 8188/8189 intacts. `~/code-buddy` et `~/.codebuddy` non ouverts. Aucun push.
+10. Ouvert : rouge `out_of_credits` hors lane ; `generateLisaSelfieCache` (CLI `buddy lora selfie-cache`) écrit encore un prompt dans *son* sidecar, hors ingest.
