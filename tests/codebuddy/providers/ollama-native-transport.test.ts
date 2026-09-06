@@ -4,16 +4,19 @@
  * agent loop: assistant tool-call arguments (JSON string vs object) and tool
  * results (bound by `tool_call_id` vs `tool_name`).
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fromOllamaNativeResponse,
   isOllamaEndpoint,
   isOllamaNativeChatEnabled,
   ollamaNativeChatUrl,
+  resetOllamaEndpointCache,
+  resolveOllamaEndpoint,
   streamOllamaNative,
   toOllamaNativeMessages,
   toOllamaNativeRequest,
+  type FetchLike,
   type OpenAiChatPayload,
 } from '../../../src/codebuddy/providers/ollama-native-transport.js';
 
@@ -38,11 +41,106 @@ function ndjsonBody(lines: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('isOllamaEndpoint', () => {
-  it('matches the daemon port and an explicit ollama host, nothing else', () => {
-    expect(isOllamaEndpoint('http://localhost:11434/v1')).toBe(true);
-    expect(isOllamaEndpoint('http://ollama.lan:8080/v1')).toBe(true);
-    expect(isOllamaEndpoint('http://127.0.0.1:1234/v1')).toBe(false);
-    expect(isOllamaEndpoint('https://api.openai.com/v1')).toBe(false);
+  afterEach(() => {
+    resetOllamaEndpointCache();
+  });
+
+  it('is true when CODEBUDDY_PROVIDER=ollama, including a non-11434 port', () => {
+    const env = { CODEBUDDY_PROVIDER: 'ollama' };
+    expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', env)).toBe(true);
+    expect(isOllamaEndpoint('http://localhost:11434/v1', env)).toBe(true);
+  });
+
+  it('matches the origin of OLLAMA_HOST regardless of /v1 suffix', () => {
+    const env = { OLLAMA_HOST: 'http://127.0.0.1:11435' };
+    expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', env)).toBe(true);
+    expect(isOllamaEndpoint('http://127.0.0.1:11435', env)).toBe(true);
+    expect(isOllamaEndpoint('http://127.0.0.1:1234/v1', env)).toBe(false);
+  });
+
+  it('treats localhost and 127.0.0.1 as the same OLLAMA_HOST origin', () => {
+    expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', { OLLAMA_HOST: 'http://localhost:11435' })).toBe(true);
+  });
+
+  it('is false for LM Studio / vLLM even on a loopback port', () => {
+    expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', { CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(false);
+    expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', { CODEBUDDY_PROVIDER: 'vllm' })).toBe(false);
+    expect(isOllamaEndpoint('http://127.0.0.1:1234/v1', {})).toBe(false);
+    expect(isOllamaEndpoint('https://api.openai.com/v1', {})).toBe(false);
+    expect(isOllamaEndpoint('http://ollama.lan:8080/v1', {})).toBe(false);
+  });
+
+  it('does not treat :11434 as Ollama without a provider, host, or probe', () => {
+    expect(isOllamaEndpoint('http://localhost:11434/v1', {})).toBe(false);
+  });
+});
+
+describe('resolveOllamaEndpoint', () => {
+  afterEach(() => {
+    resetOllamaEndpointCache();
+  });
+
+  it('probes loopback GET /api/tags (200, ≤ 300 ms) and memos the origin', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ models: [] }),
+    }));
+    const url = 'http://127.0.0.1:11435/v1';
+    expect(isOllamaEndpoint(url, {})).toBe(false);
+    expect(await resolveOllamaEndpoint(url, {}, fetchImpl as FetchLike)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('http://127.0.0.1:11435/api/tags');
+    expect(isOllamaEndpoint(url, {})).toBe(true);
+    expect(await resolveOllamaEndpoint(url, {}, fetchImpl as FetchLike)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not probe when CODEBUDDY_PROVIDER names another local runtime', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ models: [] }),
+    }));
+    expect(await resolveOllamaEndpoint(
+      'http://127.0.0.1:11435/v1',
+      { CODEBUDDY_PROVIDER: 'lmstudio' },
+      fetchImpl as FetchLike,
+    )).toBe(false);
+    expect(await resolveOllamaEndpoint(
+      'http://127.0.0.1:11435/v1',
+      { CODEBUDDY_PROVIDER: 'vllm' },
+      fetchImpl as FetchLike,
+    )).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the tags probe is not 200', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 404 }));
+    expect(await resolveOllamaEndpoint('http://127.0.0.1:1234/v1', {}, fetchImpl as FetchLike)).toBe(false);
+    expect(isOllamaEndpoint('http://127.0.0.1:1234/v1', {})).toBe(false);
+  });
+
+  it('returns false when a loopback 200 is not an Ollama tags catalogue', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'chatcmpl-mock',
+        choices: [{ message: { content: 'bonjour' } }],
+      }),
+    }));
+    expect(await resolveOllamaEndpoint('http://127.0.0.1:4410/v1', {}, fetchImpl as FetchLike)).toBe(false);
+  });
+
+  it('does not probe a non-loopback host', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ models: [] }),
+    }));
+    expect(await resolveOllamaEndpoint('http://gpu.example:11435/v1', {}, fetchImpl as FetchLike)).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 
@@ -85,7 +183,32 @@ describe('toOllamaNativeRequest', () => {
       .toBe('json');
     expect(toOllamaNativeRequest(payload({ reasoning_effort: 'none' }), 8192).think).toBe(false);
     expect(toOllamaNativeRequest(payload({ reasoning_effort: 'high' }), 8192).think).toBe('high');
-    expect(toOllamaNativeRequest(payload(), 8192).think).toBeUndefined();
+  });
+
+  it('forces think:false for a thinking model on a one-shot call without tools', () => {
+    expect(toOllamaNativeRequest(payload({ model: 'qwen3.8-ctx32k:latest' }), 8192).think).toBe(false);
+    expect(toOllamaNativeRequest(payload({ model: 'qwen3:4b-instruct' }), 8192).think).toBe(false);
+  });
+
+  it('keeps an explicit thinking level when the operator asked for it', () => {
+    expect(toOllamaNativeRequest(
+      payload({ model: 'qwen3.8-ctx32k:latest', reasoning_effort: 'high' }),
+      8192,
+    ).think).toBe('high');
+  });
+
+  it('does not force think:false when tools are present outside headless', () => {
+    const previous = process.env.CODEBUDDY_HEADLESS;
+    delete process.env.CODEBUDDY_HEADLESS;
+    try {
+      expect(toOllamaNativeRequest(
+        payload({ model: 'qwen3.8-ctx32k:latest', tools: [{ type: 'function' }] }),
+        8192,
+      ).think).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_HEADLESS;
+      else process.env.CODEBUDDY_HEADLESS = previous;
+    }
   });
 
   it('keeps tools only when there are any', () => {
