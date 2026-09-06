@@ -176,7 +176,12 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
       .mockResolvedValueOnce(okResponse('fallback ok'))
       .mockResolvedValueOnce(okResponse('still on backup'));
 
-    const busEvents: Array<{ fromProvider?: string; toProvider?: string }> = [];
+    const busEvents: Array<{
+      fromProvider?: string;
+      toProvider?: string;
+      resetsAt?: number;
+      resets_at?: number;
+    }> = [];
     getGlobalEventBus().on('provider:fallback', (evt) => {
       busEvents.push(evt);
     });
@@ -204,6 +209,7 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
       expect.any(Object),
     );
     expect(busEvents.some((e) => e.fromProvider === 'grok' && e.toProvider === 'openai')).toBe(true);
+    expect(busEvents.some((e) => typeof e.resetsAt === 'number' && e.resets_at === e.resetsAt)).toBe(true);
 
     const second = await client.chat([{ role: 'user', content: 'again' }], []);
     expect(second.choices[0]?.message.content).toBe('still on backup');

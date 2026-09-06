@@ -94,6 +94,8 @@ describe('wireDomainEventBridge — re-emission (a)', () => {
       fromProvider: 'chatgpt',
       toProvider: 'ollama',
       reason: 'quota_exhausted',
+      resetsAt: 1_700_000_000_000,
+      resets_at: 1_700_000_000_000,
     });
     teardown();
     expect(seen).toHaveLength(1);
@@ -102,6 +104,8 @@ describe('wireDomainEventBridge — re-emission (a)', () => {
       fromProvider: 'chatgpt',
       toProvider: 'ollama',
       reason: 'quota_exhausted',
+      resetsAt: 1_700_000_000_000,
+      resets_at: 1_700_000_000_000,
     });
   });
 });

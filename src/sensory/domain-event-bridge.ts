@@ -160,11 +160,15 @@ export function wireDomainEventBridge(): () => void {
         fromProvider?: string;
         toProvider?: string;
         reason?: string;
+        resetsAt?: number;
+        resets_at?: number;
       };
+      const resetsAt = e.resetsAt ?? e.resets_at;
       reemit(evt, 'provider', 'provider_fallback', SALIENCE.provider_fallback, {
         fromProvider: e.fromProvider,
         toProvider: e.toProvider,
         reason: e.reason,
+        ...(resetsAt !== undefined ? { resetsAt, resets_at: resetsAt } : {}),
       });
     }),
   );

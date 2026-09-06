@@ -45,6 +45,9 @@ export function notifyProviderFallback(notice: FallbackNotice): void {
       fromProvider: notice.fromProvider,
       toProvider: notice.toProvider,
       reason: notice.kind,
+      ...(notice.resetsAt !== undefined
+        ? { resetsAt: notice.resetsAt, resets_at: notice.resetsAt }
+        : {}),
     });
   } catch {
     /* bus must never break the turn */
