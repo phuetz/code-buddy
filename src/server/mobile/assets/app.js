@@ -14,6 +14,13 @@
   var MAX_HISTORY = 200;
   var MAX_HISTORY_IMAGES = 5;
   var MAX_IMAGE_CHARS = 100 * 1024;
+  // Client-side resize target. The server refuses anything over 600 KB per
+  // photo, so the phone shrinks BEFORE sending: a 12 Mpx camera shot is ~4 MB
+  // and would simply be rejected.
+  var ATTACH_MAX_DIM = 1280;
+  var ATTACH_QUALITY = 0.82;
+  var ATTACH_MAX_COUNT = 4;
+  var ATTACH_MAX_CHARS = 600 * 1024;
   var MAX_AVATAR_CHARS = 200 * 1024;
   var LONG_PRESS_MS = 400;
   var GROUP_MS = 5 * 60 * 1000;
@@ -63,6 +70,10 @@
     longPressTimer: 0,
     lastTap: { id: '', at: 0 },
     sawChunk: false,
+    attachments: [],
+    album: [],
+    albumLoading: false,
+    lightboxAlbumId: '',
     bound: false,
   };
 
@@ -182,6 +193,16 @@
     return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl + '">';
   }
 
+  function sentImagesHtml(images) {
+    if (!images || !images.length) return '';
+    var html = '<div class="bubble-photos">';
+    var i;
+    for (i = 0; i < images.length; i += 1) {
+      html += '<img class="bubble-img sent" alt="Photo envoyée" src="' + images[i] + '">';
+    }
+    return html + '</div>';
+  }
+
   function dataUrlFromFrame(image) {
     if (!image || typeof image.data !== 'string' || typeof image.mimeType !== 'string') return '';
     var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
@@ -276,11 +297,23 @@
           images += 1;
         }
       }
+      if (msg.images && msg.images.length && images < MAX_HISTORY_IMAGES) {
+        var kept = [];
+        msg.images.forEach(function (dataUrl) {
+          if (images >= MAX_HISTORY_IMAGES) return;
+          var small = constrainDataUrl(dataUrl, MAX_IMAGE_CHARS);
+          if (small) {
+            kept.push(small);
+            images += 1;
+          }
+        });
+        if (kept.length) copy.images = kept;
+      }
       return copy;
     });
     if (!storeSet(STORAGE.history, slim)) {
       var withoutImages = slim.map(function (msg) {
-        if (!msg.image) return msg;
+        if (!msg.image && !msg.images) return msg;
         return {
           id: msg.id,
           role: msg.role,
@@ -316,6 +349,9 @@
         reaction: typeof item.reaction === 'string' ? item.reaction : '',
         ack: typeof item.ack === 'string' ? item.ack : '',
         image: typeof item.image === 'string' ? item.image : '',
+        images: Array.isArray(item.images)
+          ? item.images.filter(function (entry) { return typeof entry === 'string'; })
+          : [],
       };
     });
     var maxSeq = 0;
@@ -364,6 +400,7 @@
       }
       var body = renderMarkdown(msg.text || '');
       if (msg.image) body += imageHtml(msg.image);
+      if (msg.images && msg.images.length) body += sentImagesHtml(msg.images);
       var reaction = msg.reaction
         ? '<div class="bubble-reactions">' + escapeHtml(msg.reaction) + '</div>'
         : '';
@@ -391,6 +428,7 @@
       reaction: partial.reaction || '',
       ack: partial.ack || (partial.role === 'user' ? 'sent' : ''),
       image: partial.image || '',
+      images: partial.images && partial.images.length ? partial.images.slice(0, ATTACH_MAX_COUNT) : [],
     };
     if (msg.role === 'assistant') markUserReplied();
     state.messages.push(msg);
@@ -685,10 +723,124 @@
     refreshSuggestions();
   }
 
-  function currentChatPayload(message) {
+  // --- Photos: pick, shrink on the device, preview, send ---------------------
+
+  function attachmentCount() {
+    return state.attachments.length;
+  }
+
+  /**
+   * Shrink a camera photo in the browser. A phone shot is 3-5 MB; the server
+   * caps a message photo at 600 KB. Resizing here means the upload is small on
+   * a mobile uplink AND the request is never rejected for size.
+   */
+  function shrinkImageFile(file) {
+    return new Promise(function (resolve) {
+      if (!file || !/^image\//.test(file.type || '')) {
+        resolve(null);
+        return;
+      }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var scale = Math.min(1, ATTACH_MAX_DIM / Math.max(img.width || 1, img.height || 1));
+          var width = Math.max(1, Math.round((img.width || 1) * scale));
+          var height = Math.max(1, Math.round((img.height || 1) * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          var dataUrl = canvas.toDataURL('image/jpeg', ATTACH_QUALITY);
+          URL.revokeObjectURL(url);
+          if (!dataUrl || dataUrl.indexOf('data:image/') !== 0) {
+            resolve(null);
+            return;
+          }
+          resolve({ mimeType: 'image/jpeg', dataUrl: dataUrl });
+        } catch (_err) {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        }
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  }
+
+  function renderAttachPreview() {
+    var box = el('attach-preview');
+    if (!box) return;
+    if (!state.attachments.length) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+    var html = [];
+    state.attachments.forEach(function (item, index) {
+      html.push(
+        '<span class="attach-thumb">' +
+          '<img alt="Photo à envoyer" src="' + item.dataUrl + '">' +
+          '<button type="button" class="attach-remove touch" data-index="' + index + '" aria-label="Retirer la photo">✕</button>' +
+        '</span>'
+      );
+    });
+    box.innerHTML = html.join('');
+    box.classList.remove('hidden');
+  }
+
+  function addAttachments(files) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return Promise.resolve(state.attachments.length);
+    var room = ATTACH_MAX_COUNT - state.attachments.length;
+    if (room <= 0) {
+      setError('4 photos au maximum par message.');
+      return Promise.resolve(state.attachments.length);
+    }
+    return Promise.all(list.slice(0, room).map(shrinkImageFile)).then(function (results) {
+      results.forEach(function (item) {
+        if (!item) return;
+        if (byteLen(item.dataUrl) > ATTACH_MAX_CHARS) return;
+        state.attachments.push(item);
+      });
+      renderAttachPreview();
+      return state.attachments.length;
+    });
+  }
+
+  function removeAttachment(index) {
+    if (index < 0 || index >= state.attachments.length) return state.attachments.length;
+    state.attachments.splice(index, 1);
+    renderAttachPreview();
+    return state.attachments.length;
+  }
+
+  function clearAttachments() {
+    state.attachments = [];
+    renderAttachPreview();
+  }
+
+  function attachmentPayload() {
+    return state.attachments.map(function (item) {
+      return { mimeType: item.mimeType, data: item.dataUrl.slice(item.dataUrl.indexOf(',') + 1) };
+    });
+  }
+
+  function openFilePicker() {
+    var input = el('attach-input');
+    if (input) input.click();
+  }
+
+  function currentChatPayload(message, attachments) {
     var payload = { message: message, stream: true, assistant: 'agent' };
     if (state.assistant === 'companion') {
       payload.assistant = 'companion';
+      // Photos are a companion gesture: never sent to the agent or a peer.
+      if (attachments && attachments.length) payload.attachments = attachments;
     } else if (state.assistant !== 'agent') {
       payload.assistant = 'peer';
       payload.peerId = state.assistant;
@@ -698,8 +850,17 @@
 
   function sendText(message) {
     var text = String(message || '').trim();
-    if (!text || state.streaming) return false;
-    addMessage({ role: 'user', text: text, ack: 'sent' });
+    var photos = state.assistant === 'companion' ? attachmentPayload() : [];
+    // A photo alone IS a message — "regarde" is optional.
+    if ((!text && !photos.length) || state.streaming) return false;
+    var thumbs = state.attachments.map(function (item) { return item.dataUrl; });
+    var outgoing = text || (photos.length > 1 ? 'Regarde ces photos.' : 'Regarde cette photo.');
+    addMessage({
+      role: 'user',
+      text: text,
+      ack: 'sent',
+      images: photos.length ? thumbs : [],
+    });
     var input = el('message-input');
     if (input) {
       input.value = '';
@@ -709,7 +870,8 @@
     haptic();
     closeEmojiPicker();
     state.suggestRotate += 1;
-    send('chat', currentChatPayload(text));
+    send('chat', currentChatPayload(outgoing, photos));
+    if (photos.length) clearAttachments();
     return true;
   }
 
@@ -746,6 +908,11 @@
     if (!box) return;
     box.classList.add('hidden');
     if (img) img.removeAttribute('src');
+    state.lightboxAlbumId = '';
+    var actions = el('lightbox-actions');
+    if (actions) actions.classList.add('hidden');
+    var confirmBox = el('album-del-confirm');
+    if (confirmBox) confirmBox.classList.add('hidden');
   }
 
   function hideReactionBar() {
@@ -981,6 +1148,157 @@
     });
     if (id === 'runs-section') loadRuns();
     if (id === 'status-section') loadStatus();
+    if (id === 'album-section') loadAlbum();
+  }
+
+  // --- Album: the photos of the two of them, in one grid ---------------------
+
+  function albumUrl(id) {
+    return BASE + '/album/' + encodeURIComponent(id);
+  }
+
+  /**
+   * An album image is served by an AUTHENTICATED route, so it cannot be an
+   * `<img src>`: the browser would send no Authorization header. Fetch it and
+   * hand the tile an object URL instead.
+   */
+  function loadAlbumThumb(img, id) {
+    fetch(albumUrl(id), { headers: authHeaders() })
+      .then(function (res) { return res.ok ? res.blob() : null; })
+      .then(function (blob) {
+        if (!blob) return;
+        img.src = URL.createObjectURL(blob);
+      })
+      .catch(function () { /* a tile that fails simply stays blank */ });
+  }
+
+  function albumDateLabel(iso) {
+    var ts = Date.parse(iso);
+    if (!ts) return '';
+    return new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  }
+
+  function renderAlbum() {
+    var grid = el('album-grid');
+    var empty = el('album-empty');
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (empty) empty.classList.toggle('hidden', state.album.length > 0);
+    state.album.forEach(function (entry) {
+      var tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'album-tile touch' + (entry.kind === 'selfie' ? ' selfie' : '');
+      tile.setAttribute('data-id', entry.id);
+      tile.setAttribute('data-kind', entry.kind);
+      tile.setAttribute(
+        'aria-label',
+        (entry.kind === 'selfie' ? 'Selfie de Lisa' : 'Photo partagée') +
+          (entry.description ? ' — ' + entry.description : ''),
+      );
+      var img = document.createElement('img');
+      img.alt = '';
+      tile.appendChild(img);
+      var meta = document.createElement('span');
+      meta.className = 'album-meta';
+      meta.textContent = (entry.favorite ? '❤️ ' : '') + albumDateLabel(entry.at);
+      tile.appendChild(meta);
+      grid.appendChild(tile);
+      loadAlbumThumb(img, entry.id);
+    });
+  }
+
+  function loadAlbum() {
+    if (state.albumLoading) return Promise.resolve(state.album);
+    state.albumLoading = true;
+    return fetchJson(BASE + '/album')
+      .then(function (data) {
+        state.album = Array.isArray(data && data.entries) ? data.entries : [];
+        renderAlbum();
+        return state.album;
+      })
+      .catch(function () {
+        state.album = [];
+        renderAlbum();
+        return state.album;
+      })
+      .then(function (value) {
+        state.albumLoading = false;
+        return value;
+      });
+  }
+
+  function albumEntry(id) {
+    var i;
+    for (i = 0; i < state.album.length; i += 1) {
+      if (state.album[i].id === id) return state.album[i];
+    }
+    return null;
+  }
+
+  function syncAlbumActions() {
+    var actions = el('lightbox-actions');
+    var fav = el('album-fav-btn');
+    var entry = state.lightboxAlbumId ? albumEntry(state.lightboxAlbumId) : null;
+    // Only a shared photo can be favourited or deleted: a selfie belongs to
+    // Lisa's rotating cache, not to the album store.
+    var editable = Boolean(entry && entry.kind === 'shared');
+    if (actions) actions.classList.toggle('hidden', !editable);
+    if (fav) fav.textContent = entry && entry.favorite ? '❤️' : '🤍';
+    var confirmBox = el('album-del-confirm');
+    if (confirmBox) confirmBox.classList.add('hidden');
+  }
+
+  function openAlbumEntry(id) {
+    var entry = albumEntry(id);
+    if (!entry) return;
+    state.lightboxAlbumId = id;
+    fetch(albumUrl(id), { headers: authHeaders() })
+      .then(function (res) { return res.ok ? res.blob() : null; })
+      .then(function (blob) {
+        if (!blob) return;
+        openLightbox(URL.createObjectURL(blob));
+        syncAlbumActions();
+      })
+      .catch(function () { /* ignore */ });
+  }
+
+  function toggleAlbumFavorite() {
+    var entry = state.lightboxAlbumId ? albumEntry(state.lightboxAlbumId) : null;
+    if (!entry || entry.kind !== 'shared') return Promise.resolve(false);
+    var next = !entry.favorite;
+    return fetch(albumUrl(entry.id) + '/favorite', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ favorite: next }),
+    })
+      .then(function (res) { return res.ok; })
+      .then(function (ok) {
+        if (ok) {
+          entry.favorite = next;
+          syncAlbumActions();
+          renderAlbum();
+        }
+        return ok;
+      })
+      .catch(function () { return false; });
+  }
+
+  function deleteAlbumEntry() {
+    var id = state.lightboxAlbumId;
+    var entry = id ? albumEntry(id) : null;
+    if (!entry || entry.kind !== 'shared') return Promise.resolve(false);
+    return fetch(albumUrl(id), { method: 'DELETE', headers: authHeaders() })
+      .then(function (res) { return res.ok; })
+      .then(function (ok) {
+        if (ok) {
+          state.album = state.album.filter(function (item) { return item.id !== id; });
+          state.lightboxAlbumId = '';
+          closeLightbox();
+          renderAlbum();
+        }
+        return ok;
+      })
+      .catch(function () { return false; });
   }
 
   function renderAssistants() {
@@ -1288,6 +1606,61 @@
       el('message-input').addEventListener('keydown', handleComposerKey);
       el('message-input').addEventListener('input', autosizeComposer);
     }
+    if (el('attach-btn')) {
+      el('attach-btn').addEventListener('click', openFilePicker);
+    }
+    if (el('attach-input')) {
+      el('attach-input').addEventListener('change', function (event) {
+        var input = event.target;
+        addAttachments(input.files).then(function () {
+          // Reset so re-picking the same file fires `change` again.
+          input.value = '';
+        });
+      });
+    }
+    if (el('attach-preview')) {
+      el('attach-preview').addEventListener('click', function (event) {
+        var btn = event.target.closest ? event.target.closest('.attach-remove') : null;
+        if (!btn) return;
+        removeAttachment(Number(btn.getAttribute('data-index')));
+      });
+    }
+    if (el('refresh-album')) {
+      el('refresh-album').addEventListener('click', function () { loadAlbum(); });
+    }
+    if (el('album-grid')) {
+      el('album-grid').addEventListener('click', function (event) {
+        var tile = event.target.closest ? event.target.closest('.album-tile') : null;
+        if (!tile) return;
+        openAlbumEntry(tile.getAttribute('data-id'));
+      });
+    }
+    if (el('album-fav-btn')) {
+      el('album-fav-btn').addEventListener('click', function (event) {
+        event.stopPropagation();
+        toggleAlbumFavorite();
+      });
+    }
+    if (el('album-del-btn')) {
+      el('album-del-btn').addEventListener('click', function (event) {
+        event.stopPropagation();
+        var box = el('album-del-confirm');
+        if (box) box.classList.remove('hidden');
+      });
+    }
+    if (el('album-del-yes')) {
+      el('album-del-yes').addEventListener('click', function (event) {
+        event.stopPropagation();
+        deleteAlbumEntry();
+      });
+    }
+    if (el('album-del-no')) {
+      el('album-del-no').addEventListener('click', function (event) {
+        event.stopPropagation();
+        var box = el('album-del-confirm');
+        if (box) box.classList.add('hidden');
+      });
+    }
     var messages = el('messages');
     if (messages) {
       messages.addEventListener('click', handleBubbleClick);
@@ -1314,7 +1687,13 @@
       });
     }
     if (el('lightbox')) {
-      el('lightbox').addEventListener('click', closeLightbox);
+      el('lightbox').addEventListener('click', function (event) {
+        var inActions = event.target.closest
+          ? event.target.closest('.lightbox-actions, .album-del-confirm')
+          : null;
+        if (inActions) return;
+        closeLightbox();
+      });
     }
     var reactionBar = el('reaction-bar');
     if (reactionBar) {
@@ -1406,6 +1785,24 @@
     haptic: haptic,
     pulseSend: pulseSend,
     showReactionBar: showReactionBar,
+    ATTACH_MAX_COUNT: ATTACH_MAX_COUNT,
+    ATTACH_MAX_DIM: ATTACH_MAX_DIM,
+    ATTACH_MAX_CHARS: ATTACH_MAX_CHARS,
+    addAttachments: addAttachments,
+    removeAttachment: removeAttachment,
+    clearAttachments: clearAttachments,
+    attachmentCount: attachmentCount,
+    attachmentPayload: attachmentPayload,
+    renderAttachPreview: renderAttachPreview,
+    currentChatPayload: currentChatPayload,
+    loadAlbum: loadAlbum,
+    renderAlbum: renderAlbum,
+    openAlbumEntry: openAlbumEntry,
+    toggleAlbumFavorite: toggleAlbumFavorite,
+    deleteAlbumEntry: deleteAlbumEntry,
+    getAlbum: function () { return state.album.slice(); },
+    setAlbum: function (entries) { state.album = entries.slice(); renderAlbum(); },
+    syncAlbumActions: syncAlbumActions,
     destroy: destroy,
   };
 
