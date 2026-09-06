@@ -312,7 +312,7 @@ describe('Mobile PWA Assets Validation', () => {
 
   it('should bump the service worker cache to include emoji-data.js', () => {
     const sw = readFileSync(path.join(assetsDir, 'sw.js'), 'utf-8');
-    expect(sw).toContain('codebuddy-mobile-v3');
+    expect(sw).toContain('codebuddy-mobile-v4');
     expect(sw).toContain('/__codebuddy__/mobile/assets/emoji-data.js');
   });
 });
