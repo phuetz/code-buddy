@@ -8,7 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { deobfuscateForScan } from './text-deobfuscation.js';
+import {
+  deobfuscateForScanWindows,
+  deobfuscateSafeForScanWindows,
+  sliceScanWindows,
+} from './text-deobfuscation.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -131,7 +135,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
 
   // Dynamic imports
   { pattern: /\brequire\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require', capability: 'dynamic-code' },
-  { pattern: /\bimport\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', capability: 'dynamic-code' },
+  { pattern: /(?<!\bfrom\s+[\w.]+\s+)\bimport\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', capability: 'dynamic-code' },
 
   // Environment/secrets
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic', capability: 'secrets' },
@@ -151,6 +155,30 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\b(?:disable|bypass)\b.{0,60}\b(?:all|every|any)\b.{0,40}\b(?:safety|guardrail|restriction)s?\b/i, severity: 'critical', description: 'Instruction to disable safety policies', name: 'disable-safety', capability: 'prompt-injection' },
 ];
 
+const DYNAMIC_IMPORT_PATTERN_LEGACY = /\bimport\s*\(\s*[a-zA-Z_$[]/;
+
+function isDeobAllEnabled(): boolean {
+  return (
+    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== 'false' &&
+    process.env.CODEBUDDY_SKILL_FIREWALL_DEOB_ALL !== '0'
+  );
+}
+
+function getDangerousPatterns(): DangerousPattern[] {
+  if (isDeobAllEnabled()) {
+    return DANGEROUS_PATTERNS;
+  }
+  return DANGEROUS_PATTERNS.map((dp) => {
+    if (dp.name === 'dynamic-import') {
+      return {
+        ...dp,
+        pattern: DYNAMIC_IMPORT_PATTERN_LEGACY,
+      };
+    }
+    return dp;
+  });
+}
+
 /**
  * Scan a single file for dangerous patterns.
  */
@@ -160,6 +188,7 @@ export function scanFile(filePath: string): ScanResult {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
+    const patterns = getDangerousPatterns();
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -169,7 +198,7 @@ export function scanFile(filePath: string): ScanResult {
       // Skip markdown comments and frontmatter delimiters
       if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
 
-      for (const dp of DANGEROUS_PATTERNS) {
+      for (const dp of patterns) {
         if (dp.pattern.test(line)) {
           findings.push({
             severity: dp.severity,
@@ -321,52 +350,81 @@ export function formatScanReport(results: ScanResult[]): string {
   return lines.join('\n');
 }
 
-/** Full-document prompt-injection pass (HTML comments + split-line jailbreaks). */
-function collectPromptInjectionFindings(
+/**
+ * Full-document de-obfuscation pass across pattern capabilities.
+ * Safe de-obfuscation (zero-width, homoglyphs, césures) is applied to all capabilities.
+ * Aggressive de-obfuscation (Base64, percent-decoding) is restricted to prompt-injection.
+ */
+function collectDeobfuscatedFindings(
   content: string,
   filePath: string,
   existing: ScanFinding[],
 ): ScanFinding[] {
   const extra: ScanFinding[] = [];
   const seen = new Set(existing.map((finding) => finding.pattern));
-  // SECAUDIT 2026-09-05: a skill is INJECTED into the LLM context, so a
-  // jailbreak / prompt-override hidden with zero-width chars, Cyrillic
-  // homoglyphs or a hyphenated line-wrap is read by the model but slips past a
-  // raw regex. Scan the de-obfuscated form too (same defence the strategy gate
-  // already has). Line position is lost after normalization → report line 1.
-  const normalized = deobfuscateForScan(content);
-  for (const dp of DANGEROUS_PATTERNS) {
-    if (dp.capability !== 'prompt-injection') continue;
+
+  const deobAll = isDeobAllEnabled();
+  const patterns = getDangerousPatterns();
+
+  const rawWindows = sliceScanWindows(content);
+  let safeWindows: string[] | null = null;
+  let aggressiveWindows: string[] | null = null;
+
+  for (const dp of patterns) {
+    const isInjection = dp.capability === 'prompt-injection';
+    if (!isInjection && !deobAll) continue;
     if (seen.has(dp.name)) continue;
-    const flags = dp.pattern.flags.includes('s') ? dp.pattern.flags : `${dp.pattern.flags}s`;
+
+    const flags = isInjection && !dp.pattern.flags.includes('s')
+      ? `${dp.pattern.flags}s`
+      : dp.pattern.flags;
     const re = new RegExp(dp.pattern.source, flags.replace('g', ''));
-    const match = re.exec(content);
-    if (match && match.index !== undefined) {
+
+    // Prompt-injection patterns also match against raw content across lines/comments
+    if (isInjection) {
+      let rawMatched = false;
+      for (const win of rawWindows) {
+        const match = re.exec(win);
+        if (match && match.index !== undefined) {
+          seen.add(dp.name);
+          extra.push({
+            severity: dp.severity,
+            pattern: dp.name,
+            description: dp.description,
+            file: filePath,
+            line: 1,
+            evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+          });
+          rawMatched = true;
+          break;
+        }
+      }
+      if (rawMatched) continue;
+    }
+
+    const targetWindows = isInjection
+      ? (aggressiveWindows ??= deobfuscateForScanWindows(content))
+      : (safeWindows ??= deobfuscateSafeForScanWindows(content));
+
+    for (const win of targetWindows) {
+      const normMatch = re.exec(win);
+      if (!normMatch || normMatch.index === undefined) continue;
       seen.add(dp.name);
       extra.push({
         severity: dp.severity,
         pattern: dp.name,
-        description: dp.description,
+        description: `${dp.description} (obfuscated)`,
         file: filePath,
-        line: content.slice(0, match.index).split('\n').length,
-        evidence: match[0].replace(/\s+/g, ' ').trim().slice(0, 120),
+        line: 1,
+        evidence: normMatch[0].replace(/\s+/g, ' ').trim().slice(0, 120),
       });
-      continue;
+      break;
     }
-    const normMatch = re.exec(normalized);
-    if (!normMatch || normMatch.index === undefined) continue;
-    seen.add(dp.name);
-    extra.push({
-      severity: dp.severity,
-      pattern: dp.name,
-      description: `${dp.description} (obfuscated)`,
-      file: filePath,
-      line: 1,
-      evidence: normMatch[0].replace(/\s+/g, ' ').trim().slice(0, 120),
-    });
   }
   return extra;
 }
+
+const collectPromptInjectionFindings = collectDeobfuscatedFindings;
 
 function countFindings(findings: ScanFinding[]): Record<FindingSeverity, number> {
   return {

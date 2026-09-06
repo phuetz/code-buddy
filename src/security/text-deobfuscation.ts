@@ -13,8 +13,31 @@
  * security layer rather than a cross-lane import. Keep the two in sync.
  */
 
-/** Hard cap so a huge skill cannot explode decode work. */
-const MAX_SCAN_CHARS = 256 * 1024;
+export const SCAN_WINDOW_SIZE = 256 * 1024;
+export const SCAN_WINDOW_OVERLAP = 4 * 1024;
+
+/**
+ * Slice text into overlapping scan windows so that large files cannot evade
+ * regex scanning by stuffing content past the first 256 KB.
+ * Overlap guarantees that patterns spanning window boundaries are not cut.
+ */
+export function sliceScanWindows(
+  text: string,
+  windowSize = SCAN_WINDOW_SIZE,
+  overlap = SCAN_WINDOW_OVERLAP,
+): string[] {
+  if (text.length <= windowSize) {
+    return [text];
+  }
+  const windows: string[] = [];
+  const step = Math.max(1, windowSize - overlap);
+  for (let offset = 0; offset < text.length; offset += step) {
+    windows.push(text.slice(offset, offset + windowSize));
+    if (offset + windowSize >= text.length) break;
+  }
+  return windows;
+}
+
 const MAX_PERCENT_BLOB = 8 * 1024;
 const MAX_BASE64_BLOB = 8 * 1024;
 const MAX_BASE64_BLOBS = 32;
@@ -62,7 +85,7 @@ export function deobfuscateText(text: string): string {
     // Remove zero-width characters and soft hyphens
     .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '')
     // Rejoin hyphenated words across lines: e.g. "jail-\nbreak" -> "jailbreak"
-    .replace(/(\w+)-[\r\n]+\s*(\w+)/g, '$1$2')
+    .replace(/(?<=\w)-[\r\n]+\s*(?=\w)/g, '')
     // Remove HTML comments
     .replace(/<!--[\s\S]*?-->/g, ' ')
     // Remove HTML tags
@@ -83,18 +106,75 @@ export function deobfuscateText(text: string): string {
 }
 
 /**
- * Scanner-facing de-obfuscation: one bounded pass that also folds bidi/format
- * controls, a single percent-decode, NFKC + diacritic strip, a homoglyph table,
- * and a single layer of strict Base64 (≥16 chars). Used by `scanSkillFirewall`.
+ * Text de-obfuscation variant for the safe scanning layer:
+ * Preserves line breaks (`\n`) and only rejoins hyphenated word-wraps across lines,
+ * preventing cross-paragraph pattern matching (such as `curl` ... `| bash`).
  */
-export function deobfuscateForScan(text: string): string {
-  const src = text.length > MAX_SCAN_CHARS ? text.slice(0, MAX_SCAN_CHARS) : text;
-  const folded = foldForScan(src);
-  const fromB64 = decodeBase64Blobs(src)
-    .map((plain) => foldForScan(plain))
-    .filter((plain) => plain.length > 0);
-  if (fromB64.length === 0) return folded;
-  return `${folded}\n${fromB64.join('\n')}`;
+function deobfuscateSafeText(text: string): string {
+  return text
+    // Remove zero-width characters and soft hyphens
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '')
+    // Rejoin hyphenated words across lines: e.g. "jail-\nbreak" -> "jailbreak"
+    .replace(/(?<=\w)-[\r\n]+\s*(?=\w)/g, '')
+    // Remove HTML comments (preserve newline if multi-line so lines don't merge)
+    .replace(/<!--[\s\S]*?-->/g, (match) => (match.includes('\n') ? '\n' : ' '))
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, ' ')
+    // Normalize unicode canonical composition
+    .normalize('NFKC')
+    // Map common Cyrillic confusable homoglyphs to Latin equivalents
+    .replace(/\u043e/gi, 'o')
+    .replace(/\u0430/gi, 'a')
+    .replace(/\u0435/gi, 'e')
+    .replace(/\u0440/gi, 'p')
+    .replace(/\u0441/gi, 'c')
+    .replace(/\u0456/gi, 'i')
+    .replace(/\u0443/gi, 'y')
+    .replace(/\u0445/gi, 'x')
+    // Preserve newlines while normalizing line endings and collapsing horizontal whitespace
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
+/**
+ * Safe layer of text de-obfuscation:
+ * Strips format/bidi controls (\p{Cf}), applies homoglyph mappings,
+ * unicode normalizations (NFKC/NFKD + diacritic strip), zero-width characters,
+ * hyphenated line-wraps, and HTML comments/tags.
+ * Safe for all pattern capabilities without risk of false positives from
+ * decoding Base64 or URL-percent blobs.
+ */
+function foldSafeForScan(text: string): string {
+  const stripped = text.replace(/\p{Cf}/gu, '');
+  const pre = applyHomoglyphs(stripped);
+  const folded = pre
+    .normalize('NFKC')
+    .normalize('NFKD')
+    .replace(/\p{Mn}/gu, '');
+  const mapped = applyHomoglyphs(folded);
+  return deobfuscateSafeText(mapped);
+}
+
+/**
+ * Safe layer of text de-obfuscation across windows:
+ * Strips format/bidi controls (\p{Cf}), applies homoglyph mappings,
+ * unicode normalizations (NFKC/NFKD + diacritic strip), zero-width characters,
+ * hyphenated line-wraps, and HTML comments/tags.
+ * Safe for all pattern capabilities without risk of false positives from
+ * decoding Base64 or URL-percent blobs.
+ */
+export function deobfuscateSafeForScanWindows(text: string): string[] {
+  return sliceScanWindows(text).map((win) => foldSafeForScan(win));
+}
+
+export function deobfuscateSafeForScan(text: string): string {
+  if (text.length <= SCAN_WINDOW_SIZE) {
+    return foldSafeForScan(text);
+  }
+  return deobfuscateSafeForScanWindows(text).join('\n');
 }
 
 function foldForScan(text: string): string {
@@ -109,6 +189,35 @@ function foldForScan(text: string): string {
     .replace(/\p{Mn}/gu, '');
   const mapped = applyHomoglyphs(folded);
   return deobfuscateText(mapped);
+}
+
+/**
+ * Scanner-facing de-obfuscation across windows: one bounded pass that also folds
+ * bidi/format controls, a single percent-decode, NFKC + diacritic strip, a homoglyph
+ * table, and a single layer of strict Base64 (≥16 chars). Used by `scanSkillFirewall`
+ * for prompt-injection capabilities.
+ */
+export function deobfuscateForScanWindows(text: string): string[] {
+  return sliceScanWindows(text).map((win) => {
+    const folded = foldForScan(win);
+    const fromB64 = decodeBase64Blobs(win)
+      .map((plain) => foldForScan(plain))
+      .filter((plain) => plain.length > 0);
+    if (fromB64.length === 0) return folded;
+    return `${folded}\n${fromB64.join('\n')}`;
+  });
+}
+
+export function deobfuscateForScan(text: string): string {
+  if (text.length <= SCAN_WINDOW_SIZE) {
+    const folded = foldForScan(text);
+    const fromB64 = decodeBase64Blobs(text)
+      .map((plain) => foldForScan(plain))
+      .filter((plain) => plain.length > 0);
+    if (fromB64.length === 0) return folded;
+    return `${folded}\n${fromB64.join('\n')}`;
+  }
+  return deobfuscateForScanWindows(text).join('\n');
 }
 
 function decodePercentOnce(text: string): string {
