@@ -68,12 +68,38 @@ export interface SensoryRuleStatus {
 
 export interface SensoryStatusView {
   serverReachable: boolean;
+  serverUrl: string;
   serverMessage: string;
   flags: SensoryStatusFlags;
   heartbeat: { source: DisplayHeartbeatSource; lastBeatAt: number | null; lastBeatAgoSec: number | null; beat?: number };
   treatments: SensoryTreatmentCadence[];
   recent: SensoryRecentPerception[];
   rules: SensoryRuleStatus[];
+}
+
+export function resolveSensoryServerUrl(
+  serverUrl?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const configured = serverUrl ?? env.CODEBUDDY_SERVER_URL;
+  if (configured?.trim()) return configured.trim().replace(/\/+$/, '');
+
+  const host = env.CODEBUDDY_SERVER_HOST ?? '127.0.0.1';
+  const port = env.CODEBUDDY_SERVER_PORT ?? env.PORT ?? '3000';
+  return `http://${host}:${port}`;
+}
+
+export async function isServerReachableHttp(baseUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { status?: string; checks?: { sensoryBridge?: string } };
+    return data?.checks?.sensoryBridge === 'ok' || (data?.status === 'ok' && data?.checks?.sensoryBridge !== 'error');
+  } catch {
+    return false;
+  }
 }
 
 const RECENT_CAP = 5;
@@ -230,27 +256,42 @@ export interface CollectSensoryStatusDeps {
   listRules?: () => Promise<SensoryRule[]>;
   listRuns?: (limit: number) => Promise<Array<{ ts: number; rule: string }>>;
   env?: NodeJS.ProcessEnv;
+  serverUrl?: string;
+  checkHttp?: (url: string) => Promise<boolean>;
 }
 
 export async function collectSensoryStatus(
   deps: CollectSensoryStatusDeps = {},
 ): Promise<SensoryStatusView> {
   const nowMs = (deps.now ?? Date.now)();
+  const env = deps.env ?? process.env;
+  const serverUrl = resolveSensoryServerUrl(deps.serverUrl, env);
   const snapshot = deps.snapshot === undefined ? readSensoryStatusSnapshot() : deps.snapshot;
   const alive = snapshot ? (deps.pidAlive ?? isPidAlive)(snapshot.pid) : false;
 
+  let serverReachable = alive;
   let serverMessage: string;
-  if (!snapshot) {
-    serverMessage = 'serveur non joignable';
-  } else if (!alive) {
+
+  if (alive && snapshot) {
     const age = agoSec(snapshot.updatedAt, nowMs);
-    serverMessage = `serveur non joignable (dernier état pid ${snapshot.pid}${age !== null ? `, il y a ${age} s` : ''})`;
+    serverMessage = `serveur pid ${snapshot.pid} en cours sur ${serverUrl}${age !== null ? ` (mis à jour il y a ${age} s)` : ''}`;
   } else {
-    const age = agoSec(snapshot.updatedAt, nowMs);
-    serverMessage = `serveur pid ${snapshot.pid} en cours${age !== null ? ` (mis à jour il y a ${age} s)` : ''}`;
+    const checkFn = deps.checkHttp ?? isServerReachableHttp;
+    const httpOk = await checkFn(serverUrl);
+    if (httpOk) {
+      serverReachable = true;
+      serverMessage = `serveur joignable sur ${serverUrl}`;
+    } else if (!snapshot) {
+      serverReachable = false;
+      serverMessage = `serveur non joignable sur ${serverUrl}`;
+    } else {
+      serverReachable = false;
+      const age = agoSec(snapshot.updatedAt, nowMs);
+      serverMessage = `serveur non joignable sur ${serverUrl} (dernier état pid ${snapshot.pid}${age !== null ? `, il y a ${age} s` : ''})`;
+    }
   }
 
-  const flags = snapshot?.flags ?? flagsFromEnv(deps.env ?? process.env);
+  const flags = snapshot?.flags ?? flagsFromEnv(env);
   const hb = snapshot?.heartbeat;
   const lastBeatAt = hb?.lastBeatAt ?? null;
 
@@ -275,7 +316,8 @@ export async function collectSensoryStatus(
   }
 
   return {
-    serverReachable: alive,
+    serverReachable,
+    serverUrl,
     serverMessage,
     flags,
     heartbeat: {

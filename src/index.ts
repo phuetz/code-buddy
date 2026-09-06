@@ -1115,6 +1115,9 @@ async function processPromptHeadless(
         const current = existing ?? (await sessionStore.loadSession(sessionId));
         const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
         runStore = RunStoreClass.getInstance();
+        const { auditLogger } = await import('./security/audit-logger.js');
+        const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+        auditLogger.init({ logDir: auditDir, sessionId });
         runId = runStore.startRun('headless prompt', {
           channel: 'terminal',
           sessionId,
@@ -1438,17 +1441,28 @@ async function processPromptHeadless(
     }
     return 1;
   } finally {
+    if (runStore && runId) {
+      try {
+        if (agent) {
+          const ext = agent.getSessionCostExtended?.();
+          if (ext) {
+            runStore.updateMetrics(runId, {
+              promptTokens: ext.inputTokens,
+              completionTokens: ext.outputTokens,
+              totalTokens: ext.inputTokens + ext.outputTokens,
+              totalCost: ext.total,
+            });
+          }
+        }
+        runStore.endRun(runId, runStatus);
+        runStore.dispose();
+      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
+    }
     if (interactionLogger) {
       try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end headless interaction logger session', { error: String(e) }); }
     }
     if (agent) {
       try { agent.dispose({ skipSessionLearning: true }); } catch (e) { logger.debug('Headless agent cleanup skipped', { error: String(e) }); }
-    }
-    if (runStore && runId) {
-      try {
-        runStore.endRun(runId, runStatus);
-        runStore.dispose();
-      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
     }
     try {
       const { resetMCPClient } = await import('./mcp/mcp-client.js');
@@ -2467,13 +2481,29 @@ program
         try {
           const { RunStore } = await import('./observability/run-store.js');
           const runStore = RunStore.getInstance();
+          const { auditLogger } = await import('./security/audit-logger.js');
+          const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+          auditLogger.init({ logDir: auditDir });
           const runId = runStore.startRun('interactive session', {
             channel: 'terminal',
             tags: ['interactive', model || 'unknown'],
           });
           agent.setRunId(runId);
           const cleanupRun = () => {
-            try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
+            try {
+              if (agent) {
+                const ext = agent.getSessionCostExtended?.();
+                if (ext) {
+                  runStore.updateMetrics(runId, {
+                    promptTokens: ext.inputTokens,
+                    completionTokens: ext.outputTokens,
+                    totalTokens: ext.inputTokens + ext.outputTokens,
+                    totalCost: ext.total,
+                  });
+                }
+              }
+              runStore.endRun(runId, 'completed');
+            } catch (_err) { /* ignore */ }
           };
           process.on('exit', cleanupRun);
         } catch (err) {

@@ -212,6 +212,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
 
   // Trust proxy (for rate limiting behind reverse proxy)
   app.set('trust proxy', 1);
+  app.set('authEnabled', config.authEnabled);
 
   // Request ID middleware
   app.use(requestIdMiddleware);

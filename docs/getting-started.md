@@ -32,6 +32,14 @@ npm link            # exposes `buddy` globally (or use: npm start / node dist/in
 # The npm release can lag the source; use @latest and check `buddy --version`.
 npm install -g @phuetz/code-buddy@latest
 
+# Note on npm >= 11: install-scripts are blocked by default during global installation.
+# Code Buddy includes 18 optional native packages (better-sqlite3, sharp, node-pty,
+# tree-sitter*, onnxruntime-node, usearch, etc.). They fall back gracefully to pure JS / JSON
+# when uncompiled, but to enable full native acceleration, allow compilation with:
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+# or selectively for SQLite:
+npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
+
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
 ```
@@ -421,7 +429,19 @@ buddy fleet policy review bash
 
 `buddy server` also exposes an OpenAI-compatible `/v1/chat/completions`
 route. In production it requires a `JWT_SECRET` and a signed bearer token
-(see [Security](security.md)); for a quick local check against your own
+(see [Security](security.md)).
+
+You can mint a signed bearer token with `buddy token` (or its fleet alias `buddy fleet token`):
+
+```bash
+# Mint a token for local or peer use
+JWT_SECRET="your-secret" buddy token --user alice
+
+# Or using the fleet subcommand:
+JWT_SECRET="your-secret" buddy fleet token --user alice --ttl 24h
+```
+
+For a quick local check against your own
 machine, start the server with `--no-auth` and bind it to loopback so it
 never leaves your machine:
 
