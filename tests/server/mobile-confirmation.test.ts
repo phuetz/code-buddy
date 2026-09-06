@@ -449,4 +449,60 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
     chatOnly.ws.close();
     toolsUser.ws.close();
   });
+
+  it('C-2 approvalCapable is cleared when omitted or false in status, and on socket close — Telegram fallback resumes', async () => {
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    expect(collectApprovalSurfaceIds()).toEqual([expect.any(String)]);
+
+    const requestApproval = vi.fn(async () => true);
+    ConfirmationService.getInstance().setRemoteApprovalService({
+      hasChannels: () => true,
+      requestApproval,
+    } as never);
+
+    // 1. Send status omitting approvalCapable (payload: {})
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: {} }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+
+    // Verify approvalCapable is now false / collectApprovalSurfaceIds is empty
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // Request confirmation: PWA must NOT receive confirmation_required, and Telegram fallback must resume
+    pwa.events.length = 0;
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'fallback.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await expect(pending).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(pwa.events.some((e) => e.type === 'confirmation_required')).toBe(false);
+
+    // 2. Re-enable via status
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    // 3. Clear explicitly with approvalCapable: false
+    pwa.events.length = 0;
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: false } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 4. Re-enable, then close socket: verify collectApprovalSurfaceIds is empty and fallback resumes
+    pwa.events.length = 0;
+    pwa.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => pwa.events.some((e) => e.type === 'status'));
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    pwa.ws.close();
+    await waitUntil(() => collectApprovalSurfaceIds().length === 0);
+
+    requestApproval.mockClear();
+    const pendingAfterClose = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'fallback-after-close.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    await expect(pendingAfterClose).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+  });
 });

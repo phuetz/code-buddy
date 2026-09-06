@@ -262,6 +262,7 @@ function cleanupWebSocketExtensions(state: ConnectionState): void {
 }
 
 function resetWebSocketExtensionsForIdentityChange(state: ConnectionState): void {
+  state.approvalCapable = false;
   cleanupWebSocketExtensions(state);
   state.extensionsCleaned = false;
 }
@@ -1014,6 +1015,7 @@ messageHandlers.set('status', async (ws, state, payload) => {
     if (state.authenticated && !state.anonymousRemote && state.scopes.includes('tools')) {
       state.approvalCapable = true;
     } else {
+      state.approvalCapable = false;
       logger.warn('[ws] status approvalCapable ignored — requires authenticated non-anonymous socket with tools scope', {
         connectionId: state.id,
         authenticated: state.authenticated,
@@ -1021,6 +1023,8 @@ messageHandlers.set('status', async (ws, state, payload) => {
         scopes: state.scopes,
       });
     }
+  } else {
+    state.approvalCapable = false;
   }
   send(ws, buildGatewayStatus({
     connection: {
@@ -1451,6 +1455,7 @@ export async function setupWebSocket(
     });
 
     ws.on('close', () => {
+      state.approvalCapable = false;
       rejectQueuedPeerHandlers(state, 'WebSocket closed before peer request execution');
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
@@ -1460,6 +1465,7 @@ export async function setupWebSocket(
 
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
+      state.approvalCapable = false;
       rejectQueuedPeerHandlers(state, 'WebSocket failed before peer request execution');
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
@@ -1476,6 +1482,7 @@ export async function setupWebSocket(
 
     for (const [ws, state] of connections.entries()) {
       if (shouldTerminateIdleWs(state, now, idleTimeoutMs)) {
+        state.approvalCapable = false;
         abortActiveTurn(state);
         cleanupWebSocketExtensions(state);
         ws.terminate();
@@ -1618,6 +1625,7 @@ export function broadcast(
  */
 export function closeAllConnections(): void {
   for (const [ws, state] of connections.entries()) {
+    state.approvalCapable = false;
     abortActiveTurn(state);
     cleanupWebSocketExtensions(state);
     ws.close(1001, 'Server shutting down');
