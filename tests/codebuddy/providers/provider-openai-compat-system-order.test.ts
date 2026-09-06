@@ -189,6 +189,29 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
     expect(urls().some((url) => url.includes('/v1/chat/completions'))).toBe(false);
   });
 
+  it('LOCAL (Ollama multimodal): stays on /v1 SDK path when payload has parts', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    const { urls } = stubOllamaWire();
+    const provider = makeProvider('http://127.0.0.1:11435/v1', 'moondream');
+    const { create } = stubClient(provider);
+    try {
+      await provider.chat([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'describe' },
+            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,123' } },
+          ],
+        } as never,
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(urls()).toEqual([]);
+  });
+
   it('LOCAL (LM Studio on 11435): stays on the OpenAI-compat /v1 SDK path', async () => {
     process.env.CODEBUDDY_PROVIDER = 'lmstudio';
     const { urls } = stubOllamaWire();

@@ -10,6 +10,9 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from '../../utils/logger.js';
+import { isDirectLoopbackRequest } from '../middleware/auth.js';
+import { verifyToken } from '../auth/jwt.js';
+import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,7 +32,14 @@ export const MOBILE_PWA_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  // `blob:` is required by the photo features and is NOT a weakening: a blob
+  // URL is minted by this page for bytes it already holds, it cannot be forged
+  // by a third party, and it is strictly narrower than the `data:` already
+  // allowed. Two paths need it — the composer resizes a picked photo through an
+  // <img> fed by URL.createObjectURL, and an album thumbnail must be FETCHED
+  // (the album route is authenticated, so a plain <img src> would carry no
+  // token) and then displayed from the resulting blob.
+  "img-src 'self' data: blob:",
   "connect-src 'self' ws: wss:",
   "font-src 'self'",
   "form-action 'self'",
@@ -88,6 +98,90 @@ mobilePwaRouter.use(
   }),
 );
 
+/**
+ * The album carries the couple's photos, so unlike the PWA shell it is NOT
+ * public. This router is mounted BEFORE the global auth middleware (the shell
+ * has to be reachable without a token), so the guard is enforced here: a valid
+ * JWT, or a DIRECT loopback request — the same standard `requireLocal-
+ * AnonymousAccess` applies, no proxy assertion is trusted.
+ */
+export function requireAlbumAccess(req: Request, res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const secret = process.env.JWT_SECRET ?? '';
+  if (token && secret && verifyToken(token, secret)) {
+    next();
+    return;
+  }
+  if (isDirectLoopbackRequest(req.socket.remoteAddress, req.headers)) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: 'Unauthorized', message: 'Album access requires a token' });
+}
+
+const ALBUM_ID = /^[0-9a-f]{64}$/;
+
+mobilePwaRouter.get('/album', requireAlbumAccess, async (_req: Request, res: Response) => {
+  try {
+    // Never a path: the response carries opaque ids and metadata only.
+    res.json({ entries: await listAlbum() });
+  } catch (error) {
+    logger.warn('Mobile album listing failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.json({ entries: [] });
+  }
+});
+
+mobilePwaRouter.get('/album/:id', requireAlbumAccess, async (req: Request, res: Response) => {
+  const id = String(req.params.id ?? '');
+  if (!ALBUM_ID.test(id)) {
+    res.status(400).json({ error: 'Bad request', message: 'Invalid album id' });
+    return;
+  }
+  const entry = await readAlbumEntry(id);
+  if (!entry) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.setHeader('Content-Type', entry.mimeType);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.end(entry.bytes);
+});
+
+mobilePwaRouter.post('/album/:id/favorite', requireAlbumAccess, async (req: Request, res: Response) => {
+  const id = String(req.params.id ?? '');
+  if (!ALBUM_ID.test(id)) {
+    res.status(400).json({ error: 'Bad request', message: 'Invalid album id' });
+    return;
+  }
+  const favorite = (req.body as { favorite?: unknown } | undefined)?.favorite !== false;
+  const { setSharedPhotoFavorite } = await import('../../companion/shared-photos.js');
+  const updated = await setSharedPhotoFavorite(id, favorite);
+  if (!updated) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.json({ id, favorite: updated.favorite === true });
+});
+
+mobilePwaRouter.delete('/album/:id', requireAlbumAccess, async (req: Request, res: Response) => {
+  const id = String(req.params.id ?? '');
+  if (!ALBUM_ID.test(id)) {
+    res.status(400).json({ error: 'Bad request', message: 'Invalid album id' });
+    return;
+  }
+  const { deleteSharedPhoto } = await import('../../companion/shared-photos.js');
+  const removed = await deleteSharedPhoto(id);
+  if (!removed) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.json({ id, deleted: true });
+});
+
 mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -98,6 +192,8 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
       '/__codebuddy__/mobile/manifest.webmanifest',
       '/__codebuddy__/mobile/sw.js',
       '/__codebuddy__/mobile/status',
+      '/__codebuddy__/mobile/album',
+      '/__codebuddy__/mobile/album/{id}',
       '/__codebuddy__/mobile/assets/{*path}',
     ],
   });

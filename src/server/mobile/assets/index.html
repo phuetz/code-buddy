@@ -56,7 +56,10 @@
             ↓ <span id="unread-count" class="unread-count hidden">0</span>
           </button>
           <div id="suggestions" class="suggestions" aria-label="Suggestions"></div>
+          <div id="attach-preview" class="attach-preview hidden" aria-label="Photos à envoyer"></div>
           <form id="composer" class="composer">
+            <button type="button" id="attach-btn" class="btn icon touch" aria-label="Envoyer une photo">📷</button>
+            <input id="attach-input" class="visually-hidden" type="file" accept="image/*" capture="environment" multiple>
             <button type="button" id="emoji-btn" class="btn icon touch" aria-label="Émojis" aria-expanded="false" aria-controls="emoji-picker">😊</button>
             <button type="button" id="mic-btn" class="btn icon touch" aria-label="Dictée">🎤</button>
             <textarea id="message-input" rows="1" placeholder="Message…" aria-label="Message"></textarea>
@@ -68,6 +71,15 @@
             <div id="emoji-cats" class="emoji-cats" role="tablist"></div>
             <div id="emoji-grid" class="emoji-grid" role="tabpanel"></div>
           </div>
+        </section>
+
+        <section id="album-section" class="panel hidden">
+          <div class="section-header">
+            <h2>Album</h2>
+            <button type="button" id="refresh-album" class="btn icon touch" aria-label="Actualiser">↻</button>
+          </div>
+          <p id="album-empty" class="album-empty hidden">Aucune photo pour l’instant. Envoie-lui la première.</p>
+          <div id="album-grid" class="album-grid"></div>
         </section>
 
         <section id="runs-section" class="panel hidden">
@@ -92,6 +104,7 @@
 
       <nav class="bottom-nav">
         <button type="button" class="nav-item active" data-section="chat-section">Chat</button>
+        <button type="button" class="nav-item" data-section="album-section">Album</button>
         <button type="button" class="nav-item" data-section="runs-section">Runs</button>
         <button type="button" class="nav-item" data-section="confirmations-section">
           Confirm
@@ -145,6 +158,15 @@
 
   <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Image en plein écran">
     <img id="lightbox-img" alt="Image">
+    <div id="lightbox-actions" class="lightbox-actions hidden">
+      <button type="button" id="album-fav-btn" class="btn icon touch" aria-label="Favori">🤍</button>
+      <button type="button" id="album-del-btn" class="btn icon touch danger" aria-label="Supprimer">🗑</button>
+    </div>
+    <p id="album-del-confirm" class="album-del-confirm hidden">
+      <span>Supprimer cette photo ?</span>
+      <button type="button" id="album-del-yes" class="btn danger">Confirmer</button>
+      <button type="button" id="album-del-no" class="btn secondary">Annuler</button>
+    </p>
   </div>
 
   <div id="reaction-bar" class="reaction-bar hidden" role="toolbar" aria-label="Réactions">

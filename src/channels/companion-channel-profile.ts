@@ -117,11 +117,18 @@ export function buildCompanionChannelPrompt(options: {
   history?: ConversationTurn[];
   userText: string;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Turn-scoped system block appended after the relational context — today the
+   * shared-photo reaction contract. Absent (the default) the system prompt is
+   * byte-identical to what it was before photos existed.
+   */
+  extraSystem?: string;
 }): CompanionChannelPrompt {
   const spoken = options.spokenPrompt.trim() || DEFAULT_COMPANION_SPOKEN_PROMPT;
   const relational = options.relationalContext?.trim() ?? '';
   const identity = buildCompanionIdentityBlock(options.env ?? process.env);
-  const system = [identity, spoken, relational].filter(Boolean).join('\n\n');
+  const extra = options.extraSystem?.trim() ?? '';
+  const system = [identity, spoken, relational, extra].filter(Boolean).join('\n\n');
   const history = (options.history ?? [])
     .filter((turn) => turn.content.trim())
     .slice(-COMPANION_CHANNEL_HISTORY_LIMIT)
@@ -145,6 +152,8 @@ export async function assembleCompanionChannelPrompt(options: {
   history?: ConversationTurn[];
   env?: NodeJS.ProcessEnv;
   relationalContext?: string;
+  /** See `buildCompanionChannelPrompt`. Omitted by every non-photo caller. */
+  extraSystem?: string;
 }): Promise<CompanionChannelPrompt> {
   const env = options.env ?? process.env;
   const persona = resolveCompanionPersona(env);
@@ -173,5 +182,6 @@ export async function assembleCompanionChannelPrompt(options: {
     history: options.history,
     userText: options.userText,
     env,
+    ...(options.extraSystem ? { extraSystem: options.extraSystem } : {}),
   });
 }

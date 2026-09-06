@@ -14,74 +14,74 @@ L'analyse du code source d'OmniRoute v3.8.49 révèle un système de routage et 
 
 ### a) Détection des quotas et signaux 429
 OmniRoute implémente une détection à deux niveaux : proactive (avant requête) et réactive (après réponse HTTP).
-- **Classification fine des 429** : [`src/shared/utils/classify429.ts:21-69`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/shared/utils/classify429.ts#L21-L69)
+- **Classification fine des 429** : [`src/shared/utils/classify429.ts:21-69`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/shared/utils/classify429.ts#L21-L69)
   - Fonction `classify429(status, body, headers)` : distingue un rate limit passager d'un épuisement fatal de quota (`QUOTA_PATTERNS` incluant `insufficient_quota`, `exceeded your current quota`, `billing`, `credits`).
   - Fonction `parseRetryAfter(header)` : gère les entiers (secondes), les dates HTTP standard, ainsi que les formats textuels propriétaires comme Groq (`"60s"`, `"5m"`).
-- **Signaux de crédits épuisés** : [`open-sse/services/accountFallback.ts:175-192`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L175-L192)
+- **Signaux de crédits épuisés** : [`open-sse/services/accountFallback.ts:175-192`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L175-L192)
   - Constante `CREDITS_EXHAUSTED_SIGNALS` : capture `insufficient_quota`, `quota_exhausted`, `credit_balance_too_low`, `usage_limit_reached`, `rate_limit_exceeded`.
-  - Fonction `parseRetryAfterFromBody(body)` : [`open-sse/services/accountFallback.ts:1063-1115`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L1063-L1115) extrait `resets_in_seconds`, `resets_at` et timestamps Unix imbriqués dans les réponses d'erreur JSON.
-- **Vérification proactive (Preflight)** : [`open-sse/services/quotaPreflight.ts:21-120`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/quotaPreflight.ts#L21-L120)
+  - Fonction `parseRetryAfterFromBody(body)` : [`open-sse/services/accountFallback.ts:1063-1115`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L1063-L1115) extrait `resets_in_seconds`, `resets_at` et timestamps Unix imbriqués dans les réponses d'erreur JSON.
+- **Vérification proactive (Preflight)** : [`open-sse/services/quotaPreflight.ts:21-120`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/quotaPreflight.ts#L21-L120)
   - `checkQuotaPreflight(connectionId, model)` : consulte le cache des quotas locaux avant l'envoi. Si une connexion est connue comme épuisée ou si la fenêtre glissante est saturée, la requête est déroutée sans consommer de round-trip réseau.
-- **Gestionnaire adaptatif de rate limit** : [`open-sse/services/rateLimitManager.ts:80-115`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/rateLimitManager.ts#L80-L115)
+- **Gestionnaire adaptatif de rate limit** : [`open-sse/services/rateLimitManager.ts:80-115`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/rateLimitManager.ts#L80-L115)
   - Utilise des limiteurs `Bottleneck` ajustés dynamiquement d'après les en-têtes amont (`x-ratelimit-remaining-requests`, `x-ratelimit-reset-requests`, `retry-after`).
 
 ### b) Ordonnancement de la cascade (Cascade Ordering)
 OmniRoute ne se contente pas d'une liste statique ; il applique des stratégies dynamiques d'ordonnancement des cibles :
-- **Boucle de sélection et d'essai** : [`open-sse/services/combo.ts:826-1004`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo.ts#L826-L1004)
+- **Boucle de sélection et d'essai** : [`open-sse/services/combo.ts:826-1004`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo.ts#L826-L1004)
   - Méthode `setTry` : itère à travers les cibles du groupe ("combo"), gère le délai entre essais et applique la permutation selon la stratégie active.
-- **Stratégies de tri multi-critères** : [`open-sse/services/combo/applyStrategyOrdering.ts:43-240`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo/applyStrategyOrdering.ts#L43-L240)
+- **Stratégies de tri multi-critères** : [`open-sse/services/combo/applyStrategyOrdering.ts:43-240`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo/applyStrategyOrdering.ts#L43-L240)
   - Supporte 14 modes : `priority`, `weighted`, `strict-random`, `fill-first`, `p2c` (power of two choices), `least-used`, `cost-optimized`, `reset-aware`, `reset-window`, `context-optimized`, `cache-optimized`, `headroom`, `quota-share`, `auto`.
-- **Tri au coût** : [`open-sse/services/combo/targetSorters.ts:66-90`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo/targetSorters.ts#L66-L90)
+- **Tri au coût** : [`open-sse/services/combo/targetSorters.ts:66-90`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo/targetSorters.ts#L66-L90)
   - `sortModelsByCost` : interroge la base SQLite locale pour obtenir les prix par million de tokens (`input_cost_per_m`, `output_cost_per_m`) et trie les modèles de repli du moins cher au plus onéreux.
-- **Sélection et rotation de connexion** : [`src/sse/services/auth.ts:1509-1661`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/sse/services/auth.ts#L1509-L1661)
+- **Sélection et rotation de connexion** : [`src/sse/services/auth.ts:1509-1661`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/sse/services/auth.ts#L1509-L1661)
   - `selectConnection` : round-robin persistant (sticky) avec pénalité `backoffLevel` pour les clés ayant récemment échoué.
 
 ### c) Transfert de contexte et gestion des fenêtres réduites
 Lorsqu'un repli s'opère vers un modèle ayant un contexte plus restreint, OmniRoute dispose de mécanismes de synthèse et de compression :
-- **Prompt de handoff structuré** : [`open-sse/services/contextHandoff.ts:25-39`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L25-L39)
+- **Prompt de handoff structuré** : [`open-sse/services/contextHandoff.ts:25-39`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L25-L39)
   - `HANDOFF_PROMPT_TEMPLATE` : ordonne au modèle de produire un JSON structuré `{summary, keyDecisions, taskProgress, activeEntities}`.
-- **Sélection et limitation des messages** : [`open-sse/services/contextHandoff.ts:233-266`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L233-L266)
+- **Sélection et limitation des messages** : [`open-sse/services/contextHandoff.ts:233-266`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L233-L266)
   - `selectMessagesForSummary` : bride l'historique transmis pour résumé à 8 000 tokens maximum.
-- **Injection du contexte universel** : [`open-sse/services/contextHandoff.ts:478-495`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L478-L495) et [`724-770`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L724-L770)
+- **Injection du contexte universel** : [`open-sse/services/contextHandoff.ts:478-495`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L478-L495) et [`724-770`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/contextHandoff.ts#L724-L770)
   - `buildUniversalHandoffSystemMessage` et `injectUniversalHandoffBody` : insèrent le résumé dans le prompt système du nouveau modèle cible.
-- **Persistance SQLite des handoffs** : [`src/lib/db/contextHandoffs.ts:80-115`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/contextHandoffs.ts#L80-L115)
+- **Persistance SQLite des handoffs** : [`src/lib/db/contextHandoffs.ts:80-115`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/contextHandoffs.ts#L80-L115)
   - Table `context_handoffs` indexée par session / hash de requête, avec un TTL par défaut de 5 heures.
-- **Compression de repli proactive** : [`open-sse/services/combo.ts:1100-1129`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo.ts#L1100-L1129)
+- **Compression de repli proactive** : [`open-sse/services/combo.ts:1100-1129`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/combo.ts#L1100-L1129)
   - Active `fallbackCompressionMode` si le modèle cible possède un contexte inférieur à la taille de la requête.
-- **Reprise de flux à mi-course (Stream Recovery)** : [`open-sse/services/streamRecovery.ts:38-104`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L38-L104) et [`174-270`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L174-L270)
+- **Reprise de flux à mi-course (Stream Recovery)** : [`open-sse/services/streamRecovery.ts:38-104`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L38-L104) et [`174-270`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L174-L270)
   - `HoldbackBuffer` : temporise les premiers chunks SSE.
   - `scanOpenAiSseText` & `makeContinuationBody` : en cas de coupure réseau, génère un corps de requête injectant le préfixe texte déjà reçu pour continuer la génération.
-  - **Règle stricte sur les tool calls** ([ligne 177](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L177)) : `sawToolCall` $\rightarrow$ si un appel d'outil partiel a été détecté dans le flux interrompu, **OmniRoute refuse expressément la reprise partielle** car l'état de l'argument JSON ne peut être garanti.
+  - **Règle stricte sur les tool calls** ([ligne 177](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/streamRecovery.ts#L177)) : `sawToolCall` $\rightarrow$ si un appel d'outil partiel a été détecté dans le flux interrompu, **OmniRoute refuse expressément la reprise partielle** car l'état de l'argument JSON ne peut être garanti.
 
 ### d) Rétablissement du fournisseur principal (Primary Recovery)
-- **Détection de fin de fenêtre d'épuisement** : [`src/domain/quotaCache.ts:112-125`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/quotaCache.ts#L112-L125)
+- **Détection de fin de fenêtre d'épuisement** : [`src/domain/quotaCache.ts:112-125`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/quotaCache.ts#L112-L125)
   - `advancedWindowResetAt` : si `resetMs <= Date.now()`, remet immédiatement à zéro l'état d'épuisement (`exhausted = false`).
-- **Décroissance des compteurs d'échec** : [`open-sse/services/accountFallback.ts:763-785`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L763-L785)
+- **Décroissance des compteurs d'échec** : [`open-sse/services/accountFallback.ts:763-785`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L763-L785)
   - `decayModelFailureCount` : applique une décroissance exponentielle du niveau d'échec au fil du temps.
-- **Vérification de cooldown** : [`open-sse/services/accountFallback.ts:935-948`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L935-L948)
+- **Vérification de cooldown** : [`open-sse/services/accountFallback.ts:935-948`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/accountFallback.ts#L935-L948)
   - `isProviderInCooldown` : contrôle si la période d'isolement est échue avant de réautoriser le dispatch principal.
 
 ### e) Mémoire des pannes et TTL
 - **Tables SQLite dédiées** :
-  - `quota_snapshots` ([`src/lib/db/quotaSnapshots.ts`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/quotaSnapshots.ts))
-  - `quota_reset_events` ([`src/lib/db/quotaResetEvents.ts`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/quotaResetEvents.ts))
+  - `quota_snapshots` ([`src/lib/db/quotaSnapshots.ts`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/quotaSnapshots.ts))
+  - `quota_reset_events` ([`src/lib/db/quotaResetEvents.ts`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/lib/db/quotaResetEvents.ts))
   - `provider_connections` colonnes `rateLimitedUntil` et `backoffLevel`.
 - **Circuit breaker à mémoire partagée** : persistance synchronisée entre mémoire volatile et SQLite pour survivre aux redémarrages du daemon OmniRoute.
 
 ### f) Observabilité
-- **En-têtes HTTP de décision** : [`src/domain/omnirouteResponseMeta.ts:83-190`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/omnirouteResponseMeta.ts#L83-L190)
+- **En-têtes HTTP de décision** : [`src/domain/omnirouteResponseMeta.ts:83-190`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/omnirouteResponseMeta.ts#L83-L190)
   - `X-OmniRoute-Provider` : identifiant du fournisseur ayant répondu.
   - `X-OmniRoute-Model` : modèle effectif.
   - `X-OmniRoute-Decision` : raison de la décision (ex. `fallback_after_429`).
   - `X-OmniRoute-Fallback-Attempts` : nombre d'essais préalables infructueux.
   - `X-OmniRoute-Latency-Ms` : durée totale incluant les tentatives avortées.
-- **Commentaires SSE pour flux temps réel** : [`src/domain/omnirouteResponseMeta.ts:192-201`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/omnirouteResponseMeta.ts#L192-L201)
+- **Commentaires SSE pour flux temps réel** : [`src/domain/omnirouteResponseMeta.ts:192-201`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/src/domain/omnirouteResponseMeta.ts#L192-L201)
   - `buildOmniRouteSseMetadataComment` : émet `: omniroute-meta: {...}` directement dans le flux SSE.
 
 ### g) Moteurs de compression RTK et Caveman
-- **RTK (Runtime Toolkit / Shell log deduplication)** : [`open-sse/services/compression/engines/rtk/`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/compression/engines/rtk/)
+- **RTK (Runtime Toolkit / Shell log deduplication)** : [`open-sse/services/compression/engines/rtk/`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/compression/engines/rtk/)
   - Détecte les sorties de commandes de build ou logs redondants et applique un diff condensé.
-- **Caveman (Condensation sémantique)** : [`open-sse/services/compression/caveman.ts`](file:///home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/compression/caveman.ts)
+- **Caveman (Condensation sémantique)** : [`open-sse/services/compression/caveman.ts`](~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/services/compression/caveman.ts)
   - Élimine le bavardage conversationnel ("Sure, I can help with that...") pour maximiser le token-headroom avant fallback.
 
 ---
@@ -91,36 +91,36 @@ Lorsqu'un repli s'opère vers un modèle ayant un contexte plus restreint, OmniR
 Code Buddy a intégré aujourd'hui une cascade déclarative opt-in pilotée par variables d'environnement.
 
 ### a) Détection des erreurs et classification
-- **Classificateur d'erreurs** : [`src/codebuddy/provider-error-classifier.ts:11-93`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-error-classifier.ts#L11-L93)
+- **Classificateur d'erreurs** : [`src/codebuddy/provider-error-classifier.ts:11-93`](~/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-error-classifier.ts#L11-L93)
   - `classifyProviderError` : analyse les statuts HTTP (429, 402, 403, 503, 529), les messages textuels et les en-têtes `Retry-After`.
-- **Typologie des pannes** : [`src/codebuddy/provider-failover-kind.ts:24-95`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-failover-kind.ts#L24-L95)
+- **Typologie des pannes** : [`src/codebuddy/provider-failover-kind.ts:24-95`](~/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-failover-kind.ts#L24-L95)
   - 5 catégories : `quota_exhausted`, `overloaded`, `unreachable`, `auth`, `other`.
   - `extractResetsInSeconds` : extrait `resets_in_seconds` et `resets_at` depuis le JSON de retour de ChatGPT/Codex.
 
 ### b) Ordonnancement de la cascade
-- **Chaîne déclarative** : [`src/providers/provider-failover-policy.ts:24-170`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-failover-policy.ts#L24-L170)
+- **Chaîne déclarative** : [`src/providers/provider-failover-policy.ts:24-170`](~/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-failover-policy.ts#L24-L170)
   - `CODEBUDDY_PROVIDER_FALLBACK=true` active la politique.
   - `CODEBUDDY_FALLBACK_CHAIN='chatgpt>ollama:qwen3:4b-instruct@http://127.0.0.1:11435'` est parsée par `parseFallbackChain`.
   - Ordonnancement : strictement séquentiel et statique d'après la déclaration de l'utilisateur.
-  - *Note d'architecture* : Code Buddy possède un sous-système distinct historique dans [`src/providers/active-llm-registry.ts`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/providers/active-llm-registry.ts) et [`src/index.ts:698-740`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/index.ts#L698-L740) (`applyActiveLlmFailover`, `CODEBUDDY_LLM_FAILOVER=1`, politiques `resilience`, `free-first`, `manual`), coexistant avec `CODEBUDDY_PROVIDER_FALLBACK`.
+  - *Note d'architecture* : Code Buddy possède un sous-système distinct historique dans [`src/providers/active-llm-registry.ts`](~/DEV/cb-omniroute-etude-2026-09-06/src/providers/active-llm-registry.ts) et [`src/index.ts:698-740`](~/DEV/cb-omniroute-etude-2026-09-06/src/index.ts#L698-L740) (`applyActiveLlmFailover`, `CODEBUDDY_LLM_FAILOVER=1`, politiques `resilience`, `free-first`, `manual`), coexistant avec `CODEBUDDY_PROVIDER_FALLBACK`.
 
 ### c) Transfert de contexte et adaptation
-- **Préparation des messages** : [`src/codebuddy/provider-handoff.ts:22-130`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-handoff.ts#L22-L130)
+- **Préparation des messages** : [`src/codebuddy/provider-handoff.ts:22-130`](~/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/provider-handoff.ts#L22-L130)
   - `repairToolCallPairs` : supprime les `tool_call` orphelins (sans bloc de réponse `tool` correspondant) ou les réponses `tool` isolées pour éviter les rejets de schéma par le LLM suivant.
   - `retruncateSystemPrompt` : réajuste le prompt système selon les plafonds de tokens du modèle de repli.
   - `compactMessagesForModelAsync` : applique la fenêtre glissante via `ContextManagerV2.prepareMessagesRaw`.
   - `buildResumeNote` : injecte une balise informative `<provider_resume>conversation reprise par [provider] suite à [kind]...</provider_resume>`.
   - **Limitation identifiée** : voir Section 4 — le tableau complet `tools` (définitions d'outils) n'est pas compressé ni élagué lors du handoff.
-  - **Flux interrompu à mi-course** : [`src/codebuddy/client.ts:1012-1024`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/client.ts#L1012-L1024)
+  - **Flux interrompu à mi-course** : [`src/codebuddy/client.ts:1012-1024`](~/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/client.ts#L1012-L1024)
     - `yieldedAnyChunk` : si au moins un chunk a été émis vers le consommateur, le repli est interdit et une exception est levée afin de garantir l'intégrité de la réponse et d'éviter les réponses hybrides.
 
 ### d) Rétablissement du fournisseur principal
-- **Vérification de disponibilité** : [`src/codebuddy/client.ts:549-556`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/client.ts#L549-L556) (`maybeReturnToOriginal`)
+- **Vérification de disponibilité** : [`src/codebuddy/client.ts:549-556`](~/DEV/cb-omniroute-etude-2026-09-06/src/codebuddy/client.ts#L549-L556) (`maybeReturnToOriginal`)
   - Lors de chaque nouveau tour, consulte `isProviderUnavailable(primaryId)`.
   - Si l'horodatage `resetsAt` est dépassé (`resetsAt <= Date.now()`), le fournisseur principal est automatiquement réactivé et testé en priorité.
 
 ### e) Mémoire des pannes et TTL
-- **Stockage fichier atomique** : [`src/providers/provider-health.ts:20-160`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-health.ts#L20-L160)
+- **Stockage fichier atomique** : [`src/providers/provider-health.ts:20-160`](~/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-health.ts#L20-L160)
   - Persistance dans `~/.codebuddy/provider-health.json` (permissions 0600) protégé par un fichier `.lock`.
   - Structure :
     ```json
@@ -139,7 +139,7 @@ Code Buddy a intégré aujourd'hui une cascade déclarative opt-in pilotée par 
     ```
 
 ### f) Observabilité
-- **Notifications console** : [`src/providers/provider-failover-policy.ts:180-196`](file:///home/patrice/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-failover-policy.ts#L180-L196)
+- **Notifications console** : [`src/providers/provider-failover-policy.ts:180-196`](~/DEV/cb-omniroute-etude-2026-09-06/src/providers/provider-failover-policy.ts#L180-L196)
   - `notifyProviderFallback` : affiche un avertissement clair en sortie terminal :  
     `WARN [fallback] chatgpt → ollama:qwen3:4b-instruct (quota_exhausted, reset dans 8 h)`
   - Pas d'en-tête HTTP structuré ou de canal dédié d'événement UI pour le companion Lisa.

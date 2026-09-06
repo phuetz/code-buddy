@@ -512,6 +512,11 @@ describe('TelegramChannel', () => {
     });
 
     it('groups every photo in a Telegram album into one multimodal turn', async () => {
+      // The production window is 1.5 s (DEFAULT_TELEGRAM_MEDIA_GROUP_MS) so a
+      // slow uplink still yields ONE reaction; the test shortens it explicitly
+      // instead of waiting on it.
+      const previousWindow = process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS;
+      process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS = '150';
       const messageSpy = jest.fn();
       channel.on('message', messageSpy);
       const base = {
@@ -538,13 +543,15 @@ describe('TelegramChannel', () => {
           photo: [{ file_id: 'back', file_unique_id: '5', width: 800, height: 600 }],
         },
       });
-      await new Promise((resolve) => setTimeout(resolve, 520));
+      await new Promise((resolve) => setTimeout(resolve, 320));
 
       expect(messageSpy).toHaveBeenCalledOnce();
       const message = messageSpy.mock.calls[0][0];
       expect(message.content).toBe('Analyse ce produit thaïlandais');
       expect(message.attachments).toHaveLength(2);
       expect(message.raw).toHaveLength(2);
+      if (previousWindow === undefined) delete process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS;
+      else process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS = previousWindow;
     });
 
     it('should detect location messages', async () => {

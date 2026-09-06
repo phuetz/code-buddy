@@ -464,3 +464,145 @@ textarea, input {
 .risk-low { color: var(--ok); }
 
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
+
+/* --- Photos partagées : composer, prévisualisation, album ------------------ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.attach-preview {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 0;
+  overflow-x: auto;
+}
+
+.attach-thumb {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.attach-thumb img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.attach-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bubble-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.bubble-img.sent {
+  max-width: 46%;
+  border-radius: 10px;
+}
+
+/* `.section-header` carried no rule at all: the refresh button wrapped onto its
+   own line in Runs as well as in Album. One rule fixes both. */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  /* The panel already pads horizontally; only the bottom needs breathing room. */
+  padding: 8px 0 24px;
+}
+
+.album-tile {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+}
+
+.album-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-tile.selfie {
+  outline: 1px solid rgba(255, 138, 190, 0.5);
+  outline-offset: -1px;
+}
+
+.album-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 4px;
+  font-size: 10px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+  text-align: right;
+}
+
+.album-empty {
+  padding: 24px 16px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.lightbox-actions {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+
+.album-del-confirm {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(20, 20, 26, 0.94);
+  color: #fff;
+}

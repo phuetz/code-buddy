@@ -43,6 +43,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => 'Récemment, on a parlé de : la refonte.',
     });
     expect(withEp).toBe(
@@ -54,6 +55,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => null,
     });
     expect(noEp).toBe('');
@@ -65,6 +67,7 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       personalitySummary: () => 'Humeur actuelle : sereine (60/100). Lien : familier.',
     });
     expect(ctx).toBe(
@@ -95,6 +98,7 @@ describe('buildRelationalContext — composition', () => {
     const ctx = await buildRelationalContext({
       factsBlock: () => null,
       episodeBlock: async () => null,
+      photosBlock: async () => null,
       personalitySummary: () => '',
       presenceBlock: async () => '',
       guidanceBlock: () => null,
@@ -108,6 +112,7 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePersonality: false,
       includeGuidance: false,
+      includePhotos: false,
       presenceBlock: async () => '<presence>seul</presence>',
     });
     expect(ctx).toBe('<presence>seul</presence>');
@@ -123,6 +128,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includeGuidance: false,
       includePresence: false,
+      includePhotos: false,
       selfEvolutionBlock: block,
     });
     expect(disabled).toBe('');
@@ -133,6 +139,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includeGuidance: false,
       includePresence: false,
+      includePhotos: false,
       includeSelfEvolution: true,
       selfEvolutionBlock: block,
     });

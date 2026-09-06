@@ -1725,16 +1725,54 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       turn.phase('grounding');
       let attachedImageEvidence: string | undefined;
+      // A photo shared with the companion is not an analysis request: it goes
+      // through the shared-photo pipeline (privacy posture, reaction contract,
+      // album, memory) instead of the analytical evidence card the agent path
+      // uses. See `companion/companion-photo.ts`.
+      let companionPhotos: import('../../companion/companion-photo.js').PreparedCompanionPhotos | null = null;
       const imageAttachmentCount = message.attachments?.filter((attachment) => attachment.type === 'image').length ?? 0;
-      if (imageAttachmentCount > 0) {
+      const telegramFileResolver = channel.type === 'telegram' &&
+        typeof (channel as unknown as { getFileUrl?: unknown }).getFileUrl === 'function'
+        ? (reference: string) => (channel as unknown as { getFileUrl: (fileId: string) => Promise<string> }).getFileUrl(reference)
+        : undefined;
+      if (imageAttachmentCount > 0 && useCompanionProfile) {
+        try {
+          const [{ loadChannelPhotos }, { prepareCompanionPhotos }] = await Promise.all([
+            import('../../companion/companion-photo-intake.js'),
+            import('../../companion/companion-photo.js'),
+          ]);
+          const loaded = await loadChannelPhotos(message.attachments, {
+            ...(telegramFileResolver ? { resolveUrl: telegramFileResolver } : {}),
+            signal: turn.signal,
+          });
+          turn.throwIfAborted();
+          companionPhotos = await prepareCompanionPhotos(loaded, {
+            caption: message.content,
+            model: effectiveRuntime.model,
+            baseUrl: effectiveRuntime.baseUrl,
+          });
+          logger.info('Companion shared-photo perception completed', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            messageHash: hashForLog(message.id),
+            mode: companionPhotos?.mode,
+            accepted: companionPhotos?.photos.length ?? 0,
+            rejected: companionPhotos?.rejected.length ?? 0,
+          });
+        } catch (error) {
+          turn.throwIfAborted();
+          companionPhotos = null;
+          logger.warn('Companion shared-photo perception unavailable', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else if (imageAttachmentCount > 0) {
         const {
           groundAttachedImages,
           renderAttachedImageEvidence,
         } = await import('../../companion/attached-image-grounding.js');
-        const telegramFileResolver = channel.type === 'telegram' &&
-          typeof (channel as unknown as { getFileUrl?: unknown }).getFileUrl === 'function'
-          ? (reference: string) => (channel as unknown as { getFileUrl: (fileId: string) => Promise<string> }).getFileUrl(reference)
-          : undefined;
         const visual = await groundAttachedImages(message.attachments, message.content, {
           ...(telegramFileResolver ? { resolveUrl: telegramFileResolver } : {}),
         });
@@ -1762,12 +1800,14 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         turn.throwIfAborted();
       }
 
-      const agentInput = attachedImageEvidence
-        ? `${message.content}\n\n${attachedImageEvidence}\n\n` +
-          'Réponds à la demande en t’appuyant sur cette fiche visuelle. Distingue les faits visibles des incertitudes.'
-        : imageAttachmentCount > 0
-          ? `${message.content}\n\nL’analyse des images jointes a échoué. Dis-le honnêtement et demande un nouvel envoi net si nécessaire.`
-          : message.content;
+      const agentInput = companionPhotos
+        ? companionPhotos.userText
+        : attachedImageEvidence
+          ? `${message.content}\n\n${attachedImageEvidence}\n\n` +
+            'Réponds à la demande en t’appuyant sur cette fiche visuelle. Distingue les faits visibles des incertitudes.'
+          : imageAttachmentCount > 0
+            ? `${message.content}\n\nL’analyse des images jointes a échoué. Dis-le honnêtement et demande un nouvel envoi net si nécessaire.`
+            : message.content;
       let transientConversationContext: string | undefined;
       let preparedConversation: PreparedConversationTurn | undefined;
       let companionConversationHistory: ConversationTurn[] = [];
@@ -1895,29 +1935,58 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
       } else if (useCompanionProfile) {
         turn.phase('generation');
+        const hasSharedPhotos = (companionPhotos?.photos.length ?? 0) > 0;
         const prompt = await assembleCompanionChannelPrompt({
           userText: agentInput,
           history: companionConversationHistory.length
             ? companionConversationHistory
             : companionChannelHistories.get(sessionKey),
+          ...(hasSharedPhotos && companionPhotos
+            ? { extraSystem: companionPhotos.guidance }
+            : {}),
         });
+        let companionMessages = prompt.messages;
+        if (hasSharedPhotos && companionPhotos?.mode === 'cloud') {
+          const { attachPhotoParts } = await import('../../companion/companion-photo.js');
+          companionMessages = attachPhotoParts(
+            prompt.messages as unknown as Array<{ role: string; content?: unknown }>,
+            companionPhotos.photos,
+          ) as typeof prompt.messages;
+        }
         logger.info('Companion channel profile prompt', {
           channelType: channel.type,
           sessionHash: hashForLog(sessionKey),
           tokenEstimate: prompt.tokenEstimate,
           messageCount: prompt.messages.length,
+          sharedPhotos: companionPhotos?.photos.length ?? 0,
         });
         try {
           const generated = await runCompanionChannelTurn({
             apiKey: effectiveRuntime.apiKey,
             baseUrl: effectiveRuntime.baseUrl,
             model: effectiveRuntime.model,
-            messages: prompt.messages,
+            messages: companionMessages,
             signal: turn.signal,
           });
           turn.throwIfAborted();
           response = generated.text;
           hasGeneratedResponse = response.trim() !== '';
+          if (hasSharedPhotos && companionPhotos) {
+            // The album write is deliberately after the reply: a full disk must
+            // cost the memory, never the reaction.
+            const { rememberSharedPhotos } = await import(
+              '../../companion/shared-photo-memory.js'
+            );
+            const stored = await rememberSharedPhotos(companionPhotos.photos, {
+              surface: 'telegram',
+              caption: message.content,
+            });
+            logger.info('Companion shared photos filed', {
+              channelType: channel.type,
+              sessionHash: hashForLog(sessionKey),
+              stored: stored.length,
+            });
+          }
         } catch (error) {
           turn.throwIfAborted();
           response = speakChannelProviderFailure(error, {
