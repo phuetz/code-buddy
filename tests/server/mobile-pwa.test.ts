@@ -231,6 +231,7 @@ describe('Mobile PWA Assets Validation', () => {
     const app = readFileSync(path.join(assetsDir, 'app.js'), 'utf-8');
     expect(app).toContain('authenticated');
     expect(app).toContain('stream_chunk');
+    expect(app).toContain('payload.image');
     expect(app).toContain('stream_end');
     expect(app).toContain('confirmation_required');
     expect(app).not.toContain('auth_success');

@@ -141,6 +141,7 @@ import { savePrefetchCache } from '../../src/companion/prefetch-engine.js';
 import { savePrefetchItems } from '../../src/companion/prefetch-config.js';
 import { telegramHtmlChunkToPlain } from '../../src/rendering/telegram-html.js';
 import * as lisaSelfieRuntime from '../../src/companion/lisa-selfie.js';
+import * as lisaSelfieRouter from '../../src/companion/lisa-selfie-router.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -238,18 +239,37 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
   });
 
   it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
-    const selfie = vi.spyOn(lisaSelfieRuntime, 'createAndMaybeSendLisaSelfie')
-      .mockImplementation(async (options) => ({
-        success: true,
-        prompt: 'ohwx lisa, portrait',
-        trigger: 'ohwx lisa',
-        imagePath: '/tmp/lisa.png',
-        telegramSent: true,
-        spokenReply: 'Voilà mon cœur.',
-        ...(options.contentTier === 'explicit'
-          ? { success: false, telegramSent: false, error: 'explicit gate' }
-          : {}),
-      }));
+    const tiers: string[] = [];
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie')
+      .mockImplementation(async (text, options) => {
+        if (
+          !lisaSelfieRuntime.isLisaSelfieRequest(text)
+          && !lisaSelfieRuntime.isLisaSelfieContinuationRequest(text, options.hasRecentSelfie === true)
+        ) {
+          return null;
+        }
+        const contentTier = lisaSelfieRuntime.inferLisaContentTier(text);
+        tiers.push(contentTier);
+        if (contentTier === 'explicit') {
+          return {
+            handled: true,
+            caption: 'refus',
+            refused: true,
+            reason: 'explicit-gate',
+            contentTier: 'safe',
+          };
+        }
+        return {
+          handled: true,
+          caption: 'Voilà.',
+          imagePath: join('cache', 'hit.png'),
+          mimeType: 'image/png',
+          refused: false,
+          reason: 'ok',
+          contentTier,
+          style: lisaSelfieRuntime.inferSelfieMood(text),
+        };
+      });
     try {
       const manager = makeManager();
       await registerAIMessageHandler(manager as any);
@@ -262,20 +282,18 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       await manager.emit(makeMessage('Montre moi une autre photo plus sexy', session), channel);
 
       expect(selfie).toHaveBeenCalledTimes(4);
-      expect(selfie.mock.calls.map(([options]) => options.contentTier)).toEqual([
+      expect(tiers).toEqual([
         'safe',
         'safe',
         'safe',
         'sensual',
       ]);
-      expect(selfie.mock.calls[3]?.[0]).toMatchObject({
-        mood: 'bold',
-        contentTier: 'sensual',
-      });
       expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(hoisted.runCompanionChannelTurn).not.toHaveBeenCalled();
 
       await manager.emit(makeMessage('Génère une image de chat', session), channel);
-      expect(selfie).toHaveBeenCalledTimes(4);
+      expect(selfie).toHaveBeenCalledTimes(5);
+      expect(selfie.mock.calls[4]?.[0]).toBe('Génère une image de chat');
       expect(hoisted.processUserMessage).toHaveBeenCalledTimes(1);
     } finally {
       selfie.mockRestore();
