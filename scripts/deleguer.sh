@@ -140,8 +140,16 @@ case "$MOTEUR" in
       --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
+  astra)
+    # GPT-6 Astra — servi par le backend Codex/ChatGPT depuis le 05/09/2026 05 h 33 (sonde : 400
+    # « not supported » jusqu'au 04/09 16 h 35). Table OpenAI du 04/09 : DeepSWE 74,1, Terminal-Bench
+    # 64,6, SRE-Bench 99,2 → réserver au DUR (sécurité, infra, terminal), comme sol.
+    codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-medium}" \
+      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+      - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    ;;
   luna|sol)
-    codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" \
+    codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" ${CODEX_EFFORT:+-c model_reasoning_effort="$CODEX_EFFORT"} \
       --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
