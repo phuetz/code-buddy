@@ -16,6 +16,7 @@
  *
  * @module companion/reply-augment
  */
+import { isCopinePersona, resolveCompanionPersona } from './personas/index.js';
 import type { RelationalSignal } from './relationship-state.js';
 import { crisisGuidanceFor } from './crisis-safety.js';
 
@@ -256,6 +257,23 @@ export function emotionGuidance(read: EmotionRead): string {
   if (HUMOR_WELCOME.has(emotion)) {
     base +=
       ' Si le moment s’y prête, tu peux — avec délicatesse — proposer de lui changer les idées (une petite blague, un mot doux), sans jamais forcer.';
+  }
+  if (isCopinePersona()) {
+    const persona = resolveCompanionPersona();
+    if (persona) {
+      if (
+        emotion === 'frustration' ||
+        emotion === 'sadness' ||
+        emotion === 'anxiety' ||
+        emotion === 'tired'
+      ) {
+        const line = persona.hardDay[0];
+        if (line) base = `${line} ${base}`;
+      } else if (emotion === 'joy') {
+        const line = persona.success[0];
+        if (line) base = `${line} ${base}`;
+      }
+    }
   }
   return base;
 }

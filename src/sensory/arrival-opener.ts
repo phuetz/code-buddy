@@ -17,6 +17,7 @@ import { join } from 'path';
 import { withTimeout } from '../council/with-timeout.js';
 import { extractSalientTerms } from '../conversation/dialogue-act.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
+import { resolveCompanionPersona } from '../companion/personas/index.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type ArrivalTrigger = 'morning' | 'afternoon' | 'evening' | 'night' | 'backSoon' | 'drowsy';
@@ -124,6 +125,8 @@ export const ARRIVAL_TRIGGERS = Object.keys(TEMPLATES) as ArrivalTrigger[];
 
 /** Read-only view of a trigger's template pool (for the LLM opener + tests). */
 export function templatePool(trigger: ArrivalTrigger): readonly string[] {
+  const overlay = resolveCompanionPersona()?.greetings[trigger];
+  if (overlay && overlay.length > 0) return overlay;
   return TEMPLATES[trigger];
 }
 
@@ -188,7 +191,7 @@ export function buildArrivalOpener(ctx: ArrivalContext): ArrivalOpener {
   const rng = ctx.rng ?? Math.random;
   const recent = ctx.recent ?? [];
   const trigger = selectTrigger(ctx);
-  const pool = TEMPLATES[trigger];
+  const pool = templatePool(trigger);
   const fresh = pool.filter((t) => !recent.includes(t)); // recent holds RAW templates
   // When the whole pool was used recently, still avoid the SINGLE most-recent
   // line so it's never the exact same phrase twice in a row (the core complaint).

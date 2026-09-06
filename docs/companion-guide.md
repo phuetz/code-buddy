@@ -481,6 +481,12 @@ se déclenche que sur un rappel réellement en attente), je re-rappelle doucemen
 réponds pas. Et un rappel déclenché **survit à un redémarrage** (jamais de dose perdue en silence).
 `reminders.ts` · `buddy remind add "médicaments" --at 09:00 --daily` · `CODEBUDDY_REMINDERS=true`.
 
+### 💗 Persona « copine » (accueil et voix, sans palier)
+Opt-in `CODEBUDDY_COMPANION_PERSONA=copine`. Les textes vivent dans un **profil de persona**
+(`src/companion/personas/copine.ts`) : bonjour / bonsoir / bonne nuit, journée dure, succès,
+surnoms rares. Défaut unset = les pools historiques, inchangés. Aucun texte intime ; le palier
+visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée.
+
 ### 🪑 Te tenir compagnie (présence)
 De temps en temps, au bon moment, je dis un petit mot qui réchauffe : *« comment s'est passée ta journée ? »*,
 un encouragement si tu galères, *« tu veux faire une pause ? »*, un suivi de tes projets, bonjour/bonne soirée.
