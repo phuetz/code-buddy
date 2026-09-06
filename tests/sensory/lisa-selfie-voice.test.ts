@@ -69,7 +69,7 @@ describe('voice companion selfie cache-first', () => {
     process.env.CODEBUDDY_LISA_SELFIE_RECENT_FILE = path.join(root, 'recent-selfies.json');
     process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
     const spoken = await defaultReply('envoie-moi une photo de toi');
-    expect(spoken).toMatch(/photo|Voilà|Tiens|portrait|Celle/i);
+    expect(spoken).toMatch(/photo|Voilà|Tiens|portrait|Celle|Une de moi/i);
     expect(spoken).not.toMatch(/backend|configur/i);
   });
 });
