@@ -39,6 +39,8 @@ export interface RelationalContextOptions {
   includePresence?: boolean;
   /** Include the recent-episode block ("what we talked about"). Default true. */
   includeEpisode?: boolean;
+  /** Include the recent shared-photos block ("what he showed me"). Default true. */
+  includePhotos?: boolean;
   /** Include the learned voice-guidance block ("how to reply better"). Default true. */
   includeGuidance?: boolean;
   /** Include Lisa's own recent inner-life vignette ("what I did"). Default: `isInnerLifeEnabled()`. */
@@ -50,6 +52,7 @@ export interface RelationalContextOptions {
   personalitySummary?: () => string;
   presenceBlock?: () => Promise<string>;
   episodeBlock?: () => Promise<string | null>;
+  photosBlock?: () => Promise<string | null>;
   guidanceBlock?: () => string | null;
   innerLifeBlock?: () => Promise<string | null>;
   selfEvolutionBlock?: () => Promise<string | null>;
@@ -196,6 +199,16 @@ async function defaultReadEpisode(): Promise<string | null> {
   }
 }
 
+/** Read the rolling shared-photos block from persistent memory (see shared-photo-memory.ts). */
+async function defaultReadPhotos(): Promise<string | null> {
+  try {
+    const { readSharedPhotoMemory } = await import('./shared-photo-memory.js');
+    return await readSharedPhotoMemory();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Compose the relational context string. Returns '' when nothing useful is available (caller can
  * splice unconditionally). Order: what she knows about him → what they talked about recently → her
@@ -236,6 +249,19 @@ export async function buildRelationalContext(
         ? await options.episodeBlock()
         : await defaultReadEpisode();
       return value?.trim() ? `<recent_episode>\n${value.trim()}\n</recent_episode>` : '';
+    } catch {
+      return '';
+    }
+  });
+  const photos = Promise.resolve().then(async () => {
+    // Absent by default: no photo shared yet means an empty string, so the
+    // assembled context is byte-identical to what it was before this block.
+    if (options.includePhotos === false) return '';
+    try {
+      const value = options.photosBlock
+        ? await options.photosBlock()
+        : await defaultReadPhotos();
+      return value?.trim() ? `<recent_photos>\n${value.trim()}\n</recent_photos>` : '';
     } catch {
       return '';
     }
@@ -293,7 +319,7 @@ export async function buildRelationalContext(
     }
   });
 
-  return (await Promise.all([facts, guidance, episode, innerLife, selfEvolution, personality, presence]))
+  return (await Promise.all([facts, guidance, episode, photos, innerLife, selfEvolution, personality, presence]))
     .filter(Boolean)
     .join('\n\n');
 }
