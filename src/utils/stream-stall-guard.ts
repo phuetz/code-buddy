@@ -11,6 +11,8 @@
  * Tunable via CODEBUDDY_LLM_STALL_TIMEOUT_MS (default 120000; <=0 disables).
  */
 
+import { isLocalLlmProvider } from '../config/headless-local-prompt.js';
+
 export class LlmStallError extends Error {
   constructor(timeoutMs: number) {
     super(
@@ -42,9 +44,11 @@ export function resolveStallTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 }
 
 /**
- * First-token budget: `max(120s, promptTokens × ms/token)` capped at
- * `CODEBUDDY_STALL_MAX_MS` (default 20 min). After the first token the
- * regular 120 s inactivity window applies.
+ * First-token budget for LOCAL runtimes only (Ollama / LM Studio / vLLM /
+ * Lemonade, see `isLocalLlmProvider`): `max(120s, promptTokens × ms/token)`
+ * capped at `CODEBUDDY_STALL_MAX_MS` (default 20 min). Cloud providers keep
+ * the plain 120 s window. After the first token the regular 120 s
+ * inactivity window applies.
  *
  * `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` defaults to 200.
  */
@@ -54,6 +58,10 @@ export function resolveFirstTokenStallTimeoutMs(
 ): number {
   const afterFirst = resolveStallTimeoutMs(env);
   if (afterFirst <= 0) return afterFirst;
+  // Adaptive prompt-eval budget is a LOCAL-runtime concern (iGPU prompt eval
+  // can take minutes). A silent cloud provider must still fail in 120 s —
+  // byte-identical behaviour for Gemini/ChatGPT/xAI and interactive sessions.
+  if (!isLocalLlmProvider(env)) return afterFirst;
   const msPerToken = Math.max(0, parseEnvNumber(
     env.CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN,
     DEFAULT_LOCAL_PROMPT_MS_PER_TOKEN,

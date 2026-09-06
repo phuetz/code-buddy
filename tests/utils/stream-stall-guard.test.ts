@@ -69,22 +69,31 @@ describe('resolveStallTimeoutMs', () => {
 });
 
 describe('resolveFirstTokenStallTimeoutMs', () => {
-  it('is max(120s, tokens × 200ms) capped at 20 min', () => {
-    expect(resolveFirstTokenStallTimeoutMs(0, {})).toBe(120_000);
-    expect(resolveFirstTokenStallTimeoutMs(100, {})).toBe(120_000);
-    expect(resolveFirstTokenStallTimeoutMs(5604, {})).toBe(1_120_800);
-    expect(resolveFirstTokenStallTimeoutMs(1_000_000, {})).toBe(20 * 60 * 1000);
+  const local = { CODEBUDDY_PROVIDER: 'ollama' };
+
+  it('is max(120s, tokens × 200ms) capped at 20 min on a local runtime', () => {
+    expect(resolveFirstTokenStallTimeoutMs(0, local)).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(100, local)).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, local)).toBe(1_120_800);
+    expect(resolveFirstTokenStallTimeoutMs(1_000_000, local)).toBe(20 * 60 * 1000);
+  });
+
+  it('keeps the plain 120s window for cloud providers and unset env (no regression)', () => {
+    expect(resolveFirstTokenStallTimeoutMs(5604, {})).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, { CODEBUDDY_PROVIDER: 'gemini' })).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(1_000_000, { CODEBUDDY_PROVIDER: 'chatgpt-oauth' })).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, { CODEBUDDY_PROVIDER: 'xai', OLLAMA_HOST: 'http://127.0.0.1:11434' })).toBe(120_000);
   });
 
   it('honours CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN and CODEBUDDY_STALL_MAX_MS', () => {
     expect(resolveFirstTokenStallTimeoutMs(100, {
-      CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
+      ...local, CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
     })).toBe(120_000);
     expect(resolveFirstTokenStallTimeoutMs(4000, {
-      CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
+      ...local, CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
     })).toBe(200_000);
     expect(resolveFirstTokenStallTimeoutMs(5604, {
-      CODEBUDDY_STALL_MAX_MS: '300000',
+      ...local, CODEBUDDY_STALL_MAX_MS: '300000',
     })).toBe(300_000);
   });
 });
