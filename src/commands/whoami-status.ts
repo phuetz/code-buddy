@@ -15,6 +15,7 @@ export interface WhoamiLocal {
 export function formatWhoamiStatus(input: {
   chatgpt?: WhoamiChatGpt | null;
   local?: WhoamiLocal | null;
+  providerHealth?: string[];
 }): string[] {
   const lines: string[] = [];
   const chatgpt = input.chatgpt;
@@ -35,6 +36,10 @@ export function formatWhoamiStatus(input: {
     if (local.model) bits.push(local.model);
     if (local.baseURL) bits.push(local.baseURL);
     lines.push(`Local: ${bits.join(' · ')}`);
+  }
+
+  if (input.providerHealth && input.providerHealth.length > 0) {
+    lines.push(...input.providerHealth);
   }
 
   return lines;

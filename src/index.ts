@@ -652,9 +652,21 @@ async function loadModel(): Promise<string | undefined> {
       requested,
     });
     if (resolution.model) return resolution.model;
-    cli.error(
-      buildOllamaPullHint({ baseURL: detected.baseURL, reachable: resolution.reachable, requested }),
+    const hint = buildOllamaPullHint({
+      baseURL: detected.baseURL,
+      reachable: resolution.reachable,
+      requested,
+    });
+    const { shouldBypassUnreachableLocalPreflight } = await import(
+      './providers/provider-failover-policy.js'
     );
+    if (shouldBypassUnreachableLocalPreflight()) {
+      cli.warn(
+        `${hint}\nDeclared provider failover is enabled; continuing so chat() can try the backup chain.`,
+      );
+      return requested || detected.defaultModel;
+    }
+    cli.error(hint);
     process.exit(1);
   }
 
@@ -3282,6 +3294,14 @@ program
       "./providers/codex-oauth.js"
     );
 
+    let providerHealth: string[] = [];
+    try {
+      const { formatProviderHealthLines } = await import("./providers/provider-health.js");
+      providerHealth = formatProviderHealthLines();
+    } catch {
+      /* health file optional */
+    }
+
     let local: { provider: string; model?: string; baseURL?: string } | null = null;
     try {
       const { getSettingsManager } = await import("./utils/settings-manager.js");
@@ -3300,7 +3320,7 @@ program
     }
 
     if (!hasCodexCredentials()) {
-      for (const line of formatWhoamiStatus({ chatgpt: null, local })) {
+      for (const line of formatWhoamiStatus({ chatgpt: null, local, providerHealth })) {
         cli.stdout(line);
       }
       return;
@@ -3332,6 +3352,7 @@ program
           ...(catalog ? {} : { fallback: CHATGPT_OAUTH_SAFE_FALLBACK_MODEL }),
         },
         local,
+        providerHealth,
       })) {
         cli.stdout(line);
       }

@@ -252,6 +252,35 @@ same-provider credential-pool candidates first. A failed auth profile is marked
 with the existing cooldown/backoff logic before Code Buddy moves on to the next
 credential or to the cross-provider fallback list.
 
+## Automatic provider failover (quota / overload / outage)
+
+Opt-in, default **off** (`CODEBUDDY_PROVIDER_FALLBACK` unset or `false` leaves
+the Hermes list above unchanged).
+
+When `CODEBUDDY_PROVIDER_FALLBACK=true`, every `CodeBuddyClient.chat` /
+`chatStream` call (channels, companion, headless `-p`) classifies the failure:
+
+| Kind | Signals | Action |
+|---|---|---|
+| `quota_exhausted` | 429 `usage_limit_reached`, `insufficient_quota`, billing | Bench until `resets_in_seconds` (default 1 h), switch |
+| `overloaded` | 503, 529, `overloaded_error` | Bench 60 s (exponential backoff), switch |
+| `unreachable` | `ECONNREFUSED`, timeout | Bench 5 min, switch |
+| `auth` | 401 / 403 | **No silent switch** — log and surface the error |
+| `other` | 400, unknown | Original error unchanged |
+
+Chain: `CODEBUDDY_FALLBACK_CHAIN="chatgpt-oauth>xai>gemini>ollama:qwen3.8-ctx32k:latest"`.
+Unset → current provider, then every authenticated catalog login, then local
+Ollama if reachable. Cloud backups are skipped when `CODEBUDDY_LOCAL_ONLY=true`.
+
+On switch the backup model receives the same system prompt retruncated to its
+budget, a compacted history if its window is smaller, a resume note, and a
+repaired tool-call transcript. Health lives in `~/.codebuddy/provider-health.json`.
+`buddy doctor` and `buddy whoami` show benched providers. A `provider:fallback`
+bus event is re-emitted as a sensory percept so a rule can alert Telegram.
+
+The original provider is retried on the **next** turn once `resetsAt` has passed
+— never in the middle of a turn.
+
 ## Hermes-Style Auxiliary Providers
 
 Side tasks can resolve an independent provider/model pair without changing the

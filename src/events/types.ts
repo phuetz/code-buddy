@@ -514,6 +514,10 @@ export interface ProviderFallbackEvent extends BaseEvent {
   fromProvider: string;
   toProvider: string;
   reason: string;
+  /** Epoch ms when the failed provider may be retried. */
+  resetsAt?: number;
+  /** Snake alias consumed by logs / bridges. */
+  resets_at?: number;
 }
 
 export interface ProviderEvents extends Record<string, BaseEvent> {
