@@ -362,6 +362,61 @@ describe('B-1 CODEBUDDY_MOBILE_PWA opt-in', () => {
       else process.env.CODEBUDDY_MOBILE_PWA = previousPwa;
     }
   });
+
+  it('C-4 stopServer unwires the bridge, resets ConfirmationService, and resolves pending confirmations', async () => {
+    const previous = process.env.JWT_SECRET;
+    const previousPwa = process.env.CODEBUDDY_MOBILE_PWA;
+    process.env.CODEBUDDY_MOBILE_PWA = 'true';
+    process.env.JWT_SECRET = 'mobile-pwa-stop-server-test-32b-min';
+    const { ConfirmationService } = await import('../../src/utils/confirmation-service.js');
+    const { pendingMobileConfirmationCount } = await import('../../src/server/websocket/confirmation-bridge.js');
+    const { startServer, stopServer } = await import('../../src/server/index.js');
+    const started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+    });
+    try {
+      const service = ConfirmationService.getInstance();
+      expect(typeof service.getWsApprovalBridge()).toBe('function');
+
+      const { port } = started.server.address() as { port: number };
+      const { WebSocket } = await import('ws');
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        ws.once('open', () => resolve());
+        ws.once('error', reject);
+      });
+      const { createUserToken } = await import('../../src/server/auth/jwt.js');
+      const token = createUserToken('mobile-user', ['chat', 'tools'], process.env.JWT_SECRET!);
+      ws.send(JSON.stringify({ type: 'authenticate', payload: { token, approvalCapable: true } }));
+      await new Promise((r) => setTimeout(r, 100));
+
+      const pending = service.requestConfirmation(
+        { operation: 'write', filename: 'pending.txt', toolName: 'write_file', forcePrompt: true },
+        'file',
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      expect(pendingMobileConfirmationCount()).toBe(1);
+
+      await stopServer(started.server);
+
+      expect(service.getWsApprovalBridge()).toBeNull();
+      expect(pendingMobileConfirmationCount()).toBe(0);
+      const result = await pending;
+      expect(result.confirmed).toBe(false);
+      ws.terminate();
+    } finally {
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+      if (previousPwa === undefined) delete process.env.CODEBUDDY_MOBILE_PWA;
+      else process.env.CODEBUDDY_MOBILE_PWA = previousPwa;
+    }
+  });
 });
 
 describe('Mobile PWA Express 5 route table', () => {

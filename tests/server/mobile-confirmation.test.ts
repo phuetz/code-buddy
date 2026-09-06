@@ -505,4 +505,31 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
     await expect(pendingAfterClose).resolves.toEqual({ confirmed: true });
     expect(requestApproval).toHaveBeenCalledTimes(1);
   });
+
+  it('C-3 falls back to Telegram immediately if all approval sockets drop under backpressure', async () => {
+    const pwa = await clientWith(['chat', 'tools'], { approvalCapable: true, userId: 'pwa-user' });
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    // Mock high bufferedAmount on the server-side socket to simulate backpressure
+    const serverWs = Array.from(wss.clients).find((c) => c !== pwa.ws);
+    expect(serverWs).toBeDefined();
+    Object.defineProperty(serverWs, 'bufferedAmount', { value: 10_000_000, configurable: true });
+
+    const requestApproval = vi.fn(async () => true);
+    ConfirmationService.getInstance().setRemoteApprovalService({
+      hasChannels: () => true,
+      requestApproval,
+    } as never);
+
+    const pending = ConfirmationService.getInstance().requestConfirmation(
+      { operation: 'write', filename: 'backpressure.md', toolName: 'write_file', forcePrompt: true },
+      'file',
+    );
+    // Must fall back to Telegram immediately without waiting for timeout
+    await expect(pending).resolves.toEqual({ confirmed: true });
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(pwa.events.some((e) => e.type === 'confirmation_required')).toBe(false);
+
+    pwa.ws.close();
+  });
 });

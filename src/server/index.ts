@@ -82,6 +82,7 @@ import {
   wirePeerMissionExchangeBridge,
   unwirePeerMissionExchangeBridge,
 } from '../fleet/peer-mission-exchange-bridge.js';
+import { unwireMobileConfirmationBridge } from './websocket/confirmation-bridge.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
 import { CSRFProtection } from '../security/csrf-protection.js';
@@ -2301,6 +2302,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     unwirePeerToolBridge();
     unwirePeerCkgBridge();
     unwirePeerMissionExchangeBridge();
+    unwireMobileConfirmationBridge();
 
     const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
       ._unwireCognition;

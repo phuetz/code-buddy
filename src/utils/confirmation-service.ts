@@ -170,6 +170,10 @@ export class ConfirmationService extends EventEmitter {
     this.wsApprovalBridge = bridge;
   }
 
+  getWsApprovalBridge(): ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null {
+    return this.wsApprovalBridge;
+  }
+
   /** Isolate exact grants between concurrent desktop/voice/CLI sessions. */
   withApprovalContextAsync<T>(contextId: string, fn: () => Promise<T>): Promise<T> {
     return this.approvalContext.run(contextId, fn);
