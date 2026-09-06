@@ -9,7 +9,13 @@
  */
 
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../../codebuddy/client.js";
-import { withStallGuard } from "../../utils/stream-stall-guard.js";
+import { resolveFirstTokenStallTimeoutMs, resolveStallTimeoutMs, withStallGuard } from "../../utils/stream-stall-guard.js";
+import { startHeadlessPromptProgress } from "../../cli/headless-prompt-progress.js";
+import {
+  HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE,
+  HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
+  isHeadlessLocalPromptCompact,
+} from "../../config/headless-local-prompt.js";
 import { ChatEntry, StreamingChunk } from "../types.js";
 import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
@@ -1451,6 +1457,12 @@ export class AgentExecutor {
             alwaysInclude: ['self_describe', 'view_file', 'search', 'apply_patch', 'bash'],
             enableCaching: false,
           };
+        } else if (isHeadlessLocalPromptCompact()) {
+          selectionOpts = {
+            ...selectionOpts,
+            maxTools: HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
+            alwaysInclude: [...HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE],
+          };
         } else if (modelToolConfig.promptProfile === 'lite') {
           selectionOpts = {
             ...selectionOpts,
@@ -1625,6 +1637,7 @@ export class AgentExecutor {
         // the request then never send a byte — without a bound this loop
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
+        const progress = startHeadlessPromptProgress();
         const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
@@ -1641,7 +1654,10 @@ export class AgentExecutor {
             this.deps.toolSelectionStrategy.shouldUseSearchFor(turnQueryText)
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } },
-        ));
+        ), resolveStallTimeoutMs(), {
+          firstTokenTimeoutMs: resolveFirstTokenStallTimeoutMs(inputTokens),
+        });
+        try {
         for await (const streamEvent of withLlmStreamRetry(streamFactory, {
           maxRetries: 2,
           baseDelayMs: 500,
@@ -1666,6 +1682,7 @@ export class AgentExecutor {
             continue;
           }
           const chunk = streamEvent.value;
+          progress.onFirstToken();
           if (abortController?.signal.aborted) {
             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
             yield { type: "done" };
@@ -1708,6 +1725,9 @@ export class AgentExecutor {
             steeringRequestedDuringText = true;
             break;
           }
+        }
+        } finally {
+          progress.stop();
         }
 
         const trailingDisplayContent = this.deps.streamingHandler.flushDisplayContent?.() ?? '';

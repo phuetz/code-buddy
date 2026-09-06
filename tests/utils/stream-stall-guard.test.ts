@@ -4,7 +4,12 @@
  * be disabled, and the env resolver parses budgets.
  */
 import { describe, expect, it } from 'vitest';
-import { LlmStallError, resolveStallTimeoutMs, withStallGuard } from '../../src/utils/stream-stall-guard.js';
+import {
+  LlmStallError,
+  resolveFirstTokenStallTimeoutMs,
+  resolveStallTimeoutMs,
+  withStallGuard,
+} from '../../src/utils/stream-stall-guard.js';
 
 async function* healthy(): AsyncGenerator<string> {
   yield 'a';
@@ -60,5 +65,49 @@ describe('resolveStallTimeoutMs', () => {
     expect(resolveStallTimeoutMs({ CODEBUDDY_LLM_STALL_TIMEOUT_MS: '30000' })).toBe(30_000);
     expect(resolveStallTimeoutMs({ CODEBUDDY_LLM_STALL_TIMEOUT_MS: '0' })).toBe(0);
     expect(resolveStallTimeoutMs({ CODEBUDDY_LLM_STALL_TIMEOUT_MS: 'nope' })).toBe(120_000);
+  });
+});
+
+describe('resolveFirstTokenStallTimeoutMs', () => {
+  it('is max(120s, tokens × 200ms) capped at 20 min', () => {
+    expect(resolveFirstTokenStallTimeoutMs(0, {})).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(100, {})).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, {})).toBe(1_120_800);
+    expect(resolveFirstTokenStallTimeoutMs(1_000_000, {})).toBe(20 * 60 * 1000);
+  });
+
+  it('honours CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN and CODEBUDDY_STALL_MAX_MS', () => {
+    expect(resolveFirstTokenStallTimeoutMs(100, {
+      CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
+    })).toBe(120_000);
+    expect(resolveFirstTokenStallTimeoutMs(4000, {
+      CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN: '50',
+    })).toBe(200_000);
+    expect(resolveFirstTokenStallTimeoutMs(5604, {
+      CODEBUDDY_STALL_MAX_MS: '300000',
+    })).toBe(300_000);
+  });
+});
+
+describe('withStallGuard first-token window', () => {
+  it('uses the longer first-token budget then the 120s gap', async () => {
+    async function* delayedFirst(): AsyncGenerator<string> {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      yield 'a';
+      yield 'b';
+    }
+    const chunks: string[] = [];
+    for await (const c of withStallGuard(delayedFirst(), 30, { firstTokenTimeoutMs: 500 })) {
+      chunks.push(c);
+    }
+    expect(chunks).toEqual(['a', 'b']);
+  });
+
+  it('still fails when the first token exceeds the adaptive budget', async () => {
+    const source = stalled();
+    await expect(async () => {
+      for await (const c of withStallGuard(source, 5_000, { firstTokenTimeoutMs: 80 })) void c;
+    }).rejects.toThrow(LlmStallError);
+    expect(source.closed).toBe(true);
   });
 });
