@@ -10,6 +10,7 @@
 
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
+import { resolveToolEffect } from './metadata.js';
 
 // ============================================================================
 // BM25 Implementation
@@ -188,7 +189,8 @@ export class ToolSearchTool extends BaseTool {
     }
 
     const lines = results.map((r, i) => {
-      let line = `${i + 1}. **${r.name}** (score: ${r.score.toFixed(2)})\n   ${r.description}`;
+      const effect = resolveToolEffect(r.name);
+      let line = `${i + 1}. **${r.name}** (score: ${r.score.toFixed(2)})\n   effect: ${effect}\n   ${r.description}`;
 
       // If deferred, include the full schema so the LLM can call it
       if (deferredSchemas?.has(r.name)) {
@@ -206,6 +208,7 @@ export class ToolSearchTool extends BaseTool {
     // next round (true progressive disclosure), not just describe it.
     return this.success(`Found ${results.length} tools:\n\n${lines.join('\n\n')}`, {
       names: results.map((r) => r.name),
+      effects: Object.fromEntries(results.map((r) => [r.name, resolveToolEffect(r.name)])),
     });
   }
 }

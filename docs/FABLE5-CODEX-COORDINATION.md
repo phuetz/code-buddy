@@ -1,6 +1,6 @@
 # Coordination Fable 5 / Codex
 
-Dernière consolidation : 2026-09-05, Europe/Paris. Ce fichier est la source de vérité partagée pour les chantiers en cours. Il coordonne les reprises asynchrones ; il ne prouve pas qu'un pair est connecté en temps réel.
+Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de vérité partagée pour les chantiers en cours. Il coordonne les reprises asynchrones ; il ne prouve pas qu'un pair est connecté en temps réel.
 
 ## Protocole obligatoire
 
@@ -16,6 +16,8 @@ Dernière consolidation : 2026-09-05, Europe/Paris. Ce fichier est la source de 
 **Signature des entrées.** Le titre de ce fichier dit « Fable 5 » pour raisons historiques, mais la colonne `Agent` nomme le modèle qui a réellement fait le travail — c'est elle qui fait foi. Les entrées du 2026-08-03 portent **Opus 5** : la session de ce jour tournait sur Opus 5, pas sur Fable 5. Un journal qui attribue le travail au mauvais agent fausse toute reprise ultérieure ; corrigez la colonne plutôt que de laisser courir.
 
 ## Tableau de contrôle
+
+| P0 | Mission TRAJECTORY-GROK — Harness C1 + C5 : vue Trajectory unifiée d'un run + taxonomie réversible/émission des outils | **Grok 4.6 — FAIT le 06/09/2026** | Clone `~/DEV/cb-heartwatch-2026-09-05`, branche `feat/trajectory-2026-09-06`, HEAD de départ `35443b9ec`. Rapport `docs/reports/2026-09/TRAJECTORY-GROK.md` créé avant inspection. HOME QA `_qa/traj/home` (gitignoré). Commits : réservation `ea9b31947`, C5 `f565be180`, C1 `2be0d27c2` + lot documentaire. | C5 : 229 outils `read`/`reversible`/`emission` ; test d'exhaustivité ; `tool_search` et `buddy tools catalog`. C1 : `buildTrajectory` + `buddy run trajectory [--json] [--since]` ; aucune télémétrie nouvelle ; liste « non journalisé » (cache, pids, `confirmation_requested`, audit JSONL jamais initié). | Vérifié : `tests/tools` 172/1682 ; `tests/cli`+commandes 22/164 ; privacy 40/40 ; `tsc --noEmit` 0 ; ESLint ciblé 0 ; `git diff --check` 0. Live Ollama `qwen3:4b-instruct` `run_mtpg47ts_67f53a` 4190/14. Aucun push. `~/code-buddy` et `~/.codebuddy` interdits. |
 
 | P0 | Mission CHASSE-SECU-GROK — chasse adversariale : prouver ou démentir 3 trous allégués (déobfuscation, chemins secrets, formats de clés) | **INTÉGRÉ sur `codex/audit-systeme-nerveux-2026-09-01` le 05/09/2026 (fusion `bcaf88876`) — ZONE LIBÉRÉE** | Clone `~/DEV/cb-astra-secaudit-2026-09-05`, branche `opus/audit-securite-flotte-2026-09-05`. Rapport `docs/reports/2026-09/CHASSE-SECU-GROK.md`. HOME QA `_qa/grok-secu/home` (gitignoré). Commits : `47f91b3b8`, `a14d8012b`, `baa21afbc`, `e1cfda32c`, `cfc41b065`, `7bf2e84fd`. | 6 obfuscations pare-feu prouvées et fermées (`deobfuscateForScan`) ; fullwidth NFKC démenti. 9 chemins d'identifiants ajoutés ; docker/kube/netrc/.env.* déjà couverts. 12 formats de jetons ajoutés. | Vérifié : `tests/security` 49/928 → 52/977 verts (rejoué agy, PUSHABLE) ; `tsc --noEmit` 0 ; ESLint ciblé 0 ; `git diff --check` 0. Zone libérée. Aucun push. |
 

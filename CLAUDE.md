@@ -366,7 +366,7 @@ buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
 buddy server [--port N]     # Start the HTTP server (3000) — one port, WebSocket `/ws` on it; required for fleet
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
-buddy run list|show|tail|replay  # Observability
+buddy run list|show|tail|replay|trajectory  # Observability
 buddy autonomy status|run|briefing|bench|tasks  # Autonomous fleet; `buddy colab …` is an alias
 buddy research "<topic>"    # Wide research (--deep: cited GPT-Researcher-style pipeline; --iterations N: gap-loop rounds; --perspectives N/--storm: STORM multi-perspective; --ckg: Collective Knowledge Graph bridge)
 buddy flow "<goal>"         # Planning flow (plan → execute → synthesize)
