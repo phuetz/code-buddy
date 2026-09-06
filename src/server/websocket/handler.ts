@@ -61,6 +61,7 @@ import {
 import { isMobilePwaEnabled } from '../mobile/index.js';
 import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
+import type { CompanionHistoryTurn } from '../../companion/companion-turn.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -612,35 +613,29 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
 });
 
+/**
+ * Lisa's reply for the mobile PWA (`assistant: 'companion'`).
+ *
+ * Delegates to `runCompanionTurn` — the SINGLE companion path, shared with the
+ * channels surface: cached selfie first, then the companion profile (persona
+ * spoken prompt + relational context + history) through the provider the
+ * server is configured for. It no longer calls `defaultReply`, which is the
+ * VOICE loop (fastest-model routing, empty history) and stays untouched.
+ */
 export async function produceCompanionReply(
   message: string,
+  options: { history?: CompanionHistoryTurn[] } = {},
 ): Promise<string | { text: string; image?: { mimeType: string; data: string } }> {
-  try {
-    const { isCompanionSurfaceEnabled } = await import('../../channels/companion-channel-profile.js');
-    if (process.env.CODEBUDDY_LISA_SELFIE !== 'false' && isCompanionSurfaceEnabled()) {
-      const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
-      const served = await tryServeCompanionSelfie(message, {
-        surface: 'mobile',
-        includeImageBytes: true,
-      });
-      if (served) {
-        if (served.imageBase64 && served.mimeType) {
-          return {
-            text: served.caption,
-            image: { mimeType: served.mimeType, data: served.imageBase64 },
-          };
-        }
-        return served.caption;
-      }
-    }
-  } catch (err) {
-    logger.warn('[ws] companion selfie router skipped', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+  const { runCompanionTurn } = await import('../../companion/companion-turn.js');
+  const result = await runCompanionTurn(message, {
+    surface: 'mobile',
+    includeImageBytes: true,
+    ...(options.history ? { history: options.history } : {}),
+  });
+  if (result.image) {
+    return { text: result.text, image: result.image };
   }
-  const { defaultReply } = await import('../../sensory/voice-loop.js');
-  const text = await defaultReply(message, []);
-  return typeof text === 'string' ? text : '';
+  return result.text;
 }
 
 async function producePeerReply(peerId: string, message: string): Promise<string> {

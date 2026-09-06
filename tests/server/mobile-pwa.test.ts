@@ -386,8 +386,8 @@ describe('Mobile companion selfie router gate', () => {
     const { produceCompanionReply } = await import('../../src/server/websocket/handler.js');
     const router = await import('../../src/companion/lisa-selfie-router.js');
     const spy = vi.spyOn(router, 'tryServeCompanionSelfie');
-    vi.spyOn(await import('../../src/sensory/voice-loop.js'), 'defaultReply')
-      .mockResolvedValue('fallback');
+    vi.spyOn(await import('../../src/channels/companion-channel-turn.js'), 'runCompanionChannelTurn')
+      .mockResolvedValue({ text: 'fallback', model: 'test' });
     await produceCompanionReply('envoie-moi une photo de toi');
     expect(spy).not.toHaveBeenCalled();
   });
@@ -397,8 +397,8 @@ describe('Mobile companion selfie router gate', () => {
     const { produceCompanionReply } = await import('../../src/server/websocket/handler.js');
     const router = await import('../../src/companion/lisa-selfie-router.js');
     const spy = vi.spyOn(router, 'tryServeCompanionSelfie').mockResolvedValue(null);
-    vi.spyOn(await import('../../src/sensory/voice-loop.js'), 'defaultReply')
-      .mockResolvedValue('fallback');
+    vi.spyOn(await import('../../src/channels/companion-channel-turn.js'), 'runCompanionChannelTurn')
+      .mockResolvedValue({ text: 'fallback', model: 'test' });
     await produceCompanionReply('envoie-moi une photo de toi');
     expect(spy).toHaveBeenCalled();
   });
