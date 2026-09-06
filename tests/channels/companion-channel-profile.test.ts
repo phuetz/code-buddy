@@ -67,3 +67,58 @@ describe('companion channel profile', () => {
     expect(companionWaitNoticeText()).toBe('Je réfléchis, quelques secondes…');
   });
 });
+
+/**
+ * Identity. On the phone (2026-09-06) « Coucou 💕 » was answered « Ah, Lisa!
+ * Comment ça va? 😊 » — the model had taken LISA'S name for the user's, and
+ * spoke as a generic assistant. The system prompt now says who is who.
+ */
+describe('companion identity block', () => {
+  it('names the robot, names the addressee, and forbids calling the user by the robot name', () => {
+    const built = buildCompanionChannelPrompt({
+      spokenPrompt: 'Tu es Lisa, une voix amie.',
+      userText: 'Coucou',
+      env: { CODEBUDDY_ROBOT_NAME: 'Lisa' } as NodeJS.ProcessEnv,
+    });
+    expect(built.system).toContain('TU es Lisa');
+    expect(built.system).toMatch(/ne l['’]appelle jamais lisa/i);
+    // No first name is configured: the addressee stays neutral, never invented.
+    expect(built.system).toContain('la personne que tu aimes');
+    expect(built.system).not.toMatch(/comment puis-je t['’]aider/i);
+  });
+
+  it('uses the configured user name when there is one', () => {
+    const built = buildCompanionChannelPrompt({
+      spokenPrompt: 'Tu es Lisa, une voix amie.',
+      userText: 'Coucou',
+      env: { CODEBUDDY_ROBOT_NAME: 'Lisa', CODEBUDDY_USER_NAME: 'Alex' } as NodeJS.ProcessEnv,
+    });
+    expect(built.system).toContain('Tu parles à Alex');
+    expect(built.system).not.toContain('la personne que tu aimes');
+  });
+
+  it('honours a renamed robot', () => {
+    const built = buildCompanionChannelPrompt({
+      spokenPrompt: 'Voix amie.',
+      userText: 'Coucou',
+      env: { CODEBUDDY_ROBOT_NAME: 'Nova' } as NodeJS.ProcessEnv,
+    });
+    expect(built.system).toContain('TU es Nova');
+    expect(built.system).toMatch(/ne l['’]appelle jamais nova/i);
+  });
+
+  it('keeps history as structured roles, never a « Lisa: … / Toi: … » blob', () => {
+    const built = buildCompanionChannelPrompt({
+      spokenPrompt: 'Voix amie.',
+      userText: 'et après ?',
+      history: [
+        { role: 'user', content: 'Coucou' },
+        { role: 'assistant', content: 'Coucou toi.' },
+      ],
+      env: {} as NodeJS.ProcessEnv,
+    });
+    expect(built.messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(built.system).not.toMatch(/^\s*(?:lisa|toi)\s*:/im);
+    expect(String(built.messages[1]?.content)).toBe('Coucou');
+  });
+});

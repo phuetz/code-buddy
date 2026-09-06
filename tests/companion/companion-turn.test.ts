@@ -93,6 +93,30 @@ describe('runCompanionTurn — one path for every companion surface', () => {
     expect(JSON.stringify(messages)).not.toContain('kind');
   });
 
+  it('states who is who in the system message reaching the model', async () => {
+    const { chat, seen } = captureChat('Coucou toi.');
+    await runCompanionTurn('Coucou 💕', {
+      surface: 'mobile',
+      history: [
+        { role: 'user', content: 'Coucou' },
+        { role: 'assistant', content: 'Coucou toi.' },
+      ],
+      env: {
+        CODEBUDDY_COMPANION_PERSONA: 'copine',
+        CODEBUDDY_ROBOT_NAME: 'Lisa',
+      } as NodeJS.ProcessEnv,
+      chat,
+      resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
+      serveSelfie: async () => null,
+    });
+    const system = String(seen[0]?.[0]?.content ?? '');
+    expect(system).toContain('TU es Lisa');
+    expect(system).toMatch(/ne l['’]appelle jamais lisa/i);
+    expect(system).toContain('la personne que tu aimes');
+    expect(system).not.toMatch(/comment puis-je (?:t['’]|vous )aider/i);
+    expect(seen[0]?.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+  });
+
   it('speaks the honest provider failure instead of a generic apology', async () => {
     const chat = vi.fn(async () => {
       throw new Error('429 usage_limit_reached: resets_in_seconds=120');
