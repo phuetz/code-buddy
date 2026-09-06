@@ -18,7 +18,9 @@
  *   8. OPENAI_API_KEY         → openai
  *   9. nothing                → null (peer.chat → CLIENT_UNAVAILABLE)
  *
- * Override the model with CODEBUDDY_PEER_MODEL.
+ * Override the model with CODEBUDDY_PEER_MODEL / CODEBUDDY_MODEL only when
+ * that name is compatible with the resolved provider (catalog + family).
+ * A leftover ChatGPT id must never be sent to Ollama.
  */
 
 import * as fs from 'node:fs';
@@ -35,6 +37,7 @@ import {
 } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
 import { classifyProviderModelEgress, type ModelEgress } from '../providers/model-egress.js';
+import { pickCompatibleModelForProvider } from './compatible-model.js';
 
 export type PeerChatProviderId =
   | 'ollama'
@@ -409,11 +412,13 @@ function buildOne(
   const spec = SPECS[id];
   const resolved = spec.resolve(explicitProvider);
   if (!resolved) return null;
-  const model =
-    explicitModel ||
-    (allowGlobalModel ? process.env.CODEBUDDY_PEER_MODEL : undefined) ||
-    providerModel(id) ||
-    spec.defaultModel;
+  const model = pickCompatibleModelForProvider({
+    provider: id,
+    explicitModel,
+    allowGlobalModel,
+    providerEnvModel: providerModel(id),
+    specDefaultModel: spec.defaultModel,
+  }).model;
   try {
     const client = new CodeBuddyClient(
       resolved.apiKey,
@@ -473,7 +478,12 @@ export function resolveProviderFromEnv(
       provider: preferred,
       apiKey: resolved.apiKey,
       baseUrl: resolved.baseUrl,
-      model: process.env.CODEBUDDY_PEER_MODEL || providerModel(preferred) || spec.defaultModel,
+      model: pickCompatibleModelForProvider({
+        provider: preferred,
+        allowGlobalModel: true,
+        providerEnvModel: providerModel(preferred),
+        specDefaultModel: spec.defaultModel,
+      }).model,
       isLocal: spec.isLocal,
       egress: classifyProviderModelEgress(preferred, resolved.baseUrl, spec.isLocal),
     };
@@ -495,7 +505,12 @@ export function resolveProviderFromEnv(
         provider: id,
         apiKey: resolved.apiKey,
         baseUrl: resolved.baseUrl,
-        model: process.env.CODEBUDDY_PEER_MODEL || providerModel(id) || spec.defaultModel,
+        model: pickCompatibleModelForProvider({
+          provider: id,
+          allowGlobalModel: true,
+          providerEnvModel: providerModel(id),
+          specDefaultModel: spec.defaultModel,
+        }).model,
         isLocal: spec.isLocal,
         egress: classifyProviderModelEgress(id, resolved.baseUrl, spec.isLocal),
       };
