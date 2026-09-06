@@ -332,7 +332,7 @@ export function buildLisaSelfiePrompt(options: {
   userName?: string;
   contentTier?: LisaContentTier;
 }): string {
-  const forWhom = options.userName?.trim() || resolveUserName();
+  const forWhom = options.userName?.trim() || undefined;
   const avatarId = resolveAvatarId(options.avatarId);
   const profile = getAvatarProfile(avatarId);
   // Multi-style: style pack from video (studio / wet-selfie / street-rain / …) or mood alias.

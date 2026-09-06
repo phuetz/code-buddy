@@ -207,10 +207,47 @@ describe('Lisa selfie cache ingest + eviction', () => {
     const sidecar = JSON.parse(
       await fs.readFile(result.destPath!.replace(/\.png$/i, '.json'), 'utf8'),
     ) as Record<string, unknown>;
-    expect(sidecar.contentTier).toBe('safe');
+    expect(sidecar.tier).toBe('safe');
     expect(sidecar.style).toBe('portrait');
-    expect(sidecar.model).toBe('test-model');
-    expect(sidecar.prompt).toMatch(/ohwx lisa/);
+    expect(sidecar.source).toBe('test-model');
+    expect(sidecar.prompt).toBeUndefined();
+    expect(sidecar.hash).toMatch(/^[a-f0-9]{12}$/);
+    expect(typeof sidecar.createdAt).toBe('string');
+    expect(sidecar.favorite).toBe(false);
+  });
+
+  it('never persists a raw prompt (fictional first name stays out of the sidecar)', async () => {
+    const root = await makeRoot('ingest-pii');
+    const cacheDir = path.join(root, 'cache');
+    const source = path.join(root, 'out.png');
+    await writePng(source);
+    const result = await maybeIngestGeneratedLisaSelfie({
+      sourcePath: source,
+      prompt: 'ohwx lisa, selfie portrait, looking at Camille, tasteful',
+      contentTier: 'safe',
+      style: 'portrait',
+      provider: 'refill',
+      env: { CODEBUDDY_LISA_SELFIE_CACHE_DIR: cacheDir } as NodeJS.ProcessEnv,
+      rootDir: root,
+      now: () => new Date('2026-09-06T12:00:00.000Z'),
+    });
+    expect(result.ingested).toBe(true);
+    const raw = await fs.readFile(result.destPath!.replace(/\.png$/i, '.json'), 'utf8');
+    expect(raw).not.toMatch(/Camille/i);
+    expect(raw).not.toMatch(/looking at/i);
+    const sidecar = JSON.parse(raw) as Record<string, unknown>;
+    expect(sidecar).toEqual({
+      tier: 'safe',
+      style: 'portrait',
+      hash: expect.stringMatching(/^[a-f0-9]{12}$/),
+      createdAt: expect.any(String),
+      source: 'refill',
+      favorite: false,
+      promptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(Object.keys(sidecar).sort()).toEqual(
+      ['createdAt', 'favorite', 'hash', 'promptHash', 'source', 'style', 'tier'].sort(),
+    );
   });
 
   it('evicts the oldest non-favorite when over the max', async () => {
@@ -286,6 +323,42 @@ describe('Lisa selfie refill heartbeat', () => {
     expect(result.generated).toBe(true);
     expect(generate).toHaveBeenCalledOnce();
     expect(result.style).toBeTruthy();
+  });
+
+  it('refills a generic Lisa image without a first name in the prompt or sidecar', async () => {
+    const root = await makeRoot('refill-pii');
+    const cacheDir = path.join(root, 'cache');
+    const source = path.join(root, 'gen.png');
+    await writePng(source);
+    let captured = '';
+    const generate = vi.fn(async (prompt: string) => {
+      captured = prompt;
+      return { success: true, outputPath: source };
+    });
+    const result = await runLisaSelfieRefillPass({
+      env: {
+        CODEBUDDY_LISA_SELFIE_REFILL: 'true',
+        CODEBUDDY_LISA_SELFIE_CACHE_DIR: cacheDir,
+        CODEBUDDY_LISA_SELFIE_REFILL_MIN: '1',
+        CODEBUDDY_USER_NAME: 'Camille',
+      } as NodeJS.ProcessEnv,
+      rootDir: root,
+      generate,
+      probeGenerator: async () => true,
+      load1: () => 0.1,
+    });
+    expect(result.generated).toBe(true);
+    expect(captured).not.toMatch(/Camille/i);
+    expect(captured).toMatch(/looking at camera/i);
+    const files = await fs.readdir(path.join(cacheDir, result.contentTier ?? 'safe', result.style ?? 'portrait'));
+    const sidecarName = files.find((name) => name.endsWith('.json'));
+    expect(sidecarName).toBeTruthy();
+    const raw = await fs.readFile(
+      path.join(cacheDir, result.contentTier ?? 'safe', result.style ?? 'portrait', sidecarName!),
+      'utf8',
+    );
+    expect(raw).not.toMatch(/Camille/i);
+    expect(JSON.parse(raw).prompt).toBeUndefined();
   });
 
   it('stops without looping when the generator is unreachable', async () => {

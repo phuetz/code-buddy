@@ -123,15 +123,13 @@ export async function maybeIngestGeneratedLisaSelfie(
     await writeJsonAtomic(
       destPath.replace(/\.[^.]+$/, '.json'),
       {
-        prompt: input.prompt,
-        contentTier: tier,
+        tier,
         style,
-        model: input.model ?? null,
-        provider: input.provider ?? null,
-        generatedAt: new Date().toISOString(),
         hash,
+        createdAt: (input.now ?? (() => new Date()))().toISOString(),
+        source: input.provider ?? input.model ?? 'generated',
         favorite: input.favorite === true,
-        disclosure: 'AI-generated image',
+        promptHash: createHash('sha256').update(input.prompt).digest('hex'),
       },
       { mode: 0o600 },
     );

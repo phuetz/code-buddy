@@ -20,7 +20,6 @@ import {
   maybeIngestGeneratedLisaSelfie,
   resolveLisaSelfieCacheDir,
 } from './lisa-selfie-ingest.js';
-import { resolveUserName } from './user-name.js';
 
 export const DEFAULT_SELFIE_REFILL_MIN = 2;
 export const DEFAULT_SELFIE_REFILL_MAX_LOAD = 4;
@@ -113,7 +112,6 @@ export async function runLisaSelfieRefillPass(
       mood: gap.style,
       style: gap.style,
       avatarId,
-      userName: resolveUserName(),
       contentTier: gap.tier,
     });
     const result = await generate(prompt, 'portrait', env);
