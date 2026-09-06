@@ -336,6 +336,15 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `BUDDY_MEMORY_EMBED_MODEL` / `BUDDY_MEMORY_EMBED_TOKEN_TYPE` | Multilingual MiniLM `.onnx` for hybrid recall (default `~/.codebuddy/models/buddy-memory/model.onnx`, `tokenizer.json` beside it; needs the `embeddings` cargo feature) + whether the graph expects `token_type_ids` (default true) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
+| `CODEBUDDY_PROVIDER_FALLBACK_LOCAL_ONLY` | `true` restricts declared failover to local-only providers (Ollama, LM Studio, Lemonade) when `CODEBUDDY_PROVIDER_FALLBACK=true` (`provider-failover-policy.ts:32`) |
+| `CODEBUDDY_LLM_LOCAL_ONLY` | Alias of `CODEBUDDY_LOCAL_ONLY` — same effect as above when set (`provider-failover-policy.ts:34`) |
+| `CODEBUDDY_COMFYUI_FALLBACK_URLS` | CSV of ComfyUI fallback endpoints checked by `resolveImageProvider()` when the primary `COMFYUI_URL` is unavailable (`media-generation-tool.ts:1480`); alias `COMFYUI_FALLBACK_URLS` also honoured |
+| `CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS` | Mobile PWA confirmation request timeout (default 30000 ms, `confirmation-bridge.ts:32`) |
+| `CODEBUDDY_SENSORY_STATUS_FILE` | Override path for sensory status JSON file (default `~/.codebuddy/sensory-status.json`, `sensory-status.ts:82`) |
+| `CODEBUDDY_COMPANION_AWAY_STATE_FILE` | Override path for companion away-state JSON file (default `~/.codebuddy/companion/away-state.json`, `away-mode.ts:153`) |
+| `CODEBUDDY_COMPANION_RECENT_SAID_FILE` | Override path for companion recent-said JSON file (default `~/.codebuddy/companion/recent-said.json`, `recent-said.ts:29`) |
+| `CODEBUDDY_AUDIT_DIR` | Override directory for run trajectory/audit files (default `~/.codebuddy/audits/`, `run-trajectory-load.ts:64`) |
+| `CODEBUDDY_IMAGE_BASE_URL` | Override base URL for image generation requests when no ComfyUI endpoint is configured (`media-generation-tool.ts:1831`) |
 
 ### Exploitation de la voix ElevenLabs de Lisa
 
