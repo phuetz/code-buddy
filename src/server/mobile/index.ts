@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from '../../utils/logger.js';
+import { buildMobileStatus } from './status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,9 +88,14 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
       '/__codebuddy__/mobile/',
       '/__codebuddy__/mobile/manifest.webmanifest',
       '/__codebuddy__/mobile/sw.js',
+      '/__codebuddy__/mobile/status',
       '/__codebuddy__/mobile/assets/{*path}',
     ],
   });
+});
+
+mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
+  res.json(await buildMobileStatus());
 });
 
 mobilePwaRouter.get('/pairing-qr', (_req: Request, res: Response) => {

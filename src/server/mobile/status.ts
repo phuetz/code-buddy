@@ -6,6 +6,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  loadRelationshipState,
+  moodBand,
+  personalityOf,
+} from '../../companion/relationship-state.js';
 import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import { getConnectionStats } from '../websocket/handler.js';
 
@@ -62,6 +67,22 @@ export async function listFleetPeersForMobile(
   return peers;
 }
 
+/**
+ * Read-only companion mood/traits for the PWA header.
+ * Present only when CODEBUDDY_COMPANION_RELATIONAL=true; otherwise omitted.
+ */
+export function companionStatusForMobile():
+  | { mood: number; traits: ReturnType<typeof personalityOf>['traits']; label: ReturnType<typeof moodBand> }
+  | undefined {
+  if (process.env.CODEBUDDY_COMPANION_RELATIONAL !== 'true') return undefined;
+  const personality = personalityOf(loadRelationshipState());
+  return {
+    mood: personality.mood,
+    traits: personality.traits,
+    label: moodBand(personality.mood),
+  };
+}
+
 export async function buildMobileStatus(homeDir = os.homedir()): Promise<Record<string, unknown>> {
   const detected = detectProviderFromEnv();
   let fallback: unknown = null;
@@ -73,6 +94,7 @@ export async function buildMobileStatus(homeDir = os.homedir()): Promise<Record<
   }
 
   const peers = await listFleetPeersForMobile();
+  const companion = companionStatusForMobile();
   return {
     provider: detected
       ? {
@@ -88,5 +110,6 @@ export async function buildMobileStatus(homeDir = os.homedir()): Promise<Record<
       connections: getConnectionStats(),
       peers,
     },
+    ...(companion ? { companion } : {}),
   };
 }
