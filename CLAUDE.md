@@ -343,8 +343,8 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_SENSORY_STATUS_FILE` | Override path for sensory status JSON file (default `~/.codebuddy/sensory-status.json`, `sensory-status.ts:82`) |
 | `CODEBUDDY_COMPANION_AWAY_STATE_FILE` | Override path for companion away-state JSON file (default `~/.codebuddy/companion/away-state.json`, `away-mode.ts:153`) |
 | `CODEBUDDY_COMPANION_RECENT_SAID_FILE` | Override path for companion recent-said JSON file (default `~/.codebuddy/companion/recent-said.json`, `recent-said.ts:29`) |
-| `CODEBUDDY_AUDIT_DIR` | Override directory for run trajectory/audit files (default `~/.codebuddy/audits/`, `run-trajectory-load.ts:64`) |
-| `CODEBUDDY_IMAGE_BASE_URL` | Override base URL for image generation requests when no ComfyUI endpoint is configured (`media-generation-tool.ts:1831`) |
+| `CODEBUDDY_AUDIT_DIR` | Extra directory of `*.jsonl` audit files read by `buddy run trajectory` **in addition to** the home audit dir (not a replacement; `run-trajectory-load.ts:64`) |
+| `CODEBUDDY_IMAGE_BASE_URL` | Alternative ComfyUI base URL used when `COMFYUI_URL` is unset; a value containing `8188` also auto-selects the `comfyui` provider (`media-generation-tool.ts:1831-1839`) |
 
 ### Exploitation de la voix ElevenLabs de Lisa
 
