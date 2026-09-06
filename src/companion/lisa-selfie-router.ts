@@ -27,8 +27,8 @@ import {
   type LisaSelfieMood,
 } from './lisa-selfie.js';
 import {
-  resolveLisaSelfieCacheDir,
   resolveLisaSelfieRecentPath,
+  resolveSelfieCacheDir,
 } from './lisa-selfie-ingest.js';
 
 export type CompanionSelfieSurface = 'telegram' | 'mobile' | 'voice';
@@ -105,7 +105,7 @@ export async function tryServeCompanionSelfie(
   const contentTier = resolveLisaContentTier(env, inferredTier);
   const style = inferLisaSelfieStyle(text)
     ?? (continuation ? undefined : inferSelfieMood(text));
-  const cacheDir = options.cacheDir ?? resolveLisaSelfieCacheDir(env, options.rootDir ?? process.cwd());
+  const cacheDir = options.cacheDir ?? resolveSelfieCacheDir(env);
   const rotationPath = options.rotationPath ?? resolveLisaSelfieRecentPath(env);
   const lastPath = loadLastSelfiePath(rotationPath);
   const exclude = lastPath ? [lastPath] : [];

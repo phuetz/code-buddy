@@ -12,6 +12,7 @@ import { tryServeCompanionSelfie } from '../../src/companion/lisa-selfie-router.
 import {
   evictLisaSelfieCacheOverflow,
   maybeIngestGeneratedLisaSelfie,
+  resolveSelfieCacheDir,
 } from '../../src/companion/lisa-selfie-ingest.js';
 import { runLisaSelfieRefillPass } from '../../src/companion/lisa-selfie-refill.js';
 
@@ -183,6 +184,30 @@ describe('tryServeCompanionSelfie cache-first', () => {
       env: {} as NodeJS.ProcessEnv,
     });
     expect(served?.caption).toBe('Voilà — une photo de moi.');
+  });
+});
+
+describe('Lisa selfie cache directory', () => {
+  it('defaults under the isolated HOME companion dir, never process.cwd()', () => {
+    const previousHome = process.env.HOME;
+    const isolatedHome = `${path.sep}opt${path.sep}isolated-companion-home`;
+    process.env.HOME = isolatedHome;
+    try {
+      const dir = resolveSelfieCacheDir({});
+      expect(dir).toBe(path.join(isolatedHome, '.codebuddy', 'companion', 'lisa', 'selfie-cache'));
+      expect(dir.startsWith(process.cwd() + path.sep)).toBe(false);
+      expect(dir).not.toContain(path.join('.codebuddy', 'lora'));
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  it('lets CODEBUDDY_LISA_SELFIE_CACHE_DIR override the default', () => {
+    const configured = path.join(QA, 'explicit-cache');
+    expect(resolveSelfieCacheDir({
+      CODEBUDDY_LISA_SELFIE_CACHE_DIR: configured,
+    } as NodeJS.ProcessEnv)).toBe(configured);
   });
 });
 

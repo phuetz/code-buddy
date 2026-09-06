@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto';
 import fs from 'fs/promises';
 import { homedir } from 'os';
 import path from 'path';
-import { defaultLoraRoot } from '../lora/dataset.js';
 import { AVATAR_STYLE_IDS, type AvatarStyleId } from '../lora/lisa-avatar-bible.js';
 import { logger } from '../utils/logger.js';
 import { writeJsonAtomic } from '../utils/atomic-write.js';
@@ -23,13 +22,18 @@ import {
 export const DEFAULT_LISA_SELFIE_CACHE_MAX = 200;
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
-export function resolveLisaSelfieCacheDir(
-  env: NodeJS.ProcessEnv = process.env,
-  rootDir = process.cwd(),
-): string {
+/** Default on-disk Lisa selfie cache. Env override wins; else HOME, never cwd. */
+export function resolveSelfieCacheDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim();
   if (configured) return configured;
-  return path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
+  return path.join(homedir(), '.codebuddy', 'companion', 'lisa', 'selfie-cache');
+}
+
+export function resolveLisaSelfieCacheDir(
+  env: NodeJS.ProcessEnv = process.env,
+  _rootDir?: string,
+): string {
+  return resolveSelfieCacheDir(env);
 }
 
 export function resolveLisaSelfieRecentPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -106,7 +110,7 @@ export async function maybeIngestGeneratedLisaSelfie(
     }
     if (bytes.length < 8) return { ingested: false, skipped: 'missing-source' };
     const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 12);
-    const cacheDir = resolveLisaSelfieCacheDir(env, input.rootDir ?? process.cwd());
+    const cacheDir = resolveSelfieCacheDir(env);
     const destDir = path.join(cacheDir, tier, style);
     const existing = await findByHash(destDir, hash, path.extname(input.sourcePath) || '.png');
     if (existing) return { ingested: false, destPath: existing, skipped: 'duplicate' };

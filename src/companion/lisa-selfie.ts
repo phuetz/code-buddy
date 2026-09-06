@@ -420,8 +420,8 @@ export async function createAndMaybeSendLisaSelfie(
       });
 
     const aspect = options.aspectRatio ?? 'portrait';
-    const cacheDir = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim()
-      || path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
+    const { resolveSelfieCacheDir } = await import('./lisa-selfie-ingest.js');
+    const cacheDir = resolveSelfieCacheDir(env);
     if (options.contentTier === 'explicit' && contentTier !== 'explicit') {
       return {
         success: false,

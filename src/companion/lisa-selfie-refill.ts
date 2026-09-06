@@ -18,7 +18,7 @@ import { buildLisaSelfiePrompt, resolveLisaContentTier, type LisaContentTier } f
 import {
   countLisaSelfieCacheImages,
   maybeIngestGeneratedLisaSelfie,
-  resolveLisaSelfieCacheDir,
+  resolveSelfieCacheDir,
 } from './lisa-selfie-ingest.js';
 
 export const DEFAULT_SELFIE_REFILL_MIN = 2;
@@ -70,7 +70,7 @@ export async function runLisaSelfieRefillPass(
       return { ran: false, skipped: 'unreachable' };
     }
 
-    const cacheDir = resolveLisaSelfieCacheDir(env, deps.rootDir ?? process.cwd());
+    const cacheDir = resolveSelfieCacheDir(env);
     const min = Math.max(1, Math.min(20, Math.floor(
       parsePositive(env.CODEBUDDY_LISA_SELFIE_REFILL_MIN, DEFAULT_SELFIE_REFILL_MIN),
     )));
