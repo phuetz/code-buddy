@@ -9,6 +9,7 @@ describe('BashTool - Streaming Execution', () => {
   let bash: BashTool;
 
   beforeEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     bash = new BashTool();
     // Auto-approve bash commands for tests
     const service = ConfirmationService.getInstance();
@@ -19,6 +20,7 @@ describe('BashTool - Streaming Execution', () => {
   });
 
   afterEach(() => {
+    delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     bash.dispose();
     const service = ConfirmationService.getInstance();
     clearSandboxEscalationBridge(service);

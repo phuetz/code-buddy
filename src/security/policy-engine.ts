@@ -165,18 +165,19 @@ export class PolicyEngine {
 
   private isSecretsOrDeployment(detail?: Record<string, unknown>): boolean {
     if (!detail) return false;
-    // macOS canonicalizes /var, /tmp and /etc under `/private/…` — that system
-    // prefix is not a "private key" path. Without this, every command whose cwd
-    // is the realpath of $TMPDIR (/private/var/folders/…) needed approval.
-    const pathStr = String(detail.path || '').toLowerCase().replace(/^\/private(?=\/|$)/, '');
-    const cmdStr = String(detail.command || '').toLowerCase();
+    const rawPath = String(detail.path || '');
+    const pathStr = rawPath.toLowerCase().replace(/^\/private(?=\/|$)/, '');
+    let cmdStr = String(detail.command || '').toLowerCase();
+    if (rawPath) {
+      cmdStr = cmdStr.split(rawPath.toLowerCase()).join('');
+    }
     const peerIdStr = String(detail.peerId || '').toLowerCase();
 
     const secretKeywords = ['.env', 'secret', 'credential', 'token', 'key', 'password', 'private'];
     const deployKeywords = ['deploy', 'publish', 'release', 'prod', 'production', 'kube', 'docker'];
 
     const hasSecret = secretKeywords.some(kw => pathStr.includes(kw) || cmdStr.includes(kw) || peerIdStr.includes(kw));
-    const hasDeploy = deployKeywords.some(kw => pathStr.includes(kw) || cmdStr.includes(kw));
+    const hasDeploy = deployKeywords.some(kw => cmdStr.includes(kw));
 
     return hasSecret || hasDeploy;
   }
