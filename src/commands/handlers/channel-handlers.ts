@@ -33,6 +33,14 @@ import {
   getChannelCognitivePort,
   type ChannelCognitiveTurn,
 } from '../../channels/channel-cognitive-port.js';
+import {
+  assembleCompanionChannelPrompt,
+  channelWaitNoticeMs,
+  companionWaitNoticeText,
+  shouldUseCompanionChannelProfile,
+} from '../../channels/companion-channel-profile.js';
+import { runCompanionChannelTurn } from '../../channels/companion-channel-turn.js';
+import { speakChannelProviderFailure } from '../../channels/provider-failure-speech.js';
 
 interface ChannelOptions {
   type?: string;
@@ -615,6 +623,7 @@ export function __resetChannelAIHandlerForTests(): void {
   }
   channelTurnTails.clear();
   channelBotPersonas.clear();
+  companionChannelHistories.clear();
   recentLisaSelfieSessions.clear();
   __resetSessionModelOverridesForTests();
 }
@@ -641,6 +650,7 @@ interface CachedChannelAgent {
 }
 const channelAgentCache = new Map<string, CachedChannelAgent>();
 const channelTurnTails = new Map<string, Promise<void>>();
+const companionChannelHistories = new Map<string, ConversationTurn[]>();
 const CHANNEL_AGENT_IDLE_MS = 2 * 60 * 60 * 1000; // evict after 2h idle
 const CHANNEL_AGENT_MAX = 50;
 const DEFAULT_CHANNEL_TURN_TIMEOUT_MS = 3 * 60 * 1000;
@@ -915,6 +925,56 @@ function channelTypingLifecycle(
     },
     onSettled: () => stopTyping(),
   };
+}
+
+function channelWaitNoticeLifecycle(
+  channel: import('../../channels/index.js').BaseChannel,
+  channelId: string,
+  replyTo?: string,
+): { onStart: () => void; onSettled: () => void } {
+  const delayMs = channelWaitNoticeMs();
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+  return {
+    onStart: () => {
+      if (delayMs <= 0) return;
+      timer = setTimeout(() => {
+        if (stopped) return;
+        void channel
+          .send({
+            channelId,
+            content: companionWaitNoticeText(),
+            ...(replyTo ? { replyTo } : {}),
+          })
+          .catch((error: unknown) => {
+            logger.debug('Channel wait notice skipped', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }, delayMs);
+      timer.unref?.();
+    },
+    onSettled: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
+function rememberCompanionChannelTurn(
+  sessionKey: string,
+  userText: string,
+  assistantText: string,
+): void {
+  const previous = companionChannelHistories.get(sessionKey) ?? [];
+  companionChannelHistories.set(
+    sessionKey,
+    [
+      ...previous,
+      { role: 'user' as const, content: userText },
+      { role: 'assistant' as const, content: assistantText },
+    ].slice(-20),
+  );
 }
 
 function hashForLog(value: unknown): string | undefined {
@@ -1649,15 +1709,35 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
         return;
       }
+      const useCompanionProfile = shouldUseCompanionChannelProfile({
+        text: message.content,
+        isCommand: message.isCommand === true,
+      });
       turn.phase('runtime');
-      const { agent, effectiveRuntime } = await getOrCreateChannelAgent(
-        sessionKey,
-        runtimeResolved,
-        agentConfig,
-        botId,
-        routeModel,
-        companionRoute
-      );
+      let agent: import('../../agent/codebuddy-agent.js').CodeBuddyAgent | undefined;
+      let effectiveRuntime: {
+        apiKey: string;
+        baseUrl: string;
+        model: string;
+        egress: ModelEgress;
+      } = {
+        apiKey: runtimeResolved.apiKey,
+        baseUrl: runtimeResolved.baseUrl,
+        model: runtimeResolved.model,
+        egress: (runtimeResolved as { egress?: ModelEgress }).egress ?? 'cloud',
+      };
+      if (!useCompanionProfile) {
+        const created = await getOrCreateChannelAgent(
+          sessionKey,
+          runtimeResolved,
+          agentConfig,
+          botId,
+          routeModel,
+          companionRoute,
+        );
+        agent = created.agent;
+        effectiveRuntime = created.effectiveRuntime;
+      }
       turn.throwIfAborted();
 
       turn.phase('grounding');
@@ -1688,7 +1768,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
       }
 
-      if (companionConversation) {
+      if (companionConversation && !useCompanionProfile) {
         cognitiveTurn = await getChannelCognitivePort().begin({
           channelType: channel.type,
           sessionKey,
@@ -1719,21 +1799,23 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ]);
         const history: ConversationTurn[] = sharedConversationHistory.length
           ? sharedConversationHistory.slice(-12)
-          : agent
-              .getChatHistory()
-              .filter((entry) => entry.type === 'user' || entry.type === 'assistant')
-              .slice(-12)
-              .map((entry) => {
-                const content = String(entry.content ?? '')
-                  .replace(/<companion_turn>[\s\S]*?<\/companion_turn>\s*/g, '')
-                  .replace(/^Message de l'utilisateur\s*:\s*/i, '')
-                  .trim();
-                return {
-                  role: entry.type === 'user' ? ('user' as const) : ('assistant' as const),
-                  content,
-                };
-              })
-              .filter((entry) => entry.content);
+          : useCompanionProfile
+            ? (companionChannelHistories.get(sessionKey) ?? []).slice(-12)
+            : (agent
+                ?.getChatHistory()
+                .filter((entry) => entry.type === 'user' || entry.type === 'assistant')
+                .slice(-12)
+                .map((entry) => {
+                  const content = String(entry.content ?? '')
+                    .replace(/<companion_turn>[\s\S]*?<\/companion_turn>\s*/g, '')
+                    .replace(/^Message de l'utilisateur\s*:\s*/i, '')
+                    .trim();
+                  return {
+                    role: entry.type === 'user' ? ('user' as const) : ('assistant' as const),
+                    content,
+                  };
+                })
+                .filter((entry) => entry.content) ?? []);
         companionConversationHistory = history;
         const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'
           ? null
@@ -1783,6 +1865,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ? ('factual_analytical' as const)
         : undefined;
       const semanticReviewPlanned =
+        !useCompanionProfile &&
         companionConversation &&
         !prefetchedDirectResponse &&
         preparedConversation !== undefined &&
@@ -1791,14 +1874,15 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
         }) &&
         deriveArgumentObligations(preparedConversation.plan, message.content).length > 0;
-      if (semanticReviewPlanned) {
-        agent.suspendTranscriptSnapshots();
+      if (semanticReviewPlanned && agent) {
+        const snapshotAgent = agent;
+        snapshotAgent.suspendTranscriptSnapshots();
         let released = false;
         releaseTranscriptSnapshotHold = () => {
           if (released) return;
           released = true;
-          if (channelAgentCache.get(sessionKey)?.agent === agent) {
-            agent.resumeTranscriptSnapshots();
+          if (channelAgentCache.get(sessionKey)?.agent === snapshotAgent) {
+            snapshotAgent.resumeTranscriptSnapshots();
           }
         };
       }
@@ -1808,16 +1892,16 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // promise) must discard that private state unless delivery and
       // persistence complete normally.
       generativeSessionKey = sessionKey;
-      generativeTurnEngaged = true;
+      generativeTurnEngaged = Boolean(agent);
       let response = '';
       let rawAgentFailure = false;
       let hasGeneratedResponse = false;
       let successfulLisaSelfieToolResult = false;
-      let shouldPersistChannelSession = true;
+      let shouldPersistChannelSession = Boolean(agent);
       let telegramWidget: { widgetHtml?: string; data?: unknown } | undefined;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
-        if (!agent.recordTrustedExternalConversationTurn(agentInput, response)) {
+        if (agent && !agent.recordTrustedExternalConversationTurn(agentInput, response)) {
           throw new Error('trusted prefetched turn could not be recorded');
         }
         logger.info('Channel served trusted prefetched companion response directly', {
@@ -1826,9 +1910,45 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           messageHash: hashForLog(message.id),
           responseLength: response.length,
         });
+      } else if (useCompanionProfile) {
+        turn.phase('generation');
+        const prompt = await assembleCompanionChannelPrompt({
+          userText: agentInput,
+          history: companionConversationHistory.length
+            ? companionConversationHistory
+            : companionChannelHistories.get(sessionKey),
+        });
+        logger.info('Companion channel profile prompt', {
+          channelType: channel.type,
+          sessionHash: hashForLog(sessionKey),
+          tokenEstimate: prompt.tokenEstimate,
+          messageCount: prompt.messages.length,
+        });
+        try {
+          const generated = await runCompanionChannelTurn({
+            apiKey: effectiveRuntime.apiKey,
+            baseUrl: effectiveRuntime.baseUrl,
+            model: effectiveRuntime.model,
+            messages: prompt.messages,
+            signal: turn.signal,
+          });
+          turn.throwIfAborted();
+          response = generated.text;
+          hasGeneratedResponse = response.trim() !== '';
+        } catch (error) {
+          turn.throwIfAborted();
+          response = speakChannelProviderFailure(error, {
+            copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+          });
+          logger.warn('Companion channel provider failure spoken to conversation', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         turn.phase('generation');
-        const entries = await agent.processUserMessage(agentInput, {
+        const entries = await agent!.processUserMessage(agentInput, {
           surface: channel.type,
           ...(attachedImageEvidence || imageAttachmentCount > 0
             ? { introspectionText: message.content }
@@ -1872,10 +1992,14 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         );
         const replacement =
           prefetchedGroundedFallback ??
-          conversationFailureReply(
-            message.content,
-            companionConversationHistory,
-          );
+          (rawAgentFailure
+            ? speakChannelProviderFailure(response, {
+                copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+              })
+            : conversationFailureReply(
+                message.content,
+                companionConversationHistory,
+              ));
         if (prefetchedGroundedFallback) {
           logger.info('Channel provider failure recovered from prefetched companion context', {
             channelType: channel.type,
@@ -1883,7 +2007,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           });
         }
         if (rawAgentFailure) {
-          if (!agent.replaceLastAssistantResponse(response, replacement)) {
+          if (agent && !agent.replaceLastAssistantResponse(response, replacement)) {
             evictChannelAgent(sessionKey, true);
             shouldPersistChannelSession = false;
             logger.error('Channel provider failure rewrite missed agent history', {
@@ -1891,7 +2015,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
               sessionHash: hashForLog(sessionKey),
             });
           }
-          logger.warn('Channel provider failure hidden from conversation', {
+          logger.warn('Channel provider failure spoken to conversation', {
             channelType: channel.type,
             sessionHash: hashForLog(sessionKey),
           });
@@ -1939,7 +2063,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             : undefined;
           response = groundedRecovery ?? (reviewed.response.trim() || unreviewedResponse);
           if (response !== unreviewedResponse) {
-            if (!agent.replaceLastAssistantResponse(unreviewedResponse, response)) {
+            if (agent && !agent.replaceLastAssistantResponse(unreviewedResponse, response)) {
               // Delivery may continue with the reviewed text, but an agent
               // containing the rejected draft can neither be cached nor saved.
               evictChannelAgent(sessionKey, true);
@@ -1976,7 +2100,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           });
         }
       }
-      if (companionConversation && response.trim()) {
+      if ((companionConversation || useCompanionProfile) && response.trim()) {
         const { guardRelationshipReply } = await import(
           '../../conversation/relationship-safety.js'
         );
@@ -1996,7 +2120,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           /* recent-said is optional */
         }
         if (guarded.intervened) {
-          if (!agent.replaceLastAssistantResponse(unguardedResponse, response)) {
+          if (agent && !agent.replaceLastAssistantResponse(unguardedResponse, response)) {
             // Never retain a response that the delivery gate rejected. A cold
             // agent will restore the safe persisted transcript on the next turn.
             evictChannelAgent(sessionKey, true);
@@ -2232,10 +2356,26 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // 8. Persist the conversation so it survives a daemon restart / cache eviction.
       turn.throwIfAborted();
       turn.phase('persistence');
-      if (shouldPersistChannelSession) await persistChannelSession(agent, sessionKey);
+      if (useCompanionProfile && response.trim()) {
+        rememberCompanionChannelTurn(sessionKey, message.content, response);
+      }
+      if (shouldPersistChannelSession && agent) await persistChannelSession(agent, sessionKey);
       turn.throwIfAborted();
       }, {
-        ...channelTypingLifecycle(channel, message.channel.id),
+        ...(() => {
+          const typing = channelTypingLifecycle(channel, message.channel.id);
+          const wait = channelWaitNoticeLifecycle(channel, message.channel.id, message.id);
+          return {
+            onStart: () => {
+              typing.onStart();
+              wait.onStart();
+            },
+            onSettled: () => {
+              wait.onSettled();
+              typing.onSettled();
+            },
+          };
+        })(),
         onTimeout: async () => {
           await (cognitiveTurn as ChannelCognitiveTurn | null)?.fail().catch(() => undefined);
           cognitiveTurn = null;
@@ -2248,8 +2388,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             deliveryState = 'started';
             const result = await channel.send({
               channelId: message.channel.id,
-              content:
-                "Je suis restée bloquée trop longtemps sur cette réponse. J’ai libéré la conversation : renvoie-moi ta demande et je repars proprement.",
+              content: speakChannelProviderFailure(
+                Object.assign(new Error('channel turn timed out after timeout during generation'), {
+                  name: 'ChannelTurnTimeoutError',
+                }),
+                { copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA) },
+              ),
               replyTo: message.id,
             });
             if (result?.success) deliveryState = 'delivered';
@@ -2284,9 +2428,15 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         const { conversationFailureReply } = await import(
           '../../conversation/conversation-orchestrator.js'
         );
+        const raw = err instanceof Error ? err.message : String(err);
+        const spoken = timedOut || /sorry, i encountered an error/i.test(raw)
+          ? speakChannelProviderFailure(err, {
+              copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+            })
+          : conversationFailureReply(message.content);
         await channel.send({
           channelId: message.channel.id,
-          content: conversationFailureReply(message.content),
+          content: spoken,
           replyTo: message.id,
         });
       } catch {
