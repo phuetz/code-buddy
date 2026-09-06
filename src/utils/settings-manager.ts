@@ -86,6 +86,8 @@ const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {
   ],
 };
 
+const repairedEmptyUserSettings = new Set<string>();
+
 /**
  * Default values for project settings
  */
@@ -180,7 +182,16 @@ export class SettingsManager {
       }
 
       const rawSettings = readJsonAtomicSync<unknown | null>(this.userSettingsPath, null, { mode: 0o600 });
-      if (rawSettings === null) return { ...DEFAULT_USER_SETTINGS };
+      if (rawSettings === null) {
+        if (!repairedEmptyUserSettings.has(this.userSettingsPath)) {
+          repairedEmptyUserSettings.add(this.userSettingsPath);
+          logger.warn('user-settings.json was empty or unreadable; restored defaults once', {
+            path: this.userSettingsPath,
+          });
+        }
+        this.saveUserSettings(DEFAULT_USER_SETTINGS);
+        return { ...DEFAULT_USER_SETTINGS };
+      }
 
       // Validate with Zod schema
       const validator = getZodConfigValidator();
