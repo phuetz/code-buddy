@@ -98,9 +98,13 @@ describe('Mobile WS protocol', () => {
   let wss: WebSocketServer;
   let wsBase: string;
   const previousSecret = process.env.JWT_SECRET;
+  // The companion turn persists its short history per identity; this suite must
+  // never write into the developer's real home.
+  const previousHistory = process.env.CODEBUDDY_MOBILE_HISTORY;
 
   beforeEach(async () => {
     process.env.JWT_SECRET = SECRET;
+    process.env.CODEBUDDY_MOBILE_HISTORY = 'false';
     _resetFleetRegistryForTests();
     getFleetRegistry().register({
       id: 'agy',
@@ -159,6 +163,8 @@ describe('Mobile WS protocol', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
+    if (previousHistory === undefined) delete process.env.CODEBUDDY_MOBILE_HISTORY;
+    else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
   });
 
   async function authed(): Promise<{ ws: WebSocket; events: Frame[] }> {
