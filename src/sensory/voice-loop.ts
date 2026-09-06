@@ -1731,7 +1731,10 @@ export async function buildSpokenPromptAugmentation(
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
       : '',
-    avoidOpenersGuidance(recentReplyOpeners),
+    avoidOpenersGuidance([
+      ...recentReplyOpeners,
+      ...(await import('../companion/recent-said.js').then((m) => m.recentOpeners()).catch(() => [] as string[])),
+    ]),
   ]
     .filter(Boolean)
     .join('\n');
@@ -4003,6 +4006,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             // that merge several spoken segments into one utterance.
             noteSpokenText(result.spoken);
             recentReplyOpeners = pushOpener(recentReplyOpeners, result.spoken);
+            void import('../companion/recent-said.js')
+              .then((m) => m.rememberSaid(result.spoken, 'voice'))
+              .catch(() => undefined);
             publishAssistantTurn(result.spoken);
             logger.info(`[voice] spoke (streamed) chars=${result.spoken.length}`);
             logger.info(
@@ -4086,6 +4092,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       }
       if (!emptyReplyRecovery) reply = rewriteRepeatedVoiceOpener(reply);
       recentReplyOpeners = pushOpener(recentReplyOpeners, reply);
+      void import('../companion/recent-said.js')
+        .then((m) => m.rememberSaid(reply, 'voice'))
+        .catch(() => undefined);
       // The textual answer is now committed even if the local audio device fails;
       // publish it to the shared channel so the conversation never disappears.
       publishAssistantTurn(reply);

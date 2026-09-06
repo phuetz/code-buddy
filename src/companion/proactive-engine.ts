@@ -50,6 +50,7 @@ import {
   resolveAwayClock,
   saveAwayState,
 } from './away-mode.js';
+import { pickUnsaidLine, rememberSaid } from './recent-said.js';
 
 /** The closed set of reasons Lisa might reach out. */
 export type ProactiveTrigger =
@@ -167,10 +168,13 @@ export function pickProactiveLine(
 ): string {
   const pool = PROACTIVE_TEMPLATES[candidate.trigger];
   if (!pool || pool.length === 0) return '';
-  let idx = pool.length === 1 ? 0 : Math.floor(rng() * pool.length) % pool.length;
-  if (pool.length > 1 && idx === lastTemplateIdx[candidate.trigger]) idx = (idx + 1) % pool.length;
-  lastTemplateIdx[candidate.trigger] = idx;
-  return interpolate(pool[idx]!, candidate.data);
+  const avoidIdx = lastTemplateIdx[candidate.trigger];
+  const avoid = typeof avoidIdx === 'number' ? pool[avoidIdx] : undefined;
+  const interpolated = pool.map((template) => interpolate(template, candidate.data));
+  const line = pickUnsaidLine(interpolated, { rng, avoid: avoid ? interpolate(avoid, candidate.data) : undefined });
+  const idx = interpolated.indexOf(line);
+  lastTemplateIdx[candidate.trigger] = idx >= 0 ? idx : 0;
+  return line;
 }
 
 // ── persisted throttle state ──────────────────────────────────────────
@@ -345,7 +349,7 @@ async function deliverAwayInitiative(
   const decision = canSendAway({ state, clock });
   if (!decision.ok) return null;
 
-  let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine });
+  let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine, now });
   if (!line.trim() || isAwayShameLine(line)) return null;
   const guardedLine = guardRelationshipReply(line);
   line = guardedLine.response;
@@ -376,6 +380,7 @@ async function deliverAwayInitiative(
     },
     deps.statePath,
   );
+  rememberSaid(line, 'telegram', now);
   logger.info(`[proactive] away:${decision.angle} (telegram) → ${line}`);
   return line;
 }
@@ -484,6 +489,7 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
         if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
           throw new Error('remote proactive delivery was not accepted');
         }
+        rememberSaid(line, 'telegram', now);
         // An injected phone transport belongs to its test/integration caller;
         // production records the already-delivered turn once, with no mirror.
         if (!deps.telegramVoice || deps.recordRemote) {

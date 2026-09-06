@@ -10,6 +10,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { resolveCompanionPersona } from './personas/index.js';
 import type { CompanionAwayAngle } from './personas/types.js';
+import { pickUnsaidLine } from './recent-said.js';
 import { resolveHouseholdClock } from './household-time.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
@@ -260,16 +261,22 @@ export function awayTemplatesFor(
 
 export function pickAwayLine(
   angle: CompanionAwayAngle,
-  opts: { rng?: () => number; avoid?: string; env?: NodeJS.ProcessEnv } = {},
+  opts: {
+    rng?: () => number;
+    avoid?: string;
+    env?: NodeJS.ProcessEnv;
+    now?: number;
+    statePath?: string;
+  } = {},
 ): string {
   const pool = awayTemplatesFor(angle, opts.env);
-  if (pool.length === 0) return '';
-  const rng = opts.rng ?? Math.random;
-  let idx = Math.min(pool.length - 1, Math.floor(rng() * pool.length));
-  if (pool.length > 1 && opts.avoid && pool[idx] === opts.avoid) {
-    idx = (idx + 1) % pool.length;
-  }
-  return pool[idx] ?? '';
+  return pickUnsaidLine(pool, {
+    rng: opts.rng,
+    avoid: opts.avoid,
+    env: opts.env,
+    now: opts.now,
+    statePath: opts.statePath,
+  });
 }
 
 export function canSendAway(input: {

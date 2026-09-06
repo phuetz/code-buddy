@@ -1983,6 +1983,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         const guarded = guardRelationshipReply(response);
         const unguardedResponse = response;
         response = guarded.response;
+        try {
+          const { rememberSaid } = await import('../../companion/recent-said.js');
+          rememberSaid(response, 'telegram');
+        } catch {
+          /* recent-said is optional */
+        }
         if (guarded.intervened) {
           if (!agent.replaceLastAssistantResponse(unguardedResponse, response)) {
             // Never retain a response that the delivery gate rejected. A cold

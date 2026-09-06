@@ -494,6 +494,7 @@ Opt-in `CODEBUDDY_COMPANION_PERSONA=copine`. Les textes vivent dans un **profil 
 surnoms rares. Défaut unset = les pools historiques, inchangés. Aucun texte intime ; le palier
 visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée. L’humeur du jour dérive
 avec inertie (plafond de saut, reset doux au réveil) — une pente, pas un sismographe.
+Les ouvertures récentes sont partagées voix + Telegram (anneau 7 jours, `~/.codebuddy/companion/recent-said.json`).
 
 ### 🪑 Te tenir compagnie (présence)
 De temps en temps, au bon moment, je dis un petit mot qui réchauffe : *« comment s'est passée ta journée ? »*,
