@@ -133,7 +133,7 @@ describe('A2AAgentClient.submitTask via skill (E2E with mocked fetch)', () => {
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
     const client = new A2AAgentClient();
-    registerRemote(client, 'ollama-ministar', 'http://100.90.108.4:3002', ['ollama-qwen2.5-coder-32b']);
+    registerRemote(client, 'ollama-hub', 'http://203.0.113.14:3002', ['ollama-qwen2.5-coder-32b']);
 
     const target = client.resolveTarget({ skill: 'ollama-qwen2.5-coder-32b' });
     expect('agentKey' in target).toBe(true);
@@ -143,7 +143,7 @@ describe('A2AAgentClient.submitTask via skill (E2E with mocked fetch)', () => {
       expect(task.status.status).toBe(TaskStatus.COMPLETED);
       expect(fetchMock).toHaveBeenCalledOnce();
       const [url] = fetchMock.mock.calls[0];
-      expect(url).toBe('http://100.90.108.4:3002/api/a2a/tasks/send');
+      expect(url).toBe('http://203.0.113.14:3002/api/a2a/tasks/send');
     }
   });
 });

@@ -14,6 +14,7 @@
 
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
 import { AUTHORED_PREFIX } from './authored-tool-runtime.js';
+import { checkAstNovelty } from './evolution/ast-novelty.js';
 import { scoreToolCases } from './sandbox-scorer.js';
 import type { ToolMutatorPort } from './tool-skill-mutator.js';
 import type { ToolBenchmarkScenario, ToolGateOutcome, ToolProposal } from './tool-types.js';
@@ -21,6 +22,8 @@ import type { ToolBenchmarkScenario, ToolGateOutcome, ToolProposal } from './too
 export interface ValidateToolOptions {
   /** auto-apply: keep (register) an accepted tool. propose-only: report only. */
   keepOnAccept: boolean;
+  /** Optional source before mutation. When absent, G0 is not applicable to a new tool. */
+  parentCode?: string;
 }
 
 export async function validateToolProposal(
@@ -37,6 +40,21 @@ export async function validateToolProposal(
     heldOutPassed: 0,
     heldOutTotal: scenario.heldOutCases.length,
   };
+
+  // G0 — reject a proven AST-identical mutation before static scans or behavioural scoring. A new
+  // authored tool has no parent and therefore remains on the normal G1→G4 path.
+  const parentCode = options.parentCode ?? proposal.parentCode;
+  if (parentCode !== undefined) {
+    const novelty = checkAstNovelty(proposal.spec.code, parentCode);
+    if (!novelty.isNovel) {
+      return {
+        ...zero,
+        accepted: false,
+        rejectionReason: 'ast-identical',
+        reasons: [`G0 rejected AST-identical mutation (${novelty.diffNodesCount} changed nodes)`],
+      };
+    }
+  }
 
   // G1 — static scan (no execution).
   const scan = inspectAuthoredCode(proposal.spec.code, 'code');

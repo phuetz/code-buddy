@@ -138,6 +138,35 @@ describe('Tools CLI commands', () => {
     consoleLogSpy.mockRestore();
   });
 
+  it('lists the tool catalog with C5 effect classes', async () => {
+    const program = createProgram();
+    registerToolsCommands(program);
+
+    await program.parseAsync(['node', 'test', 'tools', 'catalog', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      count: number;
+      tools: Array<{ name: string; effect: string }>;
+    };
+    expect(output.count).toBeGreaterThan(100);
+    expect(output.tools.find((tool) => tool.name === 'view_file')?.effect).toBe('read');
+    expect(output.tools.find((tool) => tool.name === 'create_file')?.effect).toBe('reversible');
+    expect(output.tools.find((tool) => tool.name === 'bash')?.effect).toBe('emission');
+    expect(output.tools.find((tool) => tool.name === 'stock_quote')?.effect).toBe('emission');
+    expect(output.tools.every((tool) => ['read', 'reversible', 'emission', 'unknown'].includes(tool.effect))).toBe(true);
+  });
+
+  it('lists the default profile when no subcommand is given', async () => {
+    const program = createProgram();
+    registerToolsCommands(program);
+
+    await program.parseAsync(['node', 'test', 'tools']);
+
+    const output = getLogOutput();
+    expect(output).toContain('Tool profile: fleet.hermes.balanced');
+    expect(output).toContain('Inspected tools:');
+  });
+
   it('prints JSON for a Hermes-safe profile against selected tools', async () => {
     const program = createProgram();
     registerToolsCommands(program);

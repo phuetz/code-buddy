@@ -9,13 +9,19 @@
  */
 
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../../codebuddy/client.js";
-import { withStallGuard } from "../../utils/stream-stall-guard.js";
+import { resolveFirstTokenStallTimeoutMs, resolveStallTimeoutMs, withStallGuard } from "../../utils/stream-stall-guard.js";
+import { startHeadlessPromptProgress } from "../../cli/headless-prompt-progress.js";
+import {
+  HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE,
+  HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
+  isHeadlessLocalPromptCompact,
+} from "../../config/headless-local-prompt.js";
 import { ChatEntry, StreamingChunk } from "../types.js";
 import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
 import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
 import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
-import { ContextManagerV2 } from "../../context/context-manager-v2.js";
+import { ContextCompactionError, ContextManagerV2 } from "../../context/context-manager-v2.js";
 import { TokenCounter } from "../../utils/token-counter.js";
 import { logger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../errors/index.js";
@@ -60,6 +66,7 @@ import {
 } from "../../context/restorable-compression.js";
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
+import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
 import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
@@ -74,6 +81,7 @@ import {
 import {
   classifyLisaIntrospection,
   guardLisaOperationalSelfInspectionReply,
+  isLisaEvolutionRequest,
   renderLisaOperationalSelfResponse,
 } from '../../identity/lisa-introspection.js';
 import type { TimelineToolCall } from '../../sessions/timeline.js';
@@ -118,6 +126,7 @@ const FILE_MENTION_CANDIDATE_PATTERN = /(?:^|\s)@[^\s@]+/;
 interface PreprocessedUserMessage {
   message: string;
   fileMentionContextBlocks: CodeBuddyMessage[];
+  fileMentionUserNotices: string[];
 }
 
 const RELATIONSHIP_OUTBOUND_TOOLS = new Set([
@@ -508,7 +517,18 @@ export interface ExecutorConfig {
   /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
-  recordSessionCost: (input: number, output: number) => void;
+  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number }) => void;
+  /**
+   * Optional: publishes the counters the PROVIDER reported for the turn, summed
+   * over every round. Called exactly once per turn — with `undefined` when no
+   * round carried a real `usage` block, so the previous turn's measurement can
+   * never be replayed as if it belonged to this one. Never a local estimate:
+   * the consumer (the OpenAI-compatible HTTP route) must be able to tell a
+   * measured number from a guessed one.
+   */
+  recordTurnProviderUsage?: (
+    usage: { promptTokens: number; completionTokens: number } | undefined,
+  ) => void;
   /** Returns true if session cost limit has been reached */
   isSessionCostLimitReached: () => boolean;
   /** Estimate whether cost limit would be reached after recording given tokens (no side effects) */
@@ -818,7 +838,7 @@ export class AgentExecutor {
     // identity, and KG extraction persists project entities. None belongs in a
     // core-only technical self-inspection turn.
     if (readOnlySelfInspection) {
-      return { message, fileMentionContextBlocks: [] };
+      return { message, fileMentionContextBlocks: [], fileMentionUserNotices: [] };
     }
 
     // Avoid loading the sizeable mention parser (fs-extra, axios, child_process)
@@ -832,7 +852,10 @@ export class AgentExecutor {
     // Bare @path mentions are resolved independently from the heavier legacy
     // mention parser. They are turn-scoped context: the user's message remains
     // readable in history, while file contents do not persist into later turns.
-    const fileMentionPromise: Promise<CodeBuddyMessage[]> = FILE_MENTION_CANDIDATE_PATTERN.test(message)
+    const fileMentionPromise: Promise<{
+      blocks: CodeBuddyMessage[];
+      notices: string[];
+    }> = FILE_MENTION_CANDIDATE_PATTERN.test(message)
       ? import('../../context/file-mentions.js')
           .then(async ({ formatFileMentionContext, resolveFileMentions }) => {
             const resolution = await resolveFileMentions(message, { projectRoot });
@@ -840,6 +863,7 @@ export class AgentExecutor {
               role: 'system' as const,
               content: `<context type="file_mention" ephemeral="true">\n${formatFileMentionContext(file)}\n</context>`,
             }));
+            const notices: string[] = [];
 
             for (const ignored of resolution.issues) {
               logger.debug('File mention content was not injected', {
@@ -854,17 +878,31 @@ export class AgentExecutor {
                   '</context>',
                 ].join('\n'),
               });
+              if (ignored.reason === 'not-found') {
+                notices.push(`Fichier ${ignored.path} introuvable, ignoré.`);
+              }
             }
 
-            return blocks;
+            return { blocks, notices };
           })
           .catch((error: unknown) => {
+            const errorMessage = getErrorMessage(error);
             logger.debug('File mention resolution failed closed', {
-              error: getErrorMessage(error),
+              error: errorMessage,
             });
-            return [];
+            return {
+              blocks: [{
+                role: 'system' as const,
+                content: [
+                  '<context type="file_mention_notice" ephemeral="true">',
+                  `File mention resolution failed: ${errorMessage}`,
+                  '</context>',
+                ].join('\n'),
+              }],
+              notices: [`Mention de fichier ignorée : ${errorMessage}`],
+            };
           })
-      : Promise.resolve([]);
+      : Promise.resolve({ blocks: [], notices: [] });
 
     // Persona selection affects this turn's system prompt, so keep it on the
     // critical path, but load it concurrently with explicit mention expansion.
@@ -874,11 +912,13 @@ export class AgentExecutor {
           .then(({ getPersonaManager }) => getPersonaManager().autoSelectPersona({ message }))
           .catch(() => null);
 
-    const [mentionResult, , fileMentionContextBlocks] = await Promise.all([
+    const [mentionResult, , fileMentionResolution] = await Promise.all([
       mentionPromise,
       personaPromise,
       fileMentionPromise,
     ]);
+    const fileMentionContextBlocks = fileMentionResolution.blocks;
+    const fileMentionUserNotices = fileMentionResolution.notices;
 
     if (mentionResult && mentionResult.contextBlocks.length > 0) {
       message = mentionResult.cleanedMessage;
@@ -906,7 +946,7 @@ export class AgentExecutor {
       });
     }
 
-    return { message, fileMentionContextBlocks };
+    return { message, fileMentionContextBlocks, fileMentionUserNotices };
   }
 
   /**
@@ -969,7 +1009,7 @@ export class AgentExecutor {
    * path.
    *
    * Derived from the comparative audit Gemini CLI vs Code Buddy
-   * (claude-et-patrice/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
+   * (le dépôt privé de passation, propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md,
    * recommendation #2 — fix défensif S scope). Backward compat preserved:
    * existing `processUserMessage` callers see no change.
    *
@@ -1138,6 +1178,10 @@ export class AgentExecutor {
     );
     message = preprocessed.message;
     const fileMentionContextBlocks = preprocessed.fileMentionContextBlocks;
+    for (const notice of preprocessed.fileMentionUserNotices) {
+      history.push({ type: 'assistant', content: notice, timestamp: new Date() });
+      yield { type: 'content', content: `\n${notice}\n` };
+    }
     const jitContextBlocks: CodeBuddyMessage[] = [];
     // Query ranking should also follow the current utterance on transports that
     // embed history in `message`; keep the full composite only as user context
@@ -1162,6 +1206,37 @@ export class AgentExecutor {
     }
 
     if (readOnlySelfInspection) {
+      if (isLisaEvolutionRequest(introspectionTextForTurn)) {
+        const {
+          formatEvolutionNotesForVoice,
+          queryEvolutionNotes,
+          readEvolutionNotes,
+        } = await import('../../self-model/evolution-notes.js');
+        const since = introspectionTextForTurn.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];
+        const notes = queryEvolutionNotes(await readEvolutionNotes({ workDir: turnCwd }), {
+          ...(since ? { since } : {}),
+          limit: 3,
+        });
+        const content = sanitizeAssistantOutput(formatEvolutionNotesForVoice(notes));
+        history.push({ type: 'assistant', content, timestamp: new Date() });
+        messages.push({ role: 'assistant', content });
+        yield { type: 'content', content };
+        yield {
+          type: 'token_count',
+          tokenCount: this.deps.tokenCounter.countTokens(content),
+        };
+        if (timelineEnabled) {
+          await this.recordCompletedTimelineTurn(
+            timelineHistoryStart,
+            timelineTurn,
+            history,
+            message,
+          );
+        }
+        yield { type: 'done' };
+        return;
+      }
+
       // A provider can ignore an optional tool schema, and free-form prose
       // cannot provide a hard postcondition against invented inner experience.
       // Build the complete report locally from the attested, curated core on
@@ -1249,14 +1324,36 @@ export class AgentExecutor {
     let toolRounds = 0;
     let totalOutputTokens = 0;
     let totalInputTokensForCost = 0;
+    let providerPromptTokens = 0;
+    let providerCompletionTokens = 0;
+    let providerUsageSeen = false;
     let sessionCostRecorded = false;
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
       sessionCostRecorded = true;
       try {
-        this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        // Pass provider usage when available (takes precedence over local estimates)
+        const providerUsage = providerUsageSeen
+          ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+          : undefined;
+        // Only pass provider usage when the provider reported one, so the
+        // historical two-argument call (and its tests) stays byte-identical.
+        if (providerUsage) {
+          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
+        } else {
+          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        }
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
+      }
+      try {
+        this.config.recordTurnProviderUsage?.(
+          providerUsageSeen
+            ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+            : undefined,
+        );
+      } catch (error) {
+        logger.warn('Failed to record provider turn usage', { error: getErrorMessage(error) });
       }
     };
 
@@ -1360,6 +1457,12 @@ export class AgentExecutor {
             alwaysInclude: ['self_describe', 'view_file', 'search', 'apply_patch', 'bash'],
             enableCaching: false,
           };
+        } else if (isHeadlessLocalPromptCompact()) {
+          selectionOpts = {
+            ...selectionOpts,
+            maxTools: HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
+            alwaysInclude: [...HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE],
+          };
         } else if (modelToolConfig.promptProfile === 'lite') {
           selectionOpts = {
             ...selectionOpts,
@@ -1409,6 +1512,7 @@ export class AgentExecutor {
               introspectionText: introspectionTextForTurn,
               cwd: turnCwd,
               queryComplexity,
+              collectiveGraph: ctxLevel.collectiveGraph,
               isolatedSharedHost,
             });
 
@@ -1459,9 +1563,24 @@ export class AgentExecutor {
             }
           : undefined;
 
-        const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
-          isolatedSharedHost,
-        });
+        let preparedMessages: CodeBuddyMessage[];
+        try {
+          preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
+            isolatedSharedHost,
+          });
+        } catch (error) {
+          if (error instanceof ContextCompactionError) {
+            logger.error('Context compaction refused the provider call', {
+              code: error.code,
+              tokens: error.tokens,
+              limit: error.limit,
+            });
+            yield { type: 'content', content: `\n\n${error.message}` };
+            yield { type: 'done' };
+            return;
+          }
+          throw error;
+        }
         preparedMessages.push(...contextBlocks);
         if (emotionalPresenceContext) {
           preparedMessages.push({
@@ -1512,31 +1631,50 @@ export class AgentExecutor {
         this.deps.streamingHandler.reset();
         let steeringRequestedDuringText = false;
         let streamObservedToolCalls = false;
+        let streamEmittedVisibleDelta = false;
 
         // Stall guard: some backends (ChatGPT/Codex OAuth observed) accept
         // the request then never send a byte — without a bound this loop
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
+        const progress = startHeadlessPromptProgress();
         const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
           {
             streamRetry: false,
+            turnMetrics: {
+              recorder: getTurnMetricsRecorder(),
+              inputTokens,
+              getOutputTokens: () => this.deps.streamingHandler.getTokenCount() || 0,
+            },
             ...(abortController?.signal ? { signal: abortController.signal } : {}),
           },
           this.config.isGrokModel() &&
             this.deps.toolSelectionStrategy.shouldUseSearchFor(turnQueryText)
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } },
-        ));
+        ), resolveStallTimeoutMs(), {
+          firstTokenTimeoutMs: () => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, {
+            targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
+          }),
+        });
+        try {
         for await (const streamEvent of withLlmStreamRetry(streamFactory, {
           maxRetries: 2,
           baseDelayMs: 500,
           ...(abortController?.signal ? { signal: abortController.signal } : {}),
         })) {
           if (streamEvent.type === 'retry') {
-            // A fresh stream restarts from the beginning. Reset the accumulator
-            // so only the successful attempt is persisted in the transcript.
+            // A retry after bytes were already shown would concatenate the
+            // abandoned fragment with the new attempt (hybrid answer). Align
+            // with the mid-stream integrity rule: retry only when nothing
+            // visible has been yielded.
+            if (streamEmittedVisibleDelta) {
+              throw new Error(
+                'Réponse interrompue après un fragment déjà rendu ; retry refusé pour éviter une réponse hybride.',
+              );
+            }
             this.deps.streamingHandler.reset();
             streamObservedToolCalls = false;
             yield {
@@ -1546,6 +1684,7 @@ export class AgentExecutor {
             continue;
           }
           const chunk = streamEvent.value;
+          progress.onFirstToken();
           if (abortController?.signal.aborted) {
             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
             yield { type: "done" };
@@ -1560,6 +1699,7 @@ export class AgentExecutor {
 
           if (result.hasNewToolCalls && result.toolCalls) {
             streamObservedToolCalls = true;
+            streamEmittedVisibleDelta = true;
             yield {
               type: "tool_calls",
               toolCalls: relationshipSafety
@@ -1569,6 +1709,7 @@ export class AgentExecutor {
           }
 
           if (result.displayContent && !relationshipSafety && !guardGenerativeSelfInspection) {
+            streamEmittedVisibleDelta = true;
             yield { type: "content", content: result.displayContent };
           }
 
@@ -1586,6 +1727,9 @@ export class AgentExecutor {
             steeringRequestedDuringText = true;
             break;
           }
+        }
+        } finally {
+          progress.stop();
         }
 
         const trailingDisplayContent = this.deps.streamingHandler.flushDisplayContent?.() ?? '';
@@ -1640,8 +1784,13 @@ export class AgentExecutor {
             yield { type: "content", content: `${rawStreamedContent}\n` };
           }
         }
-        const synthesizedToolFallback = !rawStreamedContent;
-        if (!rawStreamedContent) rawStreamedContent = "Using tools to help you...";
+        // The "Using tools..." placeholder is only legitimate when this turn
+        // actually carries tool_calls. An empty provider reply without tools
+        // must not be rewritten into a plausible assistant message.
+        const synthesizedToolFallback = !rawStreamedContent.trim() && hasToolCalls;
+        if (synthesizedToolFallback) {
+          rawStreamedContent = "Using tools to help you...";
+        }
         const sanitizedContent = sanitizeAssistantOutput(rawStreamedContent);
         const guardedContent = relationshipSafety
           ? guardRelationshipReply(sanitizedContent)
@@ -1658,6 +1807,29 @@ export class AgentExecutor {
             issues: guardedContent.issues,
           });
         }
+
+        // D1: empty provider response (no tools, no length truncation).
+        // Retry is bounded and opt-in via CODEBUDDY_MAX_EMPTY_RETRIES, including
+        // the first turn. Exhaustion throws so the caller and transcript get an
+        // honest failure — never an empty or fabricated assistant message.
+        if (!hasToolCalls && !content.trim() && streamFinishReason !== 'length') {
+          if (!abortController?.signal.aborted && emptyRetries < maxEmptyRetries) {
+            emptyRetries++;
+            logger.warn('[agent-executor] empty provider response, retrying', {
+              attempt: emptyRetries,
+              max: maxEmptyRetries,
+            });
+            messages.push({
+              role: 'user',
+              content: toolRounds > 0
+                ? 'Your last response was empty. Use the results of the tool calls you just made to continue the task and produce your answer.'
+                : 'Your last response was empty. Please produce your answer now.',
+            });
+            continue;
+          }
+          throw new Error('réponse vide du fournisseur');
+        }
+
         if (
           (relationshipSafety || guardGenerativeSelfInspection) &&
           content &&
@@ -1669,7 +1841,7 @@ export class AgentExecutor {
           yield { type: 'content', content: `${content}\n\n` };
         }
 
-        const persistedAssistantContent = synthesizedToolFallback && hasToolCalls
+        const persistedAssistantContent = synthesizedToolFallback
           ? null
           : content;
         const assistantEntry: ChatEntry = {
@@ -1687,6 +1859,15 @@ export class AgentExecutor {
 
         const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
         totalOutputTokens += currentOutputTokens;
+
+        // Sum the provider's own counters across rounds: one HTTP completion can
+        // cost several provider calls, exactly like the cost accounting above.
+        const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
+        if (roundProviderUsage) {
+          providerUsageSeen = true;
+          providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
+          providerCompletionTokens += roundProviderUsage.completionTokens ?? 0;
+        }
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (steeringRequestedDuringText && !hasToolCalls) {
@@ -2294,27 +2475,27 @@ export class AgentExecutor {
               });
               continue;
             }
-            // (2) Post-tool empty response: the model went silent after running
-            // tools. Nudge it to use the results and continue, bounded.
-            if (
-              streamedContentRaw.length === 0 &&
-              streamFinishReason !== 'length' &&
-              toolRounds > 0 &&
-              emptyRetries < maxEmptyRetries
-            ) {
-              emptyRetries++;
-              logger.debug('[agent-executor] empty-response re-prompt', {
-                attempt: emptyRetries,
-                max: maxEmptyRetries,
+            if (streamFinishReason === 'length') {
+              assistantEntry.truncated = true;
+              const notice = lengthContinuations > 0
+                ? `Réponse tronquée après ${lengthContinuations} continuation(s) (limite de longueur atteinte).`
+                : 'Réponse tronquée (limite de longueur atteinte).';
+              logger.warn('[agent-executor] length-truncated response', {
+                continuations: lengthContinuations,
+                max: maxLengthContinuations,
               });
-              messages.push({
-                role: 'user',
-                content:
-                  'Your last response was empty. Use the results of the tool calls you just made ' +
-                  'to continue the task and produce your answer.',
-              });
-              continue;
+              assistantEntry.content = assistantEntry.content
+                ? `${assistantEntry.content}\n\n${notice}`
+                : notice;
+              const lastMessage = messages[messages.length - 1];
+              if (lastMessage?.role === 'assistant') {
+                lastMessage.content = assistantEntry.content;
+              }
+              yield { type: 'content', content: `\n${notice}\n` };
+              break;
             }
+            // Post-tool empty responses are handled before persist (D1) so an
+            // empty assistant message is never written to the transcript.
           }
 
           // Companion hosts own the canonical commit boundary: voice,

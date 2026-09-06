@@ -4,11 +4,12 @@
  * Checks for new versions and notifies users (mistral-vibe style).
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { homedir } from 'os';
 import https from 'https';
 import { logger } from './logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 // ============================================================================
 // Types
@@ -144,9 +145,7 @@ function compareVersions(a: string, b: string): number {
  */
 function loadCache(): CacheData | null {
   try {
-    if (existsSync(CACHE_FILE)) {
-      return JSON.parse(readFileSync(CACHE_FILE, 'utf-8'));
-    }
+    return readJsonAtomicSync<CacheData | null>(CACHE_FILE, null);
   } catch {
     // Ignore cache errors
   }
@@ -158,11 +157,7 @@ function loadCache(): CacheData | null {
  */
 function saveCache(data: CacheData): void {
   try {
-    const dir = dirname(CACHE_FILE);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
+    writeJsonAtomicSync(CACHE_FILE, data);
   } catch {
     // Ignore cache save errors
   }

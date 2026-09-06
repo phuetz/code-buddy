@@ -791,6 +791,146 @@ export const CODE_GRAPH_TOOL: CodeBuddyTool = {
   },
 };
 
+export const DEPLOY_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "deploy",
+    description:
+      "Deploy applications to cloud platforms (Fly.io, Railway, Render, GCP, Hetzner, Northflank). Generate configs, deploy, check status, or view logs. Requires confirmation. Not a substitute for git or docker.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["generate_config", "deploy", "status", "logs"],
+          description: "Deployment action: generate_config, deploy, status, or logs",
+        },
+        platform: {
+          type: "string",
+          enum: ["fly", "railway", "render", "hetzner", "northflank", "gcp"],
+          description: "Target cloud platform",
+        },
+        appName: {
+          type: "string",
+          description: "Application name (used in config generation)",
+        },
+        region: {
+          type: "string",
+          description: "Deployment region (e.g. iad, us-central1)",
+        },
+        port: {
+          type: "number",
+          description: "Application port (default: 3000)",
+        },
+        env: {
+          type: "object",
+          description: "Environment variables as key-value pairs",
+          additionalProperties: { type: "string" },
+        },
+        memory: {
+          type: "string",
+          description: "Memory allocation (e.g. 512mb, 1gb)",
+        },
+        cpus: {
+          type: "number",
+          description: "Number of CPU cores",
+        },
+        outputDir: {
+          type: "string",
+          description: "Directory to write generated config files (for generate_config action)",
+        },
+        tailLines: {
+          type: "number",
+          description: "Number of log lines to retrieve (default: 50, for logs action)",
+        },
+      },
+      required: ["action", "platform"],
+    },
+  },
+};
+
+export const DOCS_SEARCH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "docs_search",
+    description:
+      "Search project documentation for architecture, API, security, and configuration information. Read-only local docs lookup — not a web search.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query (e.g. \"security model\", \"authentication flow\")",
+        },
+        scope: {
+          type: "string",
+          enum: ["all", "architecture", "api", "security", "config", "testing"],
+          description: "Limit to a category (default: all)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+};
+
+export const KNOWLEDGE_GRAPH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "knowledge_graph",
+    description:
+      "Query the in-memory code knowledge graph for entity relationships (imports, calls, extends, exports). Actions: query, add, subgraph, path, stats. Distinct from code_graph (static analysis over the repo).",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["query", "add", "subgraph", "path", "stats"],
+          description: "Action to perform on the knowledge graph",
+        },
+        subject: {
+          type: "string",
+          description: "Triple subject (entity name, e.g. \"src/index.ts\", \"MyClass\"). Used by query and add.",
+        },
+        predicate: {
+          type: "string",
+          description:
+            "Triple predicate (relationship type: imports, exports, calls, extends, implements, dependsOn, contains, definedIn, usedBy, typeof). Used by query and add.",
+        },
+        object: {
+          type: "string",
+          description: "Triple object (target entity). Used by query and add.",
+        },
+        metadata: {
+          type: "object",
+          description: "Optional metadata key-value pairs for add action.",
+          additionalProperties: { type: "string" },
+        },
+        entity: {
+          type: "string",
+          description: "Entity name for subgraph exploration.",
+        },
+        depth: {
+          type: "number",
+          description: "Max traversal depth for subgraph (default: 2).",
+        },
+        from: {
+          type: "string",
+          description: "Starting entity for path finding.",
+        },
+        to: {
+          type: "string",
+          description: "Target entity for path finding.",
+        },
+        maxDepth: {
+          type: "number",
+          description: "Max path length for path finding (default: 5).",
+        },
+      },
+      required: ["action"],
+    },
+  },
+};
+
 export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   MULTI_EDIT_TOOL,
   GIT_TOOL,
@@ -806,4 +946,7 @@ export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   PLAN_TOOL,
   EXECUTE_CODE_TOOL,
   RUN_SCRIPT_TOOL,
+  DEPLOY_TOOL,
+  DOCS_SEARCH_TOOL,
+  KNOWLEDGE_GRAPH_TOOL,
 ];

@@ -31,7 +31,7 @@ interface CodeBuddyConfigSlice {
 /**
  * `useBackendStatus()` — auto-poll the configured Code Buddy backend's
  * `/api/health` endpoint and expose a coarse status the UI can render.
- * Mirrors the chat-ui gitnexus-rs `use-backend-status` hook with the
+ * Mirrors the chat-ui code-explorer `use-backend-status` hook with the
  * same chained-setTimeout pattern (no overlapping probes, no drift)
  * and exponential-ish backoff on consecutive failures (10s → 30s → 60s,
  * capped at 60s) to avoid spamming logs when the backend is down.

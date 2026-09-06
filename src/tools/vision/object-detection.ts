@@ -474,8 +474,12 @@ if classes_arg:
             continue
         class_id = name_to_id.get(token.lower())
         if class_id is None:
-            raise ValueError(f"Unknown YOLO class: {token}")
+            # Informal labels (e.g. curriculum "desk") are mapped in vision-train
+            # before we get here. Skip leftovers instead of aborting the scene.
+            continue
         classes.append(class_id)
+    if not classes:
+        classes = None
 
 kwargs = {
     "source": image_path,

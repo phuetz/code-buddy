@@ -33,6 +33,12 @@ jest.mock('fs', async () => {
   return { ...impl, default: impl };
 });
 
+const mockWriteJsonAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/utils/atomic-write.js')>()),
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
+
 // Mock path
 jest.mock('path', async () => {
   const originalPath = await vi.importActual('path');
@@ -467,7 +473,39 @@ describe('CodebaseRAG', () => {
       await ragWithPath.indexFile('/test/file.ts');
       await ragWithPath.saveIndex();
 
-      expect(fsPromises.writeFile).toHaveBeenCalled();
+      // VERIF3 T4 : `saveIndex` écrit trois fichiers, l'unique assertion était
+      // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
+      // chunks, du file-index ou des stats restait vert.
+      expect(mockWriteJsonAtomic.mock.calls.map((call) => call[0])).toEqual([
+        '/test/index/chunks.json',
+        '/test/index/file-index.json',
+        '/test/index/stats.json',
+      ]);
+
+      const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];
+      expect(Array.isArray(savedChunks)).toBe(true);
+      expect(savedChunks.length).toBeGreaterThan(0);
+      for (const chunk of savedChunks) {
+        expect(chunk.filePath).toBe('/test/file.ts');
+        expect(typeof chunk.id).toBe('string');
+        expect(typeof chunk.content).toBe('string');
+        // Les embeddings sont volontairement exclus du fichier de chunks.
+        expect(chunk.embedding).toBeUndefined();
+      }
+
+      const savedFileIndex = mockWriteJsonAtomic.mock.calls[1]![1] as Record<string, string[]>;
+      expect(Object.keys(savedFileIndex)).toEqual(['/test/file.ts']);
+      expect(savedFileIndex['/test/file.ts']).toEqual(savedChunks.map((chunk) => chunk.id));
+
+      const savedStats = mockWriteJsonAtomic.mock.calls[2]![1] as {
+        totalTokens: number;
+        languages: Record<string, number>;
+        chunkTypes: Record<string, number>;
+      };
+      expect(savedStats.totalTokens).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.languages).length).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.chunkTypes).length).toBeGreaterThan(0);
+
       await ragWithPath.dispose();
     });
   });

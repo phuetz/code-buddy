@@ -23,6 +23,11 @@ import { injectPresenceBlock } from '../memory/presence-injector.js';
 import { loadRelationshipState, getPersonalitySummary } from './relationship-state.js';
 import { loadVoiceGuidance, formatVoiceGuidance } from './voice-guidance.js';
 import { readInnerLifeVignette, isInnerLifeEnabled } from './inner-life.js';
+import {
+  formatEvolutionNotesForCompanion,
+  queryEvolutionNotes,
+  readEvolutionNotes,
+} from '../self-model/evolution-notes.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
@@ -34,17 +39,23 @@ export interface RelationalContextOptions {
   includePresence?: boolean;
   /** Include the recent-episode block ("what we talked about"). Default true. */
   includeEpisode?: boolean;
+  /** Include the recent shared-photos block ("what he showed me"). Default true. */
+  includePhotos?: boolean;
   /** Include the learned voice-guidance block ("how to reply better"). Default true. */
   includeGuidance?: boolean;
   /** Include Lisa's own recent inner-life vignette ("what I did"). Default: `isInnerLifeEnabled()`. */
   includeInnerLife?: boolean;
+  /** Include Lisa's documented recent evolution. Default: `CODEBUDDY_COMPANION_SELF_EVOLUTION=true`. */
+  includeSelfEvolution?: boolean;
   /** Injectable seams (tests) — each defaults to the real source above. */
   factsBlock?: () => string | null;
   personalitySummary?: () => string;
   presenceBlock?: () => Promise<string>;
   episodeBlock?: () => Promise<string | null>;
+  photosBlock?: () => Promise<string | null>;
   guidanceBlock?: () => string | null;
   innerLifeBlock?: () => Promise<string | null>;
+  selfEvolutionBlock?: () => Promise<string | null>;
   /** Override the relationship-state file (tests). */
   relationshipStatePath?: string;
 }
@@ -164,6 +175,18 @@ function envNonNegative(name: string, fallback: number): number {
   return normalizeNonNegative(Number(raw), fallback);
 }
 
+function safeEvolutionLines(value: string): string {
+  return value
+    .replace(/`[^`]*`/g, '')
+    .replace(/\b(?:src|tests|docs|cowork|dist)\/[\w./-]+/gi, '')
+    .replace(/\b[0-9a-f]{12,}\b/gi, '')
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*+] |\d+[.)] )/, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n');
+}
+
 /** Read the consolidated recent conversation episode from persistent memory (see episodic-journal.ts). */
 async function defaultReadEpisode(): Promise<string | null> {
   try {
@@ -171,6 +194,16 @@ async function defaultReadEpisode(): Promise<string | null> {
     const manager = getMemoryManager();
     await manager.initialize();
     return manager.recall('episode:recent', 'project');
+  } catch {
+    return null;
+  }
+}
+
+/** Read the rolling shared-photos block from persistent memory (see shared-photo-memory.ts). */
+async function defaultReadPhotos(): Promise<string | null> {
+  try {
+    const { readSharedPhotoMemory } = await import('./shared-photo-memory.js');
+    return await readSharedPhotoMemory();
   } catch {
     return null;
   }
@@ -220,6 +253,19 @@ export async function buildRelationalContext(
       return '';
     }
   });
+  const photos = Promise.resolve().then(async () => {
+    // Absent by default: no photo shared yet means an empty string, so the
+    // assembled context is byte-identical to what it was before this block.
+    if (options.includePhotos === false) return '';
+    try {
+      const value = options.photosBlock
+        ? await options.photosBlock()
+        : await defaultReadPhotos();
+      return value?.trim() ? `<recent_photos>\n${value.trim()}\n</recent_photos>` : '';
+    } catch {
+      return '';
+    }
+  });
   const innerLife = Promise.resolve().then(async () => {
     // Own opt-in (default off): only surfaced when inner-life is enabled, so a disabled companion
     // never references a life it isn't living. Tests pass `includeInnerLife` + `innerLifeBlock`.
@@ -229,6 +275,23 @@ export async function buildRelationalContext(
         ? await options.innerLifeBlock()
         : await readInnerLifeVignette();
       return value?.trim() ? `<lisa_activite>\n${value.trim()}\n</lisa_activite>` : '';
+    } catch {
+      return '';
+    }
+  });
+  const selfEvolution = Promise.resolve().then(async () => {
+    const enabled = options.includeSelfEvolution ?? process.env.CODEBUDDY_COMPANION_SELF_EVOLUTION === 'true';
+    if (!enabled) return '';
+    try {
+      const value = options.selfEvolutionBlock
+        ? await options.selfEvolutionBlock()
+        : formatEvolutionNotesForCompanion(
+            queryEvolutionNotes(await readEvolutionNotes({ workDir: options.cwd }), { limit: 3 }),
+          );
+      const safeValue = value ? safeEvolutionLines(value) : '';
+      // Keep the wrapper on the first/last content lines so the injected
+      // block remains at most three physical lines as well as three facts.
+      return safeValue ? `<lisa_evolution>${safeValue}</lisa_evolution>` : '';
     } catch {
       return '';
     }
@@ -256,7 +319,7 @@ export async function buildRelationalContext(
     }
   });
 
-  return (await Promise.all([facts, guidance, episode, innerLife, personality, presence]))
+  return (await Promise.all([facts, guidance, episode, photos, innerLife, selfEvolution, personality, presence]))
     .filter(Boolean)
     .join('\n\n');
 }

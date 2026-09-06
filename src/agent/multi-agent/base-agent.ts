@@ -28,6 +28,25 @@ import {
 } from "./types.js";
 
 /**
+ * Resolve the model a MAS agent should call.
+ * An explicit per-agent override wins; otherwise GROK_MODEL (local Ollama)
+ * beats the hardcoded grok-3-latest defaults on Coder/Reviewer/etc.
+ */
+export function resolveMultiAgentModel(
+  configModel: string | undefined,
+  overrideModel: string | undefined,
+  envModel: string | undefined = process.env.GROK_MODEL,
+): string {
+  const fromOverride = overrideModel?.trim();
+  if (fromOverride) return fromOverride;
+  const fromEnv = envModel?.trim();
+  if (fromEnv) return fromEnv;
+  const fromConfig = configModel?.trim();
+  if (fromConfig) return fromConfig;
+  return 'grok-3-latest';
+}
+
+/**
  * Abstract base class for all agents
  */
 export abstract class BaseAgent extends EventEmitter {
@@ -64,8 +83,7 @@ export abstract class BaseAgent extends EventEmitter {
     const override = config.providerOverride;
     const effectiveApiKey = override?.apiKey ?? apiKey;
     const effectiveBaseURL = override?.baseURL ?? baseURL;
-    const effectiveModel =
-      override?.model ?? config.model ?? "grok-3-latest";
+    const effectiveModel = resolveMultiAgentModel(config.model, override?.model);
     this.client = new CodeBuddyClient(
       effectiveApiKey,
       effectiveModel,
@@ -317,7 +335,10 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
             query: observationContext.query,
             workspaceRoot: observationContext.workspaceRoot,
             sessionId: this.recoverySessionId,
-            model: this.config.providerOverride?.model ?? this.config.model ?? "grok-3-latest",
+            model: resolveMultiAgentModel(
+              this.config.model,
+              this.config.providerOverride?.model,
+            ),
             messages: this.messages,
             allowOptimization: tools.some((tool) => tool.function.name === "restore_context"),
           });

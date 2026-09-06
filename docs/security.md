@@ -38,15 +38,13 @@ Singleton for destructive operations. Check order:
 
 ### OS Sandbox (Native)
 
-Three tiers for native OS-level isolation:
+Native kernel confinement for `bash` is opt-in through `CODEBUDDY_NATIVE_SANDBOX=true` (or the explicit `bwrap`, `landlock`, or `seatbelt` backend values). When the variable is unset, the host spawn is returned unchanged and no native sandbox is applied. When enabled, backend selection is fail-closed: on Linux, usable Bubblewrap is preferred and Landlock is selected if Bubblewrap is unusable but its ABI and Python helper are available; execution is refused when no backend can be applied. On macOS, `sandbox-exec` is selected when available.
 
 | Mode | Write Access | Use Case |
 |:-----|:------------|:---------|
 | `read-only` | None | Untrusted analysis |
-| `workspace-write` | Git workspace root only | Normal development (default) |
+| `workspace-write` | Git workspace root only | Normal development (native confinement opt-in) |
 | `danger-full-access` | Unrestricted | Deployment scripts |
-
-`.git`, `.codebuddy`, `.ssh`, `.gnupg`, `.aws` are always read-only. Implemented via bubblewrap (Linux), landlock (Linux 5.13+), seatbelt (macOS).
 
 ### Docker Sandbox
 
@@ -148,3 +146,47 @@ Git-based undo via shadow refs (`refs/codebuddy/ghost/`). Auto-commits workspace
 | AST Bash Validation | tree-sitter-based command parsing with dangerous pattern checks |
 | Bash Checkpoints | Pre-snapshot of files targeted by destructive commands |
 | Diff Preview | Shows diffs before approval with magnitude-based re-confirmation |
+
+## Server Authentication & JWT Tokens
+
+When running `buddy server` (or accessing the REST API / Fleet endpoints), authentication is enabled by default (fail-closed in production, or when `JWT_SECRET` is set). Unauthenticated mode (`--no-auth`) is strictly restricted to loopback (`127.0.0.1`).
+
+### Minting JWT Tokens
+
+To generate a signed JWT bearer token, configure `JWT_SECRET` and run `buddy token` (or its fleet alias `buddy fleet token`):
+
+```bash
+# Mint a token for a user or peer with default scopes (peer:invoke, fleet:listen, chat)
+JWT_SECRET="<your-secret>" buddy token --user alice
+
+# Customize expiry (TTL) and scopes
+JWT_SECRET="<your-secret>" buddy token --user alice --ttl 24h --scopes "chat,sessions,models"
+
+# Or using the fleet command alias
+JWT_SECRET="<your-secret>" buddy fleet token --user peer-node --ttl 30d
+```
+
+The minted JWT token is printed directly to stdout (pipeable), while connection recipe instructions are printed to stderr:
+
+```bash
+TOKEN=$(JWT_SECRET="<your-secret>" buddy token --user test-client)
+curl http://127.0.0.1:3000/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+## Native Modules Installation (`--allow-scripts`)
+
+Code Buddy bundles 18 optional native packages (`better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, `onnxruntime-node`, `usearch`, etc.) that provide native hardware and database acceleration.
+
+In **npm ≥ 11**, lifecycle install scripts are blocked by default during global installation. While Code Buddy functions safely without them via pure JS and JSON file fallbacks, you can compile and enable the native modules using `--allow-scripts`:
+
+```bash
+# Allow compilation of all optional native packages during global install
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+
+# Or selectively allow compilation for SQLite support
+npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
+```
+

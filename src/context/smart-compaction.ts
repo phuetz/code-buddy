@@ -13,6 +13,8 @@ import { logger } from '../utils/logger.js';
 import { preserveToolPairs } from './tool-pair-preserver.js';
 import { wireCompactionProgress } from './progress-compaction-bridge.js';
 import { isFailedToolResultContent } from './enhanced-compression.js';
+import { estimateImageUrlTokens, textFromMessageContent } from './token-counter.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -531,7 +533,8 @@ export class SmartCompactionEngine extends EventEmitter {
     const points: string[] = [];
 
     for (const msg of messages) {
-      if (!msg.content) continue;
+      const contentText = textFromMessageContent(msg.content);
+      if (!contentText && !msg.tool_calls) continue;
 
       // Extract tool calls
       if (msg.tool_calls) {
@@ -541,7 +544,7 @@ export class SmartCompactionEngine extends EventEmitter {
       }
 
       // Extract key content (first sentence or 100 chars)
-      const content = msg.content.trim();
+      const content = contentText.trim();
       if (content.length > 0) {
         const firstSentence = content.match(/^[^.!?]*[.!?]/)?.[0] || content.slice(0, 100);
         if (msg.role === 'user') {
@@ -610,11 +613,12 @@ export class SmartCompactionEngine extends EventEmitter {
 
     const failedAttempts: string[] = [];
     for (const msg of messages) {
-      if (msg.role !== 'tool' || typeof msg.content !== 'string') continue;
-      if (!isFailedToolResultContent(msg.content)) continue;
+      if (msg.role !== 'tool') continue;
+      const content = textFromMessageContent(msg.content);
+      if (!content || !isFailedToolResultContent(content)) continue;
       const id = msg.tool_call_id;
       const name = (id ? toolNameById.get(id) : undefined) ?? 'tool';
-      const snippet = msg.content.replace(/\s+/g, ' ').trim().slice(0, MAX_TOOL_FAILURE_CHARS);
+      const snippet = content.replace(/\s+/g, ' ').trim().slice(0, MAX_TOOL_FAILURE_CHARS);
       failedAttempts.push(`- ${name}: ${snippet}`);
     }
 
@@ -638,10 +642,12 @@ export class SmartCompactionEngine extends EventEmitter {
   private estimateMessageTokens(message: Message): number {
     let tokens = 4; // Base overhead per message
 
-    if (message.content) {
+    const text = textFromMessageContent(message.content);
+    if (text) {
       // Rough estimate: ~4 chars per token
-      tokens += Math.ceil(message.content.length / 4);
+      tokens += Math.ceil(text.length / 4);
     }
+    tokens += estimateImageUrlTokens(message.content);
 
     if (message.tool_calls) {
       for (const tc of message.tool_calls) {
@@ -715,18 +721,29 @@ export class SmartCompactionEngine extends EventEmitter {
 
 let compactionEngineInstance: SmartCompactionEngine | null = null;
 
+function resolveDefaultCompactionMaxTokens(): number {
+  const model = process.env.GROK_MODEL?.trim() || process.env.CODEBUDDY_MODEL?.trim();
+  if (model) {
+    const window = getModelToolConfig(model).contextWindow;
+    if (window && window > 0) return window;
+  }
+  return 128_000;
+}
+
 /** Default config used when the singleton is constructed without one. */
-const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
-  maxTokens: 32_000,
-  provider: 'openai',
-  channelType: 'cli',
-  preserveSystem: true,
-  preserveToolCalls: true,
-};
+function defaultCompactionConfig(): CompactionConfig {
+  return {
+    maxTokens: resolveDefaultCompactionMaxTokens(),
+    provider: 'openai',
+    channelType: 'cli',
+    preserveSystem: true,
+    preserveToolCalls: true,
+  };
+}
 
 export function getSmartCompactionEngine(config?: CompactionConfig): SmartCompactionEngine {
   if (!compactionEngineInstance) {
-    compactionEngineInstance = new SmartCompactionEngine(config ?? DEFAULT_COMPACTION_CONFIG);
+    compactionEngineInstance = new SmartCompactionEngine(config ?? defaultCompactionConfig());
     // Surface compaction as a progress task in any renderer (CLI / Cowork).
     wireCompactionProgress(compactionEngineInstance);
   } else if (config) {

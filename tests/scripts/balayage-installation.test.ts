@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -151,6 +151,39 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
 });
 
 describe('balayage-installation.sh — gardes', () => {
+  it('résout node avant env -i quand le PATH isolé ne contient pas node', () => {
+    const isolatedPath = join(dir, 'path-sans-node');
+    mkdirSync(isolatedPath);
+    const expectedPath = JSON.stringify(isolatedPath);
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        if (process.env.PATH !== ${expectedPath}) process.exit(19);
+        console.log('  alpha   ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/1\/1 commandes répondent/);
+  });
+
+  it('fonctionne sans timeout dans le PATH isolé', () => {
+    const isolatedPath = join(dir, 'path-sans-timeout');
+    mkdirSync(isolatedPath);
+    const cli = fakeCli(`
+      const { spawnSync } = require('node:child_process');
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        const probe = spawnSync('timeout', ['--version'], { encoding: 'utf8' });
+        if (probe.status === 0 || probe.error?.code !== 'ENOENT') process.exit(19);
+        console.log('  alpha   ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/1\/1 commandes répondent/);
+  });
+
   it('une extraction vide N’EST PAS un succès (garde total>0)', () => {
     // --help ne liste aucune commande au motif attendu : le balayage n'a rien à tester.
     const cli = fakeCli(`console.log('Aucune commande au format attendu ici.');`);

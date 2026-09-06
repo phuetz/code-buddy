@@ -104,7 +104,7 @@ export function ComfyLabPanel({ onClose, onUseAvatar }: ComfyLabPanelProps) {
           <div className="flex flex-wrap items-start gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-600 dark:text-violet-300">
-                Cartographie {snapshot?.probe.scope === 'remote' ? 'Darkstar / distante' : 'locale'} · aucun lancement automatique
+                Cartographie {snapshot?.probe.scope === 'remote' ? 'GPU node / distante' : 'locale'} · aucun lancement automatique
               </p>
               <h2 className="mt-1 text-xl font-semibold">Laboratoire ComfyUI</h2>
               <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">

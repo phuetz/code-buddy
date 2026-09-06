@@ -16,7 +16,8 @@ describe('voice replay lab', () => {
       safeMode: 'offline-silent',
       echoCandidates: 1,
       delayedEchoCandidates: 1,
-      passed: true,
+      suppressionCoverage: 0,
+      passed: false,
     });
     expect(JSON.stringify(report)).not.toContain('météo');
   });
@@ -26,5 +27,13 @@ describe('voice replay lab', () => {
       'La météo annonce du soleil demain.',
       'Merci, et quelle température fera-t-il ?',
     )).toBeLessThan(0.5);
+    expect(replayVoiceTimeline([
+      { role: 'assistant', content: 'La météo annonce du soleil demain.', timestamp: 1_000 },
+      { role: 'user', content: 'Merci, et quelle température fera-t-il ?', timestamp: 2_000 },
+    ])).toMatchObject({
+      echoCandidates: 0,
+      suppressionCoverage: 1,
+      passed: true,
+    });
   });
 });

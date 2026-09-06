@@ -68,6 +68,10 @@ export interface RunTryDemoOptions extends ResolveTryProviderOptions {
   verbose?: boolean;
 }
 
+export interface TryCommandDependencies {
+  runTryDemo?: (options: RunTryDemoOptions) => Promise<number>;
+}
+
 interface OllamaTagsResponse {
   models?: Array<{ name?: unknown; model?: unknown }>;
 }
@@ -172,7 +176,9 @@ export async function resolveTryProvider(
     };
   }
 
-  const hasChatGpt = (options.hasChatGptCredentials ?? hasCodexCredentials)();
+  const providerOverride = env.CODEBUDDY_PROVIDER?.trim().toLowerCase();
+  const forceOllama = providerOverride === 'ollama';
+  const hasChatGpt = !forceOllama && (options.hasChatGptCredentials ?? hasCodexCredentials)();
   if (hasChatGpt) {
     const provider = resolveProviderFromCatalog({
       env,
@@ -198,7 +204,10 @@ export async function resolveTryProvider(
     });
     if (!response.ok) return null;
     const models = parseOllamaModels(await response.json());
-    const model = chooseOllamaModel(models, env.OLLAMA_MODEL);
+    const requestedModel = options.modelOverride?.trim();
+    const model = requestedModel
+      ? models.find((candidate) => candidate.toLowerCase() === requestedModel.toLowerCase()) ?? null
+      : chooseOllamaModel(models, env.OLLAMA_MODEL);
     if (!model) return null;
     return {
       kind: 'ollama',
@@ -405,18 +414,26 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   }
 }
 
-export function createTryCommand(): Command {
+export function createTryCommand(dependencies: TryCommandDependencies = {}): Command {
+  const executeTryDemo = dependencies.runTryDemo ?? runTryDemo;
   return new Command('try')
     .description('Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)')
     .option('--verbose', 'Show agent telemetry during the demo')
-    .action(async (options: { verbose?: boolean }, command: Command) => {
+    .option('--base-url <url>', 'Use this Ollama/OpenAI-compatible endpoint for the demo')
+    .option('--model <model>', 'Use this model for the demo')
+    .action(async (
+      options: { verbose?: boolean; baseUrl?: string; model?: string },
+      command: Command,
+    ) => {
       // `--base-url` et `--model` sont des options GLOBALES : sans cette reprise,
       // la démo les ignorait en silence et annonçait un succès obtenu ailleurs.
       const globals = command.parent?.opts<{ baseUrl?: string; model?: string }>() ?? {};
-      process.exitCode = await runTryDemo({
+      const baseUrl = options.baseUrl ?? globals.baseUrl;
+      const model = options.model ?? globals.model;
+      process.exitCode = await executeTryDemo({
         verbose: options.verbose === true,
-        ...(globals.baseUrl ? { baseUrlOverride: globals.baseUrl } : {}),
-        ...(globals.model ? { modelOverride: globals.model } : {}),
+        ...(baseUrl ? { baseUrlOverride: baseUrl } : {}),
+        ...(model ? { modelOverride: model } : {}),
       });
     });
 }

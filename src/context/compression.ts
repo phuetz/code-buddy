@@ -6,8 +6,9 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
-import { TokenCounter } from './token-counter.js';
+import { estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import { CompressionResult } from './types.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Options to control the compression process.
@@ -60,11 +61,11 @@ export class ContextCompressor {
 
     // Clone to avoid mutation
     let processedMessages = [...messages];
-    const systemMessage = options.preserveSystemPrompt ? processedMessages.find(m => m.role === 'system') : null;
+    const systemMessages = options.preserveSystemPrompt ? processedMessages.filter(m => m.role === 'system') : [];
     const recentCount = options.preserveRecentMessages !== undefined ? options.preserveRecentMessages : 2;
     
-    // Filter out system message if we're preserving it separately to add back later
-    if (systemMessage) {
+    // Filter out system messages if we're preserving them separately to add back later
+    if (systemMessages.length > 0) {
       processedMessages = processedMessages.filter(m => m.role !== 'system');
     }
 
@@ -77,8 +78,8 @@ export class ContextCompressor {
     
     // Reassemble to check if we're good
     let currentSet: CodeBuddyMessage[] = [];
-    if (systemMessage) {
-      currentSet.push(systemMessage as CodeBuddyMessage);
+    if (systemMessages.length > 0) {
+      currentSet.push(...systemMessages);
     }
     currentSet.push(...olderMessages, ...recentMessages);
     
@@ -87,7 +88,7 @@ export class ContextCompressor {
     if (currentTokens <= tokenLimit) {
       return {
         compressed: true,
-        messages: currentSet,
+        messages: repairToolCallPairs(currentSet),
         tokensReduced: initialTokens - currentTokens,
         strategy: 'tool_truncation'
       };
@@ -113,8 +114,8 @@ export class ContextCompressor {
     if (olderStartIndex > 0) {
       olderMessages = olderMessages.slice(olderStartIndex);
       currentSet = [];
-      if (systemMessage) {
-        currentSet.push(systemMessage as CodeBuddyMessage);
+      if (systemMessages.length > 0) {
+        currentSet.push(...systemMessages);
       }
       currentSet.push(...olderMessages, ...recentMessages);
     }
@@ -132,7 +133,7 @@ export class ContextCompressor {
 
     return {
       compressed: true,
-      messages: currentSet,
+      messages: repairToolCallPairs(currentSet),
       tokensReduced: initialTokens - currentTokens,
       strategy: 'sliding_window'
     };
@@ -144,21 +145,21 @@ export class ContextCompressor {
   private countTotalTokens(messages: CodeBuddyMessage[]): number {
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
       tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
     }));
-    return this.tokenCounter.countMessageTokens(tokenMessages);
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
   }
 
   /**
    * Helper to count tokens for a single message (for incremental calculations).
    */
   private countSingleMessageTokens(msg: CodeBuddyMessage): number {
-    return this.tokenCounter.countMessageTokens([{
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
-      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
-    }]);
+    return this.countTotalTokens([msg]);
   }
 
   /**
@@ -187,11 +188,11 @@ export class ContextCompressor {
     const result: CodeBuddyMessage[] = [];
     let currentTokens = 0;
 
-    // Always keep system if present
-    const system = messages.find(m => m.role === 'system');
-    if (system) {
-        result.push(system);
-        currentTokens += this.countTotalTokens([system]);
+    // Always keep all system messages if present
+    const systemMessages = messages.filter(m => m.role === 'system');
+    if (systemMessages.length > 0) {
+        result.push(...systemMessages);
+        currentTokens += this.countTotalTokens(systemMessages);
     }
 
     // Try to add from most recent backwards
@@ -207,14 +208,12 @@ export class ContextCompressor {
         }
     }
     
-    // Ensure system is first
-    if (system && result[0] !== system) {
-        // Should already be handled but safety check
-        const idx = result.indexOf(system);
-        if (idx >= 0) result.splice(idx, 1);
-        result.unshift(system);
+    // Ensure system messages are first, in original order
+    if (systemMessages.length > 0) {
+        const nonSystem = result.filter(m => m.role !== 'system');
+        return repairToolCallPairs([...systemMessages, ...nonSystem]);
     }
 
-    return result;
+    return repairToolCallPairs(result);
   }
 }

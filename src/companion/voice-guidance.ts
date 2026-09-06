@@ -15,9 +15,9 @@
  *
  * @module companion/voice-guidance
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface VoiceGuidanceItem {
   /** The one-line guidance, imperative and short. */
@@ -39,9 +39,10 @@ export function defaultVoiceGuidancePath(env: NodeJS.ProcessEnv = process.env): 
 /** Load the guidance list (never throws; missing/corrupt → []). */
 export function loadVoiceGuidance(path: string = defaultVoiceGuidancePath()): VoiceGuidanceItem[] {
   try {
-    if (!existsSync(path)) return [];
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    if (!Array.isArray(raw)) return [];
+    const raw = readJsonAtomicSync<unknown[]>(path, [], {
+      mode: 0o600,
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
     return raw
       .filter(
         (x): x is VoiceGuidanceItem =>
@@ -61,8 +62,7 @@ export function saveVoiceGuidance(
   path: string = defaultVoiceGuidancePath()
 ): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(items, null, 2));
+    writeJsonAtomicSync(path, items, { mode: 0o600 });
   } catch {
     /* best-effort */
   }

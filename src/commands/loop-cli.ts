@@ -16,18 +16,20 @@
  * Exit codes : 0 = objectif atteint (vérifié), 1 = pause (budget/juge) ou erreur.
  */
 
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
+import * as fs from 'fs';
 import { resolveCommandProvider } from './llm-provider-resolution.js';
 import { applyRequestedPermissionMode } from './apply-permission-mode.js';
 import {
-  applyGoalCliWorkingDirectory,
   parsePositiveIntegerOption,
+  prepareGoalCliWorkspace,
   resolveGoalCliJudgeModel,
   resolveGoalCliMaxToolRounds,
   resolveLocalGoalActorSystemPrompt,
+  shouldUseLocalGoalActorPrompt,
 } from './goal-cli.js';
-import { InvalidArgumentError } from 'commander';
-import * as path from 'path';
+import type { DevLoopResult } from '../agent/dev-loop/dev-loop.js';
+import type { GoalJudgeProviderInfo } from '../goals/goal-judge-client.js';
 
 function parsePositiveFloatOption(value: string, optionName: string): number {
   const trimmed = value.trim();
@@ -67,9 +69,33 @@ export function validateLoopCommandNumericOptions(argv: readonly string[]): void
   }
 }
 
-async function loadLoopEnv(directory: string): Promise<void> {
-  const dotenv = await import('dotenv');
-  dotenv.config({ path: path.join(directory, '.env') });
+/** Exit 0 only when the goal is done AND (no-verify, or independent verifier CONFIRMED). */
+export function loopRunSucceeded(
+  result: Pick<DevLoopResult, 'status' | 'lastVerifierVerdict'>,
+  noVerify: boolean,
+): boolean {
+  if (result.status !== 'done') return false;
+  if (noVerify) return true;
+  return result.lastVerifierVerdict === 'CONFIRMED';
+}
+
+/**
+ * Local Ollama advertises 262k context for qwen3.8* but serving that KV cache
+ * stalls the first token past the 120s stream guard — `buddy loop` then
+ * vanished with exit 0. Cap unless the operator already set CODEBUDDY_MAX_CONTEXT.
+ */
+export function applyLocalLoopContextCap(provider: GoalJudgeProviderInfo): void {
+  if (process.env.CODEBUDDY_MAX_CONTEXT?.trim()) return;
+  if (!shouldUseLocalGoalActorPrompt(provider)) return;
+  process.env.CODEBUDDY_MAX_CONTEXT = '32768';
+}
+
+function writeLoopLine(text: string): void {
+  try {
+    fs.writeSync(1, `${text.endsWith('\n') ? text : `${text}\n`}`);
+  } catch {
+    console.log(text);
+  }
 }
 
 export function createLoopCommand(): Command {
@@ -114,11 +140,12 @@ export function createLoopCommand(): Command {
       50,
     )
     .action(async (goal: string, options, command) => {
+      // Fail closed: a vanished turn (stall, killed child, nested parse) must
+      // not inherit Commander's default exit 0.
+      process.exitCode = 1;
+      let runId: string | undefined;
       try {
-        const launchDir = process.cwd();
-        await loadLoopEnv(launchDir);
-        const cwd = applyGoalCliWorkingDirectory(command);
-        if (cwd !== launchDir) await loadLoopEnv(cwd);
+        const cwd = await prepareGoalCliWorkspace(command);
 
         await applyRequestedPermissionMode(
           options,
@@ -129,11 +156,14 @@ export function createLoopCommand(): Command {
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });
         if (!resolved) {
-          console.error(
+          writeLoopLine(
             'Error: aucun provider — définis une clé API, `buddy onboard`, ou CODEBUDDY_PROVIDER=ollama.',
           );
           process.exit(1);
+          return;
         }
+
+        applyLocalLoopContextCap(resolved);
 
         if (options.judgeModel) process.env.CODEBUDDY_GOAL_JUDGE_MODEL = options.judgeModel;
         const judgeModel = resolveGoalCliJudgeModel(options.judgeModel);
@@ -152,7 +182,7 @@ export function createLoopCommand(): Command {
           resolved.baseURL,
           resolved.model,
           maxToolRounds,
-          true,
+          false,
           undefined,
           cwd,
           undefined,
@@ -160,29 +190,52 @@ export function createLoopCommand(): Command {
         );
         await agent.systemPromptReady;
 
+        const { RunStore } = await import('../observability/run-store.js');
+        const runStore = RunStore.getInstance();
+        runId = runStore.startRun(goal, {
+          channel: 'terminal',
+          tags: ['loop', resolved.model || 'unknown'],
+        });
+        agent.setRunId(runId);
+
         const { runDevLoop, makeShellVerifier } = await import('../agent/dev-loop/dev-loop.js');
         // --verify-cmd swaps the LLM Verifier for a deterministic shell gate.
         const verify = options.verifyCmd ? makeShellVerifier(options.verifyCmd, { cwd }) : undefined;
+        const noVerify = options.verify === false;
         const result = await runDevLoop(agent, goal, {
           ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
           ...(options.budget !== undefined ? { budgetUsd: options.budget } : {}),
           ...(judgeModel ? { judgeModel } : {}),
           ...(verify ? { verify } : {}),
-          noVerify: options.verify === false,
+          noVerify,
           noStructural: options.structural === false,
           noPlan: options.plan === false,
           cwd,
-          onMessage: text => console.log(`\n${text}`),
+          onMessage: text => writeLoopLine(`\n${text}`),
         });
 
-        console.log(
+        const ok = loopRunSucceeded(result, noVerify);
+        writeLoopLine(
           `\nRésultat : ${result.status} — ${result.turnsUsed} tour(s), ` +
             `$${result.costUsd.toFixed(4)}, vérification ${result.lastVerifierVerdict}.`,
         );
+        writeLoopLine(`Journal : buddy run show ${runId}`);
+        runStore.endRun(runId, ok ? 'completed' : 'failed');
         await agent.dispose?.();
-        process.exit(result.status === 'done' ? 0 : 1);
+        process.exitCode = ok ? 0 : 1;
+        process.exit(process.exitCode);
       } catch (err) {
-        console.error('Loop error:', err instanceof Error ? err.message : err);
+        const message = err instanceof Error ? err.message : String(err);
+        writeLoopLine(`Loop error: ${message}`);
+        if (runId) {
+          try {
+            const { getActiveRunStore } = await import('../observability/run-store.js');
+            getActiveRunStore()?.endRun(runId, 'failed');
+          } catch {
+            /* journal best-effort */
+          }
+        }
+        process.exitCode = 1;
         process.exit(1);
       }
     });

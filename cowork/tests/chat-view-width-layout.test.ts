@@ -12,6 +12,11 @@ function readChatList() {
   return fs.readFileSync(filePath, 'utf8');
 }
 
+function readUniversalPreviewRail() {
+  const filePath = path.resolve(__dirname, '../src/renderer/components/UniversalPreviewRail.tsx');
+  return fs.readFileSync(filePath, 'utf8');
+}
+
 describe('chat view width layout', () => {
   it('uses a centered responsive messages container', () => {
     const source = readChatList();
@@ -22,5 +27,13 @@ describe('chat view width layout', () => {
     const source = readChatView();
     expect(source).toContain('messagesContainerRef');
     expect(source).not.toContain("querySelector('.max-w-3xl')");
+  });
+
+  it('starts the fixed-width preview rail collapsed so the dock keeps a visible composer', () => {
+    const source = readUniversalPreviewRail();
+
+    expect(source).toContain('const [open, setOpen] = useState(false)');
+    expect(source).toContain('data-testid="universal-preview-rail-collapsed"');
+    expect(source).toContain('onClick={() => setOpen(true)}');
   });
 });

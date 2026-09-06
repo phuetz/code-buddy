@@ -4,6 +4,8 @@ import {
   endSpeaking,
   isSpeaking,
   classifyRecentVoiceEcho,
+  hasRecentSpokenReference,
+  isRecentVoiceFragmentEcho,
   measureVoiceResumeTiming,
   noteSpokenText,
   interruptSpeaking,
@@ -89,6 +91,47 @@ describe('voice-activity — half-duplex speaking guard', () => {
       kind: 'after_playback',
       resumeAfterPlaybackMs: 1_400,
     });
+  });
+
+  it('normalizes accents and matches 60% of a spoken phrase for 90 seconds', () => {
+    noteSpokenText('Écoute bien cette phrase réellement prononcée.', 1_000);
+
+    expect(classifyRecentVoiceEcho('ecoute cette phrase prononcee', 90_999)).toBe('echo');
+    expect(classifyRecentVoiceEcho('une question humaine distincte', 90_999)).toBe('distinct');
+    expect(classifyRecentVoiceEcho('ecoute cette phrase prononcee', 91_001)).toBe('unknown');
+  });
+
+  it('detects both a complete robot fragment and 60% of a recent spoken phrase', () => {
+    noteSpokenText('Voici une phrase vraiment courte.', 1_000);
+
+    expect(classifyRecentVoiceEcho('voici phrase', 1_100)).toBe('echo'); // short contained fragment, pure 2/5 robot tokens
+    expect(classifyRecentVoiceEcho('voici phrase courte', 1_100)).toBe('echo'); // 3/5
+    expect(classifyRecentVoiceEcho('voici question humaine', 1_100)).toBe('distinct');
+
+    noteSpokenText('Nouveau message vocal.', 1_200);
+    expect(classifyRecentVoiceEcho('voici phrase courte', 1_300)).toBe('echo');
+    expect(classifyRecentVoiceEcho('nouveau message vocal', 1_300)).toBe('echo');
+  });
+
+  it('keeps bounded human answers distinct from a longer robot prompt', () => {
+    noteSpokenText('Veux-tu continuer ? Réponds oui ou non, merci.', 1_000);
+
+    for (const reply of ['oui', 'non', 'merci']) {
+      expect(classifyRecentVoiceEcho(reply, 1_100), reply).toBe('distinct');
+    }
+    expect(classifyRecentVoiceEcho('réponds oui ou non', 1_100)).toBe('echo');
+  });
+
+  it('recognizes only one-to-three-word fragments contained in a recent spoken phrase', () => {
+    noteSpokenText('Bonjour Patrice, je suis Lisa et je suis prête.', 1_000);
+
+    expect(isRecentVoiceFragmentEcho('Lisa prête', 1_100)).toBe(true);
+    expect(hasRecentSpokenReference(1_100)).toBe(true);
+    expect(isRecentVoiceFragmentEcho('Lisa stop', 1_100)).toBe(false);
+    expect(isRecentVoiceFragmentEcho('Lisa et je suis', 1_100)).toBe(false);
+    expect(classifyRecentVoiceEcho('Lisa et je suis', 1_100)).toBe('echo');
+    expect(isRecentVoiceFragmentEcho('Lisa prête', 91_001)).toBe(false);
+    expect(hasRecentSpokenReference(91_001)).toBe(false);
   });
 
   it('classifies barge-in during playback and never re-arms a tail after interruption', () => {

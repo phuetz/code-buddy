@@ -31,6 +31,26 @@ function makeWorkspace(): { root: string; workspace: string } {
 }
 
 describe('Project shared context', () => {
+  it('rejects an existing file as a project workspace', () => {
+    const { workspace } = makeWorkspace();
+    const filePath = join(workspace, 'not-a-directory.txt');
+    writeFileSync(filePath, 'file', 'utf8');
+    const create = vi.fn();
+    const manager = new ProjectManager({
+      projects: {
+        create,
+        get: vi.fn(),
+        getAll: vi.fn(() => []),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+    } as unknown as DatabaseInstance);
+
+    expect(() => manager.create({ name: 'Invalid workspace', workspacePath: filePath }))
+      .toThrow(/directory/i);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('injects master instructions, selected text references, and memory with safe boundaries', async () => {
     const { root, workspace } = makeWorkspace();
     writeFileSync(join(workspace, 'docs', 'reference.md'), 'Palette <violet> et ton chaleureux.', 'utf-8');

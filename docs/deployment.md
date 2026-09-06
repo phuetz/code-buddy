@@ -39,6 +39,16 @@ processes of the same binary, not two listeners in one process.
    `openssl rand -hex 32`.
 2. **CORS is localhost-only by default.** Set `CORS_ORIGINS` to the
    exact origins of your clients. Avoid `*` in production.
+   **CORS is not an access control.** An HTTP request from an unlisted
+   origin still gets its normal response — measured: `200 OK`, body
+   served, simply **without** the `Access-Control-Allow-Origin` header,
+   which is what makes the *browser* refuse to hand the body to the
+   calling page. An unlisted HTTP origin is **not a 403** — the server
+   never refuses it — and a non-browser client (curl, a script, a fleet
+   peer) is unaffected. Real access
+   control is the JWT and the network — never the origin list. The
+   WebSocket is the one surface that refuses server-side: an unlisted
+   `Origin` is rejected at the handshake with `403 Forbidden origin`.
 3. **Behind a proxy, configure trusted proxies explicitly** — the
    gateway is origin-hardened (GHSA-5wcw-8jjv-m286); client IPs are only
    read from `X-Forwarded-For` when the proxy is trusted.
@@ -49,8 +59,11 @@ processes of the same binary, not two listeners in one process.
 6. **Optional device pairing.** `CODEBUDDY_GATEWAY_REQUIRE_PAIRING=true`
    gates unknown WebSocket devices behind an approval queue
    (`buddy gateway-pairing pending|approve|reject|revoke`).
-7. **Back up before upgrading:** `buddy backup create` (verify with
-   `buddy backup verify`).
+7. **Back up the project `.codebuddy/` before upgrading:**
+   `buddy backup create` (verify with `buddy backup verify`). This
+   archives the **current project's** `.codebuddy/`, not the home
+   profile `~/.codebuddy`. Restore with `buddy backup restore <file>
+   --confirm` (merge: extra files are kept).
 
 ---
 
@@ -81,7 +94,7 @@ secrets (Docker/K8s). A common layout is `~/.codebuddy/fleet.env` with
 
 ## systemd
 
-Tested in production on the Ministar fleet hub. Two variants below —
+Tested in production on the always-on fleet hub. Two variants below —
 prefer the **built** one (faster boot, no toolchain at runtime).
 
 ### From a build (recommended)
@@ -263,7 +276,9 @@ misbehaving install (`--fix` applies auto-migrations).
 
 ## Upgrades
 
-1. `buddy backup create` (and `buddy backup verify`).
+1. `buddy backup create` (and `buddy backup verify`) in each project
+   whose `.codebuddy/` you need to keep. This is not a backup of
+   `~/.codebuddy`.
 2. Deploy the new version (rebuild image / `git pull && npm ci && npm
    run build` / `buddy update`).
 3. Restart the service. **SQLite schema migrations run automatically at
@@ -273,5 +288,6 @@ misbehaving install (`--fix` applies auto-migrations).
 4. Legacy JSON installs (pre-SQLite `~/.codebuddy/*.json`) are imported
    by the JSON→SQLite migration; `buddy doctor --fix` triggers it if
    needed.
-5. If anything goes wrong: stop the service, `buddy backup restore`,
-   redeploy the previous version.
+5. If anything goes wrong: stop the service, `buddy backup restore
+   <file> --confirm` (merge into the project `.codebuddy/`; extra files
+   are kept), redeploy the previous version.

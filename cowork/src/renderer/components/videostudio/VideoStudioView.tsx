@@ -460,7 +460,7 @@ export function VideoStudioView() {
           });
           setActiveGpuJob(job.id);
           while (job.status === 'queued' || job.status === 'running') {
-            setProgress({ phase: 'longcat', message: job.progressMessage ?? `LongCat sur Darkstar · ${Math.round((job.progress ?? 0) * 100)} %` });
+            setProgress({ phase: 'longcat', message: job.progressMessage ?? `LongCat sur GPU node · ${Math.round((job.progress ?? 0) * 100)} %` });
             await new Promise((resolvePromise) => window.setTimeout(resolvePromise, 1_500));
             job = await gpu.status(job.id);
           }

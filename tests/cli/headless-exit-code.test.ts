@@ -69,6 +69,16 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
   directory?: string;
   disableTools?: boolean;
   inheritLogLevel?: boolean;
+  logLevel?: string;
+  nodeEnv?: string;
+  homeDir?: string;
+  prompt?: string;
+  persistent?: boolean;
+  timeline?: boolean;
+  widgets?: boolean;
+  widgetsAuto?: boolean;
+  quiet?: boolean;
+  responseContent?: string;
 } = {}): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -86,7 +96,7 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
     }
     args.push(
       '--prompt',
-      'Return HEADLESS_JSON_CONTRACT_OK exactly.',
+      options.prompt ?? 'Return HEADLESS_JSON_CONTRACT_OK exactly.',
       '--api-key',
       'test-key',
       '--base-url',
@@ -96,11 +106,15 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
       '--max-tool-rounds',
       '1',
       '--no-self-heal',
-      '--ephemeral',
-      '--quiet',
       '--output-format',
       'json',
     );
+    if (options.persistent !== true) {
+      args.splice(args.length - 2, 0, '--ephemeral');
+    }
+    if (options.quiet !== false) {
+      args.splice(args.length - 2, 0, '--quiet');
+    }
     if (options.disableTools ?? true) {
       args.splice(args.length - 2, 0, '--disabled-tools', '*');
     }
@@ -113,7 +127,23 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
         CODEBUDDY_DISABLE_MCP: 'true',
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
-        ...(options.inheritLogLevel === false ? {} : { LOG_LEVEL: 'error' }),
+        ...(options.homeDir
+          ? {
+            HOME: options.homeDir,
+            USERPROFILE: options.homeDir,
+            CODEBUDDY_SESSIONS_DIR: path.join(options.homeDir, '.codebuddy', 'sessions'),
+            CODEBUDDY_RUNS_DIR: path.join(options.homeDir, '.codebuddy', 'runs'),
+          }
+          : {}),
+        ...(options.timeline ? { CODEBUDDY_TIMELINE: 'true' } : {}),
+        ...(options.widgets ? { CODEBUDDY_WIDGETS: 'true' } : {}),
+        ...(options.widgetsAuto ? { CODEBUDDY_WIDGETS_AUTO: 'true' } : {}),
+        ...(options.logLevel
+          ? { LOG_LEVEL: options.logLevel }
+          : options.inheritLogLevel === false
+            ? { LOG_LEVEL: undefined }
+            : { LOG_LEVEL: 'error' }),
+        ...(options.nodeEnv ? { NODE_ENV: options.nodeEnv } : {}),
         NO_COLOR: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -314,6 +344,118 @@ describe('headless CLI exit codes', () => {
     }
   }, 90_000);
 
+  it('persists a session, run, and timeline for non-ephemeral headless turns', async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-persistence-contract',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'HEADLESS_PERSISTENCE_OK' },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-persistence-'));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+
+      for (const prompt of ['first persistent turn', 'second persistent turn']) {
+        const result = await runCliAgainstSuccessfulProvider(address.port, {
+          homeDir,
+          prompt,
+          persistent: true,
+          timeline: true,
+        });
+        expect(result.exitCode, result.stderr).toBe(0);
+        expect(JSON.parse(result.stdout).result).toBe('HEADLESS_PERSISTENCE_OK');
+      }
+
+      const sessionsDir = path.join(homeDir, '.codebuddy', 'sessions');
+      const runsDir = path.join(homeDir, '.codebuddy', 'runs');
+      const timelinesDir = path.join(homeDir, '.codebuddy', 'timelines');
+      expect(fs.readdirSync(sessionsDir).some((entry) => entry.endsWith('.json'))).toBe(true);
+      expect(fs.readdirSync(runsDir).some((entry) => entry.startsWith('run_'))).toBe(true);
+      const timelineFiles = fs.readdirSync(timelinesDir).filter((entry) => entry.endsWith('.jsonl'));
+      expect(timelineFiles.length).toBeGreaterThanOrEqual(2);
+      expect(timelineFiles.every((entry) => fs.readFileSync(path.join(timelinesDir, entry), 'utf8').trim())).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 120_000);
+
+  it('attaches an automatic table widget to headless JSON at the 200-char gate', async () => {
+    const table = `${'Contexte de tableau. '.repeat(10)}\n\n` +
+      '| Nom | Score |\n| --- | ---: |\n| Alpha | 98 |\n| Beta | 91 |';
+    expect(table.length).toBeGreaterThanOrEqual(200);
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-widget-contract',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: table },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-widget-'));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+      const result = await runCliAgainstSuccessfulProvider(address.port, {
+        homeDir,
+        widgets: true,
+        widgetsAuto: true,
+      });
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.result).toBe(table);
+      expect(parsed.data).toMatchObject({
+        type: 'table',
+        headers: [{ label: 'Nom' }, { label: 'Score' }],
+        rows: [
+          { cells: [{ value: 'Alpha' }, { value: '98' }] },
+          { cells: [{ value: 'Beta' }, { value: '91' }] },
+        ],
+      });
+      expect(parsed.widgetHtml).toContain('<table');
+      expect(parsed.widgetHtml).toContain('Alpha');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 90_000);
+
   it('returns non-zero when the provider failure is rendered as an assistant error', async () => {
     const server = http.createServer((req, res) => {
       req.resume();
@@ -338,6 +480,60 @@ describe('headless CLI exit codes', () => {
       const parsed = JSON.parse(result.stdout);
       expect(parsed.result).toContain('qa forced provider failure');
       expect(parsed.messages.at(-1).content).toContain('Sorry, I encountered an error:');
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  }, 90_000);
+
+  it('returns a dedicated non-zero code when a known tool call is only prose', async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-prose-tool-call',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'create_file(path="hello.txt", content="bonjour")',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+          total_tokens: 2,
+        },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+
+      const result = await runCliAgainstSuccessfulProvider(address.port, {
+        disableTools: true,
+        logLevel: 'warn',
+        nodeEnv: 'development',
+        quiet: false,
+        responseContent: 'create_file(path="hello.txt", content="bonjour")',
+      });
+
+      expect(result.exitCode).toBe(3);
+      expect(JSON.parse(result.stdout).result).toContain('create_file(');
+      expect(result.stderr).toContain('le modèle a décrit un appel d’outil sans l’exécuter');
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()));
     }

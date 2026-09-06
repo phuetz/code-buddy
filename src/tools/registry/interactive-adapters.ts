@@ -26,6 +26,7 @@ import {
   createBashTools,
   createLsTools,
   createSelfDescribeTools,
+  createSelfEvolutionTools,
   createRemindTools,
   createSearchTools,
   createWorkspaceTools,
@@ -96,12 +97,15 @@ import { createAuthoredExtraTools } from './authored-extra-tools.js';
 import { createExtensionForgeTools } from '../extension-forge-tool.js';
 import { createRegisterToolTool } from '../register-tool-handler.js';
 import { ToolSearchTool } from '../tool-search.js';
+import { isContextZoomEnabled } from '../../context/segment-archive.js';
 
 export interface InteractiveAdapterOptions {
   /** Include the Windows-only tools. Default: `process.platform === 'win32'`. */
   includeWindowsTools?: boolean;
   /** Include register_tool (self-improvement). Default: `CODEBUDDY_SELF_IMPROVE === 'true'`. */
   includeSelfImproveTools?: boolean;
+  /** Include context_expand (context zoom). Default: `CODEBUDDY_CONTEXT_ZOOM === 'true'`. */
+  includeContextZoomTools?: boolean;
 }
 
 /**
@@ -113,15 +117,17 @@ export function createInteractiveToolAdapters(options: InteractiveAdapterOptions
   const includeWindows = options.includeWindowsTools ?? process.platform === 'win32';
   const includeSelfImprove =
     options.includeSelfImproveTools ?? process.env.CODEBUDDY_SELF_IMPROVE === 'true';
+  const includeContextZoom = options.includeContextZoomTools ?? isContextZoomEnabled();
 
   const allTools: ITool[] = [
     new ToolSearchTool(),
-    ...createContextExpandTools(),
+    ...(includeContextZoom ? createContextExpandTools() : []),
     ...createDesignTools(),
     ...createTextEditorTools(),
     ...createBashTools(),
     ...createLsTools(),
     ...createSelfDescribeTools(),
+    ...createSelfEvolutionTools(),
     ...createRemindTools(),
     ...createSearchTools(),
     ...createWorkspaceTools(),

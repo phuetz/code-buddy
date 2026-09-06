@@ -248,7 +248,8 @@ export async function groundAttachedImages(
   if (imageAttachments.length === 0) return { status: 'unavailable', imageCount: 0, reason: 'no_images' };
   const env = options.env ?? process.env;
   const model = env.CODEBUDDY_ATTACHED_VISION_MODEL?.trim() || env.CODEBUDDY_VISION_MODEL?.trim();
-  const baseURL = (env.CODEBUDDY_VISION_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
+  const defaultBase = env.OLLAMA_HOST ? `${env.OLLAMA_HOST.replace(/\/+$/, '')}/v1` : 'http://127.0.0.1:11434/v1';
+  const baseURL = (env.CODEBUDDY_VISION_BASE_URL?.trim() || defaultBase).replace(/\/+$/, '');
   if (!model) return { status: 'unavailable', imageCount: imageAttachments.length, reason: 'no_model' };
   if (!isAllowedEndpoint(baseURL, env)) {
     return { status: 'unavailable', imageCount: imageAttachments.length, model, reason: 'blocked_endpoint' };

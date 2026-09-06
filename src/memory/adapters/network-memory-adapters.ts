@@ -1,7 +1,22 @@
 import type { MemoryProvider, MemoryRememberOptions } from '../memory-provider.js';
 import { LocalMemoryProvider } from '../local-memory-provider.js';
-import type { Memory } from '../persistent-memory.js';
+import type { Memory, MemoryConfig } from '../persistent-memory.js';
 import { logger } from '../../utils/logger.js';
+
+/**
+ * Test-only escape hatch (TESTWRITE1, 2026-09-04). Every adapter below builds
+ * its `LocalMemoryProvider` fallback with zero arguments, which resolves the
+ * DEFAULT `PersistentMemoryManager` singleton — `.codebuddy/CODEBUDDY_MEMORY.md`
+ * under `process.cwd()`. A test exercising the "no API key" fallback path
+ * (the whole point of `Mem0MemoryProvider`/`HonchoMemoryProvider`/
+ * `SupermemoryMemoryProvider`) therefore writes into the real repo's tracked
+ * memory file unless it can point the fallback at a temp `projectMemoryPath`.
+ * `fallbackMemoryConfig` is that seam; omitting it keeps production behavior
+ * byte-identical (still `new LocalMemoryProvider()`).
+ */
+interface NetworkProviderTestOptions {
+  fallbackMemoryConfig?: Partial<MemoryConfig>;
+}
 
 /**
  * Network memory provider adapters (Hermes memory-provider parity).
@@ -89,7 +104,7 @@ function trimBase(url: string): string {
 
 // ============================================================================
 // Mem0 — OSS self-hosted REST server OR Mem0 Platform cloud.
-//   Self-hosted (MEM0_BASE_URL set, e.g. http://ministar-linux:8888):
+//   Self-hosted (MEM0_BASE_URL set, e.g. http://hub-linux:8888):
 //     POST {base}/memories  {messages,[user_id]}   ·  POST {base}/search {query,user_id}
 //     auth: X-API-Key (optional)                   ·  NO /v1 prefix
 //   Cloud (api.mem0.ai):
@@ -104,13 +119,13 @@ export class Mem0MemoryProvider implements MemoryProvider {
   private selfHosted: boolean;
   private userId: string;
 
-  constructor(options: { apiKey?: string; baseUrl?: string; userId?: string } = {}) {
+  constructor(options: { apiKey?: string; baseUrl?: string; userId?: string } & NetworkProviderTestOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.MEM0_API_KEY ?? '';
     const configuredBase = options.baseUrl ?? process.env.MEM0_BASE_URL ?? '';
     this.selfHosted = configuredBase !== '' && !/api\.mem0\.ai/i.test(configuredBase);
     this.baseUrl = trimBase(configuredBase || 'https://api.mem0.ai/v1');
     this.userId = options.userId ?? process.env.MEM0_USER_ID ?? 'codebuddy';
-    this.fallback = new LocalMemoryProvider();
+    this.fallback = new LocalMemoryProvider(options.fallbackMemoryConfig);
   }
 
   /** Remote is usable when self-hosted (base set) or a cloud key is present. */
@@ -217,7 +232,7 @@ export class HonchoMemoryProvider implements MemoryProvider {
   private baseUrlConfigured: boolean;
   private ensured = false;
 
-  constructor(options: { apiKey?: string; baseUrl?: string; workspace?: string; peer?: string } = {}) {
+  constructor(options: { apiKey?: string; baseUrl?: string; workspace?: string; peer?: string } & NetworkProviderTestOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.HONCHO_API_KEY ?? '';
     const configuredBase = options.baseUrl ?? process.env.HONCHO_BASE_URL ?? '';
     this.baseUrlConfigured = configuredBase !== '';
@@ -225,7 +240,7 @@ export class HonchoMemoryProvider implements MemoryProvider {
     this.workspace = options.workspace ?? process.env.HONCHO_WORKSPACE ?? 'codebuddy';
     this.peer = options.peer ?? process.env.HONCHO_PEER ?? 'codebuddy';
     this.session = process.env.HONCHO_SESSION ?? 'default';
-    this.fallback = new LocalMemoryProvider();
+    this.fallback = new LocalMemoryProvider(options.fallbackMemoryConfig);
   }
 
   /**
@@ -323,11 +338,11 @@ export class SupermemoryMemoryProvider implements MemoryProvider {
   private baseUrl: string;
   private containerTag: string;
 
-  constructor(options: { apiKey?: string; baseUrl?: string; containerTag?: string } = {}) {
+  constructor(options: { apiKey?: string; baseUrl?: string; containerTag?: string } & NetworkProviderTestOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.SUPERMEMORY_API_KEY ?? '';
     this.baseUrl = trimBase(options.baseUrl ?? process.env.SUPERMEMORY_BASE_URL ?? 'https://api.supermemory.ai');
     this.containerTag = options.containerTag ?? process.env.SUPERMEMORY_CONTAINER_TAG ?? 'codebuddy';
-    this.fallback = new LocalMemoryProvider();
+    this.fallback = new LocalMemoryProvider(options.fallbackMemoryConfig);
   }
 
   private headers(): Record<string, string> {

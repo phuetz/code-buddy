@@ -336,7 +336,7 @@ function visualApiKey(env: NodeJS.ProcessEnv, baseURL: string): string {
     // The client will report an invalid endpoint; never attach an unrelated key.
   }
 
-  // A custom/Darkstar endpoint receives no ambient provider credential. Set
+  // A custom/GPU node endpoint receives no ambient provider credential. Set
   // CODEBUDDY_VISION_API_KEY explicitly when that endpoint requires auth.
   return 'ollama';
 }

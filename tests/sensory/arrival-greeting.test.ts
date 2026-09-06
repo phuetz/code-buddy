@@ -6,6 +6,8 @@ import { wireSemanticVisionReaction } from '../../src/sensory/semantic-vision-re
 import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { recordCompanionPercept } from '../../src/companion/percepts.js';
+import { CompanionConductor, _resetConductorForTests } from '../../src/companion/orchestrator.js';
+import { HomeModeStore } from '../../src/life-rhythm/home-mode-store.js';
 
 let tmp: string;
 const tick = () => new Promise((r) => setTimeout(r, 60));
@@ -21,6 +23,13 @@ function personEntered(): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
     metadata: { modality: 'vision', kind: 'person_entered', payload: {} },
+  });
+}
+
+function personLost(): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: { modality: 'vision', kind: 'person_lost', payload: {} },
   });
 }
 
@@ -47,12 +56,15 @@ function personIdentified(name: string, similarity = 0.7): void {
 }
 
 beforeEach(async () => {
+  _resetConductorForTests();
   tmp = await mkdtemp(path.join(os.tmpdir(), 'greet-'));
 });
 afterEach(async () => {
+  _resetConductorForTests();
   await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_GREET;
   delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
+  delete process.env.CODEBUDDY_SENSORY_REGREET_MIN_MS;
   delete process.env.CODEBUDDY_USER_NAME;
 });
 
@@ -62,9 +74,11 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     process.env.CODEBUDDY_USER_NAME = 'Patrice';
     const greet = vi.fn(async () => {});
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
     const unwire = wireSemanticVisionReaction({
       greet,
       cwd: tmp,
+      homeModeStore,
       now: () => new Date(2026, 5, 30, 8, 0, 0).getTime(),
     });
     try {
@@ -87,7 +101,16 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet = vi.fn(async () => {});
     const onEngage = vi.fn();
     let clock = 1000;
-    const unwire = wireSemanticVisionReaction({ greet, onEngage, now: () => clock, cwd: tmp });
+    const conductor = new CompanionConductor(45_000, () => clock);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({
+      greet,
+      onEngage,
+      now: () => clock,
+      conductor,
+      homeModeStore,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet, 1);
@@ -112,6 +135,67 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     }
   });
 
+  it('keeps a loss and reappearance inside five minutes in one greeting episode', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    const greet = vi.fn(async () => {});
+    let clock = 1_000;
+    const unwire = wireSemanticVisionReaction({ greet, now: () => clock, cwd: tmp });
+    try {
+      personEntered();
+      await waitForCalls(greet, 1);
+
+      clock += 2_000;
+      personLost();
+      await tick();
+
+      clock += 120_000;
+      personEntered();
+      await tick();
+      expect(greet).toHaveBeenCalledTimes(1);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('keeps the same identified person inside one episode but greets a different identity', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    process.env.CODEBUDDY_USER_NAME = 'Patrice';
+    const greet = vi.fn(async () => {});
+    let clock = 1_000;
+    const conductor = new CompanionConductor(1_000, () => clock);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({
+      greet,
+      now: () => clock,
+      greetCooldownMs: 1_000,
+      arrivalStatePath: path.join(tmp, 'arrival-state.json'),
+      conductor,
+      homeModeStore,
+      cwd: tmp,
+    });
+    try {
+      identityPendingArrival();
+      personIdentified('Patrice');
+      await waitForCalls(greet, 1);
+
+      clock = 10_000;
+      personLost();
+      identityPendingArrival();
+      personIdentified('PATRICE');
+      await tick();
+      expect(greet).toHaveBeenCalledTimes(1);
+
+      clock = 20_000;
+      personLost();
+      identityPendingArrival();
+      personIdentified('Alice');
+      await waitForCalls(greet, 2);
+      expect(greet).toHaveBeenCalledTimes(2);
+    } finally {
+      unwire();
+    }
+  });
+
   it('the arrival greeting opens the engagement window the speech gate reads (shared decider)', async () => {
     // This is the bug fix: server/index.ts wires onEngage -> the SAME decider the
     // speech reaction gates on, so a greeted visitor's natural reply (no wake-word)
@@ -128,10 +212,14 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     expect((await decider.decide('il fait beau aujourd’hui')).respond).toBe(false);
 
     const greet = vi.fn(async () => {});
+    const conductor = new CompanionConductor(45_000, () => clock);
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
     const unwire = wireSemanticVisionReaction({
       greet,
       onEngage: () => decider.markEngaged('arrival'), // exactly how server/index.ts wires it
       now: () => clock,
+      conductor,
+      homeModeStore,
       cwd: tmp,
     });
     try {
@@ -168,7 +256,16 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet1 = vi.fn(async () => {});
     const llmChat = vi.fn(async () => 'Tiens, te revoilà — content de te voir.');
     let clock = 1000;
-    const unwire1 = wireSemanticVisionReaction({ greet: greet1, llmChat, now: () => clock, cwd: tmp });
+    const conductor1 = new CompanionConductor(45_000, () => clock);
+    const homeModeStore1 = new HomeModeStore({ filePath: path.join(tmp, 'home-mode-1.json') });
+    const unwire1 = wireSemanticVisionReaction({
+      greet: greet1,
+      llmChat,
+      now: () => clock,
+      conductor: conductor1,
+      homeModeStore: homeModeStore1,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet1, 1);
@@ -183,7 +280,16 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet2 = vi.fn(async () => {});
     const nullChat = vi.fn(async () => null);
     clock += 200_000; // fresh temp cwd anyway; new wiring has its own cooldown clock
-    const unwire2 = wireSemanticVisionReaction({ greet: greet2, llmChat: nullChat, now: () => clock, cwd: tmp });
+    const conductor2 = new CompanionConductor(45_000, () => clock);
+    const homeModeStore2 = new HomeModeStore({ filePath: path.join(tmp, 'home-mode-2.json') });
+    const unwire2 = wireSemanticVisionReaction({
+      greet: greet2,
+      llmChat: nullChat,
+      now: () => clock,
+      conductor: conductor2,
+      homeModeStore: homeModeStore2,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet2, 1);
@@ -230,7 +336,8 @@ describe('arrival greeting — the robot notices and engages when someone arrive
 
     const greet = vi.fn(async () => {});
     const llmChat = vi.fn(async () => 'Content de reprendre PanoWorld avec toi.');
-    const unwire = wireSemanticVisionReaction({ greet, llmChat, cwd: tmp });
+    const homeModeStore = new HomeModeStore({ filePath: path.join(tmp, 'home-mode.json') });
+    const unwire = wireSemanticVisionReaction({ greet, llmChat, homeModeStore, cwd: tmp });
     try {
       personEntered();
       await waitForCalls(greet, 1);

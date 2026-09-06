@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, readTextAtomicSync, writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -103,9 +104,9 @@ export class AIColabManager {
 
   private loadData(): void {
     // Load tasks
-    if (fs.existsSync(this.tasksFilePath)) {
+    {
       try {
-        const data = JSON.parse(fs.readFileSync(this.tasksFilePath, 'utf-8'));
+        const data = readJsonAtomicSync<{ tasks?: ColabTask[]; config?: Partial<ColabConfig> }>(this.tasksFilePath, {} , { mode: 0o600 });
         for (const task of data.tasks || []) {
           this.tasks.set(task.id, task);
         }
@@ -120,7 +121,7 @@ export class AIColabManager {
     // Load work log
     if (fs.existsSync(this.workLogFilePath)) {
       try {
-        const data = JSON.parse(fs.readFileSync(this.workLogFilePath, 'utf-8'));
+        const data = readJsonAtomicSync<{ entries?: WorkLogEntry[] }>(this.workLogFilePath, {}, { mode: 0o600 });
         this.workLog = data.entries || [];
       } catch {
         // Ignore parse errors, use defaults
@@ -129,21 +130,16 @@ export class AIColabManager {
   }
 
   private saveData(): void {
-    const dir = path.dirname(this.tasksFilePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
     // Save tasks
-    fs.writeFileSync(this.tasksFilePath, JSON.stringify({
+    writeJsonAtomicSync(this.tasksFilePath, {
       config: this.config,
       tasks: Array.from(this.tasks.values())
-    }, null, 2));
+    }, { mode: 0o600 });
 
     // Save work log
-    fs.writeFileSync(this.workLogFilePath, JSON.stringify({
+    writeJsonAtomicSync(this.workLogFilePath, {
       entries: this.workLog
-    }, null, 2));
+    }, { mode: 0o600 });
   }
 
   // --------------------------------------------------------------------------
@@ -335,7 +331,8 @@ ${info.recommendedNextSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
     if (!fs.existsSync(this.colabFilePath)) return;
 
     try {
-      let content = fs.readFileSync(this.colabFilePath, 'utf-8');
+      let content = readTextAtomicSync(this.colabFilePath, '');
+      if (!content) return;
 
       const logEntry = this.formatWorkLogEntry(entry);
 
@@ -356,7 +353,7 @@ ${info.recommendedNextSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
           content = content.substring(0, markerIndex + workLogMarker.length) + '\n\n' + logEntry + content.substring(markerIndex + workLogMarker.length);
         }
 
-        fs.writeFileSync(this.colabFilePath, content);
+        writeFileAtomicSync(this.colabFilePath, content, { mode: 0o600 });
       }
     } catch {
       // Ignore errors updating COLAB.md

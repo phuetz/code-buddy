@@ -25,7 +25,7 @@ const PRIORITY_RANK: Record<TaskPriority, number> = { critical: 3, high: 2, medi
 
 export interface NetworkModel {
   model: string;
-  /** A Tailscale peer's OpenAI-compatible (Ollama) endpoint, e.g. http://darkstar:11434/v1 */
+  /** A Tailscale peer's OpenAI-compatible (Ollama) endpoint, e.g. http://gpuNode:11434/v1 */
   baseUrl: string;
   label?: string;
 }
@@ -85,7 +85,7 @@ const DEFAULT_ESCALATE_AFTER_FAILURES = 2;
  * - local model:    `CODEBUDDY_LOCAL_MODEL`
  * - local base URL: `OLLAMA_BASE_URL` → `OLLAMA_HOST` (+ `/v1`) → default
  * - network models: `CODEBUDDY_NETWORK_MODELS` — csv of `model@baseUrl` entries
- *   (e.g. `qwen3.6:27b@http://darkstar:11434/v1,...`)
+ *   (e.g. `qwen3.6:27b@http://gpuNode:11434/v1,...`)
  * - escalation:     `CODEBUDDY_ESCALATION_MODEL` → `GROK_MODEL` → none.
  */
 export function resolveModelTierConfig(env: NodeJS.ProcessEnv = process.env): ModelTierConfig {

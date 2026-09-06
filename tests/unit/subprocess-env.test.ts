@@ -6,7 +6,7 @@ describe('subprocess env filtering', () => {
     const env = buildFilteredSubprocessEnv({
       sourceEnv: {
         PATH: '/usr/bin',
-        HOME: '/home/patrice',
+        HOME: '/home/user',
         OPENAI_API_KEY: 'sk-test-secret-that-must-not-leak',
         JWT_SECRET: 'x'.repeat(64),
         GIT_AUTHOR_NAME: 'Patrice',
@@ -14,7 +14,7 @@ describe('subprocess env filtering', () => {
     });
 
     expect(env.PATH).toBe('/usr/bin');
-    expect(env.HOME).toBe('/home/patrice');
+    expect(env.HOME).toBe('/home/user');
     expect(env.GIT_AUTHOR_NAME).toBe('Patrice');
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.JWT_SECRET).toBeUndefined();

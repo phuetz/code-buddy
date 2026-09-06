@@ -220,6 +220,20 @@ describe('pairing IPC', () => {
     expect(status.enabled).toBe(false);
   });
 
+  it('fails closed when loadAllowlist throws (jumeau D4)', async () => {
+    const originalLoad = fakes.pairingMgr.loadAllowlist;
+    fakes.pairingMgr.loadAllowlist = async () => {
+      throw new Error('corrupt allowlist');
+    };
+    try {
+      const status = (await call('pairing.status')) as { ok: boolean; error?: string };
+      expect(status.ok).toBe(false);
+      expect(status.error).toMatch(/corrupt allowlist/);
+    } finally {
+      fakes.pairingMgr.loadAllowlist = originalLoad;
+    }
+  });
+
   it('never-throws on invalid pairing input', async () => {
     expect(((await call('pairing.approveDirect', {}, 'Bad!', 'x')) as { ok: boolean }).ok).toBe(false);
     expect(((await call('pairing.approve', {}, 'telegram', '')) as { ok: boolean }).ok).toBe(false);

@@ -9,6 +9,7 @@ d'habillage commun avant d'être déclarées livrables.
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import json
 from pathlib import Path
@@ -18,8 +19,9 @@ import sys
 
 
 MASTER = Path(
-    '/home/patrice/Videos/publication-2026-07-30/lisa-vision-ia/'
-    'lisa-vision-ia-5-signaux-v4.mp4'
+    os.path.expanduser(
+        '~/Videos/publication-2026-07-30/lisa-vision-ia/lisa-vision-ia-5-signaux-v4.mp4'
+    )
 )
 MASTER_SHA256 = '888dc692477ebcb03799b2ac51ea6031b6aa62dced2365b14a3945ffffc0d9c6'
 SRT = MASTER.with_name('lisa-vision-ia-5-signaux-v4.fr.srt')
@@ -321,7 +323,7 @@ def controler_identite(
     ]
     executer([
         str(ARCFACE_PYTHON),
-        str(racine_depot / 'scripts/darkstar/score-arcface-images.py'),
+        str(racine_depot / 'scripts/gpuNode/score-arcface-images.py'),
         '--reference', str(IDENTITE / 'lisa-avatar-800.png'),
         '--output', str(rapport),
         *(str(image) for image in images),

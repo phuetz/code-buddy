@@ -15,6 +15,8 @@ import { globalAgent as httpsGlobalAgent } from 'node:https';
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
 import type { CustomAgentConfig } from "./agent/custom/custom-agent-loader.js";
+import type { CodeBuddyAgent } from "./agent/codebuddy-agent.js";
+import type { RunStore } from "./observability/run-store.js";
 
 import { fileURLToPath } from 'url';
 import {
@@ -30,8 +32,17 @@ import {
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
 import { getRequestedProfile } from './cli/requested-profile.js';
-import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
+import {
+  findUnexecutedProseToolCall,
+  formatEmptyHeadlessResponseError,
+  isHeadlessFinalResponseEmpty,
+  resolveHeadlessOutputFormat,
+  resolveHeadlessTurnExitCode,
+} from './cli/headless-options.js';
+import { validateOutputText } from './utils/output-schema-validator.js';
 import { resolveCliModelList } from './cli/model-listing.js';
+import { registerBackupCommand } from './commands/cli/backup-command.js';
+import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
@@ -51,6 +62,7 @@ process.env.CODEBUDDY_CLI_VERSION = packageJson.version;
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
+import { writeFileAtomic } from './utils/atomic-write.js';
 // Import graceful shutdown for clean application termination
 import {
   initializeGracefulShutdown,
@@ -642,9 +654,21 @@ async function loadModel(): Promise<string | undefined> {
       requested,
     });
     if (resolution.model) return resolution.model;
-    cli.error(
-      buildOllamaPullHint({ baseURL: detected.baseURL, reachable: resolution.reachable, requested }),
+    const hint = buildOllamaPullHint({
+      baseURL: detected.baseURL,
+      reachable: resolution.reachable,
+      requested,
+    });
+    const { shouldBypassUnreachableLocalPreflight } = await import(
+      './providers/provider-failover-policy.js'
     );
+    if (shouldBypassUnreachableLocalPreflight()) {
+      cli.warn(
+        `${hint}\nDeclared provider failover is enabled; continuing so chat() can try the backup chain.`,
+      );
+      return requested || detected.defaultModel;
+    }
+    cli.error(hint);
     process.exit(1);
   }
 
@@ -665,20 +689,27 @@ async function loadModel(): Promise<string | undefined> {
 }
 
 /**
- * Active-LLM auto-failover. When `[llm] enabled` (or CODEBUDDY_LLM_FAILOVER=1),
- * build the registry of the user's live logins and inject it into the agent's
- * client fallback list — so a failing primary transparently fails over to the
- * next active LLM (resilience order by default: capable/subscription first,
- * local last). OFF by default → single-provider behavior is unchanged.
+ * Active-LLM auto-failover. `CODEBUDDY_LLM_FAILOVER` is a deprecated alias of
+ * `CODEBUDDY_PROVIDER_FALLBACK` — both take the declared client path. When no
+ * `CODEBUDDY_FALLBACK_CHAIN` is set, the authenticated registry is injected as
+ * the candidate list (resilience order by default).
  */
 async function applyActiveLlmFailover(
   agent: import('./agent/codebuddy-agent.js').CodeBuddyAgent,
 ): Promise<void> {
   try {
     const { getConfigManager } = await import('./config/toml-config.js');
+    const { isDeclaredProviderFallbackEnabled, warnLegacyLlmFailoverAlias } = await import(
+      './providers/provider-failover-policy.js'
+    );
     const llmCfg = getConfigManager().getConfig().llm;
-    const enabled = Boolean(llmCfg?.enabled) || process.env.CODEBUDDY_LLM_FAILOVER === '1';
+    warnLegacyLlmFailoverAlias();
+    const enabled = isDeclaredProviderFallbackEnabled() || Boolean(llmCfg?.enabled);
     if (!enabled) return;
+    if (process.env.CODEBUDDY_FALLBACK_CHAIN) {
+      logger.info('Active-LLM failover: CODEBUDDY_FALLBACK_CHAIN wins over the registry list');
+      return;
+    }
 
     const primary = await getDetectedProvider();
     const { buildActiveLlmRegistry } = await import('./providers/active-llm-registry.js');
@@ -1025,11 +1056,18 @@ async function processPromptHeadless(
   maxToolRounds?: number,
   selfHealEnabled: boolean = true,
   outputFormat: string = 'json',
+  outputLastMessagePath?: string,
   outputSchemaPath?: string,
   agentName?: string,
 ): Promise<number> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   const previousHeadless = process.env.CODEBUDDY_HEADLESS;
+  const startedAt = Date.now();
+  let agent: CodeBuddyAgent | undefined;
+  let interactionLogger: import('./logging/interaction-logger.js').InteractionLogger | null = null;
+  let runStore: RunStore | undefined;
+  let runId: string | undefined;
+  let runStatus: 'completed' | 'failed' = 'failed';
   // Headless defaults MCP OFF (startup cost / determinism), but respect an
   // explicit opt-in so `CODEBUDDY_DISABLE_MCP=false buddy -p …` can use MCP
   // servers (e.g. the Code Explorer / code-explorer bridge, or the benchmark's
@@ -1041,8 +1079,61 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    const agent = new CodeBuddyAgent(apiKey, baseURL, modelToUse, maxToolRounds);
+    // Evolved execution strategy (opt-in CODEBUDDY_SELF_IMPROVE_STRATEGIES): fills only what
+    // the user left unset — an explicit --max-tool-rounds always wins. Off ⇒ empty overlay.
+    const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
+    const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
+    if (strategy.strategyId && strategy.strategyId !== 'baseline') {
+      const cost = applyStrategyCostCap(strategy);
+      logger.info(
+        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
+      );
+    }
+    agent = new CodeBuddyAgent(
+      apiKey,
+      baseURL,
+      modelToUse,
+      maxToolRounds ?? strategy.maxToolRounds,
+      true,
+      undefined,
+      undefined,
+      strategy.systemPromptAppend,
+    );
     await applyActiveLlmFailover(agent);
+
+    // A headless prompt is a real session unless --ephemeral was selected.
+    // The timeline hook is installed by the agent constructor and resolves the
+    // current session lazily at turn completion, so the session must exist
+    // before the first message is processed.
+    const sessionStore = agent.getSessionStore();
+    if (!sessionStore.isEphemeral()) {
+      // GK29: --resume/--continue hydrate the persisted session in headless mode; GK28: the run
+      // record keeps the session's working directory for `buddy run show`.
+      const existingId = sessionStore.getCurrentSessionId();
+      const existing = existingId ? await sessionStore.loadSession(existingId) : null;
+      if (existing) {
+        agent.hydratePersistedSession(existing);
+      } else {
+        const sessionName = prompt.replace(/\s+/gu, ' ').trim().slice(0, 80) || 'Headless session';
+        await sessionStore.createSession(sessionName, modelToUse);
+      }
+      const sessionId = sessionStore.getCurrentSessionId();
+      if (sessionId) {
+        const current = existing ?? (await sessionStore.loadSession(sessionId));
+        const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
+        runStore = RunStoreClass.getInstance();
+        const { auditLogger } = await import('./security/audit-logger.js');
+        const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+        auditLogger.init({ logDir: auditDir, sessionId });
+        runId = runStore.startRun('headless prompt', {
+          channel: 'terminal',
+          sessionId,
+          ...(current?.workingDirectory ? { cwd: current.workingDirectory } : {}),
+          tags: ['headless', modelToUse || 'unknown'],
+        });
+        agent.setRunId(runId);
+      }
+    }
 
     await agent.systemPromptReady;
     // When MCP is opted in for this headless run, wait for the servers to finish
@@ -1074,7 +1165,6 @@ async function processPromptHeadless(
     confirmationService.setSessionFlag("allOperations", true);
 
     // Initialize interaction logger for headless session tracking
-    let interactionLogger: import('./logging/interaction-logger.js').InteractionLogger | null = null;
     try {
       const { getInteractionLogger } = await import('./logging/interaction-logger.js');
       const il = getInteractionLogger();
@@ -1087,8 +1177,47 @@ async function processPromptHeadless(
       interactionLogger = il;
     } catch (e) { logger.debug('Failed to initialize headless interaction logger', { error: String(e) }); }
 
+    // Slash commands must not be sent to the LLM as a user message.
+    if (prompt.trim().startsWith('/')) {
+      const { dispatchSlashPrompt } = await import('./commands/headless-slash.js');
+      const handler = (await import('./commands/enhanced-command-handler.js')).getEnhancedCommandHandler();
+      handler.setCodeBuddyClient(agent.getClient());
+      const slash = await dispatchSlashPrompt(prompt.trim(), { client: agent.getClient() });
+      if (slash?.handled) {
+        const resultText = slash.output ?? slash.reason ?? '(slash command produced no output)';
+        const format = outputFormat.toLowerCase();
+        if (format === 'text' || format === 'markdown') {
+          cli.stdout(resultText);
+        } else {
+          const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+          const slashCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
+          const slashOutputData: Record<string, unknown> = {
+            result: resultText,
+            cost: {
+              total: slashCostExtended.total,
+              estimated: slashCostExtended.estimated,
+              pricing: slashCostExtended.pricing,
+              billing: slashCostExtended.billing,
+            },
+            model: slashEffectiveModel,
+            messages: [{ role: 'assistant', content: resultText }],
+          };
+          // For slash commands, we don't have effective vs requested model tracking
+          // since the agent hasn't processed a user message yet
+          cli.stdout(JSON.stringify(slashOutputData));
+        }
+        return slash.denied ? 1 : 0;
+      }
+      if (slash?.passToAI && slash.prompt) {
+        prompt = slash.prompt;
+      }
+    }
+
     // Process the user message
     const chatEntries = await agent.processUserMessage(prompt, { surface: 'cli' });
+    if (!sessionStore.isEphemeral()) {
+      await agent.saveCurrentSession();
+    }
 
     // WS3-T1 — session-end flush (handoff + lesson candidates). Awaited with
     // a hard cap so headless runs keep their continuity write without ever
@@ -1161,30 +1290,84 @@ async function processPromptHeadless(
       }
     }
 
-    // Validate output against JSON Schema if --output-schema was provided
+    // Extract the final assistant response directly from chatEntries. This is
+    // the text used by every headless output mode and by the file flags.
+    const lastAssistantEntry = [...chatEntries]
+      .reverse()
+      .find((entry) => entry.type === 'assistant');
+    const resultText = lastAssistantEntry?.content ?? '';
+
+    const client = agent.getClient();
+    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
+    if (isHeadlessFinalResponseEmpty(resultText)) {
+      const providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
+        || detectProviderFromEnv()?.provider
+        || 'inconnu';
+      process.stderr.write(`${formatEmptyHeadlessResponseError({
+        provider: providerLabel,
+        model: effectiveModel,
+        durationMs: Date.now() - startedAt,
+      })}\n`);
+      runStatus = 'failed';
+      return 1;
+    }
+
+    // Validate before writing or emitting any successful output. The schema
+    // applies to the JSON value represented by the final assistant text, not
+    // to the internal/OpenAI-compatible message history.
     if (outputSchemaPath) {
-      const { validateOutputSchema } = await import("./utils/output-schema-validator.js");
-      const validation = validateOutputSchema(messages, outputSchemaPath);
+      const validation = validateOutputText(resultText, outputSchemaPath);
       if (!validation.valid) {
         cli.error('Output schema validation failed:');
         for (const error of validation.errors) {
           cli.error(`  - ${error}`);
         }
-        return 2;
+        return 1;
       }
     }
 
-    // Extract final assistant response text
-    const assistantMessages = messages.filter(
-      m => m.role === 'assistant' && m.content && !('tool_calls' in m && (m as unknown as Record<string, unknown>).tool_calls)
+    if (outputLastMessagePath) {
+      await writeFileAtomic(outputLastMessagePath, resultText);
+    }
+
+    const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
+    const knownToolNames = getBuiltinToolNames();
+    const executedToolNames = chatEntries
+      .filter((entry) => entry.type === 'tool_result' && entry.toolCall)
+      .map((entry) => entry.toolCall?.function.name)
+      .filter((toolName): toolName is string => Boolean(toolName));
+    const proseToolCall = findUnexecutedProseToolCall(
+      resultText,
+      knownToolNames,
+      executedToolNames,
     );
-    const lastResponse = assistantMessages[assistantMessages.length - 1];
-    const resultText = (lastResponse?.content as string) || '';
-    const exitCode = resolveHeadlessResultExitCode(resultText);
+    if (proseToolCall) {
+      logger.warn('le modèle a décrit un appel d’outil sans l’exécuter', {
+        toolName: proseToolCall.toolName,
+        line: proseToolCall.line,
+      });
+    }
+    const exitCode = resolveHeadlessTurnExitCode(
+      resultText,
+      knownToolNames,
+      executedToolNames,
+    );
+    runStatus = exitCode === 0 ? 'completed' : 'failed';
 
     // Gather cost and model info from the agent
-    const sessionCost = agent.getSessionCost();
-    const usedModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+    const sessionCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
+    const sessionCost = sessionCostExtended.total;
+    const requestedModel = client.getLastRequestedModel();
+
+    // MODELLABEL1: Warn on stderr when requested model differs from effective model in headless mode
+    if (requestedModel && requestedModel !== effectiveModel) {
+      const fallbackWarning = `⚠️  Modèle "${requestedModel}" non disponible, repli sur "${effectiveModel}"`;
+      // Only warn once per process in headless mode
+      if (!process.env.CODEBUDDY_MODEL_FALLBACK_WARNED) {
+        process.env.CODEBUDDY_MODEL_FALLBACK_WARNED = 'true';
+        process.stderr.write(fallbackWarning + '\n');
+      }
+    }
 
     // Output in the requested format
     const format = outputFormat.toLowerCase();
@@ -1200,22 +1383,50 @@ async function processPromptHeadless(
         process.stdout.write(JSON.stringify(message) + '\n');
       }
       // Emit a final summary event
-      process.stdout.write(JSON.stringify({
+      const summaryData: Record<string, unknown> = {
         type: 'summary',
-        result: resultText,
-        cost: { total: sessionCost },
-        model: usedModel,
-      }) + '\n');
-    } else {
-      // Default: json — structured output goes to stdout (pipeable).
-      cli.stdout(JSON.stringify({
         result: resultText,
         cost: {
           total: sessionCost,
+          estimated: sessionCostExtended.estimated,
+          pricing: sessionCostExtended.pricing,
+          billing: sessionCostExtended.billing,
         },
-        model: usedModel,
+        model: effectiveModel,
+      };
+      if (requestedModel && requestedModel !== effectiveModel) {
+        summaryData.requestedModel = requestedModel;
+      }
+      process.stdout.write(JSON.stringify(summaryData) + '\n');
+    } else {
+      // Default: json — structured output goes to stdout (pipeable).
+      const { autoWidget } = await import('./widgets/auto-widget.js');
+      const widgetPayloads = chatEntries
+        .filter((entry) => entry.type === 'tool_result')
+        .map((entry) => entry.toolResult ?? { output: entry.content });
+      const widget = await autoWidget(resultText, widgetPayloads);
+      const { detectWidgetable } = await import('./widgets/widget-matcher.js');
+      // `data` is a public structured-output field even when automatic HTML
+      // rendering is disabled. The matcher is pure and does not open the
+      // registry; typed payloads also bypass the table length gate.
+      const candidate = widget.candidate ?? detectWidgetable(resultText, widgetPayloads);
+      const outputData: Record<string, unknown> = {
+        result: resultText,
+        cost: {
+          total: sessionCost,
+          estimated: sessionCostExtended.estimated,
+          pricing: sessionCostExtended.pricing,
+          billing: sessionCostExtended.billing,
+        },
+        model: effectiveModel,
         messages,
-      }));
+        ...(candidate ? { data: candidate.data } : {}),
+        ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
+      };
+      if (requestedModel && requestedModel !== effectiveModel) {
+        outputData.requestedModel = requestedModel;
+      }
+      cli.stdout(JSON.stringify(outputData));
     }
     return exitCode;
   } catch (error: unknown) {
@@ -1237,6 +1448,33 @@ async function processPromptHeadless(
     }
     return 1;
   } finally {
+    if (runStore && runId) {
+      try {
+        if (agent) {
+          const ext = agent.getSessionCostExtended?.();
+          if (ext) {
+            runStore.updateMetrics(runId, {
+              promptTokens: ext.inputTokens,
+              completionTokens: ext.outputTokens,
+              totalTokens: ext.inputTokens + ext.outputTokens,
+              totalCost: ext.total,
+            });
+          }
+        }
+        runStore.endRun(runId, runStatus);
+        runStore.dispose();
+      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
+    }
+    if (interactionLogger) {
+      try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end headless interaction logger session', { error: String(e) }); }
+    }
+    if (agent) {
+      try { agent.dispose({ skipSessionLearning: true }); } catch (e) { logger.debug('Headless agent cleanup skipped', { error: String(e) }); }
+    }
+    try {
+      const { resetMCPClient } = await import('./mcp/mcp-client.js');
+      await resetMCPClient();
+    } catch (e) { logger.debug('Headless MCP cleanup skipped', { error: String(e) }); }
     if (previousDisableMCP === undefined) {
       delete process.env.CODEBUDDY_DISABLE_MCP;
     } else {
@@ -1286,16 +1524,19 @@ program
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 400)",
-    "400"
+    "maximum number of tool execution rounds (default: 50) (400 in YOLO mode)"
   )
   .option(
     "-s, --security-mode <mode>",
     "security mode: suggest (default), auto-edit, or full-auto"
   )
   .option(
-    "-o, --output-format <format>",
+    "--output-format <format>",
     "output format for headless mode: json, stream-json, text, markdown"
+  )
+  .option(
+    "-o, --output-last-message <file>",
+    "write the agent's final text response directly and atomically to a file"
   )
   .addOption(
     new Option(
@@ -1426,8 +1667,8 @@ program
     "allow file operations outside the workspace directory (disables workspace isolation)"
   )
   .option(
-    "--output-schema <path>",
-    "validate headless mode JSON output against a JSON Schema file"
+    "--output-schema <file>",
+    "path to a JSON Schema file to validate the final response shape against"
   )
   .option(
     "--add-dir <paths...>",
@@ -1489,6 +1730,10 @@ program
     "--tts-provider <provider>",
     "TTS provider (edge-tts, espeak, say, piper, audioreader)"
   )
+  .option(
+    "--channel <name>",
+    "Start with a messaging channel (telegram, discord, slack, …)"
+  )
   .action(async (message, options) => {
     const unknownCommand = getNonInteractiveUnknownCommand({
       positionalArgs: Array.isArray(message) ? message : undefined,
@@ -1505,12 +1750,18 @@ program
     // Apply --quiet / --verbose flags
     if (options.quiet) {
       process.env.LOG_LEVEL = 'error';
+      process.env.CODEBUDDY_QUIET = 'true';
       logger.setLevel('error');
     }
     if (options.verbose) {
       process.env.VERBOSE = 'true';
       process.env.DEBUG = 'true';
       logger.setLevel('debug');
+    }
+    if (options.channel) {
+      const { handleChannels } = await import('./commands/handlers/channel-handlers.js');
+      await handleChannels('start', { type: String(options.channel) });
+      return;
     }
     // Apply --speak / --tts-provider flags
     if (options.speak || options.ttsProvider) {
@@ -1708,15 +1959,21 @@ program
 
     try {
       // Get API key from options, environment, or user settings
+      // The OAuth-aware variant, NOT the sync one: naming a model on the command
+      // line must not throw away a subscription login. The sync resolver is blind
+      // to `buddy login xai`, so `--model grok-4.3` used to fall back to an
+      // ambient XAI_API_KEY — dead, in the case measured on 2026-09-02.
       const explicitProvider = options.model && !options.apiKey && !options.baseUrl
-        ? (await import('./commands/llm-provider-resolution.js')).resolveCommandProvider({
-            explicitModel: options.model,
-          })
+        ? await (
+            await import('./commands/llm-provider-resolution.js')
+          ).resolveCommandProviderWithOAuth({ explicitModel: options.model })
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
       let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
-      const maxToolRounds = parseInt(options.maxToolRounds) || 400;
+      const maxToolRounds = options.maxToolRounds
+        ? parseInt(options.maxToolRounds, 10) || undefined
+        : undefined;
 
       if (!apiKey) {
         // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
@@ -1925,6 +2182,7 @@ program
           maxToolRounds,
           options.selfHeal !== false,
           resolveHeadlessOutputFormat(options),
+          options.outputLastMessage,
           options.outputSchema,
           options.agent
         );
@@ -2230,13 +2488,29 @@ program
         try {
           const { RunStore } = await import('./observability/run-store.js');
           const runStore = RunStore.getInstance();
+          const { auditLogger } = await import('./security/audit-logger.js');
+          const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+          auditLogger.init({ logDir: auditDir });
           const runId = runStore.startRun('interactive session', {
             channel: 'terminal',
             tags: ['interactive', model || 'unknown'],
           });
           agent.setRunId(runId);
           const cleanupRun = () => {
-            try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
+            try {
+              if (agent) {
+                const ext = agent.getSessionCostExtended?.();
+                if (ext) {
+                  runStore.updateMetrics(runId, {
+                    promptTokens: ext.inputTokens,
+                    completionTokens: ext.outputTokens,
+                    totalTokens: ext.inputTokens + ext.outputTokens,
+                    totalCost: ext.total,
+                  });
+                }
+              }
+              runStore.endRun(runId, 'completed');
+            } catch (_err) { /* ignore */ }
           };
           process.on('exit', cleanupRun);
         } catch (err) {
@@ -2300,8 +2574,7 @@ gitCommand
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 400)",
-    "400"
+    "maximum number of tool execution rounds (default: 50)"
   )
   .action(async (options) => {
     // Load environment before changing cwd so root .env values (API keys) remain available
@@ -2323,7 +2596,9 @@ gitCommand
       const apiKey = options.apiKey || await loadApiKey();
       const baseURL = options.baseUrl || await loadBaseURL();
       const model = options.model || await loadModel();
-      const maxToolRounds = parseInt(options.maxToolRounds) || 400;
+      const maxToolRounds = options.maxToolRounds
+        ? parseInt(options.maxToolRounds, 10) || undefined
+        : undefined;
 
       if (!apiKey) {
         logger.error(NO_PROVIDER_GUIDANCE);
@@ -2591,7 +2866,7 @@ program
       if (act === "add") {
         const label = args.join(" ").trim();
         if (!label || !options.at) {
-          cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--days 1,3,5]');
+          cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--date YYYY-MM-DD] [--days 1,3,5]');
           process.exitCode = 1;
           return;
         }
@@ -2655,7 +2930,7 @@ program
         cli.stdout(removed ? `🗑️  Removed ${id}` : `Reminder not found: ${id}`);
         if (!removed) process.exitCode = 1;
       } else {
-        cli.stdout("Usage: buddy remind add|list|done|rm");
+        cli.stdout("Usage: buddy remind add|list|agenda|done|rm");
         process.exitCode = 1;
       }
     } catch (e) {
@@ -2666,9 +2941,10 @@ program
 
 program
   .command("rules [action] [args...]")
-  .description("Administer sensory rules (event→action) — list|enable|disable|rm|runs|validate|add")
+  .description("Administer sensory rules (event→action) — list|templates|enable|disable|rm|runs|validate|add")
   .option("--json <rule>", "rule JSON (for `add`)")
   .option("--from-file <path>", "read rule JSON from a file (for `add`)")
+  .option("--template <name>", "install a bundled rule template (for `add`)")
   .option("--limit <n>", "max rows (for `runs`)", "20")
   .action(async (action: string | undefined, args: string[] = [], options) => {
     const r = await import("./sensory/sensory-rules-engine.js");
@@ -2733,6 +3009,35 @@ program
           }
         }
         cli.stdout(bad ? `${bad} invalid rule(s).` : `✅ ${rules.length} rule(s) valid.`);
+      } else if (act === "templates") {
+        const { listRuleTemplates } = await import("./sensory/rule-templates.js");
+        const templates = listRuleTemplates();
+        cli.stdout("Available rule templates (install with: buddy rules add --template <name>):");
+        for (const t of templates) {
+          cli.stdout(`• ${t.name}  — ${t.description}`);
+        }
+      } else if (act === "add" && options.template) {
+        const { getRuleTemplate } = await import("./sensory/rule-templates.js");
+        const tpl = getRuleTemplate(String(options.template));
+        if (!tpl) {
+          cli.stdout(`❌ unknown template '${options.template}'. See: buddy rules templates`);
+          process.exitCode = 1;
+          return;
+        }
+        const rule = tpl.build();
+        const validation = r.validateRule(rule);
+        if (!validation.ok) {
+          cli.stdout(`❌ template '${tpl.name}' failed validation:\n  - ${validation.errors.join("\n  - ")}`);
+          process.exitCode = 1;
+          return;
+        }
+        const res = await r.upsertSensoryRule(rule);
+        cli.stdout(
+          res.ok
+            ? `✅ Installed template '${tpl.name}' as rule ${rule.id} (disabled? ${rule.enabled === false ? "yes" : "no"})`
+            : `❌ rejected:\n  - ${res.errors.join("\n  - ")}`,
+        );
+        if (!res.ok) process.exitCode = 1;
       } else if (act === "add") {
         let raw = options.json as string | undefined;
         if (!raw && options.fromFile) {
@@ -2757,7 +3062,7 @@ program
         cli.stdout(res.ok ? `✅ Saved rule ${rule.id}` : `❌ rejected:\n  - ${res.errors.join("\n  - ")}`);
         if (!res.ok) process.exitCode = 1;
       } else {
-        cli.stdout("Usage: buddy rules list|enable|disable|rm|runs|validate|add");
+        cli.stdout("Usage: buddy rules list|templates|enable|disable|rm|runs|validate|add [--template <name>]");
         process.exitCode = 1;
       }
     } catch (e) {
@@ -2954,7 +3259,8 @@ program
   .command("login [provider]")
   .description("Authenticate with a provider (chatgpt | xai — uses your subscription, no API key)")
   .option("--code <code>", "Complete an xAI login with the code shown in the browser")
-  .action(async (provider: string | undefined, options: { code?: string }) => {
+  .option("--no-browser", "Fail immediately instead of waiting for a browser callback")
+  .action(async (provider: string | undefined, options: { code?: string; browser?: boolean }) => {
     const target = (provider ?? "chatgpt").toLowerCase();
     if (target === "xai" || target === "grok" || target === "xai-oauth") {
       await loginXaiCli(options.code);
@@ -2963,6 +3269,13 @@ program
     if (target !== "chatgpt" && target !== "codex" && target !== "openai") {
       cli.stdout(`Unknown provider: "${provider}". Supported: \`chatgpt\`, \`xai\`.`);
       cli.stdout("Other providers (Gemini, Anthropic) authenticate via API key env vars.");
+      process.exit(1);
+    }
+    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE } = await import(
+      "./commands/login-prerequisites.js"
+    );
+    if (options.browser === false || !canAttemptInteractiveLogin()) {
+      cli.error(LOGIN_NEEDS_BROWSER_MESSAGE);
       process.exit(1);
     }
     const { loginInteractive, getCodexAuthFilePath } = await import(
@@ -3030,23 +3343,53 @@ program
   .command("whoami")
   .description("Show current authentication status (email, plan, OAuth model)")
   .action(async () => {
+    const { formatWhoamiStatus } = await import("./commands/whoami-status.js");
     const { hasCodexCredentials, getChatGptAuth } = await import(
       "./providers/codex-oauth.js"
     );
+
+    let providerHealth: string[] = [];
+    try {
+      const { formatProviderHealthLines } = await import("./providers/provider-health.js");
+      providerHealth = formatProviderHealthLines();
+    } catch (error) {
+      logger.debug("Health file optional or unreadable", { error });
+    }
+
+    let local: { provider: string; model?: string; baseURL?: string } | null = null;
+    try {
+      const { getSettingsManager } = await import("./utils/settings-manager.js");
+      const settings = getSettingsManager().readUserSettingsIfPresent();
+      if (settings?.provider) {
+        local = {
+          provider: settings.provider,
+          ...(settings.model || settings.defaultModel
+            ? { model: settings.model || settings.defaultModel }
+            : {}),
+          ...(settings.baseURL ? { baseURL: settings.baseURL } : {}),
+        };
+      }
+    } catch (_error) {
+      /* profile unreadable — ChatGPT status still prints */
+    }
+
     if (!hasCodexCredentials()) {
-      cli.stdout("ChatGPT: not connected (run `buddy login` to authenticate)");
+      for (const line of formatWhoamiStatus({ chatgpt: null, local, providerHealth })) {
+        cli.stdout(line);
+      }
       return;
     }
     try {
       const auth = await getChatGptAuth();
       if (!auth) {
         cli.stdout("ChatGPT: token unreadable. Run `buddy logout` then `buddy login`.");
+        if (local) {
+          for (const line of formatWhoamiStatus({ chatgpt: null, local }).filter((line) => line.startsWith('Local:'))) {
+            cli.stdout(line);
+          }
+        }
         return;
       }
-      cli.stdout("ChatGPT: ✅ connected");
-      if (auth.email) cli.stdout(`  Account:    ${auth.email}`);
-      if (auth.plan_type) cli.stdout(`  Plan:       ${auth.plan_type}`);
-      if (auth.is_fedramp) cli.stdout(`  FedRAMP:    yes`);
       const {
         CHATGPT_OAUTH_DEFAULT_MODEL,
         CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
@@ -3054,8 +3397,19 @@ program
         selectChatGptOAuthModel,
       } = await import('./providers/chatgpt-models.js');
       const catalog = await discoverChatGptModels(auth);
-      cli.stdout(`  Model:      ${selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog)}`);
-      if (!catalog) cli.stdout(`  Safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
+      for (const line of formatWhoamiStatus({
+        chatgpt: {
+          email: auth.email,
+          plan: auth.plan_type,
+          model: selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog),
+          fedramp: auth.is_fedramp,
+          ...(catalog ? {} : { fallback: CHATGPT_OAUTH_SAFE_FALLBACK_MODEL }),
+        },
+        local,
+        providerHealth,
+      })) {
+        cli.stdout(line);
+      }
     } catch (err) {
       cli.error(`Error reading credentials: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
@@ -3144,11 +3498,14 @@ program
       cli.stdout("\nNo additional active LLMs available for failover.");
     }
     const { getConfigManager } = await import("./config/toml-config.js");
+    const { isDeclaredProviderFallbackEnabled } = await import(
+      "./providers/provider-failover-policy.js"
+    );
     const on =
-      Boolean(getConfigManager().getConfig().llm?.enabled) ||
-      process.env.CODEBUDDY_LLM_FAILOVER === "1";
+      isDeclaredProviderFallbackEnabled() ||
+      Boolean(getConfigManager().getConfig().llm?.enabled);
     cli.stdout(
-      `Auto-failover: ${on ? "ON" : "OFF  (enable with [llm].enabled = true, or CODEBUDDY_LLM_FAILOVER=1)"}`,
+      `Auto-failover: ${on ? "ON" : "OFF  (enable with CODEBUDDY_PROVIDER_FALLBACK=true; CODEBUDDY_LLM_FAILOVER is a deprecated alias)"}`,
     );
   });
 
@@ -3159,7 +3516,8 @@ program
   .option("-n, --count <n>", "How many models to consult (default 3)")
   .option("--models <list>", "Restrict to these providers/models (comma list)")
   .option("--judge <model>", "Provider/model to use as the impartial judge")
-  .option("--task-type <tag>", "Override inferred task type (code|reasoning|french|vision|general)")
+  .option("--task-type <tag>", "Override inferred task type (code|reasoning|french|vision|general|literary categories)")
+  .option("--task <tag>", "Task type for `council scoreboard best`")
   .option("--no-consensus", "Skip the consensus/agreement summary")
   .option("--scoreboard", "Print the learned model ranking and exit")
   .option("--fleet", "Also consult connected fleet peers (other machines' Code Buddy) over the network")
@@ -3168,8 +3526,14 @@ program
   .action(
     async (
       taskParts: string[] = [],
-      options: { count?: string; models?: string; judge?: string; taskType?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean; conductor?: boolean; synthesis?: boolean },
+      options: { count?: string; models?: string; judge?: string; taskType?: string; task?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean; conductor?: boolean; synthesis?: boolean },
     ) => {
+      if (taskParts[0]?.toLowerCase() === 'scoreboard') {
+        const { runScoreboardCommand } = await import("./commands/council-scoreboard.js");
+        const ok = runScoreboardCommand(taskParts.slice(1), cli.stdout, undefined, { task: options.task });
+        if (!ok) process.exitCode = 1;
+        return;
+      }
       const { runCouncil } = await import("./commands/council.js");
       await runCouncil(
         (taskParts || []).join(" ").trim(),
@@ -3246,6 +3610,11 @@ addLazyCommandGroup(program, 'speak', 'Synthesize speech using AudioReader TTS',
 addLazyCommandGroup(program, 'assistant', 'Manage the voice assistant (Lisa): improvement loop, voice', async () => {
   const { registerAssistantCommand } = await import('./commands/assistant.js');
   registerAssistantCommand(program);
+});
+
+addLazyCommandGroup(program, 'self', 'Inspect Code Buddy’s documented self-model and evolution', async () => {
+  const { createSelfCommand } = await import('./commands/self.js');
+  program.addCommand(createSelfCommand());
 });
 
 addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, preview, generate (authored)', async () => {
@@ -3807,24 +4176,8 @@ addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations
 });
 
 // Backup — local backup management (Native Engine v2026.3.8 alignment)
-program
-  .command('backup [subcommand] [args...]')
-  .description('Manage .codebuddy/ backups (create, verify, list, restore)')
-  .option('--only-config', 'Only backup configuration files')
-  .option('--no-include-workspace', 'Exclude workspace data')
-  .option('--output <path>', 'Custom output directory')
-  .action(async (subcommand: string | undefined, args: string[], opts: Record<string, unknown>) => {
-    const { handleBackup } = await import('./commands/handlers/backup-handlers.js');
-    const flags: string[] = [];
-    if (opts.onlyConfig) flags.push('--only-config');
-    if (opts.includeWorkspace === false) flags.push('--no-include-workspace');
-    if (opts.output) flags.push('--output', opts.output as string);
-    const fullArgs = [subcommand || 'list', ...(args || []), ...flags].join(' ');
-    const result = await handleBackup(fullArgs);
-    // Backup command output is pipeable (scripts often capture it).
-    if (result.response) cli.stdout(result.response);
-    if (result.exitCode) process.exitCode = result.exitCode;
-  });
+registerBackupCommand(program, (msg) => cli.stdout(msg));
+registerSensoryCommand(program, (msg) => cli.stdout(msg));
 
 // Cloud — background agent tasks (Cursor/Codex parity)
 program

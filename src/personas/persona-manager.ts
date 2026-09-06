@@ -19,7 +19,9 @@ import {
   BUDDY_COMPANION_SYSTEM_PROMPT,
   LISA_COMPANION_SYSTEM_PROMPT,
 } from '../identity/companion-identity.js';
+import { interpolatePersonaName, resolveCompanionPersona } from '../companion/personas/index.js';
 import { resolveUserName } from '../companion/user-name.js';
+import { readJsonAtomic, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface Persona {
   id: string;
@@ -76,6 +78,8 @@ export interface PersonaConfig {
   activePersonaId: string;
   autoSwitch: boolean;
   customPersonasDir: string;
+  /** Persist the selected persona between processes (enabled in production). */
+  persistActivePersona: boolean;
 }
 
 const DEFAULT_STYLE: PersonaStyle = {
@@ -85,6 +89,11 @@ const DEFAULT_STYLE: PersonaStyle = {
   codeStyle: 'commented',
   explanationDepth: 'moderate',
 };
+
+/** Preserve the production custom-persona location while keeping it observable in tests. */
+export function getDefaultPersonasDir(): string {
+  return path.join(os.homedir(), '.codebuddy', 'personas');
+}
 
 // Built-in personas
 const BUILTIN_PERSONAS: Omit<Persona, 'createdAt' | 'updatedAt'>[] = [
@@ -518,7 +527,8 @@ export class PersonaManager extends EventEmitter {
       activePersonaId: config.activePersonaId || 'default',
       autoSwitch: config.autoSwitch ?? true,
       customPersonasDir:
-        config.customPersonasDir || path.join(os.homedir(), '.codebuddy', 'personas'),
+        config.customPersonasDir || getDefaultPersonasDir(),
+      persistActivePersona: config.persistActivePersona ?? true,
     };
     this.dataDir = this.config.customPersonasDir;
     this.initPromise = this.initialize();
@@ -549,7 +559,9 @@ export class PersonaManager extends EventEmitter {
 
     // Set active persona — a previously chosen personality STICKS across sessions (persisted to
     // disk), so the robot keeps the voice/character the user last selected.
-    const persisted = await this.loadPersistedActiveId();
+    const persisted = this.config.persistActivePersona
+      ? await this.loadPersistedActiveId()
+      : null;
     const target =
       persisted && this.personas.has(persisted) ? persisted : this.config.activePersonaId;
     this.setActivePersona(target, { persist: false });
@@ -565,7 +577,7 @@ export class PersonaManager extends EventEmitter {
 
   private async loadPersistedActiveId(): Promise<string | null> {
     try {
-      const data = (await fs.readJson(this.stateFile())) as { activePersonaId?: string };
+      const data = await readJsonAtomic<{ activePersonaId?: unknown } | null>(this.stateFile(), null);
       return typeof data?.activePersonaId === 'string' ? data.activePersonaId : null;
     } catch {
       return null; // no file yet / unreadable → fall back to config default
@@ -573,18 +585,12 @@ export class PersonaManager extends EventEmitter {
   }
 
   private persistActiveId(id: string): void {
+    if (!this.config.persistActivePersona) return;
     const file = this.stateFile();
-    const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
     try {
-      fs.ensureDirSync(path.dirname(file));
-      fs.writeFileSync(tmp, `${JSON.stringify({ activePersonaId: id })}\n`, 'utf8');
-      fs.renameSync(tmp, file);
+      writeJsonAtomicSync(file, { activePersonaId: id }, { mode: 0o600 });
     } catch {
-      try {
-        fs.removeSync(tmp);
-      } catch {
-        /* best-effort cleanup */
-      }
+      /* best-effort persistence */
     }
   }
 
@@ -606,7 +612,8 @@ export class PersonaManager extends EventEmitter {
 
           try {
             if (await fs.pathExists(personaPath)) {
-              const persona = await fs.readJSON(personaPath);
+              const persona = await readJsonAtomic<Persona | null>(personaPath, null);
+              if (!persona) return;
               persona.isBuiltin = false;
               this.personas.set(persona.id ?? id, persona);
               this.emit('persona:reloaded', { id: persona.id ?? id });
@@ -639,7 +646,8 @@ export class PersonaManager extends EventEmitter {
       if (file.endsWith('.json')) {
         try {
           const personaPath = path.join(this.dataDir, file);
-          const persona = await fs.readJSON(personaPath);
+          const persona = await readJsonAtomic<Persona | null>(personaPath, null);
+          if (!persona) continue;
           persona.isBuiltin = false;
           this.personas.set(persona.id, persona);
         } catch {
@@ -746,7 +754,7 @@ export class PersonaManager extends EventEmitter {
 
     // Save to disk
     const personaPath = path.join(this.dataDir, `${id}.json`);
-    await fs.writeJSON(personaPath, persona, { spaces: 2 });
+    await writeJsonAtomic(personaPath, persona, { mode: 0o600 });
 
     this.personas.set(id, persona);
     this.emit('persona:created', { persona });
@@ -778,7 +786,7 @@ export class PersonaManager extends EventEmitter {
 
     // Save to disk
     const personaPath = path.join(this.dataDir, `${id}.json`);
-    await fs.writeJSON(personaPath, updated, { spaces: 2 });
+    await writeJsonAtomic(personaPath, updated, { mode: 0o600 });
 
     this.personas.set(id, updated);
     this.emit('persona:updated', { persona: updated });
@@ -1094,7 +1102,9 @@ function activePersonaVoice(
   /** Active persona id (for voice character injection). */
   personaId?: string;
 } {
-  if (!p) return {};
+  if (!p) {
+    return overlayCompanionSpokenPrompt({});
+  }
   const base = {
     ...(p.voice ? { voice: p.voice } : {}),
     ...(p.robotName ? { robotName: p.robotName } : {}),
@@ -1116,19 +1126,29 @@ function activePersonaVoice(
       if (borrow) {
         const lisa = lookup('lisa');
         if (lisa?.spokenPrompt) {
-          return {
+          return overlayCompanionSpokenPrompt({
             ...base,
             spokenPrompt: lisa.spokenPrompt,
             ...(base.greeting ? {} : lisa.greeting ? { greeting: lisa.greeting } : {}),
             ...(base.robotName ? {} : { robotName: lisa.robotName ?? 'Lisa' }),
-          };
+          });
         }
       }
     } catch {
       /* never break voice consumers */
     }
   }
-  return base;
+  return overlayCompanionSpokenPrompt(base);
+}
+
+function overlayCompanionSpokenPrompt<T extends { spokenPrompt?: string }>(voice: T): T {
+  try {
+    const persona = resolveCompanionPersona();
+    if (!persona) return voice;
+    return { ...voice, spokenPrompt: interpolatePersonaName(persona.spokenPrompt) };
+  } catch {
+    return voice;
+  }
 }
 
 /** The active persona's voice/robot layer (voice `.onnx`, name, spoken character, greeting).
@@ -1145,7 +1165,7 @@ export function getActivePersonaVoice(): {
     const manager = getPersonaManager();
     return activePersonaVoice(manager.getActivePersona(), (id) => manager.getPersona(id));
   } catch {
-    return {};
+    return overlayCompanionSpokenPrompt({});
   }
 }
 

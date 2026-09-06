@@ -42,7 +42,7 @@ Tous dans `~/Videos/personas/ambre-scenes/automne-composites/` :
 | `ambre-011-chalet-interieur-flanelle` | Intérieur, plan rapproché |
 
 **Trois sont écartés** : `008` (0,267), `010` (0,380) et `012` (0,347) — dérive
-d'identité, réparation en cours sur darkstar. S'ils repassent le seuil, ils
+d'identité, réparation en cours sur gpuNode. S'ils repassent le seuil, ils
 enrichiront le montage ; sinon la vidéo tient sans eux.
 
 ---
@@ -96,7 +96,7 @@ La signature de chaîne le dit : *« Les destinations, habillées par Ambre. »*
 
 ## Ce qu'il reste à faire, dans l'ordre
 
-1. Attendre la fin des réparations d'identité sur darkstar — et **re-scorer** les
+1. Attendre la fin des réparations d'identité sur gpuNode — et **re-scorer** les
    neuf plans retenus, pas seulement les trois réparés : une réparation peut en
    abîmer une autre.
 2. Choisir la musique dans Epidemic Sound — licence multi-chaînes et publicité

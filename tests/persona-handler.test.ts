@@ -1,8 +1,12 @@
 /**
  * Tests for /persona slash command handler.
  */
+import * as path from 'node:path';
+import { makeTmpDir, removeTmpDir } from './helpers/tmp.js';
 import { handlePersonaCommand } from '../src/commands/handlers/persona-handler.js';
 import { getPersonaManager, resetPersonaManager } from '../src/personas/persona-manager.js';
+
+const qaRoot = path.join(process.cwd(), '_qa', 'persona1');
 
 // Mock fs-extra to avoid disk I/O
 jest.mock('fs-extra', () => {
@@ -18,22 +22,22 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
-/** Wait for PersonaManager's async initialize() to complete */
-async function flushInit(): Promise<void> {
-  // Two setImmediate ticks cover both `await ensureDir` and `await loadCustomPersonas`
-  await new Promise(r => setImmediate(r));
-  await new Promise(r => setImmediate(r));
-}
-
 describe('/persona handler', () => {
+  let customPersonasDir: string;
+
   beforeEach(async () => {
+    customPersonasDir = makeTmpDir('handler-personas-', qaRoot);
     resetPersonaManager();
-    getPersonaManager(); // trigger initialization
-    await flushInit();   // wait for async init to complete
+    const manager = getPersonaManager({
+      customPersonasDir,
+      persistActivePersona: false,
+    });
+    await manager.ready();
   });
 
   afterEach(() => {
     resetPersonaManager();
+    removeTmpDir(customPersonasDir);
   });
 
   it('list returns all built-in personas', () => {

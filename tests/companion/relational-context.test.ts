@@ -43,6 +43,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => 'Récemment, on a parlé de : la refonte.',
     });
     expect(withEp).toBe(
@@ -54,6 +55,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => null,
     });
     expect(noEp).toBe('');
@@ -65,6 +67,7 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       personalitySummary: () => 'Humeur actuelle : sereine (60/100). Lien : familier.',
     });
     expect(ctx).toBe(
@@ -95,6 +98,7 @@ describe('buildRelationalContext — composition', () => {
     const ctx = await buildRelationalContext({
       factsBlock: () => null,
       episodeBlock: async () => null,
+      photosBlock: async () => null,
       personalitySummary: () => '',
       presenceBlock: async () => '',
       guidanceBlock: () => null,
@@ -108,9 +112,42 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePersonality: false,
       includeGuidance: false,
+      includePhotos: false,
       presenceBlock: async () => '<presence>seul</presence>',
     });
     expect(ctx).toBe('<presence>seul</presence>');
+  });
+
+  it('keeps self-evolution silent by default and injects at most three first-person lines when invited', async () => {
+    const block = async (): Promise<string> =>
+      'J’ai appris à mieux écouter.\nJ’ai appris à mieux vérifier.\nJ’ai appris à garder le fil.\nCette quatrième ligne doit disparaître.';
+
+    const disabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      includePhotos: false,
+      selfEvolutionBlock: block,
+    });
+    expect(disabled).toBe('');
+
+    const enabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      includePhotos: false,
+      includeSelfEvolution: true,
+      selfEvolutionBlock: block,
+    });
+    expect(enabled).toContain('<lisa_evolution>');
+    expect(enabled).toContain('J’ai appris à mieux écouter.');
+    expect(enabled).not.toContain('quatrième ligne');
+    expect(enabled).not.toMatch(/(?:src\/|tests\/|[0-9a-f]{12,})/i);
+    expect(enabled.split('\n')).toHaveLength(3);
   });
 
   it('starts episode and presence reads concurrently while preserving prompt order', async () => {

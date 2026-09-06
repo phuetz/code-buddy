@@ -72,6 +72,14 @@ export interface AgentEvent extends BaseEvent {
   error?: Error;
 }
 
+export interface LoopDetectedEvent extends BaseEvent {
+  type: 'agent:loop_detected';
+  loopType: string;
+  detail: string;
+  turnIndex?: number;
+  count?: number;
+}
+
 export interface ToolEvent extends BaseEvent {
   type: 'tool:started' | 'tool:completed' | 'tool:error';
   toolName: string;
@@ -108,6 +116,7 @@ export interface ApplicationEvents extends Record<string, BaseEvent> {
   'agent:started': AgentEvent;
   'agent:stopped': AgentEvent;
   'agent:error': AgentEvent;
+  'agent:loop_detected': LoopDetectedEvent;
   'tool:started': ToolEvent;
   'tool:completed': ToolEvent;
   'tool:error': ToolEvent;
@@ -505,6 +514,10 @@ export interface ProviderFallbackEvent extends BaseEvent {
   fromProvider: string;
   toProvider: string;
   reason: string;
+  /** Epoch ms when the failed provider may be retried. */
+  resetsAt?: number;
+  /** Snake alias consumed by logs / bridges. */
+  resets_at?: number;
 }
 
 export interface ProviderEvents extends Record<string, BaseEvent> {
@@ -666,6 +679,18 @@ export interface MemoryEvents extends Record<string, BaseEvent> {
   'memory:cleared': MemoryClearedEvent;
 }
 
+export interface MemoryExtractionEvent extends BaseEvent {
+  type: 'memory:extraction_started' | 'memory:extraction_completed';
+  sessionCount: number;
+  memoriesAdded: number;
+  durationMs: number;
+}
+
+export interface MemoryExtractionEvents extends Record<string, BaseEvent> {
+  'memory:extraction_started': MemoryExtractionEvent;
+  'memory:extraction_completed': MemoryExtractionEvent;
+}
+
 // ============================================================================
 // Context Events
 // ============================================================================
@@ -688,10 +713,31 @@ export interface ContextCompressedEvent extends BaseEvent {
   compressedSize: number;
 }
 
+export type ContextCompactionReason = 'auto' | 'manual' | 'plugin';
+
+export interface ContextCompactionPayload {
+  reason: ContextCompactionReason;
+  tokensBefore: number;
+  tokensAfter?: number;
+  messagesBefore: number;
+  messagesAfter?: number;
+  droppedSegmentIds?: string[];
+}
+
+export interface ContextPreCompactEvent extends BaseEvent, ContextCompactionPayload {
+  type: 'context:pre_compact';
+}
+
+export interface ContextPostCompactEvent extends BaseEvent, ContextCompactionPayload {
+  type: 'context:post_compact';
+}
+
 export interface ContextEvents extends Record<string, BaseEvent> {
   'context:loaded': ContextLoadedEvent;
   'context:updated': ContextUpdatedEvent;
   'context:compressed': ContextCompressedEvent;
+  'context:pre_compact': ContextPreCompactEvent;
+  'context:post_compact': ContextPostCompactEvent;
 }
 
 // ============================================================================
@@ -805,6 +851,7 @@ export interface AllEvents extends Record<string, BaseEvent> {
   'agent:started': AgentEvent;
   'agent:stopped': AgentEvent;
   'agent:error': AgentEvent;
+  'agent:loop_detected': LoopDetectedEvent;
 
   // Tool Events
   'tool:started': ToolEvent;
@@ -913,11 +960,15 @@ export interface AllEvents extends Record<string, BaseEvent> {
   'memory:retrieved': MemoryRetrievedEvent;
   'memory:deleted': MemoryDeletedEvent;
   'memory:cleared': MemoryClearedEvent;
+  'memory:extraction_started': MemoryExtractionEvent;
+  'memory:extraction_completed': MemoryExtractionEvent;
 
   // Context Events
   'context:loaded': ContextLoadedEvent;
   'context:updated': ContextUpdatedEvent;
   'context:compressed': ContextCompressedEvent;
+  'context:pre_compact': ContextPreCompactEvent;
+  'context:post_compact': ContextPostCompactEvent;
 
   // Performance Events
   'perf:metric': PerformanceMetricEvent;

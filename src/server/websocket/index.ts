@@ -9,12 +9,14 @@ export {
   getConnectionCount,
   getConnectionStats,
   broadcast,
+  collectApprovalSurfaceIds,
   closeAllConnections,
   registerWebSocketExtension,
   type WebSocketExtensionContext,
   type WebSocketExtensionEnvelope,
   type WebSocketExtensionPrincipal,
   type WebSocketExtensionRegistration,
+  type WsBroadcastTarget,
 } from './handler.js';
 
 // Phase (d).1 V0.4.1 — fleet event broadcast for inter-Claude streaming

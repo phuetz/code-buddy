@@ -1,10 +1,869 @@
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 
+### Surveillance événementielle, sécurité flotte, remédiation bornée et installation (5 septembre 2026)
+
+Surveillance cadencée par les battements du système nerveux, durcissement défensif du moteur de sécurité, remédiation automatique bornée des processus emballés et validation d'installation depuis GitHub :
+
+- **Surveillance événementielle (vitals, schedule, domain bridge, rule templates, opérateurs de seuil)** :
+  La surveillance des ressources et du temps abandonne les boucles occupées pour un échantillonnage pur cadencé par les battements du scheduler (`HeartbeatScheduler`, `src/sensory/system-vitals-emitter.ts`, commit `4a68e4829`). L'émetteur lit mémoire, GPU, flotte, disque et `/proc`, émettant les percepts `modality:'system'` (`resource_threshold`, `disk_low`, `fleet_saturated`, `process_runaway`). La détection de processus emballé mesure le CPU instantané via le delta de jiffies de `/proc/<pid>/stat` (`(Δjiffies/clk_tck)/Δt·100`) entre deux passes, écartant la moyenne de vie `ps pcpu` (`c90406439`) ; elle intègre une garde anti réutilisation de PID (`startTime` au champ 22 de `/proc/<pid>/stat`) et conserve les compteurs sur lecture nulle transitoire (`c90406439`). La portée de scan est paramétrable (`server` pour les descendants du serveur, `user` pour l'ensemble des processus de l'utilisateur afin de couvrir les sessions CLI externes et les orphelins reparentés à PID 1, `242e1460b`) avec une liste d'exclusion par `comm` exact (`242e1460b`, `c90406439`). Le déclencheur horaire autonome (`src/sensory/schedule-emitter.ts`, `3460c9af8`) émet `time/tick` (`hhmm`, `weekday`, `iso` UTC ISO-8601, `minuteOfDay`) à cadence sub-minute (`d58fc575a`). Les filtres du moteur de règles (`src/sensory/sensory-rules-engine.ts`, `f4417863e`) supportent les opérateurs de seuil numériques `{op:'gt'|'gte'|'lt'|'lte'|'eq'|'ne', value:number}` où une valeur absente/null ne se coerce plus en 0 (`25bd08c76`), préservant l'égalité stricte des chaînes. Le pont de domaine (`src/sensory/domain-event-bridge.ts`, `bce6c31d1`) convertit `fleet:activity`, `agent:loop_detected`, `cost:*` et `context:pre_compact` en percepts sensoriels avec garde anti-boucle stricte (`0311d6425`). Cinq gabarits de règles validés (`src/sensory/rule-templates.ts`, `9073a2afc`) sont installables par `buddy rules add --template <nom>` (`process-runaway-alert`, `disk-low-alert`, `fleet-saturated-alert`, `agent-loop-alert`, `codex-quota-probe` en fenêtre horaire `between`, `d58fc575a`). L'action `alert` propage l'échec réel de livraison Telegram (`src/sensory/sensory-action-executor.ts`, `b9ffa0fd8`).
+  *Variables d'environnement* : `CODEBUDDY_SYSTEM_VITALS` (`true`), `CODEBUDDY_SYSTEM_VITALS_EVERY` (défaut 30), `CODEBUDDY_RUNAWAY_CPU_PCT` (défaut 90), `CODEBUDDY_RUNAWAY_PASSES` (défaut 3), `CODEBUDDY_RUNAWAY_SCOPE` (`server`|`user`, défaut `server`), `CODEBUDDY_RUNAWAY_IGNORE_COMM` (défaut `ffmpeg,comfyui,python,python3,node,tsc,vitest,cargo,rustc,esbuild`), `CODEBUDDY_CLK_TCK` (défaut 100), `CODEBUDDY_DISK_LOW_PCT` (défaut 90), `CODEBUDDY_SCHEDULE_TICKS` (`true`), `CODEBUDDY_SCHEDULE_TICKS_EVERY` (défaut 20), `CODEBUDDY_DOMAIN_EVENTS` (`true`).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF. Sans activation, aucun traitement n'est enregistré sur le scheduler et aucun percept n'est émis sur le bus, garantissant un comportement byte-identique (`8d439cb5c`).
+  *Fichiers clés* : `src/sensory/system-vitals-emitter.ts`, `src/sensory/sensory-rules-engine.ts`, `src/sensory/schedule-emitter.ts`, `src/sensory/domain-event-bridge.ts`, `src/sensory/rule-templates.ts`, `src/sensory/sensory-action-executor.ts`, `src/server/index.ts`, `src/index.ts`, `docs/surveillance-evenementielle.md`.
+  *Preuves* : 49 tests neufs sur 5 fichiers (`tests/sensory/system-vitals-emitter.test.ts`, `sensory-rules-engine.test.ts`, `schedule-emitter.test.ts`, `rule-templates.test.ts`, `domain-event-bridge.test.ts`), suite `tests/sensory` portée de 682 à 731 tests (`590bf9992`), puis à 741 tests après fermeture des 4 bloquants A et 6 B/C d'audit adverse (`c90406439`, `b9ffa0fd8`, `25bd08c76`, `d58fc575a`, `749874994`). Détection CPU instantané prouvée sur `/proc` réel (bash emballé détecté à 94,6 % sur fenêtre 500 ms).
+
+- **Surveillance v2 (multi-cœur/cgroup, battement TS de repli, `buddy sensory status`)** :
+  Le payload `process_runaway` s'adapte aux architectures multi-cœurs en fournissant `pcpuTotal` (somme des cœurs), `pcpuOfMachine` (`pcpuTotal / cores`, borné [0, 100]) et `cores` (nombre de cœurs plafonné au quota cgroup v2 `/sys/fs/cgroup/cpu.max` et `os.availableParallelism()`) ; le seuil CPU reste comparé à `pcpuTotal` par défaut ou à `pcpuOfMachine` sous `CODEBUDDY_RUNAWAY_CPU_BASIS=machine` (`f31004d6f`, `14296b1c7`). Un pacemaker TS autonome (`src/sensory/heartbeat-fallback.ts`, `62ef2559d`) prend le relais sous `CODEBUDDY_HEARTBEAT_FALLBACK=true` en émettant `vital/heartbeat` par `setInterval` (`unref()`) en l'absence de démon Rust `buddy-sense` ; il se coupe dès réception d'un battement réel et se réarme après silence sans jamais faire coexister deux horloges (teardown dans `stopServer`). La commande CLI `buddy sensory status [--json]` (`src/commands/cli/sensory-command.ts`, `1de88f026`) inspecte l'état en lecture seule (serveur joignable, drapeaux, source du battement, cadences, 5 dernières perceptions `system`/`time`, règles et dernier déclenchement). La lecture du journal `rule-runs.jsonl` est sécurisée par `readRuleRuns` qui lit les fichiers > 1 Mo par la fin sur une fenêtre de 512 Ko (`14296b1c7`).
+  *Variables d'environnement* : `CODEBUDDY_RUNAWAY_CPU_BASIS` (`core`|`machine`, défaut `core`), `CODEBUDDY_HEARTBEAT_FALLBACK` (`true`), `CODEBUDDY_HEARTBEAT_FALLBACK_MS` (défaut 1000), `CODEBUDDY_HEARTBEAT_FALLBACK_SILENCE_MS` (défaut 15000).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF. Sans `CODEBUDDY_HEARTBEAT_FALLBACK=true`, aucun timer n'est alloué (byte-identique). Seuil sur `core` inchangé sans variable.
+  *Fichiers clés* : `src/sensory/system-vitals-emitter.ts`, `src/sensory/heartbeat-fallback.ts`, `src/sensory/sensory-status.ts`, `src/commands/cli/sensory-command.ts`, `src/sensory/sensory-rules-engine.ts`, `src/server/index.ts`.
+  *Preuves* : Suite `tests/sensory` + `tests/cli` à 98 fichiers / 867 tests verts (`f31004d6f`, `62ef2559d`, `1de88f026`). Vérification agy v2 (`docs/reports/2026-09/VERIF-SURV2-AGY.md`) : 38 tests de lecture de queue dans `tests/sensory/rule-runs-tail.test.ts`, validation quota cgroup v2 et bornage [0, 100] (`14296b1c7`, fusion `c89051551`).
+
+- **Sécurité (4 failles B fermées, déobfuscation, chemins d'identifiants, formats de clés)** :
+  L'audit défensif de la flotte et du bac à sable ferme 4 failles B : contournement du pare-feu de skills par obfuscation (homoglyphes, césures, zero-width) étendu à toutes les classes de motifs (destructif, exfiltration, réseau, identifiants) par la couche sûre de `src/security/text-deobfuscation.ts` (`deobfuscateSafeForScan`), le décodage agressif Base64/URL restant réservé à l'injection de prompt pour garantir 0 faux positif sur les compétences importées ; lecture de secrets en dur par des outils authored via chemin absolu fermée par le motif `sensitive-credential-path` dans `dangerous-patterns.ts` (`52efd0109`) ; omission des clés OpenAI (`sk-`, `sk-proj-`), Anthropic (`sk-ant-`) et xAI (`xai-`) dans le scanner `scan_secrets` fermée par leur intégration dans `SECRET_PATTERNS` avec ancrage anti faux positifs (`105c10797`). Les surfaces 1 (`peer.tool.invoke` avec vérification de chemin et approbation fail-closed) et 3 (SSRF avec IP obfusquées décimales/hex/octales, métadonnées cloud, pinning DNS et rejet JWT absent en production) sont prouvées solides par des tests de refus (`899149fab`, `545a42621`). La chasse adversariale étendue ferme la déobfuscation pour les homoglyphes grecs (α, ϲ), latin étendu (ă), contrôles bidi `\p{Cf}`, encodage URL `%XX` et Base64 (blobs ≥ 16 car. ASCII) dans `deobfuscateForScan` (`a14d8012b`) ; étend `sensitive-credential-path` à 9 chemins d'identifiants (`~/.config/gh/hosts.yml`, Google gcloud ADC, `~/.azure`, `.terraformrc`, `~/.npmrc`, `~/.cargo/credentials[.toml]`, `~/.pypirc`, `~/.git-credentials`, `baa21afbc`) ; et élargit `SECRET_PATTERNS` aux clés Hugging Face (`hf_`), DigitalOcean (`dop_v1_`), SendGrid (`SG.`), Twilio (`SK`/`AC`), npm (`npm_`), PyPI (`pypi-`), Vercel (`vcp_`/`vci_`...), Supabase (`sb_secret_`/`sb_publishable_`), Azure (`AccountKey=`), Cloudflare (`CF_API_TOKEN=`) et `mongodb+srv://` (`e1cfda32c`).
+  *Variables d'environnement* : Aucune (moteur défensif permanent).
+  *Opt-in / défaut* : Actif par défaut sans régression ni faux positif (0 hit sur 2 414 fichiers TS de `src/` et 421 fichiers Markdown de `docs/`).
+  *Fichiers clés* : `src/security/text-deobfuscation.ts`, `src/security/skill-scanner.ts`, `src/security/dangerous-patterns.ts`, `src/security/secret-patterns.ts`, `docs/reports/2026-09/AUDIT-SECURITE-OPUS-2026-09-05.md`, `docs/reports/2026-09/CHASSE-SECU-GROK.md`, `docs/reports/2026-09/VERIF-SECU-GROK-AGY.md`.
+  *Preuves* : `tests/security` 52 fichiers / 977 tests verts (progression de 47/872 à 49/928 puis 52/977), `tests/fleet` 41/645 verts, `tests/server` 61/556 verts ; rejoué par vérification indépendante agy (`7bf2e84fd`), fusionné dans `bcaf88876`.
+
+- **Action `kill_process` bornée (double opt-in, trou A fermé)** :
+  Remédiation automatique de processus emballés exécutable par le moteur de règles via `src/sensory/sensory-action-executor.ts` (`06c287c9b`). Le PID est impérativement extrait du percept `process_runaway` (tout champ `pid` défini dans l'action de la règle est rejeté par `validateRule` et ignoré à l'exécution). La commande ré-authentifie l'identité du processus avant émission de signal (`comm` et `startTime` lus dans `/proc/<pid>/stat` concordant avec le percept) pour interdire toute réutilisation de PID. Refus structurel d'agir sur le serveur (`selfPid`), un ancêtre, PID 1, un UID distinct, un PID négatif ou un groupe de processus. Envoi séquentiel de `SIGTERM`, puis de `SIGKILL` différé sous `escalate:true` après un délai `graceMs` (défaut 5000 ms, borné [1000, 60000]). Notification via percept `process_remediated`. Règle-modèle `process-runaway-kill` livrée (`dryRun:true`, `escalate:false`, cooldown 60 s, `080117da5`). Fermeture du trou A découvert lors du re-audit adverse agy (`ca2c06232`, `VERIF-KILL-AGY.md`) : l'exécuteur restreint l'action aux percepts de modalité `system` et de source interne `system-vitals`, et `validateRule` exige `match.modality: 'system'`, bloquant l'injection de percepts `process_runaway` forgés via le pont WebSocket externe.
+  *Variables d'environnement* : `CODEBUDDY_RUNAWAY_KILL` (`true`).
+  *Opt-in / défaut* : Double opt-in obligatoire : `CODEBUDDY_RUNAWAY_KILL=true` ET `dryRun:false` dans la règle. Sans la variable, `dryRun` est forcé à `true` et `process.kill` est rendu inatteignable par construction (validé par espion de test).
+  *Fichiers clés* : `src/sensory/sensory-action-executor.ts`, `src/sensory/sensory-rules-engine.ts`, `src/sensory/rule-templates.ts`, `tests/sensory/kill-process-action.test.ts`.
+  *Preuves* : 20 tests initiaux `tests/sensory/kill-process-action.test.ts` (`06c287c9b`) augmentés des tests d'origine interne et de rejet WebSocket (`ca2c06232`) ; suite `tests/sensory` + `tests/cli` à 100 fichiers / 891 tests verts, fusionné dans `9d4302b19`.
+
+- **Alerte système qui nomme le processus** :
+  L'action `alert` déclenchée sur un percept de modalité `system` (`process_runaway`, `process_remediated`, `resource_threshold`) adosse au message générique un résumé textuel clair (`describeSystemPercept()`, `src/sensory/sensory-action-executor.ts`, `84a23888d`) indiquant le nom du processus (`comm`), son PID, sa consommation CPU et sa durée (ex. ` — bash, pid 12345, 99,9 %, 2 h 31`), ainsi que `diskPct`, `rssMb`, `vramPct` le cas échéant. Le nom `comm` est assaini (alphanumérique et `.+-_`, 32 car. max, suppression des retours à la ligne ou balises HTML) et les valeurs non numériques sont ignorées. Résout le défaut des sept alertes « processus emballé » anonymes reçues le 05/09.
+  *Variables d'environnement* : Aucune.
+  *Opt-in / défaut* : Actif dès qu'une alerte sur percept système est générée ; chaîne vide pour les autres modalités.
+  *Fichiers clés* : `src/sensory/sensory-action-executor.ts`, `tests/sensory/alerte-runaway-detail.test.ts`.
+  *Preuves* : 3 tests dédiés verts dans `tests/sensory/alerte-runaway-detail.test.ts` (formatage, assainissement, neutralité hors système), fusionné dans `d85d2119a`.
+
+- **Installation testée comme inconnu depuis GitHub** :
+  Validation de prise en main intégrale à l'aveugle par agy sur machine vierge (`~/DEV/cb-install-test-2026-09-05/`, HOME isolé, profil sans clé API, sans secret ni compte ChatGPT, `f845aa5f6`). Clonage depuis GitHub (`codex/audit-systeme-nerveux-2026-09-01`), `npm install` (1 846 paquets installés, 0 erreur native avec better-sqlite3, sharp et ripgrep), `npm run build` en 37,5 s (compilation TypeScript sans erreur, 8 compétences bundlées, manifeste généré). Exécution sans blocage de `--help`, `--version` (affichant `2.0.0`), `doctor` (code 1 signalant l'absence de modèle sélectionné sans crash ni trace), `whoami`, `sensory status [--json]`, `rules templates`, `improve status`, et `buddy server --port 3457` avec arrêt propre SIGTERM en 11 ms. Alignement documentaire dans `docs/getting-started.md` (remplacement de « 1.0 release-candidate » par « 2.0 ») et neutralisation du prénom de l'auteur dans le rapport (`2ebd40660`).
+  *Variables d'environnement* : Aucune variable requise.
+  *Opt-in / défaut* : Parcours standard d'installation.
+  *Fichiers clés* : `docs/getting-started.md`, `docs/reports/2026-09/INSTALL-INCONNU-AGY.md`.
+  *Preuves* : Rapport `docs/reports/2026-09/INSTALL-INCONNU-AGY.md` documentant chaque code de sortie (0 erreur).
+
+### CIFIX2 — la CI GitHub redevient verte sans désactiver un seul test (5 septembre 2026)
+
+Le run `33911350696` (PR #149) rendait 22 tests rouges sur les deux jambes ubuntu bloquantes,
+tous pour des causes d'environnement et aucune régression produit. `.github/workflows/ci.yml`
+exécutait `Build project` APRÈS `Run tests` : les 16 échecs de `tests/docs/revue-gemini-docs.test.ts`
+venaient d'un `dist/index.js` jamais construit, vert en local par accident. Le build passe devant
+les tests, et le test échoue désormais fort (« construire d'abord : npm run build ») au lieu de
+retourner un code de sortie 1 illisible. Les quatre échecs Chromium sont couverts pour de vrai par
+`npx playwright install --with-deps chromium` sur ubuntu ; ailleurs, un helper unique
+(`tests/helpers/cifix2-dependencies.ts`) garde Chromium, Piper et Ollama en imprimant le motif —
+jamais un `describe.skip` sec, et les assertions `/sendPhoto` et l'envoi multipart sont intactes.
+GK36 épingle l'horloge du foyer et rejoue le même 08:00 sous `TZ=UTC` et `TZ=Europe/Paris`. La
+porte `Security Audit` repasse à 0 par bump ciblé (browserslist 4.28.4 → 4.28.9, npm 11.19.0 →
+11.19.1 qui embarque tar 7.5.22, undici 6.27 → 6.28) et l'allowlist tombe de 24 à 10 entrées
+vivantes, sans relâcher le seuil. Mission Codex (GPT-5). Rapport :
+`docs/reports/2026-09/REPARATION-CIFIX2.md`.
+
+### DGM5 — la Darwin-Gödel Machine nourrie avec la journée réelle (4 septembre 2026)
+
+La machine tournait à vide faute de matière. Une source d'expérience opt-in lit les journaux de
+délégation (`~/.codebuddy/delegations`, chemin injectable) et en extrait des faits structurés :
+moteur, durée, sortie, ce qui a bougé, échecs nommés (« Maximum tool execution rounds »,
+« Unexpected end of JSON input », « trim is not a function », « peer closed connection », « Turn
+limit ») et les leçons que le pilote avait dû tirer à la main ; le digest les résume avec
+`provenance: delegation-log`. Première boucle réelle : la machine a écrit seule trois outils
+(`extract_url_statuses`, `audit_ffmpeg_argv`, `find_orphan_temp_files`) validés par les cas
+visibles puis cachés, et deux skills (relecture typographique française, mission-contrat de lane)
+passés au pare-feu et à la couverture, à 0 $ sur le forfait ChatGPT. Mission Gemini 3.8 Flash
+(24 min). Rapport : `docs/reports/2026-09/REPARATION-DGM5.md`.
+
+### DGM4 — nouveauté AST et pénalité de descendance dans l'évolution de code (4 septembre 2026)
+
+Deux manques relevés par l'audit DGM2 : le moteur d'évolution notait des variants identiques à
+un espace près, et re-sélectionnait toujours le même parent. Un filtre de nouveauté AST (G0)
+rejette `ast-identical` avant tout scoring (compteur `evaluationsAvoided`), et la sélection de
+parent est pondérée `score × exp(−λ · childrenCount)` avec rotation persistée. Mission luna
+(28 min, quatre commits fonctionnels, 165 tests verts rejoués avec le vrai HOME). Rapport :
+`docs/reports/2026-09/REPARATION-DGM4.md`.
+
+### STRAT1d — les stratégies se mesurent aussi en direct (5 septembre 2026)
+
+Le rejeu contrefactuel juge les plafonds ; il ne dit rien des consignes. L'évaluateur live fait
+tourner sept tâches notées deux fois avec le même modèle, sous les consignes de la stratégie mère
+puis sous celles de la candidate, et livre des paires gagné/perdu au test de signe ; une tâche de
+sûreté fait perdre toute consigne qui pousse à contourner le bac à sable. `buddy improve
+strategies --live` fusionne rejeu et direct. Preuve réelle sur le forfait ChatGPT : trois lanes
+« non vérifiées » → une consigne « tests des fichiers touchés » → trois gains sur trois, et la
+porte la refuse quand même, faute de confiance à 95 % : elle ne cède pas à une preuve mince.
+
+### Repli automatique de fournisseur, profil compagnon Telegram, persona copine v1, PWA mobile, correctifs Gemini 3.x, détection ComfyUI et audit de release (6 septembre 2026)
+
+Repli automatique de fournisseur opt-in, profil de canal léger pour les compagnons, persona copine v1 avec mode déplacement, PWA mobile avec pont d'approbation WebSocket, correctifs bloquants pour Gemini 3.x, détection ComfyUI par replis et correctifs d'intégration :
+
+- **Repli automatique de fournisseur** :
+  Basculement opt-in entre fournisseurs LLM via `CODEBUDDY_PROVIDER_FALLBACK=true` (défaut OFF, byte-identique). `CodeBuddyClient.chat`/`chatStream` classifie les échecs (`quota_exhausted`, `overloaded`, `unreachable`, `auth`, `other`) via `classifyProviderError` (`src/codebuddy/provider-error-classifier.ts`) et bascule vers le prochain fournisseur sain authentifié selon `CODEBUDDY_FALLBACK_CHAIN` (syntaxe `provider[:model]>provider[:model]`). La santé est persistée dans `~/.codebuddy/provider-health.json` (quota jusqu'à `resets_at` ou 1 h, surcharge 60 s avec backoff, indisponible 5 min). Un 401/403 ne bascule **jamais** : `shouldFailover:false` pour `auth`, l'erreur est relancée (`src/codebuddy/client.ts:886`). Les 14 appels à `recordProviderFailure`/`recordProviderSuccess`/`isProviderUnavailable`/`getProviderHealthEntry` sont tous derrière la garde `usesDeclaredFailover()` (`client.ts:538`), garantissant l'opt-in strict. Événement `provider:fallback` émis sur le bus, fusion `8229f2c7f`.
+  *Variables d'environnement* : `CODEBUDDY_PROVIDER_FALLBACK` (`true`), `CODEBUDDY_FALLBACK_CHAIN` (chaîne `provider[:model]>…`), `CODEBUDDY_PROVIDER_FALLBACK_LOCAL_ONLY` (`true`, `provider-failover-policy.ts:32`), `CODEBUDDY_LLM_LOCAL_ONLY` (alias de `CODEBUDDY_LOCAL_ONLY`, `provider-failover-policy.ts:34`).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF. Sans la variable, aucun fichier `provider-health.json` n'est lu ni écrit.
+  *Fichiers clés* : `src/codebuddy/client.ts`, `src/codebuddy/provider-error-classifier.ts`, `src/codebuddy/provider-failover-kind.ts`, `src/providers/provider-failover-policy.ts`, `src/providers/provider-health.ts`.
+  *Preuves* : 854 tests nouveaux verts (provider-failover, handoff, policy, health, classifier, kind), rapport `docs/reports/2026-09/PROVIDER-FALLBACK-GROK.md`.
+
+- **Compagnon Telegram / profil de canal** :
+  Profil compagnon léger (`CODEBUDDY_CHANNEL_PROFILE=companion`, `src/channels/companion-channel-profile.ts:43-49`) : prompt réduit au `spokenPrompt` de la persona + contexte relationnel + 10 derniers tours, **sans** le prompt système d'agent complet ni le catalogue d'outils. Activation automatique si `CODEBUDDY_COMPANION_PERSONA` est défini et le message n'est pas une commande. Délai de tour configurable `CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS` (défaut 180 000) avec message d'attente honnête sur Telegram après `CODEBUDDY_CHANNEL_WAIT_NOTICE_MS` (défaut 20 000). Échec fournisseur visible via `provider-failure-speech.ts`, fusion `6eee85bd8`.
+  *Variables d'environnement* : `CODEBUDDY_CHANNEL_PROFILE` (`companion`), `CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS` (défaut 180000), `CODEBUDDY_CHANNEL_WAIT_NOTICE_MS` (défaut 20000).
+  *Opt-in / défaut* : Profil compagnon OFF par défaut ; timeouts toujours actifs.
+  *Fichiers clés* : `src/channels/companion-channel-profile.ts`, `src/channels/companion-channel-turn.ts`, `src/channels/provider-failure-speech.ts`, `src/commands/handlers/channel-handlers.ts`.
+  *Preuves* : 261 tests verts, rapport `docs/reports/2026-09/TELEGRAM-COMPAGNON-GROK.md`.
+
+- **Lisa persona copine v1** :
+  Persona `copine` (`CODEBUDDY_COMPANION_PERSONA=copine`, `src/companion/personas/copine.ts`) : pools de salutations, `spokenPrompt`, registres « dure journée »/succès, palier adulte inchangé. Mode déplacement Telegram (`CODEBUDDY_COMPANION_AWAY=true` ou persona copine + 24 h sans présence caméra, `src/companion/away-mode.ts:127-133`) : au maximum `CODEBUDDY_COMPANION_AWAY_MAX_PER_DAY` (défaut 3) messages dans `CODEBUDDY_COMPANION_AWAY_HOURS` (défaut `08:30-22:00`) — matin, une pensée, soir. Pause 24 h sur « stop »/« pas maintenant »/« arrête » et variantes. Humeur cohérente (`src/companion/relationship-state.ts`) : inertie + reset doux au réveil (décroissance 0,08, anti-ratchet). `recentSpoken` partagé voix + Telegram, persisté 7 jours (`src/companion/recent-said.ts`), fusion `df3951134`.
+  *Variables d'environnement* : `CODEBUDDY_COMPANION_PERSONA` (`copine`), `CODEBUDDY_COMPANION_AWAY` (`true`), `CODEBUDDY_COMPANION_AWAY_MAX_PER_DAY` (défaut 3), `CODEBUDDY_COMPANION_AWAY_HOURS` (défaut `08:30-22:00`), `CODEBUDDY_COMPANION_RELATIONAL` (`true`), `CODEBUDDY_COMPANION_RECENT_SAID_FILE` (`recent-said.ts:29`), `CODEBUDDY_COMPANION_AWAY_STATE_FILE` (`away-mode.ts:153`).
+  *Opt-in / défaut* : Tout opt-in, défauts OFF ⇒ byte-identique.
+  *Fichiers clés* : `src/companion/personas/copine.ts`, `src/companion/away-mode.ts`, `src/companion/recent-said.ts`, `src/companion/relationship-state.ts`, `src/companion/reply-augment.ts`.
+  *Preuves* : 674 tests verts, rapport `docs/reports/2026-09/LISA-COPINE-V1-GROK.md`.
+
+- **PWA mobile v1** :
+  PWA sous `/__codebuddy__/mobile/` (`src/server/index.ts:281`, `src/server/mobile/index.ts`), derrière l'opt-in `CODEBUDDY_MOBILE_PWA=true` (sans le drapeau : 404 avant l'authentification et aucun pont d'approbation installé). Assets (PNG 96/192/512, `index.html`, `manifest.webmanifest`, `styles.css`, `app.js`, `sw.js`) copiés au `npm run build` (`scripts/copy-mobile-pwa-assets.mjs` + `generate-mobile-pwa-icons.mjs`). Client WebSocket sur le protocole réel (`src/server/mobile/assets/app.js`). Pont de confirmation `confirmation_required`/`confirmation_response` branché sur `ConfirmationService` via `confirmation-bridge.ts` (fail-closed, une réponse par id, anti-rejeu). `/api/runs` + `/api/runs/:id/trajectory` (`src/server/routes/runs.ts`) + statut (`src/server/mobile/status.ts`). Jeton jamais en clair (en-tête `Authorization`, `sessionStorage`, `sw.js:47` exclut `/api/`). CSP strict (`src/server/mobile/index.ts:32`), fusion `8a74f4d09`.
+  *Variables d'environnement* : `CODEBUDDY_MOBILE_PWA` (défaut absent = PWA et pont désactivés), `CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS` (défaut 30000, `confirmation-bridge.ts:19`).
+  *Opt-in / défaut* : `CODEBUDDY_MOBILE_PWA=true` — sans le drapeau, `buddy server` est byte-identique (route 404, `setWsApprovalBridge` jamais appelé). Les confirmations ne partent qu'aux sockets authentifiés, non anonymes distants, porteurs de la portée `tools` et déclarés `approvalCapable`.
+  *Fichiers clés* : `src/server/mobile/index.ts`, `src/server/mobile/status.ts`, `src/server/mobile/assets/`, `src/server/routes/runs.ts`, `src/server/websocket/confirmation-bridge.ts`, `src/server/websocket/handler.ts`.
+  *Preuves* : 992 tests verts, rapports `docs/reports/2026-09/MOBILE-PWA-V1-GROK.md`, `VERIF-MOBILE-AGY.md`.
+
+- **Correctifs Gemini 3.x** :
+  `provider-gemini-native.ts` : nettoyage des mots-clés JSON-Schema (`additionalProperties`, `$schema`, `default`, `const`, `definitions`, `$defs`, `oneOf`, `anyOf`) qui faisaient rejeter **100 % des requêtes avec outils** par Gemini (400 `Unknown name`). Rôle `function` → `user` pour les tool messages (`:331-335`). `thoughtSignature` préservé et renvoyé sur les parties `functionCall` (`:236-243`), sentinelle `'skip_thought_signature_validator'` (`:242`). Commits `b28216f05`, `8c878d393`.
+  *Variables d'environnement* : Aucune.
+  *Opt-in / défaut* : Actif par défaut.
+  *Fichiers clés* : `src/codebuddy/providers/provider-gemini-native.ts`.
+  *Preuves* : 39 tests verts, 100 % des appels avec outils désormais acceptés.
+
+- **Détection ComfyUI par replis** :
+  `comfyFallbackUrls()` (`src/tools/media-generation-tool.ts:1474-1487`) détecte les instances ComfyUI de repli via `CODEBUDDY_COMFYUI_FALLBACK_URLS` (et alias `COMFYUI_FALLBACK_URLS`). `resolveImageProvider()` vérifie désormais aussi les URLs de repli (`:1480`) avant de tomber sur le fournisseur cloud. Dédoublonnage des deux orthographes honorées. Fusion `533b32d47` (merge de `debug/photo-lisa-2026-09-06`).
+  *Variables d'environnement* : `CODEBUDDY_COMFYUI_FALLBACK_URLS` (csv, `media-generation-tool.ts:1480`), alias `COMFYUI_FALLBACK_URLS`.
+  *Opt-in / défaut* : Sans les variables, seule `COMFYUI_URL` est considérée.
+  *Fichiers clés* : `src/tools/media-generation-tool.ts`.
+  *Preuves* : 173 tests verts, rapport `docs/reports/2026-09/DEBUG-PHOTO-LISA-OPUS.md`.
+
+- **Selfie cache-first (router/ingest/refill)** :
+  Router cache-first (`src/companion/lisa-selfie-router.ts`) : réponse IMMÉDIATE avec un selfie du cache du palier autorisé (`CONTENT_TIER` + gate adulte) pour toute demande de photo/selfie/portrait de Lisa (motifs FR/EN, avec ou sans style), avant le LLM, sur Telegram, PWA mobile et voix (`defaultReply` + hybrid). Rotation anti-répétition persistée (`recent-selfies.json`). Ingest (`src/companion/lisa-selfie-ingest.ts`) : copie de tout selfie généré (`lisa_selfie` / `image_generate` Lisa) dans `CODEBUDDY_LISA_SELFIE_CACHE_DIR/<tier>/<style>/` (nom horodaté + hash, sidecar JSON), plafond `CODEBUDDY_LISA_SELFIE_CACHE_MAX` (défaut 200), éviction des plus anciennes non favorites. Refill heartbeat opt-in (`CODEBUDDY_LISA_SELFIE_REFILL=true`) : une image par battement si générateur ComfyUI joignable et load < 4, jusqu'à un minimum par tier/style. Endpoint ComfyUI sain vérifié toutes les 5 min, fusion `533b32d47`.
+  *Variables d'environnement* : `CODEBUDDY_LISA_SELFIE_REFILL` (`true`), `CODEBUDDY_LISA_SELFIE_CACHE_DIR` (défaut `~/.codebuddy/companion/lisa/selfie-cache`), `CODEBUDDY_LISA_SELFIE_CACHE_MAX` (défaut 200), `CODEBUDDY_LISA_CONTENT_TIER` (safe/sensual/explicit), `CODEBUDDY_COMFYUI_LORA` / `CODEBUDDY_LISA_COMFYUI_LORA` (endpoint ComfyUI LORA), `CODEBUDDY_LISA_LORA_TRIGGER` (phrase de déclenchement).
+  *Opt-in / défaut* : Strictement opt-in pour le refill, défaut OFF. Router cache-first et ingest toujours actifs.
+  *Fichiers clés* : `src/companion/lisa-selfie-router.ts`, `src/companion/lisa-selfie-ingest.ts`, `src/companion/lisa-selfie-refill.ts`, `src/server/websocket/handler.ts`.
+  *Preuves* : 167/167 tests ciblés verts, suites `tests/companion` + `tests/channels` + `tests/sensory` + `donnees-personnelles` à 225 fichiers / 2979 tests verts, rapports `docs/reports/2026-09/SELFIE-CACHE-GROK.md` et `VERIF-SELFIE-CACHE-AGY.md`.
+
+- **@phuetz/companion-core** :
+  Extraction du socle relationnel en un paquet réutilisable `@phuetz/companion-core` (TypeScript pur, sans UI, sans réseau, sans dépendance à Code Buddy), étape 1 du plan de partage Lisa ↔ MySoulmate v3. API publique de 15 fonctions injectables (Clock, Rng, KeyValueStore) : `loadPersonaProfile`, `createPersonaRegistry`, `pickGreeting`, `detectEmotion`, `detectRelationalSignal`, `evolveRelationship`, `evolveRelationshipWithDayInertia`, `rapportTier`, `remember`, `recall`, `forget`, `applySoftForgetting`, `planInitiative`, `isPauseRequest`, `applyLimitsContract`, `WhatMattersMemory`. Volume : ~2 060 lignes de source paquet, ~1 000 lignes de tests. Adaptateur opt-in côté Code Buddy (`src/companion/core-adapter.ts`) : `CODEBUDDY_COMPANION_CORE=true` charge dynamiquement le paquet pour persona validation, relationship state evolution, et initiative planning ; sans drapeau, délégation aux modules historiques, byte-identique. Fusion `b5e421795`.
+  *Variables d'environnement* : `CODEBUDDY_COMPANION_CORE` (`true`).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF. Sans la variable, le module est chargé mais l'adaptateur délègue au chemin historique.
+  *Fichiers clés* : `packages/companion-core/src/`, `src/companion/core-adapter.ts`, `package.json`, `vitest.config.ts`.
+  *Preuves* : 105 tests paquet verts, `tests/companion/core-adapter.test.ts` prouve le byte-identique sur 3 états × 8 signaux, rapports `docs/reports/2026-09/COMPANION-CORE-OPUS.md` et `VERIF-COMPANION-CORE-AGY.md`.
+
+- **Pont d'approbation PWA sécurisé (fermeture A-1, B-1, B-2)** :
+  Fermeture de trois trous de sécurité du pont d'approbation WebSocket de la PWA mobile : **A-1** — `confirmation_response` acceptait les clients anonymes distants sous `--no-auth` : exposition de `anonymousRemote` dans `WebSocketExtensionPrincipal` (`src/server/websocket/handler.ts`) et refus `UNAUTHORIZED` dans `confirmation-bridge.ts:65`. **B-2** — confirmation diffusée à tous sans liaison : portée `tools` obligatoire (`FORBIDDEN`), `broadcast(..., 'tools', filtre destinataires)`, id lié aux sockets `approvalCapable`, réponse hors destinataires ignorée, repli Telegram si aucun destinataire. **B-1** — PWA et pont montés sans opt-in : drapeau `CODEBUDDY_MOBILE_PWA=true` autour du montage HTTP (`src/server/index.ts:278`) et de `wireMobileConfirmationBridge` (`src/server/websocket/handler.ts:1288`). Sans drapeau : route 404, `setWsApprovalBridge` jamais appelé, byte-identique. Fusion `d00d063ef`.
+  *Variables d'environnement* : `CODEBUDDY_MOBILE_PWA` (`true`).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF. Sans la variable, le comportement est byte-identique.
+  *Fichiers clés* : `src/server/websocket/confirmation-bridge.ts`, `src/server/websocket/handler.ts`, `src/server/index.ts`.
+  *Preuves* : 667 tests verts / 2 skip, tsc 0, lint 0 erreur, rapports `docs/reports/2026-09/REPARATION-PWA-CONFIRMATION-GROK.md` et `VERIF-PWA-SECU-OPUS.md`.
+
+- **Chat mobile v2 (émojis, réactions, humeur, quick replies, historique local, dictée)** :
+  Transformation de la PWA vanilla `/__codebuddy__/mobile/` en vrai chat mobile inspiré de MySoulmate : 10 idées retenues — grille d'émojis (~423 Unicode, 8 catégories, recherche FR/EN), trois points « écrit… » (CSS, dès le premier `stream_chunk`), puce d'humeur dans l'en-tête (`moodBand` si `CODEBUDDY_COMPANION_RELATIONAL=true`), chips de réponses rapides (contextuelles, tap = envoi), réactions locales sous la bulle (❤️😂😮😢👍🔥, localStorage), bulle image + lightbox, avatar + pastille de présence, séparateurs de jour, haptique à l'envoi (`navigator.vibrate(10)`), bulles groupées. Réactions **locales uniquement** (aucun `type: 'reaction'` dans le handler WS). Humeur : champ `companion: { mood, traits, label }` omis si `CODEBUDDY_COMPANION_RELATIONAL` ≠ `true`. Historique : `localStorage` (200 messages, 5 images ≤ 100 Ko). `GET /__codebuddy__/mobile/status` ajouté, même payload que `buildMobileStatus`. Fusion `6569a56af`.
+  *Variables d'environnement* : `CODEBUDDY_COMPANION_RELATIONAL` (`true`).
+  *Opt-in / défaut* : Humeur opt-in, reste byte-identique sans la variable. Réactions, historique, émojis toujours actifs.
+  *Fichiers clés* : `src/server/mobile/assets/{index.html,app.js,styles.css,sw.js}`, `src/server/mobile/status.ts`, `src/companion/relationship-state.ts`.
+  *Preuves* : 4 fichiers / 91 tests verts (dont `donnees-personnelles` 40/40), rapports `docs/reports/2026-09/PWA-CHAT-V2-GROK.md` et `VERIF-PWA-CHAT-AGY.md`.
+
+- **Pare-feu de skills (déobfuscation toutes classes par couches, balayage fenêtré)** :
+  Fermeture du **trou B-4** de l'audit de release (`docs/audits/2026-09-06-audit-release-opus.md` §B-4) : extension de la déobfuscation par couches dans `src/security/skill-scanner.ts` via `collectDeobfuscatedFindings`. Couche sûre (`deobfuscateSafeForScan` dans `src/security/text-deobfuscation.ts`) : suppression contrôles bidi/format `\p{Cf}`, homoglyphes (grecs/cyrilliques/IPA), normalisation NFKC/NFKD + suppression diacritiques `\p{Mn}`, zero-width, césures inter-lignes, balises/commentaires HTML. Couche agressive (`deobfuscateForScan`) : couche sûre + décodage percent/URL + Base64 strict — réservée à `prompt-injection` uniquement. Le filtre restreignant la déobfuscation à `capability === 'prompt-injection'` est levé pour toutes les classes (filesystem, shell, dynamic-code, network, secrets, prototype-pollution). Drapeau `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` (défaut `true`). **Correction du bourrage au-delà de 256 Ko** : remplacement de la troncature par un balayage fenêtré (fenêtres de 256 Ko avec recouvrement de 4 Ko) via `windowedDeobfuscateScan` pour éviter les dénis de service sur documents géants. Campagne sur corpus réel de 90 skills (Hermes 75 + bundled 8 + OpenClaw 2 + codebuddy 5) : 0 basculement de verdict, 0 faux positif après affinement du motif `dynamic-import` pour exclure la syntaxe Python multiligne. Fusion `06036279e`.
+  *Variables d'environnement* : `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` (`true`).
+  *Opt-in / défaut* : Actif par défaut (`true`) sur corpus prouvé sans faux positif.
+  *Fichiers clés* : `src/security/skill-scanner.ts`, `src/security/text-deobfuscation.ts`, `tests/security/skill-firewall-deob-all.test.ts`, `scripts/skill-firewall-campaign.ts`.
+  *Preuves* : 78 fichiers / 1 371 tests verts (dont `donnees-personnelles` 40/40), rapports `docs/reports/2026-09/REPARATION-SKILL-FIREWALL-DEOB.md` et `VERIF-SKILL-FIREWALL-OPUS.md`.
+
+- **Audit de release (2 A / 7 B : tous fermés)** :
+  Relecture adverse par Opus (`docs/audits/2026-09-06-audit-release-opus.md`) de 14 fusions / 96 commits / 165 fichiers. **2 trous A** : A-1 — `confirmation_response` acceptait les clients anonymes distants (fermé dans pont PWA sécurisé), A-2 — CHANGELOG manquant pour le 06/09 (fermé par ce commit). **7 trous B** : B-1 — PWA montée sans opt-in (fermé dans pont PWA sécurisé), B-2 — confirmation diffusée à tous (fermé dans pont PWA sécurisé), B-3 — regression crédits vs quota (fermé `ebb82252e`), B-4 — déobfuscation limitée à une classe de motifs (fermé dans pare-feu skills), B-5 — 9 variables non documentées (fermé dans CLAUDE.md/AGENTS.md), B-6 — AGENTS.md version périmée (fermé), B-7 — lint rouge sur HEAD (fermé `07ba0f519`). Régression d'intégration entre repli-fournisseur et compagnon-Telegram corrigée : `out_of_credits` était testé **après** `quota_exhausted` dans `provider-failure-speech.ts`, donc un 403 crédits affichait « quota atteint » au lieu de « plus de crédits ». Déplacement de la branche crédits avant la branche quota (`ebb82252e`). `npm run lint` était rouge sur HEAD à cause de 6 erreurs ESLint dans `src/server/mobile/assets/app.js` (variables inutilisées non préfixées par `_`). Renommage en `_e`/`_err` selon le motif `/^_/u` attendu par la règle (`07ba0f519`).
+  *Variables d'environnement* : Aucune.
+  *Opt-in / défaut* : Correctifs toujours actifs.
+  *Fichiers clés* : `src/channels/provider-failure-speech.ts`, `src/server/mobile/assets/app.js`, `docs/audits/2026-09-06-audit-release-opus.md`.
+  *Preuves* : `tests/channels/provider-failure-speech.test.ts` vert (65 fichiers / 1 587 tests), `npx eslint src/server/mobile/assets/app.js` passe de 6 erreurs à 0.
+
+- **Pare-feu de skills (catalogue de motifs C-3 : droppers encodés, exfiltration, imports dynamiques Python, commentaires HTML)** :
+  Fermeture du trou C-3 relevé lors de l'audit de release (`docs/reports/2026-09/VERIF-SKILL-FIREWALL-OPUS.md`) par enrichissement de `DANGEROUS_PATTERNS` dans `src/security/skill-scanner.ts` (commit `597a89729`). Dix nouveaux motifs spécialisés avec justification intégrée : droppers shell encodés (`base64 -d | sh`, `printf '\xNN' | sh`), imports dynamiques Python (`__import__('os')`, `importlib.import_module()`), accès aux clés privées SSH (`~/.ssh/id_*`), lecture de variables d'environnement sensibles (`.env`), accès aux identifiants cloud et profil CodeBuddy (`~/.aws/credentials`, `~/.codebuddy/*.env`), exfiltration réseau active vers endpoints distants (paramètres `@` ou pipes vers `curl`, `wget`, `nc`, `scp`), et neutralisation des injections ou commandes dissimulées dans les commentaires HTML mono-lignes (cas E01 d'Opus et overrides de prompt).
+  *Variables d'environnement* : Aucune (protection statique fail-closed intégrée au pare-feu de compétences).
+  *Opt-in / défaut* : Actif par défaut dans le scanner de compétences.
+  *Fichiers clés* : `src/security/skill-scanner.ts`, `tests/security/skill-firewall-catalogue.test.ts`, `docs/reports/2026-09/REPARATION-SKILL-FIREWALL-CATALOGUE.md`.
+  *Preuves* : 49 tests neufs passés dans `tests/security/skill-firewall-catalogue.test.ts` ; campagne sur 191 compétences réelles confirmant 0 basculement de verdict (128 allow, 24 review, 39 quarantine identiques), 0 faux positif et détection de 2 vrais positifs documentés (`github-repo-management`) ; médiane d'exécution de 1,36 s (≤ 1,5 s).
+
+- **Mémoire et identité de Lisa (chemin unique compagnon, histoire par connexion)** :
+  Nouveau module `runCompanionTurn` (`src/companion/companion-turn.ts`) comme unique chemin compagnon, distinct de la voie vocale `defaultReply`. Mémoire par connexion WebSocket dans `ConnectionState.companionHistory` (`handler.ts:130`), limitée à 20 tours, texte seul (jamais d'octets d'image), avec marqueur `kind:'selfie'`, purgée au changement d'identité. Persistance légère opt-out (`CODEBUDDY_MOBILE_HISTORY=false`) dans `~/.codebuddy/companion/mobile-history/<sha256>.json` (permissions 0600, dossier 0700), écriture atomique (MEM1), nom de fichier haché pour éviter toute identité en clair. Relances de selfie via `isLisaSelfieContinuationRequest` acceptant huit familles elliptiques avec trois garde-fous (longueur ≤ 8 mots, mots changeant de sujet, validation « photo de X »). Bloc identité `buildCompanionIdentityBlock` dans l'invite système. Telegram enregistre désormais le selfie servi comme tour de conversation via `rememberCompanionChannelTurn`.
+  *Variables d'environnement* : `CODEBUDDY_MOBILE_HISTORY` (défaut `true`).
+  *Opt-in / défaut* : Persistance opt-out, reste byte-identique si désactivée.
+  *Fichiers clés* : `src/companion/companion-turn.ts`, `src/companion/mobile-history.ts`, `src/companion/lisa-selfie.ts`, `src/companion/companion-history.ts`, `src/companion/companion-channel-profile.ts`.
+  *Preuves* : 29 tests neufs (9 mobile-history, 2 companion-ws-memory, 25 lisa-selfie-continuation + 1 channel-ai-handler), 2896 tests verts au total, rapport `docs/reports/2026-09/REPARATION-PWA-COMPAGNON-MEMOIRE-OPUS.md`.
+
+- **Audit installateur inconnu — 5 A / 8 B fermés** :
+  Relecture par Opus (`docs/audits/2026-09-06-audit-installateur-inconnu-opus.md`) sur installation npm pack depuis un HOME vide. **5 A bloquants** : A-1 Node 18 annoncé supporté mais CLI meurt (playwright-core `process.exit(1)` sous Node < 20, `b8ee57cb1`), A-2 `buddy -p` 14 min 27 exit 0 sortie vide (réponse vide non traitée comme échec, `9246d7dc0`), A-3 PWA 500 + trace sous dossier caché (`~/.nvm`, `~/.npm-global`, `5f34b0d06`), A-4 transport natif Ollama câblé sur port 11434 (5 endroits, `1eeb2e3f9`), A-5 anti-stall 120 s incompatible voie locale (TTFT 863 s > 120 s, `1d587cf9b`). **8 B frictions** : B-1 flotte 401 → "Lancez-le avec buddy server" (`df3174e36`), B-2 `buddy run` figé [RUNNING] + trajectory vide (`01ed8d75f`), B-3 emballage 2,7 Go / 18 paquets natifs non compilés (documenté), B-4 `doctor` conseille `npm install better-sqlite3` inapplicable en global (`f717d681b`), B-5 `sensory status` sans URL testée (`16ee82923`), B-6 aucun retour visuel pendant 14-17 min (`e52fb2df1`), B-7 traces + chemins exposés par défaut (`a17fcc0bf`), B-8 documentation jeton fleet token manquante (`e5c188fb5`). INSTALL: 5 A, 8 B — tous fermés.
+  *Variables d'environnement* : Aucune (correctifs structurels).
+  *Opt-in / défaut* : Correctifs toujours actifs, byte-identique.
+  *Fichiers clés* : `src/codebuddy/providers/ollama-native-transport.ts`, `src/cli/headless-options.ts`, `src/index.ts`, `src/commands/cli/sensory-command.ts`, `src/server/index.ts`, `src/fleet/peer-failover-bridge.ts`, `docs/audits/2026-09-06-audit-installateur-inconnu-opus.md`.
+  *Preuves* : 54 fichiers / 330 tests verts (observability, doctor, server/error-handler, server/middleware, commands/sensory, cli), tsc 0, lint 0, rapport `docs/reports/2026-09/REPARATION-INSTALL-B.md`.
+
+- **Voie locale `buddy -p` avec Ollama hors 11434 — routage, réponse vide, stall adaptatif, indicateur** :
+  Routage du transport natif Ollama via `isOllamaEndpoint(baseUrl, env)` unifié (commit `1eeb2e3f9`) : 1) `CODEBUDDY_PROVIDER=ollama` → vrai, 2) origine URL = `OLLAMA_HOST`/`OLLAMA_BASE_URL` → vrai, 3) hôte loopback + sonde `GET /api/tags` 200 ≤ 300 ms avec tableau `models` → vrai, 4) sinon faux. Réponse finale vide en `-p` traitée comme échec avec diagnostic stderr « le modèle n'a rien renvoyé ; provider=… modèle=… durée=…s » et exit ≠ 0 (commit `9246d7dc0`). Anti-stall adaptatif : 120 s **après** le premier token pour la voie locale, calcul `max(120000, promptTokens × CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN)` avec plafond `CODEBUDDY_STALL_MAX_MS` (commit `1d587cf9b`). Prompt compact pour `-p` local : budget système 1 500 tokens + 8 outils RAG, opt-out `CODEBUDDY_PROMPT_COMPACT=false` (commit `1d587cf9b`). Indicateur TTY sur stderr « évaluation du prompt… (n s) » toutes les 10 s tant qu'aucun token n'est arrivé, silencieux si stdout non-TTY ou `--quiet`/`CODEBUDDY_QUIET` (commit `e52fb2df1`).
+  *Variables d'environnement* : `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` (défaut 200), `CODEBUDDY_STALL_MAX_MS` (défaut 1200000 = 20 min), `CODEBUDDY_PROMPT_COMPACT` (défaut `true` pour local), `CODEBUDDY_QUIET` (défaut `false`).
+  *Opt-in / défaut* : Stall adaptatif et prompt compact actifs pour `-p` local uniquement ; indicateur TTY actif par défaut sur TTY.
+  *Fichiers clés* : `src/codebuddy/providers/ollama-native-transport.ts`, `src/cli/headless-options.ts`, `src/index.ts`, `src/config/headless-local-prompt.ts`, `src/cli/headless-prompt-progress.ts`, `src/utils/stream-stall-guard.ts`.
+  *Preuves* : Mesure AVANT 14 min 27 exit 0 vide → APRÈS 252 s exit 0 haïku, 64/64 tests verts ( lot Grok), 771 tests verts (codebuddy, cli, services, agent/execution, donnees-personnelles), tsc 0, lint 0, diff --check 0, rapports `docs/reports/2026-09/REPARATION-HEADLESS-LOCAL-GROK.md` et `VERIF-HEADLESS-AGY.md`.
+
+- **Tests BashTool — faux positif de déploiement et isolation environnementale** :
+  Correction du faux positif dans `PolicyEngine.isSecretsOrDeployment` (`src/security/policy-engine.ts`) : `deployKeywords` n'est plus testé sur le chemin absolu (`pathStr`) mais uniquement sur la ligne de commande (`cmdStr`), et `rawPath` est retiré de `cmdStr` pour éviter les fuites via arguments `git -C <chemin>`. Isolation de `process.env.CODEBUDDY_NATIVE_SANDBOX` via `delete` dans les hooks `beforeEach`/`afterEach` des suites `bash-tool.test.ts`, `bash-execution-policy.test.ts`, `bash-streaming.test.ts`. Sonde dynamique `sandboxAvailable()` dans `tests/helpers/sandbox-availability.ts` détectant bubblewrap/Landlock/Docker, avec test de garde `tests/security/sandbox-guard.test.ts` vérifiant la correspondance entre détection et capacités réelles. Cause racine identifiée : clone `cb-release-audit-2026-09-06` faisait matcher `release` dans le chemin, déclenchant `needs_approval` pour toute commande.
+  *Variables d'environnement* : Aucune (isolation interne aux tests).
+  *Opt-in / défaut* : Correctifs toujours actifs, 0 régression.
+  *Fichiers clés* : `src/security/policy-engine.ts`, `tests/helpers/sandbox-availability.ts`, `tests/security/sandbox-guard.test.ts`, `tests/tools/bash-*.test.ts`.
+  *Preuves* : 117/117 tests BashTool verts (99 + 13 + 5), suite `tests/tools` 184 passés / 1 701 tests, tsc 0, eslint 0, diff --check 0, rapport `docs/reports/2026-09/REPARATION-TESTS-ENV.md`.
+
+- **Reconnexion PWA et cache SW v4** :
+  Cache Service Worker version 4 (`src/server/mobile/assets/sw.js`) avec gestion améliorée des assets et reconnexion transparente. Mémoire de connexion WebSocket restaurée après reconnexion via `ConnectionState.companionHistory` (≤ 20 tours, texte seul, purgée au changement d'identité). Persistance légère opt-out (`CODEBUDDY_MOBILE_HISTORY=false`) pour la mémoire compagnon entre sessions, stockage sécurisé SHA256 en `~/.codebuddy/companion/mobile-history/<sha256>.json` (0600).
+  *Variables d'environnement* : `CODEBUDDY_MOBILE_HISTORY` (défaut `true`).
+  *Opt-in / défaut* : Persistance opt-out, reconnexion toujours active.
+  *Fichiers clés* : `src/server/mobile/assets/sw.js`, `src/server/websocket/handler.ts`, `src/companion/mobile-history.ts`.
+  *Preuves* : Essai headless avec reconnexion : R1 cite le tour précédent (mémoire restaurée), 2896 tests verts incluant reconnexion, rapport `docs/reports/2026-09/REPARATION-PWA-COMPAGNON-MEMOIRE-OPUS.md` §4.2-4.3.
+
+- **Photos partagées avec Lisa — album, vie privée, vision locale** :
+  Partage de photos comme tour compagnon (pas comme analyse d'image) avec réactions authentiques et questions de suivi. Album partagé sous `~/.codebuddy/companion/photos/` (SHA256, permissions 0600, dossier 0700, plafond `CODEBUDDY_SHARED_PHOTOS_MAX` = 500, éviction FIFO préservant les favorites). Vie privée explicite : en mode `CODEBUDDY_COMPANION_PHOTO_VISION=local`, aucune image n'entre dans la requête LLM (preuve formelle via test unitaire). Métadonnées sidecar anonymisées (hash, receivedAt, surface, captionUser, descriptionLisa, mimeType, bytes). Étanchéité mémoire : photos dans `~/.codebuddy/memory.md` via `photos:recent`, le dépôt `.codebuddy/CODEBUDDY_MEMORY.md` reste vierge. Byte-identique sans pièce jointe. Telegram : photos groupées par `media_group_id` (fenêtre 1,5 s), photo sans légende génère message par défaut. Correctif : prise en compte de `OLLAMA_HOST` dans `attached-image-grounding.ts` et repli `/v1` pour requêtes multimodales.
+  *Variables d'environnement* : `CODEBUDDY_COMPANION_PHOTO_VISION` (défaut `local`), `CODEBUDDY_SHARED_PHOTOS_MAX` (défaut 500).
+  *Opt-in / défaut* : Vision locale opt-in, album et mémoire toujours actifs.
+  *Fichiers clés* : `src/companion/companion-photo.ts`, `src/companion/shared-photos.ts`, `src/companion/attached-image-grounding.ts`, `src/channels/telegram/client.ts`, `src/server/mobile/album.ts`.
+  *Preuves* : 308 fichiers / 3 787 tests verts (dont 40/40 donnees-personnelles), essai live avec moondream : description et souvenir vérifiés, 87 tests neufs, rapports `docs/reports/2026-09/PHOTOS-PARTAGEES-OPUS.md` et `VERIF-PHOTOS-AGY.md`.
+
+- **Repli de fournisseur vers modèle local — élagage outils, diagnostic, alias** :
+  Élagage dynamique des outils au handoff : transmission de ≤ 6 outils au modèle de repli (au lieu de 60k+ tokens de définitions complètes) pour éviter le débordement de contexte sur fenêtre 32k. `ProviderFailoverExhaustedError` expose l'erreur 429 initiale et chaque échec de cible de la chaîne, évitant le masquage derrière le premier échec. Annonce unifiée : PWA et compagnon notifiés une seule fois du basculement via événement structuré. Alias `CODEBUDDY_LLM_FAILOVER` déprécié (un seul avertissement) et redirigé vers `CODEBUDDY_PROVIDER_FALLBACK` (même chemin). Diagnostic amélioré : le stall adaptatif de premier token n'est activé que lorsque la cible effective du repli est locale (`isEffectiveTargetLocal()`), préservant les 120 s pour le cloud et l'interactif.
+  *Variables d'environnement* : `CODEBUDDY_PROVIDER_FALLBACK` (défaut `false`), `CODEBUDDY_FALLBACK_CHAIN` (syntaxe `provider[:model]>…`), `CODEBUDDY_LLM_FAILOVER` (dépriorisé, alias de `CODEBUDDY_PROVIDER_FALLBACK`), `CODEBUDDY_PROVIDER_FALLBACK_LOCAL_ONLY` (défaut `false`).
+  *Opt-in / défaut* : Strictement opt-in, défaut OFF.
+  *Fichiers clés* : `src/codebuddy/client.ts`, `src/codebuddy/provider-handoff.ts`, `src/providers/provider-failover-policy.ts`, `src/agent/execution/agent-executor.ts`, `src/utils/stream-stall-guard.ts`.
+  *Preuves* : 14 fichiers / 232 tests verts (stream-stall-guard, provider-failover, provider-handoff, agent/execution), 228/228 tests CLAUDE.md vérifiés, rapport `docs/reports/2026-09/VERIF-FAILOVER-AGY.md`.
+
+- **Étude OmniRoute 3.8.49 vs Code Buddy — décision : pas de proxy** :
+  Comparaison architecturale (`docs/audits/2026-09-06-etude-omniroute-failover-agy.md`) révélant que Code Buddy implémente une cascade déclarative applicative intégrée au client, tandis qu'OmniRoute agit comme un proxy universel prédictif multi-stratégies. **Décision** : ne pas intégrer OmniRoute comme proxy, mais conserver l'approche native Code Buddy avec 5 améliorations prioritaires identifiées : 1) élagage dynamique des outils au handoff (déjà implémenté, ≤ 6 outils), 2) journalisation enrichie des échecs de fallback (expose chaque tentative), 3) unification des sous-systèmes de repli (`CODEBUDDY_LLM_FAILOVER` → `CODEBUDDY_PROVIDER_FALLBACK`), 4) notification événementielle vers Lisa/Companion, 5) pré-filtrage proactif basé sur la fenêtre de contexte. Détection réactive confirmée : capture du 429 réel et extraction de `resets_in_seconds`, persistance dans `provider-health.json`, réactivation automatique à expiration. Reprise de session et intégrité de flux respectées.
+  *Variables d'environnement* : Aucune (décision architecturale).
+  *Opt-in / défaut* : Cascade déclarative existante, améliorations en cours.
+  *Fichiers clés* : `docs/audits/2026-09-06-etude-omniroute-failover-agy.md`, `src/codebuddy/client.ts`, `src/providers/provider-failover-policy.ts`.
+  *Preuves* : Essai réel avec quota ChatGPT épuisé → bascule vers Ollama en 1,2 s, `provider-health.json` généré atomiquement, compteur `resetsAt` exact, rapports OmniRoute vérifiés.
+
+- **Moteur `qwenflash` dans `scripts/deleguer.sh`** :
+  Ajout du moteur `qwenflash` (ligne 224-229) pour Qwen 3.8 Flash via OpenRouter (0,15 $/M entrée, 0,47 $/M sortie, 1 M de contexte, appels d'outils OK). Configuration via `OPENROUTER_MODELE` (défaut `qwen/qwen3.8-flash`), délégation à `exec "$0" openrouter` avec passage de `OPENROUTER_MODELE`. Moteur de volume pendant les trous Codex, OpenRouter voit les prompts (code public et vérifications uniquement).
+  *Variables d'environnement* : `OPENROUTER_MODELE` (défaut `qwen/qwen3.8-flash`).
+  *Opt-in / défaut* : Utilisation explicite via `deleguer.sh qwenflash`.
+  *Fichiers clés* : `scripts/deleguer.sh`.
+  *Preuves* : Moteur testé et opérationnel, commit `cd3ea2844` « feat(scripts): moteur qwenflash (Qwen 3.8 Flash via OpenRouter) dans deleguer.sh — essai réel agent headless 17 s, outils OK ».
+
+### SCORE1 — les bancs du jour entrent dans le tableau de bord des modèles (4 septembre 2026)
+
+
+Le Council savait déjà choisir un modèle par type de tâche, mais ses catégories s'arrêtaient à
+code, français, raisonnement et vision, et les mesures de la journée restaient dans la mémoire du
+pilote. Cinq catégories littéraires (`redaction-fr`, `arbitrage-litteraire`, `jugement-litteraire`,
+`audit-adversarial`, `relecture-typo`), une inférence FR/EN depuis le prompt, `buddy council
+scoreboard import|best`, et onze mesures sourcées (`docs/benchmarks/2026-09-04-bancs-litteraires.jsonl`).
+Preuve sur le registre réel avec `CODEBUDDY_COUNCIL_ROUTING=true` : « écris le chapitre » → luna,
+« tranche cet arbitrage » → Gemini 3.8 Flash, « juge à l'aveugle » → sol, une requête de code
+inchangée ; sans la variable, la façade de routage est un no-op strict. Mission luna (1 h 40).
+Rapport : `docs/reports/2026-09/REPARATION-SCORE1.md`.
+
+### DGM6 — les journaux de lanes livrent des chiffres au rejeu des stratégies (4 septembre 2026)
+
+La source « journaux de lanes » ne produisait que des échecs nommés ; le rejeu contrefactuel des
+stratégies devait supposer le plafond de tours. Des parseurs purs (`delegation-facts.ts`, lecture
+bornée à 256 Ko contre les expressions régulières pathologiques) extraient désormais tours
+consommés, plafond, coût réel, plafond de coût, modèle effectif et code de sortie, et la source
+les émet en marqueurs explicites `facts: rounds= limit= cost= outcome= failure=`. Preuve réelle
+sur 857 journaux : le rejeu sait maintenant que la plupart des lanes tournaient à 300 tours (elles
+comptent comme égalités) et n'accepte « 75 tours » que sur les quatre lanes coupées à 50. Mission
+Gemini 3.8 Flash en deux temps (timeout d'API à 50 min, travail abrité puis terminé). Rapport :
+`docs/reports/2026-09/REPARATION-DGM6.md`.
+
+### PROMPTBUDGET1 — le prompt système passe de 203 674 à 49 489 caractères (4 septembre 2026)
+
+Personne n'avait mesuré ce qui composait le prompt système : `scripts/measure-system-prompt.ts`
+le fait, hors ligne, bloc par bloc. Verdict : `.codebuddy/TOOLS.md` (134 751 caractères, 66 %)
+était injecté par l'identité alors que les outils sont déjà décrits par leur schéma de fonction ;
+il ne l'est plus. Les fichiers de démarrage canoniques sont `AGENTS.md` et `CODEBUDDY.md` ; les
+fichiers d'interopérabilité (`CLAUDE.md`…) restent servis par le JIT ou en opt-in
+`CODEBUDDY_INCLUDE_INTEROP_CONTEXT=true`. La connaissance passe par `knowledge_search` au lieu
+d'être collée. Quand une troncature reste nécessaire, elle retire des blocs ENTIERS par priorité
+(sécurité > workspace > outils > style > contexte > exemples) et journalise les blocs retirés ;
+l'ancienne coupe aveugle au milieu d'une phrase est supprimée. Mission luna (36 min). Rapport :
+`docs/reports/2026-09/REPARATION-PROMPTBUDGET1.md`.
+
+### HOMEBACKUP1 — sauvegarde du profil `~/.codebuddy` par liste blanche (4 septembre 2026)
+
+Le profil pèse 1,3 To (images, runtimes) et n'avait aucune copie de secours : ce matin un test a
+vidé `user-settings.json`. `buddy backup create|verify|restore --home` (ou `--scope home|both`)
+sauvegarde une LISTE BLANCHE (réglages, personas JSON, mémoire, rappels, MCP, skills, magasin
+d'auto-amélioration, registre CKG) avec plafonds de 5 Mo par fichier et 200 Mo au total, refuse les
+motifs secrets même demandés, rapporte ce qui est sauté et pourquoi, et `restore --confirm`
+garde une copie `.bak` avant tout écrasement. Preuve réelle en lecture seule : 32 fichiers, 66 Ko
+retenus, 179 sautés, aucun secret. Première passe Vibe (drapeau en collision avec `--profile`
+global, quatre tests rouges), réparée par Gemini 3.8 Flash. Rapport :
+`docs/reports/2026-09/REPARATION-HOMEBACKUP1.md`.
+
+### AUDIT-STRAT1 — la couche stratégies attaquée, cinq failles fermées (4 septembre 2026)
+
+Audit adversarial confié à Gemini 3.8 Flash une heure après la livraison : onze attaques contre
+les six promesses de la couche. Cinq failles réelles, toutes corrigées avec un test qui les
+rejoue : des consignes poussant à `bypassPermissions`, `--yolo`, `rm -rf` ou à exfiltrer un
+`.env` passaient la porte ; les homoglyphes, caractères de largeur nulle et césures contournaient
+le pare-feu (normalisation avant analyse) ; `activeId()` renvoyait un chemin `../` brut ; un fait
+`rounds=` cité dans du texte libre était cru ; un magasin en lecture seule faisait planter le
+cycle. Le gaming du rejeu est mesuré : la porte s'arrête net à 75 tours dès que le plafond
+couvre les runs. Rapport : `docs/reports/2026-09/AUDIT-STRAT1.md`.
+
+### STRAT1 — la Darwin-Gödel Machine fait évoluer la façon d'exécuter (4 septembre 2026)
+
+Quatrième surface apprenable après les leçons, les outils et les skills : la **stratégie
+d'exécution** (plafonds de tours et de coût, niveau de raisonnement, exigences de vérification,
+consignes courtes). Ce sont exactement les réglages que le pilote a dû corriger à la main dans la
+journée (limite de 50 tours en headless, « preuve = tests des fichiers touchés », « commiter après
+chaque point »). Une stratégie est un JSON sous `.codebuddy/strategies/`, jamais du code, validé
+par un schéma Zod strict où aucun champ ne peut désactiver un garde-fou. Porte à cinq étages :
+schéma → pare-feu des consignes → lignée → inerte → **empirique** (rejeu contrefactuel
+déterministe sur les faits des runs, test de signe bayésien apparié, garde de coût) ; rien n'est
+gardé sur le schéma seul. Consommée uniquement sous `CODEBUDDY_SELF_IMPROVE_STRATEGIES=true` :
+le mode headless prend le plafond de tours de la stratégie quand `--max-tool-rounds` est absent et
+reçoit ses consignes en `<execution_strategy>`. CLI `buddy improve strategies [--apply]
+[--experiences fichier.jsonl]` et `strategies-list` ; le déclencheur d'inactivité l'essaie après
+les outils et les skills. Rapport : `docs/reports/2026-09/RAPPORT-STRAT1.md`.
+
+### DGM3 — la fitness de l'auto-amélioration passe de 3 à 15 scénarios (4 septembre 2026)
+
+Le banc de capacités qui sert de « fitness » à la Darwin-Gödel Machine ne comptait que trois
+vérifications de sous-chaînes. Il en compte quinze, chacune fondée sur un invariant documenté
+(`CLAUDE.md`, `docs/agents.md`) avec sa source, un test d'orthogonalité (aucune leçon ne couvre
+deux scénarios) et de non-trivialité ; le proposeur reste un amorçage déterministe à 0 $, avec
+une voie LLM opt-in `CODEBUDDY_SELF_IMPROVE_PROPOSER=llm`. Preuve réelle dans un clone :
+`buddy improve loop --apply` monte de 0/15 à 15/15 en seize cycles puis s'arrête. Première
+mission de code confiée à Gemini 3.8 Flash (10 min, cinq commits, preuves fournies).
+Rapport : `docs/reports/2026-09/REPARATION-DGM3.md`.
+
+### COST1 — le coût headless dit la vérité (4 septembre 2026)
+
+`"cost":{"total":0.011604}` sortait pour n'importe quel modèle et n'importe quel volume. Le coût
+est désormais calculé sur l'`usage` renvoyé par le fournisseur, avec un tarif par modèle (Mistral
+ajouté), et trois champs honnêtes : `estimated`, `pricing` (`known` / `unknown` / `subscription`)
+et `billing` (`pay-per-use` / `subscription`) — le forfait ChatGPT rapporte `total: 0`. Seconde
+mission de Mistral Vibe : correctif et tests commités par la lane, tombée ensuite sur une coupure
+réseau après 230 messages. Rapport : `docs/reports/2026-09/REPARATION-COST1.md`.
+
+### DGM2 — la Darwin-Gödel Machine face à l'état de l'art (4 septembre 2026)
+
+Audit en lecture seule par Gemini 3.8 Flash avec recherche Web (11 sources arXiv vérifiées,
+13 citations de code vérifiées) : `docs/reports/2026-09/AUDIT-DGM2.md`. Verdict : sécurité
+solide, mais fitness famélique (3 scénarios déterministes, proposeur à gabarit — un cycle réel
+dure 0 s), pas de pénalité de descendance ni de filtre de nouveauté, pas de couche d'évolution
+sûre hors `src/`. Huit propositions classées ; les trois [A] partent en missions.
+
+### DISCOVERY1 — un catalogue bouchon ne rabaisse plus une déclaration nominative (4 septembre 2026)
+
+Le `/v1/models` de Mistral déclare 32 768 et toutes les capacités à `false` pour chaque variante
+Medium (bouchon), et cette valeur écrasait la déclaration nominative `mistral-medium*` (128k) :
+prompt système tronqué à 8 192 jetons. Désormais une entrée de catalogue hébergé sans capacité
+vraie est ignorée (`logger.debug`), et un catalogue hébergé ne rabaisse jamais une déclaration
+nominative — il ne remplace qu'une estimation de famille ; seul un runtime local (Ollama, LM Studio,
+vLLM) peut abaisser. Fixture rejouant Medium (bouchon) et Magistral (sincère) ; le budget système
+de `mistral-medium-latest` revient à 32 000 jetons sans `CODEBUDDY_MAX_CONTEXT`.
+Rapport : `docs/reports/2026-09/REPARATION-DISCOVERY1.md`.
+
+### MODELLABEL1 — en headless, le JSON annonce le modèle qui a vraiment répondu (4 septembre 2026)
+
+`buddy -m gpt-6-astra -p …` rendait `"model":"gpt-6-astra"` alors que le provider ChatGPT avait
+remplacé en silence par `gpt-5.6-sol` (avertissement visible seulement sous `VERBOSE`). Le
+provider mémorise désormais le modèle réellement envoyé, le client le lit aussi sur le chemin
+streaming (celui du headless), la sortie JSON porte `model` = effectif et `requestedModel`
+quand ils diffèrent, et le repli est annoncé une fois sur stderr sans mode verbeux. Première
+mission confiée à Mistral Vibe (abonnement Pro, 0 $) — livrée sans commit ni preuve, complétée
+par le pilote. Rapport : `docs/reports/2026-09/REPARATION-MODELLABEL1.md`.
+
+### CIFIX1 — la CI de `main` : les deux familles encore rouges partout (4 septembre 2026)
+
+Le balayage d'installation (`scripts/balayage-installation.sh`) résout `node`, `npm`, `env` et
+`sleep` avant `env -i` (le PATH vierge est conservé, les runners GitHub n'ont pas `node` dans
+`/usr/bin`) et remplace `timeout` GNU, absent de macOS, par un chien de garde portable. Le test
+d'injection d'environnement du shell interactif choisit sa fixture (POSIX ou PowerShell) par
+`getShellConfiguration()`, le chemin Windows étant exercé par un mock sans exemption CI. Le
+PTY macOS reste documenté, pas corrigé à l'aveugle. Diagnostic complet des six journaux CI
+dans `docs/reports/2026-09/RAPPORT-CIMAIN1.md`, réparation dans `REPARATION-CIFIX1.md`.
+
+### TESTWRITE1 — la suite Vitest écrivait dans le `.codebuddy/` réel (4 septembre 2026)
+
+Deux coupables mesurés (`strace`) : `tests/memory/memory-provider.test.ts` instanciait les
+adaptateurs réseau sans option, dont le repli local résout le singleton mémoire sur
+`process.cwd()/.codebuddy/CODEBUDDY_MEMORY.md` ; `tests/utils/settings-manager.test.ts`
+mockait `fs` partiellement pendant que `atomic-write.ts` utilisait le vrai `openSync`/
+`renameSync` — un temporaire vide remplaçait atomiquement `settings.json` (0 octet, tests
+pourtant verts). Le même mécanisme a vidé le `user-settings.json` de l'auteur. Options
+injectables sans changer les défauts, tests sous `mkdtemp`, et un `globalSetup`
+`tests/hygiene/no-repo-writes-global-setup.ts` qui prend l'empreinte des deux fichiers avant
+la suite et rougit si elle change. Rapport : `docs/reports/2026-09/REPARATION-TESTWRITE1.md`.
+
+### IDLINKS1 — des dizaines de temporaires `identity-links.json.tmp.*` orphelins (4 septembre 2026)
+
+Trois causes : `IdentityLinker` réécrivait un contenu inchangé à chaque `link()` rapproché
+(jusqu'à seize temporaires concurrents), `writeFileAtomic` ne pouvait pas nettoyer un
+temporaire laissé par un processus tué entre `open` et `rename`, et deux tests d'intégration
+écrivaient dans le vrai `~/.codebuddy/identity-links.json` de la machine (leurs fixtures s'y
+trouvaient). Désormais : pas d'écriture si le contenu sérialisé est identique, écritures
+coalescées, nettoyage des orphelins au démarrage journalisé une fois, tests isolés sous un
+répertoire temporaire. Rapport : `docs/reports/2026-09/REPARATION-IDLINKS1.md`.
+
+### GF3FIX — les deux ouverts de la revue GF3 (4 septembre 2026)
+
+La capacité `localGpu` des trois outils vidéo accepte des alias génériques
+(`local_gpu`, `localGpuAvailable`, `local_gpu_available`) — jamais l'ancienne clé
+propre à une machine, qui reste non lue et le dit dans le schéma. Le garde-fou
+données personnelles attrape désormais les adresses privées écrites avec des tirets
+(la forme que `derivePeerId` produit), fixture isolée mutation-testée ; le dépôt
+suivi n'en contient aucune. Rapport : `docs/reports/2026-09/REPARATION-GF3FIX.md`.
+
+### PERSONA1 — huit tests rouges qui lisaient l'état réel de la machine (4 septembre 2026)
+
+`tests/enhanced-memory.test.ts`, `tests/persona-manager.test.ts` et `tests/persona-handler.test.ts`
+étaient rouges sur `main` et sur la branche de travail : le magasin de mémoire fixait
+`~/.codebuddy/memory` sans option, et le gestionnaire de personnalités rechargeait la
+personnalité persistée de l'utilisateur avant celle du test (prouvé par `strace -f -e openat`).
+`EnhancedMemory({ dataDir })` et `PersonaManager({ persistActivePersona: false })` rendent
+les tests hermétiques ; les défauts de production sont inchangés et prouvés tels. Les trois
+fichiers restent verts avec un faux HOME peuplé. Rapport : `docs/reports/2026-09/REPARATION-PERSONA1.md`.
+
+### STT2 — sherpa-rs rendait un transcript vide sur le robot (4 septembre 2026)
+
+Depuis le 03/09, chaque phrase entendue passait par le repli faster-whisper : le
+routage Rust du capteur rejetait à tort le pin de langue `fr` (jugé « non
+supporté » par Parakeet, qui le supporte) et le cerveau étiquetait mal les
+transcriptions. La liste des langues Parakeet est explicite ; le repli dit
+désormais la raison (code de sortie, stderr, durée, signal) et, après trois vides
+consécutifs, annonce une seule fois « sherpa-rs inactif » au lieu d'un avertissement
+par phrase. Prouvé sur un WAV réel de 9 s (transcription non vide en 2,0 s) puis en
+production : `STT ready requested=sherpa-rs effective=sherpa-rs language=fr`.
+Rapport : `docs/reports/2026-09/REPARATION-STT2.md`.
+
+### PRIV3 — les résidus « à nettoyer » de la revue AGYSEC2 (4 septembre 2026)
+
+Chemins d'espaces de travail privés retirés de 11 documents et 15 commentaires
+source, ancien nom du moteur reformulé dans deux rapports (les identifiants
+réellement exécutés sont signalés, pas touchés), soldes et paliers d'abonnement
+reformulés, dernier fragment tireté d'une adresse du maillage privé corrigé. Le
+garde-fou `tests/security/donnees-personnelles.test.ts` gagne trois motifs et
+retrouve les dix témoins supprimés par PRIV2 (31 tests, chaque témoin
+mutation-testé) — il a aussitôt attrapé quatre fichiers ajoutés le matin même
+(rapports GF3 et BASHSTREAM1, table de coordination, fixture de test), nettoyés
+avant fusion. Rapport : `docs/reports/2026-09/REPARATION-PRIV3.md`.
+
+### BASHSTREAM1 — le premier appel d'outil d'un tour perdait ses arguments sur MiniMax (4 septembre 2026)
+
+En headless sur MiniMax M3 (GMI), chaque `bash` échouait « Streaming execution
+error: Unexpected end of JSON input » alors que les autres outils passaient.
+Cause : l'accumulateur de deltas assignait le tout premier `tool_calls` par
+position de tableau ; MiniMax numérote ses appels à partir de 1, donc le premier
+appel du tour (bash, par hasard) gardait des arguments vides pendant qu'un objet
+orphelin absorbait les siens. Fusion par index dès le premier chunk ; test qui
+rejoue les deltas réels capturés ; reproduit avant (5 échecs / 7) et après (0 / 5)
+sur GMI. Le trou de tableau laissé en position 0 est compacté par le filtre de
+l'exécuteur avant toute exécution. Rapport : `docs/reports/2026-09/REPARATION-BASHSTREAM1.md`.
+
+### DOCTOR1 — `buddy doctor --fix` choisit un modèle Ollama et le justifie (4 septembre 2026)
+
+`--fix` écrivait le premier modèle listé (un `rag` de 15 Go). Il choisit désormais
+parmi les modèles installés selon un critère explicite — appel d'outils supporté,
+taille compatible avec la RAM libre, famille instruct/coder, jamais `embed`/`rag`/
+vision seule — et dit pourquoi en une ligne ; sans candidat, il le dit au lieu
+d'écrire un choix. `/batch` (sous-agents multiplexés, `CODEBUDDY_BATCH_CONCURRENCY`)
+et `buddy improve` (opt-in `CODEBUDDY_SELF_IMPROVE`, `propose-only` par défaut)
+entrent dans `README.md` et `docs/getting-started.md`, avec un test de présence.
+Rapport : `docs/reports/2026-09/REPARATION-DOCTOR1.md`.
+
+### GF3 — PRIV2 relu hunk par hunk : trois régressions fermées (4 septembre 2026)
+
+Une revue en lecture seule (Claude opus) des 169 hunks de code et de tests
+touchés par PRIV2 en classe 97 tests cohérents, 28 doc, 43 valeurs exécutées
+dont trois régressions réelles, toutes fermées : le miroir des actifs refuse
+de démarrer si sa destination par défaut n'existe pas et que `MIROIR_DEST`
+n'est pas posé (au lieu de recopier 40 Go dans un arbre neuf) ; les motifs de
+spoke A2A « toujours allumé » se configurent par `CODEBUDDY_A2A_ALWAYS_ON_SPOKES`
+(un nom de machine en dur ne survit pas à une substitution) ; l'unité modèle
+`codebuddy-flow-daily` refuse de démarrer sans `FLOW_PROJECT_URL`
+(`~/.codebuddy/flow.env`) au lieu de viser un projet vide. Restent : la clé
+`capacity.localGpu` sans alias de l'ancien nom (appels privés à mettre à jour) et
+dix témoins du garde-fou données personnelles à restaurer (lane PRIV3).
+Rapport : `docs/reports/2026-09/RAPPORT-GF3.md`.
+
+### IMPROVE2 — les trois ouverts d'IMPROVE1 (4 septembre 2026)
+
+`CODEBUDDY_MAX_CONTEXT` est enfin honoré par Ollama : le serveur ignore
+`num_ctx` sur `/v1/chat/completions` et ne l'honore que sur `/api/chat`, d'où
+un transport natif en un seul point de couture, aiguillé sur l'URL (trappe
+`CODEBUDDY_OLLAMA_NATIVE_CHAT=false`). Prouvé : 32 000 / 5,2 Go au lieu de
+262 144 / 24 Go. Le scoring des outils authored compare exactement, et
+`buddy improve … --apply` refuse en nommant `CODEBUDDY_SELF_IMPROVE` au lieu
+d'appliquer.
+
+### Pilote Flow sur flow.google.com (4 septembre 2026)
+
+Google a déplacé Flow sur un nouveau domaine : éditeur ProseMirror au lieu de
+Slate, bouton d'envoi réduit à `arrow_forward`, compteur « N crédits Google
+Flow » avec espace fine insécable, compositeur hors viewport. Le pilote
+s'adapte (viewport élargi par émulation, projet rétabli avant la lecture du
+compteur, attente de l'éditeur) ; prise réelle vérifiée.
+
+### PRIV2 — plus rien de l'infrastructure de l'auteur dans le dépôt (4 septembre 2026)
+
+130 fichiers : adresses privées remplacées par des plages de documentation ou
+`<ip-du-hub>`, nom de machine devenu `hub` (flotte) ou `localGpu` (média, schémas
+d'outils inclus), identifiants de projet Flow lus dans `FLOW_PROJECT_ID` et
+`FLOW_PROJECT_URL`, soldes reformulés sans chiffre, sujet médical neutralisé.
+Le garde-fou gagne cinq motifs, cinq fixtures et une liste d'exemptions nommée :
+105 fichiers fautifs avant, vert après. L'historique de la branche a été
+réécrit pour les valeurs propres à la branche ; celles présentes dans `main`
+depuis l'été y restent.
+
+### VERIFIX3A — dix-sept harnais qui ne gardaient qu'« un appel » (4 septembre 2026)
+
+Les tests réalignés après MEM1 assertent désormais le contrat réel : chemin
+exact, contenu sérialisé, mode `0o600`, exception levée, permissions, latence
+mesurée. 72 mutations rouges, 34 tests nets ajoutés, aucun fichier `src/`
+modifié. Trois doubles de test corrigés au passage (un `mode` jeté, un scoreboard
+de latence figé, une contamination d'espions).
+
+### BATCHFIX1 — le résumé de `/batch` dit vrai (4 septembre 2026)
+
+Les unités de vérification, qui n'écrivent rien par nature, étaient comptées
+« FAIL » par la garde « pas de done sans fichier modifié ». `BatchUnit.verifyOnly`
+les distingue ; la garde reste stricte pour les écritures. Prouvé sur Ollama :
+« 2/5 (3 failed) » devient « 4/4 (0 failed) ».
+
+### SERV2 — `usage` réel, un seul port, CORS dit vrai (4 septembre 2026)
+
+`/v1/chat/completions` renvoie les compteurs du fournisseur : le flux ne
+demandait jamais `stream_options.include_usage` et jetait le chunk d'usage, ce
+qui laissait aussi les métriques TTFT1 sans `inputTokens`. Repli honnête marqué
+`usage.estimated: true` (`CODEBUDDY_STREAM_USAGE=false`). `buddy server` ouvre
+un seul port avec `/ws` dessus : neuf documents corrigés, test qui rougit si
+l'un d'eux redit « 3001 ». Une origine non listée reçoit 200 sans
+`Access-Control-Allow-Origin` ; le 403 n'existe que sur le WebSocket, la doc le
+dit désormais.
+
+### VERIFIX3B / DELEGVERIF — suites de VERIF3 et du juge NVIDIA (4 septembre 2026)
+
+Dix fixtures isolées supplémentaires pour le garde-fou de données personnelles,
+ordre FIFO discriminé pour `/swarm` et `/team`, argv réels de `worktree add`
+assertés, entrée `git -C` en lecture prouvée utile. Les huit points du juge
+NVIDIA sur DELEG3 ont été vérifiés par un Claude : six faux avec preuve, un vrai
+corrigé — les paramètres du parent ne sont plus transmis tels quels au Verifier
+délégué —, un test de sérialisation renforcé.
+
+### INCONNU1 — installation depuis la branche poussée, à l'aveugle (4 septembre 2026)
+
+Un Claude a rejoué le parcours README + getting-started sur un clone GitHub :
+install, build, typecheck, `buddy doctor`, headless Ollama avec `-o` et
+`--output-schema`, `/batch`, `buddy improve status`, `buddy server` + curl,
+`buddy cost --latency`. Deux trous de doc réparés avec test (flags headless,
+`server --no-auth`). Signalés : le résumé de `/batch` compte des vérifications
+réussies comme « FAIL », `doctor --fix` choisit un modèle de 15 Go sans critère,
+`/batch` et `improve` absents des pages d'entrée.
+
+### VERIF3 — 105 mutations sur les fusions de la nuit (4 septembre 2026)
+
+Vérification adverse par un Claude : 51 mutations rougissent comme attendu,
+54 restent vertes, regroupées en 21 trouvailles. Tiennent : la frontière `ask`
+de `git -C`, l'expansion du tilde, HOME dans Docker, l'override `/swarm`, la
+concurrence 1, l'annulation descendante, dm-pairing fail-closed, l'hermétisme
+BRANCH1. À fermer : onze harnais MEMFIX qui n'assertent qu'« un appel a eu
+lieu », dix motifs du garde-fou sans fixture isolée, le FIFO non discriminé par
+les tests DELEG2 (rapport `docs/reports/2026-09/RAPPORT-VERIF3.md`).
+
+### DELEG3 — QualityGate et Verifier multiplexés (4 septembre 2026)
+
+CodeGuardian et SecurityReview tournent en deux délégués parallèles (bornés à
+2), résultats multiplexés et agrégés comme avant ; un délégué qui jette ou
+dépasse son budget donne une « revue incomplète », jamais un faux vert. Le
+Verifier passe par un délégué à contexte neuf, budget 6 tours / 0,50 USD /
+16K tokens, et ne confirme toujours pas sans oracle. Prouvé sur Ollama.
+
+### SWARMFIX1 — dernier rouge du balayage et un test qui écrivait dans le dépôt (4 septembre 2026)
+
+`swarm-handler.test.ts` prouve désormais le routage de `/swarm` par les délégués
+avec l'override de stratégie honoré (mutation rouge). Le test `CC14 SpawnOptions`
+omettait `projectRoot` et faisait écrire `completeAgent` dans
+`.codebuddy/agent-memory/alice/MEMORY.md` du dépôt réel : fixture isolée, code
+produit inchangé.
+
+### MEMFIX2 — 32 harnais de tests réalignés sur les écritures atomiques (4 septembre 2026)
+
+Le premier balayage complet depuis MEM1 (~34 800 tests) a trouvé 33 fichiers
+rouges, tous de la même famille : mocks de `fs` périmés par le passage aux
+écritures atomiques. Réalignés en deux lots, sans affaiblir une assertion
+(mutation prouvée par fichier). Un vrai défaut trouvé au passage : l'appairage
+DM échoue désormais fermé sur une liste d'autorisation corrompue au lieu de la
+considérer vide.
+
+### MEMFIX1 / VERIFIX2 / DOCFIX3 (4 septembre 2026)
+
+Le harnais de `profile-manager.test.ts` est réaligné sur les écritures atomiques
+de MEM1 (13 échecs, zéro défaut de production). L'admission FIFO des délégués et
+chaque motif du garde-fou de données personnelles sont désormais couverts
+isolément. Cinq corrections documentaires vérifiées dans le code : `/batch`
+lance des agents complets, le bac à sable natif est opt-in, les variables
+`CODEBUDDY_NATIVE_SANDBOX`, `CODEBUDDY_BATCH_CONCURRENCY` et
+`CODEBUDDY_BATCH_MAX_ROUNDS` sont listées, `buddy improve tools|skills` est
+documenté.
+
+### HEADLESS2 — `bash` s'exécute enfin en headless `dontAsk` (4 septembre 2026)
+
+Les lectures `git -C <chemin>` étaient classées `ask` par la politique
+d'exécution, donc refusées sans terminal (« Approval requires an interactive
+terminal ») : une mission headless sur un modèle gratuit ne pouvait même pas
+lire `git status`. Elles passent désormais en bac à sable sans escalade ; les
+chemins protégés en `~` (`~/.ssh`) sont bloqués après expansion ; le bac à sable
+Docker conserve `HOME` et monte les dépendances en lecture seule. Reproduit et
+prouvé sur Ollama, refus dangereux conservés.
+
+### BRANCH1 — un test créait deux copies du dépôt à la racine (4 septembre 2026)
+
+`worktree-handlers.test.ts` mockait mal `git` et `fs` et laissait `git worktree
+add` créer `branch/` et `feature-branch/` (593 Mo chacun) dans le dépôt réel, ce
+qui faisait ensuite rougir des centaines de tests ramassés en double. Test
+hermétique.
+
+### VERIF2 — mutation des fusions du soir (4 septembre 2026)
+
+Plus de vingt mutations sur DELEG1, SERV1, SANDBOX1, IMPROVE1, TAUTFIX1 et PRIV1.
+Deux restées vertes, à couvrir : l'ordre FIFO des délégués avec plusieurs
+waiters et chaque motif du garde-fou de données personnelles pris isolément.
+
+### DELEG2 — `/swarm` et `/team` multiplexés (3 septembre 2026)
+
+`/swarm` et `/team run` passent par les délégués légers de DELEG1 : flux
+étiqueté FIFO, concurrence par défaut inchangée à 1, budgets réduits, annulation
+descendante, un équipier qui jette ne tue pas la session. Endpoint Ollama local
+normalisé. Prouvé sur Ollama avec deux workers chevauchés (45,96 s mur).
+QualityGate et Verifier restent sur l'ancien chemin.
+
+### RANG1 — les rapports de lanes quittent la racine (3 septembre 2026)
+
+121 rapports `RAPPORT-*`, `REPARATION-*`, `REVUE-*`, `AUDIT-*`, `BILAN-*`, `BANC-*`
+déplacés vers `docs/reports/<AAAA-MM>/` selon leur date d'ajout, références
+réparées (docs, tests, scripts, coordination), convention dans
+`docs/reports/README.md`. La racine ne garde que README, CHANGELOG, CLAUDE,
+AGENTS, CONTRIBUTING, SECURITY et CODE_OF_CONDUCT.
+
+### FLOWFIX1 — le pilote Flow/Veo soumet à nouveau (3 septembre 2026)
+
+Cause : le bouton « Créer » reste `aria-disabled="true"` tant que l'éditeur
+Slate n'a pas le prompt dans son propre modèle ; `Input.insertText` ne
+peignait que le DOM et `.disabled` restait `false`, donc les clics étaient des
+no-op. Correctif dans `flow-crame.py` : saisie caractère par caractère via
+`Input.dispatchKeyEvent`, clic TRUSTED, garde sur `aria-disabled`, projet
+épinglé (l'onglet dérivait vers un autre projet), faux « Échec » pendant la
+génération corrigé. Prouvé par deux clips Veo 3.1 Quality réels (8 s, 720p).
+
+### DELEG1 — sous-agents légers multiplexés (3 septembre 2026)
+
+`src/agent/delegation/thread-delegation.ts` : un délégué léger par sous-agent
+(contexte borné, canal d'entrée asynchrone, flux de sortie étiqueté et
+multiplexé vers le parent, budgets hérités mais réduits, annulation
+descendante). `/batch` lance désormais des agents complets par unité au lieu
+d'un simple `chat()` ; concurrence configurable, défaut inchangé à 1. Prouvé
+sur Ollama local : deux agents en parallèle, 25,7 s de chevauchement, un seul
+modèle chargé. Coût honnête : 31 s par agent complet contre 1,5 s en complétion
+simple. Le Verifier ne confirme plus depuis la prose du modèle sans oracle
+(fail-closed), test aligné.
+
+### PRIV1 — plus rien de privé dans le dépôt public (3 septembre 2026)
+
+200 fichiers assainis : chemins de home en `~/…`, `$HOME` ou `os.homedir()`,
+noms de dépôts privés remplacés par des désignations neutres, test de
+documentation MCP généralisé. Le garde-fou `donnees-personnelles` couvre
+désormais les chemins de home et ces noms (rouge sur 196 fichiers avant, vert
+après).
+
+### TAUTFIX1 — trois tests qui ne pouvaient plus rougir (3 septembre 2026)
+
+La porte de sécurité relationnelle du compagnon est exercée sur le raffinement
+LLM, la garde « pas de done sans fichier modifié » de `/batch` décide seule, et
+le rendu `▶` du thème actif est assertionné. Chaque contrat prouvé par mutation.
+
+### SERV1 — le serveur branché par un inconnu (3 septembre 2026)
+
+`/v1/chat/completions` renvoie des erreurs honnêtes (`max_tokens` absurde, `tools`
+non supportés, modèle inconnu) au lieu d'un 200 avec une excuse dans le texte ; le
+bandeau `Context Notice` ne fuite plus dans les deltas SSE ; le battement
+`/api/health` sonde `OLLAMA_HOST` ; l'A2A accepte un fournisseur local et ne
+recouvre plus un échec par `completed` ; l'AgentCard est publique ; le 429 porte
+`Retry-After` et `X-RateLimit-*`. Écarts assumés et documentés : un seul port,
+CORS HTTP sans 403, `usage.prompt_tokens` estimé.
+
+### IMPROVE1 — auto-amélioration en vrai (3 septembre 2026)
+
+Le pare-feu de compétences met en quarantaine un jailbreak caché dans un
+commentaire HTML ou coupé sur plusieurs lignes ; le proposeur d'outils ne voit
+jamais les cas held-out (prouvé) ; la porte G4 couvre les suites d'espaces ; les
+tests unitaires ne persistent plus d'outils dans le workspace.
+
+### VERIF1 / VERIFIX1 — vérification par mutation des fusions du jour (3 septembre 2026)
+
+17 mutations sur GK34, GK35, GK36 et FLOTTE1 : 12 rougissent, 5 restaient vertes.
+Fermées : `verify` du journal de lanes refuse un `prev_hash` faux et deux journaux
+recollés ; le vrai `buddy -p "/batch"` et `/swarm` sont routés sans passer par le
+LLM ; les trois filtres d'accueil (XML, `/100`, auto-évolution) sont testés
+isolément ; l'import MCP prouve l'absence de doublon dans le JSON écrit.
+
+### MCPFIX1 — douze tests MCP dormants (3 septembre 2026)
+
+Douze harnais périmés (`mcp-agent-server`, `client`) réalignés sur les contrats
+actuels, chacun prouvé par un cycle vert → rouge → vert ; aucun défaut de
+production derrière.
+
+### SANDBOX1 — bac à sable noyau pour `bash` (3 septembre 2026)
+
+`CODEBUDDY_NATIVE_SANDBOX` confine les commandes shell après confirmation,
+sans Docker : Bubblewrap si les user namespaces marchent, sinon Landlock,
+sinon `sandbox-exec` sur macOS. Variable absente = spawn inchangé. Variable
+posée et confinement impossible = refus honnête, jamais d'exécution en clair.
+`buddy doctor` affiche une ligne de capacité.
+
+### GK33 — modes de recherche en vrai (3 septembre 2026)
+
+`buddy research --deep/--storm` n’affiche plus le bandeau Wide Research. Les
+`[n]` dont la source ne contient pas l’idée sont retirés ; un dump
+`**Références**` LLM ne double plus la section déterministe. `buddy flow`
+parse un JSON de plan enveloppé ou parasite et logue planning → execution →
+synthesis. PaperQA-lite sur PDF locaux : extraits ancrés, refus RCS des
+hors-sujet (vérifié live, Ollama `qwen3:4b-instruct`, $0).
+
+
 **« Code Buddy 2 ».** 575 commits depuis la 1.8.0 : 151 fonctionnalités, 158 correctifs,
 219 commits de tests et de documentation. **Aucune rupture de compatibilité** — pas un seul
 `BREAKING CHANGE`, et les dix innovations de la campagne CB2 restent opt-in : sans leur variable
 d'environnement, le comportement est identique à celui de la 1.8.0. Le passage à 2.0.0 marque
 un changement de nature, pas d'interface.
+
+### Le robot n'entend plus sa propre voix — nuit du 2 au 3 septembre 2026
+
+Diagnostic sur la machine : une conversation sur deux était Lisa qui se répondait à elle-même.
+Le démon audio choisissait la source « echo-cancel » et l'annonçait au cerveau, qui coupait
+alors toute sa garde demi-duplex en faisant confiance à une annulation d'écho partielle ; le
+résidu était transcrit mot pour mot et pris pour l'humain (`reason=engaged`). En parallèle,
+le seuil de mouvement de l'œil (0,02) était sous le bruit du capteur dans le noir (0,03) :
+un « mouvement » toutes les 8 s, un cliché noir décrit par le modèle de vision toutes les 8 s.
+
+- **Garde demi-duplex** indépendante de l'AEC (`CODEBUDDY_SENSORY_AEC_TRUST=true` pour l'opt-in)
+  et **filtre « c'est ma propre phrase »** : anneau des dernières phrases envoyées au TTS,
+  fenêtre 90 s, recouvrement ≥ 60 % des mots → transcription ignorée (`dropped own echo`).
+- **Fenêtre d'engagement** : une question ambiante ne vaut plus une adresse directe ; l'accueil
+  caméra passe par le chef d'orchestre, respecte la politique Maison et ne parle jamais
+  par-dessus une phrase en cours ; réapparition < 5 min = même épisode (plus de « encore toi »).
+- **Œil** : plancher de bruit adaptatif (score = fraction de pixels changés sur image floutée,
+  seuil `max(BUDDY_VISION_MOTION, 2,5 × plancher)`), porte d'obscurité `BUDDY_VISION_MIN_LUMA`,
+  `BUDDY_VISION_PERSON_LOST_SECS` ; cerveau : clichés sombres ignorés, au plus
+  `CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN` analyses, percepts sombres jamais promus en mémoire.
+- **Conversation (opt-in)** : fin de tour plus courte, aperçus de transcription, backchannel
+  local annulable, réflexe « pardon ? » sous 0,55 de confiance (CONV1) ; barge-in acoustique
+  avec anti-fuite adaptatif et reprise après interruption (CONV2) ; tampon de gigue (VOIX4).
+- **Trous prouvés par revue Gemini puis fermés** : 8 en mémoire/compagnon (photo caméra
+  envoyée au mauvais chat, sauvegardes concurrentes fusionnées sous verrou, rappel one-shot,
+  préférences épinglées, état relationnel borné…), 8 en sécurité (outil pair hors workspace,
+  restauration via symlink, alias d'allowlist, signature de paquet, origine wildcard, fuite de
+  prompt de session, script de skill non scanné, IBAN formaté), 5 + 7 points CLI/Cowork.
+
+Suite complète : 36 154 tests verts (1 862 fichiers).
+
+### Fiabilité mesurée par exécution — 2 septembre 2026
+
+Une journée de chasse au motif « annoncer un succès sans l'avoir accompli », puis un audit
+où chaque fonctionnalité a été **lancée pour de vrai** (4 lanes, 105 + 74 + 38 + 33
+invocations) et jugée sur l'artefact produit. Résultat : 17 lots de réparation intégrés,
+chacun avec un test qui rougissait avant le correctif ; suite complète à 35 836 tests verts,
+Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
+
+- **Voix du robot** : le verrou du compteur ElevenLabs restait pris pendant toute la requête
+  HTTP, refusait toute synthèse qui se chevauchait, et le repli WAV levait au lieu de passer
+  sur Pocket — la phrase était perdue. Verrou borné aux écritures, repli réel, diagnostic
+  précis, et préchargement de la phrase suivante (1,3 s de trou → 0,44 s, mesuré au sink).
+- **Contexte adapté au modèle servi** : nom nu sans préfixe passerelle, familles de poids
+  ouverts (Kimi, MiniMax, Nemotron, GLM, Gemma 4, DeepSeek V4…), découverte `/v1/models` pour
+  toute passerelle OpenAI-compatible ; `CODEBUDDY_MAX_CONTEXT` l'emporte partout.
+- **Ce qui n'avait jamais été actif** : la sélection RAG des outils n'ajoutait plus aucun outil
+  (`alwaysInclude` saturait le plafond) ; dix outils exécutables n'étaient jamais proposés au
+  modèle (`remind`, `markdown_convert`, `submit_plan`…) ; cinq commandes slash n'avaient pas
+  de handler ; dans Cowork, les connexions OAuth Gemini/Codex étaient bloquées par le preload,
+  les canaux App Studio V2 n'étaient pas exposés, `SessionBridge` poussait sur le mauvais
+  canal. Invariants ajoutés pour chacun.
+- **Succès annoncés sans accomplissement**, fermés avec leurs jumeaux : montage vidéo
+  (rendu « réussi » sans fichier, porte qualité qui passait sur un échec d'analyse, narration
+  qui validait un WAV ancien), compagnon (rappels écrasés par un magasin illisible, report
+  annoncé avant d'être durable, initiative « parlée » sans son), canaux (appairage confirmé
+  avant persistance, envoi « réussi » sans envoi, transcription vocale perdue), skills (import
+  dans un dossier invisible, échec git rendu comme « 0 skill », `curl | sh` non mis en
+  quarantaine, commande qui ne rendait pas la main, skills insupprimables), parole (échec STT
+  traité comme du silence, flux hybride amputé sans clôture, mémoire dupliquée).
+- **Auto-amélioration** : `CODEBUDDY_SELF_IMPROVE=true` appliquait au lieu de proposer ; les
+  propositions `propose-only` disparaissaient ; `lessons` réinventait ses identifiants ;
+  `evolve` enregistrait le baseline comme variante ; `capsule`/`forge` plantaient.
+- **Chemin quotidien** : un appel d'outil rendu en prose par un petit modèle n'est plus un
+  succès headless (exit 3) ; `remind` approuvé sous `acceptEdits` ; `buddy fleet
+  status|describe` ; Ollama vu comme actif par `provider list --free` ; `config validate`
+  reconnaît toute authentification ; complétions alignées sur `buddy` ; `speak --out`.
+- **Connaissance** : la mémoire collective est injectée par pertinence sur la question, pas
+  par récence ; `research` simple conserve ses URL ; un conseil à un siège s'explique.
+- **Fin de journée** : « Lisa, qu'est-ce que tu vois ? » sur Telegram et à la voix
+  (`src/companion/camera-share.ts` — photo uniquement vers le chat d'alerte configuré,
+  description par le modèle vision local, les octets image ne quittent pas la machine) ; les
+  widgets générés atteignent enfin Telegram en image ; mémoire persistante (magasin illisible
+  refusé au lieu d'être écrasé, restauration vérifiée avant de vider l'archive, clé réellement
+  écrite après réconciliation) ; contexte (la requête courante n'est plus tronquée en silence
+  mais refusée explicitement, compaction hors limite refusée, statistiques alignées sur ce qui
+  est réellement envoyé, intégrité des segments à la restauration) ; un alias vers un outil
+  absent est signalé et la table d'alias est sous invariant.
+- **Jumeaux fermés après vérification croisée** : la restauration de sauvegarde écrit enfin les
+  octets et relit leur hachage (elle n'écrivait jamais rien) ; un appel d'outil rendu en prose est
+  détecté en XML, JSON et ligne indentée ; `replace_memory` approuvé sous `acceptEdits` ; routes HTTP
+  `/api/fleet/*` testées ; LM Studio et vLLM sondés comme Ollama ; fabrique et interpréteur alignés sur
+  toute authentification fournisseur ; `speak --out` crée son dossier et honore `--format` ; scripts
+  Python et Ruby scannés à l'import de skills ; `dev run`/`dev pr` libèrent le plan ; `skills exchange`
+  rejette proprement ; tout payload structuré est rendu en widget ; `shadow run -d` ; `/readyz` expose
+  `grokApi`.
+- **Cowork essayé comme un inconnu sous Linux** : build Vite réparé (`homedir` non exporté), drapeaux
+  Electron passés par `buddy gui`, `better-sqlite3` reconstruit via electron-rebuild, plus de popup
+  Buffalo_S au premier message, cartes d'onboarding cliquables, documentation Linux alignée.
+- **Cowork, suite de l'audit « inconnu »** : un fournisseur local configuré (Ollama, LM Studio, vLLM) devient réellement le
+  fournisseur du moteur sans clé factice à inventer ; plus aucune adresse réseau privée câblée dans le code (garde-fou qui la
+  refuse) ; « Choose a folder » ouvre un dossier et refuse un fichier ; `project.list` rend un tableau ; un seul compositeur, tour
+  et wizard indépendants, la croix ferme le panneau et pas l'application ; le test e2e de chat parle à un vrai serveur local au
+  lieu d'injecter la réponse ; icône Linux et script de lancement corrigés.
+- **Le registre de skills ne tue plus le serveur** : `fs.watch` récursif remplacé par un watcher de racine et des watchers de
+  premier niveau avec gestion d'erreur ; un dossier qui apparaît puis disparaît dans `~/.codebuddy/skills` ne fait plus tomber le
+  processus. Les tests n'écrivent plus dans le vrai dossier utilisateur (garde-fou `tests/security/test-home-isolation`).
+- **Robot sous charge** : la voix hachait quand des travaux de fond saturaient les cœurs ; les services du robot reçoivent le
+  poids CPU maximal (drop-ins systemd, hors dépôt) — mesuré : 0 trou ≥ 250 ms sous saturation des 24 cœurs.
+- **Seconde vague de jumeaux (vérification VD → R33 → R34)** : la restauration de sauvegarde refuse un chemin qui sort du dossier
+  cible (traversée `..`) ; appels d'outil en prose détectés aussi en YAML ; `remember`/`memory_propose` approuvés sous `acceptEdits` ;
+  scripts Perl, Lua et Go scannés à l'import ; `speak --format ogg` réellement en OGG ; Lemonade et OmniRoute sondés comme les autres
+  runtimes locaux ; `dev fix-ci`/`explain` libèrent le plan ; `/readyz` sonde le fournisseur configuré quel qu'il soit ; toute clé
+  fournisseur acceptée par l'IDE, MCP, json-rpc et skills ; clés de mémoire automatique conservées entières ; segments de contexte
+  vérifiés par hachage à la restauration ; `context_expand` caché du RAG tant que le zoom est désactivé ; un profil utilisateur corrompu
+  est refusé ; « aucun fait » distingué de « extraction impossible » ; mémoire collective injectée aux tours suivants ; cartes de
+  permissions du compagnon cliquables ; fixtures e2e ONNX vides remplacées par un skip explicite.
+- **CLI installée depuis `npm pack` dans un conteneur propre (E14)** : `sharp` chargé paresseusement (le premier `buddy -p` mourait),
+  `backup restore --confirm` déclaré, message d'erreur sans chemin personnel, `skills list` distingue un hub vide des skills embarqués.
+- **Boucles agentiques exécutées sur un dépôt jouet (E15)** : `buddy loop` et `buddy goal` réparent réellement (tests rouges → verts,
+  commits) ; `/batch` attend le résultat au lieu d'annoncer un lancement ; `flow` échoue sur une étape qui n'a émis que du balisage
+  d'outil non exécuté ; `think` et les agents multi-modèles respectent `GROK_MODEL` ; délai du juge de `goal` configurable.
+- **Troisième vague de jumeaux (VF/VG → R35/R37)** : appels d'outil en prose détectés en TOML ; scripts Rust, Elixir et R scannés ;
+  `speak` honore le format de réponse d'AudioReader ; `/readyz` nomme sa sonde `providerApi` et échoue fermé sans clé ; toute clé
+  fournisseur acceptée par MCP, OCR et suggestions de prompt ; `recoverContext` vérifie le hachage des archives ; assemblage non
+  propriétaire borné par la limite de tokens ; table des modèles appliquée dans le gestionnaire v3 ; `context_expand` absent de
+  `tools.ts` et de `TOOLS.md` sans zoom ; `flow` traite YAML, JSON et `name(...)` comme balisage non exécuté ; `GROK_MODEL` respecté
+  par les sous-agents, l'architecte, la réparation et la réflexion.
+- **Huit trous logiques de la gestion de contexte comblés** (revue Gemini 3.8 Flash puis correctifs) : plus de `tool_result` orphelin
+  après compaction v3, `tool_call` sans résultat réparé dans le compresseur enrichi, budget recalculé au changement de modèle,
+  `SegmentIntegrityError` sur discordance d'identifiant de segment, prompts système préservés et limite vérifiée pour les moteurs de
+  contexte tiers, contenus multimodaux comptés en v3, messages système multiples préservés sans injection indue, plafond du moteur de
+  compaction relevé pour les modèles à large contexte.
 
 ### Ce qui change pour qui installe
 
@@ -121,7 +980,7 @@ once it reaches `1.0.0`.
 - **cli:** add `buddy cost` (aggregated token & cost dashboard), `buddy changelog` (release notes from Conventional Commits), and `buddy import` (rules & MCP server migration from Cursor/Cline/Copilot/Claude Code) (#104).
 - **cli:** add `buddy explain [path]` — one-shot repository explanation report (Markdown or self-contained HTML, `--depth quick|deep`), extracted from PR #70 (#107)
 - **ui:** read-only LSP navigation tools (`lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`) and ephemeral `@file` mentions with bounded project-root resolution (#103).
-- **cowork-chat:** chat-ui parity with gitnexus-rs (`HealthBadge`, backend status probe, `useTextareaAutogrow`) rebased from PR #40 (#105).
+- **cowork-chat:** chat-ui parity with code-explorer (`HealthBadge`, backend status probe, `useTextareaAutogrow`) rebased from PR #40 (#105).
 - **providers:** OmniRoute gateway, 24 free-tier providers catalog, live probes, and real numbers (#82).
 
 ### Fixed
@@ -161,7 +1020,7 @@ once it reaches `1.0.0`.
   texte dans l'application active, sans transmettre le transcript à un shell ; le presse-papiers seul
   sert de repli sûr quand l'injection système n'est pas disponible.
 
-- **LongCat Avatar 1.5 validé sur Darkstar.** Le profil RTX 3090 préchauffe désormais `torch.compile`
+- **LongCat Avatar 1.5 validé sur le poste GPU.** Le profil RTX 3090 préchauffe désormais `torch.compile`
   avec la grille latente correspondant réellement à l'image source, ce qui évite la pagination WSL2
   observée avec l'ancienne grille fixe. Le muxage final conserve la vidéo H.264 existante lorsque le
   FFmpeg Conda sans GPL ne fournit pas `libx264`, et le service Windows attend le retour de l'adresse
@@ -341,7 +1200,7 @@ once it reaches `1.0.0`.
 
 Post-1.0 work tracked in the V1.1 roadmap: OpenAPI spec (WS8-T2),
 GitNexus integration (WS2), central Policy Engine + PII lint (WS5). See
-`claude-et-patrice/propositions/` and the V1.x roadmap section of
+the private handover repository's proposals and the V1.x roadmap section of
 [`docs/fleet-guide.md`](docs/fleet-guide.md).
 
 ### Added — Multi-LLM registry: list, auto-failover & ensemble (2026-06-18)
@@ -749,7 +1608,7 @@ Engine) is reclassified to the V1.1 roadmap and no longer blocks the tag.
     `dispatchPeerRequest`, while `tests/fleet/fleet-loopback-smoke.test.ts`
     starts a real Gateway WebSocket server and exercises `/fleet tool`
     over the loopback transport in both buffered and streamed modes.
-    Cross-host E2E with a real DARKSTAR fleet gateway remains the
+    Cross-host E2E with a real remote fleet gateway remains the
     intended Phase 2-3 follow-up.
 
 ### Added — Fleet V1.2 (Phase d.21)
@@ -942,7 +1801,7 @@ end-to-end experience trustworthy after the rc.7 ship. Highlights:
 - **`@phuetz/ai-providers` inlined** (commit `5757b197`) into
   `src/providers/_shared/`. The workspace symlink was a footgun on
   any host that didn't have the sibling repo cloned (e.g. fresh
-  Ministar Linux): `loadCoreModule('tools/registry/index.js')` failed
+  Hub Linux): `loadCoreModule('tools/registry/index.js')` failed
   silently because `utils/retry.js` couldn't resolve the import.
 - **Core DB initialization before startServer** (commit `cc2d2260`).
   `ServerBridge.start()` now calls `getDatabaseManager().initialize()`
@@ -1012,7 +1871,7 @@ end-to-end experience trustworthy after the rc.7 ship. Highlights:
 ## [1.0.0-rc.7] — 2026-05-09
 
 **Cowork visual workflows now executable** — closes the gap identified
-by the Cowork audit (`journal/ministar-ubuntu-grok-cli.md`). The
+by the Cowork audit (`journal/hub-ubuntu-grok-cli.md`). The
 WorkflowEditor saved DAGs but the runtime was a noop. Now wraps the
 core `Orchestrator` (`src/orchestration/orchestrator.ts`) with a
 4-agent pool that fulfils tool/approval steps. Validated end-to-end
@@ -1161,7 +2020,7 @@ shipped over the May 7-8 session, organised in three stacked branches.
 - **Phase (d).18 — Autonomous Fleet Protocol v0.1 (native TS port)**.
   `src/agent/autonomous/{fleet-task-types,fleet-tick-handler}.ts`
   ports the operational python wrapper
-  `claude-et-patrice/tools/heartbeat_tick.py` (proven over 6 cycles
+  the private handover repository's `heartbeat_tick.py` (proven over 6 cycles
   on 2026-05-02). Pull → FLEET_PAUSE check → pickTask (priority
   cascade, critical SKIPPED for autonomous) → atomic claim → in-process
   agent run → scope guard → worklog → mark completed → push.
@@ -1348,7 +2207,7 @@ existing infrastructure rather than inventing new modules.
 
 ### Audit shipped
 - **Claude Code subagent + plan mode audit**
-  (`claude-et-patrice/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`,
+  (audit sous-agents du 2026-05-04, dépôt privé de passation,
   268 lines) — 3rd iteration of the audit-doc pattern, this time with
   direct access to the Claude Code source (`D:\CascadeProjects\claude-code-source-code-main`).
   Audited 4 zones: plan mode workflow phasé (⚠️ partial), structured user
@@ -1361,7 +2220,7 @@ existing infrastructure rather than inventing new modules.
 ### Notes for V1 final (1.0.0)
 Same items as rc.3, narrowed by what shipped here:
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Migration of `agent-executor.ts:636` and `:844` to `getCuratedHistory()`
@@ -1429,7 +2288,7 @@ be productive in 5 minutes.
 ### Notes for V1 final (1.0.0)
 Same items as rc.2, narrowed by what shipped here:
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Migration of `agent-executor.ts:636` and `:844` to `getCuratedHistory()`
@@ -1521,7 +2380,7 @@ management ("très important"), and cross-CLI fleet alignment.
 
 ### Audit follow-ups closed
 Post-Gemini-CLI-source audit
-(`claude-et-patrice/propositions/AUDIT-GEMINI-CLI-AGENTIC-LOOP-2026-05-04.md`):
+(audit boucle agentique du 2026-05-04, dépôt privé de passation) :
 - Reco #1 (mid-stream retry exponential backoff) — helper `cd653ab` +
   wirage `2a06864`
 - Reco #2 (streaming events visibility in sequential mode) — `7ec4bc0`
@@ -1530,7 +2389,7 @@ Post-Gemini-CLI-source audit
 
 ### Notes for V1 final (1.0.0)
 - Live smoke test of `peer.chat` with ≥2 providers on ≥2 hosts still
-  pending (operator validation, hub-pull blocker on Ministar Linux)
+  pending (operator validation, hub-pull blocker on the Linux host)
 - `withStreamRetry` activation by default deferred until ≥1 week of
   opt-in observation without regressions
 - Vue agrégée des 7 sources mémoire deferred (Persistent + Enhanced +
@@ -1681,7 +2540,7 @@ all touched files.
 
 The comparative audit Claude Code source vs Code Buddy
 SmartCompactionEngine is archived in
-[`claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md`](https://github.com/phuetz/claude-et-patrice).
+le dépôt privé de passation (audit compaction du 2026-05-04).
 3 actionable improvements identified — #3 and #1 shipped, #2 (preview
 mode before apply, M scope) deferred to `1.0.0` final.
 
@@ -1691,7 +2550,7 @@ mode before apply, M scope) deferred to `1.0.0` final.
 
 The day the inter-Claude fleet became real. 16 narrow phases shipped
 in a single working day, plus 5 critical-priority test files. The
-hardware setup (DARKSTAR PC 3090, MINISTAR G7 PT, Ministar Linux Ryzen
+hardware setup (GPU_NODE PC 3090, HUB G7 PT, Linux hub Ryzen
 AI 9 HX 470) and Tailscale mesh (`100.x.x.x` private network) became
 the first operational multi-AI hub on the lab.
 
@@ -1787,7 +2646,7 @@ followed.
 ### Added — A2A protocol POC (Niveau 1 → 3)
 
 - POC Niveau 1: Spoke registration via `POST /api/a2a/agents/register`
-  - heartbeat. Hub at Ministar Linux `100.98.18.76:3000`.
+  - heartbeat. Hub at the always-on Linux host `203.0.113.10:3000`.
 - POC Niveau 2 (`6bf7349`): Cross-host task router forwarding to remote
   spokes via HTTP.
 - POC Niveau 3 (`677a146`): Skill-based routing dispatch on
@@ -1841,7 +2700,7 @@ starts the structured record at 0.5.0.
 
 ## Notes for fleet Claudes
 
-When pulling this branch on DARKSTAR / MINISTAR / Ministar Linux:
+When pulling this branch on GPU_NODE / HUB / the Linux hub:
 
 1. `git pull --rebase` to get the latest fleet phases + post-audit fixes
 2. Restart your `codebuddy-a2a.service` (or equivalent) to pick up

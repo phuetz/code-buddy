@@ -5,7 +5,7 @@
  *
  * Prefers SELF-CONTAINED formats (.blend, then .glb): a bare Poly Haven .gltf is
  * only the JSON descriptor (its .bin + textures are separate) and would import
- * empty. Self-contained (Node ≥18 global fetch, no deps) so it runs on DARKSTAR
+ * empty. Self-contained (Node ≥18 global fetch, no deps) so it runs on GPU_NODE
  * (Windows) too:  node scripts/blenderproc/fetch_assets.mjs [outDir] [perClass]
  *
  * The class names are COCO classes the perceiver (YOLO) knows, so ground truth

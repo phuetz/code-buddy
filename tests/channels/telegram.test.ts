@@ -4,6 +4,9 @@
 
 import { TelegramChannel } from '../../src/channels/telegram/index.js';
 import type { TelegramConfig, TelegramUpdate } from '../../src/channels/telegram/index.js';
+import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
+
+const chromiumAvailable = chromiumExecutableExists();
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -195,6 +198,46 @@ describe('TelegramChannel', () => {
 
       expect(result.success).toBe(true);
       expect(result.messageId).toBe('1');
+    });
+
+    describe.skipIf(!chromiumAvailable)('Chromium widget rendering', () => {
+      it('should render a curated widget payload and upload a non-empty PNG photo', async () => {
+        await channel.disconnect();
+        mockFetch.mockResolvedValueOnce({
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              result: { message_id: 4 },
+            }),
+        });
+
+        const result = await channel.send({
+          channelId: '12345',
+          content: 'Apple (AAPL) : 324,85 USD',
+          channelData: {
+            telegram: {
+              data: {
+                type: 'stock',
+                symbol: 'AAPL',
+                name: 'Apple Inc.',
+                price: 324.85,
+                currency: 'USD',
+              },
+            },
+          },
+        });
+
+        expect(result).toMatchObject({ success: true, messageId: '4' });
+        const lastCall = mockFetch.mock.calls.at(-1);
+        expect(String(lastCall?.[0])).toContain('/sendPhoto');
+        const form = lastCall?.[1]?.body as FormData;
+        expect(form).toBeInstanceOf(FormData);
+        expect(form.get('chat_id')).toBe('12345');
+        expect(form.get('caption')).toContain('Apple (AAPL)');
+        const photo = form.get('photo');
+        expect(photo).toBeInstanceOf(Blob);
+        expect((photo as Blob).size).toBeGreaterThan(0);
+      }, 15_000);
     });
 
     it('should send message with buttons', async () => {
@@ -469,6 +512,11 @@ describe('TelegramChannel', () => {
     });
 
     it('groups every photo in a Telegram album into one multimodal turn', async () => {
+      // The production window is 1.5 s (DEFAULT_TELEGRAM_MEDIA_GROUP_MS) so a
+      // slow uplink still yields ONE reaction; the test shortens it explicitly
+      // instead of waiting on it.
+      const previousWindow = process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS;
+      process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS = '150';
       const messageSpy = jest.fn();
       channel.on('message', messageSpy);
       const base = {
@@ -495,13 +543,15 @@ describe('TelegramChannel', () => {
           photo: [{ file_id: 'back', file_unique_id: '5', width: 800, height: 600 }],
         },
       });
-      await new Promise((resolve) => setTimeout(resolve, 520));
+      await new Promise((resolve) => setTimeout(resolve, 320));
 
       expect(messageSpy).toHaveBeenCalledOnce();
       const message = messageSpy.mock.calls[0][0];
       expect(message.content).toBe('Analyse ce produit thaïlandais');
       expect(message.attachments).toHaveLength(2);
       expect(message.raw).toHaveLength(2);
+      if (previousWindow === undefined) delete process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS;
+      else process.env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS = previousWindow;
     });
 
     it('should detect location messages', async () => {
@@ -525,6 +575,91 @@ describe('TelegramChannel', () => {
       expect(message.contentType).toBe('location');
       expect(message.attachments).toHaveLength(1);
       expect(message.attachments[0].type).toBe('location');
+    });
+
+    it('D7: transcription vocale échouée transmet un contenu explicite et signale l\'utilisateur', async () => {
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+      mockFetch.mockImplementation(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes('sendMessage')) {
+          return {
+            ok: true,
+            json: async () => ({ ok: true, result: { message_id: 77 } }),
+          };
+        }
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, description: 'download failed', error_code: 500 }),
+        };
+      });
+
+      await channel.handleWebhook({
+        update_id: 9,
+        message: {
+          message_id: 9,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 42, type: 'private' },
+          from: { id: 1, is_bot: false, first_name: 'Test' },
+          voice: { file_id: 'voice-1', file_unique_id: 'v1', duration: 3 },
+        },
+      });
+
+      expect(messageSpy).not.toHaveBeenCalled();
+      const sent = mockFetch.mock.calls
+        .filter((call) => String(call[0]).includes('sendMessage'))
+        .map((call) => String(call[1]?.body ?? ''));
+      expect(sent.some((body) => /transcri/i.test(body))).toBe(true);
+      expect(sent.some((body) => body.includes('[transcription vocale échouée]'))).toBe(false);
+    });
+
+    it("does not notify a transcription failure before pairing (jumeau D7)", async () => {
+      const { getDMPairing, resetDMPairing } = await import('../../src/channels/dm-pairing.js');
+      resetDMPairing();
+      getDMPairing({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: undefined,
+      });
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+      mockFetch.mockImplementation(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes('sendMessage')) {
+          return {
+            ok: true,
+            json: async () => ({ ok: true, result: { message_id: 78 } }),
+          };
+        }
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, description: 'download failed', error_code: 500 }),
+        };
+      });
+
+      try {
+        await channel.handleWebhook({
+          update_id: 10,
+          message: {
+            message_id: 10,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 42, type: 'private' },
+            from: { id: 99, is_bot: false, first_name: 'Stranger' },
+            voice: { file_id: 'voice-2', file_unique_id: 'v2', duration: 3 },
+          },
+        });
+
+        expect(messageSpy).not.toHaveBeenCalled();
+        const sent = mockFetch.mock.calls
+          .filter((call) => String(call[0]).includes('sendMessage'))
+          .map((call) => String(call[1]?.body ?? call[0]));
+        expect(sent.some((body) => /transcri/i.test(body))).toBe(false);
+        expect(sent.some((body) => /pair/i.test(body))).toBe(true);
+      } finally {
+        resetDMPairing();
+      }
     });
   });
 });

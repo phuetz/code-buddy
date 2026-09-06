@@ -29,7 +29,7 @@
  * }
  *
  * // Owner approves from CLI
- * pairing.approve('telegram', 'ABC123');
+ * await pairing.approve('telegram', 'ABC123');
  * ```
  */
 
@@ -38,6 +38,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import * as crypto from 'crypto';
+import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { ChannelType, InboundMessage } from './index.js';
 
 // ============================================================================
@@ -58,6 +60,10 @@ export interface PairingStatus {
   senderId: string;
   /** Channel type */
   channelType: ChannelType;
+  /** Sender is temporarily blocked after too many attempts */
+  blocked?: boolean;
+  /** Timestamp (ms) until which the sender remains blocked */
+  blockedUntil?: number;
 }
 
 /**
@@ -145,24 +151,54 @@ export const DEFAULT_DM_PAIRING_CONFIG: DMPairingConfig = {
   pairingMessage: 'This assistant requires pairing. Your code is: {code}\nAsk the owner to approve with: pairing approve {channel} {code}',
 };
 
+function isEnoent(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'ENOENT';
+}
+
 // ============================================================================
 // DM Pairing Manager
 // ============================================================================
+
+function isApprovedSenderEntry(value: unknown): value is ApprovedSender {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const sender = value as Record<string, unknown>;
+  if (typeof sender.senderId !== 'string' || sender.senderId.length === 0) return false;
+  if (typeof sender.channelType !== 'string' || sender.channelType.length === 0) return false;
+  const approvedAt = new Date(sender.approvedAt as string | number | Date);
+  return !Number.isNaN(approvedAt.getTime());
+}
 
 export class DMPairingManager extends EventEmitter {
   private config: DMPairingConfig;
   private allowlist: Map<string, ApprovedSender> = new Map();
   private pending: Map<string, PairingRequest> = new Map();
   private blocked: Map<string, number> = new Map(); // senderId -> unblock timestamp
+  private allowlistReady = false;
+  private allowlistLoad: Promise<void> | null = null;
 
   constructor(config: Partial<DMPairingConfig> = {}) {
     super();
     this.config = {
       ...DEFAULT_DM_PAIRING_CONFIG,
       ...config,
-      allowlistPath: config.allowlistPath ??
-        path.join(homedir(), '.codebuddy', 'credentials'),
+      allowlistPath: Object.prototype.hasOwnProperty.call(config, 'allowlistPath')
+        ? config.allowlistPath
+        : path.join(homedir(), '.codebuddy', 'credentials'),
     };
+  }
+
+  private async ensureAllowlistLoaded(): Promise<void> {
+    if (this.allowlistReady) return;
+    if (!this.allowlistLoad) {
+      this.allowlistLoad = this.loadAllowlist()
+        .then(() => {
+          this.allowlistReady = true;
+        })
+        .finally(() => {
+          this.allowlistLoad = null;
+        });
+    }
+    await this.allowlistLoad;
   }
 
   // ==========================================================================
@@ -174,6 +210,7 @@ export class DMPairingManager extends EventEmitter {
    * If not, generates a pairing code.
    */
   async checkSender(message: InboundMessage): Promise<PairingStatus> {
+    await this.ensureAllowlistLoaded();
     const channelType = message.channel.type;
     const senderId = message.sender.id;
 
@@ -188,8 +225,15 @@ export class DMPairingManager extends EventEmitter {
     }
 
     // Check if blocked (per-channel)
-    if (this.isBlocked(`${channelType}:${senderId}`)) {
-      return { approved: false, senderId, channelType };
+    const blockKey = `${channelType}:${senderId}`;
+    if (this.isBlocked(blockKey)) {
+      return {
+        approved: false,
+        blocked: true,
+        blockedUntil: this.blocked.get(blockKey),
+        senderId,
+        channelType,
+      };
     }
 
     // Check allowlist
@@ -223,9 +267,17 @@ export class DMPairingManager extends EventEmitter {
 
     // Block if too many attempts
     if (request.attempts > this.config.maxAttempts) {
-      this.blocked.set(pairingKey, Date.now() + this.config.blockDurationMs);
+      const blockedUntil = Date.now() + this.config.blockDurationMs;
+      this.blocked.set(pairingKey, blockedUntil);
       this.pending.delete(pairingKey);
       this.emit('pairing:blocked', senderId, channelType);
+      return {
+        approved: false,
+        blocked: true,
+        blockedUntil,
+        senderId,
+        channelType,
+      };
     }
 
     return {
@@ -241,7 +293,11 @@ export class DMPairingManager extends EventEmitter {
    * Get the pairing message for an unapproved sender
    */
   getPairingMessage(status: PairingStatus): string {
-    if (status.approved || !status.code) return '';
+    if (status.approved) return '';
+    if (status.blocked) {
+      return 'This assistant has temporarily blocked this sender after too many pairing attempts. Try again later.';
+    }
+    if (!status.code) return '';
 
     return this.config.pairingMessage
       .replace('{code}', status.code)
@@ -255,7 +311,7 @@ export class DMPairingManager extends EventEmitter {
   /**
    * Approve a sender using a pairing code
    */
-  approve(channelType: ChannelType, code: string, approvedBy = 'owner'): ApprovedSender | null {
+  async approve(channelType: ChannelType, code: string, approvedBy = 'owner'): Promise<ApprovedSender | null> {
     // Find the pending request with this code
     for (const [key, request] of this.pending) {
       if (request.channelType === channelType && request.code === code) {
@@ -276,16 +332,31 @@ export class DMPairingManager extends EventEmitter {
         };
 
         const allowlistKey = this.makeAllowlistKey(channelType, request.senderId);
+        const previous = this.allowlist.get(allowlistKey);
         this.allowlist.set(allowlistKey, sender);
         this.pending.delete(key);
 
         // Remove from blocked if applicable (use channel-prefixed key to match set())
         const blockKey = `${channelType}:${request.senderId}`;
+        const previousBlock = this.blocked.get(blockKey);
         this.blocked.delete(blockKey);
 
-        this.emit('pairing:approved', sender);
-        this.persistAllowlist().catch(() => {});
+        try {
+          await this.persistAllowlist();
+        } catch (err) {
+          if (previous) this.allowlist.set(allowlistKey, previous);
+          else this.allowlist.delete(allowlistKey);
+          this.pending.set(key, request);
+          if (previousBlock !== undefined) this.blocked.set(blockKey, previousBlock);
+          logger.warn('Failed to persist DM pairing allowlist after approve', {
+            channelType,
+            senderId: request.senderId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        }
 
+        this.emit('pairing:approved', sender);
         return sender;
       }
     }
@@ -296,12 +367,12 @@ export class DMPairingManager extends EventEmitter {
   /**
    * Directly approve a sender (without pairing code)
    */
-  approveDirectly(
+  async approveDirectly(
     channelType: ChannelType,
     senderId: string,
     approvedBy = 'owner',
     displayName?: string
-  ): ApprovedSender {
+  ): Promise<ApprovedSender> {
     const sender: ApprovedSender = {
       channelType,
       senderId,
@@ -311,27 +382,51 @@ export class DMPairingManager extends EventEmitter {
     };
 
     const key = this.makeAllowlistKey(channelType, senderId);
+    const previous = this.allowlist.get(key);
     this.allowlist.set(key, sender);
     // Use channel-prefixed key to match how blocks are set
     const blockKey = `${channelType}:${senderId}`;
+    const previousBlock = this.blocked.get(blockKey);
     this.blocked.delete(blockKey);
 
-    this.emit('pairing:approved', sender);
-    this.persistAllowlist().catch(() => {});
+    try {
+      await this.persistAllowlist();
+    } catch (err) {
+      if (previous) this.allowlist.set(key, previous);
+      else this.allowlist.delete(key);
+      if (previousBlock !== undefined) this.blocked.set(blockKey, previousBlock);
+      logger.warn('Failed to persist DM pairing allowlist after approveDirectly', {
+        channelType,
+        senderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
 
+    this.emit('pairing:approved', sender);
     return sender;
   }
 
   /**
    * Revoke approval for a sender
    */
-  revoke(channelType: ChannelType, senderId: string): boolean {
+  async revoke(channelType: ChannelType, senderId: string): Promise<boolean> {
     const key = this.makeAllowlistKey(channelType, senderId);
     const sender = this.allowlist.get(key);
     if (sender) {
       this.allowlist.delete(key);
+      try {
+        await this.persistAllowlist();
+      } catch (err) {
+        this.allowlist.set(key, sender);
+        logger.warn('Failed to persist DM pairing allowlist after revoke', {
+          channelType,
+          senderId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
       this.emit('pairing:revoked', sender);
-      this.persistAllowlist().catch(() => {});
       return true;
     }
     return false;
@@ -444,9 +539,18 @@ export class DMPairingManager extends EventEmitter {
       group.push(sender);
     }
 
-    for (const [channelType, senders] of Object.entries(byChannel)) {
+    const channelTypes = new Set<string>(Object.keys(byChannel));
+    const existing = await fs.readdir(this.config.allowlistPath);
+    for (const file of existing) {
+      if (file.endsWith('-allowFrom.json')) {
+        channelTypes.add(file.slice(0, -'-allowFrom.json'.length));
+      }
+    }
+
+    for (const channelType of channelTypes) {
       const filePath = path.join(this.config.allowlistPath, `${channelType}-allowFrom.json`);
-      await fs.writeFile(filePath, JSON.stringify(senders, null, 2));
+      const senders = byChannel[channelType] ?? [];
+      await writeJsonAtomic(filePath, senders);
     }
   }
 
@@ -456,25 +560,59 @@ export class DMPairingManager extends EventEmitter {
   async loadAllowlist(): Promise<void> {
     if (!this.config.allowlistPath) return;
 
+    let files: string[];
     try {
-      const files = await fs.readdir(this.config.allowlistPath);
-
-      for (const file of files) {
-        if (file.endsWith('-allowFrom.json')) {
-          const filePath = path.join(this.config.allowlistPath, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const senders = JSON.parse(content) as ApprovedSender[];
-
-          for (const sender of senders) {
-            sender.approvedAt = new Date(sender.approvedAt);
-            const key = this.makeAllowlistKey(sender.channelType, sender.senderId);
-            this.allowlist.set(key, sender);
-          }
-        }
-      }
-    } catch {
-      // Directory doesn't exist yet
+      files = await fs.readdir(this.config.allowlistPath);
+    } catch (err) {
+      if (isEnoent(err)) return;
+      logger.warn('Failed to read DM pairing allowlist directory', {
+        path: this.config.allowlistPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
     }
+
+    const loaded = new Map<string, ApprovedSender>();
+    for (const file of files) {
+      if (!file.endsWith('-allowFrom.json')) continue;
+      const filePath = path.join(this.config.allowlistPath, file);
+      const senders = await readJsonAtomic<ApprovedSender[] | null>(filePath, null, {
+        isValid: (value): value is ApprovedSender[] => Array.isArray(value),
+      });
+      if (senders === null) {
+        const error = new Error(`Allowlist file is unreadable: ${filePath}`);
+        logger.warn('Corrupt DM pairing allowlist file', {
+          path: filePath,
+          error: error.message,
+        });
+        throw error;
+      }
+      for (const sender of senders) {
+        if (!isApprovedSenderEntry(sender)) {
+          const error = new Error(`Allowlist entry is invalid: ${filePath}`);
+          logger.warn('Corrupt DM pairing allowlist file', {
+            path: filePath,
+            error: error.message,
+          });
+          throw error;
+        }
+        const approved: ApprovedSender = {
+          channelType: sender.channelType,
+          senderId: sender.senderId,
+          approvedAt: new Date(sender.approvedAt),
+          approvedBy: typeof sender.approvedBy === 'string' ? sender.approvedBy : 'owner',
+          ...(typeof sender.displayName === 'string' ? { displayName: sender.displayName } : {}),
+          ...(typeof sender.notes === 'string' ? { notes: sender.notes } : {}),
+        };
+        loaded.set(this.makeAllowlistKey(approved.channelType, approved.senderId), approved);
+      }
+    }
+
+    this.allowlist.clear();
+    for (const [key, sender] of loaded) {
+      this.allowlist.set(key, sender);
+    }
+    this.allowlistReady = true;
   }
 
   // ==========================================================================
@@ -511,6 +649,8 @@ export class DMPairingManager extends EventEmitter {
     this.allowlist.clear();
     this.pending.clear();
     this.blocked.clear();
+    this.allowlistReady = false;
+    this.allowlistLoad = null;
     this.removeAllListeners();
   }
 }

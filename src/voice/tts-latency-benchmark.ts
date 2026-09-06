@@ -60,7 +60,7 @@ function summarize(
 
 /**
  * Run bounded, sequential attempts. Sequential execution avoids making a CPU
- * Pocket render contend with Darkstar/network traffic and corrupting the comparison.
+ * Pocket render contend with GPU node/network traffic and corrupting the comparison.
  */
 export async function runTtsLatencyBenchmark(
   env: NodeJS.ProcessEnv = process.env,

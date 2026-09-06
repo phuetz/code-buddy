@@ -71,6 +71,9 @@ const MCP_SOURCE_PATHS = [
   '.vscode/mcp.json',
   'claude_desktop_config.json',
   '.mcp.json',
+  '.claude/mcp.json',
+  '.claude/settings.json',
+  'settings.json',
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -553,7 +556,9 @@ export async function importProjectConfiguration(
     existingMCPText,
     toProjectPath(roots.projectRoot, mcpPath)
   );
-  const claimedNames = new Set(targetMCP.existingNames);
+  // Keep destination names separate from names claimed during this import pass:
+  // the first guard protects existing configuration, the second detects source duplicates.
+  const claimedNames = new Set<string>();
   const mcpToImport: DiscoveredMCPServer[] = [];
   const mcpServers: MCPImportItem[] = discoveredMCP.map((server) => {
     if (targetMCP.existingNames.has(server.name)) {

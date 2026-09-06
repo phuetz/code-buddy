@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -134,6 +134,26 @@ describe('voice loop — readiness (fail-loud prereqs)', () => {
 });
 
 describe('voice loop — instant backchannel cache', () => {
+  it('signals response audio before handing the WAV to the player', async () => {
+    const events: string[] = [];
+    const reply = makeVoiceReply({
+      replyFn: async () => 'Réponse prête.',
+      synth: async () => '/tmp/response-ready.wav',
+      play: async () => {
+        events.push('play');
+      },
+    });
+
+    await reply('Question complète ?', {
+      turnId: 'turn-ready',
+      onResponseAudioStart: () => {
+        events.push('response-ready');
+      },
+    });
+
+    expect(events).toEqual(['response-ready', 'play']);
+  });
+
   it('uses the Pocket voice-specific cache for a prewarmed acknowledgement', async () => {
     const calls: Array<[string, string]> = [];
     const hit = await lookupInstantBackchannelWav(
@@ -672,6 +692,85 @@ describe('voice loop — fast companion replies', () => {
   });
 });
 
+describe('voice loop — deterministic clock shortcuts', () => {
+  const savedTz = process.env.CODEBUDDY_TIMEZONE;
+  const savedFast = process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+
+  beforeEach(() => {
+    process.env.CODEBUDDY_TIMEZONE = 'Europe/Paris';
+    delete process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T12:53:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (savedTz === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+    else process.env.CODEBUDDY_TIMEZONE = savedTz;
+    if (savedFast === undefined) delete process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+    else process.env.CODEBUDDY_SENSORY_FAST_REPLIES = savedFast;
+  });
+
+  it.each([
+    'Lisa, quelle heure est-il ?',
+    'quelle heure est-il',
+    'quelle heure est il',
+    'quel heure est-il',
+    'quelle heure il est',
+    'il est quelle heure',
+    "c'est quelle heure",
+    "t'as l'heure",
+    "tu as l'heure",
+    "dis-moi l'heure",
+    "peux-tu me dire l'heure",
+    "l'heure qu'il est",
+  ])('answers the current time locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Il est 14 h 53.');
+  });
+
+  it.each([
+    'quelle date',
+    'quelle date on est',
+    'on est quelle date',
+    "c'est quelle date",
+    'la date du jour',
+    'on est le combien',
+    "on est le combien aujourd'hui",
+  ])('answers the current date locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Nous sommes mercredi 2 septembre 2026.');
+  });
+
+  it.each([
+    'on est quel jour',
+    'quel jour on est',
+    'quel jour sommes-nous',
+    "c'est quel jour",
+    'quel jour de la semaine',
+    "on est quel jour aujourd'hui",
+  ])('answers the current weekday locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Nous sommes mercredi.');
+  });
+
+  it.each([
+    'rappelle-moi dans une heure',
+    'Lisa, rappelle-moi de sortir les poubelles à dix-neuf heures',
+    'à dix-neuf heures',
+    'dans une heure',
+    'à quelle heure est le train',
+    'quelle heure est le rendez-vous',
+    'il est tard ?',
+    'on est déjà en septembre ?',
+  ])('does not steal a reminder, schedule or indirect question: %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBeNull();
+  });
+
+  it("keeps « à tout à l'heure » as a goodbye, not the wall clock", () => {
+    const reply = fastCompanionReply("à tout à l'heure");
+    expect(reply).toMatch(/tout à l['’]heure/i);
+    expect(reply).not.toMatch(/^Il est /);
+  });
+});
+
 describe('voice loop — emotional prompt defaults', () => {
   const savedRelational = process.env.CODEBUDDY_COMPANION_RELATIONAL;
   const savedChannel = process.env.CODEBUDDY_CONVERSATION_CHANNEL;
@@ -706,6 +805,14 @@ describe('voice loop — emotional prompt defaults', () => {
     expect(prompt).not.toContain('<recent_episode>');
     expect(prompt).not.toContain('<lisa_state>');
     expect(prompt).not.toContain('<expressive_spoken_text>');
+  });
+
+  it('keeps evolution context silent unless the user explicitly asks for it', async () => {
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    const prompt = await buildSpokenPromptAugmentation('bonjour Lisa', [], undefined, undefined, {
+      relationalContext: async () => '<lisa_evolution>\nJ’ai appris à mieux écouter.\n</lisa_evolution>',
+    });
+    expect(prompt).toContain('ne les mentionne que si la personne te demande explicitement');
   });
 
   it('enables expressive text by default only with relational context, with an explicit override', async () => {
@@ -882,7 +989,7 @@ describe('sayNow — proactive speech (reminders/announcements)', () => {
         },
         play: async () => {},
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
   });
 });
 

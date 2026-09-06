@@ -21,6 +21,7 @@ import type {
   JsonSchema,
   IToolMetadata,
   ToolCategoryType,
+  IToolExecutionContext,
 } from './types.js';
 
 // Manifest-1: string-ref manifest, so import the classes + definitions explicitly.
@@ -46,7 +47,7 @@ import { AUTHORED_TOOLS_MANIFEST_2 } from '../authored-tools-manifest-2.js';
 interface AuthoredExecutable {
   readonly name: string;
   readonly description: string;
-  execute(input: Record<string, unknown>): Promise<ToolResult>;
+  execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult>;
 }
 
 interface AuthoredToolCtor {
@@ -111,8 +112,11 @@ function makeAuthoredTool(
   return {
     name: fn.name,
     description: fn.description,
-    async execute(input: Record<string, unknown>): Promise<ToolResult> {
-      return getInstance().execute(input);
+    async execute(
+      input: Record<string, unknown>,
+      context?: IToolExecutionContext,
+    ): Promise<ToolResult> {
+      return getInstance().execute(input, context);
     },
     getSchema(): ToolSchema {
       return {

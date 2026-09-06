@@ -396,23 +396,29 @@ export class RecallTool implements ITool {
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
     const mm = getMemoryManager(undefined, context?.botId);
-    await mm.initialize();
-    const key = input.key as string;
-    const scope = input.scope as 'project' | 'user' | undefined;
+    try {
+      await mm.initialize();
+      const key = input.key as string;
+      const scope = input.scope as 'project' | 'user' | undefined;
 
-    const value = mm.recall(key, scope);
+      const value = mm.recall(key, scope);
 
-    if (value) {
-      return {
-        success: true,
-        output: `Memory for "${key}":
+      if (value) {
+        return {
+          success: true,
+          output: `Memory for "${key}":
 
 ${value}`,
-      };
-    } else {
+        };
+      }
       return {
         success: true,
         output: `No memory found for key "${key}"${scope ? ` in ${scope} scope` : ''}.`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to recall memory: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
@@ -482,21 +488,27 @@ export class ForgetTool implements ITool {
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
     const mm = getMemoryManager(undefined, context?.botId);
-    await mm.initialize();
-    const key = input.key as string;
-    const scope = (input.scope as 'project' | 'user') ?? 'project';
+    try {
+      await mm.initialize();
+      const key = input.key as string;
+      const scope = (input.scope as 'project' | 'user') ?? 'project';
 
-    const deleted = await mm.forget(key, scope);
+      const deleted = await mm.forget(key, scope);
 
-    if (deleted) {
-      return {
-        success: true,
-        output: `Successfully forgot "${key}" from ${scope} memory.`,
-      };
-    } else {
+      if (deleted) {
+        return {
+          success: true,
+          output: `Successfully forgot "${key}" from ${scope} memory.`,
+        };
+      }
       return {
         success: true,
         output: `No memory found for key "${key}" in ${scope} scope.`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to forget memory: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

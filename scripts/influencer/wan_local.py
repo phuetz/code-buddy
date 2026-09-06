@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Pilote WAN 2.2 image-to-video LOCAL via ComfyUI darkstar ($0, sans quota).
+"""Pilote WAN 2.2 image-to-video LOCAL via ComfyUI gpuNode ($0, sans quota).
 Usage: python3 wan_local.py <image.jpg> "<prompt>" <name> [width] [height] [length]
 Upload l'image -> workflow WAN 2.2 i2v (2-stage high/low noise) -> poll -> télécharge le mp4.
 Sortie: ~/.codebuddy/personas/ambre/wan-local/<name>.mp4
 """
 import json, sys, os, time, urllib.request, urllib.parse, mimetypes
 
-HOST = os.environ.get("COMFYUI_URL", "http://darkstar:8188")
+HOST = os.environ.get("COMFYUI_URL", "http://gpuNode:8188")
 OUT = os.path.expanduser("~/.codebuddy/personas/ambre/wan-local")
 os.makedirs(OUT, exist_ok=True)
 NEG = "blurry, distorted, low quality, low resolution, static, watermark, text, deformed, ugly, jpeg artifacts, oversaturated"

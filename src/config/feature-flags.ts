@@ -17,6 +17,7 @@ import os from 'os';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -313,15 +314,14 @@ export class FeatureFlagsManager extends EventEmitter {
    * Load configuration from file
    */
   private loadConfigFile(filePath: string): FeatureFlagsConfig | null {
-    try {
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        return JSON.parse(content);
-      }
-    } catch (error) {
-      logger.warn(`Failed to load feature flags from ${filePath}`, { error: String(error) });
-    }
-    return null;
+    return readJsonAtomicSync<FeatureFlagsConfig | null>(filePath, null, {
+      mode: 0o600,
+      isValid: (value): value is FeatureFlagsConfig => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value) &&
+        typeof (value as FeatureFlagsConfig).version === 'string' &&
+        (value as FeatureFlagsConfig).flags && typeof (value as FeatureFlagsConfig).flags === 'object',
+      ),
+    });
   }
 
   /**
@@ -341,7 +341,7 @@ export class FeatureFlagsManager extends EventEmitter {
         flags: Object.fromEntries(this.flags),
       };
 
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      writeJsonAtomicSync(configPath, config, { mode: 0o600 });
       this.emit('config:saved', configPath);
     } catch (error) {
       this.emit('config:error', error);

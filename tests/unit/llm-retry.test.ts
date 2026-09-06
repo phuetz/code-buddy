@@ -38,6 +38,21 @@ describe('Self-Healing JSON (llm-retry)', () => {
       const parsed = parseJsonResponse(input);
       expect(parsed).toEqual({ items: [{ id: 1 }, { id: 2 }] });
     });
+
+    it('repairs a stray quote-comma line after a completed key (GK33 live flow plan)', () => {
+      const input = `{
+  "steps": [
+    { "id": "1", "title": "Define" },
+    {
+      "id": "3",
+     ",
+      "title": "Run"
+    }
+  ]
+}`;
+      const parsed = parseJsonResponse(input) as { steps: Array<{ id: string; title: string }> };
+      expect(parsed.steps.map((s) => s.title)).toEqual(['Define', 'Run']);
+    });
   });
 
   describe('generateJsonWithRetry', () => {

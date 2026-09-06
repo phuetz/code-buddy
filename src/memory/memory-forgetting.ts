@@ -67,6 +67,25 @@ export function resolveForgettingConfig(env: NodeJS.ProcessEnv = process.env): F
 
 const DAY_MS = 86_400_000;
 
+function normalizeProtectionValue(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function isProtectedMemory(
+  memory: ForgettableMemory,
+  config: ForgettingConfig,
+): boolean {
+  const protectedCategories = new Set(
+    Array.from(config.protectedCategories, normalizeProtectionValue),
+  );
+  const protectedTags = new Set(
+    Array.from(config.protectedTags, normalizeProtectionValue),
+  );
+
+  return protectedCategories.has(normalizeProtectionValue(memory.category))
+    || memory.tags?.some((tag) => protectedTags.has(normalizeProtectionValue(tag))) === true;
+}
+
 export function stabilityDays(accessCount: number, baseStabilityDays: number): number {
   return baseStabilityDays * (1 + Math.max(0, accessCount));
 }
@@ -98,8 +117,7 @@ export function decideForgets(
   const candidates: ForgetCandidate[] = [];
 
   for (const memory of memories) {
-    if (cfg.protectedCategories.has(memory.category)) continue;
-    if (memory.tags?.some((tag) => cfg.protectedTags.has(tag))) continue;
+    if (isProtectedMemory(memory, cfg)) continue;
 
     const anchor = memory.lastAccessedAt ?? memory.updatedAt ?? memory.createdAt;
     const ageDays = (now.getTime() - anchor.getTime()) / DAY_MS;

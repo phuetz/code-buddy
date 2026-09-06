@@ -9,7 +9,7 @@ import {
   type NativeFashionRenderDependencies,
   type NativeFashionRenderOptions,
   type NativeFashionRenderState,
-} from '../../scripts/darkstar/render-native-fashion-clip.js';
+} from '../../scripts/gpuNode/render-native-fashion-clip.js';
 import type { SubmitAndAwaitOptions, SubmitAndAwaitResult } from '../../src/tools/video/comfy-client.js';
 import type { ComfyWorkflowGraph } from '../../src/tools/video/comfy-workflow-template.js';
 

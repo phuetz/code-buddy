@@ -13,6 +13,7 @@ import { logger } from "./logger.js";
 import path from 'path';
 import readline from 'readline';
 import { getCodeBuddyHome, ensureCodeBuddyHome } from './codebuddy-home.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 import {
   getApiKey as getStoredApiKey,
   setApiKey as setStoredApiKey,
@@ -260,10 +261,8 @@ function loadExistingApiKey(): string | undefined {
   }
   try {
     const settingsPath = path.join(getCodeBuddyHome(), 'user-settings.json');
-    if (fs.existsSync(settingsPath)) {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      return settings.apiKey;
-    }
+    const settings = readJsonAtomicSync<Record<string, unknown>>(settingsPath, {});
+    return typeof settings.apiKey === 'string' ? settings.apiKey : undefined;
   } catch {
     // Ignore errors
   }
@@ -280,9 +279,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
 
     // Load existing settings
     let settings: Record<string, unknown> = {};
-    if (fs.existsSync(settingsPath)) {
-      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-    }
+    settings = readJsonAtomicSync<Record<string, unknown>>(settingsPath, {});
 
     // Update settings.
     // API keys are secrets: persist them to the encrypted credential store,
@@ -313,7 +310,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
     }
 
     // Save
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    writeJsonAtomicSync(settingsPath, settings);
 
     console.log('  API Key: ' + (config.apiKey ? 'Saved' : 'Not set'));
     console.log('  Base URL: ' + (config.baseURL || 'https://api.x.ai/v1 (default)'));
@@ -340,10 +337,8 @@ export function needsSetup(): boolean {
 
   try {
     const settingsPath = path.join(getCodeBuddyHome(), 'user-settings.json');
-    if (fs.existsSync(settingsPath)) {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      return !settings.apiKey;
-    }
+    const settings = readJsonAtomicSync<Record<string, unknown>>(settingsPath, {});
+    return !settings.apiKey;
   } catch {
     // Ignore errors
   }

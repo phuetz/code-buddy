@@ -22,7 +22,7 @@ import { getToolRegistry } from "../tools/registry.js";
 import { createRegisterToolTool } from "../tools/register-tool-handler.js";
 import { loadAuthoredTools } from "../agent/self-improvement/tool-skill-mutator.js";
 import { applyToolFilter } from "../utils/tool-filter.js";
-import { TOOL_METADATA } from "../tools/metadata.js";
+import { getActiveToolMetadata } from "../tools/metadata.js";
 import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getWorkspace } from '../workspace/workspace-config.js';
 import {
@@ -34,6 +34,7 @@ import {
 import {
   CORE_TOOLS,
   SELF_DESCRIBE_TOOLS,
+  SELF_EVOLUTION_TOOLS,
   MORPH_EDIT_TOOL,
   isMorphEnabled,
   SEARCH_TOOLS,
@@ -77,6 +78,7 @@ import {
   WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
+import { isContextZoomEnabled } from '../context/segment-archive.js';
 
 // 20 pre-authored tool definitions (wired into the registry as AUTHORED_EXTRA_TOOLS).
 // Loosely-typed literal definitions → cast the group to CodeBuddyTool[] below.
@@ -170,7 +172,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
-  CORE_TOOLS, SELF_DESCRIBE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
+  CORE_TOOLS, SELF_DESCRIBE_TOOLS, SELF_EVOLUTION_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
   SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS, LSP_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
@@ -180,6 +182,7 @@ export function getBuiltinToolNames(): string[] {
   const groups: CodeBuddyTool[][] = [
     CORE_TOOLS,
     SELF_DESCRIBE_TOOLS,
+    SELF_EVOLUTION_TOOLS,
     [MORPH_EDIT_TOOL],
     SEARCH_TOOLS,
     WORKSPACE_TOOLS,
@@ -225,9 +228,13 @@ export function getBuiltinToolNames(): string[] {
     [CONTEXT_EXPAND_TOOL],
   ];
 
-  return filterToolNamesForSurface(Array.from(new Set(
+  const names = Array.from(new Set(
     groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
-  )));
+  ));
+  const surfaceNames = isContextZoomEnabled()
+    ? names
+    : names.filter((name) => name !== 'context_expand');
+  return filterToolNamesForSurface(surfaceNames);
 }
 
 // ============================================================================
@@ -243,7 +250,7 @@ export function initializeToolRegistry(): void {
   if (isRegistryInitialized) return;
 
   const registry = getToolRegistry();
-  const metadataMap = new Map(TOOL_METADATA.map(m => [m.name, m]));
+  const metadataMap = new Map(getActiveToolMetadata().map(m => [m.name, m]));
 
   const registerGroup = (tools: CodeBuddyTool[], isEnabled: () => boolean = () => true) => {
     for (const tool of tools) {
@@ -262,6 +269,7 @@ export function initializeToolRegistry(): void {
   // Register all tool groups
   registerGroup(CORE_TOOLS);
   registerGroup(SELF_DESCRIBE_TOOLS);
+  registerGroup(SELF_EVOLUTION_TOOLS);
   registerGroup([CONTEXT_EXPAND_TOOL], () => process.env.CODEBUDDY_CONTEXT_ZOOM === 'true');
 
   // Register Morph tool separately with its own enabled check
@@ -468,6 +476,16 @@ export function codeExplorerToolPrefix(): string | null {
 }
 
 let mcpServersInitPromise: Promise<void> | null = null;
+
+/** Drop the process-wide MCP singleton (tests / one-shot CLI teardown). */
+export async function resetMCPManager(): Promise<void> {
+  const current = mcpManager;
+  mcpManager = null;
+  mcpServersInitPromise = null;
+  if (current) {
+    await current.dispose();
+  }
+}
 
 export function initializeMCPServers(): Promise<void> {
   if (mcpServersInitPromise) return mcpServersInitPromise;

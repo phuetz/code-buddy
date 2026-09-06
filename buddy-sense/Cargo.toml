@@ -23,7 +23,7 @@ xcap = { version = "0.0.14", optional = true }
 vad-rs = { version = "0.1.4", optional = true, default-features = false }
 # ort (ONNX Runtime) comes via vad-rs; pin it here only to enable a TLS backend so
 # its download-binaries strategy can fetch onnxruntime at build (no system install).
-ort = { version = "=2.0.0-rc.6", optional = true, features = ["load-dynamic"] }
+ort = { version = "=2.0.0-rc.6", optional = true, features = ["load-dynamic", "ndarray"] }
 # Pin ort-sys to match ort rc.6 (cargo otherwise resolves an incompatible rc.10).
 ort-sys = { version = "=2.0.0-rc.6", optional = true }
 
@@ -41,10 +41,20 @@ tokio-stream = "0.1"
 # binary's own directory (the TS worker does exactly this).
 sherpa-rs = { version = "0.6.8", optional = true }
 
+# Pocket TTS shares buddy-sense's existing `ort` 2.0.0-rc.6 pin (neural-vad).
+# Two pre-release `ort` versions cannot coexist in one Cargo graph.
+rand = { version = "0.8", optional = true }
+ndarray = { version = "0.16", optional = true }
+sentencepiece-model = { version = "0.1", optional = true }
+tokenizers = { version = "0.22", optional = true, default-features = false, features = ["fancy-regex"] }
+
 [features]
 default = []
 # In-process offline STT (sherpa-onnx) — powers the `buddy-sense stt` subcommand.
 stt = ["dep:sherpa-rs"]
+# In-process Pocket TTS (Kyutai ONNX INT8) — powers `buddy-sense tts`.
+# Reuses the crate's `ort` 2.0.0-rc.6 (same pin as neural-vad).
+pocket-tts = ["dep:ort", "dep:ort-sys", "dep:rand", "dep:ndarray", "dep:sentencepiece-model", "dep:tokenizers"]
 # Live-microphone sense (the robot's real-time ears): continuous ffmpeg `-f pulse`
 # capture → streaming VAD endpointer → offline decode → `audio/transcript_final`.
 # No `cpal`, no `libasound2-dev`, no sudo — reuses the system ffmpeg + `stt`.

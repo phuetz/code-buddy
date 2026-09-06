@@ -56,6 +56,26 @@ import OpenAI from 'openai';
 const MockedOpenAI = OpenAI as jest.MockedClass<typeof OpenAI>;
 const mockedGetModelInfo = getModelInfo as jest.MockedFunction<typeof getModelInfo>;
 
+/**
+ * Ollama is reached over its NATIVE `/api/chat` — the only endpoint that
+ * honours `options.num_ctx`, so `CODEBUDDY_MAX_CONTEXT` can reach the server.
+ * These Ollama-specific expectations therefore read the request off the wire
+ * instead of the mocked OpenAI SDK; the assertions themselves are unchanged.
+ */
+function stubOllamaNativeWire(): () => Array<Record<string, unknown>> {
+  const bodies: Array<Record<string, unknown>> = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+    bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: { role: 'assistant', content: 'OK' }, done: true, done_reason: 'stop' }),
+    };
+  }));
+  return () => bodies;
+}
+
 describe('CodeBuddyClient', () => {
   const mockApiKey = 'test-api-key-12345';
   let client: CodeBuddyClient;
@@ -705,10 +725,7 @@ describe('CodeBuddyClient', () => {
       });
 
       client = new CodeBuddyClient(mockApiKey, 'llama3.2', 'http://localhost:11434/v1');
-
-      mockCreate.mockResolvedValueOnce({
-        choices: [{ message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }],
-      });
+      const seen = stubOllamaNativeWire();
 
       const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'Hi' }];
       const tools: CodeBuddyTool[] = [
@@ -722,15 +739,17 @@ describe('CodeBuddyClient', () => {
         },
       ];
 
-      await client.chat(messages, tools);
+      try {
+        await client.chat(messages, tools);
+      } finally {
+        vi.unstubAllGlobals();
+      }
 
       // Ollama should have tools enabled
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools,
-          tool_choice: 'auto',
-        })
-      );
+      expect(seen()).toHaveLength(1);
+      expect(seen()[0]).toMatchObject({ tools });
+      // …and the whole point of the native endpoint: a server-side context cap.
+      expect((seen()[0]!.options as { num_ctx?: number }).num_ctx).toBeGreaterThan(0);
     });
   });
 

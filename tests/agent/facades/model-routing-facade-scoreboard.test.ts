@@ -38,6 +38,16 @@ const MESSAGE = 'show the list';
 const MODELS = ['grok-3-mini', 'grok-3', 'grok-3-reasoning'];
 const RECOMMENDED = 'grok-3-mini';
 const ALTERNATIVE = 'grok-3';
+const BENCHMARK_MODELS = [
+  'grok-3-mini',
+  'grok-3',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gemini-3.8-flash-high',
+  'mistral-medium-3.5',
+  'codestral-latest',
+];
+const BENCHMARK_FILE = path.resolve('docs/benchmarks/2026-09-04-bancs-litteraires.jsonl');
 
 function buildFacade(): ModelRoutingFacade {
   const modelRouter = {
@@ -82,6 +92,41 @@ afterEach(() => {
 });
 
 describe('council-routing tie-break (CODEBUDDY_COUNCIL_ROUTING)', () => {
+  it('routes the imported literary benches to their measured winners', () => {
+    const f = buildFacade();
+    const sb = new ModelScoreboard(tmpFile);
+    expect(sb.importJsonl(BENCHMARK_FILE).imported).toBe(11);
+    const env = { CODEBUDDY_COUNCIL_ROUTING: 'true' } as unknown as NodeJS.ProcessEnv;
+
+    expect(f.autoRouteIfEnabled('Écris le chapitre 5 de ce roman', BENCHMARK_MODELS, { env, scoreboard: sb })).toBe(
+      'gpt-5.6-luna',
+    );
+    expect(f.autoRouteIfEnabled("Tranche cet arbitrage d'auteur entre les versions", BENCHMARK_MODELS, { env, scoreboard: sb })).toBe(
+      'gemini-3.8-flash-high',
+    );
+    expect(f.autoRouteIfEnabled('Juge ces quatre versions à l’aveugle', BENCHMARK_MODELS, { env, scoreboard: sb })).toBe(
+      'gpt-5.6-sol',
+    );
+  });
+
+  it('keeps legacy code routing unchanged and leaves the flag-off path untouched', () => {
+    const message = 'Fix the bug in the login function';
+    const sb = new ModelScoreboard(tmpFile);
+    expect(sb.importJsonl(BENCHMARK_FILE).imported).toBe(11);
+
+    const off = buildFacade().autoRouteIfEnabled(message, BENCHMARK_MODELS, {
+      env: {} as NodeJS.ProcessEnv,
+      scoreboard: sb,
+    });
+    const on = buildFacade().autoRouteIfEnabled(message, BENCHMARK_MODELS, {
+      env: { CODEBUDDY_COUNCIL_ROUTING: 'true' } as unknown as NodeJS.ProcessEnv,
+      scoreboard: sb,
+    });
+
+    expect(on).toBe(off);
+    expect(off).toBe(RECOMMENDED);
+  });
+
   it('baseline: real selectModel routes "simple" → recommended, with alternative surfaced', () => {
     const f = buildFacade();
     const model = f.autoRouteIfEnabled(MESSAGE, MODELS, { env: {} as NodeJS.ProcessEnv });

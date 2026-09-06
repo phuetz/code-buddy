@@ -21,6 +21,70 @@ interface PolicyCommandOptions {
   json?: boolean;
 }
 
+interface FleetServerCommandOptions extends PolicyCommandOptions {
+  serverUrl?: string;
+  token?: string;
+}
+
+function resolveFleetServerUrl(serverUrl?: string): string {
+  const configured = serverUrl ?? process.env.CODEBUDDY_SERVER_URL;
+  if (configured?.trim()) return configured.trim().replace(/\/+$/, '');
+
+  const host = process.env.CODEBUDDY_SERVER_HOST ?? '127.0.0.1';
+  const port = process.env.CODEBUDDY_SERVER_PORT ?? process.env.PORT ?? '3000';
+  return `http://${host}:${port}`;
+}
+
+async function fetchFleetEndpoint(
+  endpoint: '/api/fleet/status' | '/api/fleet/describe',
+  options: FleetServerCommandOptions,
+): Promise<Record<string, unknown>> {
+  const baseUrl = resolveFleetServerUrl(options.serverUrl);
+  const token = options.token ?? process.env.CODEBUDDY_SERVER_TOKEN ?? process.env.CODEBUDDY_FLEET_TOKEN;
+
+  try {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      signal: AbortSignal.timeout(5000),
+    });
+    const body = await response.text();
+    let payload: unknown;
+    try {
+      payload = body ? JSON.parse(body) : {};
+    } catch {
+      payload = { message: body };
+    }
+    if (!response.ok) {
+      const message = typeof payload === 'object' && payload !== null && 'error' in payload
+        ? String(payload.error)
+        : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw new Error('Réponse JSON Fleet invalide');
+    }
+    return payload as Record<string, unknown>;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    // Un 401/403 vient d'un serveur bien vivant : conseiller de le démarrer
+    // envoie sur une fausse piste. La vraie action est de fournir un jeton.
+    const isAuth = /HTTP 40[13]\b/.test(detail);
+    throw new Error(
+      isAuth
+        ? `Serveur Fleet joignable sur ${baseUrl} mais il a refusé la requête (${detail}). ` +
+            'Il tourne avec authentification : passez un jeton avec `--token`, ' +
+            'que vous frappez via `JWT_SECRET=<secret du serveur> buddy fleet token --user <nom>`.'
+        : `Serveur Fleet indisponible sur ${baseUrl} (${detail}). ` +
+            'Lancez-le avec `buddy server` puis réessayez.',
+    );
+  }
+}
+
+function printFleetServerError(error: unknown): void {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}
+
 function formatGroups(groups: string[]): string {
   return groups.length > 0 ? groups.join(', ') : 'none';
 }
@@ -33,6 +97,54 @@ export function registerFleetCommands(program: Command): void {
   const fleet = program
     .command('fleet')
     .description('Inspect Fleet routing, toolsets, and dispatch policy decisions');
+
+  fleet
+    .command('status')
+    .description('Show Fleet status from the configured Code Buddy server')
+    .option('--server-url <url>', 'Code Buddy server URL', process.env.CODEBUDDY_SERVER_URL)
+    .option('--token <token>', 'Bearer token for an authenticated server')
+    .option('--json', 'output JSON')
+    .action(async (options: FleetServerCommandOptions) => {
+      try {
+        const status = await fetchFleetEndpoint('/api/fleet/status', options);
+        if (options.json) {
+          console.log(JSON.stringify(status, null, 2));
+          return;
+        }
+        const connections = (status.connections ?? {}) as Record<string, unknown>;
+        console.log(`\nFleet server: ${String(status.status ?? 'unknown')}`);
+        console.log(`  WebSocket connections: ${String(connections.total ?? 0)}`);
+        console.log(`  Authenticated: ${String(connections.authenticated ?? 0)}`);
+        console.log(`  Streaming: ${String(connections.streaming ?? 0)}`);
+        console.log('');
+      } catch (error) {
+        printFleetServerError(error);
+      }
+    });
+
+  fleet
+    .command('describe')
+    .description('Describe the Fleet peer exposed by the configured server')
+    .option('--server-url <url>', 'Code Buddy server URL', process.env.CODEBUDDY_SERVER_URL)
+    .option('--token <token>', 'Bearer token for an authenticated server')
+    .option('--json', 'output JSON')
+    .action(async (options: FleetServerCommandOptions) => {
+      try {
+        const description = await fetchFleetEndpoint('/api/fleet/describe', options);
+        if (options.json) {
+          console.log(JSON.stringify(description, null, 2));
+          return;
+        }
+        console.log(`\nFleet peer: ${String(description.hostname ?? 'unknown')}`);
+        console.log(`  API version: ${String(description.apiVersion ?? 'unknown')}`);
+        console.log(`  Role: ${String(description.role ?? 'unknown')}`);
+        const methods = Array.isArray(description.methods) ? description.methods.join(', ') : 'none';
+        console.log(`  Methods: ${methods}`);
+        console.log('');
+      } catch (error) {
+        printFleetServerError(error);
+      }
+    });
 
   fleet
     .command('profiles')
@@ -68,41 +180,51 @@ export function registerFleetCommands(program: Command): void {
       console.log('');
     });
 
+  const mintTokenAction = async (options: { user: string; ttl: string; scopes: string }) => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error(
+        'JWT_SECRET is required and must match the target server\'s JWT_SECRET.\n' +
+          'The fleet requires a token: `--no-auth` does NOT grant peer:invoke. Set JWT_SECRET and retry.',
+      );
+      process.exitCode = 2;
+      return;
+    }
+    const { generateToken } = await import('../../server/auth/jwt.js');
+    const scopes = String(options.scopes)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const jwt = generateToken(
+      { sub: options.user, userId: options.user, scopes: scopes as never },
+      secret,
+      options.ttl,
+    );
+    // Token to stdout (pipeable); the human recipe to stderr.
+    console.log(jwt);
+    console.error(
+      `\n# Fleet token minted (scopes: ${scopes.join(', ')}; ttl: ${options.ttl}).\n` +
+        '# On the OTHER machine, join this fleet with:\n' +
+        '#   /fleet listen ws://THIS-HOST:PORT/ws --jwt <token>\n' +
+        '# (the target server must run with the SAME JWT_SECRET and auth ENABLED — not --no-auth).',
+    );
+  };
+
   fleet
     .command('token')
     .description('Mint a fleet JWT (peer:invoke + fleet:listen) so another machine can join via /fleet listen --jwt')
     .option('--user <id>', 'token subject / user id', 'fleet-peer')
     .option('--ttl <dur>', 'expiry, e.g. 15m / 24h / 30d', '30d')
     .option('--scopes <csv>', 'override scopes', 'peer:invoke,fleet:listen,chat')
-    .action(async (options: { user: string; ttl: string; scopes: string }) => {
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        console.error(
-          'JWT_SECRET is required and must match the target server\'s JWT_SECRET.\n' +
-            'The fleet requires a token: `--no-auth` does NOT grant peer:invoke. Set JWT_SECRET and retry.',
-        );
-        process.exitCode = 2;
-        return;
-      }
-      const { generateToken } = await import('../../server/auth/jwt.js');
-      const scopes = String(options.scopes)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const jwt = generateToken(
-        { sub: options.user, userId: options.user, scopes: scopes as never },
-        secret,
-        options.ttl,
-      );
-      // Token to stdout (pipeable); the human recipe to stderr.
-      console.log(jwt);
-      console.error(
-        `\n# Fleet token minted (scopes: ${scopes.join(', ')}; ttl: ${options.ttl}).\n` +
-          '# On the OTHER machine, join this fleet with:\n' +
-          '#   /fleet listen ws://THIS-HOST:PORT/ws --jwt <token>\n' +
-          '# (the target server must run with the SAME JWT_SECRET and auth ENABLED — not --no-auth).',
-      );
-    });
+    .action(mintTokenAction);
+
+  program
+    .command('token')
+    .description('Mint a JWT authentication token (alias for buddy fleet token)')
+    .option('--user <id>', 'token subject / user id', 'fleet-peer')
+    .option('--ttl <dur>', 'expiry, e.g. 15m / 24h / 30d', '30d')
+    .option('--scopes <csv>', 'override scopes', 'peer:invoke,fleet:listen,chat')
+    .action(mintTokenAction);
 
   fleet
     .command('toolsets')

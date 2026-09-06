@@ -8,6 +8,7 @@ import {
   isBargeInTranscript,
   resolveVoiceBargeInMinMs,
   shouldTriggerVoiceBargeIn,
+  shouldTriggerVoiceBargeInOnSpeechStart,
   resolveSpeechDebounceMs,
   normalizeSpeechTranscript,
   resolveFasterWhisperOptions,
@@ -17,6 +18,7 @@ import {
 } from '../../src/sensory/speech-reaction.js';
 import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
+import { logger } from '../../src/utils/logger.js';
 import {
   _resetVoiceActivityForTests,
   beginSpeaking,
@@ -24,6 +26,12 @@ import {
   interruptSpeaking,
   noteSpokenText,
 } from '../../src/sensory/voice-activity.js';
+
+const voiceLoopHarness = vi.hoisted(() => ({
+  sayNow: vi.fn(async () => true),
+}));
+
+vi.mock('../../src/sensory/voice-loop.js', () => voiceLoopHarness);
 
 function speechEnd(wav?: string, payload: Record<string, unknown> = {}): void {
   getGlobalEventBus().emit('sensory:perception', {
@@ -53,6 +61,30 @@ function speechStart(payload: Record<string, unknown> = {}): void {
     source: 'test',
     metadata: { modality: 'audio', kind: 'speech_start', payload },
   });
+}
+
+function pcm16Wav(durationMs: number, amplitude = 0.1): Buffer {
+  const sampleRate = 16_000;
+  const samples = Math.floor(sampleRate * durationMs / 1_000);
+  const dataSize = samples * 2;
+  const wav = Buffer.alloc(44 + dataSize);
+  wav.write('RIFF', 0, 'ascii');
+  wav.writeUInt32LE(36 + dataSize, 4);
+  wav.write('WAVE', 8, 'ascii');
+  wav.write('fmt ', 12, 'ascii');
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36, 'ascii');
+  wav.writeUInt32LE(dataSize, 40);
+  for (let index = 0; index < samples; index += 1) {
+    wav.writeInt16LE(Math.round(32_767 * amplitude), 44 + index * 2);
+  }
+  return wav;
 }
 
 const SPEECH_WAIT_TIMEOUT_MS = 5_000;
@@ -94,7 +126,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(shouldSuppressPlaybackCapture('echo_tail', 'distinct', false)).toBe(false);
   });
 
-  it('uses a partial transcript only for preparation and waits for the final before cognition', async () => {
+  it('uses repeated partial transcripts only for preparation and the final for cognition', async () => {
     const partials: Array<{ text: string; audioMs?: number; decodeMs?: number }> = [];
     const heard: string[] = [];
     const unwire = wireSpeechReaction({
@@ -109,10 +141,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     try {
       speechStart({ rms: 0.08 });
       transcriptPartial('cherche les actualités', { audioMs: 1200, decodeMs: 95 });
+      transcriptPartial('cherche les actualités en Europe', { audioMs: 2400, decodeMs: 91 });
       await waitFor(() => expect(partials).toEqual([{
         text: 'cherche les actualités',
         audioMs: 1200,
         decodeMs: 95,
+      }, {
+        text: 'cherche les actualités en Europe',
+        audioMs: 2400,
+        decodeMs: 91,
       }]));
       expect(heard).toEqual([]);
 
@@ -120,6 +157,60 @@ describe('speech reaction — speech_end → STT → percept', () => {
       await waitFor(() => expect(heard).toEqual(['cherche les actualités françaises']));
     } finally {
       unwire();
+    }
+  });
+
+  it('consumes an enabled LiveKit end-of-turn decision before holding an incomplete final', async () => {
+    vi.stubEnv('CODEBUDDY_SENSORY_TURN_DETECTOR', 'livekit');
+    const heard: string[] = [];
+    const turnDecisionProvider = vi.fn(() => ({
+      endOfTurn: true,
+      source: 'livekit-v1-mini',
+      probability: 0.91,
+      threshold: 0.285,
+    }));
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      incompleteTurnHoldMs: 1_000,
+      turnDecisionProvider,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Je voudrais une pizza,');
+      await waitFor(() => expect(heard).toEqual(['Je voudrais une pizza,']));
+      expect(turnDecisionProvider).toHaveBeenCalledWith({
+        text: 'Je voudrais une pizza,',
+        payload: { text: 'Je voudrais une pizza,' },
+      });
+    } finally {
+      unwire();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the existing path cold when the LiveKit flag is absent', async () => {
+    vi.stubEnv('CODEBUDDY_SENSORY_TURN_DETECTOR', '');
+    const heard: string[] = [];
+    const turnDecisionProvider = vi.fn(() => ({
+      endOfTurn: false,
+      source: 'livekit-v1-mini',
+    }));
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      turnDecisionProvider,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('La chaîne existante reste inchangée.');
+      await waitFor(() => expect(heard).toEqual(['La chaîne existante reste inchangée.']));
+      expect(turnDecisionProvider).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+      vi.unstubAllEnvs();
     }
   });
 
@@ -140,6 +231,110 @@ describe('speech reaction — speech_end → STT → percept', () => {
       await waitFor(() => expect(starts).toEqual([{ rms: 0.08, rmsOn: 0.04, adaptiveVad: true }]));
       expect(heard).toEqual([]);
     } finally {
+      unwire();
+    }
+  });
+
+  it('repairs a short low-confidence addressed final without calling the reply', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-short-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      transcriptFinal('Lisa', { confidence: 0.2 });
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
+  it('repairs an empty final only when a retained partial proves address', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-repair-empty-'));
+    const cues: string[] = [];
+    const heard = vi.fn(async () => undefined);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_REPAIR: 'true' },
+      isAddressed: async (text) => text.startsWith('Lisa'),
+      onConversationCue: async (cue) => {
+        cues.push(cue.kind);
+        return true;
+      },
+      onHeard: heard,
+    });
+    try {
+      speechStart();
+      transcriptPartial('Lisa, je voulais');
+      transcriptFinal('');
+      await waitFor(() => expect(cues).toEqual(['repair']));
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
+  it('cancels an addressed sensory backchannel when the reply completes first', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-cancel-'));
+    const cues: string[] = [];
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, question rapide ?');
+      await waitFor(() => expect(heard).toEqual(['Lisa, question rapide ?']));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      expect(cues).toEqual([]);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('arms the sensory backchannel only after the addressed gate accepts the turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-addressed-'));
+    let releaseReply!: () => void;
+    const replyHeld = new Promise<void>((resolve) => {
+      releaseReply = resolve;
+    });
+    const cues: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async () => replyHeld,
+    });
+    try {
+      transcriptFinal('Lisa, question plus longue ?');
+      await waitFor(() => expect(cues).toEqual(['mhm']));
+    } finally {
+      releaseReply();
       unwire();
     }
   });
@@ -260,17 +455,21 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(isBargeInTranscript('le ciel est bleu')).toBe(false);
   });
 
-  it('allows sustained natural speech only when AEC is active', () => {
+  it('allows sustained natural speech only when AEC is explicitly trusted', () => {
     expect(resolveVoiceBargeInMinMs({})).toBe(500);
     expect(resolveVoiceBargeInMinMs({ CODEBUDDY_VOICE_BARGEIN_MIN_MS: '650' })).toBe(650);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: true,
       audioMs: 700,
-    })).toBe(true);
+    }, {})).toBe(false);
+    expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
+      aecActive: true,
+      audioMs: 700,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(true);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: true,
       audioMs: 300,
-    })).toBe(false);
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(false);
     expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
       aecActive: false,
       audioMs: 900,
@@ -281,7 +480,66 @@ describe('speech reaction — speech_end → STT → percept', () => {
     })).toBe(true);
   });
 
+  it('requires active AEC and a measured leakage margin for transcript-free barge-in', () => {
+    const energeticSpeech = {
+      audioMs: 300,
+      rms: 0.04,
+      noiseFloorRms: 0.01,
+    };
+    expect(shouldTriggerVoiceBargeInOnSpeechStart(energeticSpeech)).toBe(false);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      ...energeticSpeech,
+      aecActive: true,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(true);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      ...energeticSpeech,
+      aecActive: true,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'false' })).toBe(false);
+    expect(shouldTriggerVoiceBargeInOnSpeechStart({
+      audioMs: 300,
+      rms: 0.04,
+      aecActive: true,
+    }, { CODEBUDDY_SENSORY_AEC_TRUST: 'true' })).toBe(false);
+  });
+
+  it('keeps the half-duplex guard closed when AEC is announced but not explicitly trusted', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-aec-untrusted-'));
+    const heard: string[] = [];
+    let clock = 1_100;
+    _resetVoiceActivityForTests();
+    beginSpeaking(1_000);
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('résidu du haut-parleur', {
+        aecActive: true,
+        audioMs: 900,
+        startedAtMs: 1_100,
+      });
+      interruptSpeaking(1_200);
+      clock = 3_000;
+      transcriptFinal('Lisa, vraie question humaine', { startedAtMs: 3_000 });
+      await waitFor(() => expect(heard).toContain('Lisa, vraie question humaine'));
+      expect(heard).toEqual(['Lisa, vraie question humaine']);
+    } finally {
+      unwire();
+      _resetVoiceActivityForTests();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
+    }
+  });
+
   it('interrupts an in-flight turn on sustained AEC speech without a wake word', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-aec-barge-in-'));
     let releaseFirst!: () => void;
     const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -315,6 +573,8 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       releaseFirst();
       unwire();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
     }
   });
 
@@ -369,6 +629,27 @@ describe('speech reaction — speech_end → STT → percept', () => {
       expect(heard).toEqual([]);
       transcriptFinal('le test est terminé.');
       await waitFor(() => expect(heard).toEqual(['Lisa, je voulais te dire que le test est terminé.']));
+    } finally {
+      unwire();
+    }
+  });
+
+  it('adds only the missing silence up to 900 ms for a suspended opt-in turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-turn-target-'));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_TURN_HEURISTIC: 'true' },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, je pensais donc', { endpointWaitMs: 350 });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(heard).toEqual([]);
+      await waitFor(() => expect(heard).toEqual(['Lisa, je pensais donc']));
     } finally {
       unwire();
     }
@@ -554,6 +835,82 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('distinguishes an STT error from silence and bounds its local recovery per window', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-stt-error-'));
+    const firstWav = path.join(tmp, 'first.wav');
+    const secondWav = path.join(tmp, 'second.wav');
+    await writeFile(firstWav, pcm16Wav(500));
+    await writeFile(secondWav, pcm16Wav(500));
+    voiceLoopHarness.sayNow.mockClear();
+    let clock = 1_000;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        throw new Error('decoder unavailable');
+      },
+      onHeard: async () => {},
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+    });
+    try {
+      speechEnd(firstWav, { audioMs: 500, rmsOn: 0.02 });
+      const firstPercepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Speech captured; STT failed',
+      );
+      const first = JSON.parse(firstPercepts.trim()) as {
+        payload: {
+          sttEmptyReason: string;
+          sttFailure: boolean;
+          sttFailureCount: number;
+        };
+      };
+      expect(first.payload).toMatchObject({
+        sttEmptyReason: 'error',
+        sttFailure: true,
+        sttFailureCount: 1,
+      });
+      expect(voiceLoopHarness.sayNow).toHaveBeenCalledWith(
+        "Pardon, je n'ai pas compris.",
+        { phoneDelivery: 'never' },
+      );
+
+      clock = 1_200;
+      speechEnd(secondWav, { audioMs: 500, rmsOn: 0.02 });
+      await waitFor(async () => {
+        const raw = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+        expect(raw.match(/Speech captured; STT failed/g)).toHaveLength(2);
+      });
+      expect(voiceLoopHarness.sayNow).toHaveBeenCalledTimes(1);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('keeps a genuine empty transcript on the silence path', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-stt-empty-'));
+    const wav = path.join(tmp, 'silence.wav');
+    await writeFile(wav, pcm16Wav(500, 0));
+    voiceLoopHarness.sayNow.mockClear();
+    const unwire = wireSpeechReaction({
+      transcriber: async () => '',
+      onHeard: async () => {},
+      debounceMs: 0,
+      cwd: tmp,
+    });
+    try {
+      speechEnd(wav, { audioMs: 500, rmsOn: 0.02 });
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Speech captured; STT returned no text',
+      );
+      expect(percepts).toContain('"sttEmptyReason":"empty"');
+      expect(voiceLoopHarness.sayNow).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
   it('hands acoustic timing to the voice handler and journals only the raw-free delivery profile', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-entrainment-'));
     let context: Record<string, unknown> | undefined;
@@ -673,6 +1030,37 @@ describe('speech reaction — speech_end → STT → percept', () => {
       clock = 4500; // a real address arrives 3500ms after turn 1 began (past the 3000ms debounce)
       speechEnd('/tmp/real.wav'); // turn 2: addressed
       await waitFor(() => expect(heard).toEqual(['Buddy, quelle heure ?'])); // NOT swallowed by a stale echo re-stamp
+    } finally {
+      unwire();
+    }
+  });
+
+  it('does not arm the debounce when onHeard completes without speaking', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-silent-handler-'));
+    let clock = 1_000;
+    let sttCalls = 0;
+    let handlerCalls = 0;
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        sttCalls += 1;
+        clock += 2_000;
+        return sttCalls === 1 ? 'commande silencieuse' : 'Buddy, tu es là ?';
+      },
+      debounceMs: 3_000,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        handlerCalls += 1;
+        if (handlerCalls > 1) heard.push(text);
+      },
+    });
+    try {
+      speechEnd('/tmp/silent-handler.wav');
+      await waitFor(() => expect(handlerCalls).toBe(1));
+      clock = 4_500;
+      speechEnd('/tmp/real-after-silent-handler.wav');
+      await waitFor(() => expect(heard).toEqual(['Buddy, tu es là ?']));
     } finally {
       unwire();
     }
@@ -854,6 +1242,8 @@ describe('speech reaction — speech_end → STT → percept', () => {
   });
 
   it('accepts a distinct human reply that starts inside the acoustic echo tail', async () => {
+    const previousTrust = process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+    process.env.CODEBUDDY_SENSORY_AEC_TRUST = 'true';
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-quick-resume-'));
     const heard: string[] = [];
     _resetVoiceActivityForTests();
@@ -874,7 +1264,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       }),
     });
     try {
-      transcriptFinal('Et la réciprocité alors ?', { startedAtMs: 2_400 });
+      transcriptFinal('Et la réciprocité alors ?', { aecActive: true, startedAtMs: 2_400 });
       await waitFor(() => expect(heard).toEqual(['Et la réciprocité alors ?']));
       const raw = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
@@ -892,10 +1282,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       unwire();
       _resetVoiceActivityForTests();
+      if (previousTrust === undefined) delete process.env.CODEBUDDY_SENSORY_AEC_TRUST;
+      else process.env.CODEBUDDY_SENSORY_AEC_TRUST = previousTrust;
     }
   });
 
-  it('suppresses a matching loudspeaker echo during the same tail without storing it', async () => {
+  it('drops a matching loudspeaker echo during the guarded tail without storing its text', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-echo-tail-'));
     const heard: string[] = [];
     _resetVoiceActivityForTests();
@@ -914,25 +1306,57 @@ describe('speech reaction — speech_end → STT → percept', () => {
       transcriptFinal('Voici la réponse que Lisa vient de prononcer.', { startedAtMs: 4_250 });
       const raw = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-        'Likely loudspeaker echo suppressed',
+        'echo_tail_echo',
       );
       expect(heard).toEqual([]);
+      expect(raw).toContain('playbackCaptureSuppressed');
       expect(raw).not.toContain('Voici la réponse que Lisa vient de prononcer.');
-      const percept = JSON.parse(raw.trim()) as {
-        summary: string;
-        payload: Record<string, unknown>;
-      };
-      expect(percept.summary).toBe('Likely loudspeaker echo suppressed');
-      expect(percept.payload).toMatchObject({
-        playbackEcho: true,
-        echoClassification: 'echo',
-        turnTaking: {
-          kind: 'echo_tail',
-          resumeAfterPlaybackMs: 250,
-        },
-      });
     } finally {
       unwire();
+      _resetVoiceActivityForTests();
+    }
+  });
+
+  it('drops the four measured robot phrases as own echo for 90 seconds without relying on AEC', async () => {
+    const phrases = [
+      'De te voir dans les yeux.',
+      'Tu veux que je te vois dans les yeux ?',
+      'Alors je reste là dans chaque message, chaque pause, chaque coucou.',
+      "Chaque coucou n'est pas un mot.",
+    ];
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-own-echo-'));
+    const heard: string[] = [];
+    let clock = 1_000;
+    _resetVoiceActivityForTests();
+    phrases.forEach((phrase, index) => noteSpokenText(phrase, clock + index));
+    clock = 90_999;
+    const info = vi.spyOn(logger, 'info');
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      for (let index = 0; index < phrases.length; index += 1) {
+        transcriptFinal(phrases[index]!, {
+          aecActive: false,
+          startedAtMs: clock,
+        });
+        await waitFor(() => {
+          const ownEchoLogs = info.mock.calls.filter(
+            ([message]) => message === '[speech] dropped own echo',
+          );
+          expect(ownEchoLogs).toHaveLength(index + 1);
+        });
+        clock += 1;
+      }
+      expect(heard).toEqual([]);
+    } finally {
+      unwire();
+      info.mockRestore();
       _resetVoiceActivityForTests();
     }
   });
@@ -945,6 +1369,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     const heard: string[] = [];
     const recognized: string[] = [];
     const decisions: string[] = [];
+    const info = vi.spyOn(logger, 'info');
     _resetVoiceActivityForTests();
     const unwire = wireSpeechReaction({
       debounceMs: 0,
@@ -979,13 +1404,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       // after generation/housekeeping, once the acoustic tail has expired.
       clock = 3_500;
       releaseFirst();
-      await vi.waitFor(async () => {
-        const raw = await readFile(
-          path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-          'utf8',
-        );
-        expect(raw).toContain('during_playback_echo');
-      });
+      await vi.waitFor(() => expect(info).toHaveBeenCalledWith('[speech] dropped own echo'));
 
       expect(heard).toEqual(['Lisa, explique le filtre anti-écho.']);
       expect(recognized).toEqual(['Lisa, explique le filtre anti-écho.']);
@@ -998,6 +1417,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     } finally {
       releaseFirst();
       unwire();
+      info.mockRestore();
       _resetVoiceActivityForTests();
     }
   });
@@ -1070,13 +1490,13 @@ describe('speech reaction — speech_end → STT → percept', () => {
       // 1) Addressed by name → speaks.
       speechEnd('/tmp/decider-addressed.wav');
       await waitFor(() => expect(spoken).toEqual(['Buddy, quelle heure est-il ?']));
-      // 2) In-window follow-up without the name → speaks (continuity).
+      // 2) In-window direct follow-up without the name → speaks (continuity).
       clock += 5000;
-      transcript = 'et demain ?';
+      transcript = 'raconte encore';
       speechEnd('/tmp/decider-follow-up.wav');
       await waitFor(() => expect(spoken).toEqual([
         'Buddy, quelle heure est-il ?',
-        'et demain ?',
+        'raconte encore',
       ]));
       // 3) Much later, ambient human-human chatter → silent.
       clock += 60_000;
@@ -1087,7 +1507,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
         'il fait beau aujourd’hui',
       );
 
-      expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'et demain ?']);
+      expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'raconte encore']);
     } finally {
       unwire();
     }
@@ -1298,6 +1718,39 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
       );
       expect(percepts).toContain('Bonjour Lisa');
       expect(percepts).toContain('"live":true'); // recorded as the live-mic path, no fake wav
+    } finally {
+      unwire();
+    }
+  });
+
+  it('reports the upstream decode time instead of a misleading zero-millisecond STT', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-timing-'));
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'unused',
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => 1000,
+    });
+    try {
+      transcriptFinal('Lisa, tu m’entends ?', {
+        decodeMs: 87,
+        endpointMs: 420,
+        sttEngine: 'sherpa-rs',
+        sttLanguage: 'auto',
+        hotwordsApplied: false,
+      });
+      const raw = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Lisa, tu m’entends ?',
+      );
+      const percept = JSON.parse(raw.trim()) as {
+        payload: { latency: { sttMs: number; ingestMs: number; decodeMs: number } };
+      };
+      expect(percept.payload.latency).toMatchObject({
+        sttMs: 87,
+        ingestMs: 0,
+        decodeMs: 87,
+      });
     } finally {
       unwire();
     }

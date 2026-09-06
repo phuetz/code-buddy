@@ -28,7 +28,7 @@ export interface Experience {
   /** Stable id (e.g. `run:<runId>:<frictionKey>` or `sensor:<...>`). */
   id: string;
   /** Where it came from. */
-  source: 'run' | 'sensor' | 'manual';
+  source: 'run' | 'sensor' | 'manual' | 'changelog' | 'delegation-log';
   /** Short machine label for the situation (used to target a benchmark scenario). */
   kind: string;
   /** Human-readable description of the friction/opportunity. */
@@ -68,6 +68,8 @@ export interface BenchmarkScenario {
   expectIncludes: string[];
   /** Human label. */
   description: string;
+  /** Source documentation reference (e.g. 'CLAUDE.md:27'). */
+  source?: string;
 }
 
 export interface BenchmarkScenarioResult {
@@ -110,7 +112,7 @@ export interface GateOutcome {
 /** One accepted improvement, kept as an evolutionary stepping stone (DGM). */
 export interface ArchiveEntry {
   proposalId: string;
-  kind: ImprovementProposal['kind'] | 'tool' | 'skill';
+  kind: ImprovementProposal['kind'] | 'tool' | 'skill' | 'strategy' | 'evolution-notes' | 'delegation-log';
   targetScenarioId: string;
   experienceId?: string;
   delta: number;
@@ -122,6 +124,8 @@ export interface ArchiveEntry {
   createdAt: string;
   /** Sentinel for auditability, mirrors the learning-loop convention. */
   reviewedBy: string;
+  /** Origin of non-lesson archive entries, for example the project CHANGELOG or delegation logs. */
+  provenance?: 'changelog' | 'delegation-log' | string;
 }
 
 export interface SelfImprovementCycleResult {
@@ -136,7 +140,7 @@ export interface SelfImprovementCycleResult {
   scoreAfter: BenchmarkScore;
   /** True only when an empirically-validated improvement was kept. */
   applied: boolean;
-  /** 'propose-only' (default) or 'auto-apply' (CODEBUDDY_SELF_IMPROVE=true). */
+  /** 'propose-only' (default, including CODEBUDDY_SELF_IMPROVE=true) or 'auto-apply' (literal auto-apply / --apply). */
   autonomy: 'propose-only' | 'auto-apply';
   notes: string[];
 }

@@ -33,6 +33,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'yaml';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 import type {
   SafeMode,
@@ -642,14 +643,17 @@ export class InterpreterService extends EventEmitter {
     }
 
     try {
-      const content = fs.readFileSync(usagePath, 'utf-8');
-      const data = JSON.parse(content);
+      const data = readJsonAtomicSync<Partial<UsageStats> | null>(usagePath, null);
+      if (!data) return;
 
       // Merge persisted usage
-      this.state.usage.tokens = data.tokens || this.state.usage.tokens;
-      this.state.usage.cost = data.cost || this.state.usage.cost;
-      this.state.usage.requestCount = data.requestCount || 0;
-      this.state.usage.sessionStart = new Date(data.sessionStart || Date.now());
+      if (data.tokens) this.state.usage.tokens = { ...this.state.usage.tokens, ...data.tokens };
+      if (data.cost) this.state.usage.cost = { ...this.state.usage.cost, ...data.cost };
+      if (typeof data.requestCount === 'number') this.state.usage.requestCount = data.requestCount;
+      const sessionStart = data.sessionStart as unknown;
+      if (typeof sessionStart === 'string' || typeof sessionStart === 'number' || sessionStart instanceof Date) {
+        this.state.usage.sessionStart = new Date(sessionStart);
+      }
 
       this.updateBudgetStatus();
     } catch {
@@ -677,7 +681,7 @@ export class InterpreterService extends EventEmitter {
       lastRequest: this.state.usage.lastRequest?.toISOString(),
     };
 
-    fs.writeFileSync(usagePath, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomicSync(usagePath, data, { mode: 0o600 });
   }
 
   private llmClient: import('../codebuddy/client.js').CodeBuddyClient | null = null;
@@ -685,9 +689,10 @@ export class InterpreterService extends EventEmitter {
   private async getLLMClient(): Promise<import('../codebuddy/client.js').CodeBuddyClient> {
     if (this.llmClient) return this.llmClient;
 
-    const apiKey = process.env.GROK_API_KEY;
+    const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+    const apiKey = resolveActiveProviderApiKey();
     if (!apiKey) {
-      throw new Error('GROK_API_KEY environment variable is required for LLM calls. Set it with: export GROK_API_KEY=your-key');
+      throw new Error('No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.');
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');

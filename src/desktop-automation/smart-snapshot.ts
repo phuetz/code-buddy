@@ -971,6 +971,13 @@ if ($focused) {
   private async detectLinuxATSPIElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
 
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      logger.warn(
+        'AT-SPI skipped: no DISPLAY/WAYLAND_DISPLAY (honest no-op, not a session scrape)',
+      );
+      return elements;
+    }
+
     const python = this.resolveAtspiPython();
     if (!python) {
       logger.warn(
@@ -1447,6 +1454,9 @@ if ($focused) {
           return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
         }
       } else if (process.platform === 'linux') {
+        if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+          return { width: 1920, height: 1080 };
+        }
         try {
           const output = execSync(`xdpyinfo | grep dimensions`, { encoding: 'utf-8' });
           const match = output.match(/(\d+)x(\d+)/);

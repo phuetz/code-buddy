@@ -9,7 +9,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
   createPeerChatClientForProvider,
@@ -17,11 +17,18 @@ import {
   resolveProviderFromEnv,
   _getDetectionOrderForTests,
 } from '../../src/fleet/peer-chat-client-factory.js';
+import {
+  isModelCompatibleWithProvider,
+  pickCompatibleModelForProvider,
+} from '../../src/fleet/compatible-model.js';
+import { logger } from '../../src/utils/logger.js';
 
 /** Snapshot env vars we touch so each test can reset them cleanly. */
 const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'CODEBUDDY_MODEL',
   'CODEBUDDY_FALLBACK_PROVIDERS',
   'CODEBUDDY_FALLBACK_PROVIDER',
   'CODEBUDDY_FALLBACK_MODEL',
@@ -29,6 +36,7 @@ const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_CODEX_AUTH_PATH',
   'OLLAMA_HOST',
   'OLLAMA_MODEL',
+  'GROK_MODEL',
   'LMSTUDIO_HOST',
   'LMSTUDIO_MODEL',
   'GROK_API_KEY',
@@ -366,6 +374,61 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.GOOGLE_API_KEY = 'x';
       const result = createPeerChatClientFromEnv();
       expect(result!.info.model).toBe('gemini-2.5-flash');
+    });
+
+    it('ignores a ChatGPT model leftover when the resolved provider is Ollama', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.CODEBUDDY_PROVIDER = 'ollama';
+      process.env.CODEBUDDY_PEER_MODEL = 'gpt-5.5';
+      const resolved = resolveProviderFromEnv('ollama');
+      expect(resolved!.provider).toBe('ollama');
+      expect(resolved!.model).toBe('qwen2.5-coder:7b');
+      expect(createPeerChatClientFromEnv()!.info.model).toBe('qwen2.5-coder:7b');
+      expect(warn.mock.calls.some((call) => String(call[0]).includes('CODEBUDDY_PEER_MODEL'))).toBe(true);
+      warn.mockRestore();
+    });
+
+    it('ignores CODEBUDDY_MODEL when it belongs to another provider', () => {
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.CODEBUDDY_MODEL = 'gpt-5.5';
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen2.5-coder:7b');
+    });
+
+    it('keeps a same-family CODEBUDDY_PEER_MODEL on Ollama', () => {
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.CODEBUDDY_PEER_MODEL = 'qwen2.5-coder:32b';
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen2.5-coder:32b');
+    });
+
+    it('uses a compatible GROK_MODEL as the Ollama catalog default', () => {
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.GROK_MODEL = 'qwen3:4b-instruct';
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen3:4b-instruct');
+    });
+
+    it('ignores an incompatible GROK_MODEL leftover on Ollama', () => {
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.GROK_MODEL = 'gpt-5.5';
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen2.5-coder:7b');
+    });
+  });
+
+  describe('compatible model helper', () => {
+    it('rejects gpt-5.5 on ollama and accepts it on chatgpt-oauth', () => {
+      expect(isModelCompatibleWithProvider('gpt-5.5', 'ollama')).toBe(false);
+      expect(isModelCompatibleWithProvider('gpt-5.5', 'chatgpt-oauth')).toBe(true);
+    });
+
+    it('picks the spec default after ignoring a foreign global model', () => {
+      const pick = pickCompatibleModelForProvider({
+        provider: 'ollama',
+        allowGlobalModel: true,
+        specDefaultModel: 'qwen2.5-coder:7b',
+        env: { CODEBUDDY_PEER_MODEL: 'gpt-5.5' },
+      });
+      expect(pick.model).toBe('qwen2.5-coder:7b');
+      expect(pick.ignored[0]?.key).toBe('CODEBUDDY_PEER_MODEL');
     });
   });
 

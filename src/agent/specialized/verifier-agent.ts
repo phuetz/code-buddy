@@ -92,6 +92,15 @@ export const VERIFIER_ALLOWED_TOOLS = [
   'search_files',
 ];
 
+/** Tools that count as an oracle (not mere inspection). */
+const VERIFIER_ORACLE_TOOLS = new Set([
+  'task_verify',
+  'bash',
+  'web_test',
+  'app_server',
+  'execute_code',
+]);
+
 /** Destructive write tools — a verifier reads and executes, it does not code. */
 export const VERIFIER_DENIED_TOOLS = [
   'create_file',
@@ -261,7 +270,7 @@ export class VerifierAgent extends SpecializedAgent {
     const maxObserve = (task.params?.maxObserve as number) ?? 10000;
 
     try {
-      const verdict = await this.runVerificationLoop(
+      const loop = await this.runVerificationLoop(
         this.buildRequest(task),
         llmCall as LlmCall,
         this.gate(executeTool as ExecuteTool),
@@ -269,7 +278,13 @@ export class VerifierAgent extends SpecializedAgent {
         maxObserve,
       );
 
-      const confirmed = /\bCONFIRMED\b/.test(verdict) && !/\bNEEDS REVIEW\b/.test(verdict);
+      let verdict = loop.output;
+      const claimedConfirmed = /\bCONFIRMED\b/.test(verdict) && !/\bNEEDS REVIEW\b/.test(verdict);
+      if (claimedConfirmed && loop.oracleCount === 0) {
+        verdict +=
+          '\n\nFINAL VERDICT: NEEDS REVIEW — CONFIRMED was claimed without running an oracle (no evidence).';
+      }
+      const confirmed = claimedConfirmed && loop.oracleCount > 0;
 
       return {
         success: true,
@@ -316,13 +331,14 @@ export class VerifierAgent extends SpecializedAgent {
     executeTool: ExecuteTool,
     maxSteps: number,
     maxObserve: number,
-  ): Promise<string> {
+  ): Promise<{ output: string; oracleCount: number }> {
     const messages: SWEMessage[] = [
       { role: 'system', content: VERIFIER_SYSTEM_PROMPT },
       { role: 'user', content: request },
     ];
 
     let lastContent = '';
+    let oracleCount = 0;
 
     for (let step = 0; step < maxSteps; step++) {
       const response = await llmCall(messages, VERIFIER_TOOLS);
@@ -334,7 +350,10 @@ export class VerifierAgent extends SpecializedAgent {
 
       // No tool calls => the model has produced its final verdict.
       if (!response.tool_calls?.length) {
-        return response.content || lastContent || 'NEEDS REVIEW — verifier produced no output.';
+        return {
+          output: response.content || lastContent || 'NEEDS REVIEW — verifier produced no output.',
+          oracleCount,
+        };
       }
 
       for (const toolCall of response.tool_calls) {
@@ -347,6 +366,9 @@ export class VerifierAgent extends SpecializedAgent {
         }
 
         const result = await executeTool(name, args);
+        if (result.success && VERIFIER_ORACLE_TOOLS.has(name)) {
+          oracleCount += 1;
+        }
         let output = result.success
           ? result.output || 'Success (no output)'
           : `Error: ${result.error || 'Unknown error'}`;
@@ -359,10 +381,12 @@ export class VerifierAgent extends SpecializedAgent {
     }
 
     // Ran out of steps without a clean final answer: fail honest.
-    return (
-      lastContent +
-      `\n\nFINAL VERDICT: NEEDS REVIEW — verification did not converge within ${maxSteps} steps; evidence above is incomplete.`
-    );
+    return {
+      output:
+        lastContent +
+        `\n\nFINAL VERDICT: NEEDS REVIEW — verification did not converge within ${maxSteps} steps; evidence above is incomplete.`,
+      oracleCount,
+    };
   }
 }
 

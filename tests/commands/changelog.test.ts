@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -22,6 +23,17 @@ afterEach(async () => {
 });
 
 describe('buddy changelog command', () => {
+  it('documents the Git checkout requirement for npm-pack installations', () => {
+    const gettingStarted = readFileSync(
+      path.join(process.cwd(), 'docs/getting-started.md'),
+      'utf8',
+    );
+
+    expect(gettingStarted).toContain('installation npm pack');
+    expect(gettingStarted).toContain('Git checkout');
+    expect(gettingStarted).toContain('buddy changelog');
+  });
+
   it('uses the last reachable tag by default and prints Markdown to stdout', async () => {
     const calls: string[][] = [];
     const runGit: ChangelogGitRunner = async (args) => {

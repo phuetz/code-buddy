@@ -3,8 +3,8 @@
  *
  * Wraps the core `FleetListener` from `src/fleet/fleet-listener.ts` so
  * Cowork can subscribe to `fleet:*` events broadcast by remote Code Buddy
- * peers over the Tailscale mesh (e.g. Ministar Linux hub at
- * `ws://100.98.18.76:3000/ws`).
+ * peers over the Tailscale mesh (e.g. a Linux hub at
+ * `ws://203.0.113.10:3000/ws`, an address of the RFC 5737 documentation range).
  *
  * Design choices
  * - Reuses the core listener via `loadCoreModule` rather than reimplementing

@@ -24,6 +24,69 @@ OMIT="--omit=optional"
 # les tests raccourcissent le délai via BALAYAGE_TIMEOUT.
 TIMEOUT="${BALAYAGE_TIMEOUT:-45}"
 
+# Résoudre les exécutables AVANT de vider l'environnement. Les runners CI
+# placent souvent Node dans le toolcache (hors /usr/bin), alors que l'ancien
+# balayage lançait un `node` nu après avoir réduit PATH à /usr/bin:/bin.
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+NPM_BIN="$(command -v npm 2>/dev/null || true)"
+ENV_BIN="$(command -v env 2>/dev/null || true)"
+SLEEP_BIN="$(command -v sleep 2>/dev/null || true)"
+[ -n "$NODE_BIN" ] || { echo "exécutable node introuvable avant l'environnement vierge" >&2; exit 2; }
+[ -n "$ENV_BIN" ] || { echo "exécutable env introuvable avant l'environnement vierge" >&2; exit 2; }
+[ -n "$SLEEP_BIN" ] || { echo "exécutable sleep introuvable pour le timeout portable" >&2; exit 2; }
+
+# Le PATH reste volontairement minimal : il ne reçoit ni le PATH de l'appelant
+# ni les binaires de l'installation. BALAYAGE_ISOLATED_PATH est un seam de test
+# permettant de prouver que le balayage fonctionne même quand ce PATH ne
+# contient pas node ni timeout ; les exécutables résolus ci-dessus restent les
+# seuls binaires explicitement injectés.
+ISOLATED_PATH="${BALAYAGE_ISOLATED_PATH:-/usr/bin:/bin}"
+if [ -z "$NPM_BIN" ] && [ -z "${BALAYAGE_ENTREE:-}" ]; then
+  echo "exécutable npm introuvable pour construire l'installation" >&2
+  exit 2
+fi
+
+# tsx est un script #!/usr/bin/env node : sous env -i, l'invoquer directement
+# réintroduirait exactement la dépendance au PATH que l'on vient de supprimer.
+TSX_CLI="$REPO/node_modules/tsx/dist/cli.mjs"
+
+# timeout(1) GNU n'existe pas sur macOS. Ce watchdog shell est volontairement
+# utilisé partout : il ne dépend d'aucun binaire timeout et tue ensuite une
+# commande qui ignore SIGTERM. sleep est résolu avant env -i et exécuté dans le
+# shell du balayage, pas dans l'environnement vierge de l'application.
+avec_timeout_portable() {
+  local duree="$1"
+  shift
+  local -a environnement=(
+    "HOME=$BASE/home"
+    "PATH=$ISOLATED_PATH"
+    "TERM=dumb"
+  )
+  [ -n "${BALAYAGE_NODE_OPTIONS:-}" ] && environnement+=("NODE_OPTIONS=$BALAYAGE_NODE_OPTIONS")
+  [ -n "${BALAYAGE_BLOCKED_MODULES:-}" ] && environnement+=("CODEBUDDY_TEST_BLOCKED_MODULES=$BALAYAGE_BLOCKED_MODULES")
+  local pid watchdog_pid statut=0
+
+  # Lancer env directement, plutôt qu'une fonction en arrière-plan, garantit
+  # que pid désigne le processus Node lui-même. Ainsi un SIGTERM puis SIGKILL
+  # ne laissent pas un interpréteur enfant orphelin quand il ignore SIGTERM.
+  "$ENV_BIN" -i "${environnement[@]}" "$@" &
+  pid=$!
+  (
+    "$SLEEP_BIN" "$duree"
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      "$SLEEP_BIN" 5
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  ) > /dev/null 2>&1 &
+  watchdog_pid=$!
+
+  wait "$pid" || statut=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  return "$statut"
+}
+
 # Référence VERSIONNÉE des commandes attendues. Frozen snapshot indépendant de
 # l'extracteur au moment du balayage : une régression de l'extracteur ou une
 # installation qui perd des commandes rend l'extraction plus courte que la
@@ -43,11 +106,10 @@ if [ "${1:-}" = "--regenerer" ]; then
   tmp_ref="$(mktemp)"
   {
     if [ -n "${BALAYAGE_SOURCE_ENTREE:-}" ]; then
-      env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
-        timeout --kill-after=5 "$TIMEOUT" node "$BALAYAGE_SOURCE_ENTREE" --help
+      avec_timeout_portable "$TIMEOUT" "$NODE_BIN" "$BALAYAGE_SOURCE_ENTREE" --help
     else
-      env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
-        timeout --kill-after=5 "$TIMEOUT" "$REPO/node_modules/.bin/tsx" "$REPO/src/index.ts" --help
+      [ -f "$TSX_CLI" ] || { echo "point d'entrée tsx introuvable : $TSX_CLI" >&2; exit 2; }
+      avec_timeout_portable "$TIMEOUT" "$NODE_BIN" "$TSX_CLI" "$REPO/src/index.ts" --help
     fi
   } | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$tmp_ref"
   nouveau=$(wc -l < "$tmp_ref")
@@ -87,15 +149,16 @@ if [ -n "${BALAYAGE_ENTREE:-}" ]; then
   [ -f "$ENTREE" ] || { echo "point d'entrée injecté introuvable : $ENTREE"; exit 2; }
 else
   echo "== construction"
-  ( cd "$REPO" && npm run build ) > "$BASE/build.log" 2>&1 || { echo "build en échec, voir $BASE/build.log"; exit 2; }
+  [ -n "$NPM_BIN" ] || { echo "npm introuvable, impossible de construire"; exit 2; }
+  ( cd "$REPO" && "$NPM_BIN" run build ) > "$BASE/build.log" 2>&1 || { echo "build en échec, voir $BASE/build.log"; exit 2; }
 
   echo "== empaquetage"
-  TGZ="$(cd "$REPO" && npm pack --silent 2>/dev/null | tail -1)"
+  TGZ="$(cd "$REPO" && "$NPM_BIN" pack --silent 2>/dev/null | tail -1)"
   [ -n "$TGZ" ] || { echo "npm pack n'a rien produit"; exit 2; }
   mkdir -p "$BASE/install" && mv "$REPO/$TGZ" "$BASE/install/"
 
   echo "== installation propre ${OMIT:-(avec les optionnelles)}"
-  ( cd "$BASE/install" && npm init -y >/dev/null 2>&1 && npm install "./$TGZ" $OMIT --no-audit --no-fund ) \
+  ( cd "$BASE/install" && "$NPM_BIN" init -y >/dev/null 2>&1 && "$NPM_BIN" install "./$TGZ" $OMIT --no-audit --no-fund ) \
     > "$BASE/install.log" 2>&1 || { echo "installation en échec, voir $BASE/install.log"; exit 2; }
 
   ENTREE="$BASE/install/node_modules/@phuetz/code-buddy/dist/index.js"
@@ -105,20 +168,12 @@ mkdir -p "$BASE/home"
 
 # Environnement vide : ni clé d'API, ni configuration héritée.
 appel() {
-  local -a environnement=(
-    "HOME=$BASE/home"
-    "PATH=/usr/bin:/bin"
-    "TERM=dumb"
-  )
-  [ -n "${BALAYAGE_NODE_OPTIONS:-}" ] && environnement+=("NODE_OPTIONS=$BALAYAGE_NODE_OPTIONS")
-  [ -n "${BALAYAGE_BLOCKED_MODULES:-}" ] && environnement+=("CODEBUDDY_TEST_BLOCKED_MODULES=$BALAYAGE_BLOCKED_MODULES")
-  env -i "${environnement[@]}" timeout --kill-after=5 "$TIMEOUT" node "$ENTREE" "$@" 2>&1
+  avec_timeout_portable "$TIMEOUT" "$NODE_BIN" "$ENTREE" "$@" 2>&1
 }
 
 # Extrait la liste des sous-commandes d'un point d'entrée node depuis son --help.
 extraire_commandes() {
-  env -i "HOME=$BASE/home" "PATH=/usr/bin:/bin" "TERM=dumb" \
-    timeout --kill-after=5 "$TIMEOUT" node "$1" --help 2>&1 \
+  avec_timeout_portable "$TIMEOUT" "$NODE_BIN" "$1" --help 2>&1 \
     | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u
 }
 

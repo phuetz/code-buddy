@@ -25,6 +25,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -328,7 +329,7 @@ export class KnowledgeManager {
       '---',
     ].filter(Boolean).join('\n');
 
-    await fs.writeFile(filePath, `${frontmatter}\n\n${content}`);
+    await writeFileAtomic(filePath, `${frontmatter}\n\n${content}`, { mode: 0o600 });
 
     // Reload
     await this.load();

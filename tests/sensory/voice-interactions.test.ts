@@ -57,7 +57,7 @@ describe('voice interactions catalog', () => {
     );
   });
 
-  it('answers departure, return, autonomy, and real-test interactions', () => {
+  it('answers departure and return interactions', () => {
     expect(matchVoiceInteraction('Lisa je pars au travail')).toBe(
       'Bon courage pour le travail, Patrice. Je continue ici et je garde un résumé pour ton retour.',
     );
@@ -67,23 +67,29 @@ describe('voice interactions catalog', () => {
     expect(matchVoiceInteraction('Lisa je suis de retour')).toBe(
       'Contente de te retrouver, Patrice. Je peux te faire le résumé de ce que j’ai fait.',
     );
-    expect(matchVoiceInteraction('Continue en autonomie')).toBe(
-      'Je continue en autonomie et je garde les preuves pour ton retour.',
-    );
-    expect(matchVoiceInteraction('Pas de mocks')).toBe(
-      'Tu as raison. Je vais tester en vrai et garder une preuve.',
-    );
   });
 
-  it('does not hide real work requests behind fake acknowledgements', () => {
-    expect(matchVoiceInteraction('Lisa corrige le mode vocal')).toBeNull();
-    expect(matchVoiceInteraction('Lisa cherche les erreurs dans les logs')).toBeNull();
-    expect(matchVoiceInteraction('Lisa prends une photo avec la caméra')).toBeNull();
-    expect(matchVoiceInteraction('Lisa envoie un message Telegram')).toBeNull();
+  it.each([
+    'Lisa corrige le mode vocal',
+    'Lisa cherche les erreurs dans les logs',
+    'Lisa prends une photo avec la caméra',
+    'Lisa envoie un message Telegram',
+    'Lisa corrige le filtre sexuel',
+    'Continue en autonomie',
+    'Pas de mocks',
+    'Réponds plus court',
+    'Répète',
+  ])('does not hide the real request %j behind a fake acknowledgement', (request) => {
+    expect(matchVoiceInteraction(request)).toBeNull();
   });
 
-  it('prewarm phrases include every catalog reply once', () => {
-    const replies = new Set(VOICE_INTERACTIONS.map(interaction => interaction.reply));
+  it('prewarm phrases include every direct catalog reply once', () => {
+    const agentRouted = new Set(['autonomy', 'real-tests', 'shorter', 'repeat']);
+    const replies = new Set(
+      VOICE_INTERACTIONS
+        .filter(interaction => !agentRouted.has(interaction.id))
+        .map(interaction => interaction.reply),
+    );
     expect(VOICE_INTERACTION_PREWARM_PHRASES.length).toBe(replies.size);
     for (const reply of replies) {
       expect(VOICE_INTERACTION_PREWARM_PHRASES).toContain(reply);

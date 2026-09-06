@@ -162,7 +162,7 @@ export function GpuMediaAdminPanel() {
             });
       remember(job);
       setSelectedId(job.id);
-      setNotice(`Job ${job.id} envoyé à Darkstar.`);
+      setNotice(`Job ${job.id} envoyé à GPU node.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -241,7 +241,7 @@ export function GpuMediaAdminPanel() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Gauge size={15} className="text-accent" /> Worker GPU Darkstar
+                <Gauge size={15} className="text-accent" /> Worker GPU GPU node
               </h2>
               <p className="mt-1 text-xs text-text-muted">
                 {capabilities
@@ -316,7 +316,7 @@ export function GpuMediaAdminPanel() {
                 testId="gpu-image-path"
               />
               <TextField
-                label="Dossier de sortie Darkstar"
+                label="Dossier de sortie GPU node"
                 value={outputDir}
                 onChange={setOutputDir}
                 testId="gpu-output-dir"
@@ -368,7 +368,7 @@ export function GpuMediaAdminPanel() {
             data-testid="gpu-submit"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Envoyer à
-            Darkstar
+            GPU node
           </button>
         </div>
       </section>

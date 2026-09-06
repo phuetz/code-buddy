@@ -10,6 +10,7 @@
  */
 
 import type { Command } from 'commander';
+import type { CodeBuddyAgent } from '../../agent/codebuddy-agent.js';
 import { logger } from '../../utils/logger.js';
 
 /** Create an agent through the shared OAuth/local/API provider resolver. */
@@ -27,6 +28,33 @@ async function createAgent() {
   }
 
   return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.model);
+}
+
+/** Release one-shot resources used by commands that stream a plan. */
+export async function disposePlanResources(agent: CodeBuddyAgent): Promise<void> {
+  try {
+    agent.dispose({ skipSessionLearning: true });
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan agent', { error: String(error) });
+  }
+  try {
+    const { resetSkillRegistry } = await import('../../skills/registry.js');
+    resetSkillRegistry();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan skill registry', { error: String(error) });
+  }
+  try {
+    const { resetMCPClient } = await import('../../mcp/mcp-client.js');
+    await resetMCPClient();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan MCP client', { error: String(error) });
+  }
+  try {
+    const { getActiveRunStore } = await import('../../observability/run-store.js');
+    getActiveRunStore()?.dispose();
+  } catch (error) {
+    logger.debug('Failed to dispose dev plan run store', { error: String(error) });
+  }
 }
 
 export function registerDevCommands(program: Command): void {
@@ -50,6 +78,7 @@ export function registerDevCommands(program: Command): void {
 
       const agent = await createAgent();
       await agent.systemPromptReady;
+      await agent.getSkillsReady();
 
       const prompt = `Repo context: ${profile.contextPack}
 
@@ -62,24 +91,58 @@ Produce a numbered implementation plan. For each step list:
 
 Do NOT implement yet. Plan only.`;
 
-      console.log(`Planning: ${objective}\n`);
-      for await (const chunk of agent.processUserMessageStream(prompt)) {
-        if (chunk.type === 'content' && chunk.content) {
-          process.stdout.write(chunk.content);
+      try {
+        console.log(`Planning: ${objective}\n`);
+        const { isMeaningfulPlan, stripGuardNoise, writeDevPlan } = await import('./golden-path.js');
+        let planOutput = '';
+        let thinkingHint = false;
+        for await (const chunk of agent.processUserMessageStream(prompt)) {
+          if (chunk.type === 'reasoning' && !thinkingHint) {
+            thinkingHint = true;
+            process.stderr.write('Thinking…\n');
+          }
+          if (chunk.type === 'content' && chunk.content) {
+            process.stdout.write(chunk.content);
+            planOutput += chunk.content;
+          }
         }
+        console.log('');
+        const cleaned = stripGuardNoise(planOutput);
+        if (!isMeaningfulPlan(cleaned)) {
+          console.error('Plan is empty — refusing to report success. No PLAN.md written.');
+          process.exitCode = 1;
+          return;
+        }
+        const planPath = writeDevPlan(process.cwd(), objective, cleaned);
+        console.log(`Wrote plan: ${planPath}`);
+      } finally {
+        await disposePlanResources(agent);
       }
-      console.log('');
-      agent.dispose?.();
     });
 
   // ── buddy dev run ──────────────────────────────────────────────
   dev
-    .command('run <objective>')
-    .description('Plan + implement + test + save artifacts in RunStore')
+    .command('run [objective]')
+    .description('Plan + implement + test + save artifacts in RunStore (resumes PLAN.md if objective omitted)')
     .option('-t, --type <type>', 'workflow type: add-feature|fix-tests|refactor|security-audit', 'add-feature')
     .option('-y, --yes', 'skip confirmation prompts (non-interactive)', false)
     .option('--write-policy <mode>', 'write policy: strict|confirm|off', 'strict')
-    .action(async (objective: string, opts: { type: string; yes: boolean; writePolicy: string }) => {
+    .action(async (objective: string | undefined, opts: { type: string; yes: boolean; writePolicy: string }) => {
+      const {
+        resolveRunObjective,
+        workflowExitCode,
+        buildConventionalCommitMessage,
+        conventionalCommitNamedFiles,
+      } = await import('./golden-path.js');
+      let resolved;
+      try {
+        resolved = resolveRunObjective(objective, process.cwd());
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
+      }
+
       const { runWorkflow } = await import('./workflows.js');
       type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
 
@@ -96,82 +159,67 @@ Do NOT implement yet. Plan only.`;
       const agent = await createAgent();
       await agent.systemPromptReady;
 
-      const result = await runWorkflow(workflowType, objective, agent, {
-        nonInteractive: opts.yes,
-        writePolicyMode: policyMode,
-      });
+      try {
+        const result = await runWorkflow(workflowType, resolved.objective, agent, {
+          nonInteractive: opts.yes,
+          writePolicyMode: policyMode,
+        });
 
-      console.log(`\nRun ${result.runId}: ${result.status}`);
-      if (result.artifactPaths.length > 0) {
-        console.log('Artifacts:');
-        for (const p of result.artifactPaths) {
-          console.log(`  ${p}`);
+        console.log(`\nRun ${result.runId}: ${result.status}`);
+        if (resolved.source === 'plan') {
+          console.log(`Objective (from PLAN.md): ${resolved.objective}`);
         }
+        if (result.artifactPaths.length > 0) {
+          console.log('Artifacts:');
+          for (const p of result.artifactPaths) {
+            console.log(`  ${p}`);
+          }
+        }
+        console.log(`\nView run: buddy run show ${result.runId}`);
+        if (result.status === 'completed') {
+          const commitType = workflowType === 'add-feature' ? 'feat' : 'fix';
+          const message = buildConventionalCommitMessage(commitType, resolved.objective);
+          const commit = conventionalCommitNamedFiles(process.cwd(), message);
+          if (commit.committed) {
+            console.log(`Committed ${commit.hash}: ${message}`);
+            console.log(`Files: ${commit.files.join(', ')}`);
+          } else if (commit.error) {
+            console.error(`Commit skipped: ${commit.error}`);
+          } else {
+            console.log('No named source files to commit.');
+          }
+        }
+        process.exitCode = workflowExitCode(result.status);
+      } finally {
+        await disposePlanResources(agent);
       }
-      console.log(`\nView run: buddy run show ${result.runId}`);
-      agent.dispose?.();
     });
 
   // ── buddy dev pr ───────────────────────────────────────────────
   dev
-    .command('pr <objective>')
-    .description('Run a workflow then generate a PR summary')
-    .option('-t, --type <type>', 'workflow type', 'add-feature')
+    .command('pr [objective]')
+    .description('Print a PR title/body and create a PR (fail-closed without gh; local remotes are pushed)')
     .option('-y, --yes', 'skip confirmation prompts', false)
-    .action(async (objective: string, opts: { type: string; yes: boolean }) => {
-      const { runWorkflow } = await import('./workflows.js');
-      type WFType = 'add-feature' | 'fix-tests' | 'refactor' | 'security-audit';
+    .action(async (objective: string | undefined) => {
+      const { buildPrTitleAndBody, attemptPullRequest } = await import('./golden-path.js');
+      const { title, body } = buildPrTitleAndBody(process.cwd(), objective);
+      console.log('\n── PR ──────────────────────────────────');
+      console.log(`Title: ${title}`);
+      console.log('');
+      console.log(body);
+      console.log('');
 
-      const validTypes: WFType[] = ['add-feature', 'fix-tests', 'refactor', 'security-audit'];
-      const workflowType = validTypes.includes(opts.type as WFType)
-        ? (opts.type as WFType)
-        : 'add-feature';
-
-      const agent = await createAgent();
-      await agent.systemPromptReady;
-
-      const result = await runWorkflow(workflowType, objective, agent, {
-        nonInteractive: opts.yes,
-        tags: ['pr'],
-      });
-
-      if (result.status === 'completed') {
-        console.log('\n── PR Summary ──────────────────────────');
-        const prPrompt = `Based on what was just implemented, write a GitHub Pull Request description:
-- Title (max 70 chars)
-- Summary (bullet points of what changed)
-- Test plan (what to verify)
-Keep it concise and professional.`;
-
-        for await (const chunk of agent.processUserMessageStream(prPrompt)) {
-          if (chunk.type === 'content' && chunk.content) {
-            process.stdout.write(chunk.content);
-          }
-        }
-        console.log('');
-
-        // Generate full PR description using LLM
-        try {
-          const { GitHubIntegration } = await import('../../integrations/github-integration.js');
-          const gh = new GitHubIntegration();
-          const prDescription = await gh.generatePRDescriptionWithLLM(
-            undefined,
-            async (prompt: string) => {
-              let response = '';
-              for await (const chunk of agent.processUserMessageStream(prompt)) {
-                if (chunk.type === 'content' && chunk.content) response += chunk.content;
-              }
-              return response;
-            },
-          );
-          console.log('\n── Full PR Description ─────────────────');
-          console.log(prDescription);
-        } catch {
-          // Non-critical: PR summary was already printed above
-        }
+      const attempt = attemptPullRequest(process.cwd(), title, body);
+      if (attempt.created) {
+        console.log(`PR created: ${attempt.url}`);
+        return;
       }
-
-      agent.dispose?.();
+      if (attempt.pushed) {
+        console.log('Pushed to local origin (no GitHub PR: gh is not authenticated).');
+        return;
+      }
+      console.error(`PR not created: ${attempt.error || 'gh not authenticated'}`);
+      process.exitCode = 1;
     });
 
   // ── buddy dev fix-ci ───────────────────────────────────────────
@@ -211,29 +259,17 @@ Keep it concise and professional.`;
           failure = await pipeline.fetchGitHubActionsLog(opts.run);
           if (!failure) {
             console.error(`Could not fetch failed job from run ${opts.run}. Is 'gh' installed and authenticated?`);
-            agent.dispose?.();
+            await disposePlanResources(agent);
             process.exit(1);
           }
         } else {
-          // Read log from --log file or stdin
+          const { loadCiLogContent } = await import('./golden-path.js');
           let logContent = '';
-          if (opts.log) {
-            const fs = await import('fs');
-            if (!fs.default.existsSync(opts.log)) {
-              console.error(`Log file not found: ${opts.log}`);
-              agent.dispose?.();
-              process.exit(1);
-            }
-            logContent = fs.default.readFileSync(opts.log, 'utf-8');
-          } else if (!process.stdin.isTTY) {
-            const chunks: Buffer[] = [];
-            for await (const chunk of process.stdin) {
-              chunks.push(chunk as Buffer);
-            }
-            logContent = Buffer.concat(chunks).toString('utf-8');
-          } else {
-            console.error('Auto-fix requires --run <id>, --log <file>, or piped CI output via stdin.');
-            agent.dispose?.();
+          try {
+            logContent = await loadCiLogContent({ log: opts.log });
+          } catch (err) {
+            console.error(err instanceof Error ? err.message : String(err));
+            await disposePlanResources(agent);
             process.exit(1);
           }
 
@@ -288,30 +324,19 @@ Keep it concise and professional.`;
           console.log(`\nPR created: ${result.prUrl}`);
         }
 
-        agent.dispose?.();
+        await disposePlanResources(agent);
         return;
       }
 
       // ── Original interactive path ────────────────────────────
+      const { loadCiLogContent, workflowExitCode } = await import('./golden-path.js');
       let logContent = '';
-
-      if (opts.log) {
-        const fs = await import('fs');
-        if (!fs.default.existsSync(opts.log)) {
-          console.error(`Log file not found: ${opts.log}`);
-          process.exit(1);
-        }
-        logContent = fs.default.readFileSync(opts.log, 'utf-8');
-      } else if (!process.stdin.isTTY) {
-        // Read from stdin
-        const chunks: Buffer[] = [];
-        for await (const chunk of process.stdin) {
-          chunks.push(chunk as Buffer);
-        }
-        logContent = Buffer.concat(chunks).toString('utf-8');
-      } else {
-        console.error('Provide --log <file> or pipe CI output via stdin.');
-        process.exit(1);
+      try {
+        logContent = await loadCiLogContent({ log: opts.log });
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
       }
 
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
@@ -340,7 +365,8 @@ Repo context: ${profile.contextPack}`;
       });
 
       console.log(`\nRun ${result.runId}: ${result.status}`);
-      agent.dispose?.();
+      process.exitCode = workflowExitCode(result.status);
+      await disposePlanResources(agent);
     });
 
   // ── buddy dev issue ───────────────────────────────────────
@@ -376,7 +402,7 @@ Repo context: ${profile.contextPack}`;
         process.exit(1);
       }
 
-      agent.dispose?.();
+      await disposePlanResources(agent);
     });
 
   // ── buddy dev explain ──────────────────────────────────────────
@@ -429,6 +455,6 @@ Be concise — this is a quick orientation for a developer.`;
         }
       }
       console.log('');
-      agent.dispose?.();
+      await disposePlanResources(agent);
     });
 }

@@ -173,7 +173,7 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detected?.provider).toBe('groq');
     expect(detected?.apiKey).toBe('groq-key');
     expect(detected?.baseURL).toBe('https://api.groq.com/openai/v1');
-    expect(detected?.defaultModel).toBe('llama-3.3-70b-versatile');
+    expect(detected?.defaultModel).toBe('qwen/qwen3.8-27b');
   });
 
   it('detects OpenRouter when configured', async () => {

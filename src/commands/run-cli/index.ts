@@ -10,6 +10,7 @@
  *   buddy run index-doctor        → report/repair stale artifact index rows
  *   buddy run lineage <runId>     → show the fork family tree of a run
  *   buddy run recall-pack <query> → build compact context from matching runs
+ *   buddy run trajectory <runId>        → unified read-only run trajectory
  *   buddy run trajectory-export <runId> → export redacted run trajectory
  *   buddy run trajectory-batch [query] → export redacted trajectory batch
  *   buddy run retrospective <runId> → run the Learning Agent over a trajectory
@@ -24,7 +25,7 @@
  *   buddy run mobile-pairing-acceptance-plan <query> → preview pairing acceptance
  *   buddy run mobile-approval-queue <query> → preview local approvals
  *   buddy run tail <runId>        → live-stream events (follow mode)
- *   buddy run replay <runId>      → show timeline + re-execute test steps
+ *   buddy run replay <runId>      → show timeline + re-execute recorded reads and test steps
  */
 
 import type { Command } from 'commander';
@@ -206,6 +207,17 @@ export function registerRunCommands(program: Command): void {
         includeAllContext || opts.memories === true,
         parseInt(opts.maxMemories, 10),
       );
+    });
+
+  // ── buddy run trajectory ────────────────────────────────────
+  run
+    .command('trajectory <runId>')
+    .description('Show a unified read-only trajectory (tools, permissions, cost, side effects)')
+    .option('--json', 'output JSON (schemaVersion 1)')
+    .option('--since <when>', 'ISO-8601 timestamp or epoch milliseconds; drop earlier events')
+    .action(async (runId: string, opts: { json?: boolean; since?: string }) => {
+      const { showRunTrajectory } = await import('../../observability/run-viewer.js');
+      await showRunTrajectory(runId, opts.json === true, opts.since);
     });
 
   // ── buddy run trajectory-export ──────────────────────────────
@@ -650,7 +662,7 @@ export function registerRunCommands(program: Command): void {
   // ── buddy run replay ───────────────────────────────────────────
   run
     .command('replay <runId>')
-    .description('Show timeline and re-execute test steps')
+    .description('Show timeline and re-execute recorded view_file reads and test steps')
     .option('--no-rerun', 'only show timeline, do not re-run tests')
     .action(async (runId: string, opts: { rerun: boolean }) => {
       const { replayRun } = await import('../../observability/run-viewer.js');

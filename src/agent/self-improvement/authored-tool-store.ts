@@ -9,6 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 import type { AuthoredToolSpec } from './authored-tool-runtime.js';
 
@@ -37,7 +38,7 @@ export class AuthoredToolStore {
 
   private read(): StoreFile {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as Partial<StoreFile>;
+      const parsed = readJsonAtomicSync<Partial<StoreFile>>(this.filePath, {}, { mode: 0o600 });
       if (Array.isArray(parsed.tools)) {
         return { schemaVersion: AUTHORED_TOOL_STORE_SCHEMA_VERSION, tools: parsed.tools };
       }
@@ -49,7 +50,7 @@ export class AuthoredToolStore {
 
   private write(file: StoreFile): void {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
   }
 
   list(): AuthoredToolSpec[] {

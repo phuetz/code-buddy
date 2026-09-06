@@ -188,10 +188,21 @@ export class AgentState extends EventEmitter {
   /**
    * Record cost for current request
    */
-  recordSessionCost(inputTokens: number, outputTokens: number, model: string): void {
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+  recordSessionCost(
+    inputTokens: number,
+    outputTokens: number,
+    model: string,
+    providerUsage?: { promptTokens: number; completionTokens: number }
+  ): void {
+    // Keep the historical 3-argument contract when no provider usage is known:
+    // callers and tests spy on `calculateCost(input, output, model)` exactly.
+    const cost = providerUsage
+      ? this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage)
+      : this.costTracker.calculateCost(inputTokens, outputTokens, model);
     this.sessionCost += cost;
-    this.costTracker.recordUsage(inputTokens, outputTokens, model);
+    const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
+    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
+    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
     this.emit("cost:recorded", { cost, total: this.sessionCost });
 
     if (this.isSessionCostLimitReached()) {

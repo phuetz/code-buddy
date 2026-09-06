@@ -23,10 +23,13 @@ const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
  * Known Groq models with context window sizes.
  */
 const KNOWN_MODELS: Record<string, { name: string; contextWindow: number }> = {
-  'llama-3.3-70b-versatile': { name: 'Llama 3.3 70B Versatile', contextWindow: 131072 },
-  'llama-3.1-8b-instant': { name: 'Llama 3.1 8B Instant', contextWindow: 131072 },
-  'mixtral-8x7b-32768': { name: 'Mixtral 8x7B', contextWindow: 32768 },
-  'gemma2-9b-it': { name: 'Gemma 2 9B IT', contextWindow: 8192 },
+  'qwen/qwen3.8-27b': { name: 'Qwen 3.8 27B', contextWindow: 131072 },
+  'openai/gpt-oss-120b': { name: 'GPT OSS 120B', contextWindow: 131072 },
+  'openai/gpt-oss-20b': { name: 'GPT OSS 20B', contextWindow: 131072 },
+  'qwen/qwen3.6-27b': { name: 'Qwen 3.6 27B', contextWindow: 131072 },
+  'groq/compound': { name: 'Compound', contextWindow: 128000 },
+  'groq/compound-mini': { name: 'Compound Mini', contextWindow: 128000 },
+  'whisper-large-v3': { name: 'Whisper Large v3', contextWindow: 8192 },
 };
 
 const DEFAULT_CONTEXT_WINDOW = 8192;
@@ -90,8 +93,8 @@ function buildOnboardingHooks(apiKey: string): ProviderOnboardingHooks {
     },
 
     async 'wizard.modelPicker'(models: DiscoveredModel[]) {
-      // Default: prefer llama-3.3-70b-versatile if available
-      const preferred = models.find(m => m.id === 'llama-3.3-70b-versatile');
+      // Default: prefer qwen/qwen3.8-27b if available
+      const preferred = models.find(m => m.id === 'qwen/qwen3.8-27b');
       return preferred?.id ?? models[0]?.id ?? '';
     },
 
@@ -136,7 +139,7 @@ export function createGroqProvider(): PluginProvider | null {
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'qwen/qwen3.8-27b',
           messages,
           max_tokens: 4096,
           stream: false,

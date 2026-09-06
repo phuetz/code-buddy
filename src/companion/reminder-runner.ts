@@ -20,6 +20,7 @@ import {
   pendingAcks,
   expireAcks,
   dueSnoozes,
+  consumeSnooze,
   loadReminders,
   reminderMessage,
   logReminderEvent,
@@ -59,7 +60,7 @@ async function defaultSay(text: string): Promise<void> {
   const { sayNow } = await import('../sensory/voice-loop.js');
   // The runner owns its Telegram notification separately; never emit a second
   // voice note through sayNow's legacy environment-controlled phone path.
-  await sayNow(text, { phoneDelivery: 'never' });
+  await sayNow(text, { phoneDelivery: 'never', ttsRouteHint: 'reminder' });
 }
 async function defaultNotify(text: string): Promise<boolean> {
   const { sendTelegramAlert } = await import('../sensory/alert.js');
@@ -94,6 +95,39 @@ async function notifyAndRecord(
 }
 
 /**
+ * Speak and Telegram are independent: a Piper/player failure must not swallow
+ * the phone announcement (and the reverse). Never-throws.
+ */
+async function announceChannels(
+  spoken: string,
+  telegramText: string,
+  externalId: string,
+  say: (text: string) => Promise<void>,
+  notify: (text: string) => Promise<boolean | void>,
+  deps: ReminderRunnerDeps,
+): Promise<{ voiced: boolean; notified: boolean }> {
+  let voiced = false;
+  let notified = false;
+  try {
+    await say(spoken);
+    voiced = true;
+  } catch (err) {
+    logger.warn(
+      `[reminders] voice announce failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  try {
+    await notifyAndRecord(telegramText, externalId, deps, notify);
+    notified = true;
+  } catch (err) {
+    logger.warn(
+      `[reminders] telegram announce failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { voiced, notified };
+}
+
+/**
  * One pass of the reminder loop. Exposed (not just the interval) so tests drive it with a
  * controlled clock + injected delivery. Never-throws.
  */
@@ -121,12 +155,13 @@ export async function runReminderTick(now: Date, deps: ReminderRunnerDeps = {}):
       if (isOneShot(r)) await setReminderEnabled(r.id, false);
       openAck(r, nowMs);
       const msg = reminderMessage(r);
-      await say(msg);
-      await notifyAndRecord(
+      await announceChannels(
+        msg,
         `⏰ ${msg}`,
         `reminder:${r.id}:fired:${now.toISOString()}`,
-        deps,
+        say,
         notify,
+        deps,
       );
       logger.info(`[reminders] fired '${r.label}'${isOneShot(r) ? ' (one-shot → retired)' : ''} (awaiting ack)`);
     } catch (err) {
@@ -141,14 +176,22 @@ export async function runReminderTick(now: Date, deps: ReminderRunnerDeps = {}):
       const r = (await loadReminders()).find((x) => x.id === s.id);
       const msg = r ? reminderMessage(r) : `C'est l'heure : ${s.label}.`;
       openAck({ id: s.id, label: s.label }, nowMs);
-      await say(msg);
-      await notifyAndRecord(
+      const delivered = await announceChannels(
+        msg,
         `⏰ ${msg}`,
         `reminder:${s.id}:snoozed:${nowMs}`,
-        deps,
+        say,
         notify,
+        deps,
       );
+      if (!delivered.voiced && !delivered.notified) {
+        throw new Error('snooze re-announce failed on voice and Telegram');
+      }
       await logReminderEvent('fired', { id: s.id, label: s.label }, { snoozed: true }, now);
+      const consumed = await consumeSnooze(s.id);
+      if (!consumed) {
+        logger.warn(`[reminders] snooze re-fire '${s.label}' announced but not consumed durably`);
+      }
       logger.info(`[reminders] snoozed reminder re-fired '${s.label}'`);
     } catch (err) {
       logger.warn(`[reminders] snooze re-fire '${s.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -199,9 +242,15 @@ export function wireReminderRunner(deps: ReminderRunnerDeps = {}): () => void {
   // Restore pending acks first: a reminder that fired before a restart must still be re-nagged or
   // escalated to a logged 'missed' — never silently dropped (health safety).
   void (async () => {
-    const { loadPendingAcks, loadSnoozes } = await import('./reminders.js');
-    await loadPendingAcks();
-    await loadSnoozes(); // restore deferred reminders so a restart mid-snooze still re-announces
+    try {
+      const { loadPendingAcks, loadSnoozes } = await import('./reminders.js');
+      await loadPendingAcks();
+      await loadSnoozes(); // restore deferred reminders so a restart mid-snooze still re-announces
+    } catch (err) {
+      logger.warn(
+        `[reminders] could not restore pending acks/snoozes: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   })();
   const timer = setInterval(() => {
     void runReminderTick(new Date(), deps);

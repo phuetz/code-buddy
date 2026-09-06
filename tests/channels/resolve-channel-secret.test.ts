@@ -31,10 +31,12 @@ const LITERAL_TOKEN = '987654321:LITERAL-secret-defGHI';
 describe('resolveChannelSecret / channel token from the encrypted store', () => {
   let tmpDir: string;
   let credsPath: string;
+  const previousTelegramToken = process.env.TELEGRAM_BOT_TOKEN;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-channel-secret-'));
     credsPath = path.join(tmpDir, 'credentials.enc');
+    delete process.env.TELEGRAM_BOT_TOKEN;
     // Point the singleton the loader will use at our throwaway encrypted store.
     CredentialManager.resetInstance();
     CredentialManager.getInstance({ credentialsPath: credsPath });
@@ -42,6 +44,8 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
 
   afterEach(() => {
     CredentialManager.resetInstance();
+    if (previousTelegramToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousTelegramToken;
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
@@ -81,6 +85,12 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
 
   it('returns undefined when neither a literal nor a stored secret exists', () => {
     expect(resolveChannelSecret('telegram', {})).toBeUndefined();
+  });
+
+  it('uses TELEGRAM_BOT_TOKEN when the documented env var is the only source', () => {
+    process.env.TELEGRAM_BOT_TOKEN = STORED_TOKEN;
+    expect(resolveChannelSecret('telegram', {})).toBe(STORED_TOKEN);
+    expect(resolveChannelSecret('discord', {})).toBeUndefined();
   });
 
   it('never throws when the CredentialManager blows up (falls back to no token)', () => {

@@ -12,6 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 import type { BehavioralCheck, LabeledTrajectory } from './execution-gate.js';
 
@@ -49,7 +50,7 @@ export class RuleStore {
 
   private read(): RuleFile {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as Partial<RuleFile>;
+      const parsed = readJsonAtomicSync<Partial<RuleFile>>(this.filePath, {}, { mode: 0o600 });
       if (Array.isArray(parsed.rules)) {
         return { schemaVersion: RULE_STORE_SCHEMA_VERSION, rules: parsed.rules };
       }
@@ -61,7 +62,7 @@ export class RuleStore {
 
   private write(file: RuleFile): void {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
   }
 
   list(): StoredRule[] {
@@ -124,7 +125,7 @@ export class CorpusStore {
 
   list(): LabeledTrajectory[] {
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as { trajectories?: LabeledTrajectory[] };
+      const parsed = readJsonAtomicSync<{ trajectories?: LabeledTrajectory[] }>(this.filePath, {}, { mode: 0o600 });
       return Array.isArray(parsed.trajectories) ? parsed.trajectories : [];
     } catch {
       return [];
@@ -133,7 +134,7 @@ export class CorpusStore {
 
   private write(trajectories: LabeledTrajectory[]): void {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify({ schemaVersion: 1, trajectories }, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.filePath, { schemaVersion: 1, trajectories }, { mode: 0o600 });
   }
 
   /** Add or replace a labeled trajectory by id. */

@@ -17,6 +17,10 @@ export interface ToolCacheConfig {
   enabled: boolean;
   ttlMs: number;
   maxEntries: number;
+  /** Persist entries to disk (default true). Tests set false to stay hermetic. */
+  persistToDisk?: boolean;
+  /** On-disk location, relative to the working directory by default. */
+  cachePath?: string;
   similarityThreshold: number;
   cacheableTools: Set<string>;
   excludePatterns: RegExp[];
@@ -44,6 +48,8 @@ const DEFAULT_CONFIG: ToolCacheConfig = {
   enabled: true,
   ttlMs: 5 * 60 * 1000, // 5 minutes
   maxEntries: 500,
+  persistToDisk: true,
+  cachePath: '.codebuddy/cache/tool-cache.json',
   similarityThreshold: 0.9,
   cacheableTools: new Set([
     'search',
@@ -96,8 +102,8 @@ export class ToolCache extends EventEmitter {
       maxEntries: this.config.maxEntries,
       ttlMs: this.config.ttlMs,
       similarityThreshold: this.config.similarityThreshold,
-      persistToDisk: true,
-      cachePath: '.codebuddy/cache/tool-cache.json',
+      persistToDisk: this.config.persistToDisk ?? true,
+      cachePath: this.config.cachePath ?? '.codebuddy/cache/tool-cache.json',
     });
     this.stats = {
       hits: 0,

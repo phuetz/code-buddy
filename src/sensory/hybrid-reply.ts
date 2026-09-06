@@ -29,7 +29,13 @@ import type {
   StreamReplyFn,
   VoiceStepOptions,
 } from './voice-loop.js';
-import { resolveVoiceModel, voiceLatencyBufferEnabled } from './voice-loop.js';
+import {
+  resolveVoiceModel,
+  sensoryReplyMaxSentences,
+  sensoryShortFirstEnabled,
+  voiceLatencyBufferEnabled,
+} from './voice-loop.js';
+import { FIRST_SENTENCE_CAP, SentenceAssembler } from './voice-stream.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
   intentKeyForQuery,
@@ -53,6 +59,7 @@ import {
 import { assessConversationResponse } from '../conversation/conversation-quality.js';
 import { isPureAcknowledgement } from '../conversation/dialogue-act.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
+import { applyLimitsContract } from '../companion/reply-augment.js';
 import { deriveArgumentObligations } from '../conversation/argument-obligations.js';
 import {
   shouldRunSemanticResponseGate,
@@ -61,8 +68,100 @@ import {
 import type { ConversationPlan } from '../conversation/types.js';
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
 
+const STREAM_FAILURE_CLOSURE = "Pardon, je n'ai pas réussi à finir ma réponse.";
+
+function completedStreamText(text: string): string {
+  const boundary = /[.!?…](?:\s|$)/gu;
+  let end = -1;
+  let match: RegExpExecArray | null;
+  while ((match = boundary.exec(text)) !== null) {
+    end = match.index + match[0].length;
+  }
+  return end >= 0 ? text.slice(0, end).trim() : '';
+}
+
+const SHORT_FIRST_MAX_WORDS = 20;
+const SHORT_FIRST_SENTENCE_CAP = 4_096;
+
+function splitOverlongFirstSentence(sentence: string): string[] {
+  const words = [...sentence.matchAll(/\S+/gu)];
+  if (words.length <= SHORT_FIRST_MAX_WORDS && sentence.length <= FIRST_SENTENCE_CAP) {
+    return [sentence.trim()];
+  }
+  const last = words[Math.min(words.length, SHORT_FIRST_MAX_WORDS) - 1];
+  if (!last || last.index === undefined) return [sentence.trim()];
+  const maximumCut = Math.min(last.index + last[0].length, FIRST_SENTENCE_CAP - 1);
+  let cut = maximumCut;
+  while (cut > 0 && !/\s/u.test(sentence[cut] ?? '')) cut -= 1;
+  if (cut === 0) cut = maximumCut;
+  const first = sentence
+    .slice(0, cut)
+    .replace(/[,;:.!?…]+$/u, '')
+    .trim();
+  const continuation = sentence.slice(cut).trim();
+  return [`${first}…`, continuation].filter(Boolean);
+}
+
+/**
+ * Turn token deltas into complete stable sentences and stop the provider iterator at the
+ * configured audio budget. The generous assembler cap avoids inventing a boundary before
+ * punctuation; the 20-word split is only a fail-safe for a provider that ignores the prompt.
+ */
+async function* shortFirstSentenceStream(
+  source: AsyncIterable<string>,
+  maxSentences: number,
+  signal?: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const assembler = new SentenceAssembler(
+    SHORT_FIRST_SENTENCE_CAP,
+    SHORT_FIRST_SENTENCE_CAP,
+  );
+  const iterator = source[Symbol.asyncIterator]();
+  let emitted = 0;
+  let sourceDone = false;
+  const emit = function* (sentences: string[]): Generator<string, boolean, unknown> {
+    for (const sentence of sentences) {
+      const parts = emitted === 0 ? splitOverlongFirstSentence(sentence) : [sentence.trim()];
+      for (const part of parts) {
+        if (!part || emitted >= maxSentences) return true;
+        emitted += 1;
+        yield `${part} `;
+        if (emitted >= maxSentences) return true;
+      }
+    }
+    return false;
+  };
+  try {
+    while (!signal?.aborted) {
+      const next = await iterator.next();
+      if (next.done) {
+        sourceDone = true;
+        yield* emit(assembler.flush());
+        return;
+      }
+      if (typeof next.value !== 'string' || next.value.length === 0) continue;
+      const limited = emit(assembler.push(next.value));
+      while (true) {
+        const part = limited.next();
+        if (part.done) {
+          if (part.value) return;
+          break;
+        }
+        yield part.value;
+      }
+    }
+  } finally {
+    if (!sourceDone) await iterator.return?.();
+  }
+}
+
+async function* singleTextStream(text: string): AsyncGenerator<string, void, unknown> {
+  yield text;
+}
+
 export {
   classifyLisaIntrospection,
+  isLisaEvolutionRequest,
   isLisaIntrospectionRequest,
 } from '../identity/lisa-introspection.js';
 export type { LisaIntrospectionIntent } from '../identity/lisa-introspection.js';
@@ -457,6 +556,17 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
 
   function remember(user: string, assistant: string): void {
     if (!assistant.trim()) return;
+    const previousUser = history.at(-2);
+    const previousAssistant = history.at(-1);
+    // A streamed shortcut is remembered before the voice loop knows whether its audio
+    // path will hold. If the immediate blocking retry wins, do not advance conversation
+    // memory a second time for the same user/assistant pair.
+    if (
+      previousUser?.role === 'user'
+      && previousAssistant?.role === 'assistant'
+      && norm(previousUser.content) === norm(user)
+      && norm(previousAssistant.content) === norm(assistant)
+    ) return;
     history.push({ role: 'user', content: user });
     history.push({ role: 'assistant', content: assistant });
     while (history.length > maxTurns * 2) history.shift();
@@ -554,7 +664,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         `[voice-hybrid] relationship safety intervened issues=${guarded.issues.join(',')}`
       );
     }
-    return guarded.response.trim();
+    return applyLimitsContract(guarded.response).text.trim();
   }
 
   function reportPrefixCause(
@@ -580,7 +690,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       );
       reportPrefixCause(timing, 'relationship_intervened');
     }
-    const guarded = guardedResult.response.trim();
+    const guarded = applyLimitsContract(guardedResult.response).text.trim();
     let invalid: SpokenPrefixTelemetryCause | undefined;
     if (!guarded) invalid = 'empty';
     else if (guarded.length > 180) invalid = 'too_long';
@@ -678,25 +788,40 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         remember(heard, safeShortcut);
         return safeShortcut;
       }
-      // Lisa selfie → generate portrait (LoRA trigger) + optional Telegram photo.
-      // Opt-out: CODEBUDDY_LISA_SELFIE=false. Default on when image backend exists.
+      // Lisa selfie — cache-first, before the LLM (companion profile has no tools).
       if (
-        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
-        !introspectionIntent
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false'
+        && (await import('../channels/companion-channel-profile.js')).isCompanionSurfaceEnabled()
+        && !introspectionIntent
       ) {
         try {
-          const { maybeHandleLisaSelfieRequest } = await import(
-            '../companion/lisa-selfie.js'
+          const { tryServeCompanionSelfie } = await import(
+            '../companion/lisa-selfie-router.js'
           );
-          const selfie = await maybeHandleLisaSelfieRequest(heard, {
+          const selfie = await tryServeCompanionSelfie(heard, {
+            surface: 'voice',
+            includeImageBytes: false,
             rootDir: options.cwd ?? process.cwd(),
           });
           if (selfie) {
             void evolveRelationshipFromUtterance(heard);
-            const line = guardBeforeMemory(selfie.spokenReply);
+            if (selfie.imagePath) {
+              try {
+                const env = process.env;
+                if (env.CODEBUDDY_SENSORY_ALERT_TOKEN && env.CODEBUDDY_SENSORY_ALERT_CHAT) {
+                  const { sendTelegramAlert } = await import('./alert.js');
+                  await sendTelegramAlert(selfie.caption, selfie.imagePath);
+                }
+              } catch (sendErr) {
+                logger.warn(
+                  `[voice-hybrid] lisa-selfie telegram skipped: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`,
+                );
+              }
+            }
+            const line = guardBeforeMemory(selfie.caption);
             remember(heard, line);
             logger.info(
-              `[voice-hybrid] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+              `[voice-hybrid] lisa-selfie cache=${selfie.reason} image=${Boolean(selfie.imagePath)}`,
             );
             return line;
           }
@@ -705,6 +830,28 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             `[voice-hybrid] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+      }
+      try {
+        const { maybeHandleCameraShareRequest } = await import(
+          '../companion/camera-share.js'
+        );
+        const share = await maybeHandleCameraShareRequest(heard, {
+          surface: 'voice',
+          rootDir: options.cwd ?? process.cwd(),
+        });
+        if (share) {
+          void evolveRelationshipFromUtterance(heard);
+          const line = guardBeforeMemory(share.spokenReply);
+          remember(heard, line);
+          logger.info(
+            `[voice-hybrid] camera-share success=${share.success} telegram=${share.telegramSent}`,
+          );
+          return line;
+        }
+      } catch (err) {
+        logger.warn(
+          `[voice-hybrid] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       await evolveRelationshipFromUtterance(heard);
       await ensureDeps();
@@ -812,6 +959,13 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     const startedAt = Date.now();
     try {
       const recent = conversationHistory(heard);
+      if (
+        sensoryShortFirstEnabled() &&
+        classifyLisaIntrospection(heard) === null &&
+        !classify(heard, recent)
+      ) {
+        return '';
+      }
       const route = await resolveVoiceModel(heard, { history: recent });
       if (!voiceLatencyBufferEnabled(
         process.env.CODEBUDDY_VOICE_SPOKEN_PREFIX,
@@ -886,8 +1040,8 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       }
       const substantive = introspectionIntent !== null || classify(heard, recent);
       // Technical introspection stays on its deterministic whole-answer guard. Other grounded
-      // turns use the agent's text-delta stream when available; an absent/failed stream yields
-      // nothing so makeVoiceReply retains the proven blocking fallback.
+      // turns use the agent's text-delta stream when available; a failed stream with no
+      // complete sentence yields nothing so makeVoiceReply retains the proven blocking fallback.
       if (introspectionIntent !== null) return;
 
       await ensureDeps(true);
@@ -934,14 +1088,36 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             .filter(Boolean)
             .join('\n\n');
           let full = '';
-          for await (const delta of agentStream(input, {
-            ...streamOptions,
-            introspectionText: heard,
-          })) {
-            if (replyOpts?.signal?.aborted) return;
-            if (typeof delta !== 'string' || delta.length === 0) continue;
-            full += delta;
-            yield delta;
+          try {
+            for await (const delta of agentStream(input, {
+              ...streamOptions,
+              introspectionText: heard,
+            })) {
+              if (replyOpts?.signal?.aborted) return;
+              if (typeof delta !== 'string' || delta.length === 0) continue;
+              full += delta;
+              yield delta;
+            }
+          } catch (error) {
+            // A complete sentence may already be in the speaker's queue. Do not restart
+            // the answer through the blocking route: close honestly and remember only this
+            // actually released part. With no complete sentence, the outer catch remains
+            // empty so makeVoiceReply can invoke the promised blocking fallback.
+            if (!replyOpts?.signal?.aborted) {
+              const spoken = guardBeforeMemory(completedStreamText(full));
+              if (spoken) {
+                yield STREAM_FAILURE_CLOSURE;
+                await evolveRelationshipFromUtterance(heard);
+                remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+                logger.warn(
+                  `[voice-hybrid] agent stream interrupted after partial delivery: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                );
+                return;
+              }
+            }
+            throw error;
           }
           if (replyOpts?.signal?.aborted) return;
           const completed = guardBeforeMemory(full.trim());
@@ -1004,12 +1180,34 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         const input = [preamble, prepared.systemGuidance, `Demande actuelle : ${heard}`]
           .filter(Boolean)
           .join('\n\n');
-        let completed = (await agentReply!(input, {
-          ...continuationOptions,
-          introspectionText: heard,
-        })).trim();
+        let completed = '';
+        try {
+          completed = (await agentReply!(input, {
+            ...continuationOptions,
+            introspectionText: heard,
+          })).trim();
+        } catch (error) {
+          if (!replyOpts?.signal?.aborted && spokenPrefix) {
+            yield STREAM_FAILURE_CLOSURE;
+            await evolveRelationshipFromUtterance(heard);
+            remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+            logger.warn(
+              `[voice-hybrid] prefixed reply interrupted after prefix delivery: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return;
+          }
+          throw error;
+        }
         if (replyOpts?.signal?.aborted) return;
         completed = guardBeforeMemory(removeRepeatedPrefix(spokenPrefix, completed));
+        if (!completed) {
+          yield STREAM_FAILURE_CLOSURE;
+          await evolveRelationshipFromUtterance(heard);
+          remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+          return;
+        }
         if (completed) yield completed;
 
         let correction = '';
@@ -1046,9 +1244,17 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       let full = '';
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       let cognitiveEvidence: string | undefined;
+      const shortFirst = sensoryShortFirstEnabled()
+        ? { maxSentences: sensoryReplyMaxSentences() }
+        : undefined;
+      const reviewShortFirstBeforeDelivery = Boolean(
+        shortFirst && shouldReviewPlan(prepared.plan, heard),
+      );
+      let shortFirstSentenceCount = 0;
       const streamOptions: VoiceStepOptions = {
         ...(replyOpts ?? {}),
         relationshipEvolutionHandled: true,
+        ...(shortFirst ? { shortFirst } : {}),
         ...(options.acquireCognitiveContext
           ? { acquireCognitiveContext: options.acquireCognitiveContext }
           : {}),
@@ -1066,11 +1272,39 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           cognitiveEvidence = context.evidence || undefined;
         },
       };
-      for await (const delta of chitchatStream!(heard, recent, streamOptions)) {
-        if (replyOpts?.signal?.aborted) return;
-        if (typeof delta !== 'string' || delta.length === 0) continue;
-        full += delta;
-        if (!prefixBuffer) yield delta;
+      if (shortFirst) replyOpts?.onShortFirstReady?.(shortFirst);
+      try {
+        const source = chitchatStream!(heard, recent, streamOptions);
+        const delivered = shortFirst
+          ? shortFirstSentenceStream(source, shortFirst.maxSentences, replyOpts?.signal)
+          : source;
+        for await (const delta of delivered) {
+          if (replyOpts?.signal?.aborted) return;
+          if (typeof delta !== 'string' || delta.length === 0) continue;
+          if (shortFirst) shortFirstSentenceCount += 1;
+          full += delta;
+          if (!prefixBuffer && !reviewShortFirstBeforeDelivery) yield delta;
+        }
+      } catch (error) {
+        if (!replyOpts?.signal?.aborted) {
+          const spoken = guardBeforeMemory(
+            prefixBuffer
+              ? replyOpts?.spokenPrefix?.trim() ?? ''
+              : completedStreamText(full),
+          );
+          if (spoken) {
+            yield STREAM_FAILURE_CLOSURE;
+            await evolveRelationshipFromUtterance(heard);
+            remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+            logger.warn(
+              `[voice-hybrid] chitchat stream interrupted after partial delivery: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return;
+          }
+        }
+        throw error;
       }
       let completed = full.trim();
       if (completed) {
@@ -1078,11 +1312,42 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           removeRepeatedPrefix(replyOpts?.spokenPrefix ?? '', completed),
         );
       }
-      if (completed && prefixBuffer && !replyOpts?.signal?.aborted) {
+      if (completed && reviewShortFirstBeforeDelivery && !replyOpts?.signal?.aborted) {
+        const reviewed = await reviewBeforeDelivery({
+          request: heard,
+          draft: completed,
+          plan: prepared.plan,
+          history: replyOpts?.spokenPrefix
+            ? [...recent, { role: 'assistant', content: replyOpts.spokenPrefix }]
+            : recent,
+          ...(cognitiveEvidence ? { evidence: cognitiveEvidence } : {}),
+          ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
+          ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
+        }, streamOptions);
+        if (replyOpts?.signal?.aborted) return;
+        const approved = guardBeforeMemory(reviewed?.response.trim() || completed);
+        const approvedParts: string[] = [];
+        for await (const delta of shortFirstSentenceStream(
+          singleTextStream(approved),
+          shortFirst!.maxSentences,
+          replyOpts?.signal,
+        )) {
+          approvedParts.push(delta.trim());
+          yield delta;
+        }
+        completed = approvedParts.join(' ');
+        shortFirstSentenceCount = approvedParts.length;
+      } else if (completed && prefixBuffer && !replyOpts?.signal?.aborted) {
         yield completed;
       }
       let correction = '';
-      if (completed && shouldReviewPlan(prepared.plan, heard) && !replyOpts?.signal?.aborted) {
+      if (
+        completed &&
+        !reviewShortFirstBeforeDelivery &&
+        shouldReviewPlan(prepared.plan, heard) &&
+        (!shortFirst || shortFirstSentenceCount < shortFirst.maxSentences) &&
+        !replyOpts?.signal?.aborted
+      ) {
         const reviewed = await reviewBeforeDelivery({
           request: heard,
           draft: completed,
@@ -1096,7 +1361,21 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         }, streamOptions);
         correction = briefSemanticCorrection(completed, reviewed);
         if (replyOpts?.signal?.aborted) return;
-        if (correction) yield ` ${correction}`;
+        if (correction && shortFirst) {
+          const limitedCorrection: string[] = [];
+          const remaining = shortFirst.maxSentences - shortFirstSentenceCount;
+          for await (const delta of shortFirstSentenceStream(
+            singleTextStream(correction),
+            remaining,
+            replyOpts?.signal,
+          )) {
+            limitedCorrection.push(delta.trim());
+            yield ` ${delta}`;
+          }
+          correction = limitedCorrection.join(' ');
+        } else if (correction) {
+          yield ` ${correction}`;
+        }
       }
       if (completed && !replyOpts?.signal?.aborted) {
         await evolveRelationshipFromUtterance(heard);

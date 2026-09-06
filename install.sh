@@ -11,7 +11,10 @@
 #   3. Installs the `@phuetz/code-buddy` npm package globally, falling back to a
 #      user-local prefix when the global one needs root (so it never runs sudo
 #      behind your back).
-#   4. Points you at `buddy onboard` (setup wizard) and `buddy login` (ChatGPT
+#   4. Creates a relocation-safe launcher in ~/.codebuddy/bin. The wrapper has
+#      no checkout-specific absolute path and takes precedence over stale
+#      launchers elsewhere on PATH.
+#   5. Points you at `buddy onboard` (setup wizard) and `buddy login` (ChatGPT
 #      OAuth, $0 marginal cost).
 #
 # Everything is overridable with env vars (see the block below). POSIX sh only.
@@ -27,6 +30,7 @@ NODE_DIST_BASE="${CODEBUDDY_NODE_DIST:-https://nodejs.org/dist}"
 CODEBUDDY_HOME="${CODEBUDDY_HOME:-$HOME/.codebuddy}"
 NODE_DIR="$CODEBUDDY_HOME/node"
 NPM_GLOBAL_DIR="$CODEBUDDY_HOME/npm-global"
+MANAGED_BIN_DIR="$CODEBUDDY_HOME/bin"
 
 # Populated by detect_platform()
 NODE_OS=""
@@ -256,6 +260,66 @@ writable_npm_prefix() {
   return 1
 }
 
+install_managed_launcher() { # <npm-prefix>
+  _prefix="$1"
+  _npm_launcher="$_prefix/bin/buddy"
+  _package_link="$MANAGED_BIN_DIR/.code-buddy-package"
+  _launcher="$MANAGED_BIN_DIR/buddy"
+  _marker="# Code Buddy package-relative launcher"
+
+  [ -e "$_npm_launcher" ] || [ -L "$_npm_launcher" ] \
+    || die "npm installed $PACKAGE but did not expose $_npm_launcher"
+
+  # npm's POSIX global bin is a symlink to the package entry point. Resolve it
+  # once at install time, then keep the wrapper itself independent of that
+  # machine-specific absolute path.
+  _installed_entry=$(node -e \
+    'const fs = require("node:fs"); process.stdout.write(fs.realpathSync(process.argv[1]));' \
+    "$_npm_launcher") \
+    || die "could not resolve the installed buddy entry point at $_npm_launcher"
+  case "$_installed_entry" in
+    */dist/index.js) _package_root=${_installed_entry%/dist/index.js} ;;
+    *) die "unexpected buddy entry point: $_installed_entry" ;;
+  esac
+
+  mkdir -p "$MANAGED_BIN_DIR"
+  if [ -e "$_package_link" ] && [ ! -L "$_package_link" ]; then
+    die "refusing to replace non-symlink $_package_link"
+  fi
+  if [ -e "$_launcher" ] && ! grep -qF "$_marker" "$_launcher" 2>/dev/null; then
+    die "refusing to replace unmanaged launcher $_launcher"
+  fi
+
+  _relative_package=$(node -e \
+    'const path = require("node:path"); process.stdout.write(path.relative(process.argv[1], process.argv[2]) || ".");' \
+    "$MANAGED_BIN_DIR" "$_package_root") \
+    || die "could not compute a package-relative launcher target"
+  case "$_relative_package" in
+    /*) die "refusing absolute package link target: $_relative_package" ;;
+  esac
+
+  _package_tmp="$_package_link.$$"
+  _launcher_tmp="$_launcher.$$"
+  ln -s "$_relative_package" "$_package_tmp" \
+    || die "could not stage package link in $MANAGED_BIN_DIR"
+  printf '%s\n' \
+    '#!/bin/sh' \
+    "$_marker" \
+    'set -eu' \
+    'BUDDY_BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
+    'exec node "$BUDDY_BIN_DIR/.code-buddy-package/dist/index.js" "$@"' \
+    > "$_launcher_tmp" \
+    || die "could not stage launcher in $MANAGED_BIN_DIR"
+  chmod 755 "$_launcher_tmp"
+  mv -f "$_package_tmp" "$_package_link"
+  mv -f "$_launcher_tmp" "$_launcher"
+
+  PATH="$MANAGED_BIN_DIR:$PATH"
+  export PATH
+  persist_path "$MANAGED_BIN_DIR"
+  ok "Managed launcher installed at $_launcher (package-relative)"
+}
+
 install_codebuddy() {
   step "Installing $PACKAGE..."
   if _prefix=$(writable_npm_prefix); then
@@ -263,6 +327,7 @@ install_codebuddy() {
     npm install -g "$PACKAGE" || die "'npm install -g $PACKAGE' failed"
   else
     info "Global npm prefix needs root — installing into a user-local prefix instead (no sudo)."
+    _prefix="$NPM_GLOBAL_DIR"
     mkdir -p "$NPM_GLOBAL_DIR"
     npm install -g --prefix "$NPM_GLOBAL_DIR" "$PACKAGE" \
       || die "'npm install -g --prefix $NPM_GLOBAL_DIR $PACKAGE' failed"
@@ -270,6 +335,7 @@ install_codebuddy() {
     export PATH
     persist_path "$NPM_GLOBAL_DIR/bin"
   fi
+  install_managed_launcher "$_prefix"
   ok "$PACKAGE installed"
 }
 

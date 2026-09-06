@@ -226,6 +226,11 @@ jest.mock('../../src/security/bash-parser', () => ({
     redirects: [],
     isValid: true,
   }; }),
+  parseShellCommand: jest.fn(function() { return {
+    commands: [],
+    usedTreeSitter: false,
+    warnings: [],
+  }; }),
 }));
 
 // Mock checkpoint-manager

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import {
@@ -64,6 +64,26 @@ describe('companion percept store', () => {
     const recent = await readRecentCompanionPercepts({ cwd: tempDir });
     expect(recent.map(percept => percept.id)).toEqual([second.id, first.id]);
     expect(recent[1].tags).toEqual(['camera', 'vision']);
+  });
+
+  it('fails closed instead of growing the percept journal when rotation cannot complete', async () => {
+    const storePath = getCompanionPerceptsPath(tempDir);
+    const oversized = 'x'.repeat(1024 * 1024 + 1);
+    await mkdir(path.dirname(storePath), { recursive: true });
+    await writeFile(storePath, oversized, 'utf8');
+    await mkdir(`${storePath}.1`); // rename(file, directory) fails deterministically
+
+    await expect(
+      recordCompanionPercept(
+        {
+          modality: 'vision',
+          source: 'camera_snapshot',
+          summary: 'Must not be appended after a failed rotation',
+        },
+        { cwd: tempDir },
+      ),
+    ).rejects.toMatchObject({ code: expect.any(String) });
+    expect((await stat(storePath)).size).toBe(Buffer.byteLength(oversized));
   });
 
   it('filters recent percepts by modality and reports stats', async () => {

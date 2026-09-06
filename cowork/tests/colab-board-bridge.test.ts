@@ -133,7 +133,7 @@ describe('colab board claim', () => {
   it('surfaces the store error when a task is already claimed', async () => {
     const store = makeStore({
       claim: vi.fn().mockImplementation(() => {
-        throw new Error("Task 'task-1' already claimed by 'darkstar/repo'");
+        throw new Error("Task 'task-1' already claimed by 'gpuNode/repo'");
       }),
     });
     stubStoreModule(store);

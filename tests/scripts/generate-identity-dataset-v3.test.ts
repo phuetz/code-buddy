@@ -14,7 +14,7 @@ import {
   type IdentityDatasetV3ComfyClient,
   type IdentityDatasetV3Options,
   type UploadOriginalReferenceInput,
-} from '../../scripts/darkstar/generate-identity-dataset-v3.js';
+} from '../../scripts/gpuNode/generate-identity-dataset-v3.js';
 import { createDatasetV3Plan } from '../../src/lora/dataset-v3-plan.js';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);

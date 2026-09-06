@@ -24,6 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { cleanupOrphanedTemporaries, readJsonAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
@@ -99,6 +100,11 @@ export class IdentityLinker extends EventEmitter {
   private lookupIndex: Map<string, string> = new Map();
   private idCounter = 0;
   private dirty = false;
+  /** Serialized form of the last content actually written to disk; skips a redundant write when unchanged. */
+  private lastPersistedSerialized: string | undefined;
+  /** Single-flight guard: at most one physical write in flight, at most one trailing write queued behind it. */
+  private persistInFlight: Promise<void> | null = null;
+  private persistAgain = false;
 
   constructor(config: Partial<IdentityLinkerConfig> = {}) {
     super();
@@ -108,6 +114,13 @@ export class IdentityLinker extends EventEmitter {
       persistPath: config.persistPath ??
         path.join(homedir(), '.codebuddy', 'identity-links.json'),
     };
+
+    // Best-effort startup sweep: a prior process killed between `open` and
+    // `rename` (e.g. SIGTERM at service restart) can leave `.tmp.*` siblings
+    // behind. Never touches the target file itself. Never throws.
+    if (this.config.persistPath) {
+      cleanupOrphanedTemporaries(this.config.persistPath).catch(() => {});
+    }
   }
 
   // ==========================================================================
@@ -386,21 +399,59 @@ export class IdentityLinker extends EventEmitter {
     }
   }
 
-  /**
-   * Persist identity links to disk
-   */
-  async persist(): Promise<void> {
-    if (!this.config.persistPath) return;
-
+  /** Serialize the current in-memory state the same way `persist()` writes it. */
+  private serializeState(): string {
     const data = {
       version: 1,
       idCounter: this.idCounter,
       identities: Array.from(this.canonicals.values()),
     };
+    return `${JSON.stringify(data, null, 2)}\n`;
+  }
 
-    const dir = path.dirname(this.config.persistPath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(this.config.persistPath, JSON.stringify(data, null, 2));
+  /**
+   * Persist identity links to disk.
+   *
+   * Two guards keep a burst of `link()`/`unlink()` calls (each marking
+   * `dirty` and firing `autoPersist()`) from producing one temp file + one
+   * rename per call:
+   *  - single-flight: while a write is in flight, further calls just flag
+   *    `persistAgain` and await the SAME promise instead of starting a
+   *    parallel write (each of which would otherwise open its own
+   *    `.tmp.<pid>.<hex>` file for the identical target path);
+   *  - content dedup: the physical write is skipped entirely when the
+   *    serialized state is byte-identical to what was last written.
+   */
+  async persist(): Promise<void> {
+    if (!this.config.persistPath) return;
+
+    if (this.persistInFlight) {
+      this.persistAgain = true;
+      return this.persistInFlight;
+    }
+
+    this.persistInFlight = this.writeIfChanged(this.config.persistPath);
+    try {
+      await this.persistInFlight;
+    } finally {
+      this.persistInFlight = null;
+      if (this.persistAgain) {
+        this.persistAgain = false;
+        await this.persist();
+      }
+    }
+  }
+
+  private async writeIfChanged(persistPath: string): Promise<void> {
+    const serialized = this.serializeState();
+    if (serialized === this.lastPersistedSerialized) {
+      // Content identical to what's already on disk: nothing to write.
+      this.dirty = false;
+      return;
+    }
+
+    await writeFileAtomic(persistPath, serialized, { mode: 0o600 });
+    this.lastPersistedSerialized = serialized;
     this.dirty = false;
   }
 
@@ -411,12 +462,22 @@ export class IdentityLinker extends EventEmitter {
     if (!this.config.persistPath) return;
 
     try {
-      const content = await fs.readFile(this.config.persistPath, 'utf-8');
-      const data = JSON.parse(content) as {
+      const data = await readJsonAtomic<{
         version: number;
         idCounter: number;
         identities: CanonicalIdentity[];
-      };
+      } | null>(this.config.persistPath, null, {
+        mode: 0o600,
+        isValid: (value): value is {
+          version: number;
+          idCounter: number;
+          identities: CanonicalIdentity[];
+        } => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          Array.isArray((value as { identities?: unknown }).identities),
+        ),
+      });
+      if (!data) return;
 
       this.idCounter = data.idCounter || 0;
       this.canonicals.clear();
@@ -439,6 +500,10 @@ export class IdentityLinker extends EventEmitter {
       }
 
       this.dirty = false;
+      // Remember what's already on disk so a subsequent persist() with the
+      // exact same content (a common no-op reload-then-resave) is a no-op
+      // instead of an unconditional rewrite.
+      this.lastPersistedSerialized = this.serializeState();
     } catch {
       // File doesn't exist yet, that's OK
     }

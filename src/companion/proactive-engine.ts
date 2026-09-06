@@ -15,9 +15,9 @@
  *
  * @module companion/proactive-engine
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import {
   loadRelationshipState,
@@ -40,6 +40,17 @@ import {
   type DailyInteractionReservation,
 } from './daily-interaction-budget.js';
 import { resolveHouseholdClock } from './household-time.js';
+import {
+  canSendAway,
+  isAwayShameLine,
+  isCompanionAway,
+  loadAwayState,
+  pickAwayLine,
+  recordAwaySend,
+  resolveAwayClock,
+  saveAwayState,
+} from './away-mode.js';
+import { pickUnsaidLine, rememberSaid } from './recent-said.js';
 
 /** The closed set of reasons Lisa might reach out. */
 export type ProactiveTrigger =
@@ -157,10 +168,13 @@ export function pickProactiveLine(
 ): string {
   const pool = PROACTIVE_TEMPLATES[candidate.trigger];
   if (!pool || pool.length === 0) return '';
-  let idx = pool.length === 1 ? 0 : Math.floor(rng() * pool.length) % pool.length;
-  if (pool.length > 1 && idx === lastTemplateIdx[candidate.trigger]) idx = (idx + 1) % pool.length;
-  lastTemplateIdx[candidate.trigger] = idx;
-  return interpolate(pool[idx]!, candidate.data);
+  const avoidIdx = lastTemplateIdx[candidate.trigger];
+  const avoid = typeof avoidIdx === 'number' ? pool[avoidIdx] : undefined;
+  const interpolated = pool.map((template) => interpolate(template, candidate.data));
+  const line = pickUnsaidLine(interpolated, { rng, avoid: avoid ? interpolate(avoid, candidate.data) : undefined });
+  const idx = interpolated.indexOf(line);
+  lastTemplateIdx[candidate.trigger] = idx >= 0 ? idx : 0;
+  return line;
 }
 
 // ── persisted throttle state ──────────────────────────────────────────
@@ -180,34 +194,33 @@ function defaultProactiveStatePath(): string {
 }
 
 export function loadProactiveState(statePath = defaultProactiveStatePath()): ProactiveState {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      return {
-        lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
-        recentLines: Array.isArray(data.recentLines)
-          ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
-          : [],
-      };
-    }
-  } catch {
-    /* best effort */
-  }
-  return { recentLines: [] };
+  const data = readJsonAtomicSync<{ lastSentAt?: unknown; recentLines?: unknown } | null>(statePath, null, {
+    mode: 0o600,
+    isValid: (value): value is { lastSentAt?: unknown; recentLines?: unknown } => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!data) return { recentLines: [] };
+  return {
+    lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
+    recentLines: Array.isArray(data.recentLines)
+      ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
+      : [],
+  };
 }
 
 export function saveProactiveState(
   state: ProactiveState,
   statePath = defaultProactiveStatePath()
-): void {
+): boolean {
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(
-      statePath,
-      JSON.stringify({ ...state, recentLines: state.recentLines.slice(-8) })
+    writeJsonAtomicSync(statePath, { ...state, recentLines: state.recentLines.slice(-8) }, { mode: 0o600 });
+    return true;
+  } catch (err) {
+    logger.warn(
+      `[proactive] could not persist state: ${err instanceof Error ? err.message : String(err)}`
     );
-  } catch {
-    /* best effort */
+    return false;
   }
 }
 
@@ -235,10 +248,16 @@ export interface ProactiveDeps {
   now?: () => number;
   /** Someone is in front of the camera right now (→ speak vs Telegram). */
   present?: () => boolean | Promise<boolean>;
-  /** Deliver aloud (present). Default: sayNow (Piper). */
-  say?: (text: string) => Promise<void>;
+  /** True while the mouth (or its echo tail) is already taken — do not talk over it. */
+  speaking?: (now: number) => boolean | Promise<boolean>;
+  /** Deliver aloud (present). Default: sayNow (Piper). True only when speech actually played. */
+  say?: (text: string) => Promise<boolean>;
   /** Deliver to the phone (absent). Default: sendTelegramVoice (falls back to text). */
   telegramVoice?: (text: string) => Promise<boolean>;
+  /** Text Telegram for travel-mode initiatives. Default: sendTelegramAlert. */
+  telegramAlert?: (text: string) => Promise<boolean>;
+  /** Persisted away-mode cadence (angles / pause). */
+  awayStatePath?: string;
   /** Append an already-delivered remote initiative without echoing it. */
   recordRemote?: (text: string) => Promise<void>;
   /** Recent transcripts (for the encouragement trigger). */
@@ -271,19 +290,34 @@ async function defaultPresent(): Promise<boolean> {
   }
 }
 
+async function defaultSpeaking(now: number): Promise<boolean> {
+  try {
+    const { isSpeaking } = await import('../sensory/voice-activity.js');
+    return isSpeaking(now);
+  } catch {
+    return false;
+  }
+}
+
 async function defaultRecentHearing(): Promise<string[]> {
   return readRecentDialogueHearing(6);
 }
 
-async function defaultSay(text: string): Promise<void> {
-  const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
-    import('../sensory/voice-loop.js'),
-    import('../conversation/voice-continuity.js'),
-  ]);
-  await speakCanonicalVoiceInitiative(
-    text,
-    (content) => sayNow(content, { phoneDelivery: 'never' }),
-  );
+async function defaultSay(text: string): Promise<boolean> {
+  try {
+    const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
+      import('../sensory/voice-loop.js'),
+      import('../conversation/voice-continuity.js'),
+    ]);
+    return speakCanonicalVoiceInitiative(text, (content) =>
+      sayNow(content, { phoneDelivery: 'never' }),
+    );
+  } catch (err) {
+    logger.warn(
+      `[proactive] local say failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
+  }
 }
 
 async function defaultTelegramVoice(text: string): Promise<boolean> {
@@ -291,11 +325,64 @@ async function defaultTelegramVoice(text: string): Promise<boolean> {
   return sendTelegramVoice(text);
 }
 
+async function defaultTelegramAlert(text: string): Promise<boolean> {
+  const { sendTelegramAlert } = await import('../sensory/alert.js');
+  return sendTelegramAlert(text);
+}
+
 async function defaultRecordRemote(text: string): Promise<void> {
   const { recordDeliveredChannelInitiative } = await import(
     '../conversation/voice-continuity.js'
   );
   await recordDeliveredChannelInitiative(text);
+}
+
+async function deliverAwayInitiative(
+  deps: ProactiveDeps,
+  now: number,
+  homeDecision: HomeInteractionDecision | null,
+): Promise<string | null> {
+  if (homeDecision && !homeDecision.allowed) return null;
+  const clock = resolveAwayClock(now);
+  const awayPath = deps.awayStatePath;
+  const state = loadAwayState(awayPath);
+  const decision = canSendAway({ state, clock });
+  if (!decision.ok) return null;
+
+  let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine, now });
+  if (!line.trim() || isAwayShameLine(line)) return null;
+  const guardedLine = guardRelationshipReply(line);
+  line = guardedLine.response;
+  if (!line.trim()) return null;
+
+  const conductor = deps.conductor ?? getCompanionConductor();
+  if (!conductor.claim('proactive')) return null;
+  try {
+    if (!(await (deps.telegramAlert ?? defaultTelegramAlert)(line))) {
+      throw new Error('away telegram delivery was not accepted');
+    }
+    if (!deps.telegramAlert || deps.recordRemote) {
+      await (deps.recordRemote ?? defaultRecordRemote)(line);
+    }
+  } catch (error) {
+    logger.warn(
+      `[proactive] away delivery failed → silent: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+
+  const next = recordAwaySend(state, { angle: decision.angle, clock, line });
+  if (!saveAwayState(next, awayPath)) return null;
+  saveProactiveState(
+    {
+      lastSentAt: now,
+      recentLines: [...loadProactiveState(deps.statePath).recentLines, line].slice(-8),
+    },
+    deps.statePath,
+  );
+  rememberSaid(line, 'telegram', now);
+  logger.info(`[proactive] away:${decision.angle} (telegram) → ${line}`);
+  return line;
 }
 
 /**
@@ -313,6 +400,20 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       ? await deps.homePolicy(present ? 'proactive-local' : 'proactive-remote', new Date(now))
       : null;
     if (homeDecision && !homeDecision.allowed) return null;
+    if (present && (await (deps.speaking ?? defaultSpeaking)(now))) return null;
+
+    const awayFlag = (process.env.CODEBUDDY_COMPANION_AWAY ?? '').trim().toLowerCase();
+    const awayFlagOn =
+      awayFlag === 'true' ||
+      awayFlag === '1' ||
+      awayFlag === 'yes' ||
+      (process.env.CODEBUDDY_COMPANION_PERSONA ?? '').trim().toLowerCase() === 'copine';
+    if (awayFlagOn && !present) {
+      const relPeek = loadRelationshipState(deps.relationshipStatePath);
+      if (isCompanionAway({ now, lastPresentAt: relPeek.lastPresentAt, present })) {
+        return deliverAwayInitiative(deps, now, homeDecision);
+      }
+    }
 
     const cooldownMs =
       deps.cooldownMs ??
@@ -371,22 +472,24 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       }
     }
 
-    // Deliver: aloud if he's here, otherwise reach his phone. A spoken ritual
-    // yields to the conductor; a denied floor releases the budget reservation.
-    if (present) {
-      const conductor = deps.conductor ?? getCompanionConductor();
-      if (!conductor.claim('proactive')) {
-        await reservation?.release();
-        return null;
-      }
+    // Deliver: aloud if he's here, otherwise reach his phone. Every initiative
+    // yields to the conductor (spoken or Telegram) so two surfaces cannot land
+    // inside CODEBUDDY_COMPANION_MIN_GAP_MS. A denied floor releases the budget.
+    const conductor = deps.conductor ?? getCompanionConductor();
+    if (!conductor.claim('proactive')) {
+      await reservation?.release();
+      return null;
     }
     try {
       if (present) {
-        await (deps.say ?? defaultSay)(line);
+        if (!(await (deps.say ?? defaultSay)(line))) {
+          throw new Error('local proactive delivery was not accepted');
+        }
       } else {
         if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
           throw new Error('remote proactive delivery was not accepted');
         }
+        rememberSaid(line, 'telegram', now);
         // An injected phone transport belongs to its test/integration caller;
         // production records the already-delivered turn once, with no mirror.
         if (!deps.telegramVoice || deps.recordRemote) {
@@ -399,10 +502,14 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     }
 
     // Persist throttle + per-occurrence locks so a trigger fires exactly once.
-    saveProactiveState(
+    const saved = saveProactiveState(
       { lastSentAt: now, recentLines: [...state.recentLines, line].slice(-8) },
       deps.statePath
     );
+    if (!saved) {
+      logger.warn('[proactive] cooldown cursor was not persisted; not treating the tick as sent');
+      return null;
+    }
     if (candidate.trigger === 'milestone') {
       rel.celebratedMilestones = markMilestonesUpTo(rel.celebratedMilestones, daysTogether);
       saveRelationshipState(rel, deps.relationshipStatePath);

@@ -24,7 +24,7 @@ export function computeAutogrowHeight(
 /**
  * Auto-grow a controlled `<textarea>` between `minPx` (44 px) and
  * `maxPx` (200 px) as its content changes. Mirrors the chat-ui
- * gitnexus-rs `ChatInput` pattern: reset to `auto` to recompute
+ * code-explorer `ChatInput` pattern: reset to `auto` to recompute
  * scrollHeight, then clamp + apply.
  *
  * Beyond `maxPx`, the textarea stops growing and an internal vertical

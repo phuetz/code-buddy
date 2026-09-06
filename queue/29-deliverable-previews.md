@@ -1,6 +1,6 @@
 # Vague — Aperçus de livrables (deck / feuille / doc), props-driven
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/deliverable-previews`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/deliverable-previews`.
 
 ## But
 Composants d'**aperçu** props-driven pour les livrables générés (façon Genspark) : un deck de slides, une feuille

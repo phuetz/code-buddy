@@ -2,6 +2,7 @@
  * Tests for Confirmation Service
  */
 
+import { vi } from 'vitest';
 import {
   ConfirmationService,
 } from '../../src/utils/confirmation-service.js';
@@ -380,6 +381,59 @@ describe('ConfirmationService', () => {
       expect(r.confirmed).toBe(true);
       const last = auditLogger.getEntries().at(-1)!;
       expect(last.source).toBe('gate:session-flag');
+    });
+  });
+
+  describe('acceptEdits file posture', () => {
+    it('auto-approves file edits but not bash commands', async () => {
+      const { getPermissionModeManager, resetPermissionModeManager } = await import('../../src/security/permission-modes.js');
+      resetPermissionModeManager();
+      getPermissionModeManager().setMode('acceptEdits');
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+      try {
+        for (const toolName of ['create_file', 'str_replace_editor']) {
+          const result = await service.requestConfirmation({
+            operation: `Execute tool: ${toolName}`,
+            filename: `/workspace/${toolName}.txt`,
+            toolName,
+            riskLevel: 'medium',
+          }, 'file');
+          expect(result.confirmed, toolName).toBe(true);
+        }
+
+        const bashResult = await service.requestConfirmation({
+          operation: 'Run command',
+          filename: 'printf hello',
+          riskLevel: 'medium',
+        }, 'bash');
+        expect(bashResult.confirmed).toBe(false);
+        expect(bashResult.feedback).toContain('interactive terminal');
+      } finally {
+        resetPermissionModeManager();
+      }
+    });
+  });
+
+  describe('WebSocket approval bridge fallthrough', () => {
+    it('uses remoteApproval when the WS bridge returns null', async () => {
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+      const requestApproval = vi.fn(async () => true);
+      service.setRemoteApprovalService({
+        hasChannels: () => true,
+        requestApproval,
+      } as never);
+      service.setWsApprovalBridge(async () => null);
+
+      const result = await service.requestConfirmation({
+        operation: 'write',
+        filename: 'notes.md',
+        toolName: 'write_file',
+        forcePrompt: true,
+      }, 'file');
+
+      expect(result).toEqual({ confirmed: true });
+      expect(requestApproval).toHaveBeenCalledTimes(1);
     });
   });
 

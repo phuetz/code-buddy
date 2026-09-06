@@ -6,6 +6,9 @@
  * Express routing — that's covered by `a2a-protocol.test.ts`.
  */
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // vi.mock factories are hoisted above imports — variables they reference
@@ -297,13 +300,24 @@ describe('A2A inbound TaskExecutor', () => {
 
   it('fails closed: missing GROK_API_KEY rejects task before LLM call', async () => {
     delete process.env.GROK_API_KEY;
+    delete process.env.CODEBUDDY_PROVIDER;
+    delete process.env.OLLAMA_HOST;
+    const previousHome = process.env.HOME;
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-exec-no-provider-'));
+    process.env.HOME = tmpHome;
 
-    const executor = createCodeBuddyTaskExecutor();
-    const task = await executor(makeTask('any task'));
+    try {
+      const executor = createCodeBuddyTaskExecutor();
+      const task = await executor(makeTask('any task'));
 
-    expect(task.status.status).toBe(TaskStatus.FAILED);
-    expect(task.status.message).toMatch(/api key/i);
-    expect(chatMock).not.toHaveBeenCalled();
+      expect(task.status.status).toBe(TaskStatus.FAILED);
+      expect(task.status.message).toMatch(/api key|provider/i);
+      expect(chatMock).not.toHaveBeenCalled();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
   });
 
   it('audit log: emits one structured a2a:inbound entry per task', async () => {
@@ -318,12 +332,12 @@ describe('A2A inbound TaskExecutor', () => {
     });
 
     const executor = createCodeBuddyTaskExecutor();
-    await executor(makeTask('hello', { peerId: 'ministar' }));
+    await executor(makeTask('hello', { peerId: 'hub' }));
 
     expect(loggerInfoMock).toHaveBeenCalledWith(
       '[a2a:inbound]',
       expect.objectContaining({
-        peerId: 'ministar',
+        peerId: 'hub',
         turns: 1,
         tokensUsed: 15,
         status: TaskStatus.COMPLETED,
@@ -340,11 +354,22 @@ describe('A2A inbound TaskExecutor', () => {
   describe('error paths (V1.0 audit)', () => {
     it('fails closed when GROK_API_KEY is missing', async () => {
       delete process.env.GROK_API_KEY;
-      const executor = createCodeBuddyTaskExecutor();
-      const task = await executor(makeTask('anything'));
-      expect(task.status.status).toBe(TaskStatus.FAILED);
-      expect(task.status.message).toMatch(/api key/i);
-      expect(chatMock).not.toHaveBeenCalled();
+      delete process.env.CODEBUDDY_PROVIDER;
+      delete process.env.OLLAMA_HOST;
+      const previousHome = process.env.HOME;
+      const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-exec-no-provider-2-'));
+      process.env.HOME = tmpHome;
+      try {
+        const executor = createCodeBuddyTaskExecutor();
+        const task = await executor(makeTask('anything'));
+        expect(task.status.status).toBe(TaskStatus.FAILED);
+        expect(task.status.message).toMatch(/api key|provider/i);
+        expect(chatMock).not.toHaveBeenCalled();
+      } finally {
+        if (previousHome === undefined) delete process.env.HOME;
+        else process.env.HOME = previousHome;
+        fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      }
     });
 
     it('fails closed when no fleet-safe tools are registered', async () => {

@@ -24,6 +24,7 @@ import type { ChatGptAuth } from '../../../src/providers/codex-oauth.js';
 import type { ChatGptCodexModelCatalog } from '../../../src/providers/chatgpt-models.js';
 import type { CodeBuddyMessage, CodeBuddyTool } from '../../../src/codebuddy/client.js';
 import { reduceStreamChunk } from '../../../src/agent/streaming/message-reducer.js';
+import { logger } from '../../../src/utils/logger.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -496,6 +497,52 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(caught!.message).toContain('Slow down');
   });
 
+  it.each([
+    ['empty stream', []],
+    ['malformed event', ['data: not-json\n\n']],
+    ['error event', ['data: {"type":"error","code":"rate_limited","message":"Slow down"}\n\n']],
+  ])('rejects a %s instead of fabricating a successful stop', async (_label, events) => {
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of parseSseStream(makeSseStream(events), 'gpt-5.5')) {
+        /* drain */
+      }
+    };
+
+    await expect(drain()).rejects.toThrow(/ChatGPT Responses/);
+  });
+
+  it('flushes and processes the final SSE event when the body has no trailing blank line', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks[0]?.choices[0]?.delta?.content).toBe('Hello');
+    expect(chunks.at(-1)?.choices[0]?.finish_reason).toBe('stop');
+    expect(chunks.at(-1)?.usage).toMatchObject({ total_tokens: 2 });
+  });
+
+  it('maps response.incomplete to a length finish with a truncation flag', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    const terminal = chunks.at(-1);
+    expect(terminal?.choices[0]?.finish_reason).toBe('length');
+    expect((terminal as unknown as { truncated?: boolean }).truncated).toBe(true);
+  });
+
   it('ignores unknown event types silently (response.in_progress, etc.)', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.in_progress"}\n\n',
@@ -661,6 +708,25 @@ function discoveredCatalog(): ChatGptCodexModelCatalog {
 }
 
 describe('ChatGptResponsesProvider — chatStream wiring', () => {
+  it('preserves response.incomplete as length and truncated in chat()', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
+    ]));
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1_000,
+    });
+
+    const response = await provider.chat([
+      { role: 'user', content: 'Continue' } as CodeBuddyMessage,
+    ]);
+
+    expect(response.choices[0]?.finish_reason).toBe('length');
+    expect(response.truncated).toBe(true);
+  });
+
   it('surfaces Responses usage through non-streaming chat', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
       'data: {"type":"response.output_text.delta","delta":"done"}\n\n',
@@ -1082,7 +1148,9 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     // (this is what crashed: grok → 400, fallback gpt-5.2 → 400 → throw).
     provider.setModel('grok-code-fast-1');
 
+    const warnSpy = vi.spyOn(logger, 'warn');
     const out: string[] = [];
+    const renderedModels = new Set<string>();
     for await (const chunk of provider.chatStream(
       [{ role: 'user', content: 'fix the bug' } as CodeBuddyMessage],
       [],
@@ -1090,6 +1158,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     )) {
       const c = chunk.choices[0]?.delta?.content;
       if (c) out.push(c);
+      renderedModels.add(chunk.model);
     }
 
     // The grok slug was remapped to the configured gpt-5.5 BEFORE the request:
@@ -1098,6 +1167,11 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
     expect(body.model).toBe('gpt-5.5');
     expect(out.join('')).toBe('OK');
+    expect(renderedModels).toEqual(new Set(['gpt-5.5']));
+    expect(warnSpy.mock.calls.some(([message]) => {
+      const text = String(message);
+      return text.includes('grok-code-fast-1') && text.includes('gpt-5.5');
+    })).toBe(true);
   });
 
   it('auto-fallback: skipped when caller pinned --model explicitly', async () => {

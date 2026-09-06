@@ -263,7 +263,8 @@ export class JsonRpcServer {
     // Lazy load grok client
     if (!codebuddyClient) {
       const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-      const apiKey = this.options.apiKey || process.env.GROK_API_KEY || '';
+      const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+      const apiKey = this.options.apiKey || resolveActiveProviderApiKey() || '';
       codebuddyClient = new CodeBuddyClient(apiKey);
     }
 
@@ -311,7 +312,8 @@ export class JsonRpcServer {
     // Lazy load grok client
     if (!codebuddyClient) {
       const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-      const apiKey = this.options.apiKey || process.env.GROK_API_KEY || '';
+      const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+      const apiKey = this.options.apiKey || resolveActiveProviderApiKey() || '';
       codebuddyClient = new CodeBuddyClient(apiKey);
     }
 

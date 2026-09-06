@@ -43,9 +43,11 @@ jest.mock('fs', async () => {
 describe('InterpreterService LLM Integration', () => {
   let service: InterpreterService;
   let originalApiKey: string | undefined;
+  let originalOpenAiKey: string | undefined;
 
   beforeEach(() => {
     originalApiKey = process.env.GROK_API_KEY;
+    originalOpenAiKey = process.env.OPENAI_API_KEY;
     jest.clearAllMocks();
 
     // Create service with persistence disabled to avoid filesystem ops
@@ -61,6 +63,11 @@ describe('InterpreterService LLM Integration', () => {
     } else {
       delete process.env.GROK_API_KEY;
     }
+    if (originalOpenAiKey !== undefined) {
+      process.env.OPENAI_API_KEY = originalOpenAiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 
   // ==========================================================================
@@ -70,6 +77,8 @@ describe('InterpreterService LLM Integration', () => {
   describe('processMessage()', () => {
     it('should return error message when GROK_API_KEY is not set', async () => {
       delete process.env.GROK_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
 
       const result = await service.chat('Hello');
 
@@ -78,6 +87,27 @@ describe('InterpreterService LLM Integration', () => {
       expect(result.tokens).toEqual({ input: 0, output: 0, total: 0 });
       expect(result.cost).toBe(0);
       expect(result.autoApproved).toBe(false);
+    });
+
+    it('uses OPENAI_API_KEY when GROK_API_KEY is unset', async () => {
+      delete process.env.GROK_API_KEY;
+      process.env.OPENAI_API_KEY = 'openai-test-key';
+
+      mockChat.mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: 'Hello from OpenAI auth',
+              tool_calls: undefined,
+            },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+
+      const result = await service.chat('Hello');
+      expect(result.content).toBe('Hello from OpenAI auth');
+      expect(result.content).not.toContain('GROK_API_KEY');
     });
 
     it('should return ChatResult with content, tokens, and cost on successful LLM call', async () => {

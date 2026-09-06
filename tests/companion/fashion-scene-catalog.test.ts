@@ -75,9 +75,14 @@ describe('fashion scene catalog', () => {
       tier: 'safe' as const,
       trigger: 'ohwx lisa',
     };
-    expect(buildFashionScenePrompt(options)).toBe(buildFashionScenePrompt(options));
-    expect(buildFashionScenePrompt(options)).toMatch(/near full-body.*native vertical.*deliberately slow/iu);
-    expect(buildFashionScenePrompt(options)).not.toMatch(/vietsy|youtube|reference (?:person|brand|channel)/iu);
+    const firstPrompt = buildFashionScenePrompt(options);
+    const secondPrompt = buildFashionScenePrompt({ ...options, families: [...options.families] });
+    expect(secondPrompt).toBe(firstPrompt);
+    expect(firstPrompt).toContain('ohwx lisa');
+    expect(firstPrompt).toContain('outfit: tailored suit');
+    expect(firstPrompt).toContain('setting: original city arcade');
+    expect(firstPrompt).toMatch(/near full-body.*native vertical.*deliberately slow/iu);
+    expect(firstPrompt).not.toMatch(/vietsy|youtube|reference (?:person|brand|channel)/iu);
   });
 
   it('exports both mandatory safe twelve-second pilots', () => {

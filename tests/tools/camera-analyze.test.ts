@@ -6,24 +6,33 @@ import path from 'path';
 import {
   CameraAnalyzeTool,
   resolveOllamaChatEndpoint,
+  resolveCameraVisionModel,
   extractCompletionText,
 } from '../../src/tools/registry/vision-tools.js';
 
+/** 8×8 RGB PNG, luma ≈ 200 — bright enough to pass the SENSE1 door. */
+const BRIGHT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFUlEQVR4nGM8ceIEAzbAhFV00EoAANcnAmjjOKqVAAAAAElFTkSuQmCC',
+  'base64',
+);
+/** 8×8 RGB PNG, luma 0 — must be refused. */
+const BLACK_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAADElEQVR4nGNgGB4AAADIAAGtQHYiAAAAAElFTkSuQmCC',
+  'base64',
+);
+
 describe('CameraAnalyzeTool', () => {
   let tmpImage: string;
+  let tmpDir: string;
 
   beforeEach(async () => {
-    // 1x1 transparent PNG so the tool can read + base64 a real file.
-    const pngBytes = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-      'base64',
-    );
-    tmpImage = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'camera-analyze-')), 'frame.png');
-    await fs.writeFile(tmpImage, pngBytes);
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'camera-analyze-'));
+    tmpImage = path.join(tmpDir, 'frame.png');
+    await fs.writeFile(tmpImage, BRIGHT_PNG);
   });
 
   afterEach(async () => {
-    await fs.rm(path.dirname(tmpImage), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('captures a frame, composes a data-URL image_url message, and returns the model description', async () => {
@@ -122,6 +131,80 @@ describe('CameraAnalyzeTool', () => {
     expect(result.output).toContain(tmpImage);
   });
 
+  it('analyzes image_path without capturing the webcam', async () => {
+    const captureSnapshot = vi.fn(async () => {
+      throw new Error('webcam must not be opened');
+    });
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'A bright grey square.' } }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const tool = new CameraAnalyzeTool(
+      {},
+      { fetch: fetchMock as unknown as typeof fetch, captureSnapshot, env: {} },
+    );
+
+    const result = await tool.execute({
+      image_path: tmpImage,
+      prompt: 'What is this?',
+    });
+
+    expect(result.success, result.error).toBe(true);
+    expect(result.output).toBe('A bright grey square.');
+    expect(captureSnapshot).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('moondream');
+    expect(body.messages[0].content[1].image_url.url).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it('refuses a near-black still without calling the vision model', async () => {
+    const blackPath = path.join(tmpDir, 'black.png');
+    await fs.writeFile(blackPath, BLACK_PNG);
+    const captureSnapshot = vi.fn();
+    const fetchMock = vi.fn();
+    const tool = new CameraAnalyzeTool(
+      {},
+      { fetch: fetchMock as unknown as typeof fetch, captureSnapshot, env: {} },
+    );
+
+    const result = await tool.execute({ image_path: blackPath });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Dark frame refused/i);
+    expect(result.error).toMatch(/meanLuma=0/);
+    expect(result.data).toMatchObject({ imagePath: blackPath, meanLuma: 0 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(captureSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('defaults the vision model to moondream, not a text-only gemma', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: 'ok' } }] }),
+        { status: 200 },
+      ),
+    );
+    const tool = new CameraAnalyzeTool(
+      {},
+      {
+        fetch: fetchMock as unknown as typeof fetch,
+        captureSnapshot: async () => ({ success: true as const, path: tmpImage, command: 'ffmpeg' }),
+        env: {},
+      },
+    );
+    const result = await tool.execute({});
+    expect(result.success, result.error).toBe(true);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).model).toBe('moondream');
+    expect(result.data).toMatchObject({ model: 'moondream' });
+  });
+
   it('surfaces a connection error when the model endpoint is unreachable', async () => {
     const captureSnapshot = vi.fn(async () => ({
       success: true as const,
@@ -141,6 +224,17 @@ describe('CameraAnalyzeTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('unreachable');
     expect(result.error).toContain('ECONNREFUSED');
+  });
+});
+
+describe('resolveCameraVisionModel', () => {
+  it('prefers an explicit model, then CODEBUDDY_VISION_MODEL, then moondream', () => {
+    expect(resolveCameraVisionModel('llava', {})).toBe('llava');
+    expect(resolveCameraVisionModel(undefined, { CODEBUDDY_VISION_MODEL: 'moondream:latest' })).toBe(
+      'moondream:latest',
+    );
+    expect(resolveCameraVisionModel(undefined, {})).toBe('moondream');
+    expect(resolveCameraVisionModel('  ', {})).toBe('moondream');
   });
 });
 

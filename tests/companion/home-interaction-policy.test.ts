@@ -23,7 +23,7 @@ describe('home interaction policy', () => {
     expect(decision.allowed).toBe(false);
   });
 
-  it('permits remote contact but never local speech in away mode', () => {
+  it('permits a bounded remote note and a physical arrival, but no ambient local speech in away mode', () => {
     expect(evaluateHomeInteractionPolicy({
       mode: 'away',
       dayKind: 'workday',
@@ -34,6 +34,14 @@ describe('home interaction policy', () => {
       dayKind: 'workday',
       surface: 'proactive-remote',
     }).allowed).toBe(true);
+    expect(evaluateHomeInteractionPolicy({
+      mode: 'away',
+      dayKind: 'workday',
+      surface: 'arrival',
+    })).toMatchObject({
+      allowed: true,
+      reason: 'A physical arrival is a transition signal even while the stored posture is away.',
+    });
   });
 
   it('caps a weekend or explicit free day at two gentle initiatives', () => {

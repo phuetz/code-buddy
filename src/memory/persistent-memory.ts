@@ -3,10 +3,18 @@ import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
 import { getHooksManager } from "../hooks/lifecycle-hooks.js";
-import { Fact, FactCategory } from "./facts-memory.js";
+import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
-import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
+import {
+  decideForgets,
+  isProtectedMemory,
+  resolveForgettingConfig,
+  type ForgetCandidate,
+  type ForgettingConfig,
+} from "./memory-forgetting.js";
+import { withSessionLock } from "../persistence/session-lock.js";
+import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -18,6 +26,15 @@ function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
     case 'custom': return 'Profil';
     default: return 'Profil';
   }
+}
+
+export function parseReconciledFactText(text: string): { key: string; value: string } | null {
+  const colonIdx = text.indexOf(': ');
+  if (colonIdx <= 0) return null;
+  return {
+    key: text.substring(0, colonIdx).trim(),
+    value: text.substring(colonIdx + 2).trim(),
+  };
 }
 
 function mapFactCategoryToMemoryCategory(cat: FactCategory): MemoryCategory {
@@ -120,6 +137,13 @@ export class MemoryWriteRejectedError extends Error {
   }
 }
 
+export class MemoryPersistenceError extends Error {
+  constructor(readonly scope: MemoryScope, message?: string) {
+    super(message ?? `${scope} memory store is unreadable; persistence was refused to protect existing data`);
+    this.name = 'MemoryPersistenceError';
+  }
+}
+
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -170,6 +194,71 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
   ]));
 }
 
+function mergeMemoryTags(
+  priorTags: string[] | undefined,
+  factSource: string | undefined,
+  fallbackTags: string[] | undefined,
+): string[] | undefined {
+  const sourceTags = factSource
+    ?.split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0) ?? fallbackTags ?? [];
+  const tags = [...new Set([...(priorTags ?? []), ...sourceTags])];
+  return tags.length > 0 ? tags : undefined;
+}
+
+function normalizeMemoryCategory(category: string): MemoryCategory {
+  switch (category.trim().toLowerCase()) {
+    case 'project': return 'project';
+    case 'preferences': return 'preferences';
+    case 'decisions': return 'decisions';
+    case 'patterns': return 'patterns';
+    case 'context': return 'context';
+    default: return 'custom';
+  }
+}
+
+function memoryEquals(left: Memory | undefined, right: Memory | undefined): boolean {
+  if (!left || !right) return left === right;
+  const leftTags = left.tags ?? [];
+  const rightTags = right.tags ?? [];
+  return left.key === right.key
+    && left.value === right.value
+    && left.category === right.category
+    && left.createdAt.getTime() === right.createdAt.getTime()
+    && left.updatedAt.getTime() === right.updatedAt.getTime()
+    && left.lastAccessedAt?.getTime() === right.lastAccessedAt?.getTime()
+    && left.accessCount === right.accessCount
+    && leftTags.length === rightTags.length
+    && leftTags.every((tag, index) => tag === rightTags[index]);
+}
+
+function mergeMemoryMaps(
+  diskMemories: Map<string, Memory>,
+  localMemories: Map<string, Memory>,
+  persistedSnapshot: Map<string, Memory>,
+): Map<string, Memory> {
+  const merged = cloneMemoryMap(diskMemories);
+
+  // Apply only local additions/updates. Unchanged entries were loaded from
+  // the same snapshot and must not overwrite a newer process' changes.
+  for (const [key, memory] of localMemories) {
+    if (!memoryEquals(memory, persistedSnapshot.get(key))) {
+      merged.set(key, cloneMemoryMap(new Map([[key, memory]])).get(key)!);
+    }
+  }
+
+  // Propagate local deletions only when the disk entry is still the version
+  // this manager loaded. A concurrent update wins over a stale deletion.
+  for (const [key, persisted] of persistedSnapshot) {
+    if (!localMemories.has(key) && memoryEquals(merged.get(key), persisted)) {
+      merged.delete(key);
+    }
+  }
+
+  return merged;
+}
+
 const MEMORY_TEMPLATE = `# Code Buddy Memory
 
 This file stores persistent memory for the Code Buddy agent.
@@ -202,6 +291,13 @@ export class PersistentMemoryManager extends EventEmitter {
   private config: MemoryConfig;
   private projectMemories: Map<string, Memory> = new Map();
   private userMemories: Map<string, Memory> = new Map();
+  /** Last disk snapshot used to distinguish local changes from stale state. */
+  private persistedMemorySnapshots: Map<MemoryScope, Map<string, Memory>> = new Map();
+  /** Audit 2026-09-02 — garde anti-amnésie : scopes dont le chargement a
+   * échoué pour une raison AUTRE que l'absence du fichier. Tant qu'un scope
+   * est dégradé, saveMemories refuse la réécriture destructrice (il retente
+   * d'abord un load + fusion, RAM prioritaire). */
+  private degradedScopes: Map<MemoryScope, string> = new Map();
   private initialized: boolean = false;
   /**
    * Promise gate for concurrent initialize() callers (F31).
@@ -257,7 +353,7 @@ export class PersistentMemoryManager extends EventEmitter {
       await fs.ensureDir(projectDir);
 
       if (!(await fs.pathExists(this.config.projectMemoryPath))) {
-        await fs.writeFile(this.config.projectMemoryPath, MEMORY_TEMPLATE);
+        await writeFileAtomic(this.config.projectMemoryPath, MEMORY_TEMPLATE, { mode: 0o600 });
       }
     }
 
@@ -266,7 +362,7 @@ export class PersistentMemoryManager extends EventEmitter {
     await fs.ensureDir(userDir);
 
     if (!(await fs.pathExists(this.config.userMemoryPath))) {
-      await fs.writeFile(this.config.userMemoryPath, MEMORY_TEMPLATE);
+      await writeFileAtomic(this.config.userMemoryPath, MEMORY_TEMPLATE, { mode: 0o600 });
     }
   }
 
@@ -280,13 +376,66 @@ export class PersistentMemoryManager extends EventEmitter {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       const parsed = this.parseMemoryFile(content);
+      // Un fichier vide (0 octet ou blancs) n'a rien à protéger : magasin neuf,
+      // pas magasin corrompu (garde R28, alignée le 2026-09-02).
+      if (parsed.length === 0 && content.trim() !== '' && !this.isCanonicalEmptyMemoryFile(content)) {
+        throw new Error('non-canonical memory markdown contains no recoverable entries');
+      }
 
+      memories.clear();
       for (const memory of parsed) {
         memories.set(memory.key, memory);
       }
-    } catch (_error) {
-      // File doesn't exist or can't be read, start fresh
+      this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
+      this.degradedScopes.delete(scope);
+    } catch (error) {
+      // File doesn't exist -> start fresh (légitime). Toute AUTRE erreur
+      // (EACCES, EIO…) est transitoire : sans garde, la prochaine sauvegarde
+      // réécrirait le fichier entier depuis l'état vide — amnésie silencieuse.
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        const reason = (error as Error)?.message ?? String(error);
+        this.degradedScopes.set(scope, reason);
+        logger.warn(
+          `[persistent-memory] could not load ${scope} memory (${reason}) — destructive saves are blocked until a successful reload`,
+        );
+      } else {
+        this.persistedMemorySnapshots.set(scope, new Map());
+      }
     }
+  }
+
+  /** Only the generated empty template is safe to treat as a new empty store. */
+  private isCanonicalEmptyMemoryFile(content: string): boolean {
+    const requiredCategories = [
+      'Project Context',
+      'User Preferences',
+      'Decisions',
+      'Patterns',
+      'Custom',
+    ];
+    const allowedCategories = [...requiredCategories, 'Context'];
+    const seenCategories = new Set<string>();
+    const allowedText = new Set([
+      '# Code Buddy Memory',
+      'This file stores persistent memory for the Code Buddy agent.',
+      'It is automatically managed but can be manually edited.',
+      '---',
+    ]);
+
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || allowedText.has(line) || /^<!--.*-->$/.test(line) || /^\*Last updated: .*\*$/.test(line)) {
+        continue;
+      }
+      const category = /^## (.+)$/.exec(line)?.[1];
+      if (category && allowedCategories.includes(category)) {
+        seenCategories.add(category);
+        continue;
+      }
+      return false;
+    }
+
+    return requiredCategories.every((category) => seenCategories.has(category));
   }
 
   private parseMemoryFile(content: string): Memory[] {
@@ -305,15 +454,17 @@ export class PersistentMemoryManager extends EventEmitter {
     let currentKey = "";
     let currentValue = "";
     let currentMeta: MemoryMeta | undefined;
+    let currentTags: string[] | undefined;
     let inMemoryBlock = false;
 
     const pushCurrent = () => {
       if (currentKey && currentValue) {
-        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta));
+        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta, currentTags));
       }
       currentKey = "";
       currentValue = "";
       currentMeta = undefined;
+      currentTags = undefined;
     };
 
     for (const line of lines) {
@@ -347,9 +498,31 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // Tags line written by saveMemories (`  Tags: a, b`). Audit 2026-09-02 :
+      // sans cette branche, la ligne était refondue dans la valeur au 1er
+      // reload puis détruite au 2e — `pinned` ne protégeait plus rien après
+      // un redémarrage.
+      const tagsMatch = line.match(/^ {2}Tags:\s*(.*)$/);
+      if (tagsMatch && inMemoryBlock && currentTags === undefined) {
+        currentTags = (tagsMatch[1] ?? "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        continue;
+      }
+
+      // New saves prefix continuation lines with `  |` so their original
+      // indentation and any literal `Tags:` text remain unambiguous.
+      if (inMemoryBlock && line.startsWith("  |")) {
+        currentValue += "\n" + line.slice(3);
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
-        currentValue += "\n" + line.trim();
+        // Legacy files used two transport spaces without a marker. Remove
+        // only that transport prefix; do not destroy content indentation.
+        currentValue += "\n" + line.slice(2);
       } else if (inMemoryBlock && line.trim() === "") {
         // End of memory block
         pushCurrent();
@@ -363,7 +536,7 @@ export class PersistentMemoryManager extends EventEmitter {
     return memories;
   }
 
-  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta): Memory {
+  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta, tags?: string[]): Memory {
     return {
       key,
       value,
@@ -372,6 +545,7 @@ export class PersistentMemoryManager extends EventEmitter {
       updatedAt: meta?.updatedAt ?? new Date(),
       ...(meta?.lastAccessedAt ? { lastAccessedAt: meta.lastAccessedAt } : {}),
       accessCount: meta?.accessCount ?? 0,
+      ...(tags && tags.length > 0 ? { tags } : {}),
     };
   }
 
@@ -407,7 +581,7 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
     const previousMemories = cloneMemoryMap(memories);
-    const status: MemoryWriteStatus = existing ? 'updated' : 'stored';
+    let resultKey = normalizedKey;
 
     try {
       const { FactsMemoryService } = await import('./facts-memory.js');
@@ -434,10 +608,10 @@ export class PersistentMemoryManager extends EventEmitter {
         for (const fact of reconciledFacts) {
           let fKey = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           let fValue = fact.text;
-          const colonIdx = fact.text.indexOf(': ');
-          if (colonIdx > 0 && colonIdx < 50) {
-            fKey = fact.text.substring(0, colonIdx).trim();
-            fValue = fact.text.substring(colonIdx + 2).trim();
+          const parsed = parseReconciledFactText(fact.text);
+          if (parsed) {
+            fKey = parsed.key;
+            fValue = parsed.value;
           }
 
           // The map was cleared above — prior metadata lives in previousMemories.
@@ -450,8 +624,17 @@ export class PersistentMemoryManager extends EventEmitter {
             updatedAt: fact.updatedAt || new Date(),
             ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
             accessCount: prior?.accessCount || 0,
-            tags: fact.source ? [fact.source] : tags
+            tags: mergeMemoryTags(prior?.tags, fact.source, tags)
           });
+        }
+
+        if (!memories.has(normalizedKey)) {
+          const newKeys = Array.from(memories.keys()).filter((memoryKey) => !previousMemories.has(memoryKey));
+          const reconciledKey = newKeys[newKeys.length - 1];
+          if (!reconciledKey) {
+            throw new Error(`Reconciliation did not retain the new memory "${normalizedKey}"`);
+          }
+          resultKey = reconciledKey;
         }
       } else {
         // Fallback to default direct write
@@ -477,18 +660,34 @@ export class PersistentMemoryManager extends EventEmitter {
       throw err;
     }
 
-    await this.saveMemories(scope);
+    try {
+      await this.saveMemories(scope);
+    } catch (error) {
+      memories.clear();
+      for (const [memoryKey, memory] of previousMemories) {
+        memories.set(memoryKey, memory);
+      }
+      throw error;
+    }
 
-    this.emit("memory:remembered", { key: normalizedKey, scope, category });
+    const persistedMemory = memories.get(resultKey);
+    if (!persistedMemory) {
+      throw new MemoryPersistenceError(
+        scope,
+        `Memory reconciliation reported key "${resultKey}" but did not retain it`,
+      );
+    }
+    const status: MemoryWriteStatus = previousMemories.has(resultKey) ? 'updated' : 'stored';
+    this.emit("memory:remembered", { key: resultKey, scope, category: persistedMemory.category });
     return {
       status,
-      key: normalizedKey,
+      key: resultKey,
       scope,
-      category,
+      category: persistedMemory.category,
       usage: this.getMemoryUsage(scope),
       message: status === 'updated'
-        ? `Updated "${normalizedKey}" in ${scope} memory.`
-        : `Stored "${normalizedKey}" in ${scope} memory.`,
+        ? `Updated "${resultKey}" in ${scope} memory.`
+        : `Stored "${resultKey}" in ${scope} memory.`,
     };
   }
 
@@ -505,6 +704,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const memories = scope === 'project' ? this.projectMemories : this.userMemories;
     const normalizedKey = key.trim();
     const normalizedValue = value.trim();
+    this.assertScopeReadable(scope);
     const existing = memories.get(normalizedKey);
 
     if (!existing) {
@@ -563,7 +763,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const memory: Memory = {
       key,
       value,
-      category,
+      category: normalizeMemoryCategory(category),
       createdAt: existing?.createdAt || new Date(),
       updatedAt: new Date(),
       ...(existing?.lastAccessedAt ? { lastAccessedAt: existing.lastAccessedAt } : {}),
@@ -666,6 +866,7 @@ export class PersistentMemoryManager extends EventEmitter {
    */
   recall(key: string, scope?: "project" | "user"): string | null {
     if (scope) {
+      this.assertScopeReadable(scope);
       const memories = scope === "project" ? this.projectMemories : this.userMemories;
       const memory = memories.get(key);
       if (memory) {
@@ -676,6 +877,8 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
     // Search both scopes, project first
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     const projectHit = this.projectMemories.get(key);
     const memory = projectHit ?? this.userMemories.get(key);
 
@@ -743,10 +946,12 @@ export class PersistentMemoryManager extends EventEmitter {
   get(key: string, scope?: MemoryScope): (Memory & { scope: MemoryScope }) | undefined {
     const normalizedKey = key.trim();
     if (!scope || scope === "project") {
+      this.assertScopeReadable('project');
       const memory = this.projectMemories.get(normalizedKey);
       if (memory) return { ...memory, scope: "project" };
     }
     if (!scope || scope === "user") {
+      this.assertScopeReadable('user');
       const memory = this.userMemories.get(normalizedKey);
       if (memory) return { ...memory, scope: "user" };
     }
@@ -757,6 +962,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * Forget something (remove from memory)
    */
   async forget(key: string, scope: "project" | "user" = "project"): Promise<boolean> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const deleted = memories.delete(key);
 
@@ -772,6 +978,8 @@ export class PersistentMemoryManager extends EventEmitter {
    * Get memories relevant to a query (simple keyword matching)
    */
   getRelevantMemories(query: string, limit: number = 5): Memory[] {
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     const queryLower = query.toLowerCase();
     const queryWords = queryLower.split(/\s+/);
 
@@ -818,6 +1026,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * poking the private maps. Does NOT reinforce (unlike getRelevantMemories).
    */
   listMemories(scope: MemoryScope): Memory[] {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     return Array.from(memories.values()).map((m) => ({
       ...m,
@@ -836,6 +1045,7 @@ export class PersistentMemoryManager extends EventEmitter {
     scope: MemoryScope,
     options: { now?: Date; config?: Partial<ForgettingConfig> } = {},
   ): Promise<{ forgotten: ForgetCandidate[] }> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const now = options.now ?? new Date();
     const candidates = decideForgets(memories.values(), now, options.config);
@@ -923,6 +1133,7 @@ export class PersistentMemoryManager extends EventEmitter {
         ...(entry.tags?.length ? { tags: entry.tags } : {}),
       });
       if (result.status === "stored" || result.status === "updated") {
+        await this.verifyPersistedMemory(s, result.key, entry.value);
         await this.removeArchiveLine(s, entry.lineIndex);
         this.emit("memory:restored", { key: entry.key, scope: s });
       }
@@ -932,14 +1143,38 @@ export class PersistentMemoryManager extends EventEmitter {
     return null;
   }
 
+  /** Re-read the live store before deleting the only archived copy. */
+  private async verifyPersistedMemory(scope: MemoryScope, key: string, expectedValue: string): Promise<void> {
+    const filePath = scope === 'project' ? this.config.projectMemoryPath : this.config.userMemoryPath;
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const persisted = this.parseMemoryFile(content).find((memory) => memory.key === key);
+      if (persisted?.value === expectedValue) return;
+    } catch (err) {
+      logger.warn(
+        `[persistent-memory] restored memory verification failed (${scope}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    throw new MemoryPersistenceError(
+      scope,
+      `Memory "${key}" was not durably persisted in the ${scope} store; archive left intact`,
+    );
+  }
+
   /** Parse one scope's archive file into entries carrying their raw line index. */
   private async parseArchive(scope: MemoryScope): Promise<Array<ArchivedMemory & { lineIndex: number }>> {
     const archivePath = this.getArchivePath(scope);
     let content: string;
     try {
       content = await fs.readFile(archivePath, "utf-8");
-    } catch {
-      return [];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.warn(`[persistent-memory] ${scope} memory archive is unreadable: ${reason}`);
+      throw new MemoryPersistenceError(
+        scope,
+        `${scope} memory archive is unreadable (${reason}); it is not empty`,
+      );
     }
     const entries: Array<ArchivedMemory & { lineIndex: number }> = [];
     let forgottenAt = "";
@@ -1003,9 +1238,7 @@ export class PersistentMemoryManager extends EventEmitter {
         }
         cleaned.push(line);
       }
-      const tmpPath = `${archivePath}.tmp`;
-      await fs.writeFile(tmpPath, cleaned.join("\n"), "utf-8");
-      await fs.rename(tmpPath, archivePath);
+      await writeFileAtomic(archivePath, cleaned.join("\n"), { mode: 0o600 });
     } catch (err) {
       logger.warn(
         `[persistent-memory] archive cleanup after restore failed (restore itself succeeded): ${err instanceof Error ? err.message : String(err)}`,
@@ -1017,6 +1250,12 @@ export class PersistentMemoryManager extends EventEmitter {
    * Get all memories for a category
    */
   getByCategory(category: MemoryCategory, scope?: "project" | "user"): Memory[] {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     const memories: Memory[] = [];
 
     if (!scope || scope === "project") {
@@ -1042,12 +1281,14 @@ export class PersistentMemoryManager extends EventEmitter {
    * Clear old memories
    */
   async forgetOlderThan(days: number, scope: "project" | "user" = "project"): Promise<number> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const forgettingConfig = resolveForgettingConfig();
     let count = 0;
 
     for (const [key, memory] of memories) {
-      if (memory.updatedAt < cutoff) {
+      if (memory.updatedAt < cutoff && !isProtectedMemory(memory, forgettingConfig)) {
         memories.delete(key);
         count++;
       }
@@ -1069,13 +1310,59 @@ export class PersistentMemoryManager extends EventEmitter {
       ? this.config.projectMemoryPath
       : this.config.userMemoryPath;
 
-    // Group by category
-    const byCategory = new Map<MemoryCategory, Memory[]>();
-    for (const memory of memories.values()) {
-      const list = byCategory.get(memory.category) || [];
-      list.push(memory);
-      byCategory.set(memory.category, list);
+    // Garde anti-amnésie (audit 2026-09-02) : si le dernier chargement a
+    // échoué autrement que par ENOENT, ce Map ne reflète PAS le fichier.
+    // On retente un load (fusion : les entrées en RAM, plus récentes,
+    // gagnent) ; si le fichier reste illisible, on refuse d'écraser —
+    // fail-closed, comme l'archive de l'oubli.
+    if (this.degradedScopes.has(scope)) {
+      const ramSnapshot = cloneMemoryMap(memories);
+      await this.loadMemories(scope);
+      if (this.degradedScopes.has(scope)) {
+        logger.warn(
+          `[persistent-memory] ${scope} memory file is still unreadable — skipping save to avoid overwriting history`,
+        );
+        throw new MemoryPersistenceError(scope);
+      }
+      for (const [key, memory] of ramSnapshot) {
+        memories.set(key, memory);
+      }
     }
+
+    await withSessionLock(filePath, async () => {
+      const diskMemories = new Map<string, Memory>();
+      try {
+        const diskContent = await fs.readFile(filePath, "utf-8");
+        const parsed = this.parseMemoryFile(diskContent);
+        if (
+          parsed.length === 0 &&
+          diskContent.trim() !== '' &&
+          !this.isCanonicalEmptyMemoryFile(diskContent)
+        ) {
+          throw new Error('non-canonical memory markdown contains no recoverable entries');
+        }
+        for (const memory of parsed) diskMemories.set(memory.key, memory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw new MemoryPersistenceError(
+            scope,
+            `could not reload ${scope} memory before save: ${(error as Error)?.message ?? String(error)}`,
+          );
+        }
+      }
+
+      const persistedSnapshot = this.persistedMemorySnapshots.get(scope) ?? new Map();
+      const mergedMemories = mergeMemoryMaps(diskMemories, memories, persistedSnapshot);
+      memories.clear();
+      for (const [key, memory] of mergedMemories) memories.set(key, memory);
+
+      // Group by category
+      const byCategory = new Map<MemoryCategory, Memory[]>();
+      for (const memory of memories.values()) {
+        const list = byCategory.get(memory.category) || [];
+        list.push(memory);
+        byCategory.set(memory.category, list);
+      }
 
     // Generate markdown
     let content = `# Code Buddy Memory\n\n`;
@@ -1099,7 +1386,14 @@ export class PersistentMemoryManager extends EventEmitter {
         content += `<!-- No memories in this category -->\n`;
       } else {
         for (const memory of categoryMemories) {
-          content += `- **${memory.key}**: ${memory.value}\n`;
+          // Prefix continuation lines with an explicit transport marker so
+          // their original indentation and literal metadata-like text survive
+          // a reload. `  |` also encodes an empty internal line as `  |\n`.
+          const [first = '', ...rest] = memory.value.split('\n');
+          content += `- **${memory.key}**: ${first}\n`;
+          for (const cont of rest) {
+            content += `  |${cont}\n`;
+          }
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
           }
@@ -1139,8 +1433,10 @@ export class PersistentMemoryManager extends EventEmitter {
       // Ignored
     }
 
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content);
+      await fs.ensureDir(path.dirname(filePath));
+      await writeFileAtomic(filePath, content, { mode: 0o600 });
+      this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
+    });
   }
 
   /**
@@ -1153,6 +1449,10 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   getHermesSnapshotForPrompt(): string {
+    if (this.degradedScopes.size > 0) {
+      const details = Array.from(this.degradedScopes, ([scope, reason]) => `${scope}: ${reason}`).join('; ');
+      return `<memory-store-error>MEMORY STORE ERROR: ${details}. The affected store is unavailable, not empty; do not infer that memories are absent.</memory-store-error>`;
+    }
     const sections: string[] = [];
     const projectEntries = this.renderScopeEntries(this.projectMemories);
     const userEntries = this.renderScopeEntries(this.userMemories);
@@ -1212,7 +1512,10 @@ export class PersistentMemoryManager extends EventEmitter {
       }));
 
       // 2. Extract facts from the conversation turn
-      const extractedFacts = await service.extractFacts(`User: ${message}\nAssistant: ${response}`);
+      // Only user-authored text is eligible for durable facts. The assistant's
+      // response may contain hypotheses or hallucinations, so it must never
+      // become evidence for the persistent memory store.
+      const extractedFacts = await service.extractFacts(`User: ${message}`);
       if (extractedFacts.length === 0) return;
 
       // 3. Reconcile facts
@@ -1225,11 +1528,10 @@ export class PersistentMemoryManager extends EventEmitter {
       for (const fact of reconciledFacts) {
         let key = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         let value = fact.text;
-
-        const colonIdx = fact.text.indexOf(': ');
-        if (colonIdx > 0 && colonIdx < 50) {
-          key = fact.text.substring(0, colonIdx).trim();
-          value = fact.text.substring(colonIdx + 2).trim();
+        const parsed = parseReconciledFactText(fact.text);
+        if (parsed) {
+          key = parsed.key;
+          value = parsed.value;
         }
 
         const prior = priorProjectMemories.get(key);
@@ -1241,14 +1543,18 @@ export class PersistentMemoryManager extends EventEmitter {
           updatedAt: fact.updatedAt || new Date(),
           ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
           accessCount: prior?.accessCount || 0,
-          tags: fact.source ? [fact.source] : ['auto-captured']
+          tags: mergeMemoryTags(prior?.tags, fact.source, ['auto-captured'])
         });
       }
 
       await this.saveMemories("project");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`[FactsMemory] Failed to autoCapture facts, falling back to pattern matching: ${message}`);
+      const reason = err instanceof Error ? err.message : String(err);
+      if (err instanceof FactsExtractionError) {
+        logger.warn(`[FactsMemory] Failed to autoCapture facts: ${reason}`);
+        return;
+      }
+      logger.warn(`[FactsMemory] Failed to autoCapture facts, falling back to pattern matching: ${reason}`);
       // Fallback: Detect project context
       const projectPatterns = [
         /this (?:is|project) (?:a|an) ([^.]+)/i,
@@ -1257,7 +1563,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of projectPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`auto-${Date.now()}`, match[0], {
             category: "project",
@@ -1269,7 +1575,7 @@ export class PersistentMemoryManager extends EventEmitter {
       // Detect preferences
       const prefPatterns = [
         /(?:i |we )prefer ([^.]+)/i,
-        /(?:always |never )([^.]+)/i,
+        /(?:i |we )(?:(?:always|never) (?:use|choose|write|format|keep|avoid|run|work with) )([^.]+)/i,
         /use ([^.]+) (?:style|convention|format)/i,
       ];
 
@@ -1290,7 +1596,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of decisionPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`decision-${Date.now()}`, match[0], {
             category: "decisions",
@@ -1315,6 +1621,12 @@ export class PersistentMemoryManager extends EventEmitter {
     limit = 10,
     scope?: "project" | "user"
   ): Array<Memory & { scope: "project" | "user" }> {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     const all: Array<Memory & { scope: "project" | "user" }> = [];
     if (!scope || scope === "project") {
       for (const m of this.projectMemories.values()) {
@@ -1335,6 +1647,12 @@ export class PersistentMemoryManager extends EventEmitter {
    * Format memories for display
    */
   formatMemories(scope?: "project" | "user"): string {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     let output = `\n🧠 Persistent Memory\n${"═".repeat(50)}\n\n`;
 
     const formatScope = (name: string, memories: Map<string, Memory>, memoryScope: MemoryScope) => {
@@ -1366,11 +1684,22 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   getStats(): { project: number; user: number; total: number } {
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     return {
       project: this.projectMemories.size,
       user: this.userMemories.size,
       total: this.projectMemories.size + this.userMemories.size,
     };
+  }
+
+  private assertScopeReadable(scope: MemoryScope): void {
+    const reason = this.degradedScopes.get(scope);
+    if (!reason) return;
+    throw new MemoryPersistenceError(
+      scope,
+      `${scope} memory store is unreadable or unavailable (${reason}); it is not an empty store`,
+    );
   }
 }
 

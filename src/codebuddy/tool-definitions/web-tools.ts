@@ -229,6 +229,43 @@ export const STOCK_QUOTE_TOOL: CodeBuddyTool = {
   },
 };
 
+// Community discussion search (HN / SO / GitHub / arXiv / Reddit).
+// Dispatch: src/tools/registry/web-tools.ts CommunitySearchExecuteTool.
+export const COMMUNITY_SEARCH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "community_search",
+    description:
+      "Search what people say — Hacker News, Stack Overflow, GitHub, arXiv and Reddit — ranked by real engagement (votes, points, stars) over a recent window. Complements web_search, which indexes what publishers write. Free, no API key required.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "What to look for. Plain words work best — this searches discussions, not pages.",
+        },
+        days: {
+          type: "number",
+          description: "How far back to look, in days (1-365, default 30). Beyond ~30 it stops being current.",
+        },
+        limit: {
+          type: "number",
+          description: "How many results to return (1-60, default 25)",
+        },
+        sources: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["hackernews", "stackexchange", "github", "arxiv", "reddit"],
+          },
+          description: "Restrict to specific sources. All by default.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+};
+
 /**
  * All web tools as an array
  */
@@ -239,5 +276,6 @@ export const WEB_TOOLS: CodeBuddyTool[] = [
   WEB_EXTRACT_TOOL,
   WEATHER_TOOL,
   STOCK_QUOTE_TOOL,
+  COMMUNITY_SEARCH_TOOL,
   // BROWSER_TOOL omitted — superseded by the richer browser-tools.ts (40+ actions)
 ];

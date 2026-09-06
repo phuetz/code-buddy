@@ -33,6 +33,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type { LocalUserModel, UserObservation } from '../memory/user-model.js';
 
 /** Reviewer sentinel stamped on every background auto-write. */
@@ -197,7 +198,7 @@ function recordBackgroundWriteAudit(workDir: string, entry: BackgroundWriteAudit
   file.entries.push(entry);
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(file, null, 2)}\n`, 'utf-8');
+    writeJsonAtomicSync(filePath, file, { mode: 0o600 });
   } catch (err) {
     logger.warn('[learning-background-writes] failed to persist audit entry', {
       error: err instanceof Error ? err.message : String(err),
@@ -207,13 +208,15 @@ function recordBackgroundWriteAudit(workDir: string, entry: BackgroundWriteAudit
 
 function readAuditFile(filePath: string): BackgroundWriteAuditFile {
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as BackgroundWriteAuditFile;
-    if (
-      parsed.schemaVersion === BACKGROUND_WRITE_AUDIT_SCHEMA_VERSION &&
-      Array.isArray(parsed.entries)
-    ) {
-      return parsed;
-    }
+    const parsed = readJsonAtomicSync<BackgroundWriteAuditFile | null>(filePath, null, {
+      mode: 0o600,
+      isValid: (value): value is BackgroundWriteAuditFile => Boolean(
+        value && typeof value === 'object' &&
+        (value as BackgroundWriteAuditFile).schemaVersion === BACKGROUND_WRITE_AUDIT_SCHEMA_VERSION &&
+        Array.isArray((value as BackgroundWriteAuditFile).entries),
+      ),
+    });
+    if (parsed) return parsed;
   } catch {
     // Fall through to a fresh file.
   }

@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { scanForSecrets, redactSecrets } from '../fleet/privacy-lint.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   getMemoryManager,
   PersistentMemoryManager,
@@ -283,8 +284,15 @@ export class MemoryCandidateQueue {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as MemoryCandidateFile;
+      const parsed = readJsonAtomicSync<MemoryCandidateFile>(this.filePath, {
+        schemaVersion: MEMORY_CANDIDATE_SCHEMA_VERSION,
+        candidates: [],
+      }, {
+        mode: 0o600,
+        isValid: (value): value is MemoryCandidateFile => Boolean(
+          value && typeof value === 'object' && Array.isArray((value as { candidates?: unknown }).candidates),
+        ),
+      });
       if (Array.isArray(parsed.candidates)) {
         this.candidates = parsed.candidates.filter(isValidCandidate);
       }
@@ -302,7 +310,7 @@ export class MemoryCandidateQueue {
         schemaVersion: MEMORY_CANDIDATE_SCHEMA_VERSION,
         candidates: this.candidates,
       };
-      fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
     } catch (err) {
       logger.warn('[memory-candidates] failed to save queue', {
         error: err instanceof Error ? err.message : String(err),

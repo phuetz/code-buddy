@@ -51,11 +51,15 @@ import {
   createA2AProtocolRoutes,
   createACPRoutes,
   createK8sHealthAliases,
+  createCanvasRouter,
   createDashboardRouter,
   createCloudTaskRoutes,
   createWebhookRoutes,
   createCognitionRoutes,
   mobileRoutes,
+  mobilePwaRouter,
+  isMobilePwaEnabled,
+  runsRoutes,
 } from './routes/index.js';
 import {
   setupWebSocket,
@@ -64,6 +68,8 @@ import {
   wireCognitionBridge,
 } from './websocket/index.js';
 import { setupDesktopWebSocket, closeDesktopWebSocket } from './websocket/desktop-handler.js';
+import { getPeerMethodHandler } from './websocket/peer-rpc.js';
+import { fleetHttpDescribeEnvelope } from '../fleet/fleet-http-surface.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startAutonomousTick, stopAutonomousTick } from '../fleet/autonomous-tick-broadcaster.js';
 import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
@@ -76,6 +82,7 @@ import {
   wirePeerMissionExchangeBridge,
   unwirePeerMissionExchangeBridge,
 } from '../fleet/peer-mission-exchange-bridge.js';
+import { unwireMobileConfirmationBridge } from './websocket/confirmation-bridge.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
 import { CSRFProtection } from '../security/csrf-protection.js';
@@ -205,6 +212,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
 
   // Trust proxy (for rate limiting behind reverse proxy)
   app.set('trust proxy', 1);
+  app.set('authEnabled', config.authEnabled);
 
   // Request ID middleware
   app.use(requestIdMiddleware);
@@ -269,6 +277,16 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // Mobile remote-supervision routes (custom pairing-token auth)
   app.use('/api/mobile', mobileRoutes);
 
+  // PWA shell (HTML/CSS/JS/manifest/SW) is public; /api and /ws still require JWT.
+  // Opt-in: without CODEBUDDY_MOBILE_PWA=true the route is absent (404).
+  if (isMobilePwaEnabled()) {
+    app.use('/__codebuddy__/mobile', mobilePwaRouter);
+  } else {
+    app.use('/__codebuddy__/mobile', (_req, res) => {
+      res.status(404).end();
+    });
+  }
+
   // Authentication (applied after public health/metrics/mobile endpoints)
   app.use(createAuthMiddleware(config));
 
@@ -279,6 +297,40 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // network-reachable. All general agent/session/tool/workflow routes below are
   // direct-loopback only; otherwise remote chat could invoke tools indirectly.
   app.use(requireLocalAnonymousAccess);
+
+  // Read-only Fleet diagnostics for the CLI. These HTTP wrappers expose the
+  // same server state and peer description as the Gateway WebSocket methods.
+  app.get('/api/fleet/status', (_req, res) => {
+    res.json({
+      status: 'ok',
+      connections: getConnectionStats(),
+    });
+  });
+
+  app.get('/api/fleet/describe', async (_req, res) => {
+    const describe = getPeerMethodHandler('peer.describe');
+    if (!describe) {
+      res.status(503).json({ error: 'Fleet peer description is unavailable' });
+      return;
+    }
+    try {
+      const description = await describe({}, {
+        connectionId: 'http-fleet-cli',
+        scopes: ['peer:invoke'],
+        traceId: `http-fleet-${Date.now().toString(36)}`,
+        depth: 0,
+      });
+      res.json(fleetHttpDescribeEnvelope(
+        description && typeof description === 'object'
+          ? description as Record<string, unknown>
+          : { description },
+      ));
+    } catch (error) {
+      res.status(503).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   // CSRF protection for state-changing endpoints (POST/PUT/DELETE)
   // Applied AFTER A2A routes so they are never touched by CSRF middleware
@@ -309,6 +361,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   app.use('/api/acp', createACPRoutes());
   app.use('/api/cloud/tasks', createCloudTaskRoutes());
   app.use('/api/webhooks', createWebhookRoutes());
+  app.use('/api', runsRoutes);
 
   // OpenAI-compatible alias
   app.use('/v1/chat', chatRoutes);
@@ -1033,6 +1086,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
     });
   });
 
+  // Canvas / A2UI (documented at /__codebuddy__/canvas/:id and /__codebuddy__/a2ui/)
+  app.use('/__codebuddy__', createCanvasRouter());
+
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
 
@@ -1394,6 +1450,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             if (process.env.CODEBUDDY_SENSORY_SPEAK === 'true') {
               const {
                 makeVoiceReply,
+                playCachedConversationCue,
                 describeVoiceReadiness,
                 prewarmVoiceModel,
                 prewarmVoiceRuntime,
@@ -1626,7 +1683,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     return;
                   }
                   // Snooze a pending reminder ("dans 10 minutes" / "plus tard") before anything else.
-                  const snoozed = rem.snoozePending(t, Date.now());
+                  const snoozed = await rem.snoozePending(t, Date.now());
                   if (snoozed) {
                     const mins = Math.max(1, Math.round(snoozed.delayMs / 60_000));
                     await sayCanonical(`D'accord, je te le rappelle dans ${mins} minute${mins > 1 ? 's' : ''}.`);
@@ -1746,6 +1803,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 // MCP set. It is never published, remembered, or treated as a
                 // committed request; only transcript_final can enter cognition.
                 onSpeechPartial: ({ text }) => replyFn.prewarm(text),
+                onBargeInStart: (_payload, interruptedTurnId) => {
+                  reply.interrupt(interruptedTurnId);
+                  if (interruptedTurnId) {
+                    embodiedCognition.mesh.cancelCorrelation(interruptedTurnId);
+                  }
+                },
                 onBargeIn: (_text, interruptedTurnId) => {
                   reply.interrupt(interruptedTurnId);
                   if (interruptedTurnId) {
@@ -1758,7 +1821,14 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   return timing;
                 },
                 getAttentionSnapshot: () => responseDecider.snapshot(),
+                isAddressed: (text) => responseDecider.isAddressed(text),
               };
+              if (
+                process.env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true'
+                || process.env.CODEBUDDY_SENSORY_REPAIR === 'true'
+              ) {
+                wireOpts.onConversationCue = playCachedConversationCue;
+              }
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
@@ -1852,6 +1922,66 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               await runDreamingPass();
             },
           });
+          // System vitals (opt-in) — turn the EXISTING system monitors into heartbeat-paced
+          // percepts on the bus (resource_threshold / disk_low / fleet_saturated / process_runaway),
+          // so declarative rules replace busy-loop monitoring. The scheduler's inFlight lock means
+          // one sample per beat, never a loop. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_SYSTEM_VITALS === 'true') {
+            const vitalsEvery = Math.max(1, Number(process.env.CODEBUDDY_SYSTEM_VITALS_EVERY ?? 30));
+            heart.register({
+              name: 'system-vitals',
+              everyBeats: vitalsEvery,
+              handler: async () => {
+                const { runSystemVitalsPass } = await import('../sensory/system-vitals-emitter.js');
+                await runSystemVitalsPass();
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('system-vitals'));
+            logger.info(`System vitals: Enabled (CODEBUDDY_SYSTEM_VITALS) - heartbeat-paced resource percepts every ${vitalsEvery} beats`);
+          }
+          // Lisa selfie cache refill (opt-in) — one image per beat when ComfyUI is
+          // reachable and load is low. Default OFF ⇒ byte-identical. Tests inject a
+          // fake generator; this path never busy-loops if the generator is down.
+          if (process.env.CODEBUDDY_LISA_SELFIE_REFILL === 'true') {
+            const refillEvery = Math.max(1, Number(process.env.CODEBUDDY_LISA_SELFIE_REFILL_EVERY ?? 40));
+            heart.register({
+              name: 'lisa-selfie-refill',
+              everyBeats: refillEvery,
+              handler: async (ctx) => {
+                const { runLisaSelfieRefillPass } = await import('../companion/lisa-selfie-refill.js');
+                await runLisaSelfieRefillPass({
+                  ...(typeof ctx.load1 === 'number' ? { load1: () => ctx.load1 as number } : {}),
+                });
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('lisa-selfie-refill'));
+            logger.info(`Lisa selfie refill: Enabled (CODEBUDDY_LISA_SELFIE_REFILL) - at most one image every ${refillEvery} beats`);
+          }
+          // Schedule ticks (opt-in) — emit a `time/tick` percept each pass so rules can fire at a
+          // time of day (match.kind:'tick' + between/filters on hhmm) with no busy loop. The
+          // heartbeat is the clock. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_SCHEDULE_TICKS === 'true') {
+            const ticksEvery = Math.max(1, Number(process.env.CODEBUDDY_SCHEDULE_TICKS_EVERY ?? 20));
+            heart.register({
+              name: 'schedule-ticks',
+              everyBeats: ticksEvery,
+              handler: async () => {
+                const { runSchedulePass } = await import('../sensory/schedule-emitter.js');
+                runSchedulePass();
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('schedule-ticks'));
+            logger.info(`Schedule ticks: Enabled (CODEBUDDY_SCHEDULE_TICKS) - time/tick percept every ${ticksEvery} beats`);
+          }
+          // Domain-event bridge (opt-in) — re-emit the agent's internal domain events
+          // (fleet:activity, agent:loop_detected, cost:*, context:pre_compact) as sensory
+          // percepts, so ONE rule grammar covers physical perception AND inner life. Anti-loop:
+          // it never subscribes to sensory:perception. Default OFF => byte-identical behavior.
+          if (process.env.CODEBUDDY_DOMAIN_EVENTS === 'true') {
+            const { wireDomainEventBridge } = await import('../sensory/domain-event-bridge.js');
+            sensoryTeardown.push(wireDomainEventBridge());
+            logger.info('Domain-event bridge: Enabled (CODEBUDDY_DOMAIN_EVENTS) - domain events -> sensory:perception');
+          }
           // Episodic journal (opt-in) — consolidate the heard DIALOGUE into "what we talked about"
           // so the arrival opener / follow-ups can reference it. Distinct from dreaming (sensor stats).
           if (process.env.CODEBUDDY_EPISODE_JOURNAL === 'true') {
@@ -1986,6 +2116,23 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           }
           heart.start();
           sensoryTeardown.push(() => heart.stop());
+          // TS pacemaker (opt-in) — emits the same vital/heartbeat percept when
+          // buddy-sense is absent. Auto-disables on a real beat; re-arms after
+          // silence. Default OFF => no timer, byte-identical.
+          if (process.env.CODEBUDDY_HEARTBEAT_FALLBACK === 'true') {
+            const { startHeartbeatFallback } = await import('../sensory/heartbeat-fallback.js');
+            const fallback = startHeartbeatFallback();
+            sensoryTeardown.push(() => fallback.stop());
+            logger.info('Heartbeat fallback: Enabled (CODEBUDDY_HEARTBEAT_FALLBACK) - TS pacemaker until buddy-sense beats');
+          }
+          {
+            const { wireSensoryStatusSnapshot } = await import('../sensory/sensory-status.js');
+            sensoryTeardown.push(
+              wireSensoryStatusSnapshot({
+                treatments: heart.list().map((t) => ({ name: t.name, everyBeats: t.everyBeats })),
+              }),
+            );
+          }
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
         } catch (err) {
           logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);
@@ -2156,6 +2303,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     unwirePeerToolBridge();
     unwirePeerCkgBridge();
     unwirePeerMissionExchangeBridge();
+    unwireMobileConfirmationBridge();
 
     const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
       ._unwireCognition;

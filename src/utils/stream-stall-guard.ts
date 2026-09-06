@@ -11,6 +11,8 @@
  * Tunable via CODEBUDDY_LLM_STALL_TIMEOUT_MS (default 120000; <=0 disables).
  */
 
+import { isLocalLlmProvider } from '../config/headless-local-prompt.js';
+
 export class LlmStallError extends Error {
   constructor(timeoutMs: number) {
     super(
@@ -23,6 +25,14 @@ export class LlmStallError extends Error {
 }
 
 const DEFAULT_STALL_TIMEOUT_MS = 120_000;
+const DEFAULT_LOCAL_PROMPT_MS_PER_TOKEN = 200;
+const DEFAULT_STALL_MAX_MS = 20 * 60 * 1000;
+
+function parseEnvNumber(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 /** Resolve the configured inactivity budget (<=0 or NaN disables the guard). */
 export function resolveStallTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -34,24 +44,79 @@ export function resolveStallTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 }
 
 /**
+ * First-token budget for LOCAL runtimes only (Ollama / LM Studio / vLLM /
+ * Lemonade, see `isLocalLlmProvider`): `max(120s, promptTokens × ms/token)`
+ * capped at `CODEBUDDY_STALL_MAX_MS` (default 20 min). Cloud providers keep
+ * the plain 120 s window. After the first token the regular 120 s
+ * inactivity window applies.
+ *
+ * `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` defaults to 200.
+ */
+export function resolveFirstTokenStallTimeoutMs(
+  promptTokens: number,
+  env: NodeJS.ProcessEnv = process.env,
+  options?: { targetIsLocal?: boolean },
+): number {
+  const afterFirst = resolveStallTimeoutMs(env);
+  if (afterFirst <= 0) return afterFirst;
+  // Adaptive prompt-eval budget is a LOCAL-runtime concern (iGPU prompt eval
+  // can take minutes). A silent cloud provider must still fail in 120 s —
+  // byte-identical behaviour for Gemini/ChatGPT/xAI and interactive sessions.
+  const isLocal = options?.targetIsLocal ?? isLocalLlmProvider(env);
+  if (!isLocal) return afterFirst;
+  const msPerToken = Math.max(0, parseEnvNumber(
+    env.CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN,
+    DEFAULT_LOCAL_PROMPT_MS_PER_TOKEN,
+  ));
+  const maxMs = Math.max(afterFirst, parseEnvNumber(
+    env.CODEBUDDY_STALL_MAX_MS,
+    DEFAULT_STALL_MAX_MS,
+  ));
+  const tokens = Number.isFinite(promptTokens) ? Math.max(0, promptTokens) : 0;
+  return Math.min(Math.max(afterFirst, Math.ceil(tokens * msPerToken)), maxMs);
+}
+
+export interface StallGuardOptions {
+  /** Inactivity budget until the first chunk. Defaults to `timeoutMs`. */
+  firstTokenTimeoutMs?: number | (() => number);
+}
+
+/**
  * Yield the stream's chunks, failing fast when the gap between two chunks
- * (or before the first one) exceeds `timeoutMs`.
+ * exceeds `timeoutMs`. The wait for the first token uses
+ * `firstTokenTimeoutMs` when provided (adaptive local prompt eval).
  */
 export async function* withStallGuard<T>(
   stream: AsyncIterable<T>,
   timeoutMs: number = resolveStallTimeoutMs(),
+  options?: StallGuardOptions,
 ): AsyncGenerator<T, void, undefined> {
   if (timeoutMs <= 0) {
     yield* stream;
     return;
   }
 
+  const resolveFirstTimeout = (): number => {
+    const val = typeof options?.firstTokenTimeoutMs === 'function'
+      ? options.firstTokenTimeoutMs()
+      : options?.firstTokenTimeoutMs;
+    return val ?? timeoutMs;
+  };
   const iterator = stream[Symbol.asyncIterator]();
+  let awaitingFirst = true;
   try {
     while (true) {
+      const budget = awaitingFirst ? resolveFirstTimeout() : timeoutMs;
+      if (budget <= 0) {
+        const rest = await iterator.next();
+        if (rest.done) return;
+        awaitingFirst = false;
+        yield rest.value;
+        continue;
+      }
       let timer: ReturnType<typeof setTimeout> | undefined;
       const stall = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new LlmStallError(timeoutMs)), timeoutMs);
+        timer = setTimeout(() => reject(new LlmStallError(budget)), budget);
       });
       let result: IteratorResult<T>;
       try {
@@ -60,6 +125,7 @@ export async function* withStallGuard<T>(
         clearTimeout(timer);
       }
       if (result.done) return;
+      awaitingFirst = false;
       yield result.value;
     }
   } catch (error) {

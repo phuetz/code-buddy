@@ -14,8 +14,8 @@ const READY: CompanionAvatarRendererSnapshot = {
   readyCount: 1,
   renderers: [
     {
-      rendererId: 'darkstar-metahuman-lisa',
-      displayName: 'Lisa MetaHuman on Darkstar',
+      rendererId: 'gpuNode-metahuman-lisa',
+      displayName: 'Lisa MetaHuman on GPU node',
       protocolVersion: 1,
       runtime: 'unreal',
       runtimeVersion: '5.8',
@@ -53,7 +53,7 @@ describe('CompanionAvatarRendererStatus', () => {
     );
 
     expect(screen.getByText('voix → visage active')).toBeTruthy();
-    expect(screen.getByText('Lisa MetaHuman on Darkstar')).toBeTruthy();
+    expect(screen.getByText('Lisa MetaHuman on GPU node')).toBeTruthy();
     expect(screen.getByText('prouvée')).toBeTruthy();
     expect(screen.getByText('60 fps')).toBeTruthy();
     expect(screen.getByText('73 ms')).toBeTruthy();

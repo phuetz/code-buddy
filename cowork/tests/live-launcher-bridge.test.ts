@@ -176,17 +176,17 @@ describe('buildLiveLauncherEnv', () => {
     expect(ollama.OLLAMA_HOST).toBe('http://localhost:11434');
     expect(ollama.ELECTRON_RUN_AS_NODE).toBe('1');
 
-    const darkstar = buildLiveLauncherEnv(
+    const gpuNode = buildLiveLauncherEnv(
       { kind: 'research', prompt: 'x' },
       { electronAsNode: false },
-      { OLLAMA_HOST: 'http://darkstar:11434' },
+      { OLLAMA_HOST: 'http://gpuNode:11434' },
     );
-    expect(darkstar.OLLAMA_HOST).toBe('http://darkstar:11434');
+    expect(gpuNode.OLLAMA_HOST).toBe('http://gpuNode:11434');
 
     const explicit = buildLiveLauncherEnv(
       { kind: 'research', prompt: 'x', ollamaUrl: 'http://gpu-peer:11434/v1/' },
       { electronAsNode: false },
-      { OLLAMA_HOST: 'http://darkstar:11434' },
+      { OLLAMA_HOST: 'http://gpuNode:11434' },
     );
     expect(explicit.OLLAMA_HOST).toBe('http://gpu-peer:11434');
 

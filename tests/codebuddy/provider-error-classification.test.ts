@@ -41,7 +41,7 @@ describe('classifyProviderError — transient (retryable)', () => {
     expect(c.fatal).toBe(false);
   });
 
-  it('429 with no quota signal → retryable (congestion)', () => {
+  it('429 with no quota signal → retryable (congestion, not quota)', () => {
     const c = classifyProviderError(
       sdkError({ status: 429, message: 'Rate limit reached, please try again' }),
     );
@@ -99,6 +99,50 @@ describe('classifyProviderError — quota fatal (the case that matters)', () => 
     expect(c.fatal).toBe(true);
     expect(c.retryable).toBe(false);
   });
+
+  it('Anthropic 400 credit balance too low → FATAL quota_exhausted (not invalid_request)', () => {
+    const c = classifyProviderError(
+      sdkError({
+        status: 400,
+        type: 'invalid_request_error',
+        message:
+          'Your credit balance is too low to access the Claude API. Please go to Plans & Billing to upgrade or purchase credits.',
+      }),
+    );
+    expect(c.fatal).toBe(true);
+    expect(c.retryable).toBe(false);
+    expect(c.reason).toBe('quota_exhausted');
+  });
+
+  it('Anthropic 429 monthly limit → FATAL quota_exhausted (not rate_limited)', () => {
+    const c = classifyProviderError(
+      sdkError({ status: 429, message: 'You have exceeded your monthly limit' }),
+    );
+    expect(c.fatal).toBe(true);
+    expect(c.retryable).toBe(false);
+    expect(c.reason).toBe('quota_exhausted');
+  });
+
+  it('Gemini 429 RESOURCE_EXHAUSTED "check quota" → FATAL quota_exhausted', () => {
+    const err = sdkError({
+      status: 429,
+      message: 'Resource has been exhausted (e.g. check quota).',
+    }) as Error & { statusText?: string };
+    err.statusText = 'RESOURCE_EXHAUSTED';
+    const c = classifyProviderError(err);
+    expect(c.fatal).toBe(true);
+    expect(c.retryable).toBe(false);
+    expect(c.reason).toBe('quota_exhausted');
+  });
+
+  it('xAI 403 out_of_credits → FATAL quota_exhausted (not auth_failed)', () => {
+    const c = classifyProviderError(
+      sdkError({ status: 403, type: 'out_of_credits', message: 'out_of_credits' }),
+    );
+    expect(c.fatal).toBe(true);
+    expect(c.retryable).toBe(false);
+    expect(c.reason).toBe('quota_exhausted');
+  });
 });
 
 describe('classifyProviderError — auth / invalid fatal', () => {
@@ -109,10 +153,11 @@ describe('classifyProviderError — auth / invalid fatal', () => {
     expect(c.reason).toBe('auth_failed');
   });
 
-  it('403 forbidden → FATAL', () => {
+  it('403 forbidden → FATAL auth (not a billing outage)', () => {
     const c = classifyProviderError(sdkError({ status: 403, message: 'Forbidden' }));
     expect(c.fatal).toBe(true);
     expect(c.retryable).toBe(false);
+    expect(c.reason).toBe('auth_failed');
   });
 
   it('invalid_api_key code → FATAL', () => {
@@ -208,6 +253,19 @@ describe('classifyProviderError — network non-regression', () => {
 
   it('"socket hang up" → retryable', () => {
     expect(classifyProviderError(new Error('socket hang up')).retryable).toBe(true);
+  });
+
+  it('OpenAI SDK "Connection error." (no errno) → retryable network', () => {
+    const c = classifyProviderError(new Error('CodeBuddy API error: Connection error.'));
+    expect(c.retryable).toBe(true);
+    expect(c.fatal).toBe(false);
+    expect(c.reason).toBe('network');
+  });
+
+  it('APIConnectionError name → retryable network', () => {
+    const err = new Error('Connection error.') as Error & { name?: string };
+    err.name = 'APIConnectionError';
+    expect(classifyProviderError(err).reason).toBe('network');
   });
 
   it('"stream terminated" → retryable', () => {

@@ -9,7 +9,7 @@ async function dismissOnboardingIfPresent(appPage: import('@playwright/test').Pa
   }
 }
 
-test('runs the Cowork IPC chat flow from the test runner window', async ({
+test('runs the Cowork local OpenAI chat flow from the test runner window', async ({
   appPage,
 }) => {
   test.setTimeout(200_000);
@@ -33,9 +33,9 @@ test('runs the Cowork IPC chat flow from the test runner window', async ({
   const chatId = 'code-buddy-cowork-ipc-chat-flow';
   const chatRow = appPage.getByTestId(`test-catalog-row-${chatId}`);
   await expect(chatRow).toBeVisible();
-  await expect(chatRow).toContainText('IPC chat flow');
+  await expect(chatRow).toContainText('local OpenAI chat flow');
   await expect(chatRow).toContainText('session chat');
-  await expect(chatRow).toContainText('continue');
+  await expect(chatRow).toContainText('bulle assistant');
   await chatRow.scrollIntoViewIfNeeded();
   await appPage.getByTestId(`test-catalog-run-${chatId}`).click();
 

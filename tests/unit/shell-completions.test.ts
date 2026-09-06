@@ -57,16 +57,21 @@ describe('Shell Completions', () => {
       });
 
       it('should include model completions', () => {
-        expect(bashCompletion).toContain('grok-3');
-        expect(bashCompletion).toContain('grok-2-latest');
+        expect(bashCompletion).toContain('grok-4-1-fast');
+        expect(bashCompletion).toContain('grok-code-fast-1');
       });
 
-      it('should register completion for grok command', () => {
-        expect(bashCompletion).toContain('complete -F _codebuddy_completions grok');
+      it('should register completion for buddy command', () => {
+        expect(bashCompletion).toContain('complete -F _codebuddy_completions buddy');
       });
 
-      it('should register completion for code-buddy command', () => {
-        expect(bashCompletion).toContain('complete -F _codebuddy_completions code-buddy');
+      it('should register buddy and use the current Grok catalog', () => {
+        expect(bashCompletion).toContain('complete -F _codebuddy_completions buddy');
+        expect(bashCompletion).not.toContain('complete -F _codebuddy_completions grok');
+        expect(bashCompletion).not.toContain('complete -F _codebuddy_completions code-buddy');
+        expect(bashCompletion).toContain('grok-4-1-fast');
+        expect(bashCompletion).toContain('grok-code-fast-1');
+        expect(bashCompletion).not.toContain('grok-2-latest');
       });
 
       it('should handle directory completion for -d flag', () => {
@@ -112,7 +117,7 @@ describe('Shell Completions', () => {
       });
 
       it('should include compdef directive', () => {
-        expect(zshCompletion).toContain('#compdef grok code-buddy');
+        expect(zshCompletion).toContain('#compdef buddy');
       });
 
       it('should include main completion function', () => {
@@ -175,7 +180,7 @@ describe('Shell Completions', () => {
       });
 
       it('should disable default file completion', () => {
-        expect(fishCompletion).toContain('complete -c grok -f');
+        expect(fishCompletion).toContain('complete -c buddy -f');
       });
 
       it('should include short option completions', () => {
@@ -202,8 +207,8 @@ describe('Shell Completions', () => {
       });
 
       it('should include model options', () => {
-        expect(fishCompletion).toContain('grok-3');
-        expect(fishCompletion).toContain('grok-2-latest');
+        expect(fishCompletion).toContain('grok-4-1-fast');
+        expect(fishCompletion).toContain('grok-code-fast-1');
       });
 
       it('should include slash command completions', () => {
@@ -265,15 +270,15 @@ describe('Shell Completions', () => {
       });
 
       it('should include completions directory option', () => {
-        expect(instructions).toContain('/etc/bash_completion.d/grok');
+        expect(instructions).toContain('/etc/bash_completion.d/buddy');
       });
 
       it('should include source command', () => {
         expect(instructions).toContain('source ~/.bashrc');
       });
 
-      it('should include grok command', () => {
-        expect(instructions).toContain('grok --completions bash');
+      it('should include buddy command', () => {
+        expect(instructions).toContain('buddy --completions bash');
       });
     });
 
@@ -329,7 +334,7 @@ describe('Shell Completions', () => {
       });
 
       it('should include source command', () => {
-        expect(instructions).toContain('source ~/.config/fish/completions/grok.fish');
+        expect(instructions).toContain('source ~/.config/fish/completions/buddy.fish');
       });
     });
 
@@ -393,7 +398,7 @@ describe('Shell Completions', () => {
 
       expect(consoleSpy).toHaveBeenCalled();
       const output = consoleSpy.mock.calls[0][0];
-      expect(output).toContain('complete -c grok');
+      expect(output).toContain('complete -c buddy');
     });
   });
 

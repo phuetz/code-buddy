@@ -342,6 +342,63 @@ describe('runCouncilPipeline', () => {
     expect(sb.ranking('code')).toHaveLength(0);
   });
 
+  it('replaces a dead panel member within the same run and still deliberates', async () => {
+    const candidates = [
+      candidate('prov-a', 'coder-dead'),
+      candidate('prov-b', 'coder-b'),
+      candidate('prov-c', 'coder-c'),
+      candidate('prov-j', 'gpt-5-arbiter'),
+    ];
+    const clients = {
+      'coder-dead': fakeClient('coder-dead', { answer: async () => Promise.reject(new Error('model not found')) }),
+      'coder-b': fakeClient('coder-b', { answer: 'answer B from the living seat' }),
+      'coder-c': fakeClient('coder-c', { answer: 'answer C from the replacement seat' }),
+      'gpt-5-arbiter': fakeClient('gpt-5-arbiter', {
+        judgeJson: '{"scores":{"A":0.9,"B":0.4},"winner":"A","why":"ok"}',
+        synthesis: 'MERGED AFTER REPLACEMENT',
+      }),
+    };
+    const deps = makeDeps(candidates, clients);
+    const events: CouncilProgressEvent[] = [];
+
+    const result = await runCouncilPipeline(TASK, { count: 2 }, deps, (e) => events.push(e));
+
+    expect(events.filter((e) => e.type === 'answer_failed' && e.source === 'coder-dead')).toHaveLength(1);
+    expect(result.failures.some((f) => f.source === 'coder-dead')).toBe(true);
+    expect(result.answers.map((a) => a.displayName).sort()).toEqual(['coder-b', 'coder-c']);
+    expect(result.answers).toHaveLength(2);
+    expect(result.verdict.kind).toBe('judged');
+    expect(result.synthesis).toBe('MERGED AFTER REPLACEMENT');
+    const sb = new ModelScoreboard(ledger);
+    expect(sb.consecutiveRecentFailures('coder-dead')).toBeGreaterThanOrEqual(1);
+    expect(sb.selectionBias('code', 'coder-dead')).toBeLessThan(0);
+  });
+
+  it('does not ask a dead panel member to judge after it was replaced', async () => {
+    const candidates = [
+      candidate('prov-a', 'coder-dead'),
+      candidate('prov-b', 'coder-b'),
+      candidate('prov-c', 'coder-c'),
+    ];
+    const clients = {
+      'coder-dead': fakeClient('coder-dead', { answer: async () => Promise.reject(new Error('model not found')) }),
+      'coder-b': fakeClient('coder-b', {
+        answer: 'answer B from the living seat',
+        judgeJson: '{"scores":{"A":0.9,"B":0.4},"winner":"A","why":"ok"}',
+        synthesis: 'MERGED BY LIVING JUDGE',
+      }),
+      'coder-c': fakeClient('coder-c', { answer: 'answer C from the replacement seat' }),
+    };
+    const deps = makeDeps(candidates, clients);
+
+    const result = await runCouncilPipeline(TASK, { count: 2 }, deps);
+
+    expect(result.answers.map((a) => a.displayName).sort()).toEqual(['coder-b', 'coder-c']);
+    expect(result.verdict.judgeModel).not.toBe('coder-dead');
+    expect(result.verdict.kind).toBe('judged');
+    expect(result.synthesis).toBe('MERGED BY LIVING JUDGE');
+  });
+
   it('throws a typed error when no LLM is active', async () => {
     const deps = makeDeps([], {});
     await expect(runCouncilPipeline(TASK, {}, deps)).rejects.toBeInstanceOf(CouncilError);
@@ -488,6 +545,55 @@ describe('runCouncilPipeline', () => {
       code: 'all-failed',
     });
     expect(aborted).toBe(true);
+  });
+
+  it('honours provider/model --models instead of silently keeping the whole pool', async () => {
+    const candidates = [
+      candidate('chatgpt', 'gpt-5.4-mini'),
+      candidate('chatgpt', 'gpt-5.6-sol'),
+      candidate('ollama', 'qwen3:4b'),
+    ];
+    const clients = {
+      'gpt-5.4-mini': fakeClient('gpt-5.4-mini', { answer: 'Canberra from mini' }),
+      'gpt-5.6-sol': fakeClient('gpt-5.6-sol', { answer: 'Canberra from sol' }),
+      'qwen3:4b': fakeClient('qwen3:4b', { answer: 'Canberra from ollama' }),
+    };
+    const deps = makeDeps(candidates, clients);
+    const events: CouncilProgressEvent[] = [];
+
+    const result = await runCouncilPipeline(
+      'quelle est la capitale de l’Australie ?',
+      { count: 1, models: 'chatgpt/gpt-5.6-sol' },
+      deps,
+      (e) => events.push(e),
+    );
+
+    expect(result.answers.map((a) => a.displayName)).toEqual(['gpt-5.6-sol']);
+    const panel = events.find((e): e is Extract<CouncilProgressEvent, { type: 'panel' }> => e.type === 'panel');
+    expect(panel?.poolSize).toBe(3);
+    expect(panel?.requestedCount).toBe(1);
+    expect(panel?.modelsMatched).toBe(true);
+  });
+
+  it('does not fall back to the whole pool when --models matches nothing', async () => {
+    const candidates = [
+      candidate('chatgpt', 'gpt-5.6-sol'),
+      candidate('agy-cli', 'gemini-3.8-flash-high'),
+      candidate('ollama', 'gemma4-moe-rag:latest'),
+    ];
+    const clients = {
+      'gpt-5.6-sol': fakeClient('gpt-5.6-sol', { answer: 'paid' }),
+      'gemini-3.8-flash-high': fakeClient('gemini-3.8-flash-high', { answer: 'paid' }),
+      'gemma4-moe-rag:latest': fakeClient('gemma4-moe-rag:latest', { answer: 'local' }),
+    };
+    const deps = makeDeps(candidates, clients);
+
+    await expect(
+      runCouncilPipeline(TASK, { count: 2, models: 'qwen3:4b-instruct' }, deps),
+    ).rejects.toMatchObject({
+      name: 'CouncilError',
+      code: 'no-candidates',
+    });
   });
 });
 

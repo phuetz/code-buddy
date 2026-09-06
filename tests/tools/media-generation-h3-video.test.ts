@@ -60,7 +60,7 @@ describe('generateVideo — provider comfyui (MiniMax H3 local)', () => {
     }, {
       rootDir: workspace,
       createId: () => 'h3-test',
-      env: { CODEBUDDY_VIDEO_PROVIDER: 'comfyui', CODEBUDDY_VIDEO_BASE_URL: 'http://darkstar:8190', CODEBUDDY_H3_POLL_MS: '1' } as NodeJS.ProcessEnv,
+      env: { CODEBUDDY_VIDEO_PROVIDER: 'comfyui', CODEBUDDY_VIDEO_BASE_URL: 'http://gpuNode:8190', CODEBUDDY_H3_POLL_MS: '1' } as NodeJS.ProcessEnv,
       fetch: comfyFetch(captured),
     });
 
@@ -103,7 +103,7 @@ describe('generateVideo — provider comfyui (MiniMax H3 local)', () => {
     }, {
       rootDir: workspace,
       createId: () => 'h3-test-2',
-      env: { CODEBUDDY_VIDEO_PROVIDER: 'comfyui', CODEBUDDY_VIDEO_BASE_URL: 'http://darkstar:8190', CODEBUDDY_H3_POLL_MS: '1' } as NodeJS.ProcessEnv,
+      env: { CODEBUDDY_VIDEO_PROVIDER: 'comfyui', CODEBUDDY_VIDEO_BASE_URL: 'http://gpuNode:8190', CODEBUDDY_H3_POLL_MS: '1' } as NodeJS.ProcessEnv,
       fetch: comfyFetch(captured),
     });
 

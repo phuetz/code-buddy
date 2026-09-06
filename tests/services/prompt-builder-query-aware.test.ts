@@ -11,7 +11,7 @@
  * small Ollama models into hallucinating JSON tool calls.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 // ---- mocks ----------------------------------------------------------
 
@@ -157,9 +157,64 @@ describe('PromptBuilder.buildForQuery() — Phase d.22 gating', () => {
     expect(sp).toContain('<writing_rules>');
     expect(sp).toContain('Match the user\'s language and register');
     expect(sp).toContain('experienced teammate in an ongoing conversation');
-    expect(sp).toContain('Avoid robotic templates');
-    // Trivial query → execution-discipline gated off (greetings don't need it).
+  });
+});
+
+describe('PromptBuilder.buildForQuery() — headless local compact', () => {
+  afterEach(() => {
+    delete process.env.CODEBUDDY_HEADLESS;
+    delete process.env.CODEBUDDY_PROVIDER;
+    delete process.env.CODEBUDDY_PROMPT_COMPACT;
+  });
+
+  it('drops optional sections for buddy -p on a local provider, even on a rich model', async () => {
+    process.env.CODEBUDDY_HEADLESS = 'true';
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    modelToolsMock.getModelToolConfigMock.mockReturnValue({
+      contextWindow: 262144,
+      maxOutputTokens: 16384,
+      supportsToolCalls: true,
+      promptProfile: 'rich',
+    });
+
+    const { builder } = buildBuilder();
+    const sp = await builder.buildForQuery(
+      'Écris un haïku sur la mer',
+      undefined,
+      'qwen3.8-ctx32k:latest',
+      null,
+    );
+
+    expect(sp).not.toContain('<auto_memory_directive>');
+    expect(sp).not.toContain('<lessons_directive>');
     expect(sp).not.toContain('## Execution discipline');
+    expect(sp).toContain('<writing_rules>');
+    expect(Math.ceil(sp.length / 4)).toBeLessThanOrEqual(1500);
+  });
+
+  it('keeps the rich prompt when CODEBUDDY_PROMPT_COMPACT=false', async () => {
+    process.env.CODEBUDDY_HEADLESS = 'true';
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    process.env.CODEBUDDY_PROMPT_COMPACT = 'false';
+    modelToolsMock.getModelToolConfigMock.mockReturnValue({
+      contextWindow: 262144,
+      maxOutputTokens: 16384,
+      supportsToolCalls: true,
+      promptProfile: 'rich',
+    });
+
+    const { builder } = buildBuilder();
+    const sp = await builder.buildForQuery(
+      'hi',
+      undefined,
+      'qwen3.8-ctx32k:latest',
+      null,
+    );
+
+    expect(sp).toContain('<auto_memory_directive>');
+    expect(sp).toContain('<writing_rules>');
+    expect(sp).toContain('Avoid robotic templates');
+    expect(sp).toContain('## Execution discipline');
   });
 
   it('standard profile + complex query: full directive set', async () => {

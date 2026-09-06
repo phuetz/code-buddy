@@ -11,6 +11,7 @@ import {
   resolveTtsEngine,
   synthesizePocketWav,
 } from '../../src/voice/local-tts.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('Pocket TTS selection', () => {
   it('uses Pocket by default and accepts explicit Voicebox or Piper selection', () => {
@@ -187,5 +188,95 @@ describe('Pocket resident server client', () => {
     } finally {
       releaseSecondChunk?.();
     }
+  });
+});
+
+/**
+ * When this stream is unavailable the caller synthesizes each sentence separately
+ * and the listener hears choppy, gap-ridden speech. The cause used to be logged at
+ * debug level — invisible in production — so a degraded voice looked like an
+ * unexplained defect. These tests hold the degradation to naming its own cause.
+ */
+describe('Pocket native stream degradation', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let server: Server | undefined;
+
+  beforeEach(() => {
+    resetPocketServer();
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(async () => {
+    warnSpy.mockRestore();
+    if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
+    server = undefined;
+    resetPocketServer();
+  });
+
+  const warnings = (): string => warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+
+  it('names the HTTP status when the server rejects the request', async () => {
+    server = createServer((req, res) => {
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ status: 'healthy' }));
+        return;
+      }
+      res.statusCode = 503;
+      res.end();
+    });
+    await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('test server did not bind');
+
+    const stream = await openPocketAudioStream(
+      'Bonjour',
+      {
+        CODEBUDDY_POCKET_SERVER: 'true',
+        CODEBUDDY_POCKET_URL: `http://127.0.0.1:${address.port}`,
+        CODEBUDDY_POCKET_VOICE: 'estelle',
+      },
+      { timeoutMs: 2_000 }
+    );
+
+    expect(stream).toBeNull();
+    expect(warnings()).toContain('503');
+  });
+
+  it('names the transport error when the connection dies mid-request', async () => {
+    server = createServer((req, res) => {
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ status: 'healthy' }));
+        return;
+      }
+      // Kill the socket: fetch rejects, which used to be swallowed at debug level.
+      req.socket.destroy();
+    });
+    await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('test server did not bind');
+
+    const stream = await openPocketAudioStream(
+      'Bonjour',
+      {
+        CODEBUDDY_POCKET_SERVER: 'true',
+        CODEBUDDY_POCKET_URL: `http://127.0.0.1:${address.port}`,
+        CODEBUDDY_POCKET_VOICE: 'estelle',
+      },
+      { timeoutMs: 2_000 }
+    );
+
+    expect(stream).toBeNull();
+    expect(warnings()).toMatch(/unavailable/i);
+  });
+
+  it('stays silent when the operator deliberately turned the resident server off', async () => {
+    const stream = await openPocketAudioStream('Bonjour', {
+      CODEBUDDY_POCKET_SERVER: 'false',
+    });
+
+    expect(stream).toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

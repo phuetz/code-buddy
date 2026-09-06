@@ -162,6 +162,8 @@ export interface DefaultAutonomousLoopOptions {
   executorMode?: 'artifact' | 'agent';
   /** Bounded workspace for the 'agent' executor (else `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`). */
   workspaceRoot?: string;
+  /** Run each task's verifyCommand after the agent (operator-trusted queue). */
+  allowVerifyCommand?: boolean;
 }
 
 /**
@@ -179,7 +181,10 @@ export async function createDefaultAutonomousLoop(
   const tierConfig = await resolveLiveModelTierConfig();
   const executorMode = opts.executorMode ?? (process.env['CODEBUDDY_AUTONOMY_EXECUTOR'] === 'agent' ? 'agent' : 'artifact');
   const executor = executorMode === 'agent'
-    ? createAgentTaskExecutor({ ...(opts.workspaceRoot ? { workspaceRoot: opts.workspaceRoot } : {}) })
+    ? createAgentTaskExecutor({
+        ...(opts.workspaceRoot ? { workspaceRoot: opts.workspaceRoot } : {}),
+        ...(opts.allowVerifyCommand ? { allowVerifyCommand: true } : {}),
+      })
     : createLocalModelTaskExecutor({
         ...(opts.outputDir ? { outputDir: opts.outputDir } : {}),
         ...(process.env['CODEBUDDY_ESCALATION_API_KEY'] ? { apiKey: process.env['CODEBUDDY_ESCALATION_API_KEY'] } : {}),

@@ -23,6 +23,9 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import {
   classifyRecentVoiceEcho,
+  hasRecentSpokenReference,
+  isRecentVoiceFragmentEcho,
+  isSensoryAecTrusted,
   isSpeaking,
   measureVoiceResumeTiming,
 } from './voice-activity.js';
@@ -30,25 +33,49 @@ import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import {
   resolveSpeechRecognitionEngine,
+  resolveSpeechLanguage,
+  resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
+  isFrenchParakeetModelAvailable,
+  resolveSpeechSttThreads,
   expandSpeechPath,
   type SpeechRecognitionEngine,
+  type SpeechTranscriptionPlan,
 } from './speech-engine-config.js';
 import { resolveUserName } from '../companion/user-name.js';
 import {
   isLikelyIncompleteVoiceTurn,
   joinVoiceTurnFragments,
+  resolveConversationalTurnEndSilenceMs,
   resolveIncompleteTurnHoldMs,
 } from './voice-turn-taking.js';
 import type { VoiceDeliveryProfile, VoiceTurnContext } from './voice-entrainment.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { assessAudioScene, type AudioSceneAssessment } from './audio-scene.js';
+import {
+  createConversationCueController,
+  shouldRepairTranscript,
+  type ConversationCueHandle,
+  type ConversationCuePlayer,
+} from './conversation-cues.js';
+import {
+  resolveTurnDetectorDecision,
+  type TurnDecisionProvider,
+} from './turn-detector.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
 export type { SpeechRecognitionEngine };
 
 export type Transcriber = (wav: string) => Promise<string>;
+
+export interface SpeechSttFailure {
+  wav: string;
+  cause: string;
+  count: number;
+  durationMs?: number;
+  rms?: number;
+}
 
 export interface RecognizedVoiceTurn {
   turnId: string;
@@ -65,11 +92,15 @@ export interface PartialVoiceTranscript {
 export interface SpeechReactionOptions {
   /** Injectable STT (tests / custom). Default: faster-whisper via python ($0). */
   transcriber?: Transcriber;
+  /** Local recovery for a real capture whose STT failed; return true only if audio was emitted. */
+  onSpeechError?: (failure: SpeechSttFailure) => boolean | void | Promise<boolean | void>;
   debounceMs?: number;
   /** Maximum wait used only when a fast VAD final ends on an unfinished phrase. */
   incompleteTurnHoldMs?: number;
   cwd?: string;
   now?: () => number;
+  /** Injectable environment for opt-in conversational policies and the speech-start barge-in gate. */
+  env?: NodeJS.ProcessEnv;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string, context?: VoiceTurnContext) => void | Promise<void>;
   /**
@@ -89,8 +120,16 @@ export interface SpeechReactionOptions {
    * It must never trigger a reply, tool, memory write, or response decision.
    */
   onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
+  /** Local cached-cue player; never a TTS or model callback. */
+  onConversationCue?: ConversationCuePlayer;
+  /** Stateless name/address probe for empty-final repair; must not invoke an LLM. */
+  isAddressed?: (text: string) => boolean | Promise<boolean>;
+  /** Optional raw-free LiveKit v1-mini decision supplied by the local ear bridge. */
+  turnDecisionProvider?: TurnDecisionProvider;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
+  /** Interrupt the active spoken turn directly from an acoustic speech_start event. */
+  onBargeInStart?: (payload: Record<string, unknown>, interruptedTurnId?: string) => void;
   /**
    * Human-like response gate. The percept is ALWAYS recorded (observation/memory stay
    * continuous); `onHeard` only fires when this returns `respond: true`. Omit → respond to
@@ -169,6 +208,60 @@ export function isBargeInTranscript(
 }
 
 export const DEFAULT_VOICE_BARGEIN_MIN_MS = 500;
+export const DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS = 250;
+export const DEFAULT_VOICE_BARGEIN_MARGIN_DB = 6;
+export const VOICE_BARGEIN_LEAKAGE_REFERENCE_MS = 300;
+
+export function voiceBargeInEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
+}
+
+function assessAcousticBargeInEligibility(
+  payload: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+): { trustedAec: boolean; sustainedSpeech: boolean } {
+  return {
+    trustedAec: isSensoryAecTrusted(payload.aecActive === true, env),
+    sustainedSpeech: (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS,
+  };
+}
+
+/**
+ * Speech-start has no transcript yet. It may cut only when active capture-side
+ * AEC accompanies both sustained speech and a calibrated energy margin.
+ */
+export function shouldTriggerVoiceBargeInOnSpeechStart(
+  payload: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const eligibility = assessAcousticBargeInEligibility(payload, env);
+  if (!eligibility.trustedAec || !eligibility.sustainedSpeech) {
+    return false;
+  }
+  const rms = finiteTimestamp(payload.rms);
+  const leakageRms = finiteTimestamp(payload.noiseFloorRms);
+  return rms !== undefined
+    && leakageRms !== undefined
+    && exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
+}
+
+export function resolveVoiceBargeInMarginDb(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB);
+  if (!Number.isFinite(configured) || configured < 0) return DEFAULT_VOICE_BARGEIN_MARGIN_DB;
+  return Math.min(60, configured);
+}
+
+/** True when the current microphone energy clears the adaptive leakage margin. */
+export function exceedsVoiceLeakageMargin(
+  rms: number,
+  leakageRms: number,
+  marginDb: number = DEFAULT_VOICE_BARGEIN_MARGIN_DB,
+): boolean {
+  if (!Number.isFinite(rms) || rms <= 0 || !Number.isFinite(leakageRms) || leakageRms <= 0) {
+    return false;
+  }
+  return 20 * Math.log10(rms / leakageRms) >= marginDb;
+}
 
 export function resolveVoiceBargeInMinMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.CODEBUDDY_VOICE_BARGEIN_MIN_MS);
@@ -190,14 +283,146 @@ function capturedSpeechMs(payload: Record<string, unknown>): number | undefined 
   return durations.length > 0 ? Math.max(...durations) : undefined;
 }
 
-/** Explicit wake/stop always works; AEC additionally permits sustained natural speech. */
+const MIN_STT_RECOVERY_AUDIO_MS = 200;
+const DEFAULT_SPEECH_NOISE_RMS = 0.02;
+const STT_FAILURE_REPLY = "Pardon, je n'ai pas compris.";
+
+interface PcmWavSignal {
+  durationMs: number;
+  rms: number;
+  channels: number;
+  sampleRate: number;
+  bitsPerSample: number;
+}
+
+/** Read only the small PCM signal facts needed to avoid speaking on a fake/empty WAV. */
+function readPcm16WavSignal(wav: string): PcmWavSignal | undefined {
+  try {
+    const source = readFileSync(expandSpeechPath(wav));
+    if (
+      source.length < 12
+      || source.toString('ascii', 0, 4) !== 'RIFF'
+      || source.toString('ascii', 8, 12) !== 'WAVE'
+    ) return undefined;
+
+    let channels = 0;
+    let sampleRate = 0;
+    let bitsPerSample = 0;
+    let dataOffset = -1;
+    let dataSize = 0;
+    for (let offset = 12; offset + 8 <= source.length;) {
+      const chunkSize = source.readUInt32LE(offset + 4);
+      const chunkStart = offset + 8;
+      const chunkEnd = Math.min(source.length, chunkStart + chunkSize);
+      const chunk = source.toString('ascii', offset, offset + 4);
+      if (chunk === 'fmt ' && chunkEnd - chunkStart >= 16) {
+        const format = source.readUInt16LE(chunkStart);
+        channels = source.readUInt16LE(chunkStart + 2);
+        sampleRate = source.readUInt32LE(chunkStart + 4);
+        bitsPerSample = source.readUInt16LE(chunkStart + 14);
+        if (format !== 1) return undefined;
+      } else if (chunk === 'data') {
+        dataOffset = chunkStart;
+        dataSize = chunkEnd - chunkStart;
+      }
+      const nextOffset = chunkStart + chunkSize + (chunkSize % 2);
+      if (nextOffset <= offset) break;
+      offset = nextOffset;
+    }
+    if (channels < 1 || sampleRate < 1 || bitsPerSample !== 16 || dataOffset < 0 || dataSize < 2) {
+      return undefined;
+    }
+    const sampleCount = Math.floor(dataSize / 2);
+    let squareSum = 0;
+    for (let index = 0; index < sampleCount; index += 1) {
+      const sample = source.readInt16LE(dataOffset + index * 2) / 32_768;
+      squareSum += sample * sample;
+    }
+    return {
+      durationMs: dataSize / (sampleRate * channels * 2) * 1_000,
+      rms: Math.sqrt(squareSum / sampleCount),
+      channels,
+      sampleRate,
+      bitsPerSample,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function describeSherpaRustAttempt(
+  wav: string,
+  startedAtMs: number,
+  worker: FasterWhisperWorker | null,
+  reason: string,
+): string {
+  const signal = readPcm16WavSignal(wav);
+  const exitCode = worker?.proc.exitCode;
+  const stderr = worker?.stderrTail?.trim() || '<empty>';
+  return [
+    `reason=${reason}`,
+    `exit_code=${exitCode === null || exitCode === undefined ? 'running' : exitCode}`,
+    `stderr=${JSON.stringify(stderr.slice(-300))}`,
+    `request_ms=${Math.max(0, Date.now() - startedAtMs)}`,
+    `audio_ms=${signal ? Math.round(signal.durationMs) : 'unknown'}`,
+    `format=${signal ? `pcm_s16le/${signal.sampleRate}Hz/${signal.channels}ch` : 'unknown'}`,
+    `rms=${signal ? signal.rms.toFixed(6) : 'unknown'}`,
+  ].join(' ');
+}
+
+function resolveSherpaEmptyThreshold(): number {
+  return Math.max(
+    1,
+    Math.round(numericEnv('CODEBUDDY_SHERPA_EMPTY_THRESHOLD', DEFAULT_SHERPA_EMPTY_THRESHOLD)),
+  );
+}
+
+function recordSherpaRustSuccess(): void {
+  if (sherpaRustInactiveAnnounced) {
+    logger.info(`[speech] sherpa-rs actif à nouveau après ${sherpaRustEmptyStreak} transcript(s) vide(s)`);
+  }
+  sherpaRustEmptyStreak = 0;
+  sherpaRustInactiveAnnounced = false;
+}
+
+function recordSherpaRustEmpty(details: string, fallbackEnabled: boolean): void {
+  sherpaRustEmptyStreak += 1;
+  const threshold = resolveSherpaEmptyThreshold();
+  if (sherpaRustEmptyStreak === 1) {
+    logger.warn(
+      `[speech] sherpa-rs empty transcript; ${details} fallback=${fallbackEnabled ? 'faster-whisper' : 'disabled'}`,
+    );
+  }
+  if (sherpaRustEmptyStreak >= threshold && !sherpaRustInactiveAnnounced) {
+    sherpaRustInactiveAnnounced = true;
+    logger.warn(
+      `[speech] sherpa-rs inactif : ${details} consecutive_empty=${sherpaRustEmptyStreak}`,
+    );
+  }
+}
+
+function realSpeechCapture(
+  wav: string,
+  payload: Record<string, unknown>,
+): { durationMs: number; rms: number } | undefined {
+  if (!existsSync(expandSpeechPath(wav))) return undefined;
+  const measured = readPcm16WavSignal(wav);
+  if (!measured) return undefined;
+  const durationMs = measured.durationMs;
+  const rms = measured.rms;
+  const threshold = finiteTimestamp(payload.rmsOn) ?? DEFAULT_SPEECH_NOISE_RMS;
+  if (durationMs < MIN_STT_RECOVERY_AUDIO_MS || rms < threshold) return undefined;
+  return { durationMs, rms };
+}
+
+/** Explicit wake/stop always works; explicitly trusted AEC permits sustained natural speech. */
 export function shouldTriggerVoiceBargeIn(
   text: string,
   payload: Record<string, unknown> = {},
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (isBargeInTranscript(text)) return true;
-  if (payload.aecActive !== true) return false;
+  if (!isSensoryAecTrusted(payload.aecActive === true, env)) return false;
   return (capturedSpeechMs(payload) ?? 0) >= resolveVoiceBargeInMinMs(env);
 }
 
@@ -339,7 +564,9 @@ interface FasterWhisperWorkerMessage {
 
 interface PendingWorkerRequest {
   resolve: (text: string) => void;
+  reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  describeFailure?: (reason: string) => string;
 }
 
 interface FasterWhisperWorker {
@@ -349,6 +576,7 @@ interface FasterWhisperWorker {
   ready: Promise<void>;
   readySettled: boolean;
   pending: Map<string, PendingWorkerRequest>;
+  stderrTail?: string;
 }
 
 let fasterWhisperWorker: FasterWhisperWorker | null = null;
@@ -360,6 +588,17 @@ let parakeetWorkerSeq = 0;
 // no python on the hot path. The python whisper/parakeet workers stay as fallback.
 let sherpaRustWorker: FasterWhisperWorker | null = null;
 let sherpaRustWorkerSeq = 0;
+
+export const DEFAULT_SHERPA_EMPTY_THRESHOLD = 3;
+let sherpaRustEmptyStreak = 0;
+let sherpaRustInactiveAnnounced = false;
+
+class SpeechWorkerRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SpeechWorkerRequestError';
+  }
+}
 
 function defaultSpeechInitialPrompt(): string {
   return 'Transcription en français. Ne complète pas les silences.';
@@ -403,10 +642,6 @@ function resolveSherpaRustBin(): string {
   return '';
 }
 
-function sherpaRustThreads(): number {
-  return numericEnv('CODEBUDDY_SPEECH_STT_THREADS', numericEnv('CODEBUDDY_SPEECH_THREADS', 4));
-}
-
 function readSpeechHotwordsFile(filePath: string): string[] {
   try {
     return splitSpeechPhrases(readFileSync(expandSpeechPath(filePath), 'utf8'));
@@ -434,10 +669,7 @@ function defaultSpeechHotwords(): string {
 }
 
 export function resolveFasterWhisperOptions(): FasterWhisperTranscribeOptions {
-  const language =
-    process.env.CODEBUDDY_SPEECH_LANG?.trim() ||
-    process.env.CODEBUDDY_COMPANION_LANGUAGE?.trim() ||
-    'fr';
+  const language = resolveSpeechLanguage();
   const initialPrompt =
     process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT?.trim() || defaultSpeechInitialPrompt();
   const hotwords = defaultSpeechHotwords();
@@ -624,17 +856,21 @@ function parakeetWorkerKey(python: string, modelDir: string, numThreads: number)
   return JSON.stringify({ python, modelDir, numThreads });
 }
 
-function settlePending(worker: FasterWhisperWorker, text: string): void {
+function settlePending(worker: FasterWhisperWorker, error: Error): void {
   for (const pending of worker.pending.values()) {
     clearTimeout(pending.timeout);
-    pending.resolve(text);
+    pending.reject(
+      pending.describeFailure
+        ? new SpeechWorkerRequestError(pending.describeFailure(error.message))
+        : error,
+    );
   }
   worker.pending.clear();
 }
 
 function disposeFasterWhisperWorker(worker: FasterWhisperWorker): void {
   if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('faster-whisper worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -642,7 +878,7 @@ function disposeFasterWhisperWorker(worker: FasterWhisperWorker): void {
 
 function disposeParakeetWorker(worker: FasterWhisperWorker): void {
   if (parakeetWorker === worker) parakeetWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('Parakeet worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -699,14 +935,17 @@ async function createFasterWhisperWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] STT worker request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-    settlePending(worker, '');
+    settlePending(
+      worker,
+      new SpeechWorkerRequestError(`faster-whisper worker closed (code=${code})`),
+    );
     if (!worker.readySettled) {
       rejectReady(new Error(`faster-whisper worker exited before ready (code=${code})`));
     }
@@ -716,7 +955,10 @@ async function createFasterWhisperWorker(
   });
   proc.on('error', (err) => {
     if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-    settlePending(worker, '');
+    settlePending(
+      worker,
+      worker.readySettled ? new SpeechWorkerRequestError(err.message) : err,
+    );
     if (!worker.readySettled) rejectReady(err);
   });
   fasterWhisperWorker = worker;
@@ -774,14 +1016,14 @@ async function createParakeetWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] Parakeet request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (parakeetWorker === worker) parakeetWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, new SpeechWorkerRequestError(`Parakeet worker closed (code=${code})`));
     if (!worker.readySettled) {
       rejectReady(new Error(`Parakeet worker exited before ready (code=${code})`));
     }
@@ -791,7 +1033,7 @@ async function createParakeetWorker(
   });
   proc.on('error', (err) => {
     if (parakeetWorker === worker) parakeetWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, worker.readySettled ? new SpeechWorkerRequestError(err.message) : err);
     if (!worker.readySettled) rejectReady(err);
   });
   parakeetWorker = worker;
@@ -849,20 +1091,23 @@ async function transcribeWavWithWorker(
   await waitForWorkerReady(worker);
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `speech-${Date.now()}-${++fasterWhisperWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
+      const error = new SpeechWorkerRequestError(
+        `faster-whisper worker request timed out after ${timeoutMs}ms`,
+      );
       logger.warn(`[speech] STT worker request timed out after ${timeoutMs}ms`);
       disposeFasterWhisperWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -877,20 +1122,23 @@ async function transcribeWavWithParakeetWorker(
   await waitForWorkerReady(worker);
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `parakeet-${Date.now()}-${++parakeetWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
+      const error = new SpeechWorkerRequestError(
+        `Parakeet worker request timed out after ${timeoutMs}ms`,
+      );
       logger.warn(`[speech] Parakeet worker request timed out after ${timeoutMs}ms`);
       disposeParakeetWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -913,7 +1161,7 @@ async function transcribeWavOneShot(
     'segs, _ = m.transcribe(sys.argv[1], **kwargs)',
     "print(' '.join(s.text for s in segs).strip())",
   ].join('\n');
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     // Capture stderr (was ignored) so an STT failure is LOUD in the journal, not silent.
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -921,10 +1169,13 @@ async function transcribeWavOneShot(
     proc.stdout.on('data', (d) => (out += String(d)));
     proc.stderr.on('data', (d) => (err += String(d)));
     proc.on('close', (code) => {
-      if ((code !== 0 || !out.trim()) && err.trim()) {
+      if (code !== 0) {
+        const cause = err.trim().slice(0, 300) || `process exited with code ${code}`;
         logger.warn(
-          `[speech] STT failed (python='${python}', exit=${code}): ${err.trim().slice(0, 300)}`
+          `[speech] STT failed (python='${python}', exit=${code}): ${cause}`
         );
+        reject(new Error(`faster-whisper STT failed: ${cause}`));
+        return;
       }
       resolve(out.trim());
     });
@@ -932,7 +1183,7 @@ async function transcribeWavOneShot(
       logger.warn(
         `[speech] STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
-      resolve('');
+      reject(e instanceof Error ? e : new Error(String(e)));
     });
   });
 }
@@ -949,7 +1200,7 @@ async function transcribeWavParakeetOneShot(
     buildParakeetWorkerScript(modelDir, numThreads),
     'print(transcribe(sys.argv[1]))',
   ].join('\n');
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
@@ -961,10 +1212,13 @@ async function transcribeWavParakeetOneShot(
         .map((line) => line.trim())
         .filter(Boolean);
       const text = lines.filter((line) => !line.startsWith('{')).at(-1) || '';
-      if ((code !== 0 || !text) && err.trim()) {
+      if (code !== 0) {
+        const cause = err.trim().slice(0, 300) || `process exited with code ${code}`;
         logger.warn(
-          `[speech] Parakeet STT failed (python='${python}', exit=${code}): ${err.trim().slice(0, 300)}`
+          `[speech] Parakeet STT failed (python='${python}', exit=${code}): ${cause}`
         );
+        reject(new Error(`Parakeet STT failed: ${cause}`));
+        return;
       }
       resolve(text.trim());
     });
@@ -972,7 +1226,7 @@ async function transcribeWavParakeetOneShot(
       logger.warn(
         `[speech] Parakeet STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
-      resolve('');
+      reject(e instanceof Error ? e : new Error(String(e)));
     });
   });
 }
@@ -990,6 +1244,7 @@ async function transcribeWavWithFasterWhisperRaw(wav: string): Promise<string> {
     try {
       return await transcribeWavWithWorker(wav, python, model, options);
     } catch (err) {
+      if (err instanceof SpeechWorkerRequestError) throw err;
       logger.warn(
         `[speech] STT worker unavailable, falling back to one-shot: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -1010,6 +1265,7 @@ async function transcribeWavWithParakeetRaw(wav: string): Promise<string> {
     try {
       return await transcribeWavWithParakeetWorker(wav, python, modelDir, numThreads);
     } catch (err) {
+      if (err instanceof SpeechWorkerRequestError) throw err;
       logger.warn(
         `[speech] Parakeet worker unavailable, falling back to one-shot: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -1025,7 +1281,7 @@ function sherpaRustWorkerKey(bin: string, modelDir: string, numThreads: number):
 
 function disposeSherpaRustWorker(worker: FasterWhisperWorker): void {
   if (sherpaRustWorker === worker) sherpaRustWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('sherpa-rs worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -1064,11 +1320,11 @@ async function createSherpaRustWorker(
     ready,
     readySettled: false,
     pending: new Map(),
+    stderrTail: '',
   };
 
-  let stderr = '';
   proc.stderr.on('data', (data) => {
-    stderr = `${stderr}${String(data)}`.slice(-2_000);
+    worker.stderrTail = `${worker.stderrTail ?? ''}${String(data)}`.slice(-2_000);
   });
   worker.rl.on('line', (line) => {
     let message: FasterWhisperWorkerMessage;
@@ -1091,26 +1347,31 @@ async function createSherpaRustWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] sherpa-rs request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      const reason = `request_error:${message.error.slice(0, 300)}`;
+      pending.reject(
+        new SpeechWorkerRequestError(
+          pending.describeFailure ? pending.describeFailure(reason) : reason,
+        ),
+      );
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (sherpaRustWorker === worker) sherpaRustWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, new SpeechWorkerRequestError(`sherpa-rs worker closed (code=${code})`));
     if (!worker.readySettled) {
       rejectReady(new Error(`sherpa-rs worker exited before ready (code=${code})`));
     }
-    if (stderr.trim()) {
+    if (worker.stderrTail?.trim()) {
       logger.warn(
-        `[speech] sherpa-rs worker closed (code=${code}): ${stderr.trim().slice(0, 300)}`
+        `[speech] sherpa-rs worker closed (code=${code}): ${worker.stderrTail.trim().slice(0, 300)}`
       );
     }
   });
   proc.on('error', (err) => {
     if (sherpaRustWorker === worker) sherpaRustWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, worker.readySettled ? new SpeechWorkerRequestError(err.message) : err);
     if (!worker.readySettled) rejectReady(err);
   });
   sherpaRustWorker = worker;
@@ -1141,20 +1402,26 @@ async function transcribeWavWithSherpaRustWorker(
   await waitForWorkerReady(worker, numericEnv('CODEBUDDY_SPEECH_STT_READY_TIMEOUT_MS', 8_000));
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `sherpa-rs-${Date.now()}-${++sherpaRustWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  const startedAtMs = Date.now();
+  const describeFailure = (reason: string): string =>
+    describeSherpaRustAttempt(wav, startedAtMs, worker, reason);
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
-      logger.warn(`[speech] sherpa-rs worker request timed out after ${timeoutMs}ms`);
+      const error = new SpeechWorkerRequestError(
+        `sherpa-rs worker request timed out after ${timeoutMs}ms; ${describeFailure('timeout')}`,
+      );
+      logger.warn(`[speech] sherpa-rs worker request timed out; ${error.message}`);
       disposeSherpaRustWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout, describeFailure });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -1172,42 +1439,102 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
     wav,
     bin,
     resolveParakeetModelDir(),
-    sherpaRustThreads()
+    resolveSpeechSttThreads()
   );
 }
 
-async function transcribeWavRaw(
+const warnedSpeechFallbacks = new Set<string>();
+
+function warnAutoFallbackOnce(reason: string): void {
+  const key = `auto:${reason}`;
+  if (warnedSpeechFallbacks.has(key)) return;
+  warnedSpeechFallbacks.add(key);
+  logger.warn(`[speech] auto STT fallback activated: effective=faster-whisper reason=${reason}`);
+}
+
+/** Log one configuration-level STT fallback once for the lifetime of this process. */
+export function warnSpeechFallbackOnce(
+  plan: SpeechTranscriptionPlan,
+  engine: SpeechRecognitionEngine,
+  hotwordCount: number,
+): void {
+  if (!plan.fallbackReason) return;
+  const key = plan.fallbackReason;
+  if (warnedSpeechFallbacks.has(key)) return;
+  warnedSpeechFallbacks.add(key);
+  logger.warn(
+    `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
+    + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`,
+  );
+}
+
+export interface SpeechTranscriptionOutcome {
+  text: string;
+  engine: SpeechRecognitionEngine;
+}
+
+/** Transcribe a WAV and report the decoder that produced the returned text. */
+export async function transcribeWavWithMetadata(
   wav: string,
   engineOverride?: SpeechRecognitionEngine
-): Promise<string> {
+): Promise<SpeechTranscriptionOutcome> {
   // `engineOverride` lets ONE call path (e.g. long/video transcription) prefer a faster
   // engine WITHOUT touching the global `CODEBUDDY_SPEECH_ENGINE` default that the
   // companion/sensory hot paths read. Unset → the env-driven resolution (unchanged).
-  const engine = engineOverride ?? resolveSpeechRecognitionEngine();
+  const requestedEngine = engineOverride ?? resolveSpeechRecognitionEngine();
+  const plan = resolveSpeechTranscriptionPlan(requestedEngine);
+  const engine = plan.effectiveEngine;
+  if (plan.blockingReason) {
+    const message =
+      `requested=${plan.requestedEngine} language=${plan.language} reason=${plan.blockingReason}`;
+    logger.error(`[speech] STT unavailable: ${message}`);
+    throw new Error(`STT unavailable: ${message}`);
+  }
+  if (plan.fallbackReason) {
+    const hotwordCount = splitSpeechPhrases(defaultSpeechHotwords()).length;
+    warnSpeechFallbackOnce(plan, engine, hotwordCount);
+  }
   if (engine === 'faster-whisper') {
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine };
   }
 
   if (engine === 'sherpa-rs') {
+    const startedAtMs = Date.now();
     try {
       const text = await transcribeWavWithSherpaRustRaw(wav);
-      if (text || !parakeetFallbackEnabled()) return text;
-      logger.warn(
-        '[speech] sherpa-rs returned an empty transcript; falling back to faster-whisper'
+      if (text) {
+        recordSherpaRustSuccess();
+        return { text, engine };
+      }
+      const details = describeSherpaRustAttempt(
+        wav,
+        startedAtMs,
+        sherpaRustWorker,
+        'no_tokens',
       );
+      recordSherpaRustEmpty(details, plan.fallbackEnabled);
+      if (!plan.fallbackEnabled) return { text, engine };
     } catch (err) {
-      if (!parakeetFallbackEnabled()) throw err;
+      if (!plan.fallbackEnabled) throw err;
+      const details = err instanceof SpeechWorkerRequestError && err.message.includes('reason=')
+        ? err.message
+        : describeSherpaRustAttempt(
+            wav,
+            startedAtMs,
+            sherpaRustWorker,
+            `runtime_error:${err instanceof Error ? err.message : String(err)}`,
+          );
       logger.warn(
-        `[speech] sherpa-rs failed; falling back to faster-whisper: ${err instanceof Error ? err.message : String(err)}`
+        `[speech] sherpa-rs failed; falling back to faster-whisper: ${details}`,
       );
     }
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
   }
 
   if (engine === 'parakeet') {
     try {
       const text = await transcribeWavWithParakeetRaw(wav);
-      if (text || !parakeetFallbackEnabled()) return text;
+      if (text || !parakeetFallbackEnabled()) return { text, engine };
       logger.warn('[speech] Parakeet returned an empty transcript; falling back to faster-whisper');
     } catch (err) {
       if (!parakeetFallbackEnabled()) throw err;
@@ -1215,30 +1542,52 @@ async function transcribeWavRaw(
         `[speech] Parakeet failed; falling back to faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-    return transcribeWavWithFasterWhisperRaw(wav);
+    return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
   }
 
-  // Auto mode: prefer the in-process Rust engine (fastest, same model) when its
-  // binary is built, then python Parakeet when its model dir exists, else faster-whisper.
-  if (resolveSherpaRustBin() && existsSync(resolveParakeetModelDir())) {
+  // Auto mode: prefer the in-process Rust engine only when both its binary and a
+  // complete locally evidenced French model are present. A bare directory or a
+  // stale binary must never silently select the sherpa path.
+  const sherpaBin = resolveSherpaRustBin();
+  const modelDir = resolveParakeetModelDir();
+  const binaryAvailable = Boolean(sherpaBin && existsSync(sherpaBin));
+  const frenchModelAvailable = isFrenchParakeetModelAvailable(modelDir);
+  if (binaryAvailable && frenchModelAvailable) {
     try {
-      return await transcribeWavWithSherpaRustRaw(wav);
+      const text = await transcribeWavWithSherpaRustRaw(wav);
+      if (text) recordSherpaRustSuccess();
+      return { text, engine: 'sherpa-rs' };
     } catch (err) {
+      warnAutoFallbackOnce('sherpa-rs-runtime-unavailable');
       logger.warn(
         `[speech] auto STT: sherpa-rs unavailable; trying Parakeet/faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+  } else {
+    warnAutoFallbackOnce(
+      !binaryAvailable
+        ? 'sherpa-rs-binary-missing'
+        : 'french-parakeet-model-missing-or-incomplete',
+    );
   }
-  if (existsSync(resolveParakeetModelDir())) {
+  if (frenchModelAvailable) {
     try {
-      return await transcribeWavWithParakeetRaw(wav);
+      return { text: await transcribeWavWithParakeetRaw(wav), engine: 'parakeet' };
     } catch (err) {
+      warnAutoFallbackOnce('parakeet-runtime-unavailable');
       logger.warn(
         `[speech] auto STT: Parakeet unavailable; trying faster-whisper: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
-  return transcribeWavWithFasterWhisperRaw(wav);
+  return { text: await transcribeWavWithFasterWhisperRaw(wav), engine: 'faster-whisper' };
+}
+
+async function transcribeWavRaw(
+  wav: string,
+  engineOverride?: SpeechRecognitionEngine,
+): Promise<string> {
+  return (await transcribeWavWithMetadata(wav, engineOverride)).text;
 }
 
 /** Default transcriber: local faster-whisper (base), best-effort, $0. Exported so the
@@ -1255,12 +1604,23 @@ export async function transcribeWav(
 
 export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs();
-  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs();
+  const env = options.env ?? process.env;
+  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs(env);
+  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs(env);
   const now = options.now ?? (() => Date.now());
-  const transcribe = options.transcriber ?? transcribeWavRaw;
+  const customTranscribe = options.transcriber;
   const turnCoordinator = getVoiceTurnCoordinator();
+  const sensoryBackchannelEnabled =
+    env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true' && Boolean(options.onConversationCue);
+  const conversationCues = createConversationCueController({
+    env,
+    canPlay: () => !isSpeaking(now()),
+    ...(options.onConversationCue ? { player: options.onConversationCue } : {}),
+  });
   let lastAt = Number.NEGATIVE_INFINITY;
+  let lastSttFailureReplyAt = Number.NEGATIVE_INFINITY;
+  let sttFailureCount = 0;
+  const sttFailureReplyWindowMs = Math.max(debounceMs, DEFAULT_SPEECH_DEBOUNCE_MS);
   let inFlight = false;
   let activeWav: string | undefined;
   let activeTurnId: string | undefined;
@@ -1269,13 +1629,80 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let turnSeq = 0;
   let pendingSpeechStartedAtMs: number | undefined;
   let pendingSpeechTurnId: string | undefined;
+  let pendingSpeechPartialText: string | undefined;
   let bargedSpeechTurnId: string | undefined;
+  let suspectedOwnPlaybackTurnId: string | undefined;
+  let leakagePlaybackStartedAtMs: number | undefined;
+  let leakageSamples: number[] = [];
+
+  const resetLeakageReference = (playbackStartedAtMs?: number): void => {
+    leakagePlaybackStartedAtMs = playbackStartedAtMs;
+    leakageSamples = [];
+  };
+
+  const payloadRms = (payload: Record<string, unknown>): number | undefined => {
+    for (const key of ['avgRms', 'rms', 'peakRms']) {
+      const value = payload[key];
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+    }
+    return undefined;
+  };
+
+  const payloadNoiseFloorRms = (payload: Record<string, unknown>): number | undefined => {
+    const value = payload.noiseFloorRms;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+  };
+
+  /**
+   * Measure the playback leakage reference from the first 300 ms of reported mic energy.
+   * A missing reference fails closed; the independent 250 ms duration path remains available.
+   */
+  const shouldTriggerAcousticBargeIn = (
+    payload: Record<string, unknown>,
+    speechStartedAtMs: number | undefined,
+  ): boolean => {
+    const eligibility = assessAcousticBargeInEligibility(payload, env);
+    if (
+      !voiceBargeInEnabled(env)
+      || !eligibility.trustedAec
+      || speechStartedAtMs === undefined
+    ) return false;
+    const timing = measureVoiceResumeTiming(speechStartedAtMs);
+    if (timing?.kind !== 'during_playback') {
+      resetLeakageReference();
+      return false;
+    }
+    const playbackStartedAtMs = speechStartedAtMs - timing.afterPlaybackStartMs;
+    if (leakagePlaybackStartedAtMs !== playbackStartedAtMs) {
+      resetLeakageReference(playbackStartedAtMs);
+    }
+    const rms = payloadRms(payload);
+    const noiseFloorRms = payloadNoiseFloorRms(payload);
+    const referenceSample = noiseFloorRms ?? rms;
+    // The VAD's calibrated floor is already a leakage measurement. Use it at once when the
+    // speech-start sample clears the margin; otherwise collect the first 300 ms before deciding.
+    if (eligibility.sustainedSpeech
+      && rms !== undefined && noiseFloorRms !== undefined
+      && exceedsVoiceLeakageMargin(rms, noiseFloorRms, resolveVoiceBargeInMarginDb(env))) {
+      return true;
+    }
+    if (timing.afterPlaybackStartMs <= VOICE_BARGEIN_LEAKAGE_REFERENCE_MS) {
+      if (referenceSample !== undefined) leakageSamples.push(referenceSample);
+      return false;
+    }
+    const leakageRms = leakageSamples.length > 0
+      ? leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length
+      : noiseFloorRms;
+    if (!eligibility.sustainedSpeech || rms === undefined || leakageRms === undefined) return false;
+    return exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
+  };
   type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
     presetText?: string;
     speechStartedAtMs?: number;
     turnId?: string;
+    repairAddressHint?: string;
   };
   let pendingSpeech: SpeechJob | null = null;
   let heldLiveTurn: {
@@ -1286,6 +1713,28 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     speechStartedAtMs?: number;
     turnId?: string;
   } | null = null;
+
+  const speakSttFailure = async (failure: SpeechSttFailure): Promise<boolean> => {
+    if (options.onSpeechError) {
+      return (await options.onSpeechError(failure)) === true;
+    }
+    // The ordinary `onHeard` path may invoke an LLM. STT failures must use only the
+    // existing local speech path, and only when this wire is actually configured to speak.
+    if (!options.onHeard) return false;
+    try {
+      const { sayNow } = await import('./voice-loop.js');
+      return await sayNow(STT_FAILURE_REPLY, { phoneDelivery: 'never' });
+    } catch (error) {
+      logger.warn(
+        `[speech] local STT failure recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  };
+
+  const heardHandler = options.onHeard as
+    | (NonNullable<SpeechReactionOptions['onHeard']> & { lastTiming?: { spoke?: boolean } })
+    | undefined;
 
   const cleanupSpeechJob = async (job: SpeechJob): Promise<void> => {
     // `presetText` identifies buddy-sense's WAV-free live path. Only the
@@ -1309,9 +1758,15 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const voiceResume = job.speechStartedAtMs !== undefined
       ? measureVoiceResumeTiming(job.speechStartedAtMs)
       : undefined;
-    const quickPostPlaybackResume = voiceResume?.kind === 'echo_tail';
     const aecActive = (job.p.payload as Record<string, unknown> | undefined)?.aecActive === true;
-    if (isSpeaking(t) && !quickPostPlaybackResume && !aecActive) {
+    const aecTrusted = isSensoryAecTrusted(aecActive, env);
+    // A turn that already barged in (CONV2) has stopped the playback: hear it. Otherwise the
+    // half-duplex guard only opens for an explicitly trusted AEC (SENSE1) — never on aecActive alone.
+    // A capture that STARTED after normal playback ended is different: transcribe it so the
+    // in-memory fingerprint can distinguish room echo from a genuinely new quick reply.
+    const bargedIn = job.turnId !== undefined && bargedSpeechTurnId === job.turnId;
+    const canDiscriminateEchoTail = voiceResume?.kind === 'echo_tail';
+    if (isSpeaking(t) && !aecTrusted && !bargedIn && !canDiscriminateEchoTail) {
       void cleanupSpeechJob(job);
       return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
     }
@@ -1352,22 +1807,49 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         // utterance in-process, so the transcript rides in the event payload — no
         // WAV, no STT here. Everything downstream (respond gate, onHeard, percept,
         // debounce/echo guard) is shared with the WAV path.
-        const rawText = job.presetText !== undefined ? job.presetText : await transcribe(job.wav);
-        const normalizedText = normalizeSpeechTranscript(rawText);
+        let rawText = '';
+        let actualSttEngine: SpeechRecognitionEngine | undefined;
+        let sttFailure: Error | undefined;
+        try {
+          if (job.presetText !== undefined) {
+            rawText = job.presetText;
+          } else if (customTranscribe) {
+            rawText = await customTranscribe(job.wav);
+          } else {
+            const outcome = await transcribeWavWithMetadata(job.wav);
+            rawText = outcome.text;
+            actualSttEngine = outcome.engine;
+          }
+        } catch (error) {
+          sttFailure = error instanceof Error ? error : new Error(String(error));
+        }
+        const normalizedText: NormalizedSpeechTranscript = sttFailure
+          ? { text: '' }
+          : normalizeSpeechTranscript(rawText);
         const text = normalizedText.text;
-        sttMs = elapsedSince(transcribeStartMs, now);
-        const { recordCompanionPercept } = await import('../companion/percepts.js');
+        const ingestMs = elapsedSince(transcribeStartMs, now);
+        // On live `transcript_final`, the real decode happened upstream in
+        // buddy-sense. Report its payload timing instead of the near-zero cost of
+        // copying preset text into the brain.
+        sttMs = job.presetText !== undefined && decodeMs !== undefined ? decodeMs : ingestMs;
+        const perceptModule = import('../companion/percepts.js');
         const latencyPayload = {
           ...(captureStartedAtMs !== undefined ? { captureStartedAtMs } : {}),
           ...(captureEndedAtMs !== undefined ? { captureEndedAtMs } : {}),
           ...(eventTimestamp !== undefined ? { eventReceivedAtMs: eventTimestamp } : {}),
           transcribeStartMs,
           sttMs,
+          ...(job.presetText !== undefined ? { ingestMs } : {}),
           ...(endpointMs !== undefined ? { endpointMs } : {}),
           ...(decodeMs !== undefined ? { decodeMs } : {}),
           ...(turnDetectionMs !== undefined ? { turnDetectionMs } : {}),
           ...(endpointMs !== undefined || decodeMs !== undefined || turnDetectionMs !== undefined
-            ? { inputReadyMs: (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs }
+            ? {
+                inputReadyMs:
+                  (endpointMs ?? 0)
+                  + (turnDetectionMs ?? 0)
+                  + (job.presetText !== undefined ? sttMs : (decodeMs ?? 0) + sttMs),
+              }
             : {}),
           decisionMs,
           actionMs,
@@ -1398,14 +1880,104 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           aecActive: payload.aecActive === true,
           captureSourceClass: payload.captureSourceClass,
         };
-        if (!text) {
-          turnCoordinator.transition(turnId, 'suppressed', {
-            suppressionReason: normalizedText.filteredReason ?? 'stt-empty',
+        if (sttFailure) {
+          sttFailureCount += 1;
+          const cause = sttFailure.message.slice(0, 300) || sttFailure.name;
+          const signal = job.presetText === undefined
+            ? realSpeechCapture(job.wav, payload)
+            : undefined;
+          let recoverySpoke = false;
+          if (
+            signal
+            && now() - lastSttFailureReplyAt >= sttFailureReplyWindowMs
+          ) {
+            lastSttFailureReplyAt = now();
+            try {
+              recoverySpoke = await speakSttFailure({
+                wav: job.wav,
+                cause,
+                count: sttFailureCount,
+                durationMs: signal.durationMs,
+                rms: signal.rms,
+              });
+            } catch (error) {
+              logger.warn(
+                `[speech] STT failure recovery threw: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          }
+          spoke = recoverySpoke;
+          turnCoordinator.transition(turnId, 'failed', {
+            errorCategory: 'stt',
             sttMs,
+            spoke: recoverySpoke,
+          });
+          logger.warn(
+            `[speech] STT failed (#${sttFailureCount}): ${cause}`
+            + (signal ? `; local recovery spoke=${recoverySpoke}` : '; no real speech capture for local recovery'),
+          );
+          await (await perceptModule).recordCompanionPercept(
+            {
+              modality: 'hearing',
+              source: 'sensory_speech_reaction',
+              summary: 'Speech captured; STT failed',
+              confidence: 0.35,
+              payload: {
+                text: '',
+                wav: job.wav,
+                responded: recoverySpoke,
+                sttFailure: true,
+                sttEmpty: true,
+                sttEmptyReason: 'error',
+                sttFailureCause: cause,
+                sttFailureCount,
+                ...(recoverySpoke ? { sttFailureRecovery: STT_FAILURE_REPLY } : {}),
+                latency: latencyPayload,
+                capture: capturePayload,
+              },
+              tags: ['speech', 'stt', 'latency', 'error'],
+            },
+            options.cwd ? { cwd: options.cwd } : {},
+          );
+          return;
+        }
+        if (!text) {
+          let repairAddressed = false;
+          const repairCaptureAtMs = captureStartedAtMs ?? transcribeStartMs;
+          const recentOwnPlaybackRisk = !isSensoryAecTrusted(payload.aecActive === true, env)
+            && hasRecentSpokenReference(repairCaptureAtMs);
+          if (env.CODEBUDDY_SENSORY_REPAIR === 'true' && options.onConversationCue) {
+            const repairHintIsOwnEcho = job.repairAddressHint
+              ? classifyRecentVoiceEcho(job.repairAddressHint, repairCaptureAtMs) === 'echo'
+              : false;
+            if (job.repairAddressHint && !repairHintIsOwnEcho && options.isAddressed) {
+              try {
+                repairAddressed = await options.isAddressed(job.repairAddressHint);
+              } catch {
+                repairAddressed = false;
+              }
+            }
+            const attention = options.getAttentionSnapshot?.();
+            repairAddressed ||= !recentOwnPlaybackRisk
+              && attention?.engaged === true
+              && attention.source === 'addressed';
+          }
+          const repairStartedAt = now();
+          const repairSpoke = repairAddressed
+            ? await conversationCues.playRepair(turnId)
+            : false;
+          actionMs = repairAddressed ? elapsedSince(repairStartedAt, now) : 0;
+          spoke = repairSpoke;
+          turnCoordinator.transition(turnId, repairSpoke ? 'completed' : 'suppressed', {
+            suppressionReason: repairAddressed
+              ? repairSpoke ? undefined : 'repair-cue-unavailable'
+              : normalizedText.filteredReason ?? 'stt-empty',
+            sttMs,
+            spoke: repairSpoke,
           });
           const emptyReason = normalizedText.filteredReason ?? 'empty';
           logger.info(`[speech] empty transcript (${sttMs}ms STT, ${emptyReason})`);
-          await recordCompanionPercept(
+          await (await perceptModule).recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
@@ -1413,10 +1985,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               confidence: 0.25,
               payload: {
                 text: '',
-                wav: job.wav,
-                responded: false,
+                ...(job.presetText !== undefined ? { live: true } : { wav: job.wav }),
+                responded: repairSpoke,
                 sttEmpty: true,
                 sttEmptyReason: emptyReason,
+                ...(repairAddressed ? { repairTriggered: true, repairSpoke } : {}),
                 ...(normalizedText.filteredReason ? { rawText: rawText.trim().slice(0, 240) } : {}),
                 latency: latencyPayload,
                 capture: capturePayload,
@@ -1431,36 +2004,49 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           || voiceResume?.kind === 'echo_tail'
           ? voiceResume.kind
           : undefined;
-        const echoClassification = playbackCaptureKind
-          ? classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs)
-          : undefined;
+        const echoClassification = classifyRecentVoiceEcho(
+          text,
+          captureStartedAtMs ?? transcribeStartMs,
+        );
         const explicitBargeIn = playbackCaptureKind
-          ? shouldTriggerVoiceBargeIn(text, payload)
+          ? shouldTriggerVoiceBargeIn(text, payload, env)
+            // A turn that already cut the playback acoustically (CONV2 speech_start barge-in)
+            // counts as an explicit interruption: the robot is no longer speaking over it.
+            || (job.turnId !== undefined && bargedSpeechTurnId === job.turnId)
           : false;
-        const suppressPlaybackCapture = playbackCaptureKind && echoClassification
-          ? shouldSuppressPlaybackCapture(
-              playbackCaptureKind,
-              echoClassification,
-              explicitBargeIn,
-              payload.aecActive === true,
-            )
-          : false;
-        if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {
-          const suppressionReason = playbackCaptureKind === 'during_playback'
-            ? echoClassification === 'echo'
-              ? 'during_playback_echo'
-              : 'during_playback_non_explicit'
-            : `echo_tail_${echoClassification}`;
-          logger.info(
-            `[speech] suppressed playback capture reason=${suppressionReason}`,
-          );
+        const ownEcho = echoClassification === 'echo';
+        const suppressPlaybackCapture = ownEcho || (
+          playbackCaptureKind !== undefined
+            ? shouldSuppressPlaybackCapture(
+                playbackCaptureKind,
+                echoClassification,
+                explicitBargeIn,
+                isSensoryAecTrusted(payload.aecActive === true, env),
+              )
+            : false
+        );
+        if (suppressPlaybackCapture) {
+          const suppressionReason = ownEcho && playbackCaptureKind === undefined
+            ? 'own_echo'
+            : playbackCaptureKind === 'during_playback'
+              ? ownEcho
+                ? 'during_playback_echo'
+                : 'during_playback_non_explicit'
+              : `echo_tail_${echoClassification}`;
+          if (ownEcho) {
+            logger.info('[speech] dropped own echo');
+          } else {
+            logger.info(
+              `[speech] suppressed playback capture reason=${suppressionReason}`,
+            );
+          }
           turnCoordinator.transition(turnId, 'suppressed', {
             suppressionReason,
             sttMs,
-            scene: 'assistant_playback',
+            scene: playbackCaptureKind ? 'assistant_playback' : 'assistant_echo',
             sceneConfidence: echoClassification === 'echo' ? 0.98 : 0.8,
           });
-          await recordCompanionPercept(
+          await (await perceptModule).recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
@@ -1474,7 +2060,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
                 playbackCaptureSuppressed: true,
                 suppressionReason,
                 echoClassification,
-                turnTaking: voiceResume,
+                ...(voiceResume ? { turnTaking: voiceResume } : {}),
                 latency: latencyPayload,
                 capture: capturePayload,
               },
@@ -1484,8 +2070,30 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
-        logger.info(`[speech] heard (${sttMs}ms STT) → ${text}`);
+        const configuredPlan = resolveSpeechTranscriptionPlan();
+        const sttEngine = actualSttEngine ?? (typeof payload.sttEngine === 'string'
+          ? payload.sttEngine
+          : job.presetText !== undefined
+            ? 'sherpa-rs'
+            : configuredPlan.effectiveEngine);
+        const sttLanguage = typeof payload.sttLanguage === 'string'
+          ? payload.sttLanguage
+          : configuredPlan.language;
+        const sttModel = typeof payload.sttModel === 'string'
+          ? payload.sttModel
+          : sttEngine === 'faster-whisper'
+            ? process.env.CODEBUDDY_SPEECH_MODEL?.trim() || 'base'
+            : resolveParakeetModelDir();
+        const hotwordsState = payload.hotwordsApplied === false
+          ? 'ignored'
+          : sttEngine === 'faster-whisper' && defaultSpeechHotwords()
+            ? 'applied'
+            : 'none';
+        logger.info(
+          `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${text}`
+        );
 
+        let backchannel: ConversationCueHandle | null = null;
         const turnContext: VoiceTurnContext = {
           turnId,
           ...(finiteTimestamp(payload.audioMs) !== undefined
@@ -1496,9 +2104,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             : {}),
           ...(captureStartedAtMs !== undefined ? { speechStartedAtMs: captureStartedAtMs } : {}),
           ...(captureEndedAtMs !== undefined ? { speechEndedAtMs: captureEndedAtMs } : {}),
+          ...(sensoryBackchannelEnabled
+            ? { onResponseAudioStart: () => backchannel?.cancel() }
+            : {}),
         };
         let acceptedForSemanticIngress = true;
         let responded = Boolean(options.onHeard);
+        let repaired = false;
+        let repairReason: 'short' | 'low-confidence' | undefined;
         turnCoordinator.transition(turnId, 'deciding', {
           sttMs,
           wordCount: text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0,
@@ -1547,6 +2160,25 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           sttMs,
         });
 
+        const confidence = finiteTimestamp(payload.confidence);
+        if (
+          acceptedForSemanticIngress
+          && decisionReason === 'addressed'
+          && env.CODEBUDDY_SENSORY_REPAIR === 'true'
+          && options.onConversationCue
+          && shouldRepairTranscript(text, confidence)
+        ) {
+          repairReason = (text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) <= 2
+            ? 'short'
+            : 'low-confidence';
+          const repairStartedAt = now();
+          spoke = await conversationCues.playRepair(turnId);
+          actionMs = elapsedSince(repairStartedAt, now);
+          repaired = true;
+          responded = spoke;
+          acceptedForSemanticIngress = false;
+        }
+
         if (acceptedForSemanticIngress && options.onRecognizedTurn) {
           try {
             const ingress = options.onRecognizedTurn({ turnId, text, context: turnContext });
@@ -1566,18 +2198,32 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           }
         }
 
-        if (responded) {
+        if (repaired) {
+          turnCoordinator.transition(turnId, spoke ? 'completed' : 'suppressed', {
+            decisionReason,
+            suppressionReason: spoke ? undefined : 'repair-cue-unavailable',
+            spoke,
+            totalMs: elapsedSince(transcribeStartMs, now),
+          });
+        } else if (responded) {
+          if (sensoryBackchannelEnabled && decisionReason === 'addressed') {
+            backchannel = conversationCues.armBackchannel(turnId);
+          }
           turnCoordinator.transition(turnId, 'thinking', {
             decisionReason,
             decisionMs,
           });
           const actionStartMs = now();
-          await options.onHeard?.(text, turnContext);
+          try {
+            await options.onHeard?.(text, turnContext);
+          } finally {
+            backchannel?.cancel();
+          }
           actionMs = elapsedSince(actionStartMs, now);
           responseTiming = options.getResponseTiming?.();
-          // Plain hooks historically imply speech; instrumented voice handlers report whether
-          // audio really started (empty/muted/failed replies must not arm a fake echo debounce).
-          spoke = responseTiming?.spoke ?? true;
+          // The voice handler publishes the same fact through getResponseTiming or its
+          // lastTiming property. An uninstrumented/no-op hook is not evidence of audio.
+          spoke = responseTiming?.spoke ?? heardHandler?.lastTiming?.spoke ?? false;
           if (!responseTiming) {
             turnCoordinator.transition(turnId, 'completed', {
               decisionReason,
@@ -1594,7 +2240,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         }
         const totalMs = elapsedSince(transcribeStartMs, now);
         const inputReadyMs =
-          (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs;
+          (endpointMs ?? 0)
+          + (turnDetectionMs ?? 0)
+          + (job.presetText !== undefined ? sttMs : (decodeMs ?? 0) + sttMs);
         const perceivedResponseMs =
           responseTiming?.firstAudioMs !== undefined
             ? inputReadyMs + decisionMs + responseTiming.firstAudioMs
@@ -1603,7 +2251,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           responseTiming?.firstContentAudioMs !== undefined
             ? inputReadyMs + decisionMs + responseTiming.firstContentAudioMs
             : undefined;
-        await recordCompanionPercept(
+        await (await perceptModule).recordCompanionPercept(
           {
             modality: 'hearing',
             source: 'sensory_speech_reaction',
@@ -1613,7 +2261,21 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               text,
               ...(job.presetText !== undefined ? { live: true } : { wav: job.wav }),
               responded,
+              stt: {
+                requestedEngine:
+                  typeof payload.sttRequestedEngine === 'string'
+                    ? payload.sttRequestedEngine
+                    : configuredPlan.requestedEngine,
+                engine: sttEngine,
+                model: sttModel,
+                language: sttLanguage,
+                hotwords: hotwordsState,
+                ...(typeof payload.sttFallbackReason === 'string'
+                  ? { fallbackReason: payload.sttFallbackReason }
+                  : {}),
+              },
               ...(decisionReason ? { decisionReason } : {}),
+              ...(repaired ? { repairTriggered: true, repairReason } : {}),
               latency: {
                 ...latencyPayload,
                 decisionMs,
@@ -1730,10 +2392,40 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         ?? finiteTimestamp(p.receivedAt)
         ?? now();
       pendingSpeechTurnId = `voice_${pendingSpeechStartedAtMs}_${++turnSeq}`;
+      pendingSpeechPartialText = undefined;
       bargedSpeechTurnId = undefined;
       turnCoordinator.transition(pendingSpeechTurnId, 'listening', {
         aecActive: payload.aecActive === true,
       });
+      const speechStartedAtMs = pendingSpeechStartedAtMs ?? now();
+      const playbackActive = measureVoiceResumeTiming(speechStartedAtMs)?.kind === 'during_playback';
+      const suspectedOwnPlayback = playbackActive
+        && payload.aecActive !== true
+        && (env.CODEBUDDY_SENSORY_REPAIR === 'true' || sensoryBackchannelEnabled)
+        && hasRecentSpokenReference(speechStartedAtMs);
+      suspectedOwnPlaybackTurnId = suspectedOwnPlayback ? pendingSpeechTurnId : undefined;
+      if (
+        inFlight
+        && playbackActive
+        && !suspectedOwnPlayback
+        && voiceBargeInEnabled(env)
+        && (
+          shouldTriggerVoiceBargeInOnSpeechStart(payload, env)
+          || shouldTriggerAcousticBargeIn(payload, speechStartedAtMs)
+        )
+        && (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
+      ) {
+        bargedSpeechTurnId = pendingSpeechTurnId;
+        try {
+          if (options.onBargeInStart) {
+            options.onBargeInStart(payload, activeTurnId);
+          } else {
+            options.onBargeIn?.('', activeTurnId);
+          }
+        } catch {
+          /* interruption is best-effort */
+        }
+      }
       if (options.onSpeechStart) {
         void Promise.resolve().then(() => options.onSpeechStart!(payload)).catch((error) => {
           logger.debug('[speech] predictive warmup skipped', {
@@ -1748,15 +2440,21 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
       if (!text) return;
+      pendingSpeechPartialText = text;
+      const acousticBargeIn = shouldTriggerAcousticBargeIn(payload, pendingSpeechStartedAtMs);
       if (
         inFlight &&
-        options.onBargeIn &&
-        shouldTriggerVoiceBargeIn(text, payload) &&
+        (options.onBargeIn || options.onBargeInStart) &&
+        (shouldTriggerVoiceBargeIn(text, payload, env) || acousticBargeIn) &&
         (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
       ) {
         if (pendingSpeechTurnId !== undefined) bargedSpeechTurnId = pendingSpeechTurnId;
         try {
-          options.onBargeIn(text, activeTurnId);
+          if (acousticBargeIn && options.onBargeInStart) {
+            options.onBargeInStart(payload, activeTurnId);
+          } else {
+            options.onBargeIn?.(text, activeTurnId);
+          }
         } catch {
           /* interruption is best-effort */
         }
@@ -1782,15 +2480,35 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     // and carried in the payload — drive the same cognition with the text directly,
     // no WAV / no STT. Keyed on a synthetic id since there's no file to dedup on.
     if (p.kind === 'transcript_final') {
-      const livePayload = p.payload as { text?: string; turnDetector?: string } | undefined;
+      const livePayload = p.payload as {
+        text?: string;
+        turnDetector?: string;
+        endpointWaitMs?: number;
+      } | undefined;
       let speechStartedAtMs = finiteTimestamp(
         (p.payload as Record<string, unknown> | undefined)?.startedAtMs,
       ) ?? pendingSpeechStartedAtMs;
       let turnId = pendingSpeechTurnId;
+      const suspectedOwnPlayback = turnId !== undefined
+        && suspectedOwnPlaybackTurnId === turnId;
+      const repairAddressHint = pendingSpeechPartialText;
       pendingSpeechStartedAtMs = undefined;
       pendingSpeechTurnId = undefined;
-      let text = livePayload?.text?.trim();
-      if (!text) return;
+      pendingSpeechPartialText = undefined;
+      let text = livePayload?.text?.trim() ?? '';
+      if (suspectedOwnPlayback) suspectedOwnPlaybackTurnId = undefined;
+      if (suspectedOwnPlayback && isRecentVoiceFragmentEcho(text, speechStartedAtMs ?? now())) {
+        if (turnId) {
+          turnCoordinator.transition(turnId, 'suppressed', {
+            suppressionReason: 'own_playback_fragment',
+            scene: 'assistant_playback',
+            sceneConfidence: 0.98,
+          });
+        }
+        logger.info('[speech] dropped own playback fragment');
+        return;
+      }
+      if (!text && env.CODEBUDDY_SENSORY_REPAIR !== 'true') return;
       const key = `live:${liveSeq++}`;
       if (heldLiveTurn) {
         clearTimeout(heldLiveTurn.timer);
@@ -1799,12 +2517,30 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         turnId = heldLiveTurn.turnId ?? turnId;
         heldLiveTurn = null;
       }
+      let turnDecision: ReturnType<typeof resolveTurnDetectorDecision>;
+      try {
+        turnDecision = resolveTurnDetectorDecision(
+          { text, payload: (p.payload as Record<string, unknown> | undefined) ?? {} },
+          options.turnDecisionProvider,
+        );
+      } catch (error) {
+        logger.warn(
+          `[speech] LiveKit turn decision unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       // Smart Turn has already considered prosody and the complete audio. The
       // text heuristic is only a fail-open fallback for VAD-only sources.
+      const conversationalEndSilenceMs = resolveConversationalTurnEndSilenceMs(text, env);
+      const endpointWaitMs = finiteTimestamp(livePayload?.endpointWaitMs) ?? 0;
+      const remainingIncompleteHoldMs = conversationalEndSilenceMs === null
+        ? incompleteTurnHoldMs
+        : Math.max(0, conversationalEndSilenceMs - endpointWaitMs);
       if (
-        !livePayload?.turnDetector &&
-        incompleteTurnHoldMs > 0 &&
-        isLikelyIncompleteVoiceTurn(text)
+        // CONV1 shortens the hold by the endpoint silence already waited. A
+        // probabilistic detector may confirm a complete turn, but may not
+        // override an explicit syntactic suspension in the transcript.
+        remainingIncompleteHoldMs > 0 &&
+        (turnDecision?.endOfTurn === false || isLikelyIncompleteVoiceTurn(text))
       ) {
         const timer = setTimeout(() => {
           const held = heldLiveTurn;
@@ -1818,10 +2554,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               ? { speechStartedAtMs: held.speechStartedAtMs }
               : {}),
             ...(held.turnId ? { turnId: held.turnId } : {}),
+            ...(repairAddressHint ? { repairAddressHint } : {}),
           };
           if (inFlight) queuePendingSpeech(job);
           else startSpeechJob(job);
-        }, incompleteTurnHoldMs);
+        }, remainingIncompleteHoldMs);
         heldLiveTurn = {
           p,
           text,
@@ -1830,20 +2567,27 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
           ...(turnId ? { turnId } : {}),
         };
-        logger.debug(`[speech] holding likely incomplete turn for ${incompleteTurnHoldMs}ms → ${text}`);
+        logger.debug(
+          `[speech] holding likely incomplete turn for ${remainingIncompleteHoldMs}ms → ${text}`,
+        );
         return;
       }
       if (inFlight) {
         const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
+        const acousticBargeIn = shouldTriggerAcousticBargeIn(payload, speechStartedAtMs);
         if (
-          options.onBargeIn &&
-          shouldTriggerVoiceBargeIn(text, payload) &&
+          (options.onBargeIn || options.onBargeInStart) &&
+          (shouldTriggerVoiceBargeIn(text, payload, env) || acousticBargeIn) &&
           (turnId === undefined || bargedSpeechTurnId !== turnId)
         ) {
           if (turnId !== undefined) bargedSpeechTurnId = turnId;
           logger.info(`[speech] barge-in → ${text}`);
           try {
-            options.onBargeIn(text, activeTurnId);
+            if (acousticBargeIn && options.onBargeInStart) {
+              options.onBargeInStart(payload, activeTurnId);
+            } else {
+              options.onBargeIn?.(text, activeTurnId);
+            }
           } catch {
             /* interruption is best-effort; still queue the new utterance */
           }
@@ -1855,6 +2599,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             presetText: text,
             ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
             ...(turnId ? { turnId } : {}),
+            ...(repairAddressHint ? { repairAddressHint } : {}),
           });
         }
         return;
@@ -1865,6 +2610,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         presetText: text,
         ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
         ...(turnId ? { turnId } : {}),
+        ...(repairAddressHint ? { repairAddressHint } : {}),
       });
       return;
     }
@@ -1877,6 +2623,10 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const turnId = pendingSpeechTurnId;
     pendingSpeechStartedAtMs = undefined;
     pendingSpeechTurnId = undefined;
+    if (turnId !== undefined && suspectedOwnPlaybackTurnId === turnId) {
+      suspectedOwnPlaybackTurnId = undefined;
+      return;
+    }
     if (!wav) return; // no audio to transcribe (the batch path needs a WAV)
 
     if (inFlight) {
@@ -1901,6 +2651,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
   return () => {
     disposed = true;
+    conversationCues.dispose();
     if (heldLiveTurn) clearTimeout(heldLiveTurn.timer);
     heldLiveTurn = null;
     const abandonedSpeech = pendingSpeech;

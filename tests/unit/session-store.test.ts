@@ -84,6 +84,48 @@ describe('SessionStore', () => {
     });
   });
 
+  describe('usage persistence', () => {
+    it('writes Ollama $0 cost and directional tokens onto the session JSON', async () => {
+      const created = await store.createSession('Headless nimbus', 'qwen3:4b-instruct');
+      await store.attachUsageToCurrentSession({
+        provider: 'ollama',
+        model: 'qwen3:4b-instruct',
+        inputTokens: 1840,
+        outputTokens: 57,
+        totalCost: 0,
+        turns: [
+          {
+            timestamp: '2026-09-03T10:46:42.697Z',
+            inputTokens: 1840,
+            outputTokens: 57,
+            costUsd: 0,
+            model: 'qwen3:4b-instruct',
+            provider: 'ollama',
+          },
+        ],
+      });
+
+      const raw = JSON.parse(await fs.readFile(path.join(testDir, `${created.id}.json`), 'utf-8')) as {
+        provider?: string;
+        inputTokens?: number;
+        outputTokens?: number;
+        totalCost?: number;
+        turns?: Array<{ inputTokens: number; outputTokens: number; costUsd: number }>;
+        metadata?: { tokenCount?: number; totalCost?: number };
+      };
+
+      expect(raw.provider).toBe('ollama');
+      expect(raw.inputTokens).toBe(1840);
+      expect(raw.outputTokens).toBe(57);
+      expect(raw.totalCost).toBe(0);
+      expect(raw.turns).toEqual([
+        expect.objectContaining({ inputTokens: 1840, outputTokens: 57, costUsd: 0 }),
+      ]);
+      expect(raw.metadata?.tokenCount).toBe(1897);
+      expect(raw.metadata?.totalCost).toBe(0);
+    });
+  });
+
   describe('singleton', () => {
     it('returns same instance via getSessionStore', () => {
       resetSessionStore();

@@ -2,7 +2,6 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { defaultLoraRoot } from '../lora/dataset.js';
 import {
   AVATAR_STYLE_IDS,
   getAvatarProfile,
@@ -19,6 +18,8 @@ import {
   type LisaContentTier,
 } from './lisa-selfie.js';
 import { resolveUserName } from './user-name.js';
+import { resolveSelfieCacheDir } from './lisa-selfie-ingest.js';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface LisaSelfieCacheOptions {
   rootDir?: string;
@@ -58,8 +59,7 @@ export async function generateLisaSelfieCache(
   options: LisaSelfieCacheOptions = {},
 ): Promise<LisaSelfieCacheResult> {
   const rootDir = options.rootDir ?? process.cwd();
-  const cacheDir = options.cacheDir
-    ?? path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
+  const cacheDir = options.cacheDir ?? resolveSelfieCacheDir(options.env ?? process.env);
   const avatarId = resolveAvatarId(options.avatarId, options.env ?? process.env);
   const profile = getAvatarProfile(avatarId);
   const contentTier = options.contentTier ?? 'safe';
@@ -140,9 +140,9 @@ export async function generateLisaSelfieCache(
 
       try {
         await fs.copyFile(result.outputPath, outputPath);
-        await fs.writeFile(
+        await writeJsonAtomic(
           outputPath.replace(/\.png$/i, '.json'),
-          JSON.stringify({
+          {
             avatarId,
             contentTier,
             style,
@@ -154,8 +154,8 @@ export async function generateLisaSelfieCache(
             prompt,
             generatedAt: new Date().toISOString(),
             disclosure: 'AI-generated image',
-          }, null, 2) + '\n',
-          'utf8',
+          },
+          { mode: 0o600 },
         );
         generated += 1;
         files.push(outputPath);

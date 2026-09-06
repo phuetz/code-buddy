@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import { getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * MCP (Model Context Protocol) Client
@@ -68,13 +69,13 @@ export class MCPClient extends EventEmitter {
     // Check project-level config first
     if (fs.existsSync(this.configPath)) {
       try {
-        const content = fs.readFileSync(this.configPath, 'utf-8');
-        const config = JSON.parse(content);
+        const config = readJsonAtomicSync<{ servers?: unknown } | null>(this.configPath, null);
+        if (!config) return [];
         if (!Array.isArray(config.servers)) {
           logger.warn(`Invalid MCP config in ${this.configPath}: 'servers' must be an array, returning empty list`);
           return [];
         }
-        return config.servers;
+        return config.servers as MCPServerConfig[];
       } catch (error) {
         logger.error(`Failed to load project MCP config from ${this.configPath}: ${getErrorMessage(error)}`);
         return [];
@@ -85,13 +86,13 @@ export class MCPClient extends EventEmitter {
     const userConfigPath = path.join(os.homedir(), '.codebuddy', 'mcp-servers.json');
     if (fs.existsSync(userConfigPath)) {
       try {
-        const content = fs.readFileSync(userConfigPath, 'utf-8');
-        const config = JSON.parse(content);
+        const config = readJsonAtomicSync<{ servers?: unknown } | null>(userConfigPath, null);
+        if (!config) return [];
         if (!Array.isArray(config.servers)) {
           logger.warn(`Invalid MCP config in ${userConfigPath}: 'servers' must be an array, returning empty list`);
           return [];
         }
-        return config.servers;
+        return config.servers as MCPServerConfig[];
       } catch (error) {
         logger.error(`Failed to load user MCP config from ${userConfigPath}: ${getErrorMessage(error)}`);
         return [];
@@ -111,7 +112,7 @@ export class MCPClient extends EventEmitter {
     }
 
     try {
-      fs.writeFileSync(this.configPath, JSON.stringify({ servers }, null, 2));
+      writeJsonAtomicSync(this.configPath, { servers });
     } catch (error) {
       logger.error(`Failed to save MCP config to ${this.configPath}: ${getErrorMessage(error)}`);
       throw new Error(`Failed to save MCP configuration. Error: ${getErrorMessage(error)}`);

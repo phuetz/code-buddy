@@ -9,6 +9,7 @@ import type {
 import { logger } from '../utils/logger.js';
 
 export type HomeInteractionSurface =
+  | 'arrival'
   | 'presence'
   | 'proactive-local'
   | 'proactive-remote'
@@ -65,7 +66,11 @@ export function evaluateHomeInteractionPolicy(
     };
   }
 
-  if (input.mode === 'away' && input.surface !== 'proactive-remote') {
+  if (
+    input.mode === 'away'
+    && input.surface !== 'proactive-remote'
+    && input.surface !== 'arrival'
+  ) {
     return {
       allowed: false,
       spontaneousDailyLimit: 0,
@@ -82,7 +87,9 @@ export function evaluateHomeInteractionPolicy(
     allowed: true,
     spontaneousDailyLimit,
     privateContentAllowed,
-    reason: freeDay
+    reason: input.mode === 'away' && input.surface === 'arrival'
+      ? 'A physical arrival is a transition signal even while the stored posture is away.'
+      : freeDay
       ? 'Free days allow at most two gentle invitations, without creating obligations.'
       : 'Normal household rhythm with a bounded daily initiative budget.',
   };
@@ -102,7 +109,7 @@ export async function resolveCurrentHomeInteractionPolicy(
 
   // Modes that suppress a surface do not need a network/calendar lookup.
   const early = evaluateHomeInteractionPolicy({ mode: homeMode.mode, dayKind: 'unknown', surface });
-  if (!early.allowed || surface === 'idle') return early;
+  if (!early.allowed || surface === 'idle' || surface === 'arrival') return early;
 
   try {
     const holidayProvider = options.holidayProvider ?? new EtalabHolidayProvider({

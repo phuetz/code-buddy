@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const gitignoreFile = path.join(repoRoot, '.gitignore');
 const rootReadme = path.join(repoRoot, 'README.md');
-const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
+const coworkReadme = path.join(repoRoot, 'cowork', 'README.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
 // Only scan planning docs that still exist — the docs set is actively
 // restructured, and a doc that's no longer published carries no privacy risk.
@@ -308,7 +308,7 @@ describe('Cowork public QA documentation privacy', () => {
       }
     }
 
-    // The rebranded cowork/readme.md dropped the upstream Open Cowork
+    // The rebranded cowork/README.md dropped the upstream Open Cowork
     // assets (resources/logo.png, README_zh.md, WeChat.jpg) — pin the
     // durable Code Buddy Cowork anchors instead.
     expect(localFileTargets(fs.readFileSync(coworkReadme, 'utf8'))).toEqual(

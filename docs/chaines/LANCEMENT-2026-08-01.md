@@ -74,7 +74,7 @@ là où le seuil est 0,55.
 
 La cause est identifiée et se répare : la chaîne qui préserve l'identité est
 celle qui ne laisse jamais le modèle re-rendre le visage. Les réparations de
-garde-robe, qui masquent et recomposent, tiennent **0,91 à 0,92**. darkstar y
+garde-robe, qui masquent et recomposent, tiennent **0,91 à 0,92**. gpuNode y
 travaille, ses deux GPU sont à 98 %.
 
 Deux images de plus, `ambre-037` et `ambre-038`, ne sont **pas évaluées** : le

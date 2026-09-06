@@ -10,7 +10,7 @@ Specs d'origine : [`docs/specs/cb2/`](../specs/cb2/).
 
 | # | Innovation | Doc | Activation | En une phrase |
 |---|---|---|---|---|
-| 1 | Shadow Workspace | [shadow-workspace.md](shadow-workspace.md) | `CODEBUDDY_SHADOW_WORKSPACE=true` | Chaque écriture est validée (typecheck/tests) dans un worktree fantôme AVANT de toucher tes fichiers ; `buddy shadow status\|run`. |
+| 1 | Shadow Workspace | [shadow-workspace.md](shadow-workspace.md) | `CODEBUDDY_SHADOW_WORKSPACE=true` | Chaque écriture est validée (typecheck/tests) dans un worktree fantôme AVANT de toucher tes fichiers ; `buddy shadow status\|run\|list\|clean`. |
 | 2 | Time-Travel Sessions | [time-travel.md](time-travel.md) | `CODEBUDDY_TIMELINE=true` | Timeline persistée par tour ; `buddy replay <session> [--at N] [--fork id]` : re-matérialiser un état, forker une session. |
 | 3 | Intent Ledger | [intent-ledger.md](intent-ledger.md) | `CODEBUDDY_INTENTS=true` | Specs falsifiables versionnées (`.codebuddy/intents/`) ; `buddy intents new\|check\|drift` — le « done » devient un contrat re-vérifiable. |
 | 4 | CKG fédéré | [ckg-federation.md](ckg-federation.md) | `CODEBUDDY_CKG_SYNC=true` (les 2 pairs) | `peer.ckg.sync` : la mémoire collective se synchronise entre pairs fleet (pull-only, delta, anti-ragot, fail-closed). |
@@ -30,7 +30,6 @@ Specs d'origine : [`docs/specs/cb2/`](../specs/cb2/).
 | `CODEBUDDY_CKG_SYNC_TYPES` / `CODEBUDDY_CKG_SYNC_MAX` | `lesson,fact` / 1000 | Allowlist des types synchronisés / borne d'ingestion par run |
 | `CODEBUDDY_SELF_BENCH_TIMEOUT_MS` / `_DROP` / `_HISTORY` | 60000 / 0.15 / `~/.codebuddy/capability-history.jsonl` | Timeout par scénario / seuil de régression relatif / chemin d'historique |
 | `CODEBUDDY_CONTEXT_ZOOM_MAX_MB` | 200 | Quota LRU de l'archive de segments |
-| `CODEBUDDY_WIDGETS_AUTOGEN` | off | Autorise la génération LLM d'un nouveau template en l'absence de match (re-gaté) |
 | `CODEBUDDY_ERRORWATCH_VISION` / `_DEBOUNCE_MS` / `_MAX_PER_HOUR` | off / 120000 / 4 | Étage vision (keyframe→modèle local) / anti-harcèlement |
 | `CODEBUDDY_WORKSPACE_TIMEOUT_MS` / `_MAX_FILE_KB` | 30000 / 512 | Bornes de la recherche/lecture cross-repo |
 

@@ -1,13 +1,57 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync } from 'child_process';
 import { runDoctorChecks, runFixes } from '../../src/doctor/index.js';
 import type { DoctorCheck, FixResult } from '../../src/doctor/index.js';
+import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection.js';
 
 // Mock external commands so doctor checks don't depend on system state
 vi.mock('child_process', () => ({
   execSync: vi.fn(() => ''),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
+
+// VERIF3 T16 : la réparation `ollama pull` n'était couverte par aucun test.
+// La sonde d'environnement et le gestionnaire de settings sont doublés pour
+// rendre `checkProviderReadiness` déterministe (et pour ne jamais écrire dans
+// le vrai user-settings.json).
+const { mockDetectEnvironment, mockSaveUserSettings, mockReadUserSettingsIfPresent } = vi.hoisted(
+  () => ({
+    mockDetectEnvironment: vi.fn(),
+    mockSaveUserSettings: vi.fn(),
+    mockReadUserSettingsIfPresent: vi.fn(),
+  })
+);
+
+vi.mock('../../src/wizard/environment-detection.js', () => ({
+  detectEnvironment: mockDetectEnvironment,
+}));
+
+vi.mock('../../src/utils/settings-manager.js', () => ({
+  getSettingsManager: () => ({
+    saveUserSettings: mockSaveUserSettings,
+    readUserSettingsIfPresent: mockReadUserSettingsIfPresent,
+  }),
+}));
+
+const EMPTY_ENVIRONMENT: EnvironmentSnapshot = { capabilities: [], ready: false };
+
+const OLLAMA_WITHOUT_MODEL: EnvironmentSnapshot = {
+  capabilities: [
+    {
+      id: 'ollama',
+      label: 'Ollama',
+      kind: 'local',
+      free: true,
+      available: true,
+      detail: 'running - 0 models',
+      models: [],
+      baseURL: 'http://127.0.0.1:11434',
+    },
+  ],
+  ready: false,
+};
 
 vi.mock('../../src/utils/logger.js', () => ({
   logger: {
@@ -35,10 +79,69 @@ describe('doctor --fix', () => {
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
+    vi.mocked(execSync).mockReset().mockReturnValue('');
+    mockSaveUserSettings.mockReset();
+    mockReadUserSettingsIfPresent.mockReset().mockReturnValue(undefined);
+    mockDetectEnvironment.mockReset().mockResolvedValue(EMPTY_ENVIRONMENT);
   });
 
   afterEach(() => {
     cleanupDir(tmpDir);
+  });
+
+  describe('Ollama running without a model', () => {
+    beforeEach(() => {
+      mockDetectEnvironment.mockResolvedValue(OLLAMA_WITHOUT_MODEL);
+    });
+
+    it('should mark the missing Ollama model as fixable', async () => {
+      const checks = await runDoctorChecks(tmpDir);
+      const providerCheck = checks.find(c => c.name === 'AI provider ready');
+
+      expect(providerCheck).toBeDefined();
+      expect(providerCheck!.status).toBe('warn');
+      expect(providerCheck!.fixable).toBe(true);
+      expect(providerCheck!.message).toContain('qwen2.5-coder:7b');
+    });
+
+    it('should pull the model with `ollama pull` then select it', async () => {
+      const checks = await runDoctorChecks(tmpDir);
+      const results = await runFixes(checks);
+
+      // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
+      expect(execSync).toHaveBeenCalledWith('ollama pull qwen2.5-coder:7b', {
+        stdio: 'inherit',
+      });
+      expect(mockSaveUserSettings).toHaveBeenCalledWith({
+        provider: 'ollama',
+        baseURL: 'http://127.0.0.1:11434',
+        model: 'qwen2.5-coder:7b',
+        defaultModel: 'qwen2.5-coder:7b',
+      });
+
+      const selection = results.find(r => r.action === 'select-running-ollama');
+      expect(selection).toBeDefined();
+      expect(selection!.success).toBe(true);
+      expect(selection!.message).toContain('qwen2.5-coder:7b');
+    });
+
+    it('should report a failure and select nothing when the pull fails', async () => {
+      vi.mocked(execSync).mockImplementation((command: string) => {
+        if (String(command).startsWith('ollama pull')) {
+          throw new Error('ollama introuvable');
+        }
+        return '';
+      });
+
+      const checks = await runDoctorChecks(tmpDir);
+      const results = await runFixes(checks);
+
+      const pullFix = results.find(r => r.action === 'pull-ollama-model');
+      expect(pullFix).toBeDefined();
+      expect(pullFix!.success).toBe(false);
+      expect(pullFix!.message).toContain('Failed to pull qwen2.5-coder:7b');
+      expect(mockSaveUserSettings).not.toHaveBeenCalled();
+    });
   });
 
   describe('missing .codebuddy directory', () => {

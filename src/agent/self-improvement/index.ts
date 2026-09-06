@@ -53,11 +53,14 @@ export function createWorkspaceEngine(
 ): SelfImprovementEngine {
   const workDir = options.workDir ?? process.cwd();
   // Default proposer is the deterministic, offline bootstrap pack. `useLlm`
-  // swaps in the model-backed proposer that discovers novel lessons from
-  // friction — still gated by the same deterministic empirical validator.
+  // or env CODEBUDDY_SELF_IMPROVE_PROPOSER=llm swaps in the model-backed proposer
+  // that discovers novel lessons from friction — still gated by the same deterministic empirical validator.
+  const wantsLlm =
+    options.useLlm === true ||
+    process.env.CODEBUDDY_SELF_IMPROVE_PROPOSER?.trim().toLowerCase() === 'llm';
   const proposer =
     options.proposer ??
-    (options.useLlm ? new LlmProposer(createLlmDrafter()) : new StaticProposer(SEED_LESSON_DRAFTS));
+    (wantsLlm ? new LlmProposer(createLlmDrafter()) : new StaticProposer(SEED_LESSON_DRAFTS));
   return new SelfImprovementEngine({
     scenarios: SEED_BENCHMARK_SCENARIOS,
     port: createLessonMutatorPort(workDir),

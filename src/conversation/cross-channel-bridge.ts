@@ -6,10 +6,8 @@ import {
   mkdir,
   open,
   readFile,
-  rename,
   stat,
   unlink,
-  writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -18,6 +16,7 @@ import type { ChannelType, ContentType } from '../channels/core.js';
 import { getChannelManager } from '../channels/core.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 import {
   resolvePrefetchedTurnContextForConversation,
   type PrefetchedTurnContext,
@@ -932,28 +931,7 @@ export class CrossChannelConversationBridge {
     const serialized = retained.length > 0
       ? `${retained.map((item) => JSON.stringify(item)).join('\n')}\n`
       : '';
-    const temporaryPath = `${this.config.historyPath}.${process.pid}.${Date.now()}.tmp`;
-    try {
-      await writeFile(temporaryPath, serialized, { encoding: 'utf8', mode: 0o600 });
-      try {
-        await rename(temporaryPath, this.config.historyPath);
-      } catch {
-        // Windows may reject replacement rename. The lock still prevents another
-        // Code Buddy process from observing a partially interleaved append.
-        await writeFile(this.config.historyPath, serialized, { encoding: 'utf8', mode: 0o600 });
-      }
-      try {
-        await chmod(this.config.historyPath, 0o600);
-      } catch {
-        /* advisory on Windows */
-      }
-    } finally {
-      try {
-        await unlink(temporaryPath);
-      } catch {
-        /* already moved, absent, or best-effort cleanup failed */
-      }
-    }
+    await writeFileAtomic(this.config.historyPath, serialized);
   }
 }
 

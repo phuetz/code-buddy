@@ -16,7 +16,13 @@ interface SessionData {
   createdAt: Date | string;
   lastAccessedAt?: Date | string;
   updatedAt?: Date | string;
-  messages?: Array<{ role: string; content: string; timestamp?: string; metadata?: unknown }>;
+  messages?: Array<{
+    role?: string;
+    type?: string;
+    content: string;
+    timestamp?: string;
+    metadata?: unknown;
+  }>;
   tokenCount?: number;
   model?: string;
   metadata?: Record<string, unknown>;
@@ -27,6 +33,7 @@ interface SessionStoreAPI {
   searchSessions?(query: string): Promise<SessionData[]>;
   loadSession(id: string): Promise<SessionData | null>;
   createSession(name?: string, model?: string): Promise<SessionData>;
+  saveSession(session: SessionData): Promise<void>;
   updateSession?(id: string, data: Record<string, unknown>): Promise<SessionData>;
   deleteSession(id: string): Promise<void>;
   addMessage?(id: string, message: Record<string, unknown>): Promise<void>;
@@ -257,6 +264,7 @@ router.post(
     );
     session.description = description;
     session.metadata = metadata;
+    await store.saveSession(session);
 
     res.status(201).json({
       id: session.id,
@@ -305,6 +313,7 @@ router.put(
     session.name = name ?? session.name;
     session.description = description ?? session.description;
     session.metadata = metadata ?? session.metadata;
+    await store.saveSession(session);
 
     res.json({
       id: session.id,
@@ -401,7 +410,11 @@ router.post(
     if (store.addMessage) {
       await store.addMessage(id, message);
     } else {
-      session.messages = [...(session.messages || []), message];
+      session.messages = [
+        ...(session.messages || []),
+        { type: role, content, timestamp: message.timestamp, metadata },
+      ];
+      await store.saveSession(session);
     }
 
     res.status(201).json(message);
@@ -443,6 +456,7 @@ router.post(
       forkedFrom: session.id,
       forkedAt: new Date().toISOString(),
     };
+    await store.saveSession(forked);
 
     res.status(201).json({
       id: forked.id,
