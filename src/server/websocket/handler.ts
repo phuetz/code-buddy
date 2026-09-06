@@ -59,6 +59,7 @@ import {
   type ServerAgent,
 } from '../agent-adapter.js';
 import { isMobilePwaEnabled } from '../mobile/index.js';
+import { sniffImageMime } from '../../companion/companion-photo.js';
 import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
 import type { CompanionHistoryTurn } from '../../companion/companion-turn.js';
@@ -357,6 +358,59 @@ interface ChatPayload {
   /** `agent` (default), `companion` (Lisa), or a fleet peer id. */
   assistant?: string;
   peerId?: string;
+  /** Photos the phone attached to this message (companion assistant only). */
+  attachments?: Array<{ mimeType?: unknown; data?: unknown }>;
+}
+
+/** Most photos accepted on one mobile message. */
+export const WS_MAX_CHAT_ATTACHMENTS = 4;
+/** Per-photo base64 ceiling. The PWA resizes to ~200 KB before sending. */
+export const WS_MAX_ATTACHMENT_BYTES = 600 * 1024;
+
+export interface ValidatedChatAttachment {
+  mimeType: string;
+  data: string;
+}
+
+/**
+ * Validate the attachments of a `chat` frame. The payload is remote input:
+ * the count, each size and the actual image type are checked here, and the
+ * type comes from the DECODED BYTES — a declared `mimeType` is never proof.
+ */
+export function validateChatAttachments(
+  raw: unknown,
+): { ok: true; attachments: ValidatedChatAttachment[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, attachments: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: 'Attachments must be an array' };
+  if (raw.length > WS_MAX_CHAT_ATTACHMENTS) {
+    return { ok: false, error: `At most ${WS_MAX_CHAT_ATTACHMENTS} photos per message` };
+  }
+  const attachments: ValidatedChatAttachment[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, error: 'Each attachment must be an object' };
+    }
+    const data = (entry as { data?: unknown }).data;
+    if (typeof data !== 'string' || data.trim().length === 0) {
+      return { ok: false, error: 'Attachment data must be a base64 string' };
+    }
+    const payload = data.startsWith('data:') ? data.slice(data.indexOf(',') + 1) : data;
+    if (!/^[A-Za-z0-9+/\r\n]*={0,2}$/.test(payload)) {
+      return { ok: false, error: 'Attachment data must be base64' };
+    }
+    const bytes = Buffer.from(payload, 'base64');
+    if (bytes.length === 0) return { ok: false, error: 'Attachment is empty' };
+    if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
+      return {
+        ok: false,
+        error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
+      };
+    }
+    const sniffed = sniffImageMime(bytes);
+    if (!sniffed) return { ok: false, error: 'Attachment is not an image' };
+    attachments.push({ mimeType: sniffed, data: payload });
+  }
+  return { ok: true, attachments };
 }
 interface ToolPayload { name?: string; parameters?: Record<string, unknown> }
 
@@ -638,7 +692,11 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
  */
 export async function produceCompanionReply(
   message: string,
-  options: { history?: CompanionHistoryTurn[] } = {},
+  options: {
+    history?: CompanionHistoryTurn[];
+    /** Photos the phone attached — already validated by `validateChatAttachments`. */
+    attachments?: ValidatedChatAttachment[];
+  } = {},
 ): Promise<
   string | { text: string; image?: { mimeType: string; data: string }; kind?: 'selfie' | 'text' }
 > {
@@ -647,6 +705,7 @@ export async function produceCompanionReply(
     surface: 'mobile',
     includeImageBytes: true,
     ...(options.history ? { history: options.history } : {}),
+    ...(options.attachments?.length ? { attachments: options.attachments } : {}),
   });
   if (result.image || result.kind === 'selfie') {
     return {
@@ -781,6 +840,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     sessionId: _sessionId,
     assistant: assistantRaw,
     peerId: peerIdRaw,
+    attachments: attachmentsRaw,
   } = payload as ChatPayload;
 
   // Validate message
@@ -815,13 +875,28 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   const assistant = typeof assistantRaw === 'string' ? assistantRaw.trim() : 'agent';
   const peerId = typeof peerIdRaw === 'string' ? peerIdRaw.trim() : '';
 
+  // Photos are accepted only for the companion; every other assistant keeps the
+  // exact payload contract it had.
+  const validatedAttachments = validateChatAttachments(
+    assistant === 'companion' ? attachmentsRaw : undefined,
+  );
+  if (!validatedAttachments.ok) {
+    sendError(ws, 'INVALID_REQUEST', validatedAttachments.error);
+    return;
+  }
+
   try {
     if (assistant === 'companion') {
       await runPlainChatTurn(ws, state, turn, {
         stream,
         produce: async () => {
           const history = companionHistoryFor(state);
-          const produced = await produceCompanionReply(message, { history });
+          const produced = await produceCompanionReply(message, {
+            history,
+            ...(validatedAttachments.attachments.length
+              ? { attachments: validatedAttachments.attachments }
+              : {}),
+          });
           if (!turn.cancelled) rememberCompanionTurn(state, message, produced);
           return produced;
         },

@@ -61,6 +61,24 @@ describe('attached image grounding', () => {
     expect(renderAttachedImageEvidence(result)).toBe('');
   });
 
+  it('derives defaultBase from OLLAMA_HOST when CODEBUDDY_VISION_BASE_URL is not set', async () => {
+    const analyze = vi.fn(async (input: { baseURL: string }) => {
+      expect(input.baseURL).toBe('http://127.0.0.1:11435/v1');
+      return 'OBSERVATIONS: green square.';
+    });
+    const result = await groundAttachedImages([
+      { type: 'image', data: Buffer.from('photo').toString('base64'), mimeType: 'image/jpeg' },
+    ], 'Analyse', {
+      env: {
+        CODEBUDDY_VISION_MODEL: 'moondream',
+        OLLAMA_HOST: 'http://127.0.0.1:11435',
+      },
+      analyze: analyze as never,
+    });
+    expect(result.status).toBe('analyzed');
+    expect(analyze).toHaveBeenCalledOnce();
+  });
+
   it('accepts a Telegram JPEG served as application/octet-stream by sniffing its bytes', async () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
     const analyze = vi.fn(async ({ images }: { images: Array<{ mimeType: string }> }) =>

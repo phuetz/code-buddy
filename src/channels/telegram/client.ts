@@ -48,6 +48,22 @@ const NEXT_POLL_DELAY_MS = 100;
 /**
  * Telegram channel implementation
  */
+
+/** Default debounce for a Telegram album — every photo lands in ONE reaction. */
+export const DEFAULT_TELEGRAM_MEDIA_GROUP_MS = 1_500;
+
+/**
+ * How long to wait for the rest of an album before reacting. Telegram delivers
+ * an album as independent updates seconds apart on a slow uplink; reacting to
+ * the first photo alone is the "she answered before I finished sending" bug.
+ * Bounded 50 ms - 10 s; invalid values fall back to the default.
+ */
+export function telegramMediaGroupWindowMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_TELEGRAM_MEDIA_GROUP_MS;
+  return Math.min(10_000, Math.max(50, Math.floor(raw)));
+}
+
 export class TelegramChannel extends BaseChannel {
   private pollingActive = false;
   private pollingTimeout: NodeJS.Timeout | null = null;
@@ -799,7 +815,7 @@ export class TelegramChannel extends BaseChannel {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-    }, 450);
+    }, telegramMediaGroupWindowMs());
     timer.unref?.();
     this.mediaGroups.set(groupId, { messages, timer });
   }
