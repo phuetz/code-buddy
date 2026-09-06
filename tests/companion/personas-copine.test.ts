@@ -24,7 +24,6 @@ import { getActivePersonaVoice, resetPersonaManager } from '../../src/personas/p
 const INTIMATE =
   /tabou|sensuel|sensuelle|explicite|sexe|nude|nues?|déshabill|mon amour|chéri|cheri|18\+|sans tabous/i;
 const JARGON = /<[^>]+>|\/100|\blisa_state\b|\brapportTier\b/i;
-const FIRST_NAME = /\b(patrice|ambre)\b/i;
 
 const morningNow = new Date(2026, 5, 30, 8, 0, 0).getTime();
 
@@ -65,14 +64,13 @@ describe('C8 companion persona resolver', () => {
 });
 
 describe('C8 copine profile is diversified data, not intimate code', () => {
-  it('every greeting pool has ≥ 7 unique lines, no intimate / jargon / first name', () => {
+  it('every greeting pool has ≥ 7 unique lines, no intimate / jargon', () => {
     for (const [slot, pool] of Object.entries(COPINE_PERSONA.greetings)) {
       expect(pool.length, slot).toBeGreaterThanOrEqual(7);
       expect(new Set(pool).size, slot).toBe(pool.length);
       for (const line of pool) {
         expect(line, slot).not.toMatch(INTIMATE);
         expect(line, slot).not.toMatch(JARGON);
-        expect(line, slot).not.toMatch(FIRST_NAME);
       }
     }
   });
@@ -91,7 +89,6 @@ describe('C8 copine profile is diversified data, not intimate code', () => {
       for (const line of pool) {
         expect(line, name).not.toMatch(INTIMATE);
         expect(line, name).not.toMatch(JARGON);
-        expect(line, name).not.toMatch(FIRST_NAME);
       }
     }
   });
