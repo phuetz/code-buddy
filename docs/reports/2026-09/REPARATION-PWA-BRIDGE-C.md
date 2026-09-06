@@ -1,9 +1,9 @@
 # Réparation PWA Bridge C & Chat v2 — Rapport de mission
 
-**Date** : 2026-09-06  
-**Branche** : `fix/pwa-bridge-c-2026-09-06`  
-**Dépôt** : `~/DEV/cb-pwa-c-2026-09-06`  
-**Auteur** : Antigravity (AGY)  
+**Date** : 2026-09-06
+**Branche** : `fix/pwa-bridge-c-2026-09-06`
+**Dépôt** : `~/DEV/cb-pwa-c-2026-09-06`
+**Auteur** : Antigravity (AGY)
 **Environnement de test isolé** : `HOME=~/DEV/cb-pwa-c-2026-09-06/_qa/pwac/home`, `env -u FORCE_COLOR`, ports dynamiques (≥ 4000)
 
 ---
