@@ -375,7 +375,9 @@ function collectDeobfuscatedFindings(
     if (!isInjection && !deobAll) continue;
     if (seen.has(dp.name)) continue;
 
-    const flags = dp.pattern.flags.includes('s') ? dp.pattern.flags : `${dp.pattern.flags}s`;
+    const flags = isInjection && !dp.pattern.flags.includes('s')
+      ? `${dp.pattern.flags}s`
+      : dp.pattern.flags;
     const re = new RegExp(dp.pattern.source, flags.replace('g', ''));
 
     // Prompt-injection patterns also match against raw content across lines/comments

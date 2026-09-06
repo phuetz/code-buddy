@@ -106,6 +106,40 @@ export function deobfuscateText(text: string): string {
 }
 
 /**
+ * Text de-obfuscation variant for the safe scanning layer:
+ * Preserves line breaks (`\n`) and only rejoins hyphenated word-wraps across lines,
+ * preventing cross-paragraph pattern matching (such as `curl` ... `| bash`).
+ */
+function deobfuscateSafeText(text: string): string {
+  return text
+    // Remove zero-width characters and soft hyphens
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '')
+    // Rejoin hyphenated words across lines: e.g. "jail-\nbreak" -> "jailbreak"
+    .replace(/(?<=\w)-[\r\n]+\s*(?=\w)/g, '')
+    // Remove HTML comments (preserve newline if multi-line so lines don't merge)
+    .replace(/<!--[\s\S]*?-->/g, (match) => (match.includes('\n') ? '\n' : ' '))
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, ' ')
+    // Normalize unicode canonical composition
+    .normalize('NFKC')
+    // Map common Cyrillic confusable homoglyphs to Latin equivalents
+    .replace(/\u043e/gi, 'o')
+    .replace(/\u0430/gi, 'a')
+    .replace(/\u0435/gi, 'e')
+    .replace(/\u0440/gi, 'p')
+    .replace(/\u0441/gi, 'c')
+    .replace(/\u0456/gi, 'i')
+    .replace(/\u0443/gi, 'y')
+    .replace(/\u0445/gi, 'x')
+    // Preserve newlines while normalizing line endings and collapsing horizontal whitespace
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
+/**
  * Safe layer of text de-obfuscation:
  * Strips format/bidi controls (\p{Cf}), applies homoglyph mappings,
  * unicode normalizations (NFKC/NFKD + diacritic strip), zero-width characters,
@@ -121,7 +155,7 @@ function foldSafeForScan(text: string): string {
     .normalize('NFKD')
     .replace(/\p{Mn}/gu, '');
   const mapped = applyHomoglyphs(folded);
-  return deobfuscateText(mapped);
+  return deobfuscateSafeText(mapped);
 }
 
 /**
