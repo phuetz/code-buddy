@@ -24,6 +24,23 @@ npm run build:gui      # Cowork Electron GUI (cd cowork && npm run build)
 npm run dev:gui        # Cowork dev (Vite + Electron)
 ```
 
+---
+
+## Environment Variables (sélection)
+
+| Variable | Purpose |
+| --- | --- |
+| `CODEBUDDY_COMPANION_CORE` | **Opt-in (default off)** : loads `@phuetz/companion-core` for the relational layer. Byte-identical when unset. |
+| `CODEBUDDY_LISA_SELFIE_REFILL` | **Opt-in (default off)** : enables heartbeat refill of Lisa selfie cache from ComfyUI when load < 4. |
+| `CODEBUDDY_MOBILE_PWA` | **Opt-in (default off)** : enables `/__codebuddy__/mobile/` PWA and WebSocket approval bridge. |
+| `CODEBUDDY_COMPANION_RELATIONAL` | **Opt-in (default off)** : injects Lisa's mood/traits/rapport into companion replies via `src/companion/relational-context.ts`. |
+| `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` | **Opt-in (default true)** : extends deobfuscation to all pattern classes (not just prompt-injection) in skill firewall. |
+| `CODEBUDDY_LISA_SELFIE_CACHE_DIR` | On-disk Lisa selfie cache. Default: `~/.codebuddy/companion/lisa/selfie-cache`. |
+
+Pour le tableau complet, voir [`CLAUDE.md`](CLAUDE.md) §Environment Variables.
+
+---
+
 Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192`. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
 
 ## Testing Gotchas
