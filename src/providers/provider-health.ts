@@ -36,9 +36,13 @@ export interface ProviderHealthSnapshot {
 }
 
 const EMPTY: ProviderHealthSnapshot = { version: PROVIDER_HEALTH_VERSION, providers: {} };
+const HEALTH_FILE_MODE = 0o600;
+const LOCK_WAIT_MS = 2_000;
+const LOCK_STALE_MS = 5_000;
 
 let cachedPath: string | undefined;
-let memoryOverride: ProviderHealthSnapshot | undefined;
+/** Last known snapshot when the disk write fails. Never used to skip a disk read. */
+let memoryFallback: ProviderHealthSnapshot | undefined;
 
 function defaultHealthPath(): string {
   return path.join(os.homedir(), '.codebuddy', 'provider-health.json');
@@ -51,7 +55,7 @@ export function getProviderHealthPath(): string {
 /** Test seam — points the store at an isolated HOME file. */
 export function setProviderHealthPathForTests(filePath: string | undefined): void {
   cachedPath = filePath;
-  memoryOverride = undefined;
+  memoryFallback = undefined;
 }
 
 export function resetProviderHealthStoreForTests(): void {
@@ -61,7 +65,12 @@ export function resetProviderHealthStoreForTests(): void {
   } catch {
     /* best-effort */
   }
-  memoryOverride = undefined;
+  try {
+    fs.unlinkSync(`${filePath}.lock`);
+  } catch {
+    /* best-effort */
+  }
+  memoryFallback = undefined;
 }
 
 function isValidSnapshot(value: unknown): value is ProviderHealthSnapshot {
@@ -70,25 +79,118 @@ function isValidSnapshot(value: unknown): value is ProviderHealthSnapshot {
   return rec.version === PROVIDER_HEALTH_VERSION && rec.providers !== null && typeof rec.providers === 'object';
 }
 
-export function readProviderHealthSnapshot(): ProviderHealthSnapshot {
-  if (memoryOverride) return memoryOverride;
-  const loaded = readJsonAtomicSync<ProviderHealthSnapshot>(getProviderHealthPath(), EMPTY, {
-    isValid: isValidSnapshot,
-  });
+function cloneSnapshot(loaded: ProviderHealthSnapshot): ProviderHealthSnapshot {
   return {
     version: PROVIDER_HEALTH_VERSION,
     providers: { ...loaded.providers },
-    ...(loaded.lastFailover ? { lastFailover: loaded.lastFailover } : {}),
+    ...(loaded.lastFailover ? { lastFailover: { ...loaded.lastFailover } } : {}),
   };
 }
 
-function persist(snapshot: ProviderHealthSnapshot): void {
-  memoryOverride = snapshot;
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Exclusive create-lock next to the JSON. Another process (server + channels)
+ * must re-read + merge under this lock, otherwise a later persist() overwrites
+ * the sibling's entries (lost update).
+ */
+function withExclusiveLock(fn: () => void): void {
+  const lockPath = `${getProviderHealthPath()}.lock`;
   try {
-    writeJsonAtomicSync(getProviderHealthPath(), snapshot);
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 });
   } catch {
-    /* disk full / read-only HOME — keep the in-memory view for this process */
+    /* mkdir is best-effort; open will fail next if the dir is missing */
   }
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (true) {
+    try {
+      const fd = fs.openSync(
+        lockPath,
+        fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY,
+        HEALTH_FILE_MODE,
+      );
+      try {
+        fs.writeSync(fd, `${process.pid}\n`);
+        fn();
+        return;
+      } finally {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.unlinkSync(lockPath);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST') {
+        fn();
+        return;
+      }
+      let stale = Date.now() >= deadline;
+      try {
+        stale = stale || Date.now() - fs.statSync(lockPath).mtimeMs > LOCK_STALE_MS;
+      } catch {
+        stale = true;
+      }
+      if (stale) {
+        try {
+          fs.unlinkSync(lockPath);
+        } catch {
+          /* lost the race */
+        }
+        continue;
+      }
+      sleepMs(15);
+    }
+  }
+}
+
+function readFromDisk(): ProviderHealthSnapshot {
+  const loaded = readJsonAtomicSync<ProviderHealthSnapshot>(getProviderHealthPath(), EMPTY, {
+    isValid: isValidSnapshot,
+  });
+  return cloneSnapshot(loaded);
+}
+
+export function readProviderHealthSnapshot(): ProviderHealthSnapshot {
+  try {
+    const loaded = readFromDisk();
+    memoryFallback = loaded;
+    return cloneSnapshot(loaded);
+  } catch {
+    return cloneSnapshot(memoryFallback ?? EMPTY);
+  }
+}
+
+/** Strip tokens / Bearer / sk- from the persisted diagnostic string. */
+export function sanitizeProviderHealthMessage(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500)
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{10,}/g, '[redacted-key]')
+    .replace(/\b(api[_-]?key|access[_-]?token|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]');
+}
+
+function persistMutation(mutator: (snapshot: ProviderHealthSnapshot) => void): void {
+  withExclusiveLock(() => {
+    const snapshot = readFromDisk();
+    mutator(snapshot);
+    try {
+      writeJsonAtomicSync(getProviderHealthPath(), snapshot, { mode: HEALTH_FILE_MODE });
+      memoryFallback = cloneSnapshot(snapshot);
+    } catch {
+      memoryFallback = cloneSnapshot(snapshot);
+    }
+  });
 }
 
 export function isProviderUnavailable(providerId: string, nowMs: number = Date.now()): boolean {
@@ -114,35 +216,40 @@ export function recordProviderFailure(
   } = {},
 ): ProviderHealthEntry {
   const nowMs = options.nowMs ?? Date.now();
-  const snapshot = readProviderHealthSnapshot();
-  const previous = snapshot.providers[providerId];
-  let ttl = options.resetsAt !== undefined
-    ? Math.max(0, options.resetsAt - nowMs)
-    : failoverTtlMs(kind, options.resetsInSeconds);
-  let consecutiveOverloads = 1;
-  if (kind === 'overloaded') {
-    consecutiveOverloads = (previous?.kind === 'overloaded' ? (previous.consecutiveOverloads ?? 1) : 0) + 1;
-    const backoff = 60_000 * (2 ** Math.max(0, consecutiveOverloads - 1));
-    ttl = Math.min(15 * 60_000, backoff);
+  let written: ProviderHealthEntry | undefined;
+  persistMutation((snapshot) => {
+    const previous = snapshot.providers[providerId];
+    let ttl = options.resetsAt !== undefined
+      ? Math.max(0, options.resetsAt - nowMs)
+      : failoverTtlMs(kind, options.resetsInSeconds);
+    let consecutiveOverloads = 1;
+    if (kind === 'overloaded') {
+      consecutiveOverloads = (previous?.kind === 'overloaded' ? (previous.consecutiveOverloads ?? 1) : 0) + 1;
+      const backoff = 60_000 * (2 ** Math.max(0, consecutiveOverloads - 1));
+      ttl = Math.min(15 * 60_000, backoff);
+    }
+    const entry: ProviderHealthEntry = {
+      kind,
+      message: sanitizeProviderHealthMessage(options.message ?? ''),
+      failedAt: nowMs,
+      resetsAt: nowMs + ttl,
+      ...(kind === 'overloaded' ? { consecutiveOverloads } : {}),
+      ...(options.lastModel ? { lastModel: options.lastModel } : {}),
+    };
+    snapshot.providers[providerId] = entry;
+    written = entry;
+  });
+  if (!written) {
+    throw new Error('provider-health: persistMutation did not record the failure');
   }
-  const entry: ProviderHealthEntry = {
-    kind,
-    message: (options.message ?? '').slice(0, 500),
-    failedAt: nowMs,
-    resetsAt: nowMs + ttl,
-    ...(kind === 'overloaded' ? { consecutiveOverloads } : {}),
-    ...(options.lastModel ? { lastModel: options.lastModel } : {}),
-  };
-  snapshot.providers[providerId] = entry;
-  persist(snapshot);
-  return entry;
+  return written;
 }
 
 export function recordProviderSuccess(providerId: string): void {
-  const snapshot = readProviderHealthSnapshot();
-  if (!snapshot.providers[providerId]) return;
-  delete snapshot.providers[providerId];
-  persist(snapshot);
+  persistMutation((snapshot) => {
+    if (!snapshot.providers[providerId]) return;
+    delete snapshot.providers[providerId];
+  });
 }
 
 export function recordLastFailover(info: {
@@ -152,15 +259,15 @@ export function recordLastFailover(info: {
   kind: FailoverKind;
   at?: number;
 }): void {
-  const snapshot = readProviderHealthSnapshot();
-  snapshot.lastFailover = {
-    from: info.from,
-    to: info.to,
-    ...(info.toModel ? { toModel: info.toModel } : {}),
-    kind: info.kind,
-    at: info.at ?? Date.now(),
-  };
-  persist(snapshot);
+  persistMutation((snapshot) => {
+    snapshot.lastFailover = {
+      from: info.from,
+      to: info.to,
+      ...(info.toModel ? { toModel: info.toModel } : {}),
+      kind: info.kind,
+      at: info.at ?? Date.now(),
+    };
+  });
 }
 
 export function formatProviderHealthLines(
