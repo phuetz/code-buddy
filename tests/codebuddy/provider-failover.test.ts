@@ -67,6 +67,10 @@ import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 import { logger } from '../../src/utils/logger.js';
 import type { RuntimeFallbackProvider } from '../../src/providers/provider-fallback.js';
 import {
+  describeFailoverAttempt,
+  ProviderFailoverExhaustedError,
+} from '../../src/codebuddy/provider-failover-error.js';
+import {
   isProviderUnavailable,
   readProviderHealthSnapshot,
   resetProviderHealthStoreForTests,
@@ -93,6 +97,14 @@ function overloadError(): Error {
 function authError(): Error {
   const err = new Error('401 Unauthorized') as Error & { status: number };
   err.status = 401;
+  return err;
+}
+
+function contextLengthError(): Error {
+  const err = new Error(
+    'CodeBuddy API error: Ollama API error: 400 Bad Request — {"error":"request (60480 tokens) exceeds the available context size (32768 tokens), try increasing it"}',
+  ) as Error & { status: number };
+  err.status = 400;
   return err;
 }
 
@@ -240,6 +252,34 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
       expect.stringContaining('no silent failover'),
       expect.any(Object),
     );
+  });
+
+  it('exhausted chain keeps the 429 and each target failure in message, cause and details', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockRejectedValueOnce(contextLengthError());
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct')],
+    });
+    let caught: unknown;
+    try {
+      await client.chat([{ role: 'user', content: 'hello' }], []);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ProviderFailoverExhaustedError);
+    const exhausted = caught as ProviderFailoverExhaustedError;
+    expect(exhausted.message).toMatch(/usage_limit_reached/);
+    expect(exhausted.message).toContain('openai:qwen3:4b-instruct → 400 context length');
+    expect(exhausted.cause).toBeInstanceOf(Error);
+    expect((exhausted.cause as Error).message).toMatch(/usage_limit_reached/);
+    expect(exhausted.details.attempts).toEqual([
+      { target: 'openai:qwen3:4b-instruct', status: 400, message: '400 context length' },
+    ]);
+    expect(describeFailoverAttempt('ollama:qwen3:4b-instruct', contextLengthError())).toEqual({
+      target: 'ollama:qwen3:4b-instruct',
+      status: 400,
+      message: '400 context length',
+    });
   });
 
   it('empty chain → original error unchanged', async () => {

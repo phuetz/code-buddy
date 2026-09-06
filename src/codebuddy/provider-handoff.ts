@@ -275,7 +275,14 @@ export async function compactMessagesForModelAsync(
 ): Promise<CodeBuddyMessage[]> {
   const window = resolveFailoverContextWindow(toModel);
   const budget = tokenBudget ?? window;
-  if (estimateMessageTokens(messages) <= budget) return messages;
+  const estimated = estimateMessageTokens(messages);
+  if (estimated <= budget) return messages;
+  const oversizedTurn = messages.some(
+    (message) => Math.ceil(messageText(message).length / 4) > budget,
+  );
+  if (oversizedTurn) {
+    return slidingWindowCompact(messages, Math.floor(budget * 0.85));
+  }
   try {
     const { ContextManagerV2 } = await import('../context/context-manager-v2.js');
     const mgr = new ContextManagerV2({

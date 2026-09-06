@@ -31,10 +31,16 @@ import {
 } from "./provider-failover-kind.js";
 import {
   formatSkippedFailoverTargetLog,
+  formatContextTokensK,
   isFailoverTargetTooSmall,
   prepareFailoverHandoff,
   type FailoverHandoffResult,
 } from "./provider-handoff.js";
+import {
+  describeFailoverAttempt,
+  ProviderFailoverExhaustedError,
+  type FailoverAttemptDetail,
+} from "./provider-failover-error.js";
 import {
   filterHealthyFallbacks,
   isDeclaredProviderFallbackEnabled,
@@ -844,14 +850,12 @@ export class CodeBuddyClient {
   private skipDeclaredTargetIfTooSmall(
     fallback: RuntimeFallbackProvider,
     handed: FailoverHandoffResult,
-  ): boolean {
-    if (!isFailoverTargetTooSmall(handed.estimatedTokens, handed.contextWindow)) return false;
+  ): FailoverAttemptDetail | undefined {
+    if (!isFailoverTargetTooSmall(handed.estimatedTokens, handed.contextWindow)) return undefined;
+    const target = `${fallback.provider}:${fallback.model}`;
+    const message = `contexte ${formatContextTokensK(handed.contextWindow)} < ${formatContextTokensK(handed.estimatedTokens)}`;
     logger.warn(
-      formatSkippedFailoverTargetLog(
-        `${fallback.provider}:${fallback.model}`,
-        handed.contextWindow,
-        handed.estimatedTokens,
-      ),
+      formatSkippedFailoverTargetLog(target, handed.contextWindow, handed.estimatedTokens),
       {
         source: 'CodeBuddyClient',
         toProvider: fallback.provider,
@@ -860,7 +864,7 @@ export class CodeBuddyClient {
         contextWindow: handed.contextWindow,
       },
     );
-    return true;
+    return { target, status: 'skipped', message };
   }
 
   private async listDeclaredFailoverCandidates(): Promise<RuntimeFallbackProvider[]> {
@@ -936,6 +940,7 @@ export class CodeBuddyClient {
       ...opts,
       disableProviderFallback: true,
     };
+    const attempts: FailoverAttemptDetail[] = [];
 
     for (const fallback of candidates) {
       try {
@@ -946,7 +951,11 @@ export class CodeBuddyClient {
           toModel: fallback.model,
           kind: classification.kind,
         });
-        if (this.skipDeclaredTargetIfTooSmall(fallback, handed)) continue;
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -977,6 +986,7 @@ export class CodeBuddyClient {
           throw createAbortError('Chat request aborted by caller');
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
         const fbKind = classifyFailoverKind(fallbackError);
         if (fbKind.shouldFailover) {
           recordProviderFailure(fallback.provider, fbKind.kind, {
@@ -995,7 +1005,7 @@ export class CodeBuddyClient {
       }
     }
 
-    throw primaryError;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
   async *chatStream(
@@ -1213,6 +1223,7 @@ export class CodeBuddyClient {
       ...opts,
       disableProviderFallback: true,
     };
+    const attempts: FailoverAttemptDetail[] = [];
 
     for (const fallback of candidates) {
       let yieldedFromThisFallback = false;
@@ -1224,7 +1235,11 @@ export class CodeBuddyClient {
           toModel: fallback.model,
           kind: classification.kind,
         });
-        if (this.skipDeclaredTargetIfTooSmall(fallback, handed)) continue;
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -1277,6 +1292,7 @@ export class CodeBuddyClient {
           throw fallbackError;
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
         const fbKind = classifyFailoverKind(fallbackError);
         if (fbKind.shouldFailover) {
           recordProviderFailure(fallback.provider, fbKind.kind, {
@@ -1288,7 +1304,7 @@ export class CodeBuddyClient {
       }
     }
 
-    throw primaryError;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
   async search(
