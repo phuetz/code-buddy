@@ -278,7 +278,28 @@
       }
       return copy;
     });
-    storeSet(STORAGE.history, slim);
+    if (!storeSet(STORAGE.history, slim)) {
+      var withoutImages = slim.map(function (msg) {
+        if (!msg.image) return msg;
+        return {
+          id: msg.id,
+          role: msg.role,
+          text: msg.text || '',
+          ts: msg.ts,
+          reaction: msg.reaction || '',
+          ack: msg.ack || '',
+        };
+      });
+      if (!storeSet(STORAGE.history, withoutImages)) {
+        var candidate = withoutImages;
+        while (candidate.length > 1) {
+          candidate = candidate.slice(Math.ceil(candidate.length / 2));
+          if (storeSet(STORAGE.history, candidate)) {
+            break;
+          }
+        }
+      }
+    }
   }
 
   function restoreHistory() {
@@ -1193,7 +1214,18 @@
     if (el('logout-btn')) el('logout-btn').addEventListener('click', logout);
     if (el('composer')) el('composer').addEventListener('submit', sendChat);
     if (el('stop-btn')) el('stop-btn').addEventListener('click', stopChat);
-    if (el('mic-btn')) el('mic-btn').addEventListener('click', startDictation);
+    var micBtn = el('mic-btn');
+    if (micBtn) {
+      var hasSpeech = Boolean(root.SpeechRecognition || root.webkitSpeechRecognition);
+      if (!hasSpeech) {
+        micBtn.classList.add('hidden');
+        micBtn.hidden = true;
+      } else {
+        micBtn.classList.remove('hidden');
+        micBtn.hidden = false;
+        micBtn.addEventListener('click', startDictation);
+      }
+    }
     if (el('emoji-btn')) el('emoji-btn').addEventListener('click', toggleEmojiPicker);
     if (el('emoji-search')) {
       el('emoji-search').addEventListener('input', renderEmojiGrid);

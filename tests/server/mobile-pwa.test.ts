@@ -393,14 +393,37 @@ describe('B-1 CODEBUDDY_MOBILE_PWA opt-in', () => {
       });
       const { createUserToken } = await import('../../src/server/auth/jwt.js');
       const token = createUserToken('mobile-user', ['chat', 'tools'], process.env.JWT_SECRET!);
-      ws.send(JSON.stringify({ type: 'authenticate', payload: { token, approvalCapable: true } }));
-      await new Promise((r) => setTimeout(r, 100));
 
+      const authedPromise = new Promise<void>((resolve) => {
+        ws.on('message', function handler(data) {
+          try {
+            const frame = JSON.parse(data.toString());
+            if (frame.type === 'authenticated') {
+              ws.off('message', handler);
+              resolve();
+            }
+          } catch { /* ignore */ }
+        });
+      });
+      ws.send(JSON.stringify({ type: 'authenticate', payload: { token, approvalCapable: true } }));
+      await authedPromise;
+
+      const confirmReqPromise = new Promise<void>((resolve) => {
+        ws.on('message', function handler(data) {
+          try {
+            const frame = JSON.parse(data.toString());
+            if (frame.type === 'confirmation_required') {
+              ws.off('message', handler);
+              resolve();
+            }
+          } catch { /* ignore */ }
+        });
+      });
       const pending = service.requestConfirmation(
         { operation: 'write', filename: 'pending.txt', toolName: 'write_file', forcePrompt: true },
         'file',
       );
-      await new Promise((r) => setTimeout(r, 50));
+      await confirmReqPromise;
       expect(pendingMobileConfirmationCount()).toBe(1);
 
       await stopServer(started.server);
