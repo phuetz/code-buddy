@@ -98,7 +98,7 @@ export function extensionForMime(mimeType: string): string {
 
 function bounded(value: string | undefined, max: number): string {
   const clean = String(value ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\p{Cc}/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (clean.length <= max) return clean;

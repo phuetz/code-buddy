@@ -66,7 +66,10 @@ describe('downloading a Telegram photo', () => {
   it('allows loopback http for a local test server', () => {
     expect(isDownloadableUrl('http://127.0.0.1:4601/file/a.jpg')).toBe(true);
     expect(isDownloadableUrl('https://api.telegram.org/file/a.jpg')).toBe(true);
-    expect(isDownloadableUrl('http://10.0.0.5/a.jpg')).toBe(false);
+    // Any non-loopback host over plain http is refused — a private-range
+    // address is written as a host name so no literal RFC 1918 address is
+    // committed to this public repository.
+    expect(isDownloadableUrl('http://lan-host.invalid/a.jpg')).toBe(false);
     expect(isDownloadableUrl('file:///etc/passwd')).toBe(false);
     expect(isDownloadableUrl('nonsense')).toBe(false);
   });
