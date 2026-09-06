@@ -50,24 +50,33 @@ mobilePwaRouter.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-function sendHtml(res: Response, filePath: string): void {
+// `res.sendFile(absolutePath)` makes `send` apply its dotfile policy to EVERY
+// segment of the path, so any install under a hidden directory — the norm for a
+// global npm install (`~/.nvm/versions/node/...`, `~/.npm-global`) — 404s on its
+// own bundled assets. Serving them relative to `root` scopes that policy to the
+// requested name, and keeps the directory confinement `send` gives us.
+export function sendAsset(res: Response, fileName: string, root: string = ASSETS_DIR): void {
+  res.sendFile(fileName, { root });
+}
+
+function sendHtml(res: Response, fileName: string): void {
   res.setHeader('Content-Security-Policy', MOBILE_PWA_CSP);
-  res.sendFile(filePath);
+  sendAsset(res, fileName);
 }
 
 mobilePwaRouter.get('/', (_req: Request, res: Response) => {
-  sendHtml(res, path.join(ASSETS_DIR, 'index.html'));
+  sendHtml(res, 'index.html');
 });
 
 mobilePwaRouter.get('/manifest.webmanifest', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/manifest+json');
-  res.sendFile(path.join(ASSETS_DIR, 'manifest.webmanifest'));
+  sendAsset(res, 'manifest.webmanifest');
 });
 
 mobilePwaRouter.get('/sw.js', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Service-Worker-Allowed', '/__codebuddy__/mobile/');
-  res.sendFile(path.join(ASSETS_DIR, 'sw.js'));
+  sendAsset(res, 'sw.js');
 });
 
 mobilePwaRouter.use(

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** 18.0.0 or higher (the **Cowork** desktop GUI needs **Node.js ≥ 22**)
+- **Node.js** 20.0.0 or higher (the **Cowork** desktop GUI needs **Node.js ≥ 22**)
 - **ripgrep** (recommended for faster search)
 - **Docker** (optional, required for CodeAct/sandbox execution)
 
@@ -496,7 +496,7 @@ Most providers need an env var **and** the matching base URL. Common pairs:
 Run `buddy doctor` to verify which keys are detected. Check the active provider mid-session with `/status`.
 
 ### "Cannot find module" or ESM import errors
-Code Buddy is ESM-only. From source, ensure Node.js ≥ 18.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
+Code Buddy is ESM-only. From source, ensure Node.js ≥ 20.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
 
 ### Slow startup (> 5s) or noticeable cold-start cost
 Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on-demand only when first invoked, so a vanilla `buddy` should warm up in 1-2 seconds.

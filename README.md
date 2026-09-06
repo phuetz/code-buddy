@@ -75,7 +75,7 @@ is the same as 1.8.0. There is no `BREAKING CHANGE` in the 2.0 range.
 
 ## Install
 
-Three commands (Node.js ≥ 18):
+Three commands (Node.js ≥ 20):
 
 ```bash
 npm i -g @phuetz/code-buddy   # the package is scoped; `code-buddy` alone is not on npm

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -179,6 +180,54 @@ describe('Mobile PWA Router', () => {
       expect(health.ok).toBe(true);
       expect(health.service).toBe('mobile-pwa');
       expect(health.endpoints).toContain('/__codebuddy__/mobile/');
+    });
+  });
+
+  // Regression: a global npm install lives under a hidden directory
+  // (`~/.nvm/versions/node/...`, `~/.npm-global`). `res.sendFile(absolutePath)`
+  // applied `send`'s dotfile policy to EVERY segment of that path and 404'd on
+  // the PWA's own shell, manifest and service worker. The repo checkout used by
+  // the tests above has no dotted segment, so nothing caught it.
+  describe('assets served from a hidden install directory', () => {
+    let dotServer: http.Server;
+    let dotBaseUrl: string;
+    let dotRoot: string;
+    let tmpParent: string;
+
+    beforeAll(async () => {
+      tmpParent = path.join(os.tmpdir(), `cb-pwa-dot-${process.pid}`);
+      dotRoot = path.join(tmpParent, '.npm-global', 'assets');
+      mkdirSync(dotRoot, { recursive: true });
+      for (const file of ['index.html', 'manifest.webmanifest', 'sw.js']) {
+        copyFileSync(path.join(assetsDir, file), path.join(dotRoot, file));
+      }
+      const { sendAsset } = await import('../../src/server/mobile/index.js');
+      const dotApp = express();
+      dotApp.get('/:name', (req, res) => sendAsset(res, req.params.name, dotRoot));
+      dotServer = await new Promise<http.Server>((resolve) => {
+        const s = dotApp.listen(0, '127.0.0.1', () => resolve(s));
+      });
+      const address = dotServer.address();
+      if (!address || typeof address === 'string') throw new Error('expected a TCP port');
+      dotBaseUrl = `http://127.0.0.1:${address.port}`;
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => dotServer.close(() => resolve()));
+      rmSync(tmpParent, { recursive: true, force: true });
+    });
+
+    it.each(['index.html', 'manifest.webmanifest', 'sw.js'])(
+      'serves %s from a dotted root',
+      async (name) => {
+        const response = await fetch(`${dotBaseUrl}/${name}`);
+        expect(response.status).toBe(200);
+      },
+    );
+
+    it('still refuses to escape the root', async () => {
+      const response = await fetch(`${dotBaseUrl}/..%2f..%2fpackage.json`);
+      expect(response.status).not.toBe(200);
     });
   });
 
