@@ -43,6 +43,33 @@ const NEIGHBORS = [
   'Explique la photosynthèse',
 ];
 
+/** 16 phrases from VERIF-SELFIE-CACHE-AGY §(2), plus 4 extra. */
+const AGY_POSITIVES = [
+  'envoie-moi une photo de toi',
+  "t'as une photo ?",
+  'selfie',
+  'montre-toi',
+  'send me a pic of you',
+  'une photo de toi à la plage',
+  'fais-moi un selfie',
+  'show me a selfie',
+  'ta photo s\'il te plaît',
+  'Lisa, send me a photo of you',
+  'je veux te voir',
+  'send ur pic',
+];
+
+const AGY_TRAPS = [
+  'envoie-moi la photo du contrat',
+  'photo de mon chien',
+  'comment prendre une photo',
+  'photoshop',
+  'le selfie de Marie',
+  'peux-tu analyser cette photo',
+  "t'as une photo de Marie ?",
+  'comment prendre un selfie',
+];
+
 const roots: string[] = [];
 
 async function makeRoot(prefix: string): Promise<string> {
@@ -78,6 +105,15 @@ describe('Lisa selfie request routing', () => {
       expect(isLisaSelfieRequest(phrase), phrase).toBe(true);
     }
     for (const phrase of NEIGHBORS) {
+      expect(isLisaSelfieRequest(phrase), phrase).toBe(false);
+    }
+  });
+
+  it('matches the 16 agy phrases plus 4 extras (Lisa-directed only)', () => {
+    for (const phrase of AGY_POSITIVES) {
+      expect(isLisaSelfieRequest(phrase), phrase).toBe(true);
+    }
+    for (const phrase of AGY_TRAPS) {
       expect(isLisaSelfieRequest(phrase), phrase).toBe(false);
     }
   });

@@ -188,34 +188,45 @@ export async function selectCachedLisaSelfie(
 /** @deprecated use LISA_AVATAR_MOOD_SCENES — kept for call sites/tests. */
 const MOOD_SCENES: Record<LisaSelfieMood, string> = LISA_AVATAR_MOOD_SCENES;
 
+function isLisaSelfieOtherSubject(t: string): boolean {
+  if (/\b(?:photo|selfie|portrait|image|picture|pic|cliche)\s+(?:de|du|des|of)\s+(?!toi\b|you\b|lisa\b|moi\b)/.test(t)) {
+    return true;
+  }
+  if (/\bcette (?:photo|image|picture|pic)\b/.test(t)) return true;
+  if (/\bcomment (?:prendre|faire|capturer)\b/.test(t)) return true;
+  if (/\b(?:analyser|analyze|analysis)\b/.test(t)) return true;
+  if (/\bphotoshop\b/.test(t)) return true;
+  return false;
+}
+
 /** Detect spoken/text requests for Lisa to send a selfie/photo of herself. */
 export function isLisaSelfieRequest(text: string): boolean {
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
-  // Must be about her image of herself, not camera of the room.
-  const media = /\b(?:photo|selfie|portrait|image|picture|cliche)\b/.test(t);
-  // "selfie" alone implies a photo of herself; "photo" needs a self-referent.
-  const aboutSelf =
-    /\bselfie\b/.test(t) ||
-    (media &&
-      (/\b(?:toi|de toi|a toi|ta photo|ton selfie|ta tete|ton visage|toi meme|photo de lisa|you|your photo|your picture|picture of you|photo of you)\b/.test(
-        t,
-      ) ||
-        /\blisa\b/.test(t) ||
-        // In Lisa's own conversation, a bare direct request such as
-        // "montre-moi une image" naturally refers to her. Keep this narrow:
-        // an object after "image/photo" (for example "une image de chat") is
-        // left to the generic image tool instead.
-        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?\s*$/.test(t)));
-  const sendIntent =
-    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
-      t,
-    ) || /\b(?:selfie|photo de toi|photo a toi|ta photo)\b/.test(t);
+  if (isLisaSelfieOtherSubject(t)) return false;
   const negative =
-    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que j)\b/.test(
+    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que je|je te montre)\b/.test(
       t,
     );
-  return aboutSelf && sendIntent && !negative;
+  if (negative) return false;
+
+  const media = /\b(?:photo|selfie|portrait|image|picture|cliche|pic)\b/.test(t);
+  const aboutLisa =
+    /\b(?:de toi|a toi|toi meme|te voir|te montrer|montre toi|yourself|of you|your (?:photo|picture|pic|selfie)|ur (?:pic|photo|selfie)|ta photo|ton selfie|ta tete|ton visage|photo de lisa|selfie de (?:toi|lisa))\b/.test(t);
+  const shortAsk =
+    /^(?:lisa\s+)?(?:t as|tu as|t a|as tu|ya tu|y a t il|got(?: any)?|have you got|you got|you have)\s+(?:une |un |a |an )?(?:photo|selfie|portrait|image|picture|pic)\b/.test(t)
+    || /^(?:lisa\s+)?(?:selfie|ta photo)$/.test(t);
+  const showYourself = /\b(?:montre toi|te voir|show yourself)\b/.test(t);
+  const sendOrMake =
+    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|fais|fait|genere|prend|prends|capture)\b/.test(t);
+  const directAsk =
+    /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:un |une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture|pic|selfie)\b/.test(t)
+    || /\b(?:fais|fait|genere|prend|prends)\s+(?:moi\s+)?(?:un |une |a |an )?(?:selfie|photo|portrait)\b/.test(t);
+
+  if (showYourself || shortAsk) return true;
+  if (aboutLisa && (sendOrMake || media)) return true;
+  if (directAsk) return true;
+  return false;
 }
 
 /**
