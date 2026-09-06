@@ -87,6 +87,73 @@ describe('classifyFailoverKind', () => {
     expect(c.shouldFailover).toBe(false);
   });
 
+  it('Anthropic 400 credit balance → quota_exhausted with failover', () => {
+    const c = classifyFailoverKind(
+      sdkError({
+        status: 400,
+        type: 'invalid_request_error',
+        message:
+          'Your credit balance is too low to access the Claude API. Please go to Plans & Billing to upgrade or purchase credits.',
+      }),
+    );
+    expect(c.kind).toBe('quota_exhausted');
+    expect(c.shouldFailover).toBe(true);
+  });
+
+  it('Anthropic 429 monthly limit → quota_exhausted, not overloaded 60 s', () => {
+    const now = 1_700_000_000_000;
+    const c = classifyFailoverKind(
+      sdkError({ status: 429, message: 'You have exceeded your monthly limit' }),
+      now,
+    );
+    expect(c.kind).toBe('quota_exhausted');
+    expect(c.shouldFailover).toBe(true);
+    expect(c.resetsAt).toBe(now + 60 * 60 * 1000);
+  });
+
+  it('Gemini RESOURCE_EXHAUSTED 429 → quota_exhausted, not rate_limited', () => {
+    const err = sdkError({
+      status: 429,
+      message: 'Resource has been exhausted (e.g. check quota).',
+    }) as Error & { statusText?: string };
+    err.statusText = 'RESOURCE_EXHAUSTED';
+    const c = classifyFailoverKind(err);
+    expect(c.kind).toBe('quota_exhausted');
+    expect(c.shouldFailover).toBe(true);
+  });
+
+  it('xAI 403 out_of_credits → quota_exhausted (failover), 403 forbidden stays auth', () => {
+    const credits = classifyFailoverKind(
+      sdkError({ status: 403, type: 'out_of_credits', message: 'out_of_credits' }),
+    );
+    expect(credits.kind).toBe('quota_exhausted');
+    expect(credits.shouldFailover).toBe(true);
+    const forbidden = classifyFailoverKind(sdkError({ status: 403, message: 'Forbidden' }));
+    expect(forbidden.kind).toBe('auth');
+    expect(forbidden.shouldFailover).toBe(false);
+  });
+
+  it('429 congestion without quota signal → overloaded 60 s, not quota', () => {
+    const now = 1_700_000_000_000;
+    const c = classifyFailoverKind(
+      sdkError({ status: 429, message: 'Rate limit reached, please try again' }),
+      now,
+    );
+    expect(c.kind).toBe('overloaded');
+    expect(c.shouldFailover).toBe(true);
+    expect(c.resetsAt).toBe(now + 60_000);
+    expect(c.reason).toBe('rate_limited');
+  });
+
+  it('OpenAI SDK "Connection error." (no errno) → unreachable', () => {
+    const now = 1_700_000_000_000;
+    const err = new Error('CodeBuddy API error: Connection error.');
+    const c = classifyFailoverKind(err, now);
+    expect(c.kind).toBe('unreachable');
+    expect(c.shouldFailover).toBe(true);
+    expect(c.resetsAt).toBe(now + 5 * 60 * 1000);
+  });
+
   it('extracts resets_in_seconds from an embedded JSON body', () => {
     expect(extractResetsInSeconds(
       new Error('ChatGPT Responses backend error (429): {"type":"usage_limit_reached","resets_in_seconds":68400}'),

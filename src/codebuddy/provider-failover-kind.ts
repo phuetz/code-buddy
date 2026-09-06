@@ -68,27 +68,43 @@ export function extractResetsInSeconds(err: unknown): number | undefined {
   return undefined;
 }
 
+const NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+function collectCodes(err: unknown): string[] {
+  const codes: string[] = [];
+  let current: unknown = err;
+  for (let i = 0; i < 4 && current && typeof current === 'object'; i++) {
+    const rec = current as { code?: unknown; cause?: unknown };
+    if (typeof rec.code === 'string' && rec.code) codes.push(rec.code.toUpperCase());
+    current = rec.cause;
+  }
+  return codes;
+}
+
 function isNetworkish(reason: string, err: unknown): boolean {
   if (reason === 'network') return true;
+  if (collectCodes(err).some((code) => NETWORK_CODES.has(code))) return true;
   const rec = asRecord(err);
-  const code = typeof rec?.code === 'string' ? rec.code.toUpperCase() : '';
-  if (
-    code === 'ECONNREFUSED' ||
-    code === 'ENOTFOUND' ||
-    code === 'EAI_AGAIN' ||
-    code === 'ETIMEDOUT' ||
-    code === 'ECONNRESET' ||
-    code === 'UND_ERR_CONNECT_TIMEOUT'
-  ) {
-    return true;
-  }
+  const name = typeof rec?.name === 'string' ? rec.name : '';
+  if (name === 'APIConnectionError' || name === 'APIConnectionTimeoutError') return true;
   const message = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
   return (
     message.includes('econnrefused') ||
     message.includes('enotfound') ||
     message.includes('etimedout') ||
     message.includes('connect timeout') ||
-    message.includes('fetch failed')
+    message.includes('fetch failed') ||
+    message.includes('connection error')
   );
 }
 
