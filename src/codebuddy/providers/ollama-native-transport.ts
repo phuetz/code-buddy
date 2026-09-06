@@ -53,18 +53,134 @@ export interface OpenAiChatPayload {
   reasoning_effort?: string;
 }
 
+const TAGS_PROBE_TIMEOUT_MS = 300;
+const tagsProbeCache = new Map<string, boolean>();
+
+export type FetchLike = (
+  input: string,
+  init?: { method?: string; signal?: AbortSignal },
+) => Promise<{
+  ok: boolean;
+  status?: number;
+  json?: () => Promise<unknown>;
+}>;
+
+/** Test seam — drop memoized `GET /api/tags` answers. */
+export function resetOllamaEndpointCache(): void {
+  tagsProbeCache.clear();
+}
+
+function withHttpScheme(raw: string): string {
+  return /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+}
+
+function canonicalHostname(hostname: string): string {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '::1' || host === '0.0.0.0') return '127.0.0.1';
+  return host;
+}
+
+/** `http://127.0.0.1:11435/v1` → `http://127.0.0.1:11435`. */
+export function ollamaEndpointOrigin(baseURL: string): string | null {
+  try {
+    const url = new URL(withHttpScheme(baseURL.trim()));
+    if (!url.hostname) return null;
+    return `${url.protocol}//${canonicalHostname(url.hostname)}${url.port ? `:${url.port}` : ''}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+export function isLoopbackLlmHost(baseURL: string): boolean {
+  try {
+    const host = canonicalHostname(new URL(withHttpScheme(baseURL.trim())).hostname);
+    return host === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function declaredProvider(env: NodeJS.ProcessEnv): string {
+  return env.CODEBUDDY_PROVIDER?.trim().toLowerCase() ?? '';
+}
+
+function originsMatch(baseURL: string, configured: string | undefined): boolean {
+  if (!configured?.trim()) return false;
+  const left = ollamaEndpointOrigin(baseURL);
+  const right = ollamaEndpointOrigin(configured);
+  return left !== null && right !== null && left === right;
+}
+
 /**
  * `true` when this base URL is served by Ollama.
  *
- * Deliberately URL-only. `getModelInfo(model).provider` answers "ollama" for
- * any qwen/llama/gemma tag, and those same weights are routinely served by
- * LM Studio or vLLM, which have no `/api/chat` — routing those to the native
- * endpoint would turn a memory bug into a 404. An unrecognised Ollama host
- * simply keeps today's behavior.
+ * Order (sync, no I/O):
+ *   1. `CODEBUDDY_PROVIDER=ollama` — the operator already named the runtime.
+ *   2. The URL is the origin of `OLLAMA_HOST` / `OLLAMA_BASE_URL`.
+ *   3. A memoized loopback `GET /api/tags` probe previously succeeded.
+ *
+ * LM Studio / vLLM on the same loopback port stay on `/v1`: an explicit
+ * non-ollama provider short-circuits, and their `/api/tags` is not 200.
+ * A hostname containing "ollama" or the historical `:11434` port is NOT
+ * enough on its own — that is what broke a daemon on 11435.
  */
-export function isOllamaEndpoint(baseURL: string): boolean {
-  const url = baseURL.toLowerCase();
-  return url.includes(':11434') || url.includes('ollama');
+export function isOllamaEndpoint(
+  baseURL: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const provider = declaredProvider(env);
+  if (provider === 'ollama') return true;
+  if (provider && provider !== 'ollama') return false;
+  if (originsMatch(baseURL, env.OLLAMA_HOST) || originsMatch(baseURL, env.OLLAMA_BASE_URL)) {
+    return true;
+  }
+  const origin = ollamaEndpointOrigin(baseURL);
+  return origin !== null && tagsProbeCache.get(origin) === true;
+}
+
+async function probeOllamaTags(
+  origin: string,
+  fetchImpl: FetchLike,
+  timeoutMs: number = TAGS_PROBE_TIMEOUT_MS,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(`${origin}/api/tags`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    if (!response.ok) return false;
+    if (typeof response.json !== 'function') return false;
+    const body = await response.json();
+    return Boolean(body && typeof body === 'object' && Array.isArray((body as { models?: unknown }).models));
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Async counterpart of `isOllamaEndpoint`. On a loopback URL with no
+ * provider/host hint, probes `GET /api/tags` (200, ≤ 300 ms) and memos
+ * the answer per origin so later sync checks are free.
+ */
+export async function resolveOllamaEndpoint(
+  baseURL: string,
+  env: NodeJS.ProcessEnv = process.env,
+  fetchImpl: FetchLike = globalThis.fetch as FetchLike,
+): Promise<boolean> {
+  if (isOllamaEndpoint(baseURL, env)) return true;
+  const provider = declaredProvider(env);
+  if (provider && provider !== 'ollama') return false;
+  if (!isLoopbackLlmHost(baseURL)) return false;
+  const origin = ollamaEndpointOrigin(baseURL);
+  if (!origin) return false;
+  if (tagsProbeCache.has(origin)) return tagsProbeCache.get(origin) === true;
+  const ok = await probeOllamaTags(origin, fetchImpl);
+  tagsProbeCache.set(origin, ok);
+  return ok;
 }
 
 /**
@@ -147,6 +263,32 @@ function toOllamaThink(reasoningEffort?: string): boolean | string | undefined {
   return undefined;
 }
 
+/**
+ * Qwen3 (and other "thinking" weights) dump the whole answer into
+ * `message.thinking` / `/v1` `reasoning` and leave `content` empty unless
+ * `think` is false. A one-shot `-p` with no tool loop must disable that.
+ *
+ * Recent Ollama `/api/chat` accepts `think` as a boolean (or low/medium/high).
+ */
+export function isOllamaThinkingModel(model: string): boolean {
+  const cfg = getModelToolConfig(model);
+  if (cfg.supportsReasoning) return true;
+  if ((cfg.strengths ?? []).includes('thinking')) return true;
+  const name = model.toLowerCase();
+  if (/thinking|reasoner|qwq|\br1\b/.test(name)) return true;
+  return name.includes('qwen3') && !name.includes('instruct');
+}
+
+export function shouldDisableOllamaThink(
+  payload: OpenAiChatPayload,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isOllamaThinkingModel(payload.model)) return false;
+  const hasTools = Array.isArray(payload.tools) && payload.tools.length > 0;
+  const headless = env.CODEBUDDY_HEADLESS === 'true';
+  return !hasTools || headless;
+}
+
 /** OpenAI-compat payload → native `/api/chat` body, carrying `num_ctx`. */
 export function toOllamaNativeRequest(
   payload: OpenAiChatPayload,
@@ -159,7 +301,8 @@ export function toOllamaNativeRequest(
   if (typeof payload.top_p === 'number') options.top_p = payload.top_p;
   if (payload.stop !== undefined) options.stop = Array.isArray(payload.stop) ? payload.stop : [payload.stop];
 
-  const think = toOllamaThink(payload.reasoning_effort);
+  const think = toOllamaThink(payload.reasoning_effort)
+    ?? (shouldDisableOllamaThink(payload) ? false : undefined);
   return {
     model: payload.model,
     messages: toOllamaNativeMessages(payload.messages),

@@ -180,41 +180,51 @@ export function registerFleetCommands(program: Command): void {
       console.log('');
     });
 
+  const mintTokenAction = async (options: { user: string; ttl: string; scopes: string }) => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error(
+        'JWT_SECRET is required and must match the target server\'s JWT_SECRET.\n' +
+          'The fleet requires a token: `--no-auth` does NOT grant peer:invoke. Set JWT_SECRET and retry.',
+      );
+      process.exitCode = 2;
+      return;
+    }
+    const { generateToken } = await import('../../server/auth/jwt.js');
+    const scopes = String(options.scopes)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const jwt = generateToken(
+      { sub: options.user, userId: options.user, scopes: scopes as never },
+      secret,
+      options.ttl,
+    );
+    // Token to stdout (pipeable); the human recipe to stderr.
+    console.log(jwt);
+    console.error(
+      `\n# Fleet token minted (scopes: ${scopes.join(', ')}; ttl: ${options.ttl}).\n` +
+        '# On the OTHER machine, join this fleet with:\n' +
+        '#   /fleet listen ws://THIS-HOST:PORT/ws --jwt <token>\n' +
+        '# (the target server must run with the SAME JWT_SECRET and auth ENABLED — not --no-auth).',
+    );
+  };
+
   fleet
     .command('token')
     .description('Mint a fleet JWT (peer:invoke + fleet:listen) so another machine can join via /fleet listen --jwt')
     .option('--user <id>', 'token subject / user id', 'fleet-peer')
     .option('--ttl <dur>', 'expiry, e.g. 15m / 24h / 30d', '30d')
     .option('--scopes <csv>', 'override scopes', 'peer:invoke,fleet:listen,chat')
-    .action(async (options: { user: string; ttl: string; scopes: string }) => {
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        console.error(
-          'JWT_SECRET is required and must match the target server\'s JWT_SECRET.\n' +
-            'The fleet requires a token: `--no-auth` does NOT grant peer:invoke. Set JWT_SECRET and retry.',
-        );
-        process.exitCode = 2;
-        return;
-      }
-      const { generateToken } = await import('../../server/auth/jwt.js');
-      const scopes = String(options.scopes)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const jwt = generateToken(
-        { sub: options.user, userId: options.user, scopes: scopes as never },
-        secret,
-        options.ttl,
-      );
-      // Token to stdout (pipeable); the human recipe to stderr.
-      console.log(jwt);
-      console.error(
-        `\n# Fleet token minted (scopes: ${scopes.join(', ')}; ttl: ${options.ttl}).\n` +
-          '# On the OTHER machine, join this fleet with:\n' +
-          '#   /fleet listen ws://THIS-HOST:PORT/ws --jwt <token>\n' +
-          '# (the target server must run with the SAME JWT_SECRET and auth ENABLED — not --no-auth).',
-      );
-    });
+    .action(mintTokenAction);
+
+  program
+    .command('token')
+    .description('Mint a JWT authentication token (alias for buddy fleet token)')
+    .option('--user <id>', 'token subject / user id', 'fleet-peer')
+    .option('--ttl <dur>', 'expiry, e.g. 15m / 24h / 30d', '30d')
+    .option('--scopes <csv>', 'override scopes', 'peer:invoke,fleet:listen,chat')
+    .action(mintTokenAction);
 
   fleet
     .command('toolsets')

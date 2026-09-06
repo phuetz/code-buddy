@@ -34,6 +34,8 @@ import {
 import { getRequestedProfile } from './cli/requested-profile.js';
 import {
   findUnexecutedProseToolCall,
+  formatEmptyHeadlessResponseError,
+  isHeadlessFinalResponseEmpty,
   resolveHeadlessOutputFormat,
   resolveHeadlessTurnExitCode,
 } from './cli/headless-options.js';
@@ -1053,6 +1055,7 @@ async function processPromptHeadless(
 ): Promise<number> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   const previousHeadless = process.env.CODEBUDDY_HEADLESS;
+  const startedAt = Date.now();
   let agent: CodeBuddyAgent | undefined;
   let interactionLogger: import('./logging/interaction-logger.js').InteractionLogger | null = null;
   let runStore: RunStore | undefined;
@@ -1112,6 +1115,9 @@ async function processPromptHeadless(
         const current = existing ?? (await sessionStore.loadSession(sessionId));
         const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
         runStore = RunStoreClass.getInstance();
+        const { auditLogger } = await import('./security/audit-logger.js');
+        const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+        auditLogger.init({ logDir: auditDir, sessionId });
         runId = runStore.startRun('headless prompt', {
           channel: 'terminal',
           sessionId,
@@ -1284,6 +1290,21 @@ async function processPromptHeadless(
       .find((entry) => entry.type === 'assistant');
     const resultText = lastAssistantEntry?.content ?? '';
 
+    const client = agent.getClient();
+    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
+    if (isHeadlessFinalResponseEmpty(resultText)) {
+      const providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
+        || detectProviderFromEnv()?.provider
+        || 'inconnu';
+      process.stderr.write(`${formatEmptyHeadlessResponseError({
+        provider: providerLabel,
+        model: effectiveModel,
+        durationMs: Date.now() - startedAt,
+      })}\n`);
+      runStatus = 'failed';
+      return 1;
+    }
+
     // Validate before writing or emitting any successful output. The schema
     // applies to the JSON value represented by the final assistant text, not
     // to the internal/OpenAI-compatible message history.
@@ -1329,8 +1350,6 @@ async function processPromptHeadless(
     // Gather cost and model info from the agent
     const sessionCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
     const sessionCost = sessionCostExtended.total;
-    const client = agent.getClient();
-    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
     const requestedModel = client.getLastRequestedModel();
 
     // MODELLABEL1: Warn on stderr when requested model differs from effective model in headless mode
@@ -1422,17 +1441,28 @@ async function processPromptHeadless(
     }
     return 1;
   } finally {
+    if (runStore && runId) {
+      try {
+        if (agent) {
+          const ext = agent.getSessionCostExtended?.();
+          if (ext) {
+            runStore.updateMetrics(runId, {
+              promptTokens: ext.inputTokens,
+              completionTokens: ext.outputTokens,
+              totalTokens: ext.inputTokens + ext.outputTokens,
+              totalCost: ext.total,
+            });
+          }
+        }
+        runStore.endRun(runId, runStatus);
+        runStore.dispose();
+      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
+    }
     if (interactionLogger) {
       try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end headless interaction logger session', { error: String(e) }); }
     }
     if (agent) {
       try { agent.dispose({ skipSessionLearning: true }); } catch (e) { logger.debug('Headless agent cleanup skipped', { error: String(e) }); }
-    }
-    if (runStore && runId) {
-      try {
-        runStore.endRun(runId, runStatus);
-        runStore.dispose();
-      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
     }
     try {
       const { resetMCPClient } = await import('./mcp/mcp-client.js');
@@ -1713,6 +1743,7 @@ program
     // Apply --quiet / --verbose flags
     if (options.quiet) {
       process.env.LOG_LEVEL = 'error';
+      process.env.CODEBUDDY_QUIET = 'true';
       logger.setLevel('error');
     }
     if (options.verbose) {
@@ -2450,13 +2481,29 @@ program
         try {
           const { RunStore } = await import('./observability/run-store.js');
           const runStore = RunStore.getInstance();
+          const { auditLogger } = await import('./security/audit-logger.js');
+          const auditDir = process.env.CODEBUDDY_AUDIT_DIR || nodePath.join(nodeOs.homedir(), '.codebuddy');
+          auditLogger.init({ logDir: auditDir });
           const runId = runStore.startRun('interactive session', {
             channel: 'terminal',
             tags: ['interactive', model || 'unknown'],
           });
           agent.setRunId(runId);
           const cleanupRun = () => {
-            try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
+            try {
+              if (agent) {
+                const ext = agent.getSessionCostExtended?.();
+                if (ext) {
+                  runStore.updateMetrics(runId, {
+                    promptTokens: ext.inputTokens,
+                    completionTokens: ext.outputTokens,
+                    totalTokens: ext.inputTokens + ext.outputTokens,
+                    totalCost: ext.total,
+                  });
+                }
+              }
+              runStore.endRun(runId, 'completed');
+            } catch (_err) { /* ignore */ }
           };
           process.on('exit', cleanupRun);
         } catch (err) {

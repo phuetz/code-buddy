@@ -31,6 +31,10 @@ import {
   isToolNameAllowed,
   type ToolFilterConfig,
 } from "../utils/tool-filter.js";
+import {
+  HEADLESS_LOCAL_COMPACT_MAX_TOKENS,
+  isHeadlessLocalPromptCompact,
+} from "../config/headless-local-prompt.js";
 
 export interface PromptBuilderConfig {
   yoloMode: boolean;
@@ -292,6 +296,9 @@ export class PromptBuilder {
     query?: string,
   ): Promise<string> {
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
+    if (isHeadlessLocalPromptCompact()) {
+      Object.assign(gates, gatesForComplexity('trivial'));
+    }
     this.lastPromptBlocks = [];
     this.lastPromptParts = [];
     // When the model can't actually call tools (Ollama small/medium without
@@ -1042,9 +1049,12 @@ Output formatting discipline:
       const rawBudget = leftover > 0
         ? Math.floor(leftover * 0.5)
         : Math.floor(contextWindow * 0.25);
-      const budgetTokens = leftover > 0
+      let budgetTokens = leftover > 0
         ? Math.min(rawBudget, 32_000)
         : Math.max(256, Math.min(rawBudget, 32_000));
+      if (isHeadlessLocalPromptCompact()) {
+        budgetTokens = Math.min(budgetTokens, HEADLESS_LOCAL_COMPACT_MAX_TOKENS);
+      }
       const budgetChars = budgetTokens * 4; // ~4 chars per token
       if (systemPrompt.length > budgetChars) {
         const originalChars = systemPrompt.length;
@@ -1132,7 +1142,8 @@ Output formatting discipline:
     const toolCfg = getModelToolConfig(modelName);
     const profile = toolCfg.promptProfile ?? 'standard';
     const complexity: QueryComplexity =
-      profile === 'lite' ? 'trivial'
+      isHeadlessLocalPromptCompact() ? 'trivial'
+      : profile === 'lite' ? 'trivial'
       : profile === 'rich' ? 'complex'
       : classifyQuery(message).complexity;
 

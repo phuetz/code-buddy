@@ -16,18 +16,19 @@ export function registerSensoryCommand(
   program
     .command('sensory [action]')
     .description('Inspect event-driven surveillance (read-only) — status')
+    .option('--server-url <url>', 'Code Buddy server URL')
     .option('--json', 'machine-readable JSON')
-    .action(async (action: string | undefined, options: { json?: boolean }) => {
+    .action(async (action: string | undefined, options: { json?: boolean; serverUrl?: string }) => {
       const act = (action || 'status').toLowerCase();
       if (act !== 'status') {
-        write('Usage: buddy sensory status [--json]');
+        write('Usage: buddy sensory status [--server-url <url>] [--json]');
         process.exitCode = 1;
         return;
       }
       const { collectSensoryStatus, formatSensoryStatus } = await import(
         '../../sensory/sensory-status.js'
       );
-      const view = await collectSensoryStatus();
+      const view = await collectSensoryStatus({ serverUrl: options.serverUrl });
       write(formatSensoryStatus(view, Boolean(options.json)));
     });
 }

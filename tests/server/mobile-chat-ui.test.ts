@@ -415,3 +415,127 @@ describe('Mobile chat UI (DOM)', () => {
     });
   });
 });
+
+describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () => {
+  type FakeWs = {
+    readyState: number;
+    sent: string[];
+    listeners: Record<string, Array<() => void>>;
+    onclose: null;
+    send: (raw: string) => void;
+    close: () => void;
+    addEventListener: (name: string, fn: () => void) => void;
+    emit: (name: string, payload?: unknown) => void;
+  };
+  const sockets: FakeWs[] = [];
+  let api: MobileApi;
+
+  function makeFakeWs(): FakeWs {
+    const ws: FakeWs = {
+      readyState: 0,
+      sent: [],
+      listeners: {},
+      onclose: null,
+      send(raw: string) { ws.sent.push(raw); },
+      close() { ws.readyState = 3; },
+      addEventListener(name: string, fn: () => void) { (ws.listeners[name] ||= []).push(fn); },
+      emit(name: string, payload?: unknown) {
+        (ws.listeners[name] || []).forEach((fn) => (fn as (e?: unknown) => void)(payload));
+      },
+    };
+    sockets.push(ws);
+    return ws;
+  }
+
+  beforeEach(() => {
+    sockets.length = 0;
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.useFakeTimers();
+    function FakeWebSocket(this: unknown) { return makeFakeWs(); }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    Object.defineProperty(window, 'WebSocket', { configurable: true, writable: true, value: FakeWebSocket });
+    Object.defineProperty(navigator, 'vibrate', { configurable: true, value: vi.fn(() => true) });
+    api = mount();
+    (api.state as { token: string }).token = 'jeton-de-test';
+    (api as unknown as { connectWs: () => void }).connectWs();
+    const ws = sockets[0]!;
+    ws.readyState = 1;
+    ws.emit('open');
+    api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
+  });
+
+  afterEach(() => {
+    api?.destroy();
+    vi.useRealTimers();
+  });
+
+  it('authenticates on open and is connected', () => {
+    const ws = sockets[0]!;
+    expect(JSON.parse(ws.sent[0]!).type).toBe('authenticate');
+    expect((api.state as { connected: boolean }).connected).toBe(true);
+  });
+
+  it('reconnects with backoff after the server closes the socket and re-authenticates', () => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    expect((api.state as { connected: boolean }).connected).toBe(false);
+    expect(document.getElementById('presence-line')?.textContent).toBe('reconnexion…');
+    expect(sockets.length).toBe(1);
+    vi.advanceTimersByTime(1000);
+    expect(sockets.length).toBe(2);
+    const second = sockets[1]!;
+    second.readyState = 1;
+    second.emit('open');
+    expect(JSON.parse(second.sent[0]!).type).toBe('authenticate');
+    api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
+    expect((api.state as { connected: boolean }).connected).toBe(true);
+    expect(document.getElementById('presence-line')?.textContent).toBe('en ligne');
+  });
+
+  it('queues a message sent while disconnected and replays it once re-authenticated', () => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    expect(api.sendText('Tu es là ?')).toBe(true);
+    expect(first.sent.some((raw) => JSON.parse(raw).type === 'chat')).toBe(false);
+    expect((api.state as { outbox: unknown[] }).outbox).toHaveLength(1);
+    vi.advanceTimersByTime(1000);
+    const second = sockets[sockets.length - 1]!;
+    second.readyState = 1;
+    second.emit('open');
+    api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
+    const chat = second.sent.map((raw) => JSON.parse(raw)).find((f) => f.type === 'chat');
+    expect(chat?.payload?.message).toBe('Tu es là ?');
+    expect((api.state as { outbox: unknown[] }).outbox).toHaveLength(0);
+  });
+
+  it('backs off exponentially up to 30 s and resets after a successful auth', () => {
+    const delays: number[] = [];
+    for (let i = 0; i < 7; i += 1) {
+      const ws = sockets[sockets.length - 1]!;
+      ws.readyState = 3;
+      ws.emit('close');
+      delays.push((api as unknown as { reconnectDelayMs: () => number }).reconnectDelayMs());
+      vi.advanceTimersByTime(30000);
+    }
+    expect(delays[0]).toBe(2000);
+    expect(Math.max(...delays)).toBe(30000);
+    const ws = sockets[sockets.length - 1]!;
+    ws.readyState = 1;
+    ws.emit('open');
+    api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
+    expect((api.state as { reconnectAttempt: number }).reconnectAttempt).toBe(0);
+  });
+
+  it('does not reconnect after an explicit logout', () => {
+    (api as unknown as { logout: () => void }).logout();
+    const before = sockets.length;
+    const ws = sockets[sockets.length - 1]!;
+    ws.readyState = 3;
+    ws.emit('close');
+    vi.advanceTimersByTime(60000);
+    expect(sockets.length).toBe(before);
+  });
+});

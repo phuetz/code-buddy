@@ -55,6 +55,10 @@
     streamEl: null,
     streamId: null,
     pingTimer: 0,
+    reconnectTimer: 0,
+    reconnectAttempt: 0,
+    manualClose: false,
+    outbox: [],
     messages: [],
     seq: 0,
     avatarUrl: DEFAULT_AVATAR,
@@ -166,11 +170,59 @@
     return proto + '//' + location.host + '/ws';
   }
 
+  var OUTBOX_MAX = 5;
+
+  function wsOpen() {
+    return Boolean(state.ws && state.ws.readyState === 1);
+  }
+
   function send(type, payload) {
-    if (!state.ws || state.ws.readyState !== 1) return;
     var frame = { type: type };
     if (payload !== undefined) frame.payload = payload;
+    if (type === 'chat' && !wsOpen()) {
+      // Serveur redémarré ou téléphone revenu de veille : on garde le message
+      // et on le rejoue dès que la connexion est ré-authentifiée.
+      state.outbox.push(frame);
+      while (state.outbox.length > OUTBOX_MAX) state.outbox.shift();
+      ensureConnected();
+      return;
+    }
+    if (!state.ws || state.ws.readyState !== 1) return;
     state.ws.send(JSON.stringify(frame));
+  }
+
+  function flushOutbox() {
+    if (!wsOpen()) return;
+    var pending = state.outbox;
+    state.outbox = [];
+    pending.forEach(function (frame) {
+      state.ws.send(JSON.stringify(frame));
+    });
+  }
+
+  function reconnectDelayMs() {
+    return Math.min(30000, 1000 * Math.pow(2, Math.min(state.reconnectAttempt, 5)));
+  }
+
+  function scheduleReconnect() {
+    if (state.reconnectTimer || state.manualClose || !state.token) return;
+    var delay = reconnectDelayMs();
+    state.reconnectAttempt += 1;
+    setPresence('reconnecting');
+    state.reconnectTimer = setTimeout(function () {
+      state.reconnectTimer = 0;
+      connectWs();
+    }, delay);
+  }
+
+  function ensureConnected() {
+    if (wsOpen() || state.manualClose || !state.token) return;
+    if (state.ws && state.ws.readyState === 0) return; // connexion en cours
+    if (state.reconnectTimer) {
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = 0;
+    }
+    connectWs();
   }
 
   function nextId() {
@@ -489,6 +541,8 @@
       } else if (kind === 'online') {
         line.textContent = 'en ligne';
         line.classList.add('online');
+      } else if (kind === 'reconnecting') {
+        line.textContent = 'reconnexion…';
       } else {
         line.textContent = 'hors ligne';
       }
@@ -1000,8 +1054,14 @@
     if (type === 'connected') return;
     if (type === 'authenticated') {
       state.connected = true;
+      state.reconnectAttempt = 0;
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = 0;
+      }
       setDot('ok');
       setPresence('online');
+      flushOutbox();
       show('login-screen', false);
       show('main-screen', true);
       el('login-screen').classList.remove('active');
@@ -1080,7 +1140,9 @@
   }
 
   function connectWs() {
+    state.manualClose = false;
     if (state.ws && state.ws.close) {
+      state.ws.onclose = null;
       try { state.ws.close(); } catch (_e) { /* ignore */ }
     }
     var ws = new WebSocket(wsUrl());
@@ -1096,10 +1158,12 @@
       }
     });
     ws.addEventListener('close', function () {
+      if (state.ws !== ws) return; // socket remplacé, on l'ignore
       state.connected = false;
       setStreaming(false);
       setPresence('offline');
       setDot('');
+      scheduleReconnect();
     });
     clearInterval(state.pingTimer);
     state.pingTimer = setInterval(function () {
@@ -1123,6 +1187,12 @@
   function logout() {
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (_err) { /* ignore */ }
     state.token = '';
+    state.manualClose = true;
+    state.outbox = [];
+    if (state.reconnectTimer) {
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = 0;
+    }
     if (state.ws) state.ws.close();
     show('main-screen', false);
     show('login-screen', true);
@@ -1712,11 +1782,20 @@
     document.addEventListener('keydown', onDocumentKey);
   }
 
+  function onVisibilityOrOnline() {
+    if (document.visibilityState === 'hidden') return;
+    ensureConnected();
+  }
+
   function destroy() {
     document.removeEventListener('click', onDocumentClick);
     document.removeEventListener('keydown', onDocumentKey);
+    document.removeEventListener('visibilitychange', onVisibilityOrOnline);
+    root.removeEventListener('online', onVisibilityOrOnline);
     clearTimeout(state.longPressTimer);
     clearInterval(state.pingTimer);
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = 0;
     state.bound = false;
   }
 
@@ -1728,6 +1807,8 @@
   function init() {
     registerServiceWorker();
     bind();
+    document.addEventListener('visibilitychange', onVisibilityOrOnline);
+    root.addEventListener('online', onVisibilityOrOnline);
     restoreAvatar();
     state.suggestHidden = storeGet(STORAGE.suggestHidden, false) === true;
     restoreHistory();
@@ -1803,6 +1884,12 @@
     getAlbum: function () { return state.album.slice(); },
     setAlbum: function (entries) { state.album = entries.slice(); renderAlbum(); },
     syncAlbumActions: syncAlbumActions,
+    connectWs: connectWs,
+    logout: logout,
+    ensureConnected: ensureConnected,
+    scheduleReconnect: scheduleReconnect,
+    reconnectDelayMs: reconnectDelayMs,
+    flushOutbox: flushOutbox,
     destroy: destroy,
   };
 

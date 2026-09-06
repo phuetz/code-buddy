@@ -54,6 +54,7 @@ import {
   isOllamaEndpoint,
   isOllamaNativeChatEnabled,
   ollamaNativeChatUrl,
+  resolveOllamaEndpoint,
   resolveOllamaNumCtx,
   streamOllamaNative,
   toOllamaNativeRequest,
@@ -579,8 +580,7 @@ export class OpenAICompatProvider implements Provider {
 
     const modelInfo = getModelInfo(this.currentModel);
     if (modelInfo.provider === 'ollama') return false;
-    if (this.baseURL.includes('localhost:11434')) return false;
-    if (this.baseURL.includes('127.0.0.1:11434')) return false;
+    if (isOllamaEndpoint(this.baseURL)) return false;
     if (modelInfo.provider === 'lmstudio') return true;
     if (this.baseURL.includes('localhost:1234')) return true;
     if (this.baseURL.includes('127.0.0.1:1234')) return true;
@@ -670,12 +670,20 @@ export class OpenAICompatProvider implements Provider {
   }
 
   /**
-   * Whether this provider talks to Ollama. Broader than
-   * `getOllamaReasoningEffort`'s historical check (which knew only the two
-   * loopback spellings), so a LAN Ollama is recognised too.
+   * Whether this provider talks to Ollama. Sync view: provider env,
+   * `OLLAMA_HOST`, or a memoized tags probe. `ensureOllamaEndpoint()`
+   * fills the probe cache before the first native call.
    */
+  private ollamaEndpointResolved: boolean | undefined;
+
   private isOllamaProvider(): boolean {
-    return isOllamaEndpoint(this.baseURL);
+    return this.ollamaEndpointResolved ?? isOllamaEndpoint(this.baseURL);
+  }
+
+  private async ensureOllamaEndpoint(): Promise<boolean> {
+    if (this.ollamaEndpointResolved !== undefined) return this.ollamaEndpointResolved;
+    this.ollamaEndpointResolved = await resolveOllamaEndpoint(this.baseURL);
+    return this.ollamaEndpointResolved;
   }
 
   /**
@@ -691,7 +699,7 @@ export class OpenAICompatProvider implements Provider {
     signal?: AbortSignal,
   ): Promise<unknown> {
     const openAiPayload = payload as unknown as OpenAiChatPayload;
-    if (this.isOllamaProvider() && isOllamaNativeChatEnabled()) {
+    if ((await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
       return this.createOllamaNativeCompletion(openAiPayload, signal);
     }
     return signal
@@ -734,14 +742,8 @@ export class OpenAICompatProvider implements Provider {
     );
   }
 
-  private getOllamaReasoningEffort(model: string): string | undefined {
-    const modelInfo = getModelInfo(model);
-    const isOllama =
-      modelInfo.provider === 'ollama' ||
-      this.baseURL.includes('localhost:11434') ||
-      this.baseURL.includes('127.0.0.1:11434');
-    if (!isOllama) return undefined;
-
+  private getOllamaReasoningEffort(_model: string): string | undefined {
+    if (!this.isOllamaProvider()) return undefined;
     return process.env.CODEBUDDY_OLLAMA_REASONING_EFFORT?.trim() || 'none';
   }
 
@@ -902,7 +904,7 @@ export class OpenAICompatProvider implements Provider {
     if (url.includes('groq.com')) return 'groq';
     if (url.includes('together.xyz')) return 'together';
     if (url.includes('fireworks.ai')) return 'fireworks';
-    if (url.includes(':11434') || url.includes('ollama')) return 'ollama';
+    if (isOllamaEndpoint(this.baseURL) || url.includes('ollama')) return 'ollama';
     if (url.includes(':1234') || url.includes('lmstudio')) return 'lmstudio';
     if (url.includes('vllm')) return 'vllm';
     return this.detectProviderLabel();
@@ -945,6 +947,7 @@ export class OpenAICompatProvider implements Provider {
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
       }
+      await this.ensureOllamaEndpoint();
       const ollamaReasoningEffort = this.getOllamaReasoningEffort(requestPayload.model);
       if (ollamaReasoningEffort) {
         (requestPayload as unknown as Record<string, unknown>).reasoning_effort = ollamaReasoningEffort;
@@ -1147,6 +1150,7 @@ export class OpenAICompatProvider implements Provider {
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
       }
+      await this.ensureOllamaEndpoint();
       const ollamaReasoningEffort = this.getOllamaReasoningEffort(requestPayload.model);
       if (ollamaReasoningEffort) {
         (requestPayload as unknown as Record<string, unknown>).reasoning_effort = ollamaReasoningEffort;

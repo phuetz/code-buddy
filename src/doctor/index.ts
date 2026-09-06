@@ -21,7 +21,7 @@ import {
   detectNativeSandboxCapabilities,
   formatDoctorLine,
 } from '../security/native-sandbox.js';
-import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
+import { loadBetterSqlite3, getSqliteInstallGuidance } from '../database/optional-sqlite.js';
 import type { UserSettings } from '../utils/settings-manager.js';
 import {
   selectOllamaModel,
@@ -124,7 +124,7 @@ async function checkNativeSqlite(): Promise<DoctorCheck> {
       status: 'warn',
       message:
         'native module unavailable — sessions remain persisted as JSON files, but DB-backed memory, cache, and indexed search are disabled. ' +
-        SQLITE_INSTALL_GUIDANCE,
+        getSqliteInstallGuidance(),
     };
   }
 }
