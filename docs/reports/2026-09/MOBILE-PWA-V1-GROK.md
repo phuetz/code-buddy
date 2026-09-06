@@ -83,14 +83,123 @@ Constat agy relu sur le code :
 - P7 : 18 suites / 40 tests rouges par crash d'import. Le test PWA utilise `http.get` comme s'il renvoyait une `IncomingMessage`.
 - P8 : hors v1, documenté en fin de rapport.
 
+## Commits
+
+| Commit | Sujet |
+|---|---|
+| `a6fb580d2` | stub de ce rapport + réservation + gitignore QA |
+| `91d4371b5` | P1.1/P1.2/P1.3/P7 Express 5, PNG, copie build |
+| `1f5507942` | P2/P3/P4 WS confirmations + companion/peer |
+| `d23f2b245` | P5 `/api/runs` trajectory statut pairs |
+| `753a0b19a` | client vanilla protocole réel, look Lisa, CSP |
+| `9cc9a2c09` | coquille PWA montée avant le JWT (sinon 401 navigateur) |
+
 ## Preuves
 
-*(rempli au fil des commits)*
+### tests/server (0 rouge)
 
-## P8 — hors v1 (Astra)
+```
+env -u FORCE_COLOR HOME=~/DEV/cb-mobile-2026-09-06/_qa/grok/home npx vitest run tests/server
+Test Files  65 passed | 2 skipped (67)
+     Tests  588 passed | 2 skipped (590)
+```
 
-*(rempli après P1–P7)*
+Ignorés : Chromium CIFIX2 (binaire absent sous HOME QA) ; `mobile-ws-live` (gate `RUN_MOBILE_LIVE=1`). Nouveaux : confirmation 4, protocole 4, runs/statut 3, PWA 21.
+
+### Intégration WS (mock agent)
+
+`tests/server/mobile-ws-protocol.test.ts` : `authenticated` → `stream_start` / `stream_chunk` (`payload.delta`) / `stream_end` ; `assistant:'companion'` → `lisa:salut` ; `peer.chat` via registre → `peer:hi` ; `ping` → `pong`.
+
+### Confirmations
+
+`tests/server/mobile-confirmation.test.ts` : JWT + `forcePrompt` → `confirmation_required {id,tool,summary,risk}` → `confirmation_response {id, approved:true}` ; timeout 200 ms = refus ; 2ᵉ réponse `ALREADY_ANSWERED`/`UNKNOWN_CONFIRMATION` ; sans JWT = `UNAUTHORIZED`. `confirmation_response` est en `bypassLane`.
+
+### Runs / statut
+
+`tests/server/mobile-runs-status.test.ts` : `GET /api/runs` liste un `RunStore.startRun` ; `GET /api/runs/:id/trajectory` passe par `loadTrajectory`/`buildTrajectory` ; 404 si id inconnu ; `GET /api/status` + `GET /api/fleet/peers` voient un pair de registre.
+
+`buildTrajectory` est dans cette base (`2be0d27c2`, `src/observability/run-trajectory.ts`). `provider-health.json` n'existe pas dans le dépôt : lu en option sous `~/.codebuddy/provider-health.json` (repli `null`) + `fallback-chain.getAllHealthStatus()`.
+
+### tsc / eslint / diff-check / privacy
+
+```
+npx tsc --noEmit -p .          # exit 0
+npx eslint --max-warnings=0    # fichiers touchés, exit 0
+git diff --check               # vide, exit 0
+npx vitest run tests/security/donnees-personnelles.test.ts
+Test Files  1 passed (1)
+     Tests  40 passed (40)
+```
+
+### Build
+
+```
+npm run build
+copy-mobile-pwa-assets: src/server/mobile/assets → dist/server/mobile/assets
+icon-96.png  389  89504e470d0a1a0a
+icon-192.png 908  89504e470d0a1a0a
+icon-512.png 2866 89504e470d0a1a0a
+```
+
+### Essai réel `node dist/index.js server --port 3461`
+
+HOME `_qa/grok/home`, `--host 127.0.0.1`, `CODEBUDDY_PROVIDER=ollama`, `OLLAMA_HOST=http://127.0.0.1:11435`, `GROK_MODEL=qwen3.8-ctx32k:latest`. JWT de test en mémoire, pas dans le dépôt.
+
+```
+GET /__codebuddy__/mobile/          200 text/html
+CSP  default-src 'self'; script-src 'self'; style-src 'self'; … connect-src 'self' ws: wss:
+     (pas de unsafe-eval, pas de unsafe-inline)
+GET /__codebuddy__/mobile/manifest.webmanifest  200 application/manifest+json
+     start_url /__codebuddy__/mobile/  icons 96/192/512
+GET /__codebuddy__/mobile/sw.js     200  Service-Worker-Allowed: /__codebuddy__/mobile/
+GET /__codebuddy__/mobile/assets/icon-192.png  200 size=908
+GET /__codebuddy__/mobile/health    {"ok":true,"service":"mobile-pwa"}
+GET /api/status  (Bearer)  provider.id=ollama model=qwen3.8-ctx32k:latest
+                           providerHealthFile=null fallback=[] peers=[]
+GET /api/runs    (Bearer)  {"runs":[]}
+GET /api/runs    (sans JWT) 401
+```
+
+WS (protocole réel) vers ce serveur, modèle demandé `qwen3.8-ctx32k:latest` (27,3 B, ~18 Go, déjà en VRAM avec `qwen3:4b-instruct`) :
+
+```
+connected  methods incluent chat, stop, ping, confirmation_response
+authenticated  userId=mobile-user scopes=[chat]
+stream_start
+error HANDLER_ERROR  Task timed out after 120000ms   (file d'attente WS, 0 chunk)
+```
+
+Un generate Ollama direct (`num_predict: 8`) sur le même modèle a aussi fait timeout 90 s / 0 octet. La file WS coupe à 120 s : ce n'est pas un faux protocole.
+
+Reprise streamée, même client, port 3462, `GROK_MODEL=qwen3:4b-instruct` (déjà chargé, 4 B) :
+
+```
+connected
+authenticated  {"userId":"mobile-user","scopes":["chat"]}
+stream_start   id=msg_1788689977022
+stream_chunk   {"delta":"OK"}
+stream_chunk   {"delta":" MO"}
+stream_chunk   {"delta":"BILE"}
+stream_end
+--- text ---
+OK MOBILE
+```
+
+Ports 3461/3462 refermés après l'essai. 8188/8189 non touchés.
+
+## P8 — hors v1 (pilotage de flotte pour Astra)
+
+La v1 pilote un chat (agent / Lisa / pair `peer.chat`) + confirmations + lecture de runs. Elle ne pilote pas la flotte. Pour Astra il faudrait, dans cet ordre :
+
+1. **Mission** — un formulaire « objectif + plafond tours/coût » qui crée un run (`buddy goal` / `buddy run` / POST run), pas seulement un tour de chat. Aujourd'hui `GET /api/runs` est en lecture.
+2. **Lane** — une vue des files `ThreadDelegation` (`/batch`, `/swarm`, `/team`) : agent, statut, tour, coût, flux étiqueté. Rien de ça n'est exposé en HTTP.
+3. **Sentinelle** — présence stale, `utilization` (`CODEBUDDY_FLEET_MAX_CONCURRENCY`), autonomous tick, runaway, heartbeat. `/api/status.fleet` n'a que connexions WS + registre de listeners.
+4. **Assignation** — `route_peer` / `peer.dispatch` avec contraintes (coût, local-only, privacy lint). Le sélecteur v1 envoie `peer.chat` au pair choisi, sans plan de dispatch.
+5. **Trajectoire** — `buildTrajectory` est prêt ; l'UI v1 dump le JSON. Astra aurait besoin d'une timeline outils/permissions/coût.
+6. **Ack** — le pont `confirmation_required` v1 est la brique ; il faudrait le lier aux délégations de lane (un id par enfant, pas un prompt global).
+
+Sans ces six pièces, le téléphone reste un client de conversation, pas un poste de commandement.
 
 ## Bilan
 
-*(dix lignes, pas de verdict)*
+PWA vanilla sous `/__codebuddy__/mobile/` (Lisa lu, pas importé : React/MUI/Capacitor trop lourds ; jetons ambre/cyan + markdown + Web Speech copiés en esprit). Express 5 + `express.static` + copie d'assets au build + PNG 96/192/512 générés. Coquille publique, `/api` et `/ws` JWT. Client aligné sur `authenticated` / `stream_*` / `stop` / `ping` / `confirmation_*`. Confirmations fail-closed, une réponse par id. `/api/runs` + trajectory (`buildTrajectory` déjà dans la base) + statut fournisseur / fichier optionnel / flotte. Sélecteur Agent = chat outils ; Lisa = `defaultReply` ; Pairs = registre + `peer.describe`/`peer.chat` (liste vide s'il n'y a pas de listener). CSP `script-src 'self'` sans `unsafe-eval` ni `unsafe-inline`. `tests/server` 65/67 fichiers, 588/590 tests, 0 rouge ; privacy 40/40 ; `tsc` 0 ; eslint ciblé 0. Essai `server --port 3461` : HTML 200, manifeste, SW, icônes ; WS `qwen3.8-ctx32k:latest` stream_start puis timeout 120 s (27 B, 0 chunk, generate Ollama aussi muet) ; même client sur 3462 `qwen3:4b-instruct` → chunks `OK MOBILE` + `stream_end`. P8 hors v1 listé. Aucun push.
