@@ -157,6 +157,12 @@ export class GeminiNativeProvider implements Provider {
   /**
    * Gemini type mapping: lowercase OpenAI types to uppercase Gemini types
    */
+  /** JSON-Schema keywords rejected by Gemini's OpenAPI-subset parameter schema. */
+  private static readonly GEMINI_UNSUPPORTED_SCHEMA_KEYS: readonly string[] = [
+    'additionalProperties', 'patternProperties', 'unevaluatedProperties', '$schema', '$id', '$ref',
+    'definitions', '$defs', 'default', 'examples', 'title', 'const', 'contentMediaType',
+  ];
+
   private static readonly GEMINI_TYPE_MAP: Record<string, string> = {
     'string': 'STRING',
     'number': 'NUMBER',
@@ -741,6 +747,13 @@ export class GeminiNativeProvider implements Provider {
     }
 
     const result: Record<string, unknown> = { ...schema };
+
+    // Gemini's function_declarations accept an OpenAPI subset: JSON-Schema-only keywords make the
+    // whole request fail with 400 « Unknown name "additionalProperties" » (seen 2026-09-06 on the
+    // Telegram companion). Drop them here so every tool definition stays usable on this provider.
+    for (const key of GeminiNativeProvider.GEMINI_UNSUPPORTED_SCHEMA_KEYS) {
+      if (key in result) delete result[key];
+    }
 
     // Convert lowercase type to uppercase for Gemini
     if (typeof result.type === 'string') {
