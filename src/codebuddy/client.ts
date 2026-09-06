@@ -1206,20 +1206,35 @@ export class CodeBuddyClient {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {
+          if (!yieldedFromThisFallback) {
+            notifyProviderFallback({
+              fromProvider: primaryId,
+              fromModel: this.currentModel,
+              toProvider: fallback.provider,
+              toModel: fallback.model,
+              kind: classification.kind,
+              resetsAt: classification.resetsAt,
+            });
+            recordRuntimeFallbackSuccess(fallback);
+            recordProviderSuccess(fallback.provider);
+            this.didDeclaredFailover = true;
+          }
           yieldedFromThisFallback = true;
           yield chunk;
         }
-        notifyProviderFallback({
-          fromProvider: primaryId,
-          fromModel: this.currentModel,
-          toProvider: fallback.provider,
-          toModel: fallback.model,
-          kind: classification.kind,
-          resetsAt: classification.resetsAt,
-        });
-        recordRuntimeFallbackSuccess(fallback);
-        recordProviderSuccess(fallback.provider);
-        this.didDeclaredFailover = true;
+        if (!yieldedFromThisFallback) {
+          notifyProviderFallback({
+            fromProvider: primaryId,
+            fromModel: this.currentModel,
+            toProvider: fallback.provider,
+            toModel: fallback.model,
+            kind: classification.kind,
+            resetsAt: classification.resetsAt,
+          });
+          recordRuntimeFallbackSuccess(fallback);
+          recordProviderSuccess(fallback.provider);
+          this.didDeclaredFailover = true;
+        }
         return;
       } catch (fallbackError) {
         if (opts.signal?.aborted) {
