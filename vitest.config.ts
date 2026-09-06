@@ -120,7 +120,12 @@ export default defineConfig({
         statements: 70,
       },
     },
-    include: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
+    include: [
+      'tests/**/*.{test,spec}.{ts,tsx}',
+      'src/**/*.{test,spec}.{ts,tsx}',
+      // Workspace packages (packages/*) keep their tests next to their own source.
+      'packages/*/tests/**/*.{test,spec}.{ts,tsx}',
+    ],
     exclude: [
       'node_modules',
       'dist',

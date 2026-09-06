@@ -51,6 +51,8 @@ export interface LisaSelfieOptions {
    * When set, preferred over sensory alert chat for the photo.
    */
   deliverPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
+  /** Skip the on-disk cache and always generate (CLI exact-scene). */
+  skipCache?: boolean;
   /** Injectables for tests. */
   generate?: (prompt: string, aspect: string) => Promise<{ success: boolean; outputPath?: string | null; error?: string }>;
   sendPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
@@ -119,8 +121,9 @@ export async function selectCachedLisaSelfie(
   cacheDir: string,
   style: string,
   tier: LisaContentTier = 'safe',
-  options: { rotateAcrossStyles?: boolean } = {},
+  options: { rotateAcrossStyles?: boolean; exclude?: Iterable<string> } = {},
 ): Promise<string | undefined> {
+  const exclude = new Set(options.exclude ?? []);
   const candidates: Array<{ file: string; atimeMs: number }> = [];
   const tierDir = path.join(cacheDir, tier);
   let directories: string[];
@@ -169,7 +172,9 @@ export async function selectCachedLisaSelfie(
     if (!options.rotateAcrossStyles && candidates.length > 0) break;
   }
   candidates.sort((a, b) => a.atimeMs - b.atimeMs || a.file.localeCompare(b.file));
-  const selected = candidates[0]?.file;
+  const preferred = candidates.filter((entry) => !exclude.has(entry.file));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  const selected = pool[0]?.file;
   if (!selected) return undefined;
   try {
     const stat = await fs.stat(selected);
@@ -183,34 +188,45 @@ export async function selectCachedLisaSelfie(
 /** @deprecated use LISA_AVATAR_MOOD_SCENES — kept for call sites/tests. */
 const MOOD_SCENES: Record<LisaSelfieMood, string> = LISA_AVATAR_MOOD_SCENES;
 
+function isLisaSelfieOtherSubject(t: string): boolean {
+  if (/\b(?:photo|selfie|portrait|image|picture|pic|cliche)\s+(?:de|du|des|of)\s+(?!toi\b|you\b|lisa\b|moi\b)/.test(t)) {
+    return true;
+  }
+  if (/\bcette (?:photo|image|picture|pic)\b/.test(t)) return true;
+  if (/\bcomment (?:prendre|faire|capturer)\b/.test(t)) return true;
+  if (/\b(?:analyser|analyze|analysis)\b/.test(t)) return true;
+  if (/\bphotoshop\b/.test(t)) return true;
+  return false;
+}
+
 /** Detect spoken/text requests for Lisa to send a selfie/photo of herself. */
 export function isLisaSelfieRequest(text: string): boolean {
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
-  // Must be about her image of herself, not camera of the room.
-  const media = /\b(?:photo|selfie|portrait|image|picture|cliche)\b/.test(t);
-  // "selfie" alone implies a photo of herself; "photo" needs a self-referent.
-  const aboutSelf =
-    /\bselfie\b/.test(t) ||
-    (media &&
-      (/\b(?:toi|de toi|a toi|ta photo|ton selfie|ta tete|ton visage|toi meme|photo de lisa|you|your photo|your picture|picture of you|photo of you)\b/.test(
-        t,
-      ) ||
-        /\blisa\b/.test(t) ||
-        // In Lisa's own conversation, a bare direct request such as
-        // "montre-moi une image" naturally refers to her. Keep this narrow:
-        // an object after "image/photo" (for example "une image de chat") is
-        // left to the generic image tool instead.
-        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?\s*$/.test(t)));
-  const sendIntent =
-    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
-      t,
-    ) || /\b(?:selfie|photo de toi|photo a toi|ta photo)\b/.test(t);
+  if (isLisaSelfieOtherSubject(t)) return false;
   const negative =
-    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que j)\b/.test(
+    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que je|je te montre)\b/.test(
       t,
     );
-  return aboutSelf && sendIntent && !negative;
+  if (negative) return false;
+
+  const media = /\b(?:photo|selfie|portrait|image|picture|cliche|pic)\b/.test(t);
+  const aboutLisa =
+    /\b(?:de toi|a toi|toi meme|te voir|te montrer|montre toi|yourself|of you|your (?:photo|picture|pic|selfie)|ur (?:pic|photo|selfie)|ta photo|ton selfie|ta tete|ton visage|photo de lisa|selfie de (?:toi|lisa))\b/.test(t);
+  const shortAsk =
+    /^(?:lisa\s+)?(?:t as|tu as|t a|as tu|ya tu|y a t il|got(?: any)?|have you got|you got|you have)\s+(?:une |un |a |an )?(?:photo|selfie|portrait|image|picture|pic)\b/.test(t)
+    || /^(?:lisa\s+)?(?:selfie|ta photo)$/.test(t);
+  const showYourself = /\b(?:montre toi|te voir|show yourself)\b/.test(t);
+  const sendOrMake =
+    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|fais|fait|genere|prend|prends|capture)\b/.test(t);
+  const directAsk =
+    /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:un |une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture|pic|selfie)\b/.test(t)
+    || /\b(?:fais|fait|genere|prend|prends)\s+(?:moi\s+)?(?:un |une |a |an )?(?:selfie|photo|portrait)\b/.test(t);
+
+  if (showYourself || shortAsk) return true;
+  if (aboutLisa && (sendOrMake || media)) return true;
+  if (directAsk) return true;
+  return false;
 }
 
 /**
@@ -248,6 +264,28 @@ export function inferSelfieMood(text: string): LisaSelfieMood {
  * such as "en pyjama" reaches the image model instead of returning an
  * unrelated ready-made portrait.
  */
+const STYLE_HINTS: Array<{ style: LisaSelfieMood; re: RegExp }> = [
+  { style: 'wet-selfie', re: /\b(?:plage|beach|mer|ocean|océan|piscine|wet|mouill)\b/ },
+  { style: 'street-rain', re: /\b(?:pluie|rain|street|rue|manteau|city)\b/ },
+  { style: 'neon-skate', re: /\b(?:n[eé]on|skate|nuit|cyber)\b/ },
+  { style: 'studio', re: /\b(?:studio|beauty)\b/ },
+  { style: 'soft-editorial', re: /\b(?:pull|sweater|hoodie|blouse|chemise|editorial|pyjama|pajamas?)\b/ },
+  { style: 'tender', re: /\b(?:tendre|douce|tender)\b/ },
+  { style: 'playful', re: /\b(?:espi[eè]gle|playful|rigol)\b/ },
+  { style: 'bold', re: /\b(?:audacieus|bold|glamour)\b/ },
+  { style: 'calm', re: /\b(?:calme|calm)\b/ },
+];
+
+/** Map a FR/EN look request onto a cached presentation style, if any. */
+export function inferLisaSelfieStyle(text: string): LisaSelfieMood | undefined {
+  const t = normalizeVoiceInteractionText(text);
+  if (!t) return undefined;
+  for (const hint of STYLE_HINTS) {
+    if (hint.re.test(t)) return hint.style;
+  }
+  return undefined;
+}
+
 export function inferLisaSelfieScene(text: string): string | undefined {
   const normalized = normalizeVoiceInteractionText(text);
   const media = /\b(?:photo|selfie|portrait|image|picture)\b/.exec(normalized);
@@ -305,7 +343,7 @@ export function buildLisaSelfiePrompt(options: {
   userName?: string;
   contentTier?: LisaContentTier;
 }): string {
-  const forWhom = options.userName?.trim() || resolveUserName();
+  const forWhom = options.userName?.trim() || undefined;
   const avatarId = resolveAvatarId(options.avatarId);
   const profile = getAvatarProfile(avatarId);
   // Multi-style: style pack from video (studio / wet-selfie / street-rain / …) or mood alias.
@@ -393,8 +431,8 @@ export async function createAndMaybeSendLisaSelfie(
       });
 
     const aspect = options.aspectRatio ?? 'portrait';
-    const cacheDir = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim()
-      || path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
+    const { resolveSelfieCacheDir } = await import('./lisa-selfie-ingest.js');
+    const cacheDir = resolveSelfieCacheDir(env);
     if (options.contentTier === 'explicit' && contentTier !== 'explicit') {
       return {
         success: false,
@@ -405,10 +443,9 @@ export async function createAndMaybeSendLisaSelfie(
         error: 'explicit content tier requires the verified adult-content gate',
       };
     }
-    // A cache is suitable for a generic request. If the user asks for a
-    // particular outfit or location, generate that exact prompt instead of
-    // silently substituting an unrelated cached portrait.
-    const cachedImage = options.scene?.trim()
+    // Companion path serves the cache even when a look is named (plage, pull).
+    // CLI/tool can pass skipCache to force a fresh generation.
+    const cachedImage = options.skipCache
       ? undefined
       : await selectCachedLisaSelfie(cacheDir, style, contentTier, {
           rotateAcrossStyles: options.rotateCacheStyles === true,
@@ -431,6 +468,27 @@ export async function createAndMaybeSendLisaSelfie(
           "Désolée mon cœur, je n'ai pas pu me photographier là — le générateur d'images n'a pas répondu. On réessaie dans un moment ?",
         error: gen.error ?? 'image generation failed',
       };
+    }
+
+    if (!cachedImage && gen.outputPath) {
+      try {
+        const { maybeIngestGeneratedLisaSelfie } = await import('./lisa-selfie-ingest.js');
+        await maybeIngestGeneratedLisaSelfie({
+          sourcePath: gen.outputPath,
+          prompt,
+          contentTier,
+          style,
+          model: 'lisa-selfie',
+          provider: 'lisa-selfie',
+          env,
+          rootDir,
+          ...(options.now ? { now: options.now } : {}),
+        });
+      } catch (err) {
+        logger.warn(
+          `[lisa-selfie] cache ingest skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     // Archive under lora/lisa/selfies for continuity
@@ -538,14 +596,15 @@ export async function maybeHandleLisaSelfieRequest(
   options: Omit<LisaSelfieOptions, 'mood' | 'scene'> = {},
 ): Promise<LisaSelfieResult | null> {
   if (!isLisaSelfieRequest(heard)) return null;
-  const mood = inferSelfieMood(heard);
+  const mood = inferLisaSelfieStyle(heard) ?? inferSelfieMood(heard);
   const scene = inferLisaSelfieScene(heard);
   const contentTier = inferLisaContentTier(heard);
   return createAndMaybeSendLisaSelfie({
     ...options,
     mood,
     contentTier,
+    style: mood,
     ...(scene ? { scene } : {}),
-    rotateCacheStyles: !scene && mood === 'portrait',
+    rotateCacheStyles: !inferLisaSelfieStyle(heard) && mood === 'portrait',
   });
 }

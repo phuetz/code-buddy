@@ -25,6 +25,7 @@ tmp_*/
 _test-*/
 _gk1/
 _gk17/
+_qa/core/home/
 _qa/sandbox1/
 _qa/promptbudget1/
 _qa/tautfix1/home/
@@ -328,4 +329,6 @@ _qa/tg/
 _qa/grok/
 _qa/agy/
 _qa/secu/
+_qa/selfie/
+_qa/selfie2/
 src/server/mobile/assets/icon-*.png

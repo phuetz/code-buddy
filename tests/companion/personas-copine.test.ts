@@ -75,6 +75,19 @@ describe('C8 copine profile is diversified data, not intimate code', () => {
     }
   });
 
+  it('selfie caption pools are varied and not intimate', () => {
+    expect(COPINE_PERSONA.selfieCaptions.length).toBeGreaterThanOrEqual(7);
+    expect(new Set(COPINE_PERSONA.selfieCaptions).size).toBe(COPINE_PERSONA.selfieCaptions.length);
+    for (const line of [
+      ...COPINE_PERSONA.selfieCaptions,
+      ...COPINE_PERSONA.selfieRefusals,
+      ...COPINE_PERSONA.selfieEmpty,
+    ]) {
+      expect(line).not.toMatch(INTIMATE);
+      expect(line).not.toMatch(JARGON);
+    }
+  });
+
   it('hard-day / success / good-night / away pools are varied and clean', () => {
     for (const [name, pool] of [
       ['hardDay', COPINE_PERSONA.hardDay],

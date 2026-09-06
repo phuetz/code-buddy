@@ -93,6 +93,7 @@ textarea, input {
 .bubble.system { align-self: center; color: var(--muted); font-size: 13px; background: transparent; }
 .bubble pre { overflow: auto; font-size: 12px; margin-top: 6px; }
 .bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+.bubble img.selfie { display: block; max-width: 100%; border-radius: 12px; margin-top: 8px; }
 
 .composer {
   display: flex;

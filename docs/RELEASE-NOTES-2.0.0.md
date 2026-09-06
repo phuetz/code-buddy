@@ -64,6 +64,7 @@ environment variable unset, behavior is the same as 1.8.0.
   firewall, visible cases, and — for tools — **held-out** cases hidden from the proposer.
 - **Skill curation and import**: pin/archive/restore, coverage-gated consolidation, and import of
   external skill libraries through the same firewall, with dangerous skills quarantined.
+  *Limite connue* : la déobfuscation (homoglyphes, césures, zero-width) n'est appliquée qu'à la classe `prompt-injection` (`src/security/skill-scanner.ts:337-338`) ; les autres classes (destructif, exfiltration, réseau, identifiants) restent comparées au texte brut, décision de politique en attente.
 - **Self-benchmark**: capability scores per model over time, with moving-average regression
   detection feeding the council scoreboard.
 - The capability benchmark used as fitness grew from 3 substring checks to 15 scenarios, each

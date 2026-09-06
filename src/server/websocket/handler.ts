@@ -612,7 +612,32 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
 });
 
-async function produceCompanionReply(message: string): Promise<string> {
+export async function produceCompanionReply(
+  message: string,
+): Promise<string | { text: string; image?: { mimeType: string; data: string } }> {
+  try {
+    const { isCompanionSurfaceEnabled } = await import('../../channels/companion-channel-profile.js');
+    if (process.env.CODEBUDDY_LISA_SELFIE !== 'false' && isCompanionSurfaceEnabled()) {
+      const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
+      const served = await tryServeCompanionSelfie(message, {
+        surface: 'mobile',
+        includeImageBytes: true,
+      });
+      if (served) {
+        if (served.imageBase64 && served.mimeType) {
+          return {
+            text: served.caption,
+            image: { mimeType: served.mimeType, data: served.imageBase64 },
+          };
+        }
+        return served.caption;
+      }
+    }
+  } catch (err) {
+    logger.warn('[ws] companion selfie router skipped', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
   const { defaultReply } = await import('../../sensory/voice-loop.js');
   const text = await defaultReply(message, []);
   return typeof text === 'string' ? text : '';
@@ -635,7 +660,10 @@ async function runPlainChatTurn(
   ws: WebSocket,
   state: ConnectionState,
   turn: ConnectionTurn,
-  options: { stream: boolean; produce: () => Promise<string> },
+  options: {
+    stream: boolean;
+    produce: () => Promise<string | { text: string; image?: { mimeType: string; data: string } }>;
+  },
 ): Promise<void> {
   const messageId = `msg_${Date.now()}`;
   if (options.stream) {
@@ -646,14 +674,16 @@ async function runPlainChatTurn(
       timestamp: new Date().toISOString(),
     });
   }
-  const content = await options.produce();
+  const produced = await options.produce();
+  const content = typeof produced === 'string' ? produced : produced.text;
+  const image = typeof produced === 'string' ? undefined : produced.image;
   if (turn.cancelled) return;
   if (options.stream) {
-    if (content) {
+    if (content || image) {
       send(ws, {
         type: 'stream_chunk',
         id: messageId,
-        payload: { delta: content },
+        payload: { delta: content, ...(image ? { image } : {}) },
         timestamp: new Date().toISOString(),
       });
     }
@@ -665,7 +695,7 @@ async function runPlainChatTurn(
   } else {
     send(ws, {
       type: 'chat_response',
-      payload: { content, finishReason: 'stop' },
+      payload: { content, finishReason: 'stop', ...(image ? { image } : {}) },
       timestamp: new Date().toISOString(),
     });
   }
