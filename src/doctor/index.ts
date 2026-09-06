@@ -21,7 +21,7 @@ import {
   detectNativeSandboxCapabilities,
   formatDoctorLine,
 } from '../security/native-sandbox.js';
-import { loadBetterSqlite3, getSqliteInstallGuidance, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
+import { loadBetterSqlite3, getSqliteInstallGuidance } from '../database/optional-sqlite.js';
 import type { UserSettings } from '../utils/settings-manager.js';
 import {
   selectOllamaModel,

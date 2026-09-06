@@ -25,7 +25,7 @@ export function isGlobalInstallation(
 
   const globalPatterns = [
     /\/lib\/node_modules\//i,
-    /\/\.nvm\/versions\/node\/[^\/]+\/lib\/node_modules\//i,
+    /\/\.nvm\/versions\/node\/[^/]+\/lib\/node_modules\//i,
     /\/\.npm-global\//i,
     /\/npm-global\//i,
     /\/usr\/(?:local\/)?lib\/node_modules\//i,

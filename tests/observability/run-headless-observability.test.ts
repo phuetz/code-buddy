@@ -2,11 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Command } from 'commander';
 import { RunStore } from '../../src/observability/run-store.js';
-import { listRuns, showRunTrajectory } from '../../src/observability/run-viewer.js';
-import { registerRunCommands } from '../../src/commands/run-cli/index.js';
-import { auditLogger } from '../../src/security/audit-logger.js';
+import { listRuns } from '../../src/observability/run-viewer.js';
 import { loadTrajectory } from '../../src/observability/run-trajectory-load.js';
 import { renderTrajectory } from '../../src/observability/run-trajectory.js';
 
