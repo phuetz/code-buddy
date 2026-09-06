@@ -31,6 +31,7 @@ const SALIENCE = {
   cost_updated: 10,
   activity: 80,
   context_pre_compact: 60,
+  provider_fallback: 180,
 } as const;
 
 function clampSalience(n: number): number {
@@ -153,8 +154,23 @@ export function wireDomainEventBridge(): () => void {
     }),
   );
 
+  ids.push(
+    bus.on('provider:fallback', (evt: BaseEvent) => {
+      const e = evt as BaseEvent & {
+        fromProvider?: string;
+        toProvider?: string;
+        reason?: string;
+      };
+      reemit(evt, 'provider', 'provider_fallback', SALIENCE.provider_fallback, {
+        fromProvider: e.fromProvider,
+        toProvider: e.toProvider,
+        reason: e.reason,
+      });
+    }),
+  );
+
   logger.info(
-    `[domain-bridge] wired — fleet:activity, agent:loop_detected, cost:*, context:pre_compact → sensory:perception`,
+    `[domain-bridge] wired — fleet:activity, agent:loop_detected, cost:*, context:pre_compact, provider:fallback → sensory:perception`,
   );
 
   return () => {

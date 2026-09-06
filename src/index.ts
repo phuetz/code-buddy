@@ -3282,6 +3282,14 @@ program
       "./providers/codex-oauth.js"
     );
 
+    let providerHealth: string[] = [];
+    try {
+      const { formatProviderHealthLines } = await import("./providers/provider-health.js");
+      providerHealth = formatProviderHealthLines();
+    } catch {
+      /* health file optional */
+    }
+
     let local: { provider: string; model?: string; baseURL?: string } | null = null;
     try {
       const { getSettingsManager } = await import("./utils/settings-manager.js");
@@ -3300,7 +3308,7 @@ program
     }
 
     if (!hasCodexCredentials()) {
-      for (const line of formatWhoamiStatus({ chatgpt: null, local })) {
+      for (const line of formatWhoamiStatus({ chatgpt: null, local, providerHealth })) {
         cli.stdout(line);
       }
       return;
@@ -3332,6 +3340,7 @@ program
           ...(catalog ? {} : { fallback: CHATGPT_OAUTH_SAFE_FALLBACK_MODEL }),
         },
         local,
+        providerHealth,
       })) {
         cli.stdout(line);
       }

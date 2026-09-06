@@ -86,6 +86,24 @@ describe('wireDomainEventBridge — re-emission (a)', () => {
     expect(seen[0]!.metadata).toMatchObject({ modality: 'agent', kind: 'context_pre_compact' });
     expect(seen[0]!.metadata!.payload).toMatchObject({ reason: 'auto', tokensBefore: 50000, messagesBefore: 42 });
   });
+
+  it('provider:fallback → provider/provider_fallback percept', () => {
+    const teardown = wireDomainEventBridge();
+    const seen = probePercepts();
+    getGlobalEventBus().emit('provider:fallback', {
+      fromProvider: 'chatgpt',
+      toProvider: 'ollama',
+      reason: 'quota_exhausted',
+    });
+    teardown();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.metadata).toMatchObject({ modality: 'provider', kind: 'provider_fallback' });
+    expect(seen[0]!.metadata!.payload).toMatchObject({
+      fromProvider: 'chatgpt',
+      toProvider: 'ollama',
+      reason: 'quota_exhausted',
+    });
+  });
 });
 
 describe('anti-loop guarantee (b)', () => {

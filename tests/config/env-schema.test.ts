@@ -32,6 +32,8 @@ describe('ENV_SCHEMA', () => {
     expect(names).toContain('GROK_FORCE_TOOLS');
     expect(names).toContain('GROK_CONVERT_TOOL_MESSAGES');
     expect(names).toContain('CODEBUDDY_FALLBACK_PROVIDERS');
+    expect(names).toContain('CODEBUDDY_PROVIDER_FALLBACK');
+    expect(names).toContain('CODEBUDDY_FALLBACK_CHAIN');
     expect(names).toContain('CODEBUDDY_MEMORY_ENFORCE_LIMITS');
     expect(names).toContain('CODEBUDDY_MEMORY_PROJECT_CHAR_LIMIT');
     expect(names).toContain('CODEBUDDY_MEMORY_USER_CHAR_LIMIT');

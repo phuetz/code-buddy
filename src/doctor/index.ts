@@ -28,6 +28,8 @@ import {
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
+import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
+import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
 
 export interface FixResult {
   success: boolean;
@@ -825,6 +827,32 @@ async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
 // Public API
 // ============================================================================
 
+function checkProviderFailoverHealth(): DoctorCheck {
+  if (!isDeclaredProviderFallbackEnabled()) {
+    return {
+      name: 'Provider failover',
+      status: 'ok',
+      message: 'CODEBUDDY_PROVIDER_FALLBACK off (no automatic switch)',
+      optional: true,
+    };
+  }
+  const snapshot = readProviderHealthSnapshot();
+  const down = Object.keys(snapshot.providers);
+  const lines = formatProviderHealthLines();
+  if (down.length === 0) {
+    return {
+      name: 'Provider failover',
+      status: 'ok',
+      message: 'enabled; no provider currently benched',
+    };
+  }
+  return {
+    name: 'Provider failover',
+    status: 'warn',
+    message: lines.slice(1).join('; ') || `${down.length} provider(s) benched`,
+  };
+}
+
 export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
   const dir = cwd ?? process.cwd();
   const { checkLlmKeysLive } = await import('./llm-key-check.js');
@@ -849,6 +877,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
     checkDiskSpace(dir),
     checkGit(dir),
     checkNativeSandbox(),
+    checkProviderFailoverHealth(),
   ];
 }
 

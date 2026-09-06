@@ -291,6 +291,26 @@ export const ENV_SCHEMA: EnvVarDef[] = [
     category: 'core',
   },
   {
+    name: 'CODEBUDDY_PROVIDER_FALLBACK',
+    type: 'boolean',
+    default: 'false',
+    description: 'Opt-in automatic LLM provider failover on quota/overload/outage (default off = byte-identical)',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_FALLBACK_CHAIN',
+    type: 'string',
+    description: 'Declared failover chain provider[:model] separated by >, e.g. chatgpt-oauth>xai>gemini>ollama:qwen3.8-ctx32k:latest',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_LOCAL_ONLY',
+    type: 'boolean',
+    default: 'false',
+    description: 'Restrict declared provider failover to local runtimes (Ollama / LM Studio / Lemonade)',
+    category: 'core',
+  },
+  {
     name: 'CODEBUDDY_MEMORY_ENFORCE_LIMITS',
     type: 'boolean',
     default: 'true',

@@ -18,4 +18,13 @@ describe('whoami status', () => {
     const lines = formatWhoamiStatus({ chatgpt: null, local: null });
     expect(lines).toEqual(['ChatGPT: not connected (run `buddy login` to authenticate)']);
   });
+
+  it('appends provider health lines when supplied', () => {
+    const lines = formatWhoamiStatus({
+      chatgpt: null,
+      local: null,
+      providerHealth: ['Provider health:', '  chatgpt: quota_exhausted (reset dans 19 h)'],
+    });
+    expect(lines.join('\n')).toContain('chatgpt: quota_exhausted');
+  });
 });
