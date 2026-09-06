@@ -106,7 +106,7 @@ describe('buddy sensory status', () => {
       flags: { SENSORY: boolean };
     };
     expect(json.serverReachable).toBe(false);
-    expect(json.serverMessage).toBe('serveur non joignable');
+    expect(json.serverMessage).toBe('serveur non joignable sur http://127.0.0.1:3000');
     expect(json.heartbeat.source).toBe('aucun');
     expect(json.flags.SENSORY).toBe(false);
   });
@@ -213,7 +213,7 @@ describe('buddy sensory status', () => {
 
   it('unknown action: usage + exitCode 1', async () => {
     const { out, exitCode } = await run(['sensory', 'start']);
-    expect(out).toContain('Usage: buddy sensory status [--json]');
+    expect(out).toContain('Usage: buddy sensory status [--server-url <url>] [--json]');
     expect(exitCode).toBe(1);
   });
 
