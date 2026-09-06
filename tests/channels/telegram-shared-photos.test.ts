@@ -53,6 +53,40 @@ describe('downloading a Telegram photo', () => {
     expect(loaded[0]!.bytes!.equals(PNG_1X1)).toBe(true);
   });
 
+  it('does not follow a redirect to another origin when downloading a photo', async () => {
+    const { createServer } = await import('node:http');
+    const stolen: string[] = [];
+    const stolenServer = createServer((req, res) => {
+      stolen.push(String(req.url));
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<!doctype html><html lang="en"><title>x</title></html>');
+    });
+    await new Promise<void>((resolve) => stolenServer.listen(0, '127.0.0.1', resolve));
+    const stolenAddr = stolenServer.address();
+    const stolenPort = typeof stolenAddr === 'object' && stolenAddr ? stolenAddr.port : 0;
+    const startServer = createServer((_req, res) => {
+      res.writeHead(302, { Location: `http://127.0.0.1:${stolenPort}/pwn` });
+      res.end();
+    });
+    await new Promise<void>((resolve) => startServer.listen(0, '127.0.0.1', resolve));
+    const startAddr = startServer.address();
+    const startPort = typeof startAddr === 'object' && startAddr ? startAddr.port : 0;
+    try {
+      const loaded = await loadChannelPhotos([{ type: 'image', url: 'x' }], {
+        resolveUrl: async () => `http://127.0.0.1:${startPort}/start.jpg`,
+      });
+      expect(loaded).toHaveLength(0);
+      expect(stolen).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        startServer.close((err) => (err ? reject(err) : resolve())),
+      );
+      await new Promise<void>((resolve, reject) =>
+        stolenServer.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  });
+
   it('refuses a non-https, non-loopback URL', async () => {
     const fetchImpl = vi.fn(async () => okResponse(PNG_1X1));
     const loaded = await loadChannelPhotos([{ type: 'image', url: 'x' }], {

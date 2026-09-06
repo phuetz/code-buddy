@@ -114,6 +114,7 @@ export async function loadChannelPhotos(
       if (!isDownloadableUrl(resolved)) throw new Error('untrusted photo URL');
       const response = await (options.fetchImpl ?? fetch)(resolved, {
         headers: { Accept: 'image/*' },
+        redirect: 'manual',
         ...(options.signal ? { signal: options.signal } : {}),
       });
       const bytes = await readBounded(response, maxBytes);
