@@ -699,7 +699,8 @@ export class OpenAICompatProvider implements Provider {
     signal?: AbortSignal,
   ): Promise<unknown> {
     const openAiPayload = payload as unknown as OpenAiChatPayload;
-    if ((await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
+    const hasParts = (openAiPayload.messages as Array<{ content?: unknown }>)?.some((m) => Array.isArray(m?.content));
+    if (!hasParts && (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
       return this.createOllamaNativeCompletion(openAiPayload, signal);
     }
     return signal
