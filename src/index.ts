@@ -3352,8 +3352,8 @@ program
     try {
       const { formatProviderHealthLines } = await import("./providers/provider-health.js");
       providerHealth = formatProviderHealthLines();
-    } catch {
-      /* health file optional */
+    } catch (error) {
+      logger.debug("Health file optional or unreadable", { error });
     }
 
     let local: { provider: string; model?: string; baseURL?: string } | null = null;
