@@ -277,13 +277,15 @@ textarea, input {
   left: 0;
   right: 0;
   bottom: 58px;
-  max-height: 46vh;
+  height: 42vh;
+  max-height: 360px;
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   z-index: 20;
   padding: 8px 10px 10px;
+  overflow: hidden;
 }
 .emoji-picker.hidden { display: none !important; }
 .emoji-cats {
@@ -308,6 +310,7 @@ textarea, input {
   gap: 2px;
   overflow: auto;
   flex: 1;
+  min-height: 0;
 }
 .emoji-cell {
   min-width: var(--touch);
@@ -355,7 +358,13 @@ textarea, input {
   padding: 12px;
 }
 .lightbox.hidden { display: none !important; }
-.lightbox img { max-width: 96vw; max-height: 92vh; border-radius: 8px; }
+.lightbox img {
+  max-width: 96vw;
+  max-height: 92vh;
+  min-width: 48vw;
+  border-radius: 8px;
+  background: var(--panel);
+}
 
 .reaction-bar {
   position: fixed;
