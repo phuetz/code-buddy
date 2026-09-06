@@ -1516,6 +1516,21 @@ function comfyBaseUrls(config: ProviderConfig, envSource: NodeJS.ProcessEnv): st
   return [...new Set([config.baseUrl.replace(/\/+$/, ''), ...comfyFallbackUrls(envSource)])];
 }
 
+const HEALTHY_COMFY_TTL_MS = 5 * 60 * 1000;
+let healthyComfyEndpoint: { url: string; expiresAt: number } | null = null;
+
+function getPrioritizedComfyUrls(cfg: ProviderConfig, envSrc: NodeJS.ProcessEnv): string[] {
+  const urls = comfyBaseUrls(cfg, envSrc);
+  if (healthyComfyEndpoint && Date.now() < healthyComfyEndpoint.expiresAt && urls.includes(healthyComfyEndpoint.url)) {
+    return [healthyComfyEndpoint.url, ...urls.filter((u) => u !== healthyComfyEndpoint!.url)];
+  }
+  return urls;
+}
+
+export function resetHealthyComfyEndpointForTests(): void {
+  healthyComfyEndpoint = null;
+}
+
 async function generateComfyUIImageWithFallback(
   prompt: string,
   aspect: ImageAspectRatio,
@@ -1524,12 +1539,13 @@ async function generateComfyUIImageWithFallback(
   generatedAt: string,
 ): Promise<ImageGenerateResult> {
   const envSource = runtime.env ?? process.env;
-  const endpoints = comfyBaseUrls(config, envSource);
+  const declared = comfyBaseUrls(config, envSource);
+  const endpoints = getPrioritizedComfyUrls(config, envSource);
   const failures: string[] = [];
 
   for (const [index, baseUrl] of endpoints.entries()) {
     try {
-      const isFallback = index > 0;
+      const isFallback = baseUrl !== declared[0];
       const fallbackModel = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_MODEL')?.trim();
       const fallbackLora = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_LORA')?.trim();
       const endpointConfig = isFallback && fallbackModel
@@ -1544,13 +1560,15 @@ async function generateComfyUIImageWithFallback(
           },
         }
         : runtime;
-      return await generateComfyUIImage(
+      const generated = await generateComfyUIImage(
         prompt,
         aspect,
         endpointConfig,
         endpointRuntime,
         generatedAt,
       );
+      healthyComfyEndpoint = { url: baseUrl, expiresAt: Date.now() + HEALTHY_COMFY_TTL_MS };
+      return generated;
     } catch (error) {
       // A per-endpoint fetch timeout also surfaces as AbortError. Only a caller
       // cancellation should stop the chain; endpoint timeouts must fail over.
