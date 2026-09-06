@@ -38,26 +38,67 @@ export function isFailoverLocalOnly(env: EnvLike = process.env): boolean {
 export interface ParsedChainSpec {
   provider: string;
   model?: string;
+  /** Per-target OpenAI-compat base URL (`fournisseur:modele@http://host:port`). */
+  baseURL?: string;
   rawSpec: string;
 }
 
-/** `chatgpt-oauth>xai>gemini>ollama:qwen3.8-ctx32k:latest` */
+/**
+ * Split `provider:model@http://host:port` at the last `@http(s)://`.
+ * Model tags keep their colons (`qwen3.8-ctx32k:latest`).
+ */
+function splitHostOverride(part: string): { rest: string; baseURL?: string } {
+  const match = part.match(/^(.*)@(https?:\/\/\S+)$/i);
+  if (!match?.[1] || !match[2]) return { rest: part };
+  return { rest: match[1].trim(), baseURL: match[2].trim() };
+}
+
+function normalizeChainBaseURL(raw: string, providerId: string): string {
+  let url = raw.trim();
+  if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
+  url = url.replace(/\/+$/, '');
+  const v1Local =
+    providerId === 'ollama' ||
+    providerId === 'lmstudio' ||
+    providerId === 'vllm' ||
+    providerId === 'omniroute';
+  if (v1Local && !/\/v1$/i.test(url)) return `${url}/v1`;
+  return url;
+}
+
+/** `chatgpt-oauth>xai>gemini>ollama:qwen3.8-ctx32k:latest@http://127.0.0.1:11435` */
 export function parseFallbackChain(raw: string | undefined): ParsedChainSpec[] {
   if (!raw || !raw.trim()) return [];
   const parts = raw.split(/>|,/).map((part) => part.trim()).filter(Boolean);
   const specs: ParsedChainSpec[] = [];
   for (const part of parts) {
-    const colon = part.indexOf(':');
+    const split = splitHostOverride(part);
+    const rest = split.rest;
+    const colon = rest.indexOf(':');
     if (colon === -1) {
-      specs.push({ provider: part, rawSpec: part });
+      specs.push({
+        provider: rest,
+        rawSpec: part,
+        ...(split.baseURL ? { baseURL: split.baseURL } : {}),
+      });
       continue;
     }
-    const provider = part.slice(0, colon).trim();
-    const model = part.slice(colon + 1).trim();
+    const provider = rest.slice(0, colon).trim();
+    const model = rest.slice(colon + 1).trim();
     if (!provider) continue;
-    specs.push({ provider, model: model || undefined, rawSpec: part });
+    specs.push({
+      provider,
+      model: model || undefined,
+      rawSpec: part,
+      ...(split.baseURL ? { baseURL: split.baseURL } : {}),
+    });
   }
   return specs;
+}
+
+/** Skip the local-runtime `process.exit(1)` so `chat()` can walk the backup chain. */
+export function shouldBypassUnreachableLocalPreflight(env: EnvLike = process.env): boolean {
+  return isDeclaredProviderFallbackEnabled(env);
 }
 
 export function isLocalFailoverCandidate(fallback: RuntimeFallbackProvider): boolean {
@@ -83,7 +124,7 @@ export function resolveDeclaredFallbackProviders(
   const seen = new Set<string>();
   const resolved: RuntimeFallbackProvider[] = [];
 
-  const specs = chain.length > 0
+  const specs: ParsedChainSpec[] = chain.length > 0
     ? chain
     : resolveRuntimeFallbackProviders({ env, hasChatGptOAuth: hasOAuth, active: options.active })
       .map((item) => ({ provider: item.provider, model: item.model, rawSpec: item.rawSpec }));
@@ -98,12 +139,22 @@ export function resolveDeclaredFallbackProviders(
     if (!provider) continue;
     if (!provider.apiKey) continue;
     const model = spec.model || provider.defaultModel;
-    const baseURL = provider.baseURL.replace(/\/+$/, '');
+    const baseURL = spec.baseURL
+      ? normalizeChainBaseURL(spec.baseURL, provider.provider)
+      : provider.baseURL.replace(/\/+$/, '');
     if (activeBaseURL === baseURL && (activeModel === model || !spec.model)) continue;
-    if (activeProvider && canonicalId(provider.provider) === activeProvider && !spec.model) continue;
+    if (
+      activeProvider &&
+      canonicalId(provider.provider) === activeProvider &&
+      !spec.model &&
+      !spec.baseURL
+    ) {
+      continue;
+    }
 
     const candidate: RuntimeFallbackProvider = {
       ...provider,
+      baseURL,
       model,
       rawSpec: spec.rawSpec,
       fallbackSource: 'environment',
