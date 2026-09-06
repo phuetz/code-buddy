@@ -1187,6 +1187,13 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
+      try {
+        const { observeInboundForAwayPause } = await import('../../companion/away-mode.js');
+        observeInboundForAwayPause(channel.type, message.content);
+      } catch {
+        /* travel-mode pause is optional and must never block inbound chat */
+      }
+
       const sessionKey = message.sessionKey || 'default-global';
 
       // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
@@ -1976,6 +1983,18 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         const guarded = guardRelationshipReply(response);
         const unguardedResponse = response;
         response = guarded.response;
+        try {
+          const { applyLimitsContract } = await import('../../companion/reply-augment.js');
+          response = applyLimitsContract(response, { heard: message.content }).text;
+        } catch {
+          /* limits contract is optional */
+        }
+        try {
+          const { rememberSaid } = await import('../../companion/recent-said.js');
+          rememberSaid(response, 'telegram');
+        } catch {
+          /* recent-said is optional */
+        }
         if (guarded.intervened) {
           if (!agent.replaceLastAssistantResponse(unguardedResponse, response)) {
             // Never retain a response that the delivery gate rejected. A cold

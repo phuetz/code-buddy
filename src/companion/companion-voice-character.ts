@@ -8,6 +8,7 @@
  * @module companion/companion-voice-character
  */
 
+import { resolveCompanionPersona } from './personas/index.js';
 import {
   getPersonalitySummary,
   loadRelationshipState,
@@ -91,6 +92,10 @@ export function buildProgressiveIntimacyGuidance(
   try {
     const p = personalityOf(state);
     const tier = rapportTier(p.sessions);
+    const copine = resolveCompanionPersona();
+    if (copine) {
+      return `<companion_intimacy>\n${copine.intimacyByTier[tier]}\n</companion_intimacy>`;
+    }
     const lines = [INTIMACY_BY_TIER[tier], getPersonalitySummary(state)];
     return `<companion_intimacy>\n${lines.filter(Boolean).join('\n')}\n</companion_intimacy>`;
   } catch {
@@ -140,7 +145,8 @@ export function buildCompanionVoiceCharacterBlock(options?: {
     return '';
   }
 
-  const parts = [LISA_XAI_VOICE_SPINE];
+  const copine = resolveCompanionPersona();
+  const parts = [copine?.voiceSpine ?? LISA_XAI_VOICE_SPINE];
   if (options?.includeIntimacy !== false) {
     try {
       const state =
@@ -158,7 +164,7 @@ export function buildCompanionVoiceCharacterBlock(options?: {
       ? options.turnIndex
       : Number(process.env.CODEBUDDY_VOICE_TURN_INDEX ?? '0');
   if (options?.includeFewShot !== false && shouldInjectLisaFewShot(turnIndex)) {
-    parts.push(LISA_XAI_FEW_SHOT_EXEMPLARS);
+    parts.push(copine?.fewShots ?? LISA_XAI_FEW_SHOT_EXEMPLARS);
   }
   return parts.join('\n\n');
 }

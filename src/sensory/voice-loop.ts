@@ -82,6 +82,7 @@ export type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
+  applyLimitsContract,
   avoidOpenersGuidance,
   detectEmotion,
   emotionalContinuityGuidance,
@@ -89,6 +90,7 @@ import {
   expressiveTextGuidance,
   immediateEmotionAcknowledgement,
   IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS,
+  limitsContractGuidance,
   openerKey,
   pushOpener,
 } from '../companion/reply-augment.js';
@@ -1725,13 +1727,17 @@ export async function buildSpokenPromptAugmentation(
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
     emotionGuidance(emotion),
+    limitsContractGuidance(env),
     isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
     buildVoiceInterruptionGuidance(heard, options.interruption),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
       : '',
-    avoidOpenersGuidance(recentReplyOpeners),
+    avoidOpenersGuidance([
+      ...recentReplyOpeners,
+      ...(await import('../companion/recent-said.js').then((m) => m.recentOpeners()).catch(() => [] as string[])),
+    ]),
   ]
     .filter(Boolean)
     .join('\n');
@@ -4003,6 +4009,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             // that merge several spoken segments into one utterance.
             noteSpokenText(result.spoken);
             recentReplyOpeners = pushOpener(recentReplyOpeners, result.spoken);
+            void import('../companion/recent-said.js')
+              .then((m) => m.rememberSaid(result.spoken, 'voice'))
+              .catch(() => undefined);
             publishAssistantTurn(result.spoken);
             logger.info(`[voice] spoke (streamed) chars=${result.spoken.length}`);
             logger.info(
@@ -4054,7 +4063,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // if nothing meaningful survives. `reply` is what we synth, log, and hand to onSpoke.
       const preparedReply = prepareSpeech(rawReply);
       const relationshipGuard = guardRelationshipReply(preparedReply ?? '');
-      let reply = relationshipGuard.response;
+      let reply = applyLimitsContract(relationshipGuard.response, { heard }).text;
       let emptyReplyRecovery = false;
       if (reply) firstSafeReleaseMs ??= Date.now() - startedAt;
       if (relationshipGuard.intervened) {
@@ -4086,6 +4095,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       }
       if (!emptyReplyRecovery) reply = rewriteRepeatedVoiceOpener(reply);
       recentReplyOpeners = pushOpener(recentReplyOpeners, reply);
+      void import('../companion/recent-said.js')
+        .then((m) => m.rememberSaid(reply, 'voice'))
+        .catch(() => undefined);
       // The textual answer is now committed even if the local audio device fails;
       // publish it to the shared channel so the conversation never disappears.
       publishAssistantTurn(reply);

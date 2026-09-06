@@ -19,6 +19,7 @@ import {
   BUDDY_COMPANION_SYSTEM_PROMPT,
   LISA_COMPANION_SYSTEM_PROMPT,
 } from '../identity/companion-identity.js';
+import { interpolatePersonaName, resolveCompanionPersona } from '../companion/personas/index.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { readJsonAtomic, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
@@ -1101,7 +1102,9 @@ function activePersonaVoice(
   /** Active persona id (for voice character injection). */
   personaId?: string;
 } {
-  if (!p) return {};
+  if (!p) {
+    return overlayCompanionSpokenPrompt({});
+  }
   const base = {
     ...(p.voice ? { voice: p.voice } : {}),
     ...(p.robotName ? { robotName: p.robotName } : {}),
@@ -1123,19 +1126,29 @@ function activePersonaVoice(
       if (borrow) {
         const lisa = lookup('lisa');
         if (lisa?.spokenPrompt) {
-          return {
+          return overlayCompanionSpokenPrompt({
             ...base,
             spokenPrompt: lisa.spokenPrompt,
             ...(base.greeting ? {} : lisa.greeting ? { greeting: lisa.greeting } : {}),
             ...(base.robotName ? {} : { robotName: lisa.robotName ?? 'Lisa' }),
-          };
+          });
         }
       }
     } catch {
       /* never break voice consumers */
     }
   }
-  return base;
+  return overlayCompanionSpokenPrompt(base);
+}
+
+function overlayCompanionSpokenPrompt<T extends { spokenPrompt?: string }>(voice: T): T {
+  try {
+    const persona = resolveCompanionPersona();
+    if (!persona) return voice;
+    return { ...voice, spokenPrompt: interpolatePersonaName(persona.spokenPrompt) };
+  } catch {
+    return voice;
+  }
 }
 
 /** The active persona's voice/robot layer (voice `.onnx`, name, spoken character, greeting).
@@ -1152,7 +1165,7 @@ export function getActivePersonaVoice(): {
     const manager = getPersonaManager();
     return activePersonaVoice(manager.getActivePersona(), (id) => manager.getPersona(id));
   } catch {
-    return {};
+    return overlayCompanionSpokenPrompt({});
   }
 }
 

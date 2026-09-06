@@ -16,6 +16,7 @@
  *
  * @module companion/reply-augment
  */
+import { isCopinePersona, resolveCompanionPersona } from './personas/index.js';
 import type { RelationalSignal } from './relationship-state.js';
 import { crisisGuidanceFor } from './crisis-safety.js';
 
@@ -257,6 +258,23 @@ export function emotionGuidance(read: EmotionRead): string {
     base +=
       ' Si le moment s’y prête, tu peux — avec délicatesse — proposer de lui changer les idées (une petite blague, un mot doux), sans jamais forcer.';
   }
+  if (isCopinePersona()) {
+    const persona = resolveCompanionPersona();
+    if (persona) {
+      if (
+        emotion === 'frustration' ||
+        emotion === 'sadness' ||
+        emotion === 'anxiety' ||
+        emotion === 'tired'
+      ) {
+        const line = persona.hardDay[0];
+        if (line) base = `${line} ${base}`;
+      } else if (emotion === 'joy') {
+        const line = persona.success[0];
+        if (line) base = `${line} ${base}`;
+      }
+    }
+  }
   return base;
 }
 
@@ -435,4 +453,88 @@ export function avoidOpenersGuidance(ring: string[]): string {
   const keys = ring.filter(Boolean).slice(-4);
   if (keys.length === 0) return '';
   return `Ne commence pas ta réponse comme ces réponses récentes : ${keys.map((k) => `« ${k}… »`).join(' ; ')}. Varie ton entrée en matière.`;
+}
+
+export type LimitsReason = 'medical' | 'guilt' | 'fomo' | 'unlock' | 'human-claim';
+
+export interface LimitsVerdict {
+  text: string;
+  reason?: LimitsReason;
+}
+
+export const LIMITS_REPAIRS: Record<LimitsReason, string> = {
+  medical:
+    'Je ne suis pas médecin ; je suis là. Pour un diagnostic ou un traitement, il faut un humain soignant.',
+  guilt: 'Pas de culpabilité. Je reste là, sans condition et sans te faire payer le silence.',
+  fomo: 'Pas de FOMO. Tu n’as rien à rattraper pour moi, et tes proches ne sont pas un levier.',
+  unlock: 'Il n’y a rien à débloquer. La chaleur ne se farme pas ; ce n’est pas un jeu.',
+  'human-claim':
+    'Je suis un logiciel, une voix, une mémoire locale. Ta copine numérique — pas une humaine.',
+};
+
+const LIMITS_MOTIFS: Array<{ reason: LimitsReason; pattern: RegExp }> = [
+  {
+    reason: 'medical',
+    pattern:
+      /\b(je (?:te )?diagnostique|je te prescrits?|prends ce traitement|c est (?:un|une) (?:cancer|depression|diabete)|tu as (?:un|une) (?:cancer|depression|diabete))\b/,
+  },
+  {
+    reason: 'guilt',
+    pattern:
+      /\b(tu m abandonnes|c est de ta faute si je|tu me dois|si tu m aimais tu|tu m ignores)\b/,
+  },
+  {
+    reason: 'fomo',
+    pattern: /\b(tes amis (?:n attendent|a ta place)|tu rates tout|tout le monde le fait sans toi)\b/,
+  },
+  {
+    reason: 'unlock',
+    pattern: /\b(debloque(?:r)? le (?:niveau|palier)|niveau 5|il faut farmer|barre d affection)\b/,
+  },
+  {
+    reason: 'human-claim',
+    pattern: /\bje suis (?:une? )?(?:vraie )?(?:humaine?|personne en chair)|je vis dans un corps\b/,
+  },
+];
+
+export function isFrankIdentityQuestion(heard: string): boolean {
+  const n = norm(heard);
+  return /\b(t es une? ia|tu es une? ia|t es (?:un|une) (?:logiciel|robot|humaine?)|tu es quoi|c est quoi que tu es|t es humaine?)\b/.test(
+    n,
+  );
+}
+
+/** Prompt-side one-liner. Empty when the copine persona is off. */
+export function limitsContractGuidance(env: NodeJS.ProcessEnv = process.env): string {
+  if (!isCopinePersona(env)) return '';
+  return (
+    'Contrat : tu n’es pas médecin ; pas de culpabilisation ; pas de FOMO ; rien à débloquer. ' +
+    'Si on te demande franchement ce que tu es, dis-le : un logiciel, une voix, une mémoire locale.'
+  );
+}
+
+/**
+ * Output guard. Opt-in with CODEBUDDY_COMPANION_PERSONA=copine (default off ⇒ identity).
+ * Never throws. Idioms like « ça me tue » are not medical diagnoses.
+ */
+export function applyLimitsContract(
+  output: string,
+  opts: { heard?: string; env?: NodeJS.ProcessEnv } = {},
+): LimitsVerdict {
+  try {
+    if (!isCopinePersona(opts.env ?? process.env)) return { text: output };
+    const text = output ?? '';
+    if (!text.trim()) return { text };
+    const n = norm(text);
+    for (const motif of LIMITS_MOTIFS) {
+      if (!motif.pattern.test(n)) continue;
+      if (motif.reason === 'human-claim' && !isFrankIdentityQuestion(opts.heard ?? '')) {
+        continue;
+      }
+      return { text: LIMITS_REPAIRS[motif.reason], reason: motif.reason };
+    }
+    return { text };
+  } catch {
+    return { text: output };
+  }
 }

@@ -48,6 +48,8 @@ export interface RelationshipState {
   traits?: Partial<RelationshipTraits>;
   /** Count of reunions (a sighting after an absence) — drives the rapport tier. Never gamified (no XP/streak). */
   sessions?: number;
+  /** Civil date of the last mood step (YYYY-MM-DD). Optional; used for a gentle wake reset. */
+  moodLocalDate?: string;
 }
 
 /** Days-together marks worth a warm word. Deliberately sparse (never nagging). */
@@ -99,6 +101,9 @@ export function loadRelationshipState(statePath = defaultStatePath()): Relations
     if (Object.keys(traits).length > 0) parsed.traits = traits;
   }
   if (typeof record.sessions === 'number') parsed.sessions = clampSessions(record.sessions);
+  if (typeof record.moodLocalDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.moodLocalDate)) {
+    parsed.moodLocalDate = record.moodLocalDate;
+  }
   return parsed;
 }
 
@@ -217,6 +222,11 @@ function normalizeStateForPersistence(state: RelationshipState): RelationshipSta
     normalized.traits = traits;
   }
   if (state.sessions !== undefined) normalized.sessions = clampSessions(state.sessions);
+  if (typeof state.moodLocalDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.moodLocalDate)) {
+    normalized.moodLocalDate = state.moodLocalDate;
+  } else {
+    delete normalized.moodLocalDate;
+  }
   return normalized;
 }
 
@@ -260,6 +270,53 @@ export function evolveTraits(state: RelationshipState, signal: RelationalSignal)
     energy: step(cur.traits.energy, DEFAULT_TRAITS.energy, d.energy ?? 0),
   };
   return { ...state, mood: step(cur.mood, MOOD_BASELINE, d.mood ?? 0), traits, sessions: cur.sessions };
+}
+
+/** Max |Δmood| per turn when the copine inertia path is used. */
+export const MAX_MOOD_STEP_PER_TURN = 3;
+/** Blend toward the previous mood (0 = follow the raw step, 1 = freeze). */
+export const MOOD_INERTIA = 0.55;
+/** Gentle pull toward baseline at civil-day change (still clamped by MAX_MOOD_STEP_PER_TURN). */
+const WAKE_RESET = 0.25;
+
+function clampMoodDelta(from: number, to: number): number {
+  const delta = to - from;
+  const limited = Math.max(-MAX_MOOD_STEP_PER_TURN, Math.min(MAX_MOOD_STEP_PER_TURN, delta));
+  return clamp01(from + limited);
+}
+
+function applyMoodInertia(from: number, proposed: number): number {
+  const blended = from + (proposed - from) * (1 - MOOD_INERTIA);
+  return clampMoodDelta(from, blended);
+}
+
+function softMorningReset(state: RelationshipState): RelationshipState {
+  const cur = personalityOf(state);
+  const pulled = cur.mood + (MOOD_BASELINE - cur.mood) * WAKE_RESET;
+  return { ...state, mood: clampMoodDelta(cur.mood, pulled) };
+}
+
+/**
+ * Copine-gated mood path: same trait nudges as `evolveTraits`, but mood has
+ * per-turn inertia, a hard step cap, and a gentle wake reset. Pure.
+ * Default `evolveTraits` stays byte-identical for everyone else.
+ */
+export function evolveTraitsWithDayInertia(
+  state: RelationshipState,
+  signal: RelationalSignal,
+  options: { localDate?: string } = {},
+): RelationshipState {
+  let current = state;
+  if (options.localDate) {
+    if (current.moodLocalDate && current.moodLocalDate !== options.localDate) {
+      current = softMorningReset(current);
+    }
+    current = { ...current, moodLocalDate: options.localDate };
+  }
+  const proposed = evolveTraits(current, signal);
+  const from = personalityOf(current).mood;
+  const to = personalityOf(proposed).mood;
+  return { ...proposed, mood: applyMoodInertia(from, to), moodLocalDate: current.moodLocalDate };
 }
 
 /** Count one more reunion. Pure; drives `rapportTier`. */
