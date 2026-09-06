@@ -1870,19 +1870,33 @@ export async function defaultReply(
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
   }
-  // Lisa selfie when hybrid is not wrapping this path (CLI voice without hybrid, etc.)
+  // Lisa selfie — cache-first router BEFORE the LLM. Generation is not on this path.
   if (process.env.CODEBUDDY_LISA_SELFIE !== 'false') {
     try {
-      const { maybeHandleLisaSelfieRequest } = await import('../companion/lisa-selfie.js');
-      const selfie = await maybeHandleLisaSelfieRequest(heard, {
-        rootDir: process.cwd(),
+      const { tryServeCompanionSelfie } = await import('../companion/lisa-selfie-router.js');
+      const selfie = await tryServeCompanionSelfie(heard, {
+        surface: 'voice',
+        includeImageBytes: false,
       });
       if (selfie) {
         if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
+        if (selfie.imagePath) {
+          try {
+            const env = process.env;
+            if (env.CODEBUDDY_SENSORY_ALERT_TOKEN && env.CODEBUDDY_SENSORY_ALERT_CHAT) {
+              const { sendTelegramAlert } = await import('./alert.js');
+              await sendTelegramAlert(selfie.caption, selfie.imagePath);
+            }
+          } catch (sendErr) {
+            logger.warn(
+              `[voice] lisa-selfie telegram skipped: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`,
+            );
+          }
+        }
         logger.info(
-          `[voice] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+          `[voice] lisa-selfie cache=${selfie.reason} image=${Boolean(selfie.imagePath)}`,
         );
-        return selfie.spokenReply;
+        return selfie.caption;
       }
     } catch (err) {
       logger.warn(

@@ -138,9 +138,19 @@
     }
     if (type === 'stream_chunk') {
       const delta = data.payload && data.payload.delta;
-      if (typeof delta === 'string' && state.streamEl) {
-        state.streamEl.dataset.raw = (state.streamEl.dataset.raw || '') + delta;
-        state.streamEl.innerHTML = renderMarkdown(state.streamEl.dataset.raw);
+      const image = data.payload && data.payload.image;
+      if (state.streamEl) {
+        if (typeof delta === 'string') {
+          state.streamEl.dataset.raw = (state.streamEl.dataset.raw || '') + delta;
+        }
+        var html = renderMarkdown(state.streamEl.dataset.raw || '');
+        if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
+          var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+            ? image.mimeType
+            : 'image/png';
+          html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
+        }
+        state.streamEl.innerHTML = html;
         el('messages').scrollTop = el('messages').scrollHeight;
       }
       return;
@@ -152,7 +162,15 @@
     }
     if (type === 'chat_response') {
       const content = data.payload && data.payload.content;
-      if (typeof content === 'string') addBubble('assistant', renderMarkdown(content));
+      const image = data.payload && data.payload.image;
+      var html = typeof content === 'string' ? renderMarkdown(content) : '';
+      if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
+        var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+          ? image.mimeType
+          : 'image/png';
+        html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
+      }
+      if (html) addBubble('assistant', html);
       setStreaming(false);
       return;
     }

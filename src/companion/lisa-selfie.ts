@@ -51,6 +51,8 @@ export interface LisaSelfieOptions {
    * When set, preferred over sensory alert chat for the photo.
    */
   deliverPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
+  /** Skip the on-disk cache and always generate (CLI exact-scene). */
+  skipCache?: boolean;
   /** Injectables for tests. */
   generate?: (prompt: string, aspect: string) => Promise<{ success: boolean; outputPath?: string | null; error?: string }>;
   sendPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
@@ -119,8 +121,9 @@ export async function selectCachedLisaSelfie(
   cacheDir: string,
   style: string,
   tier: LisaContentTier = 'safe',
-  options: { rotateAcrossStyles?: boolean } = {},
+  options: { rotateAcrossStyles?: boolean; exclude?: Iterable<string> } = {},
 ): Promise<string | undefined> {
+  const exclude = new Set(options.exclude ?? []);
   const candidates: Array<{ file: string; atimeMs: number }> = [];
   const tierDir = path.join(cacheDir, tier);
   let directories: string[];
@@ -169,7 +172,9 @@ export async function selectCachedLisaSelfie(
     if (!options.rotateAcrossStyles && candidates.length > 0) break;
   }
   candidates.sort((a, b) => a.atimeMs - b.atimeMs || a.file.localeCompare(b.file));
-  const selected = candidates[0]?.file;
+  const preferred = candidates.filter((entry) => !exclude.has(entry.file));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  const selected = pool[0]?.file;
   if (!selected) return undefined;
   try {
     const stat = await fs.stat(selected);
@@ -248,6 +253,28 @@ export function inferSelfieMood(text: string): LisaSelfieMood {
  * such as "en pyjama" reaches the image model instead of returning an
  * unrelated ready-made portrait.
  */
+const STYLE_HINTS: Array<{ style: LisaSelfieMood; re: RegExp }> = [
+  { style: 'wet-selfie', re: /\b(?:plage|beach|mer|ocean|océan|piscine|wet|mouill)\b/ },
+  { style: 'street-rain', re: /\b(?:pluie|rain|street|rue|manteau|city)\b/ },
+  { style: 'neon-skate', re: /\b(?:n[eé]on|skate|nuit|cyber)\b/ },
+  { style: 'studio', re: /\b(?:studio|beauty)\b/ },
+  { style: 'soft-editorial', re: /\b(?:pull|sweater|hoodie|blouse|chemise|editorial|pyjama|pajamas?)\b/ },
+  { style: 'tender', re: /\b(?:tendre|douce|tender)\b/ },
+  { style: 'playful', re: /\b(?:espi[eè]gle|playful|rigol)\b/ },
+  { style: 'bold', re: /\b(?:audacieus|bold|glamour)\b/ },
+  { style: 'calm', re: /\b(?:calme|calm)\b/ },
+];
+
+/** Map a FR/EN look request onto a cached presentation style, if any. */
+export function inferLisaSelfieStyle(text: string): LisaSelfieMood | undefined {
+  const t = normalizeVoiceInteractionText(text);
+  if (!t) return undefined;
+  for (const hint of STYLE_HINTS) {
+    if (hint.re.test(t)) return hint.style;
+  }
+  return undefined;
+}
+
 export function inferLisaSelfieScene(text: string): string | undefined {
   const normalized = normalizeVoiceInteractionText(text);
   const media = /\b(?:photo|selfie|portrait|image|picture)\b/.exec(normalized);
@@ -405,10 +432,9 @@ export async function createAndMaybeSendLisaSelfie(
         error: 'explicit content tier requires the verified adult-content gate',
       };
     }
-    // A cache is suitable for a generic request. If the user asks for a
-    // particular outfit or location, generate that exact prompt instead of
-    // silently substituting an unrelated cached portrait.
-    const cachedImage = options.scene?.trim()
+    // Companion path serves the cache even when a look is named (plage, pull).
+    // CLI/tool can pass skipCache to force a fresh generation.
+    const cachedImage = options.skipCache
       ? undefined
       : await selectCachedLisaSelfie(cacheDir, style, contentTier, {
           rotateAcrossStyles: options.rotateCacheStyles === true,
@@ -431,6 +457,27 @@ export async function createAndMaybeSendLisaSelfie(
           "Désolée mon cœur, je n'ai pas pu me photographier là — le générateur d'images n'a pas répondu. On réessaie dans un moment ?",
         error: gen.error ?? 'image generation failed',
       };
+    }
+
+    if (!cachedImage && gen.outputPath) {
+      try {
+        const { maybeIngestGeneratedLisaSelfie } = await import('./lisa-selfie-ingest.js');
+        await maybeIngestGeneratedLisaSelfie({
+          sourcePath: gen.outputPath,
+          prompt,
+          contentTier,
+          style,
+          model: 'lisa-selfie',
+          provider: 'lisa-selfie',
+          env,
+          rootDir,
+          ...(options.now ? { now: options.now } : {}),
+        });
+      } catch (err) {
+        logger.warn(
+          `[lisa-selfie] cache ingest skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     // Archive under lora/lisa/selfies for continuity
@@ -538,14 +585,15 @@ export async function maybeHandleLisaSelfieRequest(
   options: Omit<LisaSelfieOptions, 'mood' | 'scene'> = {},
 ): Promise<LisaSelfieResult | null> {
   if (!isLisaSelfieRequest(heard)) return null;
-  const mood = inferSelfieMood(heard);
+  const mood = inferLisaSelfieStyle(heard) ?? inferSelfieMood(heard);
   const scene = inferLisaSelfieScene(heard);
   const contentTier = inferLisaContentTier(heard);
   return createAndMaybeSendLisaSelfie({
     ...options,
     mood,
     contentTier,
+    style: mood,
     ...(scene ? { scene } : {}),
-    rotateCacheStyles: !scene && mood === 'portrait',
+    rotateCacheStyles: !inferLisaSelfieStyle(heard) && mood === 'portrait',
   });
 }

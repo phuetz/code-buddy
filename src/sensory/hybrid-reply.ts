@@ -788,25 +788,39 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         remember(heard, safeShortcut);
         return safeShortcut;
       }
-      // Lisa selfie → generate portrait (LoRA trigger) + optional Telegram photo.
-      // Opt-out: CODEBUDDY_LISA_SELFIE=false. Default on when image backend exists.
+      // Lisa selfie — cache-first, before the LLM (companion profile has no tools).
       if (
         process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
         !introspectionIntent
       ) {
         try {
-          const { maybeHandleLisaSelfieRequest } = await import(
-            '../companion/lisa-selfie.js'
+          const { tryServeCompanionSelfie } = await import(
+            '../companion/lisa-selfie-router.js'
           );
-          const selfie = await maybeHandleLisaSelfieRequest(heard, {
+          const selfie = await tryServeCompanionSelfie(heard, {
+            surface: 'voice',
+            includeImageBytes: false,
             rootDir: options.cwd ?? process.cwd(),
           });
           if (selfie) {
             void evolveRelationshipFromUtterance(heard);
-            const line = guardBeforeMemory(selfie.spokenReply);
+            if (selfie.imagePath) {
+              try {
+                const env = process.env;
+                if (env.CODEBUDDY_SENSORY_ALERT_TOKEN && env.CODEBUDDY_SENSORY_ALERT_CHAT) {
+                  const { sendTelegramAlert } = await import('./alert.js');
+                  await sendTelegramAlert(selfie.caption, selfie.imagePath);
+                }
+              } catch (sendErr) {
+                logger.warn(
+                  `[voice-hybrid] lisa-selfie telegram skipped: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`,
+                );
+              }
+            }
+            const line = guardBeforeMemory(selfie.caption);
             remember(heard, line);
             logger.info(
-              `[voice-hybrid] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+              `[voice-hybrid] lisa-selfie cache=${selfie.reason} image=${Boolean(selfie.imagePath)}`,
             );
             return line;
           }

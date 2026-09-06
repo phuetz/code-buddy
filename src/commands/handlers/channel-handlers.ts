@@ -1317,94 +1317,78 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         }
       }
 
-      // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
+      // Lisa selfie — cache-first, BEFORE the LLM. Companion profile has no tools,
+      // so a description of lisa_selfie / image_generate never fires here.
+      const companionProfile = shouldUseCompanionChannelProfile({
+        text: message.content,
+        isCommand: message.isCommand === true,
+      });
       if (
         process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
-        (channel.type === 'telegram' || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all')
+        (channel.type === 'telegram'
+          || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all'
+          || companionProfile)
       ) {
         try {
-          const {
-            isLisaSelfieRequest,
-            createAndMaybeSendLisaSelfie,
-            inferLisaSelfieScene,
-            inferLisaContentTier,
-            inferSelfieMood,
-            isLisaSelfieContinuationRequest,
-          } =
-            await import('../../companion/lisa-selfie.js');
+          const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
           const previousSelfie = recentLisaSelfieSessions.get(sessionKey);
           const hasRecentSelfie = previousSelfie !== undefined
             && Date.now() - previousSelfie.at <= LISA_SELFIE_CONTINUATION_TTL_MS;
           if (previousSelfie && !hasRecentSelfie) recentLisaSelfieSessions.delete(sessionKey);
-          const isContinuation = (message.attachments?.length ?? 0) === 0
-            && isLisaSelfieContinuationRequest(message.content, hasRecentSelfie);
-          if (isLisaSelfieRequest(message.content) || isContinuation) {
-            await channel.send({
-              channelId: message.channel.id,
-              content: 'Un instant mon cœur — je me prépare une photo…',
-              replyTo: message.id,
-            });
-            const inferredMood = inferSelfieMood(message.content);
-            const mood = isContinuation && inferredMood === 'portrait' && previousSelfie
-              ? previousSelfie.mood
-              : inferredMood;
-            const inferredTier = inferLisaContentTier(message.content);
-            const contentTier = isContinuation && inferredTier === 'safe' && previousSelfie
-              ? previousSelfie.contentTier
-              : inferredTier;
-            const scene = inferLisaSelfieScene(message.content);
-            const result = await createAndMaybeSendLisaSelfie({
-              mood,
-              contentTier,
-              ...(scene ? { scene } : {}),
-              rotateCacheStyles: !scene && mood === 'portrait',
-              sendTelegram: true,
-              deliverPhoto: async (caption, imagePath) => {
-                const ch = channel as {
-                  sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
-                  send: (m: {
-                    channelId: string;
-                    content: string;
-                    attachments?: Array<{
-                      type: 'image';
-                      filePath?: string;
-                      data?: string;
-                      fileName?: string;
-                      mimeType?: string;
-                    }>;
-                    replyTo?: string;
-                  }) => Promise<{ success: boolean }>;
-                };
-                if (typeof ch.sendImageFile === 'function') {
-                  await ch.sendImageFile(message.channel.id, imagePath, caption);
-                  return true;
-                }
-                const path = await import('node:path');
-                const ext = path.extname(imagePath).slice(1) || 'png';
-                const r = await ch.send({
+          const served = await tryServeCompanionSelfie(message.content, {
+            surface: channel.type === 'telegram' ? 'telegram' : 'mobile',
+            hasRecentSelfie,
+            includeImageBytes: false,
+          });
+          if (served) {
+            if (served.imagePath) {
+              const ch = channel as {
+                sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
+                send: (m: {
+                  channelId: string;
+                  content: string;
+                  attachments?: Array<{
+                    type: 'image';
+                    filePath?: string;
+                    data?: string;
+                    fileName?: string;
+                    mimeType?: string;
+                  }>;
+                  replyTo?: string;
+                }) => Promise<{ success: boolean }>;
+              };
+              if (typeof ch.sendImageFile === 'function') {
+                await ch.sendImageFile(message.channel.id, served.imagePath, served.caption);
+              } else {
+                const pathMod = await import('node:path');
+                const ext = pathMod.extname(served.imagePath).slice(1) || 'png';
+                await ch.send({
                   channelId: message.channel.id,
-                  content: caption,
+                  content: served.caption,
                   replyTo: message.id,
                   attachments: [
                     {
                       type: 'image',
-                      filePath: imagePath,
-                      fileName: path.basename(imagePath),
-                      mimeType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`,
+                      filePath: served.imagePath,
+                      fileName: pathMod.basename(served.imagePath),
+                      mimeType: served.mimeType
+                        ?? (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`),
                     },
                   ],
                 });
-                return Boolean(r?.success);
-              },
-            });
-            if (result.success) {
-              recentLisaSelfieSessions.set(sessionKey, { at: Date.now(), mood, contentTier });
+              }
+              recentLisaSelfieSessions.set(sessionKey, {
+                at: Date.now(),
+                mood: served.style ?? 'portrait',
+                contentTier: served.contentTier,
+              });
+            } else {
+              await channel.send({
+                channelId: message.channel.id,
+                content: served.caption,
+                replyTo: message.id,
+              });
             }
-            await channel.send({
-              channelId: message.channel.id,
-              content: result.spokenReply,
-              replyTo: message.id,
-            });
             return;
           }
         } catch (selfieErr) {

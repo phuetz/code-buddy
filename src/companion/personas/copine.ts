@@ -180,4 +180,24 @@ export const COPINE_PERSONA: CompanionPersonaProfile = {
       'Bonne soirée. Demain on verra.',
     ],
   },
+  selfieCaptions: [
+    'Tiens. Une photo de moi.',
+    'Voilà. Celle-ci, là, tout de suite.',
+    'Une de moi — dis-moi si elle te va.',
+    'Hop. Photo de moi, sans attendre le générateur.',
+    'Celle-là. Je suis là.',
+    'Un portrait, pour toi.',
+    'Voilà moi. Pas besoin de patienter.',
+    'Une photo, maintenant. Tu me dis.',
+  ],
+  selfieRefusals: [
+    'Ça, je ne l’envoie pas. Demande-moi une photo simple.',
+    'Non. Pas celle-là, pas ici.',
+    'Je laisse cette demande de côté. Une photo sage, si tu veux.',
+  ],
+  selfieEmpty: [
+    'Je n’ai pas de photo prête sous la main. J’en prépare dès que le générateur est là.',
+    'Le tiroir est vide pour l’instant. Je te l’envoie dès qu’il y en a une.',
+    'Pas de photo en stock là. On réessaie dès que c’est prêt.',
+  ],
 };
