@@ -1187,6 +1187,13 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
+      try {
+        const { observeInboundForAwayPause } = await import('../../companion/away-mode.js');
+        observeInboundForAwayPause(channel.type, message.content);
+      } catch {
+        /* travel-mode pause is optional and must never block inbound chat */
+      }
+
       const sessionKey = message.sessionKey || 'default-global';
 
       // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.

@@ -481,6 +481,13 @@ se déclenche que sur un rappel réellement en attente), je re-rappelle doucemen
 réponds pas. Et un rappel déclenché **survit à un redémarrage** (jamais de dose perdue en silence).
 `reminders.ts` · `buddy remind add "médicaments" --at 09:00 --daily` · `CODEBUDDY_REMINDERS=true`.
 
+### ✈️ Mode déplacement (Telegram)
+Opt-in `CODEBUDDY_COMPANION_AWAY=true` (sinon : persona `copine` et aucune présence caméra depuis 24 h).
+Plafond `CODEBUDDY_COMPANION_AWAY_MAX_PER_DAY` (défaut 3), fenêtre `CODEBUDDY_COMPANION_AWAY_HOURS`
+(défaut `08:30-22:00` locale) : un bonjour, une pensée, un bonsoir. Jamais deux fois le même angle,
+jamais de culpabilisation si tu ne réponds pas. « stop » / « pas maintenant » coupe 24 h.
+Chef d’orchestre `CODEBUDDY_COMPANION_MIN_GAP_MS` inchangé. Défaut off = inchangé.
+
 ### 💗 Persona « copine » (accueil et voix, sans palier)
 Opt-in `CODEBUDDY_COMPANION_PERSONA=copine`. Les textes vivent dans un **profil de persona**
 (`src/companion/personas/copine.ts`) : bonjour / bonsoir / bonne nuit, journée dure, succès,

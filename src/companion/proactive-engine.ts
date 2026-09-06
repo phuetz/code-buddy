@@ -40,6 +40,16 @@ import {
   type DailyInteractionReservation,
 } from './daily-interaction-budget.js';
 import { resolveHouseholdClock } from './household-time.js';
+import {
+  canSendAway,
+  isAwayShameLine,
+  isCompanionAway,
+  loadAwayState,
+  pickAwayLine,
+  recordAwaySend,
+  resolveAwayClock,
+  saveAwayState,
+} from './away-mode.js';
 
 /** The closed set of reasons Lisa might reach out. */
 export type ProactiveTrigger =
@@ -240,6 +250,10 @@ export interface ProactiveDeps {
   say?: (text: string) => Promise<boolean>;
   /** Deliver to the phone (absent). Default: sendTelegramVoice (falls back to text). */
   telegramVoice?: (text: string) => Promise<boolean>;
+  /** Text Telegram for travel-mode initiatives. Default: sendTelegramAlert. */
+  telegramAlert?: (text: string) => Promise<boolean>;
+  /** Persisted away-mode cadence (angles / pause). */
+  awayStatePath?: string;
   /** Append an already-delivered remote initiative without echoing it. */
   recordRemote?: (text: string) => Promise<void>;
   /** Recent transcripts (for the encouragement trigger). */
@@ -307,11 +321,63 @@ async function defaultTelegramVoice(text: string): Promise<boolean> {
   return sendTelegramVoice(text);
 }
 
+async function defaultTelegramAlert(text: string): Promise<boolean> {
+  const { sendTelegramAlert } = await import('../sensory/alert.js');
+  return sendTelegramAlert(text);
+}
+
 async function defaultRecordRemote(text: string): Promise<void> {
   const { recordDeliveredChannelInitiative } = await import(
     '../conversation/voice-continuity.js'
   );
   await recordDeliveredChannelInitiative(text);
+}
+
+async function deliverAwayInitiative(
+  deps: ProactiveDeps,
+  now: number,
+  homeDecision: HomeInteractionDecision | null,
+): Promise<string | null> {
+  if (homeDecision && !homeDecision.allowed) return null;
+  const clock = resolveAwayClock(now);
+  const awayPath = deps.awayStatePath;
+  const state = loadAwayState(awayPath);
+  const decision = canSendAway({ state, clock });
+  if (!decision.ok) return null;
+
+  let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine });
+  if (!line.trim() || isAwayShameLine(line)) return null;
+  const guardedLine = guardRelationshipReply(line);
+  line = guardedLine.response;
+  if (!line.trim()) return null;
+
+  const conductor = deps.conductor ?? getCompanionConductor();
+  if (!conductor.claim('proactive')) return null;
+  try {
+    if (!(await (deps.telegramAlert ?? defaultTelegramAlert)(line))) {
+      throw new Error('away telegram delivery was not accepted');
+    }
+    if (!deps.telegramAlert || deps.recordRemote) {
+      await (deps.recordRemote ?? defaultRecordRemote)(line);
+    }
+  } catch (error) {
+    logger.warn(
+      `[proactive] away delivery failed → silent: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+
+  const next = recordAwaySend(state, { angle: decision.angle, clock, line });
+  if (!saveAwayState(next, awayPath)) return null;
+  saveProactiveState(
+    {
+      lastSentAt: now,
+      recentLines: [...loadProactiveState(deps.statePath).recentLines, line].slice(-8),
+    },
+    deps.statePath,
+  );
+  logger.info(`[proactive] away:${decision.angle} (telegram) → ${line}`);
+  return line;
 }
 
 /**
@@ -330,6 +396,19 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       : null;
     if (homeDecision && !homeDecision.allowed) return null;
     if (present && (await (deps.speaking ?? defaultSpeaking)(now))) return null;
+
+    const awayFlag = (process.env.CODEBUDDY_COMPANION_AWAY ?? '').trim().toLowerCase();
+    const awayFlagOn =
+      awayFlag === 'true' ||
+      awayFlag === '1' ||
+      awayFlag === 'yes' ||
+      (process.env.CODEBUDDY_COMPANION_PERSONA ?? '').trim().toLowerCase() === 'copine';
+    if (awayFlagOn && !present) {
+      const relPeek = loadRelationshipState(deps.relationshipStatePath);
+      if (isCompanionAway({ now, lastPresentAt: relPeek.lastPresentAt, present })) {
+        return deliverAwayInitiative(deps, now, homeDecision);
+      }
+    }
 
     const cooldownMs =
       deps.cooldownMs ??
