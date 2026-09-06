@@ -112,6 +112,7 @@ export class ConfirmationService extends EventEmitter {
   private remoteApproval: RemoteApprovalService | null = null;
   private interactiveBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null = null;
   private mcpApprovalBridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null = null;
+  private wsApprovalBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null = null;
 
   static getInstance(): ConfirmationService {
     if (!ConfirmationService.instance) {
@@ -157,6 +158,16 @@ export class ConfirmationService extends EventEmitter {
 
   getMcpApprovalBridge(): ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null {
     return this.mcpApprovalBridge;
+  }
+
+  /**
+   * Register a WebSocket approval bridge (mobile PWA).
+   * Returning null means "no mobile client, fall through".
+   */
+  setWsApprovalBridge(
+    bridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null,
+  ): void {
+    this.wsApprovalBridge = bridge;
   }
 
   /** Isolate exact grants between concurrent desktop/voice/CLI sessions. */
@@ -497,6 +508,15 @@ export class ConfirmationService extends EventEmitter {
       return this.auditGate('interactive-bridge', false, options, bridged);
     }
 
+    // Mobile PWA WebSocket bridge: only when an authenticated socket is present.
+    // null = no client, fall through to TTY / fail-closed.
+    if (this.wsApprovalBridge) {
+      const bridged = await this.wsApprovalBridge(options);
+      if (bridged) {
+        return this.auditGate('ws-approval', false, options, bridged);
+      }
+    }
+
     // Remote approval fallback: when not in interactive terminal, try channels
     if (!process.stdin.isTTY && this.remoteApproval?.hasChannels()) {
       const approved = await this.remoteApproval.requestApproval({
@@ -625,6 +645,7 @@ export class ConfirmationService extends EventEmitter {
     this.resolveConfirmation = null;
     this.scopedSessionApprovals.clear();
     this.mcpApprovalBridge = null;
+    this.wsApprovalBridge = null;
     this.removeAllListeners();
   }
 }

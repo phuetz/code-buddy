@@ -57,6 +57,8 @@ import {
   createWebhookRoutes,
   createCognitionRoutes,
   mobileRoutes,
+  mobilePwaRouter,
+  runsRoutes,
 } from './routes/index.js';
 import {
   setupWebSocket,
@@ -272,6 +274,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // Mobile remote-supervision routes (custom pairing-token auth)
   app.use('/api/mobile', mobileRoutes);
 
+  // PWA shell (HTML/CSS/JS/manifest/SW) is public; /api and /ws still require JWT.
+  app.use('/__codebuddy__/mobile', mobilePwaRouter);
+
   // Authentication (applied after public health/metrics/mobile endpoints)
   app.use(createAuthMiddleware(config));
 
@@ -346,6 +351,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   app.use('/api/acp', createACPRoutes());
   app.use('/api/cloud/tasks', createCloudTaskRoutes());
   app.use('/api/webhooks', createWebhookRoutes());
+  app.use('/api', runsRoutes);
 
   // OpenAI-compatible alias
   app.use('/v1/chat', chatRoutes);

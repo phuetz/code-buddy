@@ -58,6 +58,7 @@ import {
   streamAgentDeltas,
   type ServerAgent,
 } from '../agent-adapter.js';
+import { wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
@@ -325,7 +326,15 @@ interface AuthPayload {
   clientId?: string;
   requestedScopes?: string[];
 }
-interface ChatPayload { message?: string; model?: string; stream?: boolean; sessionId?: string }
+interface ChatPayload {
+  message?: string;
+  model?: string;
+  stream?: boolean;
+  sessionId?: string;
+  /** `agent` (default), `companion` (Lisa), or a fleet peer id. */
+  assistant?: string;
+  peerId?: string;
+}
 interface ToolPayload { name?: string; parameters?: Record<string, unknown> }
 
 /**
@@ -592,6 +601,65 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
 });
 
+async function produceCompanionReply(message: string): Promise<string> {
+  const { defaultReply } = await import('../../sensory/voice-loop.js');
+  const text = await defaultReply(message, []);
+  return typeof text === 'string' ? text : '';
+}
+
+async function producePeerReply(peerId: string, message: string): Promise<string> {
+  const { getFleetRegistry } = await import('../../fleet/fleet-registry.js');
+  const entry = getFleetRegistry().get(peerId);
+  if (!entry) {
+    throw new Error(`Unknown fleet peer: ${peerId}`);
+  }
+  const result = await entry.listener.request('peer.chat', { prompt: message });
+  if (result && typeof result === 'object' && typeof (result as { text?: unknown }).text === 'string') {
+    return (result as { text: string }).text;
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result ?? '');
+}
+
+async function runPlainChatTurn(
+  ws: WebSocket,
+  state: ConnectionState,
+  turn: ConnectionTurn,
+  options: { stream: boolean; produce: () => Promise<string> },
+): Promise<void> {
+  const messageId = `msg_${Date.now()}`;
+  if (options.stream) {
+    state.streaming = true;
+    send(ws, {
+      type: 'stream_start',
+      id: messageId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  const content = await options.produce();
+  if (turn.cancelled) return;
+  if (options.stream) {
+    if (content) {
+      send(ws, {
+        type: 'stream_chunk',
+        id: messageId,
+        payload: { delta: content },
+        timestamp: new Date().toISOString(),
+      });
+    }
+    send(ws, {
+      type: 'stream_end',
+      id: messageId,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    send(ws, {
+      type: 'chat_response',
+      payload: { content, finishReason: 'stop' },
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 /**
  * Handle chat message
  */
@@ -615,7 +683,14 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
-  const { message, model, stream = true, sessionId: _sessionId } = payload as ChatPayload;
+  const {
+    message,
+    model,
+    stream = true,
+    sessionId: _sessionId,
+    assistant: assistantRaw,
+    peerId: peerIdRaw,
+  } = payload as ChatPayload;
 
   // Validate message
   if (!message) {
@@ -646,7 +721,32 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   const turn: ConnectionTurn = { cancelled: false, abortDelivered: false };
   state.activeTurn = turn;
 
+  const assistant = typeof assistantRaw === 'string' ? assistantRaw.trim() : 'agent';
+  const peerId = typeof peerIdRaw === 'string' ? peerIdRaw.trim() : '';
+
   try {
+    if (assistant === 'companion') {
+      await runPlainChatTurn(ws, state, turn, {
+        stream,
+        produce: () => produceCompanionReply(message),
+      });
+      return;
+    }
+
+    const resolvedPeerId = peerId || (assistant.startsWith('peer:') ? assistant.slice(5) : '');
+    if (assistant === 'peer' || resolvedPeerId) {
+      const target = resolvedPeerId || assistant;
+      if (!target || target === 'peer' || target === 'agent' || target === 'companion') {
+        sendError(ws, 'INVALID_REQUEST', 'peerId is required for peer chat');
+        return;
+      }
+      await runPlainChatTurn(ws, state, turn, {
+        stream,
+        produce: () => producePeerReply(target, message),
+      });
+      return;
+    }
+
     // Lazy load agent (with mutex to prevent duplicate creation)
     if (!state.agent) {
       if (!state.agentInitializing) {
@@ -1185,6 +1285,12 @@ export async function setupWebSocket(
 
   serverStartedAt = Date.now();
 
+  wireMobileConfirmationBridge({
+    broadcast,
+    authenticatedCount: () => getConnectionStats().authenticated,
+    registerExtension: registerWebSocketExtension,
+  });
+
   const wss = new WebSocketServer({
     server,
     path: '/ws',
@@ -1259,7 +1365,12 @@ export async function setupWebSocket(
 
     connections.set(ws, state);
 
-    // Send welcome message (enriched with server identity + advertised capabilities)
+    ws.on('message', async (data: RawData) => {
+      await processMessage(ws, state, data);
+    });
+
+    // Greeting after the message listener so the first client frame cannot
+    // be dropped (connected is what clients wait on before authenticate).
     send(ws, buildConnectedGreeting({
       connectionId: state.id,
       authRequired: config.authEnabled,
@@ -1268,10 +1379,6 @@ export async function setupWebSocket(
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       methods: Array.from(messageHandlers.keys()),
     }));
-
-    ws.on('message', async (data: RawData) => {
-      await processMessage(ws, state, data);
-    });
 
     // Protocol pings must count as activity. /fleet listen is receive-only
     // after auth; a slow peer.chat also sends no application frames. Without

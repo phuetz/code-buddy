@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="description" content="Code Buddy Mobile">
+  <link rel="manifest" href="/__codebuddy__/mobile/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/__codebuddy__/mobile/assets/icon.svg">
+  <link rel="apple-touch-icon" href="/__codebuddy__/mobile/assets/icon-192.png">
+  <title>Code Buddy Mobile</title>
+  <link rel="stylesheet" href="/__codebuddy__/mobile/assets/styles.css">
+</head>
+<body>
+  <div id="app">
+    <section id="login-screen" class="screen active">
+      <header class="brand">
+        <h1>Code Buddy</h1>
+        <p class="subtitle">Mobile</p>
+      </header>
+      <form id="login-form" class="login-form">
+        <label for="token-input">Jeton JWT</label>
+        <textarea id="token-input" rows="3" placeholder="Coller le jeton…" autocomplete="off"></textarea>
+        <p class="hint">Le jeton reste en sessionStorage. L’API et le WebSocket exigent une authentification.</p>
+        <div class="button-row">
+          <button type="submit" id="connect-btn" class="btn primary">Se connecter</button>
+          <button type="button" id="copy-url-btn" class="btn secondary">Copier l’URL</button>
+        </div>
+        <p id="error-message" class="error-message hidden" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="main-screen" class="screen hidden">
+      <header class="app-header">
+        <button type="button" id="assistant-btn" class="btn ghost" aria-haspopup="dialog">
+          <span id="current-assistant">Agent</span>
+        </button>
+        <span id="connection-status" class="status-dot" title="Connexion">●</span>
+        <button type="button" id="logout-btn" class="btn icon" aria-label="Déconnexion">✕</button>
+      </header>
+
+      <main class="main-content">
+        <section id="chat-section" class="panel active">
+          <div id="messages" class="messages" aria-live="polite"></div>
+          <form id="composer" class="composer">
+            <button type="button" id="mic-btn" class="btn icon" aria-label="Dictée">🎤</button>
+            <textarea id="message-input" rows="1" placeholder="Message…"></textarea>
+            <button type="submit" id="send-btn" class="btn primary icon" aria-label="Envoyer">→</button>
+            <button type="button" id="stop-btn" class="btn danger icon hidden" aria-label="Arrêter">■</button>
+          </form>
+        </section>
+
+        <section id="runs-section" class="panel hidden">
+          <div class="section-header">
+            <h2>Runs</h2>
+            <button type="button" id="refresh-runs" class="btn icon" aria-label="Actualiser">↻</button>
+          </div>
+          <div id="runs-list" class="list"></div>
+          <pre id="trajectory-view" class="trajectory hidden"></pre>
+        </section>
+
+        <section id="confirmations-section" class="panel hidden">
+          <h2>Confirmations</h2>
+          <div id="confirmations-list" class="list"></div>
+        </section>
+
+        <section id="status-section" class="panel hidden">
+          <h2>Statut</h2>
+          <div id="status-info" class="status-grid"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav">
+        <button type="button" class="nav-item active" data-section="chat-section">Chat</button>
+        <button type="button" class="nav-item" data-section="runs-section">Runs</button>
+        <button type="button" class="nav-item" data-section="confirmations-section">
+          Confirm
+          <span id="confirmation-badge" class="badge hidden">0</span>
+        </button>
+        <button type="button" class="nav-item" data-section="status-section">Statut</button>
+      </nav>
+    </section>
+  </div>
+
+  <dialog id="assistant-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Assistant</h2>
+        <button type="submit" class="btn icon" value="close" aria-label="Fermer">✕</button>
+      </header>
+      <div id="assistants-list" class="list"></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmation-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Confirmation requise</h2>
+      </header>
+      <div id="confirmation-content" class="modal-body"></div>
+      <footer class="button-row">
+        <button type="submit" id="confirm-deny" class="btn danger" value="deny">Refuser</button>
+        <button type="submit" id="confirm-approve" class="btn primary" value="approve">Approuver</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="/__codebuddy__/mobile/assets/app.js"></script>
+</body>
+</html>
