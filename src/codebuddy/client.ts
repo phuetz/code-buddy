@@ -124,6 +124,9 @@ export interface CodeBuddyToolCall {
     name: string;
     arguments: string;
   };
+  /** Gemini 3.x: opaque `thoughtSignature` returned with a functionCall part; it must be echoed
+   *  back with the same call in later turns or the API answers 400. Other providers ignore it. */
+  thoughtSignature?: string;
 }
 
 export interface SearchParameters {

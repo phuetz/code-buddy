@@ -220,7 +220,7 @@ export class GeminiNativeProvider implements Provider {
         const assistantMsg = msg as { content?: string | null; tool_calls?: CodeBuddyToolCall[] };
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
           // Assistant with tool calls
-          const parts: Array<{ functionCall?: { name: string; args: unknown }; text?: string }> = [];
+          const parts: Array<{ functionCall?: { name: string; args: unknown }; text?: string; thoughtSignature?: string }> = [];
           if (assistantMsg.content) {
             parts.push({ text: assistantMsg.content });
           }
@@ -236,7 +236,11 @@ export class GeminiNativeProvider implements Provider {
                 name: tc.function.name,
                 args,
               },
-            });
+              // Gemini 3.x validates a thoughtSignature on every echoed functionCall; when the
+              // call was not produced by Gemini (other provider, injected, compacted away) the
+              // documented escape hatch skips the validator instead of failing the whole turn.
+              thoughtSignature: tc.thoughtSignature ?? 'skip_thought_signature_validator',
+            } as { functionCall: { name: string; args: unknown }; thoughtSignature: string });
           }
           contents.push({ role: 'model', parts: parts as Array<{ text?: string; functionResponse?: { name: string; response: unknown } }> });
         } else {
@@ -322,6 +326,13 @@ export class GeminiNativeProvider implements Provider {
     // Pass 3: Ensure conversation starts with 'user'
     if (merged.length > 0 && merged[0]?.role !== 'user') {
       merged.unshift({ role: 'user', parts: [{ text: '(continuing previous conversation)' }] });
+    }
+
+    // Pass 4: the current Gemini API rejects role 'function' (« Role 'function' is not supported »,
+    // 2026-09-06). Function responses travel as `functionResponse` parts inside a 'user' turn; the
+    // internal 'function' role above only served the ordering checks.
+    for (const entry of merged) {
+      if (entry.role === 'function') entry.role = 'user';
     }
 
     // Build request body
@@ -628,7 +639,7 @@ export class GeminiNativeProvider implements Provider {
         if (part.text) {
           content += part.text;
         } else if (part.functionCall) {
-          const toolCall = {
+          const toolCall: CodeBuddyToolCall = {
             id: `call_${Date.now()}_${Math.random().toString(36).slice(2)}`,
             type: 'function' as const,
             function: {
@@ -636,6 +647,8 @@ export class GeminiNativeProvider implements Provider {
               arguments: JSON.stringify(part.functionCall.args),
             },
           };
+          const sig = (part as { thoughtSignature?: unknown }).thoughtSignature;
+          if (typeof sig === 'string' && sig) toolCall.thoughtSignature = sig;
           toolCalls.push(toolCall);
           logger.debug('Gemini tool call extracted', {
             source: 'GeminiNativeProvider',
@@ -972,6 +985,7 @@ export class GeminiNativeProvider implements Provider {
 
           if (part.functionCall) {
             const fc = part.functionCall as { name: string; args?: Record<string, unknown> };
+            const streamSig = (part as { thoughtSignature?: unknown }).thoughtSignature;
             emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
@@ -989,6 +1003,7 @@ export class GeminiNativeProvider implements Provider {
                       name: fc.name,
                       arguments: JSON.stringify(fc.args || {}),
                     },
+                    ...(typeof streamSig === 'string' && streamSig ? { thoughtSignature: streamSig } : {}),
                   }],
                 },
                 finish_reason: null,
