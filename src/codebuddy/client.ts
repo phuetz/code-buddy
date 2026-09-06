@@ -29,7 +29,7 @@ import {
   classifyFailoverKind,
   extractResetsInSeconds,
 } from "./provider-failover-kind.js";
-import { prepareFailoverMessages } from "./provider-handoff.js";
+import { prepareFailoverHandoff } from "./provider-handoff.js";
 import {
   filterHealthyFallbacks,
   isDeclaredProviderFallbackEnabled,
@@ -912,7 +912,7 @@ export class CodeBuddyClient {
 
     for (const fallback of candidates) {
       try {
-        const handed = await prepareFailoverMessages(messages, {
+        const handed = await prepareFailoverHandoff(messages, tools, {
           fromProvider: primaryId,
           fromModel: this.currentModel,
           toProvider: fallback.provider,
@@ -928,7 +928,7 @@ export class CodeBuddyClient {
         if (this.circuitBreakerConfig) {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
-        const response = await fallbackClient.chat(handed, tools, {
+        const response = await fallbackClient.chat(handed.messages, handed.tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions);
@@ -1189,7 +1189,7 @@ export class CodeBuddyClient {
     for (const fallback of candidates) {
       let yieldedFromThisFallback = false;
       try {
-        const handed = await prepareFailoverMessages(messages, {
+        const handed = await prepareFailoverHandoff(messages, tools, {
           fromProvider: primaryId,
           fromModel: this.currentModel,
           toProvider: fallback.provider,
@@ -1205,7 +1205,7 @@ export class CodeBuddyClient {
         if (this.circuitBreakerConfig) {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
-        for await (const chunk of fallbackClient.chatStream(handed, tools, {
+        for await (const chunk of fallbackClient.chatStream(handed.messages, handed.tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {

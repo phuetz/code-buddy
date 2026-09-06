@@ -284,6 +284,49 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('prunes a 110-tool catalogue when failing over to a 32k model', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));
+    const padding = 'D'.repeat(2_000);
+    const tools = [
+      {
+        type: 'function' as const,
+        function: {
+          name: 'list_directory',
+          description: `list files ${padding}`,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'tool_search',
+          description: `search tools ${padding}`,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      },
+      ...Array.from({ length: 108 }, (_, i) => ({
+        type: 'function' as const,
+        function: {
+          name: `tool_${i}`,
+          description: padding,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      })),
+    ];
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct')],
+    });
+    await client.chat(
+      [{ role: 'system', content: 'sys' }, { role: 'user', content: 'liste les fichiers du dossier courant' }],
+      tools,
+    );
+    const sent = mockCreate.mock.calls[1]?.[0] as { tools?: Array<{ function: { name: string } }> };
+    expect(sent?.tools).toBeDefined();
+    expect(sent!.tools!.length).toBeLessThanOrEqual(12);
+    expect(sent!.tools!.some((tool) => tool.function.name === 'tool_search')).toBe(true);
+  });
+
   it('compact/retruncate happens when the backup context is smaller', async () => {
     process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
     mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('ok'));
