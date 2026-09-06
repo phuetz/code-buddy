@@ -28,6 +28,7 @@ import {
   readMaterializedResearchScriptSkillCandidate,
   type ResearchScriptSkillCandidate,
 } from '../../agent/research-script-skill-candidate.js';
+import { getActiveToolMetadata, resolveToolEffect } from '../../tools/metadata.js';
 
 interface ToolsProfileOptions {
   json?: boolean;
@@ -268,7 +269,10 @@ function runToolsProfile(
       toolCount: inspectedTools.length,
       policy,
       filter,
-      decisions,
+      decisions: decisions.map((decision) => ({
+        ...decision,
+        effect: resolveToolEffect(decision.tool),
+      })),
     }, null, 2));
     return;
   }
@@ -284,7 +288,7 @@ function runToolsProfile(
   console.log(`  Effective deny: ${formatList(filter.disabledPatterns)}`);
   console.log('\nTool decisions:\n');
   for (const decision of decisions) {
-    console.log(`  ${decision.tool}: ${decision.action}`);
+    console.log(`  ${decision.tool}: ${decision.action}  effect=${resolveToolEffect(decision.tool)}`);
     console.log(`    Groups: ${formatList(decision.groups)}`);
     if (decision.matchedGroup) {
       console.log(`    Matched group: ${decision.matchedGroup}`);
@@ -302,6 +306,29 @@ export function registerToolsCommands(program: Command): void {
   tools.action(() => {
     runToolsProfile('hermes-balanced', [], {});
   });
+
+  tools
+    .command('catalog')
+    .description('List built-in tool metadata including the C5 effect class')
+    .option('--json', 'output JSON')
+    .action((options: { json?: boolean }) => {
+      const catalog = getActiveToolMetadata().map((entry) => ({
+        name: entry.name,
+        category: entry.category,
+        effect: resolveToolEffect(entry.name, entry),
+        description: entry.description,
+        fleetSafe: entry.fleetSafe === true,
+      }));
+      if (options.json) {
+        console.log(JSON.stringify({ count: catalog.length, tools: catalog }, null, 2));
+        return;
+      }
+      console.log(`\nTool catalog: ${catalog.length} tools\n`);
+      for (const tool of catalog) {
+        console.log(`  ${tool.name}  effect=${tool.effect}  category=${tool.category}`);
+      }
+      console.log('');
+    });
 
   tools
     .command('profile')
