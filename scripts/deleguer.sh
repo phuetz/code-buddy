@@ -221,6 +221,12 @@ case "$MOTEUR" in
     (cd "$DEPOT" && vibe --trust --workdir "$DEPOT" --auto-approve --output "${VIBE_OUTPUT:-text}" \
        --max-turns "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-5}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
     ;;
+  qwenflash)
+    # Qwen 3.8 Flash via OpenRouter (06/09/2026 : 1 M de contexte, 0,15 $/M entrée, 0,47 $/M sortie,
+    # appels d'outils OK) — moteur de volume pendant les trous Codex. OpenRouter voit les prompts :
+    # code public et vérifications, JAMAIS de livre non publié ni de dépôt privé sans accord.
+    OPENROUTER_MODELE="${OPENROUTER_MODELE:-qwen/qwen3.8-flash}" exec "$0" "$DEPOT" "$CONSIGNE" openrouter
+    ;;
   openrouter)
     # OpenRouter, modèles `:free` — 1000 requêtes/jour gratuites dès que le compte porte > 10 $
     # de crédit (c'est le cas, deux clés). 17 modèles gratuits acceptent les appels d'outils au
