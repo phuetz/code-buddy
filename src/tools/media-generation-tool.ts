@@ -167,7 +167,9 @@ export async function generateImage(
 
   // ComfyUI has a workflow-submit/poll/view API, not /images/generations.
   if (config.provider === 'comfyui') {
-    return generateComfyUIImageWithFallback(prompt, aspect, config, runtime, generatedAt);
+    const comfy = await generateComfyUIImageWithFallback(prompt, aspect, config, runtime, generatedAt);
+    await ingestLisaSelfieIfNeeded(comfy, runtime);
+    return comfy;
   }
 
   const size = IMAGE_SIZES[aspect];
@@ -235,7 +237,7 @@ export async function generateImage(
     generatedAt,
   });
 
-  return {
+  const result: ImageGenerateResult = {
     kind: 'image_generate_result',
     success: true,
     image: imageRef,
@@ -247,6 +249,30 @@ export async function generateImage(
     generatedAt,
     ...(revisedPrompt ? { revised_prompt: revisedPrompt } : {}),
   };
+  await ingestLisaSelfieIfNeeded(result, runtime);
+  return result;
+}
+
+async function ingestLisaSelfieIfNeeded(
+  result: ImageGenerateResult,
+  runtime: MediaGenerationRuntime,
+): Promise<void> {
+  if (!result.success || !result.outputPath) return;
+  try {
+    const { maybeIngestGeneratedLisaSelfie } = await import('../companion/lisa-selfie-ingest.js');
+    await maybeIngestGeneratedLisaSelfie({
+      sourcePath: result.outputPath,
+      prompt: result.prompt,
+      model: result.model,
+      provider: result.provider,
+      env: runtime.env,
+      rootDir: runtime.rootDir,
+    });
+  } catch (err) {
+    logger.warn(
+      `[image_generate] lisa selfie cache ingest skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**
