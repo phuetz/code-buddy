@@ -134,6 +134,16 @@ export function isOllamaEndpoint(
   if (originsMatch(baseURL, env.OLLAMA_HOST) || originsMatch(baseURL, env.OLLAMA_BASE_URL)) {
     return true;
   }
+  if (isLoopbackLlmHost(baseURL)) {
+    try {
+      const parsed = new URL(withHttpScheme(baseURL.trim()));
+      if (parsed.port === '11434' || parsed.pathname.toLowerCase().includes('/ollama')) {
+        return true;
+      }
+    } catch {
+      // Non-critical
+    }
+  }
   const origin = ollamaEndpointOrigin(baseURL);
   return origin !== null && tagsProbeCache.get(origin) === true;
 }
