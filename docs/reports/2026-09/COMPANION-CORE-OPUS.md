@@ -262,6 +262,8 @@ ce moment-là ; l'import dynamique de l'adaptateur redevient alors statique.
 | Lint des fichiers neufs | `eslint packages/companion-core src/companion/core-adapter.ts tests/companion/core-adapter.test.ts` | **0** |
 | Lint complet | `npm run lint` | 6 erreurs **préexistantes** dans `src/server/mobile/assets/app.js` (`catch (err)` non utilisés, commit `753a0b19a`, hors lane) ; **0 apportée par ce travail** |
 | Blancs de fin / conflits | `git diff --check` | **0** |
+| Construction du dépôt (le workspace ne la casse pas) | `npm run build` | **0** ; `dist/companion/core-adapter.js` porte bien l'`await import('@phuetz/companion-core')` dynamique |
+| Concordance doc ↔ CLI, après construction | `vitest run tests/docs` | **111 / 111** verts (10 fichiers). Avant `npm run build`, `revue-gemini-docs.test.ts` échoue 16 fois faute de `dist/index.js` — c'est l'absence de construction du worktree, pas la lane |
 
 HOME de tests isolé sous `_qa/core/home` (gitignoré), `env -u FORCE_COLOR`.
 `git add` fichier par fichier, trois commits, aucun push, `~/code-buddy` et
