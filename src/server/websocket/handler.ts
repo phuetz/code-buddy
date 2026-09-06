@@ -1011,7 +1011,16 @@ messageHandlers.set('status', async (ws, state, payload) => {
     && !Array.isArray(payload)
     && (payload as { approvalCapable?: unknown }).approvalCapable === true
   ) {
-    state.approvalCapable = true;
+    if (state.authenticated && !state.anonymousRemote && state.scopes.includes('tools')) {
+      state.approvalCapable = true;
+    } else {
+      logger.warn('[ws] status approvalCapable ignored — requires authenticated non-anonymous socket with tools scope', {
+        connectionId: state.id,
+        authenticated: state.authenticated,
+        anonymousRemote: state.anonymousRemote,
+        scopes: state.scopes,
+      });
+    }
   }
   send(ws, buildGatewayStatus({
     connection: {

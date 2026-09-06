@@ -8,6 +8,7 @@ import { createUserToken } from '../../src/server/auth/jwt.js';
 import { DEFAULT_SERVER_CONFIG } from '../../src/server/types.js';
 import {
   closeAllConnections,
+  collectApprovalSurfaceIds,
   setupWebSocket,
 } from '../../src/server/websocket/handler.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
@@ -247,6 +248,21 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
     remote.ws.close();
     loopback.ws.close();
   });
+
+  it('C-1 status ignores approvalCapable on anonymous remote socket with warn', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const remote = await connect(`${wsBase}/ws`, { 'X-Forwarded-For': '203.0.113.50' });
+    await waitUntil(() => remote.events.some((event) => event.type === 'connected'));
+    remote.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => remote.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ anonymousRemote: true }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+    warn.mockRestore();
+    remote.ws.close();
+  });
 });
 
 describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface', () => {
@@ -393,5 +409,44 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
     await expect(pending).resolves.toEqual({ confirmed: false });
     pwa.ws.close();
     chatOnly.ws.close();
+  });
+
+  it('C-1 status only sets approvalCapable for authenticated non-anonymous socket with tools scope', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    // 1. Unauthenticated socket sends status with approvalCapable: true
+    const unauthed = await connect(`${wsBase}/ws`);
+    await waitUntil(() => unauthed.events.some((event) => event.type === 'connected'));
+    unauthed.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => unauthed.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ authenticated: false }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 2. Authenticated socket missing 'tools' scope
+    warn.mockClear();
+    const chatOnly = await clientWith(['chat'], { userId: 'chat-user' });
+    chatOnly.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => chatOnly.events.some((event) => event.type === 'status'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[ws] status approvalCapable ignored'),
+      expect.objectContaining({ authenticated: true }),
+    );
+    expect(collectApprovalSurfaceIds()).toHaveLength(0);
+
+    // 3. Authenticated socket with 'tools' scope
+    warn.mockClear();
+    const toolsUser = await clientWith(['chat', 'tools'], { userId: 'tools-user' });
+    toolsUser.ws.send(JSON.stringify({ type: 'status', payload: { approvalCapable: true } }));
+    await waitUntil(() => toolsUser.events.some((event) => event.type === 'status'));
+    expect(warn).not.toHaveBeenCalled();
+    expect(collectApprovalSurfaceIds()).toHaveLength(1);
+
+    warn.mockRestore();
+    unauthed.ws.close();
+    chatOnly.ws.close();
+    toolsUser.ws.close();
   });
 });
