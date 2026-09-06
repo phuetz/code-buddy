@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="Code Buddy Mobile - PWA pour piloter Code Buddy">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/__codebuddy__/mobile/manifest.webmanifest">
+  
+  <!-- Security: CSP -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self';">
+  
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="/__codebuddy__/mobile/assets/icon.svg">
+  <link rel="apple-touch-icon" href="/__codebuddy__/mobile/assets/icon-192.png">
+  
+  <title>Code Buddy Mobile</title>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="/__codebuddy__/mobile/assets/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Login Screen (shown when not authenticated) -->
+    <div id="login-screen" class="screen active">
+      <div class="header">
+        <h1>Code Buddy</h1>
+        <p class="subtitle">Mobile PWA</p>
+      </div>
+      
+      <div class="login-form">
+        <div class="input-group">
+          <label for="token-input">Token JWT</label>
+          <textarea 
+            id="token-input" 
+            placeholder="Coller votre token JWT ici..."
+            rows="3"
+            autofocus
+          ></textarea>
+          <p class="hint">Obtenez un token via: <code>buddy server --mobile-qr</code></p>
+        </div>
+        
+        <div class="button-group">
+          <button id="connect-btn" class="btn primary">Se connecter</button>
+          <button id="qr-btn" class="btn secondary">Générer QR Code</button>
+        </div>
+        
+        <div id="qr-container" class="qr-container hidden">
+          <p>Scannez ce QR code avec votre téléphone :</p>
+          <div id="qr-code"></div>
+          <p id="qr-data" class="qr-data"></p>
+          <button id="close-qr" class="btn small">Fermer</button>
+        </div>
+        
+        <div id="error-message" class="error-message hidden"></div>
+      </div>
+      
+      <div class="footer">
+        <p>v1.0.0 | Loopback-only par défaut</p>
+      </div>
+    </div>
+
+    <!-- Main App Screen (shown when authenticated) -->
+    <div id="main-screen" class="screen hidden">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <button id="menu-btn" class="btn icon">☰</button>
+          <h2 id="current-assistant">Code Buddy</h2>
+        </div>
+        <div class="header-right">
+          <span id="connection-status" class="status-indicator connected">●</span>
+          <button id="logout-btn" class="btn icon">✕</button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Chat Section -->
+        <section id="chat-section" class="section active">
+          <div class="chat-container">
+            <div id="messages" class="messages">
+              <!-- Messages will be dynamically inserted here -->
+              <div class="welcome-message">
+                <p>Bienvenue sur Code Buddy Mobile</p>
+                <p class="hint">Commencez une conversation avec votre assistant...</p>
+              </div>
+            </div>
+            
+            <div class="input-area">
+              <textarea 
+                id="message-input" 
+                placeholder="Écrivez votre message ici..."
+                rows="1"
+                autofocus
+              ></textarea>
+              <button id="send-btn" class="btn primary icon">→</button>
+              <button id="stop-btn" class="btn danger icon hidden">□</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Runs Section -->
+        <section id="runs-section" class="section hidden">
+          <div class="section-header">
+            <h3>Runs récents</h3>
+            <button id="refresh-runs" class="btn icon small">↻</button>
+          </div>
+          <div id="runs-list" class="list-container">
+            <!-- Runs will be dynamically inserted here -->
+            <p class="empty-state">Chargement des runs...</p>
+          </div>
+        </section>
+
+        <!-- Status Section -->
+        <section id="status-section" class="section hidden">
+          <div class="section-header">
+            <h3>Statut</h3>
+          </div>
+          <div id="status-info" class="status-container">
+            <!-- Status info will be dynamically inserted here -->
+          </div>
+        </section>
+
+        <!-- Confirmations Section -->
+        <section id="confirmations-section" class="section hidden">
+          <div class="section-header">
+            <h3>Confirmations en attente</h3>
+          </div>
+          <div id="confirmations-list" class="list-container">
+            <!-- Confirmations will be dynamically inserted here -->
+            <p class="empty-state">Aucune confirmation en attente</p>
+          </div>
+        </section>
+      </main>
+
+      <!-- Bottom Navigation -->
+      <nav class="bottom-nav">
+        <button data-section="chat-section" class="nav-item active">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">Chat</span>
+        </button>
+        <button data-section="runs-section" class="nav-item">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Runs</span>
+        </button>
+        <button data-section="confirmations-section" class="nav-item">
+          <span class="nav-icon">✅</span>
+          <span class="nav-label">Confirm</span>
+          <span id="confirmation-badge" class="badge hidden">0</span>
+        </button>
+        <button data-section="status-section" class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Statut</span>
+        </button>
+      </nav>
+
+      <!-- Assistant Selector Modal -->
+      <div id="assistant-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Sélectionner un assistant</h3>
+            <button id="close-assistant-modal" class="btn icon">✕</button>
+          </div>
+          <div id="assistants-list" class="modal-body">
+            <!-- Assistants will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirmation Modal -->
+      <div id="confirmation-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Confirmation requise</h3>
+          </div>
+          <div id="confirmation-content" class="modal-body">
+            <!-- Confirmation content will be dynamically inserted here -->
+          </div>
+          <div class="modal-footer">
+            <button id="confirm-deny" class="btn danger">Refuser</button>
+            <button id="confirm-approve" class="btn primary">Approuver</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Worker Registration -->
+  <script>
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/__codebuddy__/mobile/sw.js', { 
+          scope: '/__codebuddy__/mobile/' 
+        }).then(registration => {
+          console.log('ServiceWorker registration successful');
+        }).catch(err => {
+          console.log('ServiceWorker registration failed: ', err);
+        });
+      });
+    }
+  </script>
+
+  <!-- Main App Script -->
+  <script src="/__codebuddy__/mobile/assets/app.js"></script>
+</body>
+</html>
