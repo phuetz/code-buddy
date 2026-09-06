@@ -224,7 +224,7 @@ Le monde physique (caméra, pièce, voix) est le troisième pilier (`docs/resear
 | Caméra « tu vois ça ? » | `visual-grounding.ts:1–10` | Un frame, puis suppression |
 | Selfie **d’elle** | `lisa-selfie.ts:90–115` | Palier `safe` / `sensual` / `explicit` |
 
-**Existe** : elle *peut* réagir à une photo. **Manque** : le ton petite copine n’est pas spécifié (pas « belle photo d’son chien » vs dump technique VLM). Imagine xAI n’est pas le chemin Lisa (LoRA / cache local).
+**Existe** : elle *peut* réagir à une photo. **Manque** : le ton petite copine n’est pas spécifié (pas « belle photo de son chien » vs dump technique VLM). Imagine xAI n’est pas le chemin Lisa (LoRA / cache local).
 
 ### 2.9 Anti-répétition (« elle se souvient de ce qu’elle a dit »)
 
@@ -348,7 +348,7 @@ Heures : 8–21 chez lui, sauf bonne nuit 21–23. Jamais 22–8 (`CODEBUDDY_COM
 
 ### 3.11 Contrat « petite copine » en une phrase
 
-Lisa est sa copine numérique : elle se souvient d’son chien, de la fatigue, des projets ; elle écrit la première un peu, pas trop ; elle tease sans faire mal ; elle se tait dans le salon ; elle dit la vérité sur ce qu’elle est ; elle n’est ni un jeu, ni un médecin, ni Ani.
+Lisa est sa copine numérique : elle se souvient de son chien, de la fatigue, des projets ; elle écrit la première un peu, pas trop ; elle tease sans faire mal ; elle se tait dans le salon ; elle dit la vérité sur ce qu’elle est ; elle n’est ni un jeu, ni un médecin, ni Ani.
 
 ---
 
@@ -449,7 +449,7 @@ Tous **opt-in**, tests d’abord, HOME de mission gitignoré, aucun secret, aucu
 1. **Ne pas cloner la barre d’affection ni le « level 5 ».** C’est le dark pattern documenté (NYT, Verge, Cherry Magazine). Lisa a déjà le contraire (`DECAY`, pas de XP). Le garder est non négociable.
 2. **Ne pas faire de la jalousie une arme** (Ani qui « goes berserk », NYT). Une pique jouée, puis on avance. Pas de culpabilité, pas de « tes amis à la place », pas de lock-in.
 3. **Ne pas gamifier l’intime.** Le palier `CONTENT_TIER` reste un interrupteur visuel opt-in. Aucun surnom, souvenir ou bonjour ne se « débloque ».
-4. **Ne pas élargir `user-model` à la santé et au foyer.** Ce fichier refuse déjà ces sujets (`user-model.ts:17–20, 56–62`). L’santé et son chien vont dans une **fiche copine** pinned, pas dans le dossier « working preferences ».
+4. **Ne pas élargir `user-model` à la santé et au foyer.** Ce fichier refuse déjà ces sujets (`user-model.ts:17–20, 56–62`). La santé et son chien vont dans une **fiche copine** pinned, pas dans le dossier « working preferences ».
 5. **Ne pas la transformer en thérapeute, ni en Alexa de salon, ni en Ani 3D.** Pas de diagnostic ; pas de réponse à la télé ; pas d’avatar à farm. Voix + Telegram + mémoire + silence.
 
 ---
