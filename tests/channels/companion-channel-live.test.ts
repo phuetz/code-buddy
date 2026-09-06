@@ -22,7 +22,10 @@ async function ollamaReady(): Promise<boolean> {
   }
 }
 
-describe('companion channel live turn', () => {
+// Live performance assertion on a shared local GPU: opt-in like mobile-ws-live
+// (RUN_MOBILE_LIVE). Under load (other models resident, lanes running) a 30 s
+// budget is a measurement of the machine, not of the code.
+describe.skipIf(process.env.RUN_OLLAMA_LIVE !== '1')('companion channel live turn', () => {
   it('completes a no-tools companion turn in under 30s on local Ollama', async () => {
     if (!(await ollamaReady())) {
       return;
