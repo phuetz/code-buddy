@@ -58,6 +58,7 @@ import {
   createCognitionRoutes,
   mobileRoutes,
   mobilePwaRouter,
+  runsRoutes,
 } from './routes/index.js';
 import {
   setupWebSocket,
@@ -347,6 +348,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   app.use('/api/acp', createACPRoutes());
   app.use('/api/cloud/tasks', createCloudTaskRoutes());
   app.use('/api/webhooks', createWebhookRoutes());
+  app.use('/api', runsRoutes);
 
   // OpenAI-compatible alias
   app.use('/v1/chat', chatRoutes);
