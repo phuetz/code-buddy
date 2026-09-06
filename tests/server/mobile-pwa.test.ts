@@ -223,6 +223,18 @@ describe('Mobile PWA Assets Validation', () => {
     expect(html).toContain('name="viewport"');
     expect(html).toContain('rel="manifest"');
     expect(html).not.toContain('unsafe-eval');
+    expect(html).not.toContain('unsafe-inline');
+    expect(html).not.toMatch(/<script(?![^>]+src=)/);
+  });
+
+  it('should speak the real WebSocket protocol', () => {
+    const app = readFileSync(path.join(assetsDir, 'app.js'), 'utf-8');
+    expect(app).toContain('authenticated');
+    expect(app).toContain('stream_chunk');
+    expect(app).toContain('stream_end');
+    expect(app).toContain('confirmation_required');
+    expect(app).not.toContain('auth_success');
+    expect(app).not.toContain('chat_stream');
   });
 });
 
