@@ -4,6 +4,7 @@ import {
   speakChannelProviderFailure,
   COMPANION_CHANNEL_FAILOVER_SEAM,
 } from '../../src/channels/provider-failure-speech.js';
+import { ProviderFailoverExhaustedError } from '../../src/codebuddy/provider-failover-error.js';
 
 describe('channel provider-failure speech', () => {
   it('exposes the CodeBuddyClient.chat failover seam (do not reimplement the chain)', () => {
@@ -33,6 +34,23 @@ describe('channel provider-failure speech', () => {
     const err = Object.assign(new Error('Forbidden: out_of_credits'), { status: 403 });
     const spoken = speakChannelProviderFailure(err, { copine: true });
     expect(spoken).toMatch(/crédits/i);
+  });
+
+  it('says the backup brain failed rather than repeating the 429 quota', () => {
+    const primary = Object.assign(
+      new Error('ChatGPT Responses backend error (429): {"type":"usage_limit_reached","resets_in_seconds":3600}'),
+      { status: 429, type: 'usage_limit_reached' },
+    );
+    const err = new ProviderFailoverExhaustedError(primary, [{
+      target: 'ollama:qwen3:4b-instruct',
+      status: 400,
+      message: '400 context length',
+    }]);
+    const failure = classifyChannelProviderFailure(err);
+    expect(failure.kind).toBe('fallback_exhausted');
+    const spoken = speakChannelProviderFailure(err, { copine: true });
+    expect(spoken).toMatch(/cerveau de secours n'a pas suffi/i);
+    expect(spoken).not.toMatch(/quota/i);
   });
 
   it('names a timeout honestly', () => {

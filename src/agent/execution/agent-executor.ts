@@ -1655,7 +1655,9 @@ export class AgentExecutor {
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } },
         ), resolveStallTimeoutMs(), {
-          firstTokenTimeoutMs: resolveFirstTokenStallTimeoutMs(inputTokens),
+          firstTokenTimeoutMs: () => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, {
+            targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
+          }),
         });
         try {
         for await (const streamEvent of withLlmStreamRetry(streamFactory, {

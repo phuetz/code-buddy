@@ -67,12 +67,18 @@ import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 import { logger } from '../../src/utils/logger.js';
 import type { RuntimeFallbackProvider } from '../../src/providers/provider-fallback.js';
 import {
+  describeFailoverAttempt,
+  ProviderFailoverExhaustedError,
+} from '../../src/codebuddy/provider-failover-error.js';
+import {
   isProviderUnavailable,
   readProviderHealthSnapshot,
   resetProviderHealthStoreForTests,
   setProviderHealthPathForTests,
 } from '../../src/providers/provider-health.js';
 import { getGlobalEventBus, resetEventBus } from '../../src/events/event-bus.js';
+import { resetUserFacingFailoverNoticeForTests } from '../../src/providers/provider-failover-user-notice.js';
+import { resetLegacyLlmFailoverAliasWarnForTests } from '../../src/providers/provider-failover-policy.js';
 
 function quotaError(): Error {
   const err = new Error(
@@ -93,6 +99,14 @@ function overloadError(): Error {
 function authError(): Error {
   const err = new Error('401 Unauthorized') as Error & { status: number };
   err.status = 401;
+  return err;
+}
+
+function contextLengthError(): Error {
+  const err = new Error(
+    'CodeBuddy API error: Ollama API error: 400 Bad Request — {"error":"request (60480 tokens) exceeds the available context size (32768 tokens), try increasing it"}',
+  ) as Error & { status: number };
+  err.status = 400;
   return err;
 }
 
@@ -120,6 +134,7 @@ function openaiFallback(model = 'gpt-4o'): RuntimeFallbackProvider {
 
 const envKeys = [
   'CODEBUDDY_PROVIDER_FALLBACK',
+  'CODEBUDDY_LLM_FAILOVER',
   'CODEBUDDY_FALLBACK_CHAIN',
   'CODEBUDDY_FALLBACK_PROVIDERS',
   'CODEBUDDY_LOCAL_ONLY',
@@ -139,6 +154,7 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     setProviderHealthPathForTests(path.join(tmp, '.codebuddy', 'provider-health.json'));
     resetProviderHealthStoreForTests();
     resetEventBus();
+    resetLegacyLlmFailoverAliasWarnForTests();
     for (const key of envKeys) delete process.env[key];
   });
 
@@ -149,6 +165,7 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     else process.env.HOME = previousHome;
     for (const key of envKeys) delete process.env[key];
     resetEventBus();
+    resetUserFacingFailoverNoticeForTests();
     removeTmpDir(tmp);
   });
 
@@ -167,6 +184,26 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
       expect.any(Object),
     );
     expect(fs.existsSync(path.join(tmp, '.codebuddy', 'provider-health.json'))).toBe(false);
+  });
+
+  it('CODEBUDDY_LLM_FAILOVER=1 is the same declared path as PROVIDER_FALLBACK', async () => {
+    process.env.CODEBUDDY_LLM_FAILOVER = '1';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('legacy alias ok'));
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback()],
+    });
+    const response = await client.chat([{ role: 'user', content: 'hello' }], []);
+    expect(response.choices[0]?.message.content).toBe('legacy alias ok');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('CODEBUDDY_LLM_FAILOVER is deprecated'),
+      expect.any(Object),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[fallback] grok → openai:gpt-4o \(quota_exhausted/),
+      expect.any(Object),
+    );
+    const fallbackMessages = mockCreate.mock.calls[1]?.[0]?.messages as Array<{ content?: string }>;
+    expect(fallbackMessages.some((m) => m.content?.includes('conversation reprise'))).toBe(true);
   });
 
   it('429 quota → switch, resume note, persisted health, no retry of the benched provider', async () => {
@@ -242,6 +279,34 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     );
   });
 
+  it('exhausted chain keeps the 429 and each target failure in message, cause and details', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockRejectedValueOnce(contextLengthError());
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct')],
+    });
+    let caught: unknown;
+    try {
+      await client.chat([{ role: 'user', content: 'hello' }], []);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ProviderFailoverExhaustedError);
+    const exhausted = caught as ProviderFailoverExhaustedError;
+    expect(exhausted.message).toMatch(/usage_limit_reached/);
+    expect(exhausted.message).toContain('openai:qwen3:4b-instruct → 400 context length');
+    expect(exhausted.cause).toBeInstanceOf(Error);
+    expect((exhausted.cause as Error).message).toMatch(/usage_limit_reached/);
+    expect(exhausted.details.attempts).toEqual([
+      { target: 'openai:qwen3:4b-instruct', status: 400, message: '400 context length' },
+    ]);
+    expect(describeFailoverAttempt('ollama:qwen3:4b-instruct', contextLengthError())).toEqual({
+      target: 'ollama:qwen3:4b-instruct',
+      status: 400,
+      message: '400 context length',
+    });
+  });
+
   it('empty chain → original error unchanged', async () => {
     process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
     mockCreate.mockRejectedValueOnce(quotaError());
@@ -284,6 +349,66 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('skips a 32k target when the pruned prompt is still 41k and tries the next', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('roomy ok'));
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct'), openaiFallback('gpt-4o')],
+    });
+    const huge = 'H'.repeat(41_000 * 4);
+    const response = await client.chat([{ role: 'user', content: huge }], []);
+    expect(response.choices[0]?.message.content).toBe('roomy ok');
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[fallback] openai:qwen3:4b-instruct ignorée (contexte 32 k < 41 k)',
+      expect.objectContaining({ toModel: 'qwen3:4b-instruct' }),
+    );
+    const models = mockCreate.mock.calls.map((call) => (call[0] as { model?: string }).model);
+    expect(models).toEqual(['grok-code-fast-1', 'gpt-4o']);
+  });
+
+  it('prunes a 110-tool catalogue when failing over to a 32k model', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));
+    const padding = 'D'.repeat(2_000);
+    const tools = [
+      {
+        type: 'function' as const,
+        function: {
+          name: 'list_directory',
+          description: `list files ${padding}`,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      },
+      {
+        type: 'function' as const,
+        function: {
+          name: 'tool_search',
+          description: `search tools ${padding}`,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      },
+      ...Array.from({ length: 108 }, (_, i) => ({
+        type: 'function' as const,
+        function: {
+          name: `tool_${i}`,
+          description: padding,
+          parameters: { type: 'object' as const, properties: {}, required: [] as string[] },
+        },
+      })),
+    ];
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [openaiFallback('qwen3:4b-instruct')],
+    });
+    await client.chat(
+      [{ role: 'system', content: 'sys' }, { role: 'user', content: 'liste les fichiers du dossier courant' }],
+      tools,
+    );
+    const sent = mockCreate.mock.calls[1]?.[0] as { tools?: Array<{ function: { name: string } }> };
+    expect(sent?.tools).toBeDefined();
+    expect(sent!.tools!.length).toBeLessThanOrEqual(12);
+    expect(sent!.tools!.some((tool) => tool.function.name === 'tool_search')).toBe(true);
+  });
+
   it('compact/retruncate happens when the backup context is smaller', async () => {
     process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
     mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('ok'));
@@ -299,5 +424,30 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     const system = sent.find((m) => m.role === 'system' && !m.content.includes('provider_resume'));
     expect(system?.content.length).toBeLessThan(huge.length);
     expect(sent.some((m) => m.content?.includes('conversation reprise par'))).toBe(true);
+  });
+
+  it('exposes effective target and local status after failover', async () => {
+    process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
+    mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));
+    const localTarget: RuntimeFallbackProvider = {
+      provider: 'ollama',
+      label: 'Ollama',
+      apiMode: 'openai-compatible',
+      model: 'qwen3.8-ctx32k:latest',
+      baseURL: 'https://mock.ollama.internal/v1',
+      apiKey: 'ollama',
+      authMode: 'local',
+      fallbackSource: 'environment',
+    };
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [localTarget],
+    });
+    expect(client.getCurrentProvider()).toBe('grok');
+    expect(client.isEffectiveTargetLocal()).toBe(false);
+
+    await client.chat([{ role: 'user', content: 'hello' }], []);
+    expect(client.getCurrentProvider()).toBe('ollama');
+    expect(client.getCurrentBaseUrl()).toBe('https://mock.ollama.internal/v1');
+    expect(client.isEffectiveTargetLocal()).toBe(true);
   });
 });

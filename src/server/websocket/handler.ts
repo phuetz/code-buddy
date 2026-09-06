@@ -15,6 +15,7 @@ import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } from '../../gateway/device-pairing.js';
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
+import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 
 function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -480,6 +481,7 @@ export interface GatewayStatusInput {
  */
 export function buildGatewayStatus(input: GatewayStatusInput): WebSocketResponse {
   const c = input.connection;
+  const notice = peekUserFacingFailoverNotice();
   return {
     type: 'status',
     payload: {
@@ -498,6 +500,9 @@ export function buildGatewayStatus(input: GatewayStatusInput): WebSocketResponse
         pairingRequired: input.server.pairingRequired,
         connections: input.connections,
       },
+      ...(notice
+        ? { failoverNotice: notice.text, failoverNoticeKind: notice.kind }
+        : {}),
     },
     timestamp: new Date().toISOString(),
   };

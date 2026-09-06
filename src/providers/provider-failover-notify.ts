@@ -7,6 +7,7 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 import { RunStore } from '../observability/run-store.js';
 import type { FailoverKind } from '../codebuddy/provider-failover-kind.js';
 import { recordLastFailover } from './provider-health.js';
+import { recordUserFacingFailoverNotice } from './provider-failover-user-notice.js';
 
 export interface FallbackNotice {
   fromProvider: string;
@@ -70,6 +71,7 @@ export function notifyProviderFallback(notice: FallbackNotice): void {
     toModel: notice.toModel,
     kind: notice.kind,
   });
+  recordUserFacingFailoverNotice('fallback');
 }
 
 export function notifyProviderReturn(providerId: string): void {
@@ -77,6 +79,7 @@ export function notifyProviderReturn(providerId: string): void {
     source: 'CodeBuddyClient',
     provider: providerId,
   });
+  recordUserFacingFailoverNotice('return');
   try {
     getGlobalEventBus().emit('provider:switched', {
       toProvider: providerId,

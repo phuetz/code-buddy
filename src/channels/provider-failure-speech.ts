@@ -11,6 +11,7 @@
  */
 
 import { classifyProviderError } from '../codebuddy/provider-error-classifier.js';
+import { isProviderFailoverExhaustedError } from '../codebuddy/provider-failover-error.js';
 import { COMPANION_CHANNEL_FAILOVER_SEAM } from './companion-channel-turn.js';
 
 export { COMPANION_CHANNEL_FAILOVER_SEAM };
@@ -21,6 +22,7 @@ export type ChannelProviderFailureKind =
   | 'model_unavailable'
   | 'timeout'
   | 'unreachable'
+  | 'fallback_exhausted'
   | 'unknown';
 
 export interface ChannelProviderFailure {
@@ -69,6 +71,10 @@ export function classifyChannelProviderFailure(
   const lower = raw.toLowerCase();
   const classified = classifyProviderError(err, nowMs);
   const resetsAt = parseResetsAt(raw, nowMs);
+
+  if (isProviderFailoverExhaustedError(err)) {
+    return { kind: 'fallback_exhausted', raw };
+  }
 
   if (
     lower.includes('out_of_credits') ||
@@ -142,6 +148,10 @@ export function formatCompanionProviderFailure(
       return copine
         ? 'Je n\'arrive pas à joindre le modèle local pour le moment.'
         : 'Fournisseur injoignable.';
+    case 'fallback_exhausted':
+      return copine
+        ? 'Mon cerveau de secours n\'a pas suffi — je te le dis plutôt que d\'inventer.'
+        : 'Le cerveau de secours n\'a pas suffi.';
     default:
       return copine
         ? 'Je n\'ai pas réussi à formuler une réponse fiable. Dis-moi simplement quelle partie tu veux que je reprenne.'

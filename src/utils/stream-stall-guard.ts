@@ -55,13 +55,15 @@ export function resolveStallTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 export function resolveFirstTokenStallTimeoutMs(
   promptTokens: number,
   env: NodeJS.ProcessEnv = process.env,
+  options?: { targetIsLocal?: boolean },
 ): number {
   const afterFirst = resolveStallTimeoutMs(env);
   if (afterFirst <= 0) return afterFirst;
   // Adaptive prompt-eval budget is a LOCAL-runtime concern (iGPU prompt eval
   // can take minutes). A silent cloud provider must still fail in 120 s —
   // byte-identical behaviour for Gemini/ChatGPT/xAI and interactive sessions.
-  if (!isLocalLlmProvider(env)) return afterFirst;
+  const isLocal = options?.targetIsLocal ?? isLocalLlmProvider(env);
+  if (!isLocal) return afterFirst;
   const msPerToken = Math.max(0, parseEnvNumber(
     env.CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN,
     DEFAULT_LOCAL_PROMPT_MS_PER_TOKEN,
@@ -76,7 +78,7 @@ export function resolveFirstTokenStallTimeoutMs(
 
 export interface StallGuardOptions {
   /** Inactivity budget until the first chunk. Defaults to `timeoutMs`. */
-  firstTokenTimeoutMs?: number;
+  firstTokenTimeoutMs?: number | (() => number);
 }
 
 /**
@@ -94,12 +96,17 @@ export async function* withStallGuard<T>(
     return;
   }
 
-  const firstTimeout = options?.firstTokenTimeoutMs ?? timeoutMs;
+  const resolveFirstTimeout = (): number => {
+    const val = typeof options?.firstTokenTimeoutMs === 'function'
+      ? options.firstTokenTimeoutMs()
+      : options?.firstTokenTimeoutMs;
+    return val ?? timeoutMs;
+  };
   const iterator = stream[Symbol.asyncIterator]();
   let awaitingFirst = true;
   try {
     while (true) {
-      const budget = awaitingFirst ? firstTimeout : timeoutMs;
+      const budget = awaitingFirst ? resolveFirstTimeout() : timeoutMs;
       if (budget <= 0) {
         const rest = await iterator.next();
         if (rest.done) return;

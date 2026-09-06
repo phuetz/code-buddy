@@ -5,7 +5,10 @@
  * When ON, a `>` chain (or the authenticated registry) is walked after a
  * classified outage, never after a 401, never toward an unauthenticated
  * or (when LOCAL_ONLY) cloud provider.
+ *
+ * `CODEBUDDY_LLM_FAILOVER` is a deprecated alias of the same flag (one path).
  */
+import { logger } from '../utils/logger.js';
 import { hasCodexCredentials } from './codex-oauth.js';
 import {
   resolveRuntimeFallbackProviders,
@@ -22,8 +25,28 @@ export function isTruthyEnv(value: string | undefined): boolean {
   return v === 'true' || v === '1' || v === 'yes' || v === 'on';
 }
 
+let legacyAliasWarned = false;
+
+export function resetLegacyLlmFailoverAliasWarnForTests(): void {
+  legacyAliasWarned = false;
+}
+
+/** One-shot deprecation when the old env name is the only one set. */
+export function warnLegacyLlmFailoverAlias(env: EnvLike = process.env): void {
+  if (legacyAliasWarned) return;
+  if (!isTruthyEnv(env.CODEBUDDY_LLM_FAILOVER) || isTruthyEnv(env.CODEBUDDY_PROVIDER_FALLBACK)) return;
+  legacyAliasWarned = true;
+  logger.warn(
+    '[fallback] CODEBUDDY_LLM_FAILOVER is deprecated; use CODEBUDDY_PROVIDER_FALLBACK=true',
+    { source: 'provider-failover-policy' },
+  );
+}
+
 export function isDeclaredProviderFallbackEnabled(env: EnvLike = process.env): boolean {
-  return isTruthyEnv(env.CODEBUDDY_PROVIDER_FALLBACK);
+  const declared = isTruthyEnv(env.CODEBUDDY_PROVIDER_FALLBACK);
+  const legacy = isTruthyEnv(env.CODEBUDDY_LLM_FAILOVER);
+  if (legacy && !declared) warnLegacyLlmFailoverAlias(env);
+  return declared || legacy;
 }
 
 export function isFailoverLocalOnly(env: EnvLike = process.env): boolean {

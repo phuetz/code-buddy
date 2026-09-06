@@ -25,11 +25,23 @@ import {
   resolveRuntimeFallbackProviders,
   type RuntimeFallbackProvider,
 } from "../providers/provider-fallback.js";
+import { isLocalLlmProvider } from "../config/headless-local-prompt.js";
 import {
   classifyFailoverKind,
   extractResetsInSeconds,
 } from "./provider-failover-kind.js";
-import { prepareFailoverMessages } from "./provider-handoff.js";
+import {
+  formatSkippedFailoverTargetLog,
+  formatContextTokensK,
+  isFailoverTargetTooSmall,
+  prepareFailoverHandoff,
+  type FailoverHandoffResult,
+} from "./provider-handoff.js";
+import {
+  describeFailoverAttempt,
+  ProviderFailoverExhaustedError,
+  type FailoverAttemptDetail,
+} from "./provider-failover-error.js";
 import {
   filterHealthyFallbacks,
   isDeclaredProviderFallbackEnabled,
@@ -288,6 +300,7 @@ export class CodeBuddyClient {
   private fallbackProviders: RuntimeFallbackProvider[] = [];
   /** True after a declared failover until the original provider is healthy again. */
   private didDeclaredFailover = false;
+  private activeFallback?: RuntimeFallbackProvider;
   /** Lazy default chain (authenticated registry) for CODEBUDDY_PROVIDER_FALLBACK. */
   private defaultDeclaredChain?: Promise<RuntimeFallbackProvider[]>;
 
@@ -534,8 +547,8 @@ export class CodeBuddyClient {
     return inferRuntimeProviderIdFromBaseURL(this.baseURL) ?? 'custom';
   }
 
-  private usesDeclaredFailover(opts: ChatOptions): boolean {
-    return isDeclaredProviderFallbackEnabled() && !opts.disableProviderFallback;
+  private usesDeclaredFailover(opts?: ChatOptions): boolean {
+    return isDeclaredProviderFallbackEnabled() && !opts?.disableProviderFallback;
   }
 
   private unavailablePrimaryError(): Error {
@@ -551,6 +564,7 @@ export class CodeBuddyClient {
     const id = this.getRuntimeProviderId();
     if (isProviderUnavailable(id)) return;
     notifyProviderReturn(id);
+    this.activeFallback = undefined;
     this.didDeclaredFailover = false;
     recordProviderSuccess(id);
   }
@@ -659,6 +673,23 @@ export class CodeBuddyClient {
     if (url.includes('fireworks.ai')) return 'Fireworks';
     if (url.includes('localhost') || url.includes('127.0.0.1')) return 'Local';
     return 'API';
+  }
+
+  getCurrentProvider(): string {
+    return this.activeFallback?.provider ?? this.getRuntimeProviderId();
+  }
+
+  getCurrentBaseUrl(): string {
+    return this.activeFallback?.baseURL ?? this.baseURL;
+  }
+
+  isEffectiveTargetLocal(): boolean {
+    if (this.activeFallback) return isLocalFailoverCandidate(this.activeFallback);
+    if (this.usesDeclaredFailover() && isProviderUnavailable(this.getRuntimeProviderId())) {
+      const first = this.fallbackProviders[0] ?? this.credentialPoolProviders[0];
+      if (first) return isLocalFailoverCandidate(first);
+    }
+    return isLocalLlmProvider();
   }
 
   /**
@@ -836,6 +867,26 @@ export class CodeBuddyClient {
     throw primaryError;
   }
 
+  private skipDeclaredTargetIfTooSmall(
+    fallback: RuntimeFallbackProvider,
+    handed: FailoverHandoffResult,
+  ): FailoverAttemptDetail | undefined {
+    if (!isFailoverTargetTooSmall(handed.estimatedTokens, handed.contextWindow)) return undefined;
+    const target = `${fallback.provider}:${fallback.model}`;
+    const message = `contexte ${formatContextTokensK(handed.contextWindow)} < ${formatContextTokensK(handed.estimatedTokens)}`;
+    logger.warn(
+      formatSkippedFailoverTargetLog(target, handed.contextWindow, handed.estimatedTokens),
+      {
+        source: 'CodeBuddyClient',
+        toProvider: fallback.provider,
+        toModel: fallback.model,
+        estimatedTokens: handed.estimatedTokens,
+        contextWindow: handed.contextWindow,
+      },
+    );
+    return { target, status: 'skipped', message };
+  }
+
   private async listDeclaredFailoverCandidates(): Promise<RuntimeFallbackProvider[]> {
     const localOnly = isFailoverLocalOnly();
     const listed = filterHealthyFallbacks([
@@ -909,16 +960,23 @@ export class CodeBuddyClient {
       ...opts,
       disableProviderFallback: true,
     };
+    const attempts: FailoverAttemptDetail[] = [];
 
     for (const fallback of candidates) {
       try {
-        const handed = await prepareFailoverMessages(messages, {
+        const handed = await prepareFailoverHandoff(messages, tools, {
           fromProvider: primaryId,
           fromModel: this.currentModel,
           toProvider: fallback.provider,
           toModel: fallback.model,
           kind: classification.kind,
         });
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
+        this.activeFallback = fallback;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -928,7 +986,7 @@ export class CodeBuddyClient {
         if (this.circuitBreakerConfig) {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
-        const response = await fallbackClient.chat(handed, tools, {
+        const response = await fallbackClient.chat(handed.messages, handed.tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions);
@@ -949,6 +1007,7 @@ export class CodeBuddyClient {
           throw createAbortError('Chat request aborted by caller');
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
         const fbKind = classifyFailoverKind(fallbackError);
         if (fbKind.shouldFailover) {
           recordProviderFailure(fallback.provider, fbKind.kind, {
@@ -967,7 +1026,8 @@ export class CodeBuddyClient {
       }
     }
 
-    throw primaryError;
+    this.activeFallback = undefined;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
   async *chatStream(
@@ -1185,17 +1245,24 @@ export class CodeBuddyClient {
       ...opts,
       disableProviderFallback: true,
     };
+    const attempts: FailoverAttemptDetail[] = [];
 
     for (const fallback of candidates) {
       let yieldedFromThisFallback = false;
       try {
-        const handed = await prepareFailoverMessages(messages, {
+        const handed = await prepareFailoverHandoff(messages, tools, {
           fromProvider: primaryId,
           fromModel: this.currentModel,
           toProvider: fallback.provider,
           toModel: fallback.model,
           kind: classification.kind,
         });
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
+        this.activeFallback = fallback;
         const fallbackClient = new CodeBuddyClient(
           fallback.apiKey,
           fallback.model,
@@ -1205,7 +1272,7 @@ export class CodeBuddyClient {
         if (this.circuitBreakerConfig) {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
-        for await (const chunk of fallbackClient.chatStream(handed, tools, {
+        for await (const chunk of fallbackClient.chatStream(handed.messages, handed.tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {
@@ -1248,6 +1315,7 @@ export class CodeBuddyClient {
           throw fallbackError;
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
         const fbKind = classifyFailoverKind(fallbackError);
         if (fbKind.shouldFailover) {
           recordProviderFailure(fallback.provider, fbKind.kind, {
@@ -1259,7 +1327,8 @@ export class CodeBuddyClient {
       }
     }
 
-    throw primaryError;
+    this.activeFallback = undefined;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
   async search(

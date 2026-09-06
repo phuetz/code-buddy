@@ -30,6 +30,7 @@ import {
 } from '../channels/companion-channel-profile.js';
 import { runCompanionChannelTurn } from '../channels/companion-channel-turn.js';
 import { speakChannelProviderFailure } from '../channels/provider-failure-speech.js';
+import { prependUserFacingFailoverNotice } from '../providers/provider-failover-user-notice.js';
 import type { CodeBuddyMessage, CodeBuddyResponse } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -264,7 +265,6 @@ export async function runCompanionTurn(
         });
       }
     }
-
     const text = generated.text.trim();
     const photoSummary = batch ? await fileSharedPhotos(batch, message, options) : undefined;
     if (!text) {
@@ -275,7 +275,7 @@ export async function runCompanionTurn(
       };
     }
     return {
-      text,
+      text: prependUserFacingFailoverNotice(text, 'companion-turn'),
       kind: 'text',
       model: generated.model,
       ...(photoSummary ? { photos: photoSummary } : {}),

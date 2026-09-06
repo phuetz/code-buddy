@@ -3,16 +3,26 @@ import {
   isDeclaredProviderFallbackEnabled,
   isFailoverLocalOnly,
   parseFallbackChain,
+  resetLegacyLlmFailoverAliasWarnForTests,
   resolveDeclaredFallbackProviders,
   shouldBypassUnreachableLocalPreflight,
 } from '../../src/providers/provider-failover-policy.js';
 
 describe('declared failover policy', () => {
   it('is off unless CODEBUDDY_PROVIDER_FALLBACK is true/1/on/yes', () => {
+    resetLegacyLlmFailoverAliasWarnForTests();
     expect(isDeclaredProviderFallbackEnabled({})).toBe(false);
     expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_PROVIDER_FALLBACK: 'false' })).toBe(false);
     expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_PROVIDER_FALLBACK: 'true' })).toBe(true);
     expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_PROVIDER_FALLBACK: '1' })).toBe(true);
+  });
+
+  it('treats CODEBUDDY_LLM_FAILOVER as a deprecated alias of the same flag', () => {
+    resetLegacyLlmFailoverAliasWarnForTests();
+    expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_LLM_FAILOVER: '1' })).toBe(true);
+    expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_LLM_FAILOVER: 'true' })).toBe(true);
+    expect(isDeclaredProviderFallbackEnabled({ CODEBUDDY_LLM_FAILOVER: '0' })).toBe(false);
+    expect(shouldBypassUnreachableLocalPreflight({ CODEBUDDY_LLM_FAILOVER: '1' })).toBe(true);
   });
 
   it('parses a > chain including ollama model tags with colons', () => {
