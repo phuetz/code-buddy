@@ -57,7 +57,7 @@ Branche `feat/photos-partagees-2026-09-06`, worktree `cb-photos-2026-09-06`, HEA
 | 8 | CSP `blob:` + style `.section-header` | `2018f0254` |
 | 9 | Isolation des tests de contexte relationnel | `919a6be2b` |
 
-## Trois défauts trouvés par la mise à l'épreuve réelle
+## Quatre défauts trouvés par la mise à l'épreuve réelle
 
 1. **La description d'une photo privée atterrissait dans un fichier SUIVI.**
    `getMemoryManager()` résout la mémoire projet en `.codebuddy/CODEBUDDY_MEMORY.md`
@@ -71,7 +71,10 @@ Branche `feat/photos-partagees-2026-09-06`, worktree `cb-photos-2026-09-06`, HEA
    puis blob) échouaient **sans erreur visible**. Invisible pour Vitest + happy-dom,
    trouvé au premier lancement Playwright. `blob:` est strictement plus étroit que
    le `data:` déjà autorisé.
-3. **Une nouvelle source de contexte casse les tests de composition existants.**
+3. **Un chemin `/home/<user>` dans mon propre rapport** a fait échouer
+   `tests/security/donnees-personnelles.test.ts` au contrôle final — le garde
+   fonctionne, y compris contre l'agent qui écrit le rapport. Retiré.
+4. **Une nouvelle source de contexte casse les tests de composition existants.**
    `buildRelationalContext` lit désormais la mémoire utilisateur : après l'essai
    réel, cinq tests qui affirmaient une chaîne exacte échouaient. Ils déclarent
    maintenant la source photos comme ils déclarent déjà toutes les autres —
@@ -132,8 +135,10 @@ présente, aucun chemin. Fichiers sur disque en **0600**.
 - `_qa/photos/shots/album-tab.png` — onglet Album, tuile datée
 - `_qa/photos/shots/control-no-photo.png` — témoin
 
-Playwright a été pris dans `/home/patrice/code-buddy-cowork/node_modules`
-(`cowork/node_modules` n'existe pas dans ce worktree). Viewport 390×844.
+Playwright a été pris dans le `node_modules` d'un autre clone du dépôt présent
+sur la machine : `cowork/node_modules` n'existe pas dans ce worktree, donc
+`cowork/node_modules/.bin/playwright` demandé par la mission était introuvable.
+Viewport 390×844.
 
 **Réserve honnête :** la bande noire sous le composer sur les captures est un
 artefact **préexistant** du harnais (`showMain()` forcé sur une page arrivée sur
