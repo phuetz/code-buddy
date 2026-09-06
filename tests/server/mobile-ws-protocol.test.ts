@@ -32,8 +32,22 @@ vi.mock('../../src/server/agent-adapter.js', () => ({
   }),
 }));
 
+// The companion surface no longer goes through the VOICE loop; it goes through
+// runCompanionTurn (companion profile + configured provider). The voice mock
+// stays so any accidental regression to `defaultReply` is visible.
+vi.mock('../../src/companion/companion-turn.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/companion/companion-turn.js')>();
+  return {
+    ...actual,
+    runCompanionTurn: vi.fn(async (message: string) => ({
+      text: `lisa:${message}`,
+      kind: 'text' as const,
+    })),
+  };
+});
+
 vi.mock('../../src/sensory/voice-loop.js', () => ({
-  defaultReply: vi.fn(async (heard: string) => `lisa:${heard}`),
+  defaultReply: vi.fn(async (heard: string) => `voice:${heard}`),
 }));
 
 import { createUserToken } from '../../src/server/auth/jwt.js';
@@ -179,7 +193,7 @@ describe('Mobile WS protocol', () => {
     ws.close();
   });
 
-  it('routes assistant=companion to defaultReply', async () => {
+  it('routes assistant=companion through the companion turn, not the voice loop', async () => {
     const { ws, events } = await authed();
     ws.send(JSON.stringify({
       type: 'chat',
