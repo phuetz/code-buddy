@@ -33,6 +33,9 @@ describe('ENV_SCHEMA', () => {
     expect(names).toContain('GROK_CONVERT_TOOL_MESSAGES');
     expect(names).toContain('CODEBUDDY_FALLBACK_PROVIDERS');
     expect(names).toContain('CODEBUDDY_PROVIDER_FALLBACK');
+    expect(names).toContain('CODEBUDDY_LISA_SELFIE_CACHE_DIR');
+    expect(names).toContain('CODEBUDDY_LISA_SELFIE_CACHE_MAX');
+    expect(names).toContain('CODEBUDDY_LISA_SELFIE_REFILL');
     expect(names).toContain('CODEBUDDY_FALLBACK_CHAIN');
     expect(names).toContain('CODEBUDDY_MEMORY_ENFORCE_LIMITS');
     expect(names).toContain('CODEBUDDY_MEMORY_PROJECT_CHAR_LIMIT');

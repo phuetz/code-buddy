@@ -1929,6 +1929,24 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             sensoryTeardown.push(() => heart.unregister('system-vitals'));
             logger.info(`System vitals: Enabled (CODEBUDDY_SYSTEM_VITALS) - heartbeat-paced resource percepts every ${vitalsEvery} beats`);
           }
+          // Lisa selfie cache refill (opt-in) — one image per beat when ComfyUI is
+          // reachable and load is low. Default OFF ⇒ byte-identical. Tests inject a
+          // fake generator; this path never busy-loops if the generator is down.
+          if (process.env.CODEBUDDY_LISA_SELFIE_REFILL === 'true') {
+            const refillEvery = Math.max(1, Number(process.env.CODEBUDDY_LISA_SELFIE_REFILL_EVERY ?? 40));
+            heart.register({
+              name: 'lisa-selfie-refill',
+              everyBeats: refillEvery,
+              handler: async (ctx) => {
+                const { runLisaSelfieRefillPass } = await import('../companion/lisa-selfie-refill.js');
+                await runLisaSelfieRefillPass({
+                  ...(typeof ctx.load1 === 'number' ? { load1: () => ctx.load1 as number } : {}),
+                });
+              },
+            });
+            sensoryTeardown.push(() => heart.unregister('lisa-selfie-refill'));
+            logger.info(`Lisa selfie refill: Enabled (CODEBUDDY_LISA_SELFIE_REFILL) - at most one image every ${refillEvery} beats`);
+          }
           // Schedule ticks (opt-in) — emit a `time/tick` percept each pass so rules can fire at a
           // time of day (match.kind:'tick' + between/filters on hhmm) with no busy loop. The
           // heartbeat is the clock. Default OFF => byte-identical behavior.

@@ -36,4 +36,10 @@ export interface CompanionPersonaProfile {
   fewShots: string;
   intimacyByTier: Record<CompanionNicknameTier, string>;
   away: Record<CompanionAwayAngle, readonly string[]>;
+  /** Captions attached to a cache-served selfie (no intimate copy). */
+  selfieCaptions: readonly string[];
+  /** Polite refusals when an explicit request is blocked by the adult gate. */
+  selfieRefusals: readonly string[];
+  /** Lines when the allowed-tier cache is empty. */
+  selfieEmpty: readonly string[];
 }

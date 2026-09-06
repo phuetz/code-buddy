@@ -94,6 +94,7 @@ describe('lisa-selfie', () => {
       env: {
         CODEBUDDY_SENSORY_ALERT_TOKEN: 't',
         CODEBUDDY_SENSORY_ALERT_CHAT: '1',
+        CODEBUDDY_LISA_SELFIE_CACHE_DIR: path.join(root, 'empty-cache'),
       } as NodeJS.ProcessEnv,
       generate: async () => ({ success: true, outputPath: fakeImg }),
       sendPhoto,
@@ -186,7 +187,7 @@ describe('lisa-selfie', () => {
       generate: async () => ({ success: true, outputPath: fakeImg }),
       sendPhoto: async () => false,
       sendTelegram: true,
-      env: {} as NodeJS.ProcessEnv,
+      env: { CODEBUDDY_LISA_SELFIE_CACHE_DIR: path.join(root, 'empty-cache') } as NodeJS.ProcessEnv,
       force: true,
     });
     expect(r?.success).toBe(true);
@@ -206,7 +207,7 @@ describe('lisa-selfie', () => {
         return { success: true, outputPath: fakeImg };
       },
       sendTelegram: false,
-      env: {} as NodeJS.ProcessEnv,
+      env: { CODEBUDDY_LISA_SELFIE_CACHE_DIR: path.join(root, 'empty-cache') } as NodeJS.ProcessEnv,
       force: true,
     });
     expect(r?.success).toBe(true);
@@ -235,6 +236,7 @@ describe('lisa-selfie', () => {
       generate,
       sendTelegram: false,
       force: true,
+      env: { CODEBUDDY_LISA_SELFIE_CACHE_DIR: path.join(root, 'empty-cache') } as NodeJS.ProcessEnv,
     });
     expect(generate).toHaveBeenCalledOnce();
     expect(r).not.toBeNull();
@@ -255,7 +257,10 @@ describe('lisa-selfie', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-selfie3-'));
     const fakeImg = path.join(root, 'y.png');
     await fs.writeFile(fakeImg, Buffer.from([1]));
-    const env = { CODEBUDDY_LISA_SELFIE_COOLDOWN_MS: '60000' } as NodeJS.ProcessEnv;
+    const env = {
+      CODEBUDDY_LISA_SELFIE_COOLDOWN_MS: '60000',
+      CODEBUDDY_LISA_SELFIE_CACHE_DIR: path.join(root, 'empty-cache'),
+    } as NodeJS.ProcessEnv;
     const first = await createAndMaybeSendLisaSelfie({
       rootDir: root,
       env,

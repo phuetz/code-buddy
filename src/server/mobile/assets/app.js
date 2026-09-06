@@ -138,9 +138,19 @@
     }
     if (type === 'stream_chunk') {
       const delta = data.payload && data.payload.delta;
-      if (typeof delta === 'string' && state.streamEl) {
-        state.streamEl.dataset.raw = (state.streamEl.dataset.raw || '') + delta;
-        state.streamEl.innerHTML = renderMarkdown(state.streamEl.dataset.raw);
+      const image = data.payload && data.payload.image;
+      if (state.streamEl) {
+        if (typeof delta === 'string') {
+          state.streamEl.dataset.raw = (state.streamEl.dataset.raw || '') + delta;
+        }
+        var html = renderMarkdown(state.streamEl.dataset.raw || '');
+        if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
+          var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+            ? image.mimeType
+            : 'image/png';
+          html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
+        }
+        state.streamEl.innerHTML = html;
         el('messages').scrollTop = el('messages').scrollHeight;
       }
       return;
@@ -152,7 +162,15 @@
     }
     if (type === 'chat_response') {
       const content = data.payload && data.payload.content;
-      if (typeof content === 'string') addBubble('assistant', renderMarkdown(content));
+      const image = data.payload && data.payload.image;
+      var html = typeof content === 'string' ? renderMarkdown(content) : '';
+      if (image && typeof image.data === 'string' && typeof image.mimeType === 'string') {
+        var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
+          ? image.mimeType
+          : 'image/png';
+        html += '<img class="selfie" alt="" src="data:' + mime + ';base64,' + image.data + '">';
+      }
+      if (html) addBubble('assistant', html);
       setStreaming(false);
       return;
     }
@@ -164,7 +182,7 @@
 
   function connectWs() {
     if (state.ws) {
-      try { state.ws.close(); } catch (e) { /* ignore */ }
+      try { state.ws.close(); } catch (_e) { /* ignore */ }
     }
     const ws = new WebSocket(wsUrl());
     state.ws = ws;
@@ -174,7 +192,7 @@
     ws.addEventListener('message', function (ev) {
       try {
         handleFrame(JSON.parse(ev.data));
-      } catch (err) {
+      } catch (_err) {
         addBubble('system', 'Trame WS illisible');
       }
     });
@@ -284,7 +302,7 @@
     try {
       const data = await fetchJson('/api/fleet/peers');
       state.peers = Array.isArray(data.peers) ? data.peers : [];
-    } catch (err) {
+    } catch (_err) {
       state.peers = [];
     }
     renderAssistants();
@@ -311,7 +329,7 @@
         btn.addEventListener('click', function () { viewTrajectory(run.runId); });
         list.appendChild(btn);
       });
-    } catch (err) {
+    } catch (_err) {
       list.innerHTML = '<p class="empty">Runs indisponibles</p>';
     }
   }
@@ -322,7 +340,7 @@
       const data = await fetchJson('/api/runs/' + encodeURIComponent(runId) + '/trajectory');
       traj.textContent = JSON.stringify(data, null, 2);
       traj.classList.remove('hidden');
-    } catch (err) {
+    } catch (_err) {
       traj.textContent = 'Trajectoire indisponible';
       traj.classList.remove('hidden');
     }
@@ -350,7 +368,7 @@
         '<article class="status-card"><h3>Repli (fichier)</h3><div>' + escapeHtml(file) + '</div></article>' +
         '<article class="status-card"><h3>Repli (chaîne)</h3><div>' + escapeHtml(fallback) + '</div></article>' +
         '<article class="status-card"><h3>Flotte</h3><div>' + peers + ' pair(s), ' + conn + ' WS</div></article>';
-    } catch (err) {
+    } catch (_err) {
       box.innerHTML = '<p class="empty">Statut indisponible</p>';
     }
   }
