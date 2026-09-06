@@ -82,6 +82,7 @@ export type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
+  applyLimitsContract,
   avoidOpenersGuidance,
   detectEmotion,
   emotionalContinuityGuidance,
@@ -89,6 +90,7 @@ import {
   expressiveTextGuidance,
   immediateEmotionAcknowledgement,
   IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS,
+  limitsContractGuidance,
   openerKey,
   pushOpener,
 } from '../companion/reply-augment.js';
@@ -1725,6 +1727,7 @@ export async function buildSpokenPromptAugmentation(
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
     emotionGuidance(emotion),
+    limitsContractGuidance(env),
     isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
     buildVoiceInterruptionGuidance(heard, options.interruption),
@@ -4060,7 +4063,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // if nothing meaningful survives. `reply` is what we synth, log, and hand to onSpoke.
       const preparedReply = prepareSpeech(rawReply);
       const relationshipGuard = guardRelationshipReply(preparedReply ?? '');
-      let reply = relationshipGuard.response;
+      let reply = applyLimitsContract(relationshipGuard.response, { heard }).text;
       let emptyReplyRecovery = false;
       if (reply) firstSafeReleaseMs ??= Date.now() - startedAt;
       if (relationshipGuard.intervened) {

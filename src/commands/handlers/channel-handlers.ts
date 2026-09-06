@@ -1984,6 +1984,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         const unguardedResponse = response;
         response = guarded.response;
         try {
+          const { applyLimitsContract } = await import('../../companion/reply-augment.js');
+          response = applyLimitsContract(response, { heard: message.content }).text;
+        } catch {
+          /* limits contract is optional */
+        }
+        try {
           const { rememberSaid } = await import('../../companion/recent-said.js');
           rememberSaid(response, 'telegram');
         } catch {

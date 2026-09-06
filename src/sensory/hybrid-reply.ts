@@ -59,6 +59,7 @@ import {
 import { assessConversationResponse } from '../conversation/conversation-quality.js';
 import { isPureAcknowledgement } from '../conversation/dialogue-act.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
+import { applyLimitsContract } from '../companion/reply-augment.js';
 import { deriveArgumentObligations } from '../conversation/argument-obligations.js';
 import {
   shouldRunSemanticResponseGate,
@@ -663,7 +664,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         `[voice-hybrid] relationship safety intervened issues=${guarded.issues.join(',')}`
       );
     }
-    return guarded.response.trim();
+    return applyLimitsContract(guarded.response).text.trim();
   }
 
   function reportPrefixCause(
@@ -689,7 +690,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       );
       reportPrefixCause(timing, 'relationship_intervened');
     }
-    const guarded = guardedResult.response.trim();
+    const guarded = applyLimitsContract(guardedResult.response).text.trim();
     let invalid: SpokenPrefixTelemetryCause | undefined;
     if (!guarded) invalid = 'empty';
     else if (guarded.length > 180) invalid = 'too_long';

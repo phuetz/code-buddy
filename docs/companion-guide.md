@@ -495,6 +495,8 @@ surnoms rares. Défaut unset = les pools historiques, inchangés. Aucun texte in
 visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée. L’humeur du jour dérive
 avec inertie (plafond de saut, reset doux au réveil) — une pente, pas un sismographe.
 Les ouvertures récentes sont partagées voix + Telegram (anneau 7 jours, `~/.codebuddy/companion/recent-said.json`).
+Un garde en sortie refuse/reformule diagnostic médical, culpabilisation, FOMO, « débloquer », et
+une promesse d’être humaine si la question est franche.
 
 ### 🪑 Te tenir compagnie (présence)
 De temps en temps, au bon moment, je dis un petit mot qui réchauffe : *« comment s'est passée ta journée ? »*,
