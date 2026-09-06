@@ -13,6 +13,16 @@ import {
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 const SECRET = 'mobile-confirm-test-secret-32b-minimum';
+const previousPwaFlag = process.env.CODEBUDDY_MOBILE_PWA;
+
+function enableMobilePwa(): void {
+  process.env.CODEBUDDY_MOBILE_PWA = 'true';
+}
+
+function restoreMobilePwa(): void {
+  if (previousPwaFlag === undefined) delete process.env.CODEBUDDY_MOBILE_PWA;
+  else process.env.CODEBUDDY_MOBILE_PWA = previousPwaFlag;
+}
 
 type Frame = {
   type: string;
@@ -51,6 +61,7 @@ describe('Mobile WS confirmations', () => {
   const previousTimeout = process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
 
   beforeEach(async () => {
+    enableMobilePwa();
     process.env.JWT_SECRET = SECRET;
     process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = '200';
     server = createServer((_req, res) => {
@@ -81,6 +92,7 @@ describe('Mobile WS confirmations', () => {
     else process.env.JWT_SECRET = previousSecret;
     if (previousTimeout === undefined) delete process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
     else process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = previousTimeout;
+    restoreMobilePwa();
   });
 
   async function authedClient(): Promise<{ ws: WebSocket; events: Frame[] }> {
@@ -163,6 +175,7 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
   const previousTimeout = process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
 
   beforeEach(async () => {
+    enableMobilePwa();
     process.env.JWT_SECRET = SECRET;
     process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = '3000';
     server = createServer((_req, res) => {
@@ -193,6 +206,7 @@ describe('A-1 confirmation_response rejects anonymousRemote', () => {
     else process.env.JWT_SECRET = previousSecret;
     if (previousTimeout === undefined) delete process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
     else process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = previousTimeout;
+    restoreMobilePwa();
   });
 
   it('refuses confirmation_response from a --no-auth remote socket and still accepts loopback', async () => {
@@ -244,6 +258,7 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(async () => {
+    enableMobilePwa();
     process.env.JWT_SECRET = SECRET;
     process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = '2000';
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
@@ -276,6 +291,7 @@ describe('B-2 confirmation is scoped, bound, and opt-in as an approval surface',
     else process.env.JWT_SECRET = previousSecret;
     if (previousTimeout === undefined) delete process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS;
     else process.env.CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS = previousTimeout;
+    restoreMobilePwa();
   });
 
   async function clientWith(

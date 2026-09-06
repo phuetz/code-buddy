@@ -58,7 +58,8 @@ import {
   streamAgentDeltas,
   type ServerAgent,
 } from '../agent-adapter.js';
-import { wireMobileConfirmationBridge } from './confirmation-bridge.js';
+import { isMobilePwaEnabled } from '../mobile/index.js';
+import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
@@ -1303,11 +1304,16 @@ export async function setupWebSocket(
 
   serverStartedAt = Date.now();
 
-  wireMobileConfirmationBridge({
-    broadcast,
-    collectApprovalSurfaceIds,
-    registerExtension: registerWebSocketExtension,
-  });
+  if (isMobilePwaEnabled()) {
+    unwireMobileConfirmationBridge();
+    wireMobileConfirmationBridge({
+      broadcast,
+      collectApprovalSurfaceIds,
+      registerExtension: registerWebSocketExtension,
+    });
+  } else {
+    unwireMobileConfirmationBridge();
+  }
 
   const wss = new WebSocketServer({
     server,

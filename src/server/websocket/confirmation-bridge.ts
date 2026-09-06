@@ -199,3 +199,7 @@ export function wireMobileConfirmationBridge(deps: {
   };
   return unwireFn;
 }
+
+export function unwireMobileConfirmationBridge(): void {
+  if (unwireFn) unwireFn();
+}

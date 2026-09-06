@@ -242,7 +242,9 @@ describe('Mobile PWA Assets Validation', () => {
 describe('Mobile PWA shell is public under JWT', () => {
   it('serves the HTML shell without a token when auth is on', async () => {
     const previous = process.env.JWT_SECRET;
+    const previousPwa = process.env.CODEBUDDY_MOBILE_PWA;
     process.env.JWT_SECRET = 'mobile-pwa-shell-public-test-secret-32b';
+    process.env.CODEBUDDY_MOBILE_PWA = 'true';
     const { startServer, stopServer } = await import('../../src/server/index.js');
     const started = await startServer({
       port: 0,
@@ -264,6 +266,71 @@ describe('Mobile PWA shell is public under JWT', () => {
       await stopServer(started.server);
       if (previous === undefined) delete process.env.JWT_SECRET;
       else process.env.JWT_SECRET = previous;
+      if (previousPwa === undefined) delete process.env.CODEBUDDY_MOBILE_PWA;
+      else process.env.CODEBUDDY_MOBILE_PWA = previousPwa;
+    }
+  });
+});
+
+describe('B-1 CODEBUDDY_MOBILE_PWA opt-in', () => {
+  it('keeps the PWA route and WS approval bridge off without the flag', async () => {
+    const previous = process.env.JWT_SECRET;
+    const previousPwa = process.env.CODEBUDDY_MOBILE_PWA;
+    delete process.env.CODEBUDDY_MOBILE_PWA;
+    process.env.JWT_SECRET = 'mobile-pwa-opt-in-test-secret-32b-min';
+    const { ConfirmationService } = await import('../../src/utils/confirmation-service.js');
+    const spy = vi.spyOn(ConfirmationService.getInstance(), 'setWsApprovalBridge');
+    const { startServer, stopServer } = await import('../../src/server/index.js');
+    const started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+    });
+    try {
+      const { port } = started.server.address() as { port: number };
+      const res = await fetch(`http://127.0.0.1:${port}/__codebuddy__/mobile/`);
+      expect(res.status).toBe(404);
+      expect(spy.mock.calls.some((call) => typeof call[0] === 'function')).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await stopServer(started.server);
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+      if (previousPwa === undefined) delete process.env.CODEBUDDY_MOBILE_PWA;
+      else process.env.CODEBUDDY_MOBILE_PWA = previousPwa;
+    }
+  });
+
+  it('installs the WS approval bridge when CODEBUDDY_MOBILE_PWA=true', async () => {
+    const previous = process.env.JWT_SECRET;
+    const previousPwa = process.env.CODEBUDDY_MOBILE_PWA;
+    process.env.CODEBUDDY_MOBILE_PWA = 'true';
+    process.env.JWT_SECRET = 'mobile-pwa-opt-in-on-test-secret-32b';
+    const { ConfirmationService } = await import('../../src/utils/confirmation-service.js');
+    const spy = vi.spyOn(ConfirmationService.getInstance(), 'setWsApprovalBridge');
+    const { startServer, stopServer } = await import('../../src/server/index.js');
+    const started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+    });
+    try {
+      expect(spy.mock.calls.some((call) => typeof call[0] === 'function')).toBe(true);
+    } finally {
+      spy.mockRestore();
+      await stopServer(started.server);
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+      if (previousPwa === undefined) delete process.env.CODEBUDDY_MOBILE_PWA;
+      else process.env.CODEBUDDY_MOBILE_PWA = previousPwa;
     }
   });
 });

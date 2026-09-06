@@ -102,5 +102,9 @@ mobilePwaRouter.get('/pairing-qr', (_req: Request, res: Response) => {
   });
 });
 
+export function isMobilePwaEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CODEBUDDY_MOBILE_PWA === 'true';
+}
+
 export { mobilePwaRouter };
 export default mobilePwaRouter;

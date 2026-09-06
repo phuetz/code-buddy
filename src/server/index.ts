@@ -58,6 +58,7 @@ import {
   createCognitionRoutes,
   mobileRoutes,
   mobilePwaRouter,
+  isMobilePwaEnabled,
   runsRoutes,
 } from './routes/index.js';
 import {
@@ -275,7 +276,14 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   app.use('/api/mobile', mobileRoutes);
 
   // PWA shell (HTML/CSS/JS/manifest/SW) is public; /api and /ws still require JWT.
-  app.use('/__codebuddy__/mobile', mobilePwaRouter);
+  // Opt-in: without CODEBUDDY_MOBILE_PWA=true the route is absent (404).
+  if (isMobilePwaEnabled()) {
+    app.use('/__codebuddy__/mobile', mobilePwaRouter);
+  } else {
+    app.use('/__codebuddy__/mobile', (_req, res) => {
+      res.status(404).end();
+    });
+  }
 
   // Authentication (applied after public health/metrics/mobile endpoints)
   app.use(createAuthMiddleware(config));
