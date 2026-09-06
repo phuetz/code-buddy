@@ -120,3 +120,86 @@ Le parcours Telegram GK10 (`telegram-inconnu-journey.test.ts`) a échoué une fo
 - Preuves : 37 tests nouveaux verts ; suite exigée 2069 verts hors 1 live Telegram `/help` ; `tsc` 0 ; eslint ciblé 0 ; privacy 40/40 ; `git diff --check` 0.
 - Ouvert : activer le flag + `CODEBUDDY_FALLBACK_CHAIN` sur le compagnon Telegram ; relancer GK10 si le pilote le demande.
 - Aucun push. `~/code-buddy` et `~/.codebuddy` non écrits. ComfyUI 8188/8189 intacts.
+
+## Correctifs après vérification agy
+
+### 2026-09-06 — reprise (avant correctifs)
+
+Rapport adversariel `docs/reports/2026-09/VERIF-FALLBACK-AGY.md` (`f951ebe19`). Cinq trous, un commit chacun.
+
+### Ce qui a changé
+
+1. **Classification** — quota avant 401/403/400. Anthropic 400 `credit balance is too low` et 429 monthly limit → `quota_exhausted`. Gemini 429 `RESOURCE_EXHAUSTED` / « Resource has been exhausted (e.g. check quota). » → `quota_exhausted` (plus le 60 s `overloaded`). xAI 403 `out_of_credits` → `quota_exhausted` (le 403 `Forbidden` reste `auth`, sans repli). 429 congestion sans signal quota reste `overloaded` 60 s. `Connection error.` (SDK OpenAI, sans errno) et `APIConnectionError` → `network` / `unreachable`.
+2. **Santé persistée** — plus de cache `memoryOverride` qui saute le disque. Chaque mutation reprend le JSON sous verrou exclusif (fichier `.lock` à côté), fusionne, écrit en atomic-write `0o600`. Message persisté : Bearer / `sk-` / `api_key=` chassés. Un écrit concurrent (canaux vs server) n'efface plus l'autre.
+3. **Bus** — `provider:fallback` porte `resetsAt` et `resets_at`. Le pont sensoriel les retransmet.
+4. **Chaîne `@url`** — `fournisseur:modele@http://host:port` : le modèle garde ses deux-points (`qwen3.8-ctx32k:latest`), `baseURL` est surcharge par cible (`/v1` ajouté pour ollama).
+5. **Essai réel** — préflight Ollama : si le repli déclaré est ON, plus de `process.exit(1)` ; `chat`/`chatStream` tentent la chaîne. Sur le flux, `[fallback]` est émis dès le premier token (sinon la ligne n'apparaissait qu'après la fin du modèle).
+
+### Essai réel unreachable (commande agy, HOME `_qa/fb/home`)
+
+```text
+HOME=~/DEV/cb-fallback-2026-09-06/_qa/fb/home \
+env -u FORCE_COLOR \
+CODEBUDDY_PROVIDER_FALLBACK=true \
+CODEBUDDY_PROVIDER=ollama \
+OLLAMA_HOST=http://127.0.0.1:9 \
+CODEBUDDY_FALLBACK_CHAIN='ollama>ollama:qwen3.8-ctx32k:latest@http://127.0.0.1:11435' \
+node dist/index.js -p 'Réponds: OK' --max-tool-rounds 0
+```
+
+Sortie (extrait) :
+
+```text
+WARN  Ollama not reachable at http://127.0.0.1:9/v1.
+...
+Declared provider failover is enabled; continuing so chat() can try the backup chain.
+WARN  [fallback] custom → ollama:qwen3.8-ctx32k:latest (unreachable, reset dans 5 min)
+{"result":"OK",...,"model":"qwen2.5-coder:7b","messages":[...,{"role":"assistant","content":"OK"}]}
+```
+
+`fromProvider: custom` : l'hôte mort `127.0.0.1:9` n'est pas l'URL catalogue Ollama, donc l'id de santé ne collisionne pas avec le secours `ollama` sur `:11435`. Exit 0.
+
+### Essai réel quota 429 (serveur factice OpenAI-compat, port 0 → Ollama `:11435`)
+
+Le primaire répond `429 {"type":"usage_limit_reached","resets_in_seconds":73172}`. Chaîne `ollama:qwen3.8-ctx32k:latest@http://127.0.0.1:11435`.
+
+```text
+WARN  API call failed, retrying (attempt 1) ... 429 You have reached your usage limit
+WARN  [fallback] custom → ollama:qwen3.8-ctx32k:latest (quota_exhausted, reset dans 53 min)
+Réponse: OK
+Modèle effectif: qwen3.8-ctx32k:latest
+```
+
+Le CLI headless `-p` sur le même 429 a bien classé `quota_exhausted` et ouvert le flux vers `:11435` ; la file Ollama locale était saturée (plusieurs clients déjà connectés), le premier token a mis plusieurs minutes. Le client court ci-dessus (même HTTP 429 + même modèle) a rendu `OK`.
+
+### Tests d'intégration HTTP (serveurs factices)
+
+`tests/codebuddy/provider-failover-http.test.ts` : (1) primaire port fermé → `Connection error.` → ollama `@url` factice répond `OK` ; (2) primaire 429 `usage_limit_reached` → même bascule, bus avec `resetsAt`.
+
+### Preuves
+
+Commandes sous `HOME=~/DEV/cb-fallback-2026-09-06/_qa/fb/home` et `env -u FORCE_COLOR`.
+
+```text
+./node_modules/.bin/vitest run tests/codebuddy tests/providers tests/channels \
+  tests/security/donnees-personnelles.test.ts \
+  --exclude tests/channels/telegram-inconnu-journey.test.ts
+# Test Files  102 passed | 1 skipped (103)
+# Tests  2089 passed | 7 skipped (2096)
+
+./node_modules/.bin/tsc --noEmit -p tsconfig.json
+# exit 0
+
+./node_modules/.bin/eslint --max-warnings=0 <fichiers touchés>
+# exit 0
+
+git diff --check
+# exit 0
+```
+
+Suite exigée d'origine : 2069 verts / 7 skip. Ici 2089 / 7 skip (les nouveaux cas classification, santé, `@url`, HTTP). Privacy dans la même commande. Aucun push. `~/code-buddy` et `~/.codebuddy` non écrits. ComfyUI 8188/8189 intacts.
+
+### Ouvert
+
+- Le retry interne OpenAI-compat (3 tentatives) tape encore un 429 `usage_limit_reached` avant de laisser le classifieur basculer.
+- L'id `custom` pour un Ollama dont l'URL n'est pas `:11434` : volontaire pour ne pas bancariser le secours local sous la même clé que le primaire mort.
