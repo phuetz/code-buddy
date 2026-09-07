@@ -1171,6 +1171,13 @@
     }, 25000);
   }
 
+  function persistToken(token) {
+    state.token = token;
+    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (_err) { /* ignore */ }
+    var input = el('token-input');
+    if (input) input.value = token;
+  }
+
   function login(event) {
     if (event) event.preventDefault();
     var token = (el('token-input').value || '').trim();
@@ -1178,10 +1185,28 @@
       setError('Jeton requis');
       return;
     }
-    state.token = token;
-    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (_err) { /* ignore */ }
+    persistToken(token);
     setError('');
     connectWs();
+  }
+
+  function consumeHashToken() {
+    var raw = '';
+    try { raw = String(location.hash || ''); } catch (_err) { return false; }
+    if (raw.charAt(0) === '#') raw = raw.slice(1);
+    if (!raw) return false;
+    var token = '';
+    try {
+      token = String(new URLSearchParams(raw).get('token') || '').trim();
+    } catch (_err) {
+      return false;
+    }
+    if (!token) return false;
+    persistToken(token);
+    try {
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (_err) { /* ignore */ }
+    return true;
   }
 
   function logout() {
@@ -1820,6 +1845,7 @@
     refreshSuggestions();
     autosizeComposer();
     setPresence(state.connected ? 'online' : 'offline');
+    consumeHashToken();
     if (state.token) {
       var tokenInput = el('token-input');
       if (tokenInput) tokenInput.value = state.token;

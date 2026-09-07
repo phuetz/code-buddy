@@ -539,3 +539,67 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect(sockets.length).toBe(before);
   });
 });
+
+describe('Mobile PWA — connexion par URL #token=', () => {
+  type FakeWs = {
+    readyState: number;
+    sent: string[];
+    listeners: Record<string, Array<(ev?: unknown) => void>>;
+    send: (raw: string) => void;
+    close: () => void;
+    addEventListener: (name: string, fn: (ev?: unknown) => void) => void;
+  };
+  const sockets: FakeWs[] = [];
+
+  function makeFakeWs(): FakeWs {
+    const ws: FakeWs = {
+      readyState: 0,
+      sent: [],
+      listeners: {},
+      send(raw: string) { ws.sent.push(raw); },
+      close() { ws.readyState = 3; },
+      addEventListener(name: string, fn: (ev?: unknown) => void) {
+        (ws.listeners[name] ||= []).push(fn);
+      },
+    };
+    sockets.push(ws);
+    return ws;
+  }
+
+  beforeEach(() => {
+    sockets.length = 0;
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.hash = '';
+    function FakeWebSocket(this: unknown) { return makeFakeWs(); }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    Object.defineProperty(window, 'WebSocket', { configurable: true, writable: true, value: FakeWebSocket });
+  });
+
+  afterEach(() => {
+    const api = (window as unknown as { CodeBuddyMobile?: { destroy: () => void } }).CodeBuddyMobile;
+    api?.destroy();
+    vi.unstubAllGlobals();
+    window.location.hash = '';
+  });
+
+  it('stores hash token like the login form, clears the hash, and authenticates', () => {
+    window.location.hash = '#token=jwt-from-link';
+    document.body.innerHTML = extractBody();
+    runScript(asset('emoji-data.js'));
+    runScript(asset('app.js'));
+
+    expect(sessionStorage.getItem('codebuddy_mobile_token')).toBe('jwt-from-link');
+    expect(window.location.hash === '' || window.location.hash === '#').toBe(true);
+    const input = document.getElementById('token-input') as HTMLTextAreaElement | null;
+    expect(input?.value).toBe('jwt-from-link');
+    expect(sockets.length).toBeGreaterThan(0);
+
+    const ws = sockets[0]!;
+    ws.readyState = 1;
+    (ws.listeners.open || []).forEach((fn) => fn({}));
+    const auth = ws.sent.map((raw) => JSON.parse(raw) as { type: string; payload?: { token?: string } })
+      .find((frame) => frame.type === 'authenticate');
+    expect(auth?.payload?.token).toBe('jwt-from-link');
+  });
+});
