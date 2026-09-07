@@ -407,6 +407,7 @@ buddy whoami                # Show current auth + plan
 buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
 buddy server [--port N]     # Start the HTTP server (3000) — one port, WebSocket `/ws` on it; required for fleet
+buddy token [--env file] [--qr] [--telegram]  # Mint a JWT + PWA open URL (`#token=`); alias of `buddy fleet token`
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
 buddy run list|show|tail|replay|trajectory  # Observability
 buddy autonomy status|run|briefing|bench|tasks  # Autonomous fleet; `buddy colab …` is an alias

@@ -184,6 +184,8 @@ export interface JwtPayload {
   exp: number;
   /** Token type */
   type?: 'api_key' | 'user';
+  /** Optional operator role stamped by `buddy token --role`. */
+  role?: 'user' | 'admin';
 }
 
 export interface AuthenticatedRequest {

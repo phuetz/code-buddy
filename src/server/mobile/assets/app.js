@@ -11,7 +11,8 @@
   var DEFAULT_AVATAR = BASE + '/assets/icon-192.png';
   var REACTIONS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
   var MAX_RECENT = 10;
-  var MAX_HISTORY = 200;
+  var MAX_HISTORY = 2000;
+  var VIRTUAL_WINDOW = 150;
   var MAX_HISTORY_IMAGES = 5;
   var MAX_IMAGE_CHARS = 100 * 1024;
   // Client-side resize target. The server refuses anything over 600 KB per
@@ -31,6 +32,13 @@
     avatar: 'codebuddy_mobile_avatar',
     history: 'codebuddy_mobile_history',
     suggestHidden: 'codebuddy_mobile_suggest_hidden',
+    pins: 'codebuddy_mobile_pins',
+    lastRead: 'codebuddy_mobile_last_read',
+    voiceReply: 'codebuddy_mobile_voice_reply',
+    theme: 'codebuddy_mobile_theme',
+    font: 'codebuddy_mobile_font',
+    wallpaper: 'codebuddy_mobile_wallpaper',
+    sounds: 'codebuddy_mobile_sounds',
   };
 
   var SUGGEST_START = [
@@ -79,6 +87,33 @@
     albumLoading: false,
     lightboxAlbumId: '',
     bound: false,
+    replyTo: null,
+    editOf: null,
+    telegramForward: false,
+    selectMode: false,
+    selected: {},
+    pins: [],
+    searchOpen: false,
+    searchQuery: '',
+    searchHits: [],
+    searchHit: 0,
+    unreadAnchorId: '',
+    swipe: null,
+    pendingAckId: '',
+    voiceReply: false,
+    lastUserWasVoice: false,
+    recording: null,
+    recordTimer: 0,
+    recordStartedAt: 0,
+    recordCancelled: false,
+    lastSeenAt: 0,
+    sounds: true,
+    mobilePush: false,
+    historyLoading: false,
+    historyDone: false,
+    theme: 'dark',
+    font: '2',
+    wallpaper: '0',
   };
 
   try {
@@ -240,6 +275,28 @@
     return '';
   }
 
+  function formatDuration(ms) {
+    var total = Math.max(0, Math.round((ms || 0) / 1000));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function voiceCardHtml(msg) {
+    var speed = msg.audioSpeed === 1.5 ? '1.5×' : '1×';
+    var transcript = msg.transcript
+      ? '<details class="voice-transcript"><summary>Transcription</summary>' + escapeHtml(msg.transcript) + '</details>'
+      : '';
+    return '<div class="voice-card" data-voice="' + escapeHtml(msg.id) + '">' +
+      '<button type="button" class="btn icon touch voice-play" data-voice="' + escapeHtml(msg.id) + '" aria-label="Lecture">' +
+      (msg.playing ? '⏸' : '▶') + '</button>' +
+      '<span class="voice-dur">' + escapeHtml(formatDuration(msg.durationMs)) + '</span>' +
+      '<button type="button" class="btn icon touch voice-speed" data-voice="' + escapeHtml(msg.id) + '" aria-label="Vitesse">' +
+      speed + '</button>' +
+      transcript +
+      '</div>';
+  }
+
   function imageHtml(dataUrl) {
     if (!dataUrl) return '';
     return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl + '">';
@@ -285,6 +342,16 @@
     return new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
+  function formatFullTime(ts) {
+    return new Date(ts).toLocaleString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
   function groupingFor(index, msgs) {
     var cur = msgs[index];
     var prev = msgs[index - 1];
@@ -299,8 +366,13 @@
 
   function ackMark(msg) {
     if (msg.role !== 'user') return '';
-    if (msg.ack === 'replied') return '<span class="ack" aria-label="Répondu">✓✓</span>';
-    return '<span class="ack" aria-label="Envoyé">✓</span>';
+    if (msg.ack === 'read' || msg.ack === 'replied') {
+      return '<span class="ack read" aria-label="Lu">✓✓</span>';
+    }
+    if (msg.ack === 'received') {
+      return '<span class="ack received" aria-label="Reçu">✓✓</span>';
+    }
+    return '<span class="ack sent" aria-label="Envoyé">✓</span>';
   }
 
   function isNearBottom(box) {
@@ -327,6 +399,8 @@
       box.scrollTop = box.scrollHeight;
       state.atBottom = true;
       state.unread = 0;
+      state.unreadAnchorId = '';
+      rememberLastRead();
     }
     updateJumpButton();
   }
@@ -341,7 +415,19 @@
         ts: msg.ts,
         reaction: msg.reaction || '',
         ack: msg.ack || '',
+        edited: msg.edited === true,
+        pinned: msg.pinned === true,
+        durationMs: typeof msg.durationMs === 'number' ? msg.durationMs : undefined,
+        transcript: msg.transcript || undefined,
+        hasAudio: msg.hasAudio === true,
       };
+      if (msg.replyTo && typeof msg.replyTo.id === 'string') {
+        copy.replyTo = {
+          id: msg.replyTo.id,
+          text: String(msg.replyTo.text || '').slice(0, 280),
+          role: msg.replyTo.role || '',
+        };
+      }
       if (msg.image && images < MAX_HISTORY_IMAGES) {
         var clipped = constrainDataUrl(msg.image, MAX_IMAGE_CHARS);
         if (clipped) {
@@ -373,6 +459,9 @@
           ts: msg.ts,
           reaction: msg.reaction || '',
           ack: msg.ack || '',
+          edited: msg.edited === true,
+          pinned: msg.pinned === true,
+          replyTo: msg.replyTo || undefined,
         };
       });
       if (!storeSet(STORAGE.history, withoutImages)) {
@@ -400,12 +489,32 @@
         ts: typeof item.ts === 'number' ? item.ts : Date.now(),
         reaction: typeof item.reaction === 'string' ? item.reaction : '',
         ack: typeof item.ack === 'string' ? item.ack : '',
+        edited: item.edited === true,
+        pinned: item.pinned === true,
+        replyTo: item.replyTo && typeof item.replyTo.id === 'string'
+          ? { id: item.replyTo.id, text: String(item.replyTo.text || ''), role: item.replyTo.role || '' }
+          : null,
         image: typeof item.image === 'string' ? item.image : '',
         images: Array.isArray(item.images)
           ? item.images.filter(function (entry) { return typeof entry === 'string'; })
           : [],
+        durationMs: typeof item.durationMs === 'number' ? item.durationMs : 0,
+        transcript: typeof item.transcript === 'string' ? item.transcript : '',
+        hasAudio: item.hasAudio === true,
       };
     });
+    var storedPins = storeGet(STORAGE.pins, []);
+    state.pins = Array.isArray(storedPins)
+      ? storedPins.filter(function (id) { return typeof id === 'string'; })
+      : [];
+    state.messages.forEach(function (msg) {
+      if (state.pins.indexOf(msg.id) !== -1) msg.pinned = true;
+    });
+    var lastRead = storeGet(STORAGE.lastRead, '');
+    if (typeof lastRead === 'string' && lastRead) {
+      var lastMsg = state.messages[state.messages.length - 1];
+      if (lastMsg && lastMsg.id !== lastRead) state.unreadAnchorId = lastRead;
+    }
     var maxSeq = 0;
     state.messages.forEach(function (msg) {
       var m = /-(\d+)$/.exec(msg.id);
@@ -417,7 +526,12 @@
 
   function clearHistory() {
     state.messages = [];
+    state.pins = [];
+    state.selected = {};
+    state.unreadAnchorId = '';
     storeSet(STORAGE.history, []);
+    storeSet(STORAGE.pins, []);
+    storeSet(STORAGE.lastRead, '');
     renderMessages();
     refreshSuggestions();
   }
@@ -426,10 +540,23 @@
     var i;
     for (i = state.messages.length - 1; i >= 0; i -= 1) {
       if (state.messages[i].role === 'user') {
-        state.messages[i].ack = 'replied';
+        state.messages[i].ack = 'read';
       } else {
         break;
       }
+    }
+  }
+
+  function highlightSearch(html) {
+    var q = (state.searchQuery || '').trim();
+    if (!q) return html;
+    var safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      return html.replace(new RegExp(safe, 'gi'), function (match) {
+        return '<mark class="search-hit">' + match + '</mark>';
+      });
+    } catch (_err) {
+      return html;
     }
   }
 
@@ -439,29 +566,48 @@
     var html = [];
     var lastDay = null;
     var now = Date.now();
-    state.messages.forEach(function (msg, index) {
+    var start = Math.max(0, state.messages.length - VIRTUAL_WINDOW);
+    var visible = state.messages.slice(start);
+    visible.forEach(function (msg, visIndex) {
+      var index = start + visIndex;
       var day = startOfDay(msg.ts);
       if (day !== lastDay) {
         html.push('<div class="day-sep">' + escapeHtml(daySeparatorLabel(msg.ts, now)) + '</div>');
         lastDay = day;
+      }
+      if (
+        state.unreadAnchorId &&
+        index > 0 &&
+        state.messages[index - 1].id === state.unreadAnchorId
+      ) {
+        html.push('<div class="new-sep" role="separator">nouveaux messages</div>');
       }
       var group = groupingFor(index, state.messages);
       var avatar = '';
       if (msg.role === 'assistant') {
         avatar = '<img class="msg-avatar" alt="" src="' + escapeHtml(state.avatarUrl) + '">';
       }
-      var body = renderMarkdown(msg.text || '');
+      var quote = '';
+      if (msg.replyTo && msg.replyTo.text) {
+        quote = '<button type="button" class="quote-ref" data-quote="' + escapeHtml(msg.replyTo.id || '') +
+          '" aria-label="Aller au message cité">' + escapeHtml(String(msg.replyTo.text).slice(0, 140)) + '</button>';
+      }
+      var body = highlightSearch(quote + renderMarkdown(msg.text || ''));
       if (msg.image) body += imageHtml(msg.image);
       if (msg.images && msg.images.length) body += sentImagesHtml(msg.images);
+      if (msg.hasAudio || msg.audioUrl) body += voiceCardHtml(msg);
       var reaction = msg.reaction
         ? '<div class="bubble-reactions">' + escapeHtml(msg.reaction) + '</div>'
         : '';
+      var edited = msg.edited ? '<span class="edited-mark">modifié</span>' : '';
+      var selected = state.selected[msg.id] ? ' selected' : '';
+      var emojiOnly = isEmojiOnly(msg.text) && !msg.hasAudio && !msg.image && !(msg.images && msg.images.length);
       html.push(
-        '<div class="msg-row ' + msg.role + ' ' + group + '" data-id="' + escapeHtml(msg.id) + '" data-role="' + escapeHtml(msg.role) + '">' +
+        '<div class="msg-row ' + msg.role + ' ' + group + selected + '" data-id="' + escapeHtml(msg.id) + '" data-role="' + escapeHtml(msg.role) + '">' +
           avatar +
-          '<div class="bubble ' + msg.role + ' ' + group + '">' +
+          '<div class="bubble ' + msg.role + ' ' + group + (emojiOnly ? ' emoji-only' : '') + '">' +
             '<div class="bubble-body">' + body + '</div>' +
-            '<div class="bubble-meta">' + escapeHtml(formatTime(msg.ts)) + ackMark(msg) + '</div>' +
+            '<div class="bubble-meta">' + escapeHtml(formatFullTime(msg.ts)) + edited + ackMark(msg) + '</div>' +
             reaction +
           '</div>' +
         '</div>'
@@ -469,6 +615,8 @@
     });
     box.innerHTML = html.join('');
     scrollMessages(false);
+    renderPinnedBar();
+    hydrateLinkPreviews(box);
   }
 
   function addMessage(partial) {
@@ -479,6 +627,14 @@
       ts: partial.ts || Date.now(),
       reaction: partial.reaction || '',
       ack: partial.ack || (partial.role === 'user' ? 'sent' : ''),
+      edited: partial.edited === true,
+      pinned: partial.pinned === true,
+      replyTo: partial.replyTo || null,
+      durationMs: partial.durationMs || 0,
+      transcript: partial.transcript || '',
+      hasAudio: partial.hasAudio === true || Boolean(partial.audioUrl),
+      audioUrl: partial.audioUrl || '',
+      audioSpeed: partial.audioSpeed || 1,
       image: partial.image || '',
       images: partial.images && partial.images.length ? partial.images.slice(0, ATTACH_MAX_COUNT) : [],
     };
@@ -492,6 +648,10 @@
     var stick = isNearBottom(box);
     if (!stick && msg.role !== 'user') state.unread += 1;
     state.atBottom = stick || msg.role === 'user';
+    updateTabBadge();
+    if (msg.role === 'assistant' && document.visibilityState === 'hidden') {
+      notifyIncoming();
+    }
     renderMessages();
     if (msg.image) maybeAdoptAvatar(msg.image);
     refreshSuggestions();
@@ -541,6 +701,9 @@
       } else if (kind === 'online') {
         line.textContent = 'en ligne';
         line.classList.add('online');
+      } else if (kind === 'last-seen') {
+        var when = state.lastSeenAt ? formatTime(state.lastSeenAt) : '';
+        line.textContent = when ? 'vu à ' + when : 'vu récemment';
       } else if (kind === 'reconnecting') {
         line.textContent = 'reconnexion…';
       } else {
@@ -566,12 +729,81 @@
     if (stopBtn) stopBtn.classList.toggle('hidden', !on);
     if (!on) {
       state.sawChunk = false;
-      setPresence(state.connected ? 'online' : 'offline');
+      state.lastSeenAt = Date.now();
+      setPresence(state.connected ? 'last-seen' : 'offline');
     }
+  }
+
+  function hydrateLinkPreviews(box) {
+    if (!box || !state.token) return;
+    box.querySelectorAll('.bubble-body a[href^="http"]').forEach(function (anchor) {
+      if (anchor.parentNode && anchor.parentNode.querySelector('.link-preview')) return;
+      var href = anchor.getAttribute('href');
+      if (!href) return;
+      fetchJson(BASE + '/link-preview?url=' + encodeURIComponent(href)).then(function (data) {
+        if (!data || !data.title) return;
+        var card = document.createElement('a');
+        card.className = 'link-preview';
+        card.href = href;
+        card.target = '_blank';
+        card.rel = 'noopener';
+        card.innerHTML = '<strong>' + escapeHtml(data.title) + '</strong><span>' + escapeHtml(data.description || '') + '</span>';
+        if (anchor.parentNode) anchor.parentNode.appendChild(card);
+      }).catch(function () { /* ignore */ });
+    });
+  }
+
+  function isEmojiOnly(text) {
+    var t = String(text || '').trim();
+    if (!t || t.length > 32) return false;
+    try {
+      return /^[\p{Extended_Pictographic}\uFE0F\u200D\s]+$/u.test(t) && !/[A-Za-z0-9]/.test(t);
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function applyPrefs() {
+    var theme = state.theme || 'dark';
+    if (theme === 'auto') {
+      theme = (root.matchMedia && root.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-font', String(state.font || '2'));
+    var box = el('messages');
+    if (box) {
+      box.classList.remove('wp-1', 'wp-2', 'wp-3');
+      if (state.wallpaper && state.wallpaper !== '0') box.classList.add('wp-' + state.wallpaper);
+    }
+    var sounds = el('sounds-toggle');
+    if (sounds) sounds.checked = state.sounds !== false;
+  }
+
+  function setTheme(theme) {
+    state.theme = theme;
+    storeSet(STORAGE.theme, theme);
+    applyPrefs();
+  }
+
+  function setFont(size) {
+    state.font = String(size);
+    storeSet(STORAGE.font, state.font);
+    applyPrefs();
+  }
+
+  function setWallpaper(id) {
+    state.wallpaper = String(id);
+    storeSet(STORAGE.wallpaper, state.wallpaper);
+    applyPrefs();
   }
 
   function applyStatusPayload(data) {
     if (!data || typeof data !== 'object') return;
+    state.telegramForward = data.telegramForward === true;
+    state.mobilePush = data.mobilePush === true;
+    if (state.mobilePush) subscribePush();
+    var fwd = el('forward-msg-btn');
+    if (fwd) fwd.classList.toggle('hidden', !state.telegramForward);
     var companion = data.companion;
     var chip = el('mood-chip');
     if (!chip) return;
@@ -889,7 +1121,7 @@
     if (input) input.click();
   }
 
-  function currentChatPayload(message, attachments) {
+  function currentChatPayload(message, attachments, extras) {
     var payload = { message: message, stream: true, assistant: 'agent' };
     if (state.assistant === 'companion') {
       payload.assistant = 'companion';
@@ -899,6 +1131,16 @@
       payload.assistant = 'peer';
       payload.peerId = state.assistant;
     }
+    if (extras && extras.clientMsgId) payload.clientMsgId = extras.clientMsgId;
+    if (extras && extras.replyTo) {
+      payload.replyTo = {
+        id: extras.replyTo.id,
+        text: String(extras.replyTo.text || '').slice(0, 280),
+      };
+    }
+    if (extras && extras.editOf) payload.editOf = extras.editOf;
+    if (extras && typeof extras.durationMs === 'number') payload.durationMs = extras.durationMs;
+    if (state.voiceReply) payload.voiceReply = true;
     return payload;
   }
 
@@ -907,14 +1149,41 @@
     var photos = state.assistant === 'companion' ? attachmentPayload() : [];
     // A photo alone IS a message — "regarde" is optional.
     if ((!text && !photos.length) || state.streaming) return false;
+    state.lastUserWasVoice = false;
     var thumbs = state.attachments.map(function (item) { return item.dataUrl; });
     var outgoing = text || (photos.length > 1 ? 'Regarde ces photos.' : 'Regarde cette photo.');
-    addMessage({
-      role: 'user',
-      text: text,
-      ack: 'sent',
-      images: photos.length ? thumbs : [],
-    });
+    var extras = {};
+    var outgoingMsg;
+    if (state.editOf) {
+      var existing = findMessage(state.editOf);
+      if (existing && existing.role === 'user') {
+        existing.text = text;
+        existing.edited = true;
+        existing.ts = Date.now();
+        existing.ack = 'sent';
+        extras.editOf = existing.id;
+        extras.clientMsgId = existing.id;
+        outgoingMsg = existing;
+        persistHistory();
+        renderMessages();
+      }
+      state.editOf = null;
+    }
+    if (!outgoingMsg) {
+      outgoingMsg = addMessage({
+        role: 'user',
+        text: text,
+        ack: 'sent',
+        images: photos.length ? thumbs : [],
+        replyTo: state.replyTo
+          ? { id: state.replyTo.id, text: state.replyTo.text, role: state.replyTo.role }
+          : null,
+      });
+      extras.clientMsgId = outgoingMsg.id;
+      if (state.replyTo) extras.replyTo = state.replyTo;
+    }
+    state.pendingAckId = extras.clientMsgId || '';
+    cancelReply();
     var input = el('message-input');
     if (input) {
       input.value = '';
@@ -924,7 +1193,7 @@
     haptic();
     closeEmojiPicker();
     state.suggestRotate += 1;
-    send('chat', currentChatPayload(outgoing, photos));
+    send('chat', currentChatPayload(outgoing, photos, extras));
     if (photos.length) clearAttachments();
     return true;
   }
@@ -1007,6 +1276,577 @@
     hideReactionBar();
   }
 
+  function mergeServerHistory(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+    var known = {};
+    state.messages.forEach(function (msg) { known[msg.id] = true; });
+    var extra = [];
+    rows.forEach(function (row) {
+      if (!row || known[row.id]) return;
+      extra.push({
+        id: String(row.id),
+        role: row.role === 'user' ? 'user' : 'assistant',
+        text: String(row.text || ''),
+        ts: typeof row.ts === 'number' ? row.ts : Date.now(),
+        ack: '',
+        reaction: '',
+        edited: false,
+        pinned: false,
+        replyTo: null,
+        image: '',
+        images: [],
+      });
+      known[row.id] = true;
+    });
+    if (!extra.length) return 0;
+    extra.sort(function (a, b) { return a.ts - b.ts; });
+    state.messages = extra.concat(state.messages);
+    renderMessages();
+    return extra.length;
+  }
+
+  function loadOlderHistory() {
+    if (state.historyLoading || state.historyDone) return Promise.resolve([]);
+    state.historyLoading = true;
+    var first = state.messages[0];
+    var q = first ? ('?before=' + encodeURIComponent(first.id) + '&limit=50') : '?limit=50';
+    return fetchJson(BASE + '/history' + q).then(function (data) {
+      var rows = data && Array.isArray(data.messages) ? data.messages : [];
+      if (!rows.length) state.historyDone = true;
+      mergeServerHistory(rows);
+      state.historyLoading = false;
+      return rows;
+    }).catch(function () {
+      state.historyLoading = false;
+      return [];
+    });
+  }
+
+  function rememberLastRead() {
+    var last = state.messages[state.messages.length - 1];
+    if (last) storeSet(STORAGE.lastRead, last.id);
+  }
+
+  function scrollToMessage(id) {
+    var row = document.querySelector('.msg-row[data-id="' + id + '"]');
+    if (!row) return false;
+    if (row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+    row.classList.add('flash');
+    setTimeout(function () { row.classList.remove('flash'); }, 800);
+    return true;
+  }
+
+  function renderReplyQuote() {
+    var box = el('reply-quote');
+    var text = el('reply-quote-text');
+    if (!box) return;
+    if (!state.replyTo) {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    if (text) text.textContent = String(state.replyTo.text || '').slice(0, 140);
+  }
+
+  function startReply(id) {
+    var msg = findMessage(id);
+    if (!msg) return false;
+    state.replyTo = { id: msg.id, text: msg.text || '', role: msg.role };
+    state.editOf = null;
+    renderReplyQuote();
+    hideReactionBar();
+    var input = el('message-input');
+    if (input && input.focus) input.focus();
+    return true;
+  }
+
+  function cancelReply() {
+    state.replyTo = null;
+    renderReplyQuote();
+  }
+
+  function lastUserMessage() {
+    var last = null;
+    state.messages.forEach(function (msg) {
+      if (msg.role === 'user') last = msg;
+    });
+    return last;
+  }
+
+  function beginEdit(id) {
+    var msg = id ? findMessage(id) : lastUserMessage();
+    if (!msg || msg.role !== 'user') return false;
+    var last = lastUserMessage();
+    if (!last || last.id !== msg.id) return false;
+    state.editOf = msg.id;
+    cancelReply();
+    var input = el('message-input');
+    if (input) {
+      input.value = msg.text || '';
+      autosizeComposer();
+      if (input.focus) input.focus();
+    }
+    hideReactionBar();
+    return true;
+  }
+
+  function deleteForMe(id) {
+    state.messages = state.messages.filter(function (msg) { return msg.id !== id; });
+    state.pins = state.pins.filter(function (pin) { return pin !== id; });
+    delete state.selected[id];
+    storeSet(STORAGE.pins, state.pins);
+    persistHistory();
+    renderMessages();
+    hideReactionBar();
+    return true;
+  }
+
+  function togglePin(id) {
+    var msg = findMessage(id);
+    if (!msg) return false;
+    var idx = state.pins.indexOf(id);
+    if (idx === -1) {
+      state.pins.push(id);
+      msg.pinned = true;
+    } else {
+      state.pins.splice(idx, 1);
+      msg.pinned = false;
+    }
+    storeSet(STORAGE.pins, state.pins);
+    persistHistory();
+    renderMessages();
+    hideReactionBar();
+    return msg.pinned;
+  }
+
+  function renderPinnedBar() {
+    var bar = el('pinned-bar');
+    var label = el('pinned-label');
+    var list = el('pinned-list');
+    if (!bar) return;
+    var pinned = state.messages.filter(function (msg) { return state.pins.indexOf(msg.id) !== -1; });
+    bar.classList.toggle('hidden', pinned.length === 0);
+    if (label) {
+      label.textContent = pinned.length === 1
+        ? '1 message épinglé'
+        : pinned.length + ' messages épinglés';
+    }
+    if (!list) return;
+    list.innerHTML = '';
+    pinned.forEach(function (msg) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pinned-item touch';
+      btn.setAttribute('aria-label', 'Aller au message épinglé');
+      btn.textContent = (msg.text || '').slice(0, 80) || '(photo)';
+      btn.addEventListener('click', function () { scrollToMessage(msg.id); });
+      list.appendChild(btn);
+    });
+  }
+
+  function setSelectMode(on) {
+    state.selectMode = Boolean(on);
+    if (!state.selectMode) state.selected = {};
+    var bar = el('select-bar');
+    if (bar) bar.classList.toggle('hidden', !state.selectMode);
+    updateSelectCount();
+    renderMessages();
+    hideReactionBar();
+  }
+
+  function updateSelectCount() {
+    var n = Object.keys(state.selected).length;
+    var count = el('select-count');
+    if (count) count.textContent = String(n);
+  }
+
+  function toggleSelected(id) {
+    if (state.selected[id]) delete state.selected[id];
+    else state.selected[id] = true;
+    updateSelectCount();
+    var row = document.querySelector('.msg-row[data-id="' + id + '"]');
+    if (row) row.classList.toggle('selected', Boolean(state.selected[id]));
+  }
+
+  function deleteSelected() {
+    var ids = Object.keys(state.selected);
+    ids.forEach(function (id) { deleteForMe(id); });
+    setSelectMode(false);
+  }
+
+  function applyAck(ack, clientMsgId) {
+    var target = clientMsgId ? findMessage(clientMsgId) : null;
+    if (!target && state.pendingAckId) target = findMessage(state.pendingAckId);
+    if (!target) {
+      var i;
+      for (i = state.messages.length - 1; i >= 0; i -= 1) {
+        if (state.messages[i].role === 'user') {
+          target = state.messages[i];
+          break;
+        }
+      }
+    }
+    if (!target || target.role !== 'user') return null;
+    var rank = { sent: 1, received: 2, read: 3, replied: 3 };
+    var next = ack === 'replied' ? 'read' : ack;
+    if ((rank[next] || 0) >= (rank[target.ack] || 0)) {
+      target.ack = next;
+      persistHistory();
+      renderMessages();
+    }
+    return target.ack;
+  }
+
+  function searchConversation(query) {
+    state.searchQuery = String(query || '');
+    var q = state.searchQuery.trim().toLowerCase();
+    state.searchHits = [];
+    if (q) {
+      state.messages.forEach(function (msg) {
+        if ((msg.text || '').toLowerCase().indexOf(q) !== -1) state.searchHits.push(msg.id);
+      });
+    }
+    state.searchHit = 0;
+    var count = el('search-count');
+    if (count) {
+      count.textContent = q
+        ? (state.searchHits.length ? (state.searchHit + 1) + '/' + state.searchHits.length : '0')
+        : '';
+    }
+    renderMessages();
+    if (state.searchHits.length) scrollToMessage(state.searchHits[0]);
+    return state.searchHits.slice();
+  }
+
+  function gotoSearch(dir) {
+    if (!state.searchHits.length) return '';
+    state.searchHit = (state.searchHit + dir + state.searchHits.length) % state.searchHits.length;
+    var count = el('search-count');
+    if (count) count.textContent = (state.searchHit + 1) + '/' + state.searchHits.length;
+    var id = state.searchHits[state.searchHit];
+    scrollToMessage(id);
+    return id;
+  }
+
+  function openSearch() {
+    state.searchOpen = true;
+    var bar = el('search-bar');
+    if (bar) bar.classList.remove('hidden');
+    var input = el('search-input');
+    if (input && input.focus) input.focus();
+  }
+
+  function closeSearch() {
+    state.searchOpen = false;
+    state.searchQuery = '';
+    state.searchHits = [];
+    var bar = el('search-bar');
+    if (bar) bar.classList.add('hidden');
+    var input = el('search-input');
+    if (input) input.value = '';
+    var count = el('search-count');
+    if (count) count.textContent = '';
+    renderMessages();
+  }
+
+  function forwardMessage(id) {
+    var msg = findMessage(id);
+    if (!msg || !state.telegramForward) return Promise.resolve(false);
+    hideReactionBar();
+    return fetch(BASE + '/forward', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + state.token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: msg.text || '' }),
+    }).then(function (res) { return res.ok; }).catch(function () { return false; });
+  }
+
+  function updateTabBadge() {
+    var n = state.unread || 0;
+    document.title = n > 0 ? '(' + n + ') Lisa' : 'Code Buddy Mobile';
+    if (navigator.setAppBadge) {
+      if (n > 0) navigator.setAppBadge(n).catch(function () { /* ignore */ });
+      else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function () { /* ignore */ });
+    }
+  }
+
+  function notifyIncoming() {
+    haptic();
+    try { if (navigator.vibrate) navigator.vibrate([40, 30, 40]); } catch (_e) { /* ignore */ }
+    if (state.sounds === false) return;
+    try {
+      var Ctx = root.AudioContext || root.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.value = 0.04;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } catch (_err) { /* ignore */ }
+  }
+
+  function subscribePush() {
+    if (!state.mobilePush || !navigator.serviceWorker || !root.PushManager) return;
+    fetch(BASE + '/push/vapid', { headers: authHeaders() }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      if (!data || !data.publicKey) return;
+      return navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: data.publicKey,
+        });
+      });
+    }).then(function (sub) {
+      if (!sub) return;
+      return fetch(BASE + '/push/subscribe', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + state.token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sub.toJSON ? sub.toJSON() : sub),
+      });
+    }).catch(function () { /* ignore */ });
+  }
+
+  function syncKeyboardInset() {
+    var vv = root.visualViewport;
+    if (!vv) return;
+    var inset = Math.max(0, root.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', inset + 'px');
+  }
+
+  var VOICE_MAX_MS = 120000;
+  var VOICE_MAX_BYTES = 2 * 1024 * 1024;
+
+  function playVoice(id, _auto) {
+    var msg = findMessage(id);
+    if (!msg || !msg.audioUrl) return false;
+    if (state.playingAudio) {
+      try { state.playingAudio.pause(); } catch (_e) { /* ignore */ }
+    }
+    var audio = new Audio(msg.audioUrl);
+    audio.playbackRate = msg.audioSpeed === 1.5 ? 1.5 : 1;
+    state.playingAudio = audio;
+    msg.playing = true;
+    renderMessages();
+    audio.addEventListener('ended', function () {
+      msg.playing = false;
+      renderMessages();
+    });
+    var play = audio.play();
+    if (play && play.catch) play.catch(function () { msg.playing = false; });
+    return true;
+  }
+
+  function toggleVoiceSpeed(id) {
+    var msg = findMessage(id);
+    if (!msg) return 1;
+    msg.audioSpeed = msg.audioSpeed === 1.5 ? 1 : 1.5;
+    if (state.playingAudio) state.playingAudio.playbackRate = msg.audioSpeed;
+    renderMessages();
+    return msg.audioSpeed;
+  }
+
+  function sendVoiceData(opts) {
+    var mime = opts.mimeType || 'audio/webm';
+    var data = opts.data || '';
+    var durationMs = Math.min(VOICE_MAX_MS, Math.max(0, opts.durationMs || 0));
+    if (!data) return false;
+    var approxBytes = Math.floor(data.length * 0.75);
+    if (approxBytes > VOICE_MAX_BYTES || durationMs > VOICE_MAX_MS) {
+      addMessage({ role: 'system', text: 'Message vocal trop long (2 Mo / 120 s)' });
+      return false;
+    }
+    var transcript = opts.transcript || '';
+    var outgoing = transcript || '(message vocal)';
+    var audioUrl = 'data:' + mime + ';base64,' + data;
+    var msg = addMessage({
+      role: 'user',
+      text: outgoing,
+      ack: 'sent',
+      hasAudio: true,
+      durationMs: durationMs,
+      transcript: transcript,
+      audioUrl: audioUrl,
+    });
+    state.lastUserWasVoice = true;
+    state.pendingAckId = msg.id;
+    send('chat', currentChatPayload(outgoing, [{ mimeType: mime, data: data }], { clientMsgId: msg.id, durationMs: durationMs }));
+    return true;
+  }
+
+  function showRecordOverlay(on, cancelling) {
+    var box = el('record-overlay');
+    if (!box) return;
+    box.classList.toggle('hidden', !on);
+    box.classList.toggle('cancel', Boolean(cancelling));
+  }
+
+  function tickRecordTimer() {
+    var label = el('record-timer');
+    if (!label || !state.recordStartedAt) return;
+    label.textContent = formatDuration(Date.now() - state.recordStartedAt);
+  }
+
+  function drawWaveFrame() {
+    var rec = state.recording;
+    if (!rec || !rec.analyser) return;
+    var canvas = el('record-wave');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var data = new Uint8Array(rec.analyser.fftSize);
+    rec.analyser.getByteTimeDomainData(data);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#f5a623';
+    ctx.beginPath();
+    var i;
+    for (i = 0; i < data.length; i += 1) {
+      var x = (i / data.length) * canvas.width;
+      var y = (data[i] / 255) * canvas.height;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    rec.waveFrame = root.requestAnimationFrame(drawWaveFrame);
+  }
+
+  function stopTracks(stream) {
+    if (!stream || !stream.getTracks) return;
+    stream.getTracks().forEach(function (track) { track.stop(); });
+  }
+
+  function cancelVoiceRecord() {
+    state.recordCancelled = true;
+    if (state.recordTimer) {
+      clearInterval(state.recordTimer);
+      state.recordTimer = 0;
+    }
+    var rec = state.recording;
+    if (rec) {
+      if (rec.waveFrame) root.cancelAnimationFrame(rec.waveFrame);
+      try { if (rec.media && rec.media.state === 'recording') rec.media.stop(); } catch (_e) { /* ignore */ }
+      stopTracks(rec.stream);
+    }
+    state.recording = null;
+    showRecordOverlay(false, false);
+    var mic = el('mic-btn');
+    if (mic) mic.setAttribute('aria-pressed', 'false');
+  }
+
+  function beginVoiceRecord() {
+    if (state.streaming || state.recording) return false;
+    var Rec = root.MediaRecorder;
+    if (!Rec || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      startDictation();
+      return false;
+    }
+    state.recordCancelled = false;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      if (state.recordCancelled) {
+        stopTracks(stream);
+        return;
+      }
+      var mime = Rec.isTypeSupported && Rec.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : (Rec.isTypeSupported && Rec.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus' : '');
+      var media = mime ? new Rec(stream, { mimeType: mime }) : new Rec(stream);
+      var chunks = [];
+      media.addEventListener('dataavailable', function (ev) {
+        if (ev.data && ev.data.size) chunks.push(ev.data);
+      });
+      media.addEventListener('stop', function () {
+        stopTracks(stream);
+        if (state.recordCancelled) return;
+        var blob = new Blob(chunks, { type: media.mimeType || 'audio/webm' });
+        if (blob.size > VOICE_MAX_BYTES) {
+          addMessage({ role: 'system', text: 'Message vocal trop long (2 Mo / 120 s)' });
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var url = String(reader.result || '');
+          var comma = url.indexOf(',');
+          var data = comma >= 0 ? url.slice(comma + 1) : '';
+          sendVoiceData({
+            mimeType: blob.type || 'audio/webm',
+            data: data,
+            durationMs: Date.now() - state.recordStartedAt,
+          });
+        };
+        reader.readAsDataURL(blob);
+      });
+      var ctx = root.AudioContext || root.webkitAudioContext;
+      var analyser = null;
+      if (ctx) {
+        var ac = new ctx();
+        var src = ac.createMediaStreamSource(stream);
+        analyser = ac.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+      }
+      state.recording = { media: media, stream: stream, analyser: analyser, waveFrame: 0 };
+      state.recordStartedAt = Date.now();
+      showRecordOverlay(true, false);
+      var mic = el('mic-btn');
+      if (mic) mic.setAttribute('aria-pressed', 'true');
+      media.start(100);
+      if (analyser) drawWaveFrame();
+      state.recordTimer = setInterval(function () {
+        tickRecordTimer();
+        if (Date.now() - state.recordStartedAt >= VOICE_MAX_MS) finishVoiceRecord();
+      }, 200);
+    }).catch(function () {
+      startDictation();
+    });
+    return true;
+  }
+
+  function finishVoiceRecord() {
+    var rec = state.recording;
+    if (!rec) return;
+    if (state.recordTimer) {
+      clearInterval(state.recordTimer);
+      state.recordTimer = 0;
+    }
+    if (rec.waveFrame) root.cancelAnimationFrame(rec.waveFrame);
+    showRecordOverlay(false, false);
+    var mic = el('mic-btn');
+    if (mic) mic.setAttribute('aria-pressed', 'false');
+    try { if (rec.media && rec.media.state === 'recording') rec.media.stop(); } catch (_e) { /* ignore */ }
+    state.recording = null;
+  }
+
+  function handleMicPointerDown(event) {
+    state.recordPointer = { x: event.clientX || 0, y: event.clientY || 0 };
+    beginVoiceRecord();
+  }
+
+  function handleMicPointerMove(event) {
+    if (!state.recording) return;
+    var dx = (event.clientX || 0) - (state.recordPointer && state.recordPointer.x || 0);
+    var dy = (event.clientY || 0) - (state.recordPointer && state.recordPointer.y || 0);
+    var cancel = dy < -56 || dx < -56;
+    showRecordOverlay(true, cancel);
+    state.recordWillCancel = cancel;
+  }
+
+  function handleMicPointerUp() {
+    if (state.recordWillCancel) {
+      cancelVoiceRecord();
+      state.recordWillCancel = false;
+      return;
+    }
+    finishVoiceRecord();
+  }
+
   function rowIdFromEvent(target) {
     var node = target;
     while (node && node !== document.body) {
@@ -1020,16 +1860,58 @@
     var id = rowIdFromEvent(event.target);
     if (!id) return;
     clearTimeout(state.longPressTimer);
+    state.swipe = { id: id, x: event.clientX || 0, y: event.clientY || 0, active: false };
     state.longPressTimer = setTimeout(function () {
+      state.swipe = null;
       showReactionBar(id, event.clientX, event.clientY);
+      var editBtn = el('edit-msg-btn');
+      var last = lastUserMessage();
+      if (editBtn) editBtn.classList.toggle('hidden', !(last && last.id === id));
     }, LONG_PRESS_MS);
   }
 
-  function handleBubblePointerUp() {
+  function handleBubblePointerMove(event) {
+    if (!state.swipe) return;
+    var dx = (event.clientX || 0) - state.swipe.x;
+    if (Math.abs(dx) > 12) clearTimeout(state.longPressTimer);
+    if (dx > 24) {
+      state.swipe.active = true;
+      var row = document.querySelector('.msg-row[data-id="' + state.swipe.id + '"]');
+      if (row) row.style.transform = 'translateX(' + Math.min(dx, 72) + 'px)';
+    }
+  }
+
+  function handleBubblePointerUp(event) {
     clearTimeout(state.longPressTimer);
+    if (state.swipe && state.swipe.active && ((event && event.clientX) || 0) - state.swipe.x > 56) {
+      startReply(state.swipe.id);
+    }
+    if (state.swipe) {
+      var row = document.querySelector('.msg-row[data-id="' + state.swipe.id + '"]');
+      if (row) row.style.transform = '';
+    }
+    state.swipe = null;
   }
 
   function handleBubbleClick(event) {
+    var playBtn = event.target.closest ? event.target.closest('.voice-play') : null;
+    if (playBtn) {
+      event.preventDefault();
+      playVoice(playBtn.getAttribute('data-voice') || '');
+      return;
+    }
+    var speedBtn = event.target.closest ? event.target.closest('.voice-speed') : null;
+    if (speedBtn) {
+      event.preventDefault();
+      toggleVoiceSpeed(speedBtn.getAttribute('data-voice') || '');
+      return;
+    }
+    var quote = event.target.closest ? event.target.closest('.quote-ref') : null;
+    if (quote) {
+      event.preventDefault();
+      scrollToMessage(quote.getAttribute('data-quote') || '');
+      return;
+    }
     var img = event.target.closest ? event.target.closest('img.bubble-img, img.selfie') : null;
     if (img && img.src) {
       event.preventDefault();
@@ -1038,9 +1920,16 @@
     }
     var id = rowIdFromEvent(event.target);
     if (!id) return;
+    if (state.selectMode) {
+      toggleSelected(id);
+      return;
+    }
     var now = Date.now();
     if (state.lastTap.id === id && now - state.lastTap.at < 350) {
       showReactionBar(id, event.clientX, event.clientY);
+      var editBtn = el('edit-msg-btn');
+      var last = lastUserMessage();
+      if (editBtn) editBtn.classList.toggle('hidden', !(last && last.id === id));
       state.lastTap = { id: '', at: 0 };
       return;
     }
@@ -1081,8 +1970,34 @@
       addMessage({ role: 'system', text: msg });
       return;
     }
+    if (type === 'audio') {
+      var audioPayload = data.payload || {};
+      var mime = typeof audioPayload.mimeType === 'string' ? audioPayload.mimeType : 'audio/ogg';
+      var b64 = typeof audioPayload.data === 'string' ? audioPayload.data : '';
+      var lastAsst = null;
+      var ai;
+      for (ai = state.messages.length - 1; ai >= 0; ai -= 1) {
+        if (state.messages[ai].role === 'assistant') { lastAsst = state.messages[ai]; break; }
+      }
+      if (lastAsst && b64) {
+        lastAsst.hasAudio = true;
+        lastAsst.durationMs = typeof audioPayload.durationMs === 'number' ? audioPayload.durationMs : 0;
+        lastAsst.audioUrl = 'data:' + mime + ';base64,' + b64;
+        persistHistory();
+        renderMessages();
+        if (state.lastUserWasVoice) playVoice(lastAsst.id, true);
+      }
+      return;
+    }
+    if (type === 'ack') {
+      var ackKind = data.payload && data.payload.ack;
+      var ackId = data.payload && data.payload.clientMsgId;
+      if (typeof ackKind === 'string') applyAck(ackKind, typeof ackId === 'string' ? ackId : '');
+      return;
+    }
     if (type === 'stream_start') {
       setStreaming(true);
+      applyAck('read', state.pendingAckId);
       var started = addMessage({ role: 'assistant', text: '' });
       state.streamId = started.id;
       state.sawChunk = false;
@@ -1171,6 +2086,13 @@
     }, 25000);
   }
 
+  function persistToken(token) {
+    state.token = token;
+    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (_err) { /* ignore */ }
+    var input = el('token-input');
+    if (input) input.value = token;
+  }
+
   function login(event) {
     if (event) event.preventDefault();
     var token = (el('token-input').value || '').trim();
@@ -1178,10 +2100,28 @@
       setError('Jeton requis');
       return;
     }
-    state.token = token;
-    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (_err) { /* ignore */ }
+    persistToken(token);
     setError('');
     connectWs();
+  }
+
+  function consumeHashToken() {
+    var raw = '';
+    try { raw = String(location.hash || ''); } catch (_err) { return false; }
+    if (raw.charAt(0) === '#') raw = raw.slice(1);
+    if (!raw) return false;
+    var token = '';
+    try {
+      token = String(new URLSearchParams(raw).get('token') || '').trim();
+    } catch (_err) {
+      return false;
+    }
+    if (!token) return false;
+    persistToken(token);
+    try {
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (_err) { /* ignore */ }
+    return true;
   }
 
   function logout() {
@@ -1589,6 +2529,16 @@
       closeEmojiPicker();
       closeLightbox();
       hideReactionBar();
+      closeSearch();
+      cancelReply();
+      if (state.selectMode) setSelectMode(false);
+    }
+    if (event.key === 'ArrowUp' && !event.shiftKey && !event.altKey && !event.metaKey) {
+      var input = el('message-input');
+      var onComposer = input && document.activeElement === input && !input.value;
+      if (onComposer && beginEdit()) {
+        event.preventDefault();
+      }
     }
   }
 
@@ -1609,14 +2559,65 @@
     var micBtn = el('mic-btn');
     if (micBtn) {
       var hasSpeech = Boolean(root.SpeechRecognition || root.webkitSpeechRecognition);
-      if (!hasSpeech) {
+      var hasRec = Boolean(root.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!hasSpeech && !hasRec) {
         micBtn.classList.add('hidden');
         micBtn.hidden = true;
       } else {
         micBtn.classList.remove('hidden');
         micBtn.hidden = false;
-        micBtn.addEventListener('click', startDictation);
+        if (hasRec) {
+          micBtn.addEventListener('pointerdown', handleMicPointerDown);
+          micBtn.addEventListener('pointermove', handleMicPointerMove);
+          micBtn.addEventListener('pointerup', handleMicPointerUp);
+          micBtn.addEventListener('pointercancel', handleMicPointerUp);
+          micBtn.addEventListener('click', function (event) { event.preventDefault(); });
+        } else {
+          micBtn.addEventListener('click', startDictation);
+        }
       }
+    }
+    document.addEventListener('paste', function (event) {
+      var files = event.clipboardData && event.clipboardData.files;
+      if (files && files.length) {
+        event.preventDefault();
+        addAttachments(files);
+      }
+    });
+    var chatSection = el('chat-section');
+    if (chatSection) {
+      chatSection.addEventListener('dragover', function (event) {
+        event.preventDefault();
+      });
+      chatSection.addEventListener('drop', function (event) {
+        event.preventDefault();
+        var files = event.dataTransfer && event.dataTransfer.files;
+        if (files && files.length) addAttachments(files);
+      });
+    }
+    document.querySelectorAll('.font-size-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setFont(btn.getAttribute('data-font')); });
+    });
+    document.querySelectorAll('.theme-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setTheme(btn.getAttribute('data-theme')); });
+    });
+    document.querySelectorAll('.wallpaper-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setWallpaper(btn.getAttribute('data-wp')); });
+    });
+    document.querySelectorAll('.tone-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { insertEmoji(btn.textContent || '👋'); });
+    });
+    if (el('sounds-toggle')) {
+      el('sounds-toggle').addEventListener('change', function (event) {
+        state.sounds = Boolean(event.target.checked);
+        storeSet(STORAGE.sounds, state.sounds);
+      });
+    }
+    if (el('voice-reply-toggle')) {
+      el('voice-reply-toggle').addEventListener('change', function (event) {
+        state.voiceReply = Boolean(event.target.checked);
+        storeSet(STORAGE.voiceReply, state.voiceReply);
+      });
     }
     if (el('emoji-btn')) el('emoji-btn').addEventListener('click', toggleEmojiPicker);
     if (el('emoji-search')) {
@@ -1739,6 +2740,7 @@
     if (messages) {
       messages.addEventListener('click', handleBubbleClick);
       messages.addEventListener('pointerdown', handleBubblePointerDown);
+      messages.addEventListener('pointermove', handleBubblePointerMove);
       messages.addEventListener('pointerup', handleBubblePointerUp);
       messages.addEventListener('pointercancel', handleBubblePointerUp);
       messages.addEventListener('contextmenu', function (event) {
@@ -1746,11 +2748,46 @@
         if (!id) return;
         event.preventDefault();
         showReactionBar(id, event.clientX, event.clientY);
+        var editBtn = el('edit-msg-btn');
+        var last = lastUserMessage();
+        if (editBtn) editBtn.classList.toggle('hidden', !(last && last.id === id));
       });
       messages.addEventListener('scroll', function () {
         state.atBottom = isNearBottom(messages);
-        if (state.atBottom) state.unread = 0;
+        if (state.atBottom) {
+          state.unread = 0;
+          state.unreadAnchorId = '';
+          rememberLastRead();
+          updateTabBadge();
+        }
+        if (messages.scrollTop < 48) loadOlderHistory();
+        try { sessionStorage.setItem('codebuddy_mobile_scroll', String(messages.scrollTop)); } catch (_e) { /* ignore */ }
         updateJumpButton();
+      });
+    }
+    if (el('search-btn')) el('search-btn').addEventListener('click', openSearch);
+    if (el('search-close')) el('search-close').addEventListener('click', closeSearch);
+    if (el('search-input')) {
+      el('search-input').addEventListener('input', function (event) {
+        searchConversation(event.target.value);
+      });
+    }
+    if (el('search-prev')) el('search-prev').addEventListener('click', function () { gotoSearch(-1); });
+    if (el('search-next')) el('search-next').addEventListener('click', function () { gotoSearch(1); });
+    if (el('reply-quote-close')) el('reply-quote-close').addEventListener('click', cancelReply);
+    if (el('reply-quote-jump')) {
+      el('reply-quote-jump').addEventListener('click', function () {
+        if (state.replyTo) scrollToMessage(state.replyTo.id);
+      });
+    }
+    if (el('select-cancel')) el('select-cancel').addEventListener('click', function () { setSelectMode(false); });
+    if (el('select-delete')) el('select-delete').addEventListener('click', deleteSelected);
+    if (el('pinned-toggle')) {
+      el('pinned-toggle').addEventListener('click', function () {
+        var list = el('pinned-list');
+        if (!list) return;
+        var open = list.classList.toggle('hidden') === false;
+        el('pinned-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     }
     if (el('jump-bottom')) {
@@ -1778,16 +2815,51 @@
           copyMessage(state.reactionTarget);
           return;
         }
+        if (btn.id === 'reply-msg-btn') {
+          startReply(state.reactionTarget);
+          return;
+        }
+        if (btn.id === 'forward-msg-btn') {
+          forwardMessage(state.reactionTarget);
+          return;
+        }
+        if (btn.id === 'pin-msg-btn') {
+          togglePin(state.reactionTarget);
+          return;
+        }
+        if (btn.id === 'edit-msg-btn') {
+          beginEdit(state.reactionTarget);
+          return;
+        }
+        if (btn.id === 'delete-msg-btn') {
+          deleteForMe(state.reactionTarget);
+          return;
+        }
+        if (btn.id === 'select-msg-btn') {
+          setSelectMode(true);
+          toggleSelected(state.reactionTarget);
+          return;
+        }
         var emoji = btn.getAttribute('data-emoji');
         if (emoji) setReaction(state.reactionTarget, emoji);
       });
     }
     document.addEventListener('click', onDocumentClick);
     document.addEventListener('keydown', onDocumentKey);
+    if (root.visualViewport) {
+      root.visualViewport.addEventListener('resize', syncKeyboardInset);
+      root.visualViewport.addEventListener('scroll', syncKeyboardInset);
+      syncKeyboardInset();
+    }
   }
 
   function onVisibilityOrOnline() {
-    if (document.visibilityState === 'hidden') return;
+    if (document.visibilityState === 'hidden') {
+      var last = state.messages[state.messages.length - 1];
+      if (last && !state.atBottom) state.unreadAnchorId = last.id;
+      else if (last) rememberLastRead();
+      return;
+    }
     ensureConnected();
   }
 
@@ -1815,11 +2887,27 @@
     root.addEventListener('online', onVisibilityOrOnline);
     restoreAvatar();
     state.suggestHidden = storeGet(STORAGE.suggestHidden, false) === true;
+    state.voiceReply = storeGet(STORAGE.voiceReply, false) === true;
+    state.theme = storeGet(STORAGE.theme, 'dark') || 'dark';
+    state.font = String(storeGet(STORAGE.font, '2') || '2');
+    state.wallpaper = String(storeGet(STORAGE.wallpaper, '0') || '0');
+    var soundsPref = storeGet(STORAGE.sounds, true);
+    state.sounds = soundsPref !== false;
+    applyPrefs();
+    var voiceToggle = el('voice-reply-toggle');
+    if (voiceToggle) voiceToggle.checked = state.voiceReply;
     restoreHistory();
+    var savedScroll = 0;
+    try { savedScroll = Number(sessionStorage.getItem('codebuddy_mobile_scroll') || 0); } catch (_e) { savedScroll = 0; }
+    if (savedScroll > 0) {
+      var box = el('messages');
+      if (box) box.scrollTop = savedScroll;
+    }
     refreshConfirmationBadge();
     refreshSuggestions();
     autosizeComposer();
     setPresence(state.connected ? 'online' : 'offline');
+    consumeHashToken();
     if (state.token) {
       var tokenInput = el('token-input');
       if (tokenInput) tokenInput.value = state.token;
@@ -1853,6 +2941,33 @@
     renderMessages: renderMessages,
     setReaction: setReaction,
     copyMessage: copyMessage,
+    startReply: startReply,
+    cancelReply: cancelReply,
+    beginEdit: beginEdit,
+    deleteForMe: deleteForMe,
+    togglePin: togglePin,
+    searchConversation: searchConversation,
+    gotoSearch: gotoSearch,
+    openSearch: openSearch,
+    closeSearch: closeSearch,
+    setSelectMode: setSelectMode,
+    toggleSelected: toggleSelected,
+    deleteSelected: deleteSelected,
+    applyAck: applyAck,
+    forwardMessage: forwardMessage,
+    scrollToMessage: scrollToMessage,
+    formatTime: formatTime,
+    formatFullTime: formatFullTime,
+    handleBubblePointerDown: handleBubblePointerDown,
+    handleBubblePointerMove: handleBubblePointerMove,
+    handleBubblePointerUp: handleBubblePointerUp,
+    sendVoiceData: sendVoiceData,
+    beginVoiceRecord: beginVoiceRecord,
+    cancelVoiceRecord: cancelVoiceRecord,
+    finishVoiceRecord: finishVoiceRecord,
+    playVoice: playVoice,
+    toggleVoiceSpeed: toggleVoiceSpeed,
+    formatDuration: formatDuration,
     openLightbox: openLightbox,
     closeLightbox: closeLightbox,
     handleFrame: handleFrame,
@@ -1894,6 +3009,17 @@
     scheduleReconnect: scheduleReconnect,
     reconnectDelayMs: reconnectDelayMs,
     flushOutbox: flushOutbox,
+    updateTabBadge: updateTabBadge,
+    notifyIncoming: notifyIncoming,
+    subscribePush: subscribePush,
+    loadOlderHistory: loadOlderHistory,
+    mergeServerHistory: mergeServerHistory,
+    applyPrefs: applyPrefs,
+    setTheme: setTheme,
+    setFont: setFont,
+    setWallpaper: setWallpaper,
+    isEmojiOnly: isEmojiOnly,
+    VIRTUAL_WINDOW: VIRTUAL_WINDOW,
     destroy: destroy,
   };
 

@@ -16,6 +16,16 @@ import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } f
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
 import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
+import { applyChatReplyContext, readClientMsgId } from '../mobile/chat-extras.js';
+import {
+  assertVoiceNoteDuration,
+  assertVoiceNoteDurationSync,
+  isAudioMime,
+  sniffAudioMime,
+  synthesizeMobileVoiceReply,
+  transcribeVoiceAttachment,
+  WS_MAX_VOICE_BYTES,
+} from '../mobile/voice-note.js';
 
 function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -361,6 +371,14 @@ interface ChatPayload {
   peerId?: string;
   /** Photos the phone attached to this message (companion assistant only). */
   attachments?: Array<{ mimeType?: unknown; data?: unknown }>;
+  /** Optional quote of another bubble. Absent on older clients. */
+  replyTo?: unknown;
+  /** Client-generated id so delivery/read acks can target the right bubble. */
+  clientMsgId?: unknown;
+  /** When true, Lisa's reply is also synthesized and pushed as an `audio` frame. */
+  voiceReply?: unknown;
+  /** Client-declared duration of an attached voice note (milliseconds). */
+  durationMs?: unknown;
 }
 
 /** Most photos accepted on one mobile message. */
@@ -378,8 +396,14 @@ export interface ValidatedChatAttachment {
  * the count, each size and the actual image type are checked here, and the
  * type comes from the DECODED BYTES — a declared `mimeType` is never proof.
  */
+function readDeclaredDurationMs(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return undefined;
+  return raw;
+}
+
 export function validateChatAttachments(
   raw: unknown,
+  opts: { declaredDurationMs?: number } = {},
 ): { ok: true; attachments: ValidatedChatAttachment[] } | { ok: false; error: string } {
   if (raw === undefined || raw === null) return { ok: true, attachments: [] };
   if (!Array.isArray(raw)) return { ok: false, error: 'Attachments must be an array' };
@@ -401,15 +425,31 @@ export function validateChatAttachments(
     }
     const bytes = Buffer.from(payload, 'base64');
     if (bytes.length === 0) return { ok: false, error: 'Attachment is empty' };
-    if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
-      return {
-        ok: false,
-        error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
-      };
+    const image = sniffImageMime(bytes);
+    if (image) {
+      if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
+        return {
+          ok: false,
+          error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
+        };
+      }
+      attachments.push({ mimeType: image, data: payload });
+      continue;
     }
-    const sniffed = sniffImageMime(bytes);
-    if (!sniffed) return { ok: false, error: 'Attachment is not an image' };
-    attachments.push({ mimeType: sniffed, data: payload });
+    const audio = sniffAudioMime(bytes);
+    if (audio) {
+      if (bytes.length > WS_MAX_VOICE_BYTES) {
+        return { ok: false, error: 'Each voice note must be at most 2 MB' };
+      }
+      const declared = readDeclaredDurationMs(
+        (entry as { durationMs?: unknown }).durationMs ?? opts.declaredDurationMs,
+      );
+      const duration = assertVoiceNoteDurationSync(bytes, declared);
+      if (!duration.ok) return duration;
+      attachments.push({ mimeType: audio, data: payload });
+      continue;
+    }
+    return { ok: false, error: 'Attachment is not an image' };
   }
   return { ok: true, attachments };
 }
@@ -515,6 +555,18 @@ function send(ws: WebSocket, message: WebSocketResponse): void {
   if (ws.readyState === 1) { // OPEN
     ws.send(JSON.stringify(message));
   }
+}
+
+function sendChatAck(
+  ws: WebSocket,
+  ack: 'received' | 'read',
+  clientMsgId?: string,
+): void {
+  send(ws, {
+    type: 'ack',
+    payload: { ack, ...(clientMsgId ? { clientMsgId } : {}) },
+    timestamp: new Date().toISOString(),
+  });
 }
 
 /**
@@ -777,6 +829,7 @@ async function runPlainChatTurn(
   options: {
     stream: boolean;
     produce: () => Promise<string | { text: string; image?: { mimeType: string; data: string } }>;
+    clientMsgId?: string;
   },
 ): Promise<void> {
   const messageId = `msg_${Date.now()}`;
@@ -787,6 +840,7 @@ async function runPlainChatTurn(
       id: messageId,
       timestamp: new Date().toISOString(),
     });
+    sendChatAck(ws, 'read', options.clientMsgId);
   }
   const produced = await options.produce();
   const content = typeof produced === 'string' ? produced : produced.text;
@@ -807,6 +861,7 @@ async function runPlainChatTurn(
       timestamp: new Date().toISOString(),
     });
   } else {
+    sendChatAck(ws, 'read', options.clientMsgId);
     send(ws, {
       type: 'chat_response',
       payload: { content, finishReason: 'stop', ...(image ? { image } : {}) },
@@ -846,22 +901,18 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     assistant: assistantRaw,
     peerId: peerIdRaw,
     attachments: attachmentsRaw,
+    replyTo: replyToRaw,
+    clientMsgId: clientMsgIdRaw,
+    voiceReply: voiceReplyRaw,
+    durationMs: durationMsRaw,
   } = payload as ChatPayload;
 
-  // Validate message
-  if (!message) {
-    sendError(ws, 'INVALID_REQUEST', 'Message is required');
-    return;
-  }
-  if (typeof message !== 'string') {
+  if (message !== undefined && message !== null && typeof message !== 'string') {
     sendError(ws, 'INVALID_REQUEST', 'Message must be a string');
     return;
   }
-  if (message.trim().length === 0) {
-    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
-    return;
-  }
-  if (message.length > 100000) {
+  const rawMessage = typeof message === 'string' ? message : '';
+  if (rawMessage.length > 100000) {
     sendError(ws, 'INVALID_REQUEST', 'Message exceeds maximum length of 100000 characters');
     return;
   }
@@ -882,30 +933,85 @@ messageHandlers.set('chat', async (ws, state, payload) => {
 
   // Photos are accepted only for the companion; every other assistant keeps the
   // exact payload contract it had.
+  const declaredDurationMs = readDeclaredDurationMs(durationMsRaw);
   const validatedAttachments = validateChatAttachments(
     assistant === 'companion' ? attachmentsRaw : undefined,
+    { declaredDurationMs },
   );
   if (!validatedAttachments.ok) {
     sendError(ws, 'INVALID_REQUEST', validatedAttachments.error);
     return;
   }
 
+  const audioAttachments = validatedAttachments.attachments.filter((item) => isAudioMime(item.mimeType));
+  const imageAttachments = validatedAttachments.attachments.filter((item) =>
+    item.mimeType.startsWith('image/'),
+  );
+  for (const audio of audioAttachments) {
+    const duration = await assertVoiceNoteDuration(
+      Buffer.from(audio.data, 'base64'),
+      declaredDurationMs,
+    );
+    if (!duration.ok) {
+      sendError(ws, 'INVALID_REQUEST', duration.error);
+      return;
+    }
+  }
+  if (rawMessage.trim().length === 0 && audioAttachments.length === 0) {
+    sendError(
+      ws,
+      'INVALID_REQUEST',
+      message ? 'Message cannot be empty or whitespace only' : 'Message is required',
+    );
+    return;
+  }
+
+  let userText = applyChatReplyContext(rawMessage, replyToRaw).trim();
+  if (audioAttachments[0] && assistant === 'companion') {
+    const transcript = await transcribeVoiceAttachment(audioAttachments[0]);
+    if (transcript) {
+      userText =
+        userText && userText !== '(message vocal)' ? `${userText}\n\n${transcript}` : transcript;
+    } else if (!userText) {
+      userText = '(message vocal)';
+    }
+  }
+  if (!userText) {
+    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
+    return;
+  }
+
+  const clientMsgId = readClientMsgId(clientMsgIdRaw);
+  sendChatAck(ws, 'received', clientMsgId);
+  const wantVoiceReply = voiceReplyRaw === true;
+
   try {
     if (assistant === 'companion') {
+      let spoken = '';
       await runPlainChatTurn(ws, state, turn, {
         stream,
+        clientMsgId,
         produce: async () => {
           const history = companionHistoryFor(state);
-          const produced = await produceCompanionReply(message, {
+          const produced = await produceCompanionReply(userText, {
             history,
-            ...(validatedAttachments.attachments.length
-              ? { attachments: validatedAttachments.attachments }
-              : {}),
+            ...(imageAttachments.length ? { attachments: imageAttachments } : {}),
           });
-          if (!turn.cancelled) rememberCompanionTurn(state, message, produced);
+          spoken = typeof produced === 'string' ? produced : produced.text;
+          if (!turn.cancelled) rememberCompanionTurn(state, userText, produced);
           return produced;
         },
       });
+      if (wantVoiceReply && spoken && !turn.cancelled) {
+        const audio = await synthesizeMobileVoiceReply(spoken);
+        if (audio) {
+          send(ws, {
+            type: 'audio',
+            payload: audio,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
       return;
     }
 
@@ -918,7 +1024,8 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       }
       await runPlainChatTurn(ws, state, turn, {
         stream,
-        produce: () => producePeerReply(target, message),
+        clientMsgId,
+        produce: () => producePeerReply(target, userText),
       });
       return;
     }
@@ -963,8 +1070,9 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         id: messageId,
         timestamp: new Date().toISOString(),
       });
+      sendChatAck(ws, 'read', clientMsgId);
 
-      const streamGen = streamAgentDeltas(agent, message, { model, surface: 'websocket' });
+      const streamGen = streamAgentDeltas(agent, userText, { model, surface: 'websocket' });
 
       for await (const delta of streamGen) {
         if (turn.cancelled || !state.streaming) break;
@@ -997,7 +1105,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       // preserves the single chat_response protocol and makes stop/close/error
       // capable of releasing a blocked provider and the per-connection lane.
       let content = '';
-      for await (const delta of streamAgentDeltas(agent, message, {
+      for await (const delta of streamAgentDeltas(agent, userText, {
         model,
         surface: 'websocket',
       })) {
@@ -1006,6 +1114,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       }
 
       if (!turn.cancelled) {
+        sendChatAck(ws, 'read', clientMsgId);
         send(ws, {
           type: 'chat_response',
           payload: {

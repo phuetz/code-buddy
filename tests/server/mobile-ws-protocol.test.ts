@@ -56,6 +56,7 @@ import {
   closeAllConnections,
   setupWebSocket,
 } from '../../src/server/websocket/handler.js';
+import { setMobileVoiceHooksForTests } from '../../src/server/mobile/voice-note.js';
 import {
   _resetFleetRegistryForTests,
   getFleetRegistry,
@@ -165,6 +166,7 @@ describe('Mobile WS protocol', () => {
     else process.env.JWT_SECRET = previousSecret;
     if (previousHistory === undefined) delete process.env.CODEBUDDY_MOBILE_HISTORY;
     else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
+    setMobileVoiceHooksForTests();
   });
 
   async function authed(): Promise<{ ws: WebSocket; events: Frame[] }> {
@@ -230,6 +232,87 @@ describe('Mobile WS protocol', () => {
     const { ws, events } = await authed();
     ws.send(JSON.stringify({ type: 'ping' }));
     await waitUntil(() => events.some((event) => event.type === 'pong'));
+    ws.close();
+  });
+
+  it('acks received then read when Lisa starts to reply (old payload still streams)', async () => {
+    const { ws, events } = await authed();
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: 'salut',
+        stream: true,
+        assistant: 'companion',
+        clientMsgId: 'm-client-1',
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'stream_end'));
+    const acks = events.filter((event) => event.type === 'ack').map((event) => event.payload);
+    expect(acks).toEqual(expect.arrayContaining([
+      { ack: 'received', clientMsgId: 'm-client-1' },
+      { ack: 'read', clientMsgId: 'm-client-1' },
+    ]));
+    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
+      'authenticated',
+      'ack',
+      'stream_start',
+      'stream_chunk',
+      'stream_end',
+    ]));
+    ws.close();
+  });
+
+  it('prefixes replyTo for the companion turn without breaking a client that omits it', async () => {
+    const { ws, events } = await authed();
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: 'oui',
+        stream: true,
+        assistant: 'companion',
+        replyTo: { id: 'm-1', text: 'on se voit ?' },
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'stream_end'));
+    const text = events
+      .filter((event) => event.type === 'stream_chunk')
+      .map((event) => event.payload?.delta)
+      .join('');
+    expect(text).toContain('En réponse à : « on se voit ? »');
+    expect(text).toContain('oui');
+    ws.close();
+  });
+
+  it('transcribes a voice note with the fake STT and returns a fake TTS frame', async () => {
+    setMobileVoiceHooksForTests({
+      transcribe: async () => 'message vocal transcrit',
+      synthesize: async (text) => ({
+        mimeType: 'audio/ogg',
+        data: Buffer.from(text).toString('base64'),
+        durationMs: 500,
+      }),
+    });
+    const { ws, events } = await authed();
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(24)]).toString('base64');
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: '',
+        stream: true,
+        assistant: 'companion',
+        voiceReply: true,
+        attachments: [{ mimeType: 'audio/ogg', data: ogg }],
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'audio'));
+    const text = events
+      .filter((event) => event.type === 'stream_chunk')
+      .map((event) => event.payload?.delta)
+      .join('');
+    expect(text).toBe('lisa:message vocal transcrit');
+    const audio = events.find((event) => event.type === 'audio');
+    expect(audio?.payload?.mimeType).toBe('audio/ogg');
+    expect(audio?.payload?.durationMs).toBe(500);
     ws.close();
   });
 });

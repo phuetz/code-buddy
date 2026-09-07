@@ -130,6 +130,8 @@ const FICHIERS_PLAGES_PRIVEES = new Set([
   'tests/server/anonymous-tools-local-only.test.ts',
   'tests/server/exposure-diagnostic.test.ts',
   'tests/server/mobile.test.ts',
+  // Rapport de vérif : les RFC1918 y sont le SUJET du trou SSRF (endpoint push).
+  'docs/reports/2026-09/VERIF-PWA-CHAT-V3-SONNET.md',
   'tests/tools/app-server-real.test.ts',
   'tests/tools/bash-tool.test.ts',
   'tests/tools/camera-analyze.test.ts',

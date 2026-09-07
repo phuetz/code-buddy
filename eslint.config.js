@@ -102,6 +102,7 @@ export default [
       '*.tmp.js',
       'tmp/**',
       'tmp_*/**',
+      '_qa/**',
       'lint-output.txt',
       'lint-after-fix*.txt',
       'jest-results.json',

@@ -334,9 +334,13 @@ _qa/secu/
 _qa/selfie/
 _qa/selfie2/
 _qa/chat/
+_qa/v3/
+_qa/fix/
+_qa/verif/
 _qa/fw/
 _qa/cat/
 _qa/hl/
 _qa/pf/
 _qa/inj/
+_qa/tok/
 src/server/mobile/assets/icon-*.png

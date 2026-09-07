@@ -361,6 +361,12 @@ async function deliverAwayInitiative(
     if (!(await (deps.telegramAlert ?? defaultTelegramAlert)(line))) {
       throw new Error('away telegram delivery was not accepted');
     }
+    try {
+      const { sendMobilePush } = await import('../server/mobile/push.js');
+      await sendMobilePush({ title: 'Lisa', body: line });
+    } catch {
+      /* push is optional */
+    }
     if (!deps.telegramAlert || deps.recordRemote) {
       await (deps.recordRemote ?? defaultRecordRemote)(line);
     }

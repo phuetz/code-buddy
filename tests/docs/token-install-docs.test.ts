@@ -36,4 +36,26 @@ describe('B-8 + B-3: Documentation of token minting, --allow-scripts, and option
     expect(content).toMatch(/--allow-scripts/);
     expect(content).toMatch(/18\s+(?:optional\s+)?native/i);
   });
+
+  it('docs/getting-started.md documente l ouverture PWA en une commande', () => {
+    const content = readDoc('docs/getting-started.md');
+    expect(content).toMatch(/buddy\s+token/);
+    expect(content).toMatch(/#token=/);
+    expect(content).toMatch(/__codebuddy__\/mobile/);
+    expect(content).toMatch(/--telegram/);
+    expect(content).toMatch(/--qr/);
+  });
+
+  it('docs/security.md documente --env, le hash PWA, et le secret jamais affiche', () => {
+    const content = readDoc('docs/security.md');
+    expect(content).toMatch(/--env/);
+    expect(content).toMatch(/#token=/);
+    expect(content).toMatch(/never (?:printed|logged)|jamais affiche/i);
+    expect(content).toMatch(/server\.env/);
+  });
+
+  it('CLAUDE.md liste buddy token dans les commandes CLI', () => {
+    const content = readDoc('CLAUDE.md');
+    expect(content).toMatch(/buddy token/);
+  });
 });

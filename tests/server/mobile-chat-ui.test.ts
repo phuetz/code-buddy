@@ -21,6 +21,10 @@ type MobileApi = {
     unread: number;
     atBottom: boolean;
     avatarUrl: string;
+    connected?: boolean;
+    unreadAnchorId?: string;
+    telegramForward?: boolean;
+    replyTo?: { id: string; text: string } | null;
   };
   STORAGE: Record<string, string>;
   REACTIONS: string[];
@@ -59,6 +63,41 @@ type MobileApi = {
   haptic: () => void;
   pulseSend: () => void;
   showReactionBar: (id: string, x?: number, y?: number) => void;
+  startReply: (id: string) => boolean;
+  cancelReply: () => void;
+  beginEdit: (id?: string) => boolean;
+  deleteForMe: (id: string) => boolean;
+  togglePin: (id: string) => boolean;
+  searchConversation: (query: string) => string[];
+  gotoSearch: (dir: number) => string;
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSelectMode: (on: boolean) => void;
+  toggleSelected: (id: string) => void;
+  deleteSelected: () => void;
+  applyAck: (ack: string, clientMsgId?: string) => string | null;
+  forwardMessage: (id: string) => Promise<boolean>;
+  scrollToMessage: (id: string) => boolean;
+  formatFullTime: (ts: number) => string;
+  handleBubblePointerDown: (event: { target: EventTarget | null; clientX?: number; clientY?: number }) => void;
+  handleBubblePointerMove: (event: { clientX?: number }) => void;
+  handleBubblePointerUp: (event: { clientX?: number }) => void;
+  currentChatPayload: (
+    message: string,
+    attachments?: unknown[],
+    extras?: Record<string, unknown>,
+  ) => Record<string, unknown>;
+  applyStatusPayload: (data: Record<string, unknown>) => void;
+  sendVoiceData: (opts: {
+    mimeType: string;
+    data: string;
+    durationMs?: number;
+    transcript?: string;
+  }) => boolean;
+  toggleVoiceSpeed: (id: string) => number;
+  mergeServerHistory: (rows: Array<{ id: string; role: string; text: string; ts: number }>) => number;
+  setTheme: (theme: string) => void;
+  setFont: (size: string) => void;
 };
 
 function asset(name: string): string {
@@ -308,11 +347,12 @@ describe('Mobile chat UI (DOM)', () => {
       expect(texts).toContain('pong');
     });
 
-    it('caps history at 200 and clears after confirmation', () => {
-      for (let i = 0; i < 205; i += 1) {
+    it('keeps more than 200 local messages and clears after confirmation', () => {
+      expect(api.MAX_HISTORY).toBeGreaterThan(200);
+      for (let i = 0; i < 5; i += 1) {
         api.addMessage({ role: 'user', text: `n${i}` });
       }
-      expect(api.getMessages().length).toBeLessThanOrEqual(200);
+      expect(api.getMessages().length).toBe(5);
       document.getElementById('clear-chat-btn')?.click();
       expect(document.getElementById('clear-chat-confirm')?.classList.contains('hidden')).toBe(false);
       document.getElementById('clear-chat-yes')?.click();
@@ -413,6 +453,317 @@ describe('Mobile chat UI (DOM)', () => {
       expect(startMock).toHaveBeenCalledTimes(1);
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     });
+  });
+});
+
+describe('Mobile chat UI — messagerie (lot 1)', () => {
+  let sent: unknown[];
+  let api: MobileApi;
+
+  beforeEach(() => {
+    sent = [];
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.useRealTimers();
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+    api = mount();
+    api.state.ws = {
+      readyState: 1,
+      send: (raw: string) => {
+        sent.push(JSON.parse(raw));
+      },
+    };
+  });
+
+  afterEach(() => {
+    api?.destroy();
+  });
+
+  it('quotes a message above the composer and in the outgoing bubble', () => {
+    const original = api.addMessage({ role: 'assistant', text: 'on se voit ce soir ?' });
+    expect(api.startReply(original.id)).toBe(true);
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('reply-quote-text')?.textContent).toContain('on se voit');
+    expect(api.sendText('oui')).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { replyTo?: { id: string; text: string }; clientMsgId?: string; message?: string };
+    };
+    expect(frame?.payload?.replyTo?.id).toBe(original.id);
+    expect(frame?.payload?.replyTo?.text).toContain('on se voit');
+    expect(frame?.payload?.clientMsgId).toMatch(/^m-/);
+    expect(frame?.payload?.message).toBe('oui');
+    const mine = api.getMessages().find((msg) => msg.role === 'user' && msg.text === 'oui') as
+      { replyTo?: { id: string } };
+    expect(mine?.replyTo?.id).toBe(original.id);
+    expect(document.querySelector('.quote-ref')?.textContent).toContain('on se voit');
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('scrolls to the original when the quote is tapped', () => {
+    const original = api.addMessage({ role: 'assistant', text: 'citation cible' });
+    api.startReply(original.id);
+    api.sendText('reçu');
+    const quote = document.querySelector('.quote-ref') as HTMLButtonElement;
+    expect(quote.getAttribute('aria-label')).toBe('Aller au message cité');
+    const row = document.querySelector(`[data-id="${original.id}"]`) as HTMLElement;
+    const spy = vi.fn();
+    row.scrollIntoView = spy;
+    quote.click();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('starts a reply after a right swipe', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'swipe-moi' });
+    const row = document.querySelector(`[data-id="${msg.id}"]`) as HTMLElement;
+    api.handleBubblePointerDown({ target: row, clientX: 10, clientY: 40 });
+    api.handleBubblePointerMove({ clientX: 80 });
+    api.handleBubblePointerUp({ clientX: 80 });
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(false);
+  });
+
+  it('copies from the action bar without a WS reaction frame', () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const msg = api.addMessage({ role: 'assistant', text: 'à copier' });
+    sent.length = 0;
+    api.copyMessage(msg.id);
+    expect(writeText).toHaveBeenCalledWith('à copier');
+    expect(sent.some((frame) => (frame as { type?: string }).type === 'reaction')).toBe(false);
+  });
+
+  it('hides Telegram forward until status says the channel is configured', async () => {
+    expect(document.getElementById('forward-msg-btn')?.classList.contains('hidden')).toBe(true);
+    api.applyStatusPayload({ telegramForward: true });
+    expect(document.getElementById('forward-msg-btn')?.classList.contains('hidden')).toBe(false);
+    const msg = api.addMessage({ role: 'user', text: 'transfert' });
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.forwardMessage(msg.id);
+    expect(fetchMock).toHaveBeenCalled();
+    const call = fetchMock.mock.calls[0] as [string, { method?: string; body?: string }];
+    expect(call[0]).toContain('/forward');
+    expect(call[1]?.method).toBe('POST');
+    expect(JSON.parse(call[1]?.body ?? '{}').text).toBe('transfert');
+    vi.unstubAllGlobals();
+  });
+
+  it('deletes a message for me only', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'à effacer' });
+    api.deleteForMe(msg.id);
+    expect(api.getMessages().some((item) => item.id === msg.id)).toBe(false);
+    expect(document.querySelector(`[data-id="${msg.id}"]`)).toBeNull();
+    expect(sent.some((frame) => (frame as { type?: string }).type === 'chat')).toBe(false);
+  });
+
+  it('edits the last user message, resends it and marks it modifié', () => {
+    const mine = api.addMessage({ role: 'user', text: 'brouillon' });
+    expect(api.beginEdit(mine.id)).toBe(true);
+    expect((document.getElementById('message-input') as HTMLTextAreaElement).value).toBe('brouillon');
+    sent.length = 0;
+    expect(api.sendText('version finale')).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { editOf?: string; message?: string };
+    };
+    expect(frame?.payload?.editOf).toBe(mine.id);
+    expect(frame?.payload?.message).toBe('version finale');
+    expect(api.getMessages().filter((msg) => msg.role === 'user')).toHaveLength(1);
+    expect(api.getMessages()[0]?.text).toBe('version finale');
+    expect(document.querySelector('.edited-mark')?.textContent).toBe('modifié');
+  });
+
+  it('selects several messages and deletes them', () => {
+    const a = api.addMessage({ role: 'user', text: 'un' });
+    const b = api.addMessage({ role: 'assistant', text: 'deux' });
+    api.addMessage({ role: 'user', text: 'trois' });
+    api.setSelectMode(true);
+    expect(document.getElementById('select-bar')?.classList.contains('hidden')).toBe(false);
+    api.toggleSelected(a.id);
+    api.toggleSelected(b.id);
+    api.deleteSelected();
+    const texts = api.getMessages().map((msg) => msg.text);
+    expect(texts).toEqual(['trois']);
+    expect(document.getElementById('select-bar')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('searches, highlights, and walks previous/next hits', () => {
+    api.addMessage({ role: 'user', text: 'alpha unique' });
+    api.addMessage({ role: 'assistant', text: 'beta unique' });
+    api.addMessage({ role: 'user', text: 'gamma' });
+    api.openSearch();
+    expect(document.getElementById('search-bar')?.classList.contains('hidden')).toBe(false);
+    const hits = api.searchConversation('unique');
+    expect(hits).toHaveLength(2);
+    expect(document.querySelectorAll('mark.search-hit').length).toBeGreaterThanOrEqual(2);
+    expect(document.getElementById('search-count')?.textContent).toBe('1/2');
+    api.gotoSearch(1);
+    expect(document.getElementById('search-count')?.textContent).toBe('2/2');
+    api.closeSearch();
+    expect(document.getElementById('search-bar')?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelector('mark.search-hit')).toBeNull();
+  });
+
+  it('pins a message and shows the banner', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'à garder' });
+    expect(api.togglePin(msg.id)).toBe(true);
+    expect(document.getElementById('pinned-bar')?.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('pinned-label')?.textContent).toContain('épinglé');
+    expect(api.togglePin(msg.id)).toBe(false);
+    expect(document.getElementById('pinned-bar')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('upgrades ✓ sent to ✓✓ received then blue read from server acks', () => {
+    const mine = api.addMessage({ role: 'user', text: 'ping' });
+    expect(document.querySelector('.ack.sent')?.textContent).toBe('✓');
+    api.applyAck('received', mine.id);
+    expect(document.querySelector('.ack.received')?.textContent).toBe('✓✓');
+    api.handleFrame({ type: 'ack', payload: { ack: 'read', clientMsgId: mine.id } });
+    expect(document.querySelector('.ack.read')?.getAttribute('aria-label')).toBe('Lu');
+    expect(document.querySelector('.ack.read')?.textContent).toBe('✓✓');
+  });
+
+  it('shows a full timestamp on touch and a new-messages separator', () => {
+    const first = api.addMessage({ role: 'user', text: 'hier soir' });
+    api.state.unreadAnchorId = first.id;
+    api.addMessage({ role: 'assistant', text: 'nouveau' });
+    expect(document.querySelector('.new-sep')?.textContent).toMatch(/nouveaux messages/i);
+    const row = document.querySelector(`[data-id="${first.id}"]`) as HTMLElement;
+    row.click();
+    expect(row.classList.contains('meta-on')).toBe(true);
+    expect(row.querySelector('.bubble-meta')?.textContent).toMatch(/\d{4}|\d{1,2}\s/);
+  });
+
+  it('labels every new action with an aria-label and a 44 px target class', () => {
+    [
+      'search-btn', 'search-prev', 'search-next', 'search-close',
+      'reply-msg-btn', 'copy-msg-btn', 'forward-msg-btn', 'pin-msg-btn',
+      'edit-msg-btn', 'delete-msg-btn', 'select-msg-btn',
+      'reply-quote-close', 'select-delete', 'select-cancel',
+    ].forEach((id) => {
+      const node = document.getElementById(id);
+      expect(node?.getAttribute('aria-label'), id).toBeTruthy();
+      expect(node?.className, id).toMatch(/touch/);
+    });
+    expect(document.getElementById('search-input')?.getAttribute('aria-label')).toBe(
+      'Rechercher dans la conversation',
+    );
+  });
+
+  it('renders a voice bubble with play, duration, 1.5× speed and transcription', () => {
+    const msg = api.addMessage({
+      role: 'user',
+      text: 'bonjour',
+      hasAudio: true,
+      durationMs: 2500,
+      transcript: 'bonjour',
+      audioUrl: 'data:audio/ogg;base64,T2dnUw==',
+    });
+    expect(document.querySelector('.voice-play')?.getAttribute('aria-label')).toBe('Lecture');
+    expect(document.querySelector('.voice-dur')?.textContent).toBe('0:03');
+    expect(api.toggleVoiceSpeed(msg.id)).toBe(1.5);
+    expect(document.querySelector('.voice-speed')?.textContent).toBe('1.5×');
+    expect(document.querySelector('.voice-transcript')?.textContent).toContain('bonjour');
+  });
+
+  it('sends a voice note as an audio attachment and refuses oversized ones', () => {
+    sent.length = 0;
+    expect(api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: Buffer.from('OggSxxxx').toString('base64'),
+      durationMs: 1200,
+      transcript: 'coucou',
+    })).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { attachments?: Array<{ mimeType: string }>; message?: string; voiceReply?: boolean };
+    };
+    expect(frame?.payload?.attachments?.[0]?.mimeType).toBe('audio/ogg');
+    expect(frame?.payload?.message).toBe('coucou');
+    expect(document.querySelector('.voice-card')).toBeTruthy();
+    expect(api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: 'A'.repeat(3 * 1024 * 1024),
+      durationMs: 1000,
+    })).toBe(false);
+  });
+
+  it('attaches Lisa’s spoken reply and auto-plays after a user voice note', () => {
+    api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: Buffer.from('OggS').toString('base64'),
+      durationMs: 800,
+    });
+    api.handleFrame({ type: 'stream_start' });
+    api.handleFrame({ type: 'stream_chunk', payload: { delta: 'ok' } });
+    api.handleFrame({ type: 'stream_end' });
+    const playCalls: string[] = [];
+    const origAudio = window.Audio;
+    class FakeAudio {
+      playbackRate = 1;
+      src: string;
+      constructor(src: string) { this.src = src; playCalls.push(src); }
+      addEventListener() { /* noop */ }
+      play() { return Promise.resolve(); }
+      pause() { /* noop */ }
+    }
+    (window as unknown as { Audio: unknown }).Audio = FakeAudio;
+    api.handleFrame({
+      type: 'audio',
+      payload: { mimeType: 'audio/ogg', data: Buffer.from('lisa').toString('base64'), durationMs: 400 },
+    });
+    (window as unknown as { Audio: unknown }).Audio = origAudio;
+    const asst = api.getMessages().find((msg) => msg.role === 'assistant');
+    expect(asst).toBeTruthy();
+    expect(playCalls.length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('.voice-card').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('applies light theme, font size and large standalone emojis', () => {
+    api.setTheme('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    api.setFont('3');
+    expect(document.documentElement.getAttribute('data-font')).toBe('3');
+    api.addMessage({ role: 'user', text: '🔥' });
+    expect(document.querySelector('.bubble.emoji-only')).toBeTruthy();
+    expect(document.querySelector('[aria-label="Ton moyen"]')?.textContent).toBe('👋🏽');
+  });
+
+  it('virtualizes the DOM to 150 nodes and merges older server pages', () => {
+    for (let i = 0; i < 160; i += 1) {
+      api.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', text: `m${i}` });
+    }
+    expect(document.querySelectorAll('.msg-row').length).toBeLessThanOrEqual(150);
+    const added = api.mergeServerHistory([
+      { id: 'old-1', role: 'user', text: 'ancien', ts: 1 },
+    ]);
+    expect(added).toBe(1);
+    expect(api.getMessages()[0]?.id).toBe('old-1');
+  });
+
+  it('shows last-seen after stream_end and a tab badge while unread', () => {
+    api.state.connected = true;
+    api.handleFrame({ type: 'stream_start' });
+    api.handleFrame({ type: 'stream_chunk', payload: { delta: 'ok' } });
+    api.handleFrame({ type: 'stream_end' });
+    expect(document.getElementById('presence-line')?.textContent).toMatch(/^vu à /);
+    api.state.unread = 3;
+    api.updateTabBadge();
+    expect(document.title).toMatch(/^\(\d+\)/);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    api.notifyIncoming();
+    expect((navigator.vibrate as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+  });
+
+  it('shows the recording overlay while a vocal is in progress', () => {
+    expect(document.getElementById('record-overlay')?.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('mic-btn')?.getAttribute('aria-label')).toBe('Message vocal');
+    document.getElementById('record-overlay')?.classList.remove('hidden');
+    expect(document.getElementById('record-wave')).toBeTruthy();
+    expect(document.getElementById('record-timer')?.textContent).toMatch(/\d:\d\d/);
   });
 });
 
@@ -537,5 +888,69 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     ws.emit('close');
     vi.advanceTimersByTime(60000);
     expect(sockets.length).toBe(before);
+  });
+});
+
+describe('Mobile PWA — connexion par URL #token=', () => {
+  type FakeWs = {
+    readyState: number;
+    sent: string[];
+    listeners: Record<string, Array<(ev?: unknown) => void>>;
+    send: (raw: string) => void;
+    close: () => void;
+    addEventListener: (name: string, fn: (ev?: unknown) => void) => void;
+  };
+  const sockets: FakeWs[] = [];
+
+  function makeFakeWs(): FakeWs {
+    const ws: FakeWs = {
+      readyState: 0,
+      sent: [],
+      listeners: {},
+      send(raw: string) { ws.sent.push(raw); },
+      close() { ws.readyState = 3; },
+      addEventListener(name: string, fn: (ev?: unknown) => void) {
+        (ws.listeners[name] ||= []).push(fn);
+      },
+    };
+    sockets.push(ws);
+    return ws;
+  }
+
+  beforeEach(() => {
+    sockets.length = 0;
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.hash = '';
+    function FakeWebSocket(this: unknown) { return makeFakeWs(); }
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    Object.defineProperty(window, 'WebSocket', { configurable: true, writable: true, value: FakeWebSocket });
+  });
+
+  afterEach(() => {
+    const api = (window as unknown as { CodeBuddyMobile?: { destroy: () => void } }).CodeBuddyMobile;
+    api?.destroy();
+    vi.unstubAllGlobals();
+    window.location.hash = '';
+  });
+
+  it('stores hash token like the login form, clears the hash, and authenticates', () => {
+    window.location.hash = '#token=jwt-from-link';
+    document.body.innerHTML = extractBody();
+    runScript(asset('emoji-data.js'));
+    runScript(asset('app.js'));
+
+    expect(sessionStorage.getItem('codebuddy_mobile_token')).toBe('jwt-from-link');
+    expect(window.location.hash === '' || window.location.hash === '#').toBe(true);
+    const input = document.getElementById('token-input') as HTMLTextAreaElement | null;
+    expect(input?.value).toBe('jwt-from-link');
+    expect(sockets.length).toBeGreaterThan(0);
+
+    const ws = sockets[0]!;
+    ws.readyState = 1;
+    (ws.listeners.open || []).forEach((fn) => fn({}));
+    const auth = ws.sent.map((raw) => JSON.parse(raw) as { type: string; payload?: { token?: string } })
+      .find((frame) => frame.type === 'authenticate');
+    expect(auth?.payload?.token).toBe('jwt-from-link');
   });
 });

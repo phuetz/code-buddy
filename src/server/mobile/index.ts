@@ -14,6 +14,15 @@ import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { verifyToken } from '../auth/jwt.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
+import { readConversationLog } from '../../companion/mobile-conversation-log.js';
+import { fetchLinkPreview } from './link-preview.js';
+import { forwardMobileTextToTelegram } from './telegram-forward.js';
+import {
+  deletePushSubscription,
+  isMobilePushEnabled,
+  loadOrCreateVapidKeys,
+  savePushSubscription,
+} from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +49,7 @@ export const MOBILE_PWA_CSP = [
   // (the album route is authenticated, so a plain <img src> would carry no
   // token) and then displayed from the resulting blob.
   "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
   "connect-src 'self' ws: wss:",
   "font-src 'self'",
   "form-action 'self'",
@@ -120,6 +130,19 @@ export function requireAlbumAccess(req: Request, res: Response, next: NextFuncti
   res.status(401).json({ error: 'Unauthorized', message: 'Album access requires a token' });
 }
 
+function readRequestUserId(req: Request): string | undefined {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const secret = process.env.JWT_SECRET ?? '';
+  if (!token || !secret) return undefined;
+  const payload = verifyToken(token, secret);
+  const sub = payload && typeof (payload as { sub?: unknown }).sub === 'string'
+    ? (payload as { sub: string }).sub
+    : undefined;
+  const id = sub?.trim();
+  return id || undefined;
+}
+
 const ALBUM_ID = /^[0-9a-f]{64}$/;
 
 mobilePwaRouter.get('/album', requireAlbumAccess, async (_req: Request, res: Response) => {
@@ -192,6 +215,7 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
       '/__codebuddy__/mobile/manifest.webmanifest',
       '/__codebuddy__/mobile/sw.js',
       '/__codebuddy__/mobile/status',
+      '/__codebuddy__/mobile/forward',
       '/__codebuddy__/mobile/album',
       '/__codebuddy__/mobile/album/{id}',
       '/__codebuddy__/mobile/assets/{*path}',
@@ -202,6 +226,105 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
 mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
   res.json(await buildMobileStatus());
 });
+
+mobilePwaRouter.get('/history', requireAlbumAccess, (req: Request, res: Response) => {
+  const userId = readRequestUserId(req);
+  const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
+  res.json({ messages: readConversationLog(userId, { before, limit }) });
+});
+
+mobilePwaRouter.get('/link-preview', requireAlbumAccess, async (req: Request, res: Response) => {
+  const url = typeof req.query.url === 'string' ? req.query.url : '';
+  const result = await fetchLinkPreview(url);
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json(result);
+});
+
+mobilePwaRouter.post(
+  '/forward',
+  express.json({ limit: '16kb' }),
+  requireAlbumAccess,
+  async (req: Request, res: Response) => {
+    const text =
+      typeof (req.body as { text?: unknown } | undefined)?.text === 'string'
+        ? (req.body as { text: string }).text
+        : '';
+    const result = await forwardMobileTextToTelegram(text);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+mobilePwaRouter.get('/push/vapid', requireAlbumAccess, (_req: Request, res: Response) => {
+  if (!isMobilePushEnabled()) {
+    res.status(404).json({ error: 'Push disabled' });
+    return;
+  }
+  const keys = loadOrCreateVapidKeys();
+  if (!keys) {
+    res.status(404).json({ error: 'Push disabled' });
+    return;
+  }
+  res.json({ publicKey: keys.publicKey });
+});
+
+mobilePwaRouter.post(
+  '/push/subscribe',
+  express.json({ limit: '8kb' }),
+  requireAlbumAccess,
+  async (req: Request, res: Response) => {
+    if (!isMobilePushEnabled()) {
+      res.status(404).json({ error: 'Push disabled' });
+      return;
+    }
+    const body = req.body as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
+    const ok = await savePushSubscription(
+      {
+        endpoint: typeof body.endpoint === 'string' ? body.endpoint : '',
+        keys: {
+          p256dh: typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : '',
+          auth: typeof body.keys?.auth === 'string' ? body.keys.auth : '',
+        },
+      },
+      readRequestUserId(req),
+    );
+    if (!ok) {
+      res.status(400).json({ error: 'Invalid subscription' });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+mobilePwaRouter.delete(
+  '/push/subscribe',
+  express.json({ limit: '8kb' }),
+  requireAlbumAccess,
+  (req: Request, res: Response) => {
+    if (!isMobilePushEnabled()) {
+      res.status(404).json({ error: 'Push disabled' });
+      return;
+    }
+    const body = req.body as { endpoint?: unknown };
+    const ok = deletePushSubscription(
+      readRequestUserId(req),
+      typeof body.endpoint === 'string' ? body.endpoint : '',
+    );
+    if (!ok) {
+      res.status(400).json({ error: 'Invalid subscription' });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
 
 mobilePwaRouter.get('/pairing-qr', (_req: Request, res: Response) => {
   logger.debug('Mobile PWA: pairing-qr is a placeholder; JWT is entered on the device');
