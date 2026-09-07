@@ -16,6 +16,7 @@ import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } f
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
 import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
+import { applyChatReplyContext, readClientMsgId } from '../mobile/chat-extras.js';
 
 function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -361,6 +362,10 @@ interface ChatPayload {
   peerId?: string;
   /** Photos the phone attached to this message (companion assistant only). */
   attachments?: Array<{ mimeType?: unknown; data?: unknown }>;
+  /** Optional quote of another bubble. Absent on older clients. */
+  replyTo?: unknown;
+  /** Client-generated id so delivery/read acks can target the right bubble. */
+  clientMsgId?: unknown;
 }
 
 /** Most photos accepted on one mobile message. */
@@ -515,6 +520,18 @@ function send(ws: WebSocket, message: WebSocketResponse): void {
   if (ws.readyState === 1) { // OPEN
     ws.send(JSON.stringify(message));
   }
+}
+
+function sendChatAck(
+  ws: WebSocket,
+  ack: 'received' | 'read',
+  clientMsgId?: string,
+): void {
+  send(ws, {
+    type: 'ack',
+    payload: { ack, ...(clientMsgId ? { clientMsgId } : {}) },
+    timestamp: new Date().toISOString(),
+  });
 }
 
 /**
@@ -777,6 +794,7 @@ async function runPlainChatTurn(
   options: {
     stream: boolean;
     produce: () => Promise<string | { text: string; image?: { mimeType: string; data: string } }>;
+    clientMsgId?: string;
   },
 ): Promise<void> {
   const messageId = `msg_${Date.now()}`;
@@ -787,6 +805,7 @@ async function runPlainChatTurn(
       id: messageId,
       timestamp: new Date().toISOString(),
     });
+    sendChatAck(ws, 'read', options.clientMsgId);
   }
   const produced = await options.produce();
   const content = typeof produced === 'string' ? produced : produced.text;
@@ -807,6 +826,7 @@ async function runPlainChatTurn(
       timestamp: new Date().toISOString(),
     });
   } else {
+    sendChatAck(ws, 'read', options.clientMsgId);
     send(ws, {
       type: 'chat_response',
       payload: { content, finishReason: 'stop', ...(image ? { image } : {}) },
@@ -846,6 +866,8 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     assistant: assistantRaw,
     peerId: peerIdRaw,
     attachments: attachmentsRaw,
+    replyTo: replyToRaw,
+    clientMsgId: clientMsgIdRaw,
   } = payload as ChatPayload;
 
   // Validate message
@@ -890,19 +912,24 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
+  const userText = applyChatReplyContext(message, replyToRaw);
+  const clientMsgId = readClientMsgId(clientMsgIdRaw);
+  sendChatAck(ws, 'received', clientMsgId);
+
   try {
     if (assistant === 'companion') {
       await runPlainChatTurn(ws, state, turn, {
         stream,
+        clientMsgId,
         produce: async () => {
           const history = companionHistoryFor(state);
-          const produced = await produceCompanionReply(message, {
+          const produced = await produceCompanionReply(userText, {
             history,
             ...(validatedAttachments.attachments.length
               ? { attachments: validatedAttachments.attachments }
               : {}),
           });
-          if (!turn.cancelled) rememberCompanionTurn(state, message, produced);
+          if (!turn.cancelled) rememberCompanionTurn(state, userText, produced);
           return produced;
         },
       });
@@ -918,7 +945,8 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       }
       await runPlainChatTurn(ws, state, turn, {
         stream,
-        produce: () => producePeerReply(target, message),
+        clientMsgId,
+        produce: () => producePeerReply(target, userText),
       });
       return;
     }
@@ -963,8 +991,9 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         id: messageId,
         timestamp: new Date().toISOString(),
       });
+      sendChatAck(ws, 'read', clientMsgId);
 
-      const streamGen = streamAgentDeltas(agent, message, { model, surface: 'websocket' });
+      const streamGen = streamAgentDeltas(agent, userText, { model, surface: 'websocket' });
 
       for await (const delta of streamGen) {
         if (turn.cancelled || !state.streaming) break;
@@ -997,7 +1026,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       // preserves the single chat_response protocol and makes stop/close/error
       // capable of releasing a blocked provider and the per-connection lane.
       let content = '';
-      for await (const delta of streamAgentDeltas(agent, message, {
+      for await (const delta of streamAgentDeltas(agent, userText, {
         model,
         surface: 'websocket',
       })) {
@@ -1006,6 +1035,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       }
 
       if (!turn.cancelled) {
+        sendChatAck(ws, 'read', clientMsgId);
         send(ws, {
           type: 'chat_response',
           payload: {

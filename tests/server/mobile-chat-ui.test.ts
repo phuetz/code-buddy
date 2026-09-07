@@ -21,6 +21,9 @@ type MobileApi = {
     unread: number;
     atBottom: boolean;
     avatarUrl: string;
+    unreadAnchorId?: string;
+    telegramForward?: boolean;
+    replyTo?: { id: string; text: string } | null;
   };
   STORAGE: Record<string, string>;
   REACTIONS: string[];
@@ -59,6 +62,31 @@ type MobileApi = {
   haptic: () => void;
   pulseSend: () => void;
   showReactionBar: (id: string, x?: number, y?: number) => void;
+  startReply: (id: string) => boolean;
+  cancelReply: () => void;
+  beginEdit: (id?: string) => boolean;
+  deleteForMe: (id: string) => boolean;
+  togglePin: (id: string) => boolean;
+  searchConversation: (query: string) => string[];
+  gotoSearch: (dir: number) => string;
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSelectMode: (on: boolean) => void;
+  toggleSelected: (id: string) => void;
+  deleteSelected: () => void;
+  applyAck: (ack: string, clientMsgId?: string) => string | null;
+  forwardMessage: (id: string) => Promise<boolean>;
+  scrollToMessage: (id: string) => boolean;
+  formatFullTime: (ts: number) => string;
+  handleBubblePointerDown: (event: { target: EventTarget | null; clientX?: number; clientY?: number }) => void;
+  handleBubblePointerMove: (event: { clientX?: number }) => void;
+  handleBubblePointerUp: (event: { clientX?: number }) => void;
+  currentChatPayload: (
+    message: string,
+    attachments?: unknown[],
+    extras?: Record<string, unknown>,
+  ) => Record<string, unknown>;
+  applyStatusPayload: (data: Record<string, unknown>) => void;
 };
 
 function asset(name: string): string {
@@ -413,6 +441,205 @@ describe('Mobile chat UI (DOM)', () => {
       expect(startMock).toHaveBeenCalledTimes(1);
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     });
+  });
+});
+
+describe('Mobile chat UI — messagerie (lot 1)', () => {
+  let sent: unknown[];
+  let api: MobileApi;
+
+  beforeEach(() => {
+    sent = [];
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.useRealTimers();
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+    api = mount();
+    api.state.ws = {
+      readyState: 1,
+      send: (raw: string) => {
+        sent.push(JSON.parse(raw));
+      },
+    };
+  });
+
+  afterEach(() => {
+    api?.destroy();
+  });
+
+  it('quotes a message above the composer and in the outgoing bubble', () => {
+    const original = api.addMessage({ role: 'assistant', text: 'on se voit ce soir ?' });
+    expect(api.startReply(original.id)).toBe(true);
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('reply-quote-text')?.textContent).toContain('on se voit');
+    expect(api.sendText('oui')).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { replyTo?: { id: string; text: string }; clientMsgId?: string; message?: string };
+    };
+    expect(frame?.payload?.replyTo?.id).toBe(original.id);
+    expect(frame?.payload?.replyTo?.text).toContain('on se voit');
+    expect(frame?.payload?.clientMsgId).toMatch(/^m-/);
+    expect(frame?.payload?.message).toBe('oui');
+    const mine = api.getMessages().find((msg) => msg.role === 'user' && msg.text === 'oui') as
+      { replyTo?: { id: string } };
+    expect(mine?.replyTo?.id).toBe(original.id);
+    expect(document.querySelector('.quote-ref')?.textContent).toContain('on se voit');
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('scrolls to the original when the quote is tapped', () => {
+    const original = api.addMessage({ role: 'assistant', text: 'citation cible' });
+    api.startReply(original.id);
+    api.sendText('reçu');
+    const quote = document.querySelector('.quote-ref') as HTMLButtonElement;
+    expect(quote.getAttribute('aria-label')).toBe('Aller au message cité');
+    const row = document.querySelector(`[data-id="${original.id}"]`) as HTMLElement;
+    const spy = vi.fn();
+    row.scrollIntoView = spy;
+    quote.click();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('starts a reply after a right swipe', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'swipe-moi' });
+    const row = document.querySelector(`[data-id="${msg.id}"]`) as HTMLElement;
+    api.handleBubblePointerDown({ target: row, clientX: 10, clientY: 40 });
+    api.handleBubblePointerMove({ clientX: 80 });
+    api.handleBubblePointerUp({ clientX: 80 });
+    expect(document.getElementById('reply-quote')?.classList.contains('hidden')).toBe(false);
+  });
+
+  it('copies from the action bar without a WS reaction frame', () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const msg = api.addMessage({ role: 'assistant', text: 'à copier' });
+    sent.length = 0;
+    api.copyMessage(msg.id);
+    expect(writeText).toHaveBeenCalledWith('à copier');
+    expect(sent.some((frame) => (frame as { type?: string }).type === 'reaction')).toBe(false);
+  });
+
+  it('hides Telegram forward until status says the channel is configured', async () => {
+    expect(document.getElementById('forward-msg-btn')?.classList.contains('hidden')).toBe(true);
+    api.applyStatusPayload({ telegramForward: true });
+    expect(document.getElementById('forward-msg-btn')?.classList.contains('hidden')).toBe(false);
+    const msg = api.addMessage({ role: 'user', text: 'transfert' });
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.forwardMessage(msg.id);
+    expect(fetchMock).toHaveBeenCalled();
+    const call = fetchMock.mock.calls[0] as [string, { method?: string; body?: string }];
+    expect(call[0]).toContain('/forward');
+    expect(call[1]?.method).toBe('POST');
+    expect(JSON.parse(call[1]?.body ?? '{}').text).toBe('transfert');
+    vi.unstubAllGlobals();
+  });
+
+  it('deletes a message for me only', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'à effacer' });
+    api.deleteForMe(msg.id);
+    expect(api.getMessages().some((item) => item.id === msg.id)).toBe(false);
+    expect(document.querySelector(`[data-id="${msg.id}"]`)).toBeNull();
+    expect(sent.some((frame) => (frame as { type?: string }).type === 'chat')).toBe(false);
+  });
+
+  it('edits the last user message, resends it and marks it modifié', () => {
+    const mine = api.addMessage({ role: 'user', text: 'brouillon' });
+    expect(api.beginEdit(mine.id)).toBe(true);
+    expect((document.getElementById('message-input') as HTMLTextAreaElement).value).toBe('brouillon');
+    sent.length = 0;
+    expect(api.sendText('version finale')).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { editOf?: string; message?: string };
+    };
+    expect(frame?.payload?.editOf).toBe(mine.id);
+    expect(frame?.payload?.message).toBe('version finale');
+    expect(api.getMessages().filter((msg) => msg.role === 'user')).toHaveLength(1);
+    expect(api.getMessages()[0]?.text).toBe('version finale');
+    expect(document.querySelector('.edited-mark')?.textContent).toBe('modifié');
+  });
+
+  it('selects several messages and deletes them', () => {
+    const a = api.addMessage({ role: 'user', text: 'un' });
+    const b = api.addMessage({ role: 'assistant', text: 'deux' });
+    api.addMessage({ role: 'user', text: 'trois' });
+    api.setSelectMode(true);
+    expect(document.getElementById('select-bar')?.classList.contains('hidden')).toBe(false);
+    api.toggleSelected(a.id);
+    api.toggleSelected(b.id);
+    api.deleteSelected();
+    const texts = api.getMessages().map((msg) => msg.text);
+    expect(texts).toEqual(['trois']);
+    expect(document.getElementById('select-bar')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('searches, highlights, and walks previous/next hits', () => {
+    api.addMessage({ role: 'user', text: 'alpha unique' });
+    api.addMessage({ role: 'assistant', text: 'beta unique' });
+    api.addMessage({ role: 'user', text: 'gamma' });
+    api.openSearch();
+    expect(document.getElementById('search-bar')?.classList.contains('hidden')).toBe(false);
+    const hits = api.searchConversation('unique');
+    expect(hits).toHaveLength(2);
+    expect(document.querySelectorAll('mark.search-hit').length).toBeGreaterThanOrEqual(2);
+    expect(document.getElementById('search-count')?.textContent).toBe('1/2');
+    api.gotoSearch(1);
+    expect(document.getElementById('search-count')?.textContent).toBe('2/2');
+    api.closeSearch();
+    expect(document.getElementById('search-bar')?.classList.contains('hidden')).toBe(true);
+    expect(document.querySelector('mark.search-hit')).toBeNull();
+  });
+
+  it('pins a message and shows the banner', () => {
+    const msg = api.addMessage({ role: 'assistant', text: 'à garder' });
+    expect(api.togglePin(msg.id)).toBe(true);
+    expect(document.getElementById('pinned-bar')?.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('pinned-label')?.textContent).toContain('épinglé');
+    expect(api.togglePin(msg.id)).toBe(false);
+    expect(document.getElementById('pinned-bar')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('upgrades ✓ sent to ✓✓ received then blue read from server acks', () => {
+    const mine = api.addMessage({ role: 'user', text: 'ping' });
+    expect(document.querySelector('.ack.sent')?.textContent).toBe('✓');
+    api.applyAck('received', mine.id);
+    expect(document.querySelector('.ack.received')?.textContent).toBe('✓✓');
+    api.handleFrame({ type: 'ack', payload: { ack: 'read', clientMsgId: mine.id } });
+    expect(document.querySelector('.ack.read')?.getAttribute('aria-label')).toBe('Lu');
+    expect(document.querySelector('.ack.read')?.textContent).toBe('✓✓');
+  });
+
+  it('shows a full timestamp on touch and a new-messages separator', () => {
+    const first = api.addMessage({ role: 'user', text: 'hier soir' });
+    api.state.unreadAnchorId = first.id;
+    api.addMessage({ role: 'assistant', text: 'nouveau' });
+    expect(document.querySelector('.new-sep')?.textContent).toMatch(/nouveaux messages/i);
+    const row = document.querySelector(`[data-id="${first.id}"]`) as HTMLElement;
+    row.click();
+    expect(row.classList.contains('meta-on')).toBe(true);
+    expect(row.querySelector('.bubble-meta')?.textContent).toMatch(/\d{4}|\d{1,2}\s/);
+  });
+
+  it('labels every new action with an aria-label and a 44 px target class', () => {
+    [
+      'search-btn', 'search-prev', 'search-next', 'search-close',
+      'reply-msg-btn', 'copy-msg-btn', 'forward-msg-btn', 'pin-msg-btn',
+      'edit-msg-btn', 'delete-msg-btn', 'select-msg-btn',
+      'reply-quote-close', 'select-delete', 'select-cancel',
+    ].forEach((id) => {
+      const node = document.getElementById(id);
+      expect(node?.getAttribute('aria-label'), id).toBeTruthy();
+      expect(node?.className, id).toMatch(/touch/);
+    });
+    expect(document.getElementById('search-input')?.getAttribute('aria-label')).toBe(
+      'Rechercher dans la conversation',
+    );
   });
 });
 

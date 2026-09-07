@@ -14,6 +14,7 @@ import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { verifyToken } from '../auth/jwt.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
+import { forwardMobileTextToTelegram } from './telegram-forward.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -192,6 +193,7 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
       '/__codebuddy__/mobile/manifest.webmanifest',
       '/__codebuddy__/mobile/sw.js',
       '/__codebuddy__/mobile/status',
+      '/__codebuddy__/mobile/forward',
       '/__codebuddy__/mobile/album',
       '/__codebuddy__/mobile/album/{id}',
       '/__codebuddy__/mobile/assets/{*path}',
@@ -202,6 +204,24 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
 mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
   res.json(await buildMobileStatus());
 });
+
+mobilePwaRouter.post(
+  '/forward',
+  express.json({ limit: '16kb' }),
+  requireAlbumAccess,
+  async (req: Request, res: Response) => {
+    const text =
+      typeof (req.body as { text?: unknown } | undefined)?.text === 'string'
+        ? (req.body as { text: string }).text
+        : '';
+    const result = await forwardMobileTextToTelegram(text);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
 
 mobilePwaRouter.get('/pairing-qr', (_req: Request, res: Response) => {
   logger.debug('Mobile PWA: pairing-qr is a placeholder; JWT is entered on the device');

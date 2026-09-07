@@ -232,4 +232,52 @@ describe('Mobile WS protocol', () => {
     await waitUntil(() => events.some((event) => event.type === 'pong'));
     ws.close();
   });
+
+  it('acks received then read when Lisa starts to reply (old payload still streams)', async () => {
+    const { ws, events } = await authed();
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: 'salut',
+        stream: true,
+        assistant: 'companion',
+        clientMsgId: 'm-client-1',
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'stream_end'));
+    const acks = events.filter((event) => event.type === 'ack').map((event) => event.payload);
+    expect(acks).toEqual(expect.arrayContaining([
+      { ack: 'received', clientMsgId: 'm-client-1' },
+      { ack: 'read', clientMsgId: 'm-client-1' },
+    ]));
+    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
+      'authenticated',
+      'ack',
+      'stream_start',
+      'stream_chunk',
+      'stream_end',
+    ]));
+    ws.close();
+  });
+
+  it('prefixes replyTo for the companion turn without breaking a client that omits it', async () => {
+    const { ws, events } = await authed();
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: 'oui',
+        stream: true,
+        assistant: 'companion',
+        replyTo: { id: 'm-1', text: 'on se voit ?' },
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'stream_end'));
+    const text = events
+      .filter((event) => event.type === 'stream_chunk')
+      .map((event) => event.payload?.delta)
+      .join('');
+    expect(text).toContain('En réponse à : « on se voit ? »');
+    expect(text).toContain('oui');
+    ws.close();
+  });
 });

@@ -73,22 +73,34 @@ Porter la PWA vanilla `/__codebuddy__/mobile/` au niveau d’une app de chat com
 
 ## Inspection
 
-*(à remplir après le commit de réservation)*
+PWA v2 : `src/server/mobile/assets/{index.html,app.js,styles.css,sw.js}` — IIFE ~1910 lignes, historique local 200, réactions locales, dictée Web Speech, photos, cache `codebuddy-mobile-v4`. Aucune citation, recherche, pin, sélection, vocal MediaRecorder, push, historique serveur.
+Handler WS (`src/server/websocket/handler.ts`) : trame `chat` = `message` + `attachments` images ; pas d’`ack`, pas de `replyTo`. Les types inconnus sont ignorés (clients anciens inchangés).
+`validateChatAttachments` refuse tout non-image (lot 2 devra l’étendre).
+MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Audio.Recording`, `CheckCheck`.
 
 ## Décisions
 
-*(à remplir par lot)*
+- Lot 1 : extras optionnels `replyTo` / `clientMsgId` sur `chat` ; nouvelle trame `{ type:'ack', payload:{ ack:'received'|'read', clientMsgId? } }` ignorée par les anciens clients.
+- Transfert Telegram = `POST /__codebuddy__/mobile/forward` (JWT/loopback), masqué si canal absent (`telegramForward` dans `/status`).
+- Édition = renvoi local + `editOf` (le serveur traite comme un nouveau tour).
+- Cache SW `v5`.
 
 ## Commits
 
 | Hash | Message |
 |---|---|
-| *(réservation)* | docs(pwa): stub PWA-CHAT-V3-GROK avant inspection |
+| `ad7de3d88` | docs(pwa): stub PWA-CHAT-V3-GROK avant inspection |
+| *(lot 1)* | feat(pwa): citer, chercher, épingler, accusés et sélection |
 
 ## Preuves
 
-*(à remplir)*
+- `node --check src/server/mobile/assets/app.js` : 0
+- `npx eslint src/server/mobile/assets/app.js --quiet` : 0
+- Vitest HOME `_qa/v3/home` : `mobile-chat-ui` + extras + forward + ws-protocol + pwa = 75 verts (chat-ui+pwa) ; lot 1 ciblé 59 verts
+- `npx tsc --noEmit -p tsconfig.json` : 0
+- Playwright 390×844 : `_qa/v3/shots/01-reply-search.png` (non commitée)
 
 ## Bilan 10 lignes par lot
 
-*(à remplir)*
+### Lot 1 — messages de niveau messagerie
+Réponse citée (balayage droite / menu), copie, transfert Telegram masqué hors canal, supprimer pour moi, modifier le dernier (marque « modifié »), sélection multiple, recherche + surlignage préc/suiv, bandeau épinglés, ✓ / ✓✓ / ✓✓ bleu via `ack`, horodatage complet au toucher, séparateurs de jour conservés, ligne « nouveaux messages ». WS rétro-compatible. SW v5. Capture `01-reply-search.png`.

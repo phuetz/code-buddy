@@ -41,12 +41,26 @@
         </div>
         <span id="mood-chip" class="mood-chip hidden" aria-label="Humeur"></span>
         <span id="connection-status" class="status-dot" title="Connexion">●</span>
+        <button type="button" id="search-btn" class="btn icon touch" aria-label="Rechercher">🔍</button>
         <button type="button" id="settings-btn" class="btn icon touch" aria-label="Réglages">⚙</button>
         <button type="button" id="logout-btn" class="btn icon touch" aria-label="Déconnexion">✕</button>
       </header>
 
       <main class="main-content">
         <section id="chat-section" class="panel active">
+          <div id="search-bar" class="search-bar hidden" role="search">
+            <input id="search-input" type="search" placeholder="Rechercher…" aria-label="Rechercher dans la conversation" autocomplete="off">
+            <span id="search-count" class="search-count" aria-live="polite"></span>
+            <button type="button" id="search-prev" class="btn icon touch" aria-label="Résultat précédent">↑</button>
+            <button type="button" id="search-next" class="btn icon touch" aria-label="Résultat suivant">↓</button>
+            <button type="button" id="search-close" class="btn icon touch" aria-label="Fermer la recherche">✕</button>
+          </div>
+          <div id="pinned-bar" class="pinned-bar hidden">
+            <button type="button" id="pinned-toggle" class="pinned-toggle touch" aria-label="Messages épinglés" aria-expanded="false">
+              <span id="pinned-label">Épinglés</span>
+            </button>
+            <div id="pinned-list" class="pinned-list hidden"></div>
+          </div>
           <div id="messages" class="messages" aria-live="polite"></div>
           <div id="typing-indicator" class="typing-indicator hidden" aria-live="polite">
             <span class="typing-label">Lisa écrit</span>
@@ -57,6 +71,18 @@
           </button>
           <div id="suggestions" class="suggestions" aria-label="Suggestions"></div>
           <div id="attach-preview" class="attach-preview hidden" aria-label="Photos à envoyer"></div>
+          <div id="reply-quote" class="reply-quote hidden">
+            <button type="button" id="reply-quote-jump" class="reply-quote-body" aria-label="Aller au message cité">
+              <span class="reply-quote-kicker">Réponse</span>
+              <span id="reply-quote-text"></span>
+            </button>
+            <button type="button" id="reply-quote-close" class="btn icon touch" aria-label="Annuler la réponse">✕</button>
+          </div>
+          <div id="select-bar" class="select-bar hidden" role="toolbar" aria-label="Sélection">
+            <span id="select-count">0</span>
+            <button type="button" id="select-delete" class="btn danger touch" aria-label="Supprimer la sélection">Supprimer</button>
+            <button type="button" id="select-cancel" class="btn secondary touch" aria-label="Annuler la sélection">Annuler</button>
+          </div>
           <form id="composer" class="composer">
             <button type="button" id="attach-btn" class="btn icon touch" aria-label="Envoyer une photo">📷</button>
             <input id="attach-input" class="visually-hidden" type="file" accept="image/*" capture="environment" multiple>
@@ -169,14 +195,24 @@
     </p>
   </div>
 
-  <div id="reaction-bar" class="reaction-bar hidden" role="toolbar" aria-label="Réactions">
-    <button type="button" class="react-btn touch" data-emoji="❤️" aria-label="Cœur">❤️</button>
-    <button type="button" class="react-btn touch" data-emoji="😂" aria-label="Rire">😂</button>
-    <button type="button" class="react-btn touch" data-emoji="😮" aria-label="Surprise">😮</button>
-    <button type="button" class="react-btn touch" data-emoji="😢" aria-label="Triste">😢</button>
-    <button type="button" class="react-btn touch" data-emoji="👍" aria-label="Pouce">👍</button>
-    <button type="button" class="react-btn touch" data-emoji="🔥" aria-label="Feu">🔥</button>
-    <button type="button" id="copy-msg-btn" class="react-btn touch" aria-label="Copier">📋</button>
+  <div id="reaction-bar" class="reaction-bar hidden" role="toolbar" aria-label="Actions du message">
+    <div class="react-emojis">
+      <button type="button" class="react-btn touch" data-emoji="❤️" aria-label="Cœur">❤️</button>
+      <button type="button" class="react-btn touch" data-emoji="😂" aria-label="Rire">😂</button>
+      <button type="button" class="react-btn touch" data-emoji="😮" aria-label="Surprise">😮</button>
+      <button type="button" class="react-btn touch" data-emoji="😢" aria-label="Triste">😢</button>
+      <button type="button" class="react-btn touch" data-emoji="👍" aria-label="Pouce">👍</button>
+      <button type="button" class="react-btn touch" data-emoji="🔥" aria-label="Feu">🔥</button>
+    </div>
+    <div class="react-actions">
+      <button type="button" id="reply-msg-btn" class="react-btn touch" aria-label="Répondre">↩</button>
+      <button type="button" id="copy-msg-btn" class="react-btn touch" aria-label="Copier">📋</button>
+      <button type="button" id="forward-msg-btn" class="react-btn touch hidden" aria-label="Transférer vers Telegram">↪</button>
+      <button type="button" id="pin-msg-btn" class="react-btn touch" aria-label="Épingler">📌</button>
+      <button type="button" id="edit-msg-btn" class="react-btn touch hidden" aria-label="Modifier">✎</button>
+      <button type="button" id="delete-msg-btn" class="react-btn touch" aria-label="Supprimer pour moi">🗑</button>
+      <button type="button" id="select-msg-btn" class="react-btn touch" aria-label="Sélectionner">☑</button>
+    </div>
   </div>
 
   <script src="/__codebuddy__/mobile/assets/emoji-data.js"></script>
