@@ -117,7 +117,11 @@ async function defaultWebPushSend(
   vapid: VapidKeys,
 ): Promise<boolean> {
   try {
-    const webpush = await import('web-push');
+    // Optional runtime dependency (MIT). Absent in this tree on purpose.
+    const webpush = await import('web-push' as string) as {
+      setVapidDetails: (mailto: string, pub: string, priv: string) => void;
+      sendNotification: (sub: PushSubscriptionJSON, payload: string) => Promise<unknown>;
+    };
     webpush.setVapidDetails('mailto:mobile@localhost', vapid.publicKey, vapid.privateKey);
     await webpush.sendNotification(subscription, JSON.stringify(payload));
     return true;

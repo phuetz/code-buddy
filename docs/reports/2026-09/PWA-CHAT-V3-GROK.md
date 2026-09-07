@@ -94,15 +94,17 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 | `c2b1623c5` | feat(pwa): notes vocales MediaRecorder + STT/TTS |
 | `8b659452d` | feat(pwa): présence, badge, son et push VAPID |
 | `3175c09a4` | feat(pwa): historique serveur paginé et liste virtualisée |
-| *(lot 5)* | feat(pwa): thème, police, fond, aperçu de lien |
+| `013f20429` | feat(pwa): thème, police, fond, aperçu de lien |
+| *(lot 6)* | docs(pwa): preuves globales PWA-CHAT-V3 |
 
 ## Preuves
 
 - `node --check src/server/mobile/assets/app.js` : 0
 - `npx eslint src/server/mobile/assets/app.js --quiet` : 0
-- Vitest HOME `_qa/v3/home` : `mobile-chat-ui` + extras + forward + ws-protocol + pwa = 75 verts (chat-ui+pwa) ; lot 1 ciblé 59 verts
 - `npx tsc --noEmit -p tsconfig.json` : 0
-- Playwright 390×844 : `_qa/v3/shots/01-reply-search.png` (non commitée)
+- `git diff --check` : 0
+- Vitest HOME `_qa/v3/home` `tests/server tests/companion tests/channels tests/security/donnees-personnelles.test.ts` : **229 fichiers / 3055 verts / 11 skip / 0 rouge**
+- Playwright 390×844 (non commitée) : `_qa/v3/shots/01-reply-search.png`, `02-voice-recording.png`, `03-voice-bubble.png`, `04-settings-light.png`, `05-notification-badge.png`, `06-quoted-reply.png`
 
 ## Bilan 10 lignes par lot
 
@@ -120,3 +122,6 @@ Journal JSONL `~/.codebuddy/companion/mobile-conversations/<hash>.jsonl` (0600, 
 
 ### Lot 5 — personnalisation et confort
 Police 3 crans, thème sombre/clair/auto, 4 fonds CSS, sons on/off, aperçu de lien (SSRF `safeFetchFollow`, cache 24 h), émojis seuls 3×, tons de peau, collage/glisser-déposer, raccourcis déjà en lot 1. SW v9. Capture `04-settings-light.png`.
+
+### Lot 6 — preuves globales
+Suite exigée 229 fichiers / 3055 verts / 11 skip / 0 rouge. `tsc --noEmit` 0. ESLint `app.js` 0. `node --check app.js` 0. `git diff --check` 0. Six captures 390×844 sous `_qa/v3/shots/` (non suivies). SW v10. Aucun push. `~/code-buddy` et `~/.codebuddy` intacts. ComfyUI 8188/8189 intacts. Ouvert : envoi Web Push réel sans paquet `web-push` (transport injectable + import optionnel).
