@@ -3719,6 +3719,16 @@ addLazyCommandGroup(program, 'auth-profile', 'Manage authentication profiles (AP
   registerAuthProfileCommands(program);
 });
 
+addLazyCommand(
+  program,
+  'token',
+  'Mint a signed JWT for the API and the mobile PWA',
+  async () => {
+    const { createTokenCommand } = await import('./commands/token.js');
+    return createTokenCommand();
+  },
+);
+
 addLazyCommandGroup(program, 'fleet', 'Inspect Fleet routing and dispatch policy decisions', async () => {
   const { registerFleetCommands } = await import('./commands/cli/fleet-commands.js');
   registerFleetCommands(program);
