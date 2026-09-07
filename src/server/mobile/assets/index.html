@@ -21,7 +21,7 @@
       <form id="login-form" class="login-form">
         <label for="token-input">Jeton JWT</label>
         <textarea id="token-input" rows="3" placeholder="Coller le jeton…" autocomplete="off"></textarea>
-        <p class="hint">Le jeton reste en sessionStorage. L’API et le WebSocket exigent une authentification.</p>
+        <p class="hint">Le jeton reste en sessionStorage. Un lien <code>#token=…</code> (commande <code>buddy token</code>) se connecte tout seul. L’API et le WebSocket exigent une authentification.</p>
         <div class="button-row">
           <button type="submit" id="connect-btn" class="btn primary">Se connecter</button>
           <button type="button" id="copy-url-btn" class="btn secondary">Copier l’URL</button>
