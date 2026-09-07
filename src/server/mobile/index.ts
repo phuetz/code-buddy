@@ -276,13 +276,13 @@ mobilePwaRouter.post(
   '/push/subscribe',
   express.json({ limit: '8kb' }),
   requireAlbumAccess,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     if (!isMobilePushEnabled()) {
       res.status(404).json({ error: 'Push disabled' });
       return;
     }
     const body = req.body as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
-    const ok = savePushSubscription({
+    const ok = await savePushSubscription({
       endpoint: typeof body.endpoint === 'string' ? body.endpoint : '',
       keys: {
         p256dh: typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : '',

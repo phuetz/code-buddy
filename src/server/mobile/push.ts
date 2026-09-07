@@ -8,6 +8,8 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isLoopbackHost } from '../../security/dev-origins.js';
+import { getSSRFGuard } from '../../security/ssrf-guard.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 import { logger } from '../../utils/logger.js';
 
@@ -91,13 +93,39 @@ function loadSubscriptions(env: NodeJS.ProcessEnv): PushSubscriptionJSON[] {
   return stored?.subscriptions ?? [];
 }
 
-export function savePushSubscription(
+function isBlockedPushHostname(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (isLoopbackHost(h)) return true;
+  if (h === 'local' || h.endsWith('.local')) return true;
+  return false;
+}
+
+/** https only + public host via the shared SSRF guard. Fail-closed. */
+export async function isPublicHttpsPushEndpoint(raw: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  if (isBlockedPushHostname(parsed.hostname)) return false;
+  try {
+    const check = await getSSRFGuard().isSafeUrl(parsed.toString());
+    return check.safe === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function savePushSubscription(
   sub: PushSubscriptionJSON,
   env: NodeJS.ProcessEnv = process.env,
-): boolean {
+): Promise<boolean> {
   if (!isMobilePushEnabled(env)) return false;
   const endpoint = typeof sub.endpoint === 'string' ? sub.endpoint.trim() : '';
   if (!endpoint.startsWith('https://')) return false;
+  if (!(await isPublicHttpsPushEndpoint(endpoint))) return false;
   ensurePushDir(env);
   const list = loadSubscriptions(env).filter((item) => item.endpoint !== endpoint);
   list.push({
