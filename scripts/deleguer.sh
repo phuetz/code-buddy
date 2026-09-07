@@ -61,6 +61,18 @@
 #    `RTM_NEWADDR`, et rend une jolie prose sans avoir exécuté une seule commande.
 set -uo pipefail
 
+# Auto-copie (07/09/2026) : bash lit un script par décalage d'octets ; éditer deleguer.sh
+# pendant qu'une lane tourne faisait dérailler l'instance en cours (« MODELE: unbound
+# variable » dans l'épilogue). On exécute donc une copie temporaire ; l'original peut être
+# modifié librement. DELEGUER_NO_SELF_COPY=1 désactive (utile au test de non-régression).
+if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
+  DELEGUER_COPIE=$(mktemp "${TMPDIR:-/tmp}/deleguer-self-XXXXXX.sh")
+  cp "$0" "$DELEGUER_COPIE" && chmod +x "$DELEGUER_COPIE"
+  export DELEGUER_SELF_COPY="$DELEGUER_COPIE" DELEGUER_ORIGINE="$0"
+  exec bash "$DELEGUER_COPIE" "$@"
+fi
+DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
+
 usage() { sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 2; }
 [ $# -ge 2 ] || usage
 
@@ -80,7 +92,7 @@ LOG="$JOURNAUX/$(date +%Y-%m-%dT%H%M%S)-$MOTEUR-$NOM.log"
 # Les garde-fous voyagent AVEC la mission. Codex tourne ici sans isolation :
 # ce qui n'est pas écrit dans la consigne n'existe pas.
 CONSIGNE=$(mktemp)
-trap 'rm -f "$CONSIGNE"' EXIT
+trap 'rm -f "$CONSIGNE" ${DELEGUER_SELF_COPY:+"$DELEGUER_SELF_COPY"}' EXIT  # + copie temporaire du script
 {
   cat "$MISSION"
   # Préambule d'outillage commun (Code Explorer d'abord, lm-resizer sur les commandes
@@ -148,7 +160,7 @@ case "$MOTEUR" in
     # GPT-6 Astra — servi par le backend Codex/ChatGPT depuis le 05/09/2026 05 h 33 (sonde : 400
     # « not supported » jusqu'au 04/09 16 h 35). Table OpenAI du 04/09 : DeepSWE 74,1, Terminal-Bench
     # 64,6, SRE-Bench 99,2 → réserver au DUR (sécurité, infra, terminal), comme sol.
-    codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-medium}" \
+    codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
       --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
@@ -229,7 +241,7 @@ case "$MOTEUR" in
     # Qwen 3.8 Flash via OpenRouter (06/09/2026 : 1 M de contexte, 0,15 $/M entrée, 0,47 $/M sortie,
     # appels d'outils OK) — moteur de volume pendant les trous Codex. OpenRouter voit les prompts :
     # code public et vérifications, JAMAIS de livre non publié ni de dépôt privé sans accord.
-    OPENROUTER_MODELE="${OPENROUTER_MODELE:-qwen/qwen3.8-flash}" exec "$0" "$DEPOT" "$CONSIGNE" openrouter
+    OPENROUTER_MODELE="${OPENROUTER_MODELE:-qwen/qwen3.7-flash}" exec "$DELEGUER_ORIGINE" "$DEPOT" "$CONSIGNE" openrouter
     ;;
   openrouter)
     # OpenRouter, modèles `:free` — 1000 requêtes/jour gratuites dès que le compte porte > 10 $
@@ -366,6 +378,14 @@ case "$MOTEUR" in
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
     (cd "$DEPOT" && ollama run "$MODELE" "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  echo)
+    # Moteur factice pour le test de non-régression tests/scripts/deleguer-self-copy.sh :
+    # imprime la taille de la consigne, attend, puis insère 20 lignes en tête du script
+    # d'ORIGINE pour simuler une édition à chaud pendant la lane.
+    (cd "$DEPOT" && echo "consigne: $(wc -c < "$CONSIGNE") octets" && sleep 2 \
+      && for i in $(seq 1 20); do sed -i "1i # ligne de test $i" "$DELEGUER_ORIGINE"; done \
+      && echo "moteur echo: source modifiée pendant l'exécution") 2>&1 | tee "$LOG"
     ;;
   *) echo "moteur inconnu : $MOTEUR" >&2; usage ;;
 esac
