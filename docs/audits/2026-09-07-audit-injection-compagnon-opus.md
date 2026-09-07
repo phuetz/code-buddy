@@ -116,7 +116,34 @@ et `DEFAULT_DM_PAIRING_CONFIG.enabled = false` (`dm-pairing.ts:31`). Le garde es
 bot** ouvre une conversation privée avec Lisa et reçoit ses réponses — avec le bloc
 identité (prénom), le contexte relationnel, `<recent_episode>` et `<recent_photos>`
 dans le prompt. Le filtre `allowedUsers` de `group-security.ts` ne couvre que les
-groupes, pas les messages privés. C'est le préalable qui transforme les points 1 et 4 de
+groupes, pas les messages privés — et `getGroupSecurity()` n'est jamais appelé depuis
+le chemin entrant.
+
+Pire, et vérifié ligne à ligne : **la seule allowlist documentée est silencieusement
+jetée**. `docs/channel-a2a-bridge.md:82` présente `allowedUsers` comme « mandatory in
+practice — without it, anyone who finds the bot can use it ». La fabrique de canaux
+construit bien l'objet (`channel-handlers.ts:2515-2523`, avec `allowedUsers`) puis, pour
+Telegram, **ne le passe pas** :
+
+    // channel-handlers.ts:2543
+    return new TelegramChannel({ token: config.token || '', ...opts } as unknown as …);
+
+`opts` vaut `config.options`, alors que `allowedUsers` est une clé RACINE de l'entrée de
+config. La valeur n'atteint donc jamais `BaseChannel`, et `isUserAllowed()`
+(`core.ts:456`) est fail-open :
+
+    if (!this.config.allowedUsers || this.config.allowedUsers.length === 0) return true;
+
+Même schéma pour `discord` (`:2547`) et `slack` (`:2551`) ; les autres canaux passent
+`...channelConfig` et sont, eux, protégés. Une protection qui échoue en silence est pire
+que pas de protection : ni erreur, ni avertissement, ni journal. Les tests ne l'attrapent
+pas parce qu'ils construisent le canal directement
+(`tests/channels/telegram.test.ts:466`), en court-circuitant la fabrique.
+
+Correctif d'une ligne par canal (`{ ...channelConfig, token: …, ...opts }`) — **non
+appliqué ici** : il n'est pas sans effet de bord, `tests/channels/telegram-inconnu-journey.test.ts`
+exige aujourd'hui qu'un inconnu obtienne une réponse sans `allowedUsers`, et ce test
+devra être révisé en même temps. Cela sort du périmètre « correctif évident ≤ 10 lignes ». C'est le préalable qui transforme les points 1 et 4 de
 défauts théoriques en défauts exploitables par un inconnu.
 
 - Asymétrie des surfaces (constat structurel) : Telegram passe par
@@ -169,10 +196,12 @@ donc l'état de `c94033686`, pas un état corrigé.
 | 2. Injection par message (rôles structurés) | TIENT |
 | 2bis. Filtrage du texte / fermeture de bloc XML | **TROU B** |
 | 2ter. Cap 400 car. × 10 tours d'historique | TIENT |
-| 3. Telegram : appairage DM fail-open (`enabled:false` par défaut) | **TROU A** |
-| 3bis. Prénom exfiltrable, pas de classe « privé » | **TROU B** |
-| 3ter. Chemins absolus dans le prompt | TIENT |
-| 3quater. Gardes de sortie absents du chemin PWA | **TROU B** |
+| 3. Telegram : `allowedUsers` jeté par la fabrique (telegram/discord/slack) | **TROU A** |
+| 3bis. Telegram : appairage DM fail-open (`enabled:false`, jamais activable) | **TROU A** |
+| 3ter. Prénom exfiltrable, pas de classe « privé » | **TROU B** |
+| 3quater. Chemins absolus dans le prompt | TIENT |
+| 3quinquies. Gardes de sortie absents du chemin PWA | **TROU B** |
+| 3sexies. PWA : authentification JWT / clé / appairage | TIENT (fail-closed) |
 | 4. Contrat de limites contournable (EN / leet / reformulation) | **TROU B** |
 | 4bis. Contrat absent de l'invite compagnon | **TROU B** |
 | 5. Suites vitest ciblées | TIENT (833 passés) |
@@ -192,8 +221,11 @@ redémarrage. Une photo suffit pour un effet permanent. Le second constat est st
 existants (`guardRelationshipReply`, `applyLimitsContract`) ne sont câblés que sur la
 branche canal ; la PWA n'en a aucun. Enfin, le contrat de limites est une liste de cinq
 regex françaises : il attrape la phrase qu'on lui a montrée et rien d'autre. Reste le préalable qui
-change tout : l'appairage DM est désactivé par défaut, donc la surface Telegram est
-ouverte à un inconnu, et rien dans le code n'exige une allowlist. Rien de tout cela n'est
+change tout : sur Telegram, la seule allowlist documentée est jetée par la fabrique et
+l'appairage DM n'a pas d'interrupteur, donc la surface est ouverte à un inconnu — alors
+que la même PWA, elle, est correctement fail-closed (JWT, clé d'API ou appairage
+d'appareil). L'écart de posture entre les deux surfaces du « chemin unique » est le vrai
+constat de cet audit. Rien de tout cela n'est
 une régression introduite récemment ; c'est le niveau de confiance de conception du
 chemin, et il est trop élevé pour une surface exposée publiquement.
 
@@ -205,8 +237,9 @@ chemin, et il est trop élevé pour une surface exposée publiquement.
    ligne mémoire l'est déjà à 120.
 3. Câbler `guardRelationshipReply` + `applyLimitsContract` + `limitsContractGuidance`
    dans `runCompanionTurn`, pour que « chemin unique » soit vrai.
-4. Exiger une allowlist explicite avant de servir un DM Telegram sous persona compagnon
-   (fail-closed), ou activer l'appairage par défaut pour cette surface.
+4. Passer `...channelConfig` aux fabriques telegram/discord/slack pour que
+   `allowedUsers` cesse d'être jeté, et lire réellement `DM_PAIRING_ENABLED` ; puis
+   rendre `isUserAllowed` fail-closed pour la persona compagnon.
 
 ## Portée de l'audit
 
@@ -216,4 +249,4 @@ ce rapport). Les points non instruits faute de temps : `mobile-history.ts` en le
 ligne à ligne (couvert indirectement par le POC 2), `prependUserFacingFailoverNotice`,
 et le contenu réel de `episode:recent` en production.
 
-VERDICT: NON PUSHABLE (injection par photo persistée non échappée dans `<recent_photos>` — TROU A — et appairage DM Telegram fail-open par défaut — TROU A)
+VERDICT: NON PUSHABLE (injection par photo persistée non échappée dans `<recent_photos>` — TROU A — et Telegram ouvert à tout inconnu, `allowedUsers` jeté par la fabrique + appairage DM sans interrupteur — TROU A)
