@@ -101,6 +101,24 @@ d'un bloc XML du prompt.
   confidentialité est fait à l'ÉCRITURE. Le prompt n'a **aucune notion de ce que Lisa a
   le droit de répéter** à qui : un fait accepté est un fait dicible, quel que soit
   l'interlocuteur. Il n'existe pas de classification « privé / partageable ».
+### Qui peut parler à Lisa sur Telegram — **TROU A**
+
+Il n'existe **aucune variable `CODEBUDDY_TELEGRAM_ALLOWED_*`** dans les sources
+(`grep -rn "CODEBUDDY_TELEGRAM" src/` ne rend que `_MEDIA_GROUP_MS`). Le seul filtre
+d'identité en message privé est l'appairage DM : `telegram/client.ts:842` →
+`checkDMPairing()` (`channels/core.ts:930`). Or :
+
+    // core.ts:933 — If pairing is not enabled, always approve
+    if (!pairing.requiresPairing(message.channel.type)) return { approved: true, … };
+
+et `DEFAULT_DM_PAIRING_CONFIG.enabled = false` (`dm-pairing.ts:31`). Le garde est donc
+**fail-open par défaut** : sans configuration explicite, **quiconque connaît le nom du
+bot** ouvre une conversation privée avec Lisa et reçoit ses réponses — avec le bloc
+identité (prénom), le contexte relationnel, `<recent_episode>` et `<recent_photos>`
+dans le prompt. Le filtre `allowedUsers` de `group-security.ts` ne couvre que les
+groupes, pas les messages privés. C'est le préalable qui transforme les points 1 et 4 de
+défauts théoriques en défauts exploitables par un inconnu.
+
 - Asymétrie des surfaces (constat structurel) : Telegram passe par
   `channel-handlers.ts:2158-2168` qui applique `guardRelationshipReply()` **et**
   `applyLimitsContract()` avant l'envoi. La PWA passe par
@@ -151,12 +169,14 @@ donc l'état de `c94033686`, pas un état corrigé.
 | 2. Injection par message (rôles structurés) | TIENT |
 | 2bis. Filtrage du texte / fermeture de bloc XML | **TROU B** |
 | 2ter. Cap 400 car. × 10 tours d'historique | TIENT |
-| 3. Prénom exfiltrable, pas de classe « privé » | **TROU B** |
-| 3bis. Chemins absolus dans le prompt | TIENT |
-| 3ter. Gardes de sortie absents du chemin PWA | **TROU B** |
+| 3. Telegram : appairage DM fail-open (`enabled:false` par défaut) | **TROU A** |
+| 3bis. Prénom exfiltrable, pas de classe « privé » | **TROU B** |
+| 3ter. Chemins absolus dans le prompt | TIENT |
+| 3quater. Gardes de sortie absents du chemin PWA | **TROU B** |
 | 4. Contrat de limites contournable (EN / leet / reformulation) | **TROU B** |
 | 4bis. Contrat absent de l'invite compagnon | **TROU B** |
 | 5. Suites vitest ciblées | TIENT (833 passés) |
+| 5bis. `tsc --noEmit` | TIENT (exit 0) |
 
 ## Bilan
 
@@ -171,9 +191,11 @@ redémarrage. Une photo suffit pour un effet permanent. Le second constat est st
 `companion-turn.ts` se déclare seule couture compagnon, mais les deux gardes de sortie
 existants (`guardRelationshipReply`, `applyLimitsContract`) ne sont câblés que sur la
 branche canal ; la PWA n'en a aucun. Enfin, le contrat de limites est une liste de cinq
-regex françaises : il attrape la phrase qu'on lui a montrée et rien d'autre. Rien de
-tout cela n'est une régression introduite récemment ; c'est le niveau de confiance de
-conception du chemin, et il est trop élevé pour une surface exposée à Telegram.
+regex françaises : il attrape la phrase qu'on lui a montrée et rien d'autre. Reste le préalable qui
+change tout : l'appairage DM est désactivé par défaut, donc la surface Telegram est
+ouverte à un inconnu, et rien dans le code n'exige une allowlist. Rien de tout cela n'est
+une régression introduite récemment ; c'est le niveau de confiance de conception du
+chemin, et il est trop élevé pour une surface exposée publiquement.
 
 ## Correctifs suggérés (non appliqués)
 
@@ -183,3 +205,15 @@ conception du chemin, et il est trop élevé pour une surface exposée à Telegr
    ligne mémoire l'est déjà à 120.
 3. Câbler `guardRelationshipReply` + `applyLimitsContract` + `limitsContractGuidance`
    dans `runCompanionTurn`, pour que « chemin unique » soit vrai.
+4. Exiger une allowlist explicite avant de servir un DM Telegram sous persona compagnon
+   (fail-closed), ou activer l'appairage par défaut pour cette surface.
+
+## Portée de l'audit
+
+Aucun fichier source n'a été modifié : les mesures portent sur `c94033686` tel quel.
+Les POC ont été exécutés depuis `tests/` puis supprimés (rien d'ajouté au dépôt hors
+ce rapport). Les points non instruits faute de temps : `mobile-history.ts` en lecture
+ligne à ligne (couvert indirectement par le POC 2), `prependUserFacingFailoverNotice`,
+et le contenu réel de `episode:recent` en production.
+
+VERDICT: NON PUSHABLE (injection par photo persistée non échappée dans `<recent_photos>` — TROU A — et appairage DM Telegram fail-open par défaut — TROU A)
