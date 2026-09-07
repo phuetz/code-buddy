@@ -15,6 +15,7 @@ import { verifyToken } from '../auth/jwt.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
 import { readConversationLog } from '../../companion/mobile-conversation-log.js';
+import { fetchLinkPreview } from './link-preview.js';
 import { forwardMobileTextToTelegram } from './telegram-forward.js';
 import {
   isMobilePushEnabled,
@@ -228,6 +229,16 @@ mobilePwaRouter.get('/history', requireAlbumAccess, (req: Request, res: Response
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
   res.json({ messages: readConversationLog(userId, { before, limit }) });
+});
+
+mobilePwaRouter.get('/link-preview', requireAlbumAccess, async (req: Request, res: Response) => {
+  const url = typeof req.query.url === 'string' ? req.query.url : '';
+  const result = await fetchLinkPreview(url);
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 });
 
 mobilePwaRouter.post(

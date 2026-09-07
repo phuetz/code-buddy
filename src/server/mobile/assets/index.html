@@ -101,6 +101,14 @@
             <input id="emoji-search" type="search" placeholder="Rechercher (cœur, rire, kiss…)" aria-label="Rechercher un émoji" autocomplete="off">
             <div id="emoji-cats" class="emoji-cats" role="tablist"></div>
             <div id="emoji-grid" class="emoji-grid" role="tabpanel"></div>
+            <div id="emoji-tones" class="emoji-tones" role="toolbar" aria-label="Tons de peau">
+              <button type="button" class="btn icon touch tone-btn" data-tone="" aria-label="Ton par défaut">👋</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏻" aria-label="Ton clair">👋🏻</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏼" aria-label="Ton moyen-clair">👋🏼</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏽" aria-label="Ton moyen">👋🏽</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏾" aria-label="Ton moyen-foncé">👋🏾</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏿" aria-label="Ton foncé">👋🏿</button>
+            </div>
           </div>
         </section>
 
@@ -181,6 +189,29 @@
           <input id="voice-reply-toggle" type="checkbox">
           Lisa me répond à voix haute
         </label>
+        <label class="setting-row" for="sounds-toggle">
+          <input id="sounds-toggle" type="checkbox" checked>
+          Sons
+        </label>
+        <fieldset class="setting-fieldset">
+          <legend>Taille du texte</legend>
+          <button type="button" class="btn touch font-size-btn" data-font="1" aria-label="Texte petit">A</button>
+          <button type="button" class="btn touch font-size-btn" data-font="2" aria-label="Texte moyen">A</button>
+          <button type="button" class="btn touch font-size-btn" data-font="3" aria-label="Texte grand">A</button>
+        </fieldset>
+        <fieldset class="setting-fieldset">
+          <legend>Thème</legend>
+          <button type="button" class="btn touch theme-btn" data-theme="dark" aria-label="Thème sombre">Sombre</button>
+          <button type="button" class="btn touch theme-btn" data-theme="light" aria-label="Thème clair">Clair</button>
+          <button type="button" class="btn touch theme-btn" data-theme="auto" aria-label="Thème automatique">Auto</button>
+        </fieldset>
+        <fieldset class="setting-fieldset">
+          <legend>Fond</legend>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="0" aria-label="Fond uni">1</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="1" aria-label="Fond damier">2</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="2" aria-label="Fond rayures">3</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="3" aria-label="Fond points">4</button>
+        </fieldset>
         <button type="button" id="clear-chat-btn" class="btn danger">Effacer la conversation</button>
         <p id="clear-chat-confirm" class="hidden clear-confirm">
           <span>Supprimer les messages locaux ?</span>

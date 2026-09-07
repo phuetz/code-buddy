@@ -312,9 +312,9 @@ describe('Mobile PWA Assets Validation', () => {
 
   it('bumps the service worker cache whenever the shipped assets change', () => {
     // A stale cache serves the OLD app.js to an installed PWA, so the cache
-    // name must move with the assets. v8 = server history (chat v3 lot 4).
+    // name must move with the assets. v9 = theme/comfort (chat v3 lot 5).
     const sw = readFileSync(path.join(assetsDir, 'sw.js'), 'utf-8');
-    expect(sw).toContain('codebuddy-mobile-v8');
+    expect(sw).toContain('codebuddy-mobile-v9');
     expect(sw).toContain('/__codebuddy__/mobile/assets/emoji-data.js');
     expect(sw).toContain('/__codebuddy__/mobile/assets/app.js');
   });

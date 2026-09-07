@@ -96,6 +96,8 @@ type MobileApi = {
   }) => boolean;
   toggleVoiceSpeed: (id: string) => number;
   mergeServerHistory: (rows: Array<{ id: string; role: string; text: string; ts: number }>) => number;
+  setTheme: (theme: string) => void;
+  setFont: (size: string) => void;
 };
 
 function asset(name: string): string {
@@ -718,6 +720,16 @@ describe('Mobile chat UI — messagerie (lot 1)', () => {
     expect(asst).toBeTruthy();
     expect(playCalls.length).toBeGreaterThanOrEqual(1);
     expect(document.querySelectorAll('.voice-card').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('applies light theme, font size and large standalone emojis', () => {
+    api.setTheme('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    api.setFont('3');
+    expect(document.documentElement.getAttribute('data-font')).toBe('3');
+    api.addMessage({ role: 'user', text: '🔥' });
+    expect(document.querySelector('.bubble.emoji-only')).toBeTruthy();
+    expect(document.querySelector('[aria-label="Ton moyen"]')?.textContent).toBe('👋🏽');
   });
 
   it('virtualizes the DOM to 150 nodes and merges older server pages', () => {

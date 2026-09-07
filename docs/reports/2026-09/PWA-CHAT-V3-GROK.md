@@ -93,7 +93,8 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 | `db9651eed` | feat(pwa): citer, chercher, épingler, accusés et sélection |
 | `c2b1623c5` | feat(pwa): notes vocales MediaRecorder + STT/TTS |
 | `8b659452d` | feat(pwa): présence, badge, son et push VAPID |
-| *(lot 4)* | feat(pwa): historique serveur paginé et liste virtualisée |
+| `3175c09a4` | feat(pwa): historique serveur paginé et liste virtualisée |
+| *(lot 5)* | feat(pwa): thème, police, fond, aperçu de lien |
 
 ## Preuves
 
@@ -116,3 +117,6 @@ En-tête « vu à HH:MM » après `stream_end`. Badge d’onglet `(n) Lisa`. Son
 
 ### Lot 4 — historique serveur et défilement
 Journal JSONL `~/.codebuddy/companion/mobile-conversations/<hash>.jsonl` (0600, O_APPEND). `GET /history?before=&limit=50` (JWT). Fenêtre DOM 150, chargement en remontant, restauration de scroll, « aller en bas » déjà là. Plafond local 2000. SW v8.
+
+### Lot 5 — personnalisation et confort
+Police 3 crans, thème sombre/clair/auto, 4 fonds CSS, sons on/off, aperçu de lien (SSRF `safeFetchFollow`, cache 24 h), émojis seuls 3×, tons de peau, collage/glisser-déposer, raccourcis déjà en lot 1. SW v9. Capture `04-settings-light.png`.

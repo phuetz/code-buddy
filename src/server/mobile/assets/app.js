@@ -35,6 +35,10 @@
     pins: 'codebuddy_mobile_pins',
     lastRead: 'codebuddy_mobile_last_read',
     voiceReply: 'codebuddy_mobile_voice_reply',
+    theme: 'codebuddy_mobile_theme',
+    font: 'codebuddy_mobile_font',
+    wallpaper: 'codebuddy_mobile_wallpaper',
+    sounds: 'codebuddy_mobile_sounds',
   };
 
   var SUGGEST_START = [
@@ -107,6 +111,9 @@
     mobilePush: false,
     historyLoading: false,
     historyDone: false,
+    theme: 'dark',
+    font: '2',
+    wallpaper: '0',
   };
 
   try {
@@ -594,10 +601,11 @@
         : '';
       var edited = msg.edited ? '<span class="edited-mark">modifié</span>' : '';
       var selected = state.selected[msg.id] ? ' selected' : '';
+      var emojiOnly = isEmojiOnly(msg.text) && !msg.hasAudio && !msg.image && !(msg.images && msg.images.length);
       html.push(
         '<div class="msg-row ' + msg.role + ' ' + group + selected + '" data-id="' + escapeHtml(msg.id) + '" data-role="' + escapeHtml(msg.role) + '">' +
           avatar +
-          '<div class="bubble ' + msg.role + ' ' + group + '">' +
+          '<div class="bubble ' + msg.role + ' ' + group + (emojiOnly ? ' emoji-only' : '') + '">' +
             '<div class="bubble-body">' + body + '</div>' +
             '<div class="bubble-meta">' + escapeHtml(formatFullTime(msg.ts)) + edited + ackMark(msg) + '</div>' +
             reaction +
@@ -608,6 +616,7 @@
     box.innerHTML = html.join('');
     scrollMessages(false);
     renderPinnedBar();
+    hydrateLinkPreviews(box);
   }
 
   function addMessage(partial) {
@@ -723,6 +732,69 @@
       state.lastSeenAt = Date.now();
       setPresence(state.connected ? 'last-seen' : 'offline');
     }
+  }
+
+  function hydrateLinkPreviews(box) {
+    if (!box || !state.token) return;
+    box.querySelectorAll('.bubble-body a[href^="http"]').forEach(function (anchor) {
+      if (anchor.parentNode && anchor.parentNode.querySelector('.link-preview')) return;
+      var href = anchor.getAttribute('href');
+      if (!href) return;
+      fetchJson(BASE + '/link-preview?url=' + encodeURIComponent(href)).then(function (data) {
+        if (!data || !data.title) return;
+        var card = document.createElement('a');
+        card.className = 'link-preview';
+        card.href = href;
+        card.target = '_blank';
+        card.rel = 'noopener';
+        card.innerHTML = '<strong>' + escapeHtml(data.title) + '</strong><span>' + escapeHtml(data.description || '') + '</span>';
+        if (anchor.parentNode) anchor.parentNode.appendChild(card);
+      }).catch(function () { /* ignore */ });
+    });
+  }
+
+  function isEmojiOnly(text) {
+    var t = String(text || '').trim();
+    if (!t || t.length > 32) return false;
+    try {
+      return /^[\p{Extended_Pictographic}\uFE0F\u200D\s]+$/u.test(t) && !/[A-Za-z0-9]/.test(t);
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function applyPrefs() {
+    var theme = state.theme || 'dark';
+    if (theme === 'auto') {
+      theme = (root.matchMedia && root.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-font', String(state.font || '2'));
+    var box = el('messages');
+    if (box) {
+      box.classList.remove('wp-1', 'wp-2', 'wp-3');
+      if (state.wallpaper && state.wallpaper !== '0') box.classList.add('wp-' + state.wallpaper);
+    }
+    var sounds = el('sounds-toggle');
+    if (sounds) sounds.checked = state.sounds !== false;
+  }
+
+  function setTheme(theme) {
+    state.theme = theme;
+    storeSet(STORAGE.theme, theme);
+    applyPrefs();
+  }
+
+  function setFont(size) {
+    state.font = String(size);
+    storeSet(STORAGE.font, state.font);
+    applyPrefs();
+  }
+
+  function setWallpaper(id) {
+    state.wallpaper = String(id);
+    storeSet(STORAGE.wallpaper, state.wallpaper);
+    applyPrefs();
   }
 
   function applyStatusPayload(data) {
@@ -2479,6 +2551,42 @@
         }
       }
     }
+    document.addEventListener('paste', function (event) {
+      var files = event.clipboardData && event.clipboardData.files;
+      if (files && files.length) {
+        event.preventDefault();
+        addAttachments(files);
+      }
+    });
+    var chatSection = el('chat-section');
+    if (chatSection) {
+      chatSection.addEventListener('dragover', function (event) {
+        event.preventDefault();
+      });
+      chatSection.addEventListener('drop', function (event) {
+        event.preventDefault();
+        var files = event.dataTransfer && event.dataTransfer.files;
+        if (files && files.length) addAttachments(files);
+      });
+    }
+    document.querySelectorAll('.font-size-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setFont(btn.getAttribute('data-font')); });
+    });
+    document.querySelectorAll('.theme-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setTheme(btn.getAttribute('data-theme')); });
+    });
+    document.querySelectorAll('.wallpaper-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setWallpaper(btn.getAttribute('data-wp')); });
+    });
+    document.querySelectorAll('.tone-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { insertEmoji(btn.textContent || '👋'); });
+    });
+    if (el('sounds-toggle')) {
+      el('sounds-toggle').addEventListener('change', function (event) {
+        state.sounds = Boolean(event.target.checked);
+        storeSet(STORAGE.sounds, state.sounds);
+      });
+    }
     if (el('voice-reply-toggle')) {
       el('voice-reply-toggle').addEventListener('change', function (event) {
         state.voiceReply = Boolean(event.target.checked);
@@ -2754,6 +2862,12 @@
     restoreAvatar();
     state.suggestHidden = storeGet(STORAGE.suggestHidden, false) === true;
     state.voiceReply = storeGet(STORAGE.voiceReply, false) === true;
+    state.theme = storeGet(STORAGE.theme, 'dark') || 'dark';
+    state.font = String(storeGet(STORAGE.font, '2') || '2');
+    state.wallpaper = String(storeGet(STORAGE.wallpaper, '0') || '0');
+    var soundsPref = storeGet(STORAGE.sounds, true);
+    state.sounds = soundsPref !== false;
+    applyPrefs();
     var voiceToggle = el('voice-reply-toggle');
     if (voiceToggle) voiceToggle.checked = state.voiceReply;
     restoreHistory();
@@ -2873,6 +2987,11 @@
     subscribePush: subscribePush,
     loadOlderHistory: loadOlderHistory,
     mergeServerHistory: mergeServerHistory,
+    applyPrefs: applyPrefs,
+    setTheme: setTheme,
+    setFont: setFont,
+    setWallpaper: setWallpaper,
+    isEmojiOnly: isEmojiOnly,
     VIRTUAL_WINDOW: VIRTUAL_WINDOW,
     destroy: destroy,
   };

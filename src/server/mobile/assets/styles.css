@@ -767,6 +767,55 @@ mark.search-hit {
   margin: 10px 0;
   color: var(--text);
 }
+html[data-theme="light"] {
+  --deep: #f3efe6;
+  --surface: #fffaf3;
+  --panel: #efe7d8;
+  --border: #d7cbb6;
+  --text: #1a1204;
+  --muted: #6b5d4a;
+}
+html[data-font="1"] { font-size: 14px; }
+html[data-font="2"] { font-size: 16px; }
+html[data-font="3"] { font-size: 18px; }
+.messages.wp-1 {
+  background-image: repeating-linear-gradient(45deg, rgba(245,166,35,0.06) 0 12px, transparent 12px 24px);
+}
+.messages.wp-2 {
+  background-image: repeating-linear-gradient(0deg, rgba(6,182,212,0.08) 0 8px, transparent 8px 16px);
+}
+.messages.wp-3 {
+  background-image: radial-gradient(rgba(245,166,35,0.18) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+.bubble.emoji-only {
+  background: transparent;
+  border: 0;
+  font-size: 3em;
+  line-height: 1.1;
+  padding: 0;
+}
+.emoji-tones { display: flex; gap: 4px; padding: 6px 0; }
+.setting-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  margin: 10px 0;
+}
+.setting-fieldset legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+.link-preview {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+}
+.link-preview strong { display: block; }
+.link-preview span { font-size: 12px; color: var(--muted); }
 .album-del-confirm {
   position: absolute;
   bottom: 80px;
