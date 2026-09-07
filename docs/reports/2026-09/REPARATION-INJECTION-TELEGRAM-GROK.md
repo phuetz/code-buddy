@@ -141,7 +141,7 @@ et 6 négatifs dans `tests/companion/limits-contract.test.ts`.
 
 ## Preuves finales
 
-À remplir. Commande exigée :
+Commande :
 
 ```bash
 env -u FORCE_COLOR HOME=~/DEV/cb-injection-fix-2026-09-07/_qa/inj/home \
@@ -149,6 +149,25 @@ env -u FORCE_COLOR HOME=~/DEV/cb-injection-fix-2026-09-07/_qa/inj/home \
   tests/security/donnees-personnelles.test.ts
 ```
 
-- `npx tsc --noEmit -p tsconfig.json` : à mesurer
-- `npm run lint` : à mesurer
-- `git diff --check` : à mesurer
+- **226 fichiers verts / 5 skip / 0 rouge** (231 fichiers)
+- **3036 tests verts / 11 skip / 0 rouge** (3047 tests)
+- Skips : Chromium absent du HOME QA, Piper absent, voyage live GK10 Ollama (`skipIf`), routes live préexistantes. Aucun skip introduit par ce lot.
+- `tests/security/donnees-personnelles.test.ts` : inclus dans le lot, 0 rouge.
+- `npx tsc --noEmit -p tsconfig.json` : exit 0
+- `npx eslint . --ext .js,.jsx,.ts,.tsx --quiet` : exit 0 (**0 erreur**)
+- `git diff --check` : 0
+
+Premier passage de la suite : 5 rouges GK10 (`telegram-help`, `telegram-media-saynow`, `telegram-offset`) — les bots de test n'avaient pas `allowedUsers` alors que l'inbound est fail-closed. Corrigé (`allowedUsers: ['4242']`, id factice du faux Bot API), rejoué 6/6 puis suite complète 0 rouge.
+
+Commits (un par trou, plus réservation et tests GK10) :
+
+| Commit | Point |
+| --- | --- |
+| `c030f3789` | réservation + rapport avant inspection |
+| `f2ac73bb6` | A-1 injection photo |
+| `691801568` | A-2 allowedUsers + fail-closed |
+| `b0957a81c` | A-3 DM_PAIRING_ENABLED + code serveur |
+| `da02ac76b` | B contrat de limites PWA |
+| `f94e3b627` | tests GK10 : allowlist de l'expéditeur factice |
+
+Aucun push. ComfyUI 8188/8189 intacts. `~/code-buddy` et `~/.codebuddy` non touchés.
