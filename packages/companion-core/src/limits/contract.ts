@@ -22,13 +22,25 @@ import type { LimitsReason, LimitsVerdict } from '../types.js';
 export type LimitsLocale = 'fr' | 'en';
 
 function normalize(text: string): string {
-  return (text ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return foldLeet(
+    (text ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{M}+/gu, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+}
+
+function foldLeet(s: string): string {
+  return s
+    .replace(/([a-z])4([a-z])/g, '$1a$2')
+    .replace(/([a-z])0([a-z])/g, '$1o$2')
+    .replace(/([a-z])3([a-z])/g, '$1e$2')
+    .replace(/([a-z])1([a-z])/g, '$1i$2')
+    .replace(/([a-z])5([a-z])/g, '$1s$2')
+    .replace(/([a-z])7([a-z])/g, '$1t$2');
 }
 
 /** The repair said in place of a refused line. */
@@ -56,7 +68,7 @@ const MOTIFS: Array<{ reason: LimitsReason; pattern: RegExp }> = [
   {
     reason: 'medical',
     pattern:
-      /\b(je (?:te )?diagnostique|je te prescris|je te prescrits|prends ce traitement|c est (?:un|une) (?:cancer|depression|diabete)|tu as (?:un|une) (?:cancer|depression|diabete)|i diagnose you|you have (?:cancer|depression|diabetes)|take this medication|i prescribe)\b/,
+      /\b(je (?:te )?diagnostique|je te prescris|je te prescrits|prend(?:s)? ce traitement|c est (?:un|une) (?:cancer|depression|diabete|tumeur)|tu as (?:un|une) (?:cancer|depression|diabete|tumeur)|arrete (?:ton |ce )?traitement|i diagnose you|you have (?:a )?(?:cancer|depression|diabetes|tumor)|take this (?:treatment|medication)|i prescribe)\b/,
   },
   {
     reason: 'guilt',

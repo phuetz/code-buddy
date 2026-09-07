@@ -132,7 +132,12 @@ Le code à usage unique n'est plus envoyé à l'inconnu : journal
 `[dm-pairing] one-time pairing code (server-side only)` + `buddy channels pairing`.
 Approuver : `buddy pairing approve --channel telegram <code>` (consomme le code).
 
-### 2026-09-07 — B (à venir)
+### 2026-09-07 — B (contrat de limites)
+
+`limitsContractGuidance` est dans le prompt compagnon (`buildCompanionChannelPrompt`).
+`guardRelationshipReply` + `applyLimitsContract` s'appliquent sur la PWA via
+`runCompanionTurn` (chemin unique). Motifs FR + EN + leet (`c4ncer`) : 12 positifs
+et 6 négatifs dans `tests/companion/limits-contract.test.ts`.
 
 ## Preuves finales
 

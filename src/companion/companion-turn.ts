@@ -42,6 +42,8 @@ import {
 } from './companion-photo.js';
 import type { CompanionHistoryTurn } from './companion-history.js';
 import { rememberSharedPhotos } from './shared-photo-memory.js';
+import { applyLimitsContract } from './reply-augment.js';
+import { guardRelationshipReply } from '../conversation/relationship-safety.js';
 import type {
   CompanionSelfieServeResult,
   CompanionSelfieSurface,
@@ -274,8 +276,10 @@ export async function runCompanionTurn(
         ...(photoSummary ? { photos: photoSummary } : {}),
       };
     }
+    const guarded = guardRelationshipReply(text);
+    const limited = applyLimitsContract(guarded.response, { heard: message, env });
     return {
-      text: prependUserFacingFailoverNotice(text, 'companion-turn'),
+      text: prependUserFacingFailoverNotice(limited.text, 'companion-turn'),
       kind: 'text',
       model: generated.model,
       ...(photoSummary ? { photos: photoSummary } : {}),

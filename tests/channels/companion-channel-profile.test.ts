@@ -41,6 +41,15 @@ describe('companion channel profile', () => {
     expect(shouldUseCompanionChannelProfile({ text: 'salut', isCommand: true, env })).toBe(false);
   });
 
+  it('adds the limits contract to the system prompt when the copine persona is on', () => {
+    const built = buildCompanionChannelPrompt({
+      spokenPrompt: COPINE_PERSONA.spokenPrompt,
+      userText: 'salut',
+      env: { CODEBUDDY_COMPANION_PERSONA: 'copine' } as NodeJS.ProcessEnv,
+    });
+    expect(built.system).toMatch(/pas médecin|not a clinician/i);
+  });
+
   it('builds a prompt under 1500 tokens from spokenPrompt + relational + 10 turns', () => {
     const history = Array.from({ length: 14 }, (_, i) => ({
       role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),

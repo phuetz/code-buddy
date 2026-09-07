@@ -132,6 +132,33 @@ describe('runCompanionTurn — one path for every companion surface', () => {
     expect(result.text.toLowerCase()).toContain('quota');
   });
 
+  it('injects the limits contract into the companion system prompt', async () => {
+    const { chat, seen } = captureChat('Coucou toi.');
+    await runCompanionTurn('Coucou', {
+      surface: 'mobile',
+      env: { CODEBUDDY_COMPANION_PERSONA: 'copine' } as NodeJS.ProcessEnv,
+      chat,
+      resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
+      serveSelfie: async () => null,
+    });
+    const system = String(seen[0]?.[0]?.content ?? '');
+    expect(system).toMatch(/pas médecin|not a clinician/i);
+  });
+
+  it('applies the output limits contract on the PWA companion path', async () => {
+    const { chat } = captureChat('tu as un cancer, prends ce traitement');
+    const result = await runCompanionTurn('je me sens mal', {
+      surface: 'mobile',
+      env: { CODEBUDDY_COMPANION_PERSONA: 'copine' } as NodeJS.ProcessEnv,
+      chat,
+      resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
+      serveSelfie: async () => null,
+    });
+    expect(result.text).toBe(
+      'Je ne suis pas médecin ; je suis là. Pour un diagnostic ou un traitement, il faut un humain soignant.',
+    );
+  });
+
   it('speaks honestly when no provider is configured (never a silent empty reply)', async () => {
     const result = await runCompanionTurn('Coucou', {
       surface: 'mobile',

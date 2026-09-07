@@ -11,6 +11,7 @@ import { estimateTokens } from '../utils/token-counter.js';
 import type { ConversationTurn } from '../conversation/types.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import { resolveCompanionPersona } from '../companion/personas/index.js';
+import { limitsContractGuidance } from '../companion/reply-augment.js';
 
 export const COMPANION_CHANNEL_HISTORY_LIMIT = 10;
 export const COMPANION_CHANNEL_TURN_CHAR_CAP = 400;
@@ -127,8 +128,9 @@ export function buildCompanionChannelPrompt(options: {
   const spoken = options.spokenPrompt.trim() || DEFAULT_COMPANION_SPOKEN_PROMPT;
   const relational = options.relationalContext?.trim() ?? '';
   const identity = buildCompanionIdentityBlock(options.env ?? process.env);
+  const limits = limitsContractGuidance(options.env ?? process.env);
   const extra = options.extraSystem?.trim() ?? '';
-  const system = [identity, spoken, relational, extra].filter(Boolean).join('\n\n');
+  const system = [identity, spoken, limits, relational, extra].filter(Boolean).join('\n\n');
   const history = (options.history ?? [])
     .filter((turn) => turn.content.trim())
     .slice(-COMPANION_CHANNEL_HISTORY_LIMIT)

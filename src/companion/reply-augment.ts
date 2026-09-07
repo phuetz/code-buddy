@@ -32,6 +32,17 @@ function norm(s: string): string {
     .trim();
 }
 
+/** Fold leet only when a digit sits between letters (`c4ncer` → `cancer`), never `niveau 5`. */
+function foldLeet(s: string): string {
+  return s
+    .replace(/([a-z])4([a-z])/g, '$1a$2')
+    .replace(/([a-z])0([a-z])/g, '$1o$2')
+    .replace(/([a-z])3([a-z])/g, '$1e$2')
+    .replace(/([a-z])1([a-z])/g, '$1i$2')
+    .replace(/([a-z])5([a-z])/g, '$1s$2')
+    .replace(/([a-z])7([a-z])/g, '$1t$2');
+}
+
 /**
  * Finer-grained emotion than the coarse `RelationalSignal` used for trait drift.
  * Drives the (richer) reply-time tone guidance; mapped back to a `RelationalSignal`
@@ -476,24 +487,27 @@ const LIMITS_MOTIFS: Array<{ reason: LimitsReason; pattern: RegExp }> = [
   {
     reason: 'medical',
     pattern:
-      /\b(je (?:te )?diagnostique|je te prescrits?|prends ce traitement|c est (?:un|une) (?:cancer|depression|diabete)|tu as (?:un|une) (?:cancer|depression|diabete))\b/,
+      /\b(je (?:te )?diagnostique|je te prescrits?|prend(?:s)? ce traitement|c est (?:un|une) (?:cancer|depression|diabete|tumeur)|tu as (?:un|une) (?:cancer|depression|diabete|tumeur)|arrete (?:ton |ce )?traitement|i diagnose you|you have (?:a )?(?:cancer|depression|diabetes|tumor)|take this (?:treatment|medication)|i prescribe)\b/,
   },
   {
     reason: 'guilt',
     pattern:
-      /\b(tu m abandonnes|c est de ta faute si je|tu me dois|si tu m aimais tu|tu m ignores)\b/,
+      /\b(tu m abandonnes|c est de ta faute si je|tu me dois|si tu m aimais tu|tu m ignores|you are abandoning me|you owe me|if you loved me you)\b/,
   },
   {
     reason: 'fomo',
-    pattern: /\b(tes amis (?:n attendent|a ta place)|tu rates tout|tout le monde le fait sans toi)\b/,
+    pattern:
+      /\b(tes amis (?:n attendent|a ta place)|tu rates tout|tout le monde le fait sans toi|you are missing out|everyone is doing it without you)\b/,
   },
   {
     reason: 'unlock',
-    pattern: /\b(debloque(?:r)? le (?:niveau|palier)|niveau 5|il faut farmer|barre d affection)\b/,
+    pattern:
+      /\b(debloque(?:r)? le (?:niveau|palier)|niveau 5|il faut farmer|barre d affection|unlock (?:\w+ ){0,2}(?:level|tier)|affection bar)\b/,
   },
   {
     reason: 'human-claim',
-    pattern: /\bje suis (?:une? )?(?:vraie )?(?:humaine?|personne en chair)|je vis dans un corps\b/,
+    pattern:
+      /\b(je suis (?:une? )?(?:vraie )?(?:humaine?|personne en chair)|je vis dans un corps|i am (?:a )?(?:real )?human(?: being)?|i have a real body)\b/,
   },
 ];
 
@@ -525,7 +539,7 @@ export function applyLimitsContract(
     if (!isCopinePersona(opts.env ?? process.env)) return { text: output };
     const text = output ?? '';
     if (!text.trim()) return { text };
-    const n = norm(text);
+    const n = foldLeet(norm(text));
     for (const motif of LIMITS_MOTIFS) {
       if (!motif.pattern.test(n)) continue;
       if (motif.reason === 'human-claim' && !isFrankIdentityQuestion(opts.heard ?? '')) {
