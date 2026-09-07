@@ -175,7 +175,12 @@ async function ragSelectTools(
   try {
     const { selectRelevantTools } = await import('../tools/tool-selector.js');
     const result = selectRelevantTools(query, tools, maxTools, alwaysInclude);
-    return result.selectedTools.slice(0, maxTools);
+    // Never let the cap truncate the "always include" set (tool_search + tools
+    // already called in the transcript): pin them first, then fill with RAG picks.
+    const pinned = new Set(alwaysInclude);
+    const first = result.selectedTools.filter((t) => pinned.has(t.function?.name ?? ''));
+    const rest = result.selectedTools.filter((t) => !pinned.has(t.function?.name ?? ''));
+    return [...first, ...rest].slice(0, Math.max(maxTools, first.length));
   } catch {
     const keep = new Set(alwaysInclude);
     const selected: CodeBuddyTool[] = [];
