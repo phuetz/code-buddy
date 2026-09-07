@@ -138,8 +138,9 @@ describe('DMPairingManager', () => {
       const status = await manager.checkSender(message);
       const text = manager.getPairingMessage(status);
 
-      expect(text).toContain(status.code!);
-      expect(text).toContain('telegram');
+      expect(status.code).toBeDefined();
+      expect(text).not.toContain(status.code!);
+      expect(text).toMatch(/appairées/i);
     });
 
     it('should return empty string for approved status', () => {

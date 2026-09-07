@@ -165,10 +165,10 @@ describe('DM Pairing Integration', () => {
       expect(check1.code).toBeDefined();
       const code = check1.code!;
 
-      // Step 2: Verify the pairing message contains the code
+      // Step 2: The user-facing line must NOT contain the code (server-side only)
       const pairingMsg = pairing.getPairingMessage(check1);
-      expect(pairingMsg).toContain(code);
-      expect(pairingMsg).toContain('discord');
+      expect(pairingMsg).not.toContain(code);
+      expect(pairingMsg).toMatch(/appairées/i);
 
       // Step 3: The code appears in pending list
       const pending = pairing.listPending();

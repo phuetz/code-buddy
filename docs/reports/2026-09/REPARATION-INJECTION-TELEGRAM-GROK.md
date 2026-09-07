@@ -124,7 +124,13 @@ pas exigé : message `UNPAIRED_SENDER_REPLY`, pas d'événement `message`, pas d
 Ollama, prouve le refus poli sans allowlist. Ancien contrat (inconnu sans liste
 = réponse LLM) inversé à dessein : c'était le TROU A.
 
-### 2026-09-07 — A-3 (à venir)
+### 2026-09-07 — A-3 (appairage DM)
+
+`DM_PAIRING_ENABLED` est lue (`isDmPairingEnvEnabled`). Défaut **ON** : tout id
+hors `allowedUsers` doit s'appairer. `false`/`0`/`off`/`no` désactive.
+Le code à usage unique n'est plus envoyé à l'inconnu : journal
+`[dm-pairing] one-time pairing code (server-side only)` + `buddy channels pairing`.
+Approuver : `buddy pairing approve --channel telegram <code>` (consomme le code).
 
 ### 2026-09-07 — B (à venir)
 

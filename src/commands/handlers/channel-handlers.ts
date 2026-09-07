@@ -587,6 +587,26 @@ export async function handleChannels(action: string, options: ChannelOptions): P
       break;
     }
 
+    case 'pairing': {
+      const { getDMPairing } = await import('../../channels/dm-pairing.js');
+      const pairing = getDMPairing();
+      const stats = pairing.getStats();
+      console.log(`DM pairing: ${stats.enabled ? 'on' : 'off'} (DM_PAIRING_ENABLED, default on)`);
+      console.log(`Approved senders: ${stats.totalApproved}`);
+      const pending = pairing.listPending();
+      if (pending.length === 0) {
+        console.log('No pending pairing codes. An unknown DM generates a one-time code logged server-side only.');
+        break;
+      }
+      console.log(`Pending one-time codes (${pending.length}):`);
+      for (const request of pending) {
+        console.log(
+          `  [${request.channelType}] sender=${request.senderId} code=${request.code} expires=${request.expiresAt.toISOString()}`,
+        );
+      }
+      break;
+    }
+
     case 'stop': {
       const channelType = options.type;
       if (channelType) {
@@ -606,7 +626,7 @@ export async function handleChannels(action: string, options: ChannelOptions): P
     }
 
     default:
-      console.log(`Usage: buddy channels [start|stop|status|list] [--type <type>] [--instance <name|default>] [--config <path>]`);
+      console.log(`Usage: buddy channels [start|stop|status|list|pairing] [--type <type>] [--instance <name|default>] [--config <path>]`);
   }
 }
 

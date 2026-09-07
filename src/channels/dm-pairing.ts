@@ -42,6 +42,19 @@ import { logger } from '../utils/logger.js';
 import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { ChannelType, InboundMessage } from './index.js';
 
+/** Spoken to an unpaired sender. The one-time code is never included. */
+export const UNPAIRED_SENDER_REPLY = "Je ne parle qu'aux personnes appairées.";
+
+/**
+ * `DM_PAIRING_ENABLED` — default ON (pairing required). Only an explicit
+ * false/0/off/no disables it. A provided `config.enabled` always wins.
+ */
+export function isDmPairingEnvEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = (env.DM_PAIRING_ENABLED ?? '').trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'off' || raw === 'no') return false;
+  return true;
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -137,7 +150,7 @@ export interface DMPairingConfig {
 // ============================================================================
 
 export const DEFAULT_DM_PAIRING_CONFIG: DMPairingConfig = {
-  enabled: false,
+  enabled: true,
   pairingChannels: [
     'telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix',
     'line', 'nostr', 'zalo', 'mattermost', 'nextcloud-talk', 'twilio-voice', 'imessage',
@@ -148,7 +161,7 @@ export const DEFAULT_DM_PAIRING_CONFIG: DMPairingConfig = {
   maxAttempts: 5,
   blockDurationMs: 60 * 60 * 1000, // 1 hour
   autoApproveCli: true,
-  pairingMessage: 'This assistant requires pairing. Your code is: {code}\nAsk the owner to approve with: pairing approve {channel} {code}',
+  pairingMessage: UNPAIRED_SENDER_REPLY,
 };
 
 function isEnoent(err: unknown): boolean {
@@ -178,9 +191,11 @@ export class DMPairingManager extends EventEmitter {
 
   constructor(config: Partial<DMPairingConfig> = {}) {
     super();
+    const enabled = typeof config.enabled === 'boolean' ? config.enabled : isDmPairingEnvEnabled();
     this.config = {
       ...DEFAULT_DM_PAIRING_CONFIG,
       ...config,
+      enabled,
       allowlistPath: Object.prototype.hasOwnProperty.call(config, 'allowlistPath')
         ? config.allowlistPath
         : path.join(homedir(), '.codebuddy', 'credentials'),
@@ -261,6 +276,12 @@ export class DMPairingManager extends EventEmitter {
       };
       this.pending.set(pairingKey, request);
       this.emit('pairing:requested', request);
+      logger.warn('[dm-pairing] one-time pairing code (server-side only)', {
+        channel: channelType,
+        senderId,
+        code: request.code,
+        expiresAt: request.expiresAt.toISOString(),
+      });
     }
 
     request.attempts++;
@@ -297,11 +318,9 @@ export class DMPairingManager extends EventEmitter {
     if (status.blocked) {
       return 'This assistant has temporarily blocked this sender after too many pairing attempts. Try again later.';
     }
-    if (!status.code) return '';
-
-    return this.config.pairingMessage
-      .replace('{code}', status.code)
-      .replace('{channel}', status.channelType);
+    // Never interpolate {code}: the one-time code is journaled and shown by
+    // `buddy channels pairing` only.
+    return UNPAIRED_SENDER_REPLY;
   }
 
   // ==========================================================================

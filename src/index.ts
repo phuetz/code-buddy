@@ -2778,7 +2778,7 @@ addLazyCommand(
 program
   .command("channels")
   .description("Manage channel connections (Telegram, Discord, Slack, etc.)")
-  .argument("[action]", "start|stop|status|list", "list")
+  .argument("[action]", "start|stop|status|list|pairing", "list")
   .option("--type <type>", "Channel type (telegram|discord|slack|whatsapp|signal|google-chat|teams|matrix|webchat)")
   .option("--instance <name>", "Named channel instance, or default for an unnamed entry")
   .option("--config <path>", "Channel config file path")

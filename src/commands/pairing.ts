@@ -148,10 +148,9 @@ export function createPairingCommand(): Command {
     .command('enable')
     .description('Enable DM pairing mode (requires restart of channel adapters)')
     .action(() => {
-      console.log('⚠️  Pairing mode must be enabled via config or environment:');
-      console.log('   Set DM_PAIRING_ENABLED=true in your .env, then restart.');
-      console.log('');
-      console.log('   Or in code: getDMPairing({ enabled: true })');
+      console.log('DM pairing is ON by default (required for ids outside allowedUsers).');
+      console.log('   Disable with DM_PAIRING_ENABLED=false, then restart.');
+      console.log('   Pending one-time codes: buddy channels pairing');
     });
 
   return cmd;

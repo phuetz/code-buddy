@@ -409,9 +409,6 @@ export function getRouteAgentConfig(message: InboundMessage, accountId?: string)
 // Inbound allowlist (fail-closed for Telegram / Discord / Slack)
 // ============================================================================
 
-/** Spoken to a sender who is neither on the static allowlist nor paired. */
-export const UNPAIRED_SENDER_REPLY = "Je ne parle qu'aux personnes appairées.";
-
 export function normalizeChannelIdentity(value: string): string {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
@@ -964,9 +961,9 @@ export function enqueueMessage<T>(
 // DM Pairing Helper
 // ============================================================================
 
-import { DMPairingManager, getDMPairing, resetDMPairing } from './dm-pairing.js';
+import { DMPairingManager, getDMPairing, resetDMPairing, UNPAIRED_SENDER_REPLY } from './dm-pairing.js';
 import type { PairingStatus } from './dm-pairing.js';
-export { DMPairingManager, getDMPairing, resetDMPairing };
+export { DMPairingManager, getDMPairing, resetDMPairing, UNPAIRED_SENDER_REPLY };
 export type { PairingStatus };
 
 /**
