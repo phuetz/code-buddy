@@ -300,10 +300,45 @@ n'existe plus dans vitest 4.1.9 (il faut l'omettre).
 
 ## Tableau de synthèse
 
-TRAVAIL EN COURS
+| # | Point demandé | Verdict | Gravité | Ancrage |
+| --- | --- | --- | --- | --- |
+| 1 | Byte-identique sans les deux variables | **TIENT** | — | `client.ts:754`, `:763`, `:1053`, `:1064`, `:686-693` ; `provider-failover-policy.ts:46-52` |
+| 1b | I/O synchrone par tour quand le drapeau est ON | TROU | **C** | `agent-executor.ts:1658` → `client.ts:687` → `provider-health.ts:162,196` |
+| 2a | Pas de client partagé entre sessions WS | **TIENT** | — | `codebuddy-agent.ts:218` ; `handler.ts:929-940` ; `desktop-handler.ts:354,390-399` |
+| 2b | Budget de blocage pollué par un appel auxiliaire concurrent | TROU | **B** | `client.ts:302-305,686-693` ; `agent-executor.ts:1657-1660` ; `stream-stall-guard.ts:53-79` |
+| 2c | `activeFallback` non remis à zéro sur annulation | TROU | **C** | `client.ts:979,1006-1008,1029` et `:1265,1330` |
+| 2d | Course `chat` ↔ `chatStream` sur les mêmes champs | TROU | **C** | `client.ts:302-305` (aucun verrou) |
+| 3a | Transcript cohérent après élagage + compaction | **TIENT** | — | `provider-handoff.ts:286,299,277-281` — cas A, B, D **passés** |
+| 3b | `tool_search` et outils déjà appelés garantis | **TROU (prouvé)** | **B** | `provider-handoff.ts:174-176,205-207` — cas C **échoué** |
+| 3c | Contrôle de budget court-circuité quand `always > cap` | TROU | **C** | `provider-handoff.ts:151-153` |
+| 4a | Pas de secret dans l'erreur ni le journal | **TIENT** | — | `provider-failover-error.ts:17-32` ; `provider-failover-notify.ts:29-43` ; `provider-gemini-native.ts:482` |
+| 4b | Assainissement du dépôt non appliqué au message utilisateur | TROU | **C** | `provider-failover-error.ts:52-64` vs `provider-health.ts:173-181` |
+| 5a | `CODEBUDDY_LLM_FAILOVER=true` seul ⇒ même chemin | **TIENT** | — | `provider-failover-policy.ts:46-52` |
+| 5b | `PROVIDER_FALLBACK=false` + legacy `true` ⇒ legacy gagne, non documenté | TROU | **B** | `provider-failover-policy.ts:46-52` ; aucun coupe-circuit par variable |
+| 6 | Suites vitest + tsc | **TIENT** | — | 1139/1143 (échec sans rapport) ; tsc exit 0 |
 
 ## Bilan
 
-TRAVAIL EN COURS
+Le lot est honnêtement construit et son invariant central tient : sans
+`CODEBUDDY_PROVIDER_FALLBACK` ni `CODEBUDDY_LLM_FAILOVER`, `chat()` et `chatStream()`
+n'empruntent aucun chemin neuf — les court-circuits `&&` empêchent jusqu'à la lecture du
+fichier de santé. Aucun utilisateur non-optant n'est touché.
 
-VERDICT: TRAVAIL EN COURS
+Le point que je craignais le plus — un handoff qui casse la paire appel/résultat et déclenche
+un 400 chez le modèle local — **ne se produit pas** : le double `repairToolCallPairs` encadre
+correctement la compaction, vérifié sur 60 paires et sur un appel laissé sans résultat.
+
+Le trou réel est ailleurs, et il est prouvé : dès six outils déjà utilisés, le `slice` du
+sélecteur RAG tronque la liste des indispensables et fait tomber `tool_search` — l'échappatoire
+même que le lot conserve — en même temps que des outils dont l'agent vient de se servir. Dans
+son cas nominal, le modèle de secours reprend donc une conversation qu'il ne peut pas
+continuer. C'est une fonctionnalité incomplète, pas une régression : sans le lot, l'utilisateur
+était simplement bloqué.
+
+Deux réserves de moindre poids méritent une ligne de suivi : le budget anti-blocage peut
+hériter du mode « local » (20 min au lieu de 2) via un `activeFallback` posé par un appel
+auxiliaire concurrent, et un `CODEBUDDY_PROVIDER_FALLBACK=false` explicite n'éteint rien face à
+un ancien `CODEBUDDY_LLM_FAILOVER=true` traînant dans un profil shell. Le diagnostic ne fuit
+aucun secret ; il gagnerait seulement à réutiliser l'assainisseur déjà présent dans le dépôt.
+
+VERDICT: PUSHABLE
