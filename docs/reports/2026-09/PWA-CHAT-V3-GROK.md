@@ -152,4 +152,28 @@ Chaque point : test rouge avant, vert après. Un commit par point. Aucun push.
 
 ### Journal des correctifs
 
-*(rempli après chaque commit)*
+HEAD de départ `d3dc76d22`. Commits : `092e99c61` (réservation) → `428a2a102` (1) → `303dccb9f` (2) → `861ce6da3` (3) → `58cc717b3` (4) → `49f57e534` (5) → `d4f1e08cf` (6).
+
+| Id | Correctif | Test rouge → vert | Commit |
+|---|---|---|---|
+| 1 | `isPublicHttpsPushEndpoint` : https + `.local`/loopback + `getSSRFGuard().isSafeUrl` ; 6 endpoints forgés → 400 sans écriture | 200 → 400, aucune trace dans le répertoire push | `428a2a102` |
+| 2 | Fichiers `subscriptions/<sha256-32>.json` (0600), plafond 5 (plus ancien évincé), `DELETE /push/subscribe` JWT, `sendMobilePush` exige `userId` | 6e abo A évince le 1er ; B isolé ; DELETE A n'efface pas B | `303dccb9f` |
+| 3 | `readCappedText` arrête le flux à 256 Ko ; LRU 200 ; timeout 5 s | serveur local 5 Mo → ≤ 256 Ko ; 201e URL évince la 1re | `861ce6da3` |
+| 4 | Parse OGG/WebM ; déclaré > 120 s refusé ; `ffprobe` sinon estimation 64 kbps ; câblé dans `validateChatAttachments` + handler | OGG 200 s refusé ; déclaré 121 s refusé ; 1,2 Mo sans durée refusé | `58cc717b3` |
+| 5 | Rotation à 5 Mo → `.1` (une génération) ; purge mtime > 90 j à l'ouverture | `.1` unique après 2 rotations ; fichier 91 j disparu au `read` | `49f57e534` |
+| 6 | Test HTTP GET `/history` : jeton B ne voit pas `SECRET A` | couverture absente → 1 test vert | `d4f1e08cf` |
+
+### Preuves
+
+Commande :
+
+```
+HOME=~/DEV/cb-chat-v3-2026-09-07/_qa/fix/home env -u FORCE_COLOR \
+  npx vitest run tests/server tests/companion tests/security/donnees-personnelles.test.ts
+```
+
+Résultat : **167 fichiers verts / 3 skip / 0 rouge** ; **1562 verts / 3 skip / 0 rouge**. Privacy **40/40**. `npx tsc --noEmit -p tsconfig.json` **0**. `npx eslint . --ext .js,.jsx,.ts,.tsx --quiet` **0 erreur**. `node --check src/server/mobile/assets/app.js` **0**. `git diff --check` **0**. Aucun push. ComfyUI 8188/8189 intacts.
+
+### Bilan
+
+Les six trous Sonnet sont fermés, fail-closed, un commit chacun. L'endpoint push traverse le garde SSRF existant (https public seulement). Les abonnements sont par identité, plafonnés à 5, désabonnables, et l'envoi ne vise que cette identité. L'aperçu de lien ne bufferise plus le corps. La durée vocale 120 s est appliquée côté serveur. Le journal tourne et se purge. L'isolation A/B est dans la suite. Ouvert : envoi Web Push réel toujours conditionné au paquet optionnel `web-push`.
