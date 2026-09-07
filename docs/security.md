@@ -153,23 +153,44 @@ When running `buddy server` (or accessing the REST API / Fleet endpoints), authe
 
 ### Minting JWT Tokens
 
-To generate a signed JWT bearer token, configure `JWT_SECRET` and run `buddy token` (or its fleet alias `buddy fleet token`):
+`buddy token` (alias `buddy fleet token`) mints a signed JWT for the REST API
+and the mobile PWA. The signing secret is **never printed or logged**. If it
+is missing, the command exits 2 with a clear refusal.
+
+Secret resolution, in order: `--env <service.env>` (reads `JWT_SECRET` from a
+systemd/env file) → the process environment → `~/.codebuddy/server.env` if
+that file exists.
 
 ```bash
-# Mint a token for a user or peer with default scopes (peer:invoke, fleet:listen, chat)
-JWT_SECRET="<your-secret>" buddy token --user alice
+# Default: user=mobile, role=user, 30 days, role scopes
+JWT_SECRET="<your-secret>" buddy token --url http://127.0.0.1:3000
 
-# Customize expiry (TTL) and scopes
-JWT_SECRET="<your-secret>" buddy token --user alice --ttl 24h --scopes "chat,sessions,models"
+# Service env file (no need to export JWT_SECRET in the current shell)
+buddy token --env /etc/codebuddy/mobile.env --user demo --days 7
 
-# Or using the fleet command alias
-JWT_SECRET="<your-secret>" buddy fleet token --user peer-node --ttl 30d
+# Scripts: JSON on stdout (jq -r .token). Human output is the JWT, expiry, and
+# the PWA open URL: <base>/__codebuddy__/mobile/#token=<jwt>
+buddy token --json --url http://127.0.0.1:3000
+
+# QR in the terminal (requires `qrencode`; otherwise prints an install hint)
+buddy token --qr --url http://127.0.0.1:3000
+
+# Send the open URL as a private Telegram message (expiry warning included)
+buddy token --telegram --url http://127.0.0.1:3000
+
+# Fleet peer (override scopes). Alias:
+buddy fleet token --user peer-node --scopes peer:invoke,fleet:listen,chat --ttl 30d
 ```
 
-The minted JWT token is printed directly to stdout (pipeable), while connection recipe instructions are printed to stderr:
+The PWA stores `#token=…` in `sessionStorage` like the login form, then
+`history.replaceState`s the hash away and authenticates. Opening that URL on
+the phone is the installer's path (audit B-8): no copy-paste of the JWT.
+
+`--telegram` needs `CODEBUDDY_SENSORY_ALERT_TOKEN` and
+`CODEBUDDY_SENSORY_ALERT_CHAT` (environment or the same `--env` file).
 
 ```bash
-TOKEN=$(JWT_SECRET="<your-secret>" buddy token --user test-client)
+TOKEN=$(JWT_SECRET="<your-secret>" buddy token --user test-client --json | jq -r .token)
 curl http://127.0.0.1:3000/v1/chat/completions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \

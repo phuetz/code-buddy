@@ -434,12 +434,30 @@ route. In production it requires a `JWT_SECRET` and a signed bearer token
 You can mint a signed bearer token with `buddy token` (or its fleet alias `buddy fleet token`):
 
 ```bash
-# Mint a token for local or peer use
-JWT_SECRET="your-secret" buddy token --user alice
+# Mint a token for local or peer use (prints JWT, expiry, PWA open URL)
+JWT_SECRET="your-secret" buddy token --user demo --url http://127.0.0.1:3000
 
 # Or using the fleet subcommand:
-JWT_SECRET="your-secret" buddy fleet token --user alice --ttl 24h
+JWT_SECRET="your-secret" buddy fleet token --user demo --ttl 24h
 ```
+
+### Open the PWA on the phone in one command
+
+With `CODEBUDDY_MOBILE_PWA=true` on the server, `buddy token` prints an
+open URL `<base>/__codebuddy__/mobile/#token=<jwt>`. Opening that link on
+the phone stores the JWT, clears the hash, and connects — no copy-paste.
+
+```bash
+# Show the URL + an ANSI QR (needs `qrencode`)
+buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000 --qr
+
+# Or send the open URL to your phone as a Telegram DM (expiry warning included)
+buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000 --telegram
+```
+
+`--telegram` requires `CODEBUDDY_SENSORY_ALERT_TOKEN` and
+`CODEBUDDY_SENSORY_ALERT_CHAT`. Scripts should use `--json` and read `.token`
+/ `.url`. The signing secret is never printed.
 
 For a quick local check against your own
 machine, start the server with `--no-auth` and bind it to loopback so it
