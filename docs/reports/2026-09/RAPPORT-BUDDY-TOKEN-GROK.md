@@ -6,60 +6,79 @@ Mission : générer en une commande le jeton JWT du serveur (PWA mobile, API) et
 - Branche : `feat/buddy-token-2026-09-07`
 - Date : 2026-09-07 (Europe/Paris)
 - Agent : Grok 4.6
-- Rapport créé **avant** toute inspection du code source (`src/index.ts`, `src/commands/`, PWA, JWT)
-- HEAD de départ : `c94033686` (`test(channels): le tour compagnon live sur Ollama devient opt-in`)
+- Rapport créé **avant** toute inspection du code source
+- HEAD de départ : `c94033686`
 - HOME QA : `_qa/tok/home` (gitignoré)
 - Original `~/code-buddy` et `~/.codebuddy` : **interdits**. Aucun `JWT_SECRET` réel lu.
-- Ports de test ≥ 5600. ComfyUI 8188/8189 non touchés.
+- Ports de test ≥ 5600. ComfyUI 8188/8189 non touchés. Aucun push.
 
 ## Demande (07/09 04 h 45)
 
 « une fonctionnalité pour générer rapidement le token JWT quand j'en ai besoin ».
-Aujourd'hui : script personnel qui lit `JWT_SECRET` dans l'env du service mobile, appelle
-`dist/server/auth/jwt.js generateToken({userId, role:'user'}, secret, '30d')`, affiche le
-jeton et un QR (`qrencode` si présent).
-
-Ne pas dupliquer : étendre `buddy fleet token` / `buddy token` s'ils existent déjà.
+État réel : `buddy token` / `buddy fleet token` existaient déjà (B-8, sortie JWT brute,
+scopes fleet). Étendus, pas dupliqués.
 
 ## Garde-fous
 
 - Aucun `git push`, `git prune`, `git reset --hard`, `rm -rf`, `git add -A`, `git commit -a`.
 - `git add` fichier par fichier. Un commit par point (tests rouge → vert).
-- Vitest : `HOME=~/DEV/cb-token-2026-09-07/_qa/tok/home`, `env -u FORCE_COLOR`.
+- Vitest : `HOME=…/_qa/tok/home`, `env -u FORCE_COLOR`.
 - Jamais de prénom, `/home/<user>` ni secret dans les fichiers suivis.
-- Secret factice uniquement dans les tests.
-
-## Livrables (un commit chacun)
-
-1. **`buddy token`** (alias de `buddy fleet token` si elle existe) : `--env`, `--user` (défaut `mobile`), `--role user|admin` (défaut `user`), `--days N` (défaut 30, max 365), `--scopes`, `--url`, `--qr`, `--json`. Secret jamais affiché. Refus clair si absent. URL d'ouverture `<base>/__codebuddy__/mobile/#token=<jwt>`.
-2. **PWA : connexion par URL** — `location.hash` `token=…` → stocker comme le login, `history.replaceState`, se connecter. Test DOM. `sw.js` version incrémentée.
-3. **`--telegram`** — `sendTelegramAlert` si `CODEBUDDY_SENSORY_ALERT_TOKEN`/`_CHAT` (ou `--env`). Test `fetch` factice.
-4. **Doc** — `docs/security.md`, `docs/getting-started.md`, `CLAUDE.md`.
-5. **Preuves** — vitest ciblé, `tsc --noEmit` 0, lint 0 erreur, `node --check app.js`, `git diff --check`, essai réel `JWT_SECRET=test-only node dist/index.js token … --json` + authenticate sur serveur `--port 5601`.
-
-## Journal
-
-### 2026-09-07 — création du rapport (avant inspection)
-
-HEAD `c94033686`. Branche déjà extraite. Aucun fichier source lu à ce stade.
-Réservation inscrite dans `docs/FABLE5-CODEX-COORDINATION.md`.
+- Secret factice uniquement (`test-only`).
 
 ## Tableau scénario → attendu → obtenu → commit
 
 | Point | Attendu | Obtenu | Commit |
 |---|---|---|---|
-| 1. CLI `buddy token` | jeton + expiration + URL mobile ; `--json` ; refus sans secret | (à remplir) | |
-| 2. PWA hash `token=` | stocke, efface le hash, connecte | (à remplir) | |
-| 3. `--telegram` | URL privée + avertissement expiration | (à remplir) | |
-| 4. Doc | chemin installateur B-8 | (à remplir) | |
-| 5. Preuves | tsc 0, lint 0, live authenticate 200 | (à remplir) | |
+| 1. CLI `buddy token` | jeton + expiration + URL mobile ; `--json` ; `--env` ; `--qr` ; refus sans secret | Alias de `buddy fleet token`. Défauts `user=mobile`, rôle `user`, 30 j. Secret jamais affiché. | `b283c12a1` |
+| 2. PWA hash `token=` | stocke comme le login, `replaceState`, authentifie | Test DOM vert. `sw.js` `codebuddy-mobile-v5`. | `f30e14670` |
+| 3. `--telegram` | URL privée + avertissement expiration | `sendTelegramAlert` + `fetch` factice. Message clair si `_TOKEN`/`_CHAT` absents. | `5da23911e` |
+| 4. Doc | chemin installateur B-8 | `docs/security.md`, `docs/getting-started.md`, `CLAUDE.md` | `c34ad9ee1` |
+| 5. Preuves | tsc 0, lint 0, live authenticate | voir ci-dessous | ce lot |
 
-## Preuves (à coller)
+## Commits
+
+1. `6c10057e4` docs(token): stub RAPPORT-BUDDY-TOKEN-GROK avant inspection
+2. `555780730` docs(coordination): reservation GROK-TOKEN
+3. `b283c12a1` feat(token): mint JWT for API and mobile PWA
+4. `f30e14670` feat(mobile): connect the PWA from a #token= URL hash
+5. `5da23911e` test(token): send the PWA open URL over Telegram with fake fetch
+6. `c34ad9ee1` docs(token): document buddy token as the PWA and API installer path
+
+## Preuves
 
 ```
-(à coller après exécution)
+# Vitest (rejeu --testTimeout=60000 après un timeout 20 s hors lane)
+env -u FORCE_COLOR HOME=$PWD/_qa/tok/home npx vitest run \
+  tests/commands tests/server/mobile-pwa.test.ts tests/server/mobile-chat-ui.test.ts \
+  tests/server/auth tests/security/donnees-personnelles.test.ts --testTimeout=60000
+# Test Files  140 passed (140)
+# Tests       1476 passed | 4 skipped (1480)
+
+npx tsc --noEmit -p tsconfig.json          # exit 0
+npx eslint . --ext .js,.jsx,.ts,.tsx --quiet  # exit 0
+node --check src/server/mobile/assets/app.js  # exit 0
+git diff --check                              # exit 0
+
+# Live (secret factice, HOME QA, port 5601)
+JWT_SECRET=test-only node dist/index.js token --user demo --days 1 \
+  --url http://127.0.0.1:5601 --json
+# {
+#   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…OgCG-ce4",
+#   "user": "demo",
+#   "role": "user",
+#   "expiresAt": "2026-09-08T03:04:27.000Z",
+#   "url": "http://127.0.0.1:5601/__codebuddy__/mobile/#token=…"
+# }
+# Serveur jetable --port 5601 --host 127.0.0.1, même secret.
+# WS authenticate → type=authenticated userId=demo
+#   scopes=["chat","chat:stream","sessions","tools"]
+# HTTP GET /api/sessions Authorization: Bearer … → 200
+# Serveur arrêté. 5601 libre. ComfyUI 8188 intact.
 ```
+
+Premier passage Vitest : 1 timeout 20 s sur `tests/commands/dev/dev-lifecycle.test.ts` (hors lane). Isolation : 2/2 verts (22 s). Rejeu union : 0 rouge.
 
 ## Bilan
 
-(à remplir, 10 lignes max)
+`buddy token` (alias `buddy fleet token`) frappe un JWT, imprime l'expiration et l'URL PWA `#token=`, optionnellement un QR `qrencode` et un DM Telegram. La PWA consomme le hash, l'efface, et s'authentifie. Secret jamais affiché. Preuves : 1476 verts, tsc 0, eslint quiet 0, live authenticate `demo` sur :5601. Reste humain : coller l'URL (ou le QR / Telegram) sur le vrai téléphone contre le service mobile.
