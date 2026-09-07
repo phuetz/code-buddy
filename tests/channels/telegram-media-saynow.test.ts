@@ -87,6 +87,7 @@ describe('Telegram media and sayNow against the fake Bot API', () => {
       token: TOKEN,
       pollingTimeout: 5,
       enhancedCommands: false,
+      allowedUsers: ['4242'],
     });
     channel.on('error', () => undefined);
     await channel.connect();

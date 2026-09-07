@@ -47,6 +47,7 @@ describe('Telegram polling offset persistence', () => {
       token: TOKEN,
       pollingTimeout: 5,
       enhancedCommands: false,
+      allowedUsers: ['4242'],
     });
     first.on('error', () => undefined);
 
@@ -64,6 +65,7 @@ describe('Telegram polling offset persistence', () => {
       token: TOKEN,
       pollingTimeout: 1,
       enhancedCommands: false,
+      allowedUsers: ['4242'],
     });
     second.on('error', () => undefined);
     const secondMessages: string[] = [];

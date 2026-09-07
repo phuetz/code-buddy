@@ -67,6 +67,7 @@ describe('Telegram documented slash commands', () => {
       enabled: true,
       token: TOKEN,
       pollingTimeout: 5,
+      allowedUsers: ['4242'],
     });
     channel.on('error', () => undefined);
     await channel.connect();
