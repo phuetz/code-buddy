@@ -97,7 +97,8 @@ describe('a companion turn with a photo — local posture', () => {
     expect(system).toContain('<photo_partagee>');
     const user = messages[messages.length - 1]!;
     expect(typeof user.content).toBe('string');
-    expect(String(user.content)).toContain('[Photo envoyée : un ciel orange');
+    expect(String(user.content)).toContain('[Photo envoyée');
+    expect(String(user.content)).toContain('un ciel orange');
     // The hard guarantee: no image bytes anywhere in the request.
     expect(JSON.stringify(messages)).not.toContain('base64');
     expect(JSON.stringify(messages)).not.toContain(PNG_1X1.toString('base64'));
@@ -158,7 +159,7 @@ describe('a companion turn with a photo — cloud posture', () => {
     // The retry is text-only: the description replaced the image part.
     const retry = seen[1]!;
     expect(typeof retry[retry.length - 1]!.content).toBe('string');
-    expect(String(retry[retry.length - 1]!.content)).toContain('[Photo envoyée :');
+    expect(String(retry[retry.length - 1]!.content)).toContain('[Photo envoyée');
   });
 });
 

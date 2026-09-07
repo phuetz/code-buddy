@@ -25,6 +25,7 @@
 
 import { logger } from '../utils/logger.js';
 import { photoMemoryLine, type PreparedCompanionPhoto } from './companion-photo.js';
+import { neutralizeUntrustedText } from './untrusted-text.js';
 import {
   toFrenchPhotoMemory,
   type PhotoFrSummarizer,
@@ -109,18 +110,23 @@ export async function rememberSharedPhotos(
   const summarizeOpts = options.summarizeFr ? { summarizeFr: options.summarizeFr } : {};
   const frenchDescriptions: string[] = [];
   const records: SharedPhotoRecord[] = [];
+  const safeCaption = options.caption
+    ? neutralizeUntrustedText(options.caption).trim()
+    : '';
   for (const photo of photos) {
-    const french = photo.description?.trim()
-      ? await toFrenchPhotoMemory(photo.description, summarizeOpts)
+    const source = photo.description?.trim()
+      ? neutralizeUntrustedText(photo.description)
       : '';
-    if (french) frenchDescriptions.push(french);
+    const french = source ? await toFrenchPhotoMemory(source, summarizeOpts) : '';
+    const safeFrench = french ? neutralizeUntrustedText(french).trim() : '';
+    if (safeFrench) frenchDescriptions.push(safeFrench);
     const record = await storeSharedPhoto(
       {
         bytes: photo.bytes,
         mimeType: photo.mimeType,
         surface: options.surface,
-        ...(options.caption ? { captionUser: options.caption } : {}),
-        ...(french ? { descriptionLisa: french } : {}),
+        ...(safeCaption ? { captionUser: safeCaption } : {}),
+        ...(safeFrench ? { descriptionLisa: safeFrench } : {}),
       },
       storeOptions,
     );
@@ -129,7 +135,7 @@ export async function rememberSharedPhotos(
 
   if (options.writeMemory === false) return records;
 
-  const line = photoMemoryLine(frenchDescriptions[0] ?? options.caption ?? '', now);
+  const line = photoMemoryLine(frenchDescriptions[0] ?? safeCaption, now);
   try {
     const memory = options.memory ?? (await defaultMemory());
     if (!memory) return records;
@@ -159,7 +165,23 @@ export async function readSharedPhotoMemory(
     const port = memory ?? (await defaultMemory());
     if (!port) return null;
     const value = port.recall(SHARED_PHOTO_MEMORY_KEY, SHARED_PHOTO_MEMORY_SCOPE);
-    return value?.trim() ? value.trim() : null;
+    if (!value?.trim()) return null;
+    const original = value.trim();
+    const purged = neutralizeUntrustedText(original);
+    if (purged !== original) {
+      try {
+        await port.remember(SHARED_PHOTO_MEMORY_KEY, purged, {
+          scope: SHARED_PHOTO_MEMORY_SCOPE,
+          category: 'context',
+          tags: ['companion', 'photo'],
+        });
+      } catch (error) {
+        logger.debug('[shared-photo-memory] chevron purge write skipped', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return purged;
   } catch {
     return null;
   }

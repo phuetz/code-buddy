@@ -33,6 +33,20 @@ import { getModelStrengths } from '../config/model-tools.js';
 import { logger } from '../utils/logger.js';
 import type { SharedPhotoSurface } from './shared-photos.js';
 import { stripLisaPhotoPrefix } from './photo-memory-fr.js';
+import {
+  capUntrustedText,
+  neutralizeUntrustedText,
+  wrapUntrustedPhotoUserText,
+} from './untrusted-text.js';
+
+export {
+  COMPANION_PHOTO_INJECT_CAP,
+  UNTRUSTED_OBSERVED_DATA_MARKER,
+  capUntrustedText,
+  neutralizeUntrustedText,
+  wrapRecentPhotosBlock,
+  wrapUntrustedPhotoUserText,
+} from './untrusted-text.js';
 
 /** Longest edge of a normalized companion photo. */
 export const COMPANION_PHOTO_MAX_DIMENSION = 1280;
@@ -360,7 +374,7 @@ export function buildUserText(
   descriptions: string[],
   photoCount: number,
 ): string {
-  const clean = caption.trim();
+  const clean = neutralizeUntrustedText(caption).trim();
   if (mode === 'cloud') {
     return clean || (photoCount > 1 ? 'Regarde ces photos.' : 'Regarde cette photo.');
   }
@@ -371,7 +385,7 @@ export function buildUserText(
       .filter(Boolean)
       .join('\n\n');
   }
-  const lines = described.map((value) => `[Photo envoyée : ${value}]`);
+  const lines = described.map((value) => wrapUntrustedPhotoUserText(value));
   return [clean, ...lines].filter(Boolean).join('\n\n');
 }
 
@@ -404,15 +418,17 @@ export function attachPhotoParts<T extends { role: string; content?: unknown }>(
 /** A one-line, bounded memory hook for the relational context. */
 export function photoMemoryLine(description: string, now: Date): string {
   const date = now.toISOString().slice(0, 10);
-  const summary = stripLisaPhotoPrefix(
-    description
-      .replace(/\s+/g, ' ')
-      .replace(/^(?:IMAGE\s+\d+\/\d+\s*)/iu, '')
-      .replace(/\b(?:TEXTE(?:\s+(?:LISIBLE|OCR))?|OBSERVATIONS?|INCERTITUDES?)\s*:?\s*/giu, '')
-      .trim(),
+  const summary = capUntrustedText(
+    stripLisaPhotoPrefix(
+      description
+        .replace(/\s+/g, ' ')
+        .replace(/^(?:IMAGE\s+\d+\/\d+\s*)/iu, '')
+        .replace(/\b(?:TEXTE(?:\s+(?:LISIBLE|OCR))?|OBSERVATIONS?|INCERTITUDES?)\s*:?\s*/giu, '')
+        .trim(),
+    ),
+    120,
   );
-  const short = summary.length <= 120 ? summary : `${summary.slice(0, 119).trimEnd()}…`;
-  return short ? `${date} : tu m'as montré ${short}` : `${date} : tu m'as montré une photo`;
+  return summary ? `${date} : tu m'as montré ${summary}` : `${date} : tu m'as montré une photo`;
 }
 
 /** Where a prepared batch came from, for the album sidecar. */

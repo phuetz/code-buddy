@@ -28,6 +28,7 @@ import {
   queryEvolutionNotes,
   readEvolutionNotes,
 } from '../self-model/evolution-notes.js';
+import { wrapRecentPhotosBlock } from './untrusted-text.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
@@ -261,7 +262,7 @@ export async function buildRelationalContext(
       const value = options.photosBlock
         ? await options.photosBlock()
         : await defaultReadPhotos();
-      return value?.trim() ? `<recent_photos>\n${value.trim()}\n</recent_photos>` : '';
+      return wrapRecentPhotosBlock(value ?? '');
     } catch {
       return '';
     }
