@@ -18,6 +18,7 @@ import { readConversationLog } from '../../companion/mobile-conversation-log.js'
 import { fetchLinkPreview } from './link-preview.js';
 import { forwardMobileTextToTelegram } from './telegram-forward.js';
 import {
+  deletePushSubscription,
   isMobilePushEnabled,
   loadOrCreateVapidKeys,
   savePushSubscription,
@@ -129,6 +130,19 @@ export function requireAlbumAccess(req: Request, res: Response, next: NextFuncti
   res.status(401).json({ error: 'Unauthorized', message: 'Album access requires a token' });
 }
 
+function readRequestUserId(req: Request): string | undefined {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const secret = process.env.JWT_SECRET ?? '';
+  if (!token || !secret) return undefined;
+  const payload = verifyToken(token, secret);
+  const sub = payload && typeof (payload as { sub?: unknown }).sub === 'string'
+    ? (payload as { sub: string }).sub
+    : undefined;
+  const id = sub?.trim();
+  return id || undefined;
+}
+
 const ALBUM_ID = /^[0-9a-f]{64}$/;
 
 mobilePwaRouter.get('/album', requireAlbumAccess, async (_req: Request, res: Response) => {
@@ -214,17 +228,7 @@ mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
 });
 
 mobilePwaRouter.get('/history', requireAlbumAccess, (req: Request, res: Response) => {
-  const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  const secret = process.env.JWT_SECRET ?? '';
-  let userId: string | undefined;
-  if (token && secret) {
-    const payload = verifyToken(token, secret);
-    const sub = payload && typeof (payload as { sub?: unknown }).sub === 'string'
-      ? (payload as { sub: string }).sub
-      : undefined;
-    userId = sub;
-  }
+  const userId = readRequestUserId(req);
   const before = typeof req.query.before === 'string' ? req.query.before : undefined;
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
@@ -282,13 +286,38 @@ mobilePwaRouter.post(
       return;
     }
     const body = req.body as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
-    const ok = await savePushSubscription({
-      endpoint: typeof body.endpoint === 'string' ? body.endpoint : '',
-      keys: {
-        p256dh: typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : '',
-        auth: typeof body.keys?.auth === 'string' ? body.keys.auth : '',
+    const ok = await savePushSubscription(
+      {
+        endpoint: typeof body.endpoint === 'string' ? body.endpoint : '',
+        keys: {
+          p256dh: typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : '',
+          auth: typeof body.keys?.auth === 'string' ? body.keys.auth : '',
+        },
       },
-    });
+      readRequestUserId(req),
+    );
+    if (!ok) {
+      res.status(400).json({ error: 'Invalid subscription' });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+mobilePwaRouter.delete(
+  '/push/subscribe',
+  express.json({ limit: '8kb' }),
+  requireAlbumAccess,
+  (req: Request, res: Response) => {
+    if (!isMobilePushEnabled()) {
+      res.status(404).json({ error: 'Push disabled' });
+      return;
+    }
+    const body = req.body as { endpoint?: unknown };
+    const ok = deletePushSubscription(
+      readRequestUserId(req),
+      typeof body.endpoint === 'string' ? body.endpoint : '',
+    );
     if (!ok) {
       res.status(400).json({ error: 'Invalid subscription' });
       return;
