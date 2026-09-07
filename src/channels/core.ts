@@ -406,6 +406,47 @@ export function getRouteAgentConfig(message: InboundMessage, accountId?: string)
 }
 
 // ============================================================================
+// Inbound allowlist (fail-closed for Telegram / Discord / Slack)
+// ============================================================================
+
+/** Spoken to a sender who is neither on the static allowlist nor paired. */
+export const UNPAIRED_SENDER_REPLY = "Je ne parle qu'aux personnes appairées.";
+
+export function normalizeChannelIdentity(value: string): string {
+  return value.trim().replace(/^@/, '').toLowerCase();
+}
+
+export function isOnStaticAllowlist(
+  allowedUsers: readonly string[] | undefined,
+  identities: Array<string | null | undefined>,
+): boolean {
+  if (!allowedUsers || allowedUsers.length === 0) return false;
+  const allowed = new Set(allowedUsers.map(normalizeChannelIdentity));
+  for (const identity of identities) {
+    if (!identity) continue;
+    if (allowed.has(normalizeChannelIdentity(identity))) return true;
+  }
+  return false;
+}
+
+export type InboundSenderAccess = 'allow' | 'pair' | 'refuse';
+
+/**
+ * Static allowlist members skip pairing. Anyone else must pair when pairing
+ * is on; when pairing is off they are refused (fail-closed).
+ */
+export function resolveInboundSenderAccess(options: {
+  allowedUsers?: string[];
+  identities: Array<string | null | undefined>;
+  pairingRequired: boolean;
+  pairingApproved?: boolean;
+}): InboundSenderAccess {
+  if (isOnStaticAllowlist(options.allowedUsers, options.identities)) return 'allow';
+  if (options.pairingRequired) return options.pairingApproved ? 'allow' : 'pair';
+  return 'refuse';
+}
+
+// ============================================================================
 // Base Channel Class
 // ============================================================================
 
@@ -451,13 +492,23 @@ export abstract class BaseChannel extends EventEmitter {
   }
 
   /**
-   * Check if user is allowed
+   * Static allowlist from config (empty when unset). Public so the inbound
+   * AI handler can skip DM pairing for an already-listed sender.
+   */
+  getAllowedUsers(): string[] {
+    return this.config.allowedUsers ? [...this.config.allowedUsers] : [];
+  }
+
+  /**
+   * Check if user is allowed.
+   * Empty allowlist remains a no-op here (legacy channels); Telegram/Discord/Slack
+   * inbound uses `resolveInboundSenderAccess` which is fail-closed.
    */
   isUserAllowed(userId: string): boolean {
     if (!this.config.allowedUsers || this.config.allowedUsers.length === 0) {
       return true;
     }
-    return this.config.allowedUsers.includes(userId);
+    return isOnStaticAllowlist(this.config.allowedUsers, [userId]);
   }
 
   /**

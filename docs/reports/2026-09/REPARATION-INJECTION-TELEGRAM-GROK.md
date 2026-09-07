@@ -14,38 +14,47 @@ Ports de test ≥ 5800. ComfyUI 8188/8189 non touché.
 
 ## Exploitant — Telegram : faire passer SON compte (lire en premier)
 
-Les identifiants Telegram déjà présents dans la config réelle de l'exploitant doivent
-rester acceptés. Ce fichier de config n'a **pas** été ouvert. Le schéma ci-dessous
-est déduit de `src/channels/` (à compléter après lecture du schéma, avant le commit
-A-2). Sans cette allowlist **et** sans appairage, un inconnu est refusé (fail-closed).
+Le fichier réel `~/.codebuddy/lisa-channels.js` n'a **pas** été ouvert. Schéma lu
+dans `src/commands/handlers/channel-handlers.ts` (`ChannelConfigEntry`) et
+`src/channels/core.ts` (`ChannelConfig.allowedUsers`).
 
-**À COMPLÉTER après lecture du schéma `src/channels/` (clé, forme, exemple factice).**
+**Clé :** `allowedUsers` — tableau de chaînes, **clé racine** de l'entrée de canal
+(au même niveau que `type`, `enabled`, `token`). Pas dans `options`.
 
-Placeholder :
+**Forme acceptée (les trois matchent le même compte) :**
+- id Telegram numérique en string : `"123456789"`
+- username sans arobase : `"exemple_user"`
+- username avec arobase : `"@exemple_user"`
+La comparaison ignore la casse et l'arobase.
 
-- Fichier typique (hors dépôt) : `~/.codebuddy/lisa-channels.js` — **non lu**.
-- Clé attendue (à confirmer) : `allowedUsers` sur l'entrée de canal Telegram.
-- Forme attendue (à confirmer) : tableau d'identifiants Telegram (id numérique et/ou
-  `@username`).
-- Exemple factice (à confirmer, aucun identifiant réel) :
+**Où le mettre :** `~/.codebuddy/channels.json`, ou le fichier pointé par
+`CODEBUDDY_CHANNEL_CONFIG`. Si l'exploitant charge un module JS
+(`lisa-channels.js`) qui exporte `{ channels: [...] }`, la clé doit figurer sur
+l'objet telegram **avant** que ce module soit sérialisé/chargé comme ci-dessus.
 
-```js
-// EXEMPLE FACTICE — ne pas copier un id réel ici
+**Exemple factice (aucun identifiant réel) :**
+
+```json
 {
-  channels: [
+  "channels": [
     {
-      type: 'telegram',
-      token: process.env.TELEGRAM_BOT_TOKEN,
-      allowedUsers: ['123456789', '@exemple_user'],
-    },
-  ],
+      "type": "telegram",
+      "enabled": true,
+      "token": "123456:AA-exemple-factice-pas-un-vrai-jeton",
+      "allowedUsers": ["123456789", "@exemple_user"],
+      "options": {
+        "pollingTimeout": 30
+      }
+    }
+  ]
 }
 ```
 
-L'exploitant doit vérifier que `allowedUsers` est bien une clé **racine** de l'entrée
-Telegram (pas seulement dans `options`), et que la fabrique la transmet désormais à
-l'adaptateur. Après A-2, un id absent de cette liste **et** non appairé reçoit un
-message poli et n'atteint pas le LLM.
+Comment obtenir l'id : écrire `/id` à `@userinfobot` (ou équivalent) depuis
+le compte à autoriser, puis coller le nombre **entre guillemets**.
+
+Sans `allowedUsers` **et** sans appairage, un inconnu reçoit
+« Je ne parle qu'aux personnes appairées » et rien n'est envoyé au LLM.
 
 ## Mission
 
@@ -103,11 +112,17 @@ POC rejoué : `tests/companion/photo-injection-poc.test.ts` — le bloc n'est pl
 refermé, l'instruction cachée n'apparaît pas après `</recent_photos>` dans le
 rôle `system`.
 
-### 2026-09-07 — A-2 (à venir)
+### 2026-09-07 — A-2 (`allowedUsers` + fail-closed)
 
-Justification du test `telegram-inconnu-journey` : aujourd'hui le test exige qu'un
-inconnu obtienne une réponse sans `allowedUsers`. Après A-2 ce contrat est inversé
-(fail-closed). Détail après inspection.
+La fabrique `instantiateChannel` transmet désormais `...channelConfig` +
+`allowedUsers` racine à Telegram, Discord et Slack (plus seulement `token` +
+`options`). L'inbound refuse un expéditeur hors allowlist quand l'appairage n'est
+pas exigé : message `UNPAIRED_SENDER_REPLY`, pas d'événement `message`, pas de LLM.
+
+`tests/channels/telegram-inconnu-journey.test.ts` : le voyage live GK10 liste
+`allowedUsers: ["4242"]` (id factice du faux Bot API). Un second describe, sans
+Ollama, prouve le refus poli sans allowlist. Ancien contrat (inconnu sans liste
+= réponse LLM) inversé à dessein : c'était le TROU A.
 
 ### 2026-09-07 — A-3 (à venir)
 

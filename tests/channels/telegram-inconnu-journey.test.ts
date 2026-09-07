@@ -15,7 +15,7 @@ import {
   __resetChannelAIHandlerForTests,
   startConfiguredChannels,
 } from '../../src/commands/handlers/channel-handlers.js';
-import { getChannelManager, resetChannelManager } from '../../src/channels/index.js';
+import { getChannelManager, resetChannelManager, resetDMPairing, getDMPairing, UNPAIRED_SENDER_REPLY } from '../../src/channels/index.js';
 import { getPermissionModeManager } from '../../src/security/permission-modes.js';
 import {
   listenFakeTelegram,
@@ -116,6 +116,9 @@ describe.skipIf(!ollamaProbe.available)('GK10 stranger Telegram journey', () => 
         type: 'telegram',
         enabled: true,
         token: TOKEN,
+        // Fake sender id is 4242 (`pushTextMessage` default). Without this
+        // list A-2 fail-closes the stranger and the LLM is never reached.
+        allowedUsers: ['4242'],
         options: { model: MODEL, pollingTimeout: 2 },
       }],
     }), 'utf8');
@@ -187,4 +190,73 @@ describe.skipIf(!ollamaProbe.available)('GK10 stranger Telegram journey', () => 
 
     expect(JSON.stringify(afterRestart)).not.toContain(TOKEN);
   }, 240_000);
+});
+
+/**
+ * A-2 justification: this file used to require that a stranger WITHOUT
+ * `allowedUsers` receive an LLM reply. That contract was the hole. The live
+ * journey above now lists the fake sender (`4242`). This block proves the
+ * fail-closed default: no allowlist, pairing off → polite refuse, nothing
+ * sent to the LLM.
+ */
+describe('GK10 stranger Telegram journey — fail-closed without allowlist', () => {
+  const previous = { ...process.env };
+  let home: string;
+  let fake: Awaited<ReturnType<typeof listenFakeTelegram>> | undefined;
+
+  beforeEach(() => {
+    fs.mkdirSync(QA_HOME_ROOT, { recursive: true });
+    home = fs.mkdtempSync(path.join(QA_HOME_ROOT, 'refuse-'));
+    process.env.HOME = home;
+    process.env.CODEBUDDY_TELEGRAM_OFFSET_DIR = home;
+    process.env.CODEBUDDY_DISABLE_MCP = 'true';
+    process.env.DM_PAIRING_ENABLED = 'false';
+    delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    resetDMPairing();
+    getDMPairing({ enabled: false, allowlistPath: undefined });
+    __resetChannelAIHandlerForTests();
+    getPermissionModeManager().setMode('plan');
+  });
+
+  afterEach(async () => {
+    await getChannelManager().disconnectAll().catch(() => undefined);
+    resetChannelManager();
+    __resetChannelAIHandlerForTests();
+    resetDMPairing();
+    await fake?.close();
+    fake = undefined;
+    for (const key of ['HOME', 'CODEBUDDY_TELEGRAM_OFFSET_DIR', 'CODEBUDDY_DISABLE_MCP', 'TELEGRAM_API_BASE', 'TELEGRAM_BOT_TOKEN', 'CODEBUDDY_CHANNEL_CONFIG', 'DM_PAIRING_ENABLED']) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  });
+
+  it('refuses an unknown sender with the polite line and never calls the LLM', async () => {
+    fake = await listenFakeTelegram({ token: TOKEN, port: 0 });
+    process.env.TELEGRAM_API_BASE = fake.base;
+    process.env.TELEGRAM_BOT_TOKEN = TOKEN;
+
+    const configPath = path.join(home, 'channels.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      channels: [{
+        type: 'telegram',
+        enabled: true,
+        token: TOKEN,
+        options: { pollingTimeout: 2 },
+      }],
+    }), 'utf8');
+    process.env.CODEBUDDY_CHANNEL_CONFIG = configPath;
+
+    const started = await startConfiguredChannels(configPath, 'telegram');
+    expect(started.registered).toEqual(['telegram']);
+
+    pushTextMessage(fake.state, { text: 'Réponds uniquement par le mot PONG.' });
+    const outbound = await waitForOutbound(
+      fake.base,
+      (row) => row.method === 'sendMessage' && Boolean(row.text && row.text.includes("personnes appairées")),
+      8_000,
+    );
+    expect(outbound.some((row) => row.text === UNPAIRED_SENDER_REPLY)).toBe(true);
+    expect(outbound.some((row) => /PONG/i.test(row.text || ''))).toBe(false);
+  }, 20_000);
 });

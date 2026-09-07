@@ -1217,6 +1217,21 @@ async function getOrCreateChannelAgent(
   };
 }
 
+function isChannelAllowlistedSender(
+  channel: { getAllowedUsers?: () => string[] },
+  message: { sender?: { id?: string; username?: string } },
+): boolean {
+  if (typeof channel.getAllowedUsers !== 'function') return false;
+  const listed = channel.getAllowedUsers();
+  if (!listed || listed.length === 0) return false;
+  const identities = [message.sender?.id, message.sender?.username].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (identities.length === 0) return false;
+  const allowed = new Set(listed.map((entry) => entry.trim().replace(/^@/, '').toLowerCase()));
+  return identities.some((identity) => allowed.has(identity.trim().replace(/^@/, '').toLowerCase()));
+}
+
 export async function registerAIMessageHandler(manager: import('../../channels/index.js').ChannelManager): Promise<void> {
   if (aiHandlerRegistered) return;
   aiHandlerRegistered = true;
@@ -1229,19 +1244,24 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
     let deliveryState: 'not_started' | 'started' | 'delivered' = 'not_started';
     try {
       // 1. DM pairing gate — unapproved senders get a code, then we stop.
+      // A sender already on the channel static allowlist skipped pairing in the
+      // adapter; do not re-gate them here (pairing default-on would otherwise
+      // refuse the operator's own Telegram id).
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
-      const pairingStatus = await checkDMPairing(message);
-      if (!pairingStatus.approved) {
-        const pairing = getDMPairing();
-        const pairingMsg = pairing.getPairingMessage(pairingStatus);
-        if (pairingMsg) {
-          await channel.send({
-            channelId: message.channel.id,
-            content: pairingMsg,
-            replyTo: message.id,
-          });
+      if (!isChannelAllowlistedSender(channel, message)) {
+        const pairingStatus = await checkDMPairing(message);
+        if (!pairingStatus.approved) {
+          const pairing = getDMPairing();
+          const pairingMsg = pairing.getPairingMessage(pairingStatus);
+          if (pairingMsg) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: pairingMsg,
+              replyTo: message.id,
+            });
+          }
+          return;
         }
-        return;
       }
 
       // Nothing to answer (e.g. a non-text message with no transcription).
@@ -2522,6 +2542,14 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
     options: opts,
   };
 
+  const optsAllowlist = Array.isArray(opts.allowedUsers)
+    ? opts.allowedUsers.filter((item): item is string => typeof item === 'string')
+    : undefined;
+  const inboundAllowlist = {
+    allowedUsers: config.allowedUsers ?? optsAllowlist,
+    allowedChannels: config.allowedChannels,
+  };
+
   switch (config.type) {
     case 'telegram': {
       const { TelegramChannel } = await import('../../channels/telegram/index.js');
@@ -2540,15 +2568,32 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
       // TelegramChannel reads `config.token` (client.ts) — pass `token`, not
       // `botToken`, or it throws "Telegram bot token is required" and the
       // channel never starts from channels.json / server intake.
-      return new TelegramChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').TelegramConfig);
+      // Root `allowedUsers` used to be dropped here (only `...opts` was passed).
+      return new TelegramChannel({
+        ...channelConfig,
+        token: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').TelegramConfig);
     }
     case 'discord': {
       const { DiscordChannel } = await import('../../channels/discord/index.js');
-      return new DiscordChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').DiscordConfig);
+      return new DiscordChannel({
+        ...channelConfig,
+        token: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').DiscordConfig);
     }
     case 'slack': {
       const { SlackChannel } = await import('../../channels/slack/index.js');
-      return new SlackChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').SlackConfig);
+      return new SlackChannel({
+        ...channelConfig,
+        token: config.token || '',
+        botToken: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').SlackConfig);
     }
     case 'whatsapp': {
       const { WhatsAppChannel } = await import('../../channels/whatsapp/index.js');

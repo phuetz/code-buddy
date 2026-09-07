@@ -31,7 +31,14 @@ import type {
   ContentType,
   MessageButton,
 } from '../core.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
+import {
+  BaseChannel,
+  getSessionKey,
+  checkDMPairing,
+  getDMPairing,
+  resolveInboundSenderAccess,
+  UNPAIRED_SENDER_REPLY,
+} from '../core.js';
 import { logger } from '../../utils/logger.js';
 import { ProFeatures } from '../pro/pro-features.js';
 import type { MessageButton as ProMessageButton } from '../pro/types.js';
@@ -777,16 +784,39 @@ export class TelegramChannel extends BaseChannel {
   /**
    * Handle incoming message
    */
-  private async handleMessage(msg: TelegramMessage): Promise<void> {
-    // Check if user is allowed
+  private inboundIdentities(msg: TelegramMessage): string[] {
     const userId = msg.from?.id?.toString() ?? '';
-    if (!this.isUserAllowed(userId)) {
+    const username = msg.from?.username;
+    return [userId, username, username ? `@${username}` : undefined].filter(
+      (value): value is string => Boolean(value),
+    );
+  }
+
+  private inboundAccess(msg: TelegramMessage): 'allow' | 'pair' | 'refuse' {
+    return resolveInboundSenderAccess({
+      allowedUsers: this.config.allowedUsers,
+      identities: this.inboundIdentities(msg),
+      pairingRequired: getDMPairing().requiresPairing('telegram'),
+    });
+  }
+
+  private async refuseUnpairedSender(chatId: string): Promise<void> {
+    try {
+      await this.send({ channelId: chatId, content: UNPAIRED_SENDER_REPLY });
+    } catch {
+      /* refuse must not throw */
+    }
+  }
+
+  private async handleMessage(msg: TelegramMessage): Promise<void> {
+    const chatId = msg.chat.id.toString();
+    if (!this.isChannelAllowed(chatId)) {
       return;
     }
 
-    // Check if channel is allowed
-    const chatId = msg.chat.id.toString();
-    if (!this.isChannelAllowed(chatId)) {
+    const access = this.inboundAccess(msg);
+    if (access === 'refuse') {
+      await this.refuseUnpairedSender(chatId);
       return;
     }
 
@@ -798,7 +828,7 @@ export class TelegramChannel extends BaseChannel {
       return;
     }
 
-    await this.processAllowedMessages([msg]);
+    await this.processAllowedMessages([msg], { skipPairing: access === 'allow' });
   }
 
   private queueMediaGroup(msg: TelegramMessage): void {
@@ -820,11 +850,19 @@ export class TelegramChannel extends BaseChannel {
     this.mediaGroups.set(groupId, { messages, timer });
   }
 
-  private async processAllowedMessages(messages: TelegramMessage[]): Promise<void> {
+  private async processAllowedMessages(
+    messages: TelegramMessage[],
+    gate: { skipPairing?: boolean } = {},
+  ): Promise<void> {
     const representative = messages.find((item) => item.text?.trim() || item.caption?.trim()) ?? messages[0];
     if (!representative) return;
     const userId = representative.from?.id?.toString() ?? '';
     const chatId = representative.chat.id.toString();
+    const access = gate.skipPairing ? 'allow' : this.inboundAccess(representative);
+    if (access === 'refuse') {
+      await this.refuseUnpairedSender(chatId);
+      return;
+    }
 
     const message = this.convertMessage(representative);
     if (messages.length > 1) {
@@ -839,17 +877,21 @@ export class TelegramChannel extends BaseChannel {
     gated.sessionKey = this.scopeSessionKey(getSessionKey(gated));
 
     // DM pairing check: gate unapproved DM senders before any user-visible side effect.
-    const pairingStatus = await checkDMPairing(gated);
-    if (!pairingStatus.approved) {
-      const { getDMPairing } = await import('../dm-pairing.js');
-      const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
-      if (pairingMessage) {
-        await this.send({
-          channelId: chatId,
-          content: pairingMessage,
-        });
+    // Static allowlist members skip pairing (they are already trusted).
+    if (access !== 'allow') {
+      const pairingStatus = await checkDMPairing(gated);
+      if (!pairingStatus.approved) {
+        const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
+        if (pairingMessage) {
+          await this.send({
+            channelId: chatId,
+            content: pairingMessage,
+          });
+        } else {
+          await this.refuseUnpairedSender(chatId);
+        }
+        return;
       }
-      return;
     }
 
     // Scoped auth check (non-admin users need at least read-only)

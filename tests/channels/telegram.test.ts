@@ -21,6 +21,9 @@ describe('TelegramChannel', () => {
     pollingTimeout: 1,
     defaultParseMode: 'Markdown',
     enhancedCommands: false,
+    // Fixture senders used below are 1 and 67890. Without this list, A-2
+    // fail-closes inbound (no allowlist + no pairing → polite refuse).
+    allowedUsers: ['1', '67890'],
   };
 
   beforeEach(() => {

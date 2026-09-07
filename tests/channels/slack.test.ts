@@ -35,6 +35,7 @@ describe('SlackChannel', () => {
     enabled: true,
     token: 'xoxb-test-token',
     signingSecret: 'test-signing-secret',
+    allowedUsers: ['U12345'],
   };
 
   beforeEach(() => {
