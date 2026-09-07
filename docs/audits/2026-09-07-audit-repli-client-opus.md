@@ -48,17 +48,189 @@ thread principal : négligeable en volume, mais c'est le genre de coût qui se p
 latence perçue sur un poste chargé. Aucun cache mémoire n'est interposé. Sans gravité,
 à noter.
 
-## 2. État partagé (`activeFallback`, concurrence)
+## 2. État partagé (`activeFallback`, concurrence) — TROU B
 
-TRAVAIL EN COURS
+`activeFallback` et `didDeclaredFailover` sont des champs d'**instance**
+(`src/codebuddy/client.ts:302-305`), sans verrou, lus et écrits par les quatre chemins
+(`chat`, `chatStream`, et leurs variantes de repli).
 
-## 3. Élagage des outils et cohérence du transcript
+### Ce qui TIENT — pas de client partagé entre sessions WebSocket
 
-TRAVAIL EN COURS
+- Un `CodeBuddyClient` par `CodeBuddyAgent` (`src/agent/codebuddy-agent.ts:218`).
+- Chaque session WS construit **son propre** agent, sous mutex anti-duplication :
+  `src/server/websocket/handler.ts:929-940`, `:1097`, `src/server/websocket/desktop-handler.ts:354`.
+- Un second tour sur la même session est refusé (`session is busy`,
+  `src/server/websocket/desktop-handler.ts:390-399`).
 
-## 4. Diagnostic et fuite de secrets
+Donc : deux sessions WS ne peuvent pas se polluer. **Le scénario le plus grave est écarté.**
 
-TRAVAIL EN COURS
+### Ce qui NE tient pas — appels auxiliaires sur la MÊME instance
+
+`agent.getClient()` est exposé (`codebuddy-agent.ts:1737`) et la même instance sert des
+appels LLM auxiliaires, potentiellement pendant qu'un tour principal streame :
+`src/index.ts:1185`, `:1300`, `src/hooks/use-input-handler.ts:750`,
+`src/commands/goal-cli.ts:154` (`judgeClient = agent.getClient()`),
+`src/commands/client-dispatcher.ts:207`.
+
+Le vecteur de pollution est le **budget de premier jeton** :
+
+1. `src/agent/execution/agent-executor.ts:1657-1660` passe au garde anti-blocage un
+   `firstTokenTimeoutMs` **paresseux** — une closure rappelée au moment de l'attente :
+   `() => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, { targetIsLocal: client.isEffectiveTargetLocal?.() })`.
+2. `isEffectiveTargetLocal()` (`client.ts:686-693`) répond `true` dès que
+   `this.activeFallback` pointe une cible locale.
+3. `resolveFirstTokenStallTimeoutMs` (`src/utils/stream-stall-guard.ts:64-79`) accorde alors
+   `max(120 s, jetons × 200 ms)` plafonné à **20 minutes**, au lieu des 120 s.
+
+Si un appel auxiliaire bascule (pose `activeFallback = ollama`) **avant** le premier octet du
+stream principal encore dirigé vers le nuage, ce stream principal hérite d'un budget de
+20 minutes. C'est précisément la régression que le commentaire de
+`stream-stall-guard.ts:53-60` s'engage à ne pas produire : « A silent cloud provider must
+still fail in 120 s — byte-identical behaviour for Gemini/ChatGPT/xAI ». Le symptôme est
+un tour figé 20 minutes au lieu de 2, sans erreur — exactement le mal que le garde existe
+pour tuer.
+
+La fenêtre est étroite (avant le premier jeton) et je ne l'ai pas reproduite par un test :
+je la donne comme lecture, pas comme mesure. Gravité **B**.
+
+### Fuite d'état sur annulation — C
+
+`activeFallback` est posé **avant** que la tentative réussisse (`client.ts:979`, `:1265`).
+Sur les deux chemins, l'annulation coupe la boucle par un `throw` qui **saute** la remise à
+zéro de la ligne `client.ts:1029` / `:1330` :
+
+```ts
+} catch (fallbackError) {
+  if (opts.signal?.aborted) {
+    throw createAbortError('Chat request aborted by caller');   // client.ts:1006-1008
+  }
+```
+
+L'instance reste alors collée sur un repli qui n'a jamais servi. Effets : `getCurrentProvider()`
+et `getCurrentBaseUrl()` (`client.ts:678-684`, publics, lus par l'affichage et le suivi de coût)
+annoncent un fournisseur faux, et `isEffectiveTargetLocal()` reste `true`. Le tour suivant le
+répare (`maybeReturnToOriginal`, `client.ts:563-570`) **seulement si** le primaire est
+redevenu sain dans `provider-health.json` — sinon l'état faux persiste. Même remarque pendant
+la boucle : entre deux candidats, `activeFallback` désigne le candidat qui vient d'échouer.
+
+### Course `chat` ↔ `chatStream`
+
+Réelle par construction : les deux méthodes écrivent les mêmes deux champs sans
+sérialisation. Aucun `Promise` de garde, aucun verrou par instance. Le dépôt n'a pas de test
+qui couvre deux tours entrelacés sur une même instance.
+
+## 3. Élagage des outils et cohérence du transcript — TROU B (prouvé par test)
+
+Test écrit pour cet audit, 110 définitions d'outils, cible `ollama:qwen3.8-ctx32k:latest`
+(fenêtre 32 k ⇒ chemin « fenêtre serrée », cap 6 du commit `68e40ced9`).
+Fichier joué puis retiré (l'audit n'ajoute pas de test au dépôt) ; source conservée sous
+`_qa/af/handoff-audit.test.ts` (répertoire non suivi).
+
+| Cas | Attendu | Résultat |
+| --- | --- | --- |
+| A — un `tool_call` **sans** résultat (tour coupé par la panne) | pas d'appel orphelin après handoff | **PASSE** |
+| B — 60 paires appel/résultat compactées vers 32 k | ni appel orphelin, ni résultat orphelin | **PASSE** |
+| C — 9 outils déjà appelés + `tool_search` face au cap 6 | les indispensables survivent | **ÉCHOUE** |
+| D — budget respecté après élagage | `estimatedTokens ≤ contextWindow` | **PASSE** (110 → 6 outils) |
+
+### Le transcript reste cohérent — TIENT
+
+`prepareFailoverHandoff` (`src/codebuddy/provider-handoff.ts:283-320`) encadre correctement la
+compaction : `repairToolCallPairs` **avant** (`:286`), compaction, puis `repairToolCallPairs`
+**après** (`:299`), et la note de reprise est insérée devant le premier message non-système
+(`:277-281`), donc jamais au milieu d'une paire. Les cas A et B le confirment : **aucun
+risque de 400 « tool result sans tool call »**. Le point le plus dangereux du lot est propre.
+
+Précision utile : un outil élagué ne casse pas le transcript. Les résultats d'outils vivent
+dans les messages, pas dans le catalogue `tools` ; retirer une définition n'invalide aucune
+paire.
+
+### Le trou : les « toujours inclus » ne sont pas garantis
+
+`pruneToolsForHandoff` (`provider-handoff.ts:196-211`) calcule `always` = outils déjà appelés
++ `tool_search`, puis appelle :
+
+```ts
+const cap = tightWindow ? Math.min(HANDOFF_TOOL_CAP, 6) : HANDOFF_TOOL_CAP;
+const selected = await ragSelectTools(query, tools, cap, always);
+```
+
+et `ragSelectTools` (`provider-handoff.ts:174-176`) termine par
+`result.selectedTools.slice(0, maxTools)`. Quand `always.length > cap`, **le `slice` tronque
+les indispensables**. Sortie observée du test C :
+
+```
+AUDIT C -> n=6 noms=["tool_1","tool_2","tool_3","tool_4","tool_5","tool_6"]
+AssertionError: expected [ 'tool_1', 'tool_2', … ] to include 'tool_search'
+```
+
+Conséquences pour l'utilisateur, après un repli en milieu de tâche :
+
+1. `tool_search` — l'échappatoire même que le lot conserve pour retrouver un outil élagué —
+   **disparaît**. Le modèle de secours n'a plus aucun moyen de redécouvrir les 104 autres.
+2. Trois outils que l'agent **venait d'utiliser** (`tool_7`, `tool_8`, `tool_9`) ne sont plus
+   appelables. Le modèle local voit dans l'historique qu'il s'en est servi et ne peut pas les
+   rappeler : il improvise ou s'arrête. C'est l'inverse de la promesse « conversation reprise ».
+3. Effet de bord : `shrinkToolsToBudget` (`provider-handoff.ts:151-153`) boucle sous la
+   condition `current.length > alwaysInclude.size` ; ici `6 > 10` est faux, donc **le contrôle
+   de budget est entièrement court-circuité** dans ce cas. Sans conséquence avec 6 outils,
+   mais la garde ne garde rien.
+
+Le seuil de déclenchement est bas : 6 outils déjà appelés suffisent. Une session ordinaire
+(`view_file`, `search`, `str_replace`, `bash`, `create_file`, `list_directory`) l'atteint
+avant le premier quart d'heure — c'est-à-dire dans la situation exacte où le repli sert.
+
+**Je ne propose pas de correctif ici** : le remède demande un arbitrage (garantir tous les
+« toujours inclus » quitte à dépasser le cap 6, ou borner `always` aux N derniers outils
+appelés puis garder `tool_search` en priorité absolue). Ce n'est pas un correctif évident de
+dix lignes, c'est une décision de conception qui appartient à l'auteur du lot. Piste : dans
+`pruneToolsForHandoff`, `const cap = Math.max(tightWindow ? 6 : HANDOFF_TOOL_CAP, always.length)`
+puis laisser `shrinkToolsToBudget` redescendre — mais sa condition d'arrêt doit alors être
+revue elle aussi, sinon le budget n'est plus tenu.
+
+## 4. Diagnostic et fuite de secrets — TIENT, avec une réserve C
+
+### Aucune fuite prouvée
+
+- `ProviderFailoverExhaustedError` (`src/codebuddy/provider-failover-error.ts:17-32`) porte
+  `details = { primary, attempts }` où `attempts[].target` vaut `fournisseur:modèle` — **pas**
+  d'URL de base, **pas** d'en-tête, **pas** de corps de requête. Aucun champ ne transporte
+  `apiKey`, alors que l'objet `RuntimeFallbackProvider` disponible dans la portée en contient
+  un : l'auteur a bien pris `${fallback.provider}:${fallback.model}` (`client.ts:1010`, `:1318`)
+  et rien d'autre. C'est le bon réflexe.
+- Journal `[fallback]` (`src/providers/provider-failover-notify.ts:29-43`) : provenance,
+  destination, modèle, nature de la panne, horodatage de reprise. **Rien de secret.**
+- Journal de saut de cible (`client.ts:876-887`, `provider-handoff.ts:110-116`) : uniquement
+  des tailles de fenêtre. Propre.
+- La clé Gemini passe par l'en-tête `x-goog-api-key`
+  (`src/codebuddy/providers/provider-gemini-native.ts:482`, `:904`), **pas** en paramètre
+  d'URL — un `fetch failed` ne peut donc pas l'écho.
+
+### La réserve : l'assainissement du dépôt n'est pas appliqué ici
+
+`describeFailoverAttempt` (`provider-failover-error.ts:52-64`) reprend le message d'erreur
+**brut** du fournisseur :
+
+```ts
+const raw = err instanceof Error ? err.message : String(err ?? '');
+…
+if (typeof status === 'number') return { target, status, message: `${status} ${raw}`.trim() };
+```
+
+Or ce même dépôt possède `sanitizeProviderHealthMessage`
+(`src/providers/provider-health.ts:173-181`) qui masque `Bearer …`, `sk-…`,
+`api_key=` / `access_token=` / `authorization=`, et borne à 500 caractères — et il l'applique
+avant d'écrire ce **même genre** de message dans `provider-health.json`. L'asymétrie est nette :
+le message persisté est assaini, le message **remonté à l'utilisateur** ne l'est pas. Or celui-ci
+va plus loin : il traverse `src/channels/provider-failure-speech.ts:75-77`
+(`{ kind: 'fallback_exhausted', raw }`) jusqu'à la voix et à Telegram.
+
+Aucun fournisseur du catalogue ne renvoie aujourd'hui un message porteur de secret à ma
+connaissance, donc ce n'est pas une fuite constatée — mais c'est une défense en profondeur
+gratuite qui manque, et le dépôt a déjà la fonction sous la main. Gravité **C**.
+Correctif d'une ligne, si l'auteur le souhaite : envelopper `raw` dans
+`sanitizeProviderHealthMessage` au moment de construire `message`. Je ne le pose pas ici,
+n'ayant pas vérifié l'effet sur les assertions de messages existantes.
 
 ## 5. Alias `CODEBUDDY_LLM_FAILOVER` — TROU B
 
@@ -97,9 +269,34 @@ où l'ancien nom traîne, et impossibilité de désarmer sans éditer l'environn
 **Correctif suggéré** (hors périmètre de cette session) : rendre `CODEBUDDY_PROVIDER_FALLBACK`
 tri-état — une valeur explicitement fausse (`false`/`0`/`off`) désarme, y compris l'alias.
 
-## 6. Suites (vitest, tsc)
+## 6. Suites — TIENT
 
-TRAVAIL EN COURS
+```
+HOME=~/DEV/cb-audit-failover-2026-09-07/_qa/af/home env -u FORCE_COLOR \
+  npx vitest run tests/codebuddy tests/providers tests/utils
+```
+
+- **Fichiers : 1 échec | 74 succès (75)**
+- **Tests : 1 échec | 1139 succès | 3 ignorés (1143)** — durée 10,7 s
+
+L'unique échec est `tests/utils/disk-guard.test.ts > uses bavail (non-root available), not bfree` :
+`expected 1297597837312 to be 1297597841408`, soit un écart de 4 096 octets (un bloc) entre le
+`statfs` de référence et celui mesuré. C'est une **instabilité de mesure** sur un système de
+fichiers en cours d'écriture, **sans aucun rapport** avec le lot audité (aucun des six fichiers
+cibles n'est chargé par ce test). Les fichiers du lot — `tests/codebuddy/provider-handoff.test.ts`,
+`provider-failover.test.ts`, `provider-failover-http.test.ts`, `provider-failover-kind.test.ts`,
+`client-provider-fallback.test.ts`, `client-stream-fallback-integrity.test.ts`,
+`tests/providers/provider-failover-policy.test.ts`, `provider-health.test.ts`,
+`fallback-chain.test.ts`, `provider-fallback.test.ts`, `provider-failover-user-notice.test.ts` —
+**passent tous**.
+
+```
+npx tsc --noEmit -p tsconfig.json   → exit 0
+```
+
+Note d'environnement : `node_modules` du worktree est un lien symbolique vers
+`~/DEV/cb-secu-pwa-2026-09-06/node_modules`. Les suites tournent, mais `--reporter=basic`
+n'existe plus dans vitest 4.1.9 (il faut l'omettre).
 
 ## Tableau de synthèse
 
