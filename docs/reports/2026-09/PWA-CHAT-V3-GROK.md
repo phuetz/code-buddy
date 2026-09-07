@@ -125,3 +125,31 @@ Police 3 crans, thème sombre/clair/auto, 4 fonds CSS, sons on/off, aperçu de l
 
 ### Lot 6 — preuves globales
 Suite exigée 229 fichiers / 3055 verts / 11 skip / 0 rouge. `tsc --noEmit` 0. ESLint `app.js` 0. `node --check app.js` 0. `git diff --check` 0. Six captures 390×844 sous `_qa/v3/shots/` (non suivies). SW v10. Aucun push. `~/code-buddy` et `~/.codebuddy` intacts. ComfyUI 8188/8189 intacts. Ouvert : envoi Web Push réel sans paquet `web-push` (transport injectable + import optionnel).
+
+## Correctifs après vérification Sonnet
+
+Date : 2026-09-07 (Europe/Paris)
+Agent : Grok 4.6
+Source : `docs/reports/2026-09/VERIF-PWA-CHAT-V3-SONNET.md` (verdict NON PUSHABLE, HEAD audité `5179c8595`, rapport `d3dc76d22`)
+Branche : `feat/pwa-chat-v3-2026-09-07`
+HEAD au départ des correctifs : `d3dc76d22`
+HOME QA : `_qa/fix/home` (gitignoré). Vitest : `HOME=…/_qa/fix/home` et `env -u FORCE_COLOR`.
+Ports : ≥ 6100. Original `~/code-buddy` et `~/.codebuddy` : interdits.
+Section créée **avant toute modification de code**.
+
+### Trous à lever (Sonnet)
+
+| Id | Gravité | Fait | Correctif prévu |
+|---|---|---|---|
+| 1 | A | `savePushSubscription` n'exige que `https://` : loopback, RFC1918, 169.254, IPv6 ULA/loopback, `.local` acceptés | Passer l'`endpoint` par `isSafeUrl` (`src/security/ssrf-guard.ts`) : https seulement **et** hôte public ; 6 endpoints forgés → 400 sans écriture |
+| 2 | A/B | Liste globale de 20, pas d'identité, pas de désabonnement ; un flot évince autrui | Fichiers par hash sha256 de l'`userId`, plafond 5 (plus ancien évincé), `DELETE /push/subscribe` (JWT, même identité), envoi uniquement à l'identité visée, mode 0600 |
+| 3 | B/C | `res.text()` bufferise tout le corps ; cache `Map` sans plafond | Lecture bornée 256 Ko (arrêt du flux), timeout 5 s, LRU ≤ 200 ; serveur local 5 Mo → 256 Ko lus max |
+| 4 | C | `WS_MAX_VOICE_MS` déclaré, jamais appliqué | Durée ≤ 120 s côté serveur : parse OGG/WebM ; si indéterminable, plafond 2 Mo **et** refus si le client déclare > 120 s, vérifié par `ffprobe` s'il est là, sinon estimation par débit |
+| 5 | C | JSONL append-only sans rotation ni purge | Rotation à 5 Mo (renommé `.1`, une génération), purge des fichiers > 90 jours à l'ouverture |
+| 6 | — | Isolation A/B prouvée à la main, absente de la suite | Test HTTP : jeton A ne lit pas l'historique de B |
+
+Chaque point : test rouge avant, vert après. Un commit par point. Aucun push.
+
+### Journal des correctifs
+
+*(rempli après chaque commit)*
