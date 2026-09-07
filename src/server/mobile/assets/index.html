@@ -83,11 +83,16 @@
             <button type="button" id="select-delete" class="btn danger touch" aria-label="Supprimer la sélection">Supprimer</button>
             <button type="button" id="select-cancel" class="btn secondary touch" aria-label="Annuler la sélection">Annuler</button>
           </div>
+          <div id="record-overlay" class="record-overlay hidden" aria-live="polite">
+            <canvas id="record-wave" class="record-wave" width="220" height="44" aria-hidden="true"></canvas>
+            <span id="record-timer" class="record-timer">0:00</span>
+            <span class="record-hint">Glisser pour annuler</span>
+          </div>
           <form id="composer" class="composer">
             <button type="button" id="attach-btn" class="btn icon touch" aria-label="Envoyer une photo">📷</button>
             <input id="attach-input" class="visually-hidden" type="file" accept="image/*" capture="environment" multiple>
             <button type="button" id="emoji-btn" class="btn icon touch" aria-label="Émojis" aria-expanded="false" aria-controls="emoji-picker">😊</button>
-            <button type="button" id="mic-btn" class="btn icon touch" aria-label="Dictée">🎤</button>
+            <button type="button" id="mic-btn" class="btn icon touch" aria-label="Message vocal" aria-pressed="false">🎤</button>
             <textarea id="message-input" rows="1" placeholder="Message…" aria-label="Message"></textarea>
             <button type="submit" id="send-btn" class="btn primary icon touch" aria-label="Envoyer">→</button>
             <button type="button" id="stop-btn" class="btn danger icon touch hidden" aria-label="Arrêter">■</button>
@@ -172,6 +177,10 @@
       </header>
       <div class="modal-body">
         <p>L’historique (200 messages) et les réactions restent sur cet appareil.</p>
+        <label class="setting-row" for="voice-reply-toggle">
+          <input id="voice-reply-toggle" type="checkbox">
+          Lisa me répond à voix haute
+        </label>
         <button type="button" id="clear-chat-btn" class="btn danger">Effacer la conversation</button>
         <p id="clear-chat-confirm" class="hidden clear-confirm">
           <span>Supprimer les messages locaux ?</span>

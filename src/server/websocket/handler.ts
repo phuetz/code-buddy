@@ -17,6 +17,13 @@ import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/pr
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
 import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 import { applyChatReplyContext, readClientMsgId } from '../mobile/chat-extras.js';
+import {
+  isAudioMime,
+  sniffAudioMime,
+  synthesizeMobileVoiceReply,
+  transcribeVoiceAttachment,
+  WS_MAX_VOICE_BYTES,
+} from '../mobile/voice-note.js';
 
 function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -366,6 +373,8 @@ interface ChatPayload {
   replyTo?: unknown;
   /** Client-generated id so delivery/read acks can target the right bubble. */
   clientMsgId?: unknown;
+  /** When true, Lisa's reply is also synthesized and pushed as an `audio` frame. */
+  voiceReply?: unknown;
 }
 
 /** Most photos accepted on one mobile message. */
@@ -406,15 +415,26 @@ export function validateChatAttachments(
     }
     const bytes = Buffer.from(payload, 'base64');
     if (bytes.length === 0) return { ok: false, error: 'Attachment is empty' };
-    if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
-      return {
-        ok: false,
-        error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
-      };
+    const image = sniffImageMime(bytes);
+    if (image) {
+      if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
+        return {
+          ok: false,
+          error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
+        };
+      }
+      attachments.push({ mimeType: image, data: payload });
+      continue;
     }
-    const sniffed = sniffImageMime(bytes);
-    if (!sniffed) return { ok: false, error: 'Attachment is not an image' };
-    attachments.push({ mimeType: sniffed, data: payload });
+    const audio = sniffAudioMime(bytes);
+    if (audio) {
+      if (bytes.length > WS_MAX_VOICE_BYTES) {
+        return { ok: false, error: 'Each voice note must be at most 2 MB' };
+      }
+      attachments.push({ mimeType: audio, data: payload });
+      continue;
+    }
+    return { ok: false, error: 'Attachment is not an image' };
   }
   return { ok: true, attachments };
 }
@@ -868,22 +888,15 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     attachments: attachmentsRaw,
     replyTo: replyToRaw,
     clientMsgId: clientMsgIdRaw,
+    voiceReply: voiceReplyRaw,
   } = payload as ChatPayload;
 
-  // Validate message
-  if (!message) {
-    sendError(ws, 'INVALID_REQUEST', 'Message is required');
-    return;
-  }
-  if (typeof message !== 'string') {
+  if (message !== undefined && message !== null && typeof message !== 'string') {
     sendError(ws, 'INVALID_REQUEST', 'Message must be a string');
     return;
   }
-  if (message.trim().length === 0) {
-    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
-    return;
-  }
-  if (message.length > 100000) {
+  const rawMessage = typeof message === 'string' ? message : '';
+  if (rawMessage.length > 100000) {
     sendError(ws, 'INVALID_REQUEST', 'Message exceeds maximum length of 100000 characters');
     return;
   }
@@ -912,12 +925,41 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
-  const userText = applyChatReplyContext(message, replyToRaw);
+  const audioAttachments = validatedAttachments.attachments.filter((item) => isAudioMime(item.mimeType));
+  const imageAttachments = validatedAttachments.attachments.filter((item) =>
+    item.mimeType.startsWith('image/'),
+  );
+  if (rawMessage.trim().length === 0 && audioAttachments.length === 0) {
+    sendError(
+      ws,
+      'INVALID_REQUEST',
+      message ? 'Message cannot be empty or whitespace only' : 'Message is required',
+    );
+    return;
+  }
+
+  let userText = applyChatReplyContext(rawMessage, replyToRaw).trim();
+  if (audioAttachments[0] && assistant === 'companion') {
+    const transcript = await transcribeVoiceAttachment(audioAttachments[0]);
+    if (transcript) {
+      userText =
+        userText && userText !== '(message vocal)' ? `${userText}\n\n${transcript}` : transcript;
+    } else if (!userText) {
+      userText = '(message vocal)';
+    }
+  }
+  if (!userText) {
+    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
+    return;
+  }
+
   const clientMsgId = readClientMsgId(clientMsgIdRaw);
   sendChatAck(ws, 'received', clientMsgId);
+  const wantVoiceReply = voiceReplyRaw === true;
 
   try {
     if (assistant === 'companion') {
+      let spoken = '';
       await runPlainChatTurn(ws, state, turn, {
         stream,
         clientMsgId,
@@ -925,14 +967,23 @@ messageHandlers.set('chat', async (ws, state, payload) => {
           const history = companionHistoryFor(state);
           const produced = await produceCompanionReply(userText, {
             history,
-            ...(validatedAttachments.attachments.length
-              ? { attachments: validatedAttachments.attachments }
-              : {}),
+            ...(imageAttachments.length ? { attachments: imageAttachments } : {}),
           });
+          spoken = typeof produced === 'string' ? produced : produced.text;
           if (!turn.cancelled) rememberCompanionTurn(state, userText, produced);
           return produced;
         },
       });
+      if (wantVoiceReply && spoken && !turn.cancelled) {
+        const audio = await synthesizeMobileVoiceReply(spoken);
+        if (audio) {
+          send(ws, {
+            type: 'audio',
+            payload: audio,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
       return;
     }
 

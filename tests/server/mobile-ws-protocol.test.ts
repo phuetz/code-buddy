@@ -56,6 +56,7 @@ import {
   closeAllConnections,
   setupWebSocket,
 } from '../../src/server/websocket/handler.js';
+import { setMobileVoiceHooksForTests } from '../../src/server/mobile/voice-note.js';
 import {
   _resetFleetRegistryForTests,
   getFleetRegistry,
@@ -165,6 +166,7 @@ describe('Mobile WS protocol', () => {
     else process.env.JWT_SECRET = previousSecret;
     if (previousHistory === undefined) delete process.env.CODEBUDDY_MOBILE_HISTORY;
     else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
+    setMobileVoiceHooksForTests();
   });
 
   async function authed(): Promise<{ ws: WebSocket; events: Frame[] }> {
@@ -278,6 +280,39 @@ describe('Mobile WS protocol', () => {
       .join('');
     expect(text).toContain('En réponse à : « on se voit ? »');
     expect(text).toContain('oui');
+    ws.close();
+  });
+
+  it('transcribes a voice note with the fake STT and returns a fake TTS frame', async () => {
+    setMobileVoiceHooksForTests({
+      transcribe: async () => 'message vocal transcrit',
+      synthesize: async (text) => ({
+        mimeType: 'audio/ogg',
+        data: Buffer.from(text).toString('base64'),
+        durationMs: 500,
+      }),
+    });
+    const { ws, events } = await authed();
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(24)]).toString('base64');
+    ws.send(JSON.stringify({
+      type: 'chat',
+      payload: {
+        message: '',
+        stream: true,
+        assistant: 'companion',
+        voiceReply: true,
+        attachments: [{ mimeType: 'audio/ogg', data: ogg }],
+      },
+    }));
+    await waitUntil(() => events.some((event) => event.type === 'audio'));
+    const text = events
+      .filter((event) => event.type === 'stream_chunk')
+      .map((event) => event.payload?.delta)
+      .join('');
+    expect(text).toBe('lisa:message vocal transcrit');
+    const audio = events.find((event) => event.type === 'audio');
+    expect(audio?.payload?.mimeType).toBe('audio/ogg');
+    expect(audio?.payload?.durationMs).toBe(500);
     ws.close();
   });
 });

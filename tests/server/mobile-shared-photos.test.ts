@@ -62,6 +62,17 @@ describe('WebSocket chat attachments', () => {
     if (!result.ok) expect(result.error).toBe('Attachment is not an image');
   });
 
+  it('accepts an Ogg voice note and refuses one over 2 MB', () => {
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(32)]);
+    const ok = validateChatAttachments([{ mimeType: 'audio/mpeg', data: ogg.toString('base64') }]);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.attachments[0]!.mimeType).toBe('audio/ogg');
+    const huge = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(2 * 1024 * 1024)]);
+    const bad = validateChatAttachments([{ data: huge.toString('base64') }]);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.error).toContain('2 MB');
+  });
+
   it('refuses malformed payloads without throwing', () => {
     expect(validateChatAttachments('nope').ok).toBe(false);
     expect(validateChatAttachments([null]).ok).toBe(false);

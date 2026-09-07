@@ -33,6 +33,7 @@
     suggestHidden: 'codebuddy_mobile_suggest_hidden',
     pins: 'codebuddy_mobile_pins',
     lastRead: 'codebuddy_mobile_last_read',
+    voiceReply: 'codebuddy_mobile_voice_reply',
   };
 
   var SUGGEST_START = [
@@ -94,6 +95,12 @@
     unreadAnchorId: '',
     swipe: null,
     pendingAckId: '',
+    voiceReply: false,
+    lastUserWasVoice: false,
+    recording: null,
+    recordTimer: 0,
+    recordStartedAt: 0,
+    recordCancelled: false,
   };
 
   try {
@@ -255,6 +262,28 @@
     return '';
   }
 
+  function formatDuration(ms) {
+    var total = Math.max(0, Math.round((ms || 0) / 1000));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function voiceCardHtml(msg) {
+    var speed = msg.audioSpeed === 1.5 ? '1.5×' : '1×';
+    var transcript = msg.transcript
+      ? '<details class="voice-transcript"><summary>Transcription</summary>' + escapeHtml(msg.transcript) + '</details>'
+      : '';
+    return '<div class="voice-card" data-voice="' + escapeHtml(msg.id) + '">' +
+      '<button type="button" class="btn icon touch voice-play" data-voice="' + escapeHtml(msg.id) + '" aria-label="Lecture">' +
+      (msg.playing ? '⏸' : '▶') + '</button>' +
+      '<span class="voice-dur">' + escapeHtml(formatDuration(msg.durationMs)) + '</span>' +
+      '<button type="button" class="btn icon touch voice-speed" data-voice="' + escapeHtml(msg.id) + '" aria-label="Vitesse">' +
+      speed + '</button>' +
+      transcript +
+      '</div>';
+  }
+
   function imageHtml(dataUrl) {
     if (!dataUrl) return '';
     return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl + '">';
@@ -375,6 +404,9 @@
         ack: msg.ack || '',
         edited: msg.edited === true,
         pinned: msg.pinned === true,
+        durationMs: typeof msg.durationMs === 'number' ? msg.durationMs : undefined,
+        transcript: msg.transcript || undefined,
+        hasAudio: msg.hasAudio === true,
       };
       if (msg.replyTo && typeof msg.replyTo.id === 'string') {
         copy.replyTo = {
@@ -453,6 +485,9 @@
         images: Array.isArray(item.images)
           ? item.images.filter(function (entry) { return typeof entry === 'string'; })
           : [],
+        durationMs: typeof item.durationMs === 'number' ? item.durationMs : 0,
+        transcript: typeof item.transcript === 'string' ? item.transcript : '',
+        hasAudio: item.hasAudio === true,
       };
     });
     var storedPins = storeGet(STORAGE.pins, []);
@@ -544,6 +579,7 @@
       var body = highlightSearch(quote + renderMarkdown(msg.text || ''));
       if (msg.image) body += imageHtml(msg.image);
       if (msg.images && msg.images.length) body += sentImagesHtml(msg.images);
+      if (msg.hasAudio || msg.audioUrl) body += voiceCardHtml(msg);
       var reaction = msg.reaction
         ? '<div class="bubble-reactions">' + escapeHtml(msg.reaction) + '</div>'
         : '';
@@ -576,6 +612,11 @@
       edited: partial.edited === true,
       pinned: partial.pinned === true,
       replyTo: partial.replyTo || null,
+      durationMs: partial.durationMs || 0,
+      transcript: partial.transcript || '',
+      hasAudio: partial.hasAudio === true || Boolean(partial.audioUrl),
+      audioUrl: partial.audioUrl || '',
+      audioSpeed: partial.audioSpeed || 1,
       image: partial.image || '',
       images: partial.images && partial.images.length ? partial.images.slice(0, ATTACH_MAX_COUNT) : [],
     };
@@ -1007,6 +1048,7 @@
       };
     }
     if (extras && extras.editOf) payload.editOf = extras.editOf;
+    if (state.voiceReply) payload.voiceReply = true;
     return payload;
   }
 
@@ -1015,6 +1057,7 @@
     var photos = state.assistant === 'companion' ? attachmentPayload() : [];
     // A photo alone IS a message — "regarde" is optional.
     if ((!text && !photos.length) || state.streaming) return false;
+    state.lastUserWasVoice = false;
     var thumbs = state.attachments.map(function (item) { return item.dataUrl; });
     var outgoing = text || (photos.length > 1 ? 'Regarde ces photos.' : 'Regarde cette photo.');
     var extras = {};
@@ -1389,6 +1432,230 @@
     document.documentElement.style.setProperty('--kb', inset + 'px');
   }
 
+  var VOICE_MAX_MS = 120000;
+  var VOICE_MAX_BYTES = 2 * 1024 * 1024;
+
+  function playVoice(id, _auto) {
+    var msg = findMessage(id);
+    if (!msg || !msg.audioUrl) return false;
+    if (state.playingAudio) {
+      try { state.playingAudio.pause(); } catch (_e) { /* ignore */ }
+    }
+    var audio = new Audio(msg.audioUrl);
+    audio.playbackRate = msg.audioSpeed === 1.5 ? 1.5 : 1;
+    state.playingAudio = audio;
+    msg.playing = true;
+    renderMessages();
+    audio.addEventListener('ended', function () {
+      msg.playing = false;
+      renderMessages();
+    });
+    var play = audio.play();
+    if (play && play.catch) play.catch(function () { msg.playing = false; });
+    return true;
+  }
+
+  function toggleVoiceSpeed(id) {
+    var msg = findMessage(id);
+    if (!msg) return 1;
+    msg.audioSpeed = msg.audioSpeed === 1.5 ? 1 : 1.5;
+    if (state.playingAudio) state.playingAudio.playbackRate = msg.audioSpeed;
+    renderMessages();
+    return msg.audioSpeed;
+  }
+
+  function sendVoiceData(opts) {
+    var mime = opts.mimeType || 'audio/webm';
+    var data = opts.data || '';
+    var durationMs = Math.min(VOICE_MAX_MS, Math.max(0, opts.durationMs || 0));
+    if (!data) return false;
+    var approxBytes = Math.floor(data.length * 0.75);
+    if (approxBytes > VOICE_MAX_BYTES || durationMs > VOICE_MAX_MS) {
+      addMessage({ role: 'system', text: 'Message vocal trop long (2 Mo / 120 s)' });
+      return false;
+    }
+    var transcript = opts.transcript || '';
+    var outgoing = transcript || '(message vocal)';
+    var audioUrl = 'data:' + mime + ';base64,' + data;
+    var msg = addMessage({
+      role: 'user',
+      text: outgoing,
+      ack: 'sent',
+      hasAudio: true,
+      durationMs: durationMs,
+      transcript: transcript,
+      audioUrl: audioUrl,
+    });
+    state.lastUserWasVoice = true;
+    state.pendingAckId = msg.id;
+    send('chat', currentChatPayload(outgoing, [{ mimeType: mime, data: data }], { clientMsgId: msg.id }));
+    return true;
+  }
+
+  function showRecordOverlay(on, cancelling) {
+    var box = el('record-overlay');
+    if (!box) return;
+    box.classList.toggle('hidden', !on);
+    box.classList.toggle('cancel', Boolean(cancelling));
+  }
+
+  function tickRecordTimer() {
+    var label = el('record-timer');
+    if (!label || !state.recordStartedAt) return;
+    label.textContent = formatDuration(Date.now() - state.recordStartedAt);
+  }
+
+  function drawWaveFrame() {
+    var rec = state.recording;
+    if (!rec || !rec.analyser) return;
+    var canvas = el('record-wave');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var data = new Uint8Array(rec.analyser.fftSize);
+    rec.analyser.getByteTimeDomainData(data);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#f5a623';
+    ctx.beginPath();
+    var i;
+    for (i = 0; i < data.length; i += 1) {
+      var x = (i / data.length) * canvas.width;
+      var y = (data[i] / 255) * canvas.height;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    rec.waveFrame = root.requestAnimationFrame(drawWaveFrame);
+  }
+
+  function stopTracks(stream) {
+    if (!stream || !stream.getTracks) return;
+    stream.getTracks().forEach(function (track) { track.stop(); });
+  }
+
+  function cancelVoiceRecord() {
+    state.recordCancelled = true;
+    if (state.recordTimer) {
+      clearInterval(state.recordTimer);
+      state.recordTimer = 0;
+    }
+    var rec = state.recording;
+    if (rec) {
+      if (rec.waveFrame) root.cancelAnimationFrame(rec.waveFrame);
+      try { if (rec.media && rec.media.state === 'recording') rec.media.stop(); } catch (_e) { /* ignore */ }
+      stopTracks(rec.stream);
+    }
+    state.recording = null;
+    showRecordOverlay(false, false);
+    var mic = el('mic-btn');
+    if (mic) mic.setAttribute('aria-pressed', 'false');
+  }
+
+  function beginVoiceRecord() {
+    if (state.streaming || state.recording) return false;
+    var Rec = root.MediaRecorder;
+    if (!Rec || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      startDictation();
+      return false;
+    }
+    state.recordCancelled = false;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      if (state.recordCancelled) {
+        stopTracks(stream);
+        return;
+      }
+      var mime = Rec.isTypeSupported && Rec.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : (Rec.isTypeSupported && Rec.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus' : '');
+      var media = mime ? new Rec(stream, { mimeType: mime }) : new Rec(stream);
+      var chunks = [];
+      media.addEventListener('dataavailable', function (ev) {
+        if (ev.data && ev.data.size) chunks.push(ev.data);
+      });
+      media.addEventListener('stop', function () {
+        stopTracks(stream);
+        if (state.recordCancelled) return;
+        var blob = new Blob(chunks, { type: media.mimeType || 'audio/webm' });
+        if (blob.size > VOICE_MAX_BYTES) {
+          addMessage({ role: 'system', text: 'Message vocal trop long (2 Mo / 120 s)' });
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var url = String(reader.result || '');
+          var comma = url.indexOf(',');
+          var data = comma >= 0 ? url.slice(comma + 1) : '';
+          sendVoiceData({
+            mimeType: blob.type || 'audio/webm',
+            data: data,
+            durationMs: Date.now() - state.recordStartedAt,
+          });
+        };
+        reader.readAsDataURL(blob);
+      });
+      var ctx = root.AudioContext || root.webkitAudioContext;
+      var analyser = null;
+      if (ctx) {
+        var ac = new ctx();
+        var src = ac.createMediaStreamSource(stream);
+        analyser = ac.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+      }
+      state.recording = { media: media, stream: stream, analyser: analyser, waveFrame: 0 };
+      state.recordStartedAt = Date.now();
+      showRecordOverlay(true, false);
+      var mic = el('mic-btn');
+      if (mic) mic.setAttribute('aria-pressed', 'true');
+      media.start(100);
+      if (analyser) drawWaveFrame();
+      state.recordTimer = setInterval(function () {
+        tickRecordTimer();
+        if (Date.now() - state.recordStartedAt >= VOICE_MAX_MS) finishVoiceRecord();
+      }, 200);
+    }).catch(function () {
+      startDictation();
+    });
+    return true;
+  }
+
+  function finishVoiceRecord() {
+    var rec = state.recording;
+    if (!rec) return;
+    if (state.recordTimer) {
+      clearInterval(state.recordTimer);
+      state.recordTimer = 0;
+    }
+    if (rec.waveFrame) root.cancelAnimationFrame(rec.waveFrame);
+    showRecordOverlay(false, false);
+    var mic = el('mic-btn');
+    if (mic) mic.setAttribute('aria-pressed', 'false');
+    try { if (rec.media && rec.media.state === 'recording') rec.media.stop(); } catch (_e) { /* ignore */ }
+    state.recording = null;
+  }
+
+  function handleMicPointerDown(event) {
+    state.recordPointer = { x: event.clientX || 0, y: event.clientY || 0 };
+    beginVoiceRecord();
+  }
+
+  function handleMicPointerMove(event) {
+    if (!state.recording) return;
+    var dx = (event.clientX || 0) - (state.recordPointer && state.recordPointer.x || 0);
+    var dy = (event.clientY || 0) - (state.recordPointer && state.recordPointer.y || 0);
+    var cancel = dy < -56 || dx < -56;
+    showRecordOverlay(true, cancel);
+    state.recordWillCancel = cancel;
+  }
+
+  function handleMicPointerUp() {
+    if (state.recordWillCancel) {
+      cancelVoiceRecord();
+      state.recordWillCancel = false;
+      return;
+    }
+    finishVoiceRecord();
+  }
+
   function rowIdFromEvent(target) {
     var node = target;
     while (node && node !== document.body) {
@@ -1436,6 +1703,18 @@
   }
 
   function handleBubbleClick(event) {
+    var playBtn = event.target.closest ? event.target.closest('.voice-play') : null;
+    if (playBtn) {
+      event.preventDefault();
+      playVoice(playBtn.getAttribute('data-voice') || '');
+      return;
+    }
+    var speedBtn = event.target.closest ? event.target.closest('.voice-speed') : null;
+    if (speedBtn) {
+      event.preventDefault();
+      toggleVoiceSpeed(speedBtn.getAttribute('data-voice') || '');
+      return;
+    }
     var quote = event.target.closest ? event.target.closest('.quote-ref') : null;
     if (quote) {
       event.preventDefault();
@@ -1498,6 +1777,25 @@
         return;
       }
       addMessage({ role: 'system', text: msg });
+      return;
+    }
+    if (type === 'audio') {
+      var audioPayload = data.payload || {};
+      var mime = typeof audioPayload.mimeType === 'string' ? audioPayload.mimeType : 'audio/ogg';
+      var b64 = typeof audioPayload.data === 'string' ? audioPayload.data : '';
+      var lastAsst = null;
+      var ai;
+      for (ai = state.messages.length - 1; ai >= 0; ai -= 1) {
+        if (state.messages[ai].role === 'assistant') { lastAsst = state.messages[ai]; break; }
+      }
+      if (lastAsst && b64) {
+        lastAsst.hasAudio = true;
+        lastAsst.durationMs = typeof audioPayload.durationMs === 'number' ? audioPayload.durationMs : 0;
+        lastAsst.audioUrl = 'data:' + mime + ';base64,' + b64;
+        persistHistory();
+        renderMessages();
+        if (state.lastUserWasVoice) playVoice(lastAsst.id, true);
+      }
       return;
     }
     if (type === 'ack') {
@@ -2045,14 +2343,29 @@
     var micBtn = el('mic-btn');
     if (micBtn) {
       var hasSpeech = Boolean(root.SpeechRecognition || root.webkitSpeechRecognition);
-      if (!hasSpeech) {
+      var hasRec = Boolean(root.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!hasSpeech && !hasRec) {
         micBtn.classList.add('hidden');
         micBtn.hidden = true;
       } else {
         micBtn.classList.remove('hidden');
         micBtn.hidden = false;
-        micBtn.addEventListener('click', startDictation);
+        if (hasRec) {
+          micBtn.addEventListener('pointerdown', handleMicPointerDown);
+          micBtn.addEventListener('pointermove', handleMicPointerMove);
+          micBtn.addEventListener('pointerup', handleMicPointerUp);
+          micBtn.addEventListener('pointercancel', handleMicPointerUp);
+          micBtn.addEventListener('click', function (event) { event.preventDefault(); });
+        } else {
+          micBtn.addEventListener('click', startDictation);
+        }
       }
+    }
+    if (el('voice-reply-toggle')) {
+      el('voice-reply-toggle').addEventListener('change', function (event) {
+        state.voiceReply = Boolean(event.target.checked);
+        storeSet(STORAGE.voiceReply, state.voiceReply);
+      });
     }
     if (el('emoji-btn')) el('emoji-btn').addEventListener('click', toggleEmojiPicker);
     if (el('emoji-search')) {
@@ -2319,6 +2632,9 @@
     root.addEventListener('online', onVisibilityOrOnline);
     restoreAvatar();
     state.suggestHidden = storeGet(STORAGE.suggestHidden, false) === true;
+    state.voiceReply = storeGet(STORAGE.voiceReply, false) === true;
+    var voiceToggle = el('voice-reply-toggle');
+    if (voiceToggle) voiceToggle.checked = state.voiceReply;
     restoreHistory();
     refreshConfirmationBadge();
     refreshSuggestions();
@@ -2377,6 +2693,13 @@
     handleBubblePointerDown: handleBubblePointerDown,
     handleBubblePointerMove: handleBubblePointerMove,
     handleBubblePointerUp: handleBubblePointerUp,
+    sendVoiceData: sendVoiceData,
+    beginVoiceRecord: beginVoiceRecord,
+    cancelVoiceRecord: cancelVoiceRecord,
+    finishVoiceRecord: finishVoiceRecord,
+    playVoice: playVoice,
+    toggleVoiceSpeed: toggleVoiceSpeed,
+    formatDuration: formatDuration,
     openLightbox: openLightbox,
     closeLightbox: closeLightbox,
     handleFrame: handleFrame,

@@ -87,6 +87,13 @@ type MobileApi = {
     extras?: Record<string, unknown>,
   ) => Record<string, unknown>;
   applyStatusPayload: (data: Record<string, unknown>) => void;
+  sendVoiceData: (opts: {
+    mimeType: string;
+    data: string;
+    durationMs?: number;
+    transcript?: string;
+  }) => boolean;
+  toggleVoiceSpeed: (id: string) => number;
 };
 
 function asset(name: string): string {
@@ -640,6 +647,82 @@ describe('Mobile chat UI — messagerie (lot 1)', () => {
     expect(document.getElementById('search-input')?.getAttribute('aria-label')).toBe(
       'Rechercher dans la conversation',
     );
+  });
+
+  it('renders a voice bubble with play, duration, 1.5× speed and transcription', () => {
+    const msg = api.addMessage({
+      role: 'user',
+      text: 'bonjour',
+      hasAudio: true,
+      durationMs: 2500,
+      transcript: 'bonjour',
+      audioUrl: 'data:audio/ogg;base64,T2dnUw==',
+    });
+    expect(document.querySelector('.voice-play')?.getAttribute('aria-label')).toBe('Lecture');
+    expect(document.querySelector('.voice-dur')?.textContent).toBe('0:03');
+    expect(api.toggleVoiceSpeed(msg.id)).toBe(1.5);
+    expect(document.querySelector('.voice-speed')?.textContent).toBe('1.5×');
+    expect(document.querySelector('.voice-transcript')?.textContent).toContain('bonjour');
+  });
+
+  it('sends a voice note as an audio attachment and refuses oversized ones', () => {
+    sent.length = 0;
+    expect(api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: Buffer.from('OggSxxxx').toString('base64'),
+      durationMs: 1200,
+      transcript: 'coucou',
+    })).toBe(true);
+    const frame = sent.find((item) => (item as { type?: string }).type === 'chat') as {
+      payload?: { attachments?: Array<{ mimeType: string }>; message?: string; voiceReply?: boolean };
+    };
+    expect(frame?.payload?.attachments?.[0]?.mimeType).toBe('audio/ogg');
+    expect(frame?.payload?.message).toBe('coucou');
+    expect(document.querySelector('.voice-card')).toBeTruthy();
+    expect(api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: 'A'.repeat(3 * 1024 * 1024),
+      durationMs: 1000,
+    })).toBe(false);
+  });
+
+  it('attaches Lisa’s spoken reply and auto-plays after a user voice note', () => {
+    api.sendVoiceData({
+      mimeType: 'audio/ogg',
+      data: Buffer.from('OggS').toString('base64'),
+      durationMs: 800,
+    });
+    api.handleFrame({ type: 'stream_start' });
+    api.handleFrame({ type: 'stream_chunk', payload: { delta: 'ok' } });
+    api.handleFrame({ type: 'stream_end' });
+    const playCalls: string[] = [];
+    const origAudio = window.Audio;
+    class FakeAudio {
+      playbackRate = 1;
+      src: string;
+      constructor(src: string) { this.src = src; playCalls.push(src); }
+      addEventListener() { /* noop */ }
+      play() { return Promise.resolve(); }
+      pause() { /* noop */ }
+    }
+    (window as unknown as { Audio: unknown }).Audio = FakeAudio;
+    api.handleFrame({
+      type: 'audio',
+      payload: { mimeType: 'audio/ogg', data: Buffer.from('lisa').toString('base64'), durationMs: 400 },
+    });
+    (window as unknown as { Audio: unknown }).Audio = origAudio;
+    const asst = api.getMessages().find((msg) => msg.role === 'assistant');
+    expect(asst).toBeTruthy();
+    expect(playCalls.length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('.voice-card').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows the recording overlay while a vocal is in progress', () => {
+    expect(document.getElementById('record-overlay')?.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('mic-btn')?.getAttribute('aria-label')).toBe('Message vocal');
+    document.getElementById('record-overlay')?.classList.remove('hidden');
+    expect(document.getElementById('record-wave')).toBeTruthy();
+    expect(document.getElementById('record-timer')?.textContent).toMatch(/\d:\d\d/);
   });
 });
 

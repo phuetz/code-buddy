@@ -41,6 +41,7 @@ export const MOBILE_PWA_CSP = [
   // (the album route is authenticated, so a plain <img src> would carry no
   // token) and then displayed from the resulting blob.
   "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
   "connect-src 'self' ws: wss:",
   "font-src 'self'",
   "form-action 'self'",

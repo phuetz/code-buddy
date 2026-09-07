@@ -90,7 +90,8 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 | Hash | Message |
 |---|---|
 | `ad7de3d88` | docs(pwa): stub PWA-CHAT-V3-GROK avant inspection |
-| *(lot 1)* | feat(pwa): citer, chercher, épingler, accusés et sélection |
+| `db9651eed` | feat(pwa): citer, chercher, épingler, accusés et sélection |
+| *(lot 2)* | feat(pwa): notes vocales MediaRecorder + STT/TTS |
 
 ## Preuves
 
@@ -104,3 +105,6 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 
 ### Lot 1 — messages de niveau messagerie
 Réponse citée (balayage droite / menu), copie, transfert Telegram masqué hors canal, supprimer pour moi, modifier le dernier (marque « modifié »), sélection multiple, recherche + surlignage préc/suiv, bandeau épinglés, ✓ / ✓✓ / ✓✓ bleu via `ack`, horodatage complet au toucher, séparateurs de jour conservés, ligne « nouveaux messages ». WS rétro-compatible. SW v5. Capture `01-reply-search.png`.
+
+### Lot 2 — messages vocaux
+Micro maintenu = MediaRecorder (WebM/Ogg), forme d’onde, glisser pour annuler, plafond 2 Mo / 120 s. STT injectable (`speech-reaction`) ; le texte devient le tour utilisateur. Bulle ▶ / durée / ×1,5 + transcription. Option « Lisa me répond à voix haute » → trame `audio` (TTS injectable). Auto-lecture si l’utilisateur a envoyé un vocal. Images inchangées pour les anciens clients. SW v6. Captures `02-voice-recording.png`, `03-voice-bubble.png`.
