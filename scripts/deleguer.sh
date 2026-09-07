@@ -83,6 +83,10 @@ CONSIGNE=$(mktemp)
 trap 'rm -f "$CONSIGNE"' EXIT
 {
   cat "$MISSION"
+  # Préambule d'outillage commun (Code Explorer d'abord, lm-resizer sur les commandes
+  # bruyantes, compte rendu chiffré) — demandé par Patrice le 07/09/2026 ; ignoré si absent.
+  PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE.md}"
+  if [ -f "$PREAMBULE_OUTILLAGE" ]; then printf '\n---\n'; cat "$PREAMBULE_OUTILLAGE"; fi
   cat <<'GARDE'
 
 ---
@@ -137,7 +141,7 @@ case "$MOTEUR" in
     # GPT-5.3-Codex-Spark : quota SÉPARÉ du forfait ChatGPT général (jauge propre, 5 h + hebdo).
     # À préférer quand le général est bas (03/09/2026 : général 21 %, Spark 55 %).
     codex exec -C "$DEPOT" -m "gpt-5.3-codex-spark" \
-      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
   astra)
@@ -145,12 +149,12 @@ case "$MOTEUR" in
     # « not supported » jusqu'au 04/09 16 h 35). Table OpenAI du 04/09 : DeepSWE 74,1, Terminal-Bench
     # 64,6, SRE-Bench 99,2 → réserver au DUR (sécurité, infra, terminal), comme sol.
     codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-medium}" \
-      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
   luna|sol)
     codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" ${CODEX_EFFORT:+-c model_reasoning_effort="$CODEX_EFFORT"} \
-      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
   agy)
