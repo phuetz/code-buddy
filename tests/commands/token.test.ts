@@ -41,6 +41,8 @@ describe('buddy token (PWA / API JWT)', () => {
   let previousHome: string | undefined;
   let previousUrl: string | undefined;
   let previousPort: string | undefined;
+  let previousAlertToken: string | undefined;
+  let previousAlertChat: string | undefined;
   let previousExit: string | number | undefined;
 
   beforeEach(() => {
@@ -50,10 +52,14 @@ describe('buddy token (PWA / API JWT)', () => {
     previousHome = process.env.HOME;
     previousUrl = process.env.CODEBUDDY_SERVER_URL;
     previousPort = process.env.CODEBUDDY_SERVER_PORT;
+    previousAlertToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    previousAlertChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
     previousExit = process.exitCode;
     delete process.env.JWT_SECRET;
     delete process.env.CODEBUDDY_SERVER_URL;
     delete process.env.CODEBUDDY_SERVER_PORT;
+    delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
     process.env.HOME = QA_HOME;
     process.exitCode = undefined;
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -69,9 +75,14 @@ describe('buddy token (PWA / API JWT)', () => {
     else process.env.CODEBUDDY_SERVER_URL = previousUrl;
     if (previousPort === undefined) delete process.env.CODEBUDDY_SERVER_PORT;
     else process.env.CODEBUDDY_SERVER_PORT = previousPort;
+    if (previousAlertToken === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    else process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = previousAlertToken;
+    if (previousAlertChat === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    else process.env.CODEBUDDY_SENSORY_ALERT_CHAT = previousAlertChat;
     process.exitCode = previousExit as string | number | undefined;
     logSpy.mockRestore();
     errorSpy.mockRestore();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -227,6 +238,78 @@ describe('buddy token (PWA / API JWT)', () => {
     expect(spawn.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(['-t', 'ANSIUTF8']));
     expect(captured(errorSpy) + captured(logSpy)).toMatch(/qrencode/);
     expect(captured(errorSpy) + captured(logSpy)).not.toContain(SECRET);
+  });
+
+  it('--telegram without credentials prints a clear message and does not call fetch', async () => {
+    process.env.JWT_SECRET = SECRET;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const program = createProgram({ homedir: () => QA_HOME });
+    await program.parseAsync(['node', 'buddy', 'token', '--telegram', '--json']);
+    expect(process.exitCode).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(captured(errorSpy)).toMatch(/CODEBUDDY_SENSORY_ALERT_TOKEN/);
+    expect(captured(errorSpy)).toMatch(/CODEBUDDY_SENSORY_ALERT_CHAT/);
+    expect(JSON.parse(captured(logSpy)).token).toBeTruthy();
+  });
+
+  it('--telegram sends the open URL through a fake fetch, with an expiry warning', async () => {
+    process.env.JWT_SECRET = SECRET;
+    process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'tg-test-token';
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = '4242';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const program = createProgram({ homedir: () => QA_HOME });
+    await program.parseAsync([
+      'node',
+      'buddy',
+      'token',
+      '--telegram',
+      '--json',
+      '--user',
+      'demo',
+      '--days',
+      '1',
+      '--url',
+      'http://127.0.0.1:5601',
+    ]);
+    expect(fetchMock).toHaveBeenCalled();
+    const calledUrl = String(fetchMock.mock.calls[0]?.[0] ?? '');
+    expect(calledUrl).toContain('/bottg-test-token/sendMessage');
+    const init = fetchMock.mock.calls[0]?.[1] as { body?: string };
+    const body = JSON.parse(String(init.body)) as { chat_id: string; text: string };
+    expect(body.chat_id).toBe('4242');
+    expect(body.text).toContain('http://127.0.0.1:5601/__codebuddy__/mobile/#token=');
+    expect(body.text).toMatch(/expire/i);
+    expect(body.text).not.toContain(SECRET);
+    const payload = JSON.parse(captured(logSpy)) as { telegramSent: boolean; token: string };
+    expect(payload.telegramSent).toBe(true);
+    expect(verifyToken(payload.token, SECRET)?.sub).toBe('demo');
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it('--telegram reads bot credentials from --env', async () => {
+    const envFile = path.join(QA_WORK, 'telegram.env');
+    writeFileSync(
+      envFile,
+      [
+        `JWT_SECRET=${SECRET}`,
+        'CODEBUDDY_SENSORY_ALERT_TOKEN=tg-from-file',
+        'CODEBUDDY_SENSORY_ALERT_CHAT=99',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const program = createProgram({ homedir: () => QA_HOME });
+    await program.parseAsync(['node', 'buddy', 'token', '--env', envFile, '--telegram', '--json']);
+    const calledUrl = String(fetchMock.mock.calls[0]?.[0] ?? '');
+    expect(calledUrl).toContain('/bottg-from-file/sendMessage');
+    const init = fetchMock.mock.calls[0]?.[1] as { body?: string };
+    const body = JSON.parse(String(init.body)) as { chat_id: string };
+    expect(body.chat_id).toBe('99');
+    expect(captured(logSpy) + captured(errorSpy)).not.toContain('tg-from-file');
   });
 
   it('--qr prints ANSI from qrencode stdout', async () => {
