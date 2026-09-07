@@ -92,7 +92,8 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 | `ad7de3d88` | docs(pwa): stub PWA-CHAT-V3-GROK avant inspection |
 | `db9651eed` | feat(pwa): citer, chercher, épingler, accusés et sélection |
 | `c2b1623c5` | feat(pwa): notes vocales MediaRecorder + STT/TTS |
-| *(lot 3)* | feat(pwa): présence, badge, son et push VAPID |
+| `8b659452d` | feat(pwa): présence, badge, son et push VAPID |
+| *(lot 4)* | feat(pwa): historique serveur paginé et liste virtualisée |
 
 ## Preuves
 
@@ -112,3 +113,6 @@ Micro maintenu = MediaRecorder (WebM/Ogg), forme d’onde, glisser pour annuler,
 
 ### Lot 3 — présence et notifications
 En-tête « vu à HH:MM » après `stream_end`. Badge d’onglet `(n) Lisa`. Son + vibration si l’app est en arrière-plan. Push opt-in `CODEBUDDY_MOBILE_PUSH=true` : clés VAPID `~/.codebuddy/push/` (0600), `GET /push/vapid`, `POST /push/subscribe`, envoi via transport injectable (web-push si présent). Câblé sur les initiatives away. SW v7.
+
+### Lot 4 — historique serveur et défilement
+Journal JSONL `~/.codebuddy/companion/mobile-conversations/<hash>.jsonl` (0600, O_APPEND). `GET /history?before=&limit=50` (JWT). Fenêtre DOM 150, chargement en remontant, restauration de scroll, « aller en bas » déjà là. Plafond local 2000. SW v8.

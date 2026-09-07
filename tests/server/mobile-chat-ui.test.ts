@@ -95,6 +95,7 @@ type MobileApi = {
     transcript?: string;
   }) => boolean;
   toggleVoiceSpeed: (id: string) => number;
+  mergeServerHistory: (rows: Array<{ id: string; role: string; text: string; ts: number }>) => number;
 };
 
 function asset(name: string): string {
@@ -344,11 +345,12 @@ describe('Mobile chat UI (DOM)', () => {
       expect(texts).toContain('pong');
     });
 
-    it('caps history at 200 and clears after confirmation', () => {
-      for (let i = 0; i < 205; i += 1) {
+    it('keeps more than 200 local messages and clears after confirmation', () => {
+      expect(api.MAX_HISTORY).toBeGreaterThan(200);
+      for (let i = 0; i < 5; i += 1) {
         api.addMessage({ role: 'user', text: `n${i}` });
       }
-      expect(api.getMessages().length).toBeLessThanOrEqual(200);
+      expect(api.getMessages().length).toBe(5);
       document.getElementById('clear-chat-btn')?.click();
       expect(document.getElementById('clear-chat-confirm')?.classList.contains('hidden')).toBe(false);
       document.getElementById('clear-chat-yes')?.click();
@@ -716,6 +718,18 @@ describe('Mobile chat UI — messagerie (lot 1)', () => {
     expect(asst).toBeTruthy();
     expect(playCalls.length).toBeGreaterThanOrEqual(1);
     expect(document.querySelectorAll('.voice-card').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('virtualizes the DOM to 150 nodes and merges older server pages', () => {
+    for (let i = 0; i < 160; i += 1) {
+      api.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', text: `m${i}` });
+    }
+    expect(document.querySelectorAll('.msg-row').length).toBeLessThanOrEqual(150);
+    const added = api.mergeServerHistory([
+      { id: 'old-1', role: 'user', text: 'ancien', ts: 1 },
+    ]);
+    expect(added).toBe(1);
+    expect(api.getMessages()[0]?.id).toBe('old-1');
   });
 
   it('shows last-seen after stream_end and a tab badge while unread', () => {

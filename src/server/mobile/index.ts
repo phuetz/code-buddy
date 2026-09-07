@@ -14,6 +14,7 @@ import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { verifyToken } from '../auth/jwt.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
+import { readConversationLog } from '../../companion/mobile-conversation-log.js';
 import { forwardMobileTextToTelegram } from './telegram-forward.js';
 import {
   isMobilePushEnabled,
@@ -209,6 +210,24 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
 
 mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
   res.json(await buildMobileStatus());
+});
+
+mobilePwaRouter.get('/history', requireAlbumAccess, (req: Request, res: Response) => {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const secret = process.env.JWT_SECRET ?? '';
+  let userId: string | undefined;
+  if (token && secret) {
+    const payload = verifyToken(token, secret);
+    const sub = payload && typeof (payload as { sub?: unknown }).sub === 'string'
+      ? (payload as { sub: string }).sub
+      : undefined;
+    userId = sub;
+  }
+  const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
+  res.json({ messages: readConversationLog(userId, { before, limit }) });
 });
 
 mobilePwaRouter.post(

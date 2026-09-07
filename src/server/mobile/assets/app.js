@@ -11,7 +11,8 @@
   var DEFAULT_AVATAR = BASE + '/assets/icon-192.png';
   var REACTIONS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
   var MAX_RECENT = 10;
-  var MAX_HISTORY = 200;
+  var MAX_HISTORY = 2000;
+  var VIRTUAL_WINDOW = 150;
   var MAX_HISTORY_IMAGES = 5;
   var MAX_IMAGE_CHARS = 100 * 1024;
   // Client-side resize target. The server refuses anything over 600 KB per
@@ -104,6 +105,8 @@
     lastSeenAt: 0,
     sounds: true,
     mobilePush: false,
+    historyLoading: false,
+    historyDone: false,
   };
 
   try {
@@ -556,7 +559,10 @@
     var html = [];
     var lastDay = null;
     var now = Date.now();
-    state.messages.forEach(function (msg, index) {
+    var start = Math.max(0, state.messages.length - VIRTUAL_WINDOW);
+    var visible = state.messages.slice(start);
+    visible.forEach(function (msg, visIndex) {
+      var index = start + visIndex;
       var day = startOfDay(msg.ts);
       if (day !== lastDay) {
         html.push('<div class="day-sep">' + escapeHtml(daySeparatorLabel(msg.ts, now)) + '</div>');
@@ -1195,6 +1201,52 @@
       navigator.clipboard.writeText(text).catch(function () { /* ignore */ });
     }
     hideReactionBar();
+  }
+
+  function mergeServerHistory(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+    var known = {};
+    state.messages.forEach(function (msg) { known[msg.id] = true; });
+    var extra = [];
+    rows.forEach(function (row) {
+      if (!row || known[row.id]) return;
+      extra.push({
+        id: String(row.id),
+        role: row.role === 'user' ? 'user' : 'assistant',
+        text: String(row.text || ''),
+        ts: typeof row.ts === 'number' ? row.ts : Date.now(),
+        ack: '',
+        reaction: '',
+        edited: false,
+        pinned: false,
+        replyTo: null,
+        image: '',
+        images: [],
+      });
+      known[row.id] = true;
+    });
+    if (!extra.length) return 0;
+    extra.sort(function (a, b) { return a.ts - b.ts; });
+    state.messages = extra.concat(state.messages);
+    renderMessages();
+    return extra.length;
+  }
+
+  function loadOlderHistory() {
+    if (state.historyLoading || state.historyDone) return Promise.resolve([]);
+    state.historyLoading = true;
+    var first = state.messages[0];
+    var q = first ? ('?before=' + encodeURIComponent(first.id) + '&limit=50') : '?limit=50';
+    return fetchJson(BASE + '/history' + q).then(function (data) {
+      var rows = data && Array.isArray(data.messages) ? data.messages : [];
+      if (!rows.length) state.historyDone = true;
+      mergeServerHistory(rows);
+      state.historyLoading = false;
+      return rows;
+    }).catch(function () {
+      state.historyLoading = false;
+      return [];
+    });
   }
 
   function rememberLastRead() {
@@ -2574,6 +2626,8 @@
           rememberLastRead();
           updateTabBadge();
         }
+        if (messages.scrollTop < 48) loadOlderHistory();
+        try { sessionStorage.setItem('codebuddy_mobile_scroll', String(messages.scrollTop)); } catch (_e) { /* ignore */ }
         updateJumpButton();
       });
     }
@@ -2703,6 +2757,12 @@
     var voiceToggle = el('voice-reply-toggle');
     if (voiceToggle) voiceToggle.checked = state.voiceReply;
     restoreHistory();
+    var savedScroll = 0;
+    try { savedScroll = Number(sessionStorage.getItem('codebuddy_mobile_scroll') || 0); } catch (_e) { savedScroll = 0; }
+    if (savedScroll > 0) {
+      var box = el('messages');
+      if (box) box.scrollTop = savedScroll;
+    }
     refreshConfirmationBadge();
     refreshSuggestions();
     autosizeComposer();
@@ -2811,6 +2871,9 @@
     updateTabBadge: updateTabBadge,
     notifyIncoming: notifyIncoming,
     subscribePush: subscribePush,
+    loadOlderHistory: loadOlderHistory,
+    mergeServerHistory: mergeServerHistory,
+    VIRTUAL_WINDOW: VIRTUAL_WINDOW,
     destroy: destroy,
   };
 

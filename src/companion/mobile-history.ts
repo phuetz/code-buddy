@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { logger } from '../utils/logger.js';
+import { appendConversationLog } from './mobile-conversation-log.js';
 import type { CompanionHistoryTurn } from './companion-history.js';
 
 /** user+assistant entries kept, all surfaces. */
@@ -125,5 +126,20 @@ export function saveMobileCompanionHistory(
     logger.warn('[mobile-history] could not persist the companion history', {
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+  try {
+    const now = Date.now();
+    appendConversationLog(
+      userId,
+      history.slice(-2).map((turn, index) => ({
+        id: `c-${now}-${index}`,
+        role: turn.role,
+        text: turn.content,
+        ts: now + index,
+      })),
+      env,
+    );
+  } catch {
+    /* journal is best-effort */
   }
 }
