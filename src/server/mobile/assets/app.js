@@ -1139,6 +1139,7 @@
       };
     }
     if (extras && extras.editOf) payload.editOf = extras.editOf;
+    if (extras && typeof extras.durationMs === 'number') payload.durationMs = extras.durationMs;
     if (state.voiceReply) payload.voiceReply = true;
     return payload;
   }
@@ -1678,7 +1679,7 @@
     });
     state.lastUserWasVoice = true;
     state.pendingAckId = msg.id;
-    send('chat', currentChatPayload(outgoing, [{ mimeType: mime, data: data }], { clientMsgId: msg.id }));
+    send('chat', currentChatPayload(outgoing, [{ mimeType: mime, data: data }], { clientMsgId: msg.id, durationMs: durationMs }));
     return true;
   }
 

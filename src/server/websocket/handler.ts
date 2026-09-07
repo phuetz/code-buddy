@@ -18,6 +18,8 @@ import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
 import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 import { applyChatReplyContext, readClientMsgId } from '../mobile/chat-extras.js';
 import {
+  assertVoiceNoteDuration,
+  assertVoiceNoteDurationSync,
   isAudioMime,
   sniffAudioMime,
   synthesizeMobileVoiceReply,
@@ -375,6 +377,8 @@ interface ChatPayload {
   clientMsgId?: unknown;
   /** When true, Lisa's reply is also synthesized and pushed as an `audio` frame. */
   voiceReply?: unknown;
+  /** Client-declared duration of an attached voice note (milliseconds). */
+  durationMs?: unknown;
 }
 
 /** Most photos accepted on one mobile message. */
@@ -392,8 +396,14 @@ export interface ValidatedChatAttachment {
  * the count, each size and the actual image type are checked here, and the
  * type comes from the DECODED BYTES — a declared `mimeType` is never proof.
  */
+function readDeclaredDurationMs(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return undefined;
+  return raw;
+}
+
 export function validateChatAttachments(
   raw: unknown,
+  opts: { declaredDurationMs?: number } = {},
 ): { ok: true; attachments: ValidatedChatAttachment[] } | { ok: false; error: string } {
   if (raw === undefined || raw === null) return { ok: true, attachments: [] };
   if (!Array.isArray(raw)) return { ok: false, error: 'Attachments must be an array' };
@@ -431,6 +441,11 @@ export function validateChatAttachments(
       if (bytes.length > WS_MAX_VOICE_BYTES) {
         return { ok: false, error: 'Each voice note must be at most 2 MB' };
       }
+      const declared = readDeclaredDurationMs(
+        (entry as { durationMs?: unknown }).durationMs ?? opts.declaredDurationMs,
+      );
+      const duration = assertVoiceNoteDurationSync(bytes, declared);
+      if (!duration.ok) return duration;
       attachments.push({ mimeType: audio, data: payload });
       continue;
     }
@@ -889,6 +904,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     replyTo: replyToRaw,
     clientMsgId: clientMsgIdRaw,
     voiceReply: voiceReplyRaw,
+    durationMs: durationMsRaw,
   } = payload as ChatPayload;
 
   if (message !== undefined && message !== null && typeof message !== 'string') {
@@ -917,8 +933,10 @@ messageHandlers.set('chat', async (ws, state, payload) => {
 
   // Photos are accepted only for the companion; every other assistant keeps the
   // exact payload contract it had.
+  const declaredDurationMs = readDeclaredDurationMs(durationMsRaw);
   const validatedAttachments = validateChatAttachments(
     assistant === 'companion' ? attachmentsRaw : undefined,
+    { declaredDurationMs },
   );
   if (!validatedAttachments.ok) {
     sendError(ws, 'INVALID_REQUEST', validatedAttachments.error);
@@ -929,6 +947,16 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   const imageAttachments = validatedAttachments.attachments.filter((item) =>
     item.mimeType.startsWith('image/'),
   );
+  for (const audio of audioAttachments) {
+    const duration = await assertVoiceNoteDuration(
+      Buffer.from(audio.data, 'base64'),
+      declaredDurationMs,
+    );
+    if (!duration.ok) {
+      sendError(ws, 'INVALID_REQUEST', duration.error);
+      return;
+    }
+  }
   if (rawMessage.trim().length === 0 && audioAttachments.length === 0) {
     sendError(
       ws,
