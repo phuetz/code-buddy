@@ -83,3 +83,35 @@ d'une exécution directe hors suite. Rien de tout cela n'a nécessité de correc
 n'est un one-liner sûr), donc aucun commit de code n'a été fait — seul ce rapport est livré.
 
 VERDICT: NON PUSHABLE (SSRF réseau interne via l'endpoint push forgé + absence de plafond d'abonnements par identité, sous-système Push VAPID neuf)
+
+## Re-vérification après correctifs (HEAD `ec083088e`)
+
+Grok a livré 6 commits sur `~/DEV/cb-chat-v3-2026-09-07` : `428a2a102` (garde SSRF push),
+`303dccb9f` (abonnements par identité + plafond 5 + `DELETE`), `861ce6da3` (aperçu de lien borné
+256 Ko + LRU 200), `58cc717b3` (durée vocale 120 s côté serveur), `49f57e534` (rotation 5 Mo /
+purge 90 j du journal), `d4f1e08cf` (test d'isolation A/B). Sondes rejouées directement (hors
+suite) sur HEAD, dans `_qa/verif/proof/` (non commitées) :
+
+| # | Point | Verdict | Preuve rejouée |
+|---|---|---|---|
+| 1c | Plafond d'abonnements par identité | **RÉPARÉ** | `savePushSubscription` prend maintenant `userId` ; 21 abonnements pour `user-a` sur un hôte public réel → fichier `<hash-a>.json` plafonné à **5** (`MAX_PUSH_SUBSCRIPTIONS_PER_IDENTITY`), `user-b` isolé dans un second fichier |
+| 1d | SSRF endpoint push forgé | **RÉPARÉ** | `https://127.0.0.1:6001/evil`, `https://169.254.169.254/...`, `https://10.0.0.5/...`, `https://[::1]/evil`, `https://foo.local/evil` → tous **refusés** (`isPublicHttpsPushEndpoint` via le garde SSRF partagé + blocage `.local`) |
+| 1f | Désabonnement | **RÉPARÉ** | `deletePushSubscription(userId, endpoint)` exposé, `DELETE` câblé ; testé directement : suppression effective |
+| 3b | Corps de l'aperçu de lien borné | **RÉPARÉ** | `readCappedText` sur un flux synthétique de 10 MiB → coupe exactement à **262144 octets** (256 Ko) et annule le flux ; LRU vérifié : 210 URLs insérées → la plus ancienne (`page-0`) est ré-interrogée (évincée), la plus récente (`page-209`) reste en cache — plafond de 200 respecté |
+| 4a | Durée vocale > 120 s | **RÉPARÉ** | Conteneur Ogg synthétique à 130 s → rejeté (`Each voice note must be at most 120 s`) ; même conteneur à 2 s → accepté ; durée déclarée par le client à 999999 ms sur un fichier court → rejetée aussi (triple garde : déclaré / parsing conteneur / estimation débit) |
+| 2e | Rotation/purge du journal | **RÉPARÉ** | Fichier pré-rempli à 6 Mio → rotation vers `.1` dès le dépassement de 5 Mio, lecture fusionnée active+`.1` intacte ; fichier d'une autre identité avec mtime forcé à 91 j → purgé au prochain append dans le même dossier |
+| 2b | Isolation historique A/B | **RÉPARÉ (et maintenant testé)** | `tests/server/mobile-history-isolation.test.ts` (nouveau, `d4f1e08cf`) couvre exactement le scénario que j'avais vérifié manuellement lors du premier passage ; la lacune de couverture signalée est comblée |
+
+Suites (HOME `~/DEV/cb-chat-v3-2026-09-07/_qa/verif/home`, `env -u FORCE_COLOR`) :
+- `npx vitest run tests/server tests/security/donnees-personnelles.test.ts` : **79 fichiers / 766
+  tests verts / 2 skip / 0 rouge**, exit 0.
+- `npx tsc --noEmit -p tsconfig.json` : 0 erreur.
+- `npm run lint` : 0 erreur (2488 avertissements préexistants, hors périmètre).
+
+Les 6 trous et lacunes remontés lors de la première passe (SSRF push, plafond par identité,
+désabonnement, taille de réponse de l'aperçu de lien, durée vocale non appliquée, rotation du
+journal) sont tous corrigés et vérifiés par exécution directe. Le seul point mineur qui subsiste
+(non bloquant, déjà noté A/B/C=C en première passe) est cosmétique : `icon-72.png` référencé par
+le handler `push` de `sw.js` sans être ni présent ni mis en cache.
+
+VERDICT: PUSHABLE
