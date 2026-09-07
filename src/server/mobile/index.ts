@@ -15,6 +15,11 @@ import { verifyToken } from '../auth/jwt.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
 import { forwardMobileTextToTelegram } from './telegram-forward.js';
+import {
+  isMobilePushEnabled,
+  loadOrCreateVapidKeys,
+  savePushSubscription,
+} from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -218,6 +223,44 @@ mobilePwaRouter.post(
     const result = await forwardMobileTextToTelegram(text);
     if (!result.ok) {
       res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+mobilePwaRouter.get('/push/vapid', requireAlbumAccess, (_req: Request, res: Response) => {
+  if (!isMobilePushEnabled()) {
+    res.status(404).json({ error: 'Push disabled' });
+    return;
+  }
+  const keys = loadOrCreateVapidKeys();
+  if (!keys) {
+    res.status(404).json({ error: 'Push disabled' });
+    return;
+  }
+  res.json({ publicKey: keys.publicKey });
+});
+
+mobilePwaRouter.post(
+  '/push/subscribe',
+  express.json({ limit: '8kb' }),
+  requireAlbumAccess,
+  (req: Request, res: Response) => {
+    if (!isMobilePushEnabled()) {
+      res.status(404).json({ error: 'Push disabled' });
+      return;
+    }
+    const body = req.body as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
+    const ok = savePushSubscription({
+      endpoint: typeof body.endpoint === 'string' ? body.endpoint : '',
+      keys: {
+        p256dh: typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : '',
+        auth: typeof body.keys?.auth === 'string' ? body.keys.auth : '',
+      },
+    });
+    if (!ok) {
+      res.status(400).json({ error: 'Invalid subscription' });
       return;
     }
     res.json({ ok: true });

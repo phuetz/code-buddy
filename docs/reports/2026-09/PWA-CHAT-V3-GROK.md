@@ -91,7 +91,8 @@ MySoulmate lu en lecture seule : `replyTo`, `searchQuery`, `pinnedMessages`, `Au
 |---|---|
 | `ad7de3d88` | docs(pwa): stub PWA-CHAT-V3-GROK avant inspection |
 | `db9651eed` | feat(pwa): citer, chercher, épingler, accusés et sélection |
-| *(lot 2)* | feat(pwa): notes vocales MediaRecorder + STT/TTS |
+| `c2b1623c5` | feat(pwa): notes vocales MediaRecorder + STT/TTS |
+| *(lot 3)* | feat(pwa): présence, badge, son et push VAPID |
 
 ## Preuves
 
@@ -108,3 +109,6 @@ Réponse citée (balayage droite / menu), copie, transfert Telegram masqué hors
 
 ### Lot 2 — messages vocaux
 Micro maintenu = MediaRecorder (WebM/Ogg), forme d’onde, glisser pour annuler, plafond 2 Mo / 120 s. STT injectable (`speech-reaction`) ; le texte devient le tour utilisateur. Bulle ▶ / durée / ×1,5 + transcription. Option « Lisa me répond à voix haute » → trame `audio` (TTS injectable). Auto-lecture si l’utilisateur a envoyé un vocal. Images inchangées pour les anciens clients. SW v6. Captures `02-voice-recording.png`, `03-voice-bubble.png`.
+
+### Lot 3 — présence et notifications
+En-tête « vu à HH:MM » après `stream_end`. Badge d’onglet `(n) Lisa`. Son + vibration si l’app est en arrière-plan. Push opt-in `CODEBUDDY_MOBILE_PUSH=true` : clés VAPID `~/.codebuddy/push/` (0600), `GET /push/vapid`, `POST /push/subscribe`, envoi via transport injectable (web-push si présent). Câblé sur les initiatives away. SW v7.

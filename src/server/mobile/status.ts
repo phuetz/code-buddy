@@ -15,6 +15,7 @@ import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import { getConnectionStats } from '../websocket/handler.js';
 import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 import { isTelegramForwardConfigured } from './telegram-forward.js';
+import { isMobilePushEnabled } from './push.js';
 
 export interface MobilePeerStatus {
   id: string;
@@ -116,5 +117,6 @@ export async function buildMobileStatus(homeDir = os.homedir()): Promise<Record<
     ...(companion ? { companion } : {}),
     ...(notice ? { failoverNotice: notice.text, failoverNoticeKind: notice.kind } : {}),
     telegramForward: isTelegramForwardConfigured(),
+    mobilePush: isMobilePushEnabled(),
   };
 }

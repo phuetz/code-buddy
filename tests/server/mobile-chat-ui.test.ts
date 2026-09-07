@@ -21,6 +21,7 @@ type MobileApi = {
     unread: number;
     atBottom: boolean;
     avatarUrl: string;
+    connected?: boolean;
     unreadAnchorId?: string;
     telegramForward?: boolean;
     replyTo?: { id: string; text: string } | null;
@@ -715,6 +716,20 @@ describe('Mobile chat UI — messagerie (lot 1)', () => {
     expect(asst).toBeTruthy();
     expect(playCalls.length).toBeGreaterThanOrEqual(1);
     expect(document.querySelectorAll('.voice-card').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows last-seen after stream_end and a tab badge while unread', () => {
+    api.state.connected = true;
+    api.handleFrame({ type: 'stream_start' });
+    api.handleFrame({ type: 'stream_chunk', payload: { delta: 'ok' } });
+    api.handleFrame({ type: 'stream_end' });
+    expect(document.getElementById('presence-line')?.textContent).toMatch(/^vu à /);
+    api.state.unread = 3;
+    api.updateTabBadge();
+    expect(document.title).toMatch(/^\(\d+\)/);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    api.notifyIncoming();
+    expect((navigator.vibrate as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
   });
 
   it('shows the recording overlay while a vocal is in progress', () => {

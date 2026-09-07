@@ -101,6 +101,9 @@
     recordTimer: 0,
     recordStartedAt: 0,
     recordCancelled: false,
+    lastSeenAt: 0,
+    sounds: true,
+    mobilePush: false,
   };
 
   try {
@@ -630,6 +633,10 @@
     var stick = isNearBottom(box);
     if (!stick && msg.role !== 'user') state.unread += 1;
     state.atBottom = stick || msg.role === 'user';
+    updateTabBadge();
+    if (msg.role === 'assistant' && document.visibilityState === 'hidden') {
+      notifyIncoming();
+    }
     renderMessages();
     if (msg.image) maybeAdoptAvatar(msg.image);
     refreshSuggestions();
@@ -679,6 +686,9 @@
       } else if (kind === 'online') {
         line.textContent = 'en ligne';
         line.classList.add('online');
+      } else if (kind === 'last-seen') {
+        var when = state.lastSeenAt ? formatTime(state.lastSeenAt) : '';
+        line.textContent = when ? 'vu à ' + when : 'vu récemment';
       } else if (kind === 'reconnecting') {
         line.textContent = 'reconnexion…';
       } else {
@@ -704,13 +714,16 @@
     if (stopBtn) stopBtn.classList.toggle('hidden', !on);
     if (!on) {
       state.sawChunk = false;
-      setPresence(state.connected ? 'online' : 'offline');
+      state.lastSeenAt = Date.now();
+      setPresence(state.connected ? 'last-seen' : 'offline');
     }
   }
 
   function applyStatusPayload(data) {
     if (!data || typeof data !== 'object') return;
     state.telegramForward = data.telegramForward === true;
+    state.mobilePush = data.mobilePush === true;
+    if (state.mobilePush) subscribePush();
     var fwd = el('forward-msg-btn');
     if (fwd) fwd.classList.toggle('hidden', !state.telegramForward);
     var companion = data.companion;
@@ -1423,6 +1436,59 @@
       },
       body: JSON.stringify({ text: msg.text || '' }),
     }).then(function (res) { return res.ok; }).catch(function () { return false; });
+  }
+
+  function updateTabBadge() {
+    var n = state.unread || 0;
+    document.title = n > 0 ? '(' + n + ') Lisa' : 'Code Buddy Mobile';
+    if (navigator.setAppBadge) {
+      if (n > 0) navigator.setAppBadge(n).catch(function () { /* ignore */ });
+      else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function () { /* ignore */ });
+    }
+  }
+
+  function notifyIncoming() {
+    haptic();
+    try { if (navigator.vibrate) navigator.vibrate([40, 30, 40]); } catch (_e) { /* ignore */ }
+    if (state.sounds === false) return;
+    try {
+      var Ctx = root.AudioContext || root.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.value = 0.04;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } catch (_err) { /* ignore */ }
+  }
+
+  function subscribePush() {
+    if (!state.mobilePush || !navigator.serviceWorker || !root.PushManager) return;
+    fetch(BASE + '/push/vapid', { headers: authHeaders() }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      if (!data || !data.publicKey) return;
+      return navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: data.publicKey,
+        });
+      });
+    }).then(function (sub) {
+      if (!sub) return;
+      return fetch(BASE + '/push/subscribe', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + state.token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sub.toJSON ? sub.toJSON() : sub),
+      });
+    }).catch(function () { /* ignore */ });
   }
 
   function syncKeyboardInset() {
@@ -2506,6 +2572,7 @@
           state.unread = 0;
           state.unreadAnchorId = '';
           rememberLastRead();
+          updateTabBadge();
         }
         updateJumpButton();
       });
@@ -2741,6 +2808,9 @@
     scheduleReconnect: scheduleReconnect,
     reconnectDelayMs: reconnectDelayMs,
     flushOutbox: flushOutbox,
+    updateTabBadge: updateTabBadge,
+    notifyIncoming: notifyIncoming,
+    subscribePush: subscribePush,
     destroy: destroy,
   };
 
