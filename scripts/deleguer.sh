@@ -165,9 +165,20 @@ case "$MOTEUR" in
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
   luna|sol)
-    codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" ${CODEX_EFFORT:+-c model_reasoning_effort="$CODEX_EFFORT"} \
-      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
-      - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    # 07/09/2026 — décision Patrice « mets tout en astra low » (tweet de Tibo/OpenAI, Codex, 06/09 :
+    # « GPT-6 Astra on low performs better than GPT-5.6 Sol on high »). luna et sol sont donc
+    # réacheminés vers gpt-6-astra en low (0,2-0,3 % de quota par lane contre ~1 % et plus à xhigh).
+    # CODEX_VRAI_MOTEUR=1 rend l'ancien comportement (gpt-5.6-luna/sol, effort de config.toml ou CODEX_EFFORT).
+    if [ -n "${CODEX_VRAI_MOTEUR:-}" ]; then
+      codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" ${CODEX_EFFORT:+-c model_reasoning_effort="$CODEX_EFFORT"} \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    else
+      echo "[deleguer] moteur $MOTEUR réacheminé vers gpt-6-astra low (CODEX_VRAI_MOTEUR=1 pour l'ancien)" >&2
+      codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    fi
     ;;
   agy)
     # Sans cette option, agy en mode headless refuse TOUS les outils — il ne peut
