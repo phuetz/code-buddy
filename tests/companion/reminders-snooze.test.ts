@@ -24,7 +24,6 @@ import { runReminderTick } from '../../src/companion/reminder-runner.js';
 
 let dir: string;
 let counter = 0;
-const flush = () => new Promise((r) => setTimeout(r, 40)); // let the fire-and-forget persist land
 beforeEach(() => {
   dir = path.join(os.tmpdir(), `cb-snooze-${process.pid}-${counter++}`);
   process.env.CODEBUDDY_REMINDERS_FILE = path.join(dir, 'reminders.json');
@@ -93,7 +92,7 @@ describe('snoozePending / isSnoozeCommand', () => {
 describe('snooze persistence — survive a restart mid-deferral (health safety)', () => {
   it('a snooze is reloaded from disk after the in-memory registry is lost', async () => {
     snoozeReminder('r1', 'médicaments', 5000);
-    await flush(); // the async persist
+    await whenRemindersPersisted(); // wait for the actual disk mirror (a fixed delay flaked on the Windows runner)
     resetSnoozes(); // simulate the process dying (memory gone)
     expect(dueSnoozes(10_000)).toHaveLength(0); // nothing in memory
 
