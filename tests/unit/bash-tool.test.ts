@@ -968,29 +968,35 @@ describe('BashTool', () => {
 
   describe('Helper Methods', () => {
     describe('listFiles', () => {
-      it('should execute ls -la command', async () => {
+      it('should execute the listing command of the host shell', async () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
         emitAfterSpawn(mockProcess, { stdout: 'file1\nfile2', exitCode: 0 });
         const result = await bashTool.listFiles('.');
         expect(result.success).toBe(true);
+        // `ls -la` is POSIX-only: a PowerShell host binds `-la` to no parameter.
+        const expectedListing =
+          getShellConfiguration().shell === 'bash'
+            ? "ls -la '.'"
+            : "Get-ChildItem -Force -LiteralPath '.'";
         expect(mockSpawn).toHaveBeenCalledWith(
           getShellConfiguration().executable,
-          [...getShellConfiguration().argsPrefix, expect.stringContaining('ls -la')],
+          [...getShellConfiguration().argsPrefix, expect.stringContaining(expectedListing)],
           expect.any(Object)
         );
       });
 
-      it('should sanitize directory argument', async () => {
+      it('should quote the directory argument', async () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
         emitAfterSpawn(mockProcess, { exitCode: 0 });
         await bashTool.listFiles('test dir');
 
-        // sanitizeForShell should be called
-        expect(sanitizeForShell).toHaveBeenCalledWith('test dir');
+        // The directory reaches the shell quoted, never as two bare words.
+        const spawnArgs = mockSpawn.mock.calls.at(-1)![1] as string[];
+        expect(spawnArgs[spawnArgs.length - 1]).toContain("'test dir'");
       });
 
       it('should return error for invalid input', async () => {

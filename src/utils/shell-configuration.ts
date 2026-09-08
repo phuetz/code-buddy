@@ -92,6 +92,40 @@ export function getShellCommandParamDescription(
   return `The ${SHELL_DISPLAY_NAMES[configuration.shell]} command to execute`;
 }
 
+/**
+ * Quote one argument for the selected host shell.
+ *
+ * POSIX ends the quoted run and reopens it around an escaped quote; PowerShell
+ * doubles the quote inside the literal. The bash branch is byte-identical to
+ * `sanitizeForShell`, so POSIX command strings are unchanged.
+ */
+export function quoteShellArgument(
+  value: string,
+  configuration: ShellConfiguration = getShellConfiguration(),
+): string {
+  if (configuration.shell === 'bash') {
+    return `'${value.replace(/'/g, "'\\''")}'`;
+  }
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Directory listing for the selected host shell.
+ *
+ * `ls -la` is POSIX-only: PowerShell binds `-la` to no parameter of
+ * `Get-ChildItem` and fails, so the helper must emit the host's own listing.
+ */
+export function shellListFilesCommand(
+  directory: string,
+  configuration: ShellConfiguration = getShellConfiguration(),
+): string {
+  const quoted = quoteShellArgument(directory, configuration);
+  if (configuration.shell === 'bash') {
+    return `ls -la ${quoted}`;
+  }
+  return `Get-ChildItem -Force -LiteralPath ${quoted}`;
+}
+
 /** Keep the plain working-directory probe usable with the selected host shell. */
 export function shellWorkingDirectoryCommand(
   command: string,

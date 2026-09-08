@@ -96,3 +96,31 @@ describe('portable working-directory command', () => {
     expect(shellWorkingDirectoryCommand('pwd; echo ok', { executable: 'pwsh.exe', argsPrefix: ['-Command'], shell: 'powershell' })).toBe('pwd; echo ok');
   });
 });
+
+describe('portable directory listing command', () => {
+  const bash = { executable: 'bash', argsPrefix: ['-c'], shell: 'bash' } as const;
+  const powershell = {
+    executable: 'pwsh.exe',
+    argsPrefix: ['-NoProfile', '-NonInteractive', '-Command'],
+    shell: 'powershell',
+  } as const;
+
+  it('keeps the POSIX listing byte-identical and emits Get-ChildItem on PowerShell', async () => {
+    const { shellListFilesCommand } = await loadShellConfiguration();
+
+    expect(shellListFilesCommand('.', bash)).toBe("ls -la '.'");
+    // `ls -la` reaches Get-ChildItem on Windows, which binds `-la` to no
+    // parameter and exits non-zero: the listing must be spelled for that shell.
+    expect(shellListFilesCommand('.', powershell)).toBe("Get-ChildItem -Force -LiteralPath '.'");
+    expect(shellListFilesCommand('C:\\Users\\test dir', powershell)).toBe(
+      "Get-ChildItem -Force -LiteralPath 'C:\\Users\\test dir'",
+    );
+  });
+
+  it('quotes an embedded single quote the way each shell expects', async () => {
+    const { quoteShellArgument } = await loadShellConfiguration();
+
+    expect(quoteShellArgument("it's", bash)).toBe("'it'\\''s'");
+    expect(quoteShellArgument("it's", powershell)).toBe("'it''s'");
+  });
+});

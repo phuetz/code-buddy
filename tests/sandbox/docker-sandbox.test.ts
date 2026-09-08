@@ -230,9 +230,45 @@ describe('DockerSandbox', () => {
 
       const args = mockSpawn.mock.calls[0][1] as string[];
       expect(args).toContain('--tmpfs');
+      // Windows has no host uid to align the tmpfs with, so no uid/gid option is
+      // emitted there; the container destination stays POSIX on every host.
+      const hostOwned =
+        process.platform !== 'win32' &&
+        typeof process.getuid === 'function' &&
+        typeof process.getgid === 'function';
       expect(args).toContain(
-        `/workspace/.cache:rw,nosuid,nodev,size=64m,uid=${process.getuid?.() ?? 0},gid=${process.getgid?.() ?? 0}`,
+        hostOwned
+          ? `/workspace/.cache:rw,nosuid,nodev,size=64m,uid=${process.getuid!()},gid=${process.getgid!()}`
+          : '/workspace/.cache:rw,nosuid,nodev,size=64m',
       );
+    });
+
+    it('omits tmpfs ownership on a host without uid/gid (Windows contract)', async () => {
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { ...descriptor, value: 'win32' });
+      const hostGetuid = process.getuid;
+      const hostGetgid = process.getgid;
+      delete (process as { getuid?: unknown }).getuid;
+      delete (process as { getgid?: unknown }).getgid;
+      try {
+        const proc = createMockProcess();
+        mockSpawn.mockReturnValue(proc);
+
+        const sandbox = new DockerSandbox({ tmpfsMounts: ['/workspace/.cache'] });
+        const promise = sandbox.execute('true');
+
+        proc.emit('close', 0);
+        await promise;
+
+        const args = mockSpawn.mock.calls[0][1] as string[];
+        expect(args).toContain('/workspace/.cache:rw,nosuid,nodev,size=64m');
+        // A container destination is POSIX whatever the host separator is.
+        expect(args.some((arg) => arg.includes('\\workspace'))).toBe(false);
+      } finally {
+        Object.defineProperty(process, 'platform', descriptor);
+        if (hostGetuid) process.getuid = hostGetuid;
+        if (hostGetgid) process.getgid = hostGetgid;
+      }
     });
 
     it('can preserve the host workspace path for compatible tool output', async () => {
