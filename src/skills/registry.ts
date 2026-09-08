@@ -37,6 +37,8 @@ export class SkillRegistry extends EventEmitter {
   private skillsByTier: Map<SkillTier, Map<string, Skill>> = new Map();
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private loaded: boolean = false;
+  private watchingPauses = 0;
+  private resumeWatchingAfterPause = false;
 
   constructor(config: Partial<SkillRegistryConfig> = {}) {
     super();
@@ -639,6 +641,10 @@ export class SkillRegistry extends EventEmitter {
    */
   private startWatching(): void {
     this.stopWatching();
+    if (this.watchingPauses > 0) {
+      this.resumeWatchingAfterPause = true;
+      return;
+    }
 
     const paths = [
       { tier: 'workspace' as SkillTier, path: this.config.workspacePath },
@@ -713,7 +719,7 @@ export class SkillRegistry extends EventEmitter {
     event: string,
     filename: string | Buffer | null
   ): void {
-    if (!this.loaded) return;
+    if (!this.loaded || this.watchingPauses > 0) return;
 
     const name = filename?.toString();
     if (name && path.basename(name) === name) {
@@ -739,7 +745,7 @@ export class SkillRegistry extends EventEmitter {
     event: string,
     filename: string | Buffer | null
   ): void {
-    if (!this.loaded) return;
+    if (!this.loaded || this.watchingPauses > 0) return;
 
     if (!this.isDirectory(directory)) {
       this.closeWatcher(this.watcherKey(tier, directory));
@@ -920,6 +926,26 @@ export class SkillRegistry extends EventEmitter {
     }
   }
 
+  /** Suspend handles during removal; restore only a previously active watcher set. */
+  pauseWatching(): () => void {
+    if (this.watchingPauses === 0) this.resumeWatchingAfterPause = this.watchers.size > 0;
+    this.watchingPauses++;
+    this.stopWatching();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      this.watchingPauses--;
+      if (this.watchingPauses === 0 && this.resumeWatchingAfterPause && this.loaded) {
+        // Removal events were deliberately missed while handles were closed.
+        for (const skill of [...this.skills.values()]) {
+          if (!fs.existsSync(skill.sourcePath)) this.unload(skill.metadata.name);
+        }
+        this.startWatching();
+      }
+    };
+  }
+
   /**
    * Stop watching
    */
@@ -1000,6 +1026,11 @@ export function getSkillRegistry(config?: Partial<SkillRegistryConfig>): SkillRe
     registryInstance = new SkillRegistry(config);
   }
   return registryInstance;
+}
+
+/** Do not create a registry just to remove an installed package. */
+export function pauseSkillRegistryWatching(): () => void {
+  return registryInstance?.pauseWatching() ?? (() => {});
 }
 
 export function resetSkillRegistry(): void {

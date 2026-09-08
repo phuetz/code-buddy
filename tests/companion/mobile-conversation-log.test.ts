@@ -39,7 +39,7 @@ describe('mobile conversation log (lot 4)', () => {
     expect(names).toHaveLength(1);
     const file = path.join(dir, names[0]!);
     expect(readFileSync(file, 'utf8').split('\n').filter(Boolean)).toHaveLength(3);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     const page = readConversationLog('user-a', { before: 'c-3', limit: 2 }, env);
     expect(page.map((row) => row.id)).toEqual(['c-1', 'c-2']);
   });

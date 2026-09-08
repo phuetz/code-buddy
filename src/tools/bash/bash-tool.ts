@@ -29,7 +29,7 @@ import {
   sanitizeForShell
 } from '../../utils/input-validator.js';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
-import { getShellConfiguration } from '../../utils/shell-configuration.js';
+import { getShellConfiguration, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
@@ -198,7 +198,7 @@ export class BashTool implements Disposable {
       const shellConfiguration = getShellConfiguration();
       const shellCommand = shellConfiguration.shell === 'bash'
         ? `${buildBashEnvPrelude()}\n${command}`
-        : command;
+        : shellWorkingDirectoryCommand(command, shellConfiguration);
       const confined = confineSpawn({
         file: shellConfiguration.executable,
         args: [...shellConfiguration.argsPrefix, shellCommand],

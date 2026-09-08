@@ -39,12 +39,6 @@ describe('AUDIT-STRAT1: Adversarial Suite', () => {
   });
 
   afterEach(() => {
-    try {
-      // restore permissions if made read-only
-      fs.chmodSync(path.join(workDir, '.codebuddy', 'strategies'), 0o777);
-    } catch {
-      /* ignore */
-    }
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 
@@ -403,12 +397,13 @@ describe('AUDIT-STRAT1: Adversarial Suite', () => {
   });
 
   // =========================================================================
-  // 10. Répertoire .codebuddy/strategies en lecture seule
+  // 10. Stockage .codebuddy/strategies inaccessible
   // =========================================================================
-  describe('Attaque 10: Répertoire .codebuddy/strategies en lecture seule', () => {
-    it('ne plante pas (fail-closed) et dégrade gracieusement sans crash quand le répertoire est en lecture seule', async () => {
+  describe('Attaque 10: Stockage .codebuddy/strategies inaccessible', () => {
+    it('ne plante pas (fail-closed) et dégrade gracieusement sans crash quand un fichier bloque le répertoire', async () => {
       const stratDir = path.join(workDir, '.codebuddy', 'strategies');
-      fs.chmodSync(stratDir, 0o555);
+      fs.rmdirSync(stratDir);
+      fs.writeFileSync(stratDir, 'blocks directory creation');
 
       try {
         const engine = new StrategyImprovementEngine({
@@ -432,7 +427,7 @@ describe('AUDIT-STRAT1: Adversarial Suite', () => {
         const res = await engine.runCycle(exp);
         expect(res.applied).toBe(false);
       } finally {
-        fs.chmodSync(stratDir, 0o777);
+        fs.unlinkSync(stratDir);
       }
     });
   });

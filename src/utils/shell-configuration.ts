@@ -91,3 +91,14 @@ export function getShellCommandParamDescription(
   }
   return `The ${SHELL_DISPLAY_NAMES[configuration.shell]} command to execute`;
 }
+
+/** Keep the plain working-directory probe usable with the selected host shell. */
+export function shellWorkingDirectoryCommand(
+  command: string,
+  configuration: ShellConfiguration,
+): string {
+  if (configuration.shell === 'powershell' && command.trim() === 'pwd') {
+    return 'Get-Location | Select-Object -ExpandProperty Path';
+  }
+  return command;
+}

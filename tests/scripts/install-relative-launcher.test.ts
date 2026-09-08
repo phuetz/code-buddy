@@ -1,17 +1,27 @@
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { hasBash, spawnBashScript } from '../setup/platform-fixtures.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const installerPath = path.join(repoRoot, 'install.sh');
+const scratchRoots: string[] = [];
 
-describe('one-command installer launcher', () => {
-  it('creates a package-relative launcher that takes precedence over a stale local wrapper', () => {
+afterEach(() => {
+  for (const root of scratchRoots.splice(0)) {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+// The installer is a Bash script; Windows requires a working Git Bash.
+describe.skipIf(process.platform === 'win32' && !hasBash())('one-command installer launcher', () => {
+  it.each([false, true])('creates a package-relative launcher over a stale wrapper (Windows Node paths=%s)', (windowsNodePaths) => {
     const scratchRoot = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), 'e17-installer-')
     );
+    scratchRoots.push(scratchRoot);
     const fakeBin = path.join(scratchRoot, 'fake-bin');
     const home = path.join(scratchRoot, 'home');
     const prefix = path.join(scratchRoot, 'npm-prefix');
@@ -59,18 +69,37 @@ exit 1
       { mode: 0o755 }
     );
 
+    // Exercise the real installer with Node's Windows-style path outputs even
+    // on Linux. Only its two path-printing subprocesses are affected.
+    const pathProbe = path.join(scratchRoot, 'windows-node-paths.cjs');
+    fs.writeFileSync(pathProbe, `
+if (process._eval?.includes('fs.realpathSync')) {
+  if (process._eval.includes('path.relative')) {
+    const path = require('node:path');
+    const relative = path.relative;
+    path.relative = (...args) => relative(...args).replace(/\\//g, '\\\\');
+  } else {
+    const fs = require('node:fs');
+    const realpath = fs.realpathSync;
+    fs.realpathSync = (...args) => realpath(...args).replace(/\\//g, '\\\\');
+  }
+}
+`);
+
     const runInstaller = () =>
-      spawnSync('sh', [installerPath], {
+      spawnBashScript(installerPath, [], {
         cwd: repoRoot,
         encoding: 'utf8',
         timeout: 10_000,
         env: {
           ...process.env,
-          HOME: home,
-          CODEBUDDY_HOME: path.join(home, '.codebuddy'),
-          FAKE_NPM_PREFIX: prefix,
+          ...(windowsNodePaths ? { NODE_OPTIONS: `--require "${pathProbe.replace(/\\/g, '/')}"` } : {}),
+          HOME: home.replace(/\\/g, '/'),
+          CODEBUDDY_HOME: path.join(home, '.codebuddy').replace(/\\/g, '/'),
+          FAKE_NPM_PREFIX: prefix.replace(/\\/g, '/'),
+          MSYS: 'winsymlinks:nativestrict',
           OLLAMA_HOST: 'http://127.0.0.1:1',
-          PATH: `${fakeBin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+          PATH: [fakeBin, path.dirname(process.execPath), process.env.PATH ?? ''].join(path.delimiter),
         },
       });
 
@@ -89,13 +118,13 @@ exit 1
     expect(launcherSource).not.toContain(scratchRoot);
     expect(launcherSource).not.toContain('CODEBUDDY_ROOT');
 
-    const version = spawnSync(managedLauncher, ['--version'], {
+    const version = spawnBashScript(managedLauncher, ['--version'], {
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
+      env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH ?? ''].join(path.delimiter) },
     });
     expect(version.status, version.stderr).toBe(0);
     expect(version.stdout).toBe('2.0.0-test\n');
-    const profileEntry = `export PATH="${managedBin}:$PATH"`;
+    const profileEntry = `export PATH="${managedBin.replace(/\\/g, '/')}:$PATH"`;
     expect(fs.readFileSync(path.join(home, '.profile'), 'utf8')).toContain(profileEntry);
 
     const secondRun = runInstaller();

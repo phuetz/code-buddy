@@ -205,9 +205,9 @@ describe('Pack Contents Policy - Unit Tests', () => {
 describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', () => {
   it('la vraie liste npm pack du dépôt actuel respecte la politique sans aucune violation', () => {
     const packJsonOutput = execFileSync(
-      'npm',
+      process.platform === 'win32' ? 'npm.cmd' : 'npm',
       ['pack', '--dry-run', '--json', '--ignore-scripts'],
-      { cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
+      { shell: process.platform === 'win32', cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
     );
 
     const packData = JSON.parse(packJsonOutput);
@@ -242,9 +242,9 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
       writeFileSync(join(tmpDir, 'dist', 'index.js.map'), '{"version":3,"sources":["index.ts"]}');
 
       const outWithIgnore = execFileSync(
-        'npm',
+        process.platform === 'win32' ? 'npm.cmd' : 'npm',
         ['pack', '--dry-run', '--json', '--ignore-scripts'],
-        { cwd: tmpDir, encoding: 'utf8' }
+        { shell: process.platform === 'win32', cwd: tmpDir, encoding: 'utf8' }
       );
       const packedWithIgnore: string[] = JSON.parse(outWithIgnore)[0].files.map(
         (f: { path: string }) => f.path
@@ -262,9 +262,9 @@ describe('Pack Contents Policy - Intégration réelle npm pack & .npmignore', ()
       writeFileSync(join(tmpDir, '.npmignore'), modifiedNpmIgnore);
 
       const outWithoutIgnore = execFileSync(
-        'npm',
+        process.platform === 'win32' ? 'npm.cmd' : 'npm',
         ['pack', '--dry-run', '--json', '--ignore-scripts'],
-        { cwd: tmpDir, encoding: 'utf8' }
+        { shell: process.platform === 'win32', cwd: tmpDir, encoding: 'utf8' }
       );
       const packedWithoutIgnore: string[] = JSON.parse(outWithoutIgnore)[0].files.map(
         (f: { path: string }) => f.path

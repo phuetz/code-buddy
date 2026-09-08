@@ -13,7 +13,8 @@ function probe(candidates: string): number | null {
   `, 'guard-test', guard], { encoding: 'utf8' }).status;
 }
 
-describe('OpenCode process guard', () => {
+// This guard relies on POSIX ps/pgrep and runs only on the Linux host.
+describe.skipIf(process.platform === 'win32')('OpenCode process guard', () => {
   it('ignores the guard shell and its parent', () => {
     expect(probe('printf "%s\\n" "$$" "$PPID"')).toBe(1);
   });

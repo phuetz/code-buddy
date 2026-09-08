@@ -86,3 +86,13 @@ describe('getShellConfiguration', () => {
     expect(resolution.resolveExecutable).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('portable working-directory command', () => {
+  it('prints a plain path under PowerShell without formatting headers', async () => {
+    const { shellWorkingDirectoryCommand } = await loadShellConfiguration();
+    expect(shellWorkingDirectoryCommand(' pwd ', { executable: 'pwsh.exe', argsPrefix: ['-Command'], shell: 'powershell' }))
+      .toBe('Get-Location | Select-Object -ExpandProperty Path');
+    expect(shellWorkingDirectoryCommand('pwd', { executable: 'bash', argsPrefix: ['-c'], shell: 'bash' })).toBe('pwd');
+    expect(shellWorkingDirectoryCommand('pwd; echo ok', { executable: 'pwsh.exe', argsPrefix: ['-Command'], shell: 'powershell' })).toBe('pwd; echo ok');
+  });
+});

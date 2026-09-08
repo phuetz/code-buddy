@@ -13,7 +13,7 @@ import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
-import { getShellConfiguration } from '../../utils/shell-configuration.js';
+import { getShellConfiguration, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
 import {
   evaluateShellExecution,
@@ -161,7 +161,7 @@ export async function* executeStreaming(
   const shellConfiguration = getShellConfiguration();
   const shellCommand = shellConfiguration.shell === 'bash'
     ? `${buildBashEnvPrelude()}\n${executionCommand}`
-    : executionCommand;
+    : shellWorkingDirectoryCommand(executionCommand, shellConfiguration);
   const confined = confineSpawn({
     file: shellConfiguration.executable,
     args: [...shellConfiguration.argsPrefix, shellCommand],

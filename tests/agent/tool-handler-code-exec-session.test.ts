@@ -83,6 +83,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     observedScopes.splice(0);
     // The bash `pwd` below runs through the real ConfirmationService; hosts
     // without a sandbox backend (Windows CI) escalate it to an exact grant.
+    ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
     approveSandboxUnavailableEscalations(ConfirmationService.getInstance());
     // Repo-local tmp (gitignored): Linux bubblewrap mounts a tmpfs over `/tmp`,
     // so a cwd under os.tmpdir() disappears inside the sandbox. git rev-parse
@@ -145,6 +146,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     resetBashInstance();
     resetTrustFolderManager();
     resetPermissionModeManager();
+    ConfirmationService.getInstance().setSessionFlag('bashCommands', false);
     clearSandboxEscalationBridge(ConfirmationService.getInstance());
     restoreHostProcess();
     removeTmpDir(workDir);

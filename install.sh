@@ -274,7 +274,7 @@ install_managed_launcher() { # <npm-prefix>
   # once at install time, then keep the wrapper itself independent of that
   # machine-specific absolute path.
   _installed_entry=$(node -e \
-    'const fs = require("node:fs"); process.stdout.write(fs.realpathSync(process.argv[1]));' \
+    'const fs = require("node:fs"); process.stdout.write(fs.realpathSync(process.argv[1]).replace(/\\/g, "/"));' \
     "$_npm_launcher") \
     || die "could not resolve the installed buddy entry point at $_npm_launcher"
   case "$_installed_entry" in
@@ -294,7 +294,7 @@ install_managed_launcher() { # <npm-prefix>
   # above) and the managed bin dir may sit behind a symlink of a different
   # depth (macOS /var -> /private/var), which would shift every "..".
   _relative_package=$(node -e \
-    'const fs = require("node:fs"); const path = require("node:path"); process.stdout.write(path.relative(fs.realpathSync(process.argv[1]), process.argv[2]) || ".");' \
+    'const fs = require("node:fs"); const path = require("node:path"); process.stdout.write((path.relative(fs.realpathSync(process.argv[1]), process.argv[2]) || ".").replace(/\\/g, "/"));' \
     "$MANAGED_BIN_DIR" "$_package_root") \
     || die "could not compute a package-relative launcher target"
   case "$_relative_package" in

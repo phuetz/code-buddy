@@ -1884,10 +1884,16 @@ export class SkillsHub extends EventEmitter {
 
     logger.info('Uninstalling skill', { name: skillName });
 
-    // Remove skill directory
-    const skillDir = path.dirname(installed.path);
-    if (fs.existsSync(skillDir)) {
-      fs.rmSync(skillDir, { recursive: true, force: true });
+    // Release registry handles before Windows removal; transient external locks
+    // (for example antivirus scans) are retried by Node's asynchronous rm.
+    const { pauseSkillRegistryWatching } = await import('./registry.js');
+    const resumeWatching = pauseSkillRegistryWatching();
+    try {
+      await fs.promises.rm(path.dirname(installed.path), {
+        recursive: true, force: true, maxRetries: 5, retryDelay: 100,
+      });
+    } finally {
+      resumeWatching();
     }
 
     // Remove from lockfile
