@@ -32,9 +32,11 @@ npm run build:gui      # Cowork Electron GUI (cd cowork && npm run build)
 npm run dev:gui        # Cowork dev (Vite + Electron)
 ```
 
-Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192` (4096 on Windows — lower RAM CI runners, `vitest.config.ts:141`). `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
+Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192` (4096 on Windows/macOS — lower RAM CI runners). `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
 
 ## Testing Gotchas
+
+- macOS/Windows CI: 4096 MiB heap per Vitest fork and six sequential shards to limit accumulated memory; Linux retains 8192 MiB.
 
 - **MEM1 state writes:** les JSON/MD d'état passent par `src/utils/atomic-write.ts`; les lectures vides/tronquées repliquent et avertissent une seule fois, les JSONL append-only restent `O_APPEND`.
 - ESM project (`"type": "module"`). Use `import.meta.url` + `fileURLToPath` for `__dirname`. `@` alias → `./src` (see `vitest.config.ts`). Source imports need `.js` extensions even for `.ts` files.

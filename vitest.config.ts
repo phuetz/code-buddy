@@ -137,20 +137,12 @@ export default defineConfig({
       ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],
     pool: 'forks',
-    // Per-fork V8 heap ceiling. On windows-latest (7 GB RAM, 2 CI forks) the
-    // 8 GB ceiling over-subscribes physical memory: the Node 20 Windows job of
-    // the PR #95 run ended with "[vitest-pool]: Worker forks emitted error /
-    // Worker exited unexpectedly" — 1596 files passed, 0 failed, one file
-    // (tests/unit/hybrid-search-semantic, pure, 2.2 s in the 8 earlier runs)
-    // never reported: its fork died mid-run, outside any test. 4 GB per fork
-    // keeps two forks inside the runner's RAM and turns a runaway heap into a
-    // visible V8 "heap out of memory" instead of a silent OS kill.
-    // Linux/macOS keep 8 GB. (The 4 GB cap alone was not enough — the fork still
-    // died with no V8 FATAL, i.e. off-heap growth; see the sharded Windows test
-    // steps in .github/workflows/ci.yml.)
-    execArgv: [`--max-old-space-size=${process.platform === 'win32' ? 4096 : 8192}`],
+    // macOS/Windows CI runners have limited RAM: cap each fork at 4 GiB.
+    // Six sequential shards in ci.yml also bound accumulated off-heap growth;
+    // the heap ceiling alone is not a bound on total worker RSS.
+    execArgv: [`--max-old-space-size=${['win32', 'darwin'].includes(process.platform) ? 4096 : 8192}`],
     // Bound worker concurrency on CI only. The default is one worker per CPU, and
-    // each fork carries an 8 GB heap ceiling — on GitHub's constrained runners
+    // each fork carries a substantial heap ceiling — on GitHub's constrained runners
     // (esp. macos-latest: 3 vCPU / 7 GB) that over-subscribes RAM, causing swap
     // thrash that slows module imports enough to trip hook timeouts. This is the
     // honest root-cause fix for the historically-red macOS "Run tests" job: no
