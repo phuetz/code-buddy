@@ -84,7 +84,7 @@ MOTEUR=${3:-luna}
 # attend AVANT de démarrer (les lanes déjà lancées ne sont pas touchées). Créer/supprimer le fichier = pause/reprise.
 case "$MOTEUR" in astra|luna|sol)
   while [ -f "$HOME/.codebuddy/PAUSE-CODEX" ]; do
-    [ -z "${PAUSE_ANNONCEE:-}" ] && { echo "$(date '+%d/%m %H:%M') PAUSE-CODEX : lane $MOTEUR en attente du reset ($CONSIGNE)" >> "${CODEBUDDY_PAUSE_LOG:-$HOME/.codebuddy/delegations/pause-codex.log}"; PAUSE_ANNONCEE=1; }
+    [ -z "${PAUSE_ANNONCEE:-}" ] && { echo "$(date '+%d/%m %H:%M') PAUSE-CODEX : lane $MOTEUR en attente du reset ($(basename "$MISSION"))" >> "${CODEBUDDY_PAUSE_LOG:-$HOME/.codebuddy/delegations/pause-codex.log}"; PAUSE_ANNONCEE=1; }
     sleep 120
   done ;;
 esac
