@@ -208,7 +208,7 @@ export class InteractiveBashTool extends EventEmitter {
       : selectedConfiguration;
 
     if (!this.isPTYAvailable) {
-      return this.fallbackExecute(command, shellConfiguration);
+      return this.fallbackExecute(command, shellConfiguration, options);
     }
 
     const sessionId = `pty-${++this.sessionCounter}`;
@@ -216,6 +216,7 @@ export class InteractiveBashTool extends EventEmitter {
     const rows = options.rows || 30;
 
     return new Promise((resolve, reject) => {
+      let spawned = false;
       try {
         if (!this.ptyModule) {
           reject(new Error("PTY module not available"));
@@ -234,6 +235,7 @@ export class InteractiveBashTool extends EventEmitter {
           },
         );
 
+        spawned = true;
         let output = "";
         let resolved = false;
 
@@ -270,6 +272,13 @@ export class InteractiveBashTool extends EventEmitter {
           }
         }, 30000);
       } catch (error) {
+        // Only retry when creation failed. Replaying a command after a shell
+        // started could duplicate its side effects.
+        if (!spawned) {
+          this.isPTYAvailable = false;
+          resolve(this.fallbackExecute(command, shellConfiguration, options));
+          return;
+        }
         reject(new Error(`PTY execution failed: ${getErrorMessage(error)}`));
       }
     });
@@ -307,6 +316,7 @@ export class InteractiveBashTool extends EventEmitter {
   private async fallbackExecute(
     command: string,
     shellConfiguration: ShellConfiguration,
+    options: PTYOptions,
   ): Promise<{ sessionId: string; output: string }> {
     const sessionId = `exec-${++this.sessionCounter}`;
 
@@ -317,9 +327,9 @@ export class InteractiveBashTool extends EventEmitter {
         {
           shell: false,
           timeout: 60000,
-          cwd: process.cwd(),
+          cwd: options.cwd || process.cwd(),
           env: {
-            ...buildInteractiveEnv(),
+            ...buildInteractiveEnv(options.env),
             // Disable shell history for security
             HISTFILE: "/dev/null",
             HISTSIZE: "0",

@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -55,7 +56,7 @@ function commandForExecutable(
   configuration: ShellConfiguration = getShellConfiguration(),
 ): string {
   const fixture = fixtureForShell(configuration);
-  return `${fixture.quote(executable)} ${fixture.quote(script)}`;
+  return `${configuration.shell === 'powershell' ? '& ' : ''}${fixture.quote(executable)} ${fixture.quote(script)}`;
 }
 
 function combinedOutput(result: { stdout?: string | null; stderr?: string | null }): string {
@@ -79,14 +80,13 @@ function normalizePortablePath(value: string): string {
   ).toLowerCase();
 }
 
-async function runInteractive(command: string, forceFallback = false): Promise<string> {
-  const tool = new InteractiveBashTool();
+async function runInteractive(command: string, backend: boolean | 'spawn-failure' = false): Promise<string> {
+  const tool = backend === 'spawn-failure'
+    ? new InteractiveBashTool({ spawn() { throw new Error('posix_spawnp failed'); } })
+    : backend ? new InteractiveBashTool(null) : new InteractiveBashTool();
   try {
-    if (forceFallback) {
-      Object.defineProperty(tool, 'isPTYAvailable', { value: false, writable: true });
-    }
     const result = await tool.executeInteractive(command, { cwd: workDir });
-    return result.output;
+    return stripVTControlCharacters(result.output);
   } finally {
     tool.dispose();
   }
@@ -105,7 +105,7 @@ afterEach(() => {
     if (!(key in environmentSnapshot)) delete process.env[key];
   }
   Object.assign(process.env, environmentSnapshot);
-  rmSync(workDir, { recursive: true, force: true });
+  rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('InteractiveBashTool — environnement des sous-processus', () => {
@@ -139,7 +139,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(environment.TERM).toBe('xterm-256color');
   });
 
-  it.each([false, true])('ne transmet pas NODE_OPTIONS à un vrai node enfant (%s)', async (forceFallback) => {
+  it.each([false, true, 'spawn-failure'] as const)('ne transmet pas NODE_OPTIONS à un vrai node enfant (%s)', async (forceFallback) => {
     const evilScript = join(workDir, 'evil.cjs');
     const victimScript = join(workDir, 'node-options-victim.cjs');
     writeFileSync(evilScript, `process.stdout.write('${MARKER}\\n');\n`);
@@ -161,12 +161,12 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(output).toContain('child ok');
   });
 
-  it.each([false, true])('ne transmet pas NODE_PATH à un vrai node enfant (%s)', async (forceFallback) => {
+  it.each([false, true, 'spawn-failure'] as const)('ne transmet pas NODE_PATH à un vrai node enfant (%s)', async (forceFallback) => {
     const evilModules = join(workDir, 'evil-modules');
     const victimScript = join(workDir, 'node-path-victim.cjs');
     mkdirSync(evilModules);
     writeFileSync(join(evilModules, 'interactive-evil.cjs'), `process.stdout.write('${MARKER}\\n');\n`);
-    writeFileSync(victimScript, "try { require('interactive-evil.cjs'); } catch {}\n");
+    writeFileSync(victimScript, "try { require('interactive-evil.cjs'); } catch {}\nprocess.stdout.write('child ok\\n');\n");
     process.env.NODE_PATH = evilModules;
 
     const control = spawnSync(
@@ -181,10 +181,11 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
       forceFallback,
     );
     expect(output).not.toContain(MARKER);
+    expect(output).toContain('child ok');
   });
 
-  it.skipIf(!PYTHON).each([false, true])(
-    'ne transmet pas PYTHONPATH à un vrai python enfant (%s)',
+  it.skipIf(!PYTHON).each([false, true, 'spawn-failure'] as const)(
+    'ne transmet pas PYTHONPATH à un vrai python enfant (%s ; sauté si Python absent)',
     async (forceFallback) => {
       const evilModules = join(workDir, 'evil-python-modules');
       const script = join(workDir, 'victim.py');
@@ -206,6 +207,26 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
       );
       expect(output).not.toContain(MARKER);
       expect(output).toContain('child ok');
+    },
+  );
+
+  it.each([null, { spawn() { throw new Error('posix_spawnp failed'); } }])(
+    'préserve cwd et les overrides sûrs sans PTY (%s)',
+    async (backend) => {
+      const script = join(workDir, 'cwd-probe.cjs');
+      writeFileSync(script, "process.stdout.write(JSON.stringify({ cwd: process.cwd(), LANG: process.env.LANG, NODE_OPTIONS: process.env.NODE_OPTIONS }));");
+      const tool = new InteractiveBashTool(backend);
+      try {
+        const result = await tool.executeInteractive(commandForExecutable(process.execPath, script), {
+          cwd: workDir,
+          env: { LANG: 'C', NODE_OPTIONS: '--require missing-injection.cjs' },
+        });
+        expect(parseJsonOutput(result.output)).toEqual({ cwd: workDir, LANG: 'C' });
+        expect(result.sessionId).toMatch(/^exec-/);
+        expect(tool.isPTYSupported()).toBe(false);
+      } finally {
+        tool.dispose();
+      }
     },
   );
 
@@ -235,7 +256,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
           spawnCalls.push({ executable, args, env: options.env });
           return {
             onData(callback) {
-              callback(options.env.NODE_OPTIONS ? `${MARKER}\n` : 'child ok\n');
+              callback(options.env.NODE_OPTIONS ? `${MARKER}\n` : '\x1b[?25l\x1b[32mchild ok\x1b[0m\r\n');
             },
             onExit(callback) {
               queueMicrotask(() => callback({ exitCode: 0 }));
@@ -259,7 +280,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
           "C:\\work\\victim's.cjs",
           configuration,
         ),
-      ).toBe("'C:\\Program Files\\O''Brien\\node.exe' 'C:\\work\\victim''s.cjs'");
+      ).toBe("& 'C:\\Program Files\\O''Brien\\node.exe' 'C:\\work\\victim''s.cjs'");
       const tool = new MockedInteractiveBashTool(fakePty);
       const result = await tool.executeInteractive(command, { cwd: workDir });
       tool.dispose();
@@ -275,7 +296,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
       // Même contrat de sécurité que les deux scénarios réels ci-dessus : le
       // marqueur injecté ne doit jamais atteindre la sortie de la session.
       expect(result.output).not.toContain(MARKER);
-      expect(result.output).toContain('child ok');
+      expect(stripVTControlCharacters(result.output)).toContain('child ok');
     } finally {
       vi.doUnmock('../../src/utils/shell-configuration.js');
       vi.resetModules();
