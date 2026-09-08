@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -72,6 +72,12 @@ function parseJsonOutput(output: string): Record<string, string> {
   return JSON.parse(output.slice(start, end + 1)) as Record<string, string>;
 }
 
+function normalizeEnvironment(environment: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(environment).map(([key, value]) => [
+    process.platform === 'win32' ? key.toUpperCase() : key, value,
+  ]));
+}
+
 function normalizePortablePath(value: string): string {
   const withSlashes = value.replaceAll('\\', '/');
   return (process.platform === 'win32'
@@ -109,6 +115,16 @@ afterEach(() => {
 });
 
 describe('InteractiveBashTool — environnement des sous-processus', () => {
+  it('normalise les noms de variables Windows sans ignorer les injections', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    try {
+      expect(normalizeEnvironment({ Path: 'safe', Lang: 'C', node_options: 'blocked' }))
+        .toEqual({ PATH: 'safe', LANG: 'C', NODE_OPTIONS: 'blocked' });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('conserve les variables nécessaires au terminal interactif', async () => {
     const pathMarker = join(workDir, 'path-marker');
     const envProbe = join(workDir, 'env-probe.cjs');
@@ -213,15 +229,27 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
   it.each([null, { spawn() { throw new Error('posix_spawnp failed'); } }])(
     'préserve cwd et les overrides sûrs sans PTY (%s)',
     async (backend) => {
+      const targetDir = join(workDir, 'target');
+      const executionDir = join(workDir, 'alias');
+      mkdirSync(targetDir);
+      symlinkSync(targetDir, executionDir, 'junction');
       const script = join(workDir, 'cwd-probe.cjs');
-      writeFileSync(script, "process.stdout.write(JSON.stringify({ cwd: process.cwd(), LANG: process.env.LANG, NODE_OPTIONS: process.env.NODE_OPTIONS }));");
+      writeFileSync(script, "process.stdout.write(JSON.stringify({ cwd: process.cwd(), LANG: process.env.LANG, NODE_OPTIONS: process.env.NODE_OPTIONS, NODE_PATH: process.env.NODE_PATH, PYTHONPATH: process.env.PYTHONPATH }));");
       const tool = new InteractiveBashTool(backend);
       try {
         const result = await tool.executeInteractive(commandForExecutable(process.execPath, script), {
-          cwd: workDir,
+          cwd: executionDir,
           env: { LANG: 'C', NODE_OPTIONS: '--require missing-injection.cjs' },
         });
-        expect(parseJsonOutput(result.output)).toEqual({ cwd: workDir, LANG: 'C' });
+        const child = parseJsonOutput(result.output);
+        const environment = normalizeEnvironment(child);
+        expect(environment).toMatchObject({ LANG: 'C' });
+        expect(environment).not.toHaveProperty('NODE_OPTIONS');
+        expect(environment).not.toHaveProperty('NODE_PATH');
+        expect(environment).not.toHaveProperty('PYTHONPATH');
+        expect(normalizePortablePath(realpathSync.native(child.cwd))).toBe(
+          normalizePortablePath(realpathSync.native(executionDir)),
+        );
         expect(result.sessionId).toMatch(/^exec-/);
         expect(tool.isPTYSupported()).toBe(false);
       } finally {

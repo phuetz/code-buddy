@@ -69,3 +69,35 @@ La CI distante verte et la disparition des OOM restent à confirmer sur les runn
 Outillage : 12 appels Code Explorer (context/impact/query, sans snapshot), 38 commandes explicites via lm-resizer, 701865 octets économisés.
 
 Commitlint : les deux appels initiaux ont échoué au chargement de la configuration CommonJS `.js` dans le dépôt ESM. Copie byte-identique sous `_qa/ci-portable/commitlint.config.cjs` : validation des trois commits précédents et du message mémoire via `--config` toutes deux exit 0. Aucun changement de règles.
+
+## Tranche 2 — reprise après les vrais runners (08/09)
+
+Branche `fix/ci-portable-macos-windows-2026-09-08`, commit portant cette section.
+Analyse des journaux fournis du run 34195382471, shard 1/6 ; aucun nouveau run distant lancé.
+
+### Causes mesurées et corrections
+
+- Environnement interactif : les différences réelles sont le cwd court/long Windows (lignes 7294–7295) et `/var` contre `/private/var` sur macOS (7724–7725), pas des variables supplémentaires. Comparaison des chemins physiques via `realpathSync.native`, sous-ensemble LANG présent et NODE_OPTIONS/NODE_PATH/PYTHONPATH absents ; noms normalisés sous Windows. Une jonction/liaison réelle exerce les deux replis, et `process.platform` mocké exerce la casse Windows. Le probe ne révèle que les variables concernées.
+- Balayage : le seul cas rouge est celui dont la fixture quitte avant de produire le help si PATH diffère. Le script résout déjà Node et lance explicitement le point d’entrée ; les autres extractions sont vertes. La fixture compare désormais les chemins physiques et accepte la notation Git Bash `/c/…`. Aucun skip ajouté, aucune commande retirée. Cette attribution reste à confirmer nativement sur Windows.
+- Doctor : l’erreur vient de `fileURLToPath` recevant une URL POSIX sous Windows, et non de `pathToFileURL`. La fixture fabrique désormais une URL native avec `pathToFileURL(resolve(...))`.
+- macOS : le journal 7643–7704 rattache l’OOM au processus CLI du test de persistance (exit 134), avec GC vers 1968 Mo et pile `JsonStringifier`. `captureAndSaveTimelineSnapshot` lit le workspace et sérialise tous ses fichiers ; le test capturait le checkout entier, pas une fixture énorme déclarée. Il utilise maintenant un workspace d’un fichier, hors du répertoire des snapshots, et vérifie aussi le contenu des deux snapshots. Le journal seul ne donne pas le fichier individuel responsable du volume.
+- `vitest.config.ts` utilise bien `execArgv` au niveau test pour Vitest 4 (4096 MiB darwin/win32). `ci.yml` séquence six shards ; aucun NODE_OPTIONS hérité n’impose ce plafond aux CLI lancées avec `spawn`. L’OOM observé n’est pas celui du worker. Les plafonds et la configuration CI restent inchangés ; pas d’augmentation mémoire pour masquer le volume de la fixture.
+
+### Preuves locales
+
+Toutes les commandes de test passent par `lm-resizer exec --json --raw-on-failure -- npx vitest run <fichier> --cache=false`, HOME et TMPDIR sous `_qa/ci-portable/`, un worker par invocation. Node 24 Linux ; dépendances partagées préexistantes, cache Vitest désactivé.
+
+- Contrôle rouge avec l’ancienne comparaison cwd sur l’alias réel : 2 échecs ; correction rétablie : environnement 14/14, dont simulation de casse Windows.
+- Balayage : 18/18 ; doctor SQLite : 5/5 ; headless : 7/7, y compris persistance session/run/timeline et contenu des snapshots.
+- Garde `tests/security/donnees-personnelles.test.ts` : 40/40.
+- `npm run typecheck` : exit 0, trois projets.
+- Lint et vérifications de commit : résultats ci-dessous.
+
+### Limites
+
+Aucun runner Windows/macOS exécuté ici ; les shards 2–6 restent inconnus. La disparition de l’OOM est à confirmer sur le runner macOS Node 20. Aucun push, aucun service modifié. Index Git vide après le commit unique de cette reprise.
+Code Explorer : requêtes sans snapshot, recherches exactes en complément. Analyse initiale et reconstruction après modifications tentées ; aucun graphe frais revendiqué. Une ultime reconstruction est bornée à 45 secondes pour ne pas laisser de processus actif à la passation.
+
+`npm run lint` : exit 0, 0 erreur / 2488 warnings (journal brut relu). `git diff --check` : vert. Commitlint : premier appel sans stdin transmis par lm-resizer en échec ; second avec `--edit` et copie CJS byte-identique de la configuration : exit 0. Garde personnel relancé après rédaction : 40/40. Reconstruction Code Explorer finale : timeout 124, aucun snapshot.
+
+Outillage : 11 appels Code Explorer (context/impact/query, sans snapshot), 13 commandes via lm-resizer, 348808 octets économisés. Compteurs propres à cette reprise ; les réécritures automatiques du hook sont exclues.

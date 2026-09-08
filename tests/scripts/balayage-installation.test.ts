@@ -172,7 +172,11 @@ describe('balayage-installation.sh — gardes', () => {
     const cli = fakeCli(`
       const arg = process.argv[2];
       if (arg === '--help' || arg === undefined) {
-        if (require('node:path').normalize(process.env.PATH).toLowerCase() !== require('node:path').normalize(${expectedPath}).toLowerCase()) process.exit(19);
+        // Git Bash can pass /c/... to native Node instead of C:/....
+        const canonical = value => require('node:fs').realpathSync.native(
+          process.platform === 'win32' ? value.replace(/^\\/([a-z])\\//i, '$1:/') : value
+        ).toLowerCase();
+        if (canonical(process.env.PATH) !== canonical(${expectedPath})) process.exit(19);
         console.log('  alpha   ok');
       } else { process.exit(0); }
     `);

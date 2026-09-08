@@ -368,6 +368,10 @@ describe('headless CLI exit codes', () => {
     });
 
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-persistence-'));
+    // Snapshot a bounded workspace, not the entire checkout and its CI artifacts.
+    const workspace = path.join(homeDir, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'fixture.txt'), 'persistent fixture\n');
     try {
       const address = server.address();
       if (!address || typeof address === 'string') {
@@ -377,6 +381,7 @@ describe('headless CLI exit codes', () => {
       for (const prompt of ['first persistent turn', 'second persistent turn']) {
         const result = await runCliAgainstSuccessfulProvider(address.port, {
           homeDir,
+          directory: workspace,
           prompt,
           persistent: true,
           timeline: true,
@@ -385,6 +390,13 @@ describe('headless CLI exit codes', () => {
         expect(JSON.parse(result.stdout).result).toBe('HEADLESS_PERSISTENCE_OK');
       }
 
+      const snapshotsDir = path.join(homeDir, '.codebuddy', 'timelines', 'snapshots');
+      const snapshots = fs.readdirSync(snapshotsDir).filter(entry => entry.endsWith('.json'));
+      expect(snapshots.length).toBeGreaterThanOrEqual(2);
+      for (const entry of snapshots) {
+        const snapshot = JSON.parse(fs.readFileSync(path.join(snapshotsDir, entry), 'utf8'));
+        expect(snapshot.files).toEqual([{ path: 'fixture.txt', content: 'persistent fixture\n' }]);
+      }
       const sessionsDir = path.join(homeDir, '.codebuddy', 'sessions');
       const runsDir = path.join(homeDir, '.codebuddy', 'runs');
       const timelinesDir = path.join(homeDir, '.codebuddy', 'timelines');

@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getSqliteInstallGuidance,
@@ -28,7 +30,7 @@ describe('B-4: Doctor advises adapted SQLite installation command according to g
       isGlobalInstallation('/usr/local/lib/node_modules/@phuetz/code-buddy/dist/index.js')
     ).toBe(true);
     expect(
-      isGlobalInstallation('file:///home/user/.nvm/versions/node/v22.12.0/lib/node_modules/@phuetz/code-buddy/src/database/optional-sqlite.ts')
+      isGlobalInstallation(pathToFileURL(resolve('/home/user/.nvm/versions/node/v22.12.0/lib/node_modules/@phuetz/code-buddy/src/database/optional-sqlite.ts')).href)
     ).toBe(true);
     expect(
       isGlobalInstallation('/home/user/.npm-global/lib/node_modules/@phuetz/code-buddy/dist/index.js')
