@@ -82,6 +82,24 @@ interface ComputeProfileOptions {
   readOnly?: boolean;
   /** Keep raw import edges for one-shot consumers such as `buddy explain`. */
   preserveImportEdges?: boolean;
+  /**
+   * Pre-warm the semantic workspace index in the background. Defaults to on.
+   *
+   * One-shot CLI commands turn it off: the chain is a floating promise that
+   * outlives the command and loads native addons (`@xenova/transformers`
+   * pulls `onnxruntime-node` and `sharp`, then `usearch`) the command never
+   * uses. On Windows an unresolved delay-loaded DLL raises the SEH exception
+   * `0xC06D007F`, which no `try/catch` can intercept, so the process dies with
+   * that exit code instead of the command's own. The `semantic_search` tool
+   * still initializes the indexer on demand when it is actually queried.
+   */
+  backgroundIndexing?: boolean;
+}
+
+/** Options accepted by {@link RepoProfiler.getProfile}. */
+export interface GetProfileOptions {
+  /** See {@link ComputeProfileOptions.backgroundIndexing}. Defaults to on. */
+  backgroundIndexing?: boolean;
 }
 
 /**
@@ -100,7 +118,7 @@ export class RepoProfiler {
    * Get or compute the repo profile.
    * Uses cached result if the primary config file hasn't changed.
    */
-  async getProfile(): Promise<RepoProfile> {
+  async getProfile(options: GetProfileOptions = {}): Promise<RepoProfile> {
     const cached = this.loadCache();
     if (cached && !this.isCacheStale(cached)) {
       // Lazy-load code graph from disk if not already populated
@@ -111,7 +129,7 @@ export class RepoProfiler {
       return cached;
     }
 
-    const profile = await this.computeProfile();
+    const profile = await this.computeProfile(options);
     if (this.shouldWriteRuntimeCaches()) {
       this.saveCache(profile);
     }
@@ -434,7 +452,7 @@ export class RepoProfiler {
     profile.contextPack = this.buildContextPack(profile);
 
     // Trigger background semantic indexing of the workspace only for persistent runs.
-    if (!options.readOnly && this.shouldWriteRuntimeCaches()) {
+    if (options.backgroundIndexing !== false && !options.readOnly && this.shouldWriteRuntimeCaches()) {
       try {
         const { getWorkspaceIndexer } = await import('../knowledge/workspace-indexer.js');
         const indexer = getWorkspaceIndexer({

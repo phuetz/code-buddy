@@ -619,7 +619,14 @@ export class EnhancedMemory extends EventEmitter {
 
     // Text search
     let queryRanked = false;
-    if (options.query) {
+    if (options.query && results.length === 0) {
+      // Nothing survived the filters: every ranking branch below maps over an
+      // empty list and yields an empty list. Embedding the query first would
+      // load the local model — and with it `onnxruntime-node` and `sharp` —
+      // to rank zero candidates. A one-shot command against a fresh store
+      // (`buddy dev plan`) hits exactly this case.
+      queryRanked = true;
+    } else if (options.query) {
       const query = options.query.toLowerCase();
 
       if (this.bayesianQualifier && (this.bayesianQualifier as unknown as { isTrained: boolean }).isTrained) {
