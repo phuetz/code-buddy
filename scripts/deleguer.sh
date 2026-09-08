@@ -169,9 +169,24 @@ case "$MOTEUR" in
     # GPT-6 Astra — servi par le backend Codex/ChatGPT depuis le 05/09/2026 05 h 33 (sonde : 400
     # « not supported » jusqu'au 04/09 16 h 35). Table OpenAI du 04/09 : DeepSWE 74,1, Terminal-Bench
     # 64,6, SRE-Bench 99,2 → réserver au DUR (sécurité, infra, terminal), comme sol.
-    codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
-      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
-      - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    # ASTRA_RESUME=<uuid de session> (ou "last") : reprend une session Codex précédente au lieu d'en ouvrir
+    # une neuve — le préfixe (dépôt, missions précédentes) est alors servi depuis le cache (08/09/2026 :
+    # une session longue = 98 % de tokens en cache, une lane neuve ≈ 0 %). L'UUID d'une lane est écrit
+    # dans $JOURNAUX/sessions-codex.log à sa fin (fichier rollout dont le cwd est le dépôt).
+    _T0=$(date +%s)
+    if [ -n "${ASTRA_RESUME:-}" ]; then
+      if [ "$ASTRA_RESUME" = "last" ]; then _R=(resume --last); else _R=(resume "$ASTRA_RESUME"); fi
+      codex exec "${_R[@]}" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    else
+      codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    fi
+    _SID=$(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -newermt "@$_T0" 2>/dev/null \
+      | xargs -r grep -l -F "\"cwd\":\"$DEPOT\"" 2>/dev/null | head -1 | sed -E 's/.*rollout-[0-9T:-]+-([0-9a-f-]{36})\.jsonl$/\1/')
+    [ -n "$_SID" ] && echo "$(date '+%d/%m %H:%M') $_SID $DEPOT $(basename "$MISSION")" >> "$JOURNAUX/sessions-codex.log"
     ;;
   luna|sol)
     # 07/09/2026 — décision Patrice « mets tout en astra low » (tweet de Tibo/OpenAI, Codex, 06/09 :
