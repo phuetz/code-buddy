@@ -43,7 +43,7 @@ non ré-auditées ici.
 
 - `env -u FORCE_COLOR HOME=~/DEV/cb-injection-fix-2026-09-07/_qa/verif/home npx vitest run tests/companion tests/channels tests/server tests/security/donnees-personnelles.test.ts` → **234 fichiers verts / 4 skip (238) ; 3093 tests verts / 5 skip (3098) ; 0 rouge.** Skips : Chromium absent, Piper absent, un test live pré-existant sans rapport avec ce lot. Le voyage live GK10 (Ollama) tourne réellement (29,5 s) et passe. `donnees-personnelles.test.ts` inclus, vert.
 - `npx tsc --noEmit -p tsconfig.json` → exit 0.
-- `npm run lint` (repo entier) → **remonte 2563 erreurs** mais **toutes situées sous `/home/patrice/DEV/cb-release-audit-2026-09-06/...`**, un autre worktree atteint via le `node_modules` symlinké partagé (`node_modules → ../cb-secu-pwa-2026-09-06/node_modules`) ; artefact d'environnement pré-existant, sans rapport avec ce lot. Vérification ciblée : `npx eslint --quiet <31 fichiers du diff>` → **0 erreur, 0 avertissement, exit 0.**
+- `npm run lint` (repo entier) → **remonte 2563 erreurs** mais **toutes situées sous `<worktree d’audit voisin>/...`**, un autre worktree atteint via le `node_modules` symlinké partagé (`node_modules → ../cb-secu-pwa-2026-09-06/node_modules`) ; artefact d'environnement pré-existant, sans rapport avec ce lot. Vérification ciblée : `npx eslint --quiet <31 fichiers du diff>` → **0 erreur, 0 avertissement, exit 0.**
 - `git diff --check c030f3789^..62ba8ddd8 -- src tests` → 0.
 
 ## Bilan (10 lignes)

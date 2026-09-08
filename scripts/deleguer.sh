@@ -468,7 +468,9 @@ if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
       --report-sha256 "$(sha256sum "$LANE_RAPPORT" | cut -d' ' -f1)"
     )
   fi
-  LANE_LEDGER_SCRIPT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lane-ledger.sh
+  # Le script tourne depuis une auto-copie temporaire (DELEGUER_SELF_COPY) : lane-ledger.sh vit
+  # à côté de l'ORIGINE, pas de la copie.
+  LANE_LEDGER_SCRIPT=$(cd "$(dirname "$DELEGUER_ORIGINE")" && pwd)/lane-ledger.sh
   if ! LANE_LEDGER_RESULT=$("$LANE_LEDGER_SCRIPT" "${LANE_LEDGER_ARGS[@]}" 2>&1); then
     echo "⚠️  journal de lane non écrit : $LANE_LEDGER_RESULT" >&2
     [ "$CODE" -ne 0 ] || CODE=4
