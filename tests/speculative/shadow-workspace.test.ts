@@ -10,6 +10,7 @@ import {
   type SpawnFn,
 } from '../../src/speculative/shadow-workspace.js';
 import { createShadowCommand } from '../../src/commands/shadow.js';
+import { canonicalPath } from '../setup/platform-fixtures.js';
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
@@ -114,8 +115,9 @@ describe('ShadowWorkspace', () => {
 
     await createShadowCommand().parseAsync(['node', 'shadow', 'status', '-d', repo]);
 
-    // The command prints git's toplevel, which is canonical (macOS tmp lives behind /private/var).
-    expect(output).toContain(`Repository: ${fs.realpathSync(repo)}`);
+    // The command prints git's toplevel, which is canonical: macOS tmp lives
+    // behind /private/var and Windows tmp is handed out as an 8.3 short name.
+    expect(output).toContain(`Repository: ${canonicalPath(repo)}`);
   });
 
   it('reports success and failure from the configured command with its output tail', async () => {

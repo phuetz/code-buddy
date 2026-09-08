@@ -1,4 +1,21 @@
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+
+/**
+ * Canonical form of a path, for both sides of an assertion.
+ *
+ * `realpathSync` resolves symlinks (macOS `/var` -> `/private/var`) but leaves a
+ * Windows 8.3 short name (`C:\Users\RUNNER~1\...`, the shape `os.tmpdir()`
+ * returns on GitHub runners) untouched. Only the native binding expands it, so a
+ * fixture path and a path printed by a subprocess only compare after this call.
+ */
+export function canonicalPath(target: string): string {
+  try {
+    return realpathSync.native(target);
+  } catch {
+    return realpathSync(target);
+  }
+}
 
 /** Probe Bash itself: a Windows bash.exe may be an unusable WSL launcher. */
 export function hasBash(): boolean {
