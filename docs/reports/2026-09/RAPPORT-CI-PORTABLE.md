@@ -124,3 +124,23 @@ Lot 1 livré : `73f7148b0`. Code Explorer reste sans snapshot ; reconstruction i
 Balayage conserve l'exigence exit 0, total strictement positif et réussites égales au total, sans imposer une seule commande. GK35 attend `connected` par `expect.poll` (5 s maximum, intervalle 20 ms) ; le listener tardif ne résout que pour `slow_fixture`, car le serveur rapide peut lui aussi dépasser les 400 ms d'initialisation. L'absence initiale des outils lents reste vérifiée avant l'attente.
 
 Simulation contrôlée : cinq commandes dans le help et délai du serveur rapide porté à 600 ms. Anciennes assertions : **2 rouges / 19**, erreurs exactes `connecting` et `5/5` (brut relu). Assertions corrigées, mêmes conditions : **19/19 verts**. Fixtures finales rétablies (délai 0, help initial), également **19/19 verts** dans la première exécution. Lot 2 livré : `022fcac03`.
+
+### Lot 4 — OOM macOS mesuré
+
+Les deux traces du run fourni sont le même test rejoué : `tests/cli/gk29-headless-resume.test.ts`, première trace 8482–8586, seconde vers 9615–9695. La CLI enfant sort 134, GC vers 1963 Mo, pile `JsonStringifier`. Ce n'est pas un worker Vitest de 4 Gio qui atteint son plafond : le test lançait une CLI sans NODE_OPTIONS depuis le checkout entier ; ses snapshots capturaient ce checkout, comme l'autre test corrigé à la tranche précédente.
+
+Reproduction Linux Node 24, HOME/TMPDIR isolés, `NODE_OPTIONS=--max-old-space-size=512`, `npx vitest run tests/cli/gk29-headless-resume.test.ts --logHeapUsage --cache=false --maxWorkers=1` via lm-resizer : **rouge**, CLI exit 134, GC à **508,5 Mo**, worker **11 Mo**, 8,94 s. Après correction : **vert** sous le même plafond. Relecture en `--reporter=verbose --stream` : **12 Mo** pour le worker, **22,93 s** ; ce chiffre n'est pas le pic mémoire de la CLI. Le test utilise désormais un workspace d'un fichier, distinct des snapshots, et vérifie le contenu de chaque snapshot après les trois tours.
+
+`ci.yml` exporte désormais NODE_OPTIONS au niveau du job matriciel : **4096 MiB macOS/Windows, 8192 MiB Linux**, hérité par les CLI enfants. `vitest.config.ts` lit déjà `process.platform` et borne les forks ; commentaire clarifié. **Vitest installé 4.1.9** : `poolOptions.forks.execArgv` demandé correspond à **test.execArgv**, consommé par `project.config.execArgv` dans le runner (source locale inspectée). Pas de clé obsolète inactive ajoutée.
+
+Probe local chargeant la configuration réelle avec plateformes simulées et démarrant un fork/une CLI : old-space 4096 sur darwin/win32, 8192 sur linux ; tas total V8 mesuré **4288 / 8384 MiB** (inclut la jeune génération). Les premiers probes ont échoué : chargement hors Vite sans `__dirname`, puis borne du tas total trop stricte de +100 MiB ; harnais rectifié, trois plateformes **exit 0**. Ce sont des simulations de configuration, pas des exécutions natives macOS/Windows.
+
+### Vérifications et passation
+
+Lot 3 livré : `6c6ce427e` ; lot 4 : commit portant cette section. Invocation finale ciblée des sept fichiers (bash-streaming, lane-ledger, opencode-guard, balayage-installation, gk35-stdio-timeout, gk29-headless-resume, donnees-personnelles), via lm-resizer, HOME/TMPDIR isolés, cache désactivé et un worker : **7 fichiers / 80 tests verts**. `npm run typecheck` : **exit 0**, trois projets. `npm run lint` : **exit 0**, 2488 warnings / 0 erreur, brut relu. `git diff --check`, `bash -n` et commitlint par message (copie CJS byte-identique de la configuration ESM historique) : verts. Hooks de commit désactivés uniquement lors des commits après contrôles explicites, pour éviter la suite entière interdite par la mission.
+
+Aucun banc d'évaluation, aucun push, aucun service modifié. Index Git vide après les quatre commits. Les résultats Linux locaux ne prouvent pas le passage des runners natifs : relancer la CI et confirmer Build and Package reste ouvert. Les journaux et probes sont sous `_qa/ci-portable/`, non suivis. Code Explorer : 16 requêtes sans snapshot, analyse initiale sans résultat et trois reconstructions incrémentales bornées à 45 s (124) ; complément par recherches exactes, aucun graphe frais revendiqué.
+
+Garde personnel après rédaction finale : **40/40 verts**.
+
+Outillage : **16 appels Code Explorer (context/impact/query), 33 commandes via lm-resizer, 698617 octets économisés**. Compteurs propres à cette mission, échecs inclus ; 32 métadonnées JSON et une exécution `--stream` sans réduction, hooks automatiques exclus. Volumes de sortie, pas des tokens facturés.

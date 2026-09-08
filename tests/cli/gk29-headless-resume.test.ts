@@ -15,12 +15,13 @@ function getCleanChildEnv(): Record<string, string> {
 
 function runHeadless(port: number, options: {
   homeDir: string;
+  workspaceDir: string;
   prompt: string;
   resume?: string;
 }): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   const args = [
     path.resolve('node_modules/tsx/dist/cli.mjs'),
-    'src/index.ts',
+    path.resolve('src/index.ts'),
   ];
   if (options.resume) args.push('--resume', options.resume);
   args.push(
@@ -44,7 +45,7 @@ function runHeadless(port: number, options: {
 
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
-      cwd: process.cwd(),
+      cwd: options.workspaceDir,
       env: {
         ...getCleanChildEnv(),
         HOME: options.homeDir,
@@ -98,11 +99,14 @@ describe('GK29 headless resume keeps one timeline session', () => {
     });
 
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gk29-headless-resume-'));
+    const workspaceDir = path.join(homeDir, 'workspace');
+    fs.mkdirSync(workspaceDir);
+    fs.writeFileSync(path.join(workspaceDir, 'fixture.txt'), 'resume fixture\n');
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
 
-      const first = await runHeadless(address.port, { homeDir, prompt: 'first turn' });
+      const first = await runHeadless(address.port, { homeDir, workspaceDir, prompt: 'first turn' });
       expect(first.exitCode, first.stderr).toBe(0);
 
       const sessionsDir = path.join(homeDir, '.codebuddy', 'sessions');
@@ -111,7 +115,7 @@ describe('GK29 headless resume keeps one timeline session', () => {
       const sessionId = sessionFiles[0]!.replace(/\.json$/u, '');
 
       for (const prompt of ['second turn', 'third turn']) {
-        const result = await runHeadless(address.port, { homeDir, prompt, resume: sessionId });
+        const result = await runHeadless(address.port, { homeDir, workspaceDir, prompt, resume: sessionId });
         expect(result.exitCode, result.stderr).toBe(0);
       }
 
@@ -135,6 +139,13 @@ describe('GK29 headless resume keeps one timeline session', () => {
         .filter(Boolean)
         .map((line) => JSON.parse(line) as { turn: number });
       expect(entries.map((entry) => entry.turn)).toEqual([1, 2, 3]);
+      const snapshotsDir = path.join(timelinesDir, 'snapshots');
+      const snapshots = fs.readdirSync(snapshotsDir).filter((entry) => entry.endsWith('.json'));
+      expect(snapshots.length).toBeGreaterThanOrEqual(3);
+      for (const entry of snapshots) {
+        const snapshot = JSON.parse(fs.readFileSync(path.join(snapshotsDir, entry), 'utf8'));
+        expect(snapshot.files).toEqual([{ path: 'fixture.txt', content: 'resume fixture\n' }]);
+      }
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

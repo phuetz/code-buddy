@@ -137,6 +137,8 @@ export default defineConfig({
       ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],
     pool: 'forks',
+    // Vitest 4 uses test.execArgv (formerly poolOptions.forks.execArgv).
+    // Keep this explicit: NODE_OPTIONS in CI also covers spawned CLI processes.
     // macOS/Windows CI runners have limited RAM: cap each fork at 4 GiB.
     // Six sequential shards in ci.yml also bound accumulated off-heap growth;
     // the heap ceiling alone is not a bound on total worker RSS.

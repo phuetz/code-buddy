@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P0 | CI portable Tranche 3 2026-09-08 | ASTRA — RÉSERVÉ | Branche `fix/ci-portable-macos-windows-2026-09-08` | Zones : bash-streaming, lane-ledger/deleguer, balayage, gk35, CI/Vitest ; rapport CI portable | Aucun push ; vérifications en cours |
+| P0 | CI portable Tranche 3 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08` ; abort `73f7148b0`, BSD `022fcac03`, Windows `6c6ce427e`, OOM : commit portant cette ligne | 7 fichiers / 80 tests verts ; BSD 5 rouges→vert, Windows 2 rouges→vert, OOM reproduit puis vert sous 512 MiB ; typecheck/lint/privacy/commitlint verts ; rapport CI portable Tranche 3 | Aucun push ; CI native à confirmer ; index Git vide ; Code Explorer sans snapshot malgré analyses |
 
 | P0 | CI portable tranche 2 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08` ; commit portant cette ligne, `fix(ci): make remaining runner fixtures portable and bound timeline snapshots` | 84 tests ciblés verts ; cwd alias rouge→vert ; simulation casse Windows ; typecheck/lint/privacy/commitlint verts ; rapport CI portable, section reprise Tranche 2 | Aucun push ; CI native et shards 2–6 à confirmer ; index Git vide après commit ; Code Explorer sans snapshot |
 
