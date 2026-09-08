@@ -124,6 +124,12 @@ jest.mock('../../src/utils/input-validator', () => ({
 // =============================================================================
 
 const isWindows = process.platform === 'win32';
+// BashTool runs its commands through PowerShell on Windows (getShellConfiguration):
+// `ls -la` and `echo -e` are POSIX-only spellings there.
+const listDirectoryCommand = isWindows ? 'Get-ChildItem -Force' : 'ls -la';
+const multilineOutputCommand = isWindows
+  ? "Write-Output 'line1','line2','line3'"
+  : 'echo -e "line1\nline2\nline3"';
 
 const TEST_DIR = path.join(os.tmpdir(), 'grok-cli-tests-' + Date.now());
 
@@ -164,8 +170,8 @@ describe('BashTool', () => {
       expect(result.output).toBeDefined();
     });
 
-    test('should execute ls command successfully', async () => {
-      const result = await bashTool.execute('ls -la');
+    test('should execute a directory listing command successfully', async () => {
+      const result = await bashTool.execute(listDirectoryCommand);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
     });
@@ -196,7 +202,7 @@ describe('BashTool', () => {
     });
 
     test('should handle multiline output', async () => {
-      const result = await bashTool.execute('echo -e "line1\\nline2\\nline3"');
+      const result = await bashTool.execute(multilineOutputCommand);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
     });
@@ -332,7 +338,7 @@ describe('BashTool', () => {
   });
 
   describe('Helper Methods', () => {
-    test('listFiles should execute ls command', async () => {
+    test('listFiles should list a directory on any host shell', async () => {
       const result = await bashTool.listFiles('.');
       expect(result.success).toBe(true);
     });

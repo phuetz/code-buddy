@@ -39,6 +39,9 @@ jest.mock('../../src/utils/self-healing', () => ({
 
 const isWindows = process.platform === 'win32';
 const itUnix = isWindows ? it.skip : it;
+// BashTool runs its commands through PowerShell on Windows (getShellConfiguration),
+// where `ls -la` binds `-la` to no Get-ChildItem parameter and fails.
+const listDirectoryCommand = isWindows ? 'Get-ChildItem -Force' : 'ls -la';
 
 describe('BashTool', () => {
   let bashTool: BashTool;
@@ -111,8 +114,8 @@ describe('BashTool', () => {
       expect(result.output).toBeDefined();
     });
 
-    test('should execute ls command', async () => {
-      const result = await bashTool.execute('ls -la');
+    test('should execute a directory listing command', async () => {
+      const result = await bashTool.execute(listDirectoryCommand);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
     });
@@ -200,7 +203,7 @@ describe('BashTool', () => {
   });
 
   describe('Helper Methods', () => {
-    test('listFiles should execute ls command', async () => {
+    test('listFiles should list a directory on any host shell', async () => {
       const result = await bashTool.listFiles('.');
       expect(result.success).toBe(true);
     });
