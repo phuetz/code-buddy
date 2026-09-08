@@ -503,3 +503,80 @@ Code Explorer : l'index disponible porte sur une autre copie de travail et date 
 Outillage : **quatre appels Code Explorer** (`list_repos`, `search_code`, deux `context`) et **onze commandes via `lm-resizer exec --raw-on-failure`** (suites, ESLint, typecheck). Les vingt rejeux de stabilité et les trois sondes de falsification ont été lancés en `npx` brut, en boucle, pour compter les issues ligne à ligne ; c'est une exception assumée, pas la règle de la tranche.
 
 Passation : CI Windows native/Node 20 shard 5 à confirmer après intégration. Aucun autre rouge n'a été observé sur les suites rejouées ; aucune baseline globale n'a été prise dans cette tranche, donc aucune affirmation de non-régression globale n'est faite.
+
+## Tranche 11 — le fantôme du shard 2 Windows : sept modules natifs sur le chemin de `buddy dev plan` (2026-09-08)
+
+Base `94de25bbf`, branche `fix/ci-portable-macos-windows-2026-09-08`. Journal fourni : `_qa/ci-portable/ci-windows-run12-node20.log`, run 34249340912 (et run 34220815833, Node 22). `tests/commands/dev/dev-lifecycle.test.ts` rend **`expected 3228369023 to be +0`**, soit **`0xC06D007F`** : l'exception SEH que l'assistant de chargement différé de Windows lève quand une DLL retardée reste introuvable. Le second test du fichier tombe en cascade sur la même valeur. Le défaut est **intermittent d'un run à l'autre** (le même shard passe ailleurs) mais **déterministe à l'intérieur d'un run** : la reprise automatique du shard le reproduit à l'identique (lignes 8204 et 9459 du journal). Six commits, aucun push, index vide après chacun. Vérifications sous Linux, Node 24.14.1.
+
+### Ce que dit le code de sortie, et pourquoi aucun `try/catch` ne l'attrape
+
+`0xC06D007F` est `VcppException(ERROR_SEVERITY_ERROR, ERROR_MOD_NOT_FOUND)`. Elle n'est pas levée à l'ouverture du `.node` — un `LoadLibraryExW` qui échoue rend `null` et Node en fait une erreur JavaScript `ERR_DLOPEN_FAILED`, capturable. Elle est levée **plus tard**, au premier appel d'une fonction importée en différé, par du code natif, **sous la couche JavaScript**. Le processus meurt en portant l'exception comme code de sortie. Le journal le confirme : `stderr` est **vide** et `stdout` s'arrête net après le profil du dépôt.
+
+Conséquence directe sur le correctif : envelopper l'import d'un module natif dans un `try/catch` ne protège **pas** de ce défaut. Le seul remède est de **ne pas charger le module** sur ce chemin. C'est la branche « ou déplacé hors du chemin `dev plan` » de la consigne, et c'est celle qui a été suivie.
+
+### Identification : trace des modules natifs réellement chargés
+
+Le défaut n'est pas reproductible sous Linux — POSIX n'a pas de chargement différé, `dlopen` y échoue proprement. Ce qui est mesurable, et qui est la preuve demandée, c'est **quels modules natifs le chemin `dev plan` ouvre**. La sonde est un préchargement CommonJS qui instrumente `Module._extensions['.node']` et `process.dlopen`, transmis par `NODE_OPTIONS` — indispensable, car `tsx` exécute le point d'entrée dans un **processus enfant** à lui : un `--require` posé sur le processus externe ne voit rien (première tentative, trace vide). Le harnais rejoue exactement le test : même serveur SSE factice, même `HOME` isolé, même dépôt jouet.
+
+**Sept modules natifs ouverts, aucun utilisé par `dev plan`** :
+
+| Module natif | Chemin d'import | Déclencheur |
+| --- | --- | --- |
+| `onnxruntime-node` | `src/embeddings/embedding-provider.ts:137` → `@xenova/transformers` → `backends/onnx.js` | `RepoProfiler.computeProfile` → `WorkspaceIndexer.initialize` (promesse flottante) puis `EnhancedMemory.recall` |
+| `sharp` (0.32.6, vendorisé sous `@xenova/transformers`) | `src/embeddings/embedding-provider.ts:137` → `@xenova/transformers` → `utils/image.js` | idem |
+| `usearch` | `src/search/usearch-index.ts:210` | `WorkspaceIndexer.startIndexing` → `USearchVectorIndex.add` |
+| `tree-sitter` | `src/security/bash-parser.ts:29` **et** `src/knowledge/scanners/tree-sitter-scanner.ts:53` | deux IIFE exécutées **pendant l'évaluation du module** |
+| `tree-sitter-bash` | `src/security/bash-parser.ts:30` | IIFE de `bash-parser` |
+| `tree-sitter-typescript` | `src/knowledge/scanners/ts-tree-sitter.ts` via `scanners/index.ts:60` | IIFE du registre de scanners |
+| `bufferutil` | `require` interne de `ws` | conservé (voir limites) |
+
+Trois de ces chargements partent de **promesses flottantes** : deux IIFE au chargement de module (`bash-parser`, `scanners/index`) et une chaîne `initialize().then(startIndexing)` jamais attendue (`repo-profiler`). Elles ne sont rattachées à **aucune frame de la commande**. C'est l'explication de l'intermittence : la commande fait son travail, écrit `PLAN.md`, et l'exception native atterrit là où la promesse détachée se résout — parfois avant la fin du processus, parfois après, selon l'état de la machine.
+
+Parmi les sept, seuls deux dépendent d'une DLL externe sous Windows : `onnxruntime_binding.node` importe `onnxruntime.dll`, `MSVCP140.dll`, `VCRUNTIME140.dll` et `VCRUNTIME140_1.dll` (table d'import PE lue sur le binaire win32/x64 livré dans `node_modules`), et `sharp` 0.32 charge son libvips vendorisé. Les cinq autres ne retardent que `node.exe`, résolu par le crochet standard de `node-gyp`. **Ce classement n'est pas une preuve de culpabilité** : le journal CI ne nomme pas la DLL, et aucune de ces deux dépendances n'a pu être mise en défaut à distance. Ce qui est prouvé est plus fort et suffit : après correctif, **aucun de ces modules n'est plus ouvert**.
+
+### Correctifs
+
+| Défaut | Fichier | Correctif | Commit |
+| --- | --- | --- | --- |
+| IIFE au chargement du module important `tree-sitter` + `tree-sitter-bash` | `src/security/bash-parser.ts` | Préchargement démarré au **premier `parseBashCommand`**, même cache, même repli à automate ; une grammaire illisible est signalée **une fois** par `logger.warn` au lieu d'être avalée | `4c4c30493` |
+| IIFE au chargement du module important `tree-sitter` + `tree-sitter-typescript` | `src/knowledge/scanners/index.ts` | Bascule vers les scanners tree-sitter démarrée au **premier `getScannerForExt`** — le moment où un fichier est réellement analysé ; un `Promise.allSettled` rejeté est signalé une fois | `e36814034` |
+| Index sémantique préchauffé en tâche de fond par une commande à usage unique (`@xenova/transformers` → `onnxruntime-node`, `sharp`, puis `usearch`) | `src/agent/repo-profiler.ts`, `src/commands/dev/index.ts`, `src/commands/dev/workflows.ts` | `getProfile` accepte `backgroundIndexing`, **actif par défaut** (agent interactif inchangé) ; les quatre appels `buddy dev` (plan, fix-ci, run, pr) s'en désinscrivent. L'outil `semantic_search` initialise toujours l'indexeur à la demande | `2ec6e3886` |
+| Requête de rappel vectorisée alors qu'aucun candidat n'a survécu aux filtres | `src/memory/enhanced-memory.ts` | Court-circuit quand la liste est vide : les deux branches de classement rendaient déjà une liste vide, mais l'appel d'embedding avait déjà chargé le modèle local | `712bd1671` |
+| Le test ne dit pas ce qui est mort | `tests/commands/dev/dev-lifecycle.test.ts` | Le message d'échec nomme le statut en hexadécimal au-delà d'un code POSIX. Rien de ce que le test exerce ne change | `60c1ec34b` |
+| Aucun garde-fou de non-régression | `tests/commands/dev/dev-plan-native-modules.test.ts` (nouveau) | Deux exécutions réelles de la commande derrière la sonde native | `2f08fbc5f` |
+
+Décroissance mesurée de la trace, correctif par correctif : **7 → 6 → 4 → 3 → 1** module natif. Le seul restant est `bufferutil`, chargé par `ws` : il n'importe que `KERNEL32.dll`, `ws` l'entoure déjà d'un `try/catch` et le remplace par son implémentation JavaScript. Il est **délibérément conservé** — aucune preuve ne le met en cause, et le retirer demanderait de toucher au graphe d'imports du serveur.
+
+### Le test, et ce qu'il prouve exactement
+
+`tests/commands/dev/dev-plan-native-modules.test.ts` lance deux fois la vraie commande derrière un préchargement qui instrumente `Module._extensions['.node']` — le point d'entrée unique de tout module natif, quel que soit le chargeur qui l'a demandé — transmis par `NODE_OPTIONS` **ajouté** à celui du runner (le drapeau de tas de la CI survit).
+
+1. **Aucun module natif optionnel n'est ouvert** (`onnxruntime-node`, `sharp`, `usearch`, `tree-sitter*`, `better-sqlite3`). C'est la seule défense possible contre un échec que JavaScript ne peut pas observer.
+2. **Quand tout chargement natif échoue** (le préchargement lève `ERR_DLOPEN_FAILED` sur chaque `.node`), la commande sort quand même en **0** et écrit `PLAN.md`. C'est la simulation demandée, et elle couvre la variante capturable de la panne.
+
+**Falsification, un revert à la fois** : rétablir l'IIFE de `bash-parser` rouvre `tree-sitter` **et** `tree-sitter-bash` ; rétablir celle du registre de scanners rouvre `tree-sitter-typescript` ; rétablir le préchauffage du profileur rouvre `onnxruntime-node`, `sharp` **et** `usearch`. Les trois font passer l'assertion 1 au rouge.
+
+**Limite énoncée sans arrondi** : le quatrième correctif (`enhanced-memory`) **n'est pas falsifiable par ce test**, et il a été vérifié qu'il ne l'est pas (4 rejeux verts avec le correctif retiré). La raison est instructive : un enfant lancé depuis vitest hérite de `NODE_ENV=test`, et `codebuddy-agent.ts:792` coupe précisément le câblage de la mémoire de décisions dans ce cas. Le chemin mémoire → `onnxruntime-node` + `sharp` **n'était donc pas actif dans l'enfant de la CI non plus**. Ce correctif est justifié par la trace hors test (3 exécutions sur 3 chargent `onnxruntime-node` et `sharp` sans lui, 0 sur 3 avec lui), c'est-à-dire par le comportement d'un vrai `buddy dev plan` lancé par un utilisateur — pas par le rouge de la CI. Corollaire favorable : l'enfant du test hérite du même `NODE_ENV=test` que celui de la CI, donc **l'ensemble de modules natifs que le test observe est bien celui que la CI ouvrirait**.
+
+### Le test lui-même (point 3 de la consigne)
+
+`HOME` et `USERPROFILE` sont **déjà** isolés dans `runDevPlan`, et l'inspection de l'environnement transmis n'a fait apparaître **aucune variable d'accélération native** à neutraliser. La seule variable héritée qui change le comportement de l'enfant est `NODE_ENV=test` — et la retirer ferait charger **plus** de code natif, pas moins : ce serait s'éloigner de ce que la CI exerce. Aucune isolation supplémentaire n'a donc été ajoutée ; le seul changement côté test est le message d'échec, qui aurait fait gagner la première demi-heure de ce diagnostic.
+
+### Vérifications
+
+HOME QA `_qa/ci-portable/home`. Aucun accès en écriture à `~/code-buddy`, aucun service touché, aucun `git add -A`.
+
+- `tests/commands/dev/dev-lifecycle.test.ts` : **2/2 verts, dix fois de suite**, sans un seul écart.
+- `tests/commands/dev/dev-plan-native-modules.test.ts` : **2/2 verts, dix fois de suite**.
+- Commande demandée `npx vitest run tests/commands/dev tests/security/donnees-personnelles.test.ts` : **10 fichiers verts, 85 tests verts**, exit 0. Le garde-fou données personnelles est conservé et vert.
+- Balayage `tests/security tests/memory tests/agent` : **313 fichiers verts ; 4 090 tests verts, un skip**, exit 0.
+- Balayage `tests/unit tests/knowledge tests/search tests/embeddings`, **avant et après**, mesuré des deux côtés : **361 fichiers verts, deux rouges ; 15 204 tests verts, deux rouges** — chiffres **identiques**. Les deux rouges sont `command-palette` et `ui-components`, deux dépassements de 15 s **sous charge du balayage uniquement** (les deux fichiers passent isolément, sur la base comme sur la branche). Ce sont les deux mêmes rouges hors tranche que la tranche 9.
+- `npm run typecheck` **exit 0, zéro `error TS`**. ESLint sur les **huit fichiers touchés : exit 0, zéro erreur, zéro avertissement**.
+
+### Outillage et passation
+
+Code Explorer : l'index disponible porte sur une autre copie de travail et date du 2026-08-02. `search_code` sur la commande `dev plan` puis sur le chargement de `better-sqlite3` a rendu du bruit (tests de `cowork/`, fonctions `require` de scripts Python) — **aucune de ces deux absences n'est interprétée comme une preuve d'absence**. Le chemin exact a été établi autrement, et c'est la bonne méthode ici : la question « quel module natif est chargé » ne se répond pas dans un graphe d'imports statique, puisque les quatre imports fautifs sont des `import()` dynamiques, dont trois dans des promesses détachées. Elle se répond par une **trace à l'exécution**, qui est la preuve versée.
+
+Outillage : **trois appels Code Explorer** (`list_repos`, deux `search_code`) et **vingt commandes via `lm-resizer exec --raw-on-failure`** (suites, ESLint, typecheck, sondes de falsification). Les vingt rejeux de stabilité et les trois balayages ont été lancés en `npx` brut, en boucle, pour compter les issues ligne à ligne — même exception assumée qu'à la tranche 10. Le magasin CCR n'ayant pas été photographié avant la tranche, aucun chiffre d'octets économisés propre à celle-ci n'est avancé.
+
+Passation : CI Windows shard 2/6 à confirmer après intégration, sur Node 20 **et** Node 22 — le défaut ayant été vu sur les deux. `bufferutil` reste le seul module natif du chemin, documenté et non corrigé faute de preuve. Les correctifs 1, 2 et 4 sont transversaux (parseur de commandes, registre de scanners, rappel mémoire) : leur balayage complet figure ci-dessus, avant et après.
