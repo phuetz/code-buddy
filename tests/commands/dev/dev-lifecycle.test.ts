@@ -11,6 +11,21 @@ interface ChildResult {
   timedOut: boolean;
 }
 
+/**
+ * A child killed below the JavaScript layer leaves no stderr at all: on
+ * Windows CI this test once reported only `expected 3228369023 to be +0`,
+ * where 3228369023 is `0xC06D007F`, the delay-load helper's "module not
+ * found" exception. Name the status so the next such crash is readable at a
+ * glance instead of needing a hex conversion.
+ */
+function describeExit(result: ChildResult): string {
+  const code = result.exitCode;
+  const status = code !== null && code > 0xFFFF
+    ? `exit ${code} (0x${code.toString(16).toUpperCase()})`
+    : `exit ${code}`;
+  return `${status}\n${result.stderr}\n${result.stdout}`;
+}
+
 const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const roots: string[] = [];
@@ -118,7 +133,7 @@ describe('buddy dev plan lifecycle', () => {
       if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
       const result = await runDevPlan(address.port, home, cwd, 'corrige le bug');
       expect(result.timedOut, `${result.stderr}\n${result.stdout}`).toBe(false);
-      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.exitCode, describeExit(result)).toBe(0);
       expect(result.stdout).toContain('Edit src/add.js');
       const planPath = path.join(cwd, 'PLAN.md');
       expect(fs.existsSync(planPath), result.stdout).toBe(true);
@@ -140,7 +155,7 @@ describe('buddy dev plan lifecycle', () => {
       if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
       const result = await runDevPlan(address.port, home, cwd, 'corrige le bug');
       expect(result.timedOut, `${result.stderr}\n${result.stdout}`).toBe(false);
-      expect(result.exitCode, `${result.stderr}\n${result.stdout}`).toBe(1);
+      expect(result.exitCode, describeExit(result)).toBe(1);
       expect(fs.existsSync(path.join(cwd, 'PLAN.md'))).toBe(false);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
