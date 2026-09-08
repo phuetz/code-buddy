@@ -464,3 +464,42 @@ Code Explorer : l'index disponible porte sur une copie de travail locale et date
 Outillage : **six appels Code Explorer** (`list_repos`, deux `search_code`, `context`, deux `impact`), **28 commandes via `lm-resizer exec --raw-on-failure`, 80 059 octets économisés** — somme des métadonnées JSON de cette seule tranche, échecs, sondes, garde-fou final et dernières vérifications compris. Ce sont des volumes de sortie, pas des jetons facturés.
 
 Passation : CI Windows native/Node 22 à confirmer après intégration. Deux rouges hors tranche présents avant comme après le correctif. `findFiles` reste la graphie POSIX non traduite, signalée et non corrigée faute de preuve.
+
+## Tranche 10 — deux courses de verrous de fichiers Windows (2026-09-08)
+
+Base `78465512b`, branche `fix/ci-portable-macos-windows-2026-09-08`. Journal fourni : `_qa/ci-portable/ci-windows-run11-node20.log`, run 34244259901, commit `9e2398734`. Ubuntu, macOS 6/6 et **Windows Node 22 6/6 verts pour la première fois** ; seul **Windows Node 20, shard 5/6** reste rouge, sur **deux fichiers, deux tests**, reproduits à l'identique lors de la reprise automatique du shard (lignes 10485 et 11096) : ces échecs ne sont pas intermittents. Vérifications locales sous Linux, Node 24.14.1. Deux commits de code et de tests plus ce rapport, aucun push, index vide après chaque commit.
+
+### Diagnostic : deux libérations de handle non attendues
+
+| Fichier de test | Cause | Code ou test | Correctif et résultat individuel |
+| --- | --- | --- | --- |
+| `tests/skills/skill-import-command-lifecycle.test.ts` — « closes real watcher handles before removal and restores them (failure=true) » | `ENOTEMPTY: rmdir …\skills\watched-helper`. `watcher.close()` ne fait qu'**amorcer** la libération : l'événement `close` part au tick suivant pendant que libuv libère le descripteur dans une phase ultérieure de la boucle. `SkillsHub.uninstall` supprimait le répertoire dans la **même exécution synchrone** que la fermeture, et le nettoyage `afterEach` employait `fs.rmSync`, dont les nouvelles tentatives **bloquent la boucle** : elles ne peuvent donc jamais laisser la fermeture aboutir. Windows refuse de retirer un répertoire qui porte encore un handle de notification de changement, d'où un répertoire réputé non vide. | **Code + test** | Le registre enregistre chaque fermeture amorcée (`trackWatcherClose`) et expose `awaitSkillRegistryWatchersClosed()` ; `uninstall` l'attend avant `rm` et adopte le budget déjà standard dans le dépôt (`maxRetries: 10`) ; le `afterEach` devient asynchrone et supprime avec `fs.promises.rm`. **6/6**, dix rejeux. |
+| `tests/gpu-worker/gpu-media-worker-server.test.ts` — « cancels a running avatar render » | `EPERM … rename '…\job.json.<pid>.<uuid>.tmp' -> '…\job.json'`. Le magasin d'état du worker GPU écrivait **son propre** temporaire puis renommait **sans aucune reprise**, alors que le job annulé relit `job.json` au même instant : sous Windows une destination ouverte fait échouer le rename. Le budget win32 de `writeFileAtomic` (6 essais, 0,31 s cumulées) ne s'appliquait pas, ce chemin ne passant pas par lui. | **Code + test** | `persist` passe par `writeFileAtomic` (temporaire, rename durable, `mode 0600`, reprise win32) ; le budget win32 est porté de 6 essais (0,31 s) à **8 essais (20·2^k, ≈2,54 s cumulées)**, toujours win32-only et toujours sur le même temporaire. **10/10**, dix rejeux. |
+
+### Preuves et limites
+
+- **Aucun des deux défauts n'est reproductible sous Linux** : POSIX supprime un répertoire dont un handle reste ouvert, et un `rename` par-dessus une destination ouverte y réussit. Le journal CI est la preuve empirique ; ce qui est prouvé localement est le **contrat d'ordonnancement**, par falsification.
+- **Falsification 1** — en retirant le seul `await awaitSkillRegistryWatchersClosed()` de `uninstall`, les **deux** paramétrages du test de watchers échouent (`failure=false` et `failure=true`). La nouvelle assertion exige que chaque handle ait émis `close` **avant** l'entrée dans `rm`, et non seulement que `close()` ait été appelé : l'ancien code appelait `rm` dans la même exécution synchrone, donc avant même la file `nextTick`.
+- **Falsification 2** — en remettant `WIN32_RENAME_ATTEMPTS` à 6, les deux tests de budget échouent (« survives six consecutive win32 EPERM renames » et « propagates win32 EPERM after 8 attempts »). Le premier simule six EPERM consécutifs puis un succès : 7 appels, **un seul nom de temporaire**, contenu final correct, répertoire sans reliquat.
+- **Falsification 3** — en rétablissant le couple temporaire + `rename` maison dans `persist`, le nouveau `tests/gpu-worker/gpu-media-worker-persist.test.ts` échoue (`expected 0 to be greater than or equal to 2`). Ce test espionne l'écrivain partagé en **transmettant à l'implémentation réelle** : il constate le câblage, `mode 0600` et l'absence de temporaire résiduel, sans simuler d'écriture.
+- **Chiffre de budget, énoncé sans arrondi favorable** : 8 essais espacés de 20, 40, 80, 160, 320, 640 et 1280 ms, soit **2 540 ms** d'attente cumulée au pire, contre 310 ms auparavant. La consigne parlait d'« environ 2 s » ; la valeur retenue est légèrement au-dessus et elle n'est payée que sur un échec réel, sous Windows uniquement.
+- **Portée du changement d'écrivain** : `persist` était le seul chemin du worker GPU à écrire un état JSON ; `stdout.log`, `stderr.log` et les téléversements restent des `writeFile` simples, ce ne sont pas des états relus en concurrence. Aucun élargissement à l'aveugle.
+- **Balayage du changement transversal** : `writeFileAtomic` est partagé ; seul son chemin d'échec win32 change, jamais le chemin nominal. Les douze fichiers de test qui simulent `src/skills/registry.js` ou `src/utils/atomic-write.js` ont été rejoués (**543 tests verts**), en plus de `tests/utils` entier.
+
+### Vérifications
+
+HOME QA `_qa/ci-portable/home`. Aucun accès en écriture à la copie de travail interdite, aucun service touché.
+
+- Les deux fichiers rejoués **dix fois chacun** : `skill-import-command-lifecycle` **6/6 dix fois**, `gpu-media-worker-server` **10/10 dix fois**, sans un seul échec ni écart de comptage.
+- Commande demandée `npx vitest run tests/utils/atomic-write.test.ts tests/skills tests/gpu-worker` : **30 fichiers verts, un ignoré ; 432 tests verts, trois skips**, exit 0.
+- Suite `tests/skills` complète : **25 fichiers verts, un ignoré ; 390 verts, trois skips**. Suite `tests/utils` complète : **29 fichiers verts ; 541 verts, trois skips**.
+- Douze fichiers simulant les modules touchés : **543 tests verts**.
+- `npm run typecheck` **exit 0, zéro `error TS`** ; ESLint sur les **sept fichiers touchés : exit 0, zéro erreur, zéro avertissement**.
+
+### Outillage et passation
+
+Code Explorer : l'index disponible porte sur une autre copie de travail et date du 2026-08-02. `context` sur `uninstall` (`src/skills/hub.ts`) a rendu la méthode et ses appelants, ce qui a orienté la lecture ; `context` sur `writeFileAtomic` répond « Symbol not found » et un `search_code` sur l'écriture atomique a dépassé la limite de sortie sans être lu intégralement — **aucune de ces deux absences n'est interprétée comme une preuve d'absence** : les chemins exacts ont ensuite été établis par recherche littérale, notamment le nom du temporaire du journal CI (`job.json.<pid>.<uuid>.tmp`) qui **ne correspond pas** au patron de `atomic-write.ts` et prouve à lui seul que ce chemin n'utilisait pas l'écrivain partagé.
+
+Outillage : **quatre appels Code Explorer** (`list_repos`, `search_code`, deux `context`) et **onze commandes via `lm-resizer exec --raw-on-failure`** (suites, ESLint, typecheck). Les vingt rejeux de stabilité et les trois sondes de falsification ont été lancés en `npx` brut, en boucle, pour compter les issues ligne à ligne ; c'est une exception assumée, pas la règle de la tranche.
+
+Passation : CI Windows native/Node 20 shard 5 à confirmer après intégration. Aucun autre rouge n'a été observé sur les suites rejouées ; aucune baseline globale n'a été prise dans cette tranche, donc aucune affirmation de non-régression globale n'est faite.

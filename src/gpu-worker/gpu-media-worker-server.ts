@@ -4,8 +4,9 @@ import { spawn as realSpawn, type ChildProcessWithoutNullStreams } from 'child_p
 import { createHash, timingSafeEqual, randomUUID } from 'crypto';
 import { createReadStream } from 'fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
-import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'fs/promises';
 import { isAbsolute, join, relative, resolve } from 'path';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 import {
   parseAvatarVideoPayload,
   parsePanoWorldPayload,
@@ -279,15 +280,11 @@ export function createGpuMediaWorkerServer(
   const persist = async (job: StoredGpuMediaJob): Promise<void> => {
     job.updatedAt = now().toISOString();
     await mkdir(jobDir(job.id), { recursive: true });
-    const destination = jobFile(job.id);
-    const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, `${JSON.stringify(job, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-      await rename(temporary, destination);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    // The shared atomic writer owns the temporary file, the durable rename and
+    // the Windows retry budget: a concurrent reader of job.json (a cancelled
+    // job re-reading its own state) briefly holds the destination open, and a
+    // bare rename fails with EPERM there.
+    await writeFileAtomic(jobFile(job.id), `${JSON.stringify(job, null, 2)}\n`, { mode: 0o600 });
   };
 
   const initialize = async (): Promise<void> => {

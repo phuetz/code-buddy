@@ -37,6 +37,13 @@ export interface AtomicReadOptions<T> extends AtomicWriteOptions {
 }
 
 const DEFAULT_MODE = 0o600;
+/**
+ * Windows rename budget. A concurrent reader or an antivirus scan can hold the
+ * destination open for over a second, which the previous six attempts
+ * (0.31 s cumulated) did not cover: eight attempts spread ~2.5 s of backoff.
+ */
+const WIN32_RENAME_ATTEMPTS = 8;
+const WIN32_RENAME_BASE_DELAY_MS = 20;
 const warnedReadPaths = new Set<string>();
 
 const defaultFileSystem: AtomicWriteFileSystem = {
@@ -119,11 +126,13 @@ export async function writeFileAtomic(
         await fileSystem.rename(temporaryPath, filePath);
         break;
       } catch (error) {
-        if (process.platform !== 'win32' || retry >= 5 ||
+        if (process.platform !== 'win32' || retry >= WIN32_RENAME_ATTEMPTS - 1 ||
             !['EPERM', 'EBUSY', 'EACCES'].includes(errorCode(error) ?? '')) {
           throw error;
         }
-        await new Promise<void>(resolve => setTimeout(resolve, 10 * 2 ** retry));
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, WIN32_RENAME_BASE_DELAY_MS * 2 ** retry);
+        });
       }
     }
     await syncDirectory(filePath, fileSystem);
