@@ -127,7 +127,7 @@ if [ "${1:-}" = "--regenerer" ]; then
   # DISPARAISSENT (`comm -23`), pas le décompte — la chute brutale n'est qu'un cas
   # particulier de la perte. La revue de diff ne peut pas être la seule barrière.
   if [ -f "$REFERENCE" ]; then
-    perdues=$(comm -23 <(sort -u "$REFERENCE") "$tmp_ref")
+    perdues=$(comm -23 <(tr -d '\r' < "$REFERENCE" | sort -u) "$tmp_ref")
     if [ -n "$perdues" ] && ! $force; then
       ancien=$(wc -l < "$REFERENCE")
       echo "✗ régénération abandonnée : des commandes de la référence disparaîtraient ($nouveau vs $ancien)." >&2
@@ -186,9 +186,9 @@ total=$(wc -l < "$BASE/commandes.txt")
 # passerait inaperçue.
 : > "$BASE/attendues.txt"
 if [ -n "${BALAYAGE_ATTENDU:-}" ] && [ -f "$BALAYAGE_ATTENDU" ]; then
-  sort -u "$BALAYAGE_ATTENDU" > "$BASE/attendues.txt"
+  tr -d '\r' < "$BALAYAGE_ATTENDU" | sort -u > "$BASE/attendues.txt"
 elif [ -z "${BALAYAGE_ENTREE:-}" ] && [ -f "$REFERENCE" ]; then
-  sort -u "$REFERENCE" > "$BASE/attendues.txt"
+  tr -d '\r' < "$REFERENCE" | sort -u > "$BASE/attendues.txt"
 fi
 attendu=$(wc -l < "$BASE/attendues.txt")
 

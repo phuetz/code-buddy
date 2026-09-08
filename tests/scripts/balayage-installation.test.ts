@@ -11,10 +11,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
+import { resolveBashExecutable } from '../../src/tools/interactive-bash.js';
 import { fileURLToPath } from 'node:url';
 
-const SCRIPT = fileURLToPath(new URL('../../scripts/balayage-installation.sh', import.meta.url));
+const SCRIPT = fileURLToPath(new URL('../../scripts/balayage-installation.sh', import.meta.url)).replaceAll('\\', '/');
+const BASH = resolveBashExecutable();
 
 let dir: string;
 
@@ -22,12 +24,12 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'balayage-test-'));
 });
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 /** Écrit un faux CLI node dont le comportement dépend des arguments. */
 function fakeCli(body: string): string {
-  const p = join(dir, 'fake-cli.js');
+  const p = join(dir, 'fake-cli.cjs');
   writeFileSync(p, body);
   chmodSync(p, 0o755);
   return p;
@@ -44,9 +46,15 @@ function runBalayage(entree: string, extra: Record<string, string> = {}): {
     BALAYAGE_TIMEOUT: '3',
     ...extra,
   };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('BALAYAGE_')) {
+      const values = env as Record<string, string | undefined>;
+      values[key] = values[key]?.replaceAll('\\', '/');
+    }
+  }
   try {
     // Fusionne stderr dans stdout : les messages de garde vont sur stderr.
-    const stdout = execFileSync('bash', [SCRIPT], {
+    const stdout = execFileSync(BASH, [SCRIPT], {
       env,
       encoding: 'utf8',
       timeout: 30_000,
@@ -75,9 +83,15 @@ function runRegenerer(
     BALAYAGE_TIMEOUT: '5',
     ...extra,
   };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('BALAYAGE_')) {
+      const values = env as Record<string, string | undefined>;
+      values[key] = values[key]?.replaceAll('\\', '/');
+    }
+  }
   const args = force ? [SCRIPT, '--regenerer', '--force'] : [SCRIPT, '--regenerer'];
   try {
-    const stdout = execFileSync('bash', args, {
+    const stdout = execFileSync(BASH, args, {
       env,
       encoding: 'utf8',
       timeout: 30_000,
@@ -99,7 +113,7 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
     expect(status).not.toBe(0);
     expect(stdout).toMatch(/aucune commande|INCHANGÉE/i);
     // La référence existante n'a PAS été tronquée.
-    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+    expect(readFileSync(ref, 'utf8').trim().split(/\r?\n/).filter(Boolean)).toHaveLength(3);
   });
 
   it('refuse une chute brutale sans --force, en nommant les pertes (référence intacte)', () => {
@@ -110,7 +124,7 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
     expect(status).not.toBe(0);
     expect(stdout).toMatch(/beta/);
     expect(stdout).toMatch(/gamma/);
-    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+    expect(readFileSync(ref, 'utf8').trim().split(/\r?\n/).filter(Boolean)).toHaveLength(3);
   });
 
   it('refuse une PERTE à compte constant (échange), pas seulement une chute d’amplitude', () => {
@@ -135,18 +149,18 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
     const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha  x'); }`);
     const ref = join(dir, 'ref.txt');
     writeFileSync(ref, 'alpha\nbeta\ngamma\n');
-    const { status } = runRegenerer(source, ref, {}, true);
-    expect(status).toBe(0);
-    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toEqual(['alpha']);
+    const { status, stdout } = runRegenerer(source, ref, {}, true);
+    expect(status, stdout).toBe(0);
+    expect(readFileSync(ref, 'utf8').trim().split(/\r?\n/).filter(Boolean)).toEqual(['alpha']);
   });
 
-  it('accepte une croissance (ajouts) sans --force', () => {
+  it.each(['\n', '\r\n'])('accepte une croissance (ajouts) sans --force (%j)', (eol) => {
     const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha x'); console.log('  beta y'); console.log('  gamma z'); }`);
     const ref = join(dir, 'ref.txt');
-    writeFileSync(ref, 'alpha\nbeta\n');
-    const { status } = runRegenerer(source, ref);
-    expect(status).toBe(0);
-    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+    writeFileSync(ref, ['alpha', 'beta', ''].join(eol));
+    const { status, stdout } = runRegenerer(source, ref);
+    expect(status, stdout).toBe(0);
+    expect(readFileSync(ref, 'utf8').trim().split(/\r?\n/).filter(Boolean)).toHaveLength(3);
   });
 });
 
@@ -158,13 +172,13 @@ describe('balayage-installation.sh — gardes', () => {
     const cli = fakeCli(`
       const arg = process.argv[2];
       if (arg === '--help' || arg === undefined) {
-        if (process.env.PATH !== ${expectedPath}) process.exit(19);
+        if (require('node:path').normalize(process.env.PATH).toLowerCase() !== require('node:path').normalize(${expectedPath}).toLowerCase()) process.exit(19);
         console.log('  alpha   ok');
       } else { process.exit(0); }
     `);
     const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
-    expect(status).toBe(0);
-    expect(stdout).toMatch(/1\/1 commandes répondent/);
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/1\/\s*1\s+commandes répondent/);
   });
 
   it('fonctionne sans timeout dans le PATH isolé', () => {
@@ -174,14 +188,16 @@ describe('balayage-installation.sh — gardes', () => {
       const { spawnSync } = require('node:child_process');
       const arg = process.argv[2];
       if (arg === '--help' || arg === undefined) {
-        const probe = spawnSync('timeout', ['--version'], { encoding: 'utf8' });
+        // Windows may still find System32/timeout.exe despite an empty PATH.
+        // Probe an explicitly absent path to avoid that implicit OS search.
+        const probe = spawnSync(require('node:path').join(process.env.PATH, 'timeout'), ['--version'], { encoding: 'utf8' });
         if (probe.status === 0 || probe.error?.code !== 'ENOENT') process.exit(19);
         console.log('  alpha   ok');
       } else { process.exit(0); }
     `);
     const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
-    expect(status).toBe(0);
-    expect(stdout).toMatch(/1\/1 commandes répondent/);
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/1\/\s*1\s+commandes répondent/);
   });
 
   it('une extraction vide N’EST PAS un succès (garde total>0)', () => {
@@ -205,8 +221,8 @@ describe('balayage-installation.sh — gardes', () => {
       }
     `);
     const { status, stdout } = runBalayage(cli);
-    expect(status).toBe(0);
-    expect(stdout).toMatch(/2\/2 commandes répondent/);
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/2\/\s*2\s+commandes répondent/);
   });
 
   it('signale une commande qui plante (exit 1)', () => {
@@ -242,7 +258,28 @@ describe('balayage-installation.sh — gardes', () => {
     expect(status).not.toBe(0);
     expect(stdout).toMatch(/gamma/);
     expect(stdout).toMatch(/delta/);
-    expect(stdout).not.toMatch(/2\/2 commandes répondent/);
+    expect(stdout).not.toMatch(/2\/\s*2\s+commandes répondent/);
+  });
+
+  it('compare les références CRLF aux commandes extraites', () => {
+    const attendu = join(dir, 'reference-crlf.txt');
+    writeFileSync(attendu, 'alpha\r\nbeta\r\n');
+    const cli = fakeCli("console.log('  alpha  ok\\r\\n  beta  ok');");
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: attendu });
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/2\/\s*2\s+commandes répondent/);
+  });
+
+  it('accepte les comptes rembourrés de wc BSD', () => {
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    const wc = join(bin, 'wc');
+    writeFileSync(wc, '#!/usr/bin/env bash\nprintf "        "\nexec /usr/bin/wc "$@"\n');
+    chmodSync(wc, 0o755);
+    const cli = fakeCli("console.log('  alpha  ok\\n  beta  ok');");
+    const { status, stdout } = runBalayage(cli, { PATH: [bin, process.env.PATH].join(delimiter) });
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/2\/\s*2\s+commandes répondent/);
   });
 
   it('accepte quand toutes les commandes attendues sont présentes', () => {
@@ -256,8 +293,8 @@ describe('balayage-installation.sh — gardes', () => {
       } else { process.exit(0); }
     `);
     const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: attendu });
-    expect(status).toBe(0);
-    expect(stdout).toMatch(/2\/2 commandes répondent/);
+    expect(status, stdout).toBe(0);
+    expect(stdout).toMatch(/2\/\s*2\s+commandes répondent/);
   });
 
   it('une référence ATTENDUE mais vide n’est pas sautée en silence (exploit du binôme)', () => {
@@ -274,7 +311,7 @@ describe('balayage-installation.sh — gardes', () => {
     `);
     const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: vide });
     expect(status).not.toBe(0);
-    expect(stdout).not.toMatch(/3\/3 commandes répondent/);
+    expect(stdout).not.toMatch(/3\/\s*3\s+commandes répondent/);
     expect(stdout).toMatch(/référence.*(absente|vide)/i);
   });
 
