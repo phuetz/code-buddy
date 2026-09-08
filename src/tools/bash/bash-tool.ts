@@ -29,7 +29,7 @@ import {
   sanitizeForShell
 } from '../../utils/input-validator.js';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
-import { getShellConfiguration, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
+import { getShellConfiguration, shellListFilesCommand, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
@@ -805,7 +805,10 @@ export class BashTool implements Disposable {
   }
 
   /**
-   * List files in a directory (wrapper for `ls -la`)
+   * List files in a directory (`ls -la`, or its PowerShell equivalent).
+   *
+   * The command is built for the shell that actually runs it: a POSIX `ls -la`
+   * always fails on a PowerShell host.
    *
    * @param directory - Directory path to list (default: current directory)
    * @returns Formatted directory listing or error
@@ -825,8 +828,7 @@ export class BashTool implements Disposable {
       };
     }
 
-    const safeDir = sanitizeForShell(directory);
-    return this.execute(`ls -la ${safeDir}`);
+    return this.execute(shellListFilesCommand(directory));
   }
 
   /**
