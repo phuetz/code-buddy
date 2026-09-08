@@ -31,6 +31,22 @@ import { getSkillsHub } from './hub.js';
 // Skill Registry Class
 // ============================================================================
 
+/** Watchers whose close was started but whose handle may still be held. */
+const pendingWatcherCloses = new Set<Promise<void>>();
+
+/** A watcher that already errored never emits 'close': never wait forever. */
+const WATCHER_CLOSE_TIMEOUT_MS = 2000;
+
+function trackWatcherClose(watcher: fs.FSWatcher): void {
+  const closed = new Promise<void>(resolve => {
+    watcher.once('close', () => resolve());
+    const timer = setTimeout(resolve, WATCHER_CLOSE_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  pendingWatcherCloses.add(closed);
+  void closed.then(() => pendingWatcherCloses.delete(closed));
+}
+
 export class SkillRegistry extends EventEmitter {
   private config: SkillRegistryConfig;
   private skills: Map<string, Skill> = new Map();
@@ -859,6 +875,7 @@ export class SkillRegistry extends EventEmitter {
     if (!watcher) return;
 
     this.watchers.delete(key);
+    trackWatcherClose(watcher);
     try {
       watcher.close();
     } catch {
@@ -1031,6 +1048,25 @@ export function getSkillRegistry(config?: Partial<SkillRegistryConfig>): SkillRe
 /** Do not create a registry just to remove an installed package. */
 export function pauseSkillRegistryWatching(): () => void {
   return registryInstance?.pauseWatching() ?? (() => {});
+}
+
+/**
+ * Wait until every closed watcher released its operating-system handle.
+ *
+ * Windows refuses to remove a directory that still carries a change
+ * notification handle, and `watcher.close()` only starts that release: the
+ * 'close' event is emitted on the next tick while libuv frees the handle in a
+ * later loop phase. Callers that remove a watched directory must await this
+ * before the removal, otherwise the first `rm` attempt races the release.
+ */
+export async function awaitSkillRegistryWatchersClosed(): Promise<void> {
+  const pending = [...pendingWatcherCloses];
+  pendingWatcherCloses.clear();
+  await Promise.all(pending);
+  // libuv runs handle close callbacks after the check phase: two turns of the
+  // loop are enough for the descriptor to be gone, on every platform.
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  await new Promise<void>(resolve => { setImmediate(resolve); });
 }
 
 export function resetSkillRegistry(): void {

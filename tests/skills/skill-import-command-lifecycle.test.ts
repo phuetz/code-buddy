@@ -7,18 +7,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { registerSkillsCommands } from '../../src/commands/skills-cli/index.js';
 import { getSkillsHub, resetSkillsHub } from '../../src/skills/hub.js';
-import { getSkillRegistry, resetSkillRegistry } from '../../src/skills/registry.js';
+import {
+  awaitSkillRegistryWatchersClosed,
+  getSkillRegistry,
+  resetSkillRegistry,
+} from '../../src/skills/registry.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const tempDirs: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
   resetSkillRegistry();
   resetSkillsHub();
+  // Windows only releases a watched directory once libuv closed its handle.
+  // A synchronous rmSync blocks the loop, so its own retries can never win
+  // that race: wait for the handles, then remove asynchronously.
+  await awaitSkillRegistryWatchersClosed();
   for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -164,7 +172,7 @@ describe('skills import CLI lifecycle', () => {
       const realRm = fs.promises.rm;
       const remove = vi.spyOn(fs.promises, 'rm').mockImplementation(async (target, options) => {
         expect(stop).toHaveBeenCalled();
-        expect(options).toMatchObject({ recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        expect(options).toMatchObject({ recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
         await realRm(target, options);
       });
       logSpy.mockClear();
@@ -218,14 +226,21 @@ describe('skills import CLI lifecycle', () => {
     await registry.load();
     const watchers = (registry as unknown as { watchers: Map<string, fs.FSWatcher> }).watchers;
     const originalHandles = [...watchers.values()];
-    for (const handle of originalHandles) vi.spyOn(handle, 'close');
+    const releasedHandles = new Set<fs.FSWatcher>();
+    for (const handle of originalHandles) {
+      vi.spyOn(handle, 'close');
+      handle.once('close', () => releasedHandles.add(handle));
+    }
     expect(originalHandles.length).toBeGreaterThan(0);
     const releaseOuterPause = fail ? registry.pauseWatching() : undefined;
     const realRm = fs.promises.rm;
     const failure = Object.assign(new Error('locked'), { code: 'EPERM' });
     vi.spyOn(fs.promises, 'rm').mockImplementation(async (target, options) => {
       for (const handle of originalHandles) expect(handle.close).toHaveBeenCalled();
-      expect(options).toMatchObject({ maxRetries: 5, retryDelay: 100 });
+      // close() only starts the release: Windows keeps the directory locked
+      // until the handle is actually gone, so the removal must wait for it.
+      for (const handle of originalHandles) expect(releasedHandles.has(handle)).toBe(true);
+      expect(options).toMatchObject({ maxRetries: 10, retryDelay: 100 });
       if (fail) throw failure;
       await realRm(target, options);
     });

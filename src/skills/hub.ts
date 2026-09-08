@@ -1884,13 +1884,16 @@ export class SkillsHub extends EventEmitter {
 
     logger.info('Uninstalling skill', { name: skillName });
 
-    // Release registry handles before Windows removal; transient external locks
-    // (for example antivirus scans) are retried by Node's asynchronous rm.
-    const { pauseSkillRegistryWatching } = await import('./registry.js');
+    // Release registry handles before Windows removal, and wait for the
+    // operating system to hand the directory back: closing a watcher only
+    // starts that release. Transient external locks (for example antivirus
+    // scans) are then retried by Node's asynchronous rm.
+    const { awaitSkillRegistryWatchersClosed, pauseSkillRegistryWatching } = await import('./registry.js');
     const resumeWatching = pauseSkillRegistryWatching();
     try {
+      await awaitSkillRegistryWatchersClosed();
       await fs.promises.rm(path.dirname(installed.path), {
-        recursive: true, force: true, maxRetries: 5, retryDelay: 100,
+        recursive: true, force: true, maxRetries: 10, retryDelay: 100,
       });
     } finally {
       resumeWatching();
