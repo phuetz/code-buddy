@@ -118,3 +118,9 @@ Le journal 8588–8686 contredit l'attribution initiale : un rapport `null` dans
 Simulation BSD par PATH de test : refus de `find -printf`, `realpath -e`, et absence de `sha256sum`. Avant : exactement **5 rouges / 12**, dont `report_invalid` exit 3 (journal brut relu). Après : **12/12 verts**. La garde OpenCode est traitée séparément : motif `[o]pencode` évitant l'auto-match de pgrep, exclusion du shell et de tous ses ancêtres par `ps -o ppid=` portable. Test simulant les candidats BSD : ancien filtre **1 rouge / 3**, correction **3/3 verts**, autre PID toujours bloquant. ESLint ciblé et `bash -n` : exit 0.
 
 Lot 1 livré : `73f7148b0`. Code Explorer reste sans snapshot ; reconstruction initiale interrompue après plusieurs minutes sans résultat, reconstructions incrémentales bornées à 45 s (timeout 124). Aucun processus d'une autre lane arrêté.
+
+### Lot 3 — fixtures Windows
+
+Balayage conserve l'exigence exit 0, total strictement positif et réussites égales au total, sans imposer une seule commande. GK35 attend `connected` par `expect.poll` (5 s maximum, intervalle 20 ms) ; le listener tardif ne résout que pour `slow_fixture`, car le serveur rapide peut lui aussi dépasser les 400 ms d'initialisation. L'absence initiale des outils lents reste vérifiée avant l'attente.
+
+Simulation contrôlée : cinq commandes dans le help et délai du serveur rapide porté à 600 ms. Anciennes assertions : **2 rouges / 19**, erreurs exactes `connecting` et `5/5` (brut relu). Assertions corrigées, mêmes conditions : **19/19 verts**. Fixtures finales rétablies (délai 0, help initial), également **19/19 verts** dans la première exécution. Lot 2 livré : `022fcac03`.

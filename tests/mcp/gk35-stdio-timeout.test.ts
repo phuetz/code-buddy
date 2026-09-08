@@ -24,7 +24,12 @@ describe('GK35 real stdio MCP init timeout', () => {
     manager = new MCPManager();
 
     const lateReady = new Promise<string>((resolve) => {
-      manager!.once('serverLateReady', (name: string) => resolve(name));
+      const onReady = (name: string) => {
+        if (name !== 'slow_fixture') return;
+        manager!.off('serverLateReady', onReady);
+        resolve(name);
+      };
+      manager!.on('serverLateReady', onReady);
     });
 
     const started = Date.now();
@@ -51,11 +56,13 @@ describe('GK35 real stdio MCP init timeout', () => {
       ],
     });
     expect(Date.now() - started).toBeLessThan(900);
-    expect(manager.getServerStatus('fast_fixture')).toBe('connected');
+    expect(manager.getTools().some((tool) => tool.serverName === 'slow_fixture')).toBe(false);
+    await expect.poll(() => manager!.getServerStatus('fast_fixture'), {
+      timeout: 5000, interval: 20,
+    }).toBe('connected');
     expect(manager.getTools().map((tool) => tool.name)).toEqual(
       expect.arrayContaining(['mcp__fast_fixture__echo_marker']),
     );
-    expect(manager.getTools().some((tool) => tool.serverName === 'slow_fixture')).toBe(false);
 
     const secondStarted = Date.now();
     await manager.ensureServersInitialized({

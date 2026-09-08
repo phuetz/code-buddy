@@ -182,7 +182,12 @@ describe('balayage-installation.sh — gardes', () => {
     `);
     const { status, stdout } = runBalayage(cli, { BALAYAGE_ISOLATED_PATH: isolatedPath });
     expect(status, stdout).toBe(0);
-    expect(stdout).toMatch(/1\/\s*1\s+commandes répondent/);
+    // Command discovery can include platform-specific entries. Every discovered
+    // command must succeed, and discovering zero commands remains a failure.
+    const summary = stdout.match(/(\d+)\/\s*(\d+)\s+commandes répondent/);
+    expect(summary).not.toBeNull();
+    expect(Number(summary![2])).toBeGreaterThan(0);
+    expect(Number(summary![1])).toBe(Number(summary![2]));
   });
 
   it('fonctionne sans timeout dans le PATH isolé', () => {
