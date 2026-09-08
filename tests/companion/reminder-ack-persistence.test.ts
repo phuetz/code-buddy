@@ -14,7 +14,6 @@ import { runReminderTick } from '../../src/companion/reminder-runner.js';
 
 let dir: string;
 let n = 0;
-const flush = () => new Promise((r) => setTimeout(r, 40)); // let the fire-and-forget persist land
 
 beforeEach(() => {
   dir = path.join(os.tmpdir(), `cb-ackpersist-${process.pid}-${n++}`);
@@ -35,7 +34,7 @@ afterEach(async () => {
 describe('pending-ack persistence — survive a restart mid-window (health safety)', () => {
   it('a pending ack is reloaded from disk after the in-memory registry is lost', async () => {
     openAck({ id: 'r1', label: 'médicaments' }, 1000);
-    await flush(); // the async persist
+    await whenRemindersPersisted(); // wait for the actual disk mirror
     resetAcks(); // simulate the process dying (memory gone)
     expect(pendingAcks(1000, 999_999)).toHaveLength(0);
 
@@ -55,7 +54,7 @@ describe('pending-ack persistence — survive a restart mid-window (health safet
     await runReminderTick(T0, { say: sayA, notify: notifyA, windowMs: 10_000, renagMs: 5000, renagMax: 1 });
     expect(notifyA).toHaveBeenCalledTimes(1); // fired
     expect(pendingAcks(T0.getTime(), 10_000)).toHaveLength(1);
-    await flush();
+    await whenRemindersPersisted();
 
     // --- CRASH: in-memory pending is lost ---
     resetAcks();

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   NATIVE_SANDBOX_ENV,
@@ -242,7 +243,8 @@ describe('confineSpawn', () => {
     expect(result.file).toBe('/usr/bin/python3');
     expect(result.args[0]).toBe(helper);
     expect(result.args).toContain('--project');
-    expect(result.args).toContain(PROJECT);
+    // confineSpawn resolves cwd before building the pure argv, on every host.
+    expect(result.args).toContain(path.resolve(PROJECT));
     expect(result.args.slice(-3)).toEqual(['bash', '-c', 'echo ok']);
   });
 });

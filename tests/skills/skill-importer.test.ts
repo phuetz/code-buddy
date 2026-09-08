@@ -77,7 +77,9 @@ describe('skill-importer — discovery', () => {
   it('installs by default directly under the managed skills root', async () => {
     const home = tmp();
     const originalHome = process.env.HOME;
+    const originalProfile = process.env.USERPROFILE;
     process.env.HOME = home;
+    process.env.USERPROFILE = home;
     try {
       writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
 
@@ -89,6 +91,8 @@ describe('skill-importer — discovery', () => {
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
+      if (originalProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalProfile;
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
@@ -170,7 +174,9 @@ describe('skill-importer — discovery', () => {
   it('lists imported skills from both the current and legacy managed roots', async () => {
     const home = tmp();
     const originalHome = process.env.HOME;
+    const originalProfile = process.env.USERPROFILE;
     process.env.HOME = home;
+    process.env.USERPROFILE = home;
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       writeSkill(path.join(home, '.codebuddy', 'skills', 'imported-current'), BENIGN_FM, BENIGN_BODY);
@@ -189,6 +195,8 @@ describe('skill-importer — discovery', () => {
       logSpy.mockRestore();
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
+      if (originalProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalProfile;
       fs.rmSync(home, { recursive: true, force: true });
     }
   });

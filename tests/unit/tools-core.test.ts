@@ -623,7 +623,8 @@ describe('TextEditorTool', () => {
 
   describe('Path Validation', () => {
     test('should block path traversal attempts', async () => {
-      const maliciousPath = path.join(TEST_DIR, '..', '..', 'etc', 'passwd');
+      const protectedPath = path.join(os.homedir(), '.ssh', 'id_rsa');
+      const maliciousPath = TEST_DIR + path.sep + path.relative(TEST_DIR, protectedPath);
       const result = await textEditor.view(maliciousPath);
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/traversal|blocked|protected|outside/i);
@@ -678,6 +679,8 @@ describe('GitTool', () => {
   let testRepoDir: string;
 
   beforeEach(async () => {
+    // A temporary directory may itself be inside the checkout (isolated QA).
+    vi.stubEnv('GIT_CEILING_DIRECTORIES', await fs.realpath(TEST_DIR));
     testRepoDir = path.join(TEST_DIR, `git-test-${Date.now()}`);
     await fs.ensureDir(testRepoDir);
 
@@ -707,6 +710,7 @@ describe('GitTool', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await fs.remove(testRepoDir);
   });
 

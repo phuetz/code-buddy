@@ -317,6 +317,33 @@ describe('doctor --fix', () => {
     });
   });
 
+  describe('profile permission portability', () => {
+    it.each(['linux', 'win32'])('interprets profile mode bits only on POSIX (%s)', async (platform) => {
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      const profile = path.join(tmpDir, '.codebuddy');
+      fs.mkdirSync(profile, { recursive: true });
+      fs.chmodSync(profile, 0o777);
+      vi.stubEnv('HOME', tmpDir);
+      vi.stubEnv('USERPROFILE', tmpDir);
+      Object.defineProperty(process, 'platform', { ...descriptor, value: platform });
+      try {
+        const checks = await runDoctorChecks(tmpDir);
+        const permissions = checks.find(check => check.name === 'Profile permissions');
+        expect(permissions).toBeDefined();
+        expect(permissions!.status).toBe(platform === 'win32' ? 'ok' : 'warn');
+        expect(Boolean(permissions!.fixable)).toBe(platform !== 'win32');
+        if (platform === 'win32') {
+          expect(permissions!.message).toContain('writable');
+          expect(permissions!.message).not.toMatch(/chmod|world-writable|mode /);
+          expect(await runFixes([permissions!])).toEqual([]);
+        }
+      } finally {
+        Object.defineProperty(process, 'platform', descriptor);
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
   describe('non-fixable checks', () => {
     it('should not attempt to fix non-fixable checks', async () => {
       // With .codebuddy existing, most config checks are non-fixable

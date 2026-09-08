@@ -55,11 +55,14 @@ let DEFAULT_MAX_TOTAL_SIZE: any;
 
 // Helper to create a mock file system
 function createMockFileSystem(files: Record<string, { content?: string; size?: number; isDir?: boolean; isSymlink?: boolean }>) {
-  vi.mocked(fs.existsSync).mockImplementation((path: string) => {
-    const normalizedPath = path.replace(/\\/g, '/');
+  // Resolve drive roots as well as separators: restore resolves its destinations.
+  const normalizePath = (value: string) => path.resolve(value).replace(/\\/g, '/');
+  files = Object.fromEntries(Object.entries(files).map(([name, info]) => [normalizePath(name), info]));
+  vi.mocked(fs.existsSync).mockImplementation((filePath: string) => {
+    const normalizedPath = normalizePath(filePath);
     // Home profile directory always exists for our tests
-    if (normalizedPath === '/home/testuser/.codebuddy') return true;
-    if (normalizedPath === '/home/testuser/.codebuddy/backups') return true;
+    if (normalizedPath === normalizePath('/home/testuser/.codebuddy')) return true;
+    if (normalizedPath === normalizePath('/home/testuser/.codebuddy/backups')) return true;
     
     // Check if the path exists in our mock filesystem
     for (const filePath of Object.keys(files)) {
@@ -73,12 +76,12 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.readdirSync).mockImplementation((dir: string) => {
-    const normalizedDir = dir.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalizedDir = normalizePath(dir).replace(/\/+$/, '');
     const entries: any[] = [];
     const seenNames = new Set<string>();
     
     for (const [filePath, fileInfo] of Object.entries(files)) {
-      const normalizedPath = filePath.replace(/\\/g, '/');
+      const normalizedPath = normalizePath(filePath);
       if (normalizedPath.startsWith(normalizedDir + '/')) {
         const relativePath = normalizedPath.slice(normalizedDir.length + 1);
         const parts = relativePath.split('/');
@@ -109,7 +112,7 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.statSync).mockImplementation((filePath: string) => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const normalizedPath = normalizePath(filePath);
     for (const [mockPath, fileInfo] of Object.entries(files)) {
       if (normalizedPath === mockPath.replace(/\\/g, '/')) {
         return {
@@ -131,7 +134,7 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.lstatSync).mockImplementation((filePath: string) => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const normalizedPath = normalizePath(filePath);
     for (const [mockPath, fileInfo] of Object.entries(files)) {
       if (normalizedPath === mockPath.replace(/\\/g, '/')) {
         return {
@@ -153,7 +156,7 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.readFileSync).mockImplementation((filePath: string) => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const normalizedPath = normalizePath(filePath);
     for (const [mockPath, fileInfo] of Object.entries(files)) {
       if (normalizedPath === mockPath.replace(/\\/g, '/')) {
         return Buffer.from(fileInfo.content || '{}');
@@ -163,7 +166,7 @@ function createMockFileSystem(files: Record<string, { content?: string; size?: n
   });
 
   vi.mocked(fs.writeFileSync).mockImplementation((filePath: any, data: any) => {
-    const normalized = String(filePath).replace(/\\/g, '/');
+    const normalized = normalizePath(String(filePath));
     const content = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString('utf-8') : String(data);
     files[normalized] = {
       content,
@@ -558,7 +561,7 @@ describe('HOMEBACKUP1 - Profile Backup Features', () => {
       expect(result.exitCode).toBeUndefined();
       expect(result.response).toContain('[DRY RUN]');
       expect(result.response).toContain('Actual scope: home');
-      expect(result.response).toContain('/home/testuser/.codebuddy (profile)');
+      expect(result.response).toContain(`${path.join('/home/testuser', '.codebuddy')} (profile)`);
     });
 
     it('should verify a valid home profile backup archive', async () => {

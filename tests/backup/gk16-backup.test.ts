@@ -58,18 +58,16 @@ describe('GK16 backup I/O failures must not crash or pretend to have read the ar
     removeTmpDir(workspace);
   });
 
-  it('returns a user-facing error when create cannot write the archive (unwritable directory)', async () => {
+  it('returns a user-facing error when create cannot write the archive (output path is a file)', async () => {
     const output = path.join(workspace, 'backups');
-    fs.mkdirSync(output);
-    fs.chmodSync(output, 0o555);
+    // A file cannot contain an archive, including under Windows/admin runners.
+    fs.writeFileSync(output, 'not a directory');
     let thrown: unknown;
     let created: Awaited<ReturnType<typeof handleBackup>> | undefined;
     try {
       created = await handleBackup(`create --output ${output}`);
     } catch (err) {
       thrown = err;
-    } finally {
-      fs.chmodSync(output, 0o755);
     }
 
     expect(thrown).toBeUndefined();

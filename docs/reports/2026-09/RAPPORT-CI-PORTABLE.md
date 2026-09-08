@@ -281,3 +281,56 @@ ont été relus en brut. Les JSON de mesure restent sous `_qa/ci-portable/`.
 Commit de tranche : celui portant cette section, message
 `fix(ci): serialize metrics saves and stabilize portable test fixtures`.
 Index vide après ce commit ; aucun push.
+
+## Tranche 6 — Windows shard 3 (08/09/2026)
+
+Branche `fix/ci-portable-macos-windows-2026-09-08`, base `e5ecdf47d` (pilote macOS conservé). Un seul commit portant cette section : `fix(ci): correct Windows profile diagnostics and portable test fixtures`. Aucun push, aucun banc d’évaluation, aucun service modifié.
+
+### Inventaire et distinction code / test
+
+Le journal `_qa/ci-portable/ci-windows-run5.log` contient **dix fichiers rouges distincts**, pas onze : neuf à la première passe (lignes 9406–9656), dix à la seconde (10866–11135). Le onzième fichier traité, `tools-core`, provient du triplet local avant correction. Une fixture supplémentaire de manifeste a été corrigée après la vérification scripts. Aucun fichier rouge du journal n’est omis.
+
+| Fichier sous `tests/` | Cause établie | Nature | Correctif et preuve |
+| --- | --- | --- | --- |
+| `bash-tool.test.ts` | `ls -la` imposé au shell Windows (journal 10866) | Test | `dir` sur Windows, `ls -la` ailleurs, assertion de succès maintenue sans skip. 19/19 localement ; exécution du shell Windows à confirmer en CI native. |
+| `backup/gk16-backup.test.ts` | `chmod 0555` ne rend pas un dossier non inscriptible sous Windows (10885) | Test | Un fichier occupe le chemin de sortie : création impossible partout, erreur utilisateur et absence de crash toujours vérifiées. Sonde sans effet du chmod : 1 rouge → vert ; fichier 13/13. |
+| `commands/backup-profile.test.ts` | Sortie attendue POSIX ; faux FS ignorant la lettre de lecteur ajoutée par `resolve` (10904, 10927) | Test | Attendu par `path.join`, clés et accès du faux FS normalisés par `path.resolve`. Sonde `path.win32` avec lecteur explicite : les 2 erreurs exactes reproduites → vert ; 27 verts, 1 skip préexistant. Les gardes de restauration du code restent intactes. |
+| `companion/lisa-selfie-router.test.ts` | HOME isolé mais USERPROFILE du runner encore actif (10946) | Test | Les deux variables sont posées puis restaurées ; chemin QA natif attendu exactement. `homedir()` piloté par USERPROFILE : 1 rouge → vert ; 18/18. |
+| `docs/readme-truth.test.ts` | Exécution directe du shim npm `.bin/tsx`, erreur de spawn masquée en `exit 1`, stderr vide (10981, 11000) | Test | Node explicite (`process.execPath`) + entrée JavaScript résolue par `createRequire(...).resolve('tsx/cli')`, HOME/USERPROFILE QA, message de spawn conservé. Shim réellement non exécutable sur Linux : les 2 tests et les 12 commandes échouent comme dans le journal, puis 4/4 verts sans rétablir le bit exécutable. Mode du fichier local restauré ensuite. |
+| `providers/provider-health.test.ts` | Attente 0600 sur les modes synthétiques Windows 0666 (11043) | Test | Contenu JSON vérifié partout ; bits POSIX seulement hors Windows. Sonde stat 0666 : 438 contre 384 reproduit → vert ; 7/7. |
+| `security/native-sandbox.test.ts` | `confineSpawn` résout cwd ; assertion comparée au littéral POSIX initial (11062) | Test | Comparaison avec `path.resolve(PROJECT)`, construction pure d’argv toujours exercée partout, sans skip. Sonde `path.win32.resolve` : 1 rouge exact → vert ; 13/13. |
+| `skills/skill-importer.test.ts` | HOME seul : import et liste utilisent le vrai USERPROFILE, puis conflit avec l’import précédent (11074, 11093) | Test | HOME et USERPROFILE isolés et restaurés ensemble. Inspection de `skill-importer`, `skill-sources` et de la commande `imported` : chemins déjà construits par `path.join`, comparaison de destination par `path.resolve`, aucune correction de code nécessaire pour ces échecs. Sonde USERPROFILE : 2 rouges exacts → vert ; 19/19. |
+| `unit/doctor-fix.test.ts` et `src/doctor/index.ts` | Le diagnostic interprète les modes Windows comme world-writable et propose un chmod trompeur (11115) | **Code** | Après le contrôle réel `accessSync(W_OK)`, Windows n’interprète plus les bits POSIX. Le test initial est conservé ; deux cas Linux/Windows ajoutés sur un profil 0777 : cas Windows rouge avant code → vert après. 21/21, aucun correctif proposé sur Windows ; avertissement POSIX préservé. |
+| `companion/reminder-ack-persistence.test.ts` | Attente arbitraire de 40 ms avant de vider la mémoire (10962) | Test | Attente de `whenRemindersPersisted()` avant chaque simulation de crash. Injection d’une latence disque de 150 ms : deux pertes d’ack reproduites → 4/4 verts, y compris l’escalade après redémarrage. Aucun délai fixe dans le test final. |
+| `unit/tools-core.test.ts` | Temporaires confinés au clone : deux `..` ne visent plus la racine système ; Git découvre le dépôt parent | Test, triplet local | Traversée relative explicite vers une cible protégée du HOME isolé ; `GIT_CEILING_DIRECTORIES` sur le parent physique des fixtures Git, restauré après chaque test. Les 3 erreurs du triplet avant sont corrigées : 133/133. |
+
+**Vérification supplémentaire :** `tests/scripts/runtime-manifest.test.ts` supposait également qu’un temporaire n’appartenait à aucun dépôt Git. Sous TMPDIR QA, le manifeste obtenait `sourceDirty: false` au lieu de `null`. Plafond Git ajouté uniquement à l’environnement du processus enfant de cette fixture ; assertion exacte conservée. Première passe scripts : 1 rouge ; seconde : **23 fichiers verts, 199 tests verts, 1 skip préexistant**. Aucun correctif supplémentaire de production.
+
+### Inspection du chemin help
+
+`gui` et `install-gui` enregistrent leur aide dans Commander avant leurs actions ; les imports Electron sont dans ces actions et ne sont pas exécutés pour `--help`. `cost` passe par `addLazyCommand`, `doctor` par `loadUtilityCommands`, `improve` par `addLazyCommandGroup`. Inspection des modules chargés et reproduction du lanceur : aucun défaut Windows spécifique démontré dans ces imports. La sonde du shim reproduit aussi les sept autres commandes du journal, ainsi que l’aide racine. Aucune simulation globale de `child_process` n’a été ajoutée.
+
+### Vérifications exécutées
+
+Environnement local : Linux, Node **24.14.1**, Vitest **4.1.9** ; le journal fourni correspond à Windows/Node 22. HOME et USERPROFILE sous `_qa/ci-portable/home`, TMPDIR sous `_qa/ci-portable/tmp`. Les résultats locaux et les sondes pures ne constituent pas une exécution native Windows/Node 22.
+
+- Avant : `npx vitest run tests/unit tests/commands tests/security` → **549 fichiers verts, 1 rouge ; 17 487 verts, 3 rouges, 4 skips**, exit 1. Les trois erreurs sont celles de `tools-core` décrites ci-dessus.
+- Après, même triplet → **550 fichiers verts ; 17 492 tests verts, 4 skips**, exit 0. Gain de cinq tests verts : trois réparations et deux nouveaux cas doctor. Aucune régression du triplet.
+- Chaque fichier du tableau rejoué séparément par `lm-resizer exec --raw-on-failure --json -- npx vitest run <fichier>` : **11 fichiers verts, 278 tests verts, 1 skip préexistant**. Journaux `t6-file-01.json` à `t6-file-11.json` sous `_qa/ci-portable/`.
+- `npx vitest run tests/security/donnees-personnelles.test.ts tests/scripts tests/setup` → **23 fichiers verts, 199 tests verts, 1 skip**, exit 0. Le garde-fou données personnelles reste inchangé.
+- `npm run typecheck` → **0**, y compris les projets gpuNode-identity et companion-core.
+- ESLint de tous les fichiers TypeScript touchés → **0 erreur**, exit 0 ; 19 avertissements `any` préexistants dans backup-profile. `git diff --check` → 0.
+- `npm run validate` demandé par AGENTS.md → **exit 1**, après lint global vert (0 erreur, 2488 warnings), typecheck vert et `check:pack` 10/10. Suite globale : **2090 fichiers verts, 14 rouges, 9 ignorés ; 38 004 tests verts, 29 rouges, 35 skips, 1 todo**. Aucun de ces 14 fichiers n’est modifié dans cette tranche ni inclus dans le triplet demandé. Seize erreurs de `revue-gemini-docs` signalent explicitement l’absence de `dist/index.js`. Les autres concernent `smart-preloader`, `research-script-job-runner`, `structural-gate`, `operational-self-model`, `gk29-intent-drift`, `watchdog-handlers`, `gk29-shadow-write-gate`, `shadow-workspace`, `tools/git-tool`, `lessons-tools`, `ls-tool`, `search-tools-context`, `self-describe` : les traces montrent notamment la découverte du dépôt/package parent depuis TMPDIR QA, des recherches dans une arborescence ignorée et un timeout TypeScript. Ces échecs restent ouverts ; absence de baseline **globale**, donc aucune affirmation de non-régression globale. Le triplet avant/après est, lui, intégralement vert après correction. Journal brut : `_qa/ci-portable/home/lm-resizer/tee/1788861410_npm_run_validate.log`.
+- Commitlint : appel direct en échec sur `module.exports` dans la configuration `.js` d’un dépôt ESM ; copie CJS byte-identique sous QA puis `npx commitlint --config _qa/ci-portable/t6-commitlint.config.cjs --edit _qa/ci-portable/t6-commit-message.txt` → **0**, sans modifier les règles.
+
+Les sondes et sorties sont conservées sous `_qa/ci-portable/t6-*` (non suivies). Les sorties brutes des échecs, le triplet après et le diff intégral `t6-review.diff` ont été relus ; aucun succès ne repose uniquement sur un diff résumé. L’injection de latence n’est qu’une sonde du défaut de fixture, pas un banc d’évaluation.
+
+### Outillage et limites
+
+Code Explorer a été interrogé avant modification : 13 paires context/impact, toutes sans snapshot. L’analyse initiale a été arrêtée après plus de huit minutes sans résultat ; deux reconstructions incrémentales complètes bornées à 60 s ont atteint la limite. Les relations ont donc été recherchées par `rg` exact et lecture ciblée ; aucun graphe frais n’est revendiqué.
+
+Incident de harnais : `node_modules` était un lien préexistant vers la copie de travail interdite, découvert dans la trace d’un premier échec de configuration de sonde. Les premiers tests utilisaient donc indirectement ces dépendances partagées et le test README d’origine pouvait y écrire sa fixture. Le lien a été remplacé dans le clone par une copie locale, et les liens exécutables locaux ont été reconstruits depuis les manifestes des paquets. La copie a signalé un lien cyclique transitoire ; deux essais Vitest ont ensuite échoué avant chargement des tests car les lanceurs copiés avaient perdu leurs liens relatifs, puis ont été relancés après réparation. Aucun fichier source de l’autre copie n’a été édité ; toutes les vérifications finales utilisent les dépendances locales. Ces erreurs de harnais sont comptées dans l’outillage, distinctement des preuves rouges utiles.
+
+Outillage : 26 appels Code Explorer (context/impact/query), 43 commandes via lm-resizer, 211 843 octets économisés (volumes de sortie, pas tokens facturés).
+
+Passation : un commit, index vide après commit, aucun push. Restent ouverts : rejeu CI natif Windows/Node 22, 29 échecs de la suite globale supplémentaire, et indexation Code Explorer indisponible.

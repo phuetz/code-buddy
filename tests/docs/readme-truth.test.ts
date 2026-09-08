@@ -5,19 +5,21 @@
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readmePath = path.join(repoRoot, 'README.md');
-const tsxBin = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
+const tsxBin = createRequire(import.meta.url).resolve('tsx/cli');
 
 function isolatedEnv(): NodeJS.ProcessEnv {
-  const home = path.join(repoRoot, 'node_modules', '.gk31-readme-home');
+  const home = path.join(repoRoot, '_qa', 'ci-portable', 'home', 'readme-truth');
   fs.mkdirSync(home, { recursive: true });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: home,
+    USERPROFILE: home,
     CODEBUDDY_HOME: path.join(home, '.codebuddy'),
     NO_COLOR: '1',
   };
@@ -27,7 +29,7 @@ function isolatedEnv(): NodeJS.ProcessEnv {
 
 function runBuddy(args: string[]): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execFileSync(tsxBin, ['src/index.ts', ...args], {
+    const stdout = execFileSync(process.execPath, [tsxBin, 'src/index.ts', ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       env: isolatedEnv(),
@@ -37,10 +39,10 @@ function runBuddy(args: string[]): { stdout: string; stderr: string; exitCode: n
     });
     return { stdout, stderr: '', exitCode: 0 };
   } catch (error: unknown) {
-    const execError = error as { stdout?: string; stderr?: string; status?: number };
+    const execError = error as { stdout?: string; stderr?: string; status?: number; message?: string };
     return {
       stdout: execError.stdout ?? '',
-      stderr: execError.stderr ?? '',
+      stderr: execError.stderr || execError.message || '',
       exitCode: execError.status ?? 1,
     };
   }

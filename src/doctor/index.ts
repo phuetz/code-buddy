@@ -405,6 +405,10 @@ function checkProfilePermissions(): DoctorCheck {
       message: `${dir} is not writable`,
     };
   }
+  // Windows mode bits do not describe ACLs; keep the real writability check above.
+  if (process.platform === 'win32') {
+    return { name: 'Profile permissions', status: 'ok', message: `${dir} writable` };
+  }
   let mode = 0;
   try {
     mode = statSync(dir).mode & 0o777;

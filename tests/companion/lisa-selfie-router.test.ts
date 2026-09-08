@@ -226,16 +226,20 @@ describe('tryServeCompanionSelfie cache-first', () => {
 describe('Lisa selfie cache directory', () => {
   it('defaults under the isolated HOME companion dir, never process.cwd()', () => {
     const previousHome = process.env.HOME;
-    const isolatedHome = `${path.sep}opt${path.sep}isolated-companion-home`;
+    const previousProfile = process.env.USERPROFILE;
+    const isolatedHome = path.join(QA, 'isolated-companion-home');
     process.env.HOME = isolatedHome;
+    process.env.USERPROFILE = isolatedHome;
     try {
       const dir = resolveSelfieCacheDir({});
       expect(dir).toBe(path.join(isolatedHome, '.codebuddy', 'companion', 'lisa', 'selfie-cache'));
-      expect(dir.startsWith(process.cwd() + path.sep)).toBe(false);
+      expect(dir).not.toBe(path.join(process.cwd(), '.codebuddy', 'companion', 'lisa', 'selfie-cache'));
       expect(dir).not.toContain(path.join('.codebuddy', 'lora'));
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
+      if (previousProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousProfile;
     }
   });
 

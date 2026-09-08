@@ -74,8 +74,11 @@ describe('provider health store', () => {
   it('writes provider-health.json with owner-only 0o600', () => {
     recordProviderFailure('chatgpt', 'quota_exhausted', { resetsInSeconds: 60 });
     const filePath = path.join(tmp, 'provider-health.json');
-    const mode = fs.statSync(filePath).mode & 0o777;
-    expect(mode).toBe(0o600);
+    const stored = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    expect(stored.providers.chatgpt.kind).toBe('quota_exhausted');
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('strips Bearer / sk- / api_key from the persisted message', () => {
