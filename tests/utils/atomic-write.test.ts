@@ -52,8 +52,33 @@ describe('atomic state writes', () => {
     expect(await fsPromises.readdir(tempDir)).toEqual(['retry.json']);
   });
 
+  it('survives six consecutive win32 EPERM renames without rewriting the temporary', async () => {
+    const target = join(tempDir, 'contended.json');
+    await writeFile(target, 'old');
+    const locked = Object.assign(new Error('locked by a concurrent reader'), { code: 'EPERM' });
+    let attempts = 0;
+    const rename = vi.fn<AtomicWriteFileSystem['rename']>().mockImplementation((from, to) => {
+      attempts += 1;
+      if (attempts <= 6) return Promise.reject(locked);
+      return fsPromises.rename(from, to);
+    });
+    const fileSystem: AtomicWriteFileSystem = {
+      ...fsPromises,
+      mkdir: async (directory, options) => { await fsPromises.mkdir(directory, options); },
+      rename,
+    };
+    vi.stubGlobal('process', Object.defineProperty(Object.create(process), 'platform', { value: 'win32' }));
+
+    await writeFileAtomic(target, 'new', { fileSystem });
+
+    expect(rename).toHaveBeenCalledTimes(7);
+    expect(new Set(rename.mock.calls.map(([from]) => from)).size).toBe(1);
+    expect(await readFile(target, 'utf8')).toBe('new');
+    expect(await fsPromises.readdir(tempDir)).toEqual(['contended.json']);
+  });
+
   it.each([
-    ['win32', 'EPERM', 6],
+    ['win32', 'EPERM', 8],
     ['win32', 'ENOSPC', 1],
     ['linux', 'EPERM', 1],
     ['darwin', 'EBUSY', 1],
