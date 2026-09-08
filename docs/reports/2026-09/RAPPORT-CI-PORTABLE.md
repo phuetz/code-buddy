@@ -101,3 +101,12 @@ Code Explorer : requêtes sans snapshot, recherches exactes en complément. Anal
 `npm run lint` : exit 0, 0 erreur / 2488 warnings (journal brut relu). `git diff --check` : vert. Commitlint : premier appel sans stdin transmis par lm-resizer en échec ; second avec `--edit` et copie CJS byte-identique de la configuration : exit 0. Garde personnel relancé après rédaction : 40/40. Reconstruction Code Explorer finale : timeout 124, aucun snapshot.
 
 Outillage : 11 appels Code Explorer (context/impact/query, sans snapshot), 13 commandes via lm-resizer, 348808 octets économisés. Compteurs propres à cette reprise ; les réécritures automatiques du hook sont exclues.
+
+## Tranche 3 — run 34197704112 (08/09)
+
+### Lot 1 — abandon Bash (priorité build)
+
+Le rouge Ubuntu Node 22 fourni est le timeout explicite de 5 s. Le test attend maintenant le marqueur émis après lancement de `sleep`, déclenche abort puis consomme le générateur jusqu'à sa fin, pilotée par `close`. Timeout explicite 15 s ; délai de 50 ms et contrainte murale de 2 s supprimés. Plus de fichier hors workspace. Le groupe POSIX est déjà créé avec `detached` et tué par PID négatif dans le code existant.
+
+Preuve locale : ancien cas 5/5 vert (flocon CI non reproduit). Première synchronisation rouge à 15 s car le sandbox bufferise ; fixture corrigée pour sélectionner le chemin direct approuvé avec le bridge existant, 5/5 vert. Le processus et ses descendants sont réels, seule la disponibilité sandbox est simulée dans ce cas. Typecheck exit 0.
+Lint global exit 0 (2488 warnings préexistants), garde personnel 40/40 ; aucune suite entière.
