@@ -112,7 +112,20 @@ export async function writeFileAtomic(
     await fileHandle.sync();
     await fileHandle.close();
     closed = true;
-    await fileSystem.rename(temporaryPath, filePath);
+    // Windows readers/antivirus can briefly hold the destination open. Keep the
+    // same durable temporary and never delete the existing destination to retry.
+    for (let retry = 0; ; retry++) {
+      try {
+        await fileSystem.rename(temporaryPath, filePath);
+        break;
+      } catch (error) {
+        if (process.platform !== 'win32' || retry >= 5 ||
+            !['EPERM', 'EBUSY', 'EACCES'].includes(errorCode(error) ?? '')) {
+          throw error;
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, 10 * 2 ** retry));
+      }
+    }
     await syncDirectory(filePath, fileSystem);
     await fileSystem.chmod(filePath, mode);
   } catch (error) {

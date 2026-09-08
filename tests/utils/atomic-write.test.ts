@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../../src/utils/logger.js';
 import {
@@ -26,8 +27,51 @@ describe('atomic state writes', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it.each(['EPERM', 'EBUSY', 'EACCES'])('retries transient Windows %s renames without rewriting the temporary', async (code) => {
+    const target = join(tempDir, 'retry.json');
+    await writeFile(target, 'old');
+    const rename = vi.fn<AtomicWriteFileSystem['rename']>()
+      .mockRejectedValueOnce(Object.assign(new Error('locked'), { code }))
+      .mockRejectedValueOnce(Object.assign(new Error('locked'), { code }))
+      .mockImplementation((from, to) => fsPromises.rename(from, to));
+    const fileSystem: AtomicWriteFileSystem = {
+      ...fsPromises,
+      mkdir: async (directory, options) => { await fsPromises.mkdir(directory, options); },
+      rename,
+    };
+    vi.stubGlobal('process', Object.defineProperty(Object.create(process), 'platform', { value: 'win32' }));
+    await writeFileAtomic(target, 'new', { fileSystem });
+    expect(rename).toHaveBeenCalledTimes(3);
+    expect(new Set(rename.mock.calls.map(([from]) => from)).size).toBe(1);
+    expect(await readFile(target, 'utf8')).toBe('new');
+    expect(await fsPromises.readdir(tempDir)).toEqual(['retry.json']);
+  });
+
+  it.each([
+    ['win32', 'EPERM', 6],
+    ['win32', 'ENOSPC', 1],
+    ['linux', 'EPERM', 1],
+    ['darwin', 'EBUSY', 1],
+  ] as const)('propagates %s %s after %i attempts and preserves the target', async (platform, code, attempts) => {
+    const target = join(tempDir, 'failure.json');
+    await writeFile(target, 'old');
+    const error = Object.assign(new Error('rename failed'), { code });
+    const rename = vi.fn<AtomicWriteFileSystem['rename']>().mockRejectedValue(error);
+    const fileSystem: AtomicWriteFileSystem = {
+      ...fsPromises,
+      mkdir: async (directory, options) => { await fsPromises.mkdir(directory, options); },
+      rename,
+    };
+    vi.stubGlobal('process', Object.defineProperty(Object.create(process), 'platform', { value: platform }));
+    await expect(writeFileAtomic(target, 'new', { fileSystem })).rejects.toBe(error);
+    expect(rename).toHaveBeenCalledTimes(attempts);
+    expect(await readFile(target, 'utf8')).toBe('old');
+    expect(await fsPromises.readdir(tempDir)).toEqual(['failure.json']);
   });
 
   it('keeps the previous content when the temporary write is interrupted', async () => {
@@ -123,6 +167,7 @@ describe('cleanupOrphanedTemporaries', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -135,7 +180,7 @@ describe('cleanupOrphanedTemporaries', () => {
     // same target, each artificially held open past the point where the
     // parent will SIGKILL it — guaranteeing every temp file is created
     // (open() truncates/creates immediately) but no rename ever runs.
-    const atomicWriteSrc = fileURLToPath(new URL('../../src/utils/atomic-write.ts', import.meta.url));
+    const atomicWriteSrc = new URL('../../src/utils/atomic-write.ts', import.meta.url).href;
     const scriptPath = join(tempDir, 'write-and-die.mts');
     await writeFile(scriptPath, `
 import { writeFileAtomic } from ${JSON.stringify(atomicWriteSrc)};
@@ -175,8 +220,15 @@ for (let i = 0; i < n; i++) {
 setInterval(() => {}, 1000);
 `, 'utf8');
 
-    const tsxBin = join(process.cwd(), 'node_modules', '.bin', 'tsx');
-    const child = spawn(tsxBin, [scriptPath, target, '6', '2000'], { stdio: 'ignore' });
+    // Run Node itself, so killing this PID also closes every writer handle.
+    const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+    const child = spawn(process.execPath, ['--import', loader, scriptPath, target, '6', '2000'], {
+      stdio: 'ignore', windowsHide: true,
+    });
+    const exited = new Promise<void>((resolve, reject) => {
+      child.once('exit', () => resolve());
+      child.once('error', reject);
+    });
 
     // Sous charge, tsx met parfois > 400 ms à démarrer : un délai fixe tuait l'enfant
     // avant qu'il n'ouvre le moindre temporaire (rouge une fois sur trois le 04/09/2026).
@@ -187,8 +239,8 @@ setInterval(() => {}, 1000);
       if (entries.some((e) => e.startsWith('state.json.tmp.'))) break;
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
-    child.kill('SIGKILL');
-    await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    child.kill('SIGKILL'); // Node maps this to process termination on Windows.
+    await exited;
 
     const beforeEntries = await fsPromises.readdir(tempDir);
     const orphansBefore = beforeEntries.filter(e => e.startsWith('state.json.tmp.'));

@@ -19,8 +19,12 @@ describe('SECAUDIT surface 4 — temporaires atomic-write non lisibles', () => {
     const p = path.join(dir, 'secret-state.json');
     writeFileAtomicSync(p, JSON.stringify({ token: 'x' }));
     const mode = fs.statSync(p).mode & 0o777;
-    expect(mode & 0o077).toBe(0); // aucun bit groupe/monde
-    expect(mode & 0o600).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect(mode & 0o077).toBe(0); // POSIX permissions are not Windows ACLs.
+      expect(mode & 0o600).toBe(0o600);
+    }
+    expect(JSON.parse(fs.readFileSync(p, 'utf8'))).toEqual({ token: 'x' });
+    expect(fs.readdirSync(dir)).toEqual(['secret-state.json']);
   });
 
   it('le TEMPORAIRE est ouvert en 0o600 (fs injecté prouve le mode transmis)', async () => {
@@ -53,6 +57,10 @@ describe('SECAUDIT surface 4 — temporaires atomic-write non lisibles', () => {
   it('un mode explicite plus large est respecté MAIS 0o600 reste le défaut sûr', () => {
     const p = path.join(dir, 'public.json');
     writeFileAtomicSync(p, 'x'); // défaut
-    expect((fs.statSync(p).mode & 0o777) & 0o077).toBe(0);
+    if (process.platform !== 'win32') {
+      expect((fs.statSync(p).mode & 0o777) & 0o077).toBe(0);
+    }
+    expect(fs.readFileSync(p, 'utf8')).toBe('x');
+    expect(fs.readdirSync(dir)).toEqual(['public.json']);
   });
 });

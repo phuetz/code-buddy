@@ -146,8 +146,11 @@ describe('mobile web push (lot 3)', () => {
     const fileB = path.join(dir, 'subscriptions', `${digestB}.json`);
     expect(existsSync(fileA)).toBe(true);
     expect(existsSync(fileB)).toBe(true);
-    expect(statSync(fileA).mode & 0o777).toBe(0o600);
-    expect(statSync(fileB).mode & 0o777).toBe(0o600);
+    // Windows uses ACLs; content, identity hashes and subscription caps stay universal.
+    if (process.platform !== 'win32') {
+      expect(statSync(fileA).mode & 0o777).toBe(0o600);
+      expect(statSync(fileB).mode & 0o777).toBe(0o600);
+    }
     const names = readdirSync(path.join(dir, 'subscriptions'));
     expect(names).not.toContain('user-a');
     expect(names).not.toContain('user-b');

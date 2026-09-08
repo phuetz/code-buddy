@@ -19,6 +19,7 @@
 
 // Mock logger
 
+import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service';
 import {
@@ -95,6 +96,17 @@ jest.mock('../../src/utils/disposable', () => ({
 }));
 
 const isWindows = process.platform === 'win32';
+const shellConfiguration = getShellConfiguration();
+const pwdCommand = shellConfiguration.shell === 'powershell' ? '(Get-Location).Path' : 'pwd';
+
+function expectResolvedShell(): void {
+  const { executable, argsPrefix } = shellConfiguration;
+  expect(processMocks.spawn.mock.calls.some(([file, args]) => {
+    const invocation = [file, ...args];
+    const index = invocation.indexOf(executable);
+    return index >= 0 && argsPrefix.every((arg, offset) => invocation[index + 1 + offset] === arg);
+  })).toBe(true);
+}
 
 function createMockChildProcess(): ChildProcess & EventEmitter {
   const child = new EventEmitter() as ChildProcess & EventEmitter;
@@ -149,16 +161,16 @@ describe('BashTool', () => {
     });
 
     it('should execute pwd command', async () => {
-      const result = await bashTool.execute('pwd');
+      const result = await bashTool.execute(pwdCommand);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
-      expect(path.isAbsolute(result.output!.trim())).toBe(true);
+      expect(canonicalShellPath(result.output!)).toBe(canonical(process.cwd()));
     });
 
     it('streams in the cwd override too (the path Cowork actually uses)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-stream-cwd-'));
       const real = canonical(dir);
-      const gen = bashTool.executeStreaming('pwd', 30000, dir);
+      const gen = bashTool.executeStreaming(pwdCommand, 30000, dir);
       let out = '';
       let r = await gen.next();
       while (!r.done) {
@@ -167,7 +179,7 @@ describe('BashTool', () => {
       }
       const final = r.value;
       expect(final.success).toBe(true);
-      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      // Compare filesystem identity, including aliases in shell output.
       expect(canonicalShellPath(out || final.output || '')).toBe(real);
       fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
@@ -175,12 +187,12 @@ describe('BashTool', () => {
     it('runs in the cwd override when provided (embedded session workingDirectory)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-cwd-'));
       const real = canonical(dir);
-      const result = await bashTool.execute('pwd', 30000, dir);
+      const result = await bashTool.execute(pwdCommand, 30000, dir);
       expect(result.success).toBe(true);
-      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      // Compare filesystem identity, including aliases in shell output.
       expect(canonicalShellPath(result.output!)).toBe(real);
       // Sans override : comportement historique (process cwd), pas le tmpdir.
-      const legacy = await bashTool.execute('pwd');
+      const legacy = await bashTool.execute(pwdCommand);
       expect(canonicalShellPath(legacy.output!)).not.toBe(real);
       fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
@@ -267,8 +279,19 @@ describe('BashTool', () => {
     );
 
     it('should confine a workspace rm instead of blocking the binary', async () => {
-      const result = await bashTool.execute('rm -f .codebuddy-policy-nonexistent');
-      expect(result.success).toBe(true);
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-remove-'));
+      const target = path.join(dir, 'remove-me.txt');
+      fs.writeFileSync(target, 'disposable fixture');
+      try {
+        const command = shellConfiguration.shell === 'powershell'
+          ? 'Remove-Item -Force ./remove-me.txt'
+          : 'rm -f ./remove-me.txt';
+        const result = await bashTool.execute(command, 30000, dir);
+        expect(result.success).toBe(true);
+        expect(fs.existsSync(target)).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      }
     });
 
     it('should require a precise approval for sudo', async () => {
@@ -533,7 +556,7 @@ describe('BashTool', () => {
 
     it('should execute commands in current working directory', async () => {
       await bashTool.execute(`cd ${tmpDir}`);
-      const result = await bashTool.execute('pwd');
+      const result = await bashTool.execute(pwdCommand);
       if (!result.success) console.error('[macos-diag] pwd after cd', tmpDir, '->', bashTool.getCurrentDirectory(), ':', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
@@ -583,6 +606,7 @@ describe('BashTool', () => {
 
         const result = await execution;
         expect(result.success).toBe(true);
+        expectResolvedShell();
         expect(result.output).toContain('stdout output');
         expect(result.output).toContain('STDERR: stderr output');
       } finally {

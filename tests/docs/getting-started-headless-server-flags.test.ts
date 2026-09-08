@@ -9,6 +9,7 @@
  * must not drift from what `buddy --help` / `buddy server --help` actually
  * expose.
  */
+import { createRequire } from 'node:module';
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -17,14 +18,15 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const gettingStartedPath = path.join(repoRoot, 'docs', 'getting-started.md');
-const tsxBin = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
+const tsxBin = createRequire(import.meta.url).resolve('tsx/cli');
 
 function isolatedEnv(): NodeJS.ProcessEnv {
-  const home = path.join(repoRoot, 'node_modules', '.inconnu1-getting-started-home');
+  const home = path.join(repoRoot, '_qa', 'ci-portable', 'home', 'getting-started');
   fs.mkdirSync(home, { recursive: true });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: home,
+    USERPROFILE: home,
     CODEBUDDY_HOME: path.join(home, '.codebuddy'),
     NO_COLOR: '1',
   };
@@ -34,7 +36,7 @@ function isolatedEnv(): NodeJS.ProcessEnv {
 
 function runBuddyHelp(args: string[]): string {
   try {
-    return execFileSync(tsxBin, ['src/index.ts', ...args], {
+    return execFileSync(process.execPath, [tsxBin, 'src/index.ts', ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       env: isolatedEnv(),
@@ -43,8 +45,7 @@ function runBuddyHelp(args: string[]): string {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (error: unknown) {
-    const execError = error as { stdout?: string };
-    return execError.stdout ?? '';
+    throw new Error('buddy help failed to execute', { cause: error });
   }
 }
 
