@@ -12,6 +12,7 @@
  */
 
 import { EventEmitter } from 'events';
+import path from 'path';
 
 // Create mock functions for fs
 const mockExistsSync = jest.fn().mockReturnValue(false);
@@ -77,16 +78,13 @@ jest.mock('crypto', () => {
   return { ...impl, default: impl };
 });
 
-// Mock path with actual implementation
+// Exercise the same path implementation through named and default imports.
+// CI_PORTABLE_WIN32_PATHS allows the Windows contract to run on Linux too.
 jest.mock('path', () => {
-  const actualPath = await vi.importActual('path');
-  return {
-    ...actualPath,
-    join: (...args: string[]) => args.join('/'),
-    dirname: (p: string) => p.split('/').slice(0, -1).join('/'),
-    basename: (p: string) => p.split('/').pop() || '',
-    resolve: (...args: string[]) => args.join('/'),
-  };
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const implementation = process.env.CI_PORTABLE_WIN32_PATHS === '1'
+    ? actualPath.win32 : actualPath;
+  return { ...implementation, default: implementation };
 });
 
 // Mock logger
@@ -113,10 +111,9 @@ vi.setConfig({ testTimeout: 10000 });
 describe('PersistentCheckpointManager', () => {
   let manager: PersistentCheckpointManager;
 
-  // `crypto.createHash` et `path.join` sont doublés plus haut : le dossier de
-  // l'historique du projet est donc parfaitement déterministe.
-  const projectHistoryDir = '/home/testuser/.codebuddy/history/abcdef1234567890';
-  const indexPath = `${projectHistoryDir}/index.json`;
+  // Match the selected real path implementation, including win32 on Linux.
+  const projectHistoryDir = path.join('/home/testuser/.codebuddy/history', 'abcdef1234567890');
+  const indexPath = path.join(projectHistoryDir, 'index.json');
 
   // Sample index for testing
   const createSampleIndex = (): CheckpointIndex => ({
@@ -286,7 +283,7 @@ describe('PersistentCheckpointManager', () => {
       // Dévier son chemin, vider ses fichiers ou dégrader son mode restait
       // vert : seul l'index était observé.
       const checkpointCalls = mockWriteFileSync.mock.calls.filter(
-        (call) => call[0] === `${projectHistoryDir}/${checkpoint.id}.json`
+        (call) => call[0] === path.join(projectHistoryDir, `${checkpoint.id}.json`)
       );
       expect(checkpointCalls).toHaveLength(1);
 
@@ -298,7 +295,7 @@ describe('PersistentCheckpointManager', () => {
       expect(persisted.description).toBe('Save test');
       expect(persisted.files).toHaveLength(1);
       expect(persisted.files[0]).toMatchObject({
-        path: '/test/file1.ts',
+        path: path.resolve(process.cwd(), '/test/file1.ts'),
         content: 'file content',
         existed: true,
       });

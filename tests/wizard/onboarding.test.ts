@@ -1,6 +1,13 @@
 import { existsSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  const homedir = () => process.env.CI_PORTABLE_WIN32_HOME === '1'
+    ? process.env.USERPROFILE! : actual.homedir();
+  return { ...actual, homedir, default: { ...actual, homedir } };
+});
 import {
   PROVIDER_ENV_MAP,
   PROVIDER_DEFAULT_MODEL,
@@ -217,7 +224,9 @@ describe('onboarding', () => {
     it('does not leave grok catalog entries in an Ollama profile', async () => {
       const home = join(tmpdir(), `onboarding-home-${Date.now()}`);
       const previousHome = process.env.HOME;
+      const previousUserProfile = process.env.USERPROFILE;
       process.env.HOME = home;
+      process.env.USERPROFILE = home;
       (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;
       try {
         await persistProviderSelection(getProviderGuide('ollama'), 'qwen3:4b-instruct', '');
@@ -227,6 +236,8 @@ describe('onboarding', () => {
         expect(saved.models).toEqual(['qwen3:4b-instruct']);
         expect(saved.models).not.toContain('grok-code-fast-1');
       } finally {
+        if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+        else process.env.USERPROFILE = previousUserProfile;
         if (previousHome === undefined) delete process.env.HOME;
         else process.env.HOME = previousHome;
         (SettingsManager as unknown as { instance?: SettingsManager }).instance = undefined;

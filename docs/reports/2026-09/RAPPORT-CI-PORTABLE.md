@@ -25,3 +25,12 @@ Le probe de timeout vise un chemin absent explicite : Windows peut trouver Syste
 Aucun inventaire de commandes réduit ; faux `wc` dans PATH de test pour reproduire macOS.
 ESLint ciblé et `bash -n scripts/balayage-installation.sh` : exit 0.
 Le code 3 distant n'est pas reproduit tel quel : sans journal détaillé du runner, aucune attribution à un binaire manquant n'est affirmée.
+
+## Tranche 3 — chemins Windows
+
+Commit balayage : `85444fca0`.
+Checkpoint : base 66/66 ; `CI_PORTABLE_WIN32_PATHS=1` + vrai `path.win32` reproduit deux rouges ; 66/66 après correction, Linux également 66/66.
+Le mock `path` avait des exports nommés artificiels et un export par défaut natif divergent. Les deux utilisent désormais la même implémentation ; chemins attendus construits avec join/resolve.
+Onboarding : base 18/18 ; `CI_PORTABLE_WIN32_HOME=1` simule homedir via USERPROFILE et reproduit ENOENT ; 18/18 après isolation/restauration de HOME ET USERPROFILE, également 18/18 sans simulation.
+La première simulation par espion de l'export par défaut ne touchait pas l'import namespace : remplacée par un mock des deux exports avant de conclure.
+Le nettoyage onboarding avait déjà des retries ; aucune panne EBUSY/EPERM native n'est prétendue reproduite.
