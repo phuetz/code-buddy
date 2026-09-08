@@ -178,3 +178,106 @@ La règle réutilisable est posée dans `tests/setup/platform-fixtures.ts` et do
 Code Explorer : requêtes sans snapshot malgré l’analyse initiale (arrêtée après plusieurs minutes) et trois reconstructions incrémentales bornées à 45 s (exit 124). Recherches exactes et inspection ciblée en complément ; aucun index frais revendiqué. Index Git vide après le commit, zones libérées.
 
 Outillage : **18 appels Code Explorer (context/impact/query), 16 commandes via lm-resizer, 356208 octets économisés**. Volumes de sortie, pas des tokens facturés ; métadonnées de cette tranche seules dans `_qa/ci-portable/ci4-tooling.jsonl`, échecs inclus, hooks exclus.
+
+
+## Tranche 5
+
+Base `99206a45b`, branche `fix/ci-portable-macos-windows-2026-09-08`.
+Un seul commit de tranche, aucun push. HOME et répertoire temporaire isolés
+sous `_qa/ci-portable/`. Aucun service modifié.
+
+### Ubuntu : reproduction et cause
+
+Les fichiers `persistence-integration.test.ts` et `bash-streaming.test.ts`
+ont chacun été exécutés **20 fois avant correction**, sans échec naturel.
+Journaux : `_qa/ci-portable/before-<fichier>-<1..20>.log`.
+Le journal Ubuntu fourni reste la preuve de l'échec sous charge du runner.
+
+Une reproduction contrôlée a ensuite retenu la première écriture et laissé
+la seconde avancer : `keeps the latest snapshot when an earlier write is delayed`
+échoue sur le code initial avec **expected 1 to be 5** (exit 1).
+Ce test injecte l'ordonnancement au niveau de l'écriture atomique ; il ne prétend
+pas reproduire spontanément la charge Ubuntu. Preuve brute :
+`_qa/ci-portable/home/lm-resizer/tee/1788857748_npx_vitest_run_tests_agent_multi-agent_persisten.log`.
+
+La sauvegarde atomique empêche un JSON partiel, mais n'ordonne pas deux sauvegardes.
+`saveMetrics` capture maintenant le snapshot avant tout `await`, puis sérialise
+les écritures par chemin dans le processus. Le coordinateur émet `metrics:saved`
+après sa sauvegarde ; les deux tests de debounce attendent cet événement avant
+la lecture. Chaque test reçoit son propre `mkdtemp`, et le nettoyage attend les
+coordinateurs avant de supprimer le répertoire. Les vérifications de `dispose`
+avancent une horloge simulée au-delà du debounce, au lieu d'attendre 50/60 ms.
+La file ne fournit pas de verrou entre processus ; cette tranche traite les
+écritures concurrentes d'un processus et l'isolation des tests.
+
+### Prévention des motifs voisins
+
+Recherche Code Explorer tentée avant modification, complétée par `rg` exact
+et inventaire des attentes suivies d'assertions de compte. L'heuristique globale
+renvoie 45 candidats (dont tests d'horloges, de réseau et de débit) :
+`_qa/ci-portable/delay-count-candidates.txt`. Ce nombre n'est pas un nombre de bugs.
+Les quatre suites voisines corrigées sont :
+
+| Fichier sous `tests/agent/multi-agent/` | Correction | Rejeu final |
+| --- | --- | --- |
+| `metrics-persistence.test.ts` | Répertoire unique par test, restauration de l'environnement | 20/20 verts |
+| `metrics-ttl.test.ts` | Même isolation, suppression du chemin partagé entre `it` | 20/20 verts |
+| `fleet-workflow-bridge.test.ts` | Suppression des délais 5/50 ms : diffusion désormais synchrone, promesse du workflow attendue | 20/20 verts |
+| `workflow-orchestrator.test.ts` | Suppression du délai 10 ms après la promesse de fin | 20/20 verts |
+
+### macOS et Windows
+
+- `file-search-tool.test.ts` : comparaison des racines temporaires via
+  `realpathSync` des deux côtés, y compris le chemin renvoyé par `process.cwd()`.
+- `shell-parser-routing.test.ts` : le journal macOS montre 17/17 verts, puis
+  un rejet attendu absent au rejeu pour `cmd /c pwsh`. Le code sélectionne
+  explicitement le parseur PowerShell depuis le wrapper ; `zsh` n'intervient pas.
+  Le test supposait PowerShell indisponible alors qu'il pouvait s'exécuter.
+  Le PATH du test d'indisponibilité est maintenant explicitement vide puis
+  restauré, sans mock du parseur ni affaiblissement de son refus de sécurité.
+  La variation de délai du parseur natif est une explication compatible avec
+  le journal, pas une mesure de durée fournie par celui-ci.
+- `codebase-rag.test.ts` : le mock `path.join` fabrique des `/`, contrairement
+  au chemin natif utilisé par l'écriture. Les attentes utilisent maintenant
+  `vi.importActual('node:path')`, `join` et `normalize`, avec un chemin d'index
+  construit par composants.
+
+### Garde et vérifications
+
+Trois lignes de règle ajoutées à `CLAUDE.md`, section Testing Gotchas.
+`tests/hygiene/test-portability.test.ts` inspecte le code de test ajouté depuis
+`HEAD^` (ou `CODEBUDDY_TEST_PORTABILITY_BASE`) et les tests non suivis : chemins
+`/tmp/` littéraux et délai suivi d'assertion produisent un avertissement seulement.
+Deux cas vérifient le détecteur et son exécution ; aucune règle bloquante ajoutée.
+
+Premier lot ciblé : **8 fichiers, 133 tests verts**. Une tentative intermédiaire
+de spy sur un export Node ESM a échoué ; remplacée par l'environnement explicite.
+Le premier garde personnel a expiré à 20 s sous vérifications concurrentes ;
+son seuil et ses assertions n'ont pas été modifiés. Rejeu isolé : **40/40 verts**,
+plus **2/2** pour le garde de portabilité.
+
+- `npx vitest run` des sept fichiers répétés : **20/20 exécutions vertes**, soit
+  76 tests par exécution et 1 520 validations. Fichiers : les quatre suites du
+  tableau, `persistence-integration.test.ts` (14 cas), `bash-streaming.test.ts`
+  et `shell-parser-routing.test.ts`. Journaux `_qa/ci-portable/after-1.json`
+  à `after-20.json`, tous `exit_code=0`.
+- `TMPDIR` pointant vers `_qa/ci-portable/tmp-alias`, lien vers le tmp isolé :
+  recherche de fichiers + RAG **62/62 verts** (`paths5.json`).
+- `npm run typecheck` : **exit 0**, y compris GPU identity et companion-core.
+- `npm run lint` : **exit 0**, 0 erreur, 2 488 avertissements du dépôt.
+- `commitlint` sur le message de tranche : **exit 0**.
+- CI native macOS/Windows et prochain run Ubuntu : non exécutés localement.
+  Aucun banc d'évaluation ; seules les suites réelles demandées/voisines ont tourné.
+
+Outillage : 16 appels Code Explorer (context/impact/query), 32 commandes via
+lm-resizer, 366 601 octets économisés, ultime garde après staging inclus (42/42).
+Ce sont des volumes de sortie, pas des tokens facturés. Les deux analyses
+(initiale et `--incremental`) ont été arrêtées après plusieurs minutes sans
+snapshot exploitable. Les 16 appels ont donc renvoyé explicitement « No graph
+snapshot found » ; la lecture ciblée et les recherches exactes ont servi de
+repli. Aucun graphe frais n'est revendiqué. Les diffs sensibles et les échecs
+ont été relus en brut. Les JSON de mesure restent sous `_qa/ci-portable/`.
+
+Commit de tranche : celui portant cette section, message
+`fix(ci): serialize metrics saves and stabilize portable test fixtures`.
+Index vide après ce commit ; aucun push.

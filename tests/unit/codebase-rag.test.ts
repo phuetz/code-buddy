@@ -6,7 +6,7 @@
  */
 
 import { promises } from 'fs';
-import { join } from 'node:path';
+const { join: nativeJoin, normalize: nativeNormalize } = await vi.importActual<typeof import('node:path')>('node:path');
 
 import {
   CodebaseRAG,
@@ -469,7 +469,7 @@ describe('CodebaseRAG', () => {
       fsPromises.mkdir.mockResolvedValue(undefined);
       fsPromises.writeFile.mockResolvedValue(undefined);
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       fsPromises.readFile.mockResolvedValue('function test() {}');
       await ragWithPath.indexFile('/test/file.ts');
       await ragWithPath.saveIndex();
@@ -477,10 +477,10 @@ describe('CodebaseRAG', () => {
       // VERIF3 T4 : `saveIndex` écrit trois fichiers, l'unique assertion était
       // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
       // chunks, du file-index ou des stats restait vert.
-      expect(mockWriteJsonAtomic.mock.calls.map((call) => call[0])).toEqual([
-        join('/test/index', 'chunks.json'),
-        join('/test/index', 'file-index.json'),
-        join('/test/index', 'stats.json'),
+      expect(mockWriteJsonAtomic.mock.calls.map((call) => nativeNormalize(call[0]))).toEqual([
+        nativeJoin('test', 'index', 'chunks.json'),
+        nativeJoin('test', 'index', 'file-index.json'),
+        nativeJoin('test', 'index', 'stats.json'),
       ]);
 
       const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];
@@ -520,7 +520,7 @@ describe('CodebaseRAG', () => {
     it('should return false if directory does not exist', async () => {
       fsPromises.access.mockRejectedValue(new Error('Not found'));
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       const result = await ragWithPath.loadIndex();
 
       expect(result).toBe(false);
@@ -561,7 +561,7 @@ describe('CodebaseRAG', () => {
         return Promise.resolve('');
       });
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       const result = await ragWithPath.loadIndex();
 
       expect(result).toBe(true);

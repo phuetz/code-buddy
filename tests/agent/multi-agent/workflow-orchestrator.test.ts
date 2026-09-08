@@ -362,8 +362,6 @@ describe('WorkflowOrchestrator — Phase O (V0.4.1)', () => {
 
       const r = await o.submitWorkflow('a');
       if (r.status === 'started') await r.promise;
-      // Allow any pending microtasks to flush
-      await new Promise((res) => setTimeout(res, 10));
 
       expect(startedEvents).toHaveLength(1);
       expect(finishedEvents).toHaveLength(1);

@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import * as os from 'os';
 import * as path from 'path';
@@ -45,7 +46,7 @@ describe('FileSearchTool', () => {
     );
     expect(result.success).toBe(true);
     const data = result.data as { root: string; matches: Array<{ file: string }> };
-    expect(data.root).toBe(path.resolve(launch));
+    expect(realpathSync(data.root)).toBe(realpathSync(launch));
     expect(data.matches.map((row) => row.file)).toEqual(['alpha.txt']);
   });
 
@@ -58,7 +59,7 @@ describe('FileSearchTool', () => {
     );
     expect(result.success).toBe(true);
     const data = result.data as { root: string; matches: Array<{ file: string }> };
-    expect(data.root).toBe(path.resolve(launch));
+    expect(realpathSync(data.root)).toBe(realpathSync(launch));
     expect(data.matches).toEqual([{ file: 'here.txt', line: 1, excerpt: 'dot-root-marker' }]);
   });
 
@@ -99,7 +100,7 @@ describe('FileSearchTool', () => {
       const result = await new FileSearchTool().execute({ pattern: 'process-cwd-marker' });
       expect(result.success).toBe(true);
       const data = result.data as { root: string; matches: Array<{ file: string }> };
-      expect(data.root).toBe(path.resolve(launch));
+      expect(realpathSync(data.root)).toBe(realpathSync(launch));
       expect(data.matches.map((row) => row.file)).toEqual(['cwd-only.txt']);
     } finally {
       process.chdir(previous);
@@ -117,7 +118,7 @@ describe('FileSearchTool', () => {
     );
     expect(result.success).toBe(true);
     const data = result.data as { root: string; matches: Array<{ file: string }> };
-    expect(data.root).toBe(path.resolve(launch));
+    expect(realpathSync(data.root)).toBe(realpathSync(launch));
     expect(data.matches.map((row) => row.file)).toEqual(['adapter.txt']);
   });
 });

@@ -113,22 +113,33 @@ function deserializeMetrics(s: SerializedAgentMetrics): AgentMetrics {
   };
 }
 
+const pendingSaves = new Map<string, Promise<void>>();
+
 /**
  * Save metrics atomically (write to .tmp + rename).
  * Best-effort — never throws; logs and swallows on failure.
  */
 export async function saveMetrics(map: Map<AgentRole, AgentMetrics>): Promise<void> {
   const metricsPath = resolveMetricsPath();
+  // Capture before yielding: later mutations must not change this snapshot.
+  const envelope: PersistedMetrics = {
+    schemaVersion: 'v0.4',
+    savedAt: new Date().toISOString(),
+    metrics: Array.from(map.entries()).map(([role, m]) => [role, serializeMetrics(m)]),
+  };
+  const save = (pendingSaves.get(metricsPath) ?? Promise.resolve()).then(async () => {
+    try {
+      await ensureDir(metricsPath);
+      await writeJsonAtomic(metricsPath, envelope, { mode: 0o600 });
+    } catch (err) {
+      logger.warn('[multi-agent] metrics persistence save failed', { error: String(err) });
+    }
+  });
+  pendingSaves.set(metricsPath, save);
   try {
-    await ensureDir(metricsPath);
-    const envelope: PersistedMetrics = {
-      schemaVersion: 'v0.4',
-      savedAt: new Date().toISOString(),
-      metrics: Array.from(map.entries()).map(([role, m]) => [role, serializeMetrics(m)]),
-    };
-    await writeJsonAtomic(metricsPath, envelope, { mode: 0o600 });
-  } catch (err) {
-    logger.warn('[multi-agent] metrics persistence save failed', { error: String(err) });
+    await save;
+  } finally {
+    if (pendingSaves.get(metricsPath) === save) pendingSaves.delete(metricsPath);
   }
 }
 

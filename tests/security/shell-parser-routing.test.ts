@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { parseShellCommand, stripShellWrapper } from '../../src/security/bash-parser.js';
 import type { PowerShellParserRunner } from '../../src/security/powershell-parser.js';
@@ -87,13 +87,24 @@ describe('parseShellCommand routing', () => {
 });
 
 describe('validator parser fail-closed seam', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  function withoutPowerShell() {
+    for (const key of Object.keys(process.env)) {
+      if (key.toUpperCase() === 'PATH') vi.stubEnv(key, '');
+    }
+    vi.stubEnv('PATH', '');
+  }
+
   it('refuses a wrapped PowerShell command when the native parser is unavailable', () => {
+    withoutPowerShell();
     const verdict = validateCommand('powershell -Command "Get-ChildItem"');
     expect(verdict.valid).toBe(false);
     expect(verdict.reason).toMatch(/PowerShell parser/i);
   });
 
   it('cannot hide PowerShell behind cmd /c', () => {
+    withoutPowerShell();
     const verdict = validateCommand('cmd /c "pwsh -Command \'Get-ChildItem\'"');
     expect(verdict.valid).toBe(false);
     expect(verdict.reason).toMatch(/PowerShell parser/i);

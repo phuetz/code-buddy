@@ -964,6 +964,7 @@ export class EnhancedCoordinator extends EventEmitter {
       const { saveMetrics } = await import('./metrics-persistence.js');
       await saveMetrics(this.agentMetrics);
       this.metricsSavedAt = new Date();
+      this.emit('metrics:saved');
     } catch (err) {
       logger.warn('[multi-agent] metrics flush save failed', { error: String(err) });
     }
