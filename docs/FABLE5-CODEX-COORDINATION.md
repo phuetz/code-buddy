@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P0 | CI portable Tranche 4 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08` ; base `4885eb1cc` ; commit portant cette ligne, `fix(ci): make remaining shell and desktop fixtures platform-aware` | 11 fichiers / 317 tests verts / 1 skip Windows-only ; simulations shell et chemins rouges→vert ; typecheck/lint/privacy/commitlint verts ; rapport CI portable Tranche 4 | Aucun push ; index Git vide après commit ; CI native/shards suivants à confirmer ; ledger signé Windows exclu faute de modes POSIX, garde 0600 intacte ; Code Explorer sans snapshot |
+
 | P0 | CI portable Tranche 3 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08` ; abort `73f7148b0`, BSD `022fcac03`, Windows `6c6ce427e`, OOM : commit portant cette ligne | 7 fichiers / 80 tests verts ; BSD 5 rouges→vert, Windows 2 rouges→vert, OOM reproduit puis vert sous 512 MiB ; typecheck/lint/privacy/commitlint verts ; rapport CI portable Tranche 3 | Aucun push ; CI native à confirmer ; index Git vide ; Code Explorer sans snapshot malgré analyses |
 
 | P0 | CI portable tranche 2 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08` ; commit portant cette ligne, `fix(ci): make remaining runner fixtures portable and bound timeline snapshots` | 84 tests ciblés verts ; cwd alias rouge→vert ; simulation casse Windows ; typecheck/lint/privacy/commitlint verts ; rapport CI portable, section reprise Tranche 2 | Aucun push ; CI native et shards 2–6 à confirmer ; index Git vide après commit ; Code Explorer sans snapshot |

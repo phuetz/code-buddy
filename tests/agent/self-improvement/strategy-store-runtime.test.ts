@@ -33,7 +33,11 @@ describe('StrategyStore', () => {
   it('saves atomically with mode 0600, activates per scope, refuses a scope mismatch', () => {
     store.save(child);
     const file = path.join(work, '.codebuddy', 'strategies', `${child.id}.json`);
-    expect((fs.statSync(file).mode & 0o777).toString(8)).toBe('600');
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).id).toBe(child.id);
+    // Windows mode bits cannot express POSIX owner-only permissions.
+    if (process.platform !== 'win32') {
+      expect((fs.statSync(file).mode & 0o777).toString(8)).toBe('600');
+    }
     expect(() => store.activate('audit', child.id)).toThrow(/scope/);
     store.activate('headless', child.id);
     expect(store.resolveActive('headless').id).toBe(child.id);

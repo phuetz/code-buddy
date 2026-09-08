@@ -19,6 +19,7 @@ import { EventEmitter } from 'events';
 import path from 'path';
 import os from 'os';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
 import { BashTool } from '../../src/tools/bash';
 import { validateWithSchema, validateCommand as validateCommandSafety, sanitizeForShell } from '../../src/utils/input-validator';
 import { isLikelyTestOutput, parseTestOutput } from '../../src/utils/test-output-parser';
@@ -396,21 +397,27 @@ describe('BashTool', () => {
       expect(result.output).toBe('Command executed successfully (no output)');
     });
 
-    it('should pass correct spawn options', async () => {
-      const mockProcess = createMockChildProcess();
-      mockSpawn.mockReturnValue(mockProcess);
+    it.each(['linux', 'darwin', 'win32'] as const)('should pass correct spawn options on %s', async (platform) => {
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { ...descriptor, value: platform });
+      try {
+        const mockProcess = createMockChildProcess();
+        mockSpawn.mockReturnValue(mockProcess);
 
-      emitAfterSpawn(mockProcess, { exitCode: 0 });
-      await bashTool.execute('test-command');
+        emitAfterSpawn(mockProcess, { exitCode: 0 });
+        await bashTool.execute('test-command');
 
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'bash',
-        ['-c', expect.stringContaining('test-command')],
-        expect.objectContaining({
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-      );
+        expect(mockSpawn).toHaveBeenCalledWith(
+          getShellConfiguration().executable,
+          [...getShellConfiguration().argsPrefix, expect.stringContaining('test-command')],
+          expect.objectContaining({
+            shell: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', descriptor);
+      }
     });
 
     it('should use controlled environment variables', async () => {
@@ -969,8 +976,8 @@ describe('BashTool', () => {
         const result = await bashTool.listFiles('.');
         expect(result.success).toBe(true);
         expect(mockSpawn).toHaveBeenCalledWith(
-          'bash',
-          ['-c', expect.stringContaining('ls -la')],
+          getShellConfiguration().executable,
+          [...getShellConfiguration().argsPrefix, expect.stringContaining('ls -la')],
           expect.any(Object)
         );
       });
@@ -1005,8 +1012,8 @@ describe('BashTool', () => {
         await bashTool.findFiles('*.ts', '.');
 
         expect(mockSpawn).toHaveBeenCalledWith(
-          'bash',
-          ['-c', expect.stringContaining('find')],
+          getShellConfiguration().executable,
+          [...getShellConfiguration().argsPrefix, expect.stringContaining('find')],
           expect.any(Object)
         );
       });

@@ -139,7 +139,8 @@ describe('LongCat GPU runner hardening', () => {
     expect(() => globalThis.process.kill(childPid, 0)).toThrow();
   });
 
-  it('fails closed and kills inference after two over-temperature samples', async () => {
+  // The thermal stop also uses os.killpg/SIGKILL, unavailable on Windows.
+  it.skipIf(process.platform === 'win32')('fails closed and kills inference after two over-temperature samples', async () => {
     const code = [
       'import importlib.util, pathlib, sys, time',
       'spec = importlib.util.spec_from_file_location("longcat_runner", pathlib.Path(sys.argv[1]))',

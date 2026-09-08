@@ -36,6 +36,10 @@ Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` fi
 
 ## Testing Gotchas
 
+- **Portable platform fixtures** — use `tests/setup/platform-fixtures.ts`: launch `.sh` scripts with `spawnBashScript` (explicit `bash`, never a direct shebang spawn). On Windows, use `describe.skipIf(process.platform === 'win32' && !hasBash())` with an explanation when Bash is absent. Construct native PATH lists with `path.delimiter`; Git Bash converts the inherited Windows PATH. Do not globally mock child_process to hide portability failures.
+- **No-display tests** — use `forceLinuxWithoutDisplay()` and call its returned restore function in `afterEach`. It selects the Linux backend and unsets DISPLAY/WAYLAND_DISPLAY: macOS/Windows desktop detection does not use those variables. Never infer headlessness from the CI host. Keep native desktop tests separate.
+- **Paths and permissions** — use native `path.join` or separator-aware assertions; assert the resolved shell executable AND argument prefix. Check POSIX mode bits only outside Windows, while retaining storage/content checks everywhere. Tests of POSIX process-group signals must explicitly skip Windows with the reason.
+
 - macOS/Windows CI: 4096 MiB heap per Vitest fork and six sequential shards to limit accumulated memory; Linux retains 8192 MiB.
 
 - **MEM1 state writes:** les JSON/MD d'état passent par `src/utils/atomic-write.ts`; les lectures vides/tronquées repliquent et avertissent une seule fois, les JSONL append-only restent `O_APPEND`.

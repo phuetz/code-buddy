@@ -1,9 +1,14 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { hasBash, spawnBashScript } from '../setup/platform-fixtures.js';
+
+// Git Bash runs these integrations on Windows; skip only when Bash is unavailable.
+const skipWithoutBash = process.platform === 'win32' && !hasBash();
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const ledgerScript = path.join(repositoryRoot, 'scripts', 'lane-ledger.sh');
@@ -23,11 +28,22 @@ function run(
   env: Record<string, string | undefined> = {}
 ): CommandResult {
   const childEnv = { ...process.env, ...env };
-  childEnv.PATH = `${portableBin}:${childEnv.PATH ?? ''}`;
+  const inheritedPath = childEnv.PATH ?? childEnv.Path ?? '';
+  // Avoid duplicate Path/PATH keys: Node chooses only one on Windows.
+  if (process.platform === 'win32') {
+    for (const key of Object.keys(childEnv)) {
+      if (key.toUpperCase() === 'PATH') delete childEnv[key];
+    }
+  }
+  childEnv.PATH = `${portableBin}${path.delimiter}${inheritedPath}`;
   for (const [name, value] of Object.entries(childEnv)) {
     if (value === undefined) delete childEnv[name];
+    // Bash consumes these paths too (cd, redirects); native Windows slashes are not shell paths.
+    else if (process.platform === 'win32' && name.toUpperCase() !== 'PATH' && /^[A-Za-z]:[\\/]/.test(value)) {
+      childEnv[name] = value.replace(/\\/g, '/');
+    }
   }
-  const result = spawnSync(script, args, {
+  const result = spawnBashScript(script, args, {
     cwd: repositoryRoot,
     encoding: 'utf8',
     env: childEnv,
@@ -195,7 +211,8 @@ afterEach(async () => {
   await fs.rm(scratchRoot, { recursive: true, force: true });
 });
 
-describe('lane ledger', () => {
+// The signed ledger enforces POSIX key mode 0600 in production; Windows needs ACL support.
+describe.skipIf(skipWithoutBash || process.platform === 'win32')('lane ledger', () => {
   it('appends canonical signed entries and verifies the hash chain', async () => {
     const ledgerDir = path.join(scratchRoot, 'delegations');
     const fixture = await createLaneFixture(scratchRoot);
@@ -380,7 +397,7 @@ describe('lane ledger', () => {
   });
 });
 
-describe('deleguer.sh ledger opt-in', () => {
+describe.skipIf(skipWithoutBash)('deleguer.sh ledger opt-in', () => {
   async function prepareDelegation(): Promise<{
     bin: string;
     ledgerDir: string;
@@ -417,7 +434,7 @@ describe('deleguer.sh ledger opt-in', () => {
       CODEBUDDY_DELEGATIONS_DIR: fixture.ledgerDir,
       CODEBUDDY_LANE_LEDGER: undefined,
       HOME: scratchRoot,
-      PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
+      PATH: `${fixture.bin}${path.delimiter}${process.env.PATH ?? ''}`,
       TMPDIR: fixture.tmpDir,
     });
     expect(result.status, result.stderr).toBe(0);
@@ -425,14 +442,15 @@ describe('deleguer.sh ledger opt-in', () => {
     await expect(fs.stat(path.join(fixture.ledgerDir, 'ledger.jsonl'))).rejects.toThrow();
   });
 
-  it('records the completed lane only when CODEBUDDY_LANE_LEDGER=1', async () => {
+  // Signed-ledger verification requires real POSIX 0600 modes, unavailable on Windows.
+  it.skipIf(process.platform === 'win32')('records the completed lane only when CODEBUDDY_LANE_LEDGER=1', async () => {
     const fixture = await prepareDelegation();
     const before = git(fixture.repository, ['rev-parse', 'HEAD']);
     const result = run(delegateScript, [fixture.repository, fixture.mission, 'local'], {
       CODEBUDDY_DELEGATIONS_DIR: fixture.ledgerDir,
       CODEBUDDY_LANE_LEDGER: '1',
       HOME: scratchRoot,
-      PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
+      PATH: `${fixture.bin}${path.delimiter}${process.env.PATH ?? ''}`,
       TMPDIR: fixture.tmpDir,
     });
     expect(result.status, result.stderr).toBe(0);
@@ -459,7 +477,8 @@ describe('deleguer.sh ledger opt-in', () => {
   });
 });
 
-describe('fusionner-lane.sh approval gate', () => {
+// Approval requires a verified POSIX ledger; do not weaken its key-permission guard for CI.
+describe.skipIf(skipWithoutBash || process.platform === 'win32')('fusionner-lane.sh approval gate', () => {
   it('runs typecheck and a supplied test command, records approval, then fast-forwards', async () => {
     const ledgerDir = path.join(scratchRoot, 'delegations');
     const fixture = await createLaneFixture(scratchRoot);
@@ -529,7 +548,7 @@ describe('fusionner-lane.sh approval gate', () => {
       {
         CODEBUDDY_DELEGATIONS_DIR: ledgerDir,
         FAKE_NPX_LOG: invocationLog,
-        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
       }
     );
     expect(result.status, result.stderr).toBe(0);
@@ -643,5 +662,20 @@ describe('fusionner-lane.sh approval gate', () => {
     expect(git(fixture.target, ['rev-list', '--parents', '-n', '1', 'HEAD']).split(' ')).toHaveLength(
       3
     );
+  });
+});
+
+// Git Bash is still exercised on Windows; native key permissions must fail closed.
+describe.skipIf(skipWithoutBash)('Windows signed ledger permissions', () => {
+  it.runIf(process.platform === 'win32')('refuses keys whose native mode cannot express 0600', async () => {
+    const ledgerDir = path.join(scratchRoot, 'delegations');
+    const fixture = await createLaneFixture(scratchRoot);
+    expect((await appendDelegation(ledgerDir, fixture)).status).toBe(0);
+    const result = run(ledgerScript, ['verify', '--json'], {
+      CODEBUDDY_DELEGATIONS_DIR: ledgerDir,
+    });
+    expect(result.status).toBe(3);
+    expect(JSON.parse(result.stderr)).toMatchObject({ error: 'chain_broken', line: 1 });
+    expect(result.stderr).toContain('permissions de clé différentes de 0600');
   });
 });

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Filesystem operations shared by the lane scripts on GNU and BSD hosts.
+// Filesystem operations shared by the lane scripts on GNU, BSD and Git Bash hosts.
 import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { toBashPath } from './lane-shell-path.mjs';
 
 function latestReport(root) {
   let latest;
@@ -28,7 +29,7 @@ try {
   else if (operation === 'realpath') result = realpathSync(file);
   else if (operation === 'sha256') result = createHash('sha256').update(readFileSync(file)).digest('hex');
   else throw new Error('Unknown lane filesystem operation');
-  process.stdout.write(result);
+  process.stdout.write(operation === 'sha256' ? result : toBashPath(result));
 } catch (error) {
   process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;

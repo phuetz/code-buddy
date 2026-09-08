@@ -6,6 +6,7 @@
  */
 
 import { promises } from 'fs';
+import { join } from 'node:path';
 
 import {
   CodebaseRAG,
@@ -477,9 +478,9 @@ describe('CodebaseRAG', () => {
       // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
       // chunks, du file-index ou des stats restait vert.
       expect(mockWriteJsonAtomic.mock.calls.map((call) => call[0])).toEqual([
-        '/test/index/chunks.json',
-        '/test/index/file-index.json',
-        '/test/index/stats.json',
+        join('/test/index', 'chunks.json'),
+        join('/test/index', 'file-index.json'),
+        join('/test/index', 'stats.json'),
       ]);
 
       const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];

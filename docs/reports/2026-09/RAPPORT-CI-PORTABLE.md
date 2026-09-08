@@ -144,3 +144,37 @@ Aucun banc d'évaluation, aucun push, aucun service modifié. Index Git vide apr
 Garde personnel après rédaction finale : **40/40 verts**.
 
 Outillage : **16 appels Code Explorer (context/impact/query), 33 commandes via lm-resizer, 698617 octets économisés**. Compteurs propres à cette mission, échecs inclus ; 32 métadonnées JSON et une exécution `--stream` sans réduction, hooks automatiques exclus. Volumes de sortie, pas des tokens facturés.
+
+## Tranche 4 — scripts Bash, chemins et affichage (08/09)
+
+Branche `fix/ci-portable-macos-windows-2026-09-08`, base `4885eb1cc`, run fourni `34200577158`. Livré par le commit portant cette section : `fix(ci): make remaining shell and desktop fixtures platform-aware`. Aucun push, aucun banc d’évaluation, aucun service modifié. HOME isolé `_qa/ci-portable/home`, répertoires temporaires sous `_qa/ci-portable/tmp` ; les fixtures ledger restent dans le sous-répertoire de test du dépôt.
+
+### Diagnostic des journaux et corrections
+
+Les deux exécutions du shard Windows rapportent les mêmes familles. La seconde compte **21 échecs** : 12 ledger, 2 conversation cues, 3 BashTool, 1 RAG, 1 StrategyStore, 1 shared-photos, 1 LongCat. Le journal macOS ne présente qu’un test rouge, GK21, rejoué deux fois.
+
+- **Bash / ledger** : `spawnBashScript` passe explicitement par Bash, normalise le chemin du script et les arguments absolus Windows. Probe d’un Bash exécutable avant les suites Windows, skip expliqué s’il manque. PATH construit avec `path.delimiter`, doublon Path/PATH retiré, chemins d’environnement consommés par Bash normalisés. Le script avec espaces et antislashs est exécuté réellement, avec un argument littéral contenant une substitution shell qui ne doit pas être évaluée.
+- **Limite de sécurité du ledger** : `lane-ledger.mjs` vérifie réellement les modes des deux clés et refuse tout mode différent de 0600. Windows retourne 0666 ; corriger le lancement Bash ne suffit donc pas. **Onze scénarios de journal signé/fusion sont explicitement sautés sous Windows**, avec leur raison POSIX. La garde de production reste intacte. La délégation sans ledger s’exécute sous Git Bash ; un test Windows supplémentaire exige le refus structuré `chain_broken` des clés incompatibles. Le support ACL du ledger Windows reste hors tranche.
+- **Frontière Node → Bash** : les sorties `latest`/`realpath` de `lane-files.mjs` sont converties par `toBashPath` sous Windows (`D:\…` → `/d/…`, UNC conservé). Sans cela, le préfixe du clone Bash ne correspond pas au rapport natif et l’extraction du chemin relatif échoue. SHA-256 inchangé, noms POSIX avec antislash conservés. Sept cas synthétiques couvrent lecteurs, espaces, UNC, absence de rapport et préfixe de confinement.
+- **Conversation cues** : contrairement au résumé initial, les lignes 40/120 échouent sur les séparateurs des chemins audio ; les expressions acceptent les deux séparateurs, tout en conservant le chemin et le fichier attendus.
+- **BashTool** : les trois attentes fautives de shell se trouvent dans `tests/unit/bash-tool.test.ts`. Elles vérifient l’exécutable ET le préfixe d’arguments de `getShellConfiguration()`, sans réduire l’assertion à un joker. Le cas spawn est exécuté avec `process.platform` simulé Linux/macOS/Windows et restauré dans `finally`.
+- **RAG, ligne 479** : chemins attendus `/test/index/*.json` contre chemins reçus avec antislashs ; utilisation de `node:path.join`, mêmes trois fichiers et contrôles de contenu conservés. Ni casse ni fins de ligne en cause.
+- **GK21 macOS** : le backend macOS ignore DISPLAY/WAYLAND_DISPLAY. Le helper `forceLinuxWithoutDisplay` sélectionne explicitement Linux et retire ces variables, puis restaure exactement l’état précédent. Le test de non-capture reste exécuté sur toutes les plateformes, sans skip macOS. Trois simulations vérifient également restauration du backend et des variables initialement présentes.
+- **Permissions / signaux** : seuls les contrôles de bits POSIX des photos et de StrategyStore sont conditionnés hors Windows ; stockage et contenu restent vérifiés. Le test thermique LongCat utilise `os.killpg` et SIGKILL, comme le test SIGTERM déjà exclu : skip Windows expliqué. Aucun affaiblissement de l’arrêt thermique de production.
+
+La règle réutilisable est posée dans `tests/setup/platform-fixtures.ts` et documentée dans `CLAUDE.md` § Testing Gotchas : Bash explicite, absence de display forcée, chemins/shell résolus, permissions et signaux bornés à la plateforme qui les implémente. Pas de mock global de child_process ni de skip global des tests scripts/desktop.
+
+### Preuves rouge → vert et vérifications
+
+1. Ligne de base Linux : huit fichiers, **264/264 verts** ; les rouges natifs sont établis par les journaux fournis, pas prétendument reproduits sous Linux.
+2. Ancienne attente `bash -c` rétablie temporairement avec les trois plateformes simulées : **1 rouge Windows / 2 verts**. Attente corrigée : trois plateformes vertes. Brut relu, journal local `ci4-red-shell.log`.
+3. Ancienne sortie Node native sans conversion : **4 rouges / 7** sur chemins Windows et confinement ; conversion rétablie : **7/7 verts**. Brut relu, journal local `ci4-red-paths.log`.
+4. Commande finale via lm-resizer : `npx vitest run tests/scripts/lane-ledger.test.ts tests/scripts/lane-shell-path.test.ts tests/scripts/platform-fixtures.test.ts tests/sensory/conversation-cues.test.ts tests/unit/codebase-rag.test.ts tests/unit/bash-tool.test.ts tests/tools/gk21-computer-control-headless-display.test.ts tests/agent/self-improvement/strategy-store-runtime.test.ts tests/companion/shared-photos.test.ts tests/gpu-worker/longcat-runner.test.ts tests/security/donnees-personnelles.test.ts --maxWorkers=1` : **11 fichiers verts, 317 tests verts, 1 skip** (test réservé au mode natif Windows).
+5. `npm run typecheck` : **exit 0**, trois projets. `npm run lint` : **exit 0**, brut relu, **2488 warnings / 0 erreur** ; ESLint ciblé après les derniers ajustements : exit 0. `git diff --check` et commitlint : verts. Configuration commitlint ESM historique copiée byte-identique en CJS dans QA ; hooks désactivés lors du seul commit après ces contrôles explicites.
+6. Garde personnel : **40/40 verts** dans la commande finale, rejoué après rédaction du rapport. Aucun journal brut ni environnement personnel ajouté à Git.
+
+**Limites** : toutes les familles rouges visibles des deux shards sont traitées ; aucun passage natif Windows/macOS n’est revendiqué. Relancer la CI, puis traiter les éventuels shards suivants encore masqués. Le ledger signé reste indisponible sur Windows tant qu’une vérification ACL sûre n’existe pas. Ubuntu et Build and Package étaient déjà verts dans le run fourni et n’ont pas été relancés ici.
+
+Code Explorer : requêtes sans snapshot malgré l’analyse initiale (arrêtée après plusieurs minutes) et trois reconstructions incrémentales bornées à 45 s (exit 124). Recherches exactes et inspection ciblée en complément ; aucun index frais revendiqué. Index Git vide après le commit, zones libérées.
+
+Outillage : **18 appels Code Explorer (context/impact/query), 16 commandes via lm-resizer, 356208 octets économisés**. Volumes de sortie, pas des tokens facturés ; métadonnées de cette tranche seules dans `_qa/ci-portable/ci4-tooling.jsonl`, échecs inclus, hooks exclus.

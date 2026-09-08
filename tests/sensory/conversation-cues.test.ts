@@ -37,7 +37,7 @@ describe('conversation cues — sensory backchannel', () => {
       gainDb: BACKCHANNEL_GAIN_DB,
       atMs: BACKCHANNEL_START_DELAY_MS,
     });
-    expect(played[0]!.assetPath).toMatch(/assets\/voice\/conversation\/mhm\.wav$/);
+    expect(played[0]!.assetPath).toMatch(/assets[\\/]voice[\\/]conversation[\\/]mhm\.wav$/);
     expect(played[0]!.atMs).toBeLessThan(200);
 
     controller.armBackchannel('turn-2');
@@ -117,7 +117,7 @@ describe('conversation cues — sensory backchannel', () => {
       text: REPAIR_PROMPT,
       atMs: 1_000,
     });
-    expect(played[0]!.assetPath).toMatch(/assets\/voice\/conversation\/repair\.wav$/);
+    expect(played[0]!.assetPath).toMatch(/assets[\\/]voice[\\/]conversation[\\/]repair\.wav$/);
   });
 
   it('ships canonical PCM16 assets and can attenuate backchannels by 12 dB', async () => {
