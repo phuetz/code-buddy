@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { hasBash, spawnBashScript } from '../setup/platform-fixtures.js';
+import { spawnBashScript } from '../setup/platform-fixtures.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const installerPath = path.join(repoRoot, 'install.sh');
@@ -16,7 +16,9 @@ afterEach(() => {
 });
 
 // The installer is a Bash script; Windows requires a working Git Bash.
-describe.skipIf(process.platform === 'win32' && !hasBash())('one-command installer launcher', () => {
+// install.sh refuses MINGW/MSYS by design (Windows users install via WSL2 or npm), so even with
+// Git Bash present the installer cannot be exercised on a Windows runner.
+describe.skipIf(process.platform === 'win32')('one-command installer launcher', () => {
   it.each([false, true])('creates a package-relative launcher over a stale wrapper (Windows Node paths=%s)', (windowsNodePaths) => {
     const scratchRoot = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), 'e17-installer-')
