@@ -105,13 +105,13 @@ LANE_RAPPORT_SHA=$(printf '%s' "$LANE" | node -e \
   emit_error "$EXIT_LEDGER" ledger_invalid 'Impossible de lire le hash du rapport vérifié.'
 git -C "$CLONE" cat-file -e "$LANE_HEAD_AVANT^{commit}" 2>/dev/null || \
   emit_error "$EXIT_LEDGER" ledger_invalid 'Le HEAD initial de la lane est absent du clone.'
-RAPPORT_CANONIQUE=$(realpath -e "$CLONE/$LANE_RAPPORT" 2>/dev/null) || \
+RAPPORT_CANONIQUE=$(node "$SCRIPT_DIR/lane-files.mjs" realpath "$CLONE/$LANE_RAPPORT" 2>/dev/null) || \
   emit_error "$EXIT_LEDGER" report_invalid 'Le rapport signé est absent du clone.'
 case "$RAPPORT_CANONIQUE" in
   "$CLONE"/*) ;;
   *) emit_error "$EXIT_LEDGER" report_invalid 'Le rapport signé sort du clone.' ;;
 esac
-RAPPORT_SHA_ACTUEL=$(sha256sum "$RAPPORT_CANONIQUE" | cut -d' ' -f1)
+RAPPORT_SHA_ACTUEL=$(node "$SCRIPT_DIR/lane-files.mjs" sha256 "$RAPPORT_CANONIQUE")
 [ "$RAPPORT_SHA_ACTUEL" = "$LANE_RAPPORT_SHA" ] || \
   emit_error "$EXIT_LEDGER" report_invalid 'Le rapport livré ne correspond plus à son SHA-256 signé.'
 

@@ -23,6 +23,7 @@ function run(
   env: Record<string, string | undefined> = {}
 ): CommandResult {
   const childEnv = { ...process.env, ...env };
+  childEnv.PATH = `${portableBin}:${childEnv.PATH ?? ''}`;
   for (const [name, value] of Object.entries(childEnv)) {
     if (value === undefined) delete childEnv[name];
   }
@@ -172,10 +173,22 @@ async function copyKeyPair(
 }
 
 let scratchRoot: string;
+let portableBin: string;
 
 beforeEach(async () => {
   await fs.mkdir(scratchParent, { recursive: true });
   scratchRoot = await fs.mkdtemp(path.join(scratchParent, 'lane-ledger-'));
+  portableBin = path.join(scratchRoot, 'bsd-bin');
+  await fs.mkdir(portableBin);
+  // Model the BSD runner: GNU-only options and sha256sum are unavailable.
+  for (const command of ['find', 'realpath', 'sha256sum']) {
+    const real = command === 'sha256sum' ? ''
+      : execFileSync('bash', ['-c', `command -v ${command}`], { encoding: 'utf8' }).trim();
+    const script = command === 'sha256sum'
+      ? '#!/usr/bin/env bash\nexit 127\n'
+      : `#!/usr/bin/env bash\nfor arg in "$@"; do case "$arg" in -printf|-e) exit 1;; esac; done\nexec '${real}' "$@"\n`;
+    await fs.writeFile(path.join(portableBin, command), script, { mode: 0o700 });
+  }
 });
 
 afterEach(async () => {
@@ -407,7 +420,7 @@ describe('deleguer.sh ledger opt-in', () => {
       PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
       TMPDIR: fixture.tmpDir,
     });
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).not.toContain('journal de lane');
     await expect(fs.stat(path.join(fixture.ledgerDir, 'ledger.jsonl'))).rejects.toThrow();
   });
@@ -422,7 +435,7 @@ describe('deleguer.sh ledger opt-in', () => {
       PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
       TMPDIR: fixture.tmpDir,
     });
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     const listed = run(ledgerScript, ['list', '--json'], {
       CODEBUDDY_DELEGATIONS_DIR: fixture.ledgerDir,
     });
@@ -466,7 +479,7 @@ describe('fusionner-lane.sh approval gate', () => {
       ],
       { CODEBUDDY_DELEGATIONS_DIR: ledgerDir }
     );
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stderr).toBe('');
     expect(JSON.parse(result.stdout)).toMatchObject({
       ok: true,
@@ -519,7 +532,7 @@ describe('fusionner-lane.sh approval gate', () => {
         PATH: `${bin}:${process.env.PATH ?? ''}`,
       }
     );
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(await fs.readFile(invocationLog, 'utf8')).toContain(
       'vitest run tests/scripts/sample.test.ts'
     );
@@ -544,7 +557,7 @@ describe('fusionner-lane.sh approval gate', () => {
       ],
       { CODEBUDDY_DELEGATIONS_DIR: ledgerDir }
     );
-    expect(result.status).toBe(3);
+    expect(result.status, result.stderr).toBe(3);
     expect(result.stdout).toBe('');
     expect(JSON.parse(result.stderr)).toMatchObject({
       ok: false,
@@ -573,7 +586,7 @@ describe('fusionner-lane.sh approval gate', () => {
       ],
       { CODEBUDDY_DELEGATIONS_DIR: ledgerDir }
     );
-    expect(result.status).toBe(4);
+    expect(result.status, result.stderr).toBe(4);
     expect(result.stdout).toBe('');
     expect(JSON.parse(result.stderr)).toMatchObject({
       ok: false,

@@ -72,6 +72,7 @@ if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
   exec bash "$DELEGUER_COPIE" "$@"
 fi
 DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
+LANE_FILES="$(cd "$(dirname "$DELEGUER_ORIGINE")" && pwd)/lane-files.mjs"
 
 usage() { sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 2; }
 [ $# -ge 2 ] || usage
@@ -145,7 +146,7 @@ AVANT=$(empreinte_depot "$DEPOT")
 if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   LANE_HEAD_AVANT=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
   LANE_BRANCHE=$(git -C "$DEPOT" branch --show-current 2>/dev/null || true)
-  LANE_MISSION_SHA=$(sha256sum "$MISSION" | cut -d' ' -f1)
+  LANE_MISSION_SHA=$(node "$LANE_FILES" sha256 "$MISSION")
 fi
 
 case "$MOTEUR" in
@@ -343,7 +344,8 @@ case "$MOTEUR" in
     # (12 $) est trop étroit pour le partage : deux missions concurrentes se
     # font couper à mi-course toutes les deux — budget consommé, zéro livrable.
     # En séquentiel, la première aboutit. Constaté le 08/08.
-    if pgrep -f 'opencode run' | grep -qv "^$$\$"; then
+    source "$(dirname "$LANE_FILES")/opencode-guard.sh"
+    if opencode_lane_running; then
       echo "⛔ REFUS — un travail OpenCode tourne déjà. Le quota de 5 h ne" >&2
       echo "   supporte pas le parallélisme : attends son livrable." >&2
       exit 3
@@ -445,12 +447,7 @@ done
 if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   LANE_HEAD_APRES=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
   [ -n "$LANE_BRANCHE" ] || LANE_BRANCHE="detached-${LANE_HEAD_APRES:0:12}"
-  LANE_RAPPORT=$(find "$DEPOT" \
-    -path "$DEPOT/.git" -prune -o \
-    -path "$DEPOT/node_modules" -prune -o \
-    -path "$DEPOT/test-scripts" -prune -o \
-    -type f \( -name 'RAPPORT-*' -o -name 'REPARATION-*' -o -name 'REVUE-*' \) \
-    -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+  LANE_RAPPORT=$(node "$LANE_FILES" latest "$DEPOT")
   LANE_LEDGER_ARGS=(
     append delegation
     --engine "$MOTEUR"
@@ -465,7 +462,7 @@ if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
   if [ -n "$LANE_RAPPORT" ]; then
     LANE_LEDGER_ARGS+=(
       --report "${LANE_RAPPORT#"$DEPOT"/}"
-      --report-sha256 "$(sha256sum "$LANE_RAPPORT" | cut -d' ' -f1)"
+      --report-sha256 "$(node "$LANE_FILES" sha256 "$LANE_RAPPORT")"
     )
   fi
   # Le script tourne depuis une auto-copie temporaire (DELEGUER_SELF_COPY) : lane-ledger.sh vit

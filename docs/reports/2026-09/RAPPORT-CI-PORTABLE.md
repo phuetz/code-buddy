@@ -110,3 +110,11 @@ Le rouge Ubuntu Node 22 fourni est le timeout explicite de 5 s. Le test attend m
 
 Preuve locale : ancien cas 5/5 vert (flocon CI non reproduit). Première synchronisation rouge à 15 s car le sandbox bufferise ; fixture corrigée pour sélectionner le chemin direct approuvé avec le bridge existant, 5/5 vert. Le processus et ses descendants sont réels, seule la disponibilité sandbox est simulée dans ce cas. Typecheck exit 0.
 Lint global exit 0 (2488 warnings préexistants), garde personnel 40/40 ; aucune suite entière.
+
+### Lot 2 — ledger macOS et garde OpenCode
+
+Le journal 8588–8686 contredit l'attribution initiale : un rapport `null` dans `deleguer.sh` (moteur **local**, pas OpenCode), puis quatre codes 3 dans **fusionner-lane.sh** (`EXIT_LEDGER`). `find -printf` GNU empêche la découverte ; `realpath -e` empêche la validation du rapport. `sha256sum` n'est pas une dépendance BSD garantie non plus. Le helper `lane-files.mjs` utilise les primitives Node déjà disponibles pour découverte, chemin physique et SHA-256 ; le contrôle de confinement et la vérification du hash restent actifs.
+
+Simulation BSD par PATH de test : refus de `find -printf`, `realpath -e`, et absence de `sha256sum`. Avant : exactement **5 rouges / 12**, dont `report_invalid` exit 3 (journal brut relu). Après : **12/12 verts**. La garde OpenCode est traitée séparément : motif `[o]pencode` évitant l'auto-match de pgrep, exclusion du shell et de tous ses ancêtres par `ps -o ppid=` portable. Test simulant les candidats BSD : ancien filtre **1 rouge / 3**, correction **3/3 verts**, autre PID toujours bloquant. ESLint ciblé et `bash -n` : exit 0.
+
+Lot 1 livré : `73f7148b0`. Code Explorer reste sans snapshot ; reconstruction initiale interrompue après plusieurs minutes sans résultat, reconstructions incrémentales bornées à 45 s (timeout 124). Aucun processus d'une autre lane arrêté.
