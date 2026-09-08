@@ -290,8 +290,11 @@ install_managed_launcher() { # <npm-prefix>
     die "refusing to replace unmanaged launcher $_launcher"
   fi
 
+  # Both ends must be canonical: the package root already is (realpathSync
+  # above) and the managed bin dir may sit behind a symlink of a different
+  # depth (macOS /var -> /private/var), which would shift every "..".
   _relative_package=$(node -e \
-    'const path = require("node:path"); process.stdout.write(path.relative(process.argv[1], process.argv[2]) || ".");' \
+    'const fs = require("node:fs"); const path = require("node:path"); process.stdout.write(path.relative(fs.realpathSync(process.argv[1]), process.argv[2]) || ".");' \
     "$MANAGED_BIN_DIR" "$_package_root") \
     || die "could not compute a package-relative launcher target"
   case "$_relative_package" in
