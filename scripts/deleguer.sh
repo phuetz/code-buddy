@@ -80,6 +80,14 @@ usage() { sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 2; }
 DEPOT=$(cd "$1" 2>/dev/null && pwd) || { echo "dépôt introuvable : $1" >&2; exit 2; }
 MISSION=$2
 MOTEUR=${3:-luna}
+# Pause globale des moteurs Codex (quota) : tant que ~/.codebuddy/PAUSE-CODEX existe, une lane astra/luna/sol
+# attend AVANT de démarrer (les lanes déjà lancées ne sont pas touchées). Créer/supprimer le fichier = pause/reprise.
+case "$MOTEUR" in astra|luna|sol)
+  while [ -f "$HOME/.codebuddy/PAUSE-CODEX" ]; do
+    [ -z "${PAUSE_ANNONCEE:-}" ] && { echo "$(date '+%d/%m %H:%M') PAUSE-CODEX : lane $MOTEUR en attente du reset ($CONSIGNE)" >> "${CODEBUDDY_PAUSE_LOG:-$HOME/.codebuddy/delegations/pause-codex.log}"; PAUSE_ANNONCEE=1; }
+    sleep 120
+  done ;;
+esac
 [ -f "$MISSION" ] || { echo "mission introuvable : $MISSION" >&2; exit 2; }
 
 JOURNAUX=${CODEBUDDY_DELEGATIONS_DIR:-"$HOME/.codebuddy/delegations"}
