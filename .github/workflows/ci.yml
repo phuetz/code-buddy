@@ -15,13 +15,9 @@ jobs:
     name: Test on Node.js ${{ matrix.node-version }} and ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
-    # Ubuntu is Code Buddy's primary, gating target: the ubuntu legs are BLOCKING.
-    # macOS and Windows run best-effort (continue-on-error below) — a handful of
-    # fs/path-behaviour tests are macOS-specific and are being stabilised
-    # separately; we surface those results without letting them block a green CI.
-    # This is deliberately visible, not a silent removal of coverage: the non-Linux
-    # jobs still run the full suite and report pass/fail.
-    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    # All three operating systems are gating since 2026-09-08: the macOS and Windows
+    # legs went green end-to-end (6/6 shards on Node 20 and 22) after the portability
+    # campaign of that day, so they now block the merge like the Ubuntu legs.
 
     env:
       # Inherited by CLI subprocesses too; Vitest execArgv only caps its forks.
