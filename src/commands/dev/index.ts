@@ -70,7 +70,7 @@ export function registerDevCommands(program: Command): void {
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
 
       const profiler = getRepoProfiler();
-      const profile = await profiler.getProfile();
+      const profile = await profiler.getProfile({ backgroundIndexing: false });
 
       console.log('\nRepo profile:');
       console.log(`  ${profile.contextPack}`);
@@ -341,7 +341,7 @@ Do NOT implement yet. Plan only.`;
 
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
       const profiler = getRepoProfiler();
-      const profile = await profiler.getProfile();
+      const profile = await profiler.getProfile({ backgroundIndexing: false });
 
       const { runWorkflow } = await import('./workflows.js');
       const agent = await createAgent();

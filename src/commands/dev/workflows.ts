@@ -152,7 +152,7 @@ export async function runWorkflow(
   // ── Setup ─────────────────────────────────────────────────────
   const runStore = RunStore.getInstance();
   const profiler = getRepoProfiler();
-  const profile = await profiler.getProfile();
+  const profile = await profiler.getProfile({ backgroundIndexing: false });
 
   // Start a run for observability
   const runId = runStore.startRun(objective, {
