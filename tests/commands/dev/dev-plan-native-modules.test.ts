@@ -73,7 +73,10 @@ function runDevPlan(
   // The runner exports NODE_OPTIONS (heap size); append, never replace it.
   // tsx runs the entry point in a child process of its own, so the probe has
   // to travel through NODE_OPTIONS rather than through argv.
-  const nodeOptions = [process.env.NODE_OPTIONS, `--require "${preload}"`]
+  // NODE_OPTIONS eats backslashes (CI run 13: `D:acode-buddy…probenative-probe.cjs`), so hand
+  // Node a forward-slash path — accepted on every platform, including Windows.
+  const preloadForNodeOptions = preload.split(path.sep).join('/');
+  const nodeOptions = [process.env.NODE_OPTIONS, `--require "${preloadForNodeOptions}"`]
     .filter(Boolean)
     .join(' ');
 
