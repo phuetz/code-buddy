@@ -107,7 +107,9 @@ trap 'rm -f "$CONSIGNE" ${DELEGUER_SELF_COPY:+"$DELEGUER_SELF_COPY"}' EXIT  # + 
   # Préambule d'outillage commun (Code Explorer d'abord, lm-resizer sur les commandes
   # bruyantes, compte rendu chiffré) — demandé par Patrice le 07/09/2026 ; ignoré si absent.
   PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE.md}"
-  if [ -f "$PREAMBULE_OUTILLAGE" ]; then printf '\n---\n'; cat "$PREAMBULE_OUTILLAGE"; fi
+  # Pas de second préambule quand un moteur ré-exécute deleguer.sh sur une consigne déjà assemblée
+  # (qwenflash → openrouter : le préambule et les garde-fous étaient injectés deux fois, 08/09).
+  if [ -f "$PREAMBULE_OUTILLAGE" ] && ! grep -q "Outillage obligatoire (préambule commun" "$MISSION"; then printf '\n---\n'; cat "$PREAMBULE_OUTILLAGE"; fi
   cat <<'GARDE'
 
 ---
