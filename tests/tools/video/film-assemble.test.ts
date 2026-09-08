@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn, spawnSync } from 'child_process';
-import { mkdtemp, rm, stat, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, rm, stat, readFile, writeFile, realpath } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, sep } from 'path';
 
@@ -675,7 +675,8 @@ describe('assembleFilm — orchestration (injected)', () => {
     );
     expect(res.success, res.error).toBe(true);
     const finish = seen.find((args) => args.includes('-vf'));
-    expect(finish).toEqual(expect.arrayContaining(['-vf', buildLut3dFilter(lutPath)]));
+    // assembleFilm canonicalises the LUT path (fs.realpath) — compare against the canonical form.
+    expect(finish).toEqual(expect.arrayContaining(['-vf', buildLut3dFilter(await realpath(lutPath))]));
     const finishInput = finish?.[finish.indexOf('-i') + 1];
     expect(finishInput).toMatch(/-render\.mp4$/);
     expect(finishInput).not.toBe(res.outputPath);

@@ -114,7 +114,8 @@ describe('ShadowWorkspace', () => {
 
     await createShadowCommand().parseAsync(['node', 'shadow', 'status', '-d', repo]);
 
-    expect(output).toContain(`Repository: ${repo}`);
+    // The command prints git's toplevel, which is canonical (macOS tmp lives behind /private/var).
+    expect(output).toContain(`Repository: ${fs.realpathSync(repo)}`);
   });
 
   it('reports success and failure from the configured command with its output tail', async () => {
