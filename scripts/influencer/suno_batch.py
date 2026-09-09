@@ -40,8 +40,7 @@ DOWNLOAD_WAIT_S = 90
 AUDIO_EXT = ('.wav', '.mp3', '.m4a', '.ogg', '.flac')
 
 MSE_HOOK = r'''(()=>{
-  if (window.__SUNO_SB__) return;
-  window.__SUNO_SB__ = {chunks:[], n:0, bytes:0};
+  if (!window.__SUNO_SB__) window.__SUNO_SB__ = {chunks:[], n:0, bytes:0};
   const proto = window.SourceBuffer && window.SourceBuffer.prototype;
   if (!proto || proto.__sunoWrapped) return;
   const orig = proto.appendBuffer;
@@ -53,7 +52,7 @@ MSE_HOOK = r'''(()=>{
         u = new Uint8Array(data.buffer.slice(
           data.byteOffset, data.byteOffset + data.byteLength));
       }
-      if (u && u.length) {
+      if (u && u.length && window.__SUNO_SB__) {
         window.__SUNO_SB__.chunks.push(u);
         window.__SUNO_SB__.n += 1;
         window.__SUNO_SB__.bytes += u.length;
@@ -163,6 +162,11 @@ def conn():
     c.cmd('Page.bringToFront')
     c.cmd('Page.setWebLifecycleState', {'state': 'active'})
     c.cmd('Emulation.setFocusEmulationEnabled', {'enabled': True})
+    # Coordonnées CSS = hit-test TRUSTED (Input.dispatchMouseEvent).
+    # 1200 px de haut : le bouton Duration/Custom est à y≈1084.
+    c.cmd('Emulation.setDeviceMetricsOverride', {
+        'width': 1920, 'height': 1200, 'deviceScaleFactor': 1, 'mobile': False,
+    })
     return c
 
 
@@ -338,12 +342,23 @@ def clip_ids(clips: list[dict]) -> set[str]:
     return {str(cl.get('id')) for cl in clips if cl.get('id')}
 
 
+def dismiss_overlays(c) -> None:
+    esc(c, 2)
+    click_pred(
+        c,
+        "[...document.querySelectorAll('button')].find(b=>{"
+        "const t=(b.getAttribute('aria-label')||'').trim();"
+        "const r=b.getBoundingClientRect();"
+        "return t==='Close' && r.y>450 && r.y<620 && r.width<50;})",
+    )
+
+
 def ensure_create(c) -> None:
     href = ev(c, 'location.href') or ''
     if '/create' not in href:
         goto(c, 'https://suno.com/create')
         time.sleep(1.5)
-    esc(c, 2)
+    dismiss_overlays(c)
 
 
 def ensure_advanced(c) -> bool:
@@ -458,7 +473,7 @@ def set_duration(c, secs: int | None) -> bool:
         return True
     ev(c, '''(()=>{
       const e=[...document.querySelectorAll('button')].find(
-        b=>/^Custom$/i.test((b.innerText||'').trim()) && b.getBoundingClientRect().y>900);
+        b=>/^Custom$/i.test((b.innerText||'').trim()));
       if(e) e.scrollIntoView({block:'center'});
       return !!e;
     })()''')
@@ -467,14 +482,14 @@ def set_duration(c, secs: int | None) -> bool:
         c,
         "[...document.querySelectorAll('button')].find("
         "b=>/^Custom$/i.test((b.innerText||'').trim())"
-        " && b.getBoundingClientRect().y>700)",
+        " && b.getBoundingClientRect().width<90)",
     )
     time.sleep(0.5)
     return native_set_value(
         c,
-        "[...document.querySelectorAll('input[type=number],input')].find(t=>{"
+        "[...document.querySelectorAll('input[type=number]')].find(t=>{"
         "const r=t.getBoundingClientRect();"
-        "return r.width>30 && r.width<120 && r.y>700"
+        "return r.width>30 && r.width<120"
         " && /auto|sec|duration/i.test((t.placeholder||'')+(t.getAttribute('aria-label')||''));})",
         str(int(secs)),
     )
@@ -570,6 +585,47 @@ def set_download_dir(c, path: Path) -> None:
     })
 
 
+def restore_download_dir(c) -> None:
+    """Browser.setDownloadBehavior is process-wide — don't leave Flow/Dreamina
+    downloading into the Suno folder."""
+    dest = os.path.expanduser('~/Downloads')
+    c.cmd('Browser.setDownloadBehavior', {
+        'behavior': 'allow', 'downloadPath': dest, 'eventsEnabled': True,
+    })
+
+
+def reset_mse_capture(c) -> None:
+    ev(c, '''(()=>{
+      for (const a of document.querySelectorAll('audio,video')) {
+        try { a.pause(); } catch (e) {}
+      }
+      window.__SUNO_SB__ = {chunks:[], n:0, bytes:0};
+      return 1;
+    })()''')
+    ev(c, MSE_HOOK)
+
+
+def duration_plausible(got_s: float | None, expected_s: float | None) -> bool:
+    if not got_s or got_s < 5:
+        return False
+    if not expected_s or expected_s < 8:
+        return True
+    return expected_s * 0.80 <= got_s <= expected_s * 1.25
+
+
+def clip_ids_from_journal(journal: Path, name: str) -> list[str]:
+    if not journal.exists():
+        return []
+    ids: list[str] = []
+    for line in journal.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        if rec.get('name') == name and rec.get('clip_ids'):
+            ids = [str(x) for x in rec['clip_ids'] if x]
+    return ids
+
+
 def snapshot_audio(dir_path: Path) -> set[str]:
     if not dir_path.exists():
         return set()
@@ -634,8 +690,14 @@ def wait_mse_buffer(c, timeout_s: int = 120) -> dict:
         if dur > 10 and (covered >= dur * 0.92 or cur >= dur * 0.92 or info.get('ended')):
             if stable >= 1 or covered >= dur * 0.92:
                 break
-        # fMP4 decrypted in one go: size plateaus well before buffered() catches up
-        if dur > 10 and b > max(1_500_000, dur * 8000) and stable >= 3:
+        # fMP4 decrypted in one go — but a bytes plateau with low coverage
+        # is a false end (intro only). Require real coverage or a full-size buffer.
+        if (
+            dur > 10
+            and covered >= dur * 0.80
+            and b > max(1_500_000, dur * 8000)
+            and stable >= 2
+        ):
             break
         time.sleep(1.0)
     return info
@@ -753,65 +815,74 @@ def ffprobe_duration(path: Path) -> float | None:
         return None
 
 
-def download_clip(c, clip_id: str, dest: Path) -> Path | None:
+def download_clip(c, clip_id: str, dest: Path,
+                  expected_dur: float | None = None) -> Path | None:
     outdir = dest.parent
     set_download_dir(c, outdir)
-    before = snapshot_audio(outdir)
-    goto(c, f'https://suno.com/song/{clip_id}')
-    c.cmd('Page.reload', {'ignoreCache': True})
-    wait_url(c, clip_id, 20)
-    time.sleep(1.2)
-    ev(c, MSE_HOOK)
-    ev(c, '''(()=>{
-      if(window.__SUNO_SB__){
-        window.__SUNO_SB__.chunks=[]; window.__SUNO_SB__.n=0; window.__SUNO_SB__.bytes=0;
-      }
-      return 1;
-    })()''')
-    play = click_pred(
-        c,
-        "[...document.querySelectorAll('button')].find(b=>"
-        "(b.getAttribute('aria-label')||'')==='Playbar: Play button')",
-    )
-    if not play:
-        click_pred(
+    try:
+        before = snapshot_audio(outdir)
+        goto(c, f'https://suno.com/song/{clip_id}')
+        wait_url(c, clip_id, 20)
+        c.cmd('Page.reload', {'ignoreCache': True})
+        wait_url(c, clip_id, 20)
+        time.sleep(1.5)
+        reset_mse_capture(c)
+        time.sleep(0.3)
+        play = click_pred(
             c,
-            "[...document.querySelectorAll('button')].find(b=>{"
-            "const t=(b.innerText||'').trim(); const r=b.getBoundingClientRect();"
-            "return t==='Play' && r.width>=50 && r.y>250 && r.y<400;})",
+            "[...document.querySelectorAll('button')].find(b=>"
+            "(b.getAttribute('aria-label')||'')==='Playbar: Play button')",
         )
-    buf = wait_mse_buffer(c, timeout_s=90)
-    print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
-          flush=True)
-    mse_name = dest.stem + '.m4a'
-    if trigger_mse_download(c, mse_name):
-        got = wait_new_audio(outdir, before, timeout_s=25)
-        if got:
-            dur = ffprobe_duration(got) or 0
-            suno_dur = float(buf.get('dur') or 0)
-            if suno_dur < 8 or dur >= suno_dur * 0.8:
-                final = dest.with_suffix(got.suffix)
-                if got != final:
-                    got.replace(final)
-                return final
-            print(f'    mse tronqué {dur:.1f}s < {suno_dur:.1f}s, repli download officiel',
-                  flush=True)
-            try:
-                got.unlink()
-            except OSError:
-                pass
-            before = snapshot_audio(outdir)
-    before2 = snapshot_audio(outdir)
-    if official_download(c):
-        got = wait_new_audio(outdir, before2, timeout_s=DOWNLOAD_WAIT_S)
-        if got:
-            final = dest.with_suffix(got.suffix)
-            if got != final:
-                got.replace(final)
-            esc(c, 2)
-            return final
-    esc(c, 2)
-    return None
+        if not play:
+            click_pred(
+                c,
+                "[...document.querySelectorAll('button')].find(b=>{"
+                "const t=(b.innerText||'').trim(); const r=b.getBoundingClientRect();"
+                "return t==='Play' && r.width>=50 && r.y>250 && r.y<400;})",
+            )
+        buf = wait_mse_buffer(c, timeout_s=150)
+        print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
+              flush=True)
+        mse_name = dest.stem + '.m4a'
+        suno_dur = float(expected_dur or buf.get('dur') or 0)
+        if trigger_mse_download(c, mse_name):
+            got = wait_new_audio(outdir, before, timeout_s=25)
+            if got:
+                dur = ffprobe_duration(got) or 0
+                if duration_plausible(dur, suno_dur):
+                    final = dest.with_suffix(got.suffix)
+                    if got != final:
+                        got.replace(final)
+                    return final
+                print(
+                    f'    mse durée {dur:.1f}s vs suno {suno_dur:.1f}s, repli download officiel',
+                    flush=True,
+                )
+                try:
+                    got.unlink()
+                except OSError:
+                    pass
+        before2 = snapshot_audio(outdir)
+        if official_download(c):
+            got = wait_new_audio(outdir, before2, timeout_s=DOWNLOAD_WAIT_S)
+            if got:
+                dur = ffprobe_duration(got) or 0
+                if duration_plausible(dur, suno_dur) or not suno_dur:
+                    final = dest.with_suffix(got.suffix)
+                    if got != final:
+                        got.replace(final)
+                    esc(c, 2)
+                    return final
+                print(f'    officiel durée {dur:.1f}s vs suno {suno_dur:.1f}s, rejeté',
+                      flush=True)
+                try:
+                    got.unlink()
+                except OSError:
+                    pass
+        esc(c, 2)
+        return None
+    finally:
+        restore_download_dir(c)
 
 
 def write_sidecar(path: Path, payload: dict) -> None:
@@ -838,28 +909,56 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
         journal_write(journal, 'job_refused', name=name, reason=err)
         return result
 
-    existing = job.get('existing_ids') or []
-    if existing:
-        files = []
-        for i, cid in enumerate(existing, start=1):
-            dest = outdir / f'{name}-{i}.wav'
-            got = download_clip(c, str(cid), dest)
-            if got:
-                files.append(str(got))
-        result['ok'] = len(files) >= 1
-        result['files'] = files
-        result['skipped_generate'] = True
-        return result
+    existing = list(job.get('existing_ids') or [])
+    if not existing:
+        existing = clip_ids_from_journal(journal, name)
 
-    existing_audio = []
-    for i in (1, 2):
+    def _good_take(i: int, expected: float | None = None) -> Path | None:
+        sidecar = outdir / f'{name}-{i}.json'
+        exp = expected
+        if sidecar.exists():
+            try:
+                meta = json.loads(sidecar.read_text(encoding='utf-8'))
+                exp = exp or meta.get('suno_duration')
+            except json.JSONDecodeError:
+                pass
         found = next(
             (p for p in outdir.glob(f'{name}-{i}.*')
              if p.suffix.lower() in AUDIO_EXT and p.stat().st_size > 20_000),
             None,
         )
-        if found:
-            existing_audio.append(found)
+        if not found:
+            return None
+        dur = ffprobe_duration(found)
+        if duration_plausible(dur, float(exp) if exp else None):
+            return found
+        print(f'    {found.name} durée {dur} vs suno {exp}, à retélécharger',
+              flush=True)
+        return None
+
+    if existing:
+        files = []
+        for i, cid in enumerate(existing[:2], start=1):
+            good = _good_take(i)
+            if good:
+                files.append(str(good))
+                continue
+            dest = outdir / f'{name}-{i}.wav'
+            print(f'    redownload {name}-{i} {cid}', flush=True)
+            got = download_clip(c, str(cid), dest)
+            if got:
+                files.append(str(got))
+        result['ok'] = len(files) >= 1
+        result['files'] = files
+        result['clip_ids'] = existing[:2]
+        result['skipped_generate'] = True
+        journal_write(journal, 'job_done' if result['ok'] else 'job_fail',
+                      name=name, files=files, clip_ids=existing[:2],
+                      skipped_generate=True)
+        return result
+
+    existing_audio = [_good_take(i) for i in (1, 2)]
+    existing_audio = [p for p in existing_audio if p]
     if len(existing_audio) >= 2:
         print(f'[{name}] déjà fait, skip', flush=True)
         result['ok'] = True
@@ -921,8 +1020,8 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
     for i, cl in enumerate(clips[:2], start=1):
         cid = str(cl.get('id'))
         dest = outdir / f'{name}-{i}.wav'
-        got = download_clip(c, cid, dest)
         meta = cl.get('metadata') or {}
+        got = download_clip(c, cid, dest, expected_dur=meta.get('duration'))
         dur = None
         if got:
             dur = ffprobe_duration(got)
@@ -984,11 +1083,19 @@ def redownload_from_journal(c, journal: Path, outdir: Path) -> int:
                  if p.suffix.lower() in AUDIO_EXT and p.stat().st_size > 20_000),
                 None,
             )
-            if already:
+            sidecar = outdir / f'{name}-{i}.json'
+            expected = None
+            if sidecar.exists():
+                try:
+                    expected = json.loads(sidecar.read_text(encoding='utf-8')).get(
+                        'suno_duration')
+                except json.JSONDecodeError:
+                    expected = None
+            if already and duration_plausible(ffprobe_duration(already), expected):
                 continue
             dest = outdir / f'{name}-{i}.wav'
             print(f'[redownload] {name}-{i} {cid}', flush=True)
-            got = download_clip(c, str(cid), dest)
+            got = download_clip(c, str(cid), dest, expected_dur=expected)
             if got:
                 n += 1
                 print(f'    -> {got}', flush=True)
