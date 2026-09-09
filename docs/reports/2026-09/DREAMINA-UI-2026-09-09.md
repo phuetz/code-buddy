@@ -37,7 +37,7 @@ prouver un clip 16:9 5 s en Seedance 2.0 Mini (25 crédits), puis lancer les 20 
 | Tranche | Index | Contenu |
 |---|---|---|
 | 1 | réindexé `--force`, à jour `c1c4160fa` | Exploration DOM (ce rapport) |
-| 2 | à venir | Adaptation `seedance_batch.py` + preuve 2.0 Mini |
+| 2 | à réindexer après commit | Adaptation `seedance_batch.py` + preuve 2.0 Mini (3273→3248, 1280×720, 5.09 s) |
 | 3 | à venir | Lot 20 plans (si le JSON existe) + tableau clips |
 
 ---
@@ -182,7 +182,25 @@ Non trouvé (texte exact, `aria-label`, shadow DOM) ni au repos ni après focus 
 
 ## Preuve clip test
 
-*(tranche 2)*
+Live 2026-09-09, `--model 2.0mini`, 16:9, 5 s, T2V (vignobles vides, aucun visage).
+
+```
+python3 scripts/influencer/seedance_batch.py \
+  ~/.codebuddy/media-video/seedance-2026-09/proof-mini.json \
+  --model 2.0mini --outdir ~/.codebuddy/media-video/seedance-2026-09 --min-credits 20
+```
+
+| Champ | Valeur mesurée |
+|---|---|
+| Fichier | `~/.codebuddy/media-video/seedance-2026-09/proof-mini-16x9-5s.mp4` |
+| Taille | 14 368 132 o (14 031 Ko) |
+| ffprobe | h264 1280×720 + aac, **duration=5.088005** |
+| Solde | **3273 → 3248** (−25, tarif Mini 5 s) |
+| Réglages | model=True ratio=True dur=True (`Dreamina Seedance 2.0 Mini` / `5s` / `16:9`) |
+| Progression | 2 % … 59 % puis `fresh=1` à 112 s |
+| Journal | `seedance-journal.jsonl` `clip_start` + `clip_done` |
+
+Bug corrigé après coup : `journal_write(..., path=got)` collisionnait avec le paramètre `path` du journal — le mp4 et le ffprobe étaient déjà là, seul l'append JSONL a été réécrit. Tests purs : `tests/scripts/influencer/test_seedance_batch.py` 9 verts.
 
 ## Lot 20 plans
 
