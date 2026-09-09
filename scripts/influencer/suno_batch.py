@@ -218,6 +218,47 @@ def wait_url(c, needle: str, timeout_s=20) -> str:
     return href
 
 
+def reload_fresh(c, needle: str, timeout_s=25) -> str:
+    """Page.reload is async; wait_url can return on the OLD document.
+    Marker on window dies with the document, so None means a new page."""
+    ev(c, 'window.__SUNO_NAV=1')
+    c.cmd('Page.reload', {'ignoreCache': True})
+    t0 = time.time()
+    href = ev(c, 'location.href') or ''
+    while time.time() - t0 < timeout_s:
+        marker = ev(c, 'window.__SUNO_NAV')
+        ready = ev(c, 'document.readyState')
+        href = ev(c, 'location.href') or ''
+        if marker in (None, 'null') and ready == 'complete' and needle in href:
+            time.sleep(1.2)
+            return href
+        time.sleep(0.3)
+    return href
+
+
+def play_song(c) -> dict | None:
+    """Do not click Play if already playing (that would pause)."""
+    paused = ev(c, '''(()=>{
+      const a=[...document.querySelectorAll('audio')].find(x=>x.duration>3);
+      return a ? (a.paused ? 'paused' : 'playing') : 'none';
+    })()''')
+    if paused == 'playing':
+        return {'t': 'already-playing'}
+    pos = click_pred(
+        c,
+        "[...document.querySelectorAll('button')].find(b=>"
+        "(b.getAttribute('aria-label')||'')==='Playbar: Play button')",
+    )
+    if pos:
+        return pos
+    return click_pred(
+        c,
+        "[...document.querySelectorAll('button')].find(b=>{"
+        "const t=(b.innerText||'').trim(); const r=b.getBoundingClientRect();"
+        "return t==='Play' && r.width>=50 && r.y>250 && r.y<400;})",
+    )
+
+
 def goto(c, url: str) -> str:
     c.cmd('Page.navigate', {'url': url})
     return wait_url(c, 'suno.com', 25)
@@ -699,6 +740,8 @@ def wait_mse_buffer(c, timeout_s: int = 120) -> dict:
             and stable >= 2
         ):
             break
+        if info.get('paused') and int(time.time() - t0) % 8 == 0:
+            play_song(c)
         time.sleep(1.0)
     return info
 
@@ -823,23 +866,11 @@ def download_clip(c, clip_id: str, dest: Path,
         before = snapshot_audio(outdir)
         goto(c, f'https://suno.com/song/{clip_id}')
         wait_url(c, clip_id, 20)
-        c.cmd('Page.reload', {'ignoreCache': True})
-        wait_url(c, clip_id, 20)
-        time.sleep(1.5)
+        reload_fresh(c, clip_id, 25)
+        time.sleep(0.8)
         reset_mse_capture(c)
         time.sleep(0.3)
-        play = click_pred(
-            c,
-            "[...document.querySelectorAll('button')].find(b=>"
-            "(b.getAttribute('aria-label')||'')==='Playbar: Play button')",
-        )
-        if not play:
-            click_pred(
-                c,
-                "[...document.querySelectorAll('button')].find(b=>{"
-                "const t=(b.innerText||'').trim(); const r=b.getBoundingClientRect();"
-                "return t==='Play' && r.width>=50 && r.y>250 && r.y<400;})",
-            )
+        play_song(c)
         buf = wait_mse_buffer(c, timeout_s=150)
         print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
               flush=True)
@@ -993,9 +1024,15 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
         return result
     set_title(c, title)
     if lyrics:
-        set_lyrics(c, lyrics)
+        if not set_lyrics(c, lyrics):
+            journal_write(journal, 'lyrics_fail', name=name)
+            result['error'] = 'paroles non collées'
+            return result
     if persona:
-        set_persona(c, persona)
+        if not set_persona(c, persona):
+            journal_write(journal, 'persona_fail', name=name, persona=persona)
+            result['error'] = f'persona {persona!r} non sélectionnée — pas de create chanté sans Voice'
+            return result
     if duration_sec:
         set_duration(c, int(duration_sec))
     time.sleep(0.6)
