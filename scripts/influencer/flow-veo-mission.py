@@ -37,6 +37,9 @@ MAX_ATTEMPTS = 240
 EXPECTED_STARTING_CREDITS = 25_000
 MAX_CREDITS_TO_SPEND = 20_000
 RESERVE_CREDITS = 5_000
+# Campagne « fichier » (--prompts-file) : les trois gardes ci-dessus deviennent réglables
+# (--state, --max-spend, --reserve, --starting-credits) pour consommer un solde avant son
+# expiration mensuelle sans toucher aux campagnes codées en dur.
 CREDITS_PER_ATTEMPT = 100
 POLL_SECONDS = 8
 TIMEOUT_SECONDS = 12 * 60
@@ -856,8 +859,31 @@ def build_contact_sheet(
     return sheet if result.returncode == 0 and sheet.exists() else None
 
 
-def run(category: str, limit: int | None) -> None:
-    raw_prompts, default_ratio, output_dir, prefix, width = QUEUES[category]
+def load_prompts_file(path: Path) -> list[tuple[str, str, str]]:
+    """JSON : [{"id": "...", "prompt": "...", "ratio": "16:9"}] (ratio optionnel, 16:9)."""
+    items = json.loads(path.read_text())
+    out: list[tuple[str, str, str]] = []
+    for item in items:
+        prompt_id = str(item['id']).strip()
+        prompt = str(item['prompt']).strip()
+        ratio = str(item.get('ratio') or '16:9')
+        if ratio not in ('16:9', '9:16'):
+            raise ValueError(f'ratio inconnu pour {prompt_id}: {ratio}')
+        if prompt_id and prompt:
+            out.append((prompt_id, prompt, ratio))
+    return out
+
+
+def run(category: str, limit: int | None, prompts_file: Path | None = None,
+        output_dir_override: Path | None = None, prefix_override: str | None = None) -> None:
+    if prompts_file is not None:
+        raw_prompts = load_prompts_file(prompts_file)
+        default_ratio = '16:9'
+        output_dir = output_dir_override or Path('~/.codebuddy/media-video/broll').expanduser()
+        prefix = prefix_override or 'f'
+        width = 3
+    else:
+        raw_prompts, default_ratio, output_dir, prefix, width = QUEUES[category]
     prompts = [
         (
             prompt_spec[0],
@@ -1026,11 +1052,29 @@ def run(category: str, limit: int | None) -> None:
 
 
 def main() -> None:
+    global MISSION, EXPECTED_STARTING_CREDITS, MAX_CREDITS_TO_SPEND, RESERVE_CREDITS
     parser = argparse.ArgumentParser()
-    parser.add_argument('category', choices=QUEUES)
+    parser.add_argument('category', choices=list(QUEUES) + ['file'])
     parser.add_argument('--limit', type=int)
+    parser.add_argument('--prompts-file', type=Path, help='catégorie "file" : JSON [{id, prompt, ratio?}]')
+    parser.add_argument('--output-dir', type=Path)
+    parser.add_argument('--prefix')
+    parser.add_argument('--state', type=Path, help='fichier d\'état de la campagne (défaut : mission 2026-07-28)')
+    parser.add_argument('--starting-credits', type=int, help='solde attendu au départ (défaut 25 000)')
+    parser.add_argument('--max-spend', type=int, help='plafond de dépense de la campagne (défaut 20 000)')
+    parser.add_argument('--reserve', type=int, help='réserve dure à ne pas entamer (défaut 5 000)')
     args = parser.parse_args()
-    run(args.category, args.limit)
+    if args.category == 'file' and args.prompts_file is None:
+        parser.error('--prompts-file est obligatoire avec la catégorie "file"')
+    if args.state is not None:
+        MISSION = args.state.expanduser()
+    if args.starting_credits is not None:
+        EXPECTED_STARTING_CREDITS = args.starting_credits
+    if args.max_spend is not None:
+        MAX_CREDITS_TO_SPEND = args.max_spend
+    if args.reserve is not None:
+        RESERVE_CREDITS = args.reserve
+    run(args.category, args.limit, args.prompts_file, args.output_dir, args.prefix)
 
 
 if __name__ == '__main__':
