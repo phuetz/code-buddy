@@ -658,6 +658,14 @@ def run_job(c, job: dict, *, model_label: str, outdir: Path, journal: Path,
     ok_r = set_ratio(c, ratio)
     ok_d = set_duration(c, secs)
     print(f'    settings model={ok_m} ratio={ok_r} dur={ok_d} now={current_model(c)!r} {current_duration(c)} {current_ratio(c)}', flush=True)
+    if (model_label not in (current_model(c) or '')
+            or current_duration(c) != f'{secs}s'
+            or (ratio and current_ratio(c) != ratio)):
+        print(f'[{name}] réglages incohérents, job sauté', flush=True)
+        journal_write(journal, 'skip_bad_settings', name=name,
+                      model=current_model(c), duration=current_duration(c),
+                      ratio=current_ratio(c), want_model=model_label)
+        return result
 
     clear_references(c)
     ref = job.get('ref')
