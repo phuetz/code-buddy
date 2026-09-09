@@ -130,7 +130,17 @@ exec((SCRIPT_DIR / 'flow-veo-mission.py').read_text().split('def run(')[0])  # n
 
 POLL_SECONDS = 8
 TIMEOUT_SECONDS = 20 * 60
+# L'agent ignore le défaut « Video generation default » s'il n'est pas nommé
+# dans le prompt (mesuré 09/09 : Quality persisté dans tune, prises Omni Flash −12 cr).
+QUALITY_PREFIX = (
+    'Use Veo 3.1 Quality only — not Omni Flash, not Lite, not Fast. '
+    'Eight-second 16:9 video. '
+)
 SUFFIX = ' No on-screen text, no watermark, no logo. One continuous eight-second shot with subtle native ambient sound.'
+AGENT_INSTRUCTION = (
+    'Always generate video with Veo 3.1 Quality only, 8 seconds, 16:9. '
+    'Never use Omni Flash, Lite, Fast, or any cheaper model.'
+)
 # Projet Flow visé, lu dans l'environnement — JAMAIS en dur dans le dépôt public.
 # get_tab() prend le premier onglet labs.google/flow : si l'onglet a dérivé
 # (Retour / autre projet), on y revient.
@@ -550,8 +560,69 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         if 'Veo 3.1 - Quality' not in check:
             raise RuntimeError(f'Modèle vidéo non persisté : {check!r}')
         print(f'CONFIG: {check.replace(chr(10), " ")}', flush=True)
-        self._click_aria('Close', fallback_text='close')
+        if not self._click_aria('Back', fallback_text='arrow_back'):
+            self._click_aria('Close', fallback_text='close')
         time.sleep(0.6)
+        self.ensure_agent_instruction()
+
+    def ensure_agent_instruction(self) -> None:
+        """Consigne persistante : Veo 3.1 Quality (le défaut tune ne suffit pas)."""
+        self.ensure_project()
+        if not self._click_aria('Agent instructions', fallback_text='article_spark'):
+            print('WARN: bouton Agent instructions introuvable.', flush=True)
+            return
+        time.sleep(1.0)
+        body = self.js('document.body.innerText') or ''
+        if 'Veo 3.1 Quality' in body and 'Omni Flash' in body:
+            print('CONFIG: consigne agent déjà présente.', flush=True)
+            if not self._click_aria('Back', fallback_text='arrow_back'):
+                done = self.js(
+                    "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+                    "(e.innerText||'').trim()==='Done'&&e.getBoundingClientRect().width>0);"
+                    "if(!b)return null;const r=b.getBoundingClientRect();"
+                    "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+                )
+                if done:
+                    pos = json.loads(done)
+                    self.click(float(pos['x']), float(pos['y']), 0.8)
+            return
+        add = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "/Add instruction/i.test(e.innerText||'')&&e.getBoundingClientRect().width>0);"
+            "if(!b)return null;const r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if not add:
+            print('WARN: Add instruction introuvable.', flush=True)
+            return
+        pos = json.loads(add)
+        self.click(float(pos['x']), float(pos['y']), 0.8)
+        editor = self.js(
+            "(()=>{const e=[...document.querySelectorAll('[contenteditable=true],textarea')]"
+            ".find(el=>el.getBoundingClientRect().width>80);"
+            "if(!e)return null;const r=e.getBoundingClientRect();e.focus();"
+            "return JSON.stringify({x:r.x+20,y:r.y+12});})()"
+        )
+        if not editor:
+            print('WARN: éditeur de consigne introuvable.', flush=True)
+            return
+        pos = json.loads(editor)
+        self.click(float(pos['x']), float(pos['y']), 0.3)
+        for char in AGENT_INSTRUCTION:
+            self.c.cmd('Input.dispatchKeyEvent', {
+                'type': 'char', 'text': char, 'unmodifiedText': char,
+            })
+        time.sleep(0.4)
+        done = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "(e.innerText||'').trim()==='Done'&&e.getBoundingClientRect().width>0);"
+            "if(!b)return null;const r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if done:
+            pos = json.loads(done)
+            self.click(float(pos['x']), float(pos['y']), 1.0)
+        print('CONFIG: consigne agent Veo 3.1 Quality enregistrée.', flush=True)
 
     def configure(self, ratio: str) -> None:
         # Plus de puce « Vidéo · 8s » : les réglages vivent dans Agent settings.
@@ -643,7 +714,7 @@ def main() -> None:
         needle = ' '.join((prompt or '').split()[:8])
         try:
             flow.ensure_project()
-            flow.fill_prompt(prompt + SUFFIX)
+            flow.fill_prompt(QUALITY_PREFIX + prompt + SUFFIX)
             send_agent(flow)
         except Exception as exc:  # noqa: BLE001
             print(f'[{pid}] ERREUR soumission: {exc}', flush=True)
@@ -731,7 +802,18 @@ def main() -> None:
                 raise RuntimeError('ouverture éditeur de la carte du haut impossible.')
             flow.download_open_clip_720p(out)
             flow.leave_editor()
-            print(f'[{pid}] OK -> {out} | {ffprobe_summary(out)}', flush=True)
+            after = flow.credits()
+            spent = credits - after
+            print(
+                f'[{pid}] OK -> {out} | {ffprobe_summary(out)} | delta={spent}',
+                flush=True,
+            )
+            if spent < 50:
+                print(
+                    f'[{pid}] WARN: {spent} crédits seulement '
+                    '(attendu ~100 pour Veo 3.1 Quality — Omni Flash ?).',
+                    flush=True,
+                )
             done += 1
         except Exception as exc:  # noqa: BLE001
             print(f'[{pid}] vidéo générée, download KO ({exc}) — récup manuelle via ⬇.', flush=True)
