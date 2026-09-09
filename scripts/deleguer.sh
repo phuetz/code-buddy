@@ -272,7 +272,7 @@ case "$MOTEUR" in
     # Entrée fermée + --trust, sinon le prompt de confiance du dossier bloque en headless (04/09/2026).
     command -v vibe >/dev/null || export PATH="$HOME/.local/bin:$PATH"
     (cd "$DEPOT" && vibe --trust --workdir "$DEPOT" --auto-approve --output "${VIBE_OUTPUT:-text}" \
-       --max-turns "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-5}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
+       --max-turns "${CB_MAX_ROUNDS:-600}" --max-price "${CB_MAX_COST:-40}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
     ;;
   qwenflash)
     # Qwen 3.8 Flash via OpenRouter (06/09/2026 : 1 M de contexte, 0,15 $/M entrée, 0,47 $/M sortie,
