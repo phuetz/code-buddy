@@ -41,6 +41,7 @@ AUDIO_EXT = ('.wav', '.mp3', '.m4a', '.ogg', '.flac')
 
 MSE_HOOK = r'''(()=>{
   if (!window.__SUNO_SB__) window.__SUNO_SB__ = {chunks:[], n:0, bytes:0};
+  window.__SUNO_CAPTURE = window.__SUNO_CAPTURE || false;
   const proto = window.SourceBuffer && window.SourceBuffer.prototype;
   if (!proto || proto.__sunoWrapped) return;
   const orig = proto.appendBuffer;
@@ -52,7 +53,7 @@ MSE_HOOK = r'''(()=>{
         u = new Uint8Array(data.buffer.slice(
           data.byteOffset, data.byteOffset + data.byteLength));
       }
-      if (u && u.length && window.__SUNO_SB__) {
+      if (u && u.length && window.__SUNO_SB__ && window.__SUNO_CAPTURE) {
         window.__SUNO_SB__.chunks.push(u);
         window.__SUNO_SB__.n += 1;
         window.__SUNO_SB__.bytes += u.length;
@@ -637,6 +638,7 @@ def restore_download_dir(c) -> None:
 
 def reset_mse_capture(c) -> None:
     ev(c, '''(()=>{
+      window.__SUNO_CAPTURE = false;
       for (const a of document.querySelectorAll('audio,video')) {
         try { a.pause(); } catch (e) {}
       }
@@ -644,6 +646,14 @@ def reset_mse_capture(c) -> None:
       return 1;
     })()''')
     ev(c, MSE_HOOK)
+
+
+def arm_mse_capture(c) -> None:
+    ev(c, '''(()=>{
+      window.__SUNO_SB__ = {chunks:[], n:0, bytes:0};
+      window.__SUNO_CAPTURE = true;
+      return 1;
+    })()''')
 
 
 def duration_plausible(got_s: float | None, expected_s: float | None) -> bool:
@@ -920,6 +930,7 @@ def download_clip(c, clip_id: str, dest: Path,
     set_download_dir(c, outdir)
     try:
         before = snapshot_audio(outdir)
+        reset_mse_capture(c)  # capture OFF before navigation so the previous take cannot leak
         goto(c, f'https://suno.com/song/{clip_id}')
         wait_url(c, clip_id, 20)
         reload_fresh(c, clip_id, 25)
@@ -927,6 +938,7 @@ def download_clip(c, clip_id: str, dest: Path,
         reset_mse_capture(c)
         time.sleep(0.3)
         play_song(c)
+        arm_mse_capture(c)
         buf = wait_mse_buffer(c, timeout_s=150)
         print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
               flush=True)
@@ -1029,7 +1041,16 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
         if not found:
             return None
         dur = ffprobe_duration(found)
-        if duration_plausible(dur, float(exp) if exp else None):
+        exp_f = float(exp) if exp else None
+        if duration_plausible(dur, exp_f):
+            return found
+        # Beds: keep an existing long take rather than looping redownload.
+        # Jingles (≤30 s expected): reject a polluted 2–3 min file.
+        if exp_f and exp_f <= 30 and dur and dur > 45:
+            print(f'    {found.name} durée {dur} vs jingle {exp}, à retélécharger',
+                  flush=True)
+            return None
+        if dur and dur > 20 and (not exp_f or exp_f >= 60):
             return found
         print(f'    {found.name} durée {dur} vs suno {exp}, à retélécharger',
               flush=True)
