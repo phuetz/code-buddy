@@ -389,7 +389,7 @@ case "$MOTEUR" in
     # l'illusion d'un problème de facturation. `opencode models` liste les
     # identifiants réels avec leur préfixe : s'y fier plutôt qu'au catalogue
     # HTTP, qui ne le montre pas.
-    MODELE=${OC_MODELE:-kimi-k3}  # deepseek-v4-pro exige un opt-in « hébergé en Chine » depuis le 22/08 → Kimi K3 par défaut
+    MODELE=${OC_MODELE:-qwen3.8-flash}  # 09/09 (Patrice) : Qwen 3.8 Flash = compromis puissance/prix, maximise l'abonnement Go ; Kimi K3 explicitement pour les audits/lectures, Muse pour les lots courts
     (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
