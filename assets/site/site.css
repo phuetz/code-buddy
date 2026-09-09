@@ -195,7 +195,7 @@ figcaption a { color: var(--peach); font-weight: 700; }
 
 .appstudio-output figure { min-width: 0; margin: 0; }
 
-.appstudio-output img { display: block; width: 100%; border: 1px solid rgba(60, 45, 36, 0.24); border-radius: 14px; }
+.appstudio-output img { display: block; width: 100%; height: auto; border: 1px solid rgba(60, 45, 36, 0.24); border-radius: 14px; }
 
 .appstudio-output figcaption { padding-top: 10px; font-size: 0.77rem; }
 
