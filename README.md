@@ -172,13 +172,14 @@ their own gates, listed in [`docs/cb2/README.md`](docs/cb2/README.md) and
 
 Honest limits for a first-time visitor:
 
-- **The npm release can lag this tree.** Check `buddy --version` after installing; the source
-  checkout above is what this page describes.
+- **The npm release can lag this tree.** 2.0.0 is on npm with a signed provenance statement
+  (published from GitHub Actions, no long-lived token); commits after the tag reach npm with the
+  next release. Check `buddy --version` after installing.
 - **Only the Linux CI legs are blocking.** macOS and Windows run best-effort — their results are
   visible but do not gate a green build. Interactive-shell execution on macOS is a known open
   issue.
-- **The test toolchain needs Node ≥ 20** even though the shipped CLI declares `>= 18`. That
-  affects contributors, not users.
+- **Node ≥ 20 is the real floor**, for the CLI and for the test toolchain alike (`engines` says
+  so since 2.0.0).
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
   commands above.
 - **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
