@@ -1,0 +1,242 @@
+[
+  {
+    "name": "bed-01-quiet-circuit",
+    "title": "Quiet Circuit",
+    "usage": "voiceover bed — intro calme, agents IA",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals, no choir, no whispers, no speech. calm ambient electronic, 96 BPM, soft analog pads, muted electric piano, gentle pulse without sidechain, warm sub bass held back, faint tape hiss, 2 to 3 minutes, even dynamics, no sudden crescendo, no drops, no trap hats, no brass, night desk atmosphere for a spoken tech voiceover"
+  },
+  {
+    "name": "bed-02-soft-lattice",
+    "title": "Soft Lattice",
+    "usage": "voiceover bed — explication longue",
+    "instrumental": true,
+    "duration_sec": 160,
+    "style": "instrumental only, no vocals, no choir, no humming. gentle electronica, 94 BPM, glassy arpeggios very quiet, felt piano, rounded analog bass, light vinyl crackle, long reverb tails, 2 to 3 minutes, no build to a climax, no drums until 40 seconds and then only brushes, no risers, no orchestral hits, spacious room for spoken voice"
+  },
+  {
+    "name": "bed-03-low-horizon",
+    "title": "Low Horizon",
+    "usage": "voiceover bed — chapitre lent",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals, no speech. ambient downtempo, 92 BPM, wide pads, distant electric guitar swells with volume pedal, no distortion, soft analog drum machine ghost notes, 2 to 3 minutes, dynamics stay in the lower third, no crescendo, no snare cracks, dusk window light mood"
+  },
+  {
+    "name": "bed-04-paper-lantern",
+    "title": "Paper Lantern",
+    "usage": "voiceover bed — ton chaleureux",
+    "instrumental": true,
+    "duration_sec": 155,
+    "style": "instrumental only, no vocals, no choir. warm ambient pop-instrumental, 98 BPM, nylon guitar harmonics, soft Rhodes, analog pad, shaker barely there, 2 to 3 minutes, kind and unhurried, no drop, no EDM, no brass, no vocal chops, kitchen-table calm for a human explaining software"
+  },
+  {
+    "name": "bed-05-signal-rain",
+    "title": "Signal Rain",
+    "usage": "voiceover bed — tech contemplatif",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals, no whispers. rainy-window electronica, 90 BPM, granular pads, soft filtered noise as rain, muted piano ostinato, sub bass very low, 2 to 3 minutes, no sudden hits, no trap, no choir, [room reverb], even level throughout"
+  },
+  {
+    "name": "bed-06-idle-cursor",
+    "title": "Idle Cursor",
+    "usage": "voiceover bed — focus / deep work",
+    "instrumental": true,
+    "duration_sec": 165,
+    "style": "instrumental only, no vocals, no speech. focus ambient, 100 BPM, repeating soft synth figure, dry kick almost inaudible, warm pad, no melody that competes with a voice, 2 to 3 minutes, no chorus lift, no riser, no vocal samples, a blinking cursor at night"
+  },
+  {
+    "name": "bed-07-harbour-lights",
+    "title": "Harbour Lights",
+    "usage": "voiceover bed — clôture douce",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals, no choir. nocturnal ambient, 93 BPM, Fender-style clean guitar with delay, analog strings held, no drums first minute then soft brushes, 2 to 3 minutes, no climax, no cinematic boom, lights on water, space for a closing voiceover"
+  },
+  {
+    "name": "bed-08-quiet-stack",
+    "title": "Quiet Stack",
+    "usage": "voiceover bed — stack technique, ton posé",
+    "instrumental": true,
+    "duration_sec": 155,
+    "style": "instrumental only, no vocals, no speech. soft IDM-ambient, 97 BPM, rounded plucks, analog bass, no glitch stutters, no metallic percussion, 2 to 3 minutes, steady dynamics, no drop, no choir, a calm server room at 2 a.m."
+  },
+  {
+    "name": "jingle-01-open-circuit",
+    "title": "Open Circuit",
+    "usage": "intro / jingle — accroche 10-20 s puis boucle",
+    "instrumental": true,
+    "duration_sec": 16,
+    "style": "instrumental only, no vocals, no choir. short energetic ident, 118 BPM, bright plucked synth hook in 4 bars, tight analog drums, no long intro, hit the motif in measure 1, loop-friendly ending, 10 to 20 seconds, no lyrics, no riser that never resolves, no trap 808 slide"
+  },
+  {
+    "name": "jingle-02-spark-line",
+    "title": "Spark Line",
+    "usage": "intro / jingle — ouverture de short",
+    "instrumental": true,
+    "duration_sec": 14,
+    "style": "instrumental only, no vocals. punchy electronic sting, 120 BPM, mallet synth + short brass-free stab, dry snare, motif in bar 1, clean loop point, 10 to 20 seconds, no vocal chop, no whoosh that drowns speech"
+  },
+  {
+    "name": "jingle-03-cold-start",
+    "title": "Cold Start",
+    "usage": "intro / jingle — démarrage net",
+    "instrumental": true,
+    "duration_sec": 18,
+    "style": "instrumental only, no vocals. crisp techno-pop ident, 116 BPM, filtered bass stab, clicky hats, 4-bar hook immediately, 10 to 20 seconds, loopable, no choir, no cinematic boom, no spoken tag"
+  },
+  {
+    "name": "jingle-04-green-led",
+    "title": "Green LED",
+    "usage": "intro / jingle — signal « on air »",
+    "instrumental": true,
+    "duration_sec": 12,
+    "style": "instrumental only, no vocals. tiny optimistic motif, 122 BPM, bell-like synth, short clap, 10 to 12 seconds, starts on the first beat, ends on a held note for a loop, no lyrics, no trap, no orchestra"
+  },
+  {
+    "name": "jingle-05-quick-proof",
+    "title": "Quick Proof",
+    "usage": "intro / jingle — avant une démo",
+    "instrumental": true,
+    "duration_sec": 16,
+    "style": "instrumental only, no vocals. energetic but clean ident, 124 BPM, guitar-free synth riff, tight drums, 10 to 20 seconds, hook in measure 1, no breakdown, no vocal, no siren riser"
+  },
+  {
+    "name": "jingle-06-return-path",
+    "title": "Return Path",
+    "usage": "outro / jingle — signature de fin",
+    "instrumental": true,
+    "duration_sec": 15,
+    "style": "instrumental only, no vocals. short resolving motif, 110 BPM, warm pad + plucked hook, 10 to 20 seconds, lands on a tonic hold for a logo, no choir, no big drums, no speech"
+  },
+  {
+    "name": "tension-01-held-breath",
+    "title": "Held Breath",
+    "usage": "tension / révélation — avant une preuve",
+    "instrumental": true,
+    "duration_sec": 90,
+    "style": "instrumental only, no vocals, no choir. restrained tension, 88 BPM, [string ostinato] very quiet, dry ticking clock percussion, low analog drone, no explosion, no jump-scare hit, dynamics rise 10 percent only, 90 seconds, room for a reveal line"
+  },
+  {
+    "name": "tension-02-thin-wire",
+    "title": "Thin Wire",
+    "usage": "tension / révélation — debug, enjeu",
+    "instrumental": true,
+    "duration_sec": 80,
+    "style": "instrumental only, no vocals. taut electronica, 100 BPM, high thin synth pulse, muted kicks, no drop, no trailer boom, tension without panic, 80 to 100 seconds, no choir, no whispers"
+  },
+  {
+    "name": "tension-03-first-light",
+    "title": "First Light",
+    "usage": "révélation — le test passe",
+    "instrumental": true,
+    "duration_sec": 90,
+    "style": "instrumental only, no vocals. slow unclenching, 90 BPM, start sparse with a held pad, add a warm piano figure at 20 seconds, no sudden tutti, no choir, a small door opening, 90 seconds, still under the voice"
+  },
+  {
+    "name": "tension-04-counterproof",
+    "title": "Counterproof",
+    "usage": "tension — objection puis réponse",
+    "instrumental": true,
+    "duration_sec": 85,
+    "style": "instrumental only, no vocals. two-part cue, 96 BPM, first 40 seconds dry and questioning (muted piano, no drums), then a gentle pulse arrives, no brass fanfare, no drop, no speech, 80 to 90 seconds"
+  },
+  {
+    "name": "tension-05-glass-edge",
+    "title": "Glass Edge",
+    "usage": "tension — moment fragile",
+    "instrumental": true,
+    "duration_sec": 75,
+    "style": "instrumental only, no vocals. glassy tension, 86 BPM, [detuned music box] very low in the mix, thin strings, no percussion hits, no choir, 70 to 90 seconds, keep it human-scale, no horror stinger"
+  },
+  {
+    "name": "tension-06-after-image",
+    "title": "After Image",
+    "usage": "révélation — ce qu'on vient de voir",
+    "instrumental": true,
+    "duration_sec": 90,
+    "style": "instrumental only, no vocals. afterglow electronica, 92 BPM, delayed piano, analog pad, no drums, 90 seconds, no crescendo, no choir, the room after a proof lands"
+  },
+  {
+    "name": "lofi-01-desk-lamp",
+    "title": "Desk Lamp",
+    "usage": "lo-fi de bureau — fond de montage",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals, no speech. lo-fi hip hop, 86 BPM, dusty piano loop, vinyl crackle, lazy drums, warm bass, 2 to 3 minutes, no hook that sings, no choir, no trap hi-hat rolls, late-night desk"
+  },
+  {
+    "name": "lofi-02-second-monitor",
+    "title": "Second Monitor",
+    "usage": "lo-fi de bureau — coding ambience",
+    "instrumental": true,
+    "duration_sec": 155,
+    "style": "instrumental only, no vocals. study lo-fi, 84 BPM, Rhodes loop, soft breakbeat, tape wobble, 2 to 3 minutes, no rap vocal, no chorus, no riser, a second monitor glowing"
+  },
+  {
+    "name": "lofi-03-mug-ring",
+    "title": "Mug Ring",
+    "usage": "lo-fi de bureau — pause café",
+    "instrumental": true,
+    "duration_sec": 140,
+    "style": "instrumental only, no vocals. cozy lo-fi, 82 BPM, nylon guitar sample, brushed snare, vinyl, 2 to 3 minutes, no lyrics, no choir, no EDM, coffee going cold on a notebook"
+  },
+  {
+    "name": "lofi-04-commit-message",
+    "title": "Commit Message",
+    "usage": "lo-fi de bureau — fin de journée",
+    "instrumental": true,
+    "duration_sec": 150,
+    "style": "instrumental only, no vocals. mellow lo-fi, 88 BPM, muted trumpet very distant OR skip brass if it dominates, Rhodes, dry drums, 2 to 3 minutes, no vocal chop, no drop, a commit written slowly"
+  },
+  {
+    "name": "lofi-05-open-tabs",
+    "title": "Open Tabs",
+    "usage": "lo-fi de bureau — recherche",
+    "instrumental": true,
+    "duration_sec": 145,
+    "style": "instrumental only, no vocals. dusty boom-bap lo-fi, 90 BPM, piano loop, vinyl, rounded bass, 2 to 3 minutes, no lyrics, no choir, no sirens, many tabs open, stay in the pocket"
+  },
+  {
+    "name": "orch-01-wide-frame",
+    "title": "Wide Frame",
+    "usage": "bande-annonce — ouverture",
+    "instrumental": true,
+    "duration_sec": 120,
+    "style": "instrumental only, no vocals, no choir. orchestral-electronic hybrid, 100 BPM, low strings + analog bass, light percussion, no trailer BRAAAM, no huge boom, 2 minutes, measured lift, [string ostinato] under a synth, still leaves room for a title card"
+  },
+  {
+    "name": "orch-02-quiet-overture",
+    "title": "Quiet Overture",
+    "usage": "bande-annonce — premier plan",
+    "instrumental": true,
+    "duration_sec": 110,
+    "style": "instrumental only, no vocals. cinematic but small, 96 BPM, piano and strings, analog pad underneath, no choir, no percussion until 30 seconds, 2 minutes, no jump to fortissimo, a curtain rising slowly"
+  },
+  {
+    "name": "orch-03-proof-stage",
+    "title": "Proof Stage",
+    "usage": "bande-annonce — moment de démonstration",
+    "instrumental": true,
+    "duration_sec": 100,
+    "style": "instrumental only, no vocals. hybrid trailer-underscore, 104 BPM, pulsing synth + short string figures, no brass stabs, no vocal, 90 to 120 seconds, energy without shouting, no riser-to-silence cliché"
+  },
+  {
+    "name": "orch-04-last-slide",
+    "title": "Last Slide",
+    "usage": "bande-annonce — clôture",
+    "instrumental": true,
+    "duration_sec": 100,
+    "style": "instrumental only, no vocals, no choir. resolving orchestral-electronic, 90 BPM, warm strings, analog bass, no boom, 90 to 120 seconds, lands on a held tonic, no lyrics, a last slide left on screen"
+  },
+  {
+    "name": "orch-05-night-edit",
+    "title": "Night Edit",
+    "usage": "bande-annonce — montage nocturne",
+    "instrumental": true,
+    "duration_sec": 120,
+    "style": "instrumental only, no vocals. dark-ish but not horror, 98 BPM, low strings, analog pulses, light ticking percussion, no jump scare, no choir, 2 minutes, [room reverb], a night edit of a tech film"
+  }
+]
