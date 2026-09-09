@@ -230,3 +230,19 @@ describe('G0 in the tool gate', () => {
     expect(result.heldOutPassed).toBe(0);
   });
 });
+
+describe('checkAstNovelty without the typescript package (published install)', () => {
+  it('still rejects text-identical code and accepts a real change, without throwing', async () => {
+    const mod = await import('../../../../src/agent/self-improvement/evolution/ast-novelty.js');
+    mod.__setTypeScriptApiForTests(null);
+    try {
+      const same = mod.checkAstNovelty('const a = 1; // x', '/* y */ const a = 1;');
+      expect(same.isNovel).toBe(false);
+      expect(same.reason).toContain('typescript unavailable');
+      const changed = mod.checkAstNovelty('const a = 2;', 'const a = 1;');
+      expect(changed.isNovel).toBe(true);
+    } finally {
+      mod.__setTypeScriptApiForTests(undefined);
+    }
+  });
+});

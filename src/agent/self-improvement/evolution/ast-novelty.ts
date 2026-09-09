@@ -9,7 +9,29 @@
  * @module agent/self-improvement/evolution/ast-novelty
  */
 
-import ts from 'typescript';
+import { createRequire } from 'node:module';
+import type * as ts from 'typescript';
+
+type TypeScriptApi = typeof ts;
+
+// `typescript` is a devDependency: the published package does not ship it, and this module is
+// reached from the tool gate on every headless turn. Resolve it lazily so a fresh
+// `npm i -g @phuetz/code-buddy` never fails at import time; only the AST comparison degrades.
+let tsApi: TypeScriptApi | null | undefined;
+function loadTypeScript(): TypeScriptApi | null {
+  if (tsApi !== undefined) return tsApi;
+  try {
+    tsApi = createRequire(import.meta.url)('typescript') as TypeScriptApi;
+  } catch {
+    tsApi = null;
+  }
+  return tsApi;
+}
+
+/** Test seam: force the fallback path as if `typescript` were not installed. */
+export function __setTypeScriptApiForTests(api: TypeScriptApi | null | undefined): void {
+  tsApi = api;
+}
 
 export interface AstNoveltyResult {
   isNovel: boolean;
@@ -23,41 +45,41 @@ interface AstShape {
   children: AstShape[];
 }
 
-function isImportStatement(node: ts.Node): boolean {
-  return ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node);
+function isImportStatement(api: TypeScriptApi, node: ts.Node): boolean {
+  return api.isImportDeclaration(node) || api.isImportEqualsDeclaration(node);
 }
 
-function orderedStatements(statements: readonly ts.Statement[]): ts.Statement[] {
-  const imports = statements.filter(isImportStatement);
-  const rest = statements.filter((statement) => !isImportStatement(statement));
-  imports.sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)));
+function orderedStatements(api: TypeScriptApi, statements: readonly ts.Statement[]): ts.Statement[] {
+  const imports = statements.filter((statement) => isImportStatement(api, statement));
+  const rest = statements.filter((statement) => !isImportStatement(api, statement));
+  imports.sort((a, b) => fingerprint(api, a).localeCompare(fingerprint(api, b)));
   let importIndex = 0;
-  return statements.map((statement) => (isImportStatement(statement) ? imports[importIndex++]! : rest.shift()!));
+  return statements.map((statement) => (isImportStatement(api, statement) ? imports[importIndex++]! : rest.shift()!));
 }
 
-function childNodes(node: ts.Node): ts.Node[] {
-  if (ts.isSourceFile(node) || ts.isModuleBlock(node)) return orderedStatements(node.statements);
+function childNodes(api: TypeScriptApi, node: ts.Node): ts.Node[] {
+  if (api.isSourceFile(node) || api.isModuleBlock(node)) return orderedStatements(api, node.statements);
   const children: ts.Node[] = [];
-  ts.forEachChild(node, (child) => {
+  api.forEachChild(node, (child) => {
     children.push(child);
   });
   return children;
 }
 
-function shape(node: ts.Node, sourceFile: ts.SourceFile): AstShape {
-  const children = childNodes(node);
+function shape(api: TypeScriptApi, node: ts.Node, sourceFile: ts.SourceFile): AstShape {
+  const children = childNodes(api, node);
   return {
     kind: node.kind,
     // Leaf token text excludes trivia while preserving identifiers, literals, template chunks, and
     // JSX text. Non-leaf nodes carry their meaning through their kind and ordered descendants.
     text: children.length === 0 ? node.getText(sourceFile) : '',
-    children: children.map((child) => shape(child, sourceFile)),
+    children: children.map((child) => shape(api, child, sourceFile)),
   };
 }
 
-function fingerprint(node: ts.Node): string {
+function fingerprint(api: TypeScriptApi, node: ts.Node): string {
   const sourceFile = node.getSourceFile();
-  return JSON.stringify(shape(node, sourceFile));
+  return JSON.stringify(shape(api, node, sourceFile));
 }
 
 function nodeCount(node: AstShape | undefined): number {
@@ -75,8 +97,16 @@ function diffNodes(left: AstShape | undefined, right: AstShape | undefined): num
   return diff;
 }
 
-function parse(code: string, fileName: string): ts.SourceFile {
-  return ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+function parse(api: TypeScriptApi, code: string, fileName: string): ts.SourceFile {
+  return api.createSourceFile(fileName, code, api.ScriptTarget.Latest, true, api.ScriptKind.TS);
+}
+
+/** Without the TypeScript parser, compare source text with comments and whitespace removed. */
+function normalizeText(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/\s+/g, '');
 }
 
 /**
@@ -84,10 +114,19 @@ function parse(code: string, fileName: string): ts.SourceFile {
  * The default threshold is deliberately one node: every actual AST difference remains novel.
  */
 export function checkAstNovelty(mutatedCode: string, parentCode: string, minNodeChanges = 1): AstNoveltyResult {
-  const mutatedSource = parse(mutatedCode, 'mutated.ts');
-  const parentSource = parse(parentCode, 'parent.ts');
-  const mutated = shape(mutatedSource, mutatedSource);
-  const parent = shape(parentSource, parentSource);
+  const api = loadTypeScript();
+  if (!api) {
+    // Degraded but honest: identical text (modulo comments/whitespace) is still rejected; anything
+    // else is reported as novel with an explicit reason so callers can see the parser was absent.
+    const identical = normalizeText(mutatedCode) === normalizeText(parentCode);
+    return identical
+      ? { isNovel: false, diffNodesCount: 0, reason: 'text-identical (typescript unavailable)' }
+      : { isNovel: true, diffNodesCount: 1, reason: 'typescript unavailable, text differs' };
+  }
+  const mutatedSource = parse(api, mutatedCode, 'mutated.ts');
+  const parentSource = parse(api, parentCode, 'parent.ts');
+  const mutated = shape(api, mutatedSource, mutatedSource);
+  const parent = shape(api, parentSource, parentSource);
   const diffNodesCount = diffNodes(mutated, parent);
   if (diffNodesCount === 0) return { isNovel: false, diffNodesCount, reason: 'ast-identical' };
 
