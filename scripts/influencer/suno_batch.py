@@ -651,7 +651,8 @@ def duration_plausible(got_s: float | None, expected_s: float | None) -> bool:
         return False
     if not expected_s or expected_s < 8:
         return True
-    return expected_s * 0.80 <= got_s <= expected_s * 1.25
+    # Player duration can exceed API metadata (~20–30 %); leftover concat is ~2×.
+    return expected_s * 0.70 <= got_s <= expected_s * 1.45
 
 
 def clip_ids_from_journal(journal: Path, name: str) -> list[str]:
@@ -740,10 +741,19 @@ def wait_mse_buffer(c, timeout_s: int = 120) -> dict:
             and stable >= 2
         ):
             break
+        if dur > 10 and b > max(4_000_000, dur * 20000) and stable >= 5:
+            break
         if info.get('paused') and int(time.time() - t0) % 8 == 0:
             play_song(c)
         time.sleep(1.0)
     return info
+
+
+def ev_async(c, js, to=30):
+    res = c.cmd('Runtime.evaluate', {
+        'expression': js, 'awaitPromise': True, 'returnByValue': True,
+    }, to=to)
+    return ((res or {}).get('result') or {}).get('result', {}).get('value')
 
 
 def trigger_mse_download(c, filename: str) -> bool:
@@ -752,6 +762,7 @@ def trigger_mse_download(c, filename: str) -> bool:
       const h=window.__SUNO_SB__;
       if(!h || !h.chunks || h.bytes<20000) return JSON.stringify({{ok:false, bytes:h?h.bytes:0}});
       const blob=new Blob(h.chunks, {{type:'audio/mp4'}});
+      window.__SUNO_MSE_BLOB = blob;
       const a=document.createElement('a');
       a.href=URL.createObjectURL(blob);
       a.download={json.dumps(filename)};
@@ -759,7 +770,7 @@ def trigger_mse_download(c, filename: str) -> bool:
       a.click();
       setTimeout(()=>a.remove(), 2000);
       return JSON.stringify({{ok:true, bytes:h.bytes, n:h.n}});
-    }})()''')
+    }})()''', to=60)
     if not raw:
         return False
     try:
@@ -767,6 +778,59 @@ def trigger_mse_download(c, filename: str) -> bool:
     except json.JSONDecodeError:
         return False
     return bool(info.get('ok'))
+
+
+def mse_dump_to_path(c, dest: Path) -> Path | None:
+    """Fallback: pull the in-page Blob over CDP as base64 chunks (no download manager)."""
+    import base64
+    n = ev_async(c, '''(async()=>{
+      if(!window.__SUNO_MSE_BLOB){
+        const h=window.__SUNO_SB__;
+        if(!h||!h.chunks||h.bytes<20000) return 0;
+        window.__SUNO_MSE_BLOB=new Blob(h.chunks,{type:'audio/mp4'});
+      }
+      const buf=await window.__SUNO_MSE_BLOB.arrayBuffer();
+      window.__SUNO_MSE_U8=new Uint8Array(buf);
+      return window.__SUNO_MSE_U8.byteLength;
+    })()''', to=60)
+    try:
+        total = int(n or 0)
+    except (TypeError, ValueError):
+        total = 0
+    if total < 20_000:
+        return None
+    chunk = 196608
+    offset = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + '.part')
+    with open(tmp, 'wb') as f:
+        while offset < total:
+            b64 = ev(c, f'''(()=>{{
+              const u=window.__SUNO_MSE_U8;
+              if(!u) return '';
+              const sl=u.subarray({offset}, {offset + chunk});
+              let s='';
+              for(let i=0;i<sl.length;i++) s+=String.fromCharCode(sl[i]);
+              return btoa(s);
+            }})()''', to=30)
+            if not b64:
+                break
+            data = base64.b64decode(b64)
+            if not data:
+                break
+            f.write(data)
+            offset += len(data)
+            if len(data) < chunk:
+                break
+    if tmp.exists() and tmp.stat().st_size > 20_000:
+        tmp.replace(dest)
+        print(f'    mse dump {dest.name} {dest.stat().st_size//1024} Ko', flush=True)
+        return dest
+    try:
+        tmp.unlink()
+    except OSError:
+        pass
+    return None
 
 
 def official_download(c) -> bool:
@@ -875,24 +939,36 @@ def download_clip(c, clip_id: str, dest: Path,
         print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
               flush=True)
         mse_name = dest.stem + '.m4a'
-        suno_dur = float(expected_dur or buf.get('dur') or 0)
+        player_dur = float(buf.get('dur') or 0)
+        meta_dur = float(expected_dur or 0)
+        leftover = bool(meta_dur >= 8 and player_dur > meta_dur * 1.6)
+        suno_dur = player_dur if player_dur >= 8 and not leftover else meta_dur
+        got = None
+        if leftover:
+            print(f'    player {player_dur:.1f}s >> meta {meta_dur:.1f}s (reste MSE), dump quand même',
+                  flush=True)
         if trigger_mse_download(c, mse_name):
-            got = wait_new_audio(outdir, before, timeout_s=25)
-            if got:
-                dur = ffprobe_duration(got) or 0
-                if duration_plausible(dur, suno_dur):
-                    final = dest.with_suffix(got.suffix)
-                    if got != final:
-                        got.replace(final)
-                    return final
-                print(
-                    f'    mse durée {dur:.1f}s vs suno {suno_dur:.1f}s, repli download officiel',
-                    flush=True,
-                )
-                try:
-                    got.unlink()
-                except OSError:
-                    pass
+            got = wait_new_audio(outdir, before, timeout_s=30)
+        if not got:
+            dump_dest = dest.with_suffix('.m4a')
+            got = mse_dump_to_path(c, dump_dest)
+        if got:
+            dur = ffprobe_duration(got) or 0
+            if duration_plausible(dur, suno_dur) or (
+                duration_plausible(dur, meta_dur) if meta_dur else False
+            ):
+                final = dest.with_suffix(got.suffix)
+                if got != final:
+                    got.replace(final)
+                return final
+            print(
+                f'    mse durée {dur:.1f}s vs ref {suno_dur:.1f}s/meta {meta_dur:.1f}s, repli officiel',
+                flush=True,
+            )
+            try:
+                got.unlink()
+            except OSError:
+                pass
         before2 = snapshot_audio(outdir)
         if official_download(c):
             got = wait_new_audio(outdir, before2, timeout_s=DOWNLOAD_WAIT_S)
