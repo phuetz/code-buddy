@@ -851,13 +851,20 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
         result['skipped_generate'] = True
         return result
 
-    stem1 = outdir / f'{name}-1.wav'
-    stem2 = outdir / f'{name}-2.wav'
-    if stem1.exists() and stem1.stat().st_size > 20_000 and stem2.exists():
+    existing_audio = []
+    for i in (1, 2):
+        found = next(
+            (p for p in outdir.glob(f'{name}-{i}.*')
+             if p.suffix.lower() in AUDIO_EXT and p.stat().st_size > 20_000),
+            None,
+        )
+        if found:
+            existing_audio.append(found)
+    if len(existing_audio) >= 2:
         print(f'[{name}] déjà fait, skip', flush=True)
         result['ok'] = True
         result['skipped'] = True
-        result['files'] = [str(stem1), str(stem2)]
+        result['files'] = [str(p) for p in existing_audio]
         return result
 
     ensure_create(c)
@@ -954,6 +961,42 @@ def run_job(c, job: dict, *, outdir: Path, journal: Path,
     return result
 
 
+def redownload_from_journal(c, journal: Path, outdir: Path) -> int:
+    """Download missing takes from clip_ids already logged (0 crédit generate)."""
+    n = 0
+    if not journal.exists():
+        return 0
+    for line in journal.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        if rec.get('event') not in ('job_done', 'job_fail', 'job_incomplete'):
+            continue
+        name = rec.get('name')
+        ids = rec.get('clip_ids') or []
+        if not name or not ids:
+            continue
+        for i, cid in enumerate(ids[:2], start=1):
+            if not cid:
+                continue
+            already = next(
+                (p for p in outdir.glob(f'{name}-{i}.*')
+                 if p.suffix.lower() in AUDIO_EXT and p.stat().st_size > 20_000),
+                None,
+            )
+            if already:
+                continue
+            dest = outdir / f'{name}-{i}.wav'
+            print(f'[redownload] {name}-{i} {cid}', flush=True)
+            got = download_clip(c, str(cid), dest)
+            if got:
+                n += 1
+                print(f'    -> {got}', flush=True)
+            else:
+                print('    KO', flush=True)
+    return n
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description='Batch Suno Pro (onglet CDP suno.com uniquement)')
     p.add_argument('jobs', nargs='?', help='JSON jobs (sinon stdin)')
@@ -964,11 +1007,23 @@ def parse_args(argv=None):
     p.add_argument('--allow-vocals', action='store_true',
                    help='Autorise paroles + persona (Jade). Défaut : instrumental only.')
     p.add_argument('--limit', type=int, default=0)
+    p.add_argument('--redownload-journal', action='store_true',
+                   help='Ne génère pas : retélécharge les clip_ids du journal')
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
+    outdir = Path(args.outdir).expanduser()
+    outdir.mkdir(parents=True, exist_ok=True)
+    journal = Path(args.journal).expanduser() if args.journal else (outdir / 'suno-journal.jsonl')
+
+    if args.redownload_journal:
+        c = conn()
+        n = redownload_from_journal(c, journal, outdir)
+        print(f'=== redownload {n} fichiers ===')
+        return
+
     if args.jobs:
         jobs = json.loads(Path(args.jobs).read_text(encoding='utf-8'))
     else:
@@ -977,10 +1032,6 @@ def main(argv=None):
         raise SystemExit('jobs.json doit être une liste')
     if args.limit:
         jobs = jobs[: args.limit]
-
-    outdir = Path(args.outdir).expanduser()
-    outdir.mkdir(parents=True, exist_ok=True)
-    journal = Path(args.journal).expanduser() if args.journal else (outdir / 'suno-journal.jsonl')
 
     c = conn()
     ensure_create(c)
