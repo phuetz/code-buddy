@@ -937,8 +937,9 @@ def download_clip(c, clip_id: str, dest: Path,
         time.sleep(0.8)
         reset_mse_capture(c)
         time.sleep(0.3)
-        play_song(c)
+        # Arm BEFORE Play so the fMP4 init segment is in the dump.
         arm_mse_capture(c)
+        play_song(c)
         buf = wait_mse_buffer(c, timeout_s=150)
         print(f'    mse bytes={buf.get("bytes")} covered={buf.get("covered")}/{buf.get("dur")}',
               flush=True)
