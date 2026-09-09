@@ -834,34 +834,26 @@ def mse_dump_to_path(c, dest: Path) -> Path | None:
 
 
 def official_download(c) -> bool:
-    click_pred(
-        c,
-        "[...document.querySelectorAll('button')].find(b=>"
-        "(b.getAttribute('aria-label')||'')==='Playbar: Play button')",
-    )
-    time.sleep(0.6)
+    # Do not click Play here: if MSE is playing, that pauses the buffer.
     more = click_pred(
         c,
-        "[...document.querySelectorAll('button')].find(b=>{"
-        "const r=b.getBoundingClientRect();"
-        "return (b.getAttribute('aria-label')||'')==='More menu contents'"
-        " && r.y>870 && r.y<930 && r.x>1760 && r.x<1835;})",
+        '''(()=>{
+          const share=[...document.querySelectorAll('button')].find(
+            b=>(b.getAttribute('aria-label')||'')==='Playbar: Share');
+          const cands=[...document.querySelectorAll('button')].filter(b=>
+            (b.getAttribute('aria-label')||'')==='More menu contents');
+          if(share){
+            const sr=share.getBoundingClientRect();
+            const near=cands.find(b=>{
+              const r=b.getBoundingClientRect();
+              return Math.abs(r.y-sr.y)<24 && r.x>sr.x-10 && r.x<sr.x+140;
+            });
+            if(near) return near;
+          }
+          const bottom=cands.filter(b=>b.getBoundingClientRect().y>800);
+          return bottom[0]||cands[0]||null;
+        })()''',
     )
-    if not more:
-        more = click_pred(
-            c,
-            '''(()=>{
-              const share=[...document.querySelectorAll('button')].find(
-                b=>(b.getAttribute('aria-label')||'')==='Playbar: Share');
-              if(!share) return null;
-              const sr=share.getBoundingClientRect();
-              return [...document.querySelectorAll('button')].find(b=>{
-                const r=b.getBoundingClientRect();
-                return (b.getAttribute('aria-label')||'')==='More menu contents'
-                  && Math.abs(r.y-sr.y)<10 && r.x>sr.x && r.x<sr.x+90;
-              });
-            })()''',
-        )
     time.sleep(0.8)
     dl = click_pred(
         c,
