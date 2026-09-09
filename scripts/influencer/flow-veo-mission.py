@@ -416,7 +416,10 @@ class Flow:
         if any(button['text'] == 'ULTRA' for button in self.buttons()):
             return
         url = str(self.js('location.href') or '')
-        match = re.match(r'(https://labs\.google/fx/.+?/project/[0-9a-f-]+)', url)
+        match = re.match(
+            r'(https://(?:labs\.google/fx/.+?|flow\.google\.com)/project/[0-9a-f-]+)',
+            url,
+        )
         if match:
             self.c.cmd('Page.navigate', {'url': match.group(1)})
             time.sleep(12)
@@ -440,12 +443,13 @@ class Flow:
                 # flow.google.com (sept. 2026) : « 24 063 crédits Google Flow » avec espace fine
                 # insécable (U+202F) et « crédits » en minuscules ; labs.google : « N Crédits Google Flow ».
                 match = re.search(
-                    r'^\s*([0-9][0-9 \u202f\u00a0]*)\s*cr[ée]dits Google\s*Flow\s*$',
+                    # 09/09/2026 : le compte peut être en anglais → « 23,913 Google Flow credits ».
+                    r'^\s*(?:([0-9][0-9 ,.\u202f\u00a0]*)\s*cr[ée]dits Google\s*Flow|([0-9][0-9 ,.\u202f\u00a0]*)\s*Google\s*Flow\s*credits)\s*$',
                     body,
                     flags=re.MULTILINE | re.IGNORECASE,
                 )
                 if match:
-                    value = int(re.sub(r'[\s\u202f\u00a0]', '', match.group(1)))
+                    value = int(re.sub(r'[\s,.\u202f\u00a0]', '', match.group(1) or match.group(2)))
                     self.unlock_ui()
                     return value
                 time.sleep(0.5)

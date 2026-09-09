@@ -73,6 +73,49 @@ class FlowCrameSendSelectorTest(unittest.TestCase):
         )
 
 
+class FlowCrameEnglishUiHelpersTest(unittest.TestCase):
+    def test_composer_empty_accepts_english_and_french_placeholders(self) -> None:
+        self.assertTrue(flow_crame.composer_looks_empty('What do you want to create?'))
+        self.assertTrue(flow_crame.composer_looks_empty('Que voulez-vous créer ?'))
+        self.assertTrue(flow_crame.composer_looks_empty('\n'))
+        self.assertFalse(
+            flow_crame.composer_looks_empty(
+                'Slow dolly-in on a dark developer desk at night, a wide monitor'
+            )
+        )
+
+    def test_queued_body_accepts_english_schedule_line(self) -> None:
+        self.assertTrue(
+            flow_crame.queued_in_body(
+                "I've scheduled your cinematic shot of the developer desk in the queue"
+            )
+        )
+        self.assertTrue(flow_crame.queued_in_body("ajouté à la file d'attente"))
+        self.assertFalse(flow_crame.queued_in_body('What do you want to create?'))
+
+    def test_download_menu_picks_720p_original_and_refuses_4k(self) -> None:
+        labels = [
+            '270p\nAnimated GIF',
+            '720p\nOriginal size',
+            '1080p\nUpscaled',
+            '4K\nUpscaled · 50 credits',
+        ]
+        self.assertEqual(
+            flow_crame.pick_720p_original_option(labels),
+            '720p\nOriginal size',
+        )
+        self.assertTrue(flow_crame.is_paid_upscale_option('4K\nUpscaled · 50 credits'))
+        self.assertFalse(flow_crame.is_paid_upscale_option('720p\nOriginal size'))
+        self.assertIsNone(
+            flow_crame.pick_720p_original_option(['4K\nUpscaled · 50 credits', '1080p'])
+        )
+
+    def test_project_url_uses_flow_google_com(self) -> None:
+        url = flow_crame.flow_project_url('projet-de-test')
+        self.assertTrue(url.startswith('https://flow.google.com/project/'))
+        self.assertNotIn('labs.google', url)
+
+
 class FlowProjectIdIsMandatoryTest(unittest.TestCase):
     """Sans FLOW_PROJECT_ID, le script s'arrête avec un message explicite."""
 

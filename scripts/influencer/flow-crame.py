@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -42,6 +44,86 @@ def agent_send_is_ready(*, disabled: bool, aria_disabled: str | None) -> bool:
     """
     return (not disabled) and aria_disabled != 'true'
 
+
+def composer_looks_empty(text: str) -> bool:
+    """Le compositeur est revenu au placeholder après un envoi réussi."""
+    value = (text or '').strip().lower()
+    if not value or len(value) <= 40:
+        return True
+    return (
+        'voulez-vous' in value
+        or 'what do you want to create' in value
+    )
+
+
+def queued_in_body(text: str) -> bool:
+    """L'agent a bien pris le prompt (FR historique ou EN 2026-09)."""
+    body = (text or '').lower()
+    return (
+        "file d'attente" in body
+        or 'programmée' in body
+        or 'scheduled' in body
+        or 'in the queue' in body
+    )
+
+
+def pick_720p_original_option(labels: list[str]) -> str | None:
+    """Menu Télécharger : 720p Original only — jamais 4K (50 crédits) ni GIF."""
+    normalised: list[tuple[str, str]] = []
+    for raw in labels:
+        compact = ' '.join((raw or '').split())
+        normalised.append((raw, compact))
+    for raw, compact in normalised:
+        lower = compact.lower()
+        if '4k' in lower or 'gif' in lower or '1080' in lower:
+            continue
+        if '720p' in compact and 'original' in lower:
+            return raw
+    for raw, compact in normalised:
+        lower = compact.lower()
+        if '720p' in compact and 'upscaled' not in lower and '4k' not in lower:
+            return raw
+    return None
+
+
+def is_paid_upscale_option(label: str) -> bool:
+    compact = ' '.join((label or '').split()).lower()
+    return '4k' in compact or '50 credit' in compact
+
+
+def flow_project_url(project_id: str) -> str:
+    """Canonique 2026-09 : flow.google.com (labs.google redirige)."""
+    return 'https://flow.google.com/project/' + project_id
+
+
+def ffprobe_summary(path: Path) -> str:
+    try:
+        raw = subprocess.check_output(
+            [
+                'ffprobe', '-v', 'error',
+                '-show_entries', 'format=duration,size',
+                '-show_entries', 'stream=codec_name,width,height,avg_frame_rate,nb_frames',
+                '-of', 'json', str(path),
+            ],
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f'ffprobe KO ({exc})'
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return 'ffprobe JSON illisible'
+    streams = data.get('streams') or []
+    video = next((s for s in streams if s.get('width')), {})
+    fmt = data.get('format') or {}
+    return (
+        f"{video.get('codec_name', '?')} {video.get('width')}x{video.get('height')} "
+        f"{video.get('avg_frame_rate')} {fmt.get('duration')}s "
+        f"{fmt.get('size')}o frames={video.get('nb_frames')}"
+    )
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 # Charge cdp-lib + la classe Flow (tout le module AVANT `def run(`) sans lancer main().
 exec((SCRIPT_DIR / 'flow-veo-mission.py').read_text().split('def run(')[0])  # noqa: S102
@@ -59,11 +141,11 @@ if not FLOW_PROJECT_ID:
         "avant de lancer ce script, par exemple\n"
         "    export FLOW_PROJECT_ID=<identifiant-du-projet>\n"
         "Il se lit dans l'URL du projet ouverte dans le navigateur "
-        "(https://labs.google/fx/<langue>/tools/flow/project/<identifiant-du-projet>)."
+        "(https://flow.google.com/project/<identifiant-du-projet>)."
     )
-FLOW_PROJECT_URL = (
-    'https://labs.google/fx/fr/tools/flow/project/' + FLOW_PROJECT_ID
-)
+FLOW_PROJECT_URL = flow_project_url(FLOW_PROJECT_ID)
+CREDITS_PER_SHOT = 100
+VIEWPORT_WIDTH = 4600
 
 # Sélecteur du bouton d'envoi de l'agent Flow (UI 2026-09 : '<button> arrow_forward Créer', w<80).
 # Ne PAS se fier à .disabled : voir agent_send_is_ready().
@@ -73,12 +155,23 @@ _SEND_BTN = ("[...document.querySelectorAll('button')].find(e=>/arrow_forward/.t
 
 
 class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
-    """UI Flow 2026-09 (agent).
+    """UI Flow 2026-09 (agent) sur flow.google.com.
 
     Les clics DOM synthétiques restent utiles pour ULTRA / fermer une boîte
     (hors compositeur). L'envoi du prompt, lui, exige un clic TRUSTED et un
     modèle Slate committé (`aria-disabled=false`) — voir send_agent().
     """
+
+    def __init__(self) -> None:
+        tab = get_tab((  # noqa: F821
+            'flow.google.com/project/' + FLOW_PROJECT_ID,
+            'flow.google.com',
+        ))
+        if not tab:
+            raise RuntimeError('Aucun projet Flow ouvert dans Brave CDP 9222.')
+        self.c = CDP(tab)  # noqa: F821
+        self.c.cmd('Runtime.enable')
+        self.c.cmd('Page.enable')
 
     _DISPATCH = ("for(const t of ['pointerdown','mousedown','pointerup','mouseup','click']){"
                  "b.dispatchEvent(t.startsWith('pointer')?new PointerEvent(t,{bubbles:true,pointerType:'mouse',button:0})"
@@ -98,10 +191,17 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         return json.loads(res)
 
     def close_profile(self):
-        # Boîte ULTRA : bouton « close » juste après l'intitulé du profil.
+        # Boîte ULTRA / Agent settings : Close (EN) ou Fermer (FR).
         self.js("(()=>{let d=[...document.querySelectorAll('[role=dialog],[aria-modal=true]')].pop();"
-                "let b=d?[...d.querySelectorAll('button')].find(e=>/^close/.test(e.innerText.trim())||e.getAttribute('aria-label')==='Fermer cette fenêtre modale'):null;"
-                "if(!b){b=[...document.querySelectorAll('button')].find(e=>e.getAttribute('aria-label')==='Fermer cette fenêtre modale');}"
+                "let labels=/^(close|fermer)/i;"
+                "let b=d?[...d.querySelectorAll('button')].find(e=>labels.test(e.innerText.trim())"
+                "||labels.test(e.getAttribute('aria-label')||'')"
+                "||e.getAttribute('aria-label')==='Fermer cette fenêtre modale'"
+                "||e.getAttribute('aria-label')==='Close'):null;"
+                "if(!b){b=[...document.querySelectorAll('button')].find(e=>"
+                "e.getAttribute('aria-label')==='Fermer cette fenêtre modale'"
+                "||e.getAttribute('aria-label')==='Close this dialog'"
+                "||e.getAttribute('aria-label')==='Close');}"
                 "if(b){%s}return !!b})()" % self._DISPATCH)
         time.sleep(0.5)
 
@@ -123,18 +223,33 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         raise last  # type: ignore[misc]
 
     def widen_viewport(self) -> None:
-        # flow.google.com : le compositeur déborde à droite du viewport (x≈3470-3740 pour 3438 px) ;
-        # sans cela, elementFromPoint n'atteint jamais le bouton et le clic TRUSTED est impossible.
-        w = int(self.js('window.innerWidth') or 0); h = int(self.js('window.innerHeight') or 0)
-        if 0 < w < 4000:
-            self.c.cmd('Emulation.setDeviceMetricsOverride', {'width': 4000, 'height': max(h, 1200), 'deviceScaleFactor': 1, 'mobile': False})
+        # 04/09 : compositeur à x≈3470 → 4000 px. 09/09 : panneau agent +
+        # Paramètres à x≈4031-4575 → 4600 px, sinon tune / Créer hors hit-test.
+        w = int(self.js('window.innerWidth') or 0)
+        h = int(self.js('window.innerHeight') or 0)
+        if 0 < w < VIEWPORT_WIDTH:
+            self.c.cmd('Emulation.setDeviceMetricsOverride', {
+                'width': VIEWPORT_WIDTH,
+                'height': max(h, 1200),
+                'deviceScaleFactor': 1,
+                'mobile': False,
+            })
             time.sleep(1.5)
 
     def ensure_project(self) -> None:
         self.widen_viewport()
         url = str(self.js('location.href') or '')
-        if FLOW_PROJECT_ID in url:
+        on_project = FLOW_PROJECT_ID in url and 'flow.google.com' in url
+        in_editor = '/edit/' in url
+        if on_project and not in_editor:
             return
+        if on_project and in_editor:
+            print('WARN: vue éditeur — retour à la grille projet.', flush=True)
+            self._click_aria('Back button to go to previous page', fallback_text='arrow_back')
+            time.sleep(2)
+            url = str(self.js('location.href') or '')
+            if FLOW_PROJECT_ID in url and '/edit/' not in url:
+                return
         print(f'WARN: onglet Flow hors projet ({url}) — retour au projet configuré.', flush=True)
         self.c.cmd('Page.navigate', {'url': FLOW_PROJECT_URL})
         # L'application est une SPA : 8 s fixes ne suffisent pas toujours (mesuré le 04/09 :
@@ -148,15 +263,35 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
                        "texte:(document.body&&document.body.innerText||'').slice(0,300)})")
         print(f'WARN: éditeur toujours absent après 45 s : {etat}', flush=True)
 
+    def _click_aria(self, aria: str, *, fallback_text: str | None = None) -> bool:
+        raw = self.js(
+            "(()=>{let b=[...document.querySelectorAll('button,[role=button]')]"
+            ".find(e=>e.getBoundingClientRect().width>0&&"
+            f"(e.getAttribute('aria-label')==={json.dumps(aria)}"
+            + (f"||(e.innerText||'').trim()==={json.dumps(fallback_text)}" if fallback_text else "")
+            + "));if(!b)return null;let r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if not raw:
+            return False
+        pos = json.loads(raw)
+        self.click(float(pos['x']), float(pos['y']), 0.8)
+        return True
+
     def show_videos_view(self):
         self.ensure_project()
-        self.js("(()=>{let b=[...document.querySelectorAll('button')].find(e=>/Afficher les vidéos/.test(e.innerText));if(b){%s}return !!b})()" % self._DISPATCH)
-        time.sleep(1.5)
+        self.js(
+            "(()=>{let b=[...document.querySelectorAll('button,[role=button]')].find(e=>{"
+            "let t=e.innerText||'';"
+            "return e.getBoundingClientRect().width>0&&/videocam/.test(t)"
+            "&&/(Videos|Vidéos|Afficher les vidéos)/.test(t);});"
+            "if(b){%s}return !!b})()" % self._DISPATCH
+        )
+        time.sleep(1.0)
 
     def card_count(self) -> int:
-        # Une carte média = un bouton « play_circle » dans la grille (hors panneau agent/profil).
-        return int(self.js("[...document.querySelectorAll('button,[role=button]')].filter(e=>{let r=e.getBoundingClientRect();"
-                           "return r.width>0&&/play_circle/.test(e.innerText||'')}).length") or 0)
+        # 09/09 : les cartes sont des <flow-video-tile> (play_circle n'est plus un bouton).
+        return int(self.js("document.querySelectorAll('flow-video-tile').length") or 0)
 
     def progress_count(self) -> int:
         return int(self.js("[...document.querySelectorAll('*')].filter(e=>e.children.length===0&&/^\\d{1,3}%$/.test((e.innerText||'').trim())).length") or 0)
@@ -169,8 +304,9 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         # à 8 s alors que Veo était à 53 % (FLOWFIX1).
         return int(self.js(
             "(()=>{const vw=window.innerWidth;"
-            "const eches=[...document.querySelectorAll('*')].filter(e=>"
-            "e.children.length===0&&(e.innerText||'').trim()==='Échec');"
+            "const eches=[...document.querySelectorAll('*')].filter(e=>{"
+            "const t=(e.innerText||'').trim();"
+            "return e.children.length===0&&(t==='Échec'||t==='Failed'||t==='Failure');});"
             "const pcts=[...document.querySelectorAll('*')].filter(e=>"
             "e.children.length===0&&/^\\\\d{1,3}%$/.test((e.innerText||'').trim()));"
             "let n=0;for(const e of eches){const r=e.getBoundingClientRect();"
@@ -181,25 +317,250 @@ class DomFlow(Flow):  # noqa: F821 (Flow défini par l'exec)
         ) or 0)
 
     def top_card_ready(self) -> bool:
-        # Grille virtualisée (≈6 cartes rendues) : on ne compte plus les cartes, on regarde la
-        # carte du HAUT (la plus récente). Prête ⇔ elle porte un bouton « play_circle » (y < 300).
-        return bool(self.js("[...document.querySelectorAll('button,[role=button]')].some(e=>{let r=e.getBoundingClientRect();return r.width>0&&r.y<300&&/play_circle/.test(e.innerText||'')})"))
+        # 09/09 : play_circle de la grille est un mat-icon, PAS un bouton.
+        # Une carte prête = flow-video-tile visible avec vignette, sans %.
+        info = self.top_tile_info()
+        return bool(info.get('src')) and not info.get('progress')
+
+    def top_tile_info(self) -> dict:
+        raw = self.js(
+            "(()=>{const tiles=[...document.querySelectorAll('flow-video-tile')]"
+            ".map(t=>{const r=t.getBoundingClientRect();"
+            "const img=t.querySelector('img.thumbnail, img');"
+            "const grid=t.closest('flow-grid-tile-container');"
+            "const pct=[...t.querySelectorAll('*')].some(e=>e.children.length===0"
+            "&&/^\\\\d{1,3}%$/.test((e.innerText||'').trim()));"
+            "const bar=!!t.querySelector('mat-progress-bar,[role=progressbar]');"
+            "return {y:r.y,h:r.height,w:r.width,x:r.x,"
+            "src:img?(img.currentSrc||img.src||''):'',"
+            "aria:grid?grid.getAttribute('aria-label'):'',"
+            "progress:pct||bar, vis:r.width>40&&r.height>40&&r.y>-20&&r.y<800};})"
+            ".filter(t=>t.vis).sort((a,b)=>a.y-b.y);"
+            "return JSON.stringify(tiles[0]||{});})()"
+        )
+        try:
+            return json.loads(raw or '{}') or {}
+        except json.JSONDecodeError:
+            return {}
+
+    def tile_thumbnails(self) -> set[str]:
+        raw = self.js(
+            "JSON.stringify([...document.querySelectorAll('flow-video-tile img')]"
+            ".map(i=>i.currentSrc||i.src).filter(Boolean))"
+        )
+        return set(json.loads(raw or '[]'))
 
     def top_card_src(self) -> str:
-        # Clic play sur la carte du haut puis premier <video> du DOM (ordre DOM = ordre des cartes).
-        self.js("(()=>{let b=[...document.querySelectorAll('button,[role=button]')].find(e=>{let r=e.getBoundingClientRect();return r.width>0&&r.y<300&&/play_circle/.test(e.innerText||'')});if(b){%s}return 1})()" % self._DISPATCH)
-        time.sleep(2.5)
-        src = self.js("(()=>{let v=document.querySelector('video');return v?(v.currentSrc||v.src||''):''})()") or ''
-        self.press_escape()
-        return src
+        return str(self.top_tile_info().get('src') or '')
+
+    def open_top_tile(self) -> bool:
+        info = self.top_tile_info()
+        if not info.get('w'):
+            return False
+        x = float(info['x']) + float(info['w']) / 2
+        y = float(info['y']) + float(info['h']) / 2
+        self.click(x, y, 1.5)
+        for _ in range(20):
+            href = str(self.js('location.href') or '')
+            if '/edit/' in href:
+                return True
+            time.sleep(0.4)
+        return '/edit/' in str(self.js('location.href') or '')
+
+    def _visible_menu_labels(self) -> list[str]:
+        raw = self.js(
+            "JSON.stringify([...document.querySelectorAll('[role=menuitem],button')]"
+            ".filter(e=>e.getBoundingClientRect().width>0)"
+            ".map(e=>(e.innerText||'').trim()).filter(Boolean))"
+        )
+        return json.loads(raw or '[]')
+
+    def _click_menu_label(self, label: str) -> bool:
+        raw = self.js(
+            "(()=>{const want=%s;"
+            "const b=[...document.querySelectorAll('[role=menuitem],button')].find(e=>{"
+            "const t=(e.innerText||'').trim();"
+            "return e.getBoundingClientRect().width>0&&(t===want||t.replace(/\\s+/g,' ')===want.replace(/\\s+/g,' '));});"
+            "if(!b)return null;let r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+            % json.dumps(label)
+        )
+        if not raw:
+            return False
+        pos = json.loads(raw)
+        self.click(float(pos['x']), float(pos['y']), 1.0)
+        return True
+
+    def download_open_clip_720p(self, dest: Path) -> None:
+        """Depuis /edit/… : Download media → 720p Original size (jamais 4K)."""
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        before = {p.name for p in dest.parent.iterdir()}
+        home_before = {p.name for p in Path.home().joinpath('Downloads').glob('*')}
+        try:
+            self.c.cmd('Browser.setDownloadBehavior', {
+                'behavior': 'allow',
+                'downloadPath': str(dest.parent.resolve()),
+                'eventsEnabled': True,
+            })
+        except Exception as exc:  # noqa: BLE001
+            print(f'WARN: setDownloadBehavior ({exc})', flush=True)
+        if not self._click_aria('Download media', fallback_text='download'):
+            if not self._click_aria('Download'):
+                raise RuntimeError('Bouton Download media introuvable.')
+        time.sleep(1.0)
+        labels = self._visible_menu_labels()
+        paid = [lab for lab in labels if is_paid_upscale_option(lab)]
+        if paid:
+            print(f'INFO: options payantes ignorées : {paid}', flush=True)
+        chosen = pick_720p_original_option(labels)
+        if not chosen:
+            raise RuntimeError(f'Menu 720p Original absent ({labels[:12]!r}).')
+        if is_paid_upscale_option(chosen):
+            raise RuntimeError(f'Refus de télécharger une option payante : {chosen!r}')
+        if not self._click_menu_label(chosen):
+            raise RuntimeError(f'Clic 720p raté : {chosen!r}')
+        new_file: Path | None = None
+        for _ in range(40):
+            time.sleep(0.5)
+            for folder, seen in (
+                (dest.parent, before),
+                (Path.home() / 'Downloads', home_before),
+            ):
+                for path in folder.iterdir():
+                    if path.name in seen or path.name.startswith('.'):
+                        continue
+                    if path.suffix.lower() not in {'.mp4', '.webm', '.mov'}:
+                        continue
+                    if path.stat().st_size > 100_000:
+                        new_file = path
+                        break
+                if new_file:
+                    break
+            if new_file:
+                break
+        if not new_file:
+            raise RuntimeError('Téléchargement 720p introuvable (timeout).')
+        if new_file.resolve() != dest.resolve():
+            shutil.move(str(new_file), str(dest))
+        if dest.stat().st_size < 100_000:
+            dest.unlink(missing_ok=True)
+            raise RuntimeError('Fichier téléchargé anormalement petit.')
+
+    def leave_editor(self) -> None:
+        href = str(self.js('location.href') or '')
+        if '/edit/' not in href:
+            return
+        if not self._click_aria('Back button to go to previous page', fallback_text='arrow_back'):
+            self.c.cmd('Page.navigate', {'url': FLOW_PROJECT_URL})
+        for _ in range(20):
+            time.sleep(0.4)
+            if '/edit/' not in str(self.js('location.href') or ''):
+                self.widen_viewport()
+                return
+        self.c.cmd('Page.navigate', {'url': FLOW_PROJECT_URL})
+        time.sleep(3)
+        self.widen_viewport()
+
+    def configure_agent_defaults(self) -> None:
+        """tune → Agent settings : Never + 16:9 + x1 + Veo 3.1 Quality + Save."""
+        self.ensure_project()
+        self.widen_viewport()
+        if 'Agent settings' not in (self.js('document.body.innerText') or ''):
+            if not self._click_aria('Settings', fallback_text='tune'):
+                raise RuntimeError('Bouton Settings (tune) introuvable.')
+            time.sleep(1.2)
+        body = self.js('document.body.innerText') or ''
+        if 'Agent settings' not in body:
+            raise RuntimeError('Panneau Agent settings absent.')
+        # Never (déjà coché sur le projet mesuré ; reclic idempotent).
+        never = self.js(
+            "(()=>{const b=[...document.querySelectorAll('mat-radio-button,button')].find(e=>"
+            "/^Never/.test((e.innerText||'').trim())&&e.getBoundingClientRect().width>0);"
+            "if(!b)return null;const r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2,"
+            "on:/checked/i.test(b.className||'')});})()"
+        )
+        if never:
+            pos = json.loads(never)
+            if not pos.get('on'):
+                self.click(float(pos['x']), float(pos['y']), 0.6)
+        model_btn = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "e.getAttribute('aria-label')==='Video generation default model'"
+            "&&e.getBoundingClientRect().width>0);"
+            "if(!b)return null;const r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2,text:(b.innerText||'').trim()});})()"
+        )
+        if not model_btn:
+            raise RuntimeError('Liste modèle vidéo introuvable.')
+        model = json.loads(model_btn)
+        # 16:9 et x1 du bloc *vidéo* = radios juste au-dessus du bouton modèle.
+        ratio = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "e.getAttribute('aria-label')==='Video generation default model');"
+            "if(!b)return null;const mr=b.getBoundingClientRect();"
+            "const radios=[...document.querySelectorAll('[role=radio]')].filter(e=>{"
+            "const r=e.getBoundingClientRect();"
+            "return r.width>0&&r.y<mr.y&&r.y>mr.y-140&&/16:9/.test(e.innerText||'');});"
+            "const t=radios.at(-1);if(!t)return null;const r=t.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if ratio:
+            pos = json.loads(ratio)
+            self.click(float(pos['x']), float(pos['y']), 0.5)
+        oneshot = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "e.getAttribute('aria-label')==='Video generation default model');"
+            "if(!b)return null;const mr=b.getBoundingClientRect();"
+            "const radios=[...document.querySelectorAll('[role=radio]')].filter(e=>{"
+            "const r=e.getBoundingClientRect();"
+            "return r.width>0&&r.y<mr.y&&r.y>mr.y-90&&(e.innerText||'').trim()==='x1';});"
+            "const t=radios.at(-1);if(!t)return null;const r=t.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if oneshot:
+            pos = json.loads(oneshot)
+            self.click(float(pos['x']), float(pos['y']), 0.5)
+        if 'Veo 3.1 - Quality' not in (model.get('text') or ''):
+            self.click(float(model['x']), float(model['y']), 1.0)
+            if not self._click_menu_label('Veo 3.1 - Quality'):
+                raise RuntimeError('Entrée Veo 3.1 - Quality absente du menu.')
+            time.sleep(0.4)
+        save = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "(e.innerText||'').trim()==='Save'&&e.getBoundingClientRect().width>0);"
+            "if(!b)return null;const r=b.getBoundingClientRect();"
+            "return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()"
+        )
+        if not save:
+            raise RuntimeError('Bouton Save des Agent settings introuvable.')
+        pos = json.loads(save)
+        self.click(float(pos['x']), float(pos['y']), 1.5)
+        # Vérifier la persistance.
+        time.sleep(0.6)
+        if 'Agent settings' not in (self.js('document.body.innerText') or ''):
+            if not self._click_aria('Settings', fallback_text='tune'):
+                return
+            time.sleep(1.0)
+        check = self.js(
+            "(()=>{const b=[...document.querySelectorAll('button')].find(e=>"
+            "e.getAttribute('aria-label')==='Video generation default model');"
+            "return b?(b.innerText||'').trim():'';})()"
+        ) or ''
+        if 'Veo 3.1 - Quality' not in check:
+            raise RuntimeError(f'Modèle vidéo non persisté : {check!r}')
+        print(f'CONFIG: {check.replace(chr(10), " ")}', flush=True)
+        self._click_aria('Close', fallback_text='close')
+        time.sleep(0.6)
+
+    def configure(self, ratio: str) -> None:
+        # Plus de puce « Vidéo · 8s » : les réglages vivent dans Agent settings.
+        if ratio and ratio != '16:9':
+            print(f'WARN: ratio demandé {ratio} — Agent settings forcé 16:9 Quality.', flush=True)
+        self.configure_agent_defaults()
 
     def card_video_srcs(self) -> set:
-        # Clique « play » sur chaque carte pour matérialiser son <video>, puis collecte les src.
-        self.js("(()=>{for(const b of [...document.querySelectorAll('button,[role=button]')].filter(e=>e.getBoundingClientRect().width>0&&/play_circle/.test(e.innerText||''))){%s}return 1})()" % self._DISPATCH)
-        time.sleep(2.5)
-        raw = self.js("JSON.stringify([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src).filter(Boolean))")
-        self.press_escape()
-        return set(json.loads(raw or '[]'))
+        return self.tile_thumbnails()
 
 
 def send_agent(flow, max_wait: int = 20) -> None:
@@ -228,8 +589,8 @@ def send_agent(flow, max_wait: int = 20) -> None:
     for _ in range(12):
         time.sleep(1)
         val = flow.js("(()=>{let e=document.querySelector('[data-slate-editor=true], .ProseMirror[contenteditable=true]');return e?e.innerText.trim():''})()") or ''
-        # champ revenu au placeholder « Que voulez-vous créer ? » = soumis
-        if 'voulez-vous' in val or len(val) <= 40:
+        # placeholder FR « Que voulez-vous créer ? » / EN « What do you want to create? »
+        if composer_looks_empty(val):
             return
     raise RuntimeError('champ non vidé après envoi (soumission incertaine).')
 
@@ -253,6 +614,9 @@ def main() -> None:
 
     flow = DomFlow()
     flow.ensure_project()  # revenir au projet configuré AVANT de lire le compteur
+    if not args.skip_configure:
+        flow.configure_agent_defaults()
+        flow.ensure_project()
     start = flow.credits()
     print(f'CREDITS-DEPART {start}', flush=True)
 
@@ -260,8 +624,12 @@ def main() -> None:
     for spec in items:
         pid, prompt, ratio = spec['id'], spec['prompt'], spec.get('ratio', '16:9')
         credits = flow.credits()
-        if credits - 100 < args.reserve:
-            print(f'STOP: solde {credits} entamerait la réserve {args.reserve}.', flush=True)
+        if credits - CREDITS_PER_SHOT < args.reserve:
+            print(
+                f'STOP: solde {credits} entamerait la réserve {args.reserve} '
+                f'(prise={CREDITS_PER_SHOT}).',
+                flush=True,
+            )
             break
         out = args.outdir / f'{pid}.mp4'
         if out.exists() and out.stat().st_size > 100_000:
@@ -270,13 +638,10 @@ def main() -> None:
         print(f'[{pid}] credits={credits} ratio={ratio} — soumission...', flush=True)
         flow.ensure_project()
         flow.show_videos_view()
-        before_top = flow.top_card_src() if flow.top_card_ready() else ''
-        before_plays = flow.card_count()
-        before_videos = flow.videos()
+        before_thumbs = flow.tile_thumbnails()
+        before_top = flow.top_card_src()
         needle = ' '.join((prompt or '').split()[:8])
         try:
-            if not args.skip_configure:
-                flow.configure(ratio)
             flow.ensure_project()
             flow.fill_prompt(prompt + SUFFIX)
             send_agent(flow)
@@ -291,79 +656,89 @@ def main() -> None:
         retried_error = False
         while time.time() < deadline:
             time.sleep(POLL_SECONDS)
-            if FLOW_PROJECT_ID not in str(flow.js('location.href') or ''):
+            href = str(flow.js('location.href') or '')
+            if FLOW_PROJECT_ID not in href:
                 print(f'[{pid}] onglet a quitté le projet — abandon de cette prise.', flush=True)
                 break
+            if '/edit/' in href:
+                flow.leave_editor()
+                continue
             ready = flow.top_card_ready()
+            top = flow.top_tile_info()
             plays = flow.card_count()
             progress = flow.progress_count()
-            live_videos = flow.videos()
             body = flow.js('document.body.innerText') or ''
-            queued = 'file d\'attente' in body or 'programmée' in body
+            queued = queued_in_body(body)
             elapsed = int(TIMEOUT_SECONDS - (deadline - time.time()))
             print(
                 f'[{pid}] t={elapsed}s plays={plays} progress={progress} '
-                f'ready={int(ready)} videos={len(live_videos)} queued={int(queued)}',
+                f'ready={int(ready)} thumbs={len(flow.tile_thumbnails())} '
+                f'top={str(top.get("aria") or "")[:40]!r} queued={int(queued)}',
                 flush=True,
             )
-            if queued or progress > 0 or plays > before_plays:
+            if queued or progress > 0 or (top.get('src') and top.get('src') not in before_thumbs):
                 submitted_seen = True
+            retry_labels = ('Réessayer', 'Try again', 'Retry')
             if (
                 not retried_error
-                and 'Réessayer' in body
+                and any(label in body for label in retry_labels)
                 and progress == 0
                 and not queued
             ):
                 retry = next(
-                    (b for b in flow.buttons() if 'Réessayer' in (b.get('text') or '')),
+                    (
+                        b for b in flow.buttons()
+                        if any(label in (b.get('text') or '') for label in retry_labels)
+                    ),
                     None,
                 )
                 if retry and retry.get('width', 0) > 0:
-                    print(f'[{pid}] Flow a demandé Réessayer — second clic TRUSTED.', flush=True)
+                    print(f'[{pid}] Flow a demandé un nouvel essai — second clic TRUSTED.', flush=True)
                     flow.unlock_ui()
                     flow.click(float(retry['x']), float(retry['y']), 1.5)
                     retried_error = True
                     submitted_seen = True
                     continue
             if not submitted_seen:
-                if not ready and plays <= before_plays:
-                    submitted_seen = True  # nouvelle carte en cours (sans play) en haut
-                elif elapsed > 90:
+                if elapsed > 90:
                     print(f'[{pid}] aucune nouvelle carte après soumission.', flush=True)
                     break
                 continue
-            if flow.failure_count() > base_failures and progress == 0:
+            if flow.failure_count() > base_failures and progress == 0 and not top.get('src'):
                 print(f'[{pid}] ÉCHEC signalé par Flow.', flush=True)
                 break
-            # Ne JAMAIS prendre un <video> « nouveau » sur un projet déjà
-            # peuplé : FLOWFIX1 a téléchargé un clip Lyon préexistant (75 plays)
-            # en 8 s. On n'accepte que : une carte play apparue APRÈS, dont le
-            # src n'était pas là avant, et dont le prompt de carte colle.
-            if plays > before_plays and ready:
-                src = flow.top_card_src()
-                if src and src not in before_videos and src != before_top:
-                    card_text = flow.js('document.body.innerText') or ''
-                    if needle and needle[:40].lower() not in card_text.lower():
-                        print(f'[{pid}] src nouveau mais prompt carte divergent — on attend.', flush=True)
-                    else:
-                        new_src = src
-                        break
-            if progress > 0:
+            src = str(top.get('src') or '')
+            if ready and src and src not in before_thumbs and src != before_top:
+                # Titre auto (« Developer desk… ») ≠ 8 premiers mots du prompt :
+                # on logge, mais une vignette ABSENTE de before_thumbs est la carte neuve.
+                card_text = (top.get('aria') or '') + '\n' + body
+                if needle and needle[:40].lower() not in card_text.lower():
+                    print(
+                        f'[{pid}] vignette nouvelle titre={top.get("aria")!r} '
+                        '(prompt non relu dans le titre — on prend la carte du haut).',
+                        flush=True,
+                    )
+                new_src = src
+                break
+            if progress > 0 or top.get('progress'):
                 continue
-            if flow.failure_count() > base_failures and progress == 0:
-                print(f'[{pid}] ÉCHEC signalé par Flow.', flush=True)
-                break
 
         if not new_src:
             print(f'[{pid}] pas de vidéo (timeout/échec).', flush=True)
             continue
         try:
-            flow.fetch_video(new_src, out)
-            print(f'[{pid}] OK -> {out}', flush=True)
+            if not flow.open_top_tile():
+                raise RuntimeError('ouverture éditeur de la carte du haut impossible.')
+            flow.download_open_clip_720p(out)
+            flow.leave_editor()
+            print(f'[{pid}] OK -> {out} | {ffprobe_summary(out)}', flush=True)
             done += 1
         except Exception as exc:  # noqa: BLE001
             print(f'[{pid}] vidéo générée, download KO ({exc}) — récup manuelle via ⬇.', flush=True)
-            done += 1
+            try:
+                flow.leave_editor()
+            except Exception:
+                pass
 
     print(f'CREDITS-FIN {flow.credits()} | clips {done}/{len(items)}', flush=True)
 
