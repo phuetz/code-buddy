@@ -1,17 +1,28 @@
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { registerSensoryCommand } from '../../src/commands/cli/sensory-command.js';
 
 describe('B-5: buddy sensory status displays tested URL and accepts --server-url / CODEBUDDY_SERVER_URL', () => {
   let originalEnvServerUrl: string | undefined;
+  let originalEnvStatusFile: string | undefined;
   let testServer: Server | null = null;
   let serverPort = 0;
 
   beforeEach(() => {
     originalEnvServerUrl = process.env.CODEBUDDY_SERVER_URL;
     delete process.env.CODEBUDDY_SERVER_URL;
+    // Hermétique : sans cet isolement, un `buddy server` réellement en cours sur la
+    // machine (le robot) est vu via ~/.codebuddy/sensory-status.json et le statut
+    // répond « serveur pid N en cours » au lieu du chemin HTTP que ces tests exercent.
+    originalEnvStatusFile = process.env.CODEBUDDY_SENSORY_STATUS_FILE;
+    process.env.CODEBUDDY_SENSORY_STATUS_FILE = join(
+      tmpdir(),
+      `codebuddy-sensory-status-absent-${process.pid}-${Date.now()}.json`,
+    );
   });
 
   afterEach(async () => {
@@ -19,6 +30,11 @@ describe('B-5: buddy sensory status displays tested URL and accepts --server-url
       process.env.CODEBUDDY_SERVER_URL = originalEnvServerUrl;
     } else {
       delete process.env.CODEBUDDY_SERVER_URL;
+    }
+    if (originalEnvStatusFile !== undefined) {
+      process.env.CODEBUDDY_SENSORY_STATUS_FILE = originalEnvStatusFile;
+    } else {
+      delete process.env.CODEBUDDY_SENSORY_STATUS_FILE;
     }
     if (testServer) {
       await new Promise<void>((resolve, reject) => {
