@@ -71,35 +71,44 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-    - name: Generate changelog
-      id: changelog
+    - name: Write release notes to a file
+      # The body goes through a file, never through an argument: 2 200 commits between
+      # v1.8.0 and v2.0.0 made the inline body exceed the OS argument limit
+      # ("Argument list too long") and the release step died after npm had published.
       run: |
-        CHANGELOG=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s (%h)" --no-merges)
-        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-        echo "$CHANGELOG" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        NOTES="docs/RELEASE-NOTES-${VERSION}.md"
+        {
+          if [ -f "$NOTES" ]; then
+            cat "$NOTES"
+          else
+            echo "## Changes in this release"
+            echo
+            git log "$(git describe --tags --abbrev=0 HEAD^)..HEAD" --pretty=format:"- %s (%h)" --no-merges | head -n 200
+            echo
+            echo "_Full history: see CHANGELOG.md._"
+          fi
+          echo
+          echo "## Installation"
+          echo
+          echo '```bash'
+          echo "npm install -g @phuetz/code-buddy@${VERSION}"
+          echo '```'
+          echo
+          echo "or"
+          echo
+          echo '```bash'
+          echo "npx @phuetz/code-buddy@${VERSION}"
+          echo '```'
+        } > "${RUNNER_TEMP}/release-body.md"
+        wc -c "${RUNNER_TEMP}/release-body.md"
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref }}
         name: Release ${{ steps.version.outputs.VERSION }}
-        body: |
-          ## Changes in this release
-
-          ${{ steps.changelog.outputs.CHANGELOG }}
-
-          ## Installation
-
-          ```bash
-          npm install -g @phuetz/code-buddy@${{ steps.version.outputs.VERSION }}
-          ```
-
-          or
-
-          ```bash
-          npx @phuetz/code-buddy@${{ steps.version.outputs.VERSION }}
-          ```
+        body_path: ${{ runner.temp }}/release-body.md
         draft: false
         prerelease: false
         files: phuetz-code-buddy-${{ steps.version.outputs.VERSION }}.tgz
