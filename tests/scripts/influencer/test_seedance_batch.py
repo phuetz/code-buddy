@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 import unittest
 
@@ -56,6 +57,15 @@ class ParseHelpersTest(unittest.TestCase):
         self.assertTrue(sb.is_forbidden_commerce_text('Manage subscription'))
         self.assertFalse(sb.is_forbidden_commerce_text('Confirm'))
         self.assertFalse(sb.is_forbidden_commerce_text('Credit balance'))
+
+    def test_prompt_containing_error_is_not_a_generation_failure(self) -> None:
+        """Régression lot 2026-09-09 : « error-line » dans le prompt abortait l'attente."""
+        self.assertIsNone(re.search(
+            r'failed to generate|generation failed|content violat|sensitive content',
+            'error', re.I))
+        self.assertIsNotNone(re.search(
+            r'failed to generate|generation failed|content violat|sensitive content',
+            'generation failed', re.I))
 
     def test_generate_button_ready_uses_html_disabled(self) -> None:
         self.assertFalse(sb.looks_like_generate_button(

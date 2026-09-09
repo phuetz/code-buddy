@@ -541,14 +541,15 @@ def wait_download(c, name: str, dest: str, timeout_s=420) -> str | None:
     url = None
     while time.time() - t0 < timeout_s:
         time.sleep(8)
+        click_text(c, 'Go to bottom')
         fresh = [u for u in real_vids(c) if u not in baseline]
         prog = ev(c, r'''(()=>{
           const t=document.body.innerText||'';
-          const m=t.match(/(failed|error|violat|sensitive|\d{1,3}%)/i);
+          const m=t.match(/(\d{1,3}%)|generation failed|failed to generate|content violat|sensitive content/i);
           return m?m[0]:'';
         })()''') or ''
         print(f"    [{name}] +{int(time.time()-t0)}s fresh={len(fresh)} prog={prog!r}", flush=True)
-        if re.search(r'fail|error|violat|sensitive', prog, re.I):
+        if re.search(r'failed to generate|generation failed|content violat|sensitive content', prog, re.I):
             return None
         if fresh:
             url = fresh[0]

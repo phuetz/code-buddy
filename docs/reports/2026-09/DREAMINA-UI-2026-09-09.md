@@ -1,6 +1,6 @@
 # DREAMINA-UI-2026-09-09 — pilote CDP chat agent Seedance
 
-**Statut :** exploration DOM faite ; adaptation du pilote et preuves clips à suivre.  
+**Statut :** FAIT (19/20 clips 2.5 uniques + 1 preuve Mini ; 1 plan non récupéré).  
 **Agent :** Grok 4.6  
 **Date :** 2026-09-09  
 **Branche :** `codex/audit-systeme-nerveux-2026-09-01`  
@@ -25,10 +25,10 @@ prouver un clip 16:9 5 s en Seedance 2.0 Mini (25 crédits), puis lancer les 20 
 
 | Outil | Volume |
 |---|---|
-| Code Explorer | 4 appels (`list_repos`, `query`, `context` CDP, `impact` `set_prompt` — symbole Python absent du graphe, complété par `rg`) |
-| lm-resizer | 0 (dumps CDP et `code-explorer analyze` déjà bornés) |
+| Code Explorer | 8 appels (`list_repos`, `query`, `context` CDP, `impact` `set_prompt` absent du graphe + `rg`, `analyze --force`, 2× `analyze --incremental`, `status`) |
+| lm-resizer | 0 (pytest 10 verts, dumps CDP et analyze déjà bornés) |
 | Octets économisés | 0 |
-| Index | **réindexé** `--force` (était périmé depuis `6092cbe9` / 2026-08-02) → `c1c4160fa` 2026-09-09T19:54:14Z, 6872 fichiers |
+| Index | **réindexé** `--force` (périmé depuis `6092cbe9` / 2026-08-02) puis incrémental après les commits 1–2 |
 
 `code-explorer query "seedance batch Dreamina CDP"` a renvoyé `cdp-lib.py:CDP` et le driver Flow TypeScript, pas les fonctions top-level de `seedance_batch.py`. `context conn` / `impact set_prompt` : symbole absent. Relu par `rg` : `conn` / `set_prompt` / `find_generate_button` / `set_ratio` / `real_vids` dans `scripts/influencer/seedance_batch.py`.
 
@@ -37,8 +37,8 @@ prouver un clip 16:9 5 s en Seedance 2.0 Mini (25 crédits), puis lancer les 20 
 | Tranche | Index | Contenu |
 |---|---|---|
 | 1 | réindexé `--force`, à jour `c1c4160fa` | Exploration DOM (ce rapport) |
-| 2 | à réindexer après commit | Adaptation `seedance_batch.py` + preuve 2.0 Mini (3273→3248, 1280×720, 5.09 s) |
-| 3 | à venir | Lot 20 plans (si le JSON existe) + tableau clips |
+| 2 | incrémental après `627132599` / `315222cbf` | Adaptation `seedance_batch.py` + preuve Mini |
+| 3 | à réindexer après ce commit | Lot 20 plans 2.5 + tableau + filtre « error » |
 
 ---
 
@@ -204,8 +204,54 @@ Bug corrigé après coup : `journal_write(..., path=got)` collisionnait avec le 
 
 ## Lot 20 plans
 
-*(tranche 3)*
+JSON présent : `~/DEV/vitrine-drafts/videos-lisa-2026-09-09/broll/seedance-jobs.json` (20 jobs, tous `16:9` / `5s`, T2V).
+
+```
+python3 scripts/influencer/seedance_batch.py \
+  ~/DEV/vitrine-drafts/videos-lisa-2026-09-09/broll/seedance-jobs.json \
+  --model 2.5 --outdir ~/.codebuddy/media-video/seedance-2026-09 --min-credits 160
+```
+
+**Incident :** `wait_download` prenait le premier `error` dans `document.body` (y compris le mot du prompt `error-line-extracted`). Six jobs ont été facturés puis abortés à +8 s. Correctif : ne plus matcher `error` nu ; seulement `generation failed` / `failed to generate` / `content violat` / `sensitive content`. Cinq des six vidéos ont été récupérées ensuite dans le fil du chat (préfixe du prompt). `ce-p13` a d'abord été une copie byte-identique de `ce-p68` (mauvais parent DOM) — fichier retiré. Solde restant **48** < 160 : pas de régénération.
+
+Solde session : **3273 → 48** (preuve Mini −25 + vingt générations 2.5 à 160, dont une régénération `lmr-p10` et le retry `ce-p12`). Arrêt propre sous 160 respecté.
+
+Sortie : `~/.codebuddy/media-video/seedance-2026-09/`. Journal : `seedance-journal.jsonl`.
+
+| Clip | Durée | Résolution | Crédits (avant→après) | Chemin |
+|---|---|---|---|---|
+| proof-mini-16x9-5s | 5.088 s | 1280×720 | 25 (3273→3248) | `…/proof-mini-16x9-5s.mp4` |
+| ce-p06-intern-same-corridors | 5.017 s | 1280×720 | 160 (3248→3088) | `…/ce-p06-intern-same-corridors.mp4` |
+| ce-p07-knowledge-graph-ignites | 5.017 s | 1280×720 | 160 (3088→2928) | `…/ce-p07-knowledge-graph-ignites.mp4` |
+| ce-p09-stack-of-files-opening | 5.056 s | 1280×720 | 160 (2928→2768) | `…/ce-p09-stack-of-files-opening.mp4` |
+| ce-p12-question-edges-answer | 5.017 s | 1280×720 | 160 (368→208, retry) | `…/ce-p12-question-edges-answer.mp4` |
+| cb-p11-engine-five-parts-lock | 5.017 s | 1280×720 | 160 (2768→2608) | `…/cb-p11-engine-five-parts-lock.mp4` |
+| cb-p34-p38-three-doors-fail-closed | 5.056 s | 1280×720 | 160 (2608→2448) | `…/cb-p34-p38-three-doors-fail-closed.mp4` |
+| cb-p41-one-goal-n-bounded-agents | 5.017 s | 1280×720 | 160 (2448→2288) | `…/cb-p41-one-goal-n-bounded-agents.mp4` |
+| cb-p23-plan-edit-verify-loop | 5.017 s | 1280×720 | 160 (2288→2128) | `…/cb-p23-plan-edit-verify-loop.mp4` |
+| cb-p45-sandbox-layers-chain | 5.017 s | 1280×720 | 160 (2128→1968) | `…/cb-p45-sandbox-layers-chain.mp4` |
+| cb-p69-snapshot-score-rollback | 5.017 s | 1280×720 | 160 (1968→1808) | `…/cb-p69-snapshot-score-rollback.mp4` |
+| cb-p86-system-prompt-gauge-drops | 5.017 s | 1280×720 | 160 (1808→1648) | `…/cb-p86-system-prompt-gauge-drops.mp4` |
+| lmr-p06-context-gauge-fills-with-logs | 5.056 s | 1280×720 | 160 (1648→1488) | `…/lmr-p06-context-gauge-fills-with-logs.mp4` |
+| lmr-p10-error-line-extracted | 5.056 s | 1280×720 | 160 (208→48, retry après abort) | `…/lmr-p10-error-line-extracted.mp4` |
+| lmr-p12-signal-core-noise-edges | 5.017 s | 1280×720 | 160 (facturé à l'abort, fichier récolté) | `…/lmr-p12-signal-core-noise-edges.mp4` |
+| lmr-p28-filter-compress-agent-pipeline | 5.017 s | 1280×720 | 160 (idem, récolté) | `…/lmr-p28-filter-compress-agent-pipeline.mp4` |
+| lmr-p34-host-sandbox-pipe-filter | 5.017 s | 1280×720 | 160 (idem, récolté) | `…/lmr-p34-host-sandbox-pipe-filter.mp4` |
+| ce-p13-book-versus-index | — | — | 160 facturés à l'abort ; **fichier absent** (48 cr restants) | — |
+| ce-p41-linear-curve-then-outlier | 5.056 s | 1280×720 | 160 (abort puis récolte) | `…/ce-p41-linear-curve-then-outlier.mp4` |
+| ce-p68-dead-end-then-graph-appears | 5.017 s | 1280×720 | 160 déjà déduits (528→528 à l'écriture) | `…/ce-p68-dead-end-then-graph-appears.mp4` |
+| ce-p72-prune-folders-bottom-up | 5.017 s | 1280×720 | 160 (528→368) | `…/ce-p72-prune-folders-bottom-up.mp4` |
+
+Les 19 mp4 2.5 + la preuve Mini sont h264 1280×720 + aac, durée 5.02–5.09 s. Préfixe des chemins : `~/.codebuddy/media-video/seedance-2026-09/`. `ce-p13` n'a pas de fichier.
+
+Tests purs : `tests/scripts/influencer/test_seedance_batch.py` **10 verts**.
 
 ## Bilan
 
-*(à la clôture)*
+1. UI chat agent cartographiée (ProseMirror, menus modèle/durée/ratio, solde `.credits-R4hAvo` = 3273).
+2. `seedance_batch.py` adapté (`--model 2.5|2.0mini`, journal JSONL, onglet Dreamina only, jamais Buy).
+3. Preuve Mini : `ffprobe` 1280×720 5.088 s, solde 3273→3248.
+4. Lot 2.5 : 19 fichiers uniques + 1 plan (`ce-p13`) non récupéré ; solde final **48**.
+5. Ouvert : régénérer `ce-p13` quand le solde le permet (≥ 160).
+
+===LANE_GROK_SEEDANCE_TERMINE===
