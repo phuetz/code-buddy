@@ -107,6 +107,24 @@ The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy ins
 
 ---
 
+## Use it from Claude Code (plugin, one command)
+
+This repository is also a Claude Code plugin marketplace. It installs a skill
+that teaches Claude Code how to drive `buddy` correctly (headless one-shot,
+provider and model pinning, permission modes, the verify loop) and a read-only
+MCP server exposing Code Buddy's tools:
+
+```bash
+npm i -g @phuetz/code-buddy
+claude plugin marketplace add phuetz/code-buddy
+claude plugin install code-buddy@code-buddy
+# optional, same marketplace: the context filter
+claude plugin install lm-resizer@code-buddy
+```
+
+Codex users: copy `.codex/skills/` if present, or `skills/code-buddy` into
+`~/.codex/skills/`. Remove with `claude plugin uninstall code-buddy@code-buddy`.
+
 ## First run
 
 A real task, start to finish. `buddy loop` plans, edits, runs your verification command, and stops

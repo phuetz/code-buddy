@@ -24,6 +24,9 @@ Ce que la 2.0 ajoute, et tout est optionnel : sans la variable d'environnement, 
 
 npm i -g @phuetz/code-buddy
 
+Et si vous êtes déjà sur Claude Code, deux commandes installent la compétence et le serveur MCP :
+claude plugin marketplace add phuetz/code-buddy · claude plugin install code-buddy@code-buddy
+
 Ce qui n'est pas prêt est écrit noir sur blanc dans le README, section « Not ready ». Je préfère ça à une promesse.
 
 #IA #DeveloperTools #OpenSource #LLM #AgentsIA #Ollama #ClaudeCode
@@ -57,6 +60,7 @@ New in 2.0, all opt-in: a multi-AI fleet hub with fail-closed remote read-only t
 64 providers, 220+ tools, ~27k tests, published with signed provenance from GitHub Actions. The README says what is not ready yet.
 
 npm i -g @phuetz/code-buddy
+Claude Code users: claude plugin marketplace add phuetz/code-buddy && claude plugin install code-buddy@code-buddy
 
 #AI #DevTools #OpenSource #LLM
 

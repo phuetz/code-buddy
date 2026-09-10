@@ -1,0 +1,48 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "code-buddy",
+  "owner": {
+    "name": "Patrice Huetz",
+    "url": "https://github.com/phuetz"
+  },
+  "description": "Code Buddy (the agent) and lm-resizer (the context filter) for Claude Code.",
+  "plugins": [
+    {
+      "name": "code-buddy",
+      "displayName": "Code Buddy",
+      "description": "Skill to operate the buddy CLI correctly (headless, provider pinning, permissions, verify loop) + read-only MCP server.",
+      "source": "./",
+      "version": "2.0.0",
+      "author": {
+        "name": "Patrice Huetz"
+      },
+      "license": "BUSL-1.1",
+      "keywords": [
+        "coding-agent",
+        "ollama",
+        "mcp"
+      ],
+      "category": "development"
+    },
+    {
+      "name": "lm-resizer",
+      "displayName": "lm-resizer",
+      "description": "Filter noisy command output before it reaches the model; raw output stays recoverable. Skill + MCP server.",
+      "source": {
+        "source": "github",
+        "repo": "phuetz/lm-resizer"
+      },
+      "version": "0.2.1",
+      "author": {
+        "name": "Patrice Huetz"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "context",
+        "compression",
+        "tokens"
+      ],
+      "category": "productivity"
+    }
+  ]
+}
