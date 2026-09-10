@@ -67,6 +67,7 @@ const TOKEN_REFRESH_AGE_MS = 60 * 60 * 1000; // 1 hour
 let refreshAuthInFlight: Promise<ChatGptAuth | null> | null = null;
 
 const AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
+const CODEX_CLI_AUTH_PATH = path.join(os.homedir(), '.codex', 'auth.json');
 
 /** Token bundle returned by `https://auth.openai.com/oauth/token`. */
 interface OauthTokens {
@@ -105,7 +106,13 @@ export interface ChatGptAuth {
 
 function loadAuthFile(): CodexAuthDotJson | null {
   try {
-    return readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
+    const primary = readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
+    if (primary?.tokens?.access_token) return primary;
+    if (fs.existsSync(CODEX_CLI_AUTH_PATH)) {
+      const fallback = readJsonAtomicSync<CodexAuthDotJson | null>(CODEX_CLI_AUTH_PATH, null);
+      if (fallback?.tokens?.access_token) return fallback;
+    }
+    return primary;
   } catch (err) {
     logger.error('Error reading codex-auth.json', err instanceof Error ? err : { error: String(err) });
     return null;
@@ -136,8 +143,12 @@ export function clearCodexCredentials(): void {
 export function hasCodexCredentials(): boolean {
   try {
     const parsed = readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
-    if (!parsed) return false;
-    return Boolean(parsed.tokens?.access_token);
+    if (parsed?.tokens?.access_token) return true;
+    if (fs.existsSync(CODEX_CLI_AUTH_PATH)) {
+      const fallback = readJsonAtomicSync<CodexAuthDotJson | null>(CODEX_CLI_AUTH_PATH, null);
+      return Boolean(fallback?.tokens?.access_token);
+    }
+    return false;
   } catch {
     return false;
   }

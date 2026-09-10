@@ -50,9 +50,16 @@ import {
 import { logger } from '../../utils/logger.js';
 import { preserveProviderErrorMetadata } from '../provider-error-classifier.js';
 import { getInstallationId } from '../../utils/installation-id.js';
+import {
+  buildChatGptHeaders,
+  CHATGPT_RESPONSES_URL,
+  CODEX_ORIGINATOR,
+} from './chatgpt-headers.js';
 
-const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
-const ORIGINATOR = 'codex_cli_rs';
+export { buildChatGptHeaders } from './chatgpt-headers.js';
+
+const RESPONSES_URL = CHATGPT_RESPONSES_URL;
+const ORIGINATOR = CODEX_ORIGINATOR;
 
 // The Codex backend has no documented SLA and has been observed to silently
 // stall (TLS handshake completes, no headers ever arrive). Without these the
@@ -639,26 +646,10 @@ export class ChatGptResponsesProvider implements Provider {
     useResponsesLite: boolean,
     requestControl: ChatGptRequestControl,
   ): Promise<Response> {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${auth.access_token}`,
-      Accept: 'text/event-stream',
-      'Content-Type': 'application/json',
-      originator: ORIGINATOR,
-      // Stable per-install UUID — Codex backend uses this for telemetry
-      // and rate-limiting. Generated lazily on first read, persisted to
-      // ~/.codebuddy/installation-id. Mirrors openai/codex upstream.
-      'x-codex-installation-id': getInstallationId(),
-      'User-Agent': `codebuddy/${process.env.npm_package_version ?? 'dev'}`,
-    };
-    if (auth.account_id) {
-      headers['ChatGPT-Account-ID'] = auth.account_id;
-    }
-    if (auth.is_fedramp) {
-      headers['X-OpenAI-Fedramp'] = 'true';
-    }
-    if (useResponsesLite) {
-      headers['x-openai-internal-codex-responses-lite'] = 'true';
-    }
+    const headers = buildChatGptHeaders(auth, {
+      accept: 'text/event-stream',
+      useResponsesLite,
+    });
 
     logger.debug(`[chatgpt-responses] POST ${RESPONSES_URL} (model=${body.model})`);
 
