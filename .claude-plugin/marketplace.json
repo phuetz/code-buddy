@@ -29,8 +29,9 @@
       "displayName": "lm-resizer",
       "description": "Filter noisy command output before it reaches the model; raw output stays recoverable. Skill + MCP server.",
       "source": {
-        "source": "github",
-        "repo": "phuetz/lm-resizer"
+        "source": "url",
+        "url": "https://github.com/phuetz/lm-resizer.git",
+        "ref": "master"
       },
       "version": "0.2.1",
       "author": {
