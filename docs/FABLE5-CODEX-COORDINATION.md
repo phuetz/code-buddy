@@ -17,6 +17,9 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P0 | DEVICE-AUTH 2026-09-10 | ASTRA — RÉSERVÉ | Branche `astra/device-auth-2026-09-10`, clone courant ; rapport `docs/reports/2026-09/DEVICE-AUTH-ASTRA-2026-09-10.md` créé en premier | Auth appareil, JWT, routes, CLI pair/devices, profil WS et tests, docs Android ; PWA et lane companion exclues | En cours ; HOME `_qa/device-auth/home` ; aucun push/service |
+
+
 | P0 | CI portable Tranche 8 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08`, base `af8c95c71` ; commit portant cette ligne, `fix(ci): handle Windows cwd probes and retry skill removal` | Shell, suppression avec watchers et installateur rouge→vert ; sept fichiers / 48 verts ; suite demandée 593 verts ; privacy, typecheck, lint ciblé, commitlint verts ; rapport Tranche 8 | Aucun push ; index vide après commit ; triplet avant/après : mêmes deux rouges hors tranche ; validate global : 12 rouges hors fichiers modifiés ; Windows Node 20.20.2 natif à confirmer ; Code Explorer sans snapshot |
 
 | P0 | CI portable Tranche 7 2026-09-08 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `fix/ci-portable-macos-windows-2026-09-08`, base `e1cc039bb` ; commit portant cette ligne, `fix(ci): retry Windows atomic renames and correct shard four fixtures` | Retry win32 rouge→vert ; six fichiers / 145 verts ; suite demandée 42 fichiers / 794 verts ; privacy 40/40 ; build/typecheck/lint ciblé/commitlint verts ; rapport Tranche 7 | Aucun push ; index vide après commit ; triplet avant/après : mêmes cinq rouges hors tranche ; validate global : 12 rouges hors fichiers modifiés ; CI Windows native à confirmer ; Code Explorer sans snapshot |
