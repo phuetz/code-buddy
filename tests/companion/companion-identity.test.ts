@@ -167,6 +167,75 @@ describe('companion-identity', () => {
     });
   });
 
+  describe('Voice robotNamed resolution via respond-decider', () => {
+    it('resolves guest when phrase is spoken without robot name outside engagement window, and present when robot is named', async () => {
+      const { createResponseDecider } = await import('../../src/sensory/respond-decider.js');
+      const { resolveVoiceRobotNamed } = await import('../../src/sensory/voice-loop.js');
+
+      const decider = createResponseDecider({ robotName: 'Lisa' });
+
+      // 1. Phrase sans le nom du robot hors fenêtre => guest
+      const namedWithoutName = await resolveVoiceRobotNamed('quel temps fait-il aujourd’hui ?', {
+        responseDecider: decider,
+      });
+      expect(namedWithoutName).toBe(false);
+
+      const identityGuest = resolveCompanionIdentity({
+        channel: 'voice',
+        isVoicePresence: true,
+        robotNamed: namedWithoutName,
+        env: {},
+      });
+      expect(identityGuest.role).toBe('guest');
+      expect(identityGuest.reason).toBe('voice_unauthenticated_or_unnamed');
+
+      // 2. Phrase avec le nom du robot => present
+      const namedWithName = await resolveVoiceRobotNamed('Lisa, quel temps fait-il ?', {
+        responseDecider: decider,
+      });
+      expect(namedWithName).toBe(true);
+
+      const identityPresent = resolveCompanionIdentity({
+        channel: 'voice',
+        isVoicePresence: true,
+        robotNamed: namedWithName,
+        env: {},
+      });
+      expect(identityPresent.role).toBe('present');
+      expect(identityPresent.reason).toBe('voice_presence_and_robot_named');
+
+      // 3. Follow-up phrase inside engagement window without name => present
+      const namedFollowUp = await resolveVoiceRobotNamed('raconte une histoire', {
+        responseDecider: decider,
+      });
+      expect(namedFollowUp).toBe(true);
+
+      const identityFollowUp = resolveCompanionIdentity({
+        channel: 'voice',
+        isVoicePresence: true,
+        robotNamed: namedFollowUp,
+        env: {},
+      });
+      expect(identityFollowUp.role).toBe('present');
+
+      // 4. Once window closed, phrase without name => guest again
+      decider.close();
+      const namedAfterClose = await resolveVoiceRobotNamed('quel temps fait-il ?', {
+        responseDecider: decider,
+      });
+      expect(namedAfterClose).toBe(false);
+
+      const identityAfterClose = resolveCompanionIdentity({
+        channel: 'voice',
+        isVoicePresence: true,
+        robotNamed: namedAfterClose,
+        env: {},
+      });
+      expect(identityAfterClose.role).toBe('guest');
+      expect(identityAfterClose.reason).toBe('voice_unauthenticated_or_unnamed');
+    });
+  });
+
   describe('Fail-closed default', () => {
     it('resolves guest for unknown channels or empty options', () => {
       const identity = resolveCompanionIdentity({

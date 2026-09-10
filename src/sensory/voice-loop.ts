@@ -81,6 +81,7 @@ import {
 export type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
+import { createResponseDecider, type ResponseDecider, type ResponseDecision } from './respond-decider.js';
 import {
   applyLimitsContract,
   avoidOpenersGuidance,
@@ -207,6 +208,12 @@ export interface VoiceStepOptions {
   shortFirst?: VoiceShortFirstConfig;
   /** Tell the outer audio pipeline that the fast route accepted the short-first contract. */
   onShortFirstReady?: (config: VoiceShortFirstConfig) => void;
+  /** Decision from respond-decider if already evaluated */
+  respondDecision?: { respond: boolean; reason: string };
+  /** Injected response decider for conversational continuity */
+  responseDecider?: ResponseDecider;
+  /** Explicit override for whether the robot was named or in engagement window */
+  robotNamed?: boolean;
 }
 
 export interface VoiceShortFirstConfig {
@@ -1859,6 +1866,39 @@ async function prepareSpokenTurn(
   };
 }
 
+let sharedVoiceResponseDecider: ResponseDecider | undefined;
+
+export function getVoiceResponseDecider(): ResponseDecider {
+  if (!sharedVoiceResponseDecider) {
+    sharedVoiceResponseDecider = createResponseDecider();
+  }
+  return sharedVoiceResponseDecider;
+}
+
+export function setVoiceResponseDecider(decider: ResponseDecider | undefined): void {
+  sharedVoiceResponseDecider = decider;
+}
+
+/**
+ * Determine if the utterance addresses the robot by name or takes place inside
+ * an active engagement window, consulting the respond-decider.
+ */
+export async function resolveVoiceRobotNamed(
+  heard: string,
+  replyOpts?: VoiceStepOptions,
+): Promise<boolean> {
+  if (typeof replyOpts?.robotNamed === 'boolean') {
+    return replyOpts.robotNamed;
+  }
+  if (replyOpts?.respondDecision) {
+    const reason = replyOpts.respondDecision.reason;
+    return reason === 'addressed' || reason === 'engaged';
+  }
+  const decider = replyOpts?.responseDecider ?? getVoiceResponseDecider();
+  const decision = await decider.decide(heard);
+  return decision.reason === 'addressed' || decision.reason === 'engaged';
+}
+
 export async function defaultReply(
   heard: string,
   history: VoiceHistoryTurn[] = [],
@@ -1951,10 +1991,11 @@ export async function defaultReply(
     if (isCompanionToolsEnabled(process.env)) {
       const { resolveCompanionIdentity } = await import('../companion/companion-identity.js');
       const { runCompanionChannelTurn } = await import('../channels/companion-channel-turn.js');
+      const robotNamed = await resolveVoiceRobotNamed(heard, replyOpts);
       const identity = resolveCompanionIdentity({
         channel: 'voice',
         isVoicePresence: true,
-        robotNamed: true,
+        robotNamed,
         env: process.env,
       });
       const turnResult = await runCompanionChannelTurn({

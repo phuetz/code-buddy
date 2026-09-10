@@ -1389,6 +1389,9 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             logger.warn(`[respond-policy] ${warning}`);
           }
           const responseDecider = createResponseDecider({ chimeIn: responsePolicy.chimeIn });
+          const { setVoiceResponseDecider } = await import('../sensory/voice-loop.js');
+          setVoiceResponseDecider(responseDecider);
+          sensoryTeardown.push(() => setVoiceResponseDecider(undefined));
           {
             const { shouldWireVisionReaction, wireVisionReaction } = await import('../sensory/vision-reaction.js');
             if (shouldWireVisionReaction({ camera: process.env.CODEBUDDY_SENSORY_CAMERA, token: sensoryToken })) {

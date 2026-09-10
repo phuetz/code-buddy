@@ -309,7 +309,7 @@ export async function runCompanionChannelTurn(
           });
         }
       } else if (surface === 'voice') {
-        // Voice surface: alert Patrice on Telegram with the photo and announce it
+        // Voice surface: alert owner on Telegram with the photo and announce it
         try {
           const { sendTelegramAlert } = await import('../sensory/alert.js');
           await sendTelegramAlert(finalText, media.imagePath);

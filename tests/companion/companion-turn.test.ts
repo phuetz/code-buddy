@@ -228,11 +228,11 @@ describe('runCompanionTurn — one path for every companion surface', () => {
     try {
       const result = await runCompanionTurn('dessine un chat roux', {
         surface: 'mobile',
-        userId: 'patrice',
+        userId: 'owner-user',
         env: {
           CODEBUDDY_COMPANION_PERSONA: 'copine',
           CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
-          CODEBUDDY_OWNER_USER_ID: 'patrice',
+          CODEBUDDY_OWNER_USER_ID: 'owner-user',
         } as NodeJS.ProcessEnv,
         chat,
         resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
@@ -260,11 +260,11 @@ describe('runCompanionTurn — one path for every companion surface', () => {
     const { chat } = captureChat('Je ne peux pas dessiner.');
     const result = await runCompanionTurn('dessine un chat roux', {
       surface: 'mobile',
-      userId: 'patrice',
+      userId: 'owner-user',
       env: {
         CODEBUDDY_COMPANION_PERSONA: 'copine',
         CODEBUDDY_COMPANION_TOOLS_ENABLED: 'false',
-        CODEBUDDY_OWNER_USER_ID: 'patrice',
+        CODEBUDDY_OWNER_USER_ID: 'owner-user',
       } as NodeJS.ProcessEnv,
       chat,
       resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
