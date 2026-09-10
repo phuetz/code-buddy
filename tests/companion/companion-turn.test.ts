@@ -169,4 +169,110 @@ describe('runCompanionTurn — one path for every companion surface', () => {
     expect(result.kind).toBe('text');
     expect(result.text.trim().length).toBeGreaterThan(0);
   });
+
+  it('runs tool loop when CODEBUDDY_COMPANION_TOOLS_ENABLED is true and returns tool_media on image generation', async () => {
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const { writeFileSync, unlinkSync } = await import('fs');
+    const dummyPath = join(tmpdir(), `companion-test-${Date.now()}.png`);
+    writeFileSync(dummyPath, Buffer.from('fake-image-bytes'));
+
+    const { FormalToolRegistry } = await import('../../src/tools/registry/tool-registry.js');
+    const registry = FormalToolRegistry.getInstance();
+    const existing = registry.get('image_generate');
+    registry.register(
+      {
+        name: 'image_generate',
+        description: 'generate image',
+        execute: async () => ({
+          success: true,
+          output: `Image generated at ${dummyPath}`,
+        }),
+        getSchema: () => ({ name: 'image_generate', description: 'gen', parameters: { type: 'object' } }),
+      },
+      { override: true, metadata: { name: 'image_generate', category: 'media', priority: 1, keywords: [], description: 'gen', requiresConfirmation: false } },
+    );
+
+    let round = 0;
+    const chat = vi.fn(async () => {
+      round++;
+      if (round === 1) {
+        return {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: {
+                      name: 'image_generate',
+                      arguments: JSON.stringify({ prompt: 'chat roux' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          model: 'fake-model',
+        } as never;
+      }
+      return {
+        choices: [{ message: { role: 'assistant', content: 'Voici ton chat roux !' } }],
+        model: 'fake-model',
+      } as never;
+    });
+
+    try {
+      const result = await runCompanionTurn('dessine un chat roux', {
+        surface: 'mobile',
+        userId: 'owner-user',
+        env: {
+          CODEBUDDY_COMPANION_PERSONA: 'copine',
+          CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
+          CODEBUDDY_OWNER_USER_ID: 'owner-user',
+        } as NodeJS.ProcessEnv,
+        chat,
+        resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
+        serveSelfie: async () => null,
+      });
+
+      expect(result.kind).toBe('selfie');
+      expect(result.text).toBe('Voici ton chat roux !');
+      expect(result.image).toBeDefined();
+      expect(result.image?.data).toBe(Buffer.from('fake-image-bytes').toString('base64'));
+      expect(result.historySuffix).toContain('Image générée');
+    } finally {
+      if (existing) {
+        registry.register(existing.tool, { override: true, metadata: existing.metadata });
+      } else {
+        registry.unregister('image_generate');
+      }
+      try { unlinkSync(dummyPath); } catch {
+        // ignore
+      }
+    }
+  });
+
+  it('keeps historical zero-tool turn when CODEBUDDY_COMPANION_TOOLS_ENABLED is false', async () => {
+    const { chat } = captureChat('Je ne peux pas dessiner.');
+    const result = await runCompanionTurn('dessine un chat roux', {
+      surface: 'mobile',
+      userId: 'owner-user',
+      env: {
+        CODEBUDDY_COMPANION_PERSONA: 'copine',
+        CODEBUDDY_COMPANION_TOOLS_ENABLED: 'false',
+        CODEBUDDY_OWNER_USER_ID: 'owner-user',
+      } as NodeJS.ProcessEnv,
+      chat,
+      resolveProvider: () => ({ apiKey: 'k', baseUrl: 'http://127.0.0.1:4199/v1', model: 'm' }),
+      serveSelfie: async () => null,
+    });
+
+    expect(result.kind).toBe('text');
+    expect(result.text).toBe('Je ne peux pas dessiner.');
+    expect(result.image).toBeUndefined();
+  });
 });

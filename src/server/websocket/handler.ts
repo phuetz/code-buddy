@@ -808,25 +808,31 @@ export async function produceCompanionReply(
     history?: CompanionHistoryTurn[];
     /** Photos the phone attached — already validated by `validateChatAttachments`. */
     attachments?: ValidatedChatAttachment[];
+    userId?: string;
   } = {},
 ): Promise<
-  string | { text: string; image?: { mimeType: string; data: string }; kind?: 'selfie' | 'text' }
+  string | { text: string; image?: { mimeType: string; data: string }; kind?: 'selfie' | 'text'; imagePath?: string; historySuffix?: string }
 > {
   const { runCompanionTurn } = await import('../../companion/companion-turn.js');
   const result = await runCompanionTurn(message, {
     surface: 'mobile',
     includeImageBytes: true,
+    ...(options.userId ? { userId: options.userId } : {}),
     ...(options.history ? { history: options.history } : {}),
     ...(options.attachments?.length ? { attachments: options.attachments } : {}),
   });
-  if (result.image || result.kind === 'selfie') {
+  if (result.image || result.kind === 'selfie' || result.imagePath) {
     return {
       text: result.text,
       ...(result.image ? { image: result.image } : {}),
       kind: result.kind,
+      ...(result.imagePath ? { imagePath: result.imagePath } : {}),
+      ...(result.historySuffix ? { historySuffix: result.historySuffix } : {}),
     };
   }
-  return result.text;
+  return result.historySuffix
+    ? { text: result.text, kind: 'text', historySuffix: result.historySuffix }
+    : result.text;
 }
 
 /** Persistence identity for this connection, or undefined (memory-only). */
@@ -849,9 +855,11 @@ function companionHistoryFor(state: ConnectionState): CompanionHistoryTurn[] {
 function rememberCompanionTurn(
   state: ConnectionState,
   userText: string,
-  produced: string | { text: string; kind?: 'selfie' | 'text' },
+  produced: string | { text: string; kind?: 'selfie' | 'text'; historySuffix?: string },
 ): void {
-  const assistantText = typeof produced === 'string' ? produced : produced.text;
+  const baseAssistantText = typeof produced === 'string' ? produced : produced.text;
+  const historySuffix = typeof produced === 'string' ? '' : (produced.historySuffix ?? '');
+  const assistantText = `${baseAssistantText}${historySuffix}`.trim();
   const kind = typeof produced === 'string' ? undefined : produced.kind;
   state.companionHistory = appendCompanionHistory(companionHistoryFor(state), [
     { role: 'user', content: userText },
@@ -1051,6 +1059,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
           const history = companionHistoryFor(state);
           const produced = await produceCompanionReply(userText, {
             history,
+            userId: state.userId,
             ...(imageAttachments.length ? { attachments: imageAttachments } : {}),
           });
           spoken = typeof produced === 'string' ? produced : produced.text;

@@ -55,12 +55,16 @@ export type CompanionSurface = CompanionSelfieSurface;
 
 export type { CompanionHistoryTurn } from './companion-history.js';
 
+import { resolveCompanionIdentity, type CompanionIdentity } from './companion-identity.js';
+
 export interface CompanionTurnResult {
   text: string;
   kind: 'selfie' | 'text';
   image?: { mimeType: string; data: string };
   imagePath?: string;
   model?: string;
+  historySuffix?: string;
+  executedTools?: import('../channels/companion-channel-turn.js').CompanionExecutedTool[];
   /** Present only when the user shared photos in this turn. */
   photos?: {
     /** Where the image went. `local` means the bytes never left the machine. */
@@ -83,6 +87,11 @@ export interface RunCompanionTurnOptions {
   history?: CompanionHistoryTurn[];
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  /** Explicit identity of the user, or resolved from surface and IDs */
+  identity?: CompanionIdentity;
+  userId?: string;
+  chatId?: string;
+  onWaitingWord?: (word: string) => Promise<void> | void;
   /**
    * Photos the user shared with this message. Absent (the default) the turn is
    * byte-identical to a text-only turn: no photo module is even imported.
@@ -98,8 +107,8 @@ export interface RunCompanionTurnOptions {
   ) => Promise<CompanionSelfieServeResult | null>;
   chat?: (
     messages: CodeBuddyMessage[],
-    tools: [],
-    opts: { model: string; maxTokens?: number; signal?: AbortSignal; tool_choice: 'none' },
+    tools: unknown[],
+    opts: { model: string; maxTokens?: number; signal?: AbortSignal; tool_choice?: unknown },
   ) => Promise<CodeBuddyResponse>;
   /** Photo seams — production uses the real pipeline and the real album. */
   preparePhotos?: typeof prepareCompanionPhotos;
@@ -223,6 +232,15 @@ export async function runCompanionTurn(
       ? (attachPhotoParts(base as Array<{ role: string; content?: unknown }>, batch.photos) as CodeBuddyMessage[])
       : base;
 
+  const identity =
+    options.identity ??
+    resolveCompanionIdentity({
+      channel: options.surface === 'mobile' ? 'pwa' : options.surface,
+      userId: options.userId,
+      chatId: options.chatId,
+      env,
+    });
+
   try {
     let batch = prepared;
     let generated = await runCompanionChannelTurn({
@@ -230,6 +248,10 @@ export async function runCompanionTurn(
       baseUrl: provider.baseUrl,
       model: provider.model,
       messages: messagesFor(batch, prompt.messages),
+      identity,
+      surface: options.surface,
+      env,
+      ...(options.onWaitingWord ? { onWaitingWord: options.onWaitingWord } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.chat ? { chat: options.chat } : {}),
     });
@@ -262,6 +284,10 @@ export async function runCompanionTurn(
           baseUrl: provider.baseUrl,
           model: provider.model,
           messages: localPrompt.messages,
+          identity,
+          surface: options.surface,
+          env,
+          ...(options.onWaitingWord ? { onWaitingWord: options.onWaitingWord } : {}),
           ...(options.signal ? { signal: options.signal } : {}),
           ...(options.chat ? { chat: options.chat } : {}),
         });
@@ -278,10 +304,32 @@ export async function runCompanionTurn(
     }
     const guarded = guardRelationshipReply(text);
     const limited = applyLimitsContract(guarded.response, { heard: message, env });
+
+    const firstMedia = generated.media?.[0];
+    let generatedImage: { mimeType: string; data: string } | undefined;
+    if (firstMedia?.imagePath && (options.includeImageBytes === true || options.surface === 'mobile')) {
+      try {
+        const fsMod = await import('fs/promises');
+        const pathMod = await import('path');
+        const ext = pathMod.extname(firstMedia.imagePath).slice(1).toLowerCase();
+        const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext || 'png'}`;
+        const data = (await fsMod.readFile(firstMedia.imagePath)).toString('base64');
+        generatedImage = { mimeType, data };
+      } catch (readErr) {
+        logger.warn('[companion-turn] Failed to read generated media bytes', {
+          error: readErr instanceof Error ? readErr.message : String(readErr),
+        });
+      }
+    }
+
     return {
       text: prependUserFacingFailoverNotice(limited.text, 'companion-turn'),
-      kind: 'text',
+      kind: firstMedia ? 'selfie' : 'text',
+      ...(firstMedia?.imagePath ? { imagePath: firstMedia.imagePath } : {}),
+      ...(generatedImage ? { image: generatedImage } : {}),
       model: generated.model,
+      ...(generated.historySuffix ? { historySuffix: generated.historySuffix } : {}),
+      ...(generated.executedTools ? { executedTools: generated.executedTools } : {}),
       ...(photoSummary ? { photos: photoSummary } : {}),
     };
   } catch (error) {
