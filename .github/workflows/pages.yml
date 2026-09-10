@@ -15,6 +15,7 @@ on:
       - 'docs/assets/showcase-appstudio*'
       - 'docs/assets/showcase-try.gif'
       - 'docs/assets/cowork-chat-demo.*'
+      - 'docs/assets/infographic-*.webp'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -44,6 +45,7 @@ jobs:
           cp cowork/public/favicon.png .pages-artifact/cowork/public/
           cp docs/assets/showcase-appstudio.gif docs/assets/showcase-appstudio.mp4 docs/assets/showcase-appstudio-sharpei.jpg .pages-artifact/docs/assets/
           cp docs/assets/showcase-try.gif docs/assets/cowork-chat-demo.gif docs/assets/cowork-chat-demo.mp4 .pages-artifact/docs/assets/
+          cp docs/assets/infographic-code-buddy-2.webp docs/assets/infographic-ai-engineering-stack.webp .pages-artifact/docs/assets/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .pages-artifact
