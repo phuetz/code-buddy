@@ -53,10 +53,20 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 - Prise en compte de la Voix (`isVoicePresence` + `robotNamed` = `present`).
 - Fail-closed strict sur tout profil inconnu ou non identifié (`guest`).
 - 14 tests unitaires dans `tests/companion/companion-identity.test.ts` (14/14 verts).
+- Commit : `8206f869f` `feat(companion): resolution pure d'identite companion pour Telegram, PWA et voix (etape 1)`
+
+### Étape 2 : Jeu d'outils par niveau (`src/companion/companion-toolset.ts`)
+- Implémentation du coupe-circuit `CODEBUDDY_COMPANION_TOOLS_ENABLED` (défaut OFF : 0 outils, comportement byte-identique garanti).
+- Liste noire absolue `COMPANION_FORBIDDEN_PATTERNS` (`bash`, `terminal`, `shell_*`, `create_file`, `write_file`, `str_replace_editor`, `apply_patch`, `mcp_*`, `fleet_*`, `peer_*`, `delegate_agent`).
+- Définition de `OWNER_COMPANION_TOOLS` (9 outils autorisés) et `PRESENT_COMPANION_TOOLS` (7 outils autorisés sans `remind` ni `camera_analyze`).
+- Gestion de la surcharge `CODEBUDDY_COMPANION_TOOLS` avec filtrage strict des outils interdits et du plafond du rôle.
+- Mots d'attente immédiats (`getCompanionToolWaitingWord`).
+- Exécution sécurisée avec `ConfirmationService` et extraction d'images produit (`extractImagePathFromToolResult`).
+- 20 tests unitaires dans `tests/companion/companion-toolset.test.ts` (20/20 verts).
 
 ---
 
 ## 5. Mesures et Outillage
 
-- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), 2 commandes via lm-resizer (`typecheck baseline`, `vitest tests/companion/companion-identity.test.ts`), sortie compressée.
-- **Index Code Explorer** : à jour (commit `76e675a6923e67e48b2fb2cf68c7fdd7c5fba5f7`).
+- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), 3 commandes via lm-resizer (`typecheck baseline`, `vitest companion-identity`, `vitest companion-toolset`).
+- **Index Code Explorer** : réindexation incrémentale en cours.
