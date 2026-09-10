@@ -92,3 +92,102 @@ ne contient que des empreintes : aucun chemin de fichier n'en sort. Sans
 | `CODEBUDDY_SHARED_PHOTOS_DIR` | Emplacement de l'album (défaut `~/.codebuddy/companion/shared-photos`) |
 | `CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS` | Fenêtre de regroupement d'un album Telegram (défaut 1 500 ms) |
 | `CODEBUDDY_VISION_MODEL` | Modèle de description locale (moondream) utilisé en mode `local` |
+
+## Application Android
+
+L'application native Android utilise une clé EC P-256 du Keystore, dont l'usage
+est autorisé par la sécurité Android (biométrie). Le serveur conserve uniquement
+la clé publique et vérifie une signature de connexion. La contrainte biométrique
+et la protection matérielle de la clé sont appliquées par l'application/Keystore ;
+ce protocole ne réalise pas d'attestation matérielle à distance.
+
+Sur la machine du serveur, sous **le même compte système** que `buddy server` :
+
+```bash
+buddy pair --url https://buddy.example.test
+buddy devices list
+buddy devices rename <deviceId> "Mon Android"
+buddy devices revoke <deviceId>
+```
+
+`buddy pair` affiche un code de huit caractères sans ambiguïté, valable dix minutes
+et une seule fois, ainsi qu'un QR ANSI via `qrencode`. Si `qrencode` est absent,
+la commande indique comment l'installer et conserve le code affiché utilisable.
+Le contenu exact du QR est `{"url":"https://buddy.example.test","pairingCode":"…"}`.
+`--json` imprime uniquement ce contenu. `--url` prime sur `CODEBUDDY_SERVER_URL` ;
+sans configuration, l'URL est `http://127.0.0.1:3000` (ou le port configuré),
+à remplacer par une adresse joignable depuis le téléphone. Aucune route réseau
+ne délivre de code d'appairage.
+
+Les trois routes sont publiques, indépendantes du drapeau PWA, sans JWT préalable
+ni cookie/jeton CSRF. Chaque route est limitée à dix requêtes par minute et par
+adresse de transport. Les en-têtes `X-Forwarded-For` ne changent pas cette limite ;
+derrière un reverse proxy, ses clients partagent donc la limite. Réponses
+`Cache-Control: no-store`. Utiliser HTTPS/WSS pour le téléphone hors boucle locale.
+
+| POST | Corps JSON | Réponse 200 |
+| --- | --- | --- |
+| `/api/auth/device/register` | `{ pairingCode, deviceName, publicKeyJwk }` | `{ deviceId }` |
+| `/api/auth/device/challenge` | `{ deviceId }` | `{ nonce, expiresAt }` |
+| `/api/auth/device/verify` | `{ deviceId, nonce, signature }` | `{ token }` |
+
+`publicKeyJwk` contient `kty: "EC"`, `crv: "P-256"`, `x` et `y` en base64url.
+Une JWK privée (`d`) est refusée. `deviceName` contient 1 à 80 caractères après
+trim, sans caractères de contrôle. `nonce` encode 32 octets aléatoires en
+**base64url sans padding** ; `expiresAt` est une date ISO 8601 UTC. Le challenge
+expire après 60 secondes ; en demander un autre invalide le précédent du même
+appareil. Un redémarrage du serveur invalide les challenges en mémoire.
+
+L'application signe les octets **UTF-8 de `deviceId + "." + nonce`**, sans nouvelle
+ligne, avec ECDSA/SHA-256 (ES256). `signature` est le **base64url sans padding des
+64 octets `r || s`**, chaque entier étant non signé et complété à 32 octets
+(format IEEE P1363/JOSE). Android `SHA256withECDSA` renvoie habituellement une
+séquence ASN.1 DER : le serveur accepte aussi directement ce format natif,
+encodé en base64url ou en base64 standard (avec ou sans padding). Un essai avec le
+nonce courant le consomme même si la signature est fausse.
+
+Un code inconnu, expiré ou déjà utilisé retourne le même `400` générique ; une
+preuve invalide, expirée ou un appareil révoqué retourne `401` ; dépassement de
+limite : `429` ; magasin occupé/indisponible ou configuration JWT manquante : `503`.
+Les erreurs ne reflètent ni nom, ni identifiant, ni clé. Le serveur doit disposer
+d'un secret JWT valide ; le mode de développement authentifié peut en créer un
+éphémère, tandis qu'un `JWT_SECRET` stable conserve les jetons après redémarrage.
+La CLI d'appairage n'a pas besoin de lire ce secret.
+
+Le JWT expire après une heure et porte `sub: deviceId`,
+`amr: ["biometric", "device"]`, `profile: "agent"`, `identity: "owner"`, et les
+portées utilisateur `chat`, `chat:stream`, `sessions`, `tools`. Le renouvellement
+nécessite une nouvelle preuve par challenge/signature. La révocation est relue
+sur les requêtes HTTP, à l'authentification WS et avant chaque nouveau message WS,
+y compris une réponse de confirmation ; elle n'annule pas une action déjà achevée.
+
+Sur `/ws`, envoyer `{"type":"authenticate","payload":{"token":"…"}}`, puis les
+messages `chat` habituels. La réponse `authenticated.payload` expose aussi
+`profile`, `identity` et `amr`. Avec `profile: "agent"`, le serveur utilise l'agent
+complet même si le client demande `assistant: "companion"`. Le mode de permission
+est `default`, isolé par tour ; les outils suivent les confirmations normales de
+Code Buddy. Le téléphone est automatiquement une surface d'approbation et reçoit
+`confirmation_required { id, tool, summary, risk }`. Il répond
+`confirmation_response { id, approved }` par le pont existant, même lorsque la PWA
+est désactivée. Les jetons historiques sans ces champs gardent leur réponse
+d'authentification et leur routage agent/companion existants.
+
+**Intégration companion (lane séparée)** :
+`src/server/auth/device-session-context.ts` exporte `getDeviceSessionIdentity()`.
+Pendant le tour WS, cette fonction rend une vue immuable des champs signés
+`deviceId`, `profile`, `identity`, `amr` ; hors du tour ou pour un jeton historique,
+elle rend `undefined`. Les extensions WS les lisent aussi via `ctx.principal`.
+Aucun champ d'identité fourni dans le corps d'un message ne remplace ces valeurs.
+La politique de conversation de Lisa reste gérée par la lane companion.
+
+Le fichier `~/.codebuddy/devices.json` est écrit atomiquement en mode `0600`.
+Son enveloppe conserve les nœuds SSH/ADB historiques (`version`, `devices`) et
+ajoute `deviceAuth.devices` (clé publique, nom, dates et `revokedAt`) ainsi que
+`deviceAuth.pairings` (empreintes SHA-256 des codes et échéances). Un verrou
+`devices.json.lock` sérialise CLI et serveur. En cas de processus tué pendant une
+écriture, les mutations échouent sans ouvrir l'accès : après avoir vérifié qu'aucun
+écrivain ne travaille encore, retirer uniquement ce répertoire de verrou vide.
+Ne pas restaurer une ancienne sauvegarde pour contourner une révocation.
+Les événements `device_register`, `device_verify`, `device_revoke` sont consignés
+par `audit-logger` dans le répertoire d'audit voisin, sans codes, signatures,
+jetons, clés ni noms d'appareils.

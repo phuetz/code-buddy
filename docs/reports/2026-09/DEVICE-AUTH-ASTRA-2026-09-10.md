@@ -100,4 +100,41 @@ Le store est partagé avec le serveur sous le même HOME.
 Preuve Commander réelle : `npm test -- tests/commands/token` → 24/24,
 dont sept nouveaux tests pair/devices. Smoke de sous-processus CLI avec QR réel
 et serveur réel → 0, détaillé dans la tranche 1. Index : réindexation incrémentale
-après le commit core ; commit de tranche CLI portant cette section.
+après le commit core (16 fichiers reparsés), puis après la CLI (1 fichier
+reparsé). Commit CLI : `7ddf1a4a2`. HEAD indexé vérifié avant la tranche documentaire.
+
+### Tranche 3 — documentation et passation
+
+Préparée le 2026-09-10 à 12:20 UTC ; avant les 75 minutes du budget.
+
+Section « Application Android » dans `docs/mobile-pwa.md` : contrat complet,
+formats de signatures, code local, QR, réponses, limites, révocation, verrou,
+point d'accès pour la lane companion. `CLAUDE.md` expose les commandes et routes.
+Commit documentaire : commit portant cette section ; analyse incrémentale après
+ce commit prévue par le protocole, état final vérifié avant le message de clôture.
+
+Contrôles complémentaires : privacy `tests/security/donnees-personnelles.test.ts`
+40/40 ; `npm run lint -- ...` a aussi parcouru le dépôt (le script contient `.`),
+sortie 0 avec avertissements hors fichiers modifiés ; lint ciblé final 0/0.
+`commitlint` était absent : premier essai `npx --no` refusé (sortie 1), puis outil
+19 installé uniquement sous QA, sans scripts d'installation. Les mêmes règles du
+fichier du dépôt, copié en `.cjs` dans QA pour son `module.exports`, donnent sortie 0
+sur tous les commits fonctionnels ; le commit documentaire est contrôlé après création.
+Aucune dépendance de production ajoutée.
+
+Outillage : 14 appels Code Explorer (context/impact/query), 34 commandes via
+lm-resizer, 764 186 octets économisés nets (925 076 octets bruts → 160 890 transmis).
+Les appels Code Explorer incluent les échecs initiaux et les homonymes écartés ;
+ce sont des volumes de sortie, pas des tokens facturés. Les compteurs lm-resizer
+proviennent exclusivement des métadonnées JSON de cette mission ; journaux bruts
+relus pour la revue, les erreurs et les preuves finales.
+
+État remis : branche `astra/device-auth-2026-09-10`, réservations libérées à la
+passation, aucun push, aucune PWA modifiée, aucun service existant redémarré ou
+reconfiguré. Artefacts QA gitignorés ; aucune clé privée, code d'appairage, signature,
+jeton ni chemin personnel dans les commits. L'essai Android physique et la politique
+companion restent aux lanes désignées. `validate` global reste incomplet avec les
+28 échecs hors lot observés, sans affirmation d'antériorité.
+
+VERDICT: routes 3/3 ; profil agent sur /ws OUI ; tests 776/778 (2 ignorés)
+===LANE_ASTRA_DEVICE_AUTH_TERMINE===
