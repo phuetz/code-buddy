@@ -51,7 +51,7 @@ describe('companion-identity', () => {
         channel: 'telegram',
         chatId: 'group',
         senderUsername: '@PatriceDev',
-        allowedUsers: ['@patricedev'],
+        allowedUsers: ['@ownerhandle'],
         env: {},
       });
       expect(identityWithAt.role).toBe('owner');
@@ -59,8 +59,8 @@ describe('companion-identity', () => {
       const identityWithoutAt = resolveCompanionIdentity({
         channel: 'telegram',
         chatId: 'group',
-        senderUsername: 'patricedev',
-        allowedUsers: ['@patricedev'],
+        senderUsername: 'ownerhandle',
+        allowedUsers: ['@ownerhandle'],
         env: {},
       });
       expect(identityWithoutAt.role).toBe('owner');

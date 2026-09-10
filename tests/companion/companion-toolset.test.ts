@@ -243,9 +243,9 @@ describe('companion-toolset', () => {
     it('extracts from JSON output string', () => {
       const path = extractImagePathFromToolResult({
         success: true,
-        output: JSON.stringify({ outputPath: '/home/patrice/drawn.webp' }),
+        output: JSON.stringify({ outputPath: '/workspace/media/images/drawn.webp' }),
       });
-      expect(path).toBe('/home/patrice/drawn.webp');
+      expect(path).toBe('/workspace/media/images/drawn.webp');
     });
 
     it('returns undefined when tool failed or has no image', () => {
