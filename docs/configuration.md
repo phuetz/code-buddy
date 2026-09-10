@@ -55,7 +55,8 @@
 
 | Variable | Description | Default |
 |:---------|:------------|:--------|
-| `CODEBUDDY_IMAGE_PROVIDER` | Backend `image_generate` (`comfyui`, `openai`, `xai`, `fal`, …) | provider-dependent |
+| `CODEBUDDY_IMAGE_PROVIDER` | Backend `image_generate` (`chatgpt`, `comfyui`, `openai`, `xai`, `fal`) — sélection automatique : `comfyui` si URL/fallback configuré, sinon `chatgpt` ($0, backend Codex `gpt-image-2`) si connecté via `/login chatgpt` sans clés cloud, sinon repli `openai` | provider-dependent |
+| `CODEBUDDY_CHATGPT_IMAGE_TIMEOUT_MS` | Timeout en ms pour la génération d'images ChatGPT / Codex | `180000` (3 min) |
 | `COMFYUI_URL` | Endpoint ComfyUI pour génération | `http://127.0.0.1:8188` |
 | `COMFYUI_ROOT` | Racine ComfyUI (install LoRA `models/loras`) | auto-detect |
 | `CODEBUDDY_LORA_TRAIN` | Opt-in train cloud LoRA Krea 2 (upload + coût fal) | unset (off) |
@@ -68,6 +69,15 @@
 | `CODEBUDDY_COMFYUI_LORA_STRENGTH` | Intensité LoRA modèle+CLIP | `0.85` |
 | `CODEBUDDY_LISA_SELFIE_COOLDOWN_MS` | Cooldown entre selfies (ms) | `45000` |
 | `CODEBUDDY_SENSORY_ALERT_TOKEN` / `_CHAT` | Bot Telegram pour alertes, notes vocales **et selfies** Lisa | unset |
+
+#### Fournisseur d'images `chatgpt` (backend Codex / gpt-image-2)
+
+Code Buddy supporte la génération et l'édition d'images à 0 $ via l'abonnement ChatGPT / Codex :
+- **Activation** : `CODEBUDDY_IMAGE_PROVIDER=chatgpt` ou auto-sélectionné quand aucune clé `OPENAI_API_KEY` / `XAI_API_KEY` n'est définie et qu'une session ChatGPT active existe (`~/.codebuddy/codex-auth.json` ou `~/.codex/auth.json`).
+- **Connexion** : `buddy login` ou `/login chatgpt`. Si le jeton expire, un rafraîchissement OAuth automatique est tenté sur 401.
+- **Backend & Modèle** : Endpoint `/responses` du backend Codex avec outil `image_generation`, modèle effectif `gpt-image-2`.
+- **Édition** : Supportée via `editImage` avec préservation de contexte par `input_image` (sans masque alpha direct ; délimitation par indications de régions normalisées).
+- **Sortie** : Fichiers PNG sauvés dans `.codebuddy/media-generation/images/` avec sidecar `.meta.json` (`provider: 'chatgpt'`, `model: 'gpt-image-2'`).
 
 Doc LoRA : [krea-lora.md](./krea-lora.md).
 
