@@ -55,6 +55,9 @@ class Chaine:
     # par défaut — voir Jade.
     decalage: float = 0.10
     taille_nom: int = 150
+    # Marge du texte à l'intérieur de la zone sûre mobile (1546 px centrés) :
+    # descendre sous 40 rapproche le nom du bord gauche visible sur téléphone.
+    marge_texte: int = 40
 
 
 CHAINES = (
@@ -99,8 +102,9 @@ CHAINES = (
         visage_x=406,
         visage_y=440,
         visage_cote=780,
-        decalage=0.06,
+        decalage=0.0,
         taille_nom=120,
+        marge_texte=0,
     ),
 )
 
@@ -185,12 +189,12 @@ def fabriquer_banniere(chaine: Chaine, sortie: Path) -> Path:
     police_nom = ImageFont.truetype(GRAS, chaine.taille_nom)
     police_signature = ImageFont.truetype(NORMAL, 46)
 
-    dessin.text((zone_x + 40, zone_y + 60), chaine.nom, font=police_nom, fill=chaine.encre)
+    dessin.text((zone_x + chaine.marge_texte, zone_y + 60), chaine.nom, font=police_nom, fill=chaine.encre)
     dessin.rectangle(
-        [zone_x + 44, zone_y + 250, zone_x + 164, zone_y + 256], fill=chaine.accent
+        [zone_x + chaine.marge_texte + 4, zone_y + 250, zone_x + chaine.marge_texte + 124, zone_y + 256], fill=chaine.accent
     )
     dessin.text(
-        (zone_x + 40, zone_y + 296),
+        (zone_x + chaine.marge_texte, zone_y + 296),
         chaine.signature,
         font=police_signature,
         fill=chaine.encre,
