@@ -50,7 +50,7 @@ describe('companion-identity', () => {
       const identityWithAt = resolveCompanionIdentity({
         channel: 'telegram',
         chatId: 'group',
-        senderUsername: '@PatriceDev',
+        senderUsername: '@OwnerHandle',
         allowedUsers: ['@ownerhandle'],
         env: {},
       });
