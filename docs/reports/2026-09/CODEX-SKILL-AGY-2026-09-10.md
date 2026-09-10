@@ -51,7 +51,7 @@ nothing to commit, working tree clean
 
 $ code-explorer status
 Code Explorer Status
-  Directory: /home/patrice/DEV/code-buddy-codex-skill-2026-09-10
+  Directory: <clone>
   Status: INDEXED
   Commit: 85f80741beb62ad4de3d103aafe6af0357bcfc6f
   Index is up-to-date.

@@ -154,6 +154,15 @@ function expectValidPublicImage(sourceFile: string, target: string): void {
     return;
   }
 
+  if (extension === '.webp') {
+    // Infographics (README/site). RIFF container: 'RIFF' <size> 'WEBP'; a real
+    // image is far larger than a stub and starts with the VP8/VP8L/VP8X chunk.
+    expect(bytes.subarray(0, 4).toString('ascii'), label).toBe('RIFF');
+    expect(bytes.subarray(8, 12).toString('ascii'), label).toBe('WEBP');
+    expect(bytes.subarray(12, 15).toString('ascii'), label).toBe('VP8');
+    return;
+  }
+
   if (extension === '.svg') {
     // Vector diagrams (e.g. buddy-sense architecture). GitHub renders committed
     // SVGs; validate it's real SVG markup with a viewBox/size, not a stray file.

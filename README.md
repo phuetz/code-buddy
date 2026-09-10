@@ -219,6 +219,10 @@ Honest limits for a first-time visitor:
 
 ---
 
+## Test suite
+
+38 088 tests in 2 115 files at `788f0ef23` (measured 2026-09-10 with `npm test`; 26 failures on that run were environment-only: a running local server, `dist/` not built, 20 s timeouts under load). `npm test -- tests/path/to/file.test.ts` to run a slice.
+
 ## Part of a toolchain
 
 <p align="center">
