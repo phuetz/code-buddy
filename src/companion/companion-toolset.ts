@@ -49,32 +49,70 @@ export const GUEST_COMPANION_TOOLS: readonly string[] = Object.freeze([]);
 
 /** Strictly forbidden tool patterns that can NEVER be exposed to companion */
 export const COMPANION_FORBIDDEN_PATTERNS: readonly (string | RegExp)[] = Object.freeze([
-  'bash',
+  // bash* family (bash, bash_exec, etc.)
+  /^bash/i,
   'terminal',
-  'shell_exec',
-  'shell_git',
-  'git',
+  'interactive_shell',
+
+  // shell* family (shell_exec, shell_git, shell_process, shell_docker, shell_k8s, etc.)
+  /^shell/i,
+
+  // *_exec family and code execution (code_exec, shell_exec, execute_code, etc.)
+  /(?:^|_)exec(?:$|_)/i,
+  /^execute_/i,
+  'js_repl',
+
+  // write_* family & file writing
+  /^write_/i,
+  /^file_write/i,
+  'create_file',
+
+  // patch family
+  'patch',
+  /^apply_patch/i,
+
+  // str_replace* family (str_replace, str_replace_editor, etc.)
+  /^str_replace/i,
+
+  // multi_edit and edit_* family (file editing; does NOT match image_edit)
+  'multi_edit',
+  /^multi_edit/i,
+  /^edit_/i,
+  /^file_edit/i,
+
+  // delete_* family
+  /^delete_/i,
+
+  // system / infra / process / code execution / app server
   'docker',
   'kubernetes',
   'process',
-  'shell_process',
-  'shell_docker',
-  'shell_k8s',
-  'create_file',
-  'write_file',
-  'str_replace_editor',
-  'patch',
-  'file_write',
-  'file_edit',
-  'apply_patch',
-  'edit_file',
-  'execute_code',
-  'js_repl',
-  'code_exec',
+  /^process/i,
+  'git',
+  /^git_/i,
+  'resolve_conflicts',
+  'app_server',
+  'computer_control',
+  'office_macro_execute',
+  'codebase_replace',
+  'scaffold_app',
+  'tool_search',
+  'extension_forge',
+  'scan_vulnerabilities',
+  'env_doctor',
+  'port_check',
+  'lint_project',
+  'test_runner',
+  'format_project',
+  'build_project',
+
+  // A2A / MCP / orchestration / registration
   /^mcp_/i,
   /^fleet_/i,
   /^peer_/i,
   /^delegate_/i,
+  /^register_tool/i,
+  'register_tool',
 ]);
 
 /**
@@ -119,32 +157,33 @@ export function getCompanionToolNames(
   }
 
   // 3. Baseline per role
-  let allowed: string[] =
-    identity.role === 'owner' ? [...OWNER_COMPANION_TOOLS] : [...PRESENT_COMPANION_TOOLS];
+  const baseline: readonly string[] =
+    identity.role === 'owner' ? OWNER_COMPANION_TOOLS : PRESENT_COMPANION_TOOLS;
 
   // 4. Surcharge via CODEBUDDY_COMPANION_TOOLS (CSV)
+  // Hard invariant: CSV can ONLY INTERSECT the role's baseline tools, NEVER extend it.
+  let allowed: string[];
   const configured = (env.CODEBUDDY_COMPANION_TOOLS ?? '').trim();
   if (configured) {
-    const requested = configured
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const requested = new Set(
+      configured
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
 
-    allowed = requested.filter((tool) => {
-      // Must not be forbidden
+    // Strict intersection with role baseline (order preserved from baseline)
+    allowed = baseline.filter((tool) => {
+      const match = requested.has(tool.toLowerCase());
+      if (!match) return false;
       if (isForbiddenCompanionTool(tool)) {
         logger.warn(`[companion-toolset] Surcharge tool "${tool}" rejected: strictly forbidden`);
         return false;
       }
-      // If present role, cannot add remind or camera
-      if (identity.role === 'present') {
-        if (tool === 'remind' || tool === 'camera_analyze' || tool.startsWith('camera_')) {
-          logger.warn(`[companion-toolset] Surcharge tool "${tool}" rejected for "present" role`);
-          return false;
-        }
-      }
       return true;
     });
+  } else {
+    allowed = [...baseline];
   }
 
   // Final sanity filter: eliminate any forbidden tool that could have leaked

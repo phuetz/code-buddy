@@ -60,31 +60,70 @@ describe('companion-toolset', () => {
   });
 
   describe('Hard forbidden tools check', () => {
-    it('identifies forbidden system and destructive tools', () => {
+    it('identifies forbidden system and destructive tools across all forbidden families', () => {
+      // bash* family
       expect(isForbiddenCompanionTool('bash')).toBe(true);
+      expect(isForbiddenCompanionTool('bash_exec')).toBe(true);
       expect(isForbiddenCompanionTool('terminal')).toBe(true);
+      expect(isForbiddenCompanionTool('interactive_shell')).toBe(true);
+
+      // shell* family
       expect(isForbiddenCompanionTool('shell_exec')).toBe(true);
+      expect(isForbiddenCompanionTool('shell_git')).toBe(true);
+      expect(isForbiddenCompanionTool('shell_process')).toBe(true);
+      expect(isForbiddenCompanionTool('shell_docker')).toBe(true);
+      expect(isForbiddenCompanionTool('shell_k8s')).toBe(true);
+
+      // *_exec & execution family
+      expect(isForbiddenCompanionTool('code_exec')).toBe(true);
+      expect(isForbiddenCompanionTool('execute_code')).toBe(true);
+      expect(isForbiddenCompanionTool('js_repl')).toBe(true);
+      expect(isForbiddenCompanionTool('office_macro_execute')).toBe(true);
+
+      // write_* family & file creation
       expect(isForbiddenCompanionTool('create_file')).toBe(true);
       expect(isForbiddenCompanionTool('write_file')).toBe(true);
-      expect(isForbiddenCompanionTool('str_replace_editor')).toBe(true);
-      expect(isForbiddenCompanionTool('patch')).toBe(true);
       expect(isForbiddenCompanionTool('file_write')).toBe(true);
-      expect(isForbiddenCompanionTool('file_edit')).toBe(true);
+
+      // patch family
+      expect(isForbiddenCompanionTool('patch')).toBe(true);
       expect(isForbiddenCompanionTool('apply_patch')).toBe(true);
+
+      // str_replace* family — EXPLICIT REFUSAL
+      expect(isForbiddenCompanionTool('str_replace')).toBe(true);
+      expect(isForbiddenCompanionTool('str_replace_editor')).toBe(true);
+
+      // multi_edit & edit_* family — EXPLICIT REFUSAL
+      expect(isForbiddenCompanionTool('multi_edit')).toBe(true);
+      expect(isForbiddenCompanionTool('edit_file')).toBe(true);
+      expect(isForbiddenCompanionTool('file_edit')).toBe(true);
+
+      // delete_* family
+      expect(isForbiddenCompanionTool('delete_file')).toBe(true);
+
+      // A2A / MCP / delegation / registration
       expect(isForbiddenCompanionTool('mcp_read')).toBe(true);
+      expect(isForbiddenCompanionTool('mcp_server')).toBe(true);
       expect(isForbiddenCompanionTool('fleet_ping')).toBe(true);
       expect(isForbiddenCompanionTool('peer_delegate')).toBe(true);
       expect(isForbiddenCompanionTool('delegate_agent')).toBe(true);
-      expect(isForbiddenCompanionTool('execute_code')).toBe(true);
+      expect(isForbiddenCompanionTool('register_tool')).toBe(true);
+    });
+
+    it('explicitly refuses str_replace and multi_edit', () => {
+      expect(isForbiddenCompanionTool('str_replace')).toBe(true);
+      expect(isForbiddenCompanionTool('multi_edit')).toBe(true);
     });
 
     it('permits companion tools', () => {
       expect(isForbiddenCompanionTool('image_generate')).toBe(false);
+      expect(isForbiddenCompanionTool('image_edit')).toBe(false);
       expect(isForbiddenCompanionTool('remind')).toBe(false);
       expect(isForbiddenCompanionTool('web_search')).toBe(false);
       expect(isForbiddenCompanionTool('weather')).toBe(false);
       expect(isForbiddenCompanionTool('stock_quote')).toBe(false);
       expect(isForbiddenCompanionTool('camera_analyze')).toBe(false);
+      expect(isForbiddenCompanionTool('understand_video')).toBe(false);
       expect(isForbiddenCompanionTool('recall')).toBe(false);
     });
   });
@@ -96,6 +135,7 @@ describe('companion-toolset', () => {
       const tools = getCompanionToolNames(ownerIdentity, env);
       expect(tools).toEqual(OWNER_COMPANION_TOOLS);
       expect(tools).toContain('image_generate');
+      expect(tools).toContain('image_edit');
       expect(tools).toContain('remind');
       expect(tools).toContain('camera_analyze');
       expect(tools).toContain('weather');
@@ -119,7 +159,7 @@ describe('companion-toolset', () => {
   });
 
   describe('Surcharge via CODEBUDDY_COMPANION_TOOLS', () => {
-    it('restricts to configured comma-separated list', () => {
+    it('restricts to configured comma-separated list by intersecting role baseline', () => {
       const env = {
         CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
         CODEBUDDY_COMPANION_TOOLS: 'image_generate, weather, stock_quote',
@@ -128,19 +168,33 @@ describe('companion-toolset', () => {
       expect(tools).toEqual(['image_generate', 'weather', 'stock_quote']);
     });
 
-    it('filters out forbidden tools even if explicitly in surcharge', () => {
+    it('only intersects baseline and NEVER extends it with unlisted tools (e.g. view_file)', () => {
       const env = {
         CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
-        CODEBUDDY_COMPANION_TOOLS: 'image_generate, bash, create_file, mcp_foo, weather',
+        CODEBUDDY_COMPANION_TOOLS: 'view_file, read_file, search, image_generate',
+      };
+      const tools = getCompanionToolNames(ownerIdentity, env);
+      expect(tools).toEqual(['image_generate']);
+      expect(tools).not.toContain('view_file');
+      expect(tools).not.toContain('read_file');
+      expect(tools).not.toContain('search');
+    });
+
+    it('filters out forbidden tools even if explicitly in surcharge, including str_replace and multi_edit', () => {
+      const env = {
+        CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
+        CODEBUDDY_COMPANION_TOOLS: 'image_generate, bash, create_file, mcp_foo, str_replace, multi_edit, weather',
       };
       const tools = getCompanionToolNames(ownerIdentity, env);
       expect(tools).toEqual(['image_generate', 'weather']);
       expect(tools).not.toContain('bash');
       expect(tools).not.toContain('create_file');
       expect(tools).not.toContain('mcp_foo');
+      expect(tools).not.toContain('str_replace');
+      expect(tools).not.toContain('multi_edit');
     });
 
-    it('filters out remind and camera from surcharge for present role', () => {
+    it('filters out remind and camera from surcharge for present role via baseline intersection', () => {
       const env = {
         CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
         CODEBUDDY_COMPANION_TOOLS: 'image_generate, remind, camera_analyze, weather',
@@ -158,6 +212,45 @@ describe('companion-toolset', () => {
       };
       const tools = getCompanionToolNames(guestIdentity, env);
       expect(tools).toEqual([]);
+    });
+
+    it('verifies that NO write/exec tool from TOOL_METADATA passes, regardless of CSV', async () => {
+      const { TOOL_METADATA } = await import('../../src/tools/metadata.js');
+      const writeOrExecTools = TOOL_METADATA.filter(
+        (t) =>
+          t.category === 'file_write' ||
+          t.category === 'system' ||
+          t.category === 'git' ||
+          /^(?:write_|edit_|delete_|apply_patch|bash|shell|create_file|patch|str_replace|multi_edit|_exec)/i.test(
+            t.name,
+          ),
+      );
+
+      // Verify each individual tool is marked forbidden
+      for (const tool of writeOrExecTools) {
+        expect(isForbiddenCompanionTool(tool.name)).toBe(true);
+      }
+
+      // Massive CSV containing ALL tools from the registry
+      const allToolsCsv = TOOL_METADATA.map((t) => t.name).join(',');
+      const env = {
+        CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
+        CODEBUDDY_COMPANION_TOOLS: allToolsCsv,
+      };
+
+      const ownerTools = getCompanionToolNames(ownerIdentity, env);
+      const presentTools = getCompanionToolNames(presentIdentity, env);
+
+      // Owner tools must only be the 9 approved companion tools
+      expect(ownerTools).toEqual(OWNER_COMPANION_TOOLS);
+      // Present tools must only be the 7 approved present tools
+      expect(presentTools).toEqual(PRESENT_COMPANION_TOOLS);
+
+      // Not a single write/exec tool can pass
+      for (const forbidden of writeOrExecTools) {
+        expect(ownerTools).not.toContain(forbidden.name);
+        expect(presentTools).not.toContain(forbidden.name);
+      }
     });
   });
 
@@ -180,6 +273,22 @@ describe('companion-toolset', () => {
       });
       expect(res.success).toBe(false);
       expect(res.error).toContain('strictly forbidden');
+    });
+
+    it('explicitly blocks execution of str_replace and multi_edit', async () => {
+      const resStrReplace = await executeCompanionTool('str_replace', { path: 'foo.txt' }, {
+        identity: ownerIdentity,
+        env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
+      });
+      expect(resStrReplace.success).toBe(false);
+      expect(resStrReplace.error).toContain('strictly forbidden');
+
+      const resMultiEdit = await executeCompanionTool('multi_edit', { path: 'foo.txt' }, {
+        identity: ownerIdentity,
+        env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
+      });
+      expect(resMultiEdit.success).toBe(false);
+      expect(resMultiEdit.error).toContain('strictly forbidden');
     });
 
     it('blocks execution of tool not in role permissions', async () => {
