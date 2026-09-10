@@ -3729,6 +3729,16 @@ addLazyCommand(
   },
 );
 
+addLazyCommand(program, 'pair', 'Pair an Android authenticator with a local one-time code', async () => {
+  const { createPairCommand } = await import('./commands/device-auth.js');
+  return createPairCommand();
+});
+
+addLazyCommand(program, 'devices', 'Manage Android authentication devices', async () => {
+  const { createDevicesCommand } = await import('./commands/device-auth.js');
+  return createDevicesCommand();
+});
+
 addLazyCommandGroup(program, 'fleet', 'Inspect Fleet routing and dispatch policy decisions', async () => {
   const { registerFleetCommands } = await import('./commands/cli/fleet-commands.js');
   registerFleetCommands(program);

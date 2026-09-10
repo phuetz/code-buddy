@@ -18,7 +18,7 @@ PWA et lane companion hors périmètre. HOME QA : `_qa/device-auth/home`.
 ### Tranche 1 — protocole et sessions
 
 Base vérifiée : `76e675a6923e67e48b2fb2cf68c7fdd7c5fba5f7` = `origin/main`.
-Réservation : `9a4d6b7db`. Commit fonctionnel : commit portant cette section.
+Réservation : `9a4d6b7db`. Commit fonctionnel : `b7de292c8`.
 Index : analyse initiale terminée (6 857 fichiers), HEAD de réservation à jour ;
 requêtes context/impact avant les modifications, complétées par rg exact.
 Pendant l'analyse initiale, quatre requêtes ont échoué faute de snapshot ;
@@ -87,3 +87,17 @@ Android ; aucune preuve sur téléphone physique ici. ES256 sur le fil utilise l
 en base64url/base64 standard, avec conversion stricte avant vérification WebCrypto.
 Le contexte companion est exposé, sa politique est laissée à la lane dédiée.
 Les magasins et clés privées des comptes réels n'ont pas été utilisés.
+
+### Tranche 2 — commandes locales
+
+`src/commands/device-auth.ts` et l'enregistrement paresseux dans `src/index.ts` :
+`buddy pair [--url URL] [--json]`, `buddy devices list [--json]`,
+`buddy devices revoke <id>`, `buddy devices rename <id> <name>`.
+QR ANSI via le renderer existant de `buddy token`, URL validée sans identifiants.
+Les commandes ne contactent aucun fournisseur LLM et ne lisent aucun secret JWT.
+Le store est partagé avec le serveur sous le même HOME.
+
+Preuve Commander réelle : `npm test -- tests/commands/token` → 24/24,
+dont sept nouveaux tests pair/devices. Smoke de sous-processus CLI avec QR réel
+et serveur réel → 0, détaillé dans la tranche 1. Index : réindexation incrémentale
+après le commit core ; commit de tranche CLI portant cette section.
