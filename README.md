@@ -26,6 +26,12 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
   <sub>A local model reasons on screen, then uses a tool to create a real file. No cloud API bill.</sub>
 </p>
 
+<p>
+  <a href="docs/assets/infographic-code-buddy-2.webp"><img src="docs/assets/infographic-code-buddy-2.webp" width="900" alt="Code Buddy 2 architecture: you, multi-channel interfaces (terminal, Cowork, PWA, chat, voice, App Studio), the agentic runtime (council, fleet, memory, shadow workspace, evolve, knowledge graph), 220+ tools, 64 providers, and the autonomous engineering loop"/></a>
+  <br/>
+  <sub>The big picture: interfaces, the agentic runtime, tools and providers, and the loop that turns an idea into an improvement.</sub>
+</p>
+
 </div>
 
 ---
@@ -194,6 +200,14 @@ Honest limits for a first-time visitor:
   against Electron headers.
 
 ---
+
+## Part of a toolchain
+
+<p align="center">
+  <a href="docs/assets/infographic-ai-engineering-stack.webp"><img src="docs/assets/infographic-ai-engineering-stack.webp" width="900" alt="The AI engineering stack: Code Explorer understands the repository, lm-resizer protects the context budget, Code Buddy 2 acts with AI agents"/></a>
+</p>
+
+Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) filters noisy command output before it reaches the model (Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and Code Explorer pre-indexes a repository into a queryable knowledge graph served over MCP (available as a service on private codebases — [agile-up.com](https://agile-up.com)). Understand, compress, act.
 
 ## License
 

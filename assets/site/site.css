@@ -354,3 +354,8 @@ th.current, td.current { background: rgba(119, 227, 181, 0.075); color: var(--mi
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Infographics (2026-09-10) */
+.infographic { margin: 0 0 32px; }
+.infographic img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--line); }
+.infographic figcaption { margin-top: 12px; opacity: 0.8; }
