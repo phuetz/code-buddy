@@ -122,8 +122,8 @@ claude plugin install code-buddy@code-buddy
 claude plugin install lm-resizer@code-buddy
 ```
 
-Codex users: copy `.codex/skills/` if present, or `skills/code-buddy` into
-`~/.codex/skills/`. Remove with `claude plugin uninstall code-buddy@code-buddy`.
+Codex users: `cp -r .codex/skills/code-buddy ~/.codex/skills/`. Remove with
+`claude plugin uninstall code-buddy@code-buddy`.
 
 ## First run
 
