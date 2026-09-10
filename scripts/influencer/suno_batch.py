@@ -670,9 +670,12 @@ def clip_ids_from_journal(journal: Path, name: str) -> list[str]:
         return []
     ids: list[str] = []
     for line in journal.read_text(encoding='utf-8').splitlines():
-        if not line.strip():
+        if not line.strip() or not line.lstrip().startswith('{'):
             continue
-        rec = json.loads(line)
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         if rec.get('name') == name and rec.get('clip_ids'):
             ids = [str(x) for x in rec['clip_ids'] if x]
     return ids
