@@ -97,8 +97,8 @@ describe('companion-identity', () => {
     it('resolves owner when CODEBUDDY_OWNER_USER_ID matches JWT userId', () => {
       const identity = resolveCompanionIdentity({
         channel: 'pwa',
-        userId: 'patrice-uuid-1234',
-        env: { CODEBUDDY_OWNER_USER_ID: 'patrice-uuid-1234' },
+        userId: 'owner-uuid-1234',
+        env: { CODEBUDDY_OWNER_USER_ID: 'owner-uuid-1234' },
       });
       expect(identity.role).toBe('owner');
       expect(identity.confidence).toBe('high');
@@ -109,7 +109,7 @@ describe('companion-identity', () => {
       const identity = resolveCompanionIdentity({
         channel: 'pwa',
         userId: 'other-user-5678',
-        env: { CODEBUDDY_OWNER_USER_ID: 'patrice-uuid-1234' },
+        env: { CODEBUDDY_OWNER_USER_ID: 'owner-uuid-1234' },
       });
       expect(identity.role).toBe('guest');
       expect(identity.confidence).toBe('none');
