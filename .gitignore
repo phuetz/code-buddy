@@ -344,3 +344,7 @@ _qa/pf/
 _qa/inj/
 _qa/tok/
 src/server/mobile/assets/icon-*.png
+
+# Mission QA and local code index
+_qa/
+.codeexplorer/

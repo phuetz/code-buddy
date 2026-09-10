@@ -27,7 +27,10 @@ export type AuditAction =
   | 'sandbox_execute'
   | 'pattern_matched'
   | 'tool_execution'
-  | 'self_improvement';
+  | 'self_improvement'
+  | 'device_register'
+  | 'device_verify'
+  | 'device_revoke';
 
 export type AuditDecision = 'allow' | 'block' | 'warn' | 'confirm';
 

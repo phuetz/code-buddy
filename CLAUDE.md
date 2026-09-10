@@ -418,6 +418,10 @@ buddy whoami                # Show current auth + plan
 buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
 buddy server [--port N]     # Start the HTTP server (3000) — one port, WebSocket `/ws` on it; required for fleet
+buddy pair [--url URL]       # Local one-time Android pairing code + ANSI QR (10 min)
+buddy devices list          # List Android authentication devices
+buddy devices revoke <id>    # Revoke an Android authentication device
+buddy devices rename <id> <name>  # Rename an Android authentication device
 buddy token [--env file] [--qr] [--telegram]  # Mint a JWT + PWA open URL (`#token=`); alias of `buddy fleet token`
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
 buddy run list|show|tail|replay|trajectory  # Observability
@@ -455,5 +459,7 @@ In-session slash commands (not exhaustive):
 Started with `buddy server`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
+
+Android device auth: public `POST /api/auth/device/register`, `/challenge`, `/verify` (under `/api/auth/device`), each 10 requests/min per transport IP. Local `buddy pair` issues the only enrollment code; P-256 ES256 proof produces a 1-hour JWT with `profile: "agent"`, `identity: "owner"`, `amr: ["biometric", "device"]`. `/ws` runs the full agent in a turn-local `default` permission mode and enables the existing confirmation bridge independently of the PWA flag. `getDeviceSessionIdentity()` (`src/server/auth/device-session-context.ts`) exposes signed claims to companion code during the turn; extensions use `ctx.principal`. Legacy tokens keep their payload and routing. `~/.codebuddy/devices.json` shares an atomic, locked envelope with SSH/ADB nodes (`deviceAuth` is a separate field); revocation is checked on HTTP and WS requests. Wire encodings and Android integration: [Application Android](docs/mobile-pwa.md#application-android).
 
 `/ws` message types (`src/server/websocket/handler.ts`): `authenticate`, `chat`, `stop`, `execute_tool`, `ping`, `status`, `avatar.*`, `peer:*`. The richer `connect` → `hello_ok` → `auth` → `session_*` / `presence` handshake lives in `src/gateway/` as a library; `buddy server` does not instantiate it, so nothing binds its `DEFAULT_GATEWAY_CONFIG.port`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. **The two surfaces differ**: the WebSocket refuses an unlisted `Origin` at the handshake (`403 Forbidden origin`), while HTTP answers a normal 200 and merely omits `Access-Control-Allow-Origin` — the browser blocks the read, the server does not. CORS is not an access control; the JWT and the network are. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).

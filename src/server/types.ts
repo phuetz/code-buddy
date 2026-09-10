@@ -186,6 +186,10 @@ export interface JwtPayload {
   type?: 'api_key' | 'user';
   /** Optional operator role stamped by `buddy token --role`. */
   role?: 'user' | 'admin';
+  /** Android device proof claims; absent on legacy tokens. */
+  amr?: string[];
+  profile?: 'agent' | 'companion';
+  identity?: 'owner';
 }
 
 export interface AuthenticatedRequest {

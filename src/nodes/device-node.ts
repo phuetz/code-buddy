@@ -6,7 +6,6 @@
  * the connected device.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
@@ -17,7 +16,7 @@ import type {
   ExecuteResult,
 } from './transports/base-transport.js';
 import { getPlatformCommands, type DevicePlatform } from './platform-commands.js';
-import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readDeviceStoreFile, updateDeviceStoreFile } from '../utils/device-store-file.js';
 
 // ============================================================================
 // Types
@@ -155,18 +154,12 @@ export class DeviceNodeManager {
 
   private loadDevices(): void {
     try {
-      const data = readJsonAtomicSync<PersistedDevices | null>(DEVICES_FILE, null, {
-        mode: 0o600,
-        isValid: (value): value is PersistedDevices => Boolean(
-          value && typeof value === 'object' && !Array.isArray(value) &&
-          (value as PersistedDevices).version === DEVICES_VERSION &&
-          Array.isArray((value as PersistedDevices).devices),
-        ),
-      });
-      if (data) {
-          for (const d of data.devices) {
-            this.devices.set(d.id, d);
-          }
+      // The shared envelope also carries revocations; never restore stale backups.
+      const data = readDeviceStoreFile(DEVICES_FILE);
+      if (data.version === DEVICES_VERSION && Array.isArray(data.devices)) {
+        for (const d of data.devices) {
+          this.devices.set(d.id, d);
+        }
       }
     } catch {
       logger.debug('No persisted devices found or failed to load');
@@ -179,7 +172,7 @@ export class DeviceNodeManager {
         version: DEVICES_VERSION,
         devices: Array.from(this.devices.values()),
       };
-      writeJsonAtomicSync(DEVICES_FILE, data, { mode: 0o600 });
+      updateDeviceStoreFile(DEVICES_FILE, envelope => Object.assign(envelope, data));
     } catch (err) {
       logger.warn('Failed to save devices', {
         error: err instanceof Error ? err.message : String(err),

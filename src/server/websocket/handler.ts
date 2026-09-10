@@ -11,6 +11,10 @@ import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { isOriginAllowed } from '../origin-check.js';
 import { verifyToken } from '../auth/jwt.js';
+import { getDeviceAuthStore } from '../auth/device-store.js';
+import { withDeviceSessionIdentity } from '../auth/device-session-context.js';
+import { getPermissionModeManager } from '../../security/permission-modes.js';
+import { ConfirmationService } from '../../utils/confirmation-service.js';
 import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } from '../../gateway/device-pairing.js';
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
@@ -106,6 +110,13 @@ interface ConnectionState {
   keyId?: string;
   /** Paired device id when authenticated via the device-pairing flow. */
   deviceId?: string;
+  /** Signed Android identity, available to companion extensions. */
+  profile?: 'agent' | 'companion';
+  identity?: 'owner';
+  amr?: readonly string[];
+  deviceAuthExpiresAt?: number;
+  /** Server configuration secret, used only for the new device token path. */
+  deviceJwtSecret?: string;
   scopes: string[];
   /** No-auth network clients remain transport-visible but cannot run agent chat. */
   anonymousRemote?: boolean;
@@ -185,6 +196,9 @@ export interface WebSocketExtensionPrincipal {
   /** Server-derived principal id; request payloads cannot override it. */
   readonly id: string;
   readonly source: string;
+  readonly profile?: 'agent' | 'companion';
+  readonly identity?: 'owner';
+  readonly amr?: readonly string[];
   readonly scopes: readonly string[];
   readonly loopback: boolean;
   readonly secure: boolean;
@@ -229,6 +243,7 @@ function extensionPrincipal(state: ConnectionState): WebSocketExtensionPrincipal
   return Object.freeze({
     id,
     source,
+    ...sessionIdentityClaims(state),
     scopes: Object.freeze(state.authenticated ? [...state.scopes] : []),
     loopback: state.loopback === true,
     secure: state.secure === true,
@@ -284,13 +299,37 @@ function cleanupWebSocketExtensions(state: ConnectionState): void {
   listeners.clear();
 }
 
-function resetWebSocketExtensionsForIdentityChange(state: ConnectionState): void {
+function resetWebSocketExtensionsForIdentityChange(state: ConnectionState, deviceIdentity = false): void {
+  if (deviceIdentity || state.profile !== undefined) {
+    state.agent?.dispose?.();
+    state.agent = undefined;
+    state.agentInitializing = undefined;
+  }
+  state.profile = undefined;
+  state.identity = undefined;
+  state.amr = undefined;
+  state.deviceAuthExpiresAt = undefined;
   state.approvalCapable = false;
   cleanupWebSocketExtensions(state);
   state.extensionsCleaned = false;
   // A new principal on the same socket must never inherit the previous one's
   // companion conversation.
   state.companionHistory = undefined;
+}
+
+/** Conditional spreads preserve the exact legacy principal and auth payload. */
+function sessionIdentityClaims(state: ConnectionState) {
+  return {
+    ...(state.profile ? { profile: state.profile } : {}),
+    ...(state.identity ? { identity: state.identity } : {}),
+    ...(state.amr ? { amr: state.amr } : {}),
+  };
+}
+
+function deviceSessionIsActive(state: ConnectionState): boolean {
+  return state.deviceAuthExpiresAt === undefined || (
+    state.deviceAuthExpiresAt > Date.now() && !!state.deviceId && getDeviceAuthStore().isActive(state.deviceId)
+  );
 }
 
 /**
@@ -676,23 +715,39 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   if (token) {
     // JWT_SECRET is required - if not set, authentication will fail (secure by default)
     const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
+    const configuredToken = state.deviceJwtSecret ? verifyToken(token, state.deviceJwtSecret) : null;
+    const deviceToken = Array.isArray(configuredToken?.amr) && configuredToken.amr.includes('device') ? configuredToken : null;
+    if (!jwtSecret && !deviceToken) {
       sendError(ws, 'CONFIG_ERROR', 'Server JWT configuration missing');
       return;
     }
-    const decoded = verifyToken(token, jwtSecret);
+    const decoded = deviceToken ?? verifyToken(token, jwtSecret!);
     if (decoded) {
-      resetWebSocketExtensionsForIdentityChange(state);
+      const isDevice = Array.isArray(decoded.amr) && decoded.amr.includes('device');
+      if (isDevice && (!Number.isFinite(decoded.exp) || decoded.exp * 1000 <= Date.now() || !getDeviceAuthStore().isActive(decoded.sub))) {
+        sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
+        return;
+      }
+      resetWebSocketExtensionsForIdentityChange(state, decoded.profile !== undefined);
       state.authenticated = true;
       state.userId = decoded.userId ?? decoded.sub;
       state.keyId = undefined;
-      state.deviceId = undefined;
+      state.deviceId = isDevice ? decoded.sub : undefined;
+      state.deviceAuthExpiresAt = isDevice ? decoded.exp * 1000 : undefined;
+      state.profile = decoded.profile === 'agent' || decoded.profile === 'companion' ? decoded.profile : undefined;
+      state.identity = decoded.identity === 'owner' ? 'owner' : undefined;
+      state.amr = Array.isArray(decoded.amr) ? Object.freeze(decoded.amr.filter((method): method is string => typeof method === 'string')) : undefined;
       state.scopes = decoded.scopes || ['chat'];
       state.anonymousRemote = false;
       if (approvalCapable === true) state.approvalCapable = true;
+      if (state.profile === 'agent') {
+        // Native Android is an approval surface even when the PWA is disabled.
+        state.approvalCapable = true;
+        wireMobileConfirmationBridge({ broadcast, collectApprovalSurfaceIds, registerExtension: registerWebSocketExtension });
+      }
       send(ws, {
         type: 'authenticated',
-        payload: { userId: state.userId, scopes: state.scopes },
+        payload: { userId: state.userId, scopes: state.scopes, ...sessionIdentityClaims(state) },
         timestamp: new Date().toISOString(),
       });
       return;
@@ -928,7 +983,8 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   const turn: ConnectionTurn = { cancelled: false, abortDelivered: false };
   state.activeTurn = turn;
 
-  const assistant = typeof assistantRaw === 'string' ? assistantRaw.trim() : 'agent';
+  const assistant = state.profile === 'agent' ? 'agent'
+    : typeof assistantRaw === 'string' ? assistantRaw.trim() : state.profile ?? 'agent';
   const peerId = typeof peerIdRaw === 'string' ? peerIdRaw.trim() : '';
 
   // Photos are accepted only for the companion; every other assistant keeps the
@@ -1524,9 +1580,29 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
     ...(id ? { id } : {}),
     ...(requestId ? { requestId } : {}),
   };
+  const invoke = async () => {
+    if (type !== 'authenticate' && !deviceSessionIsActive(state)) {
+      state.authenticated = false;
+      state.approvalCapable = false;
+      abortActiveTurn(state);
+      sendError(ws, 'AUTH_FAILED', 'Invalid credentials', id);
+      return;
+    }
+    const run = () => handler(ws, state, payload ?? {}, envelope);
+    const withIdentity = () => state.profile || state.identity || state.amr
+      ? withDeviceSessionIdentity({
+        ...sessionIdentityClaims(state), ...(state.deviceId ? { deviceId: state.deviceId } : {}),
+      }, run)
+      : run();
+    if (state.profile === 'agent') {
+      return getPermissionModeManager().withModeAsync('default', () =>
+        ConfirmationService.getInstance().withApprovalContextAsync(`ws:${state.id}`, withIdentity));
+    }
+    return withIdentity();
+  };
   if (laneBypassMessageTypes.has(type)) {
     try {
-      await handler(ws, state, payload ?? {}, envelope);
+      await invoke();
     } catch (error) {
       sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
     }
@@ -1547,7 +1623,7 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
       const peerRequestId = typeof frame.id === 'string' ? frame.id : 'unknown';
       await enqueuePeerHandler(state, () => enqueueMessage(
         `${sessionKey}:peer:${peerRequestId}`,
-        () => handler(ws, state, payload ?? {}, envelope),
+        invoke,
         {
           parallel: true,
           // Channel default is 120s; cold local Ollama peer.chat exceeded it (GK17).
@@ -1555,7 +1631,7 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
         },
       ));
     } else {
-      await enqueueMessage(sessionKey, () => handler(ws, state, payload ?? {}, envelope));
+      await enqueueMessage(sessionKey, invoke);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1635,6 +1711,7 @@ export async function setupWebSocket(
     const state: ConnectionState = {
       id: generateConnectionId(),
       authenticated: !config.authEnabled, // Auto-auth if auth disabled
+      deviceJwtSecret: config.jwtSecret,
       scopes: config.authEnabled
         ? []
         : [
@@ -1823,10 +1900,12 @@ function toBroadcastTarget(state: ConnectionState): WsBroadcastTarget {
 export function collectApprovalSurfaceIds(): string[] {
   const ids: string[] = [];
   for (const state of connections.values()) {
+    if (!isMobilePwaEnabled() && state.profile !== 'agent') continue;
     if (!state.authenticated) continue;
     if (state.anonymousRemote) continue;
     if (state.approvalCapable !== true) continue;
     if (!state.scopes.includes('tools')) continue;
+    if (!deviceSessionIsActive(state)) continue;
     ids.push(state.id);
   }
   return ids;
@@ -1841,6 +1920,7 @@ export function broadcast(
   const limit = getBroadcastBufferLimit();
   for (const [ws, state] of connections.entries()) {
     if (!state.authenticated) continue;
+    if (!deviceSessionIsActive(state)) continue;
     if (scopeFilter && !state.scopes.includes(scopeFilter)) continue;
     if (targetFilter && !targetFilter(toBroadcastTarget(state))) continue;
 
