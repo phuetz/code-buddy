@@ -378,6 +378,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_COMPANION_AWAY_STATE_FILE` | Override path for companion away-state JSON file (default `~/.codebuddy/companion/away-state.json`, `away-mode.ts:153`) |
 | `CODEBUDDY_COMPANION_RECENT_SAID_FILE` | Override path for companion recent-said JSON file (default `~/.codebuddy/companion/recent-said.json`, `recent-said.ts:29`) |
 | `CODEBUDDY_AUDIT_DIR` | Extra directory of `*.jsonl` audit files read by `buddy run trajectory` **in addition to** the home audit dir (not a replacement; `run-trajectory-load.ts:64`) |
+| `CODEBUDDY_IMAGE_PROVIDER` | Backend pour `image_generate` / `editImage` (`comfyui`, `openai`, `xai`, `fal`, `chatgpt`). Si non défini, auto-sélectionne `comfyui` si un endpoint local/fallback est configuré, sinon `chatgpt` si des identifiants Codex/ChatGPT OAuth existent (`~/.codebuddy/codex-auth.json` ou `~/.codex/auth.json`) et qu'aucune clé API OpenAI/xAI n'est présente, sinon repli historique `openai`. Pour `chatgpt`, modèle sous-jacent `gpt-image-2` via backend `/responses`, métadonnées sauvegardées en sidecar `.meta.json`, et édition via `input_image` (masquage par sélection de région) |
 | `CODEBUDDY_IMAGE_BASE_URL` | Alternative ComfyUI base URL used when `COMFYUI_URL` is unset; a value containing `8188` also auto-selects the `comfyui` provider (`media-generation-tool.ts:1831-1839`) |
 
 ### Exploitation de la voix ElevenLabs de Lisa

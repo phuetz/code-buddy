@@ -6,9 +6,20 @@ import path from 'path';
 import { getImageGenerationModel } from '../config/agent-defaults.js';
 import { resolveToolGatewayRoute } from '../agent/tool-gateway-router.js';
 import { logger } from '../utils/logger.js';
+import {
+  getChatGptAuth,
+  hasCodexCredentials,
+  refreshChatGptAuth,
+  type ChatGptAuth,
+} from '../providers/codex-oauth.js';
+import {
+  buildChatGptHeaders,
+  CHATGPT_RESPONSES_URL,
+} from '../codebuddy/providers/chatgpt-headers.js';
+import { CHATGPT_OAUTH_DEFAULT_MODEL } from '../providers/chatgpt-models.js';
 
 export type ImageAspectRatio = 'landscape' | 'square' | 'portrait';
-export type MediaProvider = 'openai' | 'xai' | 'fal' | 'comfyui';
+export type MediaProvider = 'openai' | 'xai' | 'fal' | 'comfyui' | 'chatgpt';
 
 export interface MediaGenerationRuntime {
   rootDir?: string;
@@ -17,6 +28,7 @@ export interface MediaGenerationRuntime {
   now?: () => Date;
   createId?: () => string;
   signal?: AbortSignal;
+  chatGptAuth?: ChatGptAuth;
 }
 
 export interface ImageGenerateInput {
@@ -106,7 +118,7 @@ export interface VideoGenerateResult {
   error_type?: string;
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   provider: MediaProvider;
   model: string;
   baseUrl: string;
@@ -160,7 +172,7 @@ export async function generateImage(
     throw new Error('prompt is required for image generation');
   }
 
-  const config = resolveImageProvider(runtime.env ?? process.env);
+  const config = resolveImageProvider(runtime.env ?? process.env, { hasAuthOverride: Boolean(runtime.chatGptAuth) });
   const aspect = resolveImageAspect(input.aspectRatio);
   const fetchImpl = runtime.fetch ?? fetch;
   const generatedAt = (runtime.now ?? (() => new Date()))().toISOString();
@@ -170,6 +182,10 @@ export async function generateImage(
     const comfy = await generateComfyUIImageWithFallback(prompt, aspect, config, runtime, generatedAt);
     await ingestLisaSelfieIfNeeded(comfy, runtime);
     return comfy;
+  }
+
+  if (config.provider === 'chatgpt') {
+    return generateChatGptImage(prompt, aspect, config, runtime, generatedAt);
   }
 
   const size = IMAGE_SIZES[aspect];
@@ -290,7 +306,7 @@ export async function editImage(
   const imageUrl = validateImageReference(input.imageUrl, 'source image');
   const selections = normalizeEditSelections(input.selections);
   const maskUrl = input.maskUrl ? validateDataImage(input.maskUrl, 'mask') : undefined;
-  const config = resolveImageProvider(runtime.env ?? process.env);
+  const config = resolveImageProvider(runtime.env ?? process.env, { hasAuthOverride: Boolean(runtime.chatGptAuth) });
   const fetchImpl = runtime.fetch ?? fetch;
   const generatedAt = (runtime.now ?? (() => new Date()))().toISOString();
   const selectionHint = selections.length > 0
@@ -306,6 +322,16 @@ export async function editImage(
       effectivePrompt,
       imageUrl,
       maskUrl,
+      selections,
+      sourceRef: input.sourceRef,
+    }, config, runtime, generatedAt);
+  }
+
+  if (config.provider === 'chatgpt') {
+    return editChatGptImage({
+      prompt,
+      effectivePrompt,
+      imageUrl,
       selections,
       sourceRef: input.sourceRef,
     }, config, runtime, generatedAt);
@@ -397,6 +423,350 @@ export async function editImage(
     masked: maskMode === 'alpha',
     maskMode,
     selections,
+    ...(revisedPrompt ? { revised_prompt: revisedPrompt } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ChatGPT Codex image backend ($0 subscription, gpt-image-2 via /responses).
+// ---------------------------------------------------------------------------
+
+export function parseChatGptImageResponse(text: string): { b64: string; revisedPrompt?: string } {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.error?.message) {
+        throw new Error(`ChatGPT error: ${parsed.error.message}`);
+      }
+      if (Array.isArray(parsed.data) && parsed.data[0]?.b64_json) {
+        return {
+          b64: parsed.data[0].b64_json,
+          revisedPrompt: parsed.data[0].revised_prompt,
+        };
+      }
+      if (parsed.item?.type === 'image_generation_call' && parsed.item.result) {
+        return {
+          b64: parsed.item.result,
+          revisedPrompt: parsed.item.revised_prompt,
+        };
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.startsWith('ChatGPT')) throw e;
+    }
+  }
+
+  let b64: string | undefined;
+  let revisedPrompt: string | undefined;
+  const lines = text.split('\n');
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line.startsWith('data:')) continue;
+    const dataStr = line.slice(5).trim();
+    if (!dataStr || dataStr === '[DONE]') continue;
+
+    try {
+      const event = JSON.parse(dataStr);
+      if (event.error?.message) {
+        throw new Error(`ChatGPT image error: ${event.error.message}`);
+      }
+      if (event.type === 'response.failed' && event.response?.error?.message) {
+        throw new Error(`ChatGPT image response failed: ${event.response.error.message}`);
+      }
+      if (event.item?.type === 'image_generation_call') {
+        if (event.item.result) b64 = event.item.result;
+        if (event.item.revised_prompt) revisedPrompt = event.item.revised_prompt;
+      } else if (Array.isArray(event.data) && event.data[0]?.b64_json) {
+        b64 = event.data[0].b64_json;
+        if (event.data[0].revised_prompt) revisedPrompt = event.data[0].revised_prompt;
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.startsWith('ChatGPT')) throw e;
+    }
+  }
+
+  if (!b64) {
+    throw new Error('ChatGPT image generation response did not contain image data');
+  }
+
+  return { b64, revisedPrompt };
+}
+
+async function executeChatGptResponsesImage(options: {
+  prompt: string;
+  imageUrl?: string;
+  config: ProviderConfig;
+  runtime: MediaGenerationRuntime;
+  timeoutMs: number;
+}): Promise<{ b64: string; revisedPrompt?: string }> {
+  const { prompt, imageUrl, config, runtime, timeoutMs } = options;
+  const fetchImpl = runtime.fetch ?? fetch;
+  const envSource = runtime.env ?? process.env;
+
+  let auth = runtime.chatGptAuth;
+  if (!auth) {
+    try {
+      auth = (await getChatGptAuth()) ?? undefined;
+    } catch {
+      // getChatGptAuth may throw or return null
+    }
+  }
+
+  if (!auth?.access_token) {
+    throw new Error(
+      'No ChatGPT credentials found for provider chatgpt. Run `buddy login` (or `/login chatgpt`) to connect.',
+    );
+  }
+
+  const endpoint = config.baseUrl;
+  const isDirectImageEndpoint = endpoint.includes('/images/');
+
+  let requestBody: Record<string, unknown>;
+  if (isDirectImageEndpoint) {
+    requestBody = {
+      model: config.model,
+      prompt,
+      ...(imageUrl ? { image: imageUrl } : {}),
+    };
+  } else {
+    const conversationalModel = env(envSource, 'CODEBUDDY_CHATGPT_MODEL') ?? CHATGPT_OAUTH_DEFAULT_MODEL;
+    const content: Array<{ type: string; text?: string; image_url?: string }> = [
+      { type: 'input_text', text: prompt },
+    ];
+    if (imageUrl) {
+      content.push({ type: 'input_image', image_url: imageUrl });
+    }
+
+    requestBody = {
+      model: conversationalModel,
+      store: false,
+      stream: true,
+      instructions:
+        'You are an image generation assistant. When the user asks to generate or edit an image, invoke the image_generation tool immediately with the prompt and any provided input image.',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content,
+        },
+      ],
+      tools: [
+        {
+          type: 'image_generation',
+          // The Codex backend honours a per-tool model (verified live 2026-09-10):
+          // Images 2.5 (`gpt-image-2.5-flare` by default) instead of the backend default.
+          model: config.model,
+        },
+      ],
+    };
+  }
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      fetchImpl,
+      endpoint,
+      {
+        method: 'POST',
+        headers: buildChatGptHeaders(auth, {
+          accept: isDirectImageEndpoint ? 'application/json' : 'text/event-stream',
+        }),
+        body: JSON.stringify(requestBody),
+      },
+      timeoutMs,
+      runtime.signal,
+    );
+  } catch (err: unknown) {
+    if (runtime.signal?.aborted) throw err;
+    throw new Error(`ChatGPT image generation network error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (res.status === 401) {
+    try {
+      const refreshed = await refreshChatGptAuth();
+      if (refreshed?.access_token) {
+        auth = refreshed;
+        res = await fetchWithTimeout(
+          fetchImpl,
+          endpoint,
+          {
+            method: 'POST',
+            headers: buildChatGptHeaders(auth, {
+              accept: isDirectImageEndpoint ? 'application/json' : 'text/event-stream',
+            }),
+            body: JSON.stringify(requestBody),
+          },
+          timeoutMs,
+          runtime.signal,
+        );
+      }
+    } catch {
+      // Refresh failed, proceed to status checks
+    }
+  }
+
+  if (res.status === 401) {
+    throw new Error(
+      'ChatGPT authentication expired (401). Please run `buddy login` (or `/login chatgpt`) to reconnect.',
+    );
+  }
+
+  if (res.status === 429) {
+    const errText = await res.text().catch(() => '');
+    let message = 'ChatGPT image generation rate limit reached (429). Please wait before requesting another image.';
+    try {
+      const parsed = JSON.parse(errText);
+      if (parsed.error?.message) {
+        message = `ChatGPT image generation rate limit reached (429): ${parsed.error.message}`;
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+    throw new Error(message);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    let message = `ChatGPT image generation failed with status ${res.status}`;
+    try {
+      const parsed = JSON.parse(errText);
+      if (parsed.error?.message) {
+        message += `: ${parsed.error.message}`;
+      } else if (errText) {
+        message += `: ${errText}`;
+      }
+    } catch {
+      if (errText) message += `: ${errText}`;
+    }
+    throw new Error(message);
+  }
+
+  const responseText = await res.text();
+  return parseChatGptImageResponse(responseText);
+}
+
+async function generateChatGptImage(
+  prompt: string,
+  aspect: ImageAspectRatio,
+  config: ProviderConfig,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<ImageGenerateResult> {
+  const envSource = runtime.env ?? process.env;
+  const timeoutMs = Number(envSource.CODEBUDDY_CHATGPT_IMAGE_TIMEOUT_MS) || 180_000;
+  const aspectHint = aspect === 'square'
+    ? ' (aspect ratio: square 1:1)'
+    : aspect === 'portrait'
+      ? ' (aspect ratio: portrait 2:3)'
+      : ' (aspect ratio: landscape 3:2)';
+  const effectivePrompt = `${prompt}${aspectHint}`;
+
+  const { b64, revisedPrompt } = await executeChatGptResponsesImage({
+    prompt: effectivePrompt,
+    config,
+    runtime,
+    timeoutMs,
+  });
+
+  const bytes = Buffer.from(b64, 'base64');
+  const outputPath = await saveGeneratedAsset(bytes, {
+    rootDir: runtime.rootDir,
+    dirName: 'images',
+    prefix: 'image',
+    extension: 'png',
+    createId: runtime.createId,
+  });
+
+  await writeMediaSidecar(outputPath, {
+    kind: 'image',
+    prompt,
+    ...(revisedPrompt ? { revisedPrompt } : {}),
+    provider: config.provider,
+    model: config.model,
+    aspect_ratio: aspect,
+    generatedAt,
+  });
+
+  const result: ImageGenerateResult = {
+    kind: 'image_generate_result',
+    success: true,
+    image: outputPath,
+    outputPath,
+    mediaPath: `MEDIA:${outputPath}`,
+    provider: config.provider,
+    model: config.model,
+    prompt,
+    aspect_ratio: aspect,
+    generatedAt,
+    ...(revisedPrompt ? { revised_prompt: revisedPrompt } : {}),
+  };
+  await ingestLisaSelfieIfNeeded(result, runtime);
+  return result;
+}
+
+async function editChatGptImage(
+  input: {
+    prompt: string;
+    effectivePrompt: string;
+    imageUrl: string;
+    selections: ImageEditSelection[];
+    sourceRef?: string;
+  },
+  config: ProviderConfig,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<ImageEditResult> {
+  const envSource = runtime.env ?? process.env;
+  const timeoutMs = Number(envSource.CODEBUDDY_CHATGPT_IMAGE_TIMEOUT_MS) || 180_000;
+
+  const { b64, revisedPrompt } = await executeChatGptResponsesImage({
+    prompt: input.effectivePrompt,
+    imageUrl: input.imageUrl,
+    config,
+    runtime,
+    timeoutMs,
+  });
+
+  const bytes = Buffer.from(b64, 'base64');
+  const outputPath = await saveGeneratedAsset(bytes, {
+    rootDir: runtime.rootDir,
+    dirName: 'images',
+    prefix: 'image-edit',
+    extension: 'png',
+    createId: runtime.createId,
+  });
+
+  const maskMode: ImageEditResult['maskMode'] = input.selections.length > 0 ? 'region-prompt' : 'none';
+  const sourceReference = sanitizeImageSourceReference(input.sourceRef) ?? redactDataUrl(input.imageUrl);
+
+  await writeMediaSidecar(outputPath, {
+    kind: 'image-edit',
+    prompt: input.prompt,
+    ...(revisedPrompt ? { revisedPrompt } : {}),
+    provider: config.provider,
+    model: config.model,
+    source: sourceReference,
+    masked: false,
+    maskMode,
+    selections: input.selections,
+    generatedAt,
+  });
+
+  return {
+    kind: 'image_edit_result',
+    success: true,
+    image: outputPath,
+    outputPath,
+    mediaPath: `MEDIA:${outputPath}`,
+    provider: config.provider,
+    model: config.model,
+    prompt: input.prompt,
+    source: sourceReference,
+    masked: false,
+    maskMode,
+    selections: input.selections,
+    generatedAt,
     ...(revisedPrompt ? { revised_prompt: revisedPrompt } : {}),
   };
 }
@@ -747,11 +1117,14 @@ function comfyDelay(ms: number, signal?: AbortSignal): Promise<void> {
 export async function getImageEditCapabilities(
   runtime: MediaGenerationRuntime = {},
 ): Promise<ImageEditCapabilities> {
-  const config = resolveImageProvider(runtime.env ?? process.env);
+  const config = resolveImageProvider(runtime.env ?? process.env, { hasAuthOverride: Boolean(runtime.chatGptAuth) });
   if (config.provider === 'openai') {
     return { provider: config.provider, available: true, alphaMasking: true };
   }
   if (config.provider === 'xai') {
+    return { provider: config.provider, available: true, alphaMasking: false };
+  }
+  if (config.provider === 'chatgpt') {
     return { provider: config.provider, available: true, alphaMasking: false };
   }
   if (config.provider !== 'comfyui') {
@@ -1860,7 +2233,10 @@ async function materializeVideoResult(
   };
 }
 
-function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
+export function resolveImageProvider(
+  envSource: NodeJS.ProcessEnv = process.env,
+  options?: { hasAuthOverride?: boolean },
+): ProviderConfig {
   let requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
   // Prefer ComfyUI when explicitly requested OR when a ComfyUI endpoint is
   // declared and no other provider was chosen (selfie / local-first companion
@@ -1877,6 +2253,16 @@ function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
   ) {
     requested = 'comfyui';
   }
+
+  const hasOpenAiKey = Boolean(envSource.OPENAI_API_KEY?.trim() || envSource.CODEBUDDY_IMAGE_API_KEY?.trim());
+  const hasXaiKey = Boolean(envSource.XAI_API_KEY?.trim());
+  const hasFalKey = Boolean(envSource.FAL_KEY?.trim() || envSource.FAL_API_KEY?.trim());
+  const hasChatGptAuth = Boolean(options?.hasAuthOverride || hasCodexCredentials());
+
+  if (!requested && !hasOpenAiKey && !hasXaiKey && !hasFalKey && hasChatGptAuth) {
+    requested = 'chatgpt';
+  }
+
   // Local ComfyUI backend (offline, GPU) — no API key, workflow-based API.
   if (requested === 'comfyui') {
     const baseUrl = (envSource.COMFYUI_URL
@@ -1896,17 +2282,29 @@ function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
     }
     return { provider: 'comfyui', model, baseUrl, apiKey: '' };
   }
-  const provider: MediaProvider = requested === 'xai' ? 'xai' : 'openai';
+
+  if (requested === 'chatgpt') {
+    const baseUrl = (
+      envSource.CHATGPT_RESPONSES_URL
+      ?? envSource.CODEBUDDY_IMAGE_BASE_URL
+      ?? CHATGPT_RESPONSES_URL
+    ).trim().replace(/\/+$/, '');
+    const model = (envSource.CODEBUDDY_IMAGE_MODEL ?? 'gpt-image-2.5-flare').trim();
+    assertProviderReady('chatgpt', '', baseUrl, 'image', { hasCredentials: hasChatGptAuth });
+    return { provider: 'chatgpt', model, baseUrl, apiKey: '' };
+  }
+
+  const provider: MediaProvider = requested === 'xai' ? 'xai' : (requested === 'fal' ? 'fal' : 'openai');
   const baseUrl = (envSource.CODEBUDDY_IMAGE_BASE_URL
-    ?? (provider === 'xai' ? envSource.XAI_BASE_URL : envSource.OPENAI_BASE_URL)
+    ?? (provider === 'xai' ? envSource.XAI_BASE_URL : (provider === 'fal' ? 'https://queue.fal.run' : envSource.OPENAI_BASE_URL))
     ?? (provider === 'xai' ? 'https://api.x.ai/v1' : 'https://api.openai.com/v1')).trim().replace(/\/+$/, '');
   const apiKey = (envSource.CODEBUDDY_IMAGE_API_KEY
-    ?? (provider === 'xai' ? envSource.XAI_API_KEY : envSource.OPENAI_API_KEY)
+    ?? (provider === 'xai' ? envSource.XAI_API_KEY : (provider === 'fal' ? (envSource.FAL_KEY ?? envSource.FAL_API_KEY) : envSource.OPENAI_API_KEY))
     ?? '').trim();
   const model = (envSource.CODEBUDDY_IMAGE_MODEL
     ?? (provider === 'xai' ? envSource.XAI_IMAGE_MODEL : envSource.OPENAI_IMAGE_MODEL)
     ?? getImageGenerationModel()
-    ?? (provider === 'xai' ? 'grok-imagine-image' : 'gpt-image-2')).trim();
+    ?? (provider === 'xai' ? 'grok-imagine-image' : 'gpt-image-2.5-flare')).trim();
   // Route through the Nous Tool Gateway when configured (transparent base-URL +
   // token substitution); otherwise use the direct provider.
   const route = resolveToolGatewayRoute('image_gen', envSource);
@@ -2193,9 +2591,23 @@ function resolveVideoProvider(modelOverride: string | undefined, envSource: Node
   return { provider, model, baseUrl: effectiveBaseUrl, apiKey: effectiveApiKey };
 }
 
-function assertProviderReady(provider: MediaProvider, apiKey: string, baseUrl: string, kind: string): void {
+function assertProviderReady(
+  provider: MediaProvider,
+  apiKey: string,
+  baseUrl: string,
+  kind: string,
+  options?: { hasCredentials?: boolean },
+): void {
   if (!baseUrl) {
     throw new Error(`No ${kind} generation base URL configured for provider ${provider}`);
+  }
+  if (provider === 'chatgpt') {
+    if (!options?.hasCredentials) {
+      throw new Error(
+        'No ChatGPT credentials found for provider chatgpt. Run `buddy login` (or `/login chatgpt`) to connect.',
+      );
+    }
+    return;
   }
   if (!apiKey && !isLocalBaseUrl(baseUrl)) {
     throw new Error(`No ${kind} generation credentials configured for provider ${provider}`);
