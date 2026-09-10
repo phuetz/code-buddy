@@ -37,7 +37,7 @@
 - **Dépôt source inspecté** : `https://github.com/openai/codex` (`codex-rs`)
 - **Commit HEAD lu** : `9e552e9d15ba52bed7077d5357f3e18e330f8f38` (« Use available width for skill names in the toggle view (#32485) »)
 - **Commit clé d'évolution du protocole d'outils** : `a7c72aee8b385486746bfc2b48f5158a47526804` (« Use the image generation extension by default (#31596) »)
-- **Version Codex CLI de référence** : `codex-cli 0.153.0` (exécutable local @ `/home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/@openai/codex`)
+- **Version Codex CLI de référence** : `codex-cli 0.153.0` (exécutable local @ `~/.nvm/versions/node/v24.14.1/lib/node_modules/@openai/codex`)
 
 ---
 
