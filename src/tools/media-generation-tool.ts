@@ -477,9 +477,6 @@ export function parseChatGptImageResponse(text: string): { b64: string; revisedP
       if (event.item?.type === 'image_generation_call') {
         if (event.item.result) b64 = event.item.result;
         if (event.item.revised_prompt) revisedPrompt = event.item.revised_prompt;
-      } else if (event.type === 'response.output_item.done' && event.item?.type === 'image_generation_call') {
-        if (event.item.result) b64 = event.item.result;
-        if (event.item.revised_prompt) revisedPrompt = event.item.revised_prompt;
       } else if (Array.isArray(event.data) && event.data[0]?.b64_json) {
         b64 = event.data[0].b64_json;
         if (event.data[0].revised_prompt) revisedPrompt = event.data[0].revised_prompt;
@@ -620,7 +617,9 @@ async function executeChatGptResponsesImage(options: {
       if (parsed.error?.message) {
         message = `ChatGPT image generation rate limit reached (429): ${parsed.error.message}`;
       }
-    } catch {}
+    } catch {
+      // ignore JSON parse error
+    }
     throw new Error(message);
   }
 

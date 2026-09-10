@@ -49,17 +49,14 @@ import {
 } from '../../providers/chatgpt-models.js';
 import { logger } from '../../utils/logger.js';
 import { preserveProviderErrorMetadata } from '../provider-error-classifier.js';
-import { getInstallationId } from '../../utils/installation-id.js';
 import {
   buildChatGptHeaders,
   CHATGPT_RESPONSES_URL,
-  CODEX_ORIGINATOR,
 } from './chatgpt-headers.js';
 
 export { buildChatGptHeaders } from './chatgpt-headers.js';
 
 const RESPONSES_URL = CHATGPT_RESPONSES_URL;
-const ORIGINATOR = CODEX_ORIGINATOR;
 
 // The Codex backend has no documented SLA and has been observed to silently
 // stall (TLS handshake completes, no headers ever arrive). Without these the
