@@ -1,0 +1,7 @@
+interface:
+  display_name: "Code Buddy"
+  short_description: "Drive the buddy coding agent: headless runs, provider pinning, permissions, verify loop"
+  brand_color: "#ff6b6b"
+  default_prompt: "Use $code-buddy to run the buddy CLI correctly on this task."
+policy:
+  allow_implicit_invocation: true
