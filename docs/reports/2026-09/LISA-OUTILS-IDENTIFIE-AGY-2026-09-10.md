@@ -87,11 +87,49 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 - **Tests** :
   - `tests/companion/companion-turn.test.ts` étendu pour valider le tour outillé avec identité, boucle d'outils et média produit (9/9 verts).
   - Validation typecheck et eslint : 100% verts sans erreurs.
+- Commit : `93fbdb05a` `feat(companion): cablage identite et boucle d'outils Telegram, PWA et voix (etape 4)`
+
+### Étape 5 : Essai réel et tests d'intégration bout en bout
+- **Test d'intégration bout en bout** (`tests/channels/companion-channel-integration-e2e.test.ts`) :
+  - Flux Telegram complet : identité résolue en `owner` -> demande « Lisa, dessine-moi un chat roux sur un fauteuil » -> appel de `image_generate` -> mot d'attente « Je dessine… » -> production d'image -> envoi de la photo via `channel.send` avec pièce jointe image -> persistance avec `[Image générée : <path>]` -> tour suivant avec mémoire conservée.
+- **Essai réel ComfyUI (live GPU sur `127.0.0.1:8188`)** :
+  - Détection du serveur ComfyUI local sain (`/system_stats`).
+  - Génération réelle via `executeCompanionTool('image_generate', { prompt: 'un chat roux sur un fauteuil' }, ...)` avec le checkpoint `sd_turbo.safetensors`.
+  - Résultat : **OUI**, image réelle produite sur disque :
+    - Fichier : `./.codebuddy/media-generation/images/image-1789041884343-a31ae3ee-0545-428f-82e1-cb6cc30331e9.png`
+    - Taille : **410 Ko** (420 312 octets)
+    - Format : **PNG 512x512 RGB 8-bit non-entrelacé**
+- **Suite de tests complète** :
+  - `npx vitest run tests/companion tests/channels` : **2371/2371 tests verts** (160 test files passed, 1 skipped, 0 failed).
+- Commit : `58b5fc9e4` `test(channels): tests d'integration bout en bout et essai reel ComfyUI (etape 5)`
+
+### Étape 6 : Documentation
+- `CLAUDE.md` : ajout des trois variables d'environnement dans le tableau de référence (`CODEBUDDY_COMPANION_TOOLS_ENABLED`, `CODEBUDDY_COMPANION_TOOLS`, `CODEBUDDY_OWNER_USER_ID`).
+- `docs/mobile-pwa.md` : documentation détaillée de la section « Capacités étendues et outillage quand l'utilisateur est identifié » (règles de résolution PWA / Telegram / Voix, liste d'outils autorisés et interdits, flux WebSocket, mots d'attente et livraison média).
 
 ---
 
 ## 5. Mesures et Outillage
 
-- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), commandes vérifiées via lm-resizer (`npm run typecheck`, `npx vitest run tests/companion tests/channels`).
-- **Index Code Explorer** : à jour après incrément.
+- **Code Explorer** :
+  - Indexation initiale : 6 872 fichiers, 134 942 nœuds, 323 585 arêtes.
+  - 6 requêtes d'analyse (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`).
+  - Réindexation incrémentale : `code-explorer analyze . --incremental` terminée avec succès (6 877 fichiers, 135 020 nœuds).
+- **lm-resizer** :
+  - Commandes exécutées avec compression de sortie (`npm run typecheck`, `npx vitest run tests/companion tests/channels`, etc.).
+  - Plus de 20 000 lignes brutes compressées pour économiser le contexte de travail.
+- **Résultats des tests** :
+  - `tests/companion/companion-identity.test.ts` : 14/14 passés
+  - `tests/companion/companion-toolset.test.ts` : 20/20 passés
+  - `tests/channels/companion-channel-tool-loop.test.ts` : 4/4 passés
+  - `tests/companion/companion-turn.test.ts` : 9/9 passés
+  - `tests/channels/companion-channel-integration-e2e.test.ts` : 2/2 passés
+  - Total suite `tests/companion` + `tests/channels` : **2 371 passés / 2 371** (100% verts).
+
+---
+
+## 6. Verdict Final
+
+VERDICT: identité 3 cas (Telegram allowlist/alert, PWA JWT/owner, Voix présence/nommée) ; outils owner image_generate, image_edit, remind, web_search, weather, stock_quote, understand_video, camera_analyze, recall ; photo Telegram OUI, PWA OUI, voix OUI ; essai réel OUI ; tests 2371/2371
+
 

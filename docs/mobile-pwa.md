@@ -92,3 +92,28 @@ ne contient que des empreintes : aucun chemin de fichier n'en sort. Sans
 | `CODEBUDDY_SHARED_PHOTOS_DIR` | Emplacement de l'album (défaut `~/.codebuddy/companion/shared-photos`) |
 | `CODEBUDDY_TELEGRAM_MEDIA_GROUP_MS` | Fenêtre de regroupement d'un album Telegram (défaut 1 500 ms) |
 | `CODEBUDDY_VISION_MODEL` | Modèle de description locale (moondream) utilisé en mode `local` |
+
+## Capacités étendues et outillage quand l'utilisateur est identifié
+
+Lorsque l'interlocuteur est identifié et que le coupe-circuit `CODEBUDDY_COMPANION_TOOLS_ENABLED=true` est activé, Lisa dispose d'un jeu d'outils adapté à la conversation naturelle et aux requêtes du quotidien (« dessine-moi un chat roux », « rappelle-moi le train demain à 9h », « quel temps fait-il ? »).
+
+### Résolution d'identité
+
+- **PWA (WebSocket)** : L'authentification par JWT serveur validé identifie le `userId`. Si `CODEBUDDY_OWNER_USER_ID` est configuré, seul l'utilisateur correspondant obtient le niveau `owner` ; par défaut, tout token JWT serveur valide confère le niveau `owner`. Une session anonyme ou non authentifiée retombe en `guest` (0 outil, comportement historique).
+- **Telegram** : L'expéditeur ou le canal présent dans l'allowlist (`allowedUsers` ou `CODEBUDDY_SENSORY_ALERT_CHAT`) obtient le niveau `owner`.
+- **Voix** : La présence détectée face au robot avec interpellation nominale (« Lisa ») confère le niveau `present`.
+
+### Outils autorisés par niveau
+
+| Rôle | Outils disponibles |
+| ---- | ------------------ |
+| `owner` | `image_generate`, `image_edit`, `remind`, `web_search`, `weather`, `stock_quote`, `understand_video`, `camera_analyze`, `recall` |
+| `present` | Idem sans `remind` (pas de création aveugle) ni `camera_analyze` (œil déjà actif) |
+| `guest` | Aucun outil (0 outil, fail-closed strict) |
+
+### Sécurité et garde-fous
+
+- **Liste noire absolue** : Les outils d'exécution shell (`bash`, `terminal`, `process`), de manipulation de fichiers (`create_file`, `write_file`, `str_replace_editor`, `apply_patch`), les outils MCP et fleet sont **strictement interdits** et filtrés en amont.
+- **Mots d'attente immédiats** : Dès qu'un outil plus long est déclenché, Lisa annonce immédiatement un mot d'attente naturel (« Je dessine… », « Je regarde… ») avant même la fin de l'appel.
+- **Livraison média et mémoire** : Une image produite (via ComfyUI local ou backend configuré) est automatiquement envoyée en média dans le flux (photo Telegram, image PWA, envoi Telegram pour la voix). L'historique conserve la trace sous `[Image générée : <chemin>]` ou `[Rappel créé : <label>]`, permettant à Lisa de s'en souvenir au tour suivant.
+
