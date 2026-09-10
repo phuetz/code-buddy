@@ -169,17 +169,116 @@ Les deux flux ont été testés et validés en conditions réelles avec le compt
 
 ## 3. Implémentation et modifications
 
-*(En cours)*
+### 3.1 Architecture retenue
+
+L'implémentation adopte l'Architecture A (`/responses` avec outil `image_generation` hébergé par le backend Codex), complétée par la compatibilité directe avec les endpoints `/images/generations` si une URL personnalisée est spécifiée.
+
+### 3.2 Fichiers modifiés et créés
+
+1. **`src/codebuddy/providers/chatgpt-headers.ts` (nouveau)** :
+   - Extrait les en-têtes standard Codex (`buildChatGptHeaders`) depuis `provider-chatgpt-responses.ts`.
+   - Définit les constantes `CODEX_ORIGINATOR = 'codex_cli_rs'` et `CHATGPT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'`.
+   - Évite toute duplication de code d'authentification entre le fournisseur chat et le fournisseur d'images.
+
+2. **`src/providers/codex-oauth.ts`** :
+   - Ajout d'un repli en lecture seule vers `~/.codex/auth.json` dans `hasCodexCredentials()` et `getChatGptAuth()`.
+   - Permet d'exploiter les identifiants existants de la session ChatGPT Codex en place sans nécessiter de copie de fichier d'authentification (ce qui risquerait d'invalider le token par rotation).
+
+3. **`src/tools/media-generation-tool.ts`** :
+   - Type étendu : `MediaProvider = 'openai' | 'xai' | 'fal' | 'comfyui' | 'chatgpt'`.
+   - Export de l'interface `ProviderConfig`.
+   - Priorités de sélection dans `resolveImageProvider` :
+     1. Explicite : `CODEBUDDY_IMAGE_PROVIDER=chatgpt`.
+     2. Explicite : `openai`, `xai`, `fal`, `comfyui`.
+     3. Auto-détection ComfyUI (si `COMFYUI_URL` ou URLs de repli présentes).
+     4. Auto-détection ChatGPT : si aucune clé `OPENAI_API_KEY`, `XAI_API_KEY` ou `FAL_KEY` n'est définie et que des identifiants Codex valides existent (`hasCodexCredentials()`).
+     5. Repli par défaut historique : `openai` (préservé à l'octet près).
+   - Validation `assertProviderReady` :
+     - Pour `chatgpt`, vérifie la présence d'identifiants valides. En leur absence, retourne un message d'erreur clair :
+       `No ChatGPT credentials found for provider chatgpt. Run buddy login (or /login chatgpt) to connect.`
+   - Fonctions dédiées ChatGPT :
+     - `generateChatGptImage` : prépare le prompt avec indication d'aspect (`square 1:1`, `landscape 3:2`, `portrait 2:3`), appelle le backend Codex via `/responses`, sauvegarde le fichier PNG dans `.codebuddy/media-generation/images/` et génère le sidecar `.meta.json` standard (`provider: 'chatgpt'`, `model: 'gpt-image-2'`).
+     - `editChatGptImage` : injecte l'image source dans `input_image` et la consigne de modification dans `input_text` avec délimitation des régions normalisées.
+     - `executeChatGptResponsesImage` : gère la requête HTTP, le rafraîchissement automatique de token sur 401 via `refreshChatGptAuth()` avec retry, et la gestion explicite des erreurs 429 (rate limit).
+     - `parseChatGptImageResponse` : extrait le base64 PNG et le `revised_prompt` depuis le flux d'événements SSE (`image_generation_call`) ou une réponse JSON directe.
+   - `getImageEditCapabilities` : expose `provider: 'chatgpt'`, `available: true`, `alphaMasking: false`.
+
+4. **`tests/tools/media-generation-chatgpt.test.ts` (nouveau)** :
+   - 14 tests unitaires avec mock fetch couvrant :
+     - Format de requête envoyé à `/responses` (headers, body, tools: `[{ type: 'image_generation' }]`, model, aspect ratio).
+     - Parsing de réponse SSE et JSON direct.
+     - Retry automatique sur 401 après rafraîchissement de jeton.
+     - Gestion d'erreur 429 avec message lisible.
+     - Édition d'image avec élément `input_image` et `selections`.
+     - Résolution de fournisseur : auto-détection, explicite, non-régression quand `OPENAI_API_KEY` est présent.
+     - Capacités d'édition d'image.
+   - 1 test d'intégration réel (live) :
+     - Conditionné par `CODEBUDDY_LIVE_CHATGPT_IMAGE=true` et la présence de credentials.
+     - Génération d'une vraie image par `gpt-image-2` (« A small red cube on white background »).
+     - Vérification de l'existence du fichier PNG, de sa taille (> 1000 octets), de sa signature magique PNG et du sidecar `.meta.json`.
+
+5. **`CLAUDE.md` & `docs/configuration.md`** :
+   - Documentation de `CODEBUDDY_IMAGE_PROVIDER=chatgpt`, des règles d'auto-détection, du modèle effectif `gpt-image-2`, du sidecar `.meta.json` et de la variable `CODEBUDDY_CHATGPT_IMAGE_TIMEOUT_MS`.
 
 ---
 
 ## 4. Preuves de validation et tests
 
-*(En cours)*
+### 4.1 Test Live en conditions réelles
+
+- **Commande exécutée** : `CODEBUDDY_LIVE_CHATGPT_IMAGE=true npx vitest run tests/tools/media-generation-chatgpt.test.ts`
+- **Résultat** : 15/15 tests passés en 28.58 s.
+- **Fichier image généré** :
+  - Chemin : `.codebuddy/media-generation/images/image-1789041421498-94b26447-e402-4beb-9d41-fc4286d852c4.png`
+  - Taille : 798 559 octets (~798 Ko, > 1000 octets requis)
+  - Caractéristiques vérifiées via `file` :
+    `PNG image data, 1254 x 1254, 8-bit/color RGB, non-interlaced`
+  - Sidecar `.meta.json` associé :
+    ```json
+    {
+      "kind": "image",
+      "prompt": "A small red cube on white background",
+      "revisedPrompt": "A single small red cube centered on a clean pure white background, minimalist studio product image, subtle soft shadow beneath the cube, crisp geometric edges, realistic lighting, no text, no other objects, square 1:1 composition.",
+      "provider": "chatgpt",
+      "model": "gpt-image-2",
+      "aspect_ratio": "square",
+      "generatedAt": "2026-09-10T11:56:32.284Z"
+    }
+    ```
+
+### 4.2 Suites de validation globales
+
+1. **Vérification des types (`npm run typecheck`)** :
+   - `tsc --noEmit` : 0 erreur
+   - `tsc --project tsconfig.gpuNode-identity.json` : 0 erreur
+   - `tsc --noEmit -p packages/companion-core/tsconfig.json` : 0 erreur
+2. **Linter (`npx eslint`)** :
+   - Exécuté sur tous les fichiers modifiés / créés : 0 erreur.
+3. **Tests de non-régression média (`npx vitest run tests/tools/media-generation`)** :
+   - 3 fichiers de tests, 18 tests exécutés : 17 passés, 1 skippé (live test quand variable d'env non activée).
+4. **Tests dédiés avec Live (`CODEBUDDY_LIVE_CHATGPT_IMAGE=true npx vitest run tests/tools/media-generation-chatgpt.test.ts`)** :
+   - 15/15 tests passés (100 % vert).
 
 ---
 
-## 5. Outillage et fraîcheur d'index
+## 5. Outillage, historique git et fraîcheur d'index
 
-- Outillage : 1 appel Code Explorer (analyze), 1 commande lm-resizer.
-- Suivi d'index : initialisé après `code-explorer analyze .`.
+### 5.1 Commits de la mission
+
+- `ed4f36a5e` : `docs: initialisation du rapport de mission image-gen chatgpt`
+- `1fb6bd25d` : `docs(report): protocole codex cli pour gpt-image-2 et endpoints backend`
+- `c5762c02e` : `refactor(chatgpt): extraction des en-têtes partagés et support repli lecture codex-auth`
+- `42600cdcc` : `feat(image-gen): support fournisseur chatgpt (backend codex gpt-image-2)`
+- `a290ef7a5` : `test(tools): tests unitaires et live pour media-generation chatgpt`
+- `98842a3e0` : `docs: documentation de CODEBUDDY_IMAGE_PROVIDER=chatgpt`
+- `a8bcd3d5a` : `fix(image-gen): ajustements linter et nettoyage des imports provider-chatgpt`
+
+### 5.2 Fraîcheur d'index Code Explorer
+
+Indexation incrémentale (`code-explorer analyze . --incremental`) exécutée avec succès après chaque commit. Graphe et snapshot synchronisés.
+
+---
+
+## 6. Verdict final
+
+VERDICT: protocole TROUVÉ ; LIVE PNG OUI ; tests 15/15
