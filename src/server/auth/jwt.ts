@@ -192,6 +192,10 @@ export function refreshToken(
     return null;
   }
 
+  // Device tokens require a fresh key proof after one hour. In particular,
+  // never turn them into legacy tokens that lose the revocation marker.
+  if (Array.isArray(payload.amr) && payload.amr.includes('device')) return null;
+
   return generateToken(
     {
       sub: payload.sub,

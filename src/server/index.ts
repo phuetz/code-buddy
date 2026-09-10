@@ -17,6 +17,7 @@ import cors from 'cors';
 import { createServer, Server as HttpServer } from 'http';
 import { createServer as createHttpsServer, Server as HttpsServer } from 'https';
 import { resolveServerTlsOptions } from './tls-config.js';
+import { createDeviceAuthRoutes } from './routes/device-auth.js';
 
 const _require = createRequire(import.meta.url);
 let SERVER_VERSION = '0.0.0';
@@ -286,6 +287,9 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
       res.status(404).end();
     });
   }
+
+  // Android pairs with a local code and proves key possession before JWT auth.
+  app.use('/api/auth/device', createDeviceAuthRoutes(config.jwtSecret));
 
   // Authentication (applied after public health/metrics/mobile endpoints)
   app.use(createAuthMiddleware(config));

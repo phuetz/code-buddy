@@ -8,6 +8,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { IncomingHttpHeaders } from 'http';
 import { validateApiKey, hasScope as _hasScope } from '../auth/api-keys.js';
 import { verifyToken } from '../auth/jwt.js';
+import { isDeviceAccessTokenActive } from '../auth/device-token.js';
 import type { ApiScope, AuthenticatedRequest, ServerConfig } from '../types.js';
 import { API_ERRORS } from '../types.js';
 
@@ -110,7 +111,7 @@ export function createAuthMiddleware(config: ServerConfig) {
 
     // Try JWT token
     const payload = verifyToken(token, config.jwtSecret);
-    if (!payload) {
+    if (!payload || !isDeviceAccessTokenActive(payload)) {
       return res.status(401).json({
         ...API_ERRORS.UNAUTHORIZED,
         message: 'Invalid or expired token',
@@ -240,7 +241,7 @@ export function optionalAuth(config: ServerConfig) {
 
     // Try JWT
     const payload = verifyToken(token, config.jwtSecret);
-    if (payload) {
+    if (payload && isDeviceAccessTokenActive(payload)) {
       req.auth = {
         keyId: payload.type === 'api_key' ? payload.sub : undefined,
         userId: payload.sub,

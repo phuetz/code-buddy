@@ -10,9 +10,80 @@ PWA et lane companion hors périmètre. HOME QA : `_qa/device-auth/home`.
 
 ## Étapes
 0. Rapport et réservation avant inspection.
-1. Magasin, appairage, challenge et vérification avec tests cryptographiques.
-2. CLI et profil WebSocket avec tests de compatibilité.
+1. Magasin, routes, JWT et profil WebSocket avec tests cryptographiques et de compatibilité.
+2. CLI pair/devices et tests de commande.
 3. Documentation, validations et passation.
 
 ## Preuves
-À compléter ; aucun résultat annoncé sans exécution.
+### Tranche 1 — protocole et sessions
+
+Base vérifiée : `76e675a6923e67e48b2fb2cf68c7fdd7c5fba5f7` = `origin/main`.
+Réservation : `9a4d6b7db`. Commit fonctionnel : commit portant cette section.
+Index : analyse initiale terminée (6 857 fichiers), HEAD de réservation à jour ;
+requêtes context/impact avant les modifications, complétées par rg exact.
+Pendant l'analyse initiale, quatre requêtes ont échoué faute de snapshot ;
+les interrogations utiles ont ensuite été rejouées. Attention aux homonymes :
+`generateToken` et `refreshToken` ont aussi des définitions non JWT dans le graphe.
+
+- Trois routes publiques, indépendantes de PWA et de CSRF, dix requêtes/minute
+  par IP de transport et par route, erreurs génériques, réponses non stockables.
+- Codes locaux : huit caractères, dix minutes, empreintes SHA-256 persistées,
+  consommation atomique avec l'enregistrement. P-256 validé par WebCrypto ; JWK
+  privée refusée. Nonces 32 octets, 60 secondes, consommés avant le travail async.
+- JWT d'une heure : subject appareil, agent/owner, amr biometric/device, portées
+  utilisateur. Révocation vérifiée sur HTTP et WS ; refresh interdit pour éviter
+  de convertir une preuve appareil en jeton historique sans marqueur de révocation.
+- Agent complet sur WS même avec `assistant: companion`, permission default par
+  contexte async ; pont existant activé pour Android sans drapeau PWA. Identité
+  signée exposée dans le principal et `getDeviceSessionIdentity()` ; aucun changement
+  de politique companion ni de fichiers PWA.
+- Collision de magasin traitée : les nœuds SSH/ADB utilisaient déjà devices.json.
+  L'enveloppe conserve leurs champs et ajoute deviceAuth. Verrou interprocessus,
+  écriture atomique 0600, pas de récupération automatique d'une ancienne sauvegarde
+  susceptible de ressusciter une révocation. Journal d'audit sans données de preuve.
+
+Preuves exécutées sous HOME et TMPDIR QA isolés :
+
+| Vérification | Résultat |
+| --- | --- |
+| `npm run typecheck` (trois projets) | 0 |
+| ESLint ciblé des fichiers touchés | 0, aucun avertissement après nettoyage |
+| Tests protocole initiaux | 13/13 |
+| Tests nœuds SSH/ADB voisins | 80/80 |
+| Tests core avant commit (`device-auth` + nœuds voisins) | 106/106 (26 auth + 80 voisins) |
+| Tests auth + CLI, formats WebCrypto et Android DER | 33/33 |
+| `timeout 900 npm test -- tests/server tests/commands/token` (final) | 776 verts, 2 ignorés, 0 rouge ; 83 fichiers ; 9,96 s |
+| Vrai serveur + vraie CLI pair/list/rename/revoke + QR ANSI | Trois routes 200 sans JWT préalable ; révocation 401 ; sortie finale 0 |
+| `git diff --check` | 0 |
+
+Les chiffres finaux incluent les confirmations acceptées/refusées, l'expiration
+sur une connexion existante, l'exclusion des anciennes surfaces d'approbation
+lorsque seule l'application native active le pont et les signatures DER Android.
+La CLI est préparée séparément pour la tranche 2 ; le core compile sans elle.
+
+Échecs observés, sans les masquer :
+
+- Un premier test HTTP utilisait un store de test différent du singleton appelé
+  lexicalement par le validateur. La couture device-token distincte permet le même
+  store injecté à toutes les surfaces ; test rejoué vert.
+- Typecheck du parseur DER : deux accès d'octets possiblement indéfinis (TS2532),
+  corrigés par des gardes explicites ; typecheck complet final : 0.
+- Premier smoke : assertions fonctionnelles réussies puis `Server stopped`, mais
+  sortie 124 après 120 s (timers de singletons encore ouverts). Harnais corrigé :
+  sortie explicite seulement après toutes les assertions et `server.listening === false`.
+  Second smoke : sortie 0. Aucune modification des services existants.
+- `timeout 900 npm run validate` : lint, typecheck et check:pack franchis, puis
+  timeout 124 dans la suite globale, sans total final. Le journal brut montre
+  28 cas rouges dans 13 fichiers hors auth/CLI de cette mission (dont 16 dans
+  `tests/docs/revue-gemini-docs.test.ts`). Leur antériorité n'a pas été prouvée ;
+  plusieurs fixtures « hors Git » sont exécutées sous le TMPDIR QA inclus au dépôt.
+  Ne pas annoncer validate vert. Journaux complets conservés sous `_qa/device-auth/`.
+
+### Limites d'intégration
+
+L'application Kotlin/Keystore et le contrôle biométrique réel restent dans la lane
+Android ; aucune preuve sur téléphone physique ici. ES256 sur le fil utilise les
+64 octets P1363 r||s en base64url ; le DER natif Android est également accepté
+en base64url/base64 standard, avec conversion stricte avant vérification WebCrypto.
+Le contexte companion est exposé, sa politique est laissée à la lane dédiée.
+Les magasins et clés privées des comptes réels n'ont pas été utilisés.
