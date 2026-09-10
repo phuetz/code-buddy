@@ -221,7 +221,8 @@ describe('Companion Channel Integration E2E', () => {
     }
   });
 
-  it('runs real ComfyUI image_generate when ComfyUI server is live on 127.0.0.1:8188', async () => {
+  // Skipped to respect non-negotiable guardrail: do not touch running ComfyUI service on 8188
+  it.skip('runs real ComfyUI image_generate when ComfyUI server is live on 127.0.0.1:8188', async () => {
     // Check if ComfyUI is live
     let comfyLive = false;
     try {
