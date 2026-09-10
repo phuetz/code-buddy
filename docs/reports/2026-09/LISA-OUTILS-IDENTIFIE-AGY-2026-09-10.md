@@ -28,7 +28,7 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 | **Inconnu / Non identifié** | Tout autre cas ou canal sans authentification | `guest` | **AUCUN** outil (fail-closed strict, comportement historique) |
 
 ### Rationale du niveau `present` (Voix)
-- **Pourquoi priver la voix simple de `remind` ?** Une voix captée dans une pièce physique peut émaner d'un tiers, d'un collègue, d'un enfant ou d'une vidéo en cours de lecture. Créer un rappel persistant (qui réveillera Patrice à des heures indues ou encombrera son agenda) sans identification formelle de l'owner est un risque de pollution ou de spoofing de planning.
+- **Pourquoi priver la voix simple de `remind` ?** Une voix captée dans une pièce physique peut émaner d'un tiers, d'un collègue, d'un enfant ou d'une vidéo en cours de lecture. Créer un rappel persistant (qui réveillera le propriétaire à des heures indues ou encombrera son agenda) sans identification formelle de l'owner est un risque de pollution ou de spoofing de planning.
 - **Pourquoi priver la voix simple de `camera_analyze` ?** Déclencher une capture webcam sur simple présence non authentifiée pose un risque d'intrusion dans la vie privée de la pièce. Seul le propriétaire identifié (`owner`) a la légitimité pour piloter la caméra du domicile.
 
 ---
@@ -128,8 +128,73 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 
 ---
 
-## 6. Verdict Final
+## 6. Verdict Initial (Étape 6)
 
 VERDICT: identité 3 cas (Telegram allowlist/alert, PWA JWT/owner, Voix présence/nommée) ; outils owner image_generate, image_edit, remind, web_search, weather, stock_quote, understand_video, camera_analyze, recall ; photo Telegram OUI, PWA OUI, voix OUI ; essai réel OUI ; tests 2371/2371
+
+---
+
+## 7. Correctifs après vérification (10/09/2026)
+
+Suite au rapport d'audit d'exécution `docs/reports/2026-09/VERIF-GROK-LISA-OUTILS-2026-09-10.md`, trois écarts et des problèmes d'hygiène ont été corrigés en commits dédiés :
+
+### 7.1 Surcharge `CODEBUDDY_COMPANION_TOOLS` bornée par intersection et liste noire par famille (Point 1)
+- **Intersection stricte** : `getCompanionToolNames` a été refactoré dans `src/companion/companion-toolset.ts`. La variable d'environnement `CODEBUDDY_COMPANION_TOOLS` (CSV) ne peut désormais qu'**intersecter** le jeu d'outils du rôle (`OWNER_COMPANION_TOOLS` ou `PRESENT_COMPANION_TOOLS`), jamais l'étendre. Tout outil non déclaré dans le rôle (par exemple `view_file`, `read_file`, etc.) est automatiquement éliminé.
+- **Liste noire par famille** : `COMPANION_FORBIDDEN_PATTERNS` a été étendu pour couvrir des familles complètes par préfixes et expressions régulières :
+  - `bash*` : `/^bash/i`, `terminal`, `interactive_shell`
+  - `shell*` : `/^shell/i`
+  - `*_exec` & exécution : `/(?:^|_)exec(?:$|_)/i`, `/^execute_/i`, `js_repl`
+  - `write_*` & écriture : `/^write_/i`, `/^file_write/i`, `create_file`
+  - `patch` : `'patch'`, `/^apply_patch/i`
+  - `str_replace*` : `/^str_replace/i` (refus formel de `str_replace` et `str_replace_editor`)
+  - `multi_edit` & `edit_*` : `'multi_edit'`, `/^multi_edit/i`, `/^edit_/i`, `/^file_edit/i` (attention : n'interfère pas avec `image_edit`)
+  - `delete_*` : `/^delete_/i`
+  - `git` & conflits : `'git'`, `/^git_/i`, `'resolve_conflicts'`
+  - Processus & système : `'docker'`, `'kubernetes'`, `'process'`, `/^process/i`, `'app_server'`, `'computer_control'`, etc.
+  - A2A / MCP / registre : `/^mcp_/i`, `/^fleet_/i`, `/^peer_/i`, `/^delegate_/i`, `/^register_tool/i`, `'register_tool'`
+- **Validation registry-wide** :
+  - Un test unitaire exhaustif dans `tests/companion/companion-toolset.test.ts` importe `TOOL_METADATA` (`src/tools/metadata.ts`, 229 outils au total).
+  - Vérification que chaque outil d'écriture (`file_write`), système (`system`) ou versioning (`git`) est formellement interdit par `isForbiddenCompanionTool`.
+  - Vérification par injection d'un CSV massif contenant l'intégralité des 229 outils du catalogue : aucun outil d'écriture ou d'exécution ne passe le filtre (`ownerTools` reste strictement borné aux 9 outils autorisés ; `presentTools` aux 7 outils sans `remind` ni `camera_analyze`).
+  - Tests unitaires explicites de refus pour `str_replace` et `multi_edit` (détection `isForbiddenCompanionTool`, exclusion du CSV, et rejet en exécution `executeCompanionTool`).
+- **Commit** : `7b8787ccf` `fix(companion): surcharge bornee par intersection et liste noire par famille (point 1)`
+
+### 7.2 Voix : `robotNamed` réel via `respond-decider` (Point 2)
+- **Suppression du hardcoding** : Dans `src/sensory/voice-loop.ts` (`defaultReply`), la valeur `robotNamed: true` codée en dur a été remplacée par un appel asynchrone à `resolveVoiceRobotNamed(heard, replyOpts)`.
+- **Règles de décision fail-closed** :
+  - `resolveVoiceRobotNamed` consulte le `respond-decider` (adressé au robot par son nom ou requête dans la fenêtre d'engagement active).
+  - Si la phrase ne mentionne pas le nom du robot et se situe hors de la fenêtre d'engagement : `robotNamed = false` ⇒ l'identité est résolue en `guest` (`voice_unauthenticated_or_unnamed`), fail-closed total (0 outil, texte pur).
+  - Si la phrase mentionne le nom du robot (ex. « Lisa, quel temps fait-il ? ») : `robotNamed = true` ⇒ l'identité est résolue en `present` (7 outils autorisés).
+  - Si une relance directive sans le nom intervient dans la fenêtre d'engagement active (`reason === 'engaged'`, ex. « raconte une histoire ») : `robotNamed = true` ⇒ l'identité reste `present`.
+  - Dès fermeture de la fenêtre (`close()`), toute nouvelle phrase sans le nom retombe en `guest`.
+- **Liaison serveur** : Dans `src/server/index.ts`, le `responseDecider` de la session est partagé avec le module vocal via `setVoiceResponseDecider`, garantissant la cohérence conversationnelle de bout en bout.
+- **Hygiène et neutralisation** :
+  - `src/channels/companion-channel-turn.ts` : commentaire neutralisé (`alert owner on Telegram`).
+  - `tests/companion/companion-turn.test.ts` : remplacement des identifiants nominatifs par `owner-user`.
+  - `tests/companion/companion-identity.test.ts` : validation du handle Telegram neutre.
+- **Commit** : `4d8e1e2d8` `feat(sensory): resolution reelle de robotNamed via respond-decider et hygiene identifiants (point 2)`
+
+### 7.3 Rejeu des suites de tests et décomptes réels (Point 3)
+- Les 3 suites ont été rejouées séparément avec `timeout 900` via `lm-resizer` :
+  - `timeout 900 npm test -- tests/companion` : **92 fichiers / 847 passés / 0 failed / 0 skipped** (durée : 8.20s).
+  - `timeout 900 npm test -- tests/channels` : **68 fichiers passés / 1 skipped (69 au total) / 1528 passés / 2 skipped / 0 failed** (durée : 12.72s).
+  - `timeout 900 npm test -- tests/sensory` : **84 fichiers passés / 1 skipped (85 au total) / 780 passés / 4 skipped / 1 todo (785 au total) / 0 failed** (durée : 7.42s).
+- **Décomptes réels exacts** :
+  - Sur le périmètre `tests/companion` + `tests/channels` : **160 fichiers passés, 1 fichier skippé ; 2 375 tests passés, 2 tests skippés, 0 failed** (total 2 377 tests).
+  - Sur les 3 périmètres combinés (`tests/companion`, `tests/channels`, `tests/sensory`) : **3 155 tests passés, 6 skippés, 1 todo, 0 failed** (total 3 162 tests).
+  - Le test live ComfyUI dans `tests/channels/companion-channel-integration-e2e.test.ts` a été marqué `it.skip` pour sanctuariser le service en cours sur le port 8188 conformément aux garde-fous non négociables.
+- `npm run typecheck` : **exit 0** (`tsc --noEmit` + `gpuNode-identity` + `companion-core`).
+- `npm run lint` (fichiers touchés) : **exit 0** (0 warning, 0 error).
+- **Outillage & Index** :
+  - Code Explorer : 16 opérations (`status`, `analyze --incremental` ×3, `context` ×3, `impact` ×2).
+  - Index : **à jour** (commit `9b9eb8ccd`, 6 879 fichiers, 135 045 nœuds, 323 767 arêtes).
+  - `lm-resizer` : 14 commandes exécutées, 1 287 octets de sortie compressés et économisés.
+
+---
+
+## 8. Verdict Final après Correctifs
+
+VERDICT: surcharge bornée OUI ; robotNamed réel OUI ; tests 3155/3162 (2375/2377 companion+channels)
+
 
 
