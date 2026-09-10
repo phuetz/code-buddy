@@ -74,10 +74,24 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 - Conservation du `historySuffix` (« [Image générée : ...] », « [Rappel créé : ...] »).
 - Comportement byte-identique strict conservé si `CODEBUDDY_COMPANION_TOOLS_ENABLED` est éteint ou si rôle `guest`.
 - 4 tests unitaires dans `tests/channels/companion-channel-tool-loop.test.ts` (4/4 verts).
+- Commit : `865887bb0` `feat(channels): boucle de tour companion outille avec mots d'attente et livraison media (etape 3)`
+
+### Étape 4 : Câblage identité et boucle d'outils Telegram, PWA et voix
+- **PWA** :
+  - `src/server/websocket/handler.ts` : propagation du `userId` dans `produceCompanionReply` ; mémorisation du suffixe d'historique (`historySuffix`) dans `companionHistory`.
+  - `src/companion/companion-turn.ts` : résolution de l'identité PWA (`owner` si authentifié/correspondant, `guest` sinon) ; passage de `identity`, `surface`, `onWaitingWord` vers `runCompanionChannelTurn` ; lecture et conversion base64 des images générées avec retour `kind: 'selfie'`, `image`, `historySuffix`.
+- **Telegram** :
+  - `src/commands/handlers/channel-handlers.ts` : résolution de l'identité Telegram (`chatId` ∈ allowlist / sensory alert chat, `senderId`, `senderUsername`) ; transmission à `runCompanionChannelTurn` avec `surface: 'telegram'` ; livraison d'image directe via `channel.send({ attachments: [{ type: 'image', filePath }] })` déclenchant `sendPhoto` avec caption ; persistance de `companionHistorySuffix` dans l'historique de session.
+- **Voix** :
+  - `src/sensory/voice-loop.ts` : dans `defaultReply`, vérification du coupe-circuit `isCompanionToolsEnabled` ; si actif, résolution d'identité `voice` avec `isVoicePresence` et exécution via `runCompanionChannelTurn` ; livraison média vocal via `sendTelegramAlert` et suffixe parlé « Je te l'envoie sur ton téléphone. » ; conservation byte-identique du chemin rapide quand le coupe-circuit est inactif.
+- **Tests** :
+  - `tests/companion/companion-turn.test.ts` étendu pour valider le tour outillé avec identité, boucle d'outils et média produit (9/9 verts).
+  - Validation typecheck et eslint : 100% verts sans erreurs.
 
 ---
 
 ## 5. Mesures et Outillage
 
-- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), 5 commandes via lm-resizer (`typecheck baseline`, `vitest companion-identity`, `vitest companion-toolset`, `vitest companion-channel-turn`, `vitest companion-channel-tool-loop`).
+- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), commandes vérifiées via lm-resizer (`npm run typecheck`, `npx vitest run tests/companion tests/channels`).
 - **Index Code Explorer** : à jour après incrément.
+

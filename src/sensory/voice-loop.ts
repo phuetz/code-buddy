@@ -1946,27 +1946,52 @@ export async function defaultReply(
     cognitiveLease = prepared.cognitiveLease;
     replyOpts?.onProviderResolved?.(route);
     logger.debug(`[voice] reply model: ${route.model} — ${route.reason}`);
-    const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
-    const resp = await client.chat(
-      [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: heard },
-      ] as never,
-      [],
-      // Additive: thread the barge-in signal so an interrupt aborts the in-flight
-      // LLM call. Undefined when not interruptible → the call is unchanged.
-      {
-        temperature: voiceTemperature(),
+    let reply = '';
+    const { isCompanionToolsEnabled } = await import('../companion/companion-toolset.js');
+    if (isCompanionToolsEnabled(process.env)) {
+      const { resolveCompanionIdentity } = await import('../companion/companion-identity.js');
+      const { runCompanionChannelTurn } = await import('../channels/companion-channel-turn.js');
+      const identity = resolveCompanionIdentity({
+        channel: 'voice',
+        isVoicePresence: true,
+        robotNamed: true,
+        env: process.env,
+      });
+      const turnResult = await runCompanionChannelTurn({
+        apiKey: route.apiKey,
+        baseUrl: route.baseURL,
+        model: route.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history,
+          { role: 'user', content: heard },
+        ] as never,
+        identity,
+        surface: 'voice',
+        env: process.env,
+        signal: replyOpts?.signal,
         maxTokens: voiceMaxTokens(heard, history),
-        ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
-      }
-    );
-    reportReplyTimingPhase(
-      replyOpts,
-      replyOpts?.spokenPrefix ? 'continuation_generation_complete' : 'generation_complete',
-    );
-    const reply = (resp?.choices?.[0]?.message?.content ?? '').trim();
+      });
+      reply = turnResult.text.trim();
+    } else {
+      const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
+      const resp = await client.chat(
+        [
+          { role: 'system', content: systemPrompt },
+          ...history,
+          { role: 'user', content: heard },
+        ] as never,
+        [],
+        // Additive: thread the barge-in signal so an interrupt aborts the in-flight
+        // LLM call. Undefined when not interruptible → the call is unchanged.
+        {
+          temperature: voiceTemperature(),
+          maxTokens: voiceMaxTokens(heard, history),
+          ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
+        }
+      );
+      reply = (resp?.choices?.[0]?.message?.content ?? '').trim();
+    }
     if (reply && !replyOpts?.signal?.aborted) cognitiveLease?.commit();
     else cognitiveLease?.release();
     return reply || conversationFailureReply(heard, history);

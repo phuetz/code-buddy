@@ -272,7 +272,6 @@ export async function runCompanionChannelTurn(
         activeMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          name: toolName,
           content: toolRes.success
             ? (toolRes.output ?? 'Succès')
             : `Erreur outil ${toolName} : ${toolRes.error ?? 'inconnue'}`,

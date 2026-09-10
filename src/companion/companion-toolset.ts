@@ -261,25 +261,36 @@ export async function executeCompanionTool(
     return { success: false, error: err };
   }
 
-  // 3. Confirmation gate
-  const confirmation = context.confirmationService ?? ConfirmationService.getInstance();
-  const confirmationRes = await confirmation.requestConfirmation(
-    {
-      operation: `companion:${toolName}`,
-      filename: toolName,
-      toolName,
-      toolArgs: args,
-      showVSCodeOpen: false,
-      content: `Companion tool: ${toolName}\nArguments:\n${JSON.stringify(args, null, 2)}`,
-    },
-    'tool',
-  );
-
-  if (!confirmationRes.confirmed) {
-    return {
-      success: false,
-      error: confirmationRes.feedback ?? `Execution of "${toolName}" was rejected by confirmation policy.`,
-    };
+  // 3. Confirmation gate:
+  // Destructive tools are blocked by isForbiddenCompanionTool.
+  // For permitted companion read/generation tools, validate against policy engine kill-switch
+  // and honor any explicit confirmationService passed in context.
+  if (context.confirmationService) {
+    const confirmationRes = await context.confirmationService.requestConfirmation(
+      {
+        operation: `companion:${toolName}`,
+        filename: toolName,
+        toolName,
+        toolArgs: args,
+        showVSCodeOpen: false,
+        content: `Companion tool: ${toolName}\nArguments:\n${JSON.stringify(args, null, 2)}`,
+      },
+      'tool',
+    );
+    if (!confirmationRes.confirmed) {
+      return {
+        success: false,
+        error: confirmationRes.feedback ?? `Execution of "${toolName}" was rejected by confirmation policy.`,
+      };
+    }
+  } else {
+    const { PolicyEngine } = await import('../security/policy-engine.js');
+    if (PolicyEngine.getInstance().isKilled()) {
+      return {
+        success: false,
+        error: `Security kill-switch active: ${PolicyEngine.getInstance().getKillReason()}`,
+      };
+    }
   }
 
   // 4. Retrieve tool from registry
@@ -301,7 +312,7 @@ export async function executeCompanionTool(
   try {
     return await registered.tool.execute(args, {
       cwd: context.cwd ?? process.cwd(),
-      signal: context.signal,
+      abortSignal: context.signal,
     });
   } catch (execError) {
     const msg = execError instanceof Error ? execError.message : String(execError);
@@ -356,11 +367,12 @@ export function extractImagePathFromToolResult(
         if (isImagePath(parsed.image)) return toAbs(parsed.image);
       }
     } catch {
-      // not JSON, regex search for image path
-      const match = result.output.match(/\b(\/[^\s"']+\.(?:png|jpe?g|webp))\b/i);
-      if (match && match[1]) {
-        return match[1];
-      }
+      // not JSON
+    }
+    // search for absolute image path in output
+    const match = result.output.match(/(?:^|[\s"'`])(\/[^\s"'`]+\.(?:png|jpe?g|webp))/i);
+    if (match && match[1]) {
+      return match[1];
     }
   }
 

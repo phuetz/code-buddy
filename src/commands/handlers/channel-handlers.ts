@@ -1962,6 +1962,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       let successfulLisaSelfieToolResult = false;
       let shouldPersistChannelSession = Boolean(agent);
       let telegramWidget: { widgetHtml?: string; data?: unknown } | undefined;
+      let companionMediaResult: import('../../channels/companion-channel-turn.js').CompanionChannelMedia[] | undefined;
+      let companionHistorySuffix: string | undefined;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
         if (agent && !agent.recordTrustedExternalConversationTurn(agentInput, response)) {
@@ -2001,16 +2003,34 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           sharedPhotos: companionPhotos?.photos.length ?? 0,
         });
         try {
+          let companionIdentity: import('../../companion/companion-identity.js').CompanionIdentity | undefined;
+          if (channel.type === 'telegram') {
+            const { resolveCompanionIdentity } = await import('../../companion/companion-identity.js');
+            const telegramChannel = channel as unknown as { config?: { allowedUsers?: string[] } };
+            companionIdentity = resolveCompanionIdentity({
+              channel: 'telegram',
+              chatId: message.channel.id,
+              senderId: message.sender?.id,
+              senderUsername: message.sender?.username,
+              allowedUsers: telegramChannel.config?.allowedUsers ?? [],
+              env: process.env,
+            });
+          }
           const generated = await runCompanionChannelTurn({
             apiKey: effectiveRuntime.apiKey,
             baseUrl: effectiveRuntime.baseUrl,
             model: effectiveRuntime.model,
             messages: companionMessages,
             signal: turn.signal,
+            ...(companionIdentity ? { identity: companionIdentity } : {}),
+            surface: channel.type,
+            env: process.env,
           });
           turn.throwIfAborted();
           response = generated.text;
           hasGeneratedResponse = response.trim() !== '';
+          companionMediaResult = generated.media;
+          companionHistorySuffix = generated.historySuffix;
           if (hasSharedPhotos && companionPhotos) {
             // The album write is deliberately after the reply: a full disk must
             // cost the memory, never the reaction.
@@ -2244,7 +2264,31 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       turn.throwIfAborted();
       turn.phase('delivery');
       deliveryState = 'started';
-      if (channel.type === 'telegram' && response.trim() && telegramWidget) {
+      if (channel.type === 'telegram' && response.trim() && companionMediaResult && companionMediaResult.length > 0) {
+        const media = companionMediaResult[0];
+        if (media) {
+          const pathMod = await import('path');
+          const ext = pathMod.extname(media.imagePath).slice(1) || 'png';
+          const result = await channel.send({
+            channelId: message.channel.id,
+            content: response,
+            replyTo: message.id,
+            attachments: [
+              {
+                type: 'image',
+                filePath: media.imagePath,
+                fileName: pathMod.basename(media.imagePath),
+                mimeType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`,
+              },
+            ],
+          });
+          delivered = result?.success === true;
+          deliveredChunks = delivered ? 1 : 0;
+          if (delivered) deliveredAssistantContent = response;
+          if (delivered) deliveryMode = 'telegram-photo';
+          else deliveryMode = 'failed';
+        }
+      } else if (channel.type === 'telegram' && response.trim() && telegramWidget) {
         const result = await channel.send({
           channelId: message.channel.id,
           content: response,
@@ -2452,7 +2496,10 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       turn.throwIfAborted();
       turn.phase('persistence');
       if (useCompanionProfile && response.trim()) {
-        rememberCompanionChannelTurn(sessionKey, message.content, response);
+        const recordedResponse = companionHistorySuffix
+          ? `${response}${companionHistorySuffix}`
+          : response;
+        rememberCompanionChannelTurn(sessionKey, message.content, recordedResponse);
       }
       if (shouldPersistChannelSession && agent) await persistChannelSession(agent, sessionKey);
       turn.throwIfAborted();
