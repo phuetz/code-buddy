@@ -63,10 +63,21 @@ La décision produit du 10/09/2026 vise à conférer à Lisa un accès sécuris�
 - Mots d'attente immédiats (`getCompanionToolWaitingWord`).
 - Exécution sécurisée avec `ConfirmationService` et extraction d'images produit (`extractImagePathFromToolResult`).
 - 20 tests unitaires dans `tests/companion/companion-toolset.test.ts` (20/20 verts).
+- Commit : `b917f8a53` `feat(companion): jeu d'outils companion securise par niveau d'identite (etape 2)`
+
+### Étape 3 : Boucle de tour compagnon outillé (`src/channels/companion-channel-turn.ts`)
+- Extension de `runCompanionChannelTurn` pour accepter l'identité (`CompanionIdentity`), la surface, les callbacks (`onWaitingWord`, `deliverMedia`).
+- Boucle outillée bornée à 3 tours (`MAX_COMPANION_TOOL_ROUNDS = 3`).
+- Notification immédiate du mot d'attente avant tout outil lent.
+- Détection et extraction automatique des chemins d'image (`extractImagePathFromToolResult`).
+- Livraison média (Telegram photo, PWA média payload, vocal Telegram + annonce parlée).
+- Conservation du `historySuffix` (« [Image générée : ...] », « [Rappel créé : ...] »).
+- Comportement byte-identique strict conservé si `CODEBUDDY_COMPANION_TOOLS_ENABLED` est éteint ou si rôle `guest`.
+- 4 tests unitaires dans `tests/channels/companion-channel-tool-loop.test.ts` (4/4 verts).
 
 ---
 
 ## 5. Mesures et Outillage
 
-- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), 3 commandes via lm-resizer (`typecheck baseline`, `vitest companion-identity`, `vitest companion-toolset`).
-- **Index Code Explorer** : réindexation incrémentale en cours.
+- **Outillage** : 6 appels Code Explorer (`analyze`, `context`, `impact`, `query weather`, `query stock_quote`, `query camera_analyze`), 5 commandes via lm-resizer (`typecheck baseline`, `vitest companion-identity`, `vitest companion-toolset`, `vitest companion-channel-turn`, `vitest companion-channel-tool-loop`).
+- **Index Code Explorer** : à jour après incrément.
