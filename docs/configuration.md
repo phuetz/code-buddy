@@ -77,7 +77,7 @@ Code Buddy supporte la génération et l'édition d'images à 0 $ via l'abonneme
 - **Connexion** : `buddy login` ou `/login chatgpt`. Si le jeton expire, un rafraîchissement OAuth automatique est tenté sur 401.
 - **Backend & Modèle** : Endpoint `/responses` du backend Codex avec outil `image_generation`, modèle effectif `gpt-image-2`.
 - **Édition** : Supportée via `editImage` avec préservation de contexte par `input_image` (sans masque alpha direct ; délimitation par indications de régions normalisées).
-- **Sortie** : Fichiers PNG sauvés dans `.codebuddy/media-generation/images/` avec sidecar `.meta.json` (`provider: 'chatgpt'`, `model: 'gpt-image-2'`).
+- **Sortie** : Fichiers PNG sauvés dans `.codebuddy/media-generation/images/` avec sidecar `.meta.json` (`provider: 'chatgpt'`, `model: 'gpt-image-2.5-flare'`).
 
 Doc LoRA : [krea-lora.md](./krea-lora.md).
 

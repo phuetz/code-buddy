@@ -554,6 +554,9 @@ async function executeChatGptResponsesImage(options: {
       tools: [
         {
           type: 'image_generation',
+          // The Codex backend honours a per-tool model (verified live 2026-09-10):
+          // Images 2.5 (`gpt-image-2.5-flare` by default) instead of the backend default.
+          model: config.model,
         },
       ],
     };
@@ -2286,7 +2289,7 @@ export function resolveImageProvider(
       ?? envSource.CODEBUDDY_IMAGE_BASE_URL
       ?? CHATGPT_RESPONSES_URL
     ).trim().replace(/\/+$/, '');
-    const model = (envSource.CODEBUDDY_IMAGE_MODEL ?? 'gpt-image-2').trim();
+    const model = (envSource.CODEBUDDY_IMAGE_MODEL ?? 'gpt-image-2.5-flare').trim();
     assertProviderReady('chatgpt', '', baseUrl, 'image', { hasCredentials: hasChatGptAuth });
     return { provider: 'chatgpt', model, baseUrl, apiKey: '' };
   }
@@ -2301,7 +2304,7 @@ export function resolveImageProvider(
   const model = (envSource.CODEBUDDY_IMAGE_MODEL
     ?? (provider === 'xai' ? envSource.XAI_IMAGE_MODEL : envSource.OPENAI_IMAGE_MODEL)
     ?? getImageGenerationModel()
-    ?? (provider === 'xai' ? 'grok-imagine-image' : 'gpt-image-2')).trim();
+    ?? (provider === 'xai' ? 'grok-imagine-image' : 'gpt-image-2.5-flare')).trim();
   // Route through the Nous Tool Gateway when configured (transparent base-URL +
   // token substitution); otherwise use the direct provider.
   const route = resolveToolGatewayRoute('image_gen', envSource);

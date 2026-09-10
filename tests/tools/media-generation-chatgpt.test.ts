@@ -53,7 +53,7 @@ describe('ChatGPT image generation provider', () => {
         { hasAuthOverride: true },
       );
       expect(config.provider).toBe('chatgpt');
-      expect(config.model).toBe('gpt-image-2');
+      expect(config.model).toBe('gpt-image-2.5-flare');
       expect(config.baseUrl).toContain('https://chatgpt.com/backend-api/codex/responses');
     });
 
@@ -75,7 +75,7 @@ describe('ChatGPT image generation provider', () => {
         { hasAuthOverride: true },
       );
       expect(config.provider).toBe('chatgpt');
-      expect(config.model).toBe('gpt-image-2');
+      expect(config.model).toBe('gpt-image-2.5-flare');
     });
 
     it('preserves openai provider when OPENAI_API_KEY is present without explicit provider', () => {
@@ -181,7 +181,7 @@ describe('ChatGPT image generation provider', () => {
       // Verify request payload shape
       expect(capturedBody.store).toBe(false);
       expect(capturedBody.stream).toBe(true);
-      expect(capturedBody.tools).toEqual([{ type: 'image_generation' }]);
+      expect(capturedBody.tools).toEqual([{ type: 'image_generation', model: 'gpt-image-2.5-flare' }]);
       const input = capturedBody.input as Array<Record<string, unknown>>;
       expect(input).toHaveLength(1);
       expect(input[0]?.type).toBe('message');
@@ -194,7 +194,7 @@ describe('ChatGPT image generation provider', () => {
       // Verify generated result
       expect(result.success).toBe(true);
       expect(result.provider).toBe('chatgpt');
-      expect(result.model).toBe('gpt-image-2');
+      expect(result.model).toBe('gpt-image-2.5-flare');
       expect(result.aspect_ratio).toBe('square');
       expect(result.revised_prompt).toBe('A vibrant red sphere');
       expect(result.outputPath).toBeDefined();
@@ -207,7 +207,7 @@ describe('ChatGPT image generation provider', () => {
       const metaPath = `${result.outputPath}.meta.json`;
       const metaContent = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
       expect(metaContent.provider).toBe('chatgpt');
-      expect(metaContent.model).toBe('gpt-image-2');
+      expect(metaContent.model).toBe('gpt-image-2.5-flare');
       expect(metaContent.aspect_ratio).toBe('square');
       expect(metaContent.prompt).toBe('A red circle');
     });
@@ -313,14 +313,14 @@ describe('ChatGPT image generation provider', () => {
 
       expect(result.success).toBe(true);
       expect(result.provider).toBe('chatgpt');
-      expect(result.model).toBe('gpt-image-2');
+      expect(result.model).toBe('gpt-image-2.5-flare');
       expect(result.maskMode).toBe('region-prompt');
       expect(result.outputPath).toBeDefined();
 
       const metaPath = `${result.outputPath}.meta.json`;
       const meta = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
       expect(meta.provider).toBe('chatgpt');
-      expect(meta.model).toBe('gpt-image-2');
+      expect(meta.model).toBe('gpt-image-2.5-flare');
       expect(meta.maskMode).toBe('region-prompt');
     });
 
@@ -349,7 +349,7 @@ describe('ChatGPT image generation provider', () => {
 
         expect(result.success).toBe(true);
         expect(result.provider).toBe('chatgpt');
-        expect(result.model).toBe('gpt-image-2');
+        expect(result.model).toBe('gpt-image-2.5-flare');
         expect(result.outputPath).toBeDefined();
 
         const stat = await fs.stat(result.outputPath!);
@@ -368,7 +368,7 @@ describe('ChatGPT image generation provider', () => {
         const metaPath = `${result.outputPath}.meta.json`;
         const meta = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
         expect(meta.provider).toBe('chatgpt');
-        expect(meta.model).toBe('gpt-image-2');
+        expect(meta.model).toBe('gpt-image-2.5-flare');
       },
       120_000,
     );
