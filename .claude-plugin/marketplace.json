@@ -5,7 +5,7 @@
     "name": "Patrice Huetz",
     "url": "https://github.com/phuetz"
   },
-  "description": "Code Buddy (the agent) and lm-resizer (the context filter) for Claude Code.",
+  "description": "Code Buddy (the agent), lm-resizer (the context filter) and Code Explorer (the codebase knowledge graph) for Claude Code.",
   "plugins": [
     {
       "name": "code-buddy",
@@ -44,6 +44,27 @@
         "tokens"
       ],
       "category": "productivity"
+    },
+    {
+      "name": "code-explorer",
+      "displayName": "Code Explorer",
+      "description": "Map the codebase first: symbols, callers, impact/blast radius, hotspots over a pre-indexed knowledge graph. Skill + MCP server.",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/phuetz/code-explorer.git",
+        "ref": "main"
+      },
+      "version": "0.2.0",
+      "author": {
+        "name": "Patrice Huetz"
+      },
+      "license": "BUSL-1.1",
+      "keywords": [
+        "code-intelligence",
+        "knowledge-graph",
+        "impact-analysis"
+      ],
+      "category": "development"
     }
   ]
 }
