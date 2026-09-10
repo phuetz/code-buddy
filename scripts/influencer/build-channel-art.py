@@ -50,6 +50,11 @@ class Chaine:
     visage_x: int
     visage_y: int
     visage_cote: int
+    # Décalage du portrait vers la gauche (fraction de la largeur) et corps du nom :
+    # un portrait étroit (832x1216) ou un nom long chevauche le visage aux valeurs
+    # par défaut — voir Jade.
+    decalage: float = 0.10
+    taille_nom: int = 150
 
 
 CHAINES = (
@@ -80,6 +85,22 @@ CHAINES = (
         visage_x=540,
         visage_y=600,
         visage_cote=950,
+    ),
+    Chaine(
+        cle="jade",
+        nom="Jade Rivière",
+        signature="Des chansons écrites à la fenêtre.",
+        portrait=Path(
+            os.path.expanduser("~/.codebuddy/personas/jade-riviere/press-kit/jade-01-signature-mic.png")
+        ),
+        fond="#0f1f19",
+        encre="#f3efe6",
+        accent="#6fbf9a",
+        visage_x=406,
+        visage_y=440,
+        visage_cote=780,
+        decalage=0.06,
+        taille_nom=120,
     ),
 )
 
@@ -152,7 +173,7 @@ def fabriquer_banniere(chaine: Chaine, sortie: Path) -> Path:
     # 1546 px). Collé tout à droite, le côté du visage sort de cette bande et est
     # coupé. On décale le portrait vers la gauche (visage plus central) tout en le
     # laissant toucher le bord droit (facteur d'agrandissement déjà large).
-    offset_x = round(largeur * 0.10)
+    offset_x = round(largeur * chaine.decalage)
     toile.paste(portrait, (largeur - portrait_l - offset_x, 0), masque)
     # Prolonge le bord droit du portrait pour combler le vide créé par le décalage
     # (évite un liseré net + fond vide à droite).
@@ -161,7 +182,7 @@ def fabriquer_banniere(chaine: Chaine, sortie: Path) -> Path:
     toile.paste(bord, (largeur - offset_x - 8, 0))
 
     dessin = ImageDraw.Draw(toile)
-    police_nom = ImageFont.truetype(GRAS, 150)
+    police_nom = ImageFont.truetype(GRAS, chaine.taille_nom)
     police_signature = ImageFont.truetype(NORMAL, 46)
 
     dessin.text((zone_x + 40, zone_y + 60), chaine.nom, font=police_nom, fill=chaine.encre)
