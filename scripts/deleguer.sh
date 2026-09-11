@@ -69,6 +69,16 @@ if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
   DELEGUER_COPIE=$(mktemp "${TMPDIR:-/tmp}/deleguer-self-XXXXXX.sh")
   cp "$0" "$DELEGUER_COPIE" && chmod +x "$DELEGUER_COPIE"
   export DELEGUER_SELF_COPY="$DELEGUER_COPIE" DELEGUER_ORIGINE="$0"
+  # Borne mémoire (11/09/2026) : NexusFile.App.Tests a été tué par le noyau à 65 Go (10/09
+  # 14 h 55) puis 54 Go (11/09 08 h 21), swap à zéro, machine injoignable. Chaque lane tourne
+  # donc dans un scope systemd utilisateur : un dépassement tue la lane, pas la machine.
+  # DELEGUER_MEMMAX=64G ajuste la borne ; DELEGUER_MEMMAX=0 désactive. Repli sans scope si
+  # systemd-run est indisponible (session sans gestionnaire utilisateur).
+  if [ "${DELEGUER_MEMMAX:-40G}" != "0" ] && command -v systemd-run >/dev/null 2>&1 \
+     && systemd-run --user --scope -q -p MemoryMax=1M true >/dev/null 2>&1; then
+    exec systemd-run --user --scope -q -p "MemoryMax=${DELEGUER_MEMMAX:-40G}" -p MemorySwapMax=0 \
+      bash "$DELEGUER_COPIE" "$@"
+  fi
   exec bash "$DELEGUER_COPIE" "$@"
 fi
 DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
