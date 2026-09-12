@@ -141,6 +141,33 @@ afterEach(() => {
 });
 
 describe('collectInstalledRuntimePackagePaths', () => {
+  it('ships the optional SQL fallback closure and resolves it from the packaged main location', () => {
+    const root = temporaryRoot();
+    writeFile(path.join(root, 'package.json'), JSON.stringify({
+      optionalDependencies: { alasql: '1.0.0', 'unrelated-feature': '1.0.0' },
+    }));
+    writePackage(root, 'node_modules/alasql', {
+      main: 'index.js', dependencies: { 'sql-helper': '1.0.0' },
+    }, "module.exports = require('sql-helper');");
+    writePackage(root, 'node_modules/sql-helper', { main: 'index.js' }, 'module.exports = 42;');
+    writePackage(root, 'node_modules/unrelated-feature', {});
+    const packages = collectInstalledRuntimePackagePaths(root);
+    expect(packages).toEqual(['node_modules/alasql', 'node_modules/sql-helper']);
+    const resources = path.join(root, 'shipped/resources');
+    for (const packagePath of packages) {
+      copyTreeWithHardlinks(path.join(root, packagePath), path.join(resources, packagePath));
+    }
+    const mainRequire = createRequire(path.join(resources, 'app.asar/dist-electron/main/index.js'));
+    expect(mainRequire.resolve('alasql')).toBe(path.join(resources, 'node_modules/alasql/index.js'));
+    expect(mainRequire('alasql')).toBe(42);
+  });
+
+  it('fails packaging when the externalized SQL fallback was not installed', () => {
+    const root = temporaryRoot();
+    writeFile(path.join(root, 'package.json'), JSON.stringify({ optionalDependencies: { alasql: '1.0.0' } }));
+    expect(() => collectInstalledRuntimePackagePaths(root)).toThrow(/Installed production dependency is missing: alasql/);
+  });
+
   function dependencyFixture(): string {
     const root = temporaryRoot();
     writeFile(

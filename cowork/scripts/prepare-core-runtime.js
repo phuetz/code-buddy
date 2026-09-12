@@ -16,7 +16,8 @@
  * and several dependencies ship native binaries/assets that bundlers cannot
  * safely flatten.
  *
- * Root optionalDependencies are deliberately not seeded. They remain optional
+ * Root optionalDependencies are deliberately not seeded, except alasql: the
+ * main bundle externalizes this SQL fallback and must ship it. Others remain optional
  * capabilities, while every dependency (including optional platform helpers)
  * reachable from a required production package is included. Set
  * CODEBUDDY_CORE_INCLUDE_OPTIONAL=1 for a full, larger runtime. Native core
@@ -234,6 +235,11 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     }
   };
   enqueueRootGroup(rootPackage.dependencies, true);
+  // Optional for the CLI, required in Cowork's shipped SQL fallback. Include
+  // its installed closure without enabling unrelated optional core features.
+  if (rootPackage.optionalDependencies?.alasql) {
+    enqueueRootGroup({ alasql: rootPackage.optionalDependencies.alasql }, true);
+  }
   if (includeRootOptional) enqueueRootGroup(rootPackage.optionalDependencies, false);
 
   while (queue.length > 0) {

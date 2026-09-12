@@ -8,7 +8,7 @@
 
 import type { ToolGroup } from './types.js';
 import { TOOL_ALIASES } from '../../tools/registry/tool-alias-map.js';
-import { TOOL_METADATA } from '../../tools/metadata.js';
+import { TOOL_METADATA } from '../../tools/metadata-catalog.js';
 
 const FLEET_SAFE_TOOL_NAMES = new Set(
   TOOL_METADATA.filter((metadata) => metadata.fleetSafe === true).map((metadata) => metadata.name),

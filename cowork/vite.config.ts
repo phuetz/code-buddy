@@ -58,6 +58,11 @@ export default defineConfig({
               external: [
                 ...nodeBuiltins,
                 'better-sqlite3',
+                // Optional SQL fallback: keep its Node entry and lazy native
+                // branches intact. prepare-core-runtime explicitly ships
+                // this optional dependency in resources/node_modules, also
+                // reachable from app.asar/dist-electron/main.
+                'alasql',
                 'bufferutil',
                 'utf-8-validate',
                 'electron',
