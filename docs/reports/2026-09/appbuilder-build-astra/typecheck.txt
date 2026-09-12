@@ -1,0 +1,16 @@
+COMMAND: npm run typecheck
+EXIT: 0
+
+... previous line repeated 1 times
+> @phuetz/code-buddy@2.0.0 typecheck
+> tsc --noEmit && npm run typecheck:gpuNode-identity && npm run typecheck:companion-core
+
+... previous line repeated 1 times
+> @phuetz/code-buddy@2.0.0 typecheck:gpuNode-identity
+> tsc --project tsconfig.gpuNode-identity.json
+
+... previous line repeated 1 times
+> @phuetz/code-buddy@2.0.0 typecheck:companion-core
+> tsc --noEmit -p packages/companion-core/tsconfig.json
+
+... omitted 3 low-signal lines

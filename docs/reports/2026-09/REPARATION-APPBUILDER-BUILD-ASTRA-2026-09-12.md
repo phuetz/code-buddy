@@ -167,13 +167,13 @@ Le nouveau test découvre les imports exécutés et les compile ensemble avec **
 
 ## Incidents de vérification, limites et outillage
 
-- Un premier essai de Vite lancé par erreur depuis la racine avec `--prefix cowork` n’appliquait pas le bon cwd : sortie 1 sur l’entrée Electron absente. Il est exclu de la mesure témoin ; la compilation du cœur a été refaite ensuite et le vrai build depuis `cowork/` est documenté ci-dessus.
+- Un premier essai de Vite lancé par erreur depuis la racine avec `--prefix cowork` n’appliquait pas le bon cwd : sortie 1 sur l’entrée Electron absente. Il est exclu de la mesure témoin ; ses neuf fichiers générés ont été retirés nommément et la compilation du cœur a été refaite ensuite et le vrai build depuis `cowork/` est documenté ci-dessus.
 - Première capture X11 refusée faute de XAUTHORITY ; corrigée en reprenant l’autorité de **notre** processus Xvfb, sans desserrer les accès X11.
 - Premier pilote UI attendait un bouton disparu après `Configure later` ; il a été arrêté. Le suivant a correctement refusé un clic intercepté par le tour d’accueil (timeout 10 s). Le parcours final clique `Skip`, sans forcer le clic ni masquer un défaut du produit.
 - Les trois premiers appels Code Explorer ont précédé la fin de l’analyse et ont répondu « No graph snapshot found » ; les consultations utiles ont été rejouées après indexation. `TOOL_METADATA` n’a pas été reconnu comme symbole ; `rg` et l’impact de `resolveToolEffect` ont complété le graphe. L’index de base correspondait à `86f9bd9bb` avant les modifications ; analyse incrémentale après chaque commit.
 - La mission ne fournit pas de nouvel emploi CI Linux ni d’AppImage : le build local, les tests de frontière et l’ouverture réelle sont prouvés. La génération de projets reste hors essai.
 
-Outillage : **8 appels Code Explorer (context/impact/query), 21 commandes via lm-resizer, 728 927 octets économisés** (volumes de sortie, pas tokens facturés). [Comptabilité par commande](appbuilder-build-astra/commands.json) ; la compilation initiale silencieuse ajoute une commande à cette liste, avec zéro octet. Journaux bruts pertinents relus avant commit.
+Outillage : **8 appels Code Explorer (context/impact/query), 21 commandes via lm-resizer, 728 927 octets économisés** (volumes de sortie, pas tokens facturés). [Comptabilité par commande](appbuilder-build-astra/commands.json) ; la compilation initiale silencieuse ajoute une commande à cette liste, avec zéro octet. Journaux bruts pertinents relus avant commit. Les copies commitées normalisent uniquement le chemin du clone en `<repo>` et les espaces de fin de ligne (les NUL de modules virtuels sont échappés en `\0`) ; originaux conservés dans `_qa/appbuilder/`. Les `.txt` ont été ajoutés individuellement avec `git add -f`, car la règle générale `*.txt` les ignore.
 
 Index par tranche : correctif `80f7111cf`, réindexé après commit ; tranche documentaire, analyse incrémentale après son commit. Réservation libérée à la passation. Aucun push, aucun service préexistant arrêté ou modifié ; ComfyUI 8188/8189 et `~/code-buddy` intacts.
 

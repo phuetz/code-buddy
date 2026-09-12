@@ -1,0 +1,4 @@
+COMMAND: python3 _qa/appbuilder/isolated.py xvfb-run -a -s -screen 0 1600x1000x24 ./cowork/node_modules/electron/dist/electron --no-sandbox --disable-gpu ./_qa/appbuilder/sql-package/resources/app.asar
+EXIT: 0
+
+{"resolved":"<repo>/_qa/appbuilder/sql-package/resources/node_modules/alasql/dist/alasql.fs.js","result":[{"answer":42}],"packaged":false}

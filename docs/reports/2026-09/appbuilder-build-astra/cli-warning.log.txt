@@ -1,0 +1,1 @@
+[2026-09-12T14:56:04.964Z]  WARN  tool metadata missing effect class; treating as unknown {"tool":"astra_missing_effect_probe"}

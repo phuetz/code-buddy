@@ -1,0 +1,138 @@
+COMMAND: npx vite build
+EXIT: 1
+
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 5404 modules transformed.
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 6586 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-electron/main/index.js                                   0.17 kB │ gzip:     0.12 kB
+dist-electron/main/hash-D0_y954g.js                           0.36 kB │ gzip:     0.24 kB
+dist-electron/main/media-session-index-BDMy2si1.js            0.45 kB │ gzip:     0.33 kB
+dist-electron/main/github-copilot-headers-D7WHs2qG.js         0.51 kB │ gzip:     0.30 kB
+dist-electron/main/session-prune-ctF4MltS.js                  0.65 kB │ gzip:     0.43 kB
+dist-electron/main/transform-messages-C3cyUgPk.js             2.32 kB │ gzip:     1.05 kB
+dist-electron/main/discovery-B0XzYNG9.js                      3.05 kB │ gzip:     1.54 kB
+dist-electron/main/openai-responses-lhhsGK0I.js               3.50 kB │ gzip:     1.66 kB
+dist-electron/main/azure-openai-responses-Ddkn7utW.js         3.65 kB │ gzip:     1.68 kB
+dist-electron/main/conversation-pdf-template-CfblR-JX.js      3.73 kB │ gzip:     1.73 kB
+dist-electron/main/pocket-tts-TEfpD3GK.js                     4.41 kB │ gzip:     2.06 kB
+dist-electron/main/multipart-parser-kmqjijhY.js               4.50 kB │ gzip:     1.90 kB
+dist-electron/main/multipart-parser-BeJYvI7o.js               4.50 kB │ gzip:     1.90 kB
+dist-electron/main/google-DM6g7OO9.js                         5.68 kB │ gzip:     2.08 kB
+dist-electron/main/hooks-bridge-Bl57ZU9x.js                   5.84 kB │ gzip:     2.30 kB
+dist-electron/main/identity-bridge-CYUeWkAg.js                5.98 kB │ gzip:     2.22 kB
+dist-electron/main/google-vertex-QZdyEaVQ.js                  6.46 kB │ gzip:     2.32 kB
+dist-electron/main/lima-sync-Bloo_sov.js                      6.75 kB │ gzip:     2.40 kB
+dist-electron/main/a2a-bridge-BNkmR3Gd.js                     6.91 kB │ gzip:     2.64 kB
+dist-electron/main/openai-responses-shared-BtwAe4Ci.js        7.53 kB │ gzip:     2.44 kB
+dist-electron/main/index-Cg1LPfaF.js                          8.98 kB │ gzip:     3.53 kB
+dist-electron/main/api-diagnostics-CyjXrS0c.js                9.67 kB │ gzip:     3.25 kB
+dist-electron/main/openai-codex-responses-CX8rtJ3G.js        11.40 kB │ gzip:     4.43 kB
+dist-electron/main/google-gemini-cli-7J-auGKA.js             11.55 kB │ gzip:     4.45 kB
+dist-electron/main/anthropic-EPP8MFC9.js                     11.57 kB │ gzip:     3.76 kB
+dist-electron/main/openai-completions-CG4j7ofv.js            11.99 kB │ gzip:     4.10 kB
+dist-electron/main/presence-bridge-D3n8TLNk.js               13.68 kB │ gzip:     5.01 kB
+dist-electron/main/index-CbLYJkSs.js                         19.05 kB │ gzip:     7.61 kB
+dist-electron/main/photon_rs-CZ7lIjUp.js                     24.25 kB │ gzip:     5.54 kB
+dist-electron/main/audit-bridge-DdOgGx4N.js                  27.82 kB │ gzip:     7.49 kB
+dist-electron/main/index-DSQT9afB.js                         28.98 kB │ gzip:     8.78 kB
+dist-electron/main/index-DUu_-5B7.js                         87.71 kB │ gzip:    23.90 kB
+dist-electron/main/index-qa7Dq8ZZ.js                         87.71 kB │ gzip:    23.90 kB
+dist-electron/main/test-runner-bridge-C-siDeoQ.js           117.95 kB │ gzip:    20.25 kB
+dist-electron/main/google-shared-BGau0tLs.js                448.55 kB │ gzip:   111.15 kB
+dist-electron/main/mistral-DUBTlVPI.js                      836.57 kB │ gzip:   113.61 kB
+dist-electron/main/index-C9gUtTMF.js                      5,939.55 kB │ gzip: 1,653.98 kB
+✓ built in 18.11s
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 6 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-electron/preload/index.js  46.10 kB │ gzip: 9.03 kB
+✓ built in 71ms
+
+[stderr]
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[plugin vite:resolve] Module "fs" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "path" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "os" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+../src/utils/logger.ts (146:25): "dirname" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (147:11): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (147:48): "mkdirSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (151:25): "createWriteStream" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (356:22): "statSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (372:16): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (375:12): "unlinkSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (376:36): "renameSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (388:13): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (388:32): "unlinkSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (398:6): "renameSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (417:17): "extname" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (511:0): "join" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+"chromium-bidi/lib/cjs/bidiMapper/BidiMapper" is imported by "\0chromium-bidi/lib/cjs/bidiMapper/BidiMapper?commonjs-external", but could not be resolved – treating it as an external dependency.
+"chromium-bidi/lib/cjs/cdp/CdpConnection" is imported by "\0chromium-bidi/lib/cjs/cdp/CdpConnection?commonjs-external", but could not be resolved – treating it as an external dependency.
+../node_modules/@browserbasehq/stagehand/dist/esm/lib/utils.js (408:23): "pipe" is not exported by "../node_modules/zod/v3/external.js", imported by "../node_modules/@browserbasehq/stagehand/dist/esm/lib/utils.js".
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/utils/core-loader.ts is dynamically imported by <repo>/cowork/src/main/engine/codebuddy-engine-runner.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts but also statically imported by <repo>/cowork/src/main/agent/orchestrator-bridge.ts, <repo>/cowork/src/main/agent/sub-agent-bridge.ts, <repo>/cowork/src/main/agent/team-bridge.ts, <repo>/cowork/src/main/assistant/assistant-service.ts, <repo>/cowork/src/main/autonomy/autonomy-daemon-bridge.ts, <repo>/cowork/src/main/autonomy/colab-board-bridge.ts, <repo>/cowork/src/main/browser/browser-operator-runtime-bridge.ts, <repo>/cowork/src/main/claude/agent-runner.ts, <repo>/cowork/src/main/commands/slash-command-bridge.ts, <repo>/cowork/src/main/companion/cross-channel-continuity.ts, <repo>/cowork/src/main/companion/model-routing.ts, <repo>/cowork/src/main/companion/vision-cognition.ts, <repo>/cowork/src/main/config/config-test-routing.ts, <repo>/cowork/src/main/config/model-capability-bridge.ts, <repo>/cowork/src/main/cost/cost-bridge.ts, <repo>/cowork/src/main/engine/codebuddy-engine-runner.ts, <repo>/cowork/src/main/film/film-service.ts, <repo>/cowork/src/main/fleet/aggregator-wiring.ts, <repo>/cowork/src/main/fleet/fleet-bridge.ts, <repo>/cowork/src/main/fleet/saga-runner.ts, <repo>/cowork/src/main/gpu-media/gpu-media-admin-bridge.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/input/mention-processor.ts, <repo>/cowork/src/main/ipc/automations-ipc.ts, <repo>/cowork/src/main/ipc/channels-ipc.ts, <repo>/cowork/src/main/ipc/ckg-ipc.ts, <repo>/cowork/src/main/ipc/companion-ipc.ts, <repo>/cowork/src/main/ipc/desktop-snapshot-ipc.ts, <repo>/cowork/src/main/ipc/device-ipc.ts, <repo>/cowork/src/main/ipc/fleet-ipc.ts, <repo>/cowork/src/main/ipc/identity-ipc.ts, <repo>/cowork/src/main/ipc/lessons-candidate-ipc.ts, <repo>/cowork/src/main/ipc/mcp-ipc.ts, <repo>/cowork/src/main/ipc/pairing-ipc.ts, <repo>/cowork/src/main/ipc/profiles-ipc.ts, <repo>/cowork/src/main/ipc/skills-ipc.ts, <repo>/cowork/src/main/ipc/spec-ipc.ts, <repo>/cowork/src/main/ipc/spec-next-ipc.ts, <repo>/cowork/src/main/ipc/user-model-ipc.ts, <repo>/cowork/src/main/ipc/widgets-ipc.ts, <repo>/cowork/src/main/launcher/live-launcher-bridge.ts, <repo>/cowork/src/main/media/media-gen-service.ts, <repo>/cowork/src/main/meeting/meeting-live-service.ts, <repo>/cowork/src/main/memory/icm-integration.ts, <repo>/cowork/src/main/notification/notification-bridge.ts, <repo>/cowork/src/main/observability/audit-bridge.ts, <repo>/cowork/src/main/preview/preview-service.ts, <repo>/cowork/src/main/project/project-memory.ts, <repo>/cowork/src/main/security/rules-bridge.ts, <repo>/cowork/src/main/server/server-bridge.ts, <repo>/cowork/src/main/session/file-attachment-context.ts, <repo>/cowork/src/main/session/session-manager.ts, <repo>/cowork/src/main/skills/skill-md-bridge.ts, <repo>/cowork/src/main/studio/dev-server-service.ts, <repo>/cowork/src/main/studio/scaffold-service.ts, <repo>/cowork/src/main/testing/test-runner-bridge.ts, <repo>/cowork/src/main/tools/backup-bridge.ts, <repo>/cowork/src/main/tools/channel-gateway-readiness-bridge.ts, <repo>/cowork/src/main/tools/hermes-browser-backends-bridge.ts, <repo>/cowork/src/main/tools/hermes-claw-migrate-bridge.ts, <repo>/cowork/src/main/tools/hermes-doctor-bridge.ts, <repo>/cowork/src/main/tools/hermes-feature-parity-bridge.ts, <repo>/cowork/src/main/tools/hermes-kanban-bridge.ts, <repo>/cowork/src/main/tools/hermes-learning-loop-bridge.ts, <repo>/cowork/src/main/tools/hermes-memory-providers-bridge.ts, <repo>/cowork/src/main/tools/hermes-mobile-supervision-bridge.ts, <repo>/cowork/src/main/tools/hermes-openclaw-bridge.ts, <repo>/cowork/src/main/tools/hermes-portal-bridge.ts, <repo>/cowork/src/main/tools/hermes-protocol-gateways-bridge.ts, <repo>/cowork/src/main/tools/hermes-provider-readiness-bridge.ts, <repo>/cowork/src/main/tools/hermes-runtime-backends-bridge.ts, <repo>/cowork/src/main/tools/hermes-tool-catalog-bridge.ts, <repo>/cowork/src/main/tools/hermes-toolsets-bridge.ts, <repo>/cowork/src/main/tools/hermes-trajectories-bridge.ts, <repo>/cowork/src/main/tools/learning-usage-bridge.ts, <repo>/cowork/src/main/tools/lessons-vault-bridge.ts, <repo>/cowork/src/main/tools/skill-candidate-review-bridge.ts, <repo>/cowork/src/main/tools/skill-package-manager-bridge.ts, <repo>/cowork/src/main/workflows/workflow-bridge.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/server/server-bridge.ts is dynamically imported by <repo>/cowork/src/main/ipc/server-ipc.ts, <repo>/cowork/src/main/ipc/server-ipc.ts, <repo>/cowork/src/main/ipc/server-ipc.ts, <repo>/cowork/src/main/ipc/server-ipc.ts but also statically imported by <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/ipc/mobile-supervision-ipc.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/src/tools/video/localized-media.ts is dynamically imported by <repo>/src/tools/video/narration.ts but also statically imported by <repo>/src/tools/video/long-form-plan.ts, <repo>/src/tools/video/voice-rights-registry.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/media-library.ts is dynamically imported by <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/index.ts but also statically imported by <repo>/cowork/src/main/media/creative-asset-registry.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/config/config-store.ts is dynamically imported by <repo>/cowork/src/main/hooks/hooks-bridge.ts, <repo>/cowork/src/main/server/server-bridge.ts but also statically imported by <repo>/cowork/src/main/claude/agent-runner.ts, <repo>/cowork/src/main/claude/claude-sdk-one-shot.ts, <repo>/cowork/src/main/clipboard/clipboard-watcher.ts, <repo>/cowork/src/main/config/api-diagnostics.ts, <repo>/cowork/src/main/config/config-export-service.ts, <repo>/cowork/src/main/engine/codebuddy-engine-runner.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/ipc/clipboard-ipc.ts, <repo>/cowork/src/main/ipc/config-model-ipc.ts, <repo>/cowork/src/main/ipc/logs-ipc.ts, <repo>/cowork/src/main/sandbox/sandbox-adapter.ts, <repo>/cowork/src/main/sandbox/sandbox-bootstrap.ts, <repo>/cowork/src/main/session/session-manager.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/sandbox/sandbox-bootstrap.ts is dynamically imported by <repo>/cowork/src/main/sandbox/lima-bridge.ts, <repo>/cowork/src/main/sandbox/wsl-bridge.ts but also statically imported by <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/sandbox/sandbox-adapter.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/mcp/mcp-config-store.ts is dynamically imported by <repo>/cowork/src/main/mcp/mcp-manager.ts, <repo>/cowork/src/main/mcp/mcp-manager.ts, <repo>/cowork/src/main/mcp/mcp-manager.ts but also statically imported by <repo>/cowork/src/main/claude/agent-runner.ts, <repo>/cowork/src/main/config/config-export-service.ts, <repo>/cowork/src/main/index.ts, <repo>/cowork/src/main/ipc/mcp-ipc.ts, <repo>/cowork/src/main/session/session-manager.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/node_modules/@mariozechner/pi-ai/dist/index.js is dynamically imported by <repo>/cowork/src/main/config/config-store.ts but also statically imported by <repo>/cowork/node_modules/@mariozechner/pi-agent-core/dist/agent-loop.js, <repo>/cowork/node_modules/@mariozechner/pi-agent-core/dist/agent.js, <repo>/cowork/node_modules/@mariozechner/pi-agent-core/dist/proxy.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/agent-session.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/auth-storage.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/compaction/branch-summarization.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/compaction/compaction.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/model-resolver.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/main.js, <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/components/model-selector.js, <repo>/cowork/src/main/claude/claude-sdk-one-shot.ts, <repo>/cowork/src/main/claude/pi-model-resolution.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/index.js is dynamically imported by <repo>/cowork/src/main/claude/agent-runner.ts but also statically imported by <repo>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js, <repo>/cowork/src/main/claude/agent-runner.ts, <repo>/cowork/src/main/claude/shared-auth.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/cowork/src/main/reasoning/reasoning-bridge.ts is dynamically imported by <repo>/cowork/src/main/ipc/reasoning-ipc.ts, <repo>/cowork/src/main/ipc/reasoning-ipc.ts, <repo>/cowork/src/main/ipc/reasoning-ipc.ts but also statically imported by <repo>/cowork/src/main/claude/agent-runner.ts, <repo>/cowork/src/main/engine/codebuddy-engine-runner.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/src/voice/tts-volume.ts is dynamically imported by <repo>/src/companion/assistant-config.ts but also statically imported by <repo>/cowork/src/main/voice/tts-bridge.ts, <repo>/src/sensory/voice-loop.ts, <repo>/src/voice/local-tts.ts, <repo>/src/voice/pcm-edges.ts, <repo>/src/voice/voicebox-tts.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <repo>/src/voice/voicebox-tts.ts is dynamically imported by <repo>/src/sensory/voice-loop.ts, <repo>/src/sensory/voice-loop.ts, <repo>/src/voice/local-tts.ts but also statically imported by <repo>/cowork/src/main/voice/tts-bridge.ts, <repo>/src/sensory/voice-loop.ts, dynamic import will not move module into another chunk.
+
+✗ Build failed in 27.09s
+error during build:
+../src/utils/logger.ts (17:9): "homedir" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+file: <repo>/src/utils/logger.ts:17:9
+
+15: import * as path from 'path';
+16: import { homedir } from 'os';
+17: import { scrubSecrets, scrubValue } from '../security/secret-scrubber.js';
+             ^
+18:
+19: export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+    at getRollupError (file://<repo>/cowork/node_modules/rollup/dist/es/shared/parseAst.js:402:41)
+    at error (file://<repo>/cowork/node_modules/rollup/dist/es/shared/parseAst.js:398:42)
+    at Module.error (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:17040:16)
+    at Module.traceVariable (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:17452:29)
+    at ModuleScope.findVariable (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:15070:39)
+    at FunctionScope.findVariable (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at FunctionBodyScope.findVariable (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at Identifier.bind (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:5447:40)
+    at CallExpression.bind (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:2829:23)
+    at CallExpression.bind (file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:12179:15)

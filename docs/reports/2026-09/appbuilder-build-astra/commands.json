@@ -1,0 +1,162 @@
+[
+  {
+    "label": "baseline-renderer",
+    "command": "npx vite build",
+    "exit_code": 1,
+    "original_bytes": 27442,
+    "compressed_bytes": 27563,
+    "bytes_saved": 0
+  },
+  {
+    "label": "baseline-vite-cowork",
+    "command": "npx vite build",
+    "exit_code": 1,
+    "original_bytes": 5911,
+    "compressed_bytes": 6032,
+    "bytes_saved": 0
+  },
+  {
+    "label": "baseline-vite",
+    "command": "npx --prefix cowork vite build --config cowork/vite.config.ts",
+    "exit_code": 1,
+    "original_bytes": 1824,
+    "compressed_bytes": 1979,
+    "bytes_saved": 0
+  },
+  {
+    "label": "cli-warning-real",
+    "command": "python3 _qa/appbuilder/isolated.py node dist/index.js tools profile safe astra_missing_effect_probe astra_missing_effect_probe",
+    "exit_code": 0,
+    "original_bytes": 671,
+    "compressed_bytes": 770,
+    "bytes_saved": 0
+  },
+  {
+    "label": "cowork-tests-final",
+    "command": "npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts",
+    "exit_code": 0,
+    "original_bytes": 245,
+    "compressed_bytes": 54,
+    "bytes_saved": 191
+  },
+  {
+    "label": "cowork-tests-restored",
+    "command": "npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts",
+    "exit_code": 0,
+    "original_bytes": 245,
+    "compressed_bytes": 54,
+    "bytes_saved": 191
+  },
+  {
+    "label": "cowork-tests",
+    "command": "npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts",
+    "exit_code": 0,
+    "original_bytes": 245,
+    "compressed_bytes": 54,
+    "bytes_saved": 191
+  },
+  {
+    "label": "final-diff",
+    "command": "git diff --stat",
+    "exit_code": 0,
+    "original_bytes": 416,
+    "compressed_bytes": 31,
+    "bytes_saved": 385
+  },
+  {
+    "label": "final-tsc",
+    "command": "npx tsc -p .",
+    "exit_code": 0,
+    "original_bytes": 0,
+    "compressed_bytes": 0,
+    "bytes_saved": 0
+  },
+  {
+    "label": "fixed-vite",
+    "command": "npx vite build",
+    "exit_code": 0,
+    "original_bytes": 45952,
+    "compressed_bytes": 20721,
+    "bytes_saved": 25231
+  },
+  {
+    "label": "lint-final",
+    "command": "npm run lint",
+    "exit_code": 0,
+    "original_bytes": 354727,
+    "compressed_bytes": 4918,
+    "bytes_saved": 349809
+  },
+  {
+    "label": "lint",
+    "command": "npm run lint",
+    "exit_code": 0,
+    "original_bytes": 354727,
+    "compressed_bytes": 4918,
+    "bytes_saved": 349809
+  },
+  {
+    "label": "package-electron",
+    "command": "python3 _qa/appbuilder/isolated.py xvfb-run -a -s -screen 0 1600x1000x24 ./cowork/node_modules/electron/dist/electron --no-sandbox --disable-gpu ./_qa/appbuilder/sql-package/resources/app.asar",
+    "exit_code": 0,
+    "original_bytes": 183,
+    "compressed_bytes": 183,
+    "bytes_saved": 0
+  },
+  {
+    "label": "package-probe-stage-fixed",
+    "command": "node _qa/appbuilder/package-probe.cjs",
+    "exit_code": 0,
+    "original_bytes": 60,
+    "compressed_bytes": 60,
+    "bytes_saved": 0
+  },
+  {
+    "label": "package-probe-stage",
+    "command": "node _qa/appbuilder/package-probe.cjs",
+    "exit_code": 1,
+    "original_bytes": 718,
+    "compressed_bytes": 862,
+    "bytes_saved": 0
+  },
+  {
+    "label": "reviewed-diff",
+    "command": "git diff -- cowork/vite.config.ts cowork/scripts/prepare-core-runtime.js cowork/src/tests/prepare-core-runtime.test.ts src/security/tool-policy/tool-groups.ts",
+    "exit_code": 0,
+    "original_bytes": 4757,
+    "compressed_bytes": 2392,
+    "bytes_saved": 2365
+  },
+  {
+    "label": "root-tests",
+    "command": "npm test -- tests/tools/tool-effect.test.ts tests/tools/context-expand-metadata.test.ts tests/tools/active-tool-metadata-readers.test.ts tests/tools/tool-aliases-invariant.test.ts tests/security/tool-policy/policy-resolver.test.ts tests/fleet/dispatch-profile.test.ts",
+    "exit_code": 0,
+    "original_bytes": 540,
+    "compressed_bytes": 302,
+    "bytes_saved": 238
+  },
+  {
+    "label": "typecheck",
+    "command": "npm run typecheck",
+    "exit_code": 0,
+    "original_bytes": 341,
+    "compressed_bytes": 474,
+    "bytes_saved": 0
+  },
+  {
+    "label": "witness-cowork",
+    "command": "npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts",
+    "exit_code": 1,
+    "original_bytes": 1439,
+    "compressed_bytes": 1410,
+    "bytes_saved": 29
+  },
+  {
+    "label": "witness-final",
+    "command": "npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts",
+    "exit_code": 1,
+    "original_bytes": 3242,
+    "compressed_bytes": 2754,
+    "bytes_saved": 488
+  }
+]

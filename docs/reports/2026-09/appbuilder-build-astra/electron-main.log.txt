@@ -1,0 +1,115 @@
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[2026-09-12 14:55:56.959] [dotenv] Skipped (not found): <repo>/cowork/.env
+[Logger] Log file initialized: <repo>/_qa/appbuilder/config/Electron/logs/app-2026-09-12_14-55-56-959-1.log
+[dotenv@17.2.3] injecting env (0) from ../_qa/appbuilder/home/.codebuddy/cowork.env -- tip: 📡 add observability to secrets: https://dotenvx.com/ops
+[2026-09-12 14:55:56.960] [dotenv] Skipped (not found): <repo>/_qa/appbuilder/home/.codebuddy/cowork.env
+[dotenv@17.2.3] injecting env (0) from ../_qa/appbuilder/home/.codebuddy/gpu-worker-client.env -- tip: ⚙️  enable debug logging with { debug: true }
+[2026-09-12 14:55:56.960] [dotenv] Skipped (not found): <repo>/_qa/appbuilder/home/.codebuddy/gpu-worker-client.env
+
+DevTools listening on ws://127.0.0.1:39539/devtools/browser/374e7e61-8ae0-4066-ab69-0e73c76e1ac3
+[Logger] Developer logs disabled
+[Logger] Log file closed (dev logs disabled)
+[2026-09-12 14:55:57.087] === Code Buddy Studio Starting ===
+[2026-09-12 14:55:57.087] Config file: <repo>/_qa/appbuilder/config/Electron/config.json
+[2026-09-12 14:55:57.092] Is configured: false
+[2026-09-12 14:55:57.092] Developer logs: Disabled
+[2026-09-12 14:55:57.092] Environment Variables:
+[2026-09-12 14:55:57.092]   ANTHROPIC_AUTH_TOKEN: ✗ Not set
+[2026-09-12 14:55:57.092]   ANTHROPIC_BASE_URL: (not set)
+[2026-09-12 14:55:57.092]   CLAUDE_MODEL: (not set)
+[2026-09-12 14:55:57.092]   CLAUDE_CODE_PATH: (not set)
+[2026-09-12 14:55:57.092]   OPENAI_API_KEY: ✗ Not set
+[2026-09-12 14:55:57.092]   OPENAI_BASE_URL: (not set)
+[2026-09-12 14:55:57.092]   OPENAI_MODEL: (not set)
+[2026-09-12 14:55:57.092]   OPENAI_API_MODE: (default)
+[2026-09-12 14:55:57.092] ===========================
+[2026-09-12 14:55:57.092] [App] Created default working directory: <repo>/_qa/appbuilder/config/Electron/default_working_dir
+[2026-09-12 14:55:57.092] [App] Global default working directory: <repo>/_qa/appbuilder/config/Electron/default_working_dir
+[2026-09-12 14:55:57.092] Working directory: <repo>/_qa/appbuilder/config/Electron/default_working_dir
+[2026-09-12 14:55:57.092] [MessageRouter] Default working directory set to: <repo>/_qa/appbuilder/config/Electron/default_working_dir
+[2026-09-12 14:55:57.092] [RemoteManager] Default working directory set: <repo>/_qa/appbuilder/config/Electron/default_working_dir
+[2026-09-12 14:55:57.092] [Database] Opening database at: <repo>/_qa/appbuilder/config/Electron/data/cowork.db
+[2026-09-12 14:55:57.112] [Database] Schema initialized
+[2026-09-12 14:55:57.112] [Database] SQLite database initialized successfully
+[2026-09-12 14:55:57.117] [Main] Resolving Code Buddy engine: layer=dev-from-bundle path=<repo>/dist
+[2026-09-12T14:55:57.176Z]  INFO  [CodeBuddyEngineAdapter] initialized {"model":"openrouter/free","baseURL":"https://openrouter.ai/api/v1","embedded":true,"capabilities":"setMcpServers,reloadSkills,hot-swap,LRU=50"}
+[2026-09-12 14:55:57.177] [Main] Permission bridge wired to engine adapter
+[2026-09-12T14:55:57.183Z]  INFO  Extended thinking disabled (level=off)
+[2026-09-12T14:55:57.183Z]  INFO  [CodeBuddyEngineAdapter] thinkingLevel set {"level":"off"}
+[2026-09-12 14:55:57.183] [Main] Code Buddy engine adapter initialized (embedded mode)
+[2026-09-12 14:55:57.183] [Runtime] Using Code Buddy engine (embedded)
+[2026-09-12 14:55:57.183] [MCPManager] Initializing 0 MCP servers
+[2026-09-12 14:55:57.184] [SessionManager] Using Code Buddy engine runner (embedded)
+[2026-09-12 14:55:57.184] [SessionManager] Initialized with persistent database and MCP support
+[2026-09-12 14:55:57.184] [main] Embedded engine: workspace sandbox + scoped permission dialog enabled
+[2026-09-12 14:55:57.185] [MCPManager] Refreshing tools from all servers
+[2026-09-12 14:55:57.185] [MCPManager] Total tools available: 0
+[2026-09-12 14:55:57.186] [MCPMarketplaceBridge] Host configured
+[2026-09-12 14:55:57.186] [SessionManager] Initialized 0 MCP servers
+[2026-09-12 14:55:57.186] [main] PresenceBridge initialized — IPC handlers presence:* active
+[2026-09-12 14:55:57.188] [TTSBridge] ready — engine=Pocket TTS (resident), fallback=Piper
+[2026-09-12 14:55:57.195] [core-loader] Loaded events/index.js from <repo>/dist
+[2026-09-12 14:55:57.200] Loaded built-in skill: data-charts
+[2026-09-12 14:55:57.201] Loaded built-in skill: doc-ingest
+[2026-09-12 14:55:57.201] Loaded built-in skill: docx
+[2026-09-12 14:55:57.201] Loaded built-in skill: pdf
+[2026-09-12 14:55:57.204] Loaded built-in skill: pptx
+[2026-09-12 14:55:57.204] Loaded built-in skill: skill-creator
+[2026-09-12 14:55:57.206] Loaded built-in skill: web-automate
+[2026-09-12 14:55:57.207] Loaded built-in skill: web-research
+[2026-09-12 14:55:57.207] Loaded built-in skill: workspace-organizer
+[2026-09-12 14:55:57.207] Loaded built-in skill: xlsx
+[2026-09-12 14:55:57.216] [Main] Embedded engine bundled skills dir → <repo>/cowork/.claude/skills
+[2026-09-12 14:55:57.282] [RemoteManager] Agent executor set
+[2026-09-12 14:55:57.290] [NavServer] Listening on http://127.0.0.1:19888
+[2026-09-12 14:55:57.328] [core-loader] Loaded fleet/result-aggregator.js from <repo>/dist
+[2026-09-12 14:55:57.333] [core-loader] Loaded agent/proactive/notification-manager.js from <repo>/dist
+[2026-09-12 14:55:57.333] [NotificationBridge] Core notification-manager loaded
+[2026-09-12 14:55:57.333] [NotificationBridge] Attached to core notification manager
+[2026-09-12 14:55:57.345] [core-loader] Loaded agent/multi-agent/agent-tools.js from <repo>/dist
+[2026-09-12 14:55:57.345] [SubAgentBridge] Core agent-tools module loaded
+[2026-09-12 14:55:57.345] [SubAgentBridge] Event listeners attached
+[2026-09-12T14:55:57.391Z]  INFO  [CodeBuddyEngineAdapter] interactive confirmation bridge wired
+[2026-09-12 14:55:57.467] [core-loader] Loaded codebuddy/client.js from <repo>/dist
+[2026-09-12 14:55:57.467] [fleet] aggregator client wired — Council uses LLM arbitration
+[2026-09-12 14:55:57.467] [core-loader] Loaded agent/multi-agent/team-manager.js from <repo>/dist
+[2026-09-12 14:55:57.467] [TeamBridge] Core team-manager module loaded
+[2026-09-12 14:55:57.467] [TeamBridge] Event listeners attached (8 channels)
+[2026-09-12 14:55:57.528] [SessionManager] synced 0 MCP server(s) to engine
+[2026-09-12 14:55:57.610] [Config] Notifying renderer, isConfigured: false
+[2026-09-12 14:55:57.625] [App] Sandbox disabled, skipping bootstrap (using native mode)
+[2026-09-12 14:55:57.688] [core-loader] Loaded utils/cost-tracker.js from <repo>/dist
+[2026-09-12 14:55:57.688] [CostBridge] Core cost tracker loaded
+[2026-09-12 14:55:57.696] [PresenceStore] No store file yet at <repo>/_qa/appbuilder/config/Electron/presence-store.json (first run).
+[2026-09-12 14:55:57.780] [core-loader] Loaded fleet/colab-store.js from <repo>/dist
+[2026-09-12 14:55:57.781] [core-loader] Loaded daemon/service-installer.js from <repo>/dist
+[2026-09-12 14:57:09.654] [Config] Saving config fields: [ 'onboardingCompleted' ]
+[2026-09-12 14:57:09.732] [Config] Applied env vars for provider: openrouter {
+  ANTHROPIC_API_KEY: '(empty/unset)',
+  ANTHROPIC_AUTH_TOKEN: '(empty/unset)',
+  ANTHROPIC_BASE_URL: 'https://openrouter.ai/api',
+  OPENAI_API_KEY: '(empty/unset)',
+  OPENAI_BASE_URL: '(default)',
+  OPENAI_MODEL: '(not set)',
+  OPENAI_API_MODE: '(default)',
+  OPENAI_ACCOUNT_ID: '(not set)',
+  GEMINI_API_KEY: '(empty/unset)',
+  GEMINI_BASE_URL: '(default)',
+  CODEBUDDY_LM_RESIZER: 'true'
+}
+[2026-09-12 14:57:09.747] [Config] Notified renderer of config update, isConfigured: false
+[2026-09-12 14:58:57.878] [Config] Notifying renderer, isConfigured: false
+[2026-09-12 14:58:57.890] [App] Sandbox disabled, skipping bootstrap (using native mode)
+[2026-09-12 14:59:26.535] [App] Stopping remote control...
+[2026-09-12 14:59:26.536] [App] Remote control stopped
+[2026-09-12 14:59:26.536] [App] Cleaning up all sandbox sessions...
+[2026-09-12 14:59:26.536] [SandboxSync] No active sessions to cleanup
+[2026-09-12 14:59:26.536] [LimaSync] No active sessions to cleanup
+[2026-09-12 14:59:26.536] [App] Sandbox sessions cleanup complete
+[2026-09-12 14:59:26.536] [SandboxAdapter] Shutdown complete
+[2026-09-12 14:59:26.537] [App] Sandbox shutdown complete
+[2026-09-12 14:59:26.537] [App] Companion continuity flushed
+[2026-09-12 14:59:26.537] [App] Shutting down MCP servers...
+[2026-09-12 14:59:26.537] [App] MCP servers shutdown complete
+[2026-09-12 14:59:26.545] [Database] Database closed
+[2026-09-12 14:59:26.547] [App] Cleanup already in progress, skipping...

@@ -1,0 +1,15 @@
+COMMAND: npm test -- tests/tools/tool-effect.test.ts tests/tools/context-expand-metadata.test.ts tests/tools/active-tool-metadata-readers.test.ts tests/tools/tool-aliases-invariant.test.ts tests/security/tool-policy/policy-resolver.test.ts tests/fleet/dispatch-profile.test.ts
+EXIT: 0
+
+
+> @phuetz/code-buddy@2.0.0 test
+> vitest run tests/tools/tool-effect.test.ts tests/tools/context-expand-metadata.test.ts tests/tools/active-tool-metadata-readers.test.ts tests/tools/tool-aliases-invariant.test.ts tests/security/tool-policy/policy-resolver.test.ts tests/fleet/dispatch-profile.test.ts
+
+
+ RUN  v4.1.9 <repo>
+
+
+ Test Files  6 passed (6)
+      Tests  45 passed (45)
+   Start at  16:52:42
+   Duration  3.09s (transform 5.33s, setup 1.09s, import 4.78s, tests 40ms, environment 0ms)

@@ -1,0 +1,71 @@
+COMMAND: npx vite build
+EXIT: 1
+
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 5404 modules transformed.
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 4268 modules transformed.
+
+[stderr]
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[plugin vite:resolve] Module "fs" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "path" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "os" has been externalized for browser compatibility, imported by "<repo>/src/utils/logger.ts". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+../src/utils/logger.ts (146:25): "dirname" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (147:11): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (147:48): "mkdirSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (151:25): "createWriteStream" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (356:22): "statSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (372:16): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (375:12): "unlinkSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (376:36): "renameSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (388:13): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (388:32): "unlinkSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (398:6): "renameSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (417:17): "extname" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+../src/utils/logger.ts (511:0): "join" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
+✗ Build failed in 6.89s
+✗ Build failed in 12.47s
+error during build:
+[vite-plugin-electron] [commonjs--resolver] Expected 'from', got 'typeOf' in <repo>/node_modules/react-native/index.js
+file: <repo>/node_modules/react-native/index.js:27:7 (<repo>/node_modules/alasql/dist/alasql.fs.js)
+
+25: // ----------------------------------------------------------------------------
+26:
+27: import typeof * as ReactNativePublicAPI from './index.js.flow';
+           ^
+28:
+29: const warnOnce = require('./Libraries/Utilities/warnOnce').default;
+
+file: <repo>/node_modules/react-native/index.js:27:7 (<repo>/node_modules/alasql/dist/alasql.fs.js)
+
+25: // ----------------------------------------------------------------------------
+26:
+27: import typeof * as ReactNativePublicAPI from './index.js.flow';
+           ^
+28:
+29: const warnOnce = require('./Libraries/Utilities/warnOnce').default;
+
+[commonjs--resolver] Expected 'from', got 'typeOf' in <repo>/node_modules/react-native/index.js
+file: <repo>/node_modules/react-native/index.js:27:7 (<repo>/node_modules/alasql/dist/alasql.fs.js)
+
+25: // ----------------------------------------------------------------------------
+26:
+27: import typeof * as ReactNativePublicAPI from './index.js.flow';
+           ^
+28:
+29: const warnOnce = require('./Libraries/Utilities/warnOnce').default;
+
+    at getRollupError (file://<repo>/cowork/node_modules/rollup/dist/es/shared/parseAst.js:402:41)
+    at convertProgram (file://<repo>/cowork/node_modules/rollup/dist/es/shared/parseAst.js:1114:26)
+    at parseAst (file://<repo>/cowork/node_modules/rollup/dist/es/shared/parseAst.js:2099:87)
+    at tryParse (file://<repo>/cowork/node_modules/vite/dist/node/chunks/config.js:3776:10)
+    at analyzeTopLevelStatements (file://<repo>/cowork/node_modules/vite/dist/node/chunks/config.js:3788:14)
+    at Object.transformAndCheckExports (file://<repo>/cowork/node_modules/vite/dist/node/chunks/config.js:4902:66)
+    at Object.transform (file://<repo>/cowork/node_modules/vite/dist/node/chunks/config.js:5002:37)
+    at Object.handler (file://<repo>/cowork/node_modules/vite/dist/node/chunks/config.js:33750:13)
+    at file://<repo>/cowork/node_modules/rollup/dist/es/shared/node-entry.js:22571:40

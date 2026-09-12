@@ -1,0 +1,35 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '../..');
+const { collectInstalledRuntimePackagePaths, copyTreeWithHardlinks } = require(path.join(root, 'cowork/scripts/prepare-core-runtime.js'));
+const { createPackage } = require(path.join(root, 'cowork/node_modules/@electron/asar'));
+async function main() {
+ const seed = path.join(__dirname, 'sql-seed');
+ const resources = path.join(__dirname, 'sql-package/resources');
+ fs.mkdirSync(seed, { recursive: true });
+ fs.writeFileSync(path.join(seed,'package.json'), JSON.stringify({dependencies:{alasql:'4.17.0'}}));
+ if (!fs.existsSync(path.join(seed,'node_modules'))) fs.symlinkSync(path.join(root,'node_modules'),path.join(seed,'node_modules'),'dir');
+ const production = collectInstalledRuntimePackagePaths(root);
+ const packages = collectInstalledRuntimePackagePaths(seed);
+ if (!production.includes('node_modules/alasql')) throw new Error('alasql absent from production staging');
+ for (const name of packages) {
+  if (!production.includes(name)) throw new Error('Not shipped: '+name);
+  copyTreeWithHardlinks(path.join(root,name),path.join(resources,name),{excludeNestedNodeModules:true,destinationBoundary:resources});
+ }
+ const source = path.join(__dirname, 'sql-asar-source');
+ fs.mkdirSync(path.join(source,'dist-electron/main'),{recursive:true});
+ fs.writeFileSync(path.join(source,'package.json'),JSON.stringify({main:'dist-electron/main/index.js'}));
+ fs.writeFileSync(path.join(source,'dist-electron/main/index.js'), `const {app} = require('electron');
+ const assert = require('node:assert/strict');
+ const path = require('node:path');
+ const resolved = require.resolve('alasql');
+ assert.equal(resolved, path.resolve(__dirname, '../../../node_modules/alasql/dist/alasql.fs.js'));
+ const sql = require('alasql');
+ assert.deepEqual(sql('SELECT 6 * 7 AS answer'), [{answer:42}]);
+ console.log(JSON.stringify({resolved, result:sql('SELECT 6 * 7 AS answer'), packaged:app.isPackaged}));
+ app.quit();`);
+ await createPackage(source,path.join(resources,'app.asar'));
+ fs.writeFileSync(path.join(__dirname,'sql-package-manifest.json'),JSON.stringify({packages,productionHasAlasql:true},null,2));
+ console.log('Staged SQL closure: '+packages.length+' production packages; app.asar ready');
+}
+main().catch(e=>{console.error(e);process.exitCode=1});

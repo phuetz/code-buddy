@@ -1,0 +1,78 @@
+COMMAND: npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts
+EXIT: 1
+
+
+ RUN  v4.1.0 <repo>/cowork
+
+ ❯ src/tests/prepare-core-runtime.test.ts (13 tests | 2 failed) 72ms
+     × ships the optional SQL fallback closure and resolves it from the packaged main location 10ms
+     × fails packaging when the externalized SQL fallback was not installed 3ms
+ ❯ tests/renderer-core-boundary.test.ts (1 test | 1 failed) 405ms
+     × bundles every runtime core import without Node builtins, shims or the Node logger 404ms
+
+ Test Files  2 failed | 4 passed (6)
+      Tests  3 failed | 22 passed (25)
+   Start at  16:57:41
+   Duration  780ms (transform 427ms, setup 0ms, import 859ms, tests 525ms, environment 305ms)
+
+
+[stderr]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/tests/prepare-core-runtime.test.ts > collectInstalledRuntimePackagePaths > ships the optional SQL fallback closure and resolves it from the packaged main location
+AssertionError: expected [] to deeply equal [ 'node_modules/alasql', …(1) ]
+
+- Expected
++ Received
+
+- [
+-   "node_modules/alasql",
+-   "node_modules/sql-helper",
+- ]
++ []
+
+ ❯ src/tests/prepare-core-runtime.test.ts:155:22
+    153|     writePackage(root, 'node_modules/unrelated-feature', {});
+    154|     const packages = collectInstalledRuntimePackagePaths(root);
+    155|     expect(packages).toEqual(['node_modules/alasql', 'node_modules/sql…
+       |                      ^
+    156|     const resources = path.join(root, 'shipped/resources');
+    157|     for (const packagePath of packages) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/tests/prepare-core-runtime.test.ts > collectInstalledRuntimePackagePaths > fails packaging when the externalized SQL fallback was not installed
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ src/tests/prepare-core-runtime.test.ts:168:61
+    166|     const root = temporaryRoot();
+    167|     writeFile(path.join(root, 'package.json'), JSON.stringify({ option…
+    168|     expect(() => collectInstalledRuntimePackagePaths(root)).toThrow(/I…
+       |                                                             ^
+    169|   });
+    170|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/renderer-core-boundary.test.ts > renderer → core browser boundary > bundles every runtime core import without Node builtins, shims or the Node logger
+Error: Build failed with 3 errors:
+../src/utils/logger.ts:14:20: ERROR: Could not resolve "fs"
+../src/utils/logger.ts:15:22: ERROR: Could not resolve "path"
+../src/utils/logger.ts:16:24: ERROR: Could not resolve "os"
+ ❯ failureErrorWithLog node_modules/esbuild/lib/main.js:1467:15
+ ❯ node_modules/esbuild/lib/main.js:926:25
+ ❯ node_modules/esbuild/lib/main.js:878:52
+ ❯ buildResponseToResult node_modules/esbuild/lib/main.js:924:7
+ ❯ node_modules/esbuild/lib/main.js:951:16
+ ❯ responseCallbacks.<computed> node_modules/esbuild/lib/main.js:603:9
+ ❯ handleIncomingPacket node_modules/esbuild/lib/main.js:658:12
+ ❯ Socket.readFromStdout node_modules/esbuild/lib/main.js:581:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯

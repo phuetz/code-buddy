@@ -1,0 +1,11 @@
+cowork/src/renderer/components/browser-operator-draft-strip.tsx:8:} from '../../../../src/browser-automation/browser-operator-session.js';
+cowork/src/renderer/components/browser-operator-draft-strip.tsx:12:} from '../../../../src/browser-automation/internet-scout-plan.js';
+cowork/src/renderer/components/tool-profile-inspector-strip.tsx:9:} from '../../../../src/fleet/dispatch-profile.js';
+cowork/src/renderer/components/hermes-plan-strip.tsx:7:} from '../../../../src/agent/hermes-agent-profile.js';
+cowork/src/renderer/components/fleet-outcome-panel.tsx:27:import type { AgentRun } from '../../../../src/agent/agent-run-contract.js';
+cowork/src/renderer/components/FleetCommandCenter.tsx:49:import type { AgentRun } from '../../../../src/agent/agent-run-contract.js';
+cowork/src/renderer/hooks/useIPC.ts:14:import { buildConversationTurnEnvelope } from '@codebuddy/conversation/conversation-orchestrator.js';
+cowork/src/renderer/components/message/ContextOptimizationNotice.tsx:7:} from '../../../../../src/shared/context-optimization-metadata';
+cowork/src/renderer/types/index.ts:1:import type { ContextOptimizationMetadata } from '@codebuddy/shared/context-optimization-metadata';
+cowork/src/renderer/components/fleet-command-center-helpers.ts:4:import { buildAgentRun, buildAgentRunMetadata } from '../../../../src/agent/agent-run-contract.js';
+cowork/src/renderer/components/fleet-command-center-helpers.ts:5:import type { AgentRun } from '../../../../src/agent/agent-run-contract.js';

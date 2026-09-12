@@ -1,0 +1,2 @@
+COMMAND: npx tsc -p .
+EXIT: 0

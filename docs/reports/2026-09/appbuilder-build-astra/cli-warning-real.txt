@@ -1,0 +1,24 @@
+COMMAND: python3 _qa/appbuilder/isolated.py node dist/index.js tools profile safe astra_missing_effect_probe astra_missing_effect_probe
+EXIT: 0
+
+... previous line repeated 1 times
+Tool profile: fleet.hermes.safe
+  Policy: minimal / deny
+  Summary: Safe posture: read-only by default, deny mutation and execution unless explicitly widened.
+  Inspected tools: 2
+  Effective allow: none
+  Effective deny: astra_missing_effect_probe, astra_missing_effect_probe
+
+Tool decisions:
+
+  astra_missing_effect_probe: deny  effect=unknown
+    Groups: none
+    Reason: No matching rule found, using default
+  astra_missing_effect_probe: deny  effect=unknown
+    Groups: none
+    Reason: No matching rule found, using default
+
+... previous line repeated 1 times
+[stderr]
+[2026-09-12T15:00:05.595Z]  WARN  tool metadata missing effect class; treating as unknown {"tool":"astra_missing_effect_probe"}
+... omitted 2 low-signal lines

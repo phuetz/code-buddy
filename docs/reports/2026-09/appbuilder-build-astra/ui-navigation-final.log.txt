@@ -1,0 +1,416 @@
+AFTER ONBOARDING New session
+<$0.01
+openrouter/free
+👤 Register a face
+💬
+Chat
+📋
+Plan
+📊
+Activity
+📁
+Files
+🛠️
+App Studio
+✨
+Creations
+🎬
+Video Studio
+🎙️
+Assistant
+📝
+Meeting
+🖼️
+Library
+🧰
+Capabilities
+🛰️
+Mission Control
+🧪
+Labs
+⚙️
+Advanced
+🕘
+History
+☀️
+⌘K
+?
+
+Bon après-midi
+
+·
+
+DEPUIS CE MATIN
+
+Je suis prêt à reprendre avec toi
+
+Aucun événement récent n’exige ton attention. Le contexte reste prêt pour la prochaine mission.
+
+MAISON AUJOURD’HUI
+Journée légère
+Week-end · Aucun repas n’est encore planifié.
+0
+AVANCÉES
+0
+SESSIONS
+0
+AGENTS
+0
+À VOIR
+Boucle en pause
+Écouter
+Mission Control
+Détails
+What would you like to do?
+
+Tell Code Buddy — it codes, searches, and creates in your folder.
+
+Send
+MAISON
+Calendrier officiel · cache · à l’instant
+Le temps peut rester vraiment libre
+
+Une aide douce est disponible, sans transformer cette journée en liste de tâches.
+
+Prêt
+TYPE DE JOURNÉE
+Week-end
+Un rythme plus léger, sans urgence ajoutée.
+PRÉSENCE
+Présence inconnue
+Aucune présence récente confirmée
+MODE MAISON
+Normal
+Disponible, avec une proactivité mesurée.
+PROCHAIN REPAS
+Rien n’est encore prévu
+Demande une idée avec ce qui est réellement disponible, sans objectif médical ni jugement.
+À choisir
+Changer
+Cuisiner
+Invités
+Silence
+App
+Deck
+Sheet
+Document
+Pod
+Image
+Video
+Drive
+Search
+Code / fix
+Describe the bug or the feature
+Search
+Wide research + planning flow
+Create a document
+Excel, Word, PDF, charts
+MISSIONS PRÊTES
+🚀Build a web app
+🐛Find & fix a bug
+🔬Review my changes
+🔀Open a pull request
+🔎Deep research report
+📄Living research page
+APP STUDIO New session
+<$0.01
+openrouter/free
+👤 Register a face
+💬
+Chat
+📋
+Plan
+📊
+Activity
+📁
+Files
+🛠️
+App Studio
+✨
+Creations
+🎬
+Video Studio
+🎙️
+Assistant
+📝
+Meeting
+🖼️
+Library
+🧰
+Capabilities
+🛰️
+Mission Control
+🧪
+Labs
+⚙️
+Advanced
+🕘
+History
+☀️
+⌘K
+?
+React + Tailwind Studio
+React + TypeScript (bare)
+Express API
+Node CLI
+Template
+Generate with AI
+Static web — Pure HTML/CSS/JS, with an index.html you can open directly and no build required.
+React + Vite — React/TypeScript SPA with Vite, package.json, and an npm run dev command.
+Vue + Vite — Vue 3/TypeScript SPA with Vite, package.json, and an npm run dev command.
+PWA mobile — Installable mobile web app with manifest, service worker, icons, and offline support.
+Mobile (React Native / Expo) — Native mobile app via Expo/React Native with App.tsx and an Expo package.json.
+Style: none (neutral)
+Claude (Anthropic)
+Cohere
+ElevenLabs
+Hugging Face
+MiniMax
+Mistral AI
+Ollama
+OpenAI
+OpenCode
+Perplexity AI
+Replicate
+Runway
+Together AI
+VoltAgent
+xAI
+BMW
+BMW M
+Bugatti
+Ferrari
+Lamborghini
+Renault
+Tesla
+Cisco
+ClickHouse
+Composio
+HashiCorp
+MongoDB
+PostHog
+Sanity
+Sentry
+Supabase
+Bold
+Brutalism
+Colorful
+Dramatic
+Energetic
+Expressive
+Neobrutalism
+Vibrant
+Artistic
+Cafe
+Cosmic
+Creative
+Doodle
+Editorial
+Fantasy
+Friendly
+Lingo
+Publication
+Storytelling
+Airtable
+Canva
+Clay
+Figma
+Framer
+Miro
+Webflow
+Cursor
+Expo
+GitHub
+Lovable
+Mission Control Design System
+Raycast
+Superhuman
+Vercel
+Warp
+Airbnb
+Meta (Store)
+Nike
+Shopify
+Starbucks
+Atelier Zero
+Urdu Modern (Indus Script System)
+kami (紙 / 纸)
+Binance.US
+Coinbase
+Kraken
+Mastercard
+Revolut
+Stripe
+Wise
+Bento
+Levels
+Perspective
+Spacious
+Apple
+IBM
+NVIDIA
+Pinterest
+PlayStation
+SpaceX
+Spotify
+The Verge
+Uber
+Vodafone
+WIRED
+Xiaohongshu
+Clean
+Contemporary
+Flat
+Minimal
+Modern
+Mono
+Refined
+Shadcn
+Simple
+Sleek
+Claymorphism
+Glassmorphism
+Gradient
+Neon
+Neumorphism
+Skeumorphism
+Arc Browser
+Cal.com
+Discord
+Duolingo
+Intercom
+Linear
+Mintlify
+Notion
+Resend
+Slack
+Webex
+Zapier
+Ant
+Application
+Corporate
+Dashboard
+Elegant
+Enterprise
+Luxury
+Material
+Premium
+Professional
+Dithered
+Paper
+Retro
+Vintage
+WeChat Design System
+Neutral Modern
+Warm Editorial
+Agentic
+Futuristic
+HUD Design System
+Loom Design System
+Pacman
+Tetris
+Totality Festival
+Trading Terminal Design System
+Pick a brand style: the generated app inherits its colors, typography, and geometry.
+
+Missing required variables: description
+
+a React todo app
+an Express CRUD API
+a landing page
+Planned root: app-studio-project
+Ready
+
+Duration
+
+0s
+
+No active build.
+Stop
+What would you like to create?
+
+Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.
+
+TEMPLATES
+
+Choose what to create
+
+Schematic thumbnails to preview the shape of the deliverable.
+
+Search
+Web app
+
+A complete interface with navigation, panels and workspaces.
+
+Landing page
+
+A marketing page with hero, proof points and calls to action.
+
+Dashboard
+
+Metrics, charts and cards to steer an activity.
+
+Presentation
+
+A structured deck with titles, bullets and narrative pacing.
+
+Spreadsheet
+
+A grid ready to organize numbers, lists and calculations.
+
+Document
+
+Clear text with titles, paragraphs and editorial structure.
+
+Report
+
+A visual, magazine-style summary, readable at a glance.
+
+GET
+POST
+PATCH
+DEL
+API
+
+A technical contract with endpoints, statuses and methods.
+
+Mobile
+
+A compact screen designed for touch and quick flows.
+
+Image
+
+A visual composition with frame, subject and mood.
+
+Creative portfolio
+
+A strong visual presence to showcase work, approach and contact.
+
+Personal blog
+
+A warm space to publish essays, notes and stories over time.
+
+SaaS landing
+
+A modern conversion page to explain, reassure and trigger the trial.
+
+Analytics dashboard
+
+A clear cockpit to track metrics, trends and operational alerts.
+
+Interactive quiz
+
+A playful experience with questions, progress and a shareable final score.
+
+E-commerce showcase
+
+A polished store to highlight products, collections and cart.
+
+Documentation site
+
+Structured documentation with navigation, search and code examples.
+
+Memory game
+
+A mini card-flip game, perfect for a quick, visual session.
+ERRORS []

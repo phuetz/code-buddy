@@ -1,0 +1,5 @@
+COMMAND: npx vitest run tests/renderer-core-boundary.test.ts tests/tool-profile-inspector-strip.test.ts tests/hermes-plan-strip.test.ts tests/vite-config-watch-ignore.test.ts tests/core-runtime-packaging.test.ts src/tests/prepare-core-runtime.test.ts
+EXIT: 0
+
+ Test Files  6 passed (6)
+      Tests  25 passed (25)
