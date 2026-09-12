@@ -2,7 +2,7 @@
 
 B4 est fermé : le clic natif sur la croix Historique ferme maintenant le tiroir, sans changer ses coordonnées. La protection porte sur toute la surface superposée. Échap ferme également le tiroir ; `Shift+Tab` puis `Entrée` conserve son comportement. Pendant un renommage, le premier Échap annule seulement la saisie.
 
-Clone : `<clone>`. Branche `astra/appbuilder-b4-2026-09-12`, déjà préparée sur `integration/appbuilder-2026-09-12` / `695f57b6c` à l'arrivée. Correctif : **`7f663e364`**. Rapport, captures et coordination : commit documentaire portant ce rapport. Aucun `npm install`, aucun push, aucune suite complète. Les cinq fichiers gelés de B1/B2/B3 sont intacts. Les suppressions et captures antérieures présentes à l'arrivée ne sont pas intégrées aux commits.
+Clone : `<clone>`. Branche `astra/appbuilder-b4-2026-09-12`, déjà préparée sur `integration/appbuilder-2026-09-12` / `695f57b6c` à l'arrivée. Correctif : **`7f663e364`**. Rapport et captures : `b16e271b3` ; journaux et compléments de passation : commit portant cette version du rapport. Aucun `npm install`, aucun push, aucune suite complète. Les cinq fichiers gelés de B1/B2/B3 sont intacts. Les suppressions et captures antérieures présentes à l'arrivée ne sont pas intégrées aux commits.
 
 ## Cause confirmée avant correction
 
@@ -129,9 +129,9 @@ Le premier essai du nouveau test a également signalé un problème de harnais (
 
 ## Outillage et passation
 
-**Outillage : 6 appels Code Explorer (context/impact/query), 20 commandes via lm-resizer, 379207 octets économisés** sur 437506 octets de sortie initiale dans le périmètre mesuré jusqu'au commit correctif et à ses preuves. Ce sont des volumes de sortie, pas des tokens facturés. [Métadonnées](captures-appbuilder-b4/tool-metrics.json). Les journaux bruts ont été relus pour le témoin, le build, le lint et la comparaison TypeScript.
+**Outillage : 6 appels Code Explorer (context/impact/query), 20 commandes via lm-resizer, 379207 octets économisés** sur 437506 octets de sortie initiale dans le périmètre mesuré jusqu'au commit correctif et à ses preuves. Ce sont des volumes de sortie, pas des tokens facturés. [Métadonnées](captures-appbuilder-b4/tool-metrics.json). Les journaux bruts ont été relus pour le témoin, le build, le lint et la comparaison TypeScript. Les copies publiées remplacent les chemins locaux et normalisent les blancs de fin de ligne ; les originaux sont conservés hors commit. La règle générale `*.txt` du dépôt a nécessité des ajouts forcés nominatifs pour les journaux autorisés par la mission.
 
-Index : **réindexé avant intervention** (105,97 s ; HEAD de base), impact Historique réinterrogé après mise à jour. **À jour après `7f663e364`**, `analyze . --incremental` terminé en 92,43 s, deux fichiers reparsés. Une dernière analyse incrémentale suit le commit documentaire ; aucun simple `status` n'est utilisé à sa place.
+Index : **réindexé avant intervention** (105,97 s ; HEAD de base), impact Historique réinterrogé après mise à jour. **À jour après `7f663e364`**, `analyze . --incremental` terminé en 92,43 s, deux fichiers reparsés. Après `b16e271b3`, analyse incrémentale terminée en 103,14 s, aucun fichier source reparsé. Une dernière analyse incrémentale suit le commit des journaux ; aucun simple `status` n'est utilisé à sa place.
 
 Fichiers de production modifiés : `ConversationHistoryDrawer.tsx` et `globals.css` uniquement. Le test est dans `cowork/tests/`. Ajouts Git nominatifs, fichier par fichier. Les 24 captures publiées du scénario B4 et les journaux ont été contrôlés pour éviter les chemins locaux. Les captures du balayage sont conservées hors commit dans `<clone>/_qa/b4/private-sweep-captures/` : certains panneaux affichent le répertoire de travail, et l’OCR seul a manqué ce texte pâle, détecté à la relecture visuelle. Leurs mesures JSON publiques sont anonymisées ; les données runtime du profil isolé et les captures étrangères restent hors commit. Les cinq fichiers gelés sont inchangés depuis `695f57b6c`.
 

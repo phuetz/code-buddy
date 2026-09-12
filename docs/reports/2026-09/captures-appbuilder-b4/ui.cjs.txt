@@ -1,0 +1,27 @@
+const { chromium } = require('../../cowork/node_modules/playwright-core');
+const {execFileSync} = require('node:child_process');
+const fs=require('node:fs');const path=require('node:path');
+const root=path.resolve(__dirname,'../..');
+const evidence=[];
+const env={...process.env,DISPLAY:fs.readFileSync(path.join(__dirname,'display'),'utf8').trim(),XAUTHORITY:path.join(__dirname,'xauthority')};
+const shots=path.join(root,'docs/reports/2026-09/captures-appbuilder-b4');
+function native(...args){return execFileSync('xdotool',args,{env,encoding:'utf8',timeout:10000}).trim();}
+function capture(name){execFileSync('import',['-window','root',path.join(shots,name+'.png')],{env,timeout:15000});}
+(async()=>{const b=await chromium.connectOverCDP('http://127.0.0.1:9337',{timeout:10000});try{const p=b.contexts()[0].pages()[0];p.setDefaultTimeout(3000);
+const [action,arg,name]=process.argv.slice(2);
+if(action==='click'){
+ const box=await p.locator(arg).boundingBox(); if(!box)throw Error('Missing target '+arg);
+ const offset=await p.evaluate(()=>({x:screenX,y:screenY}));
+ const x=Math.round(offset.x+box.x+box.width/2),y=Math.round(offset.y+box.y+box.height/2);
+ native('mousemove',String(x),String(y));
+ capture(name+'-before');
+ execFileSync('ffmpeg',['-nostdin','-loglevel','error','-y','-f','x11grab','-draw_mouse','1','-video_size','1600x1000','-i',env.DISPLAY,'-frames:v','1','-threads','1',path.join(shots,name+'-before-cursor.png')],{env,timeout:10000});
+ const entry={action,arg,box,pointer:native('getmouselocation','--shell')};console.log(JSON.stringify(entry));fs.appendFileSync(path.join(shots,'actions.jsonl'),JSON.stringify(entry)+'\n');
+ native('click','1');
+ await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ capture(name+'-after');
+}else if(action==='key'){native('key','--clearmodifiers',arg);await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));if(name)capture(name);}
+else if(action==='capture')capture(arg);
+else if(action==='eval'||action==='assert'){const result=await p.evaluate(arg);console.log(JSON.stringify(result,null,2));fs.appendFileSync(path.join(shots,'actions.jsonl'),JSON.stringify({action,arg,result})+'\n');if(action==='assert'&&!result)throw Error('Assertion failed: '+arg);}
+else console.log(await p.locator('body').innerText());
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

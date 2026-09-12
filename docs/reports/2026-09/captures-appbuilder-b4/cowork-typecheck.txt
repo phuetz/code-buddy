@@ -1,0 +1,36 @@
+../src/sandbox/os-sandbox.ts(1506,10): error TS1205: Re-exporting a type when 'isolatedModules' is enabled requires using 'export type'.
+../src/tools/archive-tool.ts(457,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/archive-tool.ts(461,24): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+../src/tools/archive-tool.ts(617,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/archive-tool.ts(633,42): error TS7006: Parameter 'e' implicitly has an 'any' type.
+../src/tools/archive-tool.ts(763,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/document-generator.ts(363,44): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/document-generator.ts(365,48): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+../src/tools/document-generator.ts(375,63): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: unknown, index: number, obj: unknown[]) => value is unknown, thisArg?: any): unknown', gave the following error.
+    Argument of type '(char: string) => boolean' is not assignable to parameter of type '(value: unknown, index: number, obj: unknown[]) => value is unknown'.
+      Types of parameters 'char' and 'value' are incompatible.
+        Type 'unknown' is not assignable to type 'string'.
+  Overload 2 of 2, '(predicate: (value: unknown, index: number, obj: unknown[]) => unknown, thisArg?: any): unknown', gave the following error.
+    Argument of type '(char: string) => boolean' is not assignable to parameter of type '(value: unknown, index: number, obj: unknown[]) => unknown'.
+      Types of parameters 'char' and 'value' are incompatible.
+        Type 'unknown' is not assignable to type 'string'.
+../src/tools/document-generator.ts(378,85): error TS2345: Argument of type '{}' is not assignable to parameter of type 'string'.
+../src/tools/document-generator.ts(385,14): error TS18046: 'match' is of type 'unknown'.
+../src/tools/document-generator.ts(403,57): error TS18046: 'entry' is of type 'unknown'.
+../src/tools/document-tool.ts(166,36): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/document-tool.ts(266,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/document-tool.ts(299,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`
+../src/tools/document-tool.ts(313,15): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+../src/tools/document-tool.ts(314,12): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+../src/tools/document-tool.ts(318,14): error TS7006: Parameter 'a' implicitly has an 'any' type.
+../src/tools/document-tool.ts(318,17): error TS7006: Parameter 'b' implicitly has an 'any' type.
+../src/tools/document-tool.ts(495,34): error TS7016: Could not find a declaration file for module 'adm-zip'. '<clone>/node_modules/adm-zip/adm-zip.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/adm-zip` if it exists or add a new declaration (.d.ts) file containing `declare module 'adm-zip';`

@@ -1,0 +1,952 @@
+[
+  {
+    "flag": "file-preview",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[480px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "region": "none",
+        "rect": {
+          "x": 920,
+          "y": 0,
+          "width": 480,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 920
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Copy",
+        "id": null,
+        "rect": {
+          "x": 1330,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1354,
+          "bottom": 39.5,
+          "left": 1330
+        },
+        "x": 1342,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-file-preview-0-before.png",
+        "pointer": "X=1442\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1342,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 14.5,
+          "width": 26,
+          "height": 26,
+          "top": 14.5,
+          "right": 1384,
+          "bottom": 40.5,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-file-preview-1-before.png",
+        "pointer": "X=1471\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "artifact",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[560px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "region": "none",
+        "rect": {
+          "x": 840,
+          "y": 0,
+          "width": 560,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 840
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Copy",
+        "id": null,
+        "rect": {
+          "x": 1302,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1326,
+          "bottom": 39.5,
+          "left": 1302
+        },
+        "x": 1314,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-artifact-0-before.png",
+        "pointer": "X=1414\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1314,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Download",
+        "id": null,
+        "rect": {
+          "x": 1330,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1354,
+          "bottom": 39.5,
+          "left": 1330
+        },
+        "x": 1342,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-artifact-1-before.png",
+        "pointer": "X=1442\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1342,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 14.5,
+          "width": 26,
+          "height": 26,
+          "top": 14.5,
+          "right": 1384,
+          "bottom": 40.5,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-artifact-2-before.png",
+        "pointer": "X=1471\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showHelpDocs",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showHelpDocs-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showCommandPalette",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-start justify-center pt-24",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showCommandPalette-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showShortcutsDialog",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showShortcutsDialog-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showGlobalSearch",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showGlobalSearch-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showSnippetsLibrary",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-black/50 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showSnippetsLibrary-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showPersonaSwitcher",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showPersonaSwitcher-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showResumeChooser",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showResumeChooser-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showModelInstallDialog",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showModelInstallDialog-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showOrchestratorLauncher",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showOrchestratorLauncher-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showEvolutionPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showEvolutionPanel-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showKnowledgePanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showKnowledgePanel-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showSciencePanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showSciencePanel-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showClawMigration",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showClawMigration-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showKanban",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showKanban-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showMissionBoard",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showMissionBoard-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showDesktopSnapshot",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showDesktopSnapshot-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showWorkflowProPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
+        "region": "none",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/counterfactual-extra-showWorkflowProPanel-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  }
+]

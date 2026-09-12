@@ -1,0 +1,32 @@
+[
+  {
+    "file": "cowork/src/main/studio/command-runner.ts",
+    "baseBlob": "a3b0fe70680d65ab51954746fd19dff113f78b20",
+    "currentBlob": "a3b0fe70680d65ab51954746fd19dff113f78b20",
+    "unchanged": true
+  },
+  {
+    "file": "cowork/src/renderer/components/NewShell.tsx",
+    "baseBlob": "3f77e2407e2441a4a62c8debb4d594e12fd427b0",
+    "currentBlob": "3f77e2407e2441a4a62c8debb4d594e12fd427b0",
+    "unchanged": true
+  },
+  {
+    "file": "cowork/src/renderer/components/studio/AppStudioView.tsx",
+    "baseBlob": "14bf6df37adba43c727ad0604fd933f3c1e95214",
+    "currentBlob": "14bf6df37adba43c727ad0604fd933f3c1e95214",
+    "unchanged": true
+  },
+  {
+    "file": "cowork/src/renderer/components/studio/use-app-studio.ts",
+    "baseBlob": "814219295dbcc02e9ec10c9747835459dbbe1f6b",
+    "currentBlob": "814219295dbcc02e9ec10c9747835459dbbe1f6b",
+    "unchanged": true
+  },
+  {
+    "file": "src/templates/project-scaffolding.ts",
+    "baseBlob": "7db3502831518c42deac591560e73e38ece19789",
+    "currentBlob": "7db3502831518c42deac591560e73e38ece19789",
+    "unchanged": true
+  }
+]

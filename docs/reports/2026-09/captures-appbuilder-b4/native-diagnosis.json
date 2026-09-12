@@ -1,0 +1,63 @@
+{
+  "base": "695f57b6c",
+  "fixed": {
+    "overlayRegion": "no-drag",
+    "mouseClosed": true,
+    "escapeClosed": true,
+    "shiftTabFocused": "Fermer",
+    "enterClosed": true
+  },
+  "viewport": {
+    "width": 1400,
+    "height": 900,
+    "screenX": 100,
+    "screenY": 50
+  },
+  "titlebar": {
+    "x": 0,
+    "y": 0,
+    "width": 1400,
+    "height": 40,
+    "webkitAppRegion": "drag"
+  },
+  "closeBeforeAndAfter": {
+    "x": 283,
+    "y": 10,
+    "width": 24,
+    "height": 24
+  },
+  "baseline": {
+    "pointerScreen": {
+      "x": 395,
+      "y": 72
+    },
+    "closeClickEvents": 0,
+    "historyStillOpen": true,
+    "DOMHit": "close button SVG, no covering foreground element",
+    "overlayRegion": "none",
+    "searchClick": {
+      "x": 160,
+      "y": 68,
+      "isTrusted": true
+    },
+    "escapeClosed": false,
+    "shiftTabFocused": "Fermer",
+    "enterClosed": true
+  },
+  "launchIssues": [
+    {
+      "cause": "absolute TMPDIR launch exited 132; relative TMPDIR inside clone worked (suspected Unix socket path length)",
+      "exit": 132
+    },
+    {
+      "trigger": "showFleetCommandCenter",
+      "nativeError": "Fatal error in V8: v8::ToLocalChecked Empty MaybeLocal",
+      "baselineExit": 139,
+      "fixedExit": 139
+    }
+  ],
+  "finalApplicationStop": {
+    "signal": "SIGTERM",
+    "exit": 0
+  }
+}

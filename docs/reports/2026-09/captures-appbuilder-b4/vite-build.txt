@@ -1,0 +1,363 @@
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 5394 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                 0.95 kB │ gzip:   0.53 kB
+dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff                   4.42 kB
+dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                  4.93 kB
+dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2                  5.21 kB
+dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2                  5.47 kB
+dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff                   5.98 kB
+dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff                   6.19 kB
+dist/assets/KaTeX_Size1-Regular-C195tn64.woff                   6.50 kB
+dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2            6.91 kB
+dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2               6.91 kB
+dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf                    7.59 kB
+dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff             7.66 kB
+dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff                7.72 kB
+dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2                 9.64 kB
+dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2             10.34 kB
+dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf                   10.36 kB
+dist/assets/KaTeX_Script-Regular-D5yQViql.woff                 10.59 kB
+dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2               11.32 kB
+dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                  11.35 kB
+dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf                   11.51 kB
+dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2              12.03 kB
+dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2                12.22 kB
+dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf                   12.23 kB
+dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff              12.32 kB
+dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf             12.34 kB
+dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf                12.37 kB
+dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff                13.21 kB
+dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff                   13.30 kB
+dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2            13.57 kB
+dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff               14.11 kB
+dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                 14.41 kB
+dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff             16.03 kB
+dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2               16.40 kB
+dist/assets/KaTeX_Math-Italic-t53AETM-.woff2                   16.44 kB
+dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf                  16.65 kB
+dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2               16.78 kB
+dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2                   16.99 kB
+dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff                18.67 kB
+dist/assets/KaTeX_Math-Italic-DA0__PXp.woff                    18.75 kB
+dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff                19.41 kB
+dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf               19.44 kB
+dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf                 19.57 kB
+dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                    19.58 kB
+dist/assets/KaTeX_Main-Italic-BMLOBm91.woff                    19.68 kB
+dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf                22.36 kB
+dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                  24.50 kB
+dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2                     25.32 kB
+dist/assets/KaTeX_Main-Regular-B22Nviop.woff2                  26.27 kB
+dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf              27.56 kB
+dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2                   28.08 kB
+dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                      29.91 kB
+dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff                   30.77 kB
+dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                 31.20 kB
+dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf                     31.31 kB
+dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                 32.97 kB
+dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff                    33.52 kB
+dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf                     33.58 kB
+dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                       51.34 kB
+dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf                    53.58 kB
+dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf                     63.63 kB
+dist/assets/logo-CVi6n6j1.png                                 377.73 kB
+dist/assets/AppStudioView-Dv47L9lv.css                          4.13 kB │ gzip:   1.05 kB
+dist/assets/index-BJ52hg2w.css                                138.88 kB │ gzip:  29.00 kB
+dist/assets/channel-KmFIapDb.js                                 0.11 kB │ gzip:   0.13 kB
+dist/assets/circle-CaOUEYlU.js                                  0.13 kB │ gzip:   0.13 kB
+dist/assets/init-Gi6I4Gst.js                                    0.15 kB │ gzip:   0.13 kB
+dist/assets/cloud-Du4-1g0K.js                                   0.16 kB │ gzip:   0.16 kB
+dist/assets/circle-minus-De11HQvw.js                            0.17 kB │ gzip:   0.16 kB
+dist/assets/ban-0sWGmaMX.js                                     0.17 kB │ gzip:   0.16 kB
+dist/assets/gauge-D8CbvxOA.js                                   0.17 kB │ gzip:   0.17 kB
+dist/assets/terminal-S305eaYG.js                                0.19 kB │ gzip:   0.17 kB
+dist/assets/circle-play-DMJpVNLx.js                             0.19 kB │ gzip:   0.17 kB
+dist/assets/user-HZ5G2G7r.js                                    0.19 kB │ gzip:   0.18 kB
+dist/assets/chunk-2Q5K7J3B-BBVOFtii.js                          0.19 kB │ gzip:   0.16 kB
+dist/assets/tablet-DY8psxJK.js                                  0.21 kB │ gzip:   0.19 kB
+dist/assets/target-CssQuI47.js                                  0.22 kB │ gzip:   0.16 kB
+dist/assets/chunk-JWPE2WC7-ClVzRI99.js                          0.23 kB │ gzip:   0.17 kB
+dist/assets/panel-right-open-DmIx5li0.js                        0.23 kB │ gzip:   0.20 kB
+dist/assets/timer-FGSKydEb.js                                   0.24 kB │ gzip:   0.18 kB
+dist/assets/chunk-XXDRQBXY-YMxchSOz.js                          0.24 kB │ gzip:   0.21 kB
+dist/assets/square-terminal-DyNFsQZm.js                         0.24 kB │ gzip:   0.20 kB
+dist/assets/circle-pause-DDV_Tvm-.js                            0.24 kB │ gzip:   0.18 kB
+dist/assets/video-DN1gEFDZ.js                                   0.25 kB │ gzip:   0.21 kB
+dist/assets/message-square-plus-C8CrumHp.js                     0.25 kB │ gzip:   0.20 kB
+dist/assets/messages-square-BiAzO4L9.js                         0.25 kB │ gzip:   0.20 kB
+dist/assets/file-video-CtFRsN4d.js                              0.27 kB │ gzip:   0.20 kB
+dist/assets/pen-line-qDXJF7IP.js                                0.27 kB │ gzip:   0.22 kB
+dist/assets/file-plus-2-DTIGIPnp.js                             0.28 kB │ gzip:   0.21 kB
+dist/assets/file-x-2-12pb66pU.js                                0.29 kB │ gzip:   0.21 kB
+dist/assets/file-code-2-_DfTUVEJ.js                             0.29 kB │ gzip:   0.21 kB
+dist/assets/iterate-model-Dkoso7aG.js                           0.30 kB │ gzip:   0.23 kB
+dist/assets/box-BqXylIsI.js                                     0.31 kB │ gzip:   0.22 kB
+dist/assets/library-big-C5hs3MXr.js                             0.32 kB │ gzip:   0.26 kB
+dist/assets/file-audio-DF7ISk30.js                              0.33 kB │ gzip:   0.23 kB
+dist/assets/scroll-text-C8njchmv.js                             0.35 kB │ gzip:   0.23 kB
+dist/assets/mic-vocal-BazpcSM3.js                               0.36 kB │ gzip:   0.28 kB
+dist/assets/image-plus-DUIJIE9v.js                              0.36 kB │ gzip:   0.25 kB
+dist/assets/crown-DyRC39Op.js                                   0.36 kB │ gzip:   0.26 kB
+dist/assets/chunk-5VM5RSS4-CVVul5RB.js                          0.37 kB │ gzip:   0.27 kB
+dist/assets/git-compare-arrows-HIyymAGJ.js                      0.37 kB │ gzip:   0.25 kB
+dist/assets/hard-drive-rYPJoVBK.js                              0.39 kB │ gzip:   0.26 kB
+dist/assets/earth-Uhh3M6TO.js                                   0.39 kB │ gzip:   0.26 kB
+dist/assets/film-BPhkK_r2.js                                    0.40 kB │ gzip:   0.24 kB
+dist/assets/layers-qwH_hnLO.js                                  0.42 kB │ gzip:   0.24 kB
+dist/assets/package-check-DvqWOLVR.js                           0.42 kB │ gzip:   0.29 kB
+dist/assets/book-open-text-CsZEsu8w.js                          0.42 kB │ gzip:   0.25 kB
+dist/assets/stateDiagram-v2-6OUMAXLB-B-fO5PNN.js                0.43 kB │ gzip:   0.30 kB
+dist/assets/StatTile-ynb0pj9c.js                                0.43 kB │ gzip:   0.28 kB
+dist/assets/pen-Li6pwoSM.js                                     0.46 kB │ gzip:   0.31 kB
+dist/assets/classDiagram-OUVF2IWQ-BOH6_4XP.js                   0.47 kB │ gzip:   0.32 kB
+dist/assets/classDiagram-v2-EOCWNBFH-BOH6_4XP.js                0.47 kB │ gzip:   0.32 kB
+dist/assets/chunk-VR4S4FIN-D8Bvxxyq.js                          0.51 kB │ gzip:   0.36 kB
+dist/assets/wand-sparkles-B92bfhO9.js                           0.51 kB │ gzip:   0.29 kB
+dist/assets/mission-model-BhWnvSJl.js                           0.54 kB │ gzip:   0.31 kB
+dist/assets/swimlanesDiagram-G3AALYLV-KteveHRn.js               0.55 kB │ gzip:   0.37 kB
+dist/assets/EmptyState-BgU1sU6D.js                              0.55 kB │ gzip:   0.31 kB
+dist/assets/Pill-hGP-XMA8.js                                    0.57 kB │ gzip:   0.32 kB
+dist/assets/circle-dashed-BC6OBsft.js                           0.57 kB │ gzip:   0.29 kB
+dist/assets/infoDiagram-FWYZ7A6U-Dbf3t40R.js                    0.59 kB │ gzip:   0.40 kB
+dist/assets/SectionCard-DtalZaGa.js                             0.62 kB │ gzip:   0.32 kB
+dist/assets/media-attachments-model-DRxLo0kc.js                 0.87 kB │ gzip:   0.55 kB
+dist/assets/sizeCapture-X5ZJPWSS-QNZ1zEdj.js                    0.94 kB │ gzip:   0.53 kB
+dist/assets/VideoStudioPanel-DDc_X8j0.js                        1.00 kB │ gzip:   0.65 kB
+dist/assets/ImageStudioPanel-BeSID_OX.js                        1.10 kB │ gzip:   0.70 kB
+dist/assets/MissionControlShell-B6z_LeW-.js                     1.10 kB │ gzip:   0.55 kB
+dist/assets/Heatmap-BOKOGR8i.js                                 1.11 kB │ gzip:   0.59 kB
+dist/assets/ordinal-Cboi1Yqb.js                                 1.19 kB │ gzip:   0.57 kB
+dist/assets/StackedBar-E_Vi017S.js                              1.35 kB │ gzip:   0.66 kB
+dist/assets/MediaLibraryView-WR6hcNRu.js                        1.35 kB │ gzip:   0.72 kB
+dist/assets/TimelineChart-F6akUOgS.js                           1.44 kB │ gzip:   0.74 kB
+dist/assets/GaugeMeter-C7v1QJob.js                              1.47 kB │ gzip:   0.69 kB
+dist/assets/OsStatusBar-oy-GpP3l.js                             1.49 kB │ gzip:   0.65 kB
+dist/assets/railroadDiagram-RFXS5EU6-BroWsXt4.js                1.61 kB │ gzip:   0.76 kB
+dist/assets/GuardrailsBadge-DiPbK00h.js                         1.62 kB │ gzip:   0.70 kB
+dist/assets/Sparkline-DrJ1mlEU.js                               1.63 kB │ gzip:   0.76 kB
+dist/assets/MediaGenPanel-Dhx1sMT1.js                           1.75 kB │ gzip:   0.97 kB
+dist/assets/abnfDiagram-VRR7QNED-CkGRfJil.js                    1.81 kB │ gzip:   0.89 kB
+dist/assets/BarChart-DgPCfBng.js                                1.81 kB │ gzip:   0.71 kB
+dist/assets/chunk-32BRIVSS-eRhedGg3.js                          1.88 kB │ gzip:   0.83 kB
+dist/assets/Donut-C1NE4zsX.js                                   1.94 kB │ gzip:   0.91 kB
+dist/assets/pegDiagram-2B236MQR-xPjMiUvW.js                     1.96 kB │ gzip:   0.92 kB
+dist/assets/ebnfDiagram-CCIWWBDH-Bw5Hmk4R.js                    2.01 kB │ gzip:   0.88 kB
+dist/assets/FocusRunnerView-CAdwTqPm.js                         2.10 kB │ gzip:   0.87 kB
+dist/assets/SheetPreview-fwEnuDkX.js                            2.10 kB │ gzip:   0.99 kB
+dist/assets/media-path-model-zMXzOTh0.js                        2.17 kB │ gzip:   0.97 kB
+dist/assets/DocPreview-CDO5Zm_X.js                              2.23 kB │ gzip:   0.95 kB
+dist/assets/HelpDocs-B-NhnY7Q.js                                2.32 kB │ gzip:   1.05 kB
+dist/assets/DrivePanel-DB-hU-Go.js                              2.38 kB │ gzip:   1.23 kB
+dist/assets/MediaGallery-CS3Vn0Uy.js                            2.43 kB │ gzip:   1.09 kB
+dist/assets/MobileSupervisionView-Yt08Y3t9.js                   2.47 kB │ gzip:   0.89 kB
+dist/assets/DeliberationPanel-q6aLEJCd.js                       2.51 kB │ gzip:   1.01 kB
+dist/assets/ChangedFilesStrip-Boy8sN1r.js                       2.56 kB │ gzip:   1.12 kB
+dist/assets/PodcastComposer-BLiO2HRv.js                         2.66 kB │ gzip:   1.01 kB
+dist/assets/ModelComparatorView-Dz52bwJ4.js                     2.74 kB │ gzip:   1.12 kB
+dist/assets/DocComposer-DYROFH5S.js                             2.74 kB │ gzip:   1.06 kB
+dist/assets/ShortVideoStoryboard-C6eabZD2.js                    2.78 kB │ gzip:   0.98 kB
+dist/assets/MissionReplayView-D0NNUVf0.js                       2.79 kB │ gzip:   1.06 kB
+dist/assets/SheetStudioPanel-DstMTDfp.js                        2.92 kB │ gzip:   1.54 kB
+dist/assets/AutonomyDashboard-VVXZCXAU.js                       3.03 kB │ gzip:   1.27 kB
+dist/assets/DeckStudioPanel-CMY59mYv.js                         3.08 kB │ gzip:   1.61 kB
+dist/assets/McpCapabilitiesPanel-YVHJKUp6.js                    3.17 kB │ gzip:   1.24 kB
+dist/assets/DeliverableVersionTimeline-D4eXTU-o.js              3.20 kB │ gzip:   1.15 kB
+dist/assets/DocStudioPanel-DJasg1kU.js                          3.20 kB │ gzip:   1.66 kB
+dist/assets/PreviewToolbar-B97TjGzZ.js                          3.21 kB │ gzip:   1.17 kB
+dist/assets/PodStudioPanel-Bw_tu4NX.js                          3.22 kB │ gzip:   1.69 kB
+dist/assets/ExportShareSheet-DbWC2AKT.js                        3.28 kB │ gzip:   1.29 kB
+dist/assets/CallLogView-BiW9Xp4D.js                             3.34 kB │ gzip:   1.30 kB
+dist/assets/ComputerUseViewer-CAvPDqRZ.js                       3.42 kB │ gzip:   1.38 kB
+dist/assets/arc-DtPdndX0.js                                     3.43 kB │ gzip:   1.47 kB
+dist/assets/SlideDeckPreview-qnMxMHOi.js                        3.44 kB │ gzip:   1.37 kB
+dist/assets/SlideDeckBuilder-BBJh_HHc.js                        3.45 kB │ gzip:   1.25 kB
+dist/assets/WorkerDashboard-B0QvxbAU.js                         3.46 kB │ gzip:   1.07 kB
+dist/assets/MediaGenComposer-SppapIob.js                        3.47 kB │ gzip:   1.27 kB
+dist/assets/SheetAnalystView-BYNeg4vo.js                        3.51 kB │ gzip:   1.35 kB
+dist/assets/ChannelMissionAssign-Bj5S1QSj.js                    3.61 kB │ gzip:   1.29 kB
+dist/assets/CreationsView-C_0BKiPL.js                           3.70 kB │ gzip:   1.44 kB
+dist/assets/WorkflowProPanel-DyWEq4az.js                        3.74 kB │ gzip:   1.30 kB
+dist/assets/KnowledgeGraphView-EKQxhiGE.js                      3.76 kB │ gzip:   1.30 kB
+dist/assets/ToolsCatalogPanel-CyjVuEcN.js                       3.77 kB │ gzip:   1.64 kB
+dist/assets/BrowserAutopilotPanel-DwVszsl0.js                   3.89 kB │ gzip:   1.28 kB
+dist/assets/EvolutionPanel-BDvyG29U.js                          3.91 kB │ gzip:   1.59 kB
+dist/assets/skills-manager-page-CEaluFh6.js                     3.92 kB │ gzip:   1.65 kB
+dist/assets/MissionResumeMenu-Be5LR2Hs.js                       3.98 kB │ gzip:   1.27 kB
+dist/assets/diagram-NH7WQ7WH-DfAC-PH-.js                        4.21 kB │ gzip:   1.83 kB
+dist/assets/DeliverableStudioPanel-DgMhMjlg.js                  4.24 kB │ gzip:   1.86 kB
+dist/assets/DriveGrid-DmdSaZwk.js                               4.46 kB │ gzip:   1.65 kB
+dist/assets/StudioChatPanel-D0Z8hQei.js                         4.60 kB │ gzip:   1.66 kB
+dist/assets/defaultLocale-DX6XiGOO.js                           4.69 kB │ gzip:   2.18 kB
+dist/assets/ShareLinkDialog-CYy2yJmm.js                         4.71 kB │ gzip:   1.77 kB
+dist/assets/MissionBoard-D1RCi_6s.js                            4.77 kB │ gzip:   1.45 kB
+dist/assets/AiDrive-CGVkId5M.js                                 4.86 kB │ gzip:   2.05 kB
+dist/assets/ImagePromptStudio-hX_uTHsA.js                       4.90 kB │ gzip:   1.72 kB
+dist/assets/map-DxJ2ADlA.js                                     5.07 kB │ gzip:   2.07 kB
+dist/assets/linear-DPKfbJC1.js                                  5.66 kB │ gzip:   2.31 kB
+dist/assets/diagram-WEI45ONY-DUOBz1je.js                        5.93 kB │ gzip:   2.55 kB
+dist/assets/KnowledgePanel-BHvSUKyB.js                          5.94 kB │ gzip:   2.31 kB
+dist/assets/pieDiagram-ENE6RG2P-CCc9KjfK.js                     6.29 kB │ gzip:   2.62 kB
+dist/assets/chunk-RYQCIY6F-CBQkBLJ9.js                          7.08 kB │ gzip:   2.72 kB
+dist/assets/diagram-OA4YK3LP-Cl2XVzc6.js                        8.33 kB │ gzip:   3.72 kB
+dist/assets/dagre-VKFMJZFB-BEsHAmn4.js                          8.57 kB │ gzip:   3.31 kB
+dist/assets/SubAgentPanel-JwIktcjq.js                           8.87 kB │ gzip:   3.21 kB
+dist/assets/MediaLibraryPanel-CPczwxCJ.js                       9.04 kB │ gzip:   3.06 kB
+dist/assets/ReasoningTraceViewer-Czyj-9TI.js                    9.93 kB │ gzip:   3.22 kB
+dist/assets/cynefinDiagram-TSTJHNR4-DdId_5Ug.js                10.10 kB │ gzip:   3.63 kB
+dist/assets/ConfigModal-Chva93Va.js                            10.24 kB │ gzip:   3.94 kB
+dist/assets/stateDiagram-2N3HPSRC-Cl9Ca90F.js                  10.42 kB │ gzip:   3.65 kB
+dist/assets/TemplateGallery-BWhXI0YF.js                        10.67 kB │ gzip:   3.28 kB
+dist/assets/diagram-FQU43EPY-D8pynRlW.js                       10.72 kB │ gzip:   4.13 kB
+dist/assets/SciencePanel-C1j6LwJn.js                           14.21 kB │ gzip:   4.56 kB
+dist/assets/DesignViewEditors-BuJapDkw.js                      15.23 kB │ gzip:   4.86 kB
+dist/assets/chunk-MOJQB5TN-CzVvur-L.js                         15.74 kB │ gzip:   4.41 kB
+dist/assets/diagram-G47NLZAW-hh1vpKZN.js                       15.96 kB │ gzip:   5.70 kB
+dist/assets/ishikawaDiagram-FXEZZL3T-DGIa9tCX.js               17.47 kB │ gzip:   6.64 kB
+dist/assets/kanban-definition-HUTT4EX6-B1je1VcW.js             20.30 kB │ gzip:   7.21 kB
+dist/assets/hermes-browser-backends-strip-B8zogEb-.js          22.45 kB │ gzip:   4.03 kB
+dist/assets/sankeyDiagram-HTMAVEWB-DfWIS1Td.js                 23.20 kB │ gzip:   8.56 kB
+dist/assets/mindmap-definition-LN4V7U3C-wp0GRloj.js            23.45 kB │ gzip:   7.94 kB
+dist/assets/MeetingLiveView-B048upkh.js                        23.54 kB │ gzip:   6.96 kB
+dist/assets/journeyDiagram-5HDEW3XC-C_QJ9QC8.js                23.57 kB │ gzip:   8.34 kB
+dist/assets/graph-DOmOIIwC.js                                  23.92 kB │ gzip:   8.32 kB
+dist/assets/AutonomyPanel-DVqBmOwu.js                          25.17 kB │ gzip:   5.64 kB
+dist/assets/wardleyDiagram-EHGQE667-CSm1ACUt.js                25.50 kB │ gzip:   6.79 kB
+dist/assets/erDiagram-Q63AITRT-DFrYcTIN.js                     27.10 kB │ gzip:   9.42 kB
+dist/assets/skill-candidate-review-queue-strip-BNfTbOFv.js     28.67 kB │ gzip:   6.81 kB
+dist/assets/gitGraphDiagram-IHSO6WYX-IDQaoi7I.js               29.42 kB │ gzip:   8.70 kB
+dist/assets/timeline-definition-FHXFAJF6-DBpsCx-z.js           30.84 kB │ gzip:  10.15 kB
+dist/assets/TestRunnerPanel-BuYNaSo8.js                        30.91 kB │ gzip:   7.79 kB
+dist/assets/layout-D-LzfAck.js                                 31.00 kB │ gzip:  11.19 kB
+dist/assets/requirementDiagram-TGXJPOKE-DXxqzR1D.js            31.00 kB │ gzip:   9.74 kB
+dist/assets/quadrantDiagram-ABIIQ3AL-CJnonSXv.js               34.01 kB │ gzip:   9.98 kB
+dist/assets/AssistantView-DNPSAB12.js                          34.58 kB │ gzip:   9.87 kB
+dist/assets/LabsGallery-BM_kxON_.js                            37.67 kB │ gzip:  10.17 kB
+dist/assets/chunk-EX3LRPZG-DFocicqg.js                         38.16 kB │ gzip:  12.55 kB
+dist/assets/AdvancedCommandCenter-BL_oRJRc.js                  41.89 kB │ gzip:  11.36 kB
+dist/assets/xychartDiagram-FW5EYKEG-0_iHEPlU.js                41.93 kB │ gzip:  12.05 kB
+dist/assets/vennDiagram-L72KCM5P-B_hbQqPt.js                   41.96 kB │ gzip:  15.70 kB
+dist/assets/chunk-V7JOEXUC-XM_R-0m5.js                         49.21 kB │ gzip:  15.76 kB
+dist/assets/flowDiagram-23GEKE2U-Cv4-tOuG.js                   60.75 kB │ gzip:  19.53 kB
+dist/assets/VideoStudioView-1lzVSZHO.js                        65.85 kB │ gzip:  19.70 kB
+dist/assets/ganttDiagram-NO4QXBWP-CY17f-Ku.js                  69.70 kB │ gzip:  23.56 kB
+dist/assets/c4Diagram-LMCZKHZV-DU1H_7CU.js                     69.94 kB │ gzip:  19.63 kB
+dist/assets/ContextPanel-CZw_T9PR.js                           70.98 kB │ gzip:  18.41 kB
+dist/assets/blockDiagram-677ZJIJ3-DXbtXf72.js                  73.74 kB │ gzip:  21.26 kB
+dist/assets/LLMConfigPanel-3Bb7uZXW.js                         75.22 kB │ gzip:  17.55 kB
+dist/assets/cose-bilkent-JH36ORCC-DXIouI3B.js                  81.70 kB │ gzip:  22.47 kB
+dist/assets/MissionControlView-DNo-oZwq.js                     88.60 kB │ gzip:  21.05 kB
+dist/assets/CompanionPanel-BoHOBoQm.js                        112.71 kB │ gzip:  23.30 kB
+dist/assets/sequenceDiagram-DBY2YBRQ-CuvpLnjJ.js              116.97 kB │ gzip:  31.14 kB
+dist/assets/swimlanes-5IMT3BWC-Bau5VlEy.js                    118.81 kB │ gzip:  43.65 kB
+dist/assets/vision_bundle-Bk4VIwNi.js                         135.99 kB │ gzip:  40.62 kB
+dist/assets/ChatView-RKbFxcIO.js                              141.10 kB │ gzip:  40.19 kB
+dist/assets/architectureDiagram-ZJ3FMSHR-DrESp4Ll.js          151.37 kB │ gzip:  42.99 kB
+dist/assets/FleetCommandCenter-DkHXzI-B.js                    309.23 kB │ gzip:  70.98 kB
+dist/assets/SettingsPanel-Y6cofqO7.js                         402.15 kB │ gzip:  85.34 kB
+dist/assets/cytoscape.esm-D3_iZ_3b.js                         442.92 kB │ gzip: 141.93 kB
+dist/assets/mermaid.core-B8xfUrth.js                          593.16 kB │ gzip: 138.33 kB
+dist/assets/cynefin-VYW2F7L2-DW-0oibF.js                      688.13 kB │ gzip: 154.15 kB
+dist/assets/AppStudioView-BPF3W0dz.js                         972.02 kB │ gzip: 300.58 kB
+dist/assets/index-C4cWcCcV.js                               3,264.00 kB │ gzip: 998.23 kB
+✓ built in 12.54s
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 6587 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-electron/main/index.js                                   0.17 kB │ gzip:     0.12 kB
+dist-electron/main/hash-D0_y954g.js                           0.36 kB │ gzip:     0.24 kB
+dist-electron/main/media-session-index-BDMy2si1.js            0.45 kB │ gzip:     0.33 kB
+dist-electron/main/github-copilot-headers-D7WHs2qG.js         0.51 kB │ gzip:     0.30 kB
+dist-electron/main/session-prune-ctF4MltS.js                  0.65 kB │ gzip:     0.43 kB
+dist-electron/main/transform-messages-C3cyUgPk.js             2.32 kB │ gzip:     1.05 kB
+dist-electron/main/discovery-B0XzYNG9.js                      3.05 kB │ gzip:     1.54 kB
+dist-electron/main/openai-responses-lhhsGK0I.js               3.50 kB │ gzip:     1.66 kB
+dist-electron/main/azure-openai-responses-Ddkn7utW.js         3.65 kB │ gzip:     1.68 kB
+dist-electron/main/conversation-pdf-template-CfblR-JX.js      3.73 kB │ gzip:     1.73 kB
+dist-electron/main/pocket-tts-TEfpD3GK.js                     4.41 kB │ gzip:     2.06 kB
+dist-electron/main/multipart-parser-kmqjijhY.js               4.50 kB │ gzip:     1.90 kB
+dist-electron/main/multipart-parser-BeJYvI7o.js               4.50 kB │ gzip:     1.90 kB
+dist-electron/main/google-DM6g7OO9.js                         5.68 kB │ gzip:     2.08 kB
+dist-electron/main/hooks-bridge-Bl57ZU9x.js                   5.84 kB │ gzip:     2.30 kB
+dist-electron/main/identity-bridge-CYUeWkAg.js                5.98 kB │ gzip:     2.22 kB
+dist-electron/main/google-vertex-QZdyEaVQ.js                  6.46 kB │ gzip:     2.32 kB
+dist-electron/main/lima-sync-Bloo_sov.js                      6.75 kB │ gzip:     2.40 kB
+dist-electron/main/a2a-bridge-BNkmR3Gd.js                     6.91 kB │ gzip:     2.64 kB
+dist-electron/main/openai-responses-shared-BtwAe4Ci.js        7.53 kB │ gzip:     2.44 kB
+dist-electron/main/index-Cg1LPfaF.js                          8.98 kB │ gzip:     3.53 kB
+dist-electron/main/api-diagnostics-CyjXrS0c.js                9.67 kB │ gzip:     3.25 kB
+dist-electron/main/openai-codex-responses-CX8rtJ3G.js        11.40 kB │ gzip:     4.43 kB
+dist-electron/main/google-gemini-cli-7J-auGKA.js             11.55 kB │ gzip:     4.45 kB
+dist-electron/main/anthropic-EPP8MFC9.js                     11.57 kB │ gzip:     3.76 kB
+dist-electron/main/openai-completions-CG4j7ofv.js            11.99 kB │ gzip:     4.10 kB
+dist-electron/main/presence-bridge-D3n8TLNk.js               13.68 kB │ gzip:     5.01 kB
+dist-electron/main/index-CbLYJkSs.js                         19.05 kB │ gzip:     7.61 kB
+dist-electron/main/photon_rs-CZ7lIjUp.js                     24.25 kB │ gzip:     5.54 kB
+dist-electron/main/audit-bridge-DdOgGx4N.js                  27.82 kB │ gzip:     7.49 kB
+dist-electron/main/index-DSQT9afB.js                         28.98 kB │ gzip:     8.78 kB
+dist-electron/main/index-DUu_-5B7.js                         87.71 kB │ gzip:    23.90 kB
+dist-electron/main/index-qa7Dq8ZZ.js                         87.71 kB │ gzip:    23.90 kB
+dist-electron/main/test-runner-bridge-C-siDeoQ.js           117.95 kB │ gzip:    20.25 kB
+dist-electron/main/google-shared-BGau0tLs.js                448.55 kB │ gzip:   111.15 kB
+dist-electron/main/mistral-DUBTlVPI.js                      836.57 kB │ gzip:   113.61 kB
+dist-electron/main/index-C9gUtTMF.js                      5,939.55 kB │ gzip: 1,653.98 kB
+✓ built in 17.57s
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 6 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-electron/preload/index.js  46.10 kB │ gzip: 9.03 kB
+✓ built in 62ms
+
+[stderr]
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+"chromium-bidi/lib/cjs/bidiMapper/BidiMapper" is imported by " chromium-bidi/lib/cjs/bidiMapper/BidiMapper?commonjs-external", but could not be resolved – treating it as an external dependency.
+"chromium-bidi/lib/cjs/cdp/CdpConnection" is imported by " chromium-bidi/lib/cjs/cdp/CdpConnection?commonjs-external", but could not be resolved – treating it as an external dependency.
+../node_modules/@browserbasehq/stagehand/dist/esm/lib/utils.js (408:23): "pipe" is not exported by "../node_modules/zod/v3/external.js", imported by "../node_modules/@browserbasehq/stagehand/dist/esm/lib/utils.js".
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/utils/core-loader.ts is dynamically imported by <clone>/cowork/src/main/engine/codebuddy-engine-runner.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts but also statically imported by <clone>/cowork/src/main/agent/orchestrator-bridge.ts, <clone>/cowork/src/main/agent/sub-agent-bridge.ts, <clone>/cowork/src/main/agent/team-bridge.ts, <clone>/cowork/src/main/assistant/assistant-service.ts, <clone>/cowork/src/main/autonomy/autonomy-daemon-bridge.ts, <clone>/cowork/src/main/autonomy/colab-board-bridge.ts, <clone>/cowork/src/main/browser/browser-operator-runtime-bridge.ts, <clone>/cowork/src/main/claude/agent-runner.ts, <clone>/cowork/src/main/commands/slash-command-bridge.ts, <clone>/cowork/src/main/companion/cross-channel-continuity.ts, <clone>/cowork/src/main/companion/model-routing.ts, <clone>/cowork/src/main/companion/vision-cognition.ts, <clone>/cowork/src/main/config/config-test-routing.ts, <clone>/cowork/src/main/config/model-capability-bridge.ts, <clone>/cowork/src/main/cost/cost-bridge.ts, <clone>/cowork/src/main/engine/codebuddy-engine-runner.ts, <clone>/cowork/src/main/film/film-service.ts, <clone>/cowork/src/main/fleet/aggregator-wiring.ts, <clone>/cowork/src/main/fleet/fleet-bridge.ts, <clone>/cowork/src/main/fleet/saga-runner.ts, <clone>/cowork/src/main/gpu-media/gpu-media-admin-bridge.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/input/mention-processor.ts, <clone>/cowork/src/main/ipc/automations-ipc.ts, <clone>/cowork/src/main/ipc/channels-ipc.ts, <clone>/cowork/src/main/ipc/ckg-ipc.ts, <clone>/cowork/src/main/ipc/companion-ipc.ts, <clone>/cowork/src/main/ipc/desktop-snapshot-ipc.ts, <clone>/cowork/src/main/ipc/device-ipc.ts, <clone>/cowork/src/main/ipc/fleet-ipc.ts, <clone>/cowork/src/main/ipc/identity-ipc.ts, <clone>/cowork/src/main/ipc/lessons-candidate-ipc.ts, <clone>/cowork/src/main/ipc/mcp-ipc.ts, <clone>/cowork/src/main/ipc/pairing-ipc.ts, <clone>/cowork/src/main/ipc/profiles-ipc.ts, <clone>/cowork/src/main/ipc/skills-ipc.ts, <clone>/cowork/src/main/ipc/spec-ipc.ts, <clone>/cowork/src/main/ipc/spec-next-ipc.ts, <clone>/cowork/src/main/ipc/user-model-ipc.ts, <clone>/cowork/src/main/ipc/widgets-ipc.ts, <clone>/cowork/src/main/launcher/live-launcher-bridge.ts, <clone>/cowork/src/main/media/media-gen-service.ts, <clone>/cowork/src/main/meeting/meeting-live-service.ts, <clone>/cowork/src/main/memory/icm-integration.ts, <clone>/cowork/src/main/notification/notification-bridge.ts, <clone>/cowork/src/main/observability/audit-bridge.ts, <clone>/cowork/src/main/preview/preview-service.ts, <clone>/cowork/src/main/project/project-memory.ts, <clone>/cowork/src/main/security/rules-bridge.ts, <clone>/cowork/src/main/server/server-bridge.ts, <clone>/cowork/src/main/session/file-attachment-context.ts, <clone>/cowork/src/main/session/session-manager.ts, <clone>/cowork/src/main/skills/skill-md-bridge.ts, <clone>/cowork/src/main/studio/dev-server-service.ts, <clone>/cowork/src/main/studio/scaffold-service.ts, <clone>/cowork/src/main/testing/test-runner-bridge.ts, <clone>/cowork/src/main/tools/backup-bridge.ts, <clone>/cowork/src/main/tools/channel-gateway-readiness-bridge.ts, <clone>/cowork/src/main/tools/hermes-browser-backends-bridge.ts, <clone>/cowork/src/main/tools/hermes-claw-migrate-bridge.ts, <clone>/cowork/src/main/tools/hermes-doctor-bridge.ts, <clone>/cowork/src/main/tools/hermes-feature-parity-bridge.ts, <clone>/cowork/src/main/tools/hermes-kanban-bridge.ts, <clone>/cowork/src/main/tools/hermes-learning-loop-bridge.ts, <clone>/cowork/src/main/tools/hermes-memory-providers-bridge.ts, <clone>/cowork/src/main/tools/hermes-mobile-supervision-bridge.ts, <clone>/cowork/src/main/tools/hermes-openclaw-bridge.ts, <clone>/cowork/src/main/tools/hermes-portal-bridge.ts, <clone>/cowork/src/main/tools/hermes-protocol-gateways-bridge.ts, <clone>/cowork/src/main/tools/hermes-provider-readiness-bridge.ts, <clone>/cowork/src/main/tools/hermes-runtime-backends-bridge.ts, <clone>/cowork/src/main/tools/hermes-tool-catalog-bridge.ts, <clone>/cowork/src/main/tools/hermes-toolsets-bridge.ts, <clone>/cowork/src/main/tools/hermes-trajectories-bridge.ts, <clone>/cowork/src/main/tools/learning-usage-bridge.ts, <clone>/cowork/src/main/tools/lessons-vault-bridge.ts, <clone>/cowork/src/main/tools/skill-candidate-review-bridge.ts, <clone>/cowork/src/main/tools/skill-package-manager-bridge.ts, <clone>/cowork/src/main/workflows/workflow-bridge.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/server/server-bridge.ts is dynamically imported by <clone>/cowork/src/main/ipc/server-ipc.ts, <clone>/cowork/src/main/ipc/server-ipc.ts, <clone>/cowork/src/main/ipc/server-ipc.ts, <clone>/cowork/src/main/ipc/server-ipc.ts but also statically imported by <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/ipc/mobile-supervision-ipc.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/src/tools/video/localized-media.ts is dynamically imported by <clone>/src/tools/video/narration.ts but also statically imported by <clone>/src/tools/video/long-form-plan.ts, <clone>/src/tools/video/voice-rights-registry.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/media-library.ts is dynamically imported by <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/index.ts but also statically imported by <clone>/cowork/src/main/media/creative-asset-registry.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/config/config-store.ts is dynamically imported by <clone>/cowork/src/main/hooks/hooks-bridge.ts, <clone>/cowork/src/main/server/server-bridge.ts but also statically imported by <clone>/cowork/src/main/claude/agent-runner.ts, <clone>/cowork/src/main/claude/claude-sdk-one-shot.ts, <clone>/cowork/src/main/clipboard/clipboard-watcher.ts, <clone>/cowork/src/main/config/api-diagnostics.ts, <clone>/cowork/src/main/config/config-export-service.ts, <clone>/cowork/src/main/engine/codebuddy-engine-runner.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/ipc/clipboard-ipc.ts, <clone>/cowork/src/main/ipc/config-model-ipc.ts, <clone>/cowork/src/main/ipc/logs-ipc.ts, <clone>/cowork/src/main/sandbox/sandbox-adapter.ts, <clone>/cowork/src/main/sandbox/sandbox-bootstrap.ts, <clone>/cowork/src/main/session/session-manager.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/sandbox/sandbox-bootstrap.ts is dynamically imported by <clone>/cowork/src/main/sandbox/lima-bridge.ts, <clone>/cowork/src/main/sandbox/wsl-bridge.ts but also statically imported by <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/sandbox/sandbox-adapter.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/mcp/mcp-config-store.ts is dynamically imported by <clone>/cowork/src/main/mcp/mcp-manager.ts, <clone>/cowork/src/main/mcp/mcp-manager.ts, <clone>/cowork/src/main/mcp/mcp-manager.ts but also statically imported by <clone>/cowork/src/main/claude/agent-runner.ts, <clone>/cowork/src/main/config/config-export-service.ts, <clone>/cowork/src/main/index.ts, <clone>/cowork/src/main/ipc/mcp-ipc.ts, <clone>/cowork/src/main/session/session-manager.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/node_modules/@mariozechner/pi-ai/dist/index.js is dynamically imported by <clone>/cowork/src/main/config/config-store.ts but also statically imported by <clone>/cowork/node_modules/@mariozechner/pi-agent-core/dist/agent-loop.js, <clone>/cowork/node_modules/@mariozechner/pi-agent-core/dist/agent.js, <clone>/cowork/node_modules/@mariozechner/pi-agent-core/dist/proxy.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/agent-session.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/auth-storage.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/compaction/branch-summarization.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/compaction/compaction.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/model-resolver.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/main.js, <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/components/model-selector.js, <clone>/cowork/src/main/claude/claude-sdk-one-shot.ts, <clone>/cowork/src/main/claude/pi-model-resolution.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/index.js is dynamically imported by <clone>/cowork/src/main/claude/agent-runner.ts but also statically imported by <clone>/cowork/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js, <clone>/cowork/src/main/claude/agent-runner.ts, <clone>/cowork/src/main/claude/shared-auth.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/cowork/src/main/reasoning/reasoning-bridge.ts is dynamically imported by <clone>/cowork/src/main/ipc/reasoning-ipc.ts, <clone>/cowork/src/main/ipc/reasoning-ipc.ts, <clone>/cowork/src/main/ipc/reasoning-ipc.ts but also statically imported by <clone>/cowork/src/main/claude/agent-runner.ts, <clone>/cowork/src/main/engine/codebuddy-engine-runner.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/src/voice/tts-volume.ts is dynamically imported by <clone>/src/companion/assistant-config.ts but also statically imported by <clone>/cowork/src/main/voice/tts-bridge.ts, <clone>/src/sensory/voice-loop.ts, <clone>/src/voice/local-tts.ts, <clone>/src/voice/pcm-edges.ts, <clone>/src/voice/voicebox-tts.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) <clone>/src/voice/voicebox-tts.ts is dynamically imported by <clone>/src/sensory/voice-loop.ts, <clone>/src/sensory/voice-loop.ts, <clone>/src/voice/local-tts.ts but also statically imported by <clone>/cowork/src/main/voice/tts-bridge.ts, <clone>/src/sensory/voice-loop.ts, dynamic import will not move module into another chunk.
