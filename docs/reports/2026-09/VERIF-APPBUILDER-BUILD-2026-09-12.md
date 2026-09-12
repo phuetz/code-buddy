@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-12
 - **Vérificateur** : Antigravity (moteur d'audit indépendant)
-- **Dépôt** : `/home/patrice/DEV/code-buddy-appbuilder-2026-09-12`
+- **Dépôt** : clone de lane dédié (chemin local non consigné)
 - **Branche** : `astra/appbuilder-reload-2026-09-12`
 - **Commit testé** : `403f22b91` (base `86f9bd9bb`, correctif `80f7111cf`)
 - **Rapport audité** : `docs/reports/2026-09/REPARATION-APPBUILDER-BUILD-ASTRA-2026-09-12.md`
@@ -15,8 +15,8 @@ Sur un worktree isolé du commit de référence `86f9bd9bb` (`git worktree add _
 
 ### Cause 1 : Processus principal Electron — Échec Rollup CommonJS sur `alasql` (Flow `import typeof`)
 ```text
-[vite-plugin-electron] [commonjs--resolver] Expected 'from', got 'typeOf' in /home/patrice/DEV/code-buddy-appbuilder-2026-09-12/node_modules/react-native/index.js
-file: /home/patrice/DEV/code-buddy-appbuilder-2026-09-12/node_modules/react-native/index.js:27:7 (/home/patrice/DEV/code-buddy-appbuilder-2026-09-12/node_modules/alasql/dist/alasql.fs.js)
+[vite-plugin-electron] [commonjs--resolver] Expected 'from', got 'typeOf' in <clone>/node_modules/react-native/index.js
+file: <clone>/node_modules/react-native/index.js:27:7 (<clone>/node_modules/alasql/dist/alasql.fs.js)
 
 25: // ----------------------------------------------------------------------------
 26: 
@@ -28,9 +28,9 @@ file: /home/patrice/DEV/code-buddy-appbuilder-2026-09-12/node_modules/react-nati
 
 ### Cause 2 : Bundle Rendu Client — Échec d'externalisation Node pour le navigateur via `logger.ts`
 ```text
-[plugin vite:resolve] Module "fs" has been externalized for browser compatibility, imported by "/home/patrice/DEV/code-buddy-appbuilder-2026-09-12/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
-[plugin vite:resolve] Module "path" has been externalized for browser compatibility, imported by "/home/patrice/DEV/code-buddy-appbuilder-2026-09-12/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
-[plugin vite:resolve] Module "os" has been externalized for browser compatibility, imported by "/home/patrice/DEV/code-buddy-appbuilder-2026-09-12/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
+[plugin vite:resolve] Module "fs" has been externalized for browser compatibility, imported by "<clone>/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
+[plugin vite:resolve] Module "path" has been externalized for browser compatibility, imported by "<clone>/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
+[plugin vite:resolve] Module "os" has been externalized for browser compatibility, imported by "<clone>/_qa/appbuilder/baseline-worktree/src/utils/logger.ts".
 ../src/utils/logger.ts (146:25): "dirname" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
 ../src/utils/logger.ts (147:11): "existsSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
 ../src/utils/logger.ts (147:48): "mkdirSync" is not exported by "__vite-browser-external", imported by "../src/utils/logger.ts".
