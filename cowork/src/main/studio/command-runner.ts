@@ -15,6 +15,7 @@ export interface CommandRunInput {
   cwd: string;
   command: string;
   id: string;
+  env?: Record<string, string | undefined>;
 }
 
 export interface CommandOutputEvent {
@@ -48,6 +49,20 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function buildSpawnEnv(overrideEnv?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: 'development',
+    ...overrideEnv,
+  };
+  if (overrideEnv) {
+    for (const [key, value] of Object.entries(overrideEnv)) {
+      if (value === undefined) delete env[key];
+    }
+  }
+  return env;
+}
+
 export class CommandRunner {
   private readonly commands = new Map<string, RunningCommand>();
 
@@ -71,6 +86,7 @@ export class CommandRunner {
         cwd,
         detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildSpawnEnv(input.env),
       });
       if (child.pid === undefined) return { ok: false, error: `Failed to spawn command ${id}` };
 
@@ -137,6 +153,7 @@ export class CommandRunner {
           cwd,
           detached: process.platform !== 'win32',
           stdio: ['pipe', 'pipe', 'pipe'],
+          env: buildSpawnEnv(input.env),
         });
         if (child.pid === undefined) return finish({ ok: false, error: `Failed to spawn command ${id}` });
 

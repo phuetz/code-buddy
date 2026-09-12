@@ -70,4 +70,37 @@ describe('CommandRunner.runToCompletion', () => {
       error: 'command is required',
     });
   });
+
+  it('sets NODE_ENV=development in spawned child process even if parent is production', async () => {
+    const events: CommandOutputEvent[] = [];
+    const runner = new CommandRunner((event) => events.push(event));
+    const command = `${JSON.stringify(process.execPath)} -e "console.log(process.env.NODE_ENV)"`;
+
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const result = await runner.runToCompletion({ cwd: process.cwd(), command, id: 'env-test' });
+      expect(result.ok).toBe(true);
+      const stdout = events.find((e) => e.stream === 'stdout' && e.id === 'env-test');
+      expect(stdout?.line).toBe('development');
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
+  });
+
+  it('allows explicit env overrides in input', async () => {
+    const events: CommandOutputEvent[] = [];
+    const runner = new CommandRunner((event) => events.push(event));
+    const command = `${JSON.stringify(process.execPath)} -e "console.log(process.env.CUSTOM_FLAG)"`;
+
+    const result = await runner.runToCompletion({
+      cwd: process.cwd(),
+      command,
+      id: 'custom-env-test',
+      env: { CUSTOM_FLAG: 'custom_value_123' },
+    });
+    expect(result.ok).toBe(true);
+    const stdout = events.find((e) => e.stream === 'stdout' && e.id === 'custom-env-test');
+    expect(stdout?.line).toBe('custom_value_123');
+  });
 });

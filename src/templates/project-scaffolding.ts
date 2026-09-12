@@ -1507,7 +1507,11 @@ export class TemplateEngine extends EventEmitter {
    */
   private runCommand(command: string, args: string[], cwd: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(command, args, { cwd, stdio: 'pipe' });
+      const proc = spawn(command, args, {
+        cwd,
+        stdio: 'pipe',
+        env: { ...process.env, NODE_ENV: 'development' },
+      });
 
       proc.on('close', (code) => {
         if (code === 0) {
