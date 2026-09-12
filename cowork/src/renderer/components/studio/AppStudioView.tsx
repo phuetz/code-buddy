@@ -1,5 +1,6 @@
 import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
 import { PreviewPane, type PreviewPaneProps } from './PreviewPane.js';
@@ -124,6 +125,7 @@ export function AppStudioView({
   onClearTerminal,
   onStopBuild,
 }: AppStudioViewProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<MainTab>('editor');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
   const [ghBusy, setGhBusy] = useState(false);
@@ -170,7 +172,7 @@ export function AppStudioView({
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'editor' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Code2 className="h-4 w-4" aria-hidden="true" />
-              Editor
+              {t('appStudio.editor')}
             </button>
             <button
               type="button"
@@ -178,7 +180,7 @@ export function AppStudioView({
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'preview' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Eye className="h-4 w-4" aria-hidden="true" />
-              Preview
+              {t('appStudio.preview')}
             </button>
             <button
               type="button"
@@ -187,7 +189,7 @@ export function AppStudioView({
               data-testid="studio-tab-versions"
             >
               <HistoryIcon className="h-4 w-4" aria-hidden="true" />
-              Versions
+              {t('appStudio.versions')}
             </button>
             <button
               type="button"
@@ -199,19 +201,24 @@ export function AppStudioView({
               className="ml-auto inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
-              Run
+              {t('appStudio.run')}
             </button>
             <button
               type="button"
               onClick={() => {
-                if (workingDir) void window.electronAPI?.studio?.exportZip?.(workingDir);
+                if (workingDir) {
+                  void window.electronAPI?.studio?.exportZip?.(workingDir);
+                } else {
+                  console.warn('[AppStudioView] Cannot export zip: no project directory');
+                }
               }}
-              title="Export the project as a zip"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
+              disabled={!workingDir}
+              title={workingDir ? t('appStudio.exportZipTitle') : t('appStudio.noProjectToExport')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="studio-export-zip"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
-              Export
+              {t('appStudio.export')}
             </button>
             <button
               type="button"
@@ -220,23 +227,23 @@ export function AppStudioView({
                   'Deploy this app with the deploy tool (pick the simplest host, generate the config, and give me the public URL).'
                 )
               }
-              title="Prepare a deployment request (deploy tool)"
+              title={t('appStudio.deployTitle')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-deploy"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              Deploy
+              {t('appStudio.deploy')}
             </button>
             <button
               type="button"
               onClick={onPushGithub}
               disabled={ghBusy || !workingDir}
-              title="Create a GitHub repository and push this project"
+              title={t('appStudio.githubPushTitle')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="studio-github-push"
             >
               <Github className="h-4 w-4" aria-hidden="true" />
-              {ghBusy ? 'Pushing…' : 'GitHub'}
+              {ghBusy ? t('appStudio.pushing') : t('appStudio.github')}
             </button>
           </div>
           {ghResult ? (
@@ -303,7 +310,7 @@ export function AppStudioView({
                     <CodeEditorPane path={activeFile} value={fileContent} onChange={onChangeFileContent} onSave={onSaveFile} />
                   ) : (
                     <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                      No file selected.
+                      {t('appStudio.noFileSelected')}
                     </div>
                   )}
                 </div>
@@ -345,10 +352,10 @@ export function AppStudioView({
               type="button"
               onClick={onNewApp}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Start a new app"
+              title={t('appStudio.startNewApp')}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              New app
+              {t('appStudio.newApp')}
             </button>
           </div>
         ) : null}

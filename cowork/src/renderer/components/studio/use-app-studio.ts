@@ -219,7 +219,10 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   }, [apis, appendTerminal, beginPhase, refreshTree]);
 
   const openFile = useCallback(async (path: string) => {
-    if (!projectRoot) return;
+    if (!projectRoot) {
+      appendTerminal('No project directory to open file.');
+      return;
+    }
     const result = await apis.files.read(projectRoot, path);
     if (result.ok) {
       setActiveFile(path);
@@ -246,7 +249,11 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   }, [activeFile, openFile]);
 
   const saveFile = useCallback(async () => {
-    if (!projectRoot || !activeFile) return;
+    if (!projectRoot) {
+      appendTerminal('No project directory to save file.');
+      return;
+    }
+    if (!activeFile) return;
     const result = await apis.files.write(projectRoot, activeFile, fileContent);
     appendTerminal(result.ok ? `Saved: ${activeFile}` : result.error);
   }, [activeFile, apis, appendTerminal, fileContent, projectRoot]);
@@ -264,6 +271,33 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   // "Lancer" / preview reload doesn't reinstall on every click (G1).
   const installedRootsRef = useRef<Set<string>>(new Set());
 
+  // Verify that all declared dependencies and devDependencies exist in node_modules
+  const verifyDependenciesInstalled = useCallback(
+    async (cwd: string): Promise<boolean> => {
+      try {
+        const pkgFile = await apis.files.read(cwd, 'package.json');
+        if (!pkgFile.ok) return true;
+        const parsed = JSON.parse(pkgFile.data.content) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+        const allDeps = [
+          ...Object.keys(parsed.dependencies ?? {}),
+          ...Object.keys(parsed.devDependencies ?? {}),
+        ];
+        if (allDeps.length === 0) return true;
+        for (const dep of allDeps) {
+          const depPkg = await apis.files.read(cwd, `node_modules/${dep}/package.json`);
+          if (!depPkg.ok) return false;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [apis.files]
+  );
+
   // Real `npm install` for npm projects before the dev server starts (App
   // Studio G1). Streams output to the terminal, drives the "installing" build
   // phase, and resolves once the install exits — so a React/Vue app that the
@@ -271,25 +305,36 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const ensureInstalled = useCallback(
     async (cwd: string): Promise<{ ok: boolean; error?: string }> => {
       if (installedRootsRef.current.has(cwd)) return { ok: true };
-      // Fast path across reloads: npm writes this marker after a successful
-      // install, so an already-installed project skips the reinstall.
+      // Fast path across reloads: only consider installed if lock marker and required dependencies are present.
       const marker = await apis.files.read(cwd, 'node_modules/.package-lock.json');
       if (marker.ok) {
-        installedRootsRef.current.add(cwd);
-        return { ok: true };
+        const verified = await verifyDependenciesInstalled(cwd);
+        if (verified) {
+          installedRootsRef.current.add(cwd);
+          return { ok: true };
+        }
       }
       beginPhase('installing');
-      appendTerminal('$ npm install');
+      appendTerminal('$ npm install --include=dev');
       const id = (options.commandIdFactory ?? defaultCommandId)();
-      const result = await apis.commands.runToEnd({ cwd, command: 'npm install', id });
+      const result = await apis.commands.runToEnd({
+        cwd,
+        command: 'npm install --include=dev',
+        id,
+        env: { NODE_ENV: 'development' },
+      });
       if (!result.ok) return { ok: false, error: result.error };
       if (result.data.code !== 0) {
         return { ok: false, error: `npm install exited with code ${result.data.code ?? 'null'}` };
       }
+      const verified = await verifyDependenciesInstalled(cwd);
+      if (!verified) {
+        return { ok: false, error: 'npm install completed but required dependencies are missing in node_modules' };
+      }
       installedRootsRef.current.add(cwd);
       return { ok: true };
     },
-    [apis, appendTerminal, beginPhase, options.commandIdFactory]
+    [apis.commands, apis.files, appendTerminal, beginPhase, options.commandIdFactory, verifyDependenciesInstalled]
   );
 
   const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string }> => {
@@ -304,7 +349,12 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     // before the dev server can boot. Install first (idempotent, cached per
     // session); a failed install surfaces as a build error the auto-fix loop
     // can pick up, without ever spawning a doomed dev server.
-    if (!input?.command && isNpmProject(tree)) {
+    let isNpm = isNpmProject(tree);
+    if (!isNpm && tree.length === 0) {
+      const pkgCheck = await apis.files.read(cwd, 'package.json');
+      isNpm = pkgCheck.ok;
+    }
+    if (!input?.command && isNpm) {
       const installed = await ensureInstalled(cwd);
       if (!installed.ok) {
         const error = installed.error ?? 'npm install failed';
@@ -412,10 +462,21 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   }, [apis, appendTerminal, devPid]);
 
   const runCommand = useCallback(async (command: string) => {
-    if (!projectRoot || !command.trim()) return;
+    if (!projectRoot) {
+      const error = 'No project directory to run command.';
+      setBuildError(error);
+      appendTerminal(error);
+      return;
+    }
+    if (!command.trim()) return;
     const id = (options.commandIdFactory ?? defaultCommandId)();
     appendTerminal(`$ ${command}`);
-    const result = await apis.commands.run({ cwd: projectRoot, command, id });
+    const result = await apis.commands.run({
+      cwd: projectRoot,
+      command,
+      id,
+      env: { NODE_ENV: 'development' },
+    });
     if (!result.ok) { setBuildError(result.error); appendTerminal(result.error); }
   }, [apis, appendTerminal, options.commandIdFactory, projectRoot]);
 
@@ -455,7 +516,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     buildError,
     templates,
     busy,
-    workingDir: options.projectRoot ?? '',
+    workingDir: projectRoot,
     onScaffold: scaffold,
     onPrompt: setLastPrompt,
     onOpenFile: openFile,
