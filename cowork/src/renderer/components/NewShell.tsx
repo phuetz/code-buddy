@@ -228,7 +228,7 @@ function StudioView() {
     projectRoot: sessionCwd,
     platform: window.electronAPI?.platform ?? 'linux',
   });
-  const { startSession, continueSession, getSessionMessages, getSessionTraceSteps } = useIPC();
+  const { startSession, continueSession, stopSession, getSessionMessages, getSessionTraceSteps } = useIPC();
   const setActiveSession = useAppStore((st) => st.setActiveSession);
   const setMessages = useAppStore((st) => st.setMessages);
   const setTraceSteps = useAppStore((st) => st.setTraceSteps);
@@ -545,6 +545,9 @@ function StudioView() {
       onSend: (text: string) => {
         void continueSession(activeSessionId, text);
       },
+      onStop: () => {
+        stopSession(activeSessionId);
+      },
     };
   }, [
     activeSessionId,
@@ -552,6 +555,7 @@ function StudioView() {
     sessionCwd,
     sessionStates,
     continueSession,
+    stopSession,
     plan,
   ]);
 

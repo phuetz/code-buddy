@@ -130,6 +130,7 @@ export function StudioChatPanel({ messages, busy = false, suggestions = [], onSe
               type="button"
               className="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/15"
               onClick={onStop}
+              data-testid="studio-chat-stop"
             >
               <Square className="h-3.5 w-3.5" aria-hidden="true" />
               Stop
@@ -139,6 +140,7 @@ export function StudioChatPanel({ messages, busy = false, suggestions = [], onSe
               type="submit"
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!draft.trim()}
+              data-testid="studio-chat-send"
             >
               <Send className="h-3.5 w-3.5" aria-hidden="true" />
               Send
