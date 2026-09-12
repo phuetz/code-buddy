@@ -1,0 +1,3 @@
+[astra/appbuilder-b4-2026-09-12 7f663e364] fix(cowork): exclude overlays from native titlebar dragging
+ 3 files changed, 121 insertions(+), 3 deletions(-)
+ create mode 100644 cowork/tests/conversation-history-drag-region.test.tsx

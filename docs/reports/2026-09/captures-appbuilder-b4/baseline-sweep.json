@@ -1,0 +1,1942 @@
+[
+  {
+    "flag": "titlebar",
+    "layers": [],
+    "points": [
+      {
+        "label": "New tab",
+        "id": null,
+        "rect": {
+          "x": 8,
+          "y": 7.5,
+          "width": 102.015625,
+          "height": 24,
+          "top": 7.5,
+          "right": 110.015625,
+          "bottom": 31.5,
+          "left": 8
+        },
+        "x": 59.0078125,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-0-before.png",
+        "pointer": "X=159\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 59,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Model: openrouter/free",
+        "id": null,
+        "rect": {
+          "x": 676.859375,
+          "y": 7.5,
+          "width": 158.015625,
+          "height": 24,
+          "top": 7.5,
+          "right": 834.875,
+          "bottom": 31.5,
+          "left": 676.859375
+        },
+        "x": 755.8671875,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-1-before.png",
+        "pointer": "X=856\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 756,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "No face enrolled \u2014 click to enroll yours",
+        "id": null,
+        "rect": {
+          "x": 866.875,
+          "y": 11.5,
+          "width": 101.125,
+          "height": 16,
+          "top": 11.5,
+          "right": 968,
+          "bottom": 27.5,
+          "left": 866.875
+        },
+        "x": 917.4375,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-2-before.png",
+        "pointer": "X=1017\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 917,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Code Buddy core engine active (middlewares + sanitizer)",
+        "id": "runner-badge",
+        "rect": {
+          "x": 976,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1016,
+          "bottom": 39,
+          "left": 976
+        },
+        "x": 996,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-3-before.png",
+        "pointer": "X=1096\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 996,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Clipboard summariser",
+        "id": "clipboard-summary-button",
+        "rect": {
+          "x": 1016,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1056,
+          "bottom": 39,
+          "left": 1016
+        },
+        "x": 1036,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-4-before.png",
+        "pointer": "X=1136\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1036,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Voice chat overlay",
+        "id": "voice-overlay-button",
+        "rect": {
+          "x": 1056,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1096,
+          "bottom": 39,
+          "left": 1056
+        },
+        "x": 1076,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-5-before.png",
+        "pointer": "X=1176\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1076,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Start Code Buddy server",
+        "id": "server-toggle-button",
+        "rect": {
+          "x": 1096,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1136,
+          "bottom": 39,
+          "left": 1096
+        },
+        "x": 1116,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-6-before.png",
+        "pointer": "X=1216\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1116,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Show documentation",
+        "id": "documentation-button",
+        "rect": {
+          "x": 1136,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1176,
+          "bottom": 39,
+          "left": 1136
+        },
+        "x": 1156,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-7-before.png",
+        "pointer": "X=1256\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1156,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Show keyboard shortcuts",
+        "id": "shortcuts-help-button",
+        "rect": {
+          "x": 1176,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1216,
+          "bottom": 39,
+          "left": 1176
+        },
+        "x": 1196,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-8-before.png",
+        "pointer": "X=1296\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1196,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Notifications",
+        "id": null,
+        "rect": {
+          "x": 1216,
+          "y": 0,
+          "width": 40,
+          "height": 39,
+          "top": 0,
+          "right": 1256,
+          "bottom": 39,
+          "left": 1216
+        },
+        "x": 1236,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-9-before.png",
+        "pointer": "X=1336\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1236,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Minimize",
+        "id": null,
+        "rect": {
+          "x": 1256,
+          "y": 0,
+          "width": 48,
+          "height": 39,
+          "top": 0,
+          "right": 1304,
+          "bottom": 39,
+          "left": 1256
+        },
+        "x": 1280,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-10-before.png",
+        "pointer": "X=1380\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1280,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Maximize",
+        "id": null,
+        "rect": {
+          "x": 1304,
+          "y": 0,
+          "width": 48,
+          "height": 39,
+          "top": 0,
+          "right": 1352,
+          "bottom": 39,
+          "left": 1304
+        },
+        "x": 1328,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-11-before.png",
+        "pointer": "X=1428\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1328,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close Code Buddy Studio",
+        "id": null,
+        "rect": {
+          "x": 1352,
+          "y": 0,
+          "width": 48,
+          "height": 39,
+          "top": 0,
+          "right": 1400,
+          "bottom": 39,
+          "left": 1352
+        },
+        "x": 1376,
+        "y": 19.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-titlebar-12-before.png",
+        "pointer": "X=1476\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1376,
+            "y": 20
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showConversationHistory",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-40 flex",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fermer l'historique",
+        "id": null,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "x": 700,
+        "y": 39,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showConversationHistory-0-before.png",
+        "pointer": "X=800\nY=89\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      },
+      {
+        "label": "Fermer",
+        "id": null,
+        "rect": {
+          "x": 283,
+          "y": 10,
+          "width": 24,
+          "height": 24,
+          "top": 10,
+          "right": 307,
+          "bottom": 34,
+          "left": 283
+        },
+        "x": 295,
+        "y": 22,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showConversationHistory-1-before.png",
+        "pointer": "X=395\nY=72\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showMemoryEditor",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 h-full w-[560px] max-w-[95vw] bg-background border-l border-border shadow-2xl z-40 flex flex-col",
+        "rect": {
+          "x": 840,
+          "y": 0,
+          "width": 560,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 840
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": "memory-panel-close",
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showMemoryEditor-0-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showActivityFeed",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[400px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "rect": {
+          "x": 1000,
+          "y": 0,
+          "width": 400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 1000
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "All",
+        "id": "activity-filter-all",
+        "rect": {
+          "x": 1185.75,
+          "y": 13.5,
+          "width": 27.109375,
+          "height": 23,
+          "top": 13.5,
+          "right": 1212.859375,
+          "bottom": 36.5,
+          "left": 1185.75
+        },
+        "x": 1199.3046875,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showActivityFeed-0-before.png",
+        "pointer": "X=1299\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1199,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fleet",
+        "id": "activity-filter-fleet",
+        "rect": {
+          "x": 1212.859375,
+          "y": 13.5,
+          "width": 40.28125,
+          "height": 23,
+          "top": 13.5,
+          "right": 1253.140625,
+          "bottom": 36.5,
+          "left": 1212.859375
+        },
+        "x": 1233,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showActivityFeed-1-before.png",
+        "pointer": "X=1333\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1233,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Scheduled",
+        "id": "activity-filter-scheduled",
+        "rect": {
+          "x": 1253.140625,
+          "y": 13.5,
+          "width": 67.859375,
+          "height": 23,
+          "top": 13.5,
+          "right": 1321,
+          "bottom": 36.5,
+          "left": 1253.140625
+        },
+        "x": 1287.0703125,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showActivityFeed-2-before.png",
+        "pointer": "X=1387\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1287,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Clear activity log",
+        "id": null,
+        "rect": {
+          "x": 1330,
+          "y": 13,
+          "width": 24,
+          "height": 24,
+          "top": 13,
+          "right": 1354,
+          "bottom": 37,
+          "left": 1330
+        },
+        "x": 1342,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showActivityFeed-3-before.png",
+        "pointer": "X=1442\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1342,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 12,
+          "width": 26,
+          "height": 26,
+          "top": 12,
+          "right": 1384,
+          "bottom": 38,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showActivityFeed-4-before.png",
+        "pointer": "X=1471\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showFileActivity",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[400px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "rect": {
+          "x": 1000,
+          "y": 0,
+          "width": 400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 1000
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 12,
+          "width": 26,
+          "height": 26,
+          "top": 12,
+          "right": 1384,
+          "bottom": 38,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showFileActivity-0-before.png",
+        "pointer": "X=1471\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showSessionInsights",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[760px] max-w-[96vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "rect": {
+          "x": 640,
+          "y": 0,
+          "width": 760,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 640
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 12,
+          "width": 26,
+          "height": 26,
+          "top": 12,
+          "right": 1384,
+          "bottom": 38,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSessionInsights-0-before.png",
+        "pointer": "X=1471\nY=75\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 25
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showBookmarksPanel",
+    "layers": [
+      {
+        "class": "fixed inset-y-0 right-0 z-40 w-96 bg-background border-l border-border shadow-2xl flex flex-col",
+        "rect": {
+          "x": 1016,
+          "y": 0,
+          "width": 384,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 1016
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showBookmarksPanel-0-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showTestRunner",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 z-40 flex h-full w-[760px] max-w-[96vw] flex-col border-l border-border bg-background shadow-2xl",
+        "rect": {
+          "x": 640,
+          "y": 0,
+          "width": 760,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 640
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1333,
+          "y": 19.75,
+          "width": 23,
+          "height": 23,
+          "top": 19.75,
+          "right": 1356,
+          "bottom": 42.75,
+          "left": 1333
+        },
+        "x": 1344.5,
+        "y": 31.25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showTestRunner-0-before.png",
+        "pointer": "X=1445\nY=81\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1345,
+            "y": 31
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 19.25,
+          "width": 24,
+          "height": 24,
+          "top": 19.25,
+          "right": 1384,
+          "bottom": 43.25,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 31.25,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showTestRunner-1-before.png",
+        "pointer": "X=1472\nY=81\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 31
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showLiveLauncher",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 h-full w-[640px] max-w-[95vw] bg-background border-l border-border shadow-2xl z-40 flex flex-col",
+        "rect": {
+          "x": 760,
+          "y": 0,
+          "width": 640,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 760
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": "live-launcher-close",
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showLiveLauncher-0-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showFleetPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close fleet panel",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showFleetPanel-0-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showFleetPanel-1-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showSkillsManager",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex flex-col bg-background",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": "skills-manager-refresh",
+        "rect": {
+          "x": 1273.90625,
+          "y": 12,
+          "width": 74.09375,
+          "height": 28,
+          "top": 12,
+          "right": 1348,
+          "bottom": 40,
+          "left": 1273.90625
+        },
+        "x": 1310.953125,
+        "y": 26,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSkillsManager-0-before.png",
+        "pointer": "X=1411\nY=76\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1311,
+            "y": 26
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": "skills-manager-close",
+        "rect": {
+          "x": 1352,
+          "y": 12,
+          "width": 28,
+          "height": 28,
+          "top": 12,
+          "right": 1380,
+          "bottom": 40,
+          "left": 1352
+        },
+        "x": 1366,
+        "y": 26,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSkillsManager-1-before.png",
+        "pointer": "X=1466\nY=76\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1366,
+            "y": 26
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showLessonCandidatePanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showLessonCandidatePanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close lesson candidate panel",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showLessonCandidatePanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showLessonCandidatePanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showUserModelPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Infer working-preference observations from the current session (proposes pending only)",
+        "id": "user-model-infer",
+        "rect": {
+          "x": 1193.578125,
+          "y": 12,
+          "width": 134.421875,
+          "height": 24,
+          "top": 12,
+          "right": 1328,
+          "bottom": 36,
+          "left": 1193.578125
+        },
+        "x": 1260.7890625,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showUserModelPanel-0-before.png",
+        "pointer": "X=1361\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1261,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showUserModelPanel-1-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close user model panel",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showUserModelPanel-2-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showUserModelPanel-3-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showSpecPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSpecPanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close spec panel",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSpecPanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showSpecPanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showMobileSupervisionPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showMobileSupervisionPanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showMobileSupervisionPanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showMobileSupervisionPanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showIdentityPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showIdentityPanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showIdentityPanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showIdentityPanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showDevicePanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showDevicePanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showDevicePanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showDevicePanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showChannelsPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showChannelsPanel-0-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showChannelsPanel-1-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showCompanionPanel",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Refresh companion panel",
+        "id": null,
+        "rect": {
+          "x": 1332,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1356,
+          "bottom": 36,
+          "left": 1332
+        },
+        "x": 1344,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showCompanionPanel-0-before.png",
+        "pointer": "X=1444\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1344,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close companion panel",
+        "id": null,
+        "rect": {
+          "x": 1360,
+          "y": 12,
+          "width": 24,
+          "height": 24,
+          "top": 12,
+          "right": 1384,
+          "bottom": 36,
+          "left": 1360
+        },
+        "x": 1372,
+        "y": 24,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showCompanionPanel-1-before.png",
+        "pointer": "X=1472\nY=74\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1372,
+            "y": 24
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showCompanionPanel-2-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showFocusView",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-50 bg-black/45 backdrop-blur-sm",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showFocusView-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "showNotificationCenter",
+    "layers": [
+      {
+        "class": "fixed inset-0 z-40",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Fond superpos\u00e9 (x=300,y=20)",
+        "x": 300,
+        "y": 20,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 0
+        },
+        "backdrop": true,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/baseline-showNotificationCenter-0-before.png",
+        "pointer": "X=400\nY=70\nSCREEN=0\nWINDOW=2097155",
+        "events": [],
+        "result": "swallowed"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  }
+]

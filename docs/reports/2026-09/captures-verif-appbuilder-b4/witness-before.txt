@@ -1,0 +1,79 @@
+(node:4171946) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4171961) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.0 <clone>/cowork
+
+(node:4171986) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/conversation-history-drag-region.test.tsx (8 tests | 3 failed) 44ms
+     × excludes the rendered history close button and backdrop from native dragging 23ms
+     × protects future controls throughout fixed overlays, not just their current close coordinates 2ms
+     × closes with Escape from the search field 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/conversation-history-drag-region.test.tsx > native titlebar hit regions > excludes the rendered history close button and backdrop from native dragging
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/conversation-history-drag-region.test.tsx:39:93
+     37|   it('excludes the rendered history close button and backdrop from nat…
+     38|     render(<ConversationHistoryDrawer />);
+     39|     expect(hasNativeExclusion(screen.getByRole('button', { name: 'Ferm…
+       |                                                                                             ^
+     40|     expect(hasNativeExclusion(screen.getByRole('button', { name: "Ferm…
+     41|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/conversation-history-drag-region.test.tsx > native titlebar hit regions > protects future controls throughout fixed overlays, not just their current close coordinates
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/conversation-history-drag-region.test.tsx:45:68
+     43|   it('protects future controls throughout fixed overlays, not just the…
+     44|     const { container } = render(<div className="fixed inset-0"><butto…
+     45|     expect(hasNativeExclusion(container.querySelector('button')!)).toB…
+       |                                                                    ^
+     46|   });
+     47|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/conversation-history-drag-region.test.tsx > history dismissal > closes with Escape from the search field
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/conversation-history-drag-region.test.tsx:79:60
+     77|     render(<ConversationHistoryDrawer />);
+     78|     fireEvent.keyDown(screen.getByTestId('history-search'), { key: 'Es…
+     79|     expect(useAppStore.getState().showConversationHistory).toBe(false);
+       |                                                            ^
+     80|     expect(screen.queryByTestId('conversation-history')).toBeNull();
+     81|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 5 passed (8)
+   Start at  19:59:54
+   Duration  438ms (transform 93ms, setup 0ms, import 214ms, tests 44ms, environment 101ms)
+

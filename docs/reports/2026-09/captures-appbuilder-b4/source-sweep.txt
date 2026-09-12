@@ -1,0 +1,77 @@
+cowork/src/renderer/App.tsx:546: className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+cowork/src/renderer/components/ActivityFeed.tsx:162: className="fixed right-0 top-0 bottom-0 w-[400px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col"
+cowork/src/renderer/components/ApprovalDialog.tsx:96: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+cowork/src/renderer/components/ArtifactPanel.tsx:300: : 'fixed right-0 top-0 bottom-0 w-[560px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col'}>
+cowork/src/renderer/components/BatchExecutionDialog.tsx:65: className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/BookmarksPanel.tsx:82: className="fixed inset-y-0 right-0 z-40 w-96 bg-background border-l border-border shadow-2xl flex flex-col"
+cowork/src/renderer/components/BranchSwitcher.tsx:284: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+cowork/src/renderer/components/BtwQuickAsk.tsx:72: className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center px-4 pt-32"
+cowork/src/renderer/components/ChannelsPanel.tsx:107: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/ClawMigrationDialog.tsx:120: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+cowork/src/renderer/components/ClipboardSummaryPanel.tsx:121: className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40"
+cowork/src/renderer/components/CommandPalette.tsx:307: <div className="fixed inset-0 z-50 flex items-start justify-center pt-24" onClick={onClose}>
+cowork/src/renderer/components/CommitComposer.tsx:69: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+cowork/src/renderer/components/CompactStrategyDialog.tsx:99: className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/CompanionPanel.tsx:2897: <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm">
+cowork/src/renderer/components/ConfigModal.tsx:150: className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md"
+cowork/src/renderer/components/ConversationHistoryDrawer.tsx:63: className="fixed inset-0 z-40 flex"
+cowork/src/renderer/components/DesktopSnapshotPanel.tsx:167: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+cowork/src/renderer/components/DevicePanel.tsx:56: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/DiagnosticsPanel.tsx:99: className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/EnrollmentDialog.tsx:238: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+cowork/src/renderer/components/EvolutionPanel.tsx:41: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+cowork/src/renderer/components/ExportDialog.tsx:104: className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+cowork/src/renderer/components/ExportShareableDialog.tsx:123: <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4" data-testid="export-shareable-dialog">
+cowork/src/renderer/components/FileActivityPanel.tsx:80: className="fixed right-0 top-0 bottom-0 w-[400px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col"
+cowork/src/renderer/components/FilePreviewPane.tsx:176: : 'fixed right-0 top-0 bottom-0 w-[480px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col';
+cowork/src/renderer/components/FleetCommandCenter.tsx:833: className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/35 p-4 backdrop-blur-sm lg:p-6"
+cowork/src/renderer/components/FleetPanel.tsx:156: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/FocusView.tsx:98: <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" data-testid="focus-view">
+cowork/src/renderer/components/ForkFromMessageButton.tsx:68: className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+cowork/src/renderer/components/GlobalSearchDialog.tsx:165: className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60 backdrop-blur-sm"
+cowork/src/renderer/components/HelpDocs.tsx:9: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+cowork/src/renderer/components/HooksDryRunDialog.tsx:68: <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4">
+cowork/src/renderer/components/IdentityPanel.tsx:88: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/KanbanPanel.tsx:166: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+cowork/src/renderer/components/KeyboardShortcutsDialog.tsx:83: className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+cowork/src/renderer/components/KnowledgeBaseBrowser.tsx:361: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+cowork/src/renderer/components/KnowledgePanel.tsx:97: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+cowork/src/renderer/components/LessonCandidatePanel.tsx:146: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/LessonsVaultGraph.tsx:79: className="fixed inset-0 z-50 bg-black/35 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/LiveLauncherPanel.tsx:198: className="fixed right-0 top-0 h-full w-[640px] max-w-[95vw] bg-background border-l border-border shadow-2xl z-40 flex flex-col"
+cowork/src/renderer/components/MemoryPanel.tsx:22: className="fixed right-0 top-0 h-full w-[560px] max-w-[95vw] bg-background border-l border-border shadow-2xl z-40 flex flex-col"
+cowork/src/renderer/components/MissionBoardPanel.tsx:278: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+cowork/src/renderer/components/MobileSupervisionPanel.tsx:76: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/ModelInstallDialog.tsx:175: className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+cowork/src/renderer/components/NotificationCenter.tsx:134: className="fixed inset-0 z-40"
+cowork/src/renderer/components/OnboardingWizard.tsx:238: className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/OrchestratorLauncher.tsx:143: className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+cowork/src/renderer/components/PRComposer.tsx:90: <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4" data-testid="pr-composer">
+cowork/src/renderer/components/PermissionDialog.tsx:158: className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50"
+cowork/src/renderer/components/PersonaSwitcherDialog.tsx:155: className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-sm"
+cowork/src/renderer/components/ProjectSelector.tsx:215: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+cowork/src/renderer/components/ProjectSelector.tsx:340: <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+cowork/src/renderer/components/RunnerBadge.tsx:104: className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40"
+cowork/src/renderer/components/SandboxSetupDialog.tsx:97: className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-500 ${fadeOut ? 'opacity-0' : 'opacity-100'}`}
+cowork/src/renderer/components/SciencePanel.tsx:183: className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+cowork/src/renderer/components/ServerDashboard.tsx:114: className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+cowork/src/renderer/components/SessionInsightsPanel.tsx:392: className="fixed right-0 top-0 bottom-0 w-[760px] max-w-[96vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col"
+cowork/src/renderer/components/SessionPruneDialog.tsx:63: <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="session-prune-dialog">
+cowork/src/renderer/components/SessionResumeDialog.tsx:109: className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+cowork/src/renderer/components/ShareLinkDialog.tsx:69: <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4" data-testid="share-link-backdrop">
+cowork/src/renderer/components/SnippetsLibrary.tsx:99: className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-black/50 backdrop-blur-sm"
+cowork/src/renderer/components/SpecPanel.tsx:240: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/SubAgentDashboard.tsx:240: className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+cowork/src/renderer/components/SudoPasswordDialog.tsx:86: <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+cowork/src/renderer/components/TestRunnerPanel.tsx:793: className="fixed right-0 top-0 z-40 flex h-full w-[760px] max-w-[96vw] flex-col border-l border-border bg-background shadow-2xl"
+cowork/src/renderer/components/UserModelPanel.tsx:132: className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm"
+cowork/src/renderer/components/VoiceChatOverlay.tsx:479: className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+cowork/src/renderer/components/WatchedFilesPanel.tsx:72: <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4" data-testid="watched-files-panel">
+cowork/src/renderer/components/onboarding/OnboardingTour.tsx:32: className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+cowork/src/renderer/components/settings/SettingsSkills.tsx:566: <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+cowork/src/renderer/components/skills-manager-page.tsx:128: className="fixed inset-0 z-50 flex flex-col bg-background"
+cowork/src/renderer/components/studio/DesignSystemGallery.tsx:40: className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+cowork/src/renderer/styles/globals.css:390: -webkit-app-region: drag;
+cowork/src/renderer/styles/globals.css:391: app-region: drag;
+cowork/src/renderer/styles/globals.css:400: -webkit-app-region: no-drag;
+cowork/src/renderer/styles/globals.css:401: app-region: no-drag;

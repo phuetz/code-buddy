@@ -1,0 +1,11 @@
+{
+  "publicScreenshots": 24,
+  "ocrPublicScenario": {
+    "failures": 0,
+    "localPathHits": 0
+  },
+  "manualReview": "History scenario checked; sweep captures withheld because faint workspace paths escaped OCR",
+  "privateSweepScreenshots": 158,
+  "textPathScan": "no /home or /tmp paths; clone placeholders used",
+  "frozenFiles": "all five Git blobs match base 695f57b6c"
+}

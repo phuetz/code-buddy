@@ -1,0 +1,185 @@
+[
+  {
+    "flag": "file-preview",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[480px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "rect": {
+          "x": 920,
+          "y": 0,
+          "width": 480,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 920
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Copy",
+        "id": null,
+        "rect": {
+          "x": 1330,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1354,
+          "bottom": 39.5,
+          "left": 1330
+        },
+        "x": 1342,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/fixed-extra-file-preview-0-before.png",
+        "pointer": "X=1442\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1342,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 14.5,
+          "width": 26,
+          "height": 26,
+          "top": 14.5,
+          "right": 1384,
+          "bottom": 40.5,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/fixed-extra-file-preview-1-before.png",
+        "pointer": "X=1471\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  },
+  {
+    "flag": "artifact",
+    "layers": [
+      {
+        "class": "fixed right-0 top-0 bottom-0 w-[560px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col",
+        "rect": {
+          "x": 840,
+          "y": 0,
+          "width": 560,
+          "height": 900,
+          "top": 0,
+          "right": 1400,
+          "bottom": 900,
+          "left": 840
+        }
+      }
+    ],
+    "points": [
+      {
+        "label": "Copy",
+        "id": null,
+        "rect": {
+          "x": 1302,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1326,
+          "bottom": 39.5,
+          "left": 1302
+        },
+        "x": 1314,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/fixed-extra-artifact-0-before.png",
+        "pointer": "X=1414\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1314,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Download",
+        "id": null,
+        "rect": {
+          "x": 1330,
+          "y": 15.5,
+          "width": 24,
+          "height": 24,
+          "top": 15.5,
+          "right": 1354,
+          "bottom": 39.5,
+          "left": 1330
+        },
+        "x": 1342,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/fixed-extra-artifact-1-before.png",
+        "pointer": "X=1442\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1342,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      },
+      {
+        "label": "Close",
+        "id": null,
+        "rect": {
+          "x": 1358,
+          "y": 14.5,
+          "width": 26,
+          "height": 26,
+          "top": 14.5,
+          "right": 1384,
+          "bottom": 40.5,
+          "left": 1358
+        },
+        "x": 1371,
+        "y": 27.5,
+        "disabled": false,
+        "capture": "<clone>/_qa/b4/private-sweep-captures/fixed-extra-artifact-2-before.png",
+        "pointer": "X=1471\nY=78\nSCREEN=0\nWINDOW=2097155",
+        "events": [
+          {
+            "trusted": true,
+            "x": 1371,
+            "y": 28
+          }
+        ],
+        "result": "received"
+      }
+    ],
+    "offset": {
+      "x": 100,
+      "y": 50
+    }
+  }
+]

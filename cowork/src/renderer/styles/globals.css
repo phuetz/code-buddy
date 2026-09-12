@@ -391,7 +391,12 @@
     app-region: drag;
   }
 
-  .titlebar-no-drag {
+  /* Fixed overlays can cover the native titlebar even when they are not its
+     DOM descendants. Exclude the whole interactive surface: z-index alone
+     does not keep Electron's drag region from swallowing pointer events.
+     Pointer-transparent tooltips must leave the underlying drag area intact. */
+  .titlebar-no-drag,
+  .fixed:not(.pointer-events-none) {
     -webkit-app-region: no-drag;
     app-region: no-drag;
   }

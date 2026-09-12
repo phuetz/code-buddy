@@ -1,0 +1,178 @@
+[
+  {
+    "label": "sweep-start",
+    "original_bytes": 1361,
+    "compressed_bytes": 1497,
+    "bytes_saved": 0,
+    "exit_code": 1
+  },
+  {
+    "label": "sweep-baseline",
+    "original_bytes": 2215,
+    "compressed_bytes": 2351,
+    "bytes_saved": 0,
+    "exit_code": 1
+  },
+  {
+    "label": "test-setup",
+    "original_bytes": 1074,
+    "compressed_bytes": 1238,
+    "bytes_saved": 0,
+    "exit_code": 1
+  },
+  {
+    "label": "initial-witness",
+    "original_bytes": 3010,
+    "compressed_bytes": 1206,
+    "bytes_saved": 1804,
+    "exit_code": 1
+  },
+  {
+    "label": "initial-green",
+    "original_bytes": 251,
+    "compressed_bytes": 350,
+    "bytes_saved": 0,
+    "exit_code": 0
+  },
+  {
+    "label": "vite-build",
+    "original_bytes": 47691,
+    "compressed_bytes": 20742,
+    "bytes_saved": 26949,
+    "exit_code": 0
+  },
+  {
+    "label": "typecheck",
+    "original_bytes": 341,
+    "compressed_bytes": 474,
+    "bytes_saved": 0,
+    "exit_code": 0
+  },
+  {
+    "label": "lint",
+    "original_bytes": 360127,
+    "compressed_bytes": 11486,
+    "bytes_saved": 348641,
+    "exit_code": 0
+  },
+  {
+    "command": "timeout 900 git commit -m fix(cowork): exclude overlays from native titlebar dragging",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 230,
+    "filtered_bytes": 230,
+    "compressed_bytes": 230,
+    "bytes_saved": 0,
+    "label": "commit-fix"
+  },
+  {
+    "command": "timeout 900 npx eslint src/renderer/components/ConversationHistoryDrawer.tsx tests/conversation-history-drag-region.test.tsx",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 0,
+    "filtered_bytes": 0,
+    "compressed_bytes": 0,
+    "bytes_saved": 0,
+    "label": "cowork-lint"
+  },
+  {
+    "command": "timeout 900 npx tsc --noEmit",
+    "exit_code": 2,
+    "filter": "raw_on_failure",
+    "original_bytes": 4995,
+    "filtered_bytes": 4995,
+    "compressed_bytes": 5006,
+    "bytes_saved": 0,
+    "label": "cowork-typecheck-base"
+  },
+  {
+    "command": "timeout 900 npx tsc --noEmit",
+    "exit_code": 2,
+    "filter": "raw_on_failure",
+    "original_bytes": 4995,
+    "filtered_bytes": 4995,
+    "compressed_bytes": 5006,
+    "bytes_saved": 0,
+    "label": "cowork-typecheck"
+  },
+  {
+    "command": "timeout 900 git diff -- cowork/src/renderer/components/ConversationHistoryDrawer.tsx cowork/src/renderer/styles/globals.css",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 2451,
+    "filtered_bytes": 2451,
+    "compressed_bytes": 2451,
+    "bytes_saved": 0,
+    "label": "diff"
+  },
+  {
+    "command": "timeout 900 npx vitest run tests/conversation-history-drag-region.test.tsx src/renderer/components/conversation-history-model.test.ts",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 253,
+    "filtered_bytes": 352,
+    "compressed_bytes": 352,
+    "bytes_saved": 0,
+    "label": "final-tests"
+  },
+  {
+    "command": "timeout 900 node _qa/b4/sweep.cjs fixed-fleet showFleetCommandCenter",
+    "exit_code": 1,
+    "filter": "raw_on_failure",
+    "original_bytes": 154,
+    "filtered_bytes": 154,
+    "compressed_bytes": 154,
+    "bytes_saved": 0,
+    "label": "fixed-fleet"
+  },
+  {
+    "command": "timeout 900 node _qa/b4/sweep.cjs fixed",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 3054,
+    "filtered_bytes": 3054,
+    "compressed_bytes": 3054,
+    "bytes_saved": 0,
+    "label": "fixed-sweep"
+  },
+  {
+    "command": "timeout 900 node _qa/b4/sweep.cjs fixed-extra file-preview,artifact",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 106,
+    "filtered_bytes": 106,
+    "compressed_bytes": 106,
+    "bytes_saved": 0,
+    "label": "supplemental-after"
+  },
+  {
+    "command": "timeout 900 node _qa/b4/sweep.cjs counterfactual-extra file-preview,artifact,showHelpDocs,showCommandPalette,showShortcutsDialog,showGlobalSearch,showSnippetsLibrary,showPersonaSwitcher,showResumeChooser,showModelInstallDialog,showOrchestratorLauncher,showEvolutionPanel,showKnowledgePanel,showSciencePanel,showClawMigration,showKanban,showMissionBoard,showDesktopSnapshot,showWorkflowProPanel",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 1103,
+    "filtered_bytes": 1103,
+    "compressed_bytes": 1103,
+    "bytes_saved": 0,
+    "label": "supplemental-before-initial"
+  },
+  {
+    "command": "timeout 900 node _qa/b4/sweep.cjs counterfactual-extra file-preview,artifact,showHelpDocs,showCommandPalette,showShortcutsDialog,showGlobalSearch,showSnippetsLibrary,showPersonaSwitcher,showResumeChooser,showModelInstallDialog,showOrchestratorLauncher,showEvolutionPanel,showKnowledgePanel,showSciencePanel,showClawMigration,showKanban,showMissionBoard,showDesktopSnapshot,showWorkflowProPanel",
+    "exit_code": 0,
+    "filter": "generic",
+    "original_bytes": 1086,
+    "filtered_bytes": 1086,
+    "compressed_bytes": 1086,
+    "bytes_saved": 0,
+    "label": "supplemental-before"
+  },
+  {
+    "command": "timeout 900 npx vitest run tests/conversation-history-drag-region.test.tsx",
+    "exit_code": 1,
+    "filter": "raw_on_failure",
+    "original_bytes": 3009,
+    "filtered_bytes": 3009,
+    "compressed_bytes": 1196,
+    "bytes_saved": 1813,
+    "label": "witness-before"
+  }
+]
