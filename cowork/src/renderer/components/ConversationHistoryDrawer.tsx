@@ -59,7 +59,20 @@ export function ConversationHistoryDrawer() {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex" data-testid="conversation-history">
+    <div
+      className="fixed inset-0 z-40 flex"
+      data-testid="conversation-history"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Historique"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setShow(false);
+        }
+      }}
+    >
       {/* Backdrop */}
       <button
         type="button"
@@ -122,7 +135,11 @@ export function ConversationHistoryDrawer() {
                           onChange={(e) => setDraftTitle(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') commitRename(session.id);
-                            if (e.key === 'Escape') setRenaming(null);
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRenaming(null);
+                            }
                           }}
                           className="min-w-0 flex-1 rounded border border-accent bg-background px-1 py-0.5 text-xs text-foreground focus:outline-none"
                           data-testid="history-rename-input"
