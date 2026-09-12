@@ -41,6 +41,23 @@
       "dismissed": "Écartées"
     }
   },
+  "appStudio": {
+    "newApp": "Nouvelle app",
+    "editor": "Éditeur",
+    "preview": "Aperçu",
+    "versions": "Versions",
+    "run": "Lancer",
+    "export": "Exporter",
+    "deploy": "Déployer",
+    "github": "GitHub",
+    "pushing": "Envoi…",
+    "startNewApp": "Démarrer une nouvelle app",
+    "exportZipTitle": "Exporter le projet au format zip",
+    "noProjectToExport": "Aucun dossier de projet à exporter",
+    "deployTitle": "Préparer une demande de déploiement (outil deploy)",
+    "githubPushTitle": "Créer un dépôt GitHub et pousser ce projet",
+    "noFileSelected": "Aucun fichier sélectionné."
+  },
   "common": {
     "save": "Enregistrer",
     "cancel": "Annuler",

@@ -32,6 +32,23 @@
       "dismissed": "已忽略"
     }
   },
+  "appStudio": {
+    "newApp": "新建应用",
+    "editor": "编辑器",
+    "preview": "预览",
+    "versions": "版本",
+    "run": "运行",
+    "export": "导出",
+    "deploy": "部署",
+    "github": "GitHub",
+    "pushing": "推送中…",
+    "startNewApp": "开始新应用",
+    "exportZipTitle": "将项目导出为 zip 压缩包",
+    "noProjectToExport": "没有可导出的项目目录",
+    "deployTitle": "准备部署请求（部署工具）",
+    "githubPushTitle": "创建 GitHub 仓库并推送此项目",
+    "noFileSelected": "未选择文件。"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
