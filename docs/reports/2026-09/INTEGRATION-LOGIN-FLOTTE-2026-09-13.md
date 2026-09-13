@@ -97,3 +97,12 @@ plus 10 contrôles du paquet, le typecheck et le build verts. Les trois premièr
 tranches de la pile sont donc portées et validées sur la base login. Les six
 tranches suivantes restent ordonnées dans la section de pilotage et ne sont pas
 réservées.
+
+## Intégration GitHub
+
+Après une nouvelle récupération de `origin/main`, sa tête était toujours
+`13e27f057`. Le graphe confirmait une avance rapide de 19 commits, le diff-check
+était vert, le lint global sortait avec le code 0 et le push à blanc était
+accepté. La branche cumulée a donc été poussée directement sur GitHub :
+`origin/main` est passé de `13e27f057` à `dc66232a8`. Le paquet npm n'a pas été
+publié.
