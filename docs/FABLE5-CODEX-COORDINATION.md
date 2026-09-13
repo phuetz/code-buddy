@@ -17,6 +17,10 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Arrêt FleetBridge à la fermeture Cowork 2026-09-14 | **Claude Opus + Codex — VALIDÉ LOCAL** | Branche intégration après `ab968f226`, port sélectif du lot 3 Opus | Instance existante arrêtée une seule fois, délai 3 s, reprises désarmées avant nettoyage sandbox, chemins normal et dev câblés. | Opus 184 tests voisins ; contre-validation Cowork 75/75, validate noyau ciblé 89/89 + lint/typechecks/pack. Pas de sortie Electron réelle revendiquée. |
+
+| P1 | Frontière navigateur catalogue outils Cowork 2026-09-14 | **Codex — RÉSERVÉ** | Branche `integration/improvements-persistence-2026-09-13`, base `ab968f226` | Séparer avertissement runtime des métadonnées pures pour compiler les profils outils côté renderer ; imports runtime conservés fonctionnels. | src/tools/metadata.ts, nouveau tool-effect.ts, trois imports runtime et test effet ; test navigateur Cowork délégué séparément. Aucun shim logger/exports manquants. |
+
 | P1 | Exemples publics salons Fleet 2026-09-14 | **Codex — CORRIGÉ LOCAL** | Branche `integration/improvements-persistence-2026-09-13`, après `d579f26ec` | Noms privés remplacés par identités fictives dans quatre exemples source/doc/test. | Garde basée sur git ls-files : défaut apparu après ajout au suivi ; confidentialité et CLI 41/41 verts ; validate ciblé, lint, typechecks et pack verts. |
 
 | P1 | Réparation bundle Electron Cowork 2026-09-14 | **Claude Opus build — RÉSERVÉ, piloté par Codex** | Worktree `~/DEV/cb-cowork-build-opus-2026-09-14`, branche `fix/cowork-build-opus-2026-09-14`, base `d579f26ec` | Corriger résolution des branches mobiles AlaSQL dans bundle main et vérifier build réel ; conserver SQL livré. | Uniquement config build Cowork/tests dédiés/rapport ; pas dépendances, installation, Electron profil réel, commit/push. Autre session Opus possède FleetBridge/FleetPanel ailleurs. |

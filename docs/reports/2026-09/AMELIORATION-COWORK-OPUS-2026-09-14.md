@@ -10,6 +10,12 @@
 
 ## Statut
 
+**Lot 3 livré au pilote, non commité** (2026-09-14). À la sortie réelle de Cowork, le
+`FleetBridge` créé au boot est désormais fermé : délai borné, une seule fois, sans créer de
+singleton, sans reconnexion ensuite. Delta du lot 3 : `cowork/src/main/index.ts` (10 lignes
+ajoutées, aucune retirée) et deux fichiers nouveaux. Les fichiers de la seconde livraison sont
+intacts (empreintes SHA-256 identiques avant et après).
+
 **Lot 2 livré au pilote, non commité** (2026-09-14). Les trois défauts confirmés par la revue
 de la première livraison sont corrigés, avec tests rouges → verts (section « Lot 2 »). Les mêmes
 quatre fichiers sont touchés, aucun nouveau.
@@ -66,6 +72,65 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 3 — fermeture du FleetBridge à la sortie réelle d'Electron
+
+### Constat
+
+`FleetBridge.shutdown()` n'était appelé nulle part : `main/index.ts` crée l'instance au boot
+(`fleetBridge = new FleetBridge(sendToRenderer)`, variable de module, pas le singleton
+`getFleetBridge()`), mais aucun chemin de sortie ne la fermait. Pendant les longues étapes de
+nettoyage (sandbox WSL/Lima jusqu'à 30 s chacune), les reprises Fleet restaient armées, et les
+sockets n'étaient pas fermées proprement.
+
+Chemins de sortie existants, vérifiés :
+
+| Déclencheur | Chemin | Fermeture Fleet (lot 3) |
+| --- | --- | --- |
+| Dernière fenêtre fermée (Linux/Windows, macOS dev) | `window-all-closed` → `await cleanupSandboxResources()` → `app.quit()` → `before-quit` voit `isCleaningUp` et laisse sortir | lancée dès le début de `cleanupSandboxResources`, attendue avant `closeLogFile()` |
+| Cmd+Q, menu/tray, `app.quit()` au boot raté | `before-quit` (prod) → `preventDefault` → `await cleanupSandboxResources()` → `app.quit()` | idem |
+| SIGTERM / SIGINT | `app.quit()` → `before-quit` | idem |
+| Tout quit en dev (`VITE_DEV_SERVER_URL`) | chemin rapide synchrone de `before-quit` | `void shutdownFleetBridgeForQuit(fleetBridge)` : désarmement synchrone, fermeture au mieux |
+
+### Correctif
+
+- **Nouveau** `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` :
+  `shutdownFleetBridgeForQuit(bridge, timeoutMs = FLEET_BRIDGE_QUIT_TIMEOUT_MS = 3 000)`.
+  - `null` → `'no-bridge'`, sans rien créer ; import de `FleetBridge` en type seulement, jamais
+    `getFleetBridge()`.
+  - Idempotent : une promesse par instance (`WeakMap`), quel que soit le nombre de chemins de
+    sortie qui appellent.
+  - Borné : course avec un timer `unref()`, effacé à la fin → `'closed'` | `'timed-out'` |
+    `'failed'` ; ne rejette jamais ; journalise seulement le dépassement et l'échec (écrire après
+    `closeLogFile()` rouvrirait le journal).
+  - `FleetBridge.shutdown()` passe `stopped` à vrai avant son premier `await` : reprises et
+    tentatives en vol sont désarmées immédiatement, même si la fermeture des sockets dépasse le
+    budget.
+- `cowork/src/main/index.ts` (seul fichier existant modifié) : import ; dans
+  `cleanupSandboxResources()`, appel juste après les arrêts synchrones et avant tout `await`, puis
+  `await` du résultat après les autres arrêts et avant `sessionManager.dispose()`/`closeDatabase()`/
+  `closeLogFile()`, avec le journal `[App] Fleet bridge closed` ; appel `void` dans le chemin
+  rapide dev. Aucune refonte de l'init global, aucune modification de `fleet-bridge.ts`.
+
+### Tests du lot 3 — `cowork/tests/fleet-bridge-quit-lifecycle.test.ts` (nouveau, 9 tests)
+
+`main/index.ts` n'est pas importable en test (effets de boot Electron) : le câblage est vérifié
+statiquement, comme `single-mainwindow-sync.test.ts` ; le comportement est vérifié sur le helper
+avec un **vrai `FleetBridge`** et un faux listener.
+
+| Test | 1ʳᵉ exécution (sans helper) | 2ᵉ (helper, sans câblage) | Après câblage |
+| --- | --- | --- | --- |
+| câblage : `cleanupSandboxResources` appelle avant tout `await`, attend avant `closeLogFile()` | rouge (module absent) | **rouge** (-1 : aucun appel) | vert |
+| câblage : chemin rapide dev appelle aussi | rouge (module absent) | **rouge** | vert |
+| câblage : jamais `getFleetBridge(` + import du helper | rouge (module absent) | **rouge** (import absent) | vert |
+| sans bridge → `'no-bridge'`, `getFleetBridge()` lève toujours (aucun singleton), aucun listener | rouge (module absent) | vert | vert |
+| vrai bridge (pair joignable + pair en panne) : `'closed'`, socket fermée, 60 s de timers simulés sans nouveau listener, `reconnectPeer` → `Fleet bridge is stopped` | rouge (module absent) | vert | vert |
+| deux appels concurrents + un tardif → un seul `shutdown()` | rouge (module absent) | vert | vert |
+| `disconnect()` qui ne rend jamais la main : `'timed-out'` à 3 000 ms, erreur journalisée, aucune reconnexion ensuite | rouge (module absent) | vert | vert |
+| `shutdown()` qui rejette → `'failed'` journalisé, pas d'exception | rouge (module absent) | vert | vert |
+| timer effacé après fermeture (`vi.getTimerCount() === 0`) | rouge (module absent) | vert | vert |
+
+Le rouge significatif est la 2ᵉ exécution : le helper existe, mais `index.ts` ne l'appelle pas.
 
 ## Lot 2 — défauts confirmés par la revue du pilote
 
@@ -124,6 +189,22 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 3
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-bridge-quit-lifecycle.test.ts` sans helper | échec d'import (module absent). |
+| même commande, helper présent, `index.ts` non câblé | **3 rouges** (câblage) / 6 verts. |
+| même commande après câblage | **9/9 verts**. |
+| `fleet-bridge-quit-lifecycle` + `fleet-bridge` avec `--sequence.shuffle` | **30/30 verts**. |
+| 20 suites Fleet voisines + `fleet-bridge-quit-lifecycle` + `single-mainwindow-sync` + `ipc-registration-selfcontained` | **23 fichiers, 184 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0 src/main/fleet/fleet-bridge-lifecycle.ts tests/fleet-bridge-quit-lifecycle.test.ts` | Propre. |
+| `node scripts/lint.cjs src/main/index.ts` | Propre. |
+| Prettier `--check` sur les deux nouveaux fichiers | Conforme. |
+| `tsc --noEmit -p tsconfig.json` | 0 erreur dans `cowork/src` ; 20 erreurs noyau connues inchangées. |
+| `sha256sum` des 4 fichiers de la seconde livraison | Identiques aux empreintes du journal 01:23. |
+| Build global | Non relancé (consigne). |
+
 ### Lot 2
 
 | Commande | Résultat |
@@ -174,6 +255,30 @@ comportement des tests existants.
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 3
+
+- Pas d'Electron réel : aucune sortie effective observée. Le câblage est prouvé par lecture
+  statique du source ; le comportement, par le helper exécuté sur un vrai `FleetBridge`.
+- La découverte périodique (`discoveryTimer`, `setInterval` 5 min, et son `setTimeout` initial)
+  n'est pas arrêtée à la sortie. Elle ne reconnecte rien (`listPeers()` ne sonde plus un bridge
+  arrêté), mais peut encore lancer `discoverPeers()` pendant un long nettoyage (hors périmètre, voir
+  ci-dessous).
+- `FleetBridge.shutdown()` ferme les sockets l'une après l'autre : au-delà de quelques pairs lents,
+  le budget de 3 s est atteint et la sortie continue (l'OS récupère les sockets). Paralléliser
+  toucherait `fleet-bridge.ts`, volontairement laissé intact.
+- Commande pour le pilote (lot 3 seul, après revue) :
+  `git add cowork/src/main/index.ts cowork/src/main/fleet/fleet-bridge-lifecycle.ts
+  cowork/tests/fleet-bridge-quit-lifecycle.test.ts docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md
+  docs/FABLE5-CODEX-COORDINATION.md` puis
+  `git commit -m "fix(cowork): close the fleet bridge when the app quits"`.
+
+## Prochain lot suggéré après le lot 3 (non démarré, en attente de passation)
+
+**Lot 4 — présence Fleet périmée** (point 1 ci-dessous, désormais prioritaire : la fermeture à la
+sortie est faite). En option, dans le même lot ou un micro-lot `main` séparé : arrêter
+`discoveryTimer` et son premier `setTimeout` au début de `cleanupSandboxResources`, et
+paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-bridge.ts`).
+
 ## Prochain lot suggéré (non démarré, en attente de passation)
 
 **Lot 3 — présence Fleet périmée + fermeture propre à la sortie**, borné à `cowork/` :
@@ -185,14 +290,35 @@ comportement des tests existants.
    Ajouter une horloge partagée légère pour que « vu il y a » avance sans événement (aujourd'hui
    figé dans `FleetPanel`). Tests happy-dom sous timers simulés. Aucune reconnexion forcée (un
    pair ancien sans heartbeat ne doit pas osciller).
-2. **`FleetBridge.shutdown()` jamais appelé** dans `cowork/src/main/index.ts` : le brancher sur la
-   séquence de sortie existante, borné par le `withTimeout` déjà utilisé pour `mcpManager`, avec
-   un test de câblage.
+2. ~~**`FleetBridge.shutdown()` jamais appelé** dans `cowork/src/main/index.ts`~~ — **fait au
+   lot 3** (helper borné dédié plutôt que `withTimeout`, qui rejette et ne partage pas l'appel entre
+   chemins de sortie).
 3. Option : fusionner le double `peer.describe` émis par `authenticated` puis `reconnected`.
    Grâce à la génération du lot 2, la première réponse est déjà ignorée ; il reste une requête
    réseau inutile.
 
 ## Journal
+
+### 01:23 — Lot 3 : fermeture réelle du FleetBridge à la sortie (avant toute inspection)
+
+Seconde passe revue et copiée dans la branche d'intégration par Codex. Périmètre du lot 3 : cycle
+d'arrêt de `cowork/src/main/index.ts` (+ helper/export FleetBridge éventuel), tests lifecycle
+dédiés, rapport, réservation. Interdits ajoutés : `FleetPanel` et ses tests, présence
+silencieuse, `cowork/vite.config.ts`/build/config/dépendances (autre Opus), build global.
+
+Base du lot 3 = seconde livraison, empreintes SHA-256 avant toute modification :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/main/fleet/fleet-bridge.ts` | `c7c001b9be300359570e5c985bb4a35e1dd864b6d7526757b5062da0e5cf7ebe` |
+| `cowork/src/renderer/components/FleetPanel.tsx` | `a2d5868e749f3be104d4cbee8544d4bb64ddc6718f13fca3f920df8832a17c6c` |
+| `cowork/tests/fleet-bridge.test.ts` | `750198f37c4e75a3d71a27ed5224df2dfbfadce6a8256e67276144b03e82562d` |
+| `cowork/tests/fleet-panel-connection.test.tsx` | `27955a569a7af12b2dc23ae1f54e57e475d0b0abb18b7c73806cd1af962a3a5d` |
+| `cowork/src/main/index.ts` (identique à HEAD) | `c3e82bf963ed1d52e56cc92bd306cd6d2f81d36953b3c11ea2135f5be9999fa4` |
+
+La copie de sauvegarde hors dépôt (`mkdir`/`cp` vers `/tmp`) a demandé une approbation :
+non contournée. Choix : ne pas retoucher les fichiers de la seconde livraison, pour que le delta du
+lot 3 soit `git diff cowork/src/main/index.ts` plus des fichiers nouveaux.
 
 ### 01:11 — Lot 2 : trois défauts confirmés par la revue du pilote (avant toute modification)
 
@@ -249,3 +375,8 @@ Fleet décrites dans `COWORK-FLEET-TRANSPORT-2026-09-14.md`. Reprise Cowork :
 69/69 tests, lint ciblé propre ; les 20 diagnostics TypeScript sont identiques
 à la base. La suite complète du noyau est verte (38 538 tests). Les prochains
 lots fermeture Electron et build restent dans leurs worktrees réservés.
+
+Contre-validation lot 3 : cinq suites Cowork, **75/75 verts**, lint ciblé propre ;
+`npm run validate -- tests/fleet/fleet-listener.test.ts tests/security/donnees-personnelles.test.ts`
+vert (89 tests, plus lint/typechecks/pack). La sortie réelle Electron reste
+non testée ; helper et câblage sont vérifiés comme décrit ci-dessus.

@@ -128,6 +128,7 @@ import { ProjectEvolutionService } from './project/project-evolution';
 import { SubAgentBridge } from './agent/sub-agent-bridge';
 import { OrchestratorBridge } from './agent/orchestrator-bridge';
 import { FleetBridge } from './fleet/fleet-bridge';
+import { shutdownFleetBridgeForQuit } from './fleet/fleet-bridge-lifecycle';
 import { SagaRunner } from './fleet/saga-runner';
 import { resolveWorkDir } from './ipc/ipc-workdir';
 import {
@@ -2443,6 +2444,9 @@ async function cleanupSandboxResources(): Promise<void> {
   tray?.destroy();
   tray = null;
   liveLauncherBridge?.shutdown();
+  // Disarm fleet reconnection now (the sandbox steps below can take tens of
+  // seconds) and let the peer sockets close alongside them; awaited, bounded, below.
+  const fleetBridgeClosing = shutdownFleetBridgeForQuit(fleetBridge);
 
   // 停止远程控制
   try {
@@ -2513,6 +2517,10 @@ async function cleanupSandboxResources(): Promise<void> {
   } catch (error) {
     logError('[App] Error stopping clipboard watcher:', error);
   }
+
+  // Never rejects; a hang is cut at FLEET_BRIDGE_QUIT_TIMEOUT_MS.
+  const fleetBridgeOutcome = await fleetBridgeClosing;
+  if (fleetBridgeOutcome === 'closed') log('[App] Fleet bridge closed');
 
   sessionManager?.dispose();
   try {
@@ -2585,6 +2593,8 @@ app.on('before-quit', async (event) => {
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
       liveLauncherBridge?.shutdown();
+      // Synchronously disarms fleet reconnection; sockets close best-effort.
+      void shutdownFleetBridgeForQuit(fleetBridge);
       sessionManager?.dispose();
       try {
         closeDatabase();
