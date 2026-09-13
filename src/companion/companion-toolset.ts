@@ -408,8 +408,10 @@ export function extractImagePathFromToolResult(
     } catch {
       // not JSON
     }
-    // search for absolute image path in output
-    const match = result.output.match(/(?:^|[\s"'`])(\/[^\s"'`]+\.(?:png|jpe?g|webp))/i);
+    // Search for an absolute POSIX or Windows image path in human-readable output.
+    const match = result.output.match(
+      /(?:^|[\s"'`])((?:[a-z]:[\\/]|\/)[^\s"'`]+\.(?:png|jpe?g|webp))/i,
+    );
     if (match && match[1]) {
       return match[1];
     }

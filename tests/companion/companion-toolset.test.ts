@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import pathModule from 'path';
 import {
   isCompanionToolsEnabled,
   isForbiddenCompanionTool,
@@ -346,7 +347,7 @@ describe('companion-toolset', () => {
         output: 'ok',
         data: { mediaPath: 'media/images/photo.jpg' },
       }, '/workspace');
-      expect(path).toBe('/workspace/media/images/photo.jpg');
+      expect(path).toBe(pathModule.resolve('/workspace', 'media/images/photo.jpg'));
     });
 
     it('extracts from JSON output string', () => {
@@ -355,6 +356,15 @@ describe('companion-toolset', () => {
         output: JSON.stringify({ outputPath: '/workspace/media/images/drawn.webp' }),
       });
       expect(path).toBe('/workspace/media/images/drawn.webp');
+    });
+
+    it('extracts an absolute Windows image path from human-readable output', () => {
+      const imagePath = String.raw`D:\workspace\media\images\photo.jpg`;
+      const extracted = extractImagePathFromToolResult({
+        success: true,
+        output: `Image generated at ${imagePath}`,
+      });
+      expect(extracted).toBe(imagePath);
     });
 
     it('returns undefined when tool failed or has no image', () => {
