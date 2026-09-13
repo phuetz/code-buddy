@@ -107,6 +107,12 @@ accepté. La branche cumulée a donc été poussée directement sur GitHub :
 `origin/main` est passé de `13e27f057` à `dc66232a8`. Le paquet npm n'a pas été
 publié.
 
+Une seconde avance rapide a ensuite intégré les tranches 4 à 9 et la clôture
+CI portable : `origin/main` est passé de `ded4cd165` à `808e986f8`. Cette
+version contient donc l'ensemble de la modernisation DGM, de la gestion des
+outils, de la reprise de flotte, de Sense et de l'intégration MCP
+WorkflowBuilder décrits ci-dessous. Le paquet npm reste inchangé.
+
 ## Tranche 4 — skills, sandbox et DGM
 
 La modernisation DGM est portée avec le confinement Landlock/seccomp, la
