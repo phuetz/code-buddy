@@ -147,3 +147,10 @@ contrôles du paquet, le typecheck et le lint sont également verts.
 Les commits `fb1a6d734` et `c74197c80` bornent les attentes réseau du bridge
 Sense et préservent les événements reçus dans un ordre différent. Les tests
 Rust passent à 42/42 et les trois suites d'intégration TypeScript donnent 20/20.
+
+## Tranche 8 — outillage du harnais
+
+Les commits `996693e15` et `780f55d6a` exposent les métadonnées de mission et
+coordonnent les demandes d'index Code Explorer. La contre-validation donne six
+fichiers et 138 tests verts, plus 10 contrôles du paquet, typecheck, build et
+lint verts.
