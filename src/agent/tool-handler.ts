@@ -16,6 +16,7 @@
  * Tool instances are lazy-loaded on first access for optimal startup time.
  */
 
+import { streamToolOutput } from '../tools/stream-tool-output.js';
 import {
   TextEditorTool,
   MorphEditorTool,
@@ -1258,14 +1259,24 @@ export class ToolHandler {
       ...(Object.keys(contextExtra).length > 0 ? { extra: contextExtra } : {}),
     };
 
+    const toolCatalog = toolName === 'code_exec' || toolName === 'tool_search' ? [
+      ...this.registry.getSchemas().map(tool => ({
+        ...tool, keywords: this.registry.get(tool.name)?.metadata.keywords,
+      })),
+      ...getMCPManager().getTools().map(tool => ({ name: tool.name, description: tool.description, parameters: tool.inputSchema })),
+      ...this.deps.marketplace.getTools().map(name => {
+        const definition = this.deps.marketplace.getToolDefinition(name);
+        return { name: `plugin__${name}`, description: definition?.description ?? '', parameters: definition?.parameters };
+      }),
+    ].filter(tool => isToolNameAllowed(tool.name) && isToolVisibleForSurface(tool.name)) : [];
+
+    if (toolName === 'tool_search') {
+      context = { ...context, extra: { ...context.extra, toolSearchCatalog: toolCatalog } };
+    }
+
     if (toolName === 'code_exec') {
-      const availableTools = Array.from(new Set([
-        ...this.registry.getNames(),
-        ...getMCPManager().getTools().map((tool) => tool.name),
-        ...this.deps.marketplace.getTools(),
-      ]))
-        .filter((name) => name !== 'code_exec' && name !== 'exec' && isToolNameAllowed(name))
-        .sort();
+      const availableTools = [...new Set(toolCatalog.map(tool => tool.name))]
+        .filter(name => name !== 'code_exec' && name !== 'exec').sort();
       // HTTP uses one host agent and swaps logical conversations under a
       // mutex. Its SessionStore ID therefore cannot isolate code_exec state;
       // the opaque recovery scope is the authoritative logical session.
@@ -1279,7 +1290,11 @@ export class ToolHandler {
         agentId: stateAgentId,
         cwd: context.cwd,
         availableTools,
-        executor: async (nestedToolName, nestedArgs) => {
+        abortSignal,
+        onOutput: typeof executionExtra?.codeExecOnOutput === 'function' ? executionExtra.codeExecOnOutput as (delta: string) => void : undefined,
+        toolMetadata: toolCatalog.map(tool => ({ name: tool.name, description: tool.description })),
+        parallelTools: availableTools.filter(name => this.registry.get(name)?.metadata.fleetSafe === true && this.registry.get(name)?.metadata.effect === 'read'),
+        executor: async (nestedToolName, nestedArgs, nestedSignal) => {
           // Defense in depth: code_exec is omitted from the child bridge and
           // rejected again here so tools.call('code_exec', ...) cannot recurse.
           if (nestedToolName === 'code_exec' || nestedToolName === 'exec') {
@@ -1306,6 +1321,7 @@ export class ToolHandler {
             },
           }, {
             ...(executionExtra ?? {}),
+            abortSignal: nestedSignal ?? abortSignal,
             recoverySessionId,
           });
         },
@@ -1660,7 +1676,7 @@ export class ToolHandler {
 
   /**
    * Execute a tool with streaming output.
-   * Currently only supports bash. Falls back to executeTool for other tools.
+   * Supports process output, code_exec yields and progress-producing tools.
    * Yields string deltas for real-time output.
    */
   public async *executeToolStreaming(
@@ -1679,6 +1695,12 @@ export class ToolHandler {
     // exists only to yield chunks, not to skip the guarded dispatch.
     if (toolName === 'bash') {
       return yield* this.executeStreamingBash(toolCall, executionExtra, startTime);
+    }
+
+    if (toolName === 'code_exec') {
+      return yield* streamToolOutput((abortSignal, codeExecOnOutput) => this.executeTool(toolCall, {
+        ...(executionExtra ?? {}), abortSignal, codeExecOnOutput,
+      }), abortSignalFromExecutionExtra(executionExtra));
     }
 
     // Reason: stream MCTS progress events in real-time

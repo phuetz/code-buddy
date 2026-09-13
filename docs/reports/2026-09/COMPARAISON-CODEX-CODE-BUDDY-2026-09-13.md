@@ -1,6 +1,6 @@
 # Améliorations de Code Buddy tirées du code de Codex
 
-Audit du 13 septembre 2026, demandé par Patrice. **Quatre chantiers concrets retenus**, dont deux urgents dans l'exécution streaming. Ils sont proposés ici ; leur implémentation ne fait pas partie des quatre corrections sessions/mémoire déjà livrées dans `AUDIT-AMELIORATIONS-2026-09-13.md`.
+Audit du 13 septembre 2026, demandé par Patrice. **Mise à jour : les quatre propositions sont désormais implémentées dans la tranche `HARNAIS-CODEX-TOOL-SEARCH-2026-09-13.md` ; le texte ci-dessous conserve les constats avant correction.** **Quatre chantiers concrets retenus**, dont deux urgents dans l'exécution streaming. Ils sont proposés ici ; leur implémentation ne fait pas partie des quatre corrections sessions/mémoire déjà livrées dans `AUDIT-AMELIORATIONS-2026-09-13.md`.
 
 ## Source et méthode
 

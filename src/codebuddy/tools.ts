@@ -5,6 +5,7 @@
  * Tools are now organized in modular files under tool-definitions/.
  */
 
+import { TOOL_METADATA as SEARCH_TOOL_METADATA } from '../tools/metadata.js';
 import type { CodeBuddyTool, JsonSchemaProperty } from "./client.js";
 import { setDeferredMCPSchemas } from "../tools/deferred-schema-state.js";
 import { MCPManager, MCPTool } from "../mcp/client.js";
@@ -759,6 +760,8 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
       allTools.map((t) => ({
         name: t.function.name,
         description: t.function.description ?? '',
+        parameters: t.function.parameters,
+        keywords: SEARCH_TOOL_METADATA.find(meta => meta.name === t.function.name)?.keywords,
       })),
     );
   } catch {

@@ -10,7 +10,7 @@ export const CODE_EXEC_TOOL: CodeBuddyTool = {
   function: {
     name: 'code_exec',
     description:
-      'Run bounded JavaScript orchestration in an isolated local process. Use await tools.<name>({...}) or tools.call(name, {...}) to invoke normal Code Buddy tools; nested effects retain confirmations and policies. Helpers: text(), store()/load(), ALL_TOOLS, yield_control().',
+      'Run bounded JavaScript orchestration in an isolated local process. Use await tools.<name>({...}) or tools.call(name, {...}) to invoke normal Code Buddy tools; nested effects retain confirmations and policies. Results are structured {success, output?, data?, error?}. Helpers: text(), store()/load(), ALL_TOOLS ({name, description}), ALL_TOOL_NAMES, await yield_control() for live output. Promise.all runs approved read tools in bounded parallelism; writes remain ordered.',
     parameters: {
       type: 'object',
       properties: {

@@ -165,6 +165,16 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     expect(observedScopes).toEqual(['logical-session-a']);
   });
 
+  it('streams explicit code_exec yields through the guarded ToolHandler', async () => {
+    const generator = handler.executeToolStreaming(toolCall('stream-probe', `text('PHASE_ONE'); await yield_control(); text('PHASE_TWO');`));
+    const chunks: string[] = [];
+    let next = await generator.next();
+    while (!next.done) { chunks.push(next.value); next = await generator.next(); }
+    expect(chunks.join('')).toBe('PHASE_ONE');
+    expect(next.value.success).toBe(true);
+    expect(next.value.output).toContain('PHASE_TWO');
+  });
+
   it('keeps code_exec store/load private when one host handler swaps sessions', async () => {
     const writeA = await handler.executeTool(
       toolCall('store-a', 'store("private", "A-only");'),

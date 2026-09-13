@@ -17,6 +17,10 @@
   ],
   "main": "dist/index.js",
   "exports": {
+    "./harness": {
+      "types": "./dist/harness/index.d.ts",
+      "import": "./dist/harness/index.js"
+    },
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"

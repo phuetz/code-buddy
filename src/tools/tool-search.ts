@@ -11,14 +11,29 @@
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
 import { resolveToolEffect } from './metadata.js';
+import type { IToolExecutionContext } from './registry/types.js';
 
 // ============================================================================
 // BM25 Implementation
 // ============================================================================
 
+const QUERY_EQUIVALENTS: Record<string, readonly string[]> = {
+  lire: ['read', 'view'], fichier: ['file'], fichiers: ['file'],
+  dossier: ['directory'], dossiers: ['directory'], chercher: ['search'],
+  rechercher: ['search'], modifier: ['edit', 'replace'], creer: ['create'],
+  memoire: ['memory'], executer: ['execute', 'run'], commande: ['command'],
+};
+
 /** BM25 parameters */
 const K1 = 1.2;   // Term frequency saturation
 const B = 0.75;    // Length normalization
+
+export interface SearchableTool {
+  name: string;
+  description: string;
+  keywords?: string[];
+  parameters?: unknown;
+}
 
 interface ToolDocument {
   name: string;
@@ -37,10 +52,11 @@ interface ToolDocument {
  */
 function tokenize(text: string): string[] {
   return text
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .normalize('NFKD').replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 1);
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
 }
 
 /**
@@ -49,15 +65,20 @@ function tokenize(text: string): string[] {
 export class BM25Index {
   private documents: ToolDocument[] = [];
   private avgDL = 0;
+  private catalog = new Map<string, SearchableTool>();
+
+  getTool(name: string): SearchableTool | undefined { return this.catalog.get(name); }
   private idf = new Map<string, number>();
 
   /**
    * Add tool definitions to the index.
    */
-  index(tools: Array<{ name: string; description: string; keywords?: string[] }>): void {
-    this.documents = tools.map(t => {
+  index(tools: SearchableTool[]): void {
+    this.idf.clear();
+    this.catalog = new Map(tools.map(tool => [tool.name, tool]));
+    this.documents = [...this.catalog.values()].map(t => {
       const tokens = [
-        ...tokenize(t.name),
+        ...Array.from({ length: 3 }, () => tokenize(t.name)).flat(),
         ...tokenize(t.description),
         ...(t.keywords ?? []).flatMap(k => tokenize(k)),
       ];
@@ -80,15 +101,14 @@ export class BM25Index {
 
     // Compute IDF for all terms
     const N = this.documents.length;
-    const allTerms = new Set<string>();
+    const frequencies = new Map<string, number>();
     for (const doc of this.documents) {
       for (const token of doc.tf.keys()) {
-        allTerms.add(token);
+        frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
       }
     }
 
-    for (const term of allTerms) {
-      const df = this.documents.filter(d => d.tf.has(term)).length;
+    for (const [term, df] of frequencies) {
       this.idf.set(term, Math.log((N - df + 0.5) / (df + 0.5) + 1));
     }
   }
@@ -98,11 +118,12 @@ export class BM25Index {
    * Returns results sorted by BM25 score (highest first).
    */
   search(query: string, maxResults: number = 10): Array<{ name: string; description: string; score: number }> {
-    const queryTokens = tokenize(query);
+    const queryTokens = [...new Set(tokenize(query).flatMap(term => [term, ...(QUERY_EQUIVALENTS[term] ?? [])]))];
+    const limit = Number.isFinite(maxResults) ? Math.max(1, Math.min(50, Math.floor(maxResults))) : 10;
     if (queryTokens.length === 0) return [];
 
     const scored = this.documents.map(doc => {
-      let score = 0;
+      let score = doc.name.toLowerCase() === query.trim().toLowerCase() ? 100 : 0;
       for (const qToken of queryTokens) {
         const tf = doc.tf.get(qToken) ?? 0;
         const idf = this.idf.get(qToken) ?? 0;
@@ -112,13 +133,15 @@ export class BM25Index {
         const denominator = tf + K1 * (1 - B + B * (doc.length / this.avgDL));
         score += idf * (numerator / denominator);
       }
+      const nameTerms = new Set(tokenize(doc.name));
+      if (queryTokens.every(term => nameTerms.has(term))) score += 5;
       return { name: doc.name, description: doc.description, score };
     });
 
     return scored
       .filter(s => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxResults);
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, limit);
   }
 }
 
@@ -132,7 +155,7 @@ let _index: BM25Index | null = null;
 /**
  * Initialize the BM25 index with available tools.
  */
-export function initToolSearchIndex(tools: Array<{ name: string; description: string; keywords?: string[] }>): void {
+export function initToolSearchIndex(tools: SearchableTool[]): void {
   _index = new BM25Index();
   _index.index(tools);
 }
@@ -165,12 +188,15 @@ export class ToolSearchTool extends BaseTool {
     };
   }
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const query = input.query as string;
-    if (!query) return this.error('query is required');
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    const query = input.query;
+    if (typeof query !== 'string' || !query.trim() || query.length > 2000) return this.error('query must be a nonempty string of at most 2000 characters');
+    if (input.max_results !== undefined && (typeof input.max_results !== 'number' || !Number.isInteger(input.max_results) || input.max_results < 1 || input.max_results > 50)) return this.error('max_results must be an integer between 1 and 50');
 
     const maxResults = typeof input.max_results === 'number' ? input.max_results : 10;
-    const index = getToolSearchIndex();
+    const catalog = context?.extra?.toolSearchCatalog;
+    const index = Array.isArray(catalog) ? new BM25Index() : getToolSearchIndex();
+    if (Array.isArray(catalog)) index.index(catalog as SearchableTool[]);
     const results = index.search(query, maxResults);
 
     if (results.length === 0) {
@@ -188,17 +214,17 @@ export class ToolSearchTool extends BaseTool {
       // tools.js not available — skip deferred schema resolution
     }
 
-    const lines = results.map((r, i) => {
+    const tools = results.map(result => ({
+      ...result,
+      effect: resolveToolEffect(result.name),
+      parameters: index.getTool(result.name)?.parameters ??
+        (deferredSchemas?.get(result.name) as { function?: { parameters?: unknown } } | undefined)?.function?.parameters,
+    }));
+    const lines = tools.map((r, i) => {
       const effect = resolveToolEffect(r.name);
       let line = `${i + 1}. **${r.name}** (score: ${r.score.toFixed(2)})\n   effect: ${effect}\n   ${r.description}`;
 
-      // If deferred, include the full schema so the LLM can call it
-      if (deferredSchemas?.has(r.name)) {
-        const fullTool = deferredSchemas.get(r.name) as { function: { parameters: unknown } };
-        if (fullTool?.function?.parameters) {
-          line += `\n   Schema: ${JSON.stringify(fullTool.function.parameters)}`;
-        }
-      }
+      if (r.parameters) line += `\n   Schema: ${JSON.stringify(r.parameters)}`;
 
       return line;
     });
@@ -207,6 +233,7 @@ export class ToolSearchTool extends BaseTool {
     // with what was discovered — finding a tool must make it invocable on the
     // next round (true progressive disclosure), not just describe it.
     return this.success(`Found ${results.length} tools:\n\n${lines.join('\n\n')}`, {
+      tools,
       names: results.map((r) => r.name),
       effects: Object.fromEntries(results.map((r) => [r.name, resolveToolEffect(r.name)])),
     });

@@ -19,6 +19,7 @@ import { BaseTool, type ParameterDefinition } from './base-tool.js';
 import type { IToolExecutionContext, IValidationResult } from './registry/types.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { ToolCallScheduler } from './tool-call-scheduler.js';
 
 // ============================================================================
 // Public runtime contract
@@ -27,6 +28,7 @@ import { logger } from '../utils/logger.js';
 export type ToolExecutor = (
   toolName: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ) => Promise<ToolResult>;
 
 /** Per-agent/per-session bridge injected by ToolHandler for one invocation. */
@@ -37,6 +39,10 @@ export interface CodeExecRuntime {
   agentId?: string;
   cwd?: string;
   availableTools: readonly string[];
+  toolMetadata?: readonly { name: string; description: string }[];
+  parallelTools?: readonly string[];
+  onOutput?: (delta: string) => void;
+  resultFormat?: 'structured' | 'legacy';
   executor: ToolExecutor;
   abortSignal?: AbortSignal;
 }
@@ -100,6 +106,14 @@ interface ScopedState {
 }
 
 const scopedStates = new Map<string, ScopedState>();
+const scopeSchedulers = new Map<string, { scheduler: ToolCallScheduler; users: number }>();
+async function runScoped<T>(scopeId: string, action: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  let entry = scopeSchedulers.get(scopeId);
+  if (!entry) { entry = { scheduler: new ToolCallScheduler(1), users: 0 }; scopeSchedulers.set(scopeId, entry); }
+  entry.users++;
+  try { return await entry.scheduler.schedule(false, action, signal); }
+  finally { if (--entry.users === 0) scopeSchedulers.delete(scopeId); }
+}
 
 /** Backward-compatible direct-use runtime. Production ToolHandler never uses it. */
 let legacySessionId = 'default';
@@ -225,14 +239,15 @@ function truncate(value: string, limit: number): string {
 }
 
 function jsonSafe(value: unknown): unknown {
-  const seen = new WeakSet<object>();
+  const ancestors: object[] = [];
   try {
-    const encoded = JSON.stringify(value, (_key, current: unknown) => {
+    const encoded = JSON.stringify(value, function(this: unknown, _key, current: unknown) {
       if (typeof current === 'bigint') return current.toString();
       if (typeof current === 'function' || typeof current === 'symbol') return undefined;
       if (current && typeof current === 'object') {
-        if (seen.has(current)) return '[Circular]';
-        seen.add(current);
+        while (ancestors.length && ancestors[ancestors.length - 1] !== this) ancestors.pop();
+        if (ancestors.includes(current)) return '[Circular]';
+        ancestors.push(current);
       }
       return current;
     });
@@ -249,7 +264,17 @@ function jsonSafe(value: unknown): unknown {
   }
 }
 
-function serializeToolResult(result: ToolResult): string {
+function serializeToolResult(result: ToolResult, format: CodeExecRuntime['resultFormat']): string {
+  if (format !== 'legacy') {
+    const payload = jsonSafe(result);
+    if (payload && typeof payload === 'object' && 'truncated' in payload && 'preview' in payload) {
+      return JSON.stringify({ success: result.success, truncated: true,
+        output: truncate(result.output ?? String(payload.preview), CODE_EXEC_LIMITS.maxToolResultChars - CODE_EXEC_LIMITS.maxErrorChars),
+        ...(result.error ? { error: truncate(result.error, CODE_EXEC_LIMITS.maxErrorChars) } : {}),
+      });
+    }
+    return JSON.stringify(payload);
+  }
   const payload = result.success
     ? (result.output ?? result.data ?? '')
     : { error: truncate(result.error ?? 'Tool execution failed', CODE_EXEC_LIMITS.maxErrorChars) };
@@ -284,8 +309,10 @@ function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
       continue;
     }
     seenTools.add(toolName);
-    const exposedName = sanitizeToolName(toolName);
-    if (seenBindings.has(exposedName)) continue;
+    const baseName = sanitizeToolName(toolName);
+    let exposedName = baseName;
+    let suffix = 2;
+    while (seenBindings.has(exposedName)) exposedName = `${baseName}_${suffix++}`;
     seenBindings.add(exposedName);
     bindings.push({ exposedName, toolName });
   }
@@ -368,27 +395,31 @@ async function execute(message) {
   const outputLimit = ${CODE_EXEC_LIMITS.maxOutputChars};
   const storeEntries = JSON.stringify(message.storeEntries || []);
   const toolBindings = JSON.stringify(message.toolBindings || []);
-  const allTools = JSON.stringify((message.toolBindings || []).map((entry) => entry.toolName));
+  const allTools = JSON.stringify(message.toolMetadata || (message.toolBindings || []).map((entry) => ({ name: entry.toolName, description: '' })));
   const bootstrap =
     'const __cbOutput = []; let __cbOutputLength = 0; let __cbTruncated = false; let __cbYielded = false;' +
     'const __cbStore = new Map(' + storeEntries + ');' +
     'const __cbBindings = ' + toolBindings + ';' +
     'const __cbBridge = globalThis.__codeBuddyBridge; delete globalThis.__codeBuddyBridge;' +
+    'const __cbYield = globalThis.__codeBuddyYield; delete globalThis.__codeBuddyYield;' +
     'function __cbFormat(value) { if (typeof value === "string") return value; try { const json = JSON.stringify(value); return json === undefined ? String(value) : json; } catch { return String(value); } }' +
     'function __cbAppend(values, prefix = "") { if (__cbTruncated) return; const line = prefix + values.map(__cbFormat).join(" "); const separator = __cbOutput.length ? "\\n" : ""; const remaining = ' + outputLimit + ' - __cbOutputLength; if (remaining <= 0) { __cbTruncated = true; return; } const next = separator + line; if (next.length > remaining) { __cbOutput.push(next.slice(0, remaining)); __cbOutputLength += remaining; __cbTruncated = true; return; } __cbOutput.push(next); __cbOutputLength += next.length; }' +
     'function text(content) { __cbAppend([content]); }' +
     'function store(key, value) { if (typeof key !== "string" || key.length === 0 || key.length > 256) throw new Error("store key must be 1..256 characters"); const encoded = JSON.stringify(value); if (encoded === undefined) throw new Error("store values must be JSON-compatible"); const cloned = JSON.parse(encoded); const candidate = new Map(__cbStore); candidate.set(key, cloned); if (candidate.size > ${CODE_EXEC_LIMITS.maxStoreEntries}) throw new Error("store entry limit reached"); const total = JSON.stringify(Array.from(candidate.entries())).length; if (total > ${CODE_EXEC_LIMITS.maxStoreBytes}) throw new Error("store byte limit reached"); __cbStore.set(key, cloned); }' +
     'function load(key) { const value = __cbStore.get(key); return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }' +
-    'function yield_control() { __cbYielded = true; }' +
+    'let __cbEmittedLength = 0; async function yield_control() { __cbYielded = true; const output = __cbOutput.join(""); const delta = output.slice(__cbEmittedLength); __cbEmittedLength = output.length; await __cbYield(delta); }' +
     'const tools = Object.create(null);' +
     'for (const binding of __cbBindings) { tools[binding.exposedName] = async function(args = {}) { const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); }; }' +
     'tools.call = async function(name, args = {}) { if (typeof name !== "string") throw new Error("tool name must be a string"); const binding = __cbBindings.find((entry) => entry.toolName === name); if (!binding) throw new Error("tool is not available: " + name); const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); };' +
     'Object.freeze(tools); Object.freeze(__cbBindings);' +
-    'const ALL_TOOLS = Object.freeze(' + allTools + ');' +
+    'const ALL_TOOLS = Object.freeze(' + allTools + '.map(Object.freeze)); const ALL_TOOL_NAMES = Object.freeze(ALL_TOOLS.map(t => t.name));' +
     'const console = Object.freeze({ log: (...args) => __cbAppend(args), error: (...args) => __cbAppend(args, "[ERROR] "), warn: (...args) => __cbAppend(args, "[WARN] ") });';
 
   const sandbox = Object.create(null);
   sandbox.__codeBuddyBridge = bridgeCall;
+  const yieldOutput = (output) => send({ type: 'output', output });
+  Object.setPrototypeOf(yieldOutput, null);
+  sandbox.__codeBuddyYield = yieldOutput;
   const context = vm.createContext(sandbox, {
     name: 'codebuddy-code-exec',
     codeGeneration: { strings: false, wasm: false },
@@ -429,6 +460,7 @@ interface RunnerSnapshot {
 
 type RunnerMessage =
   | { type: 'tool_call'; id: number; toolName: string; argsJson: string }
+  | { type: 'output'; output: string }
   | { type: 'done'; snapshotJson: string }
   | { type: 'failed'; error: string; partialOutput?: string };
 
@@ -472,7 +504,10 @@ async function runInChild(
   return await new Promise<ChildRunResult>((resolve) => {
     let settled = false;
     let stderr = '';
-    let toolQueue = Promise.resolve();
+    const scheduler = new ToolCallScheduler();
+    const controller = new AbortController();
+    let toolCallCount = 0;
+    let emittedChars = 0;
     const child = spawn(process.execPath, childExecArgs(), {
       cwd: runtime.cwd || process.cwd(),
       env: {
@@ -490,6 +525,7 @@ async function runInChild(
     const finish = (result: ChildRunResult): void => {
       if (settled) return;
       settled = true;
+      controller.abort();
       clearTimeout(timer);
       runtime.abortSignal?.removeEventListener('abort', onAbort);
       terminateChild(child);
@@ -531,8 +567,19 @@ async function runInChild(
       const message = raw as RunnerMessage;
       if (!message || typeof message !== 'object' || settled) return;
 
+      if (message.type === 'output') {
+        if (typeof message.output === 'string' && emittedChars + message.output.length <= CODE_EXEC_LIMITS.maxOutputChars) {
+          emittedChars += message.output.length;
+          try { runtime.onOutput?.(message.output); } catch { /* Observers do not control execution. */ }
+        }
+        return;
+      }
       if (message.type === 'tool_call') {
-        toolQueue = toolQueue.then(async () => {
+        if (++toolCallCount > CODE_EXEC_LIMITS.maxToolCalls || typeof message.argsJson !== 'string' || message.argsJson.length > CODE_EXEC_LIMITS.maxCodeChars) {
+          finish({ success: false, output: 'code_exec tool-call or argument limit exceeded' });
+          return;
+        }
+        void scheduler.schedule(runtime.parallelTools?.includes(message.toolName) === true, async () => {
           if (settled || !child.connected) return;
           if (
             !allowedTools.has(message.toolName) ||
@@ -566,13 +613,13 @@ async function runInChild(
           }
 
           try {
-            const result = await runtime.executor(message.toolName, args);
+            const result = await runtime.executor(message.toolName, args, controller.signal);
             if (!settled && child.connected) {
               child.send({
                 type: 'tool_result',
                 id: message.id,
                 ok: true,
-                valueJson: serializeToolResult(result),
+                valueJson: serializeToolResult(result, runtime.resultFormat),
               });
             }
           } catch (error) {
@@ -632,6 +679,10 @@ async function runInChild(
       code,
       timeoutMs,
       toolBindings,
+      toolMetadata: toolBindings.map(binding => ({
+        name: binding.toolName,
+        description: runtime.toolMetadata?.find(tool => tool.name === binding.toolName)?.description.slice(0, 2000) ?? '',
+      })),
       storeEntries: Array.from(state.values.entries()),
     }, (error) => {
       if (error) finish({ success: false, output: `Sandbox IPC failed: ${error.message}` });
@@ -701,8 +752,9 @@ export class CodeExecTool extends BaseTool {
     const code = input.code as string;
     const timeoutMs = normalizeTimeout(input.timeout_ms);
     const injectedRuntime = runtimeFromContext(context);
-    const runtime: CodeExecRuntime = injectedRuntime ?? {
+    const runtime: CodeExecRuntime = injectedRuntime ? { ...injectedRuntime } : {
       scopeId: legacyScopeId(),
+      resultFormat: 'legacy',
       sessionId: legacySessionId,
       cwd: context?.cwd ?? process.cwd(),
       availableTools: legacyAvailableTools,
@@ -712,31 +764,35 @@ export class CodeExecTool extends BaseTool {
       })),
     };
 
-    const state = getScopedState(runtime);
-    const startedAt = Date.now();
-    const childResult = await runInChild(code, timeoutMs, runtime, state);
-    const elapsed = Date.now() - startedAt;
+    runtime.abortSignal ??= context?.abortSignal;
+    return runScoped(runtime.scopeId, async () => {
+      if (runtime.abortSignal?.aborted) return this.error('Script cancelled');
+      const state = getScopedState(runtime);
+      const startedAt = Date.now();
+      const childResult = await runInChild(code, timeoutMs, runtime, state);
+      const elapsed = Date.now() - startedAt;
 
-    if (!childResult.success) {
-      logger.debug('code_exec failed', {
-        scopeId: runtime.scopeId,
-        timedOut: childResult.timedOut === true,
-        elapsed,
-      });
-      return this.error(truncate(childResult.output, CODE_EXEC_LIMITS.maxErrorChars));
-    }
+      if (!childResult.success) {
+        logger.debug('code_exec failed', {
+          scopeId: runtime.scopeId,
+          timedOut: childResult.timedOut === true,
+          elapsed,
+        });
+        return this.error(truncate(childResult.output, CODE_EXEC_LIMITS.maxErrorChars));
+      }
 
-    // Commit state transactionally only after a successful script.
-    if (childResult.storeEntries) {
-      state.values = new Map(childResult.storeEntries);
-      state.lastAccess = Date.now();
-    }
+      // Commit state transactionally only after a successful script.
+      if (childResult.storeEntries) {
+        state.values = new Map(childResult.storeEntries);
+        state.lastAccess = Date.now();
+      }
 
-    const status = childResult.yielded
-      ? `Script yielded control after ${elapsed}ms`
-      : `Script completed in ${elapsed}ms`;
-    const output = childResult.output ? `${status}\n\n${childResult.output}` : status;
-    return this.success(truncate(output, CODE_EXEC_LIMITS.maxOutputChars));
+      const status = childResult.yielded
+        ? `Script yielded control after ${elapsed}ms`
+        : `Script completed in ${elapsed}ms`;
+      const output = childResult.output ? `${status}\n\n${childResult.output}` : status;
+      return this.success(truncate(output, CODE_EXEC_LIMITS.maxOutputChars));
+    }, runtime.abortSignal).catch(error => this.error(error instanceof Error ? error.message : String(error)));
   }
 }
 
