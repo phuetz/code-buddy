@@ -25,7 +25,7 @@ coordination.
 - `npm run lint` : code 0, avertissements historiques autorisés ;
 - tarball `@phuetz/code-buddy@2.0.0` : 8,4 MB, 5 067 fichiers ;
 - installation fraîche : 1 306 paquets sous
-  `/home/patrice/DEV/cb-login-package-qa-GRLsKr/install` ;
+  un répertoire temporaire d’installation isolée ;
 - smoke du binaire installé : 6/6 verts (`--version`, `--help`, aide login,
   `whoami`, refus login headless et `doctor`).
 
@@ -175,6 +175,6 @@ aucun correctif source.
 ## Paquet final
 
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
-1 306 dépendances dans `/home/patrice/DEV/cb-final-package-qa-0Iox1m/install`,
+1 306 dépendances dans un répertoire temporaire d’installation isolée,
 puis exécuté depuis ce préfixe neuf. Les six scénarios du CLI passent : version,
 aide, aide login, état déconnecté, refus headless et doctor.
