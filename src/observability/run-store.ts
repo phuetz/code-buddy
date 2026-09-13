@@ -10,6 +10,7 @@
  * Automatic pruning keeps the 30 most recent runs.
  */
 
+import { RunEventWriter, type RunPersistenceStatus } from './run-event-writer.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -99,6 +100,7 @@ export interface RunSummary {
 }
 
 export interface RunRecord {
+  persistence?: RunPersistenceStatus;
   summary: RunSummary;
   metrics: Partial<RunMetrics>;
   artifacts: string[]; // file paths relative to run dir
@@ -235,6 +237,7 @@ export class RunStore {
   private runsDir: string;
   /** File handles for active run event streams */
   private handles: Map<string, fs.WriteStream> = new Map();
+  private eventWriters = new Map<string, RunEventWriter>();
   /** Immediate in-process view of events, avoiding read-after-write stream races. */
   private eventBuffers: Map<string, RunEvent[]> = new Map();
   /** In-memory event counts per run */
@@ -339,12 +342,9 @@ export class RunStore {
     const eventsPath = path.join(runDir, 'events.jsonl');
     fs.writeFileSync(eventsPath, '', { flag: 'a' }); // ensure file exists
     const ws = fs.createWriteStream(eventsPath, { flags: 'a', encoding: 'utf-8' });
-    ws.on('error', (err) => {
-      logger.debug('RunStore: event stream error', {
-        runId,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    });
+    this.eventWriters.set(runId, new RunEventWriter(ws, error => {
+      logger.warn('RunStore: journal persistence failed', { runId, error: error.message });
+    }));
     this.handles.set(runId, ws);
 
     // Emit run_start event
@@ -417,6 +417,16 @@ export class RunStore {
   /**
    * Emit an event for a run. Thread-safe: writes are serialized by the writable stream.
    */
+  getPersistenceStatus(runId: string): RunPersistenceStatus | undefined {
+    return this.eventWriters.get(runId)?.status();
+  }
+
+  async flushRun(runId: string): Promise<RunPersistenceStatus> {
+    const writer = this.eventWriters.get(runId);
+    if (!writer) throw new Error(`No active journal writer for run ${runId}`);
+    return writer.flush();
+  }
+
   emit(runId: string, event: Omit<RunEvent, 'ts' | 'runId'>): void {
     const ws = this.handles.get(runId);
     if (!ws) return;
@@ -432,11 +442,7 @@ export class RunStore {
       buffer.push(fullEvent);
     }
 
-    try {
-      ws.write(JSON.stringify(fullEvent) + '\n');
-    } catch (err) {
-      logger.debug('RunStore: failed to write event', { runId, err });
-    }
+    this.eventWriters.get(runId)?.write(JSON.stringify(fullEvent) + '\n');
 
     // Update in-memory count
     const count = (this.eventCounts.get(runId) || 0) + 1;
@@ -640,7 +646,8 @@ export class RunStore {
       // Ignore
     }
 
-    return { summary, metrics, artifacts };
+    const persistence = this.getPersistenceStatus(runId);
+    return { summary, metrics, artifacts, ...(persistence ? { persistence } : {}) };
   }
 
   /**
@@ -1354,6 +1361,7 @@ export class RunStore {
       if (ws) {
         ws.destroy();
         this.handles.delete(s.runId);
+      this.eventWriters.delete(s.runId);
       }
 
       // Remove directory after a short delay to let the stream fully close
