@@ -284,6 +284,7 @@ type CommandHandlerFn = (args: string[]) => Promise<CommandHandlerResult> | Comm
  * Proxy interface for agent context stats used by the /context stats command.
  */
 export interface AgentContextProxy {
+  getMemoryScope?: () => { cwd: string; botId?: string };
   getContextStats: () => unknown;
   formatContextStats: () => string;
   getCurrentModel: () => string;
@@ -355,8 +356,8 @@ export class EnhancedCommandHandler {
     ['__BRANCH__', (args) => handleBranch(args)],
 
     // Memory & TODOs
-    ['__MEMORY__', (args) => handleMemory(args)],
-    ['__REMEMBER__', (args) => handleRemember(args)],
+    ['__MEMORY__', (args) => this.agentProxy?.getMemoryScope ? handleMemory(args, this.agentProxy.getMemoryScope()) : handleMemory(args)],
+    ['__REMEMBER__', (args) => this.agentProxy?.getMemoryScope ? handleRemember(args, this.agentProxy.getMemoryScope()) : handleRemember(args)],
     ['__SCAN_TODOS__', () => handleScanTodos()],
     ['__ADDRESS_TODO__', (args) => handleAddressTodo(args)],
 

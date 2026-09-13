@@ -3,6 +3,11 @@ import { getEnhancedMemory, getMemoryManager } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
 import { getErrorMessage } from "../../errors/index.js";
 
+export interface MemoryCommandContext {
+  cwd?: string;
+  botId?: string;
+}
+
 export interface CommandHandlerResult {
   handled: boolean;
   entry?: ChatEntry;
@@ -39,12 +44,13 @@ function clip(text: string, max = 180): string {
 /**
  * Memory - Manage persistent memory using PersistentMemoryManager (Markdown) and EnhancedMemory (SQLite/Vector)
  */
-export async function handleMemory(args: string[]): Promise<CommandHandlerResult> {
+export async function handleMemory(args: string[], context?: MemoryCommandContext): Promise<CommandHandlerResult> {
   const enhancedMemory = getEnhancedMemory();
-  const persistentMemory = getMemoryManager();
+  const persistentMemory = getMemoryManager(undefined, context?.botId, context?.cwd);
   const action = args[0]?.toLowerCase() || 'list';
 
   try {
+    await persistentMemory.initialize();
     let content: string;
 
     switch (action) {
@@ -162,7 +168,8 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
           const value = args.slice(2).join(" ");
 
           // Store in both for redundancy and better retrieval
-          await persistentMemory.remember(key, value, { scope, category: "custom" });
+          await persistentMemory.initialize();
+    await persistentMemory.remember(key, value, { scope, category: "custom" });
           await enhancedMemory.store({
             type: 'fact',
             content: `${key}: ${value}`,
@@ -246,7 +253,7 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
           : undefined;
         const rawLimit = parseInt(args[status ? 2 : 1] ?? "20", 10);
         const limit = Math.min(50, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 20));
-        const candidates = getMemoryCandidateQueue(process.cwd()).list(status).slice(0, limit);
+        const candidates = getMemoryCandidateQueue(context?.cwd ?? process.cwd(), context?.botId).list(status).slice(0, limit);
 
         if (candidates.length === 0) {
           content = status ? `No ${status} memory candidates.` : "No memory candidates yet.";
@@ -284,7 +291,7 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
         }
         const reviewedBy = args.slice(2).join(" ").trim() || "user";
         const { getMemoryCandidateQueue } = await import("../../memory/memory-candidate-queue.js");
-        const { candidate, write } = await getMemoryCandidateQueue(process.cwd()).accept(id, { reviewedBy });
+        const { candidate, write } = await getMemoryCandidateQueue(context?.cwd ?? process.cwd(), context?.botId).accept(id, { reviewedBy });
         content = `✅ Accepted ${candidate.id} into ${candidate.scope} memory as "${candidate.key}".\n` +
           `Write status: ${write.status}. Capacity: ${write.usage.used}/${write.usage.limit} chars (${write.usage.percent}%).`;
         break;
@@ -299,7 +306,7 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
         }
         const reason = args.slice(2).join(" ").trim();
         const { getMemoryCandidateQueue } = await import("../../memory/memory-candidate-queue.js");
-        const candidate = getMemoryCandidateQueue(process.cwd()).reject(id, {
+        const candidate = getMemoryCandidateQueue(context?.cwd ?? process.cwd(), context?.botId).reject(id, {
           reviewedBy: "user",
           ...(reason ? { reason } : {}),
         });
@@ -338,7 +345,7 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
 /**
  * Remember - Quick memory store using PersistentMemoryManager and EnhancedMemory
  */
-export async function handleRemember(args: string[]): Promise<CommandHandlerResult> {
+export async function handleRemember(args: string[], context?: MemoryCommandContext): Promise<CommandHandlerResult> {
   if (args.length < 2) {
     return {
       handled: true,
@@ -367,7 +374,7 @@ export async function handleRemember(args: string[]): Promise<CommandHandlerResu
   const value = args.slice(1).join(" ");
 
   try {
-    const persistentMemory = getMemoryManager();
+    const persistentMemory = getMemoryManager(undefined, context?.botId, context?.cwd);
     const enhancedMemory = getEnhancedMemory();
 
     await persistentMemory.remember(key, value, { scope, category: "custom" });

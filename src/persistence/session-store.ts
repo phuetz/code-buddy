@@ -3,6 +3,7 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import type { ChatEntry } from '../agent/types.js';
+import { decryptSessionContent, encryptSessionContent, hasEncryptedSessionContent, SessionDecryptionError } from './session-content.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
 import type { Message as DBMessage, Session as DBSession } from '../database/schema.js';
 import {
@@ -52,6 +53,8 @@ export interface SessionUsageSnapshot {
 }
 
 export interface Session {
+  /** Sticky protection: metadata changes and forks must remain encrypted. */
+  encrypted?: boolean;
   id: string;
   name: string;
   workingDirectory: string;
@@ -73,6 +76,10 @@ export interface SessionMessage {
   timestamp: string;
   toolCallName?: string;
   toolCallSuccess?: boolean;
+  toolCall?: ChatEntry['toolCall'];
+  toolCalls?: ChatEntry['toolCalls'];
+  toolResult?: ChatEntry['toolResult'];
+  truncated?: boolean;
   /** Task state for cross-session continuity */
   taskState?: Record<string, unknown>;
 }
@@ -89,6 +96,7 @@ const MAX_SESSIONS = 50;
 export interface SessionStoreConfig {
   /** Use SQLite database instead of JSON files */
   useSQLite: boolean;
+  encryptionKeyPath?: string;
 }
 
 const DEFAULT_CONFIG: SessionStoreConfig = {
@@ -252,10 +260,27 @@ export class SessionStore {
     const filePath = this.getSessionFilePath(session.id);
     const data = {
       ...session,
+      ...(this.shouldEncrypt(session) ? { encrypted: true } : {}),
+      messages: this.shouldEncrypt(session)
+        ? await encryptSessionContent(session.messages, this.config.encryptionKeyPath)
+        : session.messages,
       createdAt: session.createdAt.toISOString(),
       lastAccessedAt: new Date().toISOString(),
     };
     await writeJsonAtomic(filePath, data, { mode: 0o600 });
+  }
+
+  private shouldEncrypt(session: Session): boolean {
+    return session.encrypted === true || process.env.SESSION_ENCRYPTION === 'true' || hasEncryptedSessionContent(session.messages);
+  }
+
+  private decodeContent(session: Pick<Session, 'messages' | 'encrypted'>): Pick<Session, 'messages' | 'encrypted'> {
+    const encrypted = hasEncryptedSessionContent(session.messages);
+    if (session.encrypted && !encrypted) throw new SessionDecryptionError(new Error('Missing encrypted envelope'));
+    return {
+      messages: decryptSessionContent(session.messages, this.config.encryptionKeyPath),
+      ...(encrypted ? { encrypted: true } : {}),
+    };
   }
 
   /**
@@ -300,10 +325,12 @@ export class SessionStore {
 
       return {
         ...persisted,
+        ...this.decodeContent(persisted),
         createdAt,
         lastAccessedAt,
       };
     } catch (_error) {
+      if (_error instanceof SessionDecryptionError) throw _error;
       return null;
     }
   }
@@ -371,7 +398,7 @@ export class SessionStore {
       session.lastAccessedAt = new Date();
 
       // Auto-generate title from first user message if session has default name
-      if (entry.type === 'user' && session.messages.filter(m => m.type === 'user').length === 1) {
+      if (!this.shouldEncrypt(session) && entry.type === 'user' && session.messages.filter(m => m.type === 'user').length === 1) {
         try {
           const { generateConversationTitle } = await import('../utils/conversation-title.js');
           const title = generateConversationTitle(entry.content);
@@ -383,13 +410,13 @@ export class SessionStore {
 
       // Store in SQLite if enabled
       const dbRepository = await this.ensureDatabaseRepository();
-      if (dbRepository) {
+      if (dbRepository && !this.shouldEncrypt(session)) {
         const dbMessage: Omit<DBMessage, 'id' | 'created_at'> = {
           session_id: this.currentSessionId!,
           role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type === 'diff_preview' ? 'assistant' : message.type,
           content: message.content,
-          tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
-          metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
+          tool_calls: message.toolCalls ?? (message.toolCall ? [message.toolCall] : message.toolCallName ? [{ name: message.toolCallName }] : undefined),
+          metadata: { sessionMessage: message, ...(message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : {}) },
         };
         dbRepository.addMessage(dbMessage);
       }
@@ -408,7 +435,11 @@ export class SessionStore {
       content: entry.content,
       timestamp: entry.timestamp.toISOString(),
       toolCallName: entry.toolCall?.function?.name,
-      toolCallSuccess: entry.toolResult?.success
+      toolCallSuccess: entry.toolResult?.success,
+      ...(entry.toolCall ? { toolCall: entry.toolCall } : {}),
+      ...(entry.toolCalls ? { toolCalls: entry.toolCalls } : {}),
+      ...(entry.toolResult ? { toolResult: entry.toolResult } : {}),
+      ...(entry.truncated !== undefined ? { truncated: entry.truncated } : {}),
     };
   }
 
@@ -427,17 +458,19 @@ export class SessionStore {
       type: msg.type,
       content: msg.content,
       timestamp: new Date(msg.timestamp),
-      toolCall: msg.toolCallName ? {
+      toolCall: msg.toolCall ?? (msg.toolCallName ? {
         id: `restored_${Date.now()}_${idx}`,
         type: 'function' as const,
         function: {
           name: msg.toolCallName,
           arguments: '{}'
         }
-      } : undefined,
-      toolResult: msg.toolCallSuccess !== undefined ? {
+      } : undefined),
+      ...(msg.toolCalls ? { toolCalls: msg.toolCalls } : {}),
+      ...(msg.truncated !== undefined ? { truncated: msg.truncated } : {}),
+      toolResult: msg.toolResult ?? (msg.toolCallSuccess !== undefined ? {
         success: msg.toolCallSuccess
-      } : undefined
+      } : undefined)
     }));
   }
 
@@ -582,13 +615,7 @@ export class SessionStore {
         lastAccessedAt: session.lastAccessedAt.toISOString(),
         metadata: session.metadata,
       },
-      messages: session.messages.map(msg => ({
-        type: msg.type,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        toolCallName: msg.toolCallName,
-        toolCallSuccess: msg.toolCallSuccess,
-      })),
+      messages: session.messages,
       statistics: {
         totalMessages: session.messages.length,
         userMessages: session.messages.filter(m => m.type === 'user').length,
@@ -1038,6 +1065,7 @@ export class SessionStore {
             const persisted = data as unknown as PersistedSession;
             sessions.push({
               ...persisted,
+              ...this.decodeContent(persisted),
               createdAt: new Date(persisted.createdAt),
               lastAccessedAt: new Date(persisted.lastAccessedAt),
             });
@@ -1077,10 +1105,12 @@ export class SessionStore {
 
       return {
         ...persisted,
+        ...this.decodeContent(persisted),
         createdAt,
         lastAccessedAt,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof SessionDecryptionError) throw error;
       return null;
     }
   }
@@ -1103,6 +1133,10 @@ export class SessionStore {
   }
 
   private convertDatabaseMessage(message: DBMessage): SessionMessage {
+    const stored = message.metadata?.sessionMessage;
+    if (stored && typeof stored === 'object' && 'type' in stored && 'content' in stored && 'timestamp' in stored) {
+      return stored as SessionMessage;
+    }
     const type = message.role === 'tool'
       ? 'tool_result'
       : message.role === 'system'
@@ -1380,7 +1414,7 @@ export class SessionStore {
 
   private async persistDatabaseSessionSnapshot(session: Session, parentSessionId?: string): Promise<void> {
     const dbRepository = await this.ensureDatabaseRepository();
-    if (!dbRepository) {
+    if (!dbRepository || this.shouldEncrypt(session)) {
       return;
     }
 
@@ -1403,8 +1437,8 @@ export class SessionStore {
           session_id: session.id,
           role: message.type === 'tool_result' ? 'tool' : message.type === 'user' ? 'user' : 'assistant',
           content: message.content,
-          tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
-          metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
+          tool_calls: message.toolCalls ?? (message.toolCall ? [message.toolCall] : message.toolCallName ? [{ name: message.toolCallName }] : undefined),
+          metadata: { sessionMessage: message, ...(message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : {}) },
         });
       }
     } catch (error) {

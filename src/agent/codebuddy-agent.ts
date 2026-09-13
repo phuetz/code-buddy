@@ -29,6 +29,7 @@ import { MessageQueue, type MessageQueueMode } from "./message-queue.js";
 import { CostPredictor } from "../analytics/cost-predictor.js";
 import { BudgetAlertManager } from "../analytics/budget-alerts.js";
 import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.js";
+import { restoreSessionHistory } from '../persistence/session-history.js';
 import { getUserHooksManager } from "../hooks/user-hooks.js";
 import { isFeatureEnabled } from "../config/feature-flags.js";
 import { getActiveRunStore } from "../observability/run-store.js";
@@ -197,7 +198,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.repairCoordinator = this.infrastructure.repairCoordinator;
 
     // Initialize Persistent Memory (CLAUDE.md style)
-    initializeMemory().catch(err => {
+    initializeMemory(undefined, initialWorkingDirectory).catch(err => {
       logger.error('Failed to initialize persistent memory', { error: String(err) });
     });
 
@@ -495,7 +496,7 @@ export class CodeBuddyAgent extends BaseAgent {
       memoryEnabled: this.memoryEnabled,
       morphEditorEnabled: !!this.toolHandler.morphEditor,
       cwd: initialWorkingDirectory,
-    }, this.promptCacheManager, this.memory, this.infrastructure.moltbotHooksManager, getMemoryManager());
+    }, this.promptCacheManager, this.memory, this.infrastructure.moltbotHooksManager, getMemoryManager(undefined, undefined, initialWorkingDirectory));
 
     // Set up executors for the repair coordinator
     this.repairCoordinator.setExecutors({
@@ -669,13 +670,21 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.toolHandler.setRunId(runId);
   }
 
+  private memoryBotId: string | undefined;
+
   /**
    * Multi-bot channels: scope this agent's per-bot state (persistent memory,
    * lessons) to a bot id. Tool-execution contexts get tagged with it so
    * `remember`/`lessons` write under `~/.codebuddy/bots/<botId>/`.
    */
+  public getMemoryScope(): { cwd: string; botId?: string } {
+    return { cwd: this.toolHandler.getWorkingDirectory(), botId: this.memoryBotId };
+  }
+
   public setChannelBotId(botId: string | undefined): void {
+    this.memoryBotId = botId;
     this.toolHandler.setBotId(botId);
+    this.promptBuilder.setPersistentMemory(getMemoryManager(undefined, botId, this.toolHandler.getWorkingDirectory()));
   }
 
   /** Scope raw tool-result recovery to an embedding host's conversation. */
@@ -1576,6 +1585,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.contextManager.importConversationState(cloned.contextManagerState);
     this.toolHandler.restoreWorkingDirectory(cloned.workingDirectory);
     this.promptBuilder.updateConfig({ cwd: cloned.workingDirectory });
+    this.promptBuilder.setPersistentMemory(getMemoryManager(undefined, this.memoryBotId, cloned.workingDirectory));
   }
 
   getCurrentDirectory(): string {
@@ -1592,17 +1602,13 @@ Look at the screenshot and find the element matching the user's intent. Output o
   setWorkingDirectory(dir: string | undefined): void {
     this.toolHandler.setWorkingDirectory(dir);
     this.promptBuilder.updateConfig({ cwd: dir || process.cwd() });
+    this.promptBuilder.setPersistentMemory(getMemoryManager(undefined, this.memoryBotId, dir));
   }
 
   /** Rehydrate chat and LLM history from a persisted session (headless --resume). */
   hydratePersistedSession(session: Session): void {
     const entries = this.sessionStore.convertMessagesToChatEntries(session.messages);
-    const llmMessages: CodeBuddyMessage[] = [];
-    for (const entry of entries) {
-      if (entry.type === 'user' || entry.type === 'assistant') {
-        llmMessages.push({ role: entry.type, content: entry.content });
-      }
-    }
+    const llmMessages = restoreSessionHistory(entries);
     this.historyManager.setChatHistory(entries);
     this.historyManager.setMessages(llmMessages);
     if (session.workingDirectory) {

@@ -112,10 +112,10 @@ interface MemoryCandidateFile {
 
 const registry = new Map<string, MemoryCandidateQueue>();
 
-export function getMemoryCandidateQueue(workDir: string = process.cwd()): MemoryCandidateQueue {
-  const key = path.resolve(workDir);
+export function getMemoryCandidateQueue(workDir: string = process.cwd(), botId?: string): MemoryCandidateQueue {
+  const key = JSON.stringify([path.resolve(workDir), botId ?? '']);
   if (!registry.has(key)) {
-    registry.set(key, new MemoryCandidateQueue(key));
+    registry.set(key, new MemoryCandidateQueue(path.resolve(workDir), botId ? getMemoryManager(undefined, botId, workDir) : undefined, botId));
     if (registry.size > 20) {
       const firstKey = registry.keys().next().value;
       if (firstKey) registry.delete(firstKey);
@@ -136,8 +136,9 @@ export class MemoryCandidateQueue {
   constructor(
     private workDir: string = process.cwd(),
     private memoryManager?: PersistentMemoryManager,
+    botId?: string,
   ) {
-    this.filePath = path.join(workDir, '.codebuddy', 'memory-candidates.json');
+    this.filePath = path.join(workDir, '.codebuddy', botId ? `memory-candidates-${encodeURIComponent(botId)}.json` : 'memory-candidates.json');
   }
 
   propose(input: ProposeMemoryCandidateInput): ProposeMemoryCandidateResult {
@@ -223,7 +224,7 @@ export class MemoryCandidateQueue {
     if (!key) throw new Error('Accepted memory key cannot be empty.');
     if (!value) throw new Error('Accepted memory value cannot be empty.');
 
-    const manager = this.memoryManager ?? getMemoryManager();
+    const manager = this.memoryManager ?? getMemoryManager(undefined, undefined, this.workDir);
     await manager.initialize();
     const write = await manager.remember(key, value, {
       scope,

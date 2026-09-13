@@ -348,6 +348,18 @@ describe('PromptBuilder — Phase T4', () => {
   });
 
   describe('memory injection', () => {
+    it('reads the newly bound project manager after a session switch', async () => {
+      const { builder } = buildBuilder({ config: { memoryEnabled: true }, withPersistentMemory: 'old-project-note' });
+      builder.setPersistentMemory({
+        initialize: async () => undefined,
+        getContextForPrompt: () => 'new-project-note',
+      } as unknown as NonNullable<ConstructorParameters<typeof PromptBuilder>[4]>);
+      await builder.buildSystemPrompt('explicit', 'grok-3', null);
+      const args = promptMocks.buildSystemPromptMock.mock.calls[0][0];
+      expect(args.memoryContext).toContain('new-project-note');
+      expect(args.memoryContext).not.toContain('old-project-note');
+    });
+
     it('builds enhanced memory context when memoryEnabled + memory wired', async () => {
       const { builder } = buildBuilder({
         config: { memoryEnabled: true },

@@ -317,6 +317,10 @@ export class PersistentMemoryManager extends EventEmitter {
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+    // Freeze relative paths at construction; later process/session cwd changes
+    // must not redirect a delayed metadata flush to another project.
+    this.config.projectMemoryPath = path.resolve(this.config.projectMemoryPath);
+    this.config.userMemoryPath = path.resolve(this.config.userMemoryPath);
   }
 
   /**
@@ -627,6 +631,8 @@ export class PersistentMemoryManager extends EventEmitter {
             tags: mergeMemoryTags(prior?.tags, fact.source, tags)
           });
         }
+
+        await this.guardReconciliation(previousMemories, memories, scope, normalizedKey);
 
         if (!memories.has(normalizedKey)) {
           const newKeys = Array.from(memories.keys()).filter((memoryKey) => !previousMemories.has(memoryKey));
@@ -1032,6 +1038,37 @@ export class PersistentMemoryManager extends EventEmitter {
       ...m,
       ...(m.tags ? { tags: [...m.tags] } : {}),
     }));
+  }
+
+  /** Guard the result, including model renames/omissions, rather than trusting DELETE alone. */
+  private async guardReconciliation(previous: Map<string, Memory>, next: Map<string, Memory>, scope: MemoryScope, explicitKey?: string): Promise<void> {
+    const removed: Memory[] = [];
+    const protection = resolveForgettingConfig();
+    for (const [key, memory] of previous) {
+      const replacement = next.get(key);
+      if (isProtectedMemory(memory, protection)) {
+        if (key !== explicitKey || !replacement) next.set(key, memory);
+        else next.set(key, { ...replacement, category: memory.category, tags: mergeMemoryTags(memory.tags, undefined, replacement.tags) });
+      } else if (!replacement || replacement.value !== memory.value || replacement.category !== memory.category) {
+        removed.push(memory);
+      }
+    }
+    if (!removed.length) return;
+    const archivePath = this.getArchivePath(scope);
+    const now = new Date();
+    const lines = removed.map(memory => {
+      const tags = memory.tags?.length ? ` [${memory.tags.join(', ')}]` : '';
+      const ageDays = Math.max(0, Math.round((now.getTime() - memory.createdAt.getTime()) / 86_400_000));
+      return `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, age ${ageDays}d, retention 1.000): ${escapeArchiveValue(memory.value)}`;
+    });
+    // Same recoverable format as forgetting. Durable archive precedes deletion;
+    // failures propagate to the caller's snapshot rollback/direct-write fallback.
+    await withSessionLock(archivePath, async () => {
+      let existing = '';
+      try { existing = await fs.readFile(archivePath, 'utf8'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      await writeFileAtomic(archivePath, `${existing}\n## Forgotten ${now.toISOString()}\n${lines.join('\n')}\n`, { mode: 0o600 });
+    });
   }
 
   /**
@@ -1495,6 +1532,7 @@ export class PersistentMemoryManager extends EventEmitter {
   async autoCapture(message: string, response: string): Promise<void> {
     if (!this.config.autoCapture) return;
 
+    const beforeCapture = cloneMemoryMap(this.projectMemories);
     try {
       const { FactsMemoryService } = await import('./facts-memory.js');
       const service = new FactsMemoryService();
@@ -1547,8 +1585,12 @@ export class PersistentMemoryManager extends EventEmitter {
         });
       }
 
+      await this.guardReconciliation(priorProjectMemories, this.projectMemories, 'project');
+      this.assertScopeWithinLimit('project');
       await this.saveMemories("project");
     } catch (err) {
+      this.projectMemories.clear();
+      for (const [key, memory] of beforeCapture) this.projectMemories.set(key, memory);
       const reason = err instanceof Error ? err.message : String(err);
       if (err instanceof FactsExtractionError) {
         logger.warn(`[FactsMemory] Failed to autoCapture facts: ${reason}`);
@@ -1717,46 +1759,39 @@ function unescapeArchiveValue(value: string): string {
     .replace(/\\(\\|n)/g, (_match, escaped: string) => escaped === "n" ? "\n" : "\\");
 }
 
-// Default singleton instance (no bot scope) + per-bot instances.
-let memoryManagerInstance: PersistentMemoryManager | null = null;
-const memoryManagerByBot = new Map<string, PersistentMemoryManager>();
+// A project manager is shared by its tools, prompt reader and review queue.
+const memoryManagers = new Map<string, PersistentMemoryManager>();
 
-/**
- * Get the memory manager. With no `botId`, returns the global singleton (default
- * — CLI / desktop / server behavior unchanged). With a `botId` (multi-bot
- * channels), returns a per-bot instance whose memory files live under
- * `~/.codebuddy/bots/<botId>/`, so bots never share each other's `remember` facts.
- */
 export function getMemoryManager(
   config?: Partial<MemoryConfig>,
   botId?: string,
+  cwd: string = process.cwd(),
 ): PersistentMemoryManager {
-  if (!botId) {
-    if (!memoryManagerInstance) {
-      memoryManagerInstance = new PersistentMemoryManager(config);
-    }
-    return memoryManagerInstance;
-  }
-  let inst = memoryManagerByBot.get(botId);
-  if (!inst) {
-    const botDir = path.join(os.homedir(), '.codebuddy', 'bots', botId);
-    inst = new PersistentMemoryManager({
-      ...(config ?? {}),
-      userMemoryPath: path.join(botDir, 'memory.md'),
-      projectMemoryPath: path.join(botDir, 'CODEBUDDY_MEMORY.md'),
+  const root = path.resolve(cwd);
+  // Bot memory deliberately remains per-bot (historical channel contract).
+  const key = botId ? `bot:${botId}` : `project:${root}`;
+  let manager = memoryManagers.get(key);
+  if (!manager) {
+    const botDir = botId ? path.join(os.homedir(), '.codebuddy', 'bots', botId) : undefined;
+    manager = new PersistentMemoryManager({
+      projectMemoryPath: path.join(root, '.codebuddy', 'CODEBUDDY_MEMORY.md'),
+      ...config,
+      ...(botDir ? {
+        userMemoryPath: path.join(botDir, 'memory.md'),
+        projectMemoryPath: path.join(botDir, 'CODEBUDDY_MEMORY.md'),
+      } : {}),
     });
-    memoryManagerByBot.set(botId, inst);
+    memoryManagers.set(key, manager);
   }
-  return inst;
+  return manager;
 }
 
 export function resetMemoryManagerForTests(): void {
-  memoryManagerInstance = null;
-  memoryManagerByBot.clear();
+  memoryManagers.clear();
 }
 
-export async function initializeMemory(config?: Partial<MemoryConfig>): Promise<PersistentMemoryManager> {
-  const manager = getMemoryManager(config);
+export async function initializeMemory(config?: Partial<MemoryConfig>, cwd?: string): Promise<PersistentMemoryManager> {
+  const manager = getMemoryManager(config, undefined, cwd);
   await manager.initialize();
   return manager;
 }

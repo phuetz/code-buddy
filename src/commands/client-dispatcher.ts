@@ -209,6 +209,7 @@ export class ClientCommandDispatcher {
       getContextStats: () => context.agent.getContextStats(),
       formatContextStats: () => context.agent.formatContextStats(),
       getCurrentModel: () => context.agent.getCurrentModel(),
+      getMemoryScope: () => context.agent.getMemoryScope(),
       getCurrentSessionId: () => context.agent.getCurrentSessionId?.() ?? null,
       getContextMemoryMetrics: () => context.agent.getContextMemoryMetrics(),
       getCompressionStats: () => context.agent.getCompressionStats(),

@@ -345,6 +345,7 @@ jest.mock('../../src/services/prompt-builder.js', () => ({
   PromptBuilder: jest.fn().mockImplementation(function() { return {
     buildSystemPrompt: jest.fn().mockResolvedValue('You are a helpful AI coding assistant.'),
     updateConfig: jest.fn(),
+    setPersistentMemory: jest.fn(),
   }; }),
 }));
 
@@ -589,6 +590,21 @@ describe('CodeBuddyAgent', () => {
   // agent's .codebuddy/-backed tools target the active project rather than the
   // process directory. Uses lessons_propose (the Hermes self-improvement path).
   describe('Working Directory (Cowork project scoping)', () => {
+    it('binds the prompt reader when switching project or restoring a conversation', async () => {
+      const { getMemoryManager } = await import('../../src/memory/persistent-memory.js');
+      agent = new CodeBuddyAgent('test-api-key');
+      const builder = (PromptBuilder as jest.Mock).mock.results.at(-1)?.value;
+      const root = process.cwd();
+      const a = `${root}/_qa/scope-a`, b = `${root}/_qa/scope-b`;
+      agent.setWorkingDirectory(a);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, a));
+      const state = agent.exportConversationState();
+      agent.setWorkingDirectory(b);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, b));
+      agent.importConversationState(state);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, a));
+    });
+
     it('routes .codebuddy tools to setWorkingDirectory(), not process.cwd()', async () => {
       const os = await import('os');
       const path = await import('path');

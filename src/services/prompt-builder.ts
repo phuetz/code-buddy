@@ -1158,6 +1158,11 @@ Output formatting discipline:
     return this.buildSystemPrompt(systemPromptId, modelName, customInstructions, gates, message);
   }
 
+  /** Keep prompt reads bound to the same project/bot manager as tool writes. */
+  setPersistentMemory(manager: PersistentMemoryManager): void {
+    this.persistentMemory = manager;
+  }
+
   /**
    * Update configuration
    */
