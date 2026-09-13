@@ -23,6 +23,12 @@ describe('runProc lifecycle', () => {
     expect(result.stderr).toContain('cb-missing-cli');
   });
 
+  it('runs the Vitest CLI despite its restricted package exports', async () => {
+    const result = await runCheckoutCli('vitest/vitest.mjs', ['--version'], ctx);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('vitest/');
+  });
+
   it('collects successful and nonzero exits without waiting for timeout', async () => {
     expect(await node('console.log("done")')).toMatchObject({ code: 0, stdout: 'done\n', timedOut: false });
     expect(await node('process.exit(7)')).toMatchObject({ code: 7, timedOut: false });

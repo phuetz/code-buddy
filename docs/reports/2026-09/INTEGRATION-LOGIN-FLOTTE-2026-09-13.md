@@ -277,6 +277,13 @@ Node 20, puis 35 tests DGM après remplacement du shim, typecheck et lint verts.
 périphériques, sélection de modèle). Les mêmes 11 échecs ont été reproduits
 sur `8f08fad72` avec les mêmes dépendances : ils préexistent au correctif.
 
+La résolution du CLI Vitest passe par son manifeste exporté, car le chemin
+`vitest/vitest.mjs` n'est pas un sous-chemin exporté par le paquet. Un test
+lance réellement ce CLI : 10 tests de processus verts sous Node 20, typecheck
+et lint verts. Le nouveau `validate` donne 38 423 tests verts et les mêmes
+11 échecs préexistants. Le paquet installé passe également le préflight sous
+Node 20.20.2 (programme valide accepté et erreur de type refusée).
+
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
 1 306 dépendances dans un répertoire temporaire d’installation isolée,
 puis exécuté depuis ce préfixe neuf. Les six scénarios du CLI passent : version,

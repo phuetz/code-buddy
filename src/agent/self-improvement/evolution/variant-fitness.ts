@@ -21,7 +21,7 @@ import { join } from 'path';
 import { tmpdir } from 'node:os';
 import { stripVTControlCharacters } from 'node:util';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 export interface FitnessContext {
   /** Directory to score (repo root or a worktree). Must contain node_modules + dist for slow components. */
@@ -71,7 +71,11 @@ function msg(e: unknown): string {
 export function runCheckoutCli(modulePath: string, args: string[], ctx: FitnessContext) {
   try {
     const require = createRequire(resolve(ctx.checkoutDir, 'package.json'));
-    return runProc(process.execPath, [require.resolve(modulePath), ...args], ctx);
+    // Vitest exports its manifest but deliberately does not export its CLI subpath.
+    const cli = modulePath === 'vitest/vitest.mjs'
+      ? join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
+      : require.resolve(modulePath);
+    return runProc(process.execPath, [cli, ...args], ctx);
   } catch (error) {
     return Promise.resolve({ code: 1, stdout: '', stderr: msg(error), timedOut: false });
   }
