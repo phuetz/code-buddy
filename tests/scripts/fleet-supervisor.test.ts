@@ -9,7 +9,7 @@ const script = path.resolve('scripts/fleet-supervisor.mjs');
 describe('fleet supervisor', () => {
   it('only exposes fixed, bounded operations from the operator manifest', () => {
     const manifest = { workspace: '.', operations: { context: { command: 'code-explorer', args: ['status'] } } };
-    expect(parseSupervisorManifest(manifest, '/work').workspace).toBe('/work');
+    expect(parseSupervisorManifest(manifest, '/work').workspace).toBe(path.resolve('/work'));
     for (const operation of [{ command: 'node', args: 'arbitrary shell' }, { command: 'node', args: [], timeoutMs: 600000 }]) {
       expect(() => parseSupervisorManifest({ ...manifest, operations: { operation } }, '/work')).toThrow();
     }
