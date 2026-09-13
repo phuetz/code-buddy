@@ -68,3 +68,19 @@ Le conflit attendu dans le tableau de coordination a été résolu de façon
 additive. La contre-validation sur la nouvelle base donne 10 fichiers de tests
 et 213 tests verts, la sonde réelle de persistance verte, le typecheck vert et
 le lint code 0. Le worktree est propre après les deux commits portés.
+
+## Tranche 2 — exécution, observabilité et harnais
+
+Les quatre commits suivants ont été portés sur la tranche 1 :
+
+- `023bc1e6f` — sorties bornées et terminaison des processus bloqués ;
+- `a7841e302` — accusés d'écriture et erreurs du journal observables ;
+- `8c16c2246` — découverte limitée au périmètre et appels programmatiques
+  structurés ;
+- `7f847806a` — audit complémentaire du harnais et du cycle RPC.
+
+La contre-validation donne 9 fichiers et 48 tests verts, 10 contrôles du
+paquet verts, ainsi que le typecheck et le build verts. La sonde d'audit
+s'exécute correctement et reproduit quatre lacunes destinées à la tranche 3 :
+lecture par symlink hors workspace, changement de bot accepté, appel RPC après
+la fin du script et incohérence du catalogue au-delà de 512 outils.
