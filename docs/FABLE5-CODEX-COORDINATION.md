@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Intégration login et reprise de flotte 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | `~/DEV/cb-login-integration-2026-09-13`, branche `integration/login-release-2026-09-13`, base `origin/main` `13e27f057` ; commits `ae883f5d6`, `1cc3b0374`, `96f1b175f`, `a692062e1` + clôture documentaire | 130 tests ciblés + 10 pack, typecheck/build/lint code 0 ; tarball installé à neuf, smoke CLI 6/6. Anciennes réservations vidéo et suite déléguée libérées ; audit rouge `a9667d187` exclu. | Rapport `docs/reports/2026-09/INTEGRATION-LOGIN-FLOTTE-2026-09-13.md`. Grande pile `2455a5c5f` à porter en neuf tranches, jamais en fusion globale. Aucun push/publication ; GitHub/npm et Jade/diffusion restent humains. |
+
 | P0 | DEVICE-AUTH 2026-09-10 | ASTRA — LIVRÉ LOCAL, zones libérées | Branche `astra/device-auth-2026-09-10`, base `76e675a69` ; réservation `9a4d6b7db`, core `b7de292c8`, CLI `7ddf1a4a2`, documentation : commit portant cette ligne | Routes 3/3, P-256 WebCrypto + DER Android, JWT agent/owner, WS default et confirmations ; identité exposée à la lane companion ; PWA intacte | Tests demandés 776 verts / 2 ignorés / 0 rouge ; typecheck, lint, privacy 40/40, CLI/HTTP réel verts ; validate global timeout 900 s avec 28 cas rouges hors lot observés, sans antériorité prouvée ; rapport `docs/reports/2026-09/DEVICE-AUTH-ASTRA-2026-09-10.md` ; index incrémental après chaque tranche ; aucun push |
 
 
