@@ -789,34 +789,16 @@ describe('Transport Module', () => {
     });
 
     describe('send()', () => {
-      it('should throw error indicating SSE incompatibility with MCP', async () => {
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
-        await expect(sdkTransport.send(message)).rejects.toThrow(
-          'StreamableHttpTransport: SSE endpoints are not compatible with MCP request-response pattern'
-        );
-      });
-
-      it('should log warning about SSE incompatibility', async () => {
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
+      it('uses HTTP and surfaces a server refusal without logging request payloads', async () => {
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('Unavailable', { status: 503 }));
         try {
-          await sdkTransport.send(message);
-        } catch {
-          // Expected to throw
+          await expect(sdkTransport.send({ jsonrpc: '2.0', id: 1, method: 'test' })).rejects.toThrow();
+          expect(fetchMock).toHaveBeenCalled();
+          expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('not compatible'));
+        } finally {
+          fetchMock.mockRestore();
+          await transport.disconnect();
         }
-
-        expect(logger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('SSE endpoints require persistent connections')
-        );
       });
     });
   });

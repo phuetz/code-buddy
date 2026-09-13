@@ -1,3 +1,4 @@
+import { registerMCPInvocationCommands } from './mcp-invoke.js';
 import { Command } from 'commander';
 import {
   addMCPServer,
@@ -601,5 +602,6 @@ export function createMCPCommand(): Command {
       }
     });
 
+  registerMCPInvocationCommands(mcpCommand);
   return mcpCommand;
 }

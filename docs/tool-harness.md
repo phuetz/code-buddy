@@ -221,3 +221,9 @@ buddy cron update JOB_ID --continuity false
 L’outil `cronjob` accepte le même objet `continuity` lors d’une création. `true` active la continuité sans notes initiales ; `false` la désactive. Les notes sont enregistrées séparément de `jobs.json` dans le répertoire cron configuré. Maximum : 128 caractères par clé, 16 Kio par valeur et 64 Kio par fichier sérialisé. Le contexte du prochain passage contient les notes et le dernier résultat réussi non vide, borné à 16 Kio et à l’espace restant.
 
 Une exécution échouée ne remplace pas cette sortie et ne consomme pas l’empreinte du précontrôle. Une erreur de lecture ou d’enregistrement du carnet est signalée ; un carnet corrompu n’est pas remis à zéro. Les écritures concurrentes sont exclues et signalent une contention à retenter. La continuité reste désactivée par défaut.
+
+## Appels MCP ponctuels sans modèle
+
+`buddy mcp tools <serveur> --query <texte>` découvre uniquement les contrats utiles. `buddy mcp call <serveur> <outil> --args-file <json>` appelle un outil du serveur configuré, imprime son résultat MCP JSON et ferme la connexion. Le fichier doit contenir un objet JSON de 1 MiB maximum ; `--args` est l’alternative pour les petits objets. Lire aussi le statut métier contenu dans le résultat.
+
+[Installation WorkflowBuilder, sources ETL et compétences](reports/2026-09/WORKFLOW-BUILDER-MCP-SKILLS-2026-09-13.md).

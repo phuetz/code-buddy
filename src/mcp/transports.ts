@@ -1,4 +1,5 @@
 import { Transport, TransportSendOptions } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
@@ -232,61 +233,32 @@ class SSEClientTransport extends EventEmitter implements Transport {
 }
 
 export class StreamableHttpTransport extends EventEmitter implements MCPTransport {
-  private connected = false;
+  private transport?: StreamableHTTPClientTransport;
 
   constructor(private config: TransportConfig) {
     super();
-    if (!config.url) {
-      throw new Error('URL is required for streamable_http transport');
-    }
+    if (!config.url) throw new Error('URL is required for streamable_http transport');
   }
 
   async connect(): Promise<Transport> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.connected = true;
-        resolve(new StreamableHttpClientTransport(this.config.url!, this.config.headers));
-      } catch (error) {
-        reject(error);
-      }
+    const url = new URL(this.config.url!);
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('Streamable HTTP MCP requires an HTTP(S) URL');
+    }
+    this.transport = new StreamableHTTPClientTransport(url, {
+      requestInit: { headers: this.config.headers },
     });
+    return this.transport;
   }
 
   async disconnect(): Promise<void> {
-    this.connected = false;
+    const transport = this.transport;
+    this.transport = undefined;
+    await transport?.close();
   }
 
   getType(): TransportType {
     return 'streamable_http';
-  }
-}
-
-// Custom Streamable HTTP Transport implementation for GitHub Copilot MCP
-class StreamableHttpClientTransport extends EventEmitter implements Transport {
-  onclose?: () => void;
-  onerror?: (error: Error) => void;
-  onmessage?: <T extends JSONRPCMessage>(message: T) => void;
-  sessionId?: string;
-
-  constructor(private url: string, private headers?: Record<string, string>) {
-    super();
-  }
-
-  async start(): Promise<void> {
-    // Streamable HTTP transport is connection-less, so we're always "started"
-  }
-
-  async close(): Promise<void> {
-    // Nothing to close for streamable HTTP transport
-  }
-
-  async send(_message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
-    logger.warn('StreamableHttpTransport: SSE endpoints require persistent connections, not suitable for MCP request-response pattern');
-    logger.debug('StreamableHttpTransport: Message that would be sent', { message: _message });
-
-    // For now, throw an error to indicate the transport type is not compatible
-    // with the MCP protocol's request-response pattern
-    throw new Error('StreamableHttpTransport: SSE endpoints are not compatible with MCP request-response pattern. GitHub Copilot MCP may require a different integration approach.');
   }
 }
 
