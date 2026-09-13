@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Revue indépendante finale CI 2026-09-13 | **Codex + Astra — INTÉGRÉ À `main`, zones libérées** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, branche `integration/improvements-persistence-2026-09-13`, correctif `ed1923c24` | Le fallback préflight depuis un checkout source utilise le chargeur `tsx` sous Node 20 ; seuls les deux scénarios ProposalStore qui exécutent un outil restent bornés à Linux, les six tests portables tournent sur macOS et Windows. | Revue statique indépendante ; chemin sans `dist` forcé sous Node 20.20.2 : 2 fichiers, 40/40 tests ; typecheck, lint et diff-check verts. npm inchangé. |
+
 | P1 | Clôture CI fixtures Windows 2026-09-13 | **Codex — INTÉGRÉ À `main`, zones libérées** | Même branche ; correctif `1121ddbab` après le run publié `34780157034` | Import interprocess MissionStore converti en URL de fichier ; recherche de l'historique compagnon faite dans les messages avant sérialisation JSON. | 2 fichiers, 16 tests verts / 1 skip ; typecheck, lint ciblé et diff-check verts. Le seul autre rouge Windows Node 20 était un crash de worker après 5 949 tests verts et zéro assertion rouge. |
 
 | P1 | Clôture CI préflight Node 20 2026-09-13 | **Codex — INTÉGRÉ À `main`, zones libérées** | Même branche ; correctif `e54dca188`, preuve `307c39188`, après le run publié `34775711378` | Le préflight TypeScript lancé depuis les sources préfère désormais le worker JavaScript compilé, compatible Node 20, et le dernier test d'agent respecte le refus fermé hors Linux. | Node 20.20.2 réel : préflight 32/32 ; validation courante : 133 tests, typecheck, lint ciblé et diff-check verts. Matrice finale à vérifier. |
