@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Clôture CI portable avant intégration finale 2026-09-13 | **Codex — RÉSERVÉ** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, branche `integration/improvements-persistence-2026-09-13`, base `6a6984084` | Nettoyage du rapport public et correction des deux assertions compagnon Windows déjà rouges sur `origin/main`. | Run de référence `34762883281` : Linux/macOS verts, deux tests Windows rouges ; tests ciblés et matrice publiée à vérifier avant libération. |
+| P1 | Clôture CI portable avant intégration finale 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, branche `integration/improvements-persistence-2026-09-13`, base `6a6984084` ; correctif `bf61b6d42` | Rapport public expurgé des chemins personnels ; résolution portable des chemins relatifs et extraction des chemins média Windows. | Run de référence `34762883281` : deux rouges Windows reproduits avant intégration. Après correction : 74 tests ciblés, typecheck, build, lint, privacy 40/40 et pack 10/10 verts. |
 
 | P1 | Intégration améliorations — tranche 9 MCP WorkflowBuilder 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 8 `328b86edb` ; commit porté `5e0197932`, clôture `42d0d3658` + preuve paquet | WorkflowBuilder connecté aux outils MCP natifs, CLI et compétences associées. | MCP noyau 97 tests, Cowork 25 tests, pack 10/10, typecheck/build/lint noyau et lint Cowork verts ; paquet final installé à neuf, smoke CLI 6/6. Typecheck Cowork complet rouge identique sur base login, hors delta MCP. |
 

@@ -172,6 +172,19 @@ Les neuf tranches prévues sont désormais portées. Le commit Grok `a9667d187`
 reste exclu parce qu'il contient uniquement trois tests rouges intentionnels et
 aucun correctif source.
 
+## Clôture CI portable
+
+Le premier run publié après les tranches 1 à 3 a révélé un chemin personnel
+dans ce rapport. Le contrôle de confidentialité est repassé à 40/40 après son
+remplacement par une description neutre.
+
+Les deux autres échecs concernaient Windows et existaient déjà sur le run de
+base `34762883281` : une attente de chemin POSIX codée en dur et l'absence de
+reconnaissance d'un chemin média avec lettre de lecteur dans une sortie
+textuelle. Le commit `bf61b6d42` rend l'attente portable et accepte les chemins
+absolus Windows. La validation donne 74 tests ciblés, typecheck, build, lint et
+10 contrôles du paquet verts.
+
 ## Paquet final
 
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
