@@ -66,9 +66,15 @@ buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
-`buddy onboard` needs a terminal because it asks questions. In a pipe or CI
-job it exits with an explanation; use `buddy login`, environment variables, or
-`buddy doctor` for a non-interactive check.
+`buddy login` needs an interactive terminal and a browser. If the browser does
+not open automatically, copy the complete URL printed in the terminal into its
+address bar and keep the terminal open until sign-in finishes. The link expires
+when the login attempt ends (after five minutes). `--no-browser` skips the attempt
+and exits with an explanation; it is not a device-code login mode.
+
+`buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
+job, configure provider environment variables and use `buddy doctor` for a
+non-interactive check.
 
 ### The two $0 paths in detail
 

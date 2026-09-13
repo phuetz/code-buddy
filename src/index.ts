@@ -3278,14 +3278,15 @@ program
       cli.error(LOGIN_NEEDS_BROWSER_MESSAGE);
       process.exit(1);
     }
-    const { loginInteractive, getCodexAuthFilePath } = await import(
+    const { getCodexAuthFilePath } = await import(
       "./providers/codex-oauth.js"
     );
+    const { loginChatGptWithBrowser } = await import('./commands/login-chatgpt.js');
     cli.stdout("🔐 ChatGPT login");
-    cli.stdout("Opening your browser to https://auth.openai.com/oauth/authorize ...");
+    cli.stdout("Opening your browser for ChatGPT sign-in ...");
     cli.stdout("Sign in with your ChatGPT account, then return to this terminal.\n");
     try {
-      const auth = await loginInteractive();
+      const auth = await loginChatGptWithBrowser(cli);
       cli.stdout("✅ Authenticated successfully");
       if (auth.email) cli.stdout(`   Account:    ${auth.email}`);
       if (auth.plan_type) cli.stdout(`   Plan:       ${auth.plan_type}`);

@@ -122,8 +122,12 @@ function loadAuthFile(): CodexAuthDotJson | null {
 function saveAuthFile(auth: CodexAuthDotJson): void {
   try {
     writeJsonAtomicSync(AUTH_FILE_PATH, auth, { mode: 0o600 });
-  } catch (err) {
-    logger.error('Error writing codex-auth.json', err instanceof Error ? err : { error: String(err) });
+  } catch {
+    // A successful exchange is not a successful login until tokens survive
+    // a restart. Never return freshly rotated tokens as if they were saved.
+    throw new Error(
+      'Could not save ChatGPT credentials. Check file permissions and available disk space, then run `buddy login` again.',
+    );
   }
 }
 
