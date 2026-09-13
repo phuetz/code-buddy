@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Clôture CI préflight Node 20 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même branche ; correctif `e54dca188` après le run publié `34775711378` | Le préflight TypeScript lancé depuis les sources préfère désormais le worker JavaScript compilé, compatible Node 20, et le dernier test d'agent respecte le refus fermé hors Linux. | Node 20.20.2 réel : préflight 32/32 ; validation courante : 133 tests, typecheck, lint ciblé et diff-check verts. |
+| P1 | Clôture CI préflight Node 20 2026-09-13 | **Codex — INTÉGRÉ À `main`, zones libérées** | Même branche ; correctif `e54dca188`, preuve `307c39188`, après le run publié `34775711378` | Le préflight TypeScript lancé depuis les sources préfère désormais le worker JavaScript compilé, compatible Node 20, et le dernier test d'agent respecte le refus fermé hors Linux. | Node 20.20.2 réel : préflight 32/32 ; validation courante : 133 tests, typecheck, lint ciblé et diff-check verts. Matrice finale à vérifier. |
 
 | P1 | Clôture CI portable avant intégration finale 2026-09-13 | **Codex — INTÉGRÉ À `main`, zones libérées** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, branche `integration/improvements-persistence-2026-09-13`, correctif `bf61b6d42`, clôture `808e986f8` | Rapport public expurgé des chemins personnels ; résolution portable des chemins relatifs et extraction des chemins média Windows. | Run de référence `34762883281` : deux rouges Windows reproduits avant intégration. Après correction : 74 tests ciblés, typecheck, build, lint, privacy 40/40 et pack 10/10 verts ; avance rapide GitHub `ded4cd165..808e986f8`. |
 
