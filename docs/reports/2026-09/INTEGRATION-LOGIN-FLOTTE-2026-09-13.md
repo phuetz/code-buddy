@@ -174,6 +174,12 @@ export `OSSandboxConfig`. Le même échec a été reproduit dans le worktree du 
 login avant les tranches d'amélioration ; il ne vient pas du delta MCP. Les
 fichiers Cowork modifiés restent couverts par leurs tests et le lint.
 
+La matrice complète a aussi révélé que deux assertions historiques de
+`mcp-tool-adapter` décrivaient encore le rejet de l'ancien transport SSE.
+`09934a25a` les remplace par une vérification de la délégation, de l'URL et des
+en-têtes vers le transport streamable HTTP natif. Les 55 tests passent sous
+Node 20.20.2 et Node 24.
+
 Les neuf tranches prévues sont désormais portées. Le commit Grok `a9667d187`
 reste exclu parce qu'il contient uniquement trois tests rouges intentionnels et
 aucun correctif source.
