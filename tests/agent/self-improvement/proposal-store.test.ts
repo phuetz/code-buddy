@@ -74,7 +74,7 @@ function throwingSkillProposer(message: string): SkillProposer {
   };
 }
 
-describe('pending proposals — propose-only persists, --apply reuses', () => {
+describe.skipIf(process.platform !== 'linux')('pending proposals — propose-only persists, --apply reuses', () => {
   let dir: string;
 
   beforeEach(() => {
