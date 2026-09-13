@@ -122,6 +122,7 @@ Stateful WebSocket mesh letting Code Buddy peers observe each other's events liv
 - **`peer.tool.invoke` + `.stream`** (V1.3, Phase d.23, `peer-tool-bridge.ts`) — remote read-only tool execution. **Three security gates** in order: allowlist (`CODEBUDDY_PEER_TOOL_ALLOWLIST`, default `view_file`/`list_directory`/`search`) → registry `fleetSafe: true` flag (`src/tools/metadata.ts`) → workspace root (`CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` must be set; **fails closed** with `PEER_WORKSPACE_NOT_CONFIGURED` if unset, so a misconfigured peer can't expose `/`). Anti-loop guards: `CODEBUDDY_PEER_MAX_DEPTH`, `CODEBUDDY_PEER_ROLE=leaf`.
 - **`route_peer` tool + `/fleet route`** — `TaskRouter` (`task-router.ts`) classifies a prompt, gathers peer capabilities via `peer.describe`, applies privacy/cost/latency constraints, returns the recommended `peer_delegate` call. Privacy lint (`privacy-lint.ts`) detects SSN/IBAN/phone/credit-card before routing.
 - **Slash UX:** `/fleet listen`, `/fleet send <peer> <method> <json>`, `/fleet history [--type glob] [--json]`, `/fleet status [--with-sessions]`, `/fleet chat start|say|end|list`, `/fleet route`, `/fleet describe`.
+- **Fleet rooms** — `CODEBUDDY_FLEET_ROOMS=true` enables signed room messages on the same `/ws`, with membership policy, a single-writer durable ledger and cursor replay. CLI `buddy fleet rooms`; agent tool `fleet_room` uses a configured destination and the normal confirmation policy. Optional local status observations never turn incoming room messages into sensory events or robot actions. See [`docs/fleet-rooms.md`](docs/fleet-rooms.md).
 
 ## Cowork — Desktop GUI (`cowork/`)
 
@@ -168,7 +169,7 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 
 ## Coding Conventions
 
-- TypeScript strict, avoid `any`. `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are **not yet on** — see `tsconfig.json` TODOs.
+- TypeScript strict, avoid `any`. `noUncheckedIndexedAccess` is on; `exactOptionalPropertyTypes` remains off — see `tsconfig.json`.
 - Single quotes, semicolons, 2-space indent
 - Files kebab-case (`text-editor.ts`); React components PascalCase (`ChatInterface.tsx`)
 - Conventional Commits (`feat(scope): description`) — enforced by `commitlint.config.js`

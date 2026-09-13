@@ -1337,6 +1337,21 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
       logger.info(`Metrics Dashboard: ${baseUrl}/api/metrics/dashboard`);
       logger.info(`Docs: ${baseUrl}/api/docs`);
       logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
+      // Fleet rooms (opt-in): persistent signed messages between members. Wired
+      // after listen so auth audiences use the port actually bound.
+      if (config.websocketEnabled && process.env.CODEBUDDY_FLEET_ROOMS === 'true') {
+        try {
+          const address = server.address();
+          const port = address && typeof address === 'object' ? address.port : config.port;
+          const { startFleetRooms } = await import('../fleet/rooms/room-server.js');
+          (server as unknown as { _fleetRooms?: { stop: () => void } })._fleetRooms =
+            startFleetRooms({ port });
+        } catch (error) {
+          logger.warn('[fleet-rooms] not enabled', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       // Sensory nervous-system bridge (opt-in): ingress for the Rust buddy-sense
       // daemon → internal event bus → reactions. Loopback-only.
       if (process.env.CODEBUDDY_SENSORY === 'true' && !sensoryWired) {
@@ -2315,6 +2330,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
       ._unwireCognition;
     unwireCognition?.();
+    (server as unknown as { _fleetRooms?: { stop: () => void } })._fleetRooms?.stop();
 
     // Detach the channel-A2A bridge handler + shut down the
     // ChannelManager so polling loops (Telegram, Discord, ...) stop.

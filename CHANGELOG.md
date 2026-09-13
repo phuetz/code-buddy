@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Added
+
+- Opt-in Fleet rooms on the existing `/ws` endpoint: member signatures, private room membership, threads, mentions, durable history and cursor replay. Manage them with `buddy fleet rooms`.
+- The `fleet_room` agent tool reads or publishes to a configured room through the existing tool policy. An optional outbound bridge shares bounded system and sensory status observations with a mission identifier.
+
 ### Fixed
 
 - `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.

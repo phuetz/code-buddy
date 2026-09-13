@@ -71,6 +71,7 @@ find_references
 find_symbols
 firecrawl_scrape
 firecrawl_search
+fleet_room
 forget
 format_project
 generate_document

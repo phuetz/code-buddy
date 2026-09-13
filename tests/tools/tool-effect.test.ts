@@ -104,6 +104,7 @@ const EMISSION_JUSTIFICATION: Record<string, string> = {
   peer_chain: 'fleet network',
   list_peers: 'fleet network',
   route_peer: 'peer.describe network',
+  fleet_room: 'authenticated room network and durable message publication',
   sessions_send: 'cross-session message',
   sessions_spawn: 'spawn session',
   lint_project: 'linter spawn',

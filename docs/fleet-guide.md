@@ -305,6 +305,11 @@ The history is **in-memory** per listener — kill the session, the
 history dies. For persistent audit, broadcast events go to the
 underlying WS surface anyway and can be logged elsewhere.
 
+For persistent **messages between members** (rooms, threads, mentions,
+signed authorship, catch-up after a disconnection), use the opt-in
+[fleet rooms](fleet-rooms.md) (`CODEBUDDY_FLEET_ROOMS=true`,
+`buddy fleet rooms post|read|tail`).
+
 ---
 
 ## peer-rpc methods
@@ -1498,6 +1503,7 @@ and saves the request+response artifact.
 - [`docs/security.md`](security.md) — permission modes, scopes,
   Guardian Agent
 - [`docs/configuration.md`](configuration.md) — full env var reference
+- [`docs/fleet-rooms.md`](fleet-rooms.md) — persistent signed messages between members (opt-in)
 - `src/fleet/peer-chat-bridge.ts` — bridge implementation
 - `src/fleet/peer-chat-client-factory.ts` — env-driven detection
 - `scripts/fleet-roundtrip-smoke.ts` — cross-host round-trip smoke test (this section)
