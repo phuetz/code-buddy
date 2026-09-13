@@ -85,7 +85,7 @@ node node_modules/vitest/vitest.mjs run tests/unit/session-store.test.ts tests/m
 
 **3 fichiers, 27 tests verts, exit 0.** Ces tests ne suffisent pas à détecter les quatre problèmes ci-dessus. Journal local : `_qa/audit/targeted-tests.log`. Sonde finale : exit 0. Vérifications syntaxiques et `git diff --check` : exit 0. Aucun build, typecheck ou test global relancé puisque la production est inchangée.
 
-## Passation
+## Passation initiale (avant implémentation)
 
 Rapport et sonde livrés localement, non commités, aucun push. HEAD reste `8b5c61def`. Fichiers suivis modifiés : coordination seulement ; nouveaux fichiers livrables : ce rapport et la sonde. `_qa/audit/` contient les preuves temporaires non suivies ; `node_modules` est un lien vers les dépendances existantes. Dans le dépôt principal, seule la ligne de coordination de cette mission a été modifiée ; `_dreamina-dom-dump.json` préexistant est intact.
 
@@ -141,3 +141,7 @@ Les managers non liés à un bot sont désormais indexés par dossier de projet 
 Incident de harnais consigné : le premier rejeu rouge du test cwd a précisément écrit dans le Markdown mémoire du worktree QA, comme le défaut le prédisait. Le garde-fou l’a détecté ; les octets suivis ont été restaurés depuis la base et le test corrigé pour que même sa version rouge cible un fichier temporaire. La copie de travail principale et la mémoire utilisateur réelle n’ont pas été modifiées.
 
 Logs non versionnés : `_qa/audit/{validate,validate-final,final-functional,privacy-baseline,probe-fixed}.log`. Aucun service, appel LLM réel, push ou migration des données personnelles. Le dépôt principal ne reçoit que la mise à jour de coordination.
+
+## Passation finale
+
+Correctifs commités dans `b185a60e2` sur `codex/audit-ameliorations-2026-09-13`, worktree `~/DEV/cb-audit-ameliorations-2026-09-13`. Validate ciblé final exit 0 ; privacy séparé 39/40 avec exactement les cinq fichiers déjà rouges sur la base. Seuls les journaux `_qa/audit/` restent non suivis. Aucun push ni fusion dans le dépôt principal. Comparaison avec le clone officiel OpenAI Codex documentée dans `COMPARAISON-CODEX-CODE-BUDDY-2026-09-13.md`.
