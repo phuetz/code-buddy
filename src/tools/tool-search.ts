@@ -18,10 +18,30 @@ import type { IToolExecutionContext } from './registry/types.js';
 // ============================================================================
 
 const QUERY_EQUIVALENTS: Record<string, readonly string[]> = {
-  lire: ['read', 'view'], fichier: ['file'], fichiers: ['file'],
-  dossier: ['directory'], dossiers: ['directory'], chercher: ['search'],
-  rechercher: ['search'], modifier: ['edit', 'replace'], creer: ['create'],
-  memoire: ['memory'], executer: ['execute', 'run'], commande: ['command'],
+  lire: ['read', 'view'],
+  voir: ['view', 'read'],
+  contenu: ['content', 'contents'],
+  contenus: ['content', 'contents'],
+  consulter: ['view', 'read'],
+  ouvrir: ['open', 'read', 'view'],
+  afficher: ['show', 'display', 'view', 'list'],
+  fichier: ['file'],
+  fichiers: ['file', 'files'],
+  dossier: ['directory', 'folder'],
+  dossiers: ['directory', 'directories', 'folder', 'folders'],
+  repertoire: ['directory', 'folder'],
+  repertoires: ['directory', 'directories', 'folder', 'folders'],
+  chercher: ['search', 'find'],
+  rechercher: ['search', 'find'],
+  trouver: ['find', 'search'],
+  modifier: ['edit', 'replace'],
+  remplacer: ['replace', 'edit'],
+  creer: ['create'],
+  supprimer: ['delete', 'remove'],
+  memoire: ['memory'],
+  executer: ['execute', 'run'],
+  lancer: ['run', 'execute'],
+  commande: ['command'],
 };
 
 /** BM25 parameters */

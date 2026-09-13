@@ -15,7 +15,7 @@
  * @module agent/self-improvement/evolution/variant-fitness
  */
 
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import { existsSync, readdirSync, statSync, mkdtempSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'node:os';
@@ -63,52 +63,77 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Run a subprocess in the checkout, capped output + timeout. Never throws (resolves with code). */
+/** Run a bounded subprocess; terminate its process group on timeout. */
 export function runProc(
   cmd: string,
   args: string[],
   ctx: FitnessContext,
 ): Promise<{ code: number; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve) => {
+    const MAX = 1_000_000;
+    const windows = process.platform === 'win32';
     let stdout = '';
     let stderr = '';
     let timedOut = false;
-    const MAX = 1_000_000;
-    let child: ReturnType<typeof spawn>;
+    let settled = false;
+    let child: ReturnType<typeof spawn> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let escalation: ReturnType<typeof setTimeout> | undefined;
+
+    const stopTree = (signal: NodeJS.Signals): Promise<void> => {
+      const pid = child?.pid;
+      if (!pid) return Promise.resolve();
+      if (windows) {
+        return new Promise(done => {
+          execFile('taskkill', ['/F', '/T', '/PID', String(pid)], { windowsHide: true, timeout: 2000 }, error => {
+            if (error) { try { child?.kill(signal); } catch { /* already gone */ } }
+            done();
+          });
+        });
+      }
+      try { process.kill(-pid, signal); } catch { /* group already gone */ }
+      return Promise.resolve();
+    };
+    const settle = (code: number): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(escalation);
+      child?.stdout?.destroy();
+      child?.stderr?.destroy();
+      child?.unref();
+      resolve({ code, stdout, stderr, timedOut });
+    };
     try {
-      child = spawn(cmd, args, { cwd: ctx.checkoutDir, env: ctx.env ?? process.env });
-    } catch (err) {
-      resolve({ code: 1, stdout: '', stderr: msg(err), timedOut: false });
+      child = spawn(cmd, args, {
+        cwd: ctx.checkoutDir, env: ctx.env ?? process.env,
+        detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      stderr = msg(error).slice(0, MAX);
+      settle(1);
       return;
     }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true;
-      try {
-        child.kill('SIGTERM');
-        setTimeout(() => {
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            /* already gone */
-          }
-        }, 1000);
-      } catch {
-        /* ignore */
-      }
+      void stopTree('SIGTERM');
+      escalation = setTimeout(() => {
+        // Even if the parent closed its pipes, the group can still contain children.
+        void stopTree('SIGKILL').finally(() => settle(1));
+      }, 250);
     }, ctx.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    child.stdout?.on('data', (d) => {
-      if (stdout.length < MAX) stdout += d.toString();
+    child.stdout?.on('data', chunk => { stdout += chunk.toString().slice(0, Math.max(0, MAX - stdout.length)); });
+    child.stderr?.on('data', chunk => { stderr += chunk.toString().slice(0, Math.max(0, MAX - stderr.length)); });
+    child.once('error', error => {
+      if (settled) return;
+      stderr = (stderr + msg(error)).slice(0, MAX);
+      if (!timedOut) void stopTree('SIGKILL').finally(() => settle(1));
     });
-    child.stderr?.on('data', (d) => {
-      if (stderr.length < MAX) stderr += d.toString();
-    });
-    child.on('error', (err) => {
+    child.once('close', code => {
+      if (settled || timedOut) return;
       clearTimeout(timer);
-      resolve({ code: 1, stdout, stderr: stderr + msg(err), timedOut });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? 1, stdout, stderr, timedOut });
+      // A completed evaluation must not leave background work in its checkout.
+      void stopTree('SIGKILL').finally(() => settle(code ?? 1));
     });
   });
 }

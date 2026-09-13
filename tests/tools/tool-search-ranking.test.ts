@@ -39,4 +39,34 @@ describe('tool discovery contracts', () => {
     expect(result.output).not.toContain('private_other_agent');
   });
 
+  it('handles French query equivalents and paraphrases (voir, contenu, consulter, ouvrir)', async () => {
+    initToolSearchIndex([
+      { name: 'view_file', description: 'Read the contents of a text file' },
+      { name: 'search', description: 'Search for a string or regular expression in workspace files' },
+      { name: 'list_directory', description: 'List files and directories in a folder' },
+      { name: 'git_status', description: 'Show changes staged and unstaged in the git repository' },
+      { name: 'run_tests', description: 'Run the tests for a specified file' },
+    ]);
+    const tool = new ToolSearchTool();
+
+    const rVoir = await tool.execute({ query: 'voir le contenu' });
+    expect(rVoir.success).toBe(true);
+    expect((rVoir.data as { names: string[] }).names[0]).toBe('view_file');
+
+    const rConsulter = await tool.execute({ query: 'consulter un fichier' });
+    expect(rConsulter.success).toBe(true);
+    expect((rConsulter.data as { names: string[] }).names[0]).toBe('view_file');
+
+    const rOuvrir = await tool.execute({ query: 'ouvrir un fichier' });
+    expect(rOuvrir.success).toBe(true);
+    expect((rOuvrir.data as { names: string[] }).names[0]).toBe('view_file');
+
+    const rDossier = await tool.execute({ query: 'afficher les dossiers' });
+    expect(rDossier.success).toBe(true);
+    expect((rDossier.data as { names: string[] }).names[0]).toBe('list_directory');
+
+    const rRecherche = await tool.execute({ query: 'rechercher une expression' });
+    expect(rRecherche.success).toBe(true);
+    expect((rRecherche.data as { names: string[] }).names[0]).toBe('search');
+  });
 });

@@ -1,4 +1,4 @@
-/** Diagnostic observations, not assertions that these defects are desirable. */
+/** Regression probe for the follow-up audit corrections. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -17,9 +17,11 @@ const out = {};
 try {
   const store = new PendingProposalStore({ workDir: root });
   const proposal = { id: 'fixture', targetScenarioId: 'audit/a', spec: { name: 'authored-audit-reprise', description: 'Synthetic review guidance', content: '# Review\nUse this workflow to review a synthetic document carefully.' } };
-  store.saveSkill({ scenarioId: 'audit/a', acceptedAt: new Date(0).toISOString(), proposal, gate: { accepted: true } });
+  store.saveSkill({ scenarioId: 'audit/a', acceptedAt: new Date(0).toISOString(), proposal, gate: { accepted: true, proposalId: proposal.id, scenarioId: 'audit/a', reasons: [] } });
   out.proposalCollision = { samePath: store.pathFor('skill', 'audit/a') === store.pathFor('skill', 'audit:a'), loadedScenario: store.loadSkill('audit:a')?.scenarioId };
-  assert.equal(out.proposalCollision.loadedScenario, 'audit/a');
+  assert.equal(out.proposalCollision.samePath, false);
+  assert.equal(out.proposalCollision.loadedScenario, undefined);
+  assert.equal(store.loadSkill('audit/a')?.proposal.id, proposal.id);
 
   const skillRoot = path.join(root, 'skills');
   const registry = getSkillRegistry({ workspacePath: skillRoot, managedPath: '', bundledPath: '', watchEnabled: false });
@@ -45,8 +47,8 @@ try {
   const result = await runProc(process.execPath, ['-e', parent], { checkoutDir: root, timeoutMs: 100 });
   out.timeout = { timedOut: result.timedOut, elapsedMs: Date.now() - start, descendantFinished: await fs.access(marker).then(() => true, () => false) };
   assert.equal(out.timeout.timedOut, true);
-  assert.equal(out.timeout.descendantFinished, true);
-  assert.ok(out.timeout.elapsedMs > 1000);
+  assert.equal(out.timeout.descendantFinished, false);
+  assert.ok(out.timeout.elapsedMs < 1400);
   console.log(JSON.stringify(out, null, 2));
 } finally {
   getSkillRegistry().shutdown();
