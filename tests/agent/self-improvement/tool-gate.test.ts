@@ -202,7 +202,7 @@ describe.skipIf(process.platform !== 'linux')('tool-gate — behavioural held-ou
   });
 });
 
-describe('ToolImprovementEngine — cycle', () => {
+describe.skipIf(process.platform !== 'linux')('ToolImprovementEngine — cycle', () => {
   it('auto-applies a legit tool and archives it; rejects a gamed one', async () => {
     const archive = new EvolutionaryArchive({ workDir: path.join(os.tmpdir(), `cb-arch-${randomUUID()}`) });
     const legitEngine = new ToolImprovementEngine({
