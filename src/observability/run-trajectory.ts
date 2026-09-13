@@ -7,7 +7,7 @@
 
 import os from 'node:os';
 import type { ToolEffectClass } from '../tools/types.js';
-import { resolveToolEffect } from '../tools/metadata.js';
+import { resolveToolEffect } from '../tools/tool-effect.js';
 
 export const RUN_TRAJECTORY_SCHEMA_VERSION = 1 as const;
 export const RUN_TRAJECTORY_KIND = 'run_trajectory' as const;

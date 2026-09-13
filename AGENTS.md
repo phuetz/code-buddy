@@ -147,6 +147,8 @@ Electron app, separate `package.json`, Node ≥22, Vite + React + better-sqlite3
 
 Codex-style aliases (`shell_exec`, `file_read`, `browser_search`, …) live in `src/tools/registry/tool-aliases.ts`.
 
+`src/tools/metadata.ts` is also imported by Cowork's browser-side profile previews. Keep its catalogue free of Node runtime imports; effect resolution with logger warnings lives in `src/tools/tool-effect.ts`. A Vite browser-bundle regression test guards this boundary.
+
 ## Edit Tool Matching
 
 `str_replace` tries 5 strategies in cascade: **exact** → **flexible** (trim-normalized, preserves indent) → **regex** (tokenized on `():[]{}<>=,;`, joined with `\s*`) → **fuzzy** (Levenshtein, 10% threshold) → **LCS fallback** (90% similarity). Before any write/edit, content is scanned for omission placeholders (`// ... rest of code`, `// remaining methods ...`) — if present in `new_string` but not `old_string`, the edit is blocked.

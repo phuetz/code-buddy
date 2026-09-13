@@ -10,7 +10,7 @@
 
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
-import { resolveToolEffect } from './metadata.js';
+import { resolveToolEffect } from './tool-effect.js';
 import type { IToolExecutionContext } from './registry/types.js';
 
 // ============================================================================

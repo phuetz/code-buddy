@@ -28,7 +28,8 @@ import {
   readMaterializedResearchScriptSkillCandidate,
   type ResearchScriptSkillCandidate,
 } from '../../agent/research-script-skill-candidate.js';
-import { getActiveToolMetadata, resolveToolEffect } from '../../tools/metadata.js';
+import { getActiveToolMetadata } from '../../tools/metadata.js';
+import { resolveToolEffect } from '../../tools/tool-effect.js';
 
 interface ToolsProfileOptions {
   json?: boolean;

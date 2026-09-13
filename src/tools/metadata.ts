@@ -1,5 +1,4 @@
-import { ToolMetadata, ToolCategory, ToolEffectClass, TOOL_EFFECT_CLASSES } from "./types.js";
-import { logger } from "../utils/logger.js";
+import type { ToolMetadata, ToolCategory } from './types.js';
 
 /**
  * Default tool metadata for all built-in tools
@@ -2086,32 +2085,6 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
 ];
-
-const missingEffectWarned = new Set<string>();
-
-function isToolEffectClass(value: unknown): value is ToolEffectClass {
-  return (TOOL_EFFECT_CLASSES as readonly string[]).includes(value as string);
-}
-
-/** Resolve a tool's declared effect class. Missing catalog/MCP entries warn once and return `unknown`. */
-export function resolveToolEffect(
-  name: string,
-  metadata?: Pick<ToolMetadata, 'effect'> | null,
-): ToolEffectClass | 'unknown' {
-  if (isToolEffectClass(metadata?.effect)) return metadata.effect;
-  const catalog = TOOL_METADATA.find((entry) => entry.name === name)?.effect;
-  if (isToolEffectClass(catalog)) return catalog;
-  if (!missingEffectWarned.has(name)) {
-    missingEffectWarned.add(name);
-    logger.warn('tool metadata missing effect class; treating as unknown', { tool: name });
-  }
-  return 'unknown';
-}
-
-/** Test hook: unique-warning latch. */
-export function resetToolEffectWarningLatch(): void {
-  missingEffectWarned.clear();
-}
 
 /** Metadata visible to RAG / BM25. Gated tools stay out of the index when disabled. */
 export function getActiveToolMetadata(): ToolMetadata[] {

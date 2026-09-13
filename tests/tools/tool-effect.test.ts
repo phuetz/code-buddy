@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { logger } from '../../src/utils/logger.js';
+import { TOOL_METADATA } from '../../src/tools/metadata.js';
 import {
-  TOOL_METADATA,
   resetToolEffectWarningLatch,
   resolveToolEffect,
-} from '../../src/tools/metadata.js';
+} from '../../src/tools/tool-effect.js';
 import { TOOL_EFFECT_CLASSES, type ToolEffectClass } from '../../src/tools/types.js';
 import { ToolSearchTool, initToolSearchIndex } from '../../src/tools/tool-search.js';
 
