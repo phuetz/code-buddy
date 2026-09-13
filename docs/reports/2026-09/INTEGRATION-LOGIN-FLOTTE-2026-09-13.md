@@ -191,6 +191,15 @@ textuelle. Le commit `bf61b6d42` rend l'attente portable et accepte les chemins
 absolus Windows. La validation donne 74 tests ciblés, typecheck, build, lint et
 10 contrôles du paquet verts.
 
+Le premier rejeu macOS a ensuite exposé cinq tests qui supposaient encore que
+les outils générés pouvaient s'exécuter sans Landlock. Le correctif
+`931f1f735` conserve le refus fermé en production, vérifie explicitement ce
+refus sur les plateformes non Linux et limite aux runners Linux les scénarios
+comportementaux qui exigent le confinement noyau. Le test historique de lecture
+absolue vérifie désormais que la sentinelle reste inaccessible. La suite élargie
+self-improvement et sécurité donne 50 fichiers et 403 tests verts sous Linux,
+avec lint ciblé et typecheck verts.
+
 ## Paquet final
 
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
