@@ -541,6 +541,8 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     id: variantId,
     branch,
     sha,
+    baselineSha: git(['rev-parse', '--verify', `${opts.baselineRef}^{commit}`], basePath).trim(),
+    fitness: report,
     score: report.score,
     passedAll: report.passedAll,
     regressions: report.regressions,

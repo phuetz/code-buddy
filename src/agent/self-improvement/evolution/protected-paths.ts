@@ -33,6 +33,8 @@ export const PROTECTED_GLOBS: readonly string[] = [
   'src/agent/self-improvement/self-knowledge.ts',
   // Security scanners the skill firewall relies on
   'src/security/skill-scanner.ts',
+  'src/security/compute-confinement.ts',
+  'src/agent/self-improvement/authored-tool-runtime.ts',
   'src/security/dangerous-patterns.ts',
   // Tests that verify the gates / self-improvement (used by the fitness unit-tests component)
   'tests/agent/self-improvement/**',

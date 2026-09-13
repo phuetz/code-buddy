@@ -16,8 +16,10 @@
  */
 
 import { spawn } from 'child_process';
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync, mkdtempSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'node:os';
+import { stripVTControlCharacters } from 'node:util';
 
 export interface FitnessContext {
   /** Directory to score (repo root or a worktree). Must contain node_modules + dist for slow components. */
@@ -117,8 +119,15 @@ function lastLines(s: string, n = 8): string {
 
 /** Parse vitest summary lines: "Tests  3 passed (3)" / "Tests  2 failed | 5 passed (7)". */
 export function parseVitestCounts(out: string): { passed: number; failed: number } {
-  const passed = /(\d+)\s+passed/.exec(out);
-  const failed = /(\d+)\s+failed/.exec(out);
+  try {
+    const report = JSON.parse(out) as Record<string, unknown>;
+    const passed = report.numPassedTests;
+    const failed = report.numFailedTests;
+    if (typeof passed === 'number' && Number.isSafeInteger(passed) && passed >= 0 && typeof failed === 'number' && Number.isSafeInteger(failed) && failed >= 0) return { passed, failed };
+  } catch { /* Compatibility for recorded human-readable summaries. */ }
+  const summary = stripVTControlCharacters(out).split('\n').find(line => /^\s*Tests\s/.test(line)) ?? '';
+  const passed = /(\d+)\s+passed/.exec(summary);
+  const failed = /(\d+)\s+failed/.exec(summary);
   return { passed: passed ? Number(passed[1]) : 0, failed: failed ? Number(failed[1]) : 0 };
 }
 
@@ -183,18 +192,21 @@ export function unitTestsComponent(patterns: string[], weight = 4): FitnessCompo
     weight,
     deterministic: true,
     async run(ctx) {
-      const r = await runProc('npx', ['vitest', 'run', ...patterns], ctx);
-      const { passed, failed } = parseVitestCounts(r.stdout + r.stderr);
-      const total = passed + failed;
-      const { score, passed: passedFlag } = scoreVitestRun(passed, failed, r.code, r.timedOut);
-      return {
-        name: 'unit-tests',
-        weight,
-        score,
-        passed: passedFlag,
-        detail: total > 0 ? `${passed} passed / ${failed} failed` : `no tests collected — ${lastLines(r.stdout + r.stderr, 4)}`,
-        metrics: { passed, failed },
-      };
+      const dir = mkdtempSync(join(tmpdir(), 'cb-fitness-'));
+      try {
+        const file = join(dir, 'vitest.json');
+        const r = await runProc('npx', ['vitest', 'run', ...patterns, '--reporter=json', `--outputFile=${file}`], ctx);
+        // A separate report avoids mixing tool/subprocess stdout with the machine-readable results.
+        if (statSync(file).size > 16 * 1024 * 1024) throw new Error('Test report exceeds 16 MiB');
+        const raw = readFileSync(file, 'utf8');
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (!Number.isSafeInteger(parsed.numPassedTests) || !Number.isSafeInteger(parsed.numFailedTests) || Number(parsed.numPassedTests) < 0 || Number(parsed.numFailedTests) < 0) throw new Error('Invalid test report counts');
+        const { passed, failed } = parseVitestCounts(raw);
+        const { score, passed: passedFlag } = scoreVitestRun(passed, failed, r.code, r.timedOut);
+        return { name: 'unit-tests', weight, score, passed: passedFlag, detail: `${passed} passed / ${failed} failed`, metrics: { passed, failed } };
+      } catch (error) {
+        return { name: 'unit-tests', weight, score: 0, passed: false, detail: `Missing or invalid Vitest report: ${msg(error)}` };
+      } finally { rmSync(dir, { recursive: true, force: true }); }
     },
   };
 }
@@ -213,26 +225,56 @@ export function evalTasksComponent(tasks?: string[], weight = 5): FitnessCompone
       if (all.length === 0) {
         return { name: 'eval-tasks', weight, score: 0, passed: false, detail: 'no eval tasks found' };
       }
+      const build = await runProc('npx', ['tsc'], ctx);
+      if (build.code !== 0 || build.timedOut) return { name: 'eval-tasks', weight, score: 0, passed: false, detail: 'candidate build failed' };
       let pass = 0;
+      let completed = true;
+      const outcomes: Record<string, number> = {};
       for (const t of all) {
         const r = await runProc(process.execPath, ['eval/run-task.mjs', t], ctx);
-        if (r.code === 0 && !r.timedOut) pass++;
+        const ok = r.code === 0 && !r.timedOut;
+        if (ok) pass++;
+        if (r.timedOut) completed = false;
+        outcomes[`task:${t}`] = ok ? 1 : 0;
       }
       return {
         name: 'eval-tasks',
         weight,
         score: pass / all.length,
-        passed: pass === all.length,
+        // Completion is the gate; task success is a graded optimization signal.
+        passed: completed,
         detail: `${pass}/${all.length} eval tasks passed`,
-        metrics: { passed: pass, total: all.length },
+        metrics: { passed: pass, total: all.length, ...outcomes },
       };
     },
   };
 }
 
+/** Protected, offline task objective. Guard checks can be green while task success improves. */
+export function harnessTasksComponent(weight = 5): FitnessComponent {
+  return {
+    name: 'harness-tasks', weight, deterministic: true,
+    async run(ctx) {
+      const build = await runProc('npx', ['tsc'], ctx);
+      if (build.code !== 0 || build.timedOut) return { name: 'harness-tasks', weight, score: 0, passed: false, detail: 'candidate build failed' };
+      const result = await runProc(process.execPath, ['eval/harness-benchmark.mjs'], ctx);
+      try {
+        const lines = result.stdout.trim().split('\n');
+        const report = JSON.parse(lines[lines.length - 1] ?? '') as { kind?: unknown; results?: Record<string, unknown> };
+        const entries = Object.entries(report.results ?? {});
+        if (result.code !== 0 || result.timedOut || report.kind !== 'harness_benchmark' || !entries.length || entries.some(([, value]) => typeof value !== 'boolean')) throw new Error('Invalid harness benchmark report');
+        const pass = entries.filter(([, value]) => value).length;
+        return { name: 'harness-tasks', weight, passed: true, score: pass / entries.length, detail: `${pass}/${entries.length} harness tasks passed`, metrics: Object.fromEntries(entries.map(([id, value]) => [`task:${id}`, value ? 1 : 0])) };
+      } catch {
+        return { name: 'harness-tasks', weight, score: 0, passed: false, detail: 'harness benchmark failed or emitted an invalid report' };
+      }
+    },
+  };
+}
+
 /** Default deterministic set → a fast, reproducible baseline (no LLM, no build). */
-export function defaultDeterministicComponents(): FitnessComponent[] {
-  return [typecheckComponent(), unitTestsComponent(['tests/agent/self-improvement'])];
+export function defaultDeterministicComponents(guardsOnly = false): FitnessComponent[] {
+  return [typecheckComponent(guardsOnly ? 0 : 3), unitTestsComponent(['tests/agent/self-improvement'], guardsOnly ? 0 : 4)];
 }
 
 // ---- Aggregation (pure, unit-tested) ------------------------------------------------------
@@ -243,8 +285,9 @@ export function detectRegressions(baseline: FitnessReport, current: ComponentRes
   for (const r of current) {
     const b = byName.get(r.name);
     if (!b) continue;
-    if (r.score < b.score - eps || (b.passed && !r.passed)) out.push(r.name);
+    if (r.score < b.score - eps || (b.passed && !r.passed) || Object.entries(b.metrics ?? {}).some(([key, value]) => key.startsWith('task:') && (r.metrics?.[key] ?? -1) < value)) out.push(r.name);
   }
+  for (const b of baseline.components) if (!current.some(c => c.name === b.name)) out.push(b.name);
   return out;
 }
 

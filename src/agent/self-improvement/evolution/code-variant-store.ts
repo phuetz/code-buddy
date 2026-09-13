@@ -7,6 +7,7 @@
  * @module agent/self-improvement/evolution/code-variant-store
  */
 
+import type { FitnessReport } from './variant-fitness.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../../../utils/logger.js';
@@ -16,6 +17,8 @@ export interface VariantRecord {
   id: string;
   branch: string;
   sha: string;
+  baselineSha?: string;
+  fitness?: FitnessReport;
   /** Aggregate fitness in [0,1]. */
   score: number;
   passedAll: boolean;

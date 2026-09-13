@@ -25,6 +25,7 @@ import {
 
 interface EvolveOptions {
   goal?: string;
+  evalTask?: string[];
   auto?: boolean;
   source?: string;
   rounds?: string;
@@ -163,6 +164,18 @@ export function registerEvolveCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
+      if (!v.passedAll || v.regressions.length || !/^[a-f0-9]{40,64}$/.test(v.sha)) {
+        logger.error('Variant is not eligible: missing verified commit, failed checks, or regressions.');
+        process.exitCode = 1;
+        return;
+      }
+      try {
+        if (git(['rev-parse', '--verify', `${v.branch}^{commit}`]).trim() !== v.sha) throw new Error('Variant branch changed since evaluation');
+      } catch (error) {
+        logger.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+        return;
+      }
       if (!options.confirm) {
         logger.info(`Preview: keep ${v.id} (${v.branch}) → merge into '${current}'.`);
         logger.info(`  fitness=${v.score.toFixed(3)}  passedAll=${v.passedAll}  regressions=[${v.regressions.join(', ')}]`);
@@ -170,7 +183,7 @@ export function registerEvolveCommands(program: Command): void {
         return;
       }
       try {
-        execFileSync('git', ['merge', '--no-ff', '-m', `evolve: keep ${v.id} (${v.detail ?? ''})`, v.branch], {
+        execFileSync('git', ['merge', '--no-ff', '-m', `evolve: keep ${v.id} (${v.detail ?? ''})`, v.sha], {
           stdio: 'inherit',
         });
         logger.info(`Merged ${v.branch} into '${current}'. Review the result and run your full validation.`);
@@ -189,6 +202,7 @@ export function registerEvolveCommands(program: Command): void {
     .option('--rounds <n>', 'Candidates per goal (fan-out), or max auto-weaknesses', '1')
     .option('--concurrency <n>', 'How many candidates to evaluate at once', '2')
     .option('--baseline <ref>', 'Baseline ref to branch from + rank against', 'main')
+    .option('--eval-task <ids...>', 'Opt in to whole-agent LLM eval tasks; default objective is the offline harness benchmark')
     .option('--model <model>', 'Model for the mutator agent + planner')
     .option('--model-bandit', 'Pick the mutator model per-cycle with the cost-aware UCB bandit (opt-in; overrides --model per cycle)')
     .option('--no-plan', 'Skip deliberate planning (use the ad-hoc mutator prompt)')
@@ -207,11 +221,12 @@ export function registerEvolveCommands(program: Command): void {
       }
       const { runEvolutionRound, agentMutator, formatEvolveRoundSummary } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
       const { makeLlmVariantPlanner } = await import('../../agent/self-improvement/evolution/variant-planner.js');
-      const { computeFitness, defaultDeterministicComponents } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
-      const baselineRef = options.baseline ?? 'main';
+      const { defaultDeterministicComponents, evalTasksComponent, harnessTasksComponent } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
+      const { scoreReferenceInWorktree } = await import('../../agent/self-improvement/evolution/worktree-scorer.js');
+      const baselineRef = git(['rev-parse', '--verify', `${options.baseline ?? 'main'}^{commit}`]).trim();
       const rounds = Math.max(1, Number(options.rounds ?? '1') || 1);
       const concurrency = Math.max(1, Number(options.concurrency ?? '2') || 2);
-      const components = defaultDeterministicComponents();
+      const components = [...defaultDeterministicComponents(true), options.evalTask ? evalTasksComponent(options.evalTask) : harnessTasksComponent()];
       const mutate = agentMutator(options.model ? { model: options.model } : {});
       // Deliberate planner (default on). --no-plan → a planner that returns null → mutator's ad-hoc prompt.
       const planner = options.plan === false
@@ -253,7 +268,7 @@ export function registerEvolveCommands(program: Command): void {
       }
 
       logger.info(`Scoring baseline (${baselineRef})…`);
-      const baseline = await computeFitness({ checkoutDir: process.cwd() }, components);
+      const baseline = (await scoreReferenceInWorktree(baselineRef, { components })).report;
       logger.info(`  baseline fitness=${baseline.score.toFixed(3)}`);
 
       // Compounding: build each candidate on top of the current best elite (guarded by reachability
