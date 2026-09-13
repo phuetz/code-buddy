@@ -1,8 +1,8 @@
 /**
  * Prompt Caching Module
  *
- * Implements prompt caching for LLM API calls to reduce costs and latency.
- * Research shows up to 90% cost reduction and 80% latency improvement.
+ * Tracks local prompt repetition and exact component changes. Cache hits and
+ * savings here are heuristics, not measurements of a provider's prompt cache.
  *
  * References:
  * - OpenAI Prompt Caching: https://platform.openai.com/docs/guides/prompt-caching
@@ -35,6 +35,12 @@ export interface CacheStats {
   totalTokensSaved: number;
   estimatedCostSaved: number;
   entries: number;
+}
+
+/** Consecutive raw observations within this manager, not provider cache usage. */
+export interface PrefixStabilityStats {
+  system: { observations: number; unchanged: number; changes: number };
+  tools: { observations: number; unchanged: number; changes: number };
 }
 
 /**
@@ -81,6 +87,11 @@ export class PromptCacheManager extends EventEmitter {
   private systemPromptHash: string | null = null;
   private toolsHash: string | null = null;
   private contextHashes: Map<string, string> = new Map();
+  // Fixed-size diagnostics: retain only the previous component hashes and counts.
+  private prefixStats: PrefixStabilityStats = {
+    system: { observations: 0, unchanged: 0, changes: 0 },
+    tools: { observations: 0, unchanged: 0, changes: 0 },
+  };
 
   constructor(config: Partial<CacheConfig> = {}) {
     super();
@@ -92,6 +103,19 @@ export class PromptCacheManager extends EventEmitter {
    */
   private hash(content: string): string {
     return createHash("sha256").update(content).digest("hex").slice(0, 16);
+  }
+
+  private observePrefix(type: 'system' | 'tools', hash: string): void {
+    if (!this.config.enabled) return;
+    const previous = type === 'system' ? this.systemPromptHash : this.toolsHash;
+    const stats = this.prefixStats[type];
+    stats.observations++;
+    if (previous !== null) {
+      if (previous === hash) stats.unchanged++;
+      else stats.changes++;
+    }
+    if (type === 'system') this.systemPromptHash = hash;
+    else this.toolsHash = hash;
   }
 
   /**
@@ -145,10 +169,10 @@ export class PromptCacheManager extends EventEmitter {
   cacheSystemPrompt(prompt: string): string {
     const hash = this.hash(prompt);
     const tokens = this.estimateTokens(prompt);
+    this.observePrefix('system', hash);
 
     if (tokens >= this.config.minTokensToCache) {
       this.addEntry(hash, tokens, "system");
-      this.systemPromptHash = hash;
     }
 
     return hash;
@@ -161,10 +185,10 @@ export class PromptCacheManager extends EventEmitter {
     const content = JSON.stringify(tools);
     const hash = this.hash(content);
     const tokens = this.estimateTokens(content);
+    this.observePrefix('tools', hash);
 
     if (tokens >= this.config.minTokensToCache) {
       this.addEntry(hash, tokens, "tools");
-      this.toolsHash = hash;
     }
 
     return hash;
@@ -239,6 +263,14 @@ export class PromptCacheManager extends EventEmitter {
     return { ...this.stats };
   }
 
+  /** Includes short components below the cache threshold; stores no prompt text. */
+  getPrefixStats(): PrefixStabilityStats {
+    return {
+      system: { ...this.prefixStats.system },
+      tools: { ...this.prefixStats.tools },
+    };
+  }
+
   /**
    * Format stats for display
    */
@@ -247,8 +279,10 @@ export class PromptCacheManager extends EventEmitter {
       "📦 Prompt Cache Statistics",
       `├─ Entries: ${this.stats.entries}`,
       `├─ Hit Rate: ${(this.stats.hitRate * 100).toFixed(1)}%`,
-      `├─ Tokens Saved: ${this.stats.totalTokensSaved.toLocaleString()}`,
-      `└─ Est. Cost Saved: $${this.stats.estimatedCostSaved.toFixed(4)}`,
+      `├─ Est. Reused Tokens: ${this.stats.totalTokensSaved.toLocaleString()}`,
+      `├─ Est. Cost Saved (heuristic): $${this.stats.estimatedCostSaved.toFixed(4)}`,
+      `└─ Prefix Changes (local): system ${this.prefixStats.system.changes}, tools ${this.prefixStats.tools.changes}`,
+      'Local repetition estimates; provider cache usage is not measured.',
     ];
     return lines.join("\n");
   }
@@ -261,6 +295,10 @@ export class PromptCacheManager extends EventEmitter {
     this.systemPromptHash = null;
     this.toolsHash = null;
     this.contextHashes.clear();
+    this.prefixStats = {
+      system: { observations: 0, unchanged: 0, changes: 0 },
+      tools: { observations: 0, unchanged: 0, changes: 0 },
+    };
     logger.debug("Prompt cache cleared");
   }
 
