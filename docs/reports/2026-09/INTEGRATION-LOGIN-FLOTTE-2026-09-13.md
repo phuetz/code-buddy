@@ -131,3 +131,13 @@ La sonde de reprise est passée rouge→vert. La validation finale donne 55 test
 et 10 contrôles du paquet verts, ainsi que typecheck, build et lint verts. Un
 premier lancement parallèle avait exécuté le test du superviseur avant le build
 et échoué faute d'artefact `dist`; le rejeu après build est entièrement vert.
+
+## Tranche 6 — intégration des trois harnais
+
+Les commits `a51a74890`, `1b0cd8765`, `1873b38bd`, `4f390aee8` et
+`207ffc3b4` ajoutent les missions persistantes avec leases, handoffs et
+résultats, le diagnostic de stabilité du cache, le préflight TypeScript borné
+des programmes et la continuité/reprise des tâches cron.
+
+Après compilation, les huit fichiers ciblés donnent 144 tests verts. Les dix
+contrôles du paquet, le typecheck et le lint sont également verts.

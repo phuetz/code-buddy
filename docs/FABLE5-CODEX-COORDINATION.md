@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Intégration améliorations — tranche 6 trois harnais 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 5 `40554dcdf` ; commits visés `9bfc8796f`, `0a4ad53d2`, `0988accad`, `d99ecd52b`, `6eb570c8c` | Porter leases/handoffs/résultats, diagnostic cache, compilation bornée des programmes et continuité/retry cron. | Aucun push avant validations ciblées et build. |
+| P1 | Intégration améliorations — tranche 6 trois harnais 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 5 `40554dcdf` ; commits portés `a51a74890`, `1b0cd8765`, `1873b38bd`, `4f390aee8`, `207ffc3b4` + clôture | Missions avec leases/handoffs/résultats, diagnostic cache, préflight TypeScript borné et continuité/retry cron. | Build puis 8 fichiers/144 tests, pack 10/10, typecheck et lint verts. Aucun push avant clôture. |
 
 | P1 | Intégration améliorations — tranche 5 reprise flotte 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 4 `262291288` ; commits portés `ab9920c80`, `c81f691a3`, `e54a75883`, `95bf9c8f3` + clôture | Propositions isolées, descendants terminés, applications de skills journalisées/réconciliées, opérations locales fixes supervisées. | Sonde reprise rouge→vert ; 55 tests + 10 pack, typecheck/build/lint verts. Premier lancement parallèle rouge avant build, rejeu après build 55/55 vert. |
 
