@@ -106,3 +106,16 @@ Après une nouvelle récupération de `origin/main`, sa tête était toujours
 accepté. La branche cumulée a donc été poussée directement sur GitHub :
 `origin/main` est passé de `13e27f057` à `dc66232a8`. Le paquet npm n'a pas été
 publié.
+
+## Tranche 4 — skills, sandbox et DGM
+
+La modernisation DGM est portée avec le confinement Landlock/seccomp, la
+vérification d'identité et de comportement des skills, l'évaluation de tâches
+comportementales et la promotion du SHA effectivement évalué. Les commits
+portés vont de `fba371800` à `fb841c7c0`.
+
+La contre-validation donne 34 tests et 10 contrôles du paquet verts, les sondes
+skills/DGM et le benchmark exécutés avec succès, ainsi que typecheck, build et
+lint code 0. La sonde de reprise conserve trois défauts documentés pour la
+tranche 5 : collision de chemins de propositions, installation sans journal
+cohérent et descendants survivant au timeout.
