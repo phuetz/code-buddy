@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Compilation TypeScript Cowork 2026-09-14 | **Codex — VALIDÉ LOCAL** | Branche `integration/improvements-persistence-2026-09-13`, après `2b8d62ca7` | Déclarations optionnelles du noyau incluses et alias OSConfig exporté comme type ; 20 diagnostics historiques éliminés. | Typecheck Cowork exit 0 ; validate ciblé sandbox 12/12, lint/typechecks/pack verts. Rapport `COWORK-TYPECHECK-2026-09-14.md`. |
+
 | P1 | Arrêt FleetBridge à la fermeture Cowork 2026-09-14 | **Claude Opus + Codex — VALIDÉ LOCAL** | Branche intégration après `ab968f226`, port sélectif du lot 3 Opus | Instance existante arrêtée une seule fois, délai 3 s, reprises désarmées avant nettoyage sandbox, chemins normal et dev câblés. | Opus 184 tests voisins ; contre-validation Cowork 75/75, validate noyau ciblé 89/89 + lint/typechecks/pack. Pas de sortie Electron réelle revendiquée. |
 
 | P1 | Frontière navigateur catalogue outils Cowork 2026-09-14 | **Codex — VALIDÉ LOCAL** | Branche `integration/improvements-persistence-2026-09-13`, après `10788eb8e` | Métadonnées séparées des avertissements runtime ; correction CommonJS AlaSQL d’Opus intégrée ; build Vite complet vert. | Validate complet : 38 538 tests verts ; 48 ciblés runtime, 5 builds Node 20/24, smoke CLI compilé et Chromium sur fixture verts. Rapport `COWORK-BUILD-OPUS-2026-09-14.md`. |
