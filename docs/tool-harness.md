@@ -158,6 +158,27 @@ buddy fleet mission show .codebuddy/missions audit
 buddy fleet mission ack .codebuddy/missions audit fable
 ```
 
+Pour retrouver les travaux sans connaître leurs identifiants :
+
+```sh
+buddy fleet mission list .codebuddy/missions --limit 25
+buddy fleet mission list .codebuddy/missions --limit 25 --cursor HASH_RETOURNE
+```
+
+La réponse contient `missions`, `errors` et éventuellement `nextCursor`. Chaque
+mission expose son identifiant, état, révision, date, pilote, expiration du bail,
+succès éventuel et accusé de lecture booléen. Elle exclut commandes, arguments,
+workspace, sorties, capsule de passation et génération d’autorité. `show` reste
+le détail explicite d’une mission. Une page examine 25 fichiers par défaut
+(1 à 100) ; les fichiers invalides consomment aussi une place et sont signalés par
+leur nom haché avec une erreur générique. Un dossier absent renvoie une page vide
+sans créer de fichier. Les pages suivent l’état vivant, sans instantané : une
+mission créée avant le curseur nécessite de recommencer la lecture.
+
+Le catalogue balaie les noms du répertoire en mémoire bornée, puis lit et valide
+les enregistrements sélectionnés (au plus 3 Mo chacun). La réduction concerne les
+sorties transmises aux pilotes ; ce n’est pas un index séparé de métadonnées.
+
 Une seule réservation active par tâche. La génération change à chaque attribution ; une ancienne génération est refusée. Le runner renouvelle son bail pendant le travail. Les commandes et arguments sont figés à la création : modifier le manifeste ensuite ne modifie pas la mission. Le résultat est borné, indique `truncated` si nécessaire, reste consultable après redémarrage et après accusé de réception. Une tâche terminée ne se relance pas implicitement.
 
 Pour transmettre une mission réservée mais non démarrée :

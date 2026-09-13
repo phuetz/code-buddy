@@ -61,3 +61,25 @@ That's it. The bundled **`code-explorer` skill** then nudges the agent to reach 
 - **How it loads.** Interactive `buddy` loads MCP servers at session start with a per-server timeout (`CODEBUDDY_MCP_INIT_TIMEOUT_MS`, default 15s): a slow server is skipped so the others still load, then reconnects in the background. **Headless `buddy -p` defaults MCP off** for startup cost/determinism — opt in with `CODEBUDDY_DISABLE_MCP=false`. `buddy mcp test code-explorer` (which connects explicitly) is the reliable way to confirm the bridge itself is healthy.
 - **Relationship to Code Buddy's built-in graph (honest framing).** Code Buddy already ships graph tools — `code_graph` / `codebase_map`, backed by an internal `KnowledgeGraph` — that also do callers/callees/impact/dead-code. So Code Explorer is **not** "a graph where there was none"; it's a **broader, multi-language (14 langs), whole-repo** graph for projects where the built-in falls short. Both are offered to the model when gitnexus is installed, and Code Buddy injects a directive (only when gitnexus is connected) steering the agent to prefer the gitnexus tools for relationship/blast-radius questions. On a spot check (`impact executePlan --direction both`) gitnexus-over-MCP returns the full **187 affected symbols** vs the built-in's **~20** — so the win is real (breadth + completeness), not just "the agent had no graph." (An earlier MCP under-report of 18 was a gitnexus bug, since fixed — the MCP path now matches the CLI.)
 - The 30 public tools (a private edition adds `business`): `list_repos`, `query`, `context`, `impact`, `detect_changes`, `rename`, `cypher`, `hotspots`, `coupling`, `ownership`, `coverage`, `diagram`, `report`, `search_processes`, `analyze_execution_trace`, `search_code`, `read_file`, `get_insights`, `save_memory`, `find_cycles`, `find_similar_code`, `list_todos`, `get_complexity`, `list_endpoints`, `list_db_tables`, `list_env_vars`, `get_endpoint_handler`, `list_sfd_pages`, `write_sfd_draft`, `validate_sfd`.
+
+## Index freshness and concurrent callers
+
+Buddy verifies full SHA-1 or SHA-256 index revisions against Git HEAD using an
+argument-based Git invocation. A rewound or changed branch is stale even when
+`rev-list` reports zero commits behind. Unavailable Git, invalid revisions and
+incomplete or unreadable modern metadata produce `unverified: true` and a warning
+in the agent prompt; they do not trigger automatic indexing. Legacy flat metadata
+with an explicit stale flag or symbol/relation counts remains supported. This
+check compares commits, not uncommitted working-tree contents.
+
+`CodeExplorerManager.analyze({ incremental: true })` accepts incremental indexing.
+Simultaneous identical calls for the same resolved repository path share one
+analysis promise across manager instances. Different options wait their turn;
+a failed analysis releases the slot for a retry. Diagnostics retain the last
+65,536 stderr characters. Automatic refresh uses whichever supported executable
+was resolved (`code-explorer` or `gitnexus`).
+
+This coordination applies inside one Buddy process. It does not lock out another
+CLI process or an already detached background indexer. It also does not make the
+engine's repository-wide relationship resolution cheaper: repeated sequential
+refreshes can still be expensive.
