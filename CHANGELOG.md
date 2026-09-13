@@ -4,6 +4,7 @@
 
 - `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.
 - ChatGPT login and token refresh no longer report success when credentials cannot be saved; login explains how to resolve the storage failure.
+- Cancelled or timed-out ChatGPT logins ignore late token responses instead of replacing saved credentials after the login has ended.
 
 ## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
 

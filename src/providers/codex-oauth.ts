@@ -465,8 +465,10 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
     let serverInstance: http.Server | null = null;
     let timeoutHandle: NodeJS.Timeout | null = null;
     let actualPort = CALLBACK_PORT;
+    let finished = false;
 
     const cleanup = () => {
+      finished = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (serverInstance) {
         try { serverInstance.close(); } catch { /* ignore */ }
@@ -518,6 +520,13 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
 
         const redirectUri = `http://localhost:${actualPort}/auth/callback`;
         const tokens = await exchangeCodeForTokens(code, pkce.code_verifier, redirectUri);
+        if (finished) {
+          // Cancellation/timeout may happen while the issuer is responding.
+          // A late response must not replace credentials after the UI has ended.
+          res.writeHead(410, { 'Content-Type': 'text/plain' });
+          res.end('Login is no longer active. Run buddy login again.');
+          return;
+        }
 
         const authFile: CodexAuthDotJson = {
           tokens,

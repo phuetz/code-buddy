@@ -48,6 +48,43 @@ async function waitForOpenCalled(timeoutMs = 5000): Promise<string> {
 }
 
 describe('Codex OAuth — E2E login happy path', () => {
+  it('does not persist a delayed token exchange after login is cancelled', async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    let releaseTokens!: (response: Response) => void;
+    let markExchangeStarted!: () => void;
+    const delayedTokens = new Promise<Response>((resolve) => { releaseTokens = resolve; });
+    const exchangeStarted = new Promise<void>((resolve) => { markExchangeStarted = resolve; });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === 'https://auth.openai.com/oauth/token') {
+        markExchangeStarted();
+        return delayedTokens;
+      }
+      return realFetch(input, init);
+    });
+    const { loginInteractive, getCodexAuthFilePath } = await import('../../src/providers/codex-oauth.js');
+    const original = JSON.stringify({ tokens: { access_token: 'existing-access', refresh_token: 'existing-refresh' } });
+    fs.mkdirSync(path.dirname(getCodexAuthFilePath()), { recursive: true });
+    fs.writeFileSync(getCodexAuthFilePath(), original);
+    const outcome = loginInteractive().then(() => null, (error: unknown) => error);
+    const authorize = new URL(await waitForOpenCalled());
+    const callback = new URL(authorize.searchParams.get('redirect_uri')!);
+    callback.hostname = '127.0.0.1';
+    callback.searchParams.set('code', 'delayed-code');
+    callback.searchParams.set('state', authorize.searchParams.get('state')!);
+    const callbackResponse = realFetch(callback, { headers: { Connection: 'close' } });
+    await exchangeStarted;
+    const cancelled = await realFetch(new URL('/cancel', callback), { headers: { Connection: 'close' } });
+    expect(cancelled.status).toBe(200);
+    expect(await outcome).toEqual(expect.objectContaining({ message: 'Login cancelled by another instance' }));
+    releaseTokens(new Response(JSON.stringify({
+      id_token: 'header.e30.sig', access_token: 'late-access', refresh_token: 'late-refresh',
+    }), { status: 200 }));
+    const response = await callbackResponse;
+    expect(response.status).toBe(410);
+    await response.text();
+    expect(fs.readFileSync(getCodexAuthFilePath(), 'utf8')).toBe(original);
+  });
+
   it.each([
     { browserFails: false, storageFails: false },
     { browserFails: true, storageFails: false },
@@ -120,7 +157,7 @@ describe('Codex OAuth — E2E login happy path', () => {
     const cbUrl = new URL(`http://127.0.0.1:${port}/auth/callback`);
     cbUrl.searchParams.set('code', 'auth-code-e2e');
     cbUrl.searchParams.set('state', state);
-    const cb = await realFetch(cbUrl.toString());
+    const cb = await realFetch(cbUrl.toString(), { headers: { Connection: 'close' } });
     if (storageFails) {
       expect(cb.status).toBe(500);
       const html = await cb.text();
