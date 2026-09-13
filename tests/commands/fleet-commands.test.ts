@@ -1,6 +1,10 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
 import { registerFleetCommands } from '../../src/commands/cli/fleet-commands.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -32,6 +36,28 @@ describe('Fleet CLI commands', () => {
     consoleErrorSpy.mockRestore();
     vi.restoreAllMocks();
     process.exitCode = 0;
+  });
+
+  it('supervises a real local operation without contacting a fleet server or model', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-fleet-cli-'));
+    const originalListeners = process.listenerCount('SIGINT');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const manifest = path.join(root, 'operations.json');
+      await fs.writeFile(manifest, JSON.stringify({ workspace: root, operations: { inspect: { command: process.execPath, args: ['-e', 'console.log("CLI_HARNESS_PROOF")'] } } }));
+      const program = createProgram();
+      registerFleetCommands(program);
+      await program.parseAsync(['node', 'test', 'fleet', 'supervise', manifest, 'inspect', '--json']);
+      const result = JSON.parse(getLogOutput());
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('CLI_HARNESS_PROOF');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(process.listenerCount('SIGINT')).toBe(originalListeners);
+      consoleLogSpy.mockClear();
+      await program.parseAsync(['node', 'test', 'fleet', 'supervise', manifest, 'missing', '--json']);
+      expect(process.exitCode).toBe(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown operation'));
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
   });
 
   it('prints JSON policy decisions for a dispatch profile', async () => {

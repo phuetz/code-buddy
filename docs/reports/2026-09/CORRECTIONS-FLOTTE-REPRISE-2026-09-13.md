@@ -30,3 +30,41 @@ La sonde réelle confirme désormais : `proofPending=true` après échec d'archi
 La suite self-improvement + harnais + recherche a passé 403 tests avant les deux derniers cas d'archive corrompue. Ces deux cas, le journal et les protections ont ensuite passé 28 tests ciblés. Validation finale de cette tranche consignée ci-dessous à la livraison. Le stockage atomique ne constitue pas une transaction distribuée ou un verrou interprocessus ; deux coordinateurs doivent toujours réserver les zones. Les décisions d'application restent sous le mode d'autonomie courant.
 
 Validation finale tranche reprise : `npm run validate` avec self-improvement, harnais et recherche, exit 0 ; 50 fichiers / 405 tests verts, 10 tests packaging verts, lint sans erreur et TypeScript vert. Build complet vert. lm-resizer : 355 285 octets originaux, 1 648 compressés (353 637 économisés) ; journal brut relu pour les totaux.
+
+
+## Troisième tranche : supervision native
+
+La preuve par script est intégrée à `src/harness/fleet-supervisor.ts`, exportée
+par l'entrée publique du harnais, et accessible via **`buddy fleet supervise
+<manifest> <operation> --json`**. `scripts/fleet-supervisor.mjs` n'est plus qu'un
+point d'entrée de compatibilité. Guide et manifeste d'exemple : `docs/tool-harness.md`.
+
+La configuration de l'opérateur fixe les exécutables et leurs arguments. La
+cellule Code Buddy ne choisit qu'une opération existante ; les paramètres libres
+sont refusés. Le résultat d'un processus échoué reste un échec jusqu'au code de
+sortie CLI. L'annulation est transmise à `runProc` et son groupe de processus.
+Aucun fournisseur LLM ni serveur Fleet n'est requis pour superviser localement.
+Les limites restent explicites : 45 secondes par opération, 60 par cellule,
+pas de nouveau service durable ou de délégation longue automatiquement lancée.
+
+Preuve réelle avec le CLI compilé : contexte Code Explorer réussi puis
+vérification **52 fichiers / 418 tests verts** en 12,68 s, via `fleet supervise`.
+lm-resizer sur cette vérification : 588 octets originaux, 323 compressés,
+265 économisés. Une deuxième suite ciblée vérifie le parsing Commander, les
+manifestes, les échecs et l'annulation. Build final réussi après correction du
+champ `required` manquant dans le premier schéma.
+
+Le premier essai avec un CodeBuddyAgent complet avait laissé une indexation
+active malgré `dispose` et SIGTERM. Le processus de cette seule sonde a été
+identifié par son PID, sa commande et son cwd, puis terminé par SIGKILL. La
+commande native n'instancie pas cet agent et ne déclenche pas cette indexation.
+Le défaut général de fermeture de l'agent complet reste une piste séparée ;
+il n'est pas déclaré corrigé par cette tranche.
+
+Outillage du coordinateur : index Code Explorer construit, actualisé après les
+commits `623d19f64` et `d34d1ebe4` ; lectures ciblées contexte/impact pour runProc,
+SkillImprovementEngine et registerFleetCommands (six appels context/impact au
+moins, directs ou via harnais). Les volumes indiqués sont ceux des commandes
+mesurées ; aucun pourcentage de quota fournisseur économisé n'est revendiqué.
+
+Validation finale native : `npm run validate` ciblé, exit 0 ; 19 tests, 10 packaging, lint (0 erreur / 2 488 avertissements) et TypeScript verts. Le contrôle de données personnelles séparé reste à **39/40**, avec les mêmes cinq chemins fautifs préexistants documentés dans les livraisons précédentes. Les fichiers de cette tranche étaient ajoutés à l'index avant ce contrôle.

@@ -26,6 +26,8 @@ export interface FitnessContext {
   checkoutDir: string;
   /** Per-process timeout for a component's subprocess. */
   timeoutMs?: number;
+  /** Cancel the subprocess and its process group. */
+  signal?: AbortSignal;
   /** Env for subprocesses. Callers may pass a SCRUBBED env (no host secrets) for untrusted variants. */
   env?: NodeJS.ProcessEnv;
 }
@@ -76,6 +78,7 @@ export function runProc(
     let stderr = '';
     let timedOut = false;
     let settled = false;
+    let stopping = false;
     let child: ReturnType<typeof spawn> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let escalation: ReturnType<typeof setTimeout> | undefined;
@@ -99,11 +102,31 @@ export function runProc(
       settled = true;
       clearTimeout(timer);
       clearTimeout(escalation);
+      ctx.signal?.removeEventListener('abort', abort);
       child?.stdout?.destroy();
       child?.stderr?.destroy();
       child?.unref();
       resolve({ code, stdout, stderr, timedOut });
     };
+    const stop = (code: number, timeout: boolean): void => {
+      if (settled || stopping) return;
+      stopping = true;
+      timedOut = timeout;
+      clearTimeout(timer);
+      void stopTree('SIGTERM');
+      escalation = setTimeout(() => {
+        void stopTree('SIGKILL').finally(() => settle(code));
+      }, 250);
+    };
+    const abort = (): void => {
+      stderr = (stderr + 'Operation cancelled').slice(0, MAX);
+      stop(130, false);
+    };
+    if (ctx.signal?.aborted) {
+      stderr = 'Operation cancelled before spawn';
+      settle(130);
+      return;
+    }
     try {
       child = spawn(cmd, args, {
         cwd: ctx.checkoutDir, env: ctx.env ?? process.env,
@@ -114,23 +137,18 @@ export function runProc(
       settle(1);
       return;
     }
-    timer = setTimeout(() => {
-      timedOut = true;
-      void stopTree('SIGTERM');
-      escalation = setTimeout(() => {
-        // Even if the parent closed its pipes, the group can still contain children.
-        void stopTree('SIGKILL').finally(() => settle(1));
-      }, 250);
-    }, ctx.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    ctx.signal?.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => stop(1, true), ctx.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    if (ctx.signal?.aborted) abort();
     child.stdout?.on('data', chunk => { stdout += chunk.toString().slice(0, Math.max(0, MAX - stdout.length)); });
     child.stderr?.on('data', chunk => { stderr += chunk.toString().slice(0, Math.max(0, MAX - stderr.length)); });
     child.once('error', error => {
       if (settled) return;
       stderr = (stderr + msg(error)).slice(0, MAX);
-      if (!timedOut) void stopTree('SIGKILL').finally(() => settle(1));
+      if (!stopping) void stopTree('SIGKILL').finally(() => settle(1));
     });
     child.once('close', code => {
-      if (settled || timedOut) return;
+      if (settled || stopping) return;
       clearTimeout(timer);
       // A completed evaluation must not leave background work in its checkout.
       void stopTree('SIGKILL').finally(() => settle(code ?? 1));

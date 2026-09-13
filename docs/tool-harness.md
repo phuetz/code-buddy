@@ -101,3 +101,46 @@ Les scopes HTTP et confirmations existants s'appliquent. Cet endpoint retourne l
 ## État des journaux
 
 `RunStore.getPersistenceStatus(runId)` et `getRun(runId).persistence` distinguent les événements reçus en mémoire de ceux acquittés par le stream. `await store.flushRun(runId)` attend les écritures précédentes ou rejette si le journal est incomplet. Une erreur disque ou un dépassement de la file de 1 Mio reste visible pour la durée de vie du writer ; les écritures suivantes ne masquent pas cette erreur. Il n'y a pas de retry implicite pouvant dupliquer un événement, ni de promesse `fsync`. Après redémarrage, l'absence du champ ne prouve pas que les anciennes écritures avaient toutes abouti.
+
+
+## Supervision locale sans instance LLM
+
+La commande native `buddy fleet supervise <manifest> <operation>` expose au harnais des
+opérations hôtes définies par un manifeste de l'opérateur. Cela permet d'appeler
+Code Explorer et lm-resizer installés localement, sans charger un agent complet
+ni modifier la politique du shell sandboxé. Le manifeste constitue la liste des
+commandes autorisées ; un modèle ne doit pas pouvoir le réécrire.
+
+Exemple de `_qa/audit/fleet-manifest.json` (workspace relatif au manifeste) :
+
+```json
+{
+  "workspace": "../..",
+  "operations": {
+    "context": {"command": "code-explorer", "args": ["context", "runProc", "--repo", "."]},
+    "verify": {"command": "lm-resizer", "args": ["exec", "--json", "--", "npm", "test", "--", "tests/harness", "--maxWorkers=2"], "timeoutMs": 45000},
+    "status": {"command": "git", "args": ["worktree", "list", "--porcelain"]}
+  }
+}
+```
+
+```bash
+buddy fleet supervise _qa/audit/fleet-manifest.json context --json
+buddy fleet supervise _qa/audit/fleet-manifest.json verify --json
+```
+
+Les noms et arguments sont fixes : pas d'expansion shell ni de paramètres libres.
+Le résultat JSON conserve `success`, la sortie et le code de l'opération ; un
+échec donne aussi un code de sortie CLI non nul. SIGINT/SIGTERM annulent la cellule
+et transmettent l'arrêt au groupe de processus. Les commandes héritent de
+l'environnement de l'opérateur : utiliser un HOME de test isolé pour les
+vérifications. Chaque commande est bornée à 45 secondes, chaque cellule à 60.
+
+Ce point d'entrée supervise et vérifie les lanes existantes. Il n'est pas un
+service durable de délégation : il ne lance pas de nouveaux agents par défaut,
+ne promet pas de reprise de jobs après redémarrage et ne remplace pas les
+réservations du tableau de coordination. Les travaux longs restent découpés
+ou exécutés par leur runner de délégation, avec suivi séparé.
+
+Le script `scripts/fleet-supervisor.mjs` délègue à cette même implémentation,
+`src/harness/fleet-supervisor.ts`, et reste utilisable après build.

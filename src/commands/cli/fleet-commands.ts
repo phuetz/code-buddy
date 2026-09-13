@@ -99,6 +99,26 @@ export function registerFleetCommands(program: Command): void {
     .command('fleet')
     .description('Inspect Fleet routing, toolsets, and dispatch policy decisions');
 
+  fleet.command('supervise <manifest> <operation>')
+    .description('Run a fixed local fleet operation through the Code Buddy harness')
+    .option('--json', 'Output the structured harness result')
+    .action(async (manifest: string, operation: string, options: PolicyCommandOptions) => {
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      process.once('SIGINT', stop);
+      process.once('SIGTERM', stop);
+      try {
+        const { runSupervisor } = await import('../../harness/fleet-supervisor.js');
+        const result = await runSupervisor(manifest, operation, { signal: controller.signal });
+        console.log(options.json ? JSON.stringify({ kind: 'fleet_supervisor_result', operation, ...result }) : result.output ?? result.error ?? '');
+        if (!result.success) process.exitCode = 1;
+      } catch (error) { printFleetServerError(error); }
+      finally {
+        process.removeListener('SIGINT', stop);
+        process.removeListener('SIGTERM', stop);
+      }
+    });
+
   fleet
     .command('status')
     .description('Show Fleet status from the configured Code Buddy server')

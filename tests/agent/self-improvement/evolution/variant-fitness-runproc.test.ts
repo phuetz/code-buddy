@@ -16,6 +16,16 @@ describe('runProc lifecycle', () => {
     expect(await runProc('cb-nonexistent-audit-command', [], ctx)).toMatchObject({ code: 1, timedOut: false });
     expect(await runProc('\0', [], ctx)).toMatchObject({ code: 1, timedOut: false });
   });
+  it('does not spawn a cancelled operation and cancels an active operation', async () => {
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(await runProc('cb-nonexistent-audit-command', [], { ...ctx, signal: cancelled.signal })).toMatchObject({ code: 130, stderr: 'Operation cancelled before spawn', timedOut: false });
+    const active = new AbortController();
+    const result = runProc(process.execPath, ['-e', 'setTimeout(()=>{},3000)'], { ...ctx, signal: active.signal });
+    const timer = setTimeout(() => active.abort(), 100);
+    try { expect(await result).toMatchObject({ code: 130, timedOut: false }); }
+    finally { clearTimeout(timer); }
+  });
   it('bounds both streams and passes the supplied environment', async () => {
     const result = await node('process.stdout.write("x".repeat(1100000)); process.stderr.write("y".repeat(1100000))');
     expect(result.code).toBe(0);
