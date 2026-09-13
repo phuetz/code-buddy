@@ -2,12 +2,27 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runProc } from '../../../../src/agent/self-improvement/evolution/variant-fitness.js';
+import {
+  runCheckoutCli,
+  runProc,
+} from '../../../../src/agent/self-improvement/evolution/variant-fitness.js';
 
 const ctx = { checkoutDir: process.cwd(), timeoutMs: 3000 };
 const node = (code: string, timeoutMs = 3000) => runProc(process.execPath, ['-e', code], { ...ctx, timeoutMs });
 
 describe('runProc lifecycle', () => {
+  it('executes the checkout compiler without an npm shell shim', async () => {
+    const result = await runCheckoutCli('typescript/bin/tsc', ['--version'], ctx);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/Version \d/);
+  });
+
+  it('reports unavailable checkout CLIs as failed evaluations', async () => {
+    const result = await runCheckoutCli('cb-missing-cli/cli.js', [], ctx);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('cb-missing-cli');
+  });
+
   it('collects successful and nonzero exits without waiting for timeout', async () => {
     expect(await node('console.log("done")')).toMatchObject({ code: 0, stdout: 'done\n', timedOut: false });
     expect(await node('process.exit(7)')).toMatchObject({ code: 7, timedOut: false });

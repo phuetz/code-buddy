@@ -242,7 +242,40 @@ six cas de skills, d'identité et de collisions restent actifs sur macOS et
 Windows. Le chemin sans build a été forcé sous Node 20.20.2 : 40 tests sur 40,
 typecheck, lint et contrôle du diff verts.
 
+Le run final suivant a exécuté 38 394 tests avec succès sous Ubuntu Node 20,
+puis un unique teardown a rencontré `ENOTEMPTY` pendant qu'un fichier de
+`.codebuddy` finissait d'être écrit. Le nettoyage des deux fixtures voisines
+utilise maintenant `fs.rm` avec dix tentatives bornées. Les quatre scénarios de
+working directory ont passé dix répétitions consécutives sous Node 20 (40/40),
+avec typecheck, lint ciblé et contrôle du diff verts.
+
 ## Paquet final
+
+### Contre-revue Claude Opus
+
+Claude Opus a relu la DGM et les outils via le CLI Claude Code authentifié.
+Deux corrections ont été retenues : TypeScript devient une dépendance runtime
+explicite et les évaluations lancent les CLIs du checkout directement avec Node,
+sans dépendre du shim Windows `npx.cmd`. L'installation isolée du paquet avec
+`--omit=dev --omit=optional` accepte un programme TypeScript valide et refuse
+une erreur de type. Les autres plateformes restent soumises au refus fermé
+des outils générés : Linux, Python 3, Landlock ABI ≥3 et seccomp sont requis,
+comme documenté dans `docs/self-improvement-engine.md`.
+
+La revue signale aussi un risque de mise à jour perdue du journal skill-apply
+si deux processus le modifient simultanément. Ce point de concurrence reste
+ouvert ; la présente correction ne change pas le protocole de ce journal.
+
+Le run `34782022245` a terminé avec cinq configurations OS/Node et l'audit de
+sécurité verts ; seul le nettoyage de fixture Ubuntu Node 20 décrit ci-dessus
+a échoué. Une nouvelle matrice doit valider les corrections finales.
+
+Validation des corrections Opus : 141 tests préflight/agent/processus sous
+Node 20, puis 35 tests DGM après remplacement du shim, typecheck et lint verts.
+`npm run validate` termine avec lint, typechecks et contrôle paquet verts,
+38 422 tests verts et 11 échecs dans trois suites locales (sensory URL,
+périphériques, sélection de modèle). Les mêmes 11 échecs ont été reproduits
+sur `8f08fad72` avec les mêmes dépendances : ils préexistent au correctif.
 
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
 1 306 dépendances dans un répertoire temporaire d’installation isolée,

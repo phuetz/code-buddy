@@ -20,6 +20,8 @@ import { existsSync, readdirSync, statSync, mkdtempSync, readFileSync, rmSync } 
 import { join } from 'path';
 import { tmpdir } from 'node:os';
 import { stripVTControlCharacters } from 'node:util';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 
 export interface FitnessContext {
   /** Directory to score (repo root or a worktree). Must contain node_modules + dist for slow components. */
@@ -63,6 +65,16 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Execute checkout-owned JavaScript CLIs directly, preserving argv on every OS. */
+export function runCheckoutCli(modulePath: string, args: string[], ctx: FitnessContext) {
+  try {
+    const require = createRequire(resolve(ctx.checkoutDir, 'package.json'));
+    return runProc(process.execPath, [require.resolve(modulePath), ...args], ctx);
+  } catch (error) {
+    return Promise.resolve({ code: 1, stdout: '', stderr: msg(error), timedOut: false });
+  }
 }
 
 /** Run a bounded subprocess; terminate its process group on timeout. */
@@ -130,7 +142,9 @@ export function runProc(
     try {
       child = spawn(cmd, args, {
         cwd: ctx.checkoutDir, env: ctx.env ?? process.env,
-        detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        detached: !windows,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (error) {
       stderr = msg(error).slice(0, MAX);
@@ -195,7 +209,7 @@ export function typecheckComponent(weight = 3): FitnessComponent {
     weight,
     deterministic: true,
     async run(ctx) {
-      const r = await runProc('npx', ['tsc', '--noEmit'], ctx);
+      const r = await runCheckoutCli('typescript/bin/tsc', ['--noEmit'], ctx);
       const passed = r.code === 0 && !r.timedOut;
       return {
         name: 'typecheck',
@@ -238,7 +252,7 @@ export function unitTestsComponent(patterns: string[], weight = 4): FitnessCompo
       const dir = mkdtempSync(join(tmpdir(), 'cb-fitness-'));
       try {
         const file = join(dir, 'vitest.json');
-        const r = await runProc('npx', ['vitest', 'run', ...patterns, '--reporter=json', `--outputFile=${file}`], ctx);
+        const r = await runCheckoutCli('vitest/vitest.mjs', ['run', ...patterns, '--reporter=json', `--outputFile=${file}`], ctx);
         // A separate report avoids mixing tool/subprocess stdout with the machine-readable results.
         if (statSync(file).size > 16 * 1024 * 1024) throw new Error('Test report exceeds 16 MiB');
         const raw = readFileSync(file, 'utf8');
@@ -268,7 +282,7 @@ export function evalTasksComponent(tasks?: string[], weight = 5): FitnessCompone
       if (all.length === 0) {
         return { name: 'eval-tasks', weight, score: 0, passed: false, detail: 'no eval tasks found' };
       }
-      const build = await runProc('npx', ['tsc'], ctx);
+      const build = await runCheckoutCli('typescript/bin/tsc', [], ctx);
       if (build.code !== 0 || build.timedOut) return { name: 'eval-tasks', weight, score: 0, passed: false, detail: 'candidate build failed' };
       let pass = 0;
       let completed = true;
@@ -298,7 +312,7 @@ export function harnessTasksComponent(weight = 5): FitnessComponent {
   return {
     name: 'harness-tasks', weight, deterministic: true,
     async run(ctx) {
-      const build = await runProc('npx', ['tsc'], ctx);
+      const build = await runCheckoutCli('typescript/bin/tsc', [], ctx);
       if (build.code !== 0 || build.timedOut) return { name: 'harness-tasks', weight, score: 0, passed: false, detail: 'candidate build failed' };
       const result = await runProc(process.execPath, ['eval/harness-benchmark.mjs'], ctx);
       try {

@@ -637,8 +637,8 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.remove(procDir);
-        await fs.remove(projectDir);
+        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -669,7 +669,7 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.remove(procDir);
+        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
