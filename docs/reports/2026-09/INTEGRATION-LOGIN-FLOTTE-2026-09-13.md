@@ -200,6 +200,13 @@ absolue vérifie désormais que la sentinelle reste inaccessible. La suite élar
 self-improvement et sécurité donne 50 fichiers et 403 tests verts sous Linux,
 avec lint ciblé et typecheck verts.
 
+Le shard macOS Node 20 suivant a montré que le worker de préflight TypeScript
+était encore lancé avec une option réservée aux versions récentes de Node.
+`e54dca188` préfère le worker JavaScript produit par le build lorsqu'il est
+disponible. Le préflight passe à 32/32 sous Node 20.20.2 réel ; avec le test
+d'agent ajusté au refus fermé hors Linux, les deux suites concernées donnent
+133 tests verts.
+
 ## Paquet final
 
 Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
