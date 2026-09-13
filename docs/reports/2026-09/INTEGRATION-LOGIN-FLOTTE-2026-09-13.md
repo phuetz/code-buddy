@@ -54,3 +54,17 @@ historiques divergents. Ordre des tranches :
 
 Chaque tranche exige ses tests ciblés et une résolution additive du tableau de
 coordination. Aucun push GitHub ni publication npm n'a été effectué.
+
+## Tranche 1 — persistance
+
+La première tranche a ensuite été portée sur
+`integration/improvements-persistence-2026-09-13`, à partir du lot login :
+
+- `f2e5081c1` — sessions chiffrées, reprise du contenu et mémoire limitée au
+  projet ;
+- `7ffe48a71` — rapport comparatif et passation documentaire.
+
+Le conflit attendu dans le tableau de coordination a été résolu de façon
+additive. La contre-validation sur la nouvelle base donne 10 fichiers de tests
+et 213 tests verts, la sonde réelle de persistance verte, le typecheck vert et
+le lint code 0. Le worktree est propre après les deux commits portés.
