@@ -29,15 +29,21 @@ try {
   const archive = new EvolutionaryArchive({ workDir: root });
   // A directory occupying the destination reliably simulates an unwritable journal.
   await fs.mkdir(archive.path, { recursive: true });
-  const engine = new SkillImprovementEngine({ workDir: root, autonomy: 'auto-apply', mutator, archive,
+  const engine = new SkillImprovementEngine({ workDir: root, autonomy: 'auto-apply', mutator, archive, readInstalledSkill: name => mutator.readInstalled(name),
     scenarios: [{ id: 'review', query: 'review', description: 'Synthetic', expectIncludes: ['review'] }],
     proposer: { propose: async () => ({ ...proposal, targetScenarioId: 'review' }) },
     evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'fixture', before: false, after: true }] }),
   });
-  let rejected = false;
-  try { await engine.runCycle(); } catch { rejected = true; }
-  out.installWithoutJournal = { rejected, installed: mutator.has(proposal.spec.name), loaded: !!registry.get(proposal.spec.name), archived: archive.list().length, retryScenario: (await engine.runCycle()).selectedScenarioId };
-  assert.deepEqual(out.installWithoutJournal, { rejected: true, installed: true, loaded: true, archived: 0, retryScenario: null });
+  const first = await engine.runCycle();
+  out.installWithoutJournal = { applied: first.applied, proofPending: first.proofPending, installed: mutator.has(proposal.spec.name), loaded: !!registry.get(proposal.spec.name), archived: archive.list().length };
+  assert.equal(first.proofPending, true);
+  assert.equal(first.applied, false);
+  assert.equal(mutator.has(proposal.spec.name), true);
+  await fs.rmdir(archive.path);
+  const retry = await engine.runCycle();
+  out.recoveredApplication = { applied: retry.applied, phase: retry.applyPhase, archived: archive.list().length };
+  assert.deepEqual(out.recoveredApplication, { applied: true, phase: 'archived', archived: 1 });
+
 
   // Grandchild is finite (1.5 seconds), writes only inside our temporary directory.
   const marker = path.join(root, 'descendant-finished');

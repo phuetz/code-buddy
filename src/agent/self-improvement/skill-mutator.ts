@@ -158,6 +158,8 @@ export interface SkillMutatorPort {
   create(spec: SkillSpec): { name: string };
   remove(name: string): boolean;
   has(name: string): boolean;
+  /** Read SKILL.md from this mutator's actual root. Engine must not guess paths. */
+  readInstalled?(name: string): string | null;
 }
 
 export interface MutationResult {
@@ -224,6 +226,11 @@ export class LiveSkillMutator implements SkillMutatorPort {
   has(name: string): boolean {
     if (!isSafeSkillSegment(name)) return false;
     return fs.existsSync(this.skillFile(name));
+  }
+
+  readInstalled(name: string): string | null {
+    if (!isAuthoredSkillName(name)) return null;
+    return this.readContent(name);
   }
 
   isPinned(name: string): boolean {
