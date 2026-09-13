@@ -2,7 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Cloud, HardDrive, Loader2, RefreshCw, Wifi } from 'lucide-react';
 import type { FleetPeer } from '../types';
-import { formatPeerSeenAt, peerStatusTone } from './fleet-command-center-helpers';
+import { peerStatusTone } from './fleet-command-center-helpers';
+import { PeerSeenLabel, PeerSilenceNote } from './fleet-peer-freshness';
 import { FleetPeerSessionPanel } from './FleetPeerSessionPanel';
 
 export const PeerRow: React.FC<{
@@ -28,11 +29,7 @@ export const PeerRow: React.FC<{
             {peer.label ?? cap?.machineLabel ?? peer.id}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
-            {peer.lastSeenAt && (
-              <span className="text-[9px] text-text-muted">
-                {formatPeerSeenAt(peer.lastSeenAt)}
-              </span>
-            )}
+            <PeerSeenLabel peer={peer} className="text-[9px]" />
             <StatusDot status={status} />
           </div>
         </div>
@@ -91,7 +88,7 @@ export const PeerDetail: React.FC<{
         <PeerStat label={t('fleet.detail.load', 'Load')} value={load ?? '-'} />
         <PeerStat
           label={t('fleet.detail.lastSeen', 'Last seen')}
-          value={formatPeerSeenAt(peer.lastSeenAt)}
+          value={<PeerSeenLabel peer={peer} quietTone="text-text-secondary" />}
         />
         <PeerStat
           label={t('fleet.detail.lastEvent', 'Last event')}
@@ -103,6 +100,7 @@ export const PeerDetail: React.FC<{
           {peer.lastError}
         </div>
       )}
+      <PeerSilenceNote peer={peer} />
       {cap && (
         <>
           <div className="flex items-center gap-1.5 text-[11px]">
@@ -215,7 +213,7 @@ function shortSessionId(sessionId: string): string {
 
 export const PeerStat: React.FC<{
   label: string;
-  value: string;
+  value: React.ReactNode;
   tone?: string;
 }> = ({ label, value, tone }) => (
   <div className="rounded border border-border-muted bg-surface/70 px-2 py-1.5">

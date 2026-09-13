@@ -2992,6 +2992,19 @@
     "runDraft": {
       "title": "Brouillon de run de suivi"
     },
+    "freshness": {
+      "justNow": "à l'instant",
+      "secondsAgo": "il y a {{count}} s",
+      "minutesAgo": "il y a {{count}} min",
+      "hoursAgo": "il y a {{count}} h",
+      "daysAgo": "il y a {{count}} j",
+      "noEventsYet": "aucun événement reçu",
+      "noEventsHint": "Aucun heartbeat ni événement reçu de ce peer pour l'instant.",
+      "unknownTime": "inconnue",
+      "unknownHint": "L'heure de dernière présence est invalide ou en avance sur l'horloge de cet ordinateur.",
+      "silent": "silencieux",
+      "silentHint": "Toujours authentifié, mais rien reçu depuis plus de {{threshold}} s (dernier événement {{ago}} ; les peers envoient un heartbeat toutes les {{heartbeat}} s). La liaison est peut-être figée."
+    },
     "detail": {
       "status": "Statut",
       "load": "Charge",

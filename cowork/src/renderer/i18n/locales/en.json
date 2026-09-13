@@ -2992,6 +2992,19 @@
     "runDraft": {
       "title": "Follow-up run draft"
     },
+    "freshness": {
+      "justNow": "just now",
+      "secondsAgo": "{{count}}s ago",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "noEventsYet": "no events yet",
+      "noEventsHint": "No heartbeat or event received from this peer yet.",
+      "unknownTime": "unknown",
+      "unknownHint": "The last-seen time is invalid or ahead of this computer's clock.",
+      "silent": "silent",
+      "silentHint": "Still authenticated, but nothing received for over {{threshold}} s (last event {{ago}}; peers send a heartbeat every {{heartbeat}} s). The link may be stale."
+    },
     "detail": {
       "status": "Status",
       "load": "Load",

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { FleetPeer, FleetPeerStatus } from '../types';
+import { PeerSeenLabel } from './fleet-peer-freshness';
 
 const STATUS_TOKEN: Record<FleetPeerStatus, string> = {
   connecting: 'text-warning',
@@ -80,15 +81,6 @@ function pruneObsoleteReconnectErrors(
     delete next[peerId];
   }
   return next ?? errors;
-}
-
-function formatRelativeTime(ts: number | undefined): string {
-  if (!ts) return '—';
-  const diff = Date.now() - ts;
-  if (diff < 1000) return 'just now';
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  return `${Math.floor(diff / 3_600_000)}h ago`;
 }
 
 export function FleetPanel() {
@@ -380,9 +372,7 @@ export function FleetPanel() {
                         </div>
                       )}
                     </div>
-                    <span className="text-[10px] text-text-muted shrink-0">
-                      {formatRelativeTime(peer.lastSeenAt)}
-                    </span>
+                    <PeerSeenLabel peer={peer} className="text-[10px] shrink-0" />
                   </button>
                   <button
                     onClick={() => handleReconnect(peer.id)}

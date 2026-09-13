@@ -10,6 +10,13 @@
 
 ## Statut
 
+**Lot 4 livré au pilote, non commité** (2026-09-14). Les étiquettes « vu il y a » de Fleet
+avancent désormais avec le temps grâce à une horloge partagée (un seul intervalle, arrêté quand
+aucun panneau visible ne l'utilise). Un pair authentifié qui n'a rien envoyé depuis plus de trois
+heartbeats (90 s) est marqué « silencieux », sans jamais être présenté comme déconnecté ni
+reconnecté. Renderer uniquement ; les fichiers `main`, `FleetBridge`, lifecycle et les tests des
+lots précédents sont intacts (SHA-256 identiques).
+
 **Lot 3 livré au pilote, non commité** (2026-09-14). À la sortie réelle de Cowork, le
 `FleetBridge` créé au boot est désormais fermé : délai borné, une seule fois, sans créer de
 singleton, sans reconnexion ensuite. Delta du lot 3 : `cowork/src/main/index.ts` (10 lignes
@@ -72,6 +79,108 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 4 — fraîcheur Fleet dans le renderer
+
+### Constat (lecture du noyau et du renderer)
+
+- Noyau, en lecture seule : `startFleetHeartbeat()` émet `fleet:peer:heartbeat` toutes les 30 s
+  (`DEFAULT_INTERVAL_MS = 30_000`, `src/fleet/heartbeat-broadcaster.ts`, non configurable), démarré
+  sans condition dès que le WebSocket est actif (`src/server/index.ts:1248`). `/fleet status`
+  signale un pair « stale » au-delà de `STALE_THRESHOLD_MS = 90_000`
+  (`src/commands/handlers/fleet-handler.ts:171`), et `FleetListener.isStale()` refuse de conclure
+  sans premier événement (« can't say stale without a baseline »).
+- Bridge Cowork : `lastSeenAt` = heure **locale** de réception de chaque `fleet:*` (heartbeats
+  compris) ; aucune notion de silence n'est transmise au renderer.
+- Renderer :
+  - `FleetPanel` calculait « vu il y a » avec `Date.now()` au seul moment du rendu : le libellé
+    restait figé (« just now ») tant que rien ne changeait dans le store, précisément quand un
+    pair se tait.
+  - `fleet-peer-panel` (`PeerRow`/`PeerDetail` du Command Center) utilisait `formatPeerSeenAt()`,
+    qui ne se remettait à jour qu'avec le polling des sagas, et dont `Math.max(0, …)` affichait
+    « now » pour un horodatage futur.
+  - Aucun écran ne distinguait « authentifié réseau » et « plus rien reçu ».
+- Pas de hook horloge existant : `os/util/use-polling.ts` crée un intervalle par composant.
+- **`MissionControlView` non adapté, volontairement** : son modèle OS ne connaît que
+  `online`/`busy`/`offline` (`os/util/fleet-model.ts`) et n'affiche aucun « vu il y a ». Mapper le
+  silence sur `offline` inventerait une déconnexion (interdit) ; ajouter un état toucherait
+  `FleetTopologyView`/`PeerCapabilityMatrix` et leurs modèles, hors du lot borné.
+
+### Correctif
+
+- **Nouveau** `cowork/src/renderer/utils/fleet-freshness.ts` (pur) :
+  `describePeerFreshness(peer, now)` renvoie l'un de ces états :
+  - `never` : aucun événement reçu, donc pas de base de comparaison ;
+  - `invalid` : valeur non numérique, NaN, infinie, ≤ 0, ou en avance de plus de 10 s sur
+    l'horloge ;
+  - `seen` : événement reçu, avec son âge ;
+  - `silent` : **uniquement** si le statut est `authenticated` et que l'âge dépasse 90 s.
+
+  `FLEET_HEARTBEAT_INTERVAL_MS = 30_000`, `FLEET_SILENCE_THRESHOLD_MS = 3 × 30 s` (même seuil que
+  `/fleet status`), `FLEET_CLOCK_SKEW_TOLERANCE_MS = 10_000` (un tick de retard de l'horloge plus
+  une marge). `toSeenAge()` : « à l'instant » < 10 s, puis secondes, minutes, heures, jours.
+- **Nouveau** `cowork/src/renderer/hooks/use-shared-now.ts` : `createSharedClock(tickMs)` fournit
+  un store externe (`useSyncExternalStore`) :
+  - un seul `setInterval`, démarré au premier abonné et effacé au dernier ;
+  - une valeur stable entre deux ticks ;
+  - au repos, un rafraîchissement paresseux après un tick écoulé, dans les deux sens, pour prendre
+    en compte une horloge système reculée.
+
+  `sharedClock` par défaut à 5 s : les libellés et la détection du silence ont au plus 5 s de
+  retard.
+- **Nouveau** `cowork/src/renderer/components/fleet-peer-freshness.tsx` : `PeerSeenLabel`
+  (`data-testid="fleet-peer-seen-<id>"`, `data-freshness`, info-bulle explicative, ton
+  d'avertissement seulement si silencieux) et `PeerSilenceNote` (explication dans le détail). Les
+  hooks vivent dans ces composants, montés seulement quand le panneau est visible : `FleetPanel`
+  renvoie `null` une fois masqué, le Command Center aussi une fois fermé. Aucun abonnement ne
+  subsiste donc panneau masqué.
+- `FleetPanel.tsx` (delta lot 4 par rapport au lot 2) : import de `PeerSeenLabel` ; suppression du
+  `formatRelativeTime` local ; le `<span>` « vu il y a » est remplacé par
+  `<PeerSeenLabel peer={peer} className="text-[10px] shrink-0" />`. Les correctifs des lots 1-2
+  (reconnexion, erreurs obsolètes) sont inchangés : `fleet-panel-connection.test.tsx` passe, avec
+  la même empreinte.
+- `fleet-peer-panel.tsx` : `PeerRow` et la statistique « Dernière présence » de `PeerDetail`
+  utilisent `PeerSeenLabel` ; `PeerSilenceNote` sous l'erreur éventuelle ; `PeerStat.value` accepte
+  un `ReactNode` (compatible avec `fleet-saga-detail.tsx`). Le statut affiché reste `peer.status`.
+- `fleet-command-center-helpers.ts` : `formatPeerSeenAt()` supprimé (plus d'appelant, masquait
+  les horodatages futurs).
+- Locales `en`/`fr`/`zh` : bloc `fleet.freshness` (11 clés) inséré juste avant `fleet.detail`, à la
+  même position en `en` et `fr` (le test de structure identique `fr` = `en` passe).
+- Aucun statut inventé, aucune reconnexion, aucun changement de routage : `onlinePeers`,
+  `routablePeers` et la disponibilité du Command Center sont inchangés.
+
+### Tests du lot 4
+
+`cowork/tests/fleet-freshness.test.ts` (nouveau, pur) :
+- alignement lu dans le noyau : `DEFAULT_INTERVAL_MS = 30_000` et `STALE_THRESHOLD_MS = 90_000` ;
+- `never`, `seen`, frontière exacte des 90 s (non silencieux) contre 90 s + 1 ms (silencieux),
+  5 statuts non authentifiés jamais silencieux, tolérance de 10 s ;
+- valeurs invalides : futur lointain, NaN, Infini, 0, négatif, chaîne venue de l'IPC ;
+- bornes de `toSeenAge` ;
+- horloge : aucun timer sans abonné, un intervalle pour trois abonnés, arrêt au dernier départ,
+  valeur stable jusqu'au tick, rafraîchissement au repos après un saut d'horloge en avant ou en
+  arrière ;
+- 11 clés présentes en `en`/`fr`/`zh`.
+
+`cowork/tests/fleet-freshness-display.test.tsx` (nouveau, happy-dom, `setInterval`/`Date`
+simulés, i18n factice qui interpole) :
+- `FleetPanel` :
+  - « just now » → « 25s ago » → « 1m ago » sans nouvel événement ;
+  - pas silencieux à 90 s, silencieux à 95 s (« silent · 1m ago », info-bulle « 90 s ») : statut
+    toujours `authenticated`, aucun texte « disconnected », `reconnect` jamais appelé ;
+  - un nouvel événement reçu rend le pair frais aussitôt ;
+  - pair sans événement → « no events yet » même après 10 min ;
+  - futur lointain et NaN → « unknown », léger décalage accepté ;
+  - pair déconnecté → « 10m ago », jamais silencieux ;
+  - 3 pairs = 3 abonnés et 1 seul timer ; panneau masqué → 0/0 ; réaffiché → 1 ; démonté → 0.
+- Command Center : `PeerRow` vieillit et signale le silence ; `PeerDetail` affiche la note tandis
+  que le statut reste `authenticated` ; démonter les lignes libère le timer.
+
+| Exécution | Résultat |
+| --- | --- |
+| 1ʳᵉ (modules absents) | 2 fichiers en échec d'import |
+| 2ᵉ (helper, horloge et composant présents, écrans et locales non branchés) | **13 rouges** (10 DOM : aucune étiquette ni abonnement ; 3 locales), 28 verts |
+| Après branchement | **41/41 verts** |
 
 ## Lot 3 — fermeture du FleetBridge à la sortie réelle d'Electron
 
@@ -189,6 +298,39 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 4
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-freshness.test.ts tests/fleet-freshness-display.test.tsx` | voir tableau rouge → vert ci-dessus ; **41/41** au final. |
+| mêmes fichiers + `fleet-panel-connection`, `fleet-saga-detail-actions`, `i18n-french-support`, `--sequence.shuffle` | **5 fichiers, 61 tests verts**. |
+| 20 suites Fleet voisines + `fleet-bridge-quit-lifecycle` + `single-mainwindow-sync` + `ipc-registration-selfcontained` + `i18n-french-support` + les 2 nouveaux fichiers | **26 fichiers, 233 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0` sur les 3 sources nouvelles, `fleet-peer-panel.tsx`, `FleetPanel.tsx` et les 2 tests | Propre. |
+| `node scripts/lint.cjs src/renderer/components/fleet-command-center-helpers.ts` | Propre. |
+| Prettier `--check` sur les 5 fichiers nouveaux | Conforme (`fleet-peer-panel.tsx` aussi ; les écarts restants de `FleetPanel.tsx` sont antérieurs au lot). |
+| `tsc --noEmit -p tsconfig.json` | 0 erreur dans `cowork/src` ; 20 erreurs noyau connues inchangées. |
+| `sha256sum` de `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts`, `index.ts`, `FleetCommandCenter.tsx`, `MissionControlView.tsx`, `fleet-bridge.test.ts`, `fleet-panel-connection.test.tsx`, `fleet-bridge-quit-lifecycle.test.ts` | Identiques à la base du lot 4 (journal 01:31). |
+| Build global | Non relancé (consigne). |
+
+Empreintes à la livraison du lot 4 :
+
+| Fichier | Nature | SHA-256 |
+| --- | --- | --- |
+| `cowork/src/renderer/utils/fleet-freshness.ts` | nouveau, 65 lignes | `290759780fc51a39c83610c1d1aa00e9de495e6a431bff5ee8573e2a09710f10` |
+| `cowork/src/renderer/hooks/use-shared-now.ts` | nouveau, 59 lignes | `45593fa84feab2059aa66eceeabb3fdceded80cb99837fd16fded8b6c45e24f6` |
+| `cowork/src/renderer/components/fleet-peer-freshness.tsx` | nouveau, 117 lignes | `349764b6a0609e4593edd17a7d9e4f9adbf035faeddc3a0a35149b759ba07739` |
+| `cowork/src/renderer/components/FleetPanel.tsx` | modifié (lots 1-2 + 4) | `87eea1cab5a1b9202a58151f780afe5a771708cf280ef7f4b0ad19e97a94f645` |
+| `cowork/src/renderer/components/fleet-peer-panel.tsx` | modifié (5 hunks) | `39509a46d25450c4dffa6bb8ec8ed4e28c8abc52a2990c6357afa113057ac0ad` |
+| `cowork/src/renderer/components/fleet-command-center-helpers.ts` | modifié (−9 lignes) | `c04580c89654a8c9e590e277fce17901724dd0de893a2dfd1747a36c17f2e3d2` |
+| `cowork/src/renderer/i18n/locales/en.json` | +14 lignes | `8ab6c4997abea7926a375db6bc25527acd22831ad32b8cf0c332b9c3220e3fef` |
+| `cowork/src/renderer/i18n/locales/fr.json` | +14 lignes | `f55e893d96e7a6b2ecf938d1f9ad3feb9984b88871018eba0803dece68fe5f31` |
+| `cowork/src/renderer/i18n/locales/zh.json` | +14 lignes | `030084e5b95596d2fc473d0d83da1e8735e54ea07d80350cb31184311cb90f1c` |
+| `cowork/tests/fleet-freshness.test.ts` | nouveau, 218 lignes | `5432f69f15c8be9213ebd64cb24fc0fcf995becdf4587df8b41aec3d78192cfb` |
+| `cowork/tests/fleet-freshness-display.test.tsx` | nouveau, 231 lignes | `05a4e13aa9a8a9bc468359fb5ec293e60abbfa3166e0f4cc9193d72611f97a29` |
+
+Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30…0b35`,
+`zh` `22ba1357…5845`.
+
 ### Lot 3
 
 | Commande | Résultat |
@@ -255,6 +397,42 @@ comportement des tests existants.
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 4
+
+- Pas d'Electron réel ni de capture : la preuve de rendu est le DOM happy-dom sous timers
+  simulés.
+- Le seuil de 90 s suppose la cadence noyau par défaut de 30 s. Le test lit ces constantes dans
+  le noyau et échouera si elles changent ; un pair ancien sans heartbeat serait vu « silencieux »
+  sans activité, mais la note dit « peut-être figée », jamais « déconnecté ».
+- Au plus 5 s de retard sur le libellé et la détection du silence (résolution de l'horloge
+  partagée).
+- `MissionControlView` non modifié (voir Constat) ; la disponibilité du Command Center compte
+  toujours un pair silencieux comme en ligne et routable (comportement de dispatch inchangé).
+- Les autres libellés relatifs hors Fleet (par exemple `formatRelativeTime` de
+  `SessionResumeDialog`) ne sont pas branchés sur l'horloge partagée.
+- Commande pour le pilote (lot 4 seul, après revue) :
+  `git add cowork/src/renderer/utils/fleet-freshness.ts cowork/src/renderer/hooks/use-shared-now.ts
+  cowork/src/renderer/components/fleet-peer-freshness.tsx cowork/src/renderer/components/FleetPanel.tsx
+  cowork/src/renderer/components/fleet-peer-panel.tsx cowork/src/renderer/components/fleet-command-center-helpers.ts
+  cowork/src/renderer/i18n/locales/en.json cowork/src/renderer/i18n/locales/fr.json
+  cowork/src/renderer/i18n/locales/zh.json cowork/tests/fleet-freshness.test.ts
+  cowork/tests/fleet-freshness-display.test.tsx docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md
+  docs/FABLE5-CODEX-COORDINATION.md` puis
+  `git commit -m "feat(cowork): show fleet peer freshness and silent authenticated peers"`.
+  Attention : `FleetPanel.tsx` porte aussi les correctifs des lots 1-2, déjà en intégration.
+
+## Suite proposée après le lot 4 (non démarrée, en attente de passation)
+
+**Lot 5 — le silence visible là où l'on décide** (renderer seul, sans changer le routage) :
+1. Command Center : dans la synthèse de disponibilité, séparer « en ligne » et « dont N
+   silencieux », et avertir dans la prévisualisation de route (`FleetRoutePreview`) quand le pair
+   recommandé est silencieux ; le dispatch reste inchangé.
+2. Mission Control : drapeau optionnel `quiet` sur le modèle OS `Peer` (jamais `offline`), affiché
+   par `FleetTopologyView`/`PeerCapabilityMatrix`, avec la même horloge partagée.
+
+Alternative courte côté `main` (si le pilote préfère) : arrêter `discoveryTimer` et son premier
+`setTimeout` au début de la sortie, et paralléliser les `disconnect()` de `FleetBridge.shutdown()`.
+
 ## Limites du lot 3
 
 - Pas d'Electron réel : aucune sortie effective observée. Le câblage est prouvé par lecture
@@ -274,8 +452,8 @@ comportement des tests existants.
 
 ## Prochain lot suggéré après le lot 3 (non démarré, en attente de passation)
 
-**Lot 4 — présence Fleet périmée** (point 1 ci-dessous, désormais prioritaire : la fermeture à la
-sortie est faite). En option, dans le même lot ou un micro-lot `main` séparé : arrêter
+**Lot 4 — présence Fleet périmée** (point 1 ci-dessous) — **fait au lot 4** pour `FleetPanel` et
+le Command Center ; Mission Control reporté au lot 5 proposé. En option, dans le même lot ou un micro-lot `main` séparé : arrêter
 `discoveryTimer` et son premier `setTimeout` au début de `cleanupSandboxResources`, et
 paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-bridge.ts`).
 
@@ -298,6 +476,40 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
    réseau inutile.
 
 ## Journal
+
+### 01:31 — Lot 4 : présentation de la fraîcheur Fleet (avant toute inspection)
+
+Lot 3 copié et revu en intégration (root vérifie puis commite). Périmètre du lot 4 : renderer
+Cowork uniquement (helper/hook pur, horloge partagée, `FleetPanel`, `FleetCommandCenter`,
+`MissionControlView` si adaptés), tests dédiés, rapport, réservation. Interdits : `main/index.ts`,
+`FleetBridge`, lifecycle, `vite.config.ts`, noyau, dépendances, Electron/profil/services,
+install/rebuild, commit/push. Ne jamais inventer « déconnecté » ni forcer une reconnexion.
+
+**Delta du lot 3, mesuré pour la passation** (déjà copié en intégration) :
+
+| Fichier | Delta lot 3 | SHA-256 à la base du lot 4 |
+| --- | --- | --- |
+| `cowork/src/main/index.ts` | 4 hunks, +10 / −0 (import ; appel au début de `cleanupSandboxResources` ; `await` + journal avant `dispose`/`closeDatabase`/`closeLogFile` ; appel `void` dans le chemin dev de `before-quit`) | `40418d1f401cfb2b72c60f2a33ce54dd6ae19951b124511528b35e8ba3c0777c` |
+| `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` | nouveau, 67 lignes | `2df2e5d0b63239db71dd7d1099f656a1c9970733544438f7c2140ef870bb3671` |
+| `cowork/tests/fleet-bridge-quit-lifecycle.test.ts` | nouveau, 237 lignes, 9 tests | `ccebdc2e2ee697ebbd6f42363a87609fdb73a46da664855fe2379af307a46791` |
+
+Base des fichiers susceptibles d'être touchés au lot 4 et des correctifs précédents à conserver :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/renderer/components/FleetPanel.tsx` (lots 1-2) | `a2d5868e749f3be104d4cbee8544d4bb64ddc6718f13fca3f920df8832a17c6c` |
+| `cowork/src/renderer/components/FleetCommandCenter.tsx` (= HEAD) | `7e84d1220737e7785092a10426586abf25539aea4b203c56bb9a5e9c543be7a9` |
+| `cowork/src/renderer/components/fleet-peer-panel.tsx` (= HEAD) | `338986059432fd11bc9a0caa882f441320fe6786fbd72be4c8c73f30560f6cba` |
+| `cowork/src/renderer/components/fleet-command-center-helpers.ts` (= HEAD) | `b09486900a3c971289a1899628371789a91dee88a0019fe04d124708982164a5` |
+| `cowork/src/renderer/components/os/MissionControlView.tsx` (= HEAD) | `b9e1b5249a248b64063ba6930f47703d2eb80ef0d4f1af379ba1c443e16e1976` |
+| `cowork/src/main/fleet/fleet-bridge.ts` (lots 1-2, interdit au lot 4) | `c7c001b9be300359570e5c985bb4a35e1dd864b6d7526757b5062da0e5cf7ebe` |
+| `cowork/tests/fleet-bridge.test.ts` | `750198f37c4e75a3d71a27ed5224df2dfbfadce6a8256e67276144b03e82562d` |
+| `cowork/tests/fleet-panel-connection.test.tsx` | `27955a569a7af12b2dc23ae1f54e57e475d0b0abb18b7c73806cd1af962a3a5d` |
+
+Refus de permission (non contournés) : `git check-ignore`, `git diff … | grep -c` (comptage de
+lignes). La mesure ci-dessus vient du `git diff -U0` du lot 3 et de `wc -l`. `FleetPanel.tsx`
+était déjà modifié aux lots 1-2 : son delta propre au lot 4 se lit par comparaison avec la copie
+d'intégration du lot 2.
 
 ### 01:23 — Lot 3 : fermeture réelle du FleetBridge à la sortie (avant toute inspection)
 
@@ -380,3 +592,21 @@ Contre-validation lot 3 : cinq suites Cowork, **75/75 verts**, lint ciblé propr
 `npm run validate -- tests/fleet/fleet-listener.test.ts tests/security/donnees-personnelles.test.ts`
 vert (89 tests, plus lint/typechecks/pack). La sortie réelle Electron reste
 non testée ; helper et câblage sont vérifiés comme décrit ci-dessus.
+
+## Contre-validation du lot 4 intégré
+
+- Revue indépendante favorable ; 53 tests fraîcheur/panneau/actions, 8 tests
+  français, soit **61 tests ciblés verts** ; lint ciblé et typecheck Cowork verts.
+- Build Vite complet vert après intégration ; confidentialité sur fichiers
+  suivis : **40/40 verts**.
+- Chromium réel, fixture IPC, aucune connexion backend : pair authentifié
+  silencieux après 95 s, avertissement retiré à réception, âge progressant de
+  19 à 24 secondes après un tick réel, panneau masqué normalement. Aucune
+  exception de page ; Google Fonts bloqué volontairement. Navigateur et
+  serveur statique éphémère arrêtés. Preuves :
+  `/tmp/cb-fleet-freshness-browser-qa.json` et
+  `/tmp/cb-fleet-freshness-{silent,received,aged}.png`.
+
+La compilation TypeScript est désormais entièrement verte grâce au correctif
+Codex `5cc171870` (`COWORK-TYPECHECK-2026-09-14.md`) ; les mentions des 20 erreurs
+dans les livraisons Opus décrivent leur base isolée antérieure.
