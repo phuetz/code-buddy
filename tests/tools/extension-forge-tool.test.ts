@@ -66,7 +66,7 @@ describe('extension_forge', () => {
     )).toContain('{{ symbol }}');
   });
 
-  it('creates, persists, and immediately executes a tool after both behavior gates pass', async () => {
+  it.skipIf(process.platform !== 'linux')('creates, persists, and immediately executes a tool after both behavior gates pass', async () => {
     const cwd = tempDir();
     const result = await createExtensionForgeTool().execute({
       kind: 'tool',
@@ -108,7 +108,7 @@ describe('extension_forge', () => {
     expect(store.tools.map((tool) => tool.name)).toContain('authored__uppercase');
   });
 
-  it('rejects an implementation that hardcodes the visible example', async () => {
+  it.skipIf(process.platform !== 'linux')('rejects an implementation that hardcodes the visible example', async () => {
     const cwd = tempDir();
     const result = await createExtensionForgeTool().execute({
       kind: 'tool',

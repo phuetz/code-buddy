@@ -113,7 +113,7 @@ describe('LlmToolProposer — held-out cases never reach the model', () => {
   });
 });
 
-describe('LlmToolProposer — generative self-improvement loop (gated)', () => {
+describe.skipIf(process.platform !== 'linux')('LlmToolProposer — generative self-improvement loop (gated)', () => {
   it('auto-applies a generalizing LLM-authored tool (passes held-out)', async () => {
     const result = await engineWith(REAL_DRAFT).runCycle();
     expect(result.applied).toBe(true);

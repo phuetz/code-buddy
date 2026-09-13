@@ -58,7 +58,12 @@ describe('authored-tool persistence across a simulated restart', () => {
     expect(FormalToolRegistry.getInstance().has('authored__echo')).toBe(true);
 
     const out = await FormalToolRegistry.getInstance().execute('authored__echo', { msg: 'hi' });
-    expect(out.output).toContain('echo:hi');
+    if (process.platform === 'linux') {
+      expect(out.output).toContain('echo:hi');
+    } else {
+      expect(out.success).toBe(false);
+      expect(out.error).toContain('Compute confinement requires Linux');
+    }
   });
 
   it('unregister removes the tool from the store too', () => {

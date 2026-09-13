@@ -57,7 +57,7 @@ beforeEach(() => {
   getToolRegistry().removeTool('authored__reverse');
 });
 
-describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => {
+describe.skipIf(process.platform !== 'linux')('tool-gate — behavioural held-out gate (anti reward-hacking)', () => {
   it('seed slugify held-out includes a run-of-spaces input so replace(" ","-") cannot pass G4', async () => {
     const slugify = SEED_TOOL_SCENARIOS.find((s) => s.id === 'slugify')!;
     expect(slugify.heldOutCases.some((c) => /\s{2,}/.test(String(c.input.text)))).toBe(true);

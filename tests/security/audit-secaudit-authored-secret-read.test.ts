@@ -50,10 +50,9 @@ describe('SECAUDIT surface 2 — outil authored lisant un secret', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('DOCUMENTE le résidu runtime : isolate ne confine PAS les lectures par chemin absolu', async () => {
-    // Ce test PROUVE pourquoi le gate statique est nécessaire : le sandbox
-    // runtime (envMode isolate) redirige HOME mais laisse lire un chemin
-    // absolu hors du runDir. Sentinelle hermétique dans un tmp dédié.
+  it('confine les lectures par chemin absolu au runtime', async () => {
+    // Sentinelle hermétique hors du runDir : Landlock doit en refuser la lecture
+    // sur Linux et les autres plateformes doivent refuser l'exécution sans leurre.
     const sentinelDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secaudit-sentinel-'));
     const sentinelFile = path.join(sentinelDir, 'outside.txt');
     const SENT = 'RUNTIME_ISOLATE_DOES_NOT_CONFINE_READS';
@@ -68,10 +67,9 @@ describe('SECAUDIT surface 2 — outil authored lisant un secret', () => {
         code: "const fsm=await import('node:fs'); const p=JSON.parse(process.env.CODEBUDDY_TOOL_INPUT||'{}').p; process.stdout.write(fsm.readFileSync(p,'utf8'));",
       });
       const res = await tool.execute({ p: sentinelFile });
-      // Le runtime lit bien le fichier hors runDir → confirme que la seule
-      // barrière fiable pour un chemin EN DUR est le gate statique.
-      expect(res.success).toBe(true);
-      expect(String(res.output)).toContain(SENT);
+      expect(res.success).toBe(false);
+      expect(String(res.output ?? '')).not.toContain(SENT);
+      expect(res.error).toBeDefined();
     } finally {
       fs.rmSync(sentinelDir, { recursive: true, force: true });
     }

@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe('authored tool sandbox — env isolation', () => {
-  it('does NOT leak a parent secret to the authored code (echoes empty, not the value)', async () => {
+  it.skipIf(process.platform !== 'linux')('does NOT leak a parent secret to the authored code (echoes empty, not the value)', async () => {
     const tool = buildAuthoredTool({
       name: 'authored__leaker',
       description: 'tries to read a secret from the env',
@@ -42,7 +42,7 @@ describe('authored tool sandbox — env isolation', () => {
     expect(String(res.output)).not.toContain(SECRET_VALUE);
   }, 30_000);
 
-  it('redirects HOME into the throwaway run dir (real ~/.codebuddy unreachable by path)', async () => {
+  it.skipIf(process.platform !== 'linux')('redirects HOME into the throwaway run dir (real ~/.codebuddy unreachable by path)', async () => {
     const tool = buildAuthoredTool({
       name: 'authored__homeprobe',
       description: 'reports its HOME',
@@ -57,7 +57,7 @@ describe('authored tool sandbox — env isolation', () => {
     expect(parsed.home).not.toBe(process.env.HOME);
   }, 30_000);
 
-  it('still passes the tool input through (isolation does not break normal operation)', async () => {
+  it.skipIf(process.platform !== 'linux')('still passes the tool input through (isolation does not break normal operation)', async () => {
     const tool = buildAuthoredTool({
       name: 'authored__doubler',
       description: 'doubles n',
