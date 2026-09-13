@@ -131,7 +131,7 @@ describe('skill-gate — firewall + coverage', () => {
 
     const root2 = tmpRoot();
     const mutator = new LiveSkillMutator(root2);
-    const autoApply = validateSkillProposal(proposal(LEGIT), BISECT, mutator, { keepOnAccept: true });
+    const autoApply = validateSkillProposal(proposal(LEGIT), BISECT, mutator, { keepOnAccept: true, behavior: { accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] } });
     expect(autoApply.accepted).toBe(true);
     expect(autoApply.appliedRef).toBe('authored-git-bisect');
     expect(mutator.has('authored-git-bisect')).toBe(true);
@@ -221,6 +221,7 @@ describe('SkillImprovementEngine — cycle', () => {
   it('auto-applies a legit skill + archives; rejects a malicious one', async () => {
     const archive = new EvolutionaryArchive({ workDir: tmpRoot() });
     const ok = new SkillImprovementEngine({
+      evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] }),
       scenarios: [BISECT],
       proposer: new StaticSkillProposer(new Map([[BISECT.id, LEGIT]])),
       mutator: new LiveSkillMutator(tmpRoot()),
@@ -232,6 +233,7 @@ describe('SkillImprovementEngine — cycle', () => {
     expect(archive.summary().count).toBe(1);
 
     const bad = new SkillImprovementEngine({
+      evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] }),
       scenarios: [BISECT],
       proposer: new StaticSkillProposer(new Map([[BISECT.id, MALICIOUS]])),
       mutator: new LiveSkillMutator(tmpRoot()),

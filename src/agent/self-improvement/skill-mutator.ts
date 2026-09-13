@@ -14,6 +14,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import * as yaml from 'yaml';
+import { parseSkillFile, validateSkill } from '../../skills/parser.js';
 import { randomUUID } from 'crypto';
 import { getSkillRegistry } from '../../skills/registry.js';
 import { logger } from '../../utils/logger.js';
@@ -64,9 +66,15 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 /** Ensure the content begins with YAML frontmatter carrying name + description. */
 export function ensureFrontmatter(name: string, description: string, content: string): string {
-  if (FRONTMATTER_RE.test(content)) return content;
-  const desc = description.replace(/"/g, "'").replace(/\r?\n/g, ' ').trim();
-  return `---\nname: ${name}\ndescription: "${desc}"\n---\n\n${content.trim()}\n`;
+  const match = content.match(FRONTMATTER_RE);
+  const metadata = match ? yaml.parse(match[1]!) as Record<string, unknown> : {};
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('Invalid skill metadata');
+  if (metadata.name !== undefined && metadata.name !== name) throw new Error('Skill frontmatter identity differs from requested name');
+  const body = match ? content.slice(match[0].length) : content;
+  const result = `---\n${yaml.stringify({ ...metadata, name, description: description.trim() || metadata.description })}---\n\n${body.trim()}\n`;
+  const validation = validateSkill(parseSkillFile(result, 'authored-skill', 'workspace'));
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  return result;
 }
 
 export function readPinned(content: string): boolean {
@@ -224,7 +232,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     return c ? readPinned(c) : false;
   }
 
-  create(spec: SkillSpec): { name: string } {
+  create(spec: SkillSpec, options: { overwrite?: boolean } = {}): { name: string } {
     // Backstops durs, miroir de LiveToolMutator.register : (a) namespace
     // authored-* obligatoire — sans lui, un spec nommé comme une skill user/
     // bundled l'écraserait ; (b) re-gate de sûreté — les appelants légitimes
@@ -236,6 +244,10 @@ export class LiveSkillMutator implements SkillMutatorPort {
         `refusing to create skill "${spec.name}": authored skills must be named "${AUTHORED_SKILL_PREFIX}*" (never shadow a user/bundled skill)`,
       );
     }
+    if (this.has(spec.name)) {
+      if (this.isPinned(spec.name)) throw new Error('Skill is pinned');
+      if (!options.overwrite) throw new Error('Skill already exists; explicit overwrite required');
+    }
     const content = ensureFrontmatter(spec.name, spec.description, spec.content);
     const gate = safetyGateSkill(content);
     if (!gate.ok) {
@@ -243,9 +255,20 @@ export class LiveSkillMutator implements SkillMutatorPort {
     }
     const dir = this.dirFor(spec.name);
     fs.mkdirSync(dir, { recursive: true });
-    writeFileAtomicSync(this.skillFile(spec.name), content);
-    this.reload(spec.name);
-    return { name: spec.name };
+    const file = this.skillFile(spec.name);
+    const previous = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+    try {
+      writeFileAtomicSync(file, content);
+      const registry = getSkillRegistry();
+      const installed = registry.registerSkillFileSync(file, 'workspace');
+      if (registry.get(spec.name) !== installed) throw new Error('Skill registry refused installation');
+      return { name: spec.name };
+    } catch (error) {
+      if (previous !== undefined) writeFileAtomicSync(file, previous);
+      else fs.rmSync(file, { force: true });
+      this.reload(spec.name);
+      throw error;
+    }
   }
 
   /** Full re-author of an existing authored skill, re-gated. Refuses pinned. */
@@ -253,12 +276,12 @@ export class LiveSkillMutator implements SkillMutatorPort {
     if (!isAuthoredSkillName(name)) return { ok: false, reasons: ['not an authored skill'] };
     if (!this.has(name)) return { ok: false, reasons: ['skill does not exist'] };
     if (this.isPinned(name)) return { ok: false, reasons: ['skill is pinned'] };
-    const withFm = ensureFrontmatter(name, description, newContent);
-    const gate = safetyGateSkill(withFm);
-    if (!gate.ok) return gate;
-    writeFileAtomicSync(this.skillFile(name), withFm);
-    this.reload(name);
-    return { ok: true, reasons: [] };
+    try {
+      this.create({ name, description: description || parseSkillFile(this.readContent(name)!, this.skillFile(name), 'workspace').metadata.description, content: newContent }, { overwrite: true });
+      return { ok: true, reasons: [] };
+    } catch (error) {
+      return { ok: false, reasons: [error instanceof Error ? error.message : String(error)] };
+    }
   }
 
   /** Find/replace within an authored skill body (exact; fail on multiple unless replaceAll). */

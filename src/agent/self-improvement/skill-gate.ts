@@ -10,11 +10,13 @@
  * @module agent/self-improvement/skill-gate
  */
 
-import { safetyGateSkill, type SkillMutatorPort } from './skill-mutator.js';
+import type { SkillBehaviorResult } from './skill-behavior-gate.js';
+import { ensureFrontmatter, safetyGateSkill, type SkillMutatorPort } from './skill-mutator.js';
 import type { SkillBenchmarkScenario, SkillGateOutcome, SkillProposal } from './skill-types.js';
 
 export interface ValidateSkillOptions {
   keepOnAccept: boolean;
+  behavior?: SkillBehaviorResult;
 }
 
 /** Deterministic coverage check: the skill content surfaces all expected guidance. */
@@ -43,6 +45,13 @@ export function validateSkillProposal(
       rejectionReason: 'static-scan',
       reasons: ['SG1: skill content is empty or too short, or missing name'],
     };
+  }
+
+  try {
+    ensureFrontmatter(proposal.spec.name, proposal.spec.description, content);
+    if (!/^#{1,6}\s+\S/m.test(content)) throw new Error('skill must have a Markdown title');
+  } catch (error) {
+    return { ...base, accepted: false, rejectionReason: 'static-scan', reasons: [`SG1: ${error instanceof Error ? error.message : String(error)}`] };
   }
 
   // SG2: static scan + skill firewall (prompt-injection / exfiltration / safety)
@@ -81,6 +90,13 @@ export function validateSkillProposal(
     };
   }
 
+  if (options.keepOnAccept) {
+    const evidence = options.behavior;
+    if (!evidence?.accepted || evidence.tested < 1 || evidence.cases.length !== evidence.tested || evidence.wins < 1 || evidence.losses !== 0 || !evidence.cases.every(item => item.after) || evidence.cases.filter(item => !item.before && item.after).length !== evidence.wins) {
+      return { ...base, accepted: false, rejectionReason: 'behavior-required', reasons: ['Installation requires a measured behavioral gain without regression'] };
+    }
+  }
+
   // Accepted. Install (auto-apply) or just report (propose-only).
   let appliedRef: string | undefined;
   if (options.keepOnAccept) {
@@ -89,9 +105,10 @@ export function validateSkillProposal(
   return {
     ...base,
     accepted: true,
+    validationLevel: options.keepOnAccept ? 'behavioral' : 'coverage',
     reasons: options.keepOnAccept
       ? ['accepted and installed (auto-apply): firewall-clean + covers the scenario']
-      : ['accepted (propose-only): firewall-clean + covers the scenario, not installed'],
+      : ['coverage validated only; behavioral verification is required before the improvement engine installs this proposal'],
     ...(appliedRef ? { appliedRef } : {}),
   };
 }

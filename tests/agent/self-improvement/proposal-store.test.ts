@@ -157,6 +157,7 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
   it('propose-only writes an accepted skill candidate + gate evidence under proposals/', async () => {
     const mutator = new LiveSkillMutator(dir);
     const engine = new SkillImprovementEngine({
+      evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] }),
       scenarios: [BISECT],
       proposer: new StaticSkillProposer(new Map([[BISECT.id, LEGIT_SKILL]])),
       mutator,
@@ -187,6 +188,7 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
   it('auto-apply reuses the pending skill instead of re-authoring', async () => {
     const mutator = new LiveSkillMutator(dir);
     const propose = new SkillImprovementEngine({
+      evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] }),
       scenarios: [BISECT],
       proposer: new StaticSkillProposer(new Map([[BISECT.id, LEGIT_SKILL]])),
       mutator,
@@ -198,6 +200,7 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     expect(mutator.has('authored-git-bisect')).toBe(false);
 
     const apply = new SkillImprovementEngine({
+      evaluateBehavior: async () => ({ accepted: true, wins: 1, losses: 0, tested: 1, cases: [{ id: 'unit-fixture', before: false, after: true }] }),
       scenarios: [BISECT],
       proposer: throwingSkillProposer('must not re-author a pending skill'),
       mutator,

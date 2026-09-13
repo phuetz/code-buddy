@@ -126,6 +126,7 @@ export interface ArchiveEntry {
   reviewedBy: string;
   /** Origin of non-lesson archive entries, for example the project CHANGELOG or delegation logs. */
   provenance?: 'changelog' | 'delegation-log' | string;
+  evidence?: { artifactSha256: string; benchmarkSha256: string; wins: number; losses: number; cases: { id: string; before: boolean; after: boolean }[] };
 }
 
 export interface SelfImprovementCycleResult {
