@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Intégration améliorations — tranche 8 outillage harnais 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 7 `33875c2d6` ; commits visés `8e4e593b4`, `ba0552ec1` | Exposer les métadonnées de mission et coordonner les demandes d'index. | Aucun push avant tests ciblés, typecheck et build. |
+
 | P1 | Intégration améliorations — tranche 7 Sense 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 6 `5eb20755f` ; commits portés `fb1a6d734`, `c74197c80` + clôture | Attentes réseau du bridge bornées et événements réordonnés préservés. | Rust 42/42 et intégration TypeScript 20/20 verts ; aucun push avant clôture. |
 
 | P1 | Intégration améliorations — tranche 6 trois harnais 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 5 `40554dcdf` ; commits portés `a51a74890`, `1b0cd8765`, `1873b38bd`, `4f390aee8`, `207ffc3b4` + clôture | Missions avec leases/handoffs/résultats, diagnostic cache, préflight TypeScript borné et continuité/retry cron. | Build puis 8 fichiers/144 tests, pack 10/10, typecheck et lint verts. Aucun push avant clôture. |
