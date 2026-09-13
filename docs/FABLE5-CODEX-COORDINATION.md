@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Intégration améliorations — tranche 5 reprise flotte 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 4 `262291288` ; commits visés `623d19f64`, `d34d1ebe4`, `9b117b3dc`, `f2943dcad` | Isoler propositions, terminer descendants, journaliser/réconcilier les skills et superviser les opérations locales fixes. | Aucun push avant sonde rouge→vert et validations ciblées. |
+| P1 | Intégration améliorations — tranche 5 reprise flotte 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 4 `262291288` ; commits portés `ab9920c80`, `c81f691a3`, `e54a75883`, `95bf9c8f3` + clôture | Propositions isolées, descendants terminés, applications de skills journalisées/réconciliées, opérations locales fixes supervisées. | Sonde reprise rouge→vert ; 55 tests + 10 pack, typecheck/build/lint verts. Premier lancement parallèle rouge avant build, rejeu après build 55/55 vert. |
 
 | P1 | Intégration améliorations — tranche 4 skills/sandbox/DGM 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, base `origin/main` `ded4cd165` ; commits portés `fba371800`, `163e9f938`, `283a48f62`, `878361d65`, `3e55be140`, `fb841c7c0` + clôture | Confinement Landlock/seccomp, identité et comportement des skills, score et promotion du commit DGM évalué. | 34 tests + 10 pack, sondes skills/DGM et benchmark verts ; typecheck/build/lint code 0. Audit reprise reproduit trois défauts destinés à la tranche 5. Aucun push avant clôture. |
 

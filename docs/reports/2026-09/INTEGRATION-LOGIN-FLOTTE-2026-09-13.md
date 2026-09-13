@@ -119,3 +119,15 @@ skills/DGM et le benchmark exécutés avec succès, ainsi que typecheck, build e
 lint code 0. La sonde de reprise conserve trois défauts documentés pour la
 tranche 5 : collision de chemins de propositions, installation sans journal
 cohérent et descendants survivant au timeout.
+
+## Tranche 5 — reprise de flotte
+
+Les commits `ab9920c80`, `c81f691a3`, `e54a75883` et `95bf9c8f3`
+isolent les propositions, terminent les descendants d'évaluation, rendent les
+applications de skills récupérables par journal et ajoutent le superviseur des
+opérations locales fixes.
+
+La sonde de reprise est passée rouge→vert. La validation finale donne 55 tests
+et 10 contrôles du paquet verts, ainsi que typecheck, build et lint verts. Un
+premier lancement parallèle avait exécuté le test du superviseur avant le build
+et échoué faute d'artefact `dist`; le rejeu après build est entièrement vert.
