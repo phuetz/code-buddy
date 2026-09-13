@@ -31,6 +31,7 @@
  */
 
 import { spawn } from 'child_process';
+import { constants } from 'node:fs';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -59,6 +60,7 @@ export interface ExecuteCodeRpcInvokeResult {
 
 export type ExecuteCodeRpcInvoker = (
   request: ExecuteCodeRpcInvokeRequest,
+  signal?: AbortSignal,
 ) => Promise<ExecuteCodeRpcInvokeResult>;
 
 /** Truthy-flag parse — the single master gate. Read once, in the parent. */
@@ -134,9 +136,10 @@ export function createExecuteCodeRpcInvoker(options: InvokerOptions): ExecuteCod
   const isFleetSafe = options.isFleetSafe ?? ((name: string) => getToolRegistry().isFleetSafe(name));
   const workspaceRoot = path.resolve(options.workspaceRoot);
 
-  return async (request) => {
+  return async (request, signal) => {
     const tool = request.tool;
     try {
+      signal?.throwIfAborted();
       if (!combinedAllowlist.has(tool)) {
         return {
           ok: false,
@@ -155,7 +158,7 @@ export function createExecuteCodeRpcInvoker(options: InvokerOptions): ExecuteCod
       if (!executor) {
         return { ok: false, error: `UNKNOWN_EXECUTE_CODE_RPC_TOOL: no executor for "${tool}"` };
       }
-      const { output, truncated } = await executor(request.args, workspaceRoot);
+      const { output, truncated } = await executor(request.args, workspaceRoot, signal);
       logger.debug('[execute-code-rpc] tool executed', { tool, truncated });
       return { ok: true, output, truncated };
     } catch (error) {
@@ -173,6 +176,7 @@ export function createExecuteCodeRpcInvoker(options: InvokerOptions): ExecuteCod
 type Executor = (
   args: Record<string, unknown>,
   workspaceRoot: string,
+  signal?: AbortSignal,
 ) => Promise<{ output: string; truncated: boolean }>;
 
 function assertInsideWorkspace(target: string, workspaceRoot: string): string {
@@ -184,21 +188,33 @@ function assertInsideWorkspace(target: string, workspaceRoot: string): string {
   return absolute;
 }
 
-const execViewFile: Executor = async (args, workspaceRoot) => {
+/** Resolve both sides physically; lexical containment alone follows escaping links. */
+async function resolveWorkspacePath(target: string, workspaceRoot: string): Promise<string> {
+  const lexical = assertInsideWorkspace(target, workspaceRoot);
+  const root = await fs.realpath(workspaceRoot);
+  const resolved = await fs.realpath(lexical);
+  return assertInsideWorkspace(resolved, root);
+}
+
+const execViewFile: Executor = async (args, workspaceRoot, signal) => {
   const filePath = args.file_path ?? args.path;
   if (typeof filePath !== 'string' || filePath.length === 0) {
     throw new Error('view_file: missing string file_path');
   }
-  const resolved = assertInsideWorkspace(filePath, workspaceRoot);
-  const stat = await fs.stat(resolved);
-  if (!stat.isFile()) {
-    throw new Error(`view_file: ${filePath} is not a regular file`);
-  }
-  const truncated = stat.size > READ_TRUNCATE_BYTES;
-  const limit = Math.min(stat.size, READ_TRUNCATE_BYTES);
-  if (limit <= 0) return { output: '', truncated };
-  const handle = await fs.open(resolved, 'r');
+  const resolved = await resolveWorkspacePath(filePath, workspaceRoot);
+  signal?.throwIfAborted();
+  const handle = await fs.open(resolved, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
+    // On Linux verify the opened descriptor too, before reading, against path swaps.
+    if (process.platform === 'linux') {
+      assertInsideWorkspace(await fs.realpath(`/proc/self/fd/${handle.fd}`), await fs.realpath(workspaceRoot));
+    }
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error(`view_file: ${filePath} is not a regular file`);
+    const truncated = stat.size > READ_TRUNCATE_BYTES;
+    const limit = Math.min(stat.size, READ_TRUNCATE_BYTES);
+    signal?.throwIfAborted();
+    if (limit <= 0) return { output: '', truncated };
     const buffer = Buffer.allocUnsafe(limit);
     const { bytesRead } = await handle.read(buffer, 0, limit, 0);
     return { output: buffer.subarray(0, bytesRead).toString('utf-8'), truncated };
@@ -207,12 +223,13 @@ const execViewFile: Executor = async (args, workspaceRoot) => {
   }
 };
 
-const execListDirectory: Executor = async (args, workspaceRoot) => {
+const execListDirectory: Executor = async (args, workspaceRoot, signal) => {
   const dirPath = args.path ?? args.directory ?? '.';
   if (typeof dirPath !== 'string') {
     throw new Error('list_directory: path must be a string');
   }
-  const resolved = assertInsideWorkspace(dirPath, workspaceRoot);
+  const resolved = await resolveWorkspacePath(dirPath, workspaceRoot);
+  signal?.throwIfAborted();
   const entries = await fs.readdir(resolved, { withFileTypes: true });
   const lines = entries
     .map((entry) => {
@@ -225,7 +242,7 @@ const execListDirectory: Executor = async (args, workspaceRoot) => {
   return { output: visible.join('\n'), truncated };
 };
 
-const execSearch: Executor = async (args, workspaceRoot) => {
+const execSearch: Executor = async (args, workspaceRoot, signal) => {
   const query = args.query ?? args.pattern;
   const dirPath = args.path ?? '.';
   if (typeof query !== 'string' || query.length === 0) {
@@ -234,10 +251,11 @@ const execSearch: Executor = async (args, workspaceRoot) => {
   if (typeof dirPath !== 'string') {
     throw new Error('search: path must be a string');
   }
-  const resolved = assertInsideWorkspace(dirPath, workspaceRoot);
+  const resolved = await resolveWorkspacePath(dirPath, workspaceRoot);
+  signal?.throwIfAborted();
   return await new Promise<{ output: string; truncated: boolean }>((resolve, reject) => {
-    const rgArgs = ['--no-heading', '--line-number', '--color', 'never', '--max-count', '50', '--', query, resolved];
-    const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const rgArgs = ['--no-config', '--no-follow', '--no-heading', '--line-number', '--color', 'never', '--max-count', '50', '--', query, resolved];
+    const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'], signal });
     let stdout = '';
     let stderr = '';
     let lineCount = 0;

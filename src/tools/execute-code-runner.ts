@@ -214,8 +214,7 @@ export async function executeCode(
     child.on('close', (exitCode, signal) => {
       clearTimeout(timer);
       if (forceKillTimer) clearTimeout(forceKillTimer);
-      rpcPoller?.stop();
-      resolve({ exitCode, signal });
+      void Promise.resolve(rpcPoller?.stop()).then(() => resolve({ exitCode, signal }));
     });
   });
 
@@ -393,7 +392,7 @@ interface RpcResponderOptions {
 }
 
 interface RpcResponder {
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 /**
@@ -408,12 +407,16 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
   const seen = new Set<string>();
   let callCount = 0;
   let stopped = false;
+  const controller = new AbortController();
   let scanning = false;
+  let activeScan: Promise<void> = Promise.resolve();
 
   const writeResponse = async (id: string, payload: ExecuteCodeRpcResponse): Promise<void> => {
+    if (stopped) return;
     const finalPath = path.join(options.rpcDir, `${id}.res.json`);
     const tmpPath = path.join(options.rpcDir, `${id}.res.json.tmp`);
     await fs.writeFile(tmpPath, JSON.stringify(payload), 'utf8');
+    if (stopped) { await fs.rm(tmpPath, { force: true }); return; }
     await fs.rename(tmpPath, finalPath);
   };
 
@@ -426,6 +429,7 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
       return;
     }
 
+    if (stopped) return;
     if (!options.enabled || !options.invoke) {
       await writeResponse(id, {
         ok: false,
@@ -454,16 +458,23 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
       return;
     }
 
+    const callController = new AbortController();
+    const abort = (): void => callController.abort();
+    controller.signal.addEventListener('abort', abort, { once: true });
     try {
+      if (stopped) return;
       const result = await withTimeout(
-        options.invoke({ tool, args }),
+        options.invoke({ tool, args }, callController.signal),
         options.callTimeoutMs,
         `RPC_TOOL_TIMEOUT: tool "${tool}" exceeded ${options.callTimeoutMs}ms`,
+        callController,
       );
       await writeResponse(id, result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await writeResponse(id, { ok: false, error: message });
+    } finally {
+      controller.signal.removeEventListener('abort', abort);
     }
   };
 
@@ -473,6 +484,7 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
     try {
       const entries = await fs.readdir(options.rpcDir).catch(() => [] as string[]);
       for (const entry of entries) {
+        if (stopped) break;
         if (!entry.endsWith('.req.json')) continue;
         const id = entry.slice(0, -'.req.json'.length);
         if (seen.has(id)) continue;
@@ -489,14 +501,16 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
   };
 
   const interval = setInterval(() => {
-    void scan();
+    if (!scanning && !stopped) activeScan = scan();
   }, RPC_POLL_INTERVAL_MS);
   interval.unref?.();
 
   return {
-    stop(): void {
+    async stop(): Promise<void> {
       stopped = true;
+      controller.abort();
       clearInterval(interval);
+      await activeScan;
     },
   };
 }
@@ -508,20 +522,20 @@ interface ExecuteCodeRpcResponse {
   truncated?: boolean;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string, controller: AbortController): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
+    const abort = (): void => { clearTimeout(timer); reject(new Error('RPC_CANCELLED')); };
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+      controller.abort();
+    }, ms);
     timer.unref?.();
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
+    controller.signal.addEventListener('abort', abort, { once: true });
+    if (controller.signal.aborted) abort();
+    promise.then(resolve, reject).finally(() => {
+      clearTimeout(timer);
+      controller.signal.removeEventListener('abort', abort);
+    });
   });
 }
 

@@ -52,6 +52,73 @@ describe('execute_code → tool RPC (opt-in, OFF by default)', () => {
     await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
+  it('rejects external file and directory symlinks but permits internal links', async () => {
+    const workspace = path.join(tempWorkspace, 'inside');
+    const outside = path.join(tempWorkspace, 'outside');
+    await fs.mkdir(workspace);
+    await fs.mkdir(outside);
+    await fs.writeFile(path.join(outside, 'marker.txt'), 'SYNTHETIC_OUTSIDE');
+    await fs.writeFile(path.join(workspace, 'local.txt'), 'SYNTHETIC_INSIDE');
+    await fs.symlink(outside, path.join(workspace, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+    await fs.symlink(path.join(outside, 'marker.txt'), path.join(workspace, 'escape.txt'));
+    await fs.symlink(path.join(workspace, 'local.txt'), path.join(workspace, 'alias.txt'));
+    const invoke = createExecuteCodeRpcInvoker({ workspaceRoot: workspace, isFleetSafe: () => true, extraTools: new Set() });
+    for (const request of [
+      { tool: 'view_file', args: { path: 'escape.txt' } },
+      { tool: 'view_file', args: { path: 'escape/marker.txt' } },
+      { tool: 'list_directory', args: { path: 'escape' } },
+      { tool: 'search', args: { path: 'escape', query: 'SYNTHETIC' } },
+      { tool: 'search', args: { path: 'escape.txt', query: 'SYNTHETIC' } },
+    ]) {
+      const result = await invoke(request);
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('PATH_OUTSIDE_WORKSPACE');
+      expect(result.output).toBeUndefined();
+    }
+    expect(await invoke({ tool: 'view_file', args: { path: 'alias.txt' } })).toMatchObject({ ok: true, output: 'SYNTHETIC_INSIDE' });
+    const controller = new AbortController();
+    controller.abort();
+    expect((await invoke({ tool: 'view_file', args: { path: 'local.txt' } }, controller.signal)).ok).toBe(false);
+  });
+
+  it('aborts the active RPC and discards queued requests before returning after child exit', async () => {
+    const marker = path.join(tempWorkspace, 'may-exit');
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let signal: AbortSignal | undefined;
+    const invoke = vi.fn(async (_request: ExecuteCodeRpcInvokeRequest, callSignal?: AbortSignal) => {
+      signal = callSignal;
+      await fs.writeFile(marker, 'ready');
+      await gate; // Deliberately non-cooperative adapter must not hold shutdown hostage.
+      return { ok: true, output: 'late' };
+    });
+    try {
+      const result = await executeCode({ language: 'javascript', timeoutMs: 3000, code: `
+        import * as fs from 'node:fs';
+        for (const id of ['01', '02']) fs.writeFileSync(process.env.CODEBUDDY_EXECUTE_CODE_RPC_DIR + '/' + id + '.req.json', JSON.stringify({tool:'probe', args:{}}));
+        while (!fs.existsSync(${JSON.stringify(marker)})) await new Promise(r => setTimeout(r, 10));
+      ` }, { rootDir: tempWorkspace, envMode: 'isolate', rpcEnabled: true, rpcInvoke: invoke });
+      expect(result.ok, result.error).toBe(true);
+      expect(signal?.aborted).toBe(true);
+      release();
+      await new Promise(resolve => setTimeout(resolve, 60));
+      expect(invoke).toHaveBeenCalledTimes(1);
+    } finally { release(); }
+  });
+
+  it('aborts an RPC adapter on its per-call timeout', async () => {
+    let signal: AbortSignal | undefined;
+    const result = await executeCode({ language: 'javascript', code: rpcScript('probe', {}) }, {
+      rootDir: tempWorkspace, rpcEnabled: true, rpcCallTimeoutMs: 30,
+      rpcInvoke: async (_request, callSignal) => {
+        signal = callSignal;
+        return new Promise(resolve => callSignal?.addEventListener('abort', () => resolve({ ok: false }), { once: true }));
+      },
+    });
+    expect(parseRpcLine(result.stdout).error).toContain('RPC_TOOL_TIMEOUT');
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('OFF by default: script RPC attempt is refused and no tool runs', async () => {
     const invoke = vi.fn<[ExecuteCodeRpcInvokeRequest], ReturnType<ExecuteCodeRpcInvoker>>(
       async () => ({ ok: true, output: 'should-never-run' }),
