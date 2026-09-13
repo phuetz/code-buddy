@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { confineComputeInvocation } from '../security/compute-confinement.js';
 import { logger } from '../utils/logger.js';
 import {
   isExecuteCodeToolRpcEnabled,
@@ -49,6 +50,8 @@ export interface ExecuteCodeRunnerOptions {
    *    cannot exfiltrate secrets — even during pre-accept scoring.
    */
   envMode?: 'inherit' | 'isolate';
+  /** Required OS confinement for authored computation; never falls back to unrestricted execution. */
+  confinement?: 'compute';
 }
 
 /**
@@ -141,11 +144,12 @@ export async function executeCode(
   // the responder is ALWAYS active so every request gets a structured
   // reply (denial when off / tool refused) — never a hang.
   const rpcEnabled = (options.rpcEnabled ?? isExecuteCodeToolRpcEnabled()) && !!options.rpcInvoke;
-  const rpcSupported = language === 'javascript' || language === 'typescript' || language === 'python';
+  const rpcSupported = options.confinement !== 'compute' && (language === 'javascript' || language === 'typescript' || language === 'python');
   const rpcDir = path.join(runDir, RPC_DIR_NAME);
   const rpcMaxCalls = Math.max(1, options.rpcMaxCalls ?? RPC_DEFAULT_MAX_CALLS);
   const rpcCallTimeoutMs = Math.max(1_000, options.rpcCallTimeoutMs ?? RPC_DEFAULT_CALL_TIMEOUT_MS);
 
+  await fs.mkdir(runDir, { recursive: true });
   let scriptCode = code;
   if (rpcSupported) {
     await fs.mkdir(rpcDir, { recursive: true });
@@ -177,7 +181,11 @@ export async function executeCode(
       options.envMode === 'isolate'
         ? buildIsolatedEnv(runDir, { ...env, ...runnerEnv })
         : { ...process.env, ...env, ...runnerEnv };
-    const child = spawn(invocation.command, [...invocation.args, scriptPath, ...scriptArgs], {
+    const commandArgs = [...invocation.args, scriptPath, ...scriptArgs];
+    const launch = options.confinement === 'compute'
+      ? confineComputeInvocation(invocation.command, commandArgs, runDir)
+      : { command: invocation.command, args: commandArgs };
+    const child = spawn(launch.command, launch.args, {
       cwd: runDir,
       env: childEnv,
       windowsHide: true,
@@ -654,10 +662,12 @@ function buildRpcHelper(language: ExecuteCodeLanguage): string {
     ].join('\n');
   }
   // javascript / typescript
+  // Block-scoped dynamic imports avoid collisions with names in the user's module.
   return [
-    "import { writeFileSync, renameSync, existsSync, readFileSync } from 'node:fs';",
-    "import { join } from 'node:path';",
-    "import { randomUUID } from 'node:crypto';",
+    '{',
+    "const { writeFileSync, renameSync, existsSync, readFileSync } = await import('node:fs');",
+    "const { join } = await import('node:path');",
+    "const { randomUUID } = await import('node:crypto');",
     'globalThis.codebuddyToolCall = function codebuddyToolCall(tool, args) {',
     '  const dir = process.env.CODEBUDDY_EXECUTE_CODE_RPC_DIR;',
     "  if (!dir) return { ok: false, error: 'EXECUTE_CODE_TOOL_RPC_UNAVAILABLE' };",
@@ -677,6 +687,7 @@ function buildRpcHelper(language: ExecuteCodeLanguage): string {
     '  }',
     "  return { ok: false, error: 'RPC_RESPONSE_TIMEOUT' };",
     '};',
+    '}',
     '',
   ].join('\n');
 }
