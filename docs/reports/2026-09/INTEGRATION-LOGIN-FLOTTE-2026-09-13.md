@@ -141,3 +141,9 @@ des programmes et la continuité/reprise des tâches cron.
 
 Après compilation, les huit fichiers ciblés donnent 144 tests verts. Les dix
 contrôles du paquet, le typecheck et le lint sont également verts.
+
+## Tranche 7 — Sense
+
+Les commits `fb1a6d734` et `c74197c80` bornent les attentes réseau du bridge
+Sense et préservent les événements reçus dans un ordre différent. Les tests
+Rust passent à 42/42 et les trois suites d'intégration TypeScript donnent 20/20.
