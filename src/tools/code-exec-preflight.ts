@@ -16,6 +16,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { IToolExecutionContext } from './registry/types.js';
 import {
@@ -397,7 +398,8 @@ function resolvePreflightRunnerPath(): string {
 function getRunnerSpawnArgs(runnerPath: string): string[] {
   const args = [`--max-old-space-size=${PREFLIGHT_LIMITS.maxHeapMb}`, '--no-warnings'];
   if (runnerPath.endsWith('.ts')) {
-    args.push('--experimental-strip-types');
+    const require = createRequire(import.meta.url);
+    args.push(require.resolve('tsx/cli'));
   }
   args.push(runnerPath);
   return args;

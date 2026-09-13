@@ -74,7 +74,7 @@ function throwingSkillProposer(message: string): SkillProposer {
   };
 }
 
-describe.skipIf(process.platform !== 'linux')('pending proposals — propose-only persists, --apply reuses', () => {
+describe('pending proposals — propose-only persists, --apply reuses', () => {
   let dir: string;
 
   beforeEach(() => {
@@ -89,7 +89,7 @@ describe.skipIf(process.platform !== 'linux')('pending proposals — propose-onl
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
-  it('propose-only writes an accepted tool candidate + gate evidence under proposals/', async () => {
+  it.skipIf(process.platform !== 'linux')('propose-only writes an accepted tool candidate + gate evidence under proposals/', async () => {
     const mutator = new LiveToolMutator({
       persist: true,
       store: new AuthoredToolStore({ workDir: dir }),
@@ -123,7 +123,7 @@ describe.skipIf(process.platform !== 'linux')('pending proposals — propose-onl
     expect(stored.gate.accepted).toBe(true);
   });
 
-  it('auto-apply reuses the pending tool instead of re-authoring', async () => {
+  it.skipIf(process.platform !== 'linux')('auto-apply reuses the pending tool instead of re-authoring', async () => {
     const mutator = new LiveToolMutator({
       persist: true,
       store: new AuthoredToolStore({ workDir: dir }),
