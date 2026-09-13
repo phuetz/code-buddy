@@ -26,6 +26,8 @@ import * as fs from 'fs';
 import type { Command } from 'commander';
 import type { CronJob, CronScheduler, ScheduleType } from '../../scheduler/cron-scheduler.js';
 
+import { validateContinuity } from '../../scheduler/job-notepad.js';
+
 export interface CronAddOptions {
   every?: string;
   cron?: string;
@@ -41,6 +43,7 @@ export interface CronAddOptions {
   /** Job-level chain target: id (or id prefix) to run on successful completion. */
   then?: string;
   preCheck?: string;
+  continuity?: string;
   deliver?: string[];
   format?: string;
 }
@@ -61,12 +64,13 @@ export interface CronJobSpec {
   task: CronJob['task'];
   delivery?: CronJob['delivery'];
   preCheck?: CronJob['preCheck'];
+  continuity?: CronJob['continuity'];
   then?: string;
 }
 
 export type CronJobUpdates = Partial<Pick<
   CronJob,
-  'name' | 'type' | 'schedule' | 'task' | 'delivery' | 'preCheck' | 'then'
+  'name' | 'type' | 'schedule' | 'task' | 'delivery' | 'preCheck' | 'then' | 'continuity'
 >>;
 
 export type CronJobSpecResult = { spec: CronJobSpec } | { error: string };
@@ -128,6 +132,13 @@ export function buildCronJobSpec(name: string, opts: CronAddOptions): CronJobSpe
       return { error: 'cron add: --then must be a non-empty job id (or id prefix)' };
     }
     spec.then = opts.then.trim();
+  }
+
+  if (opts.continuity !== undefined) {
+    const parsed = parseJsonOption(opts.continuity, '--continuity');
+    if ('error' in parsed) return parsed;
+    try { spec.continuity = validateContinuity(parsed.value); }
+    catch (error) { return { error: `Invalid --continuity: ${String(error)}` }; }
   }
 
   // Optional pre-check gate.
@@ -214,6 +225,13 @@ export function buildCronJobUpdates(job: CronJob, opts: CronUpdateOptions): Cron
       return { error: 'cron update: --then must be a non-empty job id (or id prefix)' };
     }
     updates.then = opts.then.trim();
+  }
+
+  if (opts.continuity !== undefined) {
+    const parsed = parseJsonOption(opts.continuity, '--continuity');
+    if ('error' in parsed) return parsed;
+    try { updates.continuity = validateContinuity(parsed.value); }
+    catch (error) { return { error: `Invalid --continuity: ${String(error)}` }; }
   }
 
   if (opts.preCheck !== undefined && opts.clearPreCheck) {
@@ -474,6 +492,7 @@ export function registerCronCommands(program: Command): void {
     .option('--skill-request <text>', 'request string passed to the skill executor')
     .option('--then <jobId>', 'chain: run this job id (or prefix) on successful completion')
     .option('--clear-then', 'remove the chain target')
+    .option('--continuity <json>', 'per-job continuity: true, false, or {enabled, notes}; inline JSON or @file')
     .option('--pre-check <json>', 'replace pre-check gate as inline JSON or @file')
     .option('--clear-pre-check', 'remove the pre-check gate')
     .option('--deliver <target>', 'replace delivery targets type:id (repeatable)', collectOption, [])
@@ -514,6 +533,7 @@ export function registerCronCommands(program: Command): void {
     .option('--skill <id>', 'no-agent skill run by registered skill name')
     .option('--skill-request <text>', 'request string passed to the skill executor')
     .option('--then <jobId>', 'chain: run this job id (or prefix) on successful completion')
+    .option('--continuity <json>', 'per-job continuity: true, false, or {enabled, notes}; inline JSON or @file')
     .option('--pre-check <json>', 'pre-check gate as inline JSON or @file')
     .option('--deliver <target>', 'delivery target type:id (repeatable)', collectOption, [])
     .option('--format <fmt>', 'delivery body format: full|summary')

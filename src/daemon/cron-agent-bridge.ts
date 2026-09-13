@@ -13,6 +13,11 @@ import { evaluateCronPreCheck } from '../scheduler/pre-check-runner.js';
 import { runWatchdog } from '../scheduler/watchdog-handlers.js';
 import { collectDeliveryTargets, resolveDeliveryBody } from '../scheduler/scheduled-delivery.js';
 import type { RunStore, RunMetadata } from '../observability/run-store.js';
+import {
+  JobNotepadStore,
+  defaultNotepadDir,
+  isContinuityEnabled,
+} from '../scheduler/job-notepad.js';
 
 // ============================================================================
 // Types
@@ -36,6 +41,11 @@ export interface BridgeConfig {
    * Left undefined, the bridge behaves exactly as before (no run records).
    */
   runStore?: RunStore;
+  /**
+   * Directory of per-job notepad files. Defaults to `$CODEBUDDY_CRON_HOME/notepads`
+   * (or `~/.codebuddy/cron/notepads`). Isolated from jobs.json.
+   */
+  notepadDir?: string;
 }
 
 export interface JobExecutionResult {
@@ -72,10 +82,12 @@ const DEFAULT_BRIDGE_CONFIG: Partial<BridgeConfig> = {
 export class CronAgentBridge extends EventEmitter {
   private config: BridgeConfig;
   private activeJobs: Map<string, AbortController> = new Map();
+  private notepad: JobNotepadStore;
 
   constructor(config: BridgeConfig) {
     super();
     this.config = { ...DEFAULT_BRIDGE_CONFIG, ...config } as BridgeConfig;
+    this.notepad = new JobNotepadStore(config.notepadDir ?? defaultNotepadDir());
   }
 
   /**
@@ -101,11 +113,13 @@ export class CronAgentBridge extends EventEmitter {
     try {
       // Pre-check gate: skip expensive LLM work when nothing changed.
       // Watchdog jobs are non-LLM monitors, so they bypass the pre-check.
+      // Fingerprint is applied only after a skip or a successful task — a
+      // failed run must leave lastFingerprint alone so an unchanged source retries.
+      let pendingFingerprint: string | undefined;
       if (job.preCheck && job.task.type !== 'watchdog') {
         const preCheckResult = await evaluateCronPreCheck(job.preCheck);
         if (typeof preCheckResult.fingerprint === 'string') {
-          // Persisted by the scheduler's persistJobs() after this returns.
-          job.preCheck.lastFingerprint = preCheckResult.fingerprint;
+          pendingFingerprint = preCheckResult.fingerprint;
         }
         this.emit('job:precheck', {
           jobId: job.id,
@@ -114,6 +128,9 @@ export class CronAgentBridge extends EventEmitter {
           evidence: preCheckResult.evidence,
         });
         if (!preCheckResult.shouldRun) {
+          if (pendingFingerprint !== undefined) {
+            job.preCheck.lastFingerprint = pendingFingerprint;
+          }
           const duration = Date.now() - startTime;
           const skipOutput = `Skipped by pre-check: ${preCheckResult.reason}`;
           this.recordRunEvent(recordedRunId, 'decision', {
@@ -202,6 +219,18 @@ export class CronAgentBridge extends EventEmitter {
       // data channel, capped at 64KB in the script runner). For all other
       // task types, the full output serves as outputData.
       const outputData = job.task.type === 'script' ? scriptStdout : output;
+
+      if (pendingFingerprint !== undefined && job.preCheck) {
+        job.preCheck.lastFingerprint = pendingFingerprint;
+      }
+
+      if (isContinuityEnabled(job.continuity)) {
+        try {
+          await this.notepad.saveLastSuccessfulOutput(job.id, outputData ?? output);
+        } catch (err) {
+          logger.warn('Cron task succeeded but its continuity output could not be saved', { jobId: job.id, error: String(err) });
+        }
+      }
 
       const result: JobExecutionResult = {
         jobId: job.id,
@@ -333,10 +362,17 @@ export class CronAgentBridge extends EventEmitter {
       }
     }
 
-    // Prepend inputData from parent chained job if available
     let message = job.task.message;
+    const prefixes: string[] = [];
+    if (isContinuityEnabled(job.continuity)) {
+      const section = await this.notepad.renderSection(job.id);
+      if (section) prefixes.push(section.trimEnd());
+    }
     if (inputData) {
-      message = `[Chained job context — output from parent job]:\n${inputData}\n\n[Task]:\n${message}`;
+      prefixes.push(`[Chained job context — output from parent job]:\n${inputData}`);
+    }
+    if (prefixes.length > 0) {
+      message = `${prefixes.join('\n\n')}\n\n[Task]:\n${message}`;
     }
 
     const entries = await agent.processUserMessage(message);

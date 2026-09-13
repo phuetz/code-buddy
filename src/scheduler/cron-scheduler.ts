@@ -20,6 +20,13 @@ import { findNextZonedMinute } from '../life-rhythm/zoned-minute.js';
 import type { CronPreCheck } from './pre-check-runner.js';
 import type { CronWatchdog } from './watchdog-handlers.js';
 import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
+import {
+  JobNotepadStore,
+  isContinuityEnabled,
+  persistableContinuity,
+  validateContinuity,
+  type ContinuityFlag,
+} from './job-notepad.js';
 
 /** Exponential backoff delays in ms: 30s, 1m, 5m, 15m, 60m */
 const BACKOFF_DELAYS_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000];
@@ -100,9 +107,17 @@ export interface CronJob {
   /**
    * Optional non-LLM pre-check. When present, it is evaluated before the task;
    * if it decides nothing changed, the expensive task is skipped with evidence.
-   * `lastFingerprint` is updated and persisted across runs by the bridge.
+   * `lastFingerprint` is updated and persisted across runs by the bridge,
+   * but only after a successful evaluation (skip or completed task) — a failed
+   * run must not consume the fingerprint, so an unchanged source can retry.
    */
   preCheck?: CronPreCheck;
+  /**
+   * Opt-in per-job bounded continuity (scratchpad + last successful output).
+   * Off by default: agent prompts stay byte-identical. Notes passed at
+   * create/update are stored in the isolated notepad file, not in jobs.json.
+   */
+  continuity?: ContinuityFlag;
   /** Delivery options */
   delivery?: {
     /** Delivery mode: 'channel' (default), 'webhook', or 'none' (silent, no notification) */
@@ -417,10 +432,17 @@ export class CronScheduler extends EventEmitter {
   private tickInFlight = false;
   private running: boolean = false;
   private taskExecutor?: (job: CronJob, inputData?: string) => Promise<unknown>;
+  private notepad: JobNotepadStore;
 
   constructor(config: Partial<CronSchedulerConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CRON_SCHEDULER_CONFIG, ...config };
+    this.notepad = new JobNotepadStore(path.join(path.dirname(this.config.persistPath), 'notepads'));
+  }
+
+  /** Directory of isolated per-job notepad files (`<cron-root>/notepads`). */
+  get notepadDir(): string {
+    return path.join(path.dirname(this.config.persistPath), 'notepads');
   }
 
   // ==========================================================================
@@ -513,9 +535,12 @@ export class CronScheduler extends EventEmitter {
     sessionTarget?: CronJob['sessionTarget'];
     preCheck?: CronJob['preCheck'];
     then?: string;
+    continuity?: CronJob['continuity'];
   }): Promise<CronJob> {
     const id = crypto.randomUUID();
     const now = new Date();
+    const continuity = params.continuity === undefined ? undefined : validateContinuity(params.continuity);
+    const seededNotes = typeof continuity === 'object' ? continuity.notes : undefined;
 
     const job: CronJob = {
       id,
@@ -535,6 +560,7 @@ export class CronScheduler extends EventEmitter {
       sessionTarget: params.sessionTarget,
       preCheck: params.preCheck,
       then: params.then,
+      continuity: persistableContinuity(continuity),
     };
 
     // Resolve 'current' session target to concrete session ID at creation time
@@ -545,6 +571,9 @@ export class CronScheduler extends EventEmitter {
     // Calculate next run
     job.nextRunAt = this.calculateNextRun(job);
 
+    if (seededNotes && isContinuityEnabled(job.continuity)) {
+      await this.notepad.replaceNotes(id, seededNotes);
+    }
     this.jobs.set(id, job);
     await this.persistJobs();
 
@@ -561,18 +590,27 @@ export class CronScheduler extends EventEmitter {
    */
   async updateJob(
     jobId: string,
-    updates: Partial<Pick<CronJob, 'name' | 'description' | 'type' | 'schedule' | 'task' | 'delivery' | 'maxRuns' | 'enabled' | 'preCheck' | 'then'>>
+    updates: Partial<Pick<CronJob, 'name' | 'description' | 'type' | 'schedule' | 'task' | 'delivery' | 'maxRuns' | 'enabled' | 'preCheck' | 'then' | 'continuity'>>
   ): Promise<CronJob | null> {
     const job = this.jobs.get(jobId);
     if (!job) return null;
 
-    // Cancel existing timer
+    const { continuity: inputContinuity, ...rest } = updates;
+    const continuity = inputContinuity === undefined ? undefined : validateContinuity(inputContinuity);
+    const next = { ...job, ...rest };
+    if (continuity !== undefined) next.continuity = persistableContinuity(continuity);
+    // Validate scheduling before writing notes; retain the live job/timer on failure.
+    this.calculateNextRun(next);
+    if (continuity !== undefined) {
+      const seededNotes = typeof continuity === 'object' ? continuity.notes : undefined;
+      if (seededNotes && isContinuityEnabled(next.continuity)) {
+        await this.notepad.replaceNotes(jobId, seededNotes);
+      }
+    }
+
     this.cancelJobTimer(jobId);
-
-    // Apply updates
-    Object.assign(job, updates);
-
-    // Recalculate next run
+    Object.assign(job, rest);
+    if (continuity !== undefined) job.continuity = next.continuity;
     job.nextRunAt = this.calculateNextRun(job);
 
     // Reschedule if enabled
@@ -593,6 +631,11 @@ export class CronScheduler extends EventEmitter {
 
     this.cancelJobTimer(jobId);
     this.jobs.delete(jobId);
+    try {
+      await this.notepad.clear(jobId);
+    } catch (error) {
+      logger.warn('Cron job removed but its notepad could not be cleared', { jobId, error: String(error) });
+    }
     await this.persistJobs();
 
     this.emit('job:deleted', jobId);
