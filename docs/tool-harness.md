@@ -179,3 +179,24 @@ buddy fleet mission reconcile .codebuddy/missions audit GENERATION retry 'Proces
 `submit <store> <id> <owner> <generation>` enregistre le HEAD pour revue. `approve <store> <id> <reviewer> <commit>` exige un relecteur distinct, un HEAD inchangé et un worktree propre. Il s’agit d’une attestation au moment de la revue, pas d’une autorisation de fusion ni d’une surveillance des éditions Git ultérieures. Attribution, transmission et lancement invalident cette attestation.
 
 Limites : coordination sur une seule machine et un stockage local de confiance ; les identités déclarées ne sont pas une authentification réseau. Les transactions synchrones utilisent un verrou exclusif et des écritures atomiques avec fsync (répertoire synchronisé sous POSIX). Un crash pendant la très courte transaction peut laisser un `.lock` : inspecter le PID et l’état avant intervention, aucun vol de verrou automatique. Un arrêt de processus pendant une opération laisse une intention durable à réconcilier. Le harnais ne garantit pas exactement une fois pour un effet externe arbitraire.
+
+## Vérification facultative des programmes d’outils
+
+`code_exec` accepte `typecheck: true`. L’API publique expose également `harness.exec(code, { typecheck: true })` et `harness.start(code, { typecheck: true })`. Les déclarations proviennent du catalogue autorisé du harnais, notamment pour `tools.call("nom.canonique", args)`. Les erreurs sont signalées avant tout appel d’outil. Les annotations TypeScript sont retirées avant l’exécution JavaScript.
+
+Le compilateur s’exécute dans un processus séparé, avec délai de 5 secondes, tas V8 de 128 Mo et diagnostics bornés. Les imports du programme ne sont pas autorisés ; seul le compilateur lit ses bibliothèques installées. Ce contrôle ne remplace pas les permissions d’exécution ni une validation JSON Schema complète (les schémas complexes non représentés peuvent rester `unknown`). L’option est désactivée par défaut ; elle ajoute un démarrage de compilateur lorsqu’elle est activée.
+
+## Diagnostic de stabilité du cache
+
+Le statut `/prompt-cache` affiche les changements locaux des composants système et outils. `PromptCacheManager.getPrefixStats()` donne les observations, répétitions consécutives et changements, sans conserver le texte des prompts. Ce sont des observations locales : les économies affichées restent estimées et ne mesurent pas les tokens de cache facturés par le fournisseur.
+
+## Continuité des tâches planifiées
+
+```sh
+buddy cron add briefing --every 3600000 --message 'Résume les nouveautés' --continuity '{"enabled":true,"notes":{"focus":"changements depuis le dernier passage"}}'
+buddy cron update JOB_ID --continuity false
+```
+
+L’outil `cronjob` accepte le même objet `continuity` lors d’une création. `true` active la continuité sans notes initiales ; `false` la désactive. Les notes sont enregistrées séparément de `jobs.json` dans le répertoire cron configuré. Maximum : 128 caractères par clé, 16 Kio par valeur et 64 Kio par fichier sérialisé. Le contexte du prochain passage contient les notes et le dernier résultat réussi non vide, borné à 16 Kio et à l’espace restant.
+
+Une exécution échouée ne remplace pas cette sortie et ne consomme pas l’empreinte du précontrôle. Une erreur de lecture ou d’enregistrement du carnet est signalée ; un carnet corrompu n’est pas remis à zéro. Les écritures concurrentes sont exclues et signalent une contention à retenter. La continuité reste désactivée par défaut.

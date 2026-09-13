@@ -69,7 +69,7 @@ export class ToolHarness {
   }
 
   /** Start an isolated JavaScript cell. Effects always route through call(). */
-  start(code: string, options: { timeoutMs?: number } = {}): string {
+  start(code: string, options: { timeoutMs?: number; typecheck?: boolean } = {}): string {
     if (this.disposed) throw new Error('Harness is disposed');
     for (const [id, execution] of this.executions) {
       if (this.executions.size < 32) break;
@@ -83,13 +83,14 @@ export class ToolHarness {
     const context = attachCodeExecRuntime({ cwd: this.cwd, sessionId: this.id }, {
       scopeId: `harness:${this.id}`, sessionId: this.id, cwd: this.cwd,
       availableTools: [...new Set([...this.tools.keys(), 'tool_search'])],
+      toolCatalog: [...this.tools.values()].map(tool => ({ name: tool.function.name, description: tool.function.description, parameters: tool.function.parameters })),
       toolMetadata: [...this.tools.values()].map(tool => ({ name: tool.function.name, description: tool.function.description ?? '' })),
       parallelTools: this.options.parallelTools,
       executor: (name, args, signal) => this.call(name, args, signal),
       abortSignal: execution.controller.signal,
       onOutput: delta => { execution.output.append(delta); execution.notify?.(); },
     });
-    execution.completed = new CodeExecTool().execute({ code, ...(options.timeoutMs !== undefined ? { timeout_ms: options.timeoutMs } : {}) }, context)
+    execution.completed = new CodeExecTool().execute({ code, typecheck: options.typecheck, ...(options.timeoutMs !== undefined ? { timeout_ms: options.timeoutMs } : {}) }, context)
       .then(result => { execution.result = result; })
       .catch(error => { execution.result = { success: false, error: error instanceof Error ? error.message : String(error) }; });
     this.executions.set(sessionId, execution);
@@ -118,7 +119,7 @@ export class ToolHarness {
     execution.controller.abort();
   }
 
-  async exec(code: string, options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<ToolResult> {
+  async exec(code: string, options: { timeoutMs?: number; signal?: AbortSignal; typecheck?: boolean } = {}): Promise<ToolResult> {
     if (options.signal?.aborted) return { success: false, error: 'Harness call cancelled' };
     const sessionId = this.start(code, options);
     const execution = this.executions.get(sessionId)!;

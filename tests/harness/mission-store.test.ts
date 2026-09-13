@@ -1,9 +1,10 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, vi, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { MissionStore } from '../../src/harness/mission-store.js';
+import * as fitness from '../../src/agent/self-improvement/evolution/variant-fitness.js';
 import { runMission } from '../../src/harness/mission-runner.js';
 
 let root: string;
@@ -76,6 +77,11 @@ it('binds review to a clean exact commit and clears it on handoff', () => {
   expect(() => store.approve('review', 'fable', sha)).toThrow('unchanged');
   store.handoff('review', a, { succeeded: [], failed: [], keyFiles: [], deadEnds: [], nextAction: 'Review new HEAD' });
   expect(store.get('review').review).toBeUndefined();
+  store.create('completed-review', op()); const done = store.claim('completed-review', 'codex').authority!;
+  store.start('completed-review', done);
+  store.complete('completed-review', done, { success: true, stdout: 'verified', stderr: '', exitCode: 0 });
+  const current = git('rev-parse', 'HEAD'); store.submit('completed-review', done, current);
+  expect(store.approve('completed-review', 'fable', current).review?.reviewer).toBe('fable');
 });
 
 it('bounds escaped and unicode outputs before persisting a successful effect', () => {
@@ -83,4 +89,26 @@ it('bounds escaped and unicode outputs before persisting a successful effect', (
   const result = store.complete('large', a, { success: true, stdout: '\n'.repeat(800000), stderr: '界'.repeat(800000), exitCode: 0 });
   expect(result.status).toBe('completed');
   expect(new MissionStore(store.directory).get('large').result).toMatchObject({ truncated: true, success: true });
+});
+
+it('renews a running lease and persists cancellation without leaving its timer alive', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(10000);
+  let finish: ((value: { code: number; stdout: string; stderr: string; timedOut: boolean }) => void) | undefined;
+  const proc = vi.spyOn(fitness, 'runProc').mockImplementation((_cmd, _args, ctx) => new Promise(resolve => {
+    finish = resolve;
+    ctx.signal?.addEventListener('abort', () => resolve({ code: 130, stdout: '', stderr: 'Cancelled', timedOut: false }));
+  }));
+  try {
+    store = new MissionStore(store.directory);
+    store.create('renewal', op()); const a = store.claim('renewal', 'codex').authority!;
+    const controller = new AbortController();
+    const pending = runMission(store, 'renewal', a, controller.signal);
+    const expiry = store.get('renewal').expiresAt!;
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(store.get('renewal').expiresAt).toBeGreaterThan(expiry);
+    controller.abort();
+    expect((await pending).result).toMatchObject({ success: false, exitCode: 130 });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { finish?.({ code: 130, stdout: '', stderr: '', timedOut: false }); proc.mockRestore(); vi.useRealTimers(); }
 });

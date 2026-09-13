@@ -22,6 +22,11 @@ export const CODE_EXEC_TOOL: CodeBuddyTool = {
           type: 'number',
           description: 'Bounded execution timeout in milliseconds (100..60000; default 30000).',
         },
+        typecheck: {
+          type: 'boolean',
+          description:
+            'Optional. When true, validates JavaScript/TypeScript orchestration against scoped tool declarations with isolated TypeScript preflight before execution. Rejects invalid code with diagnostics and zero side effects (default: false).',
+        },
       },
       required: ['code'],
       additionalProperties: false,

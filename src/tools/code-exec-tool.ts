@@ -31,6 +31,12 @@ export type ToolExecutor = (
   signal?: AbortSignal,
 ) => Promise<ToolResult>;
 
+export interface ToolCatalogEntry {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+}
+
 /** Per-agent/per-session bridge injected by ToolHandler for one invocation. */
 export interface CodeExecRuntime {
   /** Stable isolation key. Include both the owning agent and current session. */
@@ -40,6 +46,7 @@ export interface CodeExecRuntime {
   cwd?: string;
   availableTools: readonly string[];
   toolMetadata?: readonly { name: string; description: string }[];
+  toolCatalog?: readonly ToolCatalogEntry[];
   parallelTools?: readonly string[];
   onOutput?: (delta: string) => void;
   resultFormat?: 'structured' | 'legacy';
@@ -281,18 +288,18 @@ function serializeToolResult(result: ToolResult, format: CodeExecRuntime['result
   return JSON.stringify(jsonSafe(payload));
 }
 
-function sanitizeToolName(name: string): string {
+export function sanitizeToolName(name: string): string {
   const replaced = name.replace(/[^a-zA-Z0-9_$]/g, '_');
   if (!replaced) return '_tool';
   return /^[a-zA-Z_$]/.test(replaced) ? replaced : `_${replaced}`;
 }
 
-interface ToolBinding {
+export interface ToolBinding {
   exposedName: string;
   toolName: string;
 }
 
-function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
+export function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
   const bindings: ToolBinding[] = [];
   const seenTools = new Set<string>();
   const seenBindings = new Set<string>(['call']);
@@ -717,6 +724,11 @@ export class CodeExecTool extends BaseTool {
         type: 'number',
         description: `Execution timeout in milliseconds (${CODE_EXEC_LIMITS.minTimeoutMs}..${CODE_EXEC_LIMITS.maxTimeoutMs}, default ${CODE_EXEC_LIMITS.defaultTimeoutMs}).`,
       },
+      typecheck: {
+        type: 'boolean',
+        description:
+          'Perform isolated TypeScript typechecking before execution. Rejects code on diagnostic errors with zero runtime side effects. Default false.',
+      },
     };
   }
 
@@ -742,6 +754,15 @@ export class CodeExecTool extends BaseTool {
         errors: [`timeout_ms must be between ${CODE_EXEC_LIMITS.minTimeoutMs} and ${CODE_EXEC_LIMITS.maxTimeoutMs}`],
       };
     }
+    if (
+      args.typecheck !== undefined &&
+      typeof args.typecheck !== 'boolean'
+    ) {
+      return {
+        valid: false,
+        errors: ['typecheck must be a boolean'],
+      };
+    }
     return { valid: true };
   }
 
@@ -754,6 +775,7 @@ export class CodeExecTool extends BaseTool {
 
     const code = input.code as string;
     const timeoutMs = normalizeTimeout(input.timeout_ms);
+    const typecheck = input.typecheck === true;
     const injectedRuntime = runtimeFromContext(context);
     const runtime: CodeExecRuntime = injectedRuntime ? { ...injectedRuntime } : {
       scopeId: legacyScopeId(),
@@ -768,11 +790,26 @@ export class CodeExecTool extends BaseTool {
     };
 
     runtime.abortSignal ??= context?.abortSignal;
+
+    let codeToRun = code;
+    if (typecheck) {
+      const { runCodeExecPreflight } = await import('./code-exec-preflight.js');
+      const preflightResult = await runCodeExecPreflight(code, runtime, context, {
+        signal: runtime.abortSignal,
+      });
+      if (!preflightResult.success) {
+        return this.error(preflightResult.error || 'TypeScript preflight validation failed');
+      }
+      if (preflightResult.transpiledCode) {
+        codeToRun = preflightResult.transpiledCode;
+      }
+    }
+
     return runScoped(runtime.scopeId, async () => {
       if (runtime.abortSignal?.aborted) return this.error('Script cancelled');
       const state = getScopedState(runtime);
       const startedAt = Date.now();
-      const childResult = await runInChild(code, timeoutMs, runtime, state);
+      const childResult = await runInChild(codeToRun, timeoutMs, runtime, state);
       const elapsed = Date.now() - startedAt;
 
       if (!childResult.success) {

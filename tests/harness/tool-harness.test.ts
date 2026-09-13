@@ -152,3 +152,19 @@ describe('Codex-style tool harness', () => {
   });
 
 });
+
+
+it('typechecks against the actual private harness schema before any dispatch', async () => {
+  const dispatch = vi.fn(async () => ({ success: true, output: 'ok' }));
+  const harness = new ToolHarness({ cwd: process.cwd(), tools: [{ type: 'function', function: {
+    name: 'private.read', description: 'Read a path', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+  } }], dispatch });
+  try {
+    const bad = await harness.exec('await tools.call("private.read", {path: 42});', { typecheck: true });
+    expect(bad.success).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    const good = await harness.exec('const p: string = "a.txt"; text((await tools.call("private.read", {path:p})).output);', { typecheck: true });
+    expect(good.success, good.error).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  } finally { await harness.dispose(); }
+});

@@ -150,12 +150,18 @@ export class MissionStore {
   }
   submit(id: string, a: MissionAuthority, commit: string): Mission {
     if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new Error('Expected full commit SHA');
-    return this.change(id, m => { this.owned(m, a); if (m.status !== 'claimed') throw new Error('Review requires a claimed mission'); m.review = { commit, author: a.owner }; return m; });
+    return this.change(id, m => {
+      if (m?.status === 'completed') {
+        if (m.authority?.owner !== a.owner || m.authority.generation !== a.generation) throw new Error('Stale mission authority');
+      } else { this.owned(m, a); }
+      if (!['claimed', 'completed'].includes(m.status)) throw new Error('Review requires a claimed or completed mission');
+      m.review = { commit, author: a.owner }; return m;
+    });
   }
   approve(id: string, reviewer: string, expectedCommit: string): Mission {
     bounded(reviewer, 'reviewer', 256);
     return this.change(id, m => {
-      if (!m || m.status !== 'claimed' || (m.expiresAt ?? 0) <= this.now()) throw new Error('Review requires active ownership');
+      if (!m || !['claimed', 'completed'].includes(m.status) || (m.status === 'claimed' && (m.expiresAt ?? 0) <= this.now())) throw new Error('Review requires active ownership or a completed mission');
       const actualCommit = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: m.operation.workspace, encoding: 'utf8', timeout: 5000 }).trim();
       const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: m.operation.workspace, encoding: 'utf8', timeout: 5000 }).trim();
       if (dirty) throw new Error('Review requires a clean worktree');
