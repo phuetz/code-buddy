@@ -79,13 +79,13 @@ describe('buddy fleet rooms CLI', () => {
     });
     const connection = ['--url', url, '--api-key', key.key, '--identity', identity];
 
-    const [posted] = await run(['rooms', 'post', 'general', 'build', 'vert', 'sur', 'ministar', ...connection, '--json']);
+    const [posted] = await run(['rooms', 'post', 'general', 'build', 'vert', 'sur', 'peer-alpha', ...connection, '--json']);
     expect(JSON.parse(posted as string)).toMatchObject({ seq: 1, duplicate: false });
 
     const cursorFile = path.join(dir, 'cursor.json');
     const [firstRead] = await run(['rooms', 'read', 'general', '--cursor', cursorFile, ...connection, '--json']);
     const firstPayload = JSON.parse(firstRead as string) as { messages: Array<{ text: string; seq: number }>; cursor: { throughSeq: number } };
-    expect(firstPayload.messages.map((m) => m.text)).toEqual(['build vert sur ministar']);
+    expect(firstPayload.messages.map((m) => m.text)).toEqual(['build vert sur peer-alpha']);
     expect(JSON.parse(fs.readFileSync(cursorFile, 'utf8'))).toMatchObject({ version: 1, room: 'general', throughSeq: 1 });
 
     await run(['rooms', 'post', 'general', 'second', ...connection]);

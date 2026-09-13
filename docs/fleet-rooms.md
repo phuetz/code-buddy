@@ -46,12 +46,12 @@ machine-readable prefixes. It is re-implemented in TypeScript on the existing
    {
      "version": 1,
      "members": {
-       "<pubkey ministar>": { "name": "ministar", "principals": ["key:<api key id>"] },
-       "<pubkey darkstar>": { "name": "darkstar" },
+       "<pubkey peer-alpha>": { "name": "peer-alpha", "principals": ["key:<api key id>"] },
+       "<pubkey peer-beta>": { "name": "peer-beta" },
        "<pubkey observer>": { "name": "observer" }
      },
      "rooms": {
-       "general": { "members": ["<pubkey ministar>", "<pubkey darkstar>"], "readers": ["<pubkey observer>"] }
+       "general": { "members": ["<pubkey peer-alpha>", "<pubkey peer-beta>"], "readers": ["<pubkey observer>"] }
      }
    }
    ```
@@ -83,7 +83,7 @@ machine-readable prefixes. It is re-implemented in TypeScript on the existing
 ```bash
 export CODEBUDDY_FLEET_ROOMS_URL=ws://codebuddy-hub.example:3000/ws
 
-buddy fleet rooms post general "build vert sur ministar"
+buddy fleet rooms post general "build vert sur peer-alpha"
 buddy fleet rooms post general "je prends la suite" --reply-to <id> --mention <pubkey>
 buddy fleet rooms read general --limit 20
 buddy fleet rooms read general --mentions-me

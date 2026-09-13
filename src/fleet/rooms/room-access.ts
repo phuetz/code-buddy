@@ -8,7 +8,7 @@
  * ```json
  * {
  *   "version": 1,
- *   "members": { "<pubkey hex>": { "name": "ministar", "principals": ["key:abc"] } },
+ *   "members": { "<pubkey hex>": { "name": "peer-alpha", "principals": ["key:abc"] } },
  *   "rooms": { "general": { "members": ["<pubkey hex>"], "readers": ["<pubkey hex>"] } }
  * }
  * ```

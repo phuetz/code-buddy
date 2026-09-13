@@ -7,7 +7,7 @@
  *
  * Accepted auth audiences: the loopback URLs of the listening port, plus the
  * canonical URLs listed in `CODEBUDDY_FLEET_ROOMS_AUDIENCE` (csv) — the address
- * remote members dial (e.g. `ws://ministar-linux:3000/ws`). A hub never accepts
+ * remote members dial (e.g. `ws://codebuddy-hub.example:3000/ws`). A hub never accepts
  * a proof addressed to a URL it was not told is its own.
  *
  * @module fleet/rooms/room-server

@@ -2,6 +2,12 @@
 
 État : lot assemblé et validé, 14 septembre 2026. Commit source : `a5e95402a`.
 
+Intégration GitHub : `d579f26ec` sur `main`. Le contrôle complet suivant le commit
+a détecté des noms de machines privées dans quatre exemples nouvellement suivis
+par Git ; la garde utilise `git ls-files`, donc la passe précédente ne les
+inspectait pas encore. Les exemples ont été remplacés par des noms fictifs,
+sans changement du protocole. Reprise confidentialité + CLI : **41/41 verts**.
+
 ## Objectif et provenance
 
 Patrice a autorisé l'intégration des idées utiles de [block/buzz](https://github.com/block/buzz)
