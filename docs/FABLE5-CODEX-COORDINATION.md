@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Intégration améliorations — tranche 9 MCP WorkflowBuilder 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 8 `328b86edb` ; commit visé `2455a5c5f` | Connecter WorkflowBuilder aux outils MCP natifs, CLI et compétences associées. | Aucun push avant tests MCP, pack, typecheck et build. |
+
 | P1 | Intégration améliorations — tranche 8 outillage harnais 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 7 `33875c2d6` ; commits portés `996693e15`, `780f55d6a` + clôture | Métadonnées de mission exposées et demandes d'index coordonnées. | 6 fichiers/138 tests + 10 pack, typecheck/build/lint verts. Aucun push avant clôture. |
 
 | P1 | Intégration améliorations — tranche 7 Sense 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 6 `5eb20755f` ; commits portés `fb1a6d734`, `c74197c80` + clôture | Attentes réseau du bridge bornées et événements réordonnés préservés. | Rust 42/42 et intégration TypeScript 20/20 verts ; aucun push avant clôture. |
