@@ -204,6 +204,11 @@ Le shard macOS suivant a repéré le même prérequis dans le test du cycle DGM
 complet. `6cd223c01` applique la même borne Linux à ce scénario ; ses 13 tests
 restent verts sur le runner Linux.
 
+Le shard 5 macOS a enfin trouvé les deux scénarios ProposalStore qui évaluent
+une proposition d'outil avant de tester sa persistance. `f4c825d8a` les borne
+eux aussi au runner Linux ; la suite self-improvement complète repasse à 47
+fichiers et 384 tests verts.
+
 Le shard macOS Node 20 suivant a montré que le worker de préflight TypeScript
 était encore lancé avec une option réservée aux versions récentes de Node.
 `e54dca188` préfère le worker JavaScript produit par le build lorsqu'il est
