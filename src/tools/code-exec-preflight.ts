@@ -377,6 +377,15 @@ function resolvePreflightRunnerPath(): string {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const distPath = path.join(currentDir, 'code-exec-preflight-runner.js');
     if (fs.existsSync(distPath)) return distPath;
+    const builtFromSourcePath = path.resolve(
+      currentDir,
+      '..',
+      '..',
+      'dist',
+      'tools',
+      'code-exec-preflight-runner.js',
+    );
+    if (fs.existsSync(builtFromSourcePath)) return builtFromSourcePath;
     const srcPath = path.join(currentDir, 'code-exec-preflight-runner.ts');
     if (fs.existsSync(srcPath)) return srcPath;
     throw new Error('Bundled preflight compiler is missing');

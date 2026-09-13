@@ -701,7 +701,12 @@ describe('CodeBuddyAgent', () => {
 
         expect(FormalToolRegistry.getInstance().has(toolName)).toBe(true);
         const result = await FormalToolRegistry.getInstance().execute(toolName, { text: 'loaded' });
-        expect(result.output).toContain('loaded');
+        if (process.platform === 'linux') {
+          expect(result.output).toContain('loaded');
+        } else {
+          expect(result.success).toBe(false);
+          expect(result.error).toContain('Compute confinement requires Linux');
+        }
       } finally {
         FormalToolRegistry.getInstance().unregister(toolName);
         getToolRegistry().removeTool(toolName);
