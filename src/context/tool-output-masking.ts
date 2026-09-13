@@ -10,6 +10,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { truncateOutput } from '../utils/bounded-output.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 
 /** Tokens worth of newest tool outputs to protect from masking */
@@ -52,16 +53,14 @@ function generatePreview(content: string): string {
   if (lines.length <= HEAD_PREVIEW_LINES + TAIL_PREVIEW_LINES) {
     // Short enough — use char-based preview
     if (content.length <= SHORT_PREVIEW_CHARS * 2) return content;
-    return content.substring(0, SHORT_PREVIEW_CHARS) +
-      '\n...\n' +
-      content.substring(content.length - SHORT_PREVIEW_CHARS);
+    return truncateOutput(content, SHORT_PREVIEW_CHARS * 2);
   }
 
   const head = lines.slice(0, HEAD_PREVIEW_LINES).join('\n');
   const tail = lines.slice(-TAIL_PREVIEW_LINES).join('\n');
   const omitted = lines.length - HEAD_PREVIEW_LINES - TAIL_PREVIEW_LINES;
 
-  return `${head}\n\n... (${omitted} lines omitted) ...\n\n${tail}`;
+  return truncateOutput(`${head}\n\n... (${omitted} lines omitted) ...\n\n${tail}`, 4000);
 }
 
 /**

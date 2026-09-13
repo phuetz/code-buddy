@@ -8,6 +8,7 @@
  * @module agent/execution
  */
 
+import { BoundedOutput } from '../../utils/bounded-output.js';
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../../codebuddy/client.js";
 import { resolveFirstTokenStallTimeoutMs, resolveStallTimeoutMs, withStallGuard } from "../../utils/stream-stall-guard.js";
 import { startHeadlessPromptProgress } from "../../cli/headless-prompt-progress.js";
@@ -729,17 +730,26 @@ export class AgentExecutor {
     startedAt = Date.now(),
   ): Promise<{ result: ToolResult; streamChunks: string[] }> {
     const streamChunks: string[] = [];
+    const streamPreview = new BoundedOutput(256 * 1024);
+    let collapsed = false;
+    const appendStreamChunk = (chunk: string): void => {
+      if (!chunk || signal?.aborted) return;
+      streamPreview.append(chunk);
+      collapsed ||= streamPreview.omittedBytes > 0 || streamChunks.length >= 1024;
+      if (collapsed) streamChunks.splice(0, streamChunks.length, streamPreview.text());
+      else streamChunks.push(chunk);
+    };
     const extraWithSignal = signal
       ? { ...(executionExtra ?? {}), abortSignal: signal }
       : executionExtra;
 
     const execute = async (): Promise<{ result: ToolResult; streamChunks: string[] }> => {
-      const streamingTools = new Set(['bash', 'reason', 'generate_document']);
+      const streamingTools = new Set(['bash', 'reason', 'generate_document', 'code_exec']);
       if (streamingTools.has(toolCall.function.name)) {
         const generator = this.deps.toolHandler.executeToolStreaming(toolCall, extraWithSignal);
         let generated = await generator.next();
         while (!generated.done) {
-          streamChunks.push(generated.value);
+          appendStreamChunk(generated.value);
           generated = await generator.next();
         }
         return {
@@ -753,7 +763,7 @@ export class AgentExecutor {
         const result = await streamingAdapter.wrapWithStreaming(
           toolCall.function.name,
           () => this.executeToolViaLane(toolCall, extraWithSignal),
-          (chunk: string) => streamChunks.push(chunk),
+          appendStreamChunk,
         );
         return { result, streamChunks };
       }

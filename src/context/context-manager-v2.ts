@@ -13,6 +13,7 @@
  * - Key Information Preservation
  */
 
+import { truncateOutput } from '../utils/bounded-output.js';
 import { createHash } from 'node:crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1008,8 +1009,7 @@ export class ContextManagerV2 {
         if (msg.content.length > MAX_TOOL_RESULT_LENGTH) {
           return {
             ...msg,
-            content: msg.content.substring(0, MAX_TOOL_RESULT_LENGTH) +
-                     '\n... [truncated for context limits]',
+            content: truncateOutput(msg.content, MAX_TOOL_RESULT_LENGTH),
           };
         }
       }
