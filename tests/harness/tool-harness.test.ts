@@ -25,6 +25,43 @@ describe('Codex-style tool harness', () => {
       expect(dispatch.mock.calls.map(call => call[0])).toEqual(['read_file', 'a.b', 'a-b']);
     } finally { await harness.dispose(); }
   });
+  it.each([511, 512, 513])('discovers and calls tools with a %i-entry catalogue', async count => {
+    const catalog: CodeBuddyTool[] = Array.from({ length: count }, (_, index) => ({
+      type: 'function', function: { name: `entry_${index}`, description: `Entry ${index}`, parameters: { type: 'object', properties: {} } },
+    }));
+    const dispatch = vi.fn(async (name: string) => ({ success: true, output: name }));
+    const harness = new ToolHarness({ cwd: process.cwd(), tools: catalog, dispatch });
+    try {
+      const result = await harness.exec(`
+        const found = await tools.tool_search({query: 'entry_${count - 1}', max_results: 1});
+        text((await tools.call(found.data.names[0])).output);
+        text(ALL_TOOLS.length);
+      `);
+      expect(result.success, result.error).toBe(true);
+      expect(result.output).toContain(`entry_${count - 1}`);
+      expect(result.output).toContain('512');
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      for (const denied of ['absent', 'code_exec', 'exec']) {
+        expect((await harness.exec(`await tools.call('${denied}');`)).success).toBe(false);
+      }
+      expect(dispatch).toHaveBeenCalledTimes(1);
+    } finally { await harness.dispose(); }
+  });
+
+  it.each([['a', 'b'], ['a', undefined], [undefined, 'a']])('rejects a bot transition %s → %s in the same workspace', async (initial, next) => {
+    let botId = initial;
+    const executeToolByName = vi.fn(async () => ({ success: true }));
+    const harness = await createAgentToolHarness({ getMemoryScope: () => ({ cwd: process.cwd(), botId }), executeToolByName }, tools);
+    try {
+      expect((await harness.call('read_file')).success).toBe(true);
+      botId = next;
+      expect((await harness.call('read_file')).error).toContain('bot changed');
+      const result = await harness.exec(`text(await tools.read_file());`);
+      expect(result.output).toContain('bot changed');
+      expect(executeToolByName).toHaveBeenCalledTimes(1);
+    } finally { await harness.dispose(); }
+  });
+
   it('runs safe reads concurrently with write barriers and preserves same-session state', async () => {
     let active = 0;
     let peak = 0;

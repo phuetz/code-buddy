@@ -297,7 +297,9 @@ function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
   const seenTools = new Set<string>();
   const seenBindings = new Set<string>(['call']);
 
-  for (const toolName of toolNames) {
+  // Keep discovery reachable even when direct bindings hit their budget.
+  const ordered = toolNames.includes('tool_search') ? ['tool_search', ...toolNames] : toolNames;
+  for (const toolName of ordered) {
     if (bindings.length >= CODE_EXEC_LIMITS.maxAvailableTools) break;
     if (
       typeof toolName !== 'string' ||
@@ -410,7 +412,7 @@ async function execute(message) {
     'let __cbEmittedLength = 0; async function yield_control() { __cbYielded = true; const output = __cbOutput.join(""); const delta = output.slice(__cbEmittedLength); __cbEmittedLength = output.length; await __cbYield(delta); }' +
     'const tools = Object.create(null);' +
     'for (const binding of __cbBindings) { tools[binding.exposedName] = async function(args = {}) { const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); }; }' +
-    'tools.call = async function(name, args = {}) { if (typeof name !== "string") throw new Error("tool name must be a string"); const binding = __cbBindings.find((entry) => entry.toolName === name); if (!binding) throw new Error("tool is not available: " + name); const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); };' +
+    'tools.call = async function(name, args = {}) { if (typeof name !== "string") throw new Error("tool name must be a string"); const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(name, encoded)); };' +
     'Object.freeze(tools); Object.freeze(__cbBindings);' +
     'const ALL_TOOLS = Object.freeze(' + allTools + '.map(Object.freeze)); const ALL_TOOL_NAMES = Object.freeze(ALL_TOOLS.map(t => t.name));' +
     'const console = Object.freeze({ log: (...args) => __cbAppend(args), error: (...args) => __cbAppend(args, "[ERROR] "), warn: (...args) => __cbAppend(args, "[WARN] ") });';
@@ -499,7 +501,8 @@ async function runInChild(
   state: ScopedState,
 ): Promise<ChildRunResult> {
   const toolBindings = buildToolBindings(runtime.availableTools);
-  const allowedTools = new Set(toolBindings.map((binding) => binding.toolName));
+  // Canonical calls use the full scoped catalogue; only JS shortcuts are capped.
+  const allowedTools = new Set(runtime.availableTools.filter(name => typeof name === 'string' && name && !['exec', 'code_exec'].includes(name)));
 
   return await new Promise<ChildRunResult>((resolve) => {
     let settled = false;

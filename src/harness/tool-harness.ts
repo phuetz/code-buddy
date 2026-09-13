@@ -140,13 +140,17 @@ export class ToolHarness {
 
 /** Bind an existing agent, preserving ToolHandler's policy, approvals and project scope. */
 export async function createAgentToolHarness(agent: {
-  getMemoryScope(): { cwd: string };
+  getMemoryScope(): { cwd: string; botId?: string };
   executeToolByName(name: string, args: Record<string, unknown>, extra?: Record<string, unknown>): Promise<ToolResult>;
 }, tools?: readonly CodeBuddyTool[]): Promise<ToolHarness> {
   const catalog = tools ?? await (await import('../codebuddy/tools.js')).getAllCodeBuddyTools();
-  const cwd = path.resolve(agent.getMemoryScope().cwd);
+  const scope = agent.getMemoryScope();
+  const cwd = path.resolve(scope.cwd);
+  const botId = scope.botId;
   return new ToolHarness({ cwd, tools: catalog, parallelTools: TOOL_METADATA.filter(tool => tool.fleetSafe === true && tool.effect === 'read').map(tool => tool.name), dispatch: (name, args, abortSignal) => {
-    if (path.resolve(agent.getMemoryScope().cwd) !== cwd) return Promise.resolve({ success: false, error: 'Agent workspace changed; create a new harness' });
+    const currentScope = agent.getMemoryScope();
+    if (path.resolve(currentScope.cwd) !== cwd) return Promise.resolve({ success: false, error: 'Agent workspace changed; create a new harness' });
+    if (currentScope.botId !== botId) return Promise.resolve({ success: false, error: 'Agent bot changed; create a new harness' });
     return agent.executeToolByName(name, args, { abortSignal });
   } });
 }
