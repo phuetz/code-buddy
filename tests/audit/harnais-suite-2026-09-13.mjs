@@ -1,4 +1,4 @@
-/** Diagnostic audit probe: assertions document defects at 4b52cb6f4, not desired behavior. */
+/** Regression probe for the four defects originally reproduced at 4b52cb6f4. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -26,7 +26,7 @@ try {
   const invoker = createExecuteCodeRpcInvoker({ workspaceRoot: workspace, allowlist: new Set(['view_file']), extraTools: new Set(), isFleetSafe: () => true });
   const escaped = await invoker({ tool: 'view_file', args: { file_path: 'linked.txt' } });
   observations.symlinkBoundary = { outsideRead: escaped.ok && escaped.output === 'SYNTHETIC_OUTSIDE_MARKER' };
-  assert.equal(observations.symlinkBoundary.outsideRead, true);
+  assert.equal(observations.symlinkBoundary.outsideRead, false);
 
   let botId = 'bot-a';
   const agent = {
@@ -39,7 +39,7 @@ try {
     botId = 'bot-b';
     const after = await scoped.call('recall');
     observations.botScope = { before: before.output, after: after.output, acceptedChangedBot: after.success };
-    assert.deepEqual(observations.botScope, { before: 'bot-a', after: 'bot-b', acceptedChangedBot: true });
+    assert.deepEqual(observations.botScope, { before: 'bot-a', after: undefined, acceptedChangedBot: false });
   } finally { await scoped.dispose(); }
 
   const catalog = Array.from({ length: 513 }, (_, index) => tool(`tool_${String(index).padStart(4, '0')}`));
@@ -52,14 +52,12 @@ try {
     observations.largeCatalog = { found: found[0]?.name, directSuccess: direct.success, cellSuccess: cell.success, cellError: cell.error, discoveryMissing: discovery.output?.includes('undefined') };
     assert.equal(found[0]?.name, 'tool_0512');
     assert.equal(direct.success, true);
-    assert.equal(cell.success, false);
-    assert.equal(observations.largeCatalog.discoveryMissing, true);
+    assert.equal(cell.success, true);
+    assert.equal(observations.largeCatalog.discoveryMissing, false);
   } finally { await large.dispose(); }
 
   let releaseFirst;
   const firstGate = new Promise(resolve => { releaseFirst = resolve; });
-  let secondCalled;
-  const lateCall = new Promise(resolve => { secondCalled = resolve; });
   const marker = path.join(root, 'child-may-exit');
   let finished = false;
   const calls = [];
@@ -72,20 +70,15 @@ try {
     ` }, { rootDir: workspace, envMode: 'isolate', rpcEnabled: true, rpcInvoke: async request => {
       calls.push({ id: request.args.id, afterCompletion: finished });
       if (calls.length === 1) { await fs.writeFile(marker, 'ready'); await firstGate; }
-      else secondCalled();
       return { ok: true, output: 'synthetic' };
     } });
     finished = true;
     assert.equal(result.ok, true, result.error);
     assert.equal(calls.length, 1);
     releaseFirst();
-    let timer;
-    try { await Promise.race([lateCall, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('No late RPC observed')), 2000); })]); }
-    finally { clearTimeout(timer); }
-    // Let the responder finish writing its second answer before fixture cleanup.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
     observations.rpcAfterExit = { calls, lateInvocation: calls[1]?.afterCompletion === true };
-    assert.equal(observations.rpcAfterExit.lateInvocation, true);
+    assert.equal(observations.rpcAfterExit.lateInvocation, false);
   } finally { releaseFirst(); }
   console.log(JSON.stringify(observations, null, 2));
 } finally {

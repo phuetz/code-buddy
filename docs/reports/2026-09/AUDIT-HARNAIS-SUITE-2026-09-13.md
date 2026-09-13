@@ -1,5 +1,6 @@
 # Suite de l'audit : harnais et RPC
 
+> Les quatre défauts ci-dessous ont été corrigés dans la tranche suivante. Voir [le rapport de correction](CORRECTIONS-HARNAIS-RPC-2026-09-13.md). La sonde citée vérifie désormais le comportement corrigé.
 Audit demandé par Patrice après la livraison du harnais. Révision examinée : **`4b52cb6f4`**, branche `codex/audit-ameliorations-2026-09-13`, worktree `~/DEV/cb-audit-ameliorations-2026-09-13`.
 
 **Quatre défauts reproduits.** Deux concernent le harnais livré dans la tranche précédente ; ils n'étaient pas couverts par ses tests. Deux concernent le RPC historique d'`execute_code`, distinct du moteur isolé `code_exec`. Aucune modification de production dans cette tranche : rapport et sonde diagnostique seulement.

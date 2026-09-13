@@ -26,7 +26,7 @@ try {
 }
 ```
 
-Les effets empruntent `agent.executeToolByName` puis le ToolHandler habituel : filtres, schémas, permissions, confirmations, hooks et contexte de projet. Si le projet de l'agent change, recréez le harnais ; il refuse les appels avec un contexte devenu incohérent. Le catalogue appartient à chaque harnais. Les appels n'effectuent pas de `process.chdir()`.
+Les effets empruntent `agent.executeToolByName` puis le ToolHandler habituel : filtres, schémas, permissions, confirmations, hooks et contexte de projet. Si le projet ou le bot de l'agent change, recréez le harnais ; il refuse les appels avec un contexte devenu incohérent. Le catalogue appartient à chaque harnais. Les appels n'effectuent pas de `process.chdir()`.
 
 ## Appels programmatiques dans Code Buddy
 
@@ -49,11 +49,12 @@ store('lastFiles', ['package.json', 'tsconfig.json']);
 ```
 
 - `tools.nom(args)` et `tools.call(nomExact, args)` renvoient un objet `{success, output?, data?, error?}`. Une erreur d'outil n'est pas transformée en succès ; inspectez `success`. Une erreur du transport peut rejeter la promesse.
+- Le raccourci `tools.tool_search` est réservé lorsqu'il est autorisé. Au-delà de 512 outils, utilisez la recherche puis `tools.call(nomExact, args)` : le parent vérifie le catalogue complet de la session. Les outils absents ou récursifs restent refusés.
 - `ALL_TOOLS` contient `{name, description}` ; `ALL_TOOL_NAMES` donne les seuls noms. Pour un nom MCP contenant des caractères particuliers, utilisez `tools.call(nomExact, args)`. Les collisions entre noms normalisés ne suppriment plus un outil.
 - Les lectures explicitement autorisées au parallélisme sont limitées à quatre appels simultanés. Les autres outils forment des barrières FIFO : les écritures attendent les lectures précédentes et terminent avant les suivantes. `Promise.all` ne constitue pas une transaction avec rollback des effets.
 - `text()` accumule un résultat borné ; `await yield_control()` publie le delta dans le chemin streaming du ToolHandler. Le résultat final conserve la sortie complète bornée. Le harnais et le ToolHandler livrent ce delta immédiatement ; la boucle d'agent principale conserve son rejeu ordonné des événements par lot d'outils, avec un buffer désormais borné. Cela ne suspend pas durablement le processus comme un workflow persistant.
 - `store()` / `load()` stockent du JSON isolé par agent/session. Les cellules d'une même session sont sérialisées pour éviter les mises à jour perdues. Le snapshot n'est validé qu'après succès ; les effets d'outils déjà exécutés ne sont pas annulés si le script échoue.
-- Les limites existantes restent appliquées : 64 appels par cellule, 512 outils exposés, 100–60 000 ms par cellule, mémoire du processus enfant et volumes de sortie bornés. L'annulation est transmise aux outils ; leur arrêt effectif dépend de la prise en charge du signal par chaque adaptateur.
+- Les limites existantes restent appliquées : 64 appels par cellule, 512 raccourcis et descriptions exposés, 100–60 000 ms par cellule, mémoire du processus enfant et volumes de sortie bornés. L'annulation est transmise aux outils ; leur arrêt effectif dépend de la prise en charge du signal par chaque adaptateur.
 
 Compatibilité : le pont historique `setCodeModeToolExecutor` conserve le retour simplifié des résultats. Les runtimes injectés utilisent désormais les résultats structurés ; pour un intégrateur direct utilisant `attachCodeExecRuntime`, `resultFormat: 'legacy'` conserve l'ancien format. Les scripts de production qui attendaient une chaîne doivent lire `result.output`.
 
