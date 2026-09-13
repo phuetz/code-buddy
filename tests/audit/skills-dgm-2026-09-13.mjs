@@ -1,4 +1,4 @@
-/** Diagnostic probe: documents observed limitations, not desired regression expectations. */
+/** Regression probe for the skill/DGM audit fixes. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -28,29 +28,29 @@ try {
  const creator = new CreateSkillTool();
  assert.equal((await creator.execute({name:'Audit sample',description:'A synthetic workflow',body:'# Audit\nUse this to review a synthetic sample.'})).success,true);
  await registry.load();
- observations.createdButNotDiscovered = !registry.list().some(s=>s.metadata.name==='Audit sample');
- assert.equal(observations.createdButNotDiscovered,true);
+ observations.createdButNotDiscovered = !registry.list().some(s=>s.metadata.name==='authored-audit-sample');
+ assert.equal(observations.createdButNotDiscovered,false);
  assert.equal((await creator.execute({name:'Review: French',description:'Synthetic example',body:'# Review\nReview this synthetic document.'})).success,true);
- const yaml = await fs.readFile(path.join(root,'.codebuddy/skills/workspace/review-french/SKILL.md'),'utf8');
- assert.throws(()=>parseSkillFile(yaml,'synthetic','workspace'));
- observations.successWithInvalidYaml = true;
+ const yaml = await fs.readFile(path.join(root,'.codebuddy/skills/authored-review-french/SKILL.md'),'utf8');
+ assert.doesNotThrow(()=>parseSkillFile(yaml,'synthetic','workspace'));
+ observations.successWithInvalidYaml = false;
  const scenario = {id:'path-filter',description:'Use targeted tests',query:'npm test',expectIncludes:['npm test','path filter'],heldOutIncludes:['targeted']};
  const stub = {has:()=>false,create:()=>{throw new Error('No install expected');},remove:()=>false};
  const badAdvice = 'Never use a path filter for npm test. Always avoid targeted tests.';
  const verdict = validateSkillProposal({id:'synthetic',targetScenarioId:scenario.id,spec:{name:'authored-bad-advice',description:'Synthetic',content:badAdvice}},scenario,stub,{keepOnAccept:false});
  observations.wrongAdviceAccepted = verdict.accepted;
- assert.equal(verdict.accepted,true);
+ assert.equal(verdict.accepted,false);
  const mutator = new LiveSkillMutator(path.join(root,'.codebuddy/skills'));
- mutator.create({name:'authored-container',description:'Synthetic',content:'---\nname: synthetic-other-identity\ndescription: Synthetic\n---\n\n# Review\nUse this for a synthetic review.'});
+ assert.throws(() => mutator.create({name:'authored-container',description:'Synthetic',content:'---\nname: synthetic-other-identity\ndescription: Synthetic\n---\n\n# Review\nUse this for a synthetic review.'}), /identity/);
  observations.frontmatterOverridesAuthoredIdentity = getSkillRegistry().list().some(s=>s.metadata.name==='synthetic-other-identity');
- assert.equal(observations.frontmatterOverridesAuthoredIdentity,true);
+ assert.equal(observations.frontmatterOverridesAuthoredIdentity,false);
  mutator.create({name:'authored-pinned-sample',description:'Synthetic',content:'# Original\nUse this original synthetic workflow.'});
  assert.equal(mutator.pin('authored-pinned-sample'),true);
- mutator.create({name:'authored-pinned-sample',description:'Replacement',content:'# Replacement\nUse this replacement synthetic workflow.'});
+ assert.throws(() => mutator.create({name:'authored-pinned-sample',description:'Replacement',content:'# Replacement\nUse this replacement synthetic workflow.'}), /pinned/);
  observations.createOverwritesPinned = (await fs.readFile(path.join(root,'.codebuddy/skills/authored-pinned-sample/SKILL.md'),'utf8')).includes('# Replacement');
- assert.equal(observations.createOverwritesPinned,true);
+ assert.equal(observations.createOverwritesPinned,false);
  observations.vitestCounts = parseVitestCounts('Test Files  2 passed (2)\nTests  92 passed (92)');
- assert.deepEqual(observations.vitestCounts,{passed:2,failed:0});
+ assert.deepEqual(observations.vitestCounts,{passed:92,failed:0});
  const green = {score:1,passedAll:true,regressions:[],components:[]};
  observations.greenCandidateBeatsGreenBaseline = beatsBaseline(green,green);
  assert.equal(observations.greenCandidateBeatsGreenBaseline,false);
@@ -61,10 +61,8 @@ try {
  assert.equal(scan.ok,true,JSON.stringify(scan));
  const result = await buildAuthoredTool({name:'authored__read_probe',description:'Synthetic read probe',parameters:{type:'object',properties:{}},language:'javascript',code}).execute({path:sentinel});
  observations.authoredRuntimeReadsOutside = result.success && result.output.includes('SYNTHETIC_OUTSIDE_RUNTIME');
- assert.equal(observations.authoredRuntimeReadsOutside,true,JSON.stringify(result));
- const runtimeRoot = JSON.parse(result.output).root;
- assert.ok(path.basename(runtimeRoot).startsWith('cb-authored-'));
- await fs.rm(runtimeRoot,{recursive:true,force:true});
+ assert.equal(observations.authoredRuntimeReadsOutside,false,JSON.stringify(result));
+ assert.equal(result.success,false);
  console.log(JSON.stringify(observations,null,2));
 } finally {
  registry.shutdown(); getSkillRegistry().shutdown();

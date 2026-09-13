@@ -2,6 +2,8 @@
 
 13 septembre 2026. Source : branche `codex/audit-ameliorations-2026-09-13`, base `d1e2f0e15`, worktree `~/DEV/cb-audit-ameliorations-2026-09-13`. Audit de code et expériences synthétiques isolées ; aucun changement de production, aucun cycle LLM lancé, aucune variante fusionnée.
 
+> Correctifs livrés dans la tranche suivante : [rapport de correction](CORRECTIONS-SKILLS-DGM-2026-09-13.md). La sonde vérifie désormais les comportements corrigés ; les constats ci-dessous décrivent la base auditée.
+
 ## Conclusion
 
 Code Buddy possède une architecture d'auto-extension et d'évolution effectivement implémentée. Son point faible est la continuité entre **création, chargement, évaluation et promotion**. Certaines protections existent dans une voie et sont absentes dans une autre. Le signal d'évaluation du code est trop limité pour piloter une amélioration continue lorsque les tests sont déjà verts.

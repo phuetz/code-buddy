@@ -1,6 +1,6 @@
 # Recursive Self-Improvement Engine
 
-> Status: **V1 (reversible learnable layer)**. The empirically-gated core of an
+> Status: **Reversible learning plus reviewed code evolution**. The empirically-gated core of an
 > agent that improves itself — designed to become the brain of Patrice's robot,
 > with the senses plugging into the same loop.
 
@@ -55,8 +55,7 @@ ExperienceSource → Curriculum → Proposer → Empirical Gate → Archive
 
 ## Safety model
 
-- **Reversible layer only.** V1 improves lessons (add/remove). Code-level
-  self-modification (the DGM's “rewrite own code”) is **out of scope**.
+- **Reversible layer only.** V1 improves lessons (add/remove). Code variants are produced separately by `buddy evolve` in isolated worktrees; their promotion requires explicit confirmation on an integration branch.
 - **Tiered autonomy, fail-safe.** `propose-only` by default — validates and
   *reports* what would help but persists nothing. `auto-apply` requires
   `CODEBUDDY_SELF_IMPROVE=true` (or `--apply`), and even then keeps only
@@ -103,7 +102,8 @@ Beyond lessons, the agent authors its own tools (`authored__*`) and skills (`aut
   - **SG1**: Frontmatter validity, non-empty structured instructions, title and triggers.
   - **SG2**: Static safety scan + full-document firewall (`scanSkillFirewall`, prompt-injection and exfiltration defenses).
   - **SG3**: Visible guidance coverage check.
-  - **SG4**: Held-out secret guidance coverage check (anti-gaming defense).
+  - **SG4**: Held-out guidance coverage, still a lexical relevance check.
+  - **Behavioral gate before auto-apply**: paired runs with/without the skill on curated file tasks, executed through `ToolHarness`. Check final file contents, preservation/removal and required ordering of effects. At least one observed gain, no loss, and every candidate task passing are required. These small fixtures provide execution evidence, not a statistical guarantee of general skill quality.
   Validated skills: `authored-relecture-typographique-francaise` (rules for « », non-breaking spaces, curly apostrophes, decimal commas, code block protection), `authored-mission-contrat-lane` (formalization of autonomous lane contracts: dedicated clone, report before inspection, isolated HOME, atomic named commits, touched files proof, 10-line summary).
 
 **Proposers.** Default is a deterministic, offline `StaticProposer` (a curated
@@ -218,3 +218,25 @@ in V1 and refuses to run rather than emit fake signals.
 - **Robot** — `SensorExperienceSource` over the JEPA world-model prediction-error
   stream; per-modality micro-benchmarks; the loop runs on the robot's lived
   experience.
+
+
+## Corrections verified on 2026-09-13
+
+`create_skill` and the forge now share the authored skill installer. Generated names use `authored-*` and the path is `.codebuddy/skills/<authored-name>/SKILL.md`. YAML is serialized and parsed, frontmatter cannot substitute a different identity, existing skills require explicit overwrite, and pinned skills cannot be overwritten. Loading must succeed before success is reported; a failed installation restores the prior file. The tool adapter passes the execution workspace explicitly.
+
+`improve skills --apply` now needs a configured model for behavioral verification in addition to its existing opt-in. The static/coverage result remains provisional. Each of the four seed scenarios has two curated tasks, run once without and once with the skill: up to four additional model requests per candidate. A missing provider, missing task set, failed task, regression, or no observed gain prevents installation. The archive records outcome pairs and hashes of the installed document and benchmark. The model writes bounded JavaScript using file tools inside a fresh temporary fixture; it cannot author the expected outcomes.
+
+Authored JavaScript, TypeScript (transpiled in the parent) and Python run under **Linux Landlock ABI ≥3 plus seccomp**, with Python 3 as the trusted bootstrap. Supported architectures: x86_64 and aarch64 (x86_64 exercised here). Host private files are inaccessible, system runtime libraries are read-only, networking and spawning separate processes are denied. Files are confined to the private temporary run directory; CPU, data memory, file size, descriptors and Node heap are bounded. Temporary artifacts are removed on completion. Other platforms or missing kernel facilities return an error rather than execute unrestricted code.
+
+`buddy evolve run` now separates required type/test checks from a graded objective. The default objective is the protected offline `eval/harness-benchmark.mjs`: 17 tool-search and programmatic execution tasks. `--eval-task <ids...>` explicitly selects whole-agent LLM tasks instead; those require a provider usable in the evaluation environment. The candidate and baseline are built and evaluated in isolated worktrees. Baseline references are resolved to a SHA before the round. Vitest counts come from a separate JSON report, so subprocess logs and file-summary counts do not corrupt the measurement. Losing any previously passing task, or dropping a component, is a regression.
+
+```bash
+CODEBUDDY_EVOLVE=true buddy evolve run --baseline HEAD --goal "Improve tool discovery"
+buddy evolve review <id>
+# On an integration branch, after reviewing the evaluated commit:
+buddy evolve keep <id> --confirm
+```
+
+Promotion refuses failed/regressed variants and branches whose tip differs from the evaluated SHA. It merges the evaluated commit, not a subsequently movable branch name. The store retains the baseline SHA and full component report. Main/master remain protected.
+
+Verification report: [skills/DGM corrections](reports/2026-09/CORRECTIONS-SKILLS-DGM-2026-09-13.md).
