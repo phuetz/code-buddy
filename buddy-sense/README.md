@@ -9,29 +9,31 @@ concurrently, gated by the brain, and memory consolidates in the background.
 gates/coalesces the stream, and a **bridge** feeds events into Code Buddy's event
 bus, where they trigger processing (and heartbeat-paced memory consolidation). The
 default daemon emits the heartbeat (and audio when given a WAV); the screen/ui live
-captures are opt-in features, and vision is a detector core with no live path yet.
+captures, microphone and camera are opt-in features.
 
 ![architecture](docs/architecture.svg)
 
 - **Senses** emit `SensoryEvent { modality, kind, ts_ms, salience, payload }` over
   bounded channels (backpressure).
 - **Thalamus** (`bus.rs`): coalesces high-rate low-salience bursts, lets salient
-  events bypass coalescing (an attention **gate** — note: it does not reorder by
-  priority), and broadcasts (the "global workspace", GWT). The vital heartbeat is
-  never coalesced. (A per-modality ring buffer is Phase-2/3 scaffolding, not yet
-  read by the binary; the real short-term memory is on the Code Buddy side.)
+  events bypass coalescing, sorts available batches of up to 32 events by salience,
+  and broadcasts (the "global workspace", GWT). The vital heartbeat is never
+  coalesced. A bounded per-modality ring buffer emits a `memory/digest` summary
+  every 20 admitted events. Near duplicates coalesce within the time window even
+  when priority sorting reverses their timestamp order; events outside that
+  window survive. A memory capacity of zero disables ring-buffer storage.
 - **Bridge** (`bridge.rs`): ships events as JSON over a WebSocket (loopback,
   Origin-checked, optional token) to Code Buddy's `sensory-bridge`.
-- Heavy analysis (STT, vision models, OCR) is **delegated to Code Buddy** — the
-  daemon stays light.
+- The default build stays light. Optional `stt` and `live-audio` features provide
+  in-process speech recognition; vision model analysis and OCR run in Code Buddy.
 
 ## The five senses
 
 | Sense | File | Emits | Live capture |
 |-------|------|-------|--------------|
-| **audio** | `senses/audio.rs` | `speech_start/end` (energy VAD, or Silero neural) | WAV file (no live mic yet) |
+| **audio** | `senses/audio.rs` | `speech_start/end` (energy VAD, or Silero neural) | WAV file; `live-audio` for microphone |
 | **vital** | `senses/vital.rs` | `heartbeat` (uptime, load) — the autonomic rhythm | always on |
-| **vision** | `senses/video.rs` | `motion` (→ Code Buddy `camera_analyze`) | detector core (frames fed) |
+| **vision** | `senses/video.rs` | `motion` (→ Code Buddy `camera_analyze`) | `live-vision` (ffmpeg camera capture) |
 | **screen** | `senses/screen.rs` | `change` (xcap screen diff) | `live-screen` (xcap) |
 | **ui** | `senses/ui.rs` | `app_focus`/`window_title`/`element_focus` (AT-SPI) | `live-ui` (atspi) |
 
@@ -63,10 +65,30 @@ Code Buddy's event bus, no hardware):
 
 On the Code Buddy side: `CODEBUDDY_SENSORY=true buddy server` starts the bridge.
 
+### Bridge reliability
+
+The WebSocket bridge bounds each connection/handshake attempt to 10 seconds and
+an event or ping write to 5 seconds. It pings every 15 seconds and reconnects if
+no matching empty pong is processed within 10 seconds. The pong watchdog runs
+between writes: an in-flight write can delay that check by up to 5 seconds and
+also delay processing a queued pong. Failed connections retry after
+2 seconds. Once all event producers close, an existing connection drains pending
+events; a disconnected bridge stops without retrying its backlog. A pending
+connection or write finishes or reaches its deadline before the bridge task
+stops. This applies while the Tokio runtime remains alive: the current binary
+still exits WAV mode after a fixed flush delay and does not await the bridge or
+guarantee graceful draining on process shutdown.
+
+Delivery is best-effort: broadcast overflow and failed writes can lose events;
+there is no delivery acknowledgement or durable replay. These deadlines cover
+network waits, not synchronous event serialization. Tests use ephemeral loopback
+sockets, including silent handshakes, missed pongs and backpressured writes.
+
 ### Optional features (opt-in; the core builds + tests without them)
 
 | Feature | Adds | System / model needs |
 |---------|------|----------------------|
+| `live-vision` | live camera motion detection | system `ffmpeg` + a V4L2 camera |
 | `live-screen` | live screen capture (xcap, X11/Wayland) | xcb libs |
 | `live-ui` | live AT-SPI focus events (atspi/zbus) | a running a11y bus (none to build) |
 | `neural-vad` | Silero neural VAD via ONNX Runtime | a model + onnxruntime — see [models/README.md](models/README.md) |
