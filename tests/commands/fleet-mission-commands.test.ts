@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { registerFleetMissionCommands } from '../../src/commands/cli/fleet-mission-commands.js';
-import type { Mission } from '../../src/harness/mission-store.js';
+import type { Mission, MissionListPage } from '../../src/harness/mission-store.js';
 
 let root: string;
 let workspace: string;
@@ -49,7 +50,7 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-async function invoke(...args: string[]) {
+async function invoke<T = Mission>(...args: string[]) {
   // Each parse represents a new CLI invocation, with its own status and output.
   process.exitCode = undefined;
   logs.mockClear();
@@ -60,7 +61,7 @@ async function invoke(...args: string[]) {
   return {
     exitCode: process.exitCode,
     error: errors.mock.calls.map(call => call.join(' ')).join('\n'),
-    mission: logs.mock.calls.length ? JSON.parse(String(logs.mock.calls[0][0])) as Mission : undefined,
+    mission: logs.mock.calls.length ? JSON.parse(String(logs.mock.calls[0][0])) as T : undefined,
   };
 }
 
@@ -97,6 +98,54 @@ async function submittedMission(): Promise<Mission> {
 }
 
 describe('fleet mission Commander commands', () => {
+  it('lists an unknown store without creating it', async () => {
+    const response = await invoke<MissionListPage>('list', directory);
+    expect(response).toEqual({ exitCode: undefined, error: '', mission: { missions: [], errors: [] } });
+    expect(fs.existsSync(directory)).toBe(false);
+  });
+
+  it('discovers completed and claimed missions without returning private fields', async () => {
+    await succeed('create', directory, 'completed', manifest, 'success');
+    const claim = await succeed('claim', directory, 'completed', 'pilot');
+    await succeed('run', directory, 'completed', 'pilot', claim.authority!.generation);
+    await succeed('create', directory, 'pending', manifest, 'failure');
+    const pending = await succeed('claim', directory, 'pending', 'worker');
+    const response = await invoke<MissionListPage>('list', directory);
+    expect(response.exitCode).toBeUndefined();
+    expect(response.error).toBe('');
+    expect(response.mission?.missions).toHaveLength(2);
+    expect(response.mission?.missions.find(m => m.id === 'completed')).toMatchObject({ status: 'completed', owner: 'pilot', success: true });
+    expect(response.mission?.missions.find(m => m.id === 'pending')).toMatchObject({ status: 'claimed', owner: 'worker', leaseExpired: false });
+    const output = JSON.stringify(response.mission);
+    for (const privateValue of [workspace, process.execPath, claim.authority!.generation, pending.authority!.generation, 'effects.log', 'stdout', 'stderr', 'command', 'args', 'handoff']) {
+      expect(output).not.toContain(privateValue);
+    }
+  });
+
+  it('accepts pagination options and surfaces corrupt records without parser details', async () => {
+    await succeed('create', directory, 'only', manifest, 'success');
+    const validHash = createHash('sha256').update('only').digest('hex');
+    const corruptHash = 'f'.repeat(64);
+    fs.writeFileSync(path.join(directory, `${corruptHash}.json`), '{PRIVATE_CORRUPT_CONTENT');
+    const first = await invoke<MissionListPage>('list', directory, '--limit', '1');
+    expect(first.mission?.missions.map(m => m.id)).toEqual(['only']);
+    expect(first.mission?.nextCursor).toBe(validHash);
+    const second = await invoke<MissionListPage>('list', directory, '--limit', '1', '--cursor', first.mission!.nextCursor!);
+    expect(second.exitCode).toBeUndefined();
+    expect(second.mission).toEqual({ missions: [], errors: [{ file: `${corruptHash}.json`, error: 'Invalid or unreadable mission record' }] });
+    expect(JSON.stringify(second)).not.toContain('PRIVATE_CORRUPT_CONTENT');
+  });
+
+  it.each([['--limit', '0'], ['--limit', '101'], ['--limit', 'invalid'], ['--cursor', '../outside']])(
+    'rejects invalid listing option %s %s', async (option, value) => {
+      const response = await invoke<MissionListPage>('list', directory, option, value);
+      expect(response.exitCode).toBe(1);
+      expect(response.mission).toBeUndefined();
+      expect(response.error).toMatch(/limit|cursor/);
+      expect(fs.existsSync(directory)).toBe(false);
+    },
+  );
+
   it('creates, claims, executes, reads and acknowledges a durable result exactly once', async () => {
     const created = await succeed('create', directory, 'job/a', manifest, 'success');
     expect(created).toMatchObject({ status: 'ready', operation: { workspace, command: process.execPath } });

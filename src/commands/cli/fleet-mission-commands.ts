@@ -13,6 +13,15 @@ export function registerFleetMissionCommands(fleet: Command): void {
     try { console.log(JSON.stringify(await action(...args.filter(a => typeof a === 'string') as string[]))); }
     catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
   };
+  group.command('list <store>')
+    .description('List mission metadata, with bounded pages and unreadable-record notices')
+    .option('--limit <count>', 'Maximum records examined in this page (1..100)', '25')
+    .option('--cursor <hash>', 'Continue after the previous page nextCursor')
+    .action((directory: string, options: { limit: string; cursor?: string }) => {
+      try {
+        console.log(JSON.stringify(new MissionStore(directory).list({ limit: Number(options.limit), cursor: options.cursor })));
+      } catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
+    });
   group.command('create <store> <id> <manifest> <operation>').action(output(async (directory, id, manifestPath, name) => {
     const file = path.resolve(manifestPath!);
     const manifest = parseSupervisorManifest(JSON.parse(await fs.readFile(file, 'utf8')), path.dirname(file), 43200000);

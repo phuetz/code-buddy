@@ -677,12 +677,13 @@ export class PromptBuilder {
             const { getCodeExplorerManager } = await import('../plugins/code-explorer/CodeExplorerManager.js');
             const fresh = getCodeExplorerManager(this.config.cwd).getFreshness();
             if (fresh.stale) {
-              const behind =
-                fresh.commitsBehind !== undefined ? `${fresh.commitsBehind} commit(s)` : 'some commits';
+              const state = fresh.unverified
+                ? 'could not be verified against Git HEAD'
+                : 'does not match Git HEAD';
               staleNote =
-                `\n⚠️ The Code Explorer index is STALE — built at commit ${fresh.lastCommit?.slice(0, 8) ?? '?'}, ` +
-                `now ${behind} behind HEAD. Its answers may miss recent code; treat relationship results as ` +
-                `approximate and suggest re-running \`code-explorer analyze --incremental\` if they look wrong.`;
+                `\n⚠️ The Code Explorer index ${state}. Its answers may miss current code; ` +
+                `treat relationship results as approximate and suggest re-running ` +
+                `\`code-explorer analyze --incremental\` if they look wrong.`;
             }
           } catch { /* freshness best-effort */ }
           const codeExplorerBlock =

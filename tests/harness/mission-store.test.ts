@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { MissionStore } from '../../src/harness/mission-store.js';
 import * as fitness from '../../src/agent/self-improvement/evolution/variant-fitness.js';
 import { runMission } from '../../src/harness/mission-runner.js';
@@ -13,6 +14,117 @@ let store: MissionStore;
 const op = () => ({ command: process.execPath, args: ['-e', 'process.stdout.write("done")'], workspace: root, timeoutMs: 1000 });
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-missions-')); now = 10000; store = new MissionStore(path.join(root, 'state'), () => now); });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+const missionFile = (id: string) => `${createHash('sha256').update(id).digest('hex')}.json`;
+
+it('lists an absent store without creating directories or files', () => {
+  expect(store.list()).toEqual({ missions: [], errors: [] });
+  expect(fs.existsSync(store.directory)).toBe(false);
+});
+
+it('lists only whitelisted metadata without output, command, handoff or authority tokens', () => {
+  const operation = { ...op(), command: 'PRIVATE_COMMAND', args: ['PRIVATE_ARGUMENT'], workspace: path.join(root, 'PRIVATE_WORKSPACE') };
+  store.create('done', operation);
+  const first = store.claim('done', 'first-owner').authority!;
+  store.handoff('done', first, {
+    succeeded: ['PRIVATE_SUCCEEDED'], failed: ['PRIVATE_FAILED'], keyFiles: ['PRIVATE_KEY_FILE'],
+    deadEnds: ['PRIVATE_DEAD_END'], nextAction: 'PRIVATE_NEXT_ACTION',
+  });
+  const owner = store.claim('done', 'worker').authority!;
+  store.start('done', owner);
+  store.complete('done', owner, { success: true, stdout: 'PRIVATE_STDOUT'.repeat(5000), stderr: 'PRIVATE_STDERR', exitCode: 0 });
+  store.submit('done', owner, 'a'.repeat(40));
+  const done = store.acknowledge('done', 'PRIVATE_ACK_CONSUMER');
+  store.create('waiting', operation);
+  const waiting = store.claim('waiting', 'next-worker', 1000);
+  now += 1000;
+  const page = store.list();
+  expect(page.errors).toEqual([]);
+  expect(page.missions.find(m => m.id === 'done')).toEqual({
+    id: 'done', revision: done.revision, status: 'completed', updatedAt: done.updatedAt,
+    owner: 'worker', success: true, acknowledged: true,
+  });
+  expect(page.missions.find(m => m.id === 'waiting')).toEqual({
+    id: 'waiting', revision: waiting.revision, status: 'claimed', updatedAt: waiting.updatedAt,
+    owner: 'next-worker', expiresAt: waiting.expiresAt, leaseExpired: true, acknowledged: false,
+  });
+  const serialized = JSON.stringify(page);
+  for (const secret of ['PRIVATE_', root, first.generation, owner.generation, waiting.authority!.generation, 'stdout', 'stderr', 'handoff', 'generation', 'command', 'workspace', 'review']) {
+    expect(serialized).not.toContain(secret);
+  }
+  expect(serialized.length).toBeLessThan(1024);
+  expect(store.get('waiting').revision).toBe(waiting.revision);
+});
+
+it('paginates deterministically across valid and corrupt files while ignoring temporary state', () => {
+  const ids = Array.from({ length: 6 }, (_, index) => `page-${index}`);
+  for (const id of ids) store.create(id, op());
+  const badFile = `${'f'.repeat(64)}.json`;
+  fs.writeFileSync(path.join(store.directory, badFile), '{PRIVATE_CORRUPTION');
+  fs.writeFileSync(path.join(store.directory, `${missionFile(ids[0]!)}.lock`), 'private generation');
+  fs.writeFileSync(path.join(store.directory, `${missionFile(ids[0]!)}.temporary.tmp`), 'private output');
+  fs.writeFileSync(path.join(store.directory, 'unrelated.json'), 'not a mission');
+  const seenIds: string[] = [];
+  const seenErrors: string[] = [];
+  let cursor: string | undefined;
+  let pages = 0;
+  do {
+    const page = store.list({ limit: 2, cursor });
+    expect(page.missions.length + page.errors.length).toBeLessThanOrEqual(2);
+    seenIds.push(...page.missions.map(m => m.id));
+    seenErrors.push(...page.errors.map(error => error.file));
+    if (page.nextCursor) expect(page.nextCursor > (cursor ?? '')).toBe(true);
+    cursor = page.nextCursor;
+    pages++;
+    expect(pages).toBeLessThanOrEqual(4);
+  } while (cursor);
+  expect(seenIds).toEqual([...ids].sort((a, b) => missionFile(a).localeCompare(missionFile(b))));
+  expect(seenErrors).toEqual([badFile]);
+  expect(pages).toBe(4);
+  expect(fs.readFileSync(path.join(store.directory, badFile), 'utf8')).toBe('{PRIVATE_CORRUPTION');
+});
+
+it('reads only the selected page and never reports an unvalidated filename identity', () => {
+  store.create('valid', op());
+  const validFile = path.join(store.directory, missionFile('valid'));
+  const copied = path.join(store.directory, `${'e'.repeat(64)}.json`);
+  fs.copyFileSync(validFile, copied);
+  fs.mkdirSync(path.join(store.directory, `${'d'.repeat(64)}.json`));
+  const reads = vi.spyOn(fs, 'readFileSync');
+  try {
+    const page = store.list({ limit: 1 });
+    expect(page.nextCursor).toBeDefined();
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(1);
+  } finally { reads.mockRestore(); }
+  const page = store.list();
+  expect(page.missions.map(m => m.id)).toEqual(['valid']);
+  expect(page.errors).toEqual([
+    { file: `${'d'.repeat(64)}.json`, error: 'Invalid or unreadable mission record' },
+    { file: `${'e'.repeat(64)}.json`, error: 'Invalid or unreadable mission record' },
+  ]);
+  expect(fs.readFileSync(copied, 'utf8')).toBe(fs.readFileSync(validFile, 'utf8'));
+});
+
+it('reports malformed and oversized records without exposing parser or validation contents', () => {
+  fs.mkdirSync(store.directory);
+  const malformed = `${'a'.repeat(64)}.json`;
+  const oversized = `${'b'.repeat(64)}.json`;
+  fs.writeFileSync(path.join(store.directory, malformed), '{"PRIVATE_PARSER_DETAIL":notjson}');
+  fs.writeFileSync(path.join(store.directory, oversized), 'PRIVATE_OVERSIZED'.repeat(200000));
+  const page = store.list({ limit: 1 });
+  expect(page).toEqual({
+    missions: [], errors: [{ file: malformed, error: 'Invalid or unreadable mission record' }], nextCursor: 'a'.repeat(64),
+  });
+  const next = store.list({ limit: 1, cursor: page.nextCursor });
+  expect(next).toEqual({ missions: [], errors: [{ file: oversized, error: 'Invalid or unreadable mission record' }] });
+  expect(JSON.stringify([page, next])).not.toContain('PRIVATE_');
+});
+
+it('rejects invalid pagination arguments before touching an absent store', () => {
+  for (const limit of [0, -1, 101, 1.5, NaN, Infinity]) expect(() => store.list({ limit })).toThrow('limit');
+  for (const cursor of ['', '../outside', 'A'.repeat(64), 'a'.repeat(63)]) expect(() => store.list({ cursor })).toThrow('cursor');
+  expect(fs.existsSync(store.directory)).toBe(false);
+});
+
 it('fences expired owners across store instances and preserves a compact handoff', () => {
   store.create('job/a', op());
   const first = store.claim('job/a', 'codex', 1000).authority!;

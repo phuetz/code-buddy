@@ -17,6 +17,20 @@ export interface Mission {
   acknowledgedBy?: string; updatedAt: number;
 }
 
+/** Public catalogue projection: no command, result text, handoff or authority token. */
+export interface MissionSummary {
+  id: string; revision: number; status: Mission['status']; updatedAt: number;
+  owner?: string; expiresAt?: number; leaseExpired?: boolean; success?: boolean;
+  acknowledged: boolean;
+}
+
+export interface MissionListPage {
+  missions: MissionSummary[];
+  errors: Array<{ file: string; error: 'Invalid or unreadable mission record' }>;
+  /** Last scanned filename hash; pages reflect live state, not a frozen snapshot. */
+  nextCursor?: string;
+}
+
 export class MissionBusyError extends Error {
   constructor() { super('Mission mutation locked; retry. An abandoned lock requires operator inspection.'); }
 }
@@ -59,12 +73,58 @@ export class MissionStore {
   }
   get(id: string): Mission {
     const file = this.file(id);
+    const m = this.read(file);
+    if (m.id !== id) throw new Error('Mission identity mismatch');
+    return m;
+  }
+  private read(file: string): Mission {
     if (!fs.lstatSync(file).isFile()) throw new Error('Mission must be a regular file');
     if (fs.statSync(file).size > 3_000_000) throw new Error('Mission record exceeds size limit');
     const m = JSON.parse(fs.readFileSync(file, 'utf8')) as Mission;
     validate(m);
-    if (m.id !== id) throw new Error('Mission identity mismatch');
+    if (path.basename(this.file(m.id)) !== path.basename(file)) throw new Error('Mission identity mismatch');
     return m;
+  }
+
+  /** Metadata only in the result. Validate at most one bounded record per page slot. */
+  list(options: { limit?: number; cursor?: string } = {}): MissionListPage {
+    const limit = options.limit ?? 25;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Mission list limit must be 1..100');
+    if (options.cursor !== undefined && !/^[a-f0-9]{64}$/.test(options.cursor)) throw new Error('Invalid mission list cursor');
+    const page: MissionListPage = { missions: [], errors: [] };
+    let directory: fs.Dir;
+    try { directory = fs.opendirSync(this.directory); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return page; throw error; }
+    // Scan names only; retain at most limit + 1 names regardless of store size.
+    const names: string[] = [];
+    try {
+      for (let entry = directory.readSync(); entry !== null; entry = directory.readSync()) {
+        if (!/^[a-f0-9]{64}\.json$/.test(entry.name) || (options.cursor !== undefined && entry.name.slice(0, 64) <= options.cursor)) continue;
+        if (names.length === limit + 1 && entry.name >= names[names.length - 1]!) continue;
+        names.push(entry.name);
+        names.sort();
+        if (names.length > limit + 1) names.pop();
+      }
+    } finally { directory.closeSync(); }
+    const now = this.now();
+    for (const name of names.slice(0, limit)) {
+      try {
+        const m = this.read(path.join(this.directory, name));
+        const active = m.status === 'claimed' || m.status === 'running';
+        page.missions.push({
+          id: m.id, revision: m.revision, status: m.status, updatedAt: m.updatedAt,
+          ...(m.authority ? { owner: m.authority.owner } : {}),
+          ...(active ? { expiresAt: m.expiresAt!, leaseExpired: m.expiresAt! <= now } : {}),
+          ...(m.result ? { success: m.result.success } : {}),
+          acknowledged: m.acknowledgedBy !== undefined,
+        });
+      } catch {
+        // Parser/validation errors can embed record contents. Never return them.
+        page.errors.push({ file: name, error: 'Invalid or unreadable mission record' });
+      }
+    }
+    if (names.length > limit) page.nextCursor = names[limit - 1]!.slice(0, 64);
+    return page;
   }
   /** Synchronous critical section, exclusive across processes; never steal a mutation lock. */
   private change(id: string, update: (m: Mission | undefined) => Mission): Mission {
