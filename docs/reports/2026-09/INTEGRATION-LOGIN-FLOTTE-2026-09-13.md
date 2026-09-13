@@ -184,6 +184,14 @@ La matrice complète a aussi révélé que deux assertions historiques de
 en-têtes vers le transport streamable HTTP natif. Les 55 tests passent sous
 Node 20.20.2 et Node 24.
 
+Le dernier shard Windows a révélé deux fixtures supplémentaires : l'import du
+processus concurrent MissionStore utilisait un chemin Windows brut comme
+spécificateur ESM, et le test compagnon cherchait un chemin à antislash après
+sa sérialisation JSON. `1121ddbab` emploie une URL `file:` et inspecte les
+messages avant sérialisation. Les suites concernées donnent 16 tests verts et
+un test ignoré. Le seul autre échec Windows Node 20 du run était un worker
+Vitest sorti après 5 949 tests verts, sans assertion rouge.
+
 Les neuf tranches prévues sont désormais portées. Le commit Grok `a9667d187`
 reste exclu parce qu'il contient uniquement trois tests rouges intentionnels et
 aucun correctif source.
