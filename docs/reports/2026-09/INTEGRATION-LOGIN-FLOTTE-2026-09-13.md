@@ -154,3 +154,20 @@ Les commits `996693e15` et `780f55d6a` exposent les métadonnées de mission et
 coordonnent les demandes d'index Code Explorer. La contre-validation donne six
 fichiers et 138 tests verts, plus 10 contrôles du paquet, typecheck, build et
 lint verts.
+
+## Tranche 9 — MCP WorkflowBuilder
+
+Le commit `5e0197932` connecte WorkflowBuilder aux commandes MCP natives, au
+transport HTTP, au CLI et au service Cowork. Les tests donnent 97 cas verts
+pour le noyau MCP et 25 pour les deux suites Cowork modifiées. Le contrôle du
+paquet, le typecheck, le build et le lint du noyau ainsi que le lint Cowork sont
+verts.
+
+Le typecheck Cowork complet échoue sur des déclarations `adm-zip` et l'ancien
+export `OSSandboxConfig`. Le même échec a été reproduit dans le worktree du lot
+login avant les tranches d'amélioration ; il ne vient pas du delta MCP. Les
+fichiers Cowork modifiés restent couverts par leurs tests et le lint.
+
+Les neuf tranches prévues sont désormais portées. Le commit Grok `a9667d187`
+reste exclu parce qu'il contient uniquement trois tests rouges intentionnels et
+aucun correctif source.

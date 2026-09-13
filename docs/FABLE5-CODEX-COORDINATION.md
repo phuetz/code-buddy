@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Intégration améliorations — tranche 9 MCP WorkflowBuilder 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 8 `328b86edb` ; commit visé `2455a5c5f` | Connecter WorkflowBuilder aux outils MCP natifs, CLI et compétences associées. | Aucun push avant tests MCP, pack, typecheck et build. |
+| P1 | Intégration améliorations — tranche 9 MCP WorkflowBuilder 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 8 `328b86edb` ; commit porté `5e0197932` + clôture | WorkflowBuilder connecté aux outils MCP natifs, CLI et compétences associées. | MCP noyau 97 tests, Cowork 25 tests, packs 10/10, typecheck/build/lint noyau et lint Cowork verts. Typecheck Cowork complet rouge identique sur la base login (déclarations `adm-zip` et ancien export type), hors delta MCP. |
 
 | P1 | Intégration améliorations — tranche 8 outillage harnais 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 7 `33875c2d6` ; commits portés `996693e15`, `780f55d6a` + clôture | Métadonnées de mission exposées et demandes d'index coordonnées. | 6 fichiers/138 tests + 10 pack, typecheck/build/lint verts. Aucun push avant clôture. |
 
