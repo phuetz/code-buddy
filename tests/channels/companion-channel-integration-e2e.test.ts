@@ -177,8 +177,7 @@ describe('Companion Channel Integration E2E', () => {
 
       let turn2CalledWithHistory = false;
       const chatTurn2 = vi.fn(async (messages: CodeBuddyMessage[]) => {
-        const historyText = JSON.stringify(messages);
-        if (historyText.includes(`[Image générée : ${tmpImage}]`)) {
+        if (messages.some((entry) => entry.content.includes(`[Image générée : ${tmpImage}]`))) {
           turn2CalledWithHistory = true;
         }
         return {

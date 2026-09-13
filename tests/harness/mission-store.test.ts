@@ -2,6 +2,7 @@ import { it, vi, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MissionStore } from '../../src/harness/mission-store.js';
@@ -169,7 +170,7 @@ it('refuses malformed completion and leaves the mission running', () => {
 });
 it('permits exactly one claimant in independent processes', async () => {
   store.create('race', op());
-  const source = path.resolve('src/harness/mission-store.ts');
+  const source = pathToFileURL(path.resolve('src/harness/mission-store.ts')).href;
   const attempt = (owner: string) => new Promise<number | null>((resolve, reject) => {
     const code = `import {MissionStore} from ${JSON.stringify(source)}; try { new MissionStore(${JSON.stringify(store.directory)}).claim('race',${JSON.stringify(owner)}); } catch { process.exitCode=2; }`;
     const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], { stdio: 'ignore' });
