@@ -40,9 +40,9 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 
 ### One minute with Lisa · French presentation
 
-[![Lisa introduces Code Buddy and its installation command](assets/site/lisa/presentation.jpg)](https://www.agile-up.com/studio-ia/code-buddy#presentation-lisa)
+[![Lisa introduces Code Buddy and its installation command](assets/site/lisa/presentation.jpg)](https://youtu.be/2XgFHxBeI8Q)
 
-[Watch the 60-second presentation](https://www.agile-up.com/studio-ia/code-buddy#presentation-lisa) · [French subtitles](assets/site/lisa/presentation.fr.srt)
+[Watch on YouTube](https://youtu.be/2XgFHxBeI8Q) · [MP4 alternative](https://www.agile-up.com/code-buddy/lisa/presentation.mp4) · [French subtitles](assets/site/lisa/presentation.fr.srt)
 
 Lisa introduces the multi-AI hub, installation and optional perception components. Edited on September 13, 2026 from an existing September 10 master, with a synthetic voice and portrait, illustrative footage and French captions. Illustrations are not execution evidence. Voice and robotics require additional components beyond the npm package.
 
