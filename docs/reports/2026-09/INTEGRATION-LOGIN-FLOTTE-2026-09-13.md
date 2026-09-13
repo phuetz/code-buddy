@@ -200,6 +200,10 @@ absolue vérifie désormais que la sentinelle reste inaccessible. La suite élar
 self-improvement et sécurité donne 50 fichiers et 403 tests verts sous Linux,
 avec lint ciblé et typecheck verts.
 
+Le shard macOS suivant a repéré le même prérequis dans le test du cycle DGM
+complet. `6cd223c01` applique la même borne Linux à ce scénario ; ses 13 tests
+restent verts sur le runner Linux.
+
 Le shard macOS Node 20 suivant a montré que le worker de préflight TypeScript
 était encore lancé avec une option réservée aux versions récentes de Node.
 `e54dca188` préfère le worker JavaScript produit par le build lorsqu'il est
