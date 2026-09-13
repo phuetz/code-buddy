@@ -138,6 +138,10 @@ et 10 contrôles du paquet verts, ainsi que typecheck, build et lint verts. Un
 premier lancement parallèle avait exécuté le test du superviseur avant le build
 et échoué faute d'artefact `dist`; le rejeu après build est entièrement vert.
 
+La matrice Windows a repéré une attente POSIX codée en dur dans cette suite.
+`085f2ceb7` compare désormais le workspace résolu par la plateforme ; les deux
+tests du superviseur restent verts.
+
 ## Tranche 6 — intégration des trois harnais
 
 Les commits `a51a74890`, `1b0cd8765`, `1873b38bd`, `4f390aee8` et
