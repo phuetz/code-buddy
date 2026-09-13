@@ -171,3 +171,10 @@ fichiers Cowork modifiés restent couverts par leurs tests et le lint.
 Les neuf tranches prévues sont désormais portées. Le commit Grok `a9667d187`
 reste exclu parce qu'il contient uniquement trois tests rouges intentionnels et
 aucun correctif source.
+
+## Paquet final
+
+Le paquet final 2.0.0 a été créé après les neuf tranches, installé avec ses
+1 306 dépendances dans `/home/patrice/DEV/cb-final-package-qa-0Iox1m/install`,
+puis exécuté depuis ce préfixe neuf. Les six scénarios du CLI passent : version,
+aide, aide login, état déconnecté, refus headless et doctor.
