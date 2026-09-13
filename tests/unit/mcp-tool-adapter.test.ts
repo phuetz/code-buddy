@@ -25,6 +25,17 @@ jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   })),
 }));
 
+const mockStreamableTransportSend = jest.fn();
+const mockStreamableTransportClose = jest.fn();
+jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
+  StreamableHTTPClientTransport: jest.fn().mockImplementation(function(url, options) { return {
+    url,
+    options,
+    send: mockStreamableTransportSend,
+    close: mockStreamableTransportClose,
+  }; }),
+}));
+
 // Mock axios
 jest.mock('axios', () => {
   const mockAxiosInstance = {
@@ -52,6 +63,7 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   TransportType,
   TransportConfig,
@@ -669,29 +681,11 @@ describe('StreamableHttpTransport', () => {
 describe('StreamableHttpClientTransport', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockStreamableTransportSend.mockResolvedValue(undefined);
+    mockStreamableTransportClose.mockResolvedValue(undefined);
   });
 
-  it('should throw error when sending messages (SSE incompatible)', async () => {
-    const config: TransportConfig = {
-      type: 'streamable_http',
-      url: 'http://localhost:3000/stream',
-    };
-
-    const transport = new StreamableHttpTransport(config);
-    const sdkTransport = await transport.connect();
-
-    await expect(
-      sdkTransport.send({ jsonrpc: '2.0', id: 1, method: 'test' } as any)
-    ).rejects.toThrow(
-      'StreamableHttpTransport: SSE endpoints are not compatible with MCP request-response pattern'
-    );
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      'StreamableHttpTransport: SSE endpoints require persistent connections, not suitable for MCP request-response pattern'
-    );
-  });
-
-  it('should log debug message with message content', async () => {
+  it('delegates messages to the native streamable HTTP transport', async () => {
     const config: TransportConfig = {
       type: 'streamable_http',
       url: 'http://localhost:3000/stream',
@@ -701,12 +695,23 @@ describe('StreamableHttpClientTransport', () => {
     const sdkTransport = await transport.connect();
 
     const message = { jsonrpc: '2.0', id: 1, method: 'test' };
+    await expect(sdkTransport.send(message as any)).resolves.toBeUndefined();
+    expect(mockStreamableTransportSend).toHaveBeenCalledWith(message);
+  });
 
-    await expect(sdkTransport.send(message as any)).rejects.toThrow();
+  it('passes the URL and headers to the native transport', async () => {
+    const config: TransportConfig = {
+      type: 'streamable_http',
+      url: 'http://localhost:3000/stream',
+      headers: { Authorization: 'Bearer test' },
+    };
 
-    expect(logger.debug).toHaveBeenCalledWith(
-      'StreamableHttpTransport: Message that would be sent',
-      { message }
+    const transport = new StreamableHttpTransport(config);
+    await transport.connect();
+
+    expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+      new URL(config.url!),
+      { requestInit: { headers: config.headers } },
     );
   });
 });
