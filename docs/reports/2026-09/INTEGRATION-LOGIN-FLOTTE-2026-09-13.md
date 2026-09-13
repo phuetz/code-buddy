@@ -84,3 +84,16 @@ paquet verts, ainsi que le typecheck et le build verts. La sonde d'audit
 s'exécute correctement et reproduit quatre lacunes destinées à la tranche 3 :
 lecture par symlink hors workspace, changement de bot accepté, appel RPC après
 la fin du script et incohérence du catalogue au-delà de 512 outils.
+
+## Tranche 3 — corrections harnais et RPC
+
+Les défauts de la sonde ont été corrigés par `f0d1667e2` et `356f50d97`, puis
+documentés par `efb2d461c`. La même sonde prouve maintenant que le lien sortant
+est refusé, que le bot reste lié au harnais, que l'outil 513 est découvert et
+appelé, et qu'aucun appel RPC ne démarre après la fin du script.
+
+La contre-validation donne 76 tests normaux et 35 tests avec le runner réel,
+plus 10 contrôles du paquet, le typecheck et le build verts. Les trois premières
+tranches de la pile sont donc portées et validées sur la base login. Les six
+tranches suivantes restent ordonnées dans la section de pilotage et ne sont pas
+réservées.

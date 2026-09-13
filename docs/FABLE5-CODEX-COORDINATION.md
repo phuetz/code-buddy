@@ -17,7 +17,7 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
-| P1 | Intégration améliorations — tranche 3 corrections harnais/RPC 2026-09-13 | **Codex — RÉSERVÉ** | Même worktree, base tranche 2 `e66c988b1` ; commits visés `cc146f71d`, `f388ef5a0`, `d1e2f0e15` | Fermer les quatre défauts reproduits par la sonde : portée bot, catalogue complet, symlinks sortants et appels après fin de script. | Aucun push/publication ; tests ciblés et sonde rouge→vert exigés. |
+| P1 | Intégration améliorations — tranche 3 corrections harnais/RPC 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Même worktree, base tranche 2 `e66c988b1` ; commits portés `f0d1667e2`, `356f50d97`, `efb2d461c` + clôture documentaire | Portée bot figée, catalogue complet, symlinks sortants refusés et file RPC annulée/drainée après fin de script. | Sonde rouge→vert ; 76 tests normaux + 35 runner réel + 10 pack verts ; typecheck et build verts. Aucun push/publication ; tranche 4 à réserver séparément. |
 
 | P1 | Intégration améliorations — tranche 2 exécution/observabilité/harnais 2026-09-13 | **Codex — PRÊT À INTÉGRER, zones libérées** | Worktree `~/DEV/cb-improvements-persistence-2026-09-13`, base tranche 1 `864fd1dc7` ; commits portés `023bc1e6f`, `a7841e302`, `8c16c2246`, `7f847806a` + clôture documentaire | Sorties bornées et terminaison, accusés du journal, découverte à portée limitée et outils programmatiques. Contre-validation : 9 fichiers, 48 tests verts ; pack 10/10 ; typecheck et build verts. | Sonde d'audit verte en tant que diagnostic et quatre défauts reproduits pour la tranche 3 : symlink RPC, changement de bot, appel tardif, catalogue >512. Aucun push/publication. |
 
