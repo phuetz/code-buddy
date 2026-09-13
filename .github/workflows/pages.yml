@@ -42,6 +42,7 @@ jobs:
           mkdir -p .pages-artifact/assets/site .pages-artifact/cowork/public .pages-artifact/docs/assets
           cp index.html .nojekyll .pages-artifact/
           cp assets/site/site.css assets/site/site.js .pages-artifact/assets/site/
+          cp -R assets/site/lisa .pages-artifact/assets/site/
           cp cowork/public/favicon.png .pages-artifact/cowork/public/
           cp docs/assets/showcase-appstudio.gif docs/assets/showcase-appstudio.mp4 docs/assets/showcase-appstudio-sharpei.jpg .pages-artifact/docs/assets/
           cp docs/assets/showcase-try.gif docs/assets/cowork-chat-demo.gif docs/assets/cowork-chat-demo.mp4 .pages-artifact/docs/assets/

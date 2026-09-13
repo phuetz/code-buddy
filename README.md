@@ -38,6 +38,14 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 
 ## What 2.0 is
 
+### One minute with Lisa · French presentation
+
+[![Lisa introduces Code Buddy and its installation command](assets/site/lisa/presentation.jpg)](https://www.agile-up.com/studio-ia/code-buddy#presentation-lisa)
+
+[Watch the 60-second presentation](https://www.agile-up.com/studio-ia/code-buddy#presentation-lisa) · [French subtitles](assets/site/lisa/presentation.fr.srt)
+
+Lisa introduces the multi-AI hub, installation and optional perception components. Edited on September 13, 2026 from an existing September 10 master, with a synthetic voice and portrait, illustrative footage and French captions. Illustrations are not execution evidence. Voice and robotics require additional components beyond the npm package.
+
 1.x was a terminal coding agent: 64 providers behind one router — cloud, gateway and local
 runtimes — and 220+ tools selected per query. 2.0 keeps all of that unchanged and adds five
 surfaces around it. Every one of them is **opt-in**: with its environment variable unset, behavior
