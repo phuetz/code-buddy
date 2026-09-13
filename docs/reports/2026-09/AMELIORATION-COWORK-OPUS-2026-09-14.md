@@ -1,0 +1,251 @@
+# Amélioration Cowork — écran Fleet et états de connexion (Opus, 2026-09-14)
+
+- **Agent** : Claude Opus 5, piloté par Codex, demande explicite de Patrice.
+- **Worktree** : `~/DEV/cb-cowork-improvements-opus-2026-09-14`
+- **Branche** : `feat/cowork-improvements-opus-2026-09-14`, base `017ba1aa8`.
+- **Périmètre** : `cowork/src`, tests Cowork, ce rapport, ma ligne de coordination.
+- **Interdits** : commit/push, publication, compte, API LLM distante, commande robot,
+  service/config utilisateur, Electron sur profil réel, `npm install`/rebuild, `src/` hors
+  `cowork/`, `src/fleet/rooms` (intégrés séparément par le pilote).
+
+## Statut
+
+**Lot 2 livré au pilote, non commité** (2026-09-14). Les trois défauts confirmés par la revue
+de la première livraison sont corrigés, avec tests rouges → verts (section « Lot 2 »). Les mêmes
+quatre fichiers sont touchés, aucun nouveau.
+
+Lot 1 (~01 h 10) : deux problèmes utilisateur corrigés avec tests rouges → verts ; typecheck sans
+erreur dans `cowork/src` ; lint ciblé propre ; bundle renderer compilé. Le build Vite complet
+échoue sur le bundle main pour une cause d'environnement antérieure (voir « Limites »).
+
+## Fichiers
+
+| Fichier | Nature |
+| --- | --- |
+| `cowork/src/main/fleet/fleet-bridge.ts` | Correctif P1 + P2 (bridge main). |
+| `cowork/src/renderer/components/FleetPanel.tsx` | Correctif P2 (retour du bouton « Reconnect », erreur de liste). |
+| `cowork/tests/fleet-bridge.test.ts` | Faux listener fidèle au core (`NOT_AUTHENTICATED`), 8 tests ajoutés. |
+| `cowork/tests/fleet-panel-connection.test.tsx` | Nouveau, 4 tests happy-dom. |
+| `docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md` | Ce rapport. |
+| `docs/FABLE5-CODEX-COORDINATION.md` | Ma ligne de réservation (déjà ajoutée par le pilote, mise à jour). |
+
+Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché et non inventé.
+
+## Correctifs
+
+### P1 — Connexion perdue mal récupérée, cause invisible (`fleet-bridge.ts`)
+
+- `updateStatus()` ne réécrit plus `lastError` sur les transitions `connecting` / `connected` /
+  `disconnected` / `reconnecting` : la cause reste affichée ; seule une authentification réussie
+  l'efface.
+- `refreshPeerCapabilities()` ne sonde plus `peer.describe` sur un pair non authentifié (ouvrir
+  le panneau ne remplace plus la vraie cause par `NOT_AUTHENTICATED`). `refreshCapabilities(peerId)`
+  sur un pair déconnecté répond `success: false` avec « not connected (<statut>); reconnect it
+  first » au lieu d'un faux succès — le bandeau d'erreur du Command Center l'affiche.
+- Événement `exhausted` écouté : statut `error`, message « Auto-reconnect gave up after N
+  attempts: <cause> ».
+- **Reprise au niveau du bridge** pour les deux cas que le core ne retente pas (échec de la
+  première connexion, auto-reconnexion épuisée) : délais 15 s, 30 s, 1 min, 2 min puis 5 min en
+  boucle, remis à zéro à l'authentification, timer `unref()`. Pas de reprise si le serveur a
+  refusé les identifiants (`AUTH_FAILED` / `INVALID_TOKEN`) : marteler une clé fausse ne sert à
+  rien, la cause reste affichée. Annulée par `removePeer`, `shutdown` et par une reconnexion
+  manuelle. Délais injectables (`new FleetBridge(send, feed, { recoveryDelaysMs })`), défaut
+  inchangé pour `main/index.ts`.
+
+### P2 — Reconnexion manuelle non fiable (`fleet-bridge.ts` + `FleetPanel.tsx`)
+
+- `connectPeer()` partage la tentative en cours (`pendingConnect`) : deux clics, ou un clic
+  pendant une reprise planifiée, ne créent plus deux listeners.
+- Garde d'identité `isCurrent()` sur tous les handlers : un listener remplacé ou supprimé ne
+  repeint plus le statut et ne duplique plus les `fleet.event`. L'ancien listener est détaché
+  avant sa déconnexion ; `removePeer` oublie le pair avant de fermer la socket.
+- `reconnectPeer()` attend l'issue réelle et renvoie `{ success: false, error }` quand la
+  connexion échoue (seul appelant : `FleetPanel`).
+- `FleetPanel` : bouton désactivé + icône qui tourne + `aria-busy` pendant la tentative ;
+  cause d'échec affichée sous le pair (une seule fois si le bridge rapporte la même) ; rejet IPC
+  capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
+  géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
+  (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 2 — défauts confirmés par la revue du pilote
+
+### D1 — Une tentative en vol pouvait ouvrir une socket après `shutdown()` (`fleet-bridge.ts`)
+
+- `openListener()` s'arrête à chaque point de reprise si le bridge est arrêté ou si le pair a été
+  retiré : à l'entrée, après `await loadFleetModule()`, après `await previous.disconnect()`
+  (garde commune `abandoned()`, message `Fleet bridge is stopped`).
+- `isCurrent()` exige aussi `!stopped` : aucun handler d'un listener ne repeint le pair ni ne
+  programme de reprise après l'arrêt.
+- `shutdown()` collecte les `pendingConnect`, ferme les sockets, puis attend que ces tentatives
+  soient réglées : quand la promesse se résout, plus rien n'est en vol. Chaque tentative s'arrête
+  au point de reprise suivant ou échoue sur la socket fermée. `refreshPeerCapabilities()` ne sonde
+  plus après l'arrêt.
+- Constat annexe : `shutdown()` n'est appelé nulle part dans `cowork/src/main/index.ts`
+  (non modifié, voir « Prochain lot »).
+
+### D2 — Un `peer.describe` tardif écrasait un état plus récent (`fleet-bridge.ts`)
+
+- `PeerEntry.statusGeneration` est incrémenté à chaque `updateStatus()`.
+- `refreshPeerCapabilities()` capture le listener et la génération avant la requête. Au retour,
+  succès comme échec, il revérifie arrêt, identité du pair, listener et génération (`stillAsked()`)
+  avant toute mutation. Si l'un a changé, la réponse est ignorée : un `AUTH_FAILED` survenu entre
+  temps reste affiché, et une vieille erreur n'entache pas un pair reconnecté.
+- Effet voulu : lors d'une reconnexion du core (`authenticated` puis `reconnected`), seule la
+  réponse du dernier état s'applique.
+
+### D3 — `FleetPanel` gardait des erreurs de reconnexion obsolètes
+
+- Une erreur de reconnexion porte désormais le `addedAt` du pair pour lequel elle a été émise.
+  Elle devient obsolète dès que ce pair s'authentifie (reprise automatique du bridge), disparaît
+  ou est réenregistré sous le même id (`isReconnectErrorObsolete`).
+- Un effet synchronisé sur `fleetPeers` purge ces erreurs (même objet renvoyé si rien ne change,
+  donc pas de rendu superflu) ; le rendu les masque déjà avant l'effet ; à la résolution d'une
+  tentative, l'état est relu dans le store (`useAppStore.getState()`) plutôt que dans la capture du
+  rendu, ce qui écarte une réponse arrivée après l'authentification, la suppression ou le
+  réenregistrement.
+
+### Tests du lot 2
+
+| Test | Avant correctif | Après |
+| --- | --- | --- |
+| `shutdown with an attempt in flight` › pendant le chargement du module | rouge (2 listeners) | vert |
+| › pendant la fermeture de la socket précédente (`disconnect()` différé) | rouge (2 listeners) | vert |
+| › reconnexion refusée après arrêt | rouge (`success: true`) | vert |
+| › handshake qui échoue après arrêt : ni événement ni reprise (timers simulés) | vert (garde de non-régression) | vert |
+| `late peer.describe answers` › `AUTH_FAILED` plus récent conservé (réponse différée) | rouge (`lastError` effacé) | vert |
+| › échec tardif après reconnexion ignoré (réponses différées, ordre adverse) | rouge (`peer.describe failed…`) | vert |
+| `obsolete reconnect errors` › purge après reprise authentifiée, pas de résurrection sur une nouvelle chute | rouge | vert |
+| › échec résolu après authentification ignoré | rouge | vert |
+| › pair supprimé puis réajouté sous le même id | rouge | vert |
+| › pair réenregistré pendant la tentative | rouge | vert |
+
+Faux listener étendu (`disconnectImpl`, `describeImpl`, `deferred()`), sans changer le
+comportement des tests existants.
+
+## Vérifications (exécutées dans `cowork/`)
+
+### Lot 2
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-bridge.test.ts` avant correctif | **5 rouges** / 16 verts. |
+| même commande après correctif | **21/21 verts**. |
+| `… run tests/fleet-panel-connection.test.tsx` avant correctif | **4 rouges** / 4 verts. |
+| même commande après correctif | **8/8 verts**. |
+| les deux fichiers avec `--sequence.shuffle` | **29/29 verts**. |
+| 20 suites Fleet voisines (même liste qu'au lot 1) | **20 fichiers, 149 tests verts**. |
+| Reprise après formatage : `fleet-bridge`, `fleet-panel-connection`, `fleet-ipc`, `saga-runner`, `fleet-team-panel-browser-bridge` | **5 fichiers, 69 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0 <4 fichiers>` | Propre. |
+| `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` | 0 erreur dans `cowork/src` ; les 20 erreurs noyau connues (baseline `d579f26ec`) inchangées. |
+| Build Vite complet | Non relancé (échec `alasql`/Flow connu, sur consigne). |
+
+### Lot 1
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-bridge.test.ts` avant correctif | **7 rouges** / 8 verts (les 7 nouveaux attendus ; la garde de suppression passait déjà). |
+| même commande après correctif | **15/15 verts**. |
+| `… run tests/fleet-panel-connection.test.tsx` avant correctif | **4 rouges** + 1 « Unhandled Rejection: IPC channel closed » réel. |
+| même commande après correctif | **4/4 verts**, aucun rejet non géré. |
+| 20 suites Fleet voisines (`advanced-command-center`, `companion-gateway-fleet-launch`, `fleet-*`, `saga-runner`, `test-runner-bridge-catalog`) | **20 fichiers, 139 tests verts**. |
+| Reprise après formatage : `fleet-bridge`, `fleet-panel-connection`, `fleet-ipc`, `saga-runner`, `fleet-team-panel-browser-bridge` | **5 fichiers, 59 tests verts**. |
+| `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` | 0 erreur dans `cowork/src` ; 20 erreurs préexistantes dans `../src/tools/document-tool.ts`, `document-generator.ts`, `archive-tool.ts`, `../src/sandbox/os-sandbox.ts` (types `adm-zip` absents du `node_modules` lié), fichiers non touchés. |
+| `node scripts/lint.cjs --max-warnings 0 <4 fichiers>` | Propre. |
+| Prettier | Nouveau test formaté ; les deux sources et l'ancien test n'étaient pas conformes à HEAD (virgules finales…) : pas de reformatage global, seules mes lignes suivent le style environnant. |
+| `node node_modules/vite/bin/vite.js build` | **Échec environnemental** du bundle main : `src/agent/specialized/sql-agent.ts` → `alasql` → `react-native` / `react-native-fs` résolus dans `~/code-buddy/node_modules` (lié), syntaxe Flow non parsable. Sans rapport avec les fichiers modifiés. A laissé `cowork/dist-electron/` (gitignoré). |
+| Build renderer seul via l'API Vite (`configFile: false`, plugin React, alias du dépôt, `shimMissingExports`, sortie `/tmp/opus-cowork-renderer-2026-09-14`) | **RENDERER_BUILD_OK** ; la chaîne « Could not load peers » est présente dans le bundle. |
+
+## Limites
+
+- Aucune capture visuelle : pas d'Electron lancé (interdit sur profil réel, bundle main non
+  compilable ici). La preuve de rendu est le DOM happy-dom des tests `FleetPanel` sur fixture.
+- Le core n'a pas été modifié : la reprise vit dans le bridge Cowork ; la CLI `/fleet` garde le
+  comportement du core (pas de reprise après échec initial).
+- Non traités (à arbitrer par le pilote) : libellé « vu il y a » de `FleetPanel` recalculé
+  seulement au rendu ; pair `authenticated` silencieux depuis plusieurs heartbeats (socket
+  semi-ouverte) toujours affiché vert ; double `peer.describe` sur `authenticated` +
+  `reconnected` (préexistant).
+- Lot 2 : les ordres adverses (réponse `peer.describe` différée, `disconnect()` retenu) sont
+  simulés dans le faux listener ; le noyau `FleetListener` réel, corrigé séparément par Codex,
+  n'a pas été exercé ici.
+- Rien n'est commité ni poussé. Commandes pour le pilote (après revue) :
+  `git add cowork/src/main/fleet/fleet-bridge.ts cowork/src/renderer/components/FleetPanel.tsx
+  cowork/tests/fleet-bridge.test.ts cowork/tests/fleet-panel-connection.test.tsx
+  docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
+  puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
+
+## Prochain lot suggéré (non démarré, en attente de passation)
+
+**Lot 3 — présence Fleet périmée + fermeture propre à la sortie**, borné à `cowork/` :
+
+1. **Pair « vert » silencieux.** Un pair `authenticated` dont la socket est semi-ouverte (machine
+   en veille, câble tiré) reste vert tant que TCP ne s'en aperçoit pas, alors que les heartbeats
+   (30 s) ont cessé. Dériver côté renderer un état « silencieux » quand `lastSeenAt` dépasse
+   3 heartbeats (90 s) : `StatusDot`/`PeerRow` du Command Center, `FleetPanel`, `MissionControlView`.
+   Ajouter une horloge partagée légère pour que « vu il y a » avance sans événement (aujourd'hui
+   figé dans `FleetPanel`). Tests happy-dom sous timers simulés. Aucune reconnexion forcée (un
+   pair ancien sans heartbeat ne doit pas osciller).
+2. **`FleetBridge.shutdown()` jamais appelé** dans `cowork/src/main/index.ts` : le brancher sur la
+   séquence de sortie existante, borné par le `withTimeout` déjà utilisé pour `mcpManager`, avec
+   un test de câblage.
+3. Option : fusionner le double `peer.describe` émis par `authenticated` puis `reconnected`.
+   Grâce à la génération du lot 2, la première réponse est déjà ignorée ; il reste une requête
+   réseau inutile.
+
+## Journal
+
+### 01:11 — Lot 2 : trois défauts confirmés par la revue du pilote (avant toute modification)
+
+Demande : même worktree, mêmes interdits ; noyau `FleetListener` corrigé séparément par Codex
+(non touché) ; baseline typecheck `d579f26ec` = 20 erreurs noyau connues ; build complet
+`alasql`/Flow connu, non répété.
+
+1. `openListener()` ne revérifie pas `stopped` après `await loadFleetModule()` ni après
+   `previous.disconnect()` ; `shutdown()` garde les pairs et ignore `pendingConnect` → une reprise
+   en vol peut ouvrir une socket après l'arrêt.
+2. `refreshPeerCapabilities()` applique le succès ou l'échec d'un `peer.describe` tardif sans
+   revalider listener/génération/statut → une vieille réponse efface un `AUTH_FAILED` récent.
+3. `FleetPanel` : `reconnectErrors` survit à une reconnexion automatique authentifiée, à la
+   suppression du pair et aux résolutions tardives.
+
+### 00:50 — Diagnostic (lecture du code, avant toute modification)
+
+Base : `node node_modules/vitest/vitest.mjs run tests/fleet-bridge.test.ts` → 7/7 verts.
+
+Constats prouvés par la lecture croisée `cowork/src/main/fleet/fleet-bridge.ts` ↔
+`src/fleet/fleet-listener.ts` ↔ `src/channels/reconnection-manager.ts` (core en lecture seule) :
+
+1. **Cause d'échec effacée.** `updateStatus()` écrit `lastError = error` à chaque transition ;
+   `disconnected`/`reconnecting`/`connecting` passent `undefined`. Le serveur répond
+   `AUTH_FAILED` sans fermer la socket (`handler.ts:728`), puis la termine au délai d'inactivité
+   → l'événement `disconnected` efface « Invalid credentials » : le pair apparaît simplement
+   « disconnected », sans raison, et le listener ne retentera jamais (erreur terminale).
+2. **Abandon silencieux.** Le listener émet `exhausted` après 10 tentatives (~5 min) ; le bridge
+   ne l'écoute pas → statut figé sur `reconnecting`/`disconnected`, plus aucune tentative.
+3. **Échec initial jamais retenté.** `fleet-listener.ts:313-327` : l'auto-reconnexion n'est armée
+   qu'après une première authentification. Le commentaire du bridge (« Listener may have
+   scheduled a reconnect — leave it ») est faux : un pair éteint au lancement de Cowork (peer-beta
+   en veille, Tailscale pas prêt) reste en `error` jusqu'à un clic manuel, même rallumé.
+4. **Reconnexions concurrentes.** Deux `connectPeer()` simultanés (double clic « Reconnect »)
+   voient le même ancien listener, créent chacun un nouveau listener ; le premier n'est jamais
+   déconnecté → socket fantôme, événements `fleet.event` dupliqués, et les événements tardifs d'un
+   listener remplacé écrasent le statut du courant (aucune garde d'identité dans les handlers).
+5. **Bouton « Reconnect » muet** (`FleetPanel.tsx`) : ni état en cours, ni erreur ;
+   `reconnectPeer()` renvoie toujours `success: true` (l'échec est avalé dans `connectPeer`).
+   `fleetApi.list()` sans `catch` → rejet non géré, panneau vide sans explication.
+
+Non retenus (notés pour le pilote) : libellé « vu il y a » de `FleetPanel` recalculé seulement
+au rendu ; pair `authenticated` sans heartbeat depuis longtemps (socket semi-ouverte) toujours
+affiché vert.
+
+Lot retenu (deux problèmes) :
+- **P1 — connexion perdue mal récupérée / erreur invisible** (constats 1-3), dans le bridge.
+- **P2 — reconnexion manuelle non fiable** (constats 4-5), bridge + `FleetPanel`.
+
+## Contre-validation du pilote après port sélectif
+
+Les deux premières passes Opus sont assemblées avec les corrections du transport
+Fleet décrites dans `COWORK-FLEET-TRANSPORT-2026-09-14.md`. Reprise Cowork :
+69/69 tests, lint ciblé propre ; les 20 diagnostics TypeScript sont identiques
+à la base. La suite complète du noyau est verte (38 538 tests). Les prochains
+lots fermeture Electron et build restent dans leurs worktrees réservés.

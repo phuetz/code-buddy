@@ -58,11 +58,27 @@ interface CoreFleetModule {
   FleetListener: new (options: CoreFleetListenerOptions) => CoreFleetListener;
 }
 
+type ConnectOutcome = { success: true } | { success: false; error: string };
+
 interface PeerEntry {
   meta: FleetPeer;
   apiKey?: string;
   jwt?: string;
   listener: CoreFleetListener | null;
+  /** Attempt in flight, shared by concurrent callers so no listener is ever orphaned. */
+  pendingConnect?: Promise<ConnectOutcome>;
+  /** Bridge-level retry for the failures the core listener never retries itself. */
+  recoveryTimer?: ReturnType<typeof setTimeout>;
+  recoveryAttempt: number;
+  /** The server refused the credentials: retrying cannot help until the user acts. */
+  credentialsRejected: boolean;
+  /** Bumped on every status change; an async answer only applies to the state it was asked in. */
+  statusGeneration: number;
+}
+
+export interface FleetBridgeOptions {
+  /** Delays between bridge-level recovery attempts; the last one repeats. */
+  recoveryDelaysMs?: number[];
 }
 
 interface PersistedPeer {
@@ -81,6 +97,14 @@ interface PersistedFile {
 const EVENT_RING_CAPACITY = 200;
 const CAPABILITY_REFRESH_INTERVAL_MS = 60_000;
 const PEER_DESCRIBE_TIMEOUT_MS = 5_000;
+const DEFAULT_RECOVERY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000, 300_000];
+const CREDENTIAL_REJECTION_CODES = new Set(['AUTH_FAILED', 'INVALID_TOKEN']);
+const BRIDGE_STOPPED = 'Fleet bridge is stopped';
+
+function isCredentialRejection(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && CREDENTIAL_REJECTION_CODES.has(code);
+}
 
 function sanitizeId(value: string): string {
   return value
@@ -111,11 +135,20 @@ export class FleetBridge {
   private events: FleetEventRecord[] = [];
   private capabilityRefreshedAt: Map<string, number> = new Map();
   private loaded = false;
+  private stopped = false;
   private activityFeed: ActivityFeed | null = null;
+  private readonly recoveryDelaysMs: number[];
 
-  constructor(sendToRenderer: (event: ServerEvent) => void, activityFeed: ActivityFeed | null = null) {
+  constructor(
+    sendToRenderer: (event: ServerEvent) => void,
+    activityFeed: ActivityFeed | null = null,
+    options: FleetBridgeOptions = {},
+  ) {
     this.sendToRenderer = sendToRenderer;
     this.activityFeed = activityFeed;
+    this.recoveryDelaysMs = options.recoveryDelaysMs?.length
+      ? options.recoveryDelaysMs
+      : DEFAULT_RECOVERY_DELAYS_MS;
     const userData = app.isReady()
       ? app.getPath('userData')
       : path.join(os.homedir(), '.codebuddy-cowork');
@@ -141,23 +174,14 @@ export class FleetBridge {
           addedAt: p.addedAt,
           status: 'disconnected',
         };
-        this.peers.set(p.id, {
-          meta,
-          apiKey: p.apiKey,
-          jwt: p.jwt,
-          listener: null,
-        });
+        this.peers.set(p.id, newPeerEntry(meta, p.apiKey, p.jwt));
       }
       log(`[FleetBridge] Loaded ${this.peers.size} persisted peer(s)`);
     } catch {
       // First launch — no registry yet
     }
-    // Best-effort connect all peers in parallel
-    await Promise.all(
-      Array.from(this.peers.keys()).map((id) =>
-        this.connectPeer(id).catch((err) => logWarn(`[FleetBridge] connectPeer(${id}) failed:`, err))
-      )
-    );
+    // Best-effort connect all peers in parallel; failures are recorded on the peer.
+    await Promise.all(Array.from(this.peers.keys()).map((id) => this.connectPeer(id)));
   }
 
   private async save(): Promise<void> {
@@ -179,12 +203,22 @@ export class FleetBridge {
     }
   }
 
+  /**
+   * `lastError` holds the cause of the last failure. Transitional states keep it
+   * visible (the close that follows an AUTH_FAILED must not hide the refusal);
+   * only a successful authentication clears it.
+   */
   private updateStatus(peerId: string, status: FleetPeerStatus, error?: string): void {
     const entry = this.peers.get(peerId);
     if (!entry) return;
     entry.meta.status = status;
-    entry.meta.lastError = error;
-    this.sendToRenderer({ type: 'fleet.peer.update', payload: { peer: { ...entry.meta } } });
+    entry.statusGeneration += 1;
+    if (error !== undefined) {
+      entry.meta.lastError = error;
+    } else if (status === 'authenticated') {
+      entry.meta.lastError = undefined;
+    }
+    this.emitPeerUpdate(peerId);
   }
 
   private emitPeerUpdate(peerId: string): void {
@@ -198,17 +232,29 @@ export class FleetBridge {
     options: { force?: boolean } = {},
   ): Promise<void> {
     const entry = this.peers.get(peerId);
-    if (!entry?.listener) return;
+    // peer.describe needs an authenticated socket; asking earlier would only
+    // replace the real connection cause with NOT_AUTHENTICATED.
+    if (this.stopped || !entry?.listener || entry.meta.status !== 'authenticated') return;
     const now = Date.now();
     const last = this.capabilityRefreshedAt.get(peerId) ?? 0;
     if (!options.force && now - last < CAPABILITY_REFRESH_INTERVAL_MS) return;
 
+    const listener = entry.listener;
+    const generation = entry.statusGeneration;
+    // The answer belongs to the connection state it was asked in: a reconnect,
+    // an AUTH_FAILED or a removal in between makes it stale either way.
+    const stillAsked = () =>
+      !this.stopped &&
+      this.peers.get(peerId) === entry &&
+      entry.listener === listener &&
+      entry.statusGeneration === generation;
     try {
-      const raw = (await entry.listener.request(
+      const raw = (await listener.request(
         'peer.describe',
         {},
         { timeoutMs: PEER_DESCRIBE_TIMEOUT_MS },
       )) as { capabilities?: unknown; peerChatProvider?: unknown };
+      if (!stillAsked()) return;
       entry.meta.capability = normalizeCapability(raw.capabilities);
       entry.meta.peerChatProvider = normalizePeerChatProvider(raw.peerChatProvider);
       entry.meta.lastError = undefined;
@@ -216,6 +262,7 @@ export class FleetBridge {
       this.emitPeerUpdate(peerId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (!stillAsked()) return;
       entry.meta.lastError = `peer.describe failed: ${message}`;
       this.emitPeerUpdate(peerId);
       logWarn(`[FleetBridge] peer.describe failed for ${peerId}:`, message);
@@ -232,22 +279,48 @@ export class FleetBridge {
     );
   }
 
-  private async connectPeer(peerId: string): Promise<void> {
+  /** Connect (or reconnect) a peer. Concurrent callers share the attempt in flight. */
+  private connectPeer(peerId: string): Promise<ConnectOutcome> {
     const entry = this.peers.get(peerId);
-    if (!entry) return;
-    const mod = await loadFleetModule();
-    if (!mod) {
-      this.updateStatus(peerId, 'error', 'Fleet listener module unavailable');
-      return;
+    if (!entry) return Promise.resolve({ success: false, error: 'Peer not found' });
+    if (!entry.pendingConnect) {
+      entry.pendingConnect = this.openListener(peerId, entry).finally(() => {
+        entry.pendingConnect = undefined;
+      });
     }
-    if (entry.listener) {
-      // Already connected/connecting; tear down before re-connecting
+    return entry.pendingConnect;
+  }
+
+  private async openListener(peerId: string, entry: PeerEntry): Promise<ConnectOutcome> {
+    this.cancelRecovery(entry);
+    // Every await below can straddle shutdown() or removePeer(): re-check both
+    // before touching the entry, so neither can be followed by a new socket.
+    const abandoned = (): ConnectOutcome | null => {
+      if (this.stopped) return { success: false, error: BRIDGE_STOPPED };
+      if (this.peers.get(peerId) !== entry) return { success: false, error: 'Peer removed' };
+      return null;
+    };
+    const early = abandoned();
+    if (early) return early;
+    const mod = await loadFleetModule();
+    const afterLoad = abandoned();
+    if (afterLoad) return afterLoad;
+    if (!mod) {
+      const error = 'Fleet listener module unavailable';
+      this.updateStatus(peerId, 'error', error);
+      return { success: false, error };
+    }
+    const previous = entry.listener;
+    if (previous) {
+      // Detach before tearing down so the old socket's close/error events are ignored.
+      entry.listener = null;
       try {
-        await entry.listener.disconnect();
+        await previous.disconnect();
       } catch {
         /* ignore */
       }
-      entry.listener = null;
+      const afterTeardown = abandoned();
+      if (afterTeardown) return afterTeardown;
     }
 
     const listener = new mod.FleetListener({
@@ -258,25 +331,50 @@ export class FleetBridge {
       historyCapacity: 0, // we keep our own ring on the bridge level
     });
     entry.listener = listener;
+    entry.credentialsRejected = false;
     this.updateStatus(peerId, 'connecting');
+    // A replaced or removed listener can still emit late events; they must not
+    // repaint the peer or duplicate its event stream.
+    const isCurrent = () =>
+      !this.stopped && this.peers.get(peerId) === entry && entry.listener === listener;
 
-    listener.on('connected', () => this.updateStatus(peerId, 'connected'));
+    listener.on('connected', () => {
+      if (isCurrent()) this.updateStatus(peerId, 'connected');
+    });
     listener.on('authenticated', () => {
+      if (!isCurrent()) return;
+      entry.recoveryAttempt = 0;
       this.updateStatus(peerId, 'authenticated');
       void this.refreshPeerCapabilities(peerId, { force: true });
     });
-    listener.on('disconnected', () => this.updateStatus(peerId, 'disconnected'));
-    listener.on('reconnecting', () => this.updateStatus(peerId, 'reconnecting'));
+    listener.on('disconnected', () => {
+      if (isCurrent()) this.updateStatus(peerId, 'disconnected');
+    });
+    listener.on('reconnecting', () => {
+      if (isCurrent()) this.updateStatus(peerId, 'reconnecting');
+    });
     listener.on('reconnected', () => {
+      if (!isCurrent()) return;
       this.updateStatus(peerId, 'authenticated');
       void this.refreshPeerCapabilities(peerId, { force: true });
+    });
+    listener.on('exhausted', (...args: unknown[]) => {
+      if (!isCurrent()) return;
+      const total = (args[0] as { totalAttempts?: unknown } | undefined)?.totalAttempts;
+      const attempts = typeof total === 'number' ? `${total} attempts` : 'repeated attempts';
+      const cause = entry.meta.lastError ? `: ${entry.meta.lastError}` : '';
+      this.updateStatus(peerId, 'error', `Auto-reconnect gave up after ${attempts}${cause}`);
+      this.scheduleRecovery(peerId, entry);
     });
     listener.on('error', (...args: unknown[]) => {
+      if (!isCurrent()) return;
       const err = args[0];
+      if (isCredentialRejection(err)) entry.credentialsRejected = true;
       const msg = err instanceof Error ? err.message : String(err ?? 'unknown error');
       this.updateStatus(peerId, 'error', msg);
     });
     listener.on('fleet:event', (...args: unknown[]) => {
+      if (!isCurrent()) return;
       const data = args[0] as { type?: string; payload?: Record<string, unknown> } | undefined;
       if (!data || typeof data.type !== 'string') return;
       const payload = data.payload ?? {};
@@ -306,12 +404,38 @@ export class FleetBridge {
 
     try {
       await listener.connect();
+      return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (!isCurrent()) return { success: false, error: msg };
+      if (isCredentialRejection(err)) entry.credentialsRejected = true;
       this.updateStatus(peerId, 'error', msg);
-      logWarn(`[FleetBridge] Initial connect failed for ${peerId}: ${msg}`);
-      // Listener may have scheduled a reconnect via autoReconnect — leave it.
+      logWarn(`[FleetBridge] Connect failed for ${peerId}: ${msg}`);
+      // The core listener only auto-reconnects after a first authentication, so a
+      // peer that is down when the attempt starts is ours to retry.
+      this.scheduleRecovery(peerId, entry);
+      return { success: false, error: msg };
     }
+  }
+
+  private scheduleRecovery(peerId: string, entry: PeerEntry): void {
+    if (this.stopped || entry.credentialsRejected || entry.recoveryTimer) return;
+    if (this.peers.get(peerId) !== entry) return;
+    const delays = this.recoveryDelaysMs;
+    const delayMs = delays[Math.min(entry.recoveryAttempt, delays.length - 1)];
+    entry.recoveryAttempt += 1;
+    entry.recoveryTimer = setTimeout(() => {
+      entry.recoveryTimer = undefined;
+      if (this.stopped || this.peers.get(peerId) !== entry) return;
+      void this.connectPeer(peerId);
+    }, delayMs);
+    entry.recoveryTimer.unref?.();
+  }
+
+  private cancelRecovery(entry: PeerEntry): void {
+    if (!entry.recoveryTimer) return;
+    clearTimeout(entry.recoveryTimer);
+    entry.recoveryTimer = undefined;
   }
 
   async listPeers(): Promise<FleetPeer[]> {
@@ -438,8 +562,16 @@ export class FleetBridge {
     error?: string;
   }> {
     if (peerId) {
-      if (!this.peers.has(peerId)) {
+      const target = this.peers.get(peerId);
+      if (!target) {
         return { success: false, error: `Unknown peer: ${peerId}` };
+      }
+      if (target.meta.status !== 'authenticated') {
+        return {
+          success: false,
+          error: `Peer ${peerId} is not connected (${target.meta.status}); reconnect it first`,
+          peer: { ...target.meta },
+        };
       }
       await this.refreshPeerCapabilities(peerId, { force: true });
       const entry = this.peers.get(peerId);
@@ -476,12 +608,7 @@ export class FleetBridge {
       addedAt: Date.now(),
       status: 'disconnected',
     };
-    this.peers.set(id, {
-      meta,
-      apiKey: input.apiKey,
-      jwt: input.jwt,
-      listener: null,
-    });
+    this.peers.set(id, newPeerEntry(meta, input.apiKey, input.jwt));
     await this.save();
     this.sendToRenderer({ type: 'fleet.peer.update', payload: { peer: { ...meta } } });
     void this.connectPeer(id);
@@ -491,28 +618,29 @@ export class FleetBridge {
   async removePeer(peerId: string): Promise<{ success: boolean }> {
     const entry = this.peers.get(peerId);
     if (!entry) return { success: false };
-    if (entry.listener) {
+    this.cancelRecovery(entry);
+    // Forget the peer first so the teardown cannot re-emit it to the renderer.
+    this.peers.delete(peerId);
+    const listener = entry.listener;
+    entry.listener = null;
+    if (listener) {
       try {
-        await entry.listener.disconnect();
+        await listener.disconnect();
       } catch {
         /* ignore */
       }
     }
-    this.peers.delete(peerId);
     this.capabilityRefreshedAt.delete(peerId);
     this.events = this.events.filter((e) => e.peerId !== peerId);
     await this.save();
     return { success: true };
   }
 
+  /** Resolves once the attempt settles, with the failure cause when it did not authenticate. */
   async reconnectPeer(peerId: string): Promise<{ success: boolean; error?: string }> {
     if (!this.peers.has(peerId)) return { success: false, error: 'Peer not found' };
-    try {
-      await this.connectPeer(peerId);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    const outcome = await this.connectPeer(peerId);
+    return outcome.success ? { success: true } : { success: false, error: outcome.error };
   }
 
   async getRecentEvents(peerId?: string, limit = 100): Promise<FleetEventRecord[]> {
@@ -543,18 +671,38 @@ export class FleetBridge {
     return entry.listener.request(method, params, options);
   }
 
+  /** Close every socket; resolves once no connection attempt is left in flight. */
   async shutdown(): Promise<void> {
+    this.stopped = true;
+    const inFlight: Promise<ConnectOutcome>[] = [];
     for (const entry of this.peers.values()) {
-      if (entry.listener) {
+      this.cancelRecovery(entry);
+      if (entry.pendingConnect) inFlight.push(entry.pendingConnect);
+      const listener = entry.listener;
+      entry.listener = null;
+      if (listener) {
         try {
-          await entry.listener.disconnect();
+          await listener.disconnect();
         } catch {
           /* ignore */
         }
-        entry.listener = null;
       }
     }
+    // Attempts see `stopped` at their next checkpoint, or fail on the socket closed above.
+    await Promise.allSettled(inFlight);
   }
+}
+
+function newPeerEntry(meta: FleetPeer, apiKey?: string, jwt?: string): PeerEntry {
+  return {
+    meta,
+    apiKey,
+    jwt,
+    listener: null,
+    recoveryAttempt: 0,
+    credentialsRejected: false,
+    statusGeneration: 0,
+  };
 }
 
 function normalizePeerChatProvider(raw: unknown): FleetPeerChatProvider | null {

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { spawnSync } from 'node:child_process';
 
 // vi.hoisted runs before imports, so we can't use any imported value
 // inside it. We hand-roll a minimal EventEmitter substitute here so the
@@ -21,6 +22,7 @@ const wsMock = vi.hoisted(() => {
     once(event: string, h: Handler): FakeWS;
     off(event: string, h: Handler): FakeWS;
     removeListener(event: string, h: Handler): FakeWS;
+    removeAllListeners(): FakeWS;
     emit(event: string, ...args: unknown[]): boolean;
     send(data: string): void;
     close(): void;
@@ -59,6 +61,10 @@ const wsMock = vi.hoisted(() => {
     }
     removeListener(event: string, h: Handler): this {
       return this.off(event, h);
+    }
+    removeAllListeners(): this {
+      this.handlers.clear();
+      return this;
     }
     emit(event: string, ...args: unknown[]): boolean {
       const list = [...(this.handlers.get(event) || [])];
@@ -209,6 +215,168 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
 
       fake.fail(new Error('ECONNREFUSED'));
       await expect(connectPromise).rejects.toThrow(/ECONNREFUSED/);
+    });
+
+    it('does not let an abandoned auth timeout close a later authenticated socket', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          authTimeoutMs: 50,
+        });
+
+        const firstConnect = l.connect();
+        await new Promise((resolve) => setImmediate(resolve));
+        const first = wsMock.instances[0];
+        first.fail(new Error('first attempt failed before welcome'));
+        await expect(firstConnect).rejects.toThrow(/first attempt failed/);
+
+        const secondConnect = l.connect();
+        await new Promise((resolve) => setImmediate(resolve));
+        const second = wsMock.instances[1];
+        second.open();
+        second.receive({ type: 'connected' });
+        second.receive({ type: 'authenticated', payload: {} });
+        await secondConnect;
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(second.readyState).toBe(1);
+        expect(l.isAuthenticated()).toBe(true);
+
+        await l.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not let an earlier connect timeout close a replacement socket', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          connectTimeoutMs: 50,
+        });
+
+        const firstOutcome = l.connect().catch((error: Error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        const secondConnect = l.connect();
+        await new Promise((resolve) => setImmediate(resolve));
+        const second = wsMock.instances[1];
+        second.open();
+        second.receive({ type: 'connected' });
+        second.receive({ type: 'authenticated', payload: {} });
+        await secondConnect;
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect((await firstOutcome).message).toMatch(/attempt replaced/);
+        expect(second.readyState).toBe(1);
+        expect(l.isAuthenticated()).toBe(true);
+
+        await l.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('resets authentication and rejects old RPCs while replacing an authenticated socket', async () => {
+      const l = new FleetListener({ url: 'ws://peer/ws', apiKey: 'k' });
+      const firstConnect = l.connect();
+      await new Promise((resolve) => setImmediate(resolve));
+      const first = wsMock.instances[0];
+      first.open();
+      first.receive({ type: 'connected' });
+      first.receive({ type: 'authenticated', payload: {} });
+      await firstConnect;
+
+      const oldRpc = l.request('peer.echo').catch((error: Error & { code?: string }) => error);
+      expect(l.getPendingRequestCount()).toBe(1);
+
+      const replacementConnect = l.connect();
+      await new Promise((resolve) => setImmediate(resolve));
+      const second = wsMock.instances[1];
+      second.open();
+
+      expect(l.isConnected()).toBe(true);
+      expect(l.isAuthenticated()).toBe(false);
+      await expect(oldRpc).resolves.toMatchObject({ code: 'DISCONNECTED' });
+      expect(l.getPendingRequestCount()).toBe(0);
+      await expect(l.request('peer.echo')).rejects.toMatchObject({ code: 'NOT_AUTHENTICATED' });
+      expect(second.sentMessages).toHaveLength(0);
+
+      second.receive({ type: 'connected' });
+      second.receive({ type: 'authenticated', payload: {} });
+      await replacementConnect;
+      await l.disconnect();
+    });
+
+    it('replaces a real connecting ws without an uncaught error', () => {
+      const probe = String.raw`
+        import http from 'node:http';
+        import { WebSocketServer } from 'ws';
+        import { FleetListener } from './src/fleet/fleet-listener.ts';
+
+        const server = http.createServer();
+        const wss = new WebSocketServer({ noServer: true });
+        const retained = new Set();
+        let upgrades = 0;
+        server.on('upgrade', (request, socket, head) => {
+          upgrades += 1;
+          if (upgrades === 1) {
+            retained.add(socket);
+            socket.once('close', () => retained.delete(socket));
+            return;
+          }
+          wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws, request));
+        });
+        wss.on('connection', ws => {
+          ws.send(JSON.stringify({ type: 'connected' }));
+          ws.on('message', data => {
+            const message = JSON.parse(data.toString());
+            if (message.type === 'authenticate') {
+              ws.send(JSON.stringify({ type: 'authenticated', payload: { scopes: ['fleet:listen'] } }));
+            }
+          });
+        });
+
+        await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+        const address = server.address();
+        const listener = new FleetListener({
+          url: 'ws://127.0.0.1:' + address.port,
+          apiKey: 'fixture',
+          connectTimeoutMs: 100,
+        });
+        try {
+          const first = listener.connect().catch(error => error);
+          await new Promise(resolve => setTimeout(resolve, 20));
+          await listener.connect();
+          const firstError = await first;
+          if (!(firstError instanceof Error) || !/replaced/.test(firstError.message)) {
+            throw new Error('the replaced attempt was not rejected immediately');
+          }
+          await new Promise(resolve => setTimeout(resolve, 150));
+          if (!listener.isAuthenticated()) throw new Error('replacement socket was not retained');
+          console.log('REAL_REPLACEMENT_OK');
+        } finally {
+          await listener.disconnect().catch(() => undefined);
+          for (const socket of retained) socket.destroy();
+          await new Promise(resolve => wss.close(resolve));
+          await new Promise(resolve => server.close(resolve));
+        }
+      `;
+      const result = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '--input-type=module', '--eval', probe],
+        { cwd: process.cwd(), encoding: 'utf8', timeout: 5_000 },
+      );
+      expect({ status: result.status, signal: result.signal, stderr: result.stderr }).toEqual({
+        status: 0,
+        signal: null,
+        stderr: '',
+      });
+      expect(result.stdout).toContain('REAL_REPLACEMENT_OK');
     });
   });
 
