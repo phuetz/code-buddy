@@ -144,3 +144,38 @@ ou exécutés par leur runner de délégation, avec suivi séparé.
 
 Le script `scripts/fleet-supervisor.mjs` délègue à cette même implémentation,
 `src/harness/fleet-supervisor.ts`, et reste utilisable après build.
+
+## Missions durables et passations entre pilotes
+
+`buddy fleet mission` conserve les opérations dans un répertoire local appartenant à l’opérateur. Aucun serveur ni fournisseur n’est démarré. Le manifeste est le même que pour `fleet supervise` ; une mission accepte un timeout de 100 ms à 12 heures. Le processus appelant reste au premier plan pendant `run`.
+
+```sh
+buddy fleet mission create .codebuddy/missions audit ./fleet.json verify
+buddy fleet mission claim .codebuddy/missions audit codex
+# Reprendre la generation retournée par claim :
+buddy fleet mission run .codebuddy/missions audit codex GENERATION
+buddy fleet mission show .codebuddy/missions audit
+buddy fleet mission ack .codebuddy/missions audit fable
+```
+
+Une seule réservation active par tâche. La génération change à chaque attribution ; une ancienne génération est refusée. Le runner renouvelle son bail pendant le travail. Les commandes et arguments sont figés à la création : modifier le manifeste ensuite ne modifie pas la mission. Le résultat est borné, indique `truncated` si nécessaire, reste consultable après redémarrage et après accusé de réception. Une tâche terminée ne se relance pas implicitement.
+
+Pour transmettre une mission réservée mais non démarrée :
+
+```sh
+buddy fleet mission handoff .codebuddy/missions audit codex GENERATION capsule.json
+buddy fleet mission claim .codebuddy/missions audit fable
+```
+
+La capsule JSON contient `succeeded`, `failed`, `keyFiles`, `deadEnds` (listes bornées) et `nextAction` (texte obligatoire). Elle demeure disponible au nouveau pilote. Une commande déjà en cours doit se terminer ou être arrêtée avant transmission.
+
+Après perte du pilote pendant une commande, l’effet peut avoir eu lieu : le harnais refuse une reprise automatique. Une fois le bail expiré et après inspection de l’effet et du processus, l’opérateur peut enregistrer :
+
+```sh
+buddy fleet mission reconcile .codebuddy/missions audit GENERATION retry 'Processus arrêté, effet vérifié : nouvelle tentative possible'
+# ou résolution completed si le travail est déjà effectué
+```
+
+`submit <store> <id> <owner> <generation>` enregistre le HEAD pour revue. `approve <store> <id> <reviewer> <commit>` exige un relecteur distinct, un HEAD inchangé et un worktree propre. Il s’agit d’une attestation au moment de la revue, pas d’une autorisation de fusion ni d’une surveillance des éditions Git ultérieures. Attribution, transmission et lancement invalident cette attestation.
+
+Limites : coordination sur une seule machine et un stockage local de confiance ; les identités déclarées ne sont pas une authentification réseau. Les transactions synchrones utilisent un verrou exclusif et des écritures atomiques avec fsync (répertoire synchronisé sous POSIX). Un crash pendant la très courte transaction peut laisser un `.lock` : inspecter le PID et l’état avant intervention, aucun vol de verrou automatique. Un arrêt de processus pendant une opération laisse une intention durable à réconcilier. Le harnais ne garantit pas exactement une fois pour un effet externe arbitraire.

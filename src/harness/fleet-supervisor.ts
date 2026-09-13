@@ -11,7 +11,7 @@ interface SupervisorOperation { command: string; args: string[]; timeoutMs: numb
 export interface SupervisorManifest { workspace: string; operations: Map<string, SupervisorOperation> }
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
 
-export function parseSupervisorManifest(input: unknown, baseDir: string): SupervisorManifest {
+export function parseSupervisorManifest(input: unknown, baseDir: string, maxTimeoutMs = 45000): SupervisorManifest {
   if (!record(input) || typeof input.workspace !== 'string') throw new Error('workspace is required');
   const workspace = path.resolve(baseDir, input.workspace);
   if (!record(input.operations)) throw new Error('operations must be an object');
@@ -21,7 +21,7 @@ export function parseSupervisorManifest(input: unknown, baseDir: string): Superv
     if (!record(operation) || typeof operation.command !== 'string' || !operation.command || operation.command.includes('\0')) throw new Error(`Invalid command: ${name}`);
     if (!Array.isArray(operation.args) || !operation.args.every(arg => typeof arg === 'string' && !arg.includes('\0'))) throw new Error(`Invalid arguments: ${name}`);
     const timeoutMs = operation.timeoutMs ?? 30000;
-    if (typeof timeoutMs !== 'number' || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 45000) throw new Error(`Invalid timeout: ${name}`);
+    if (typeof timeoutMs !== 'number' || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > maxTimeoutMs) throw new Error(`Invalid timeout: ${name}`);
     operations.set(name, { command: operation.command, args: [...operation.args], timeoutMs, description: typeof operation.description === 'string' ? operation.description : name });
   }
   if (!operations.size || operations.size > 64) throw new Error('Define between 1 and 64 fixed operations');

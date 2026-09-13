@@ -6,6 +6,7 @@
  */
 
 import type { Command } from 'commander';
+import { registerFleetMissionCommands } from './fleet-mission-commands.js';
 import { createTokenCommand, registerFleetTokenCommand } from '../token.js';
 
 import {
@@ -98,6 +99,8 @@ export function registerFleetCommands(program: Command): void {
   const fleet = program
     .command('fleet')
     .description('Inspect Fleet routing, toolsets, and dispatch policy decisions');
+
+  registerFleetMissionCommands(fleet);
 
   fleet.command('supervise <manifest> <operation>')
     .description('Run a fixed local fleet operation through the Code Buddy harness')
