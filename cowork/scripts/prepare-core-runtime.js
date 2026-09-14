@@ -200,10 +200,17 @@ function supportsCurrentTarget(entry, platform, arch) {
   return supportsValue(entry.os, platform) && supportsValue(entry.cpu, arch);
 }
 
+/**
+ * Node's lookup order inside the installed tree: the requiring package's own
+ * node_modules, then each enclosing package, then the root node_modules. The
+ * cursor only moves to a strictly shorter parent, so the walk ends at the root
+ * lookup or as soon as the cursor stops changing.
+ */
 function resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName) {
   assertDependencyName(dependencyName);
   let cursor = fromPackagePath;
-  while (true) {
+  let previous = null;
+  while (cursor !== previous) {
     const candidate = cursor
       ? `${cursor}/node_modules/${dependencyName}`
       : `node_modules/${dependencyName}`;
@@ -211,10 +218,10 @@ function resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyNam
     assertConfinedPath(coreRoot, absoluteCandidate, 'Installed dependency path');
     if (fs.existsSync(path.join(absoluteCandidate, 'package.json'))) return candidate;
     if (!cursor) return null;
-    const parent = packageParent(cursor);
-    if (parent === cursor) return null;
-    cursor = parent;
+    previous = cursor;
+    cursor = packageParent(cursor);
   }
+  return null;
 }
 
 /**
@@ -512,6 +519,7 @@ module.exports = {
   copyTreeWithHardlinks,
   prepareCoreRuntime,
   readCorePackageIdentity,
+  resolveInstalledDependencyPath,
   resolveSourceRevision,
 };
 

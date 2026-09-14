@@ -20,10 +20,16 @@ const {
   copyTreeWithHardlinks,
   prepareCoreRuntime,
   readCorePackageIdentity,
+  resolveInstalledDependencyPath,
   resolveSourceRevision,
 } = require(
   '../../scripts/prepare-core-runtime.js',
 ) as {
+  resolveInstalledDependencyPath: (
+    coreRoot: string,
+    fromPackagePath: string,
+    dependencyName: string,
+  ) => string | null;
   COWORK_REQUIRED_OPTIONAL_DEPENDENCIES: readonly string[];
   collectInstalledRuntimePackagePaths: (
     coreRoot: string,
@@ -310,6 +316,70 @@ describe('collectInstalledRuntimePackagePaths', () => {
         'Cowork-required optional dependency does not support linux/x64: node_modules/@google/generative-ai',
       );
     });
+  });
+});
+
+describe('resolveInstalledDependencyPath', () => {
+  function nestedFixture(): string {
+    const root = temporaryRoot();
+    for (const packagePath of [
+      'node_modules/a',
+      'node_modules/a/node_modules/b',
+      'node_modules/a/node_modules/b/node_modules/c',
+      'node_modules/a/node_modules/d',
+      'node_modules/d',
+      'node_modules/e',
+      'node_modules/@s/p',
+      'node_modules/@s/p/node_modules/@s/q',
+      'node_modules/@s/q',
+      'packages/app/node_modules/f',
+    ]) {
+      writePackage(root, packagePath, {});
+    }
+    return root;
+  }
+
+  it('resolves nearest-first and walks up through enclosing packages to the root', () => {
+    const root = nestedFixture();
+
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b', 'c')).toBe(
+      'node_modules/a/node_modules/b/node_modules/c',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b', 'd')).toBe(
+      'node_modules/a/node_modules/d',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b/node_modules/c', 'e')).toBe(
+      'node_modules/e',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/@s/p', '@s/q')).toBe(
+      'node_modules/@s/p/node_modules/@s/q',
+    );
+    expect(resolveInstalledDependencyPath(root, 'packages/app', 'f')).toBe('packages/app/node_modules/f');
+  });
+
+  it('returns null once the root node_modules lookup misses, from any depth', () => {
+    const root = nestedFixture();
+
+    for (const fromPackagePath of ['', 'node_modules/a', 'node_modules/a/node_modules/b/node_modules/c', 'packages/app']) {
+      expect(resolveInstalledDependencyPath(root, fromPackagePath, 'missing')).toBeNull();
+    }
+    expect(fs.existsSync(path.join(root, 'node_modules', 'missing'))).toBe(false);
+  });
+
+  it('terminates when the core root is the filesystem root', () => {
+    const filesystemRoot = path.parse(os.tmpdir()).root;
+    const absent = `codebuddy-absent-${process.pid}-${Date.now()}`;
+
+    expect(
+      resolveInstalledDependencyPath(filesystemRoot, 'node_modules/a/node_modules/b/node_modules/c', absent),
+    ).toBeNull();
+    expect(resolveInstalledDependencyPath(filesystemRoot, '', `@codebuddy-absent/${absent}`)).toBeNull();
+  });
+
+  it('keeps refusing lookups that escape the core root', () => {
+    expect(() => resolveInstalledDependencyPath(nestedFixture(), '../escape', 'a')).toThrow(
+      /Installed dependency path escapes its allowed root/,
+    );
   });
 });
 

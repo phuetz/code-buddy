@@ -33,6 +33,12 @@ const CORE_RUNTIME_DIR = '.bundle-resources/core-runtime';
  * like a missing package — ESM through a resolve hook, CommonJS through
  * Module._resolveFilename — with the codes Node uses, so optional
  * `try { require() }` / `try { await import() }` fallbacks behave as packaged.
+ *
+ * A failed top-level import that carries a Node error code (resolution errors,
+ * refused or native) is reported compactly: `Name [code]: message` plus the
+ * frames outside Node internals, the eval wrapper and the data: URL of the hook,
+ * so the missing package and its importer stay inside the check detail. Errors
+ * without a code (a syntax error, for instance) keep Node's default report.
  */
 function confinedImportSource(entryPath, runtimeRoot) {
   const root = JSON.stringify(runtimeRoot);
@@ -46,32 +52,51 @@ const outside = ${outside};
 export async function resolve(specifier, context, nextResolve) {
   const resolved = await nextResolve(specifier, context);
   if (resolved.url.startsWith('file:') && outside(fileURLToPath(resolved.url))) {
+    const importer = context.parentURL?.startsWith('file:')
+      ? fileURLToPath(context.parentURL)
+      : context.parentURL ?? 'the probe entry';
     const error = new Error(
-      \`Cannot find package '\${specifier}' in the staged runtime (resolved outside it: \${fileURLToPath(resolved.url)})\`,
+      \`Cannot find package '\${specifier}' imported from \${importer} \` +
+        \`(only resolvable outside the staged runtime: \${fileURLToPath(resolved.url)})\`,
     );
     error.code = context.conditions?.includes('require') ? 'MODULE_NOT_FOUND' : 'ERR_MODULE_NOT_FOUND';
-    // The default stack would repeat this whole data: URL in the check detail.
-    error.stack = \`Error [\${error.code}]: \${error.message}\`;
     throw error;
   }
   return resolved;
 }
 `;
-  return `import Module, { register } from 'node:module';
+  return `import { writeSync } from 'node:fs';
+import Module, { register } from 'node:module';
 import path from 'node:path';
 const outside = ${outside};
 register('data:text/javascript,' + encodeURIComponent(${JSON.stringify(hook)}));
 const resolveFilename = Module._resolveFilename;
-Module._resolveFilename = function (request, ...rest) {
-  const file = resolveFilename.call(this, request, ...rest);
+Module._resolveFilename = function (request, parent, ...rest) {
+  const file = resolveFilename.call(this, request, parent, ...rest);
   if (path.isAbsolute(file) && outside(file)) {
-    const error = new Error(\`Cannot find module '\${request}' in the staged runtime (resolved outside it: \${file})\`);
+    const error = new Error(
+      \`Cannot find module '\${request}' required from \${parent?.filename ?? 'an unknown module'} \` +
+        \`(only resolvable outside the staged runtime: \${file})\`,
+    );
     error.code = 'MODULE_NOT_FOUND';
     throw error;
   }
   return file;
 };
-await import(${JSON.stringify(pathToFileURL(entryPath).href)});
+try {
+  await import(${JSON.stringify(pathToFileURL(entryPath).href)});
+} catch (error) {
+  if (typeof error?.code !== 'string') throw error;
+  const frames = String(error.stack ?? '')
+    .split('\\n')
+    .filter((line) => /^\\s+at /.test(line) && !/data:|node:internal|\\[eval/.test(line));
+  const diagnostic = [\`\${error.name} [\${error.code}]: \${error.message}\`, ...frames].join('\\n') + '\\n';
+  try {
+    writeSync(2, diagnostic.slice(0, 2_000));
+  } finally {
+    process.exit(1);
+  }
+}
 `;
 }
 

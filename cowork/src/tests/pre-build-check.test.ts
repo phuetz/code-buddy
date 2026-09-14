@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 
 // Import the runChecks function from the CommonJS script using createRequire
@@ -507,6 +508,124 @@ describe('pre-build-check: runChecks', () => {
       for (const probe of probes) {
         expect(probe).toMatchObject({ passed: true, severity: 'fatal' });
       }
+    });
+  });
+
+  describe('staged import diagnostics', () => {
+    const runtime = () => path.join(tmpDir, '.bundle-resources', 'core-runtime');
+    const adapterPath = () =>
+      fs.realpathSync(path.join(runtime(), 'dist', 'desktop', 'codebuddy-engine-adapter.js'));
+    const adapterResult = (result: { results: Array<{ relPath: string; passed: boolean; detail?: string }> }) =>
+      result.results.find((entry) => entry.relPath.endsWith('dist/desktop/codebuddy-engine-adapter.js'))!;
+
+    it('names a package missing everywhere and its importer without the hook data: URL', () => {
+      populateWin32Artifacts(tmpDir);
+      fs.rmSync(path.join(runtime(), 'node_modules', 'chalk'), { recursive: true });
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline.startsWith('Error [ERR_MODULE_NOT_FOUND]: ')).toBe(true);
+      expect(headline).toContain("Cannot find package 'chalk'");
+      expect(headline).toContain(`imported from ${adapterPath()}`);
+      expect(detail).not.toContain('data:');
+      expect(detail.length).toBeLessThan(2_000);
+    });
+
+    it('names the importer of an ESM import refused outside the staged runtime', () => {
+      populateWin32Artifacts(tmpDir);
+      const stagedChalk = path.join(runtime(), 'node_modules', 'chalk');
+      fs.cpSync(stagedChalk, path.join(parentDir, 'node_modules', 'chalk'), { recursive: true });
+      fs.rmSync(stagedChalk, { recursive: true });
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline).toContain(
+        `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'chalk' imported from ${adapterPath()}`,
+      );
+      expect(headline).toContain('only resolvable outside the staged runtime');
+      expect(detail).not.toContain('data:');
+    });
+
+    it('names the importer of a refused CommonJS require without echoing the probe source', () => {
+      populateWin32Artifacts(tmpDir);
+      const stagedChalk = path.join(runtime(), 'node_modules', 'chalk');
+      makeFile(path.join(stagedChalk, 'package.json'), JSON.stringify({ main: 'index.cjs' }));
+      makeFile(
+        path.join(stagedChalk, 'index.cjs'),
+        "require('ancestor-only-cjs'); module.exports = { blue(value) { return value; } };",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline).toContain(
+        `Error [MODULE_NOT_FOUND]: Cannot find module 'ancestor-only-cjs' required from ${fs.realpathSync(path.join(stagedChalk, 'index.cjs'))}`,
+      );
+      expect(detail).not.toContain('${request}');
+      expect(detail).not.toContain('data:');
+    });
+
+    it('terminates promptly with its diagnostic when failing CommonJS left an active handle', () => {
+      populateWin32Artifacts(tmpDir);
+      const activeHandlePackage = path.join(runtime(), 'node_modules', 'active-handle-cjs');
+      makeFile(
+        path.join(activeHandlePackage, 'package.json'),
+        JSON.stringify({ main: 'index.cjs' }),
+      );
+      makeFile(
+        path.join(activeHandlePackage, 'index.cjs'),
+        "setInterval(() => {}, 60_000); require('absent-after-timer');",
+      );
+      makeFile(
+        path.join(runtime(), 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+        "import 'active-handle-cjs'; export class CodeBuddyEngineAdapter {}",
+      );
+      const startedAt = Date.now();
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      expect(detail).toContain("Error [MODULE_NOT_FOUND]: Cannot find module 'absent-after-timer'");
+      expect(detail).not.toContain('ETIMEDOUT');
+      expect(detail.length).toBeLessThanOrEqual(2_000);
+    }, 35_000);
+
+    it('keeps fallback codes for optional packages missing everywhere', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeModules = path.join(runtime(), 'node_modules');
+      makeFile(
+        path.join(runtimeModules, 'chalk', 'index.js'),
+        [
+          "import accelerator from 'optional-accelerator';",
+          "try { await import('absent-everywhere-esm'); throw new Error('absent ESM loaded'); }",
+          "catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; }",
+          "if (accelerator !== 'MODULE_NOT_FOUND') throw new Error(`absent CJS code: ${accelerator}`);",
+          'export default { blue(value) { return value; } };',
+        ].join('\n'),
+      );
+      makeFile(path.join(runtimeModules, 'optional-accelerator', 'package.json'), JSON.stringify({ main: 'index.js' }));
+      makeFile(
+        path.join(runtimeModules, 'optional-accelerator', 'index.js'),
+        "try { require('absent-everywhere-cjs'); module.exports = 'loaded'; } catch (error) { module.exports = error.code; }",
+      );
+
+      expect(adapterResult(runChecks(tmpDir, 'win32', 'x64'))).toMatchObject({ passed: true });
+    });
+
+    it("keeps Node's source frame for a staged module syntax error", () => {
+      populateWin32Artifacts(tmpDir);
+      makeFile(path.join(runtime(), 'node_modules', 'chalk', 'index.js'), 'export default ;');
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const stagedChalkUrl = pathToFileURL(
+        fs.realpathSync(path.join(runtime(), 'node_modules', 'chalk', 'index.js')),
+      ).href;
+      expect(detail).toContain(`${stagedChalkUrl}:1`);
+      expect(detail).toContain("SyntaxError: Unexpected token ';'");
     });
   });
 
