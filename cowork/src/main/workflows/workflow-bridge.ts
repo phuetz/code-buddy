@@ -115,6 +115,9 @@ interface CoreToolRegistryModule {
 // Bridge
 // ──────────────────────────────────────────────────────────────────────────
 
+const BRIDGE_SHUT_DOWN_ERROR =
+  'Workflow bridge is shut down (Cowork is quitting): no workflow run can start';
+
 export class WorkflowBridge {
   private filePath: string;
   private runStore: WorkflowRunStore;
@@ -279,6 +282,16 @@ export class WorkflowBridge {
   }
 
   async replay(runId: string): Promise<WorkflowRunResult> {
+    if (this.stopped) {
+      return {
+        success: false,
+        status: 'failed',
+        duration: 0,
+        completedSteps: 0,
+        totalSteps: 0,
+        error: BRIDGE_SHUT_DOWN_ERROR,
+      };
+    }
     const prior = this.runStore.get(runId);
     if (!prior) {
       return {
@@ -334,14 +347,14 @@ export class WorkflowBridge {
     source: WorkflowRunSource,
     replayOf?: string
   ): Promise<WorkflowRunResult> {
-    if (this.trackedRunActive) {
+    if (this.stopped || this.trackedRunActive) {
       return {
         success: false,
         status: 'failed',
         duration: 0,
         completedSteps: 0,
         totalSteps: definition.nodes.filter((node) => node.type !== 'start' && node.type !== 'end').length,
-        error: 'Another visual workflow is already running',
+        error: this.stopped ? BRIDGE_SHUT_DOWN_ERROR : 'Another visual workflow is already running',
       };
     }
     this.trackedRunActive = true;
@@ -399,14 +412,16 @@ export class WorkflowBridge {
 
     // Lazy-boot orchestrator on first run.
     await this.ensureOrchestrator();
-    if (!this.orchestrator || !this.toolAgent) {
+    if (this.stopped || !this.orchestrator || !this.toolAgent) {
       return {
         success: false,
         status: 'failed',
         duration: 0,
         completedSteps: 0,
         totalSteps: totalNodes,
-        error: this.orchestratorBootError ?? 'Orchestrator unavailable',
+        error: this.stopped
+          ? BRIDGE_SHUT_DOWN_ERROR
+          : (this.orchestratorBootError ?? 'Orchestrator unavailable'),
       };
     }
 
@@ -493,13 +508,14 @@ export class WorkflowBridge {
   /**
    * Stop starting workflow actions (e.g. on app shutdown): queued tasks are no
    * longer dispatched, a confirmation answered afterwards runs no tool, and
-   * pending approvals are cancelled. A tool that already started is not undone.
+   * pending approvals are cancelled. A run requested afterwards is refused at
+   * once, and an orchestrator still booting never starts dispatching. Final and
+   * idempotent. A tool that already started is not undone.
    */
   shutdown(): void {
     this.stopped = true;
     this.orchestrator?.stop();
     this.toolAgent?.cancelPending(undefined, 'shutdown');
-    this.orchestrator?.stop();
   }
 
   // ──────── Internals ────────
@@ -736,6 +752,8 @@ export class WorkflowBridge {
           queueMicrotask(() => orchestrator.processQueue());
         });
 
+        // Shut down while the core was loading: this orchestrator never dispatches.
+        if (this.stopped) return;
         orchestrator.start();
         this.orchestrator = orchestrator;
         this.toolAgent = toolAgent;

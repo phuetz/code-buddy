@@ -202,13 +202,12 @@ describe('WorkflowBridge answers after the run ended (real Orchestrator)', () =>
     await vi.advanceTimersByTimeAsync(CORE_TASK_TIMEOUT_MS + 200);
     expect((await firstRun).success).toBe(false);
 
-    // A run requested after shutdown starts no action: no confirmation, no tool.
-    const lateRun = bridge.run(workflow.id);
-    await vi.advanceTimersByTimeAsync(1_000);
+    // A run requested after shutdown is refused at once, without waiting for the core
+    // timeout (see workflow-bridge-shutdown.test.ts): no confirmation, no tool.
+    const lateRun = await bridge.run(workflow.id);
+    expect(lateRun).toMatchObject({ success: false, error: expect.stringMatching(/shut down/i) });
     expect(requestConfirmation).toHaveBeenCalledTimes(1);
     expect(registry.execute).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(CORE_TASK_TIMEOUT_MS + 200);
-    expect((await lateRun).success).toBe(false);
   });
 
   it('still runs a promptly confirmed tool and publishes its node event', async () => {

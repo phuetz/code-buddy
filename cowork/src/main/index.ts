@@ -2452,6 +2452,12 @@ async function cleanupSandboxResources(): Promise<void> {
   // Disarm fleet reconnection now (the sandbox steps below can take tens of
   // seconds) and let the peer sockets close alongside them; awaited, bounded, below.
   const fleetBridgeClosing = shutdownFleetBridgeForQuit(fleetBridge);
+  // No workflow task, confirmation or tool starts while quitting; runs are refused.
+  try {
+    workflowBridge?.shutdown();
+  } catch (error) {
+    logError('[App] Error shutting down workflow bridge:', error);
+  }
 
   // 停止远程控制
   try {
@@ -2601,6 +2607,11 @@ app.on('before-quit', async (event) => {
       fleetDiscovery.stop();
       // Synchronously disarms fleet reconnection; sockets close best-effort.
       void shutdownFleetBridgeForQuit(fleetBridge);
+      try {
+        workflowBridge?.shutdown();
+      } catch {
+        /* best-effort */
+      }
       sessionManager?.dispose();
       try {
         closeDatabase();

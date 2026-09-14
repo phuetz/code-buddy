@@ -116,6 +116,138 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
 
+## Mission 12 — arrêt du pont workflows câblé dans la sortie de `main`
+
+**Livrée au pilote, non commitée** (2026-09-14, 03:15).
+
+### Constats et reproduction
+
+Deux nouveaux fichiers de tests, **6 rouges sur 7** sur la livraison de la mission 11 bis.
+
+`cowork/tests/workflow-bridge-shutdown.test.ts` (4 tests à ce stade, 4 rouges). Composants
+réels : `WorkflowBridge`, Orchestrator du noyau (gelé) et `CoworkToolAgent`. Factices : imports
+du noyau (qu'on peut retenir pour simuler un boot en cours), registre d'outils, service de
+confirmation et `userData`. Horloge du noyau simulée (`setTimeout`), jamais avancée pendant les
+assertions de refus : un run qui attendrait l'expiration du noyau reste « non réglé ».
+
+| Test | Mission 11 bis | Après |
+| --- | --- | --- |
+| run après `shutdown()`, pont jamais démarré → réglé tout de suite, erreur « shut down », aucun import du noyau, 0 timer, aucun enregistrement de run | **rouge** : run non réglé (le noyau démarre et attend 5 min) | vert |
+| orchestrateur déjà démarré : run puis replay après `shutdown()` → refus immédiats, aucun nouveau `startWorkflow`, aucun timer ajouté, historique inchangé | **rouge** : run non réglé | vert |
+| arrêt pendant l'import `orchestration/` retenu, puis import libéré → refus, `start()` jamais appelé, aucun `startWorkflow`, 0 timer ; un run ultérieur ne relance aucun boot | **rouge** : run non réglé | vert |
+| idem, import `tools/` retenu | **rouge** | vert |
+
+Pendant ces rouges, Vitest a aussi capturé **3 exceptions non gérées** du noyau : « Task
+'task_write' is not assigned » (`processQueue` → `startTask`). C'est la preuve que le dispatch
+reprenait après l'arrêt. L'Orchestrator démarrait tout de même, et le refus synchrone du pont à
+`task_assigned` (mission 11 bis) passait la tâche en échec avant le `startTask` du noyau. Dans
+Electron, ce serait une exception non capturée dans `main`. Ce chemin disparaît avec le correctif :
+aucun Orchestrator ne tourne après l'arrêt.
+
+`cowork/tests/workflow-bridge-quit-wiring.test.ts` (3 tests, 2 rouges). `main/index.ts` n'est pas
+importable en test : lecture de la source, lignes de commentaire ignorées.
+
+| Test | Avant | Après |
+| --- | --- | --- |
+| `cleanupSandboxResources` appelle `workflowBridge?.shutdown()` une fois, après `isCleaningUp = true` et `shutdownFleetBridgeForQuit(fleetBridge)`, avant le premier `await` | **rouge** (absent) | vert |
+| chemin dev de `before-quit` : appel après la fermeture Fleet, avant `closeDatabase()` | **rouge** (absent) | vert |
+| un seul `new WorkflowBridge(`, placé au boot avant la sortie ; `let workflowBridge: WorkflowBridge \| null = null;` ; aucun `getWorkflowBridge(` ; aucune affectation ni appel non optionnel dans les deux sorties | vert (garde) | vert |
+
+### Correctif
+
+`workflow-bridge.ts` :
+- `runTracked` refuse d'emblée après l'arrêt (même forme que le refus « Another visual workflow
+  is already running »), avant tout enregistrement de run, compilation ou boot. Message :
+  « Workflow bridge is shut down (Cowork is quitting): no workflow run can start ». `run()` et
+  `replay()` passent par là.
+- Boot différé : juste avant `orchestrator.start()`, si le pont a été arrêté pendant les
+  imports, retour sans démarrer ni conserver cet Orchestrator.
+- Après `await ensureOrchestrator()`, le même refus s'applique si le pont a été arrêté entre-temps.
+  C'est le cas d'un `run()` suivi d'un `shutdown()` dans le même tick, orchestrateur déjà démarré :
+  `run()` s'exécute de façon synchrone jusqu'à cet `await`.
+- `shutdown()` : suppression du second `orchestrator.stop()` (doublon laissé à la mission 11 bis,
+  sans effet) ; commentaire complété (refus immédiat, boot en cours, final et idempotent).
+
+`main/index.ts` (+11 lignes, 2 hunks, rien retiré) :
+- `cleanupSandboxResources()` (ligne 2457) : `workflowBridge?.shutdown()` dans un `try/catch`
+  journalisé, juste après `const fleetBridgeClosing = shutdownFleetBridgeForQuit(fleetBridge)`
+  et avant le premier `await`. Même idiome que `voiceBridge?.shutdown()` : une exception ne peut
+  pas empêcher `app.quit()` ni la fermeture de la base.
+- chemin dev de `before-quit` (ligne 2611) : même appel, `try/catch` best-effort comme
+  `closeDatabase()`, après `void shutdownFleetBridgeForQuit(fleetBridge)` et avant
+  `sessionManager?.dispose()`.
+- Aucun singleton : la variable de module créée au boot est utilisée par chaînage optionnel. Ordre
+  du lot 6 inchangé : `fleetDiscovery.stop()`, fermeture Fleet démarrée avant tout `await`,
+  attente bornée à 3 s avant `closeLogFile()`. `fleet-bridge-lifecycle.ts` et son test sont
+  inchangés (empreintes identiques).
+- `index.ts` ne contient aucun autre chemin de sortie (`app.exit`, `will-quit`, `app.relaunch`,
+  `process.exit` absents). SIGTERM/SIGINT passent par `app.quit()`, puis `before-quit`.
+
+### Test de la mission 11 bis mis à jour
+
+`workflow-bridge-late-confirmation.test.ts`, test « does not run a tool confirmed after the
+bridge shut down ». Le run lancé après l'arrêt attendait l'expiration du noyau (5 min simulées)
+avant d'échouer ; c'était l'ancien comportement. Il est désormais refusé tout de suite (erreur
+« shut down »), toujours sans confirmation ni outil. La partie sur le run en vol au moment de
+l'arrêt est inchangée.
+
+### Mutations (retrait temporaire d'une garde, puis restauration)
+
+| Garde retirée | Résultat |
+| --- | --- |
+| retour avant `orchestrator.start()` | 2 rouges (boot retenu `orchestration/` et `tools/`) |
+| refus en tête de `runTracked` | 4 rouges |
+| `this.stopped` dans la condition après `ensureOrchestrator` | **0 rouge** d'abord : le cas « même tick » n'était pas couvert. Test ajouté (« never starts a run requested in the same tick as shutdown on a running orchestrator ») → 1 rouge, vert après restauration |
+
+### Vérifications
+
+| Commande (dans `cowork/`) | Résultat |
+| --- | --- |
+| 7 nouveaux tests avant correctif | **6 rouges**, 1 vert (garde), 3 exceptions non gérées du noyau |
+| `workflow-bridge-shutdown` (5) + `quit-wiring` (3) + `late-confirmation` + `late-task` + `fleet-bridge-quit-lifecycle` | **5 fichiers, 32 tests verts** (avant ajout du test « même tick »), 0 erreur non gérée |
+| 17 fichiers qui lisent `main/index.ts` + 10 fichiers workflow (dont `late-*`, `persistence`, `integration`, `compilation`, `supervision-bridge`, `supervisor`, `force-confirmation`, `service`) | **27 fichiers, 218 tests verts** |
+| `shutdown` + `late-confirmation` + `late-task` + `quit-wiring`, `--sequence.shuffle` | **15/15 verts** |
+| `node scripts/lint.cjs --max-warnings 0` sur les 5 fichiers | Propre |
+| `tsc --noEmit -p tsconfig.json` | 20 erreurs, toutes dans le noyau `../src/` (baseline connue) ; **0 dans `cowork/src`** |
+| Prettier | 3 fichiers de test conformes ; toutes mes lignes du pont et de `index.ts` identiques à la sortie Prettier (les deux fichiers ne l'étaient déjà pas avant) |
+
+Electron non lancé : aucune sortie réelle n'est revendiquée. Le câblage est prouvé sur la
+source de `main`, et le comportement de `shutdown()` sur le vrai pont avec le vrai Orchestrator.
+
+Empreintes :
+
+| Fichier | Base → Après |
+| --- | --- |
+| `cowork/src/main/index.ts` | `d5639971…bcbc` → `f1acd716bb6eadd7af619f4d624194a5d8112f2bf6d1ac69712ea1c9f859c633` |
+| `cowork/src/main/workflows/workflow-bridge.ts` | `65fe8155…6571` → `f466590b994fa6fa02b1e12a62bb4d9da76922d2f1d8426b69b1ddfca99942fe` |
+| `cowork/tests/workflow-bridge-late-confirmation.test.ts` | `0eb16eb0…9745` → `9c87a9b2ee9c2f08c14c02870805e548f3093d3392291ba6638e93865570c2cb` |
+| `cowork/tests/workflow-bridge-shutdown.test.ts` | nouveau → `2261d481aae63c84914e1c851df49f7b1473b8dc2ac65607f26849e0357b0815` |
+| `cowork/tests/workflow-bridge-quit-wiring.test.ts` | nouveau → `795a7e1cf1c7989ba10d0096fe422de519f08b49db0ee2c4ecf784d4c3b457cd` |
+| inchangés : `fleet-bridge-lifecycle.ts`, `fleet-bridge-quit-lifecycle.test.ts`, `cowork-tool-agent.ts`, `workflow-bridge-late-task.test.ts`, `src/orchestration/orchestrator.ts` | `649ee14f…60d6`, `95cfee4c…8167`, `6837b123…a8cf`, `b19818cc…f924`, `3bc79850…f23d` |
+
+### Correction d'une affirmation de la mission 11 bis
+
+J'avais écrit que `shutdown()` « n'annulait que les approbations » et que « la file de
+l'Orchestrator restait active ». C'est faux : le `shutdown()` de HEAD (`017ba1aa8`) appelait déjà
+`this.orchestrator?.stop()` après `cancelPending`, comme le montre `git diff` contre HEAD. Seul
+point prouvé par le rouge de la mission 11 bis : un outil confirmé après l'arrêt s'exécutait,
+faute de drapeau `stopped` consulté par le pont. La mission 11 bis a ajouté ce drapeau et un
+second `stop()`, qui faisait doublon avec celui de HEAD ; ce doublon est retiré ici.
+
+### Limites
+
+- Un run **en vol** au moment de l'arrêt (workflow déjà démarré dans le noyau) n'est pas
+  interrompu : aucune action nouvelle ne démarre, mais sa promesse ne se règle qu'à l'expiration
+  du noyau (5 min). La sortie de `main` ne l'attend pas.
+- Un outil déjà lancé n'est pas interrompu. Les boîtes de confirmation ou d'approbation déjà
+  affichées ne sont pas retirées (renderer gelé).
+- Un `replay()` dont l'instantané contient des valeurs masquées répond toujours par son erreur
+  « Secret input required » et enregistre ce refus, même après l'arrêt. Réponse immédiate,
+  rien n'est exécuté ; branche non modifiée.
+- `shutdown()` est définitif. Aucun redémarrage du pont n'est prévu sans relancer Cowork, comme
+  pour la découverte Fleet du lot 6.
+- Garantie du câblage : lecture statique de la source, pas une sortie Electron réelle.
+
 ## Mission 11 bis — contre-relecture avant port : activité prouvée et arrêt du pont
 
 ### Constats et reproduction (vrai Orchestrator, vrai `CoworkToolAgent`)
@@ -126,9 +258,10 @@ livraison de la mission 11 :
    `completed`/`failed`/`cancelled`, y compris une tâche absente ou un statut `undefined`.
    Reproduit en faisant renvoyer `undefined` au `getTask` du vrai noyau pendant qu'une
    confirmation attend : l'outil était exécuté (`registry.execute` appelé 1 fois).
-2. **Arrêt du pont.** `WorkflowBridge.shutdown()` n'annulait que les approbations. Un outil
-   confirmé après `shutdown()` était exécuté (`registry.execute` appelé 1 fois), et la file de
-   l'Orchestrator restait active. Un premier jet de ce test (éventail de 5 outils) ne produisait
+2. **Arrêt du pont.** ~~`WorkflowBridge.shutdown()` n'annulait que les approbations.~~ Un outil
+   confirmé après `shutdown()` était exécuté (`registry.execute` appelé 1 fois)~~, et la file de
+   l'Orchestrator restait active~~. *(Corrigé à la mission 12 : HEAD appelait déjà
+   `orchestrator.stop()` ; seul le drapeau `stopped` manquait.)* Un premier jet de ce test (éventail de 5 outils) ne produisait
    pas de branches parallèles avec ce compilateur ; il a été remplacé, avant toute conclusion, par
    un outil unique suivi d'un run lancé après l'arrêt.
 
@@ -143,7 +276,8 @@ Constat annexe, non modifié (main gelé) : `WorkflowBridge.shutdown()` n'est ap
   the bridge is stopped or the task is not running ») et ne démarre rien : ni confirmation, ni
   approbation, ni `set_variable`, ni événement.
 - `shutdown()` passe `stopped` à vrai, appelle `orchestrator.stop()` (API existante du noyau, plus
-  aucun dispatch de la file) et annule les approbations en attente comme avant.
+  aucun dispatch de la file) et annule les approbations en attente comme avant. *(Mission 12 :
+  `stop()` était déjà appelé à HEAD ; l'appel ajouté ici faisait doublon, retiré.)*
 - Commentaire de `emitWorkflowEvent` corrigé : les événements de nœud tardifs ne sont plus publiés
   du tout ; la garde n'y protège plus que l'historique persistant du run actif.
 - Test de la mission 9 : son Orchestrator factice déclare désormais la tâche `in_progress` à
@@ -172,9 +306,10 @@ Empreintes : `workflow-bridge.ts` `ffc565ed…2744` →
 Limites :
 - un outil déjà démarré avant l'arrêt n'est pas interrompu ;
 - les boîtes de confirmation et d'approbation déjà affichées ne sont pas retirées (renderer gelé) ;
-- après `shutdown()`, un run lancé reste en file jusqu'à l'expiration du noyau (5 min) ; aucune
-  action ne démarre ;
-- câbler `shutdown()` dans la séquence de sortie de `main` reste à décider par le pilote.
+- ~~après `shutdown()`, un run lancé reste en file jusqu'à l'expiration du noyau (5 min) ; aucune
+  action ne démarre~~ (résolu mission 12 : refus immédiat) ;
+- ~~câbler `shutdown()` dans la séquence de sortie de `main` reste à décider par le pilote~~
+  (fait à la mission 12).
 
 ## Mission 11 — confirmation/approbation après la fin du run : pas d'exécution, pas de publication
 
@@ -1299,6 +1434,39 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
 
 ## Journal
 
+### 03:01 — Mission 12 : fermer le circuit réel de l'arrêt du pont workflows (avant toute modification)
+
+`main/index.ts` dégelé pour moi seul (fichier identique au primaire, vérifié par le pilote) ;
+helpers lifecycle permis. Noyau d'orchestration et renderer gelés. Demandé :
+- appeler `WorkflowBridge.shutdown()` dans la sortie normale et dans le chemin dev, sans créer
+  de singleton, en préservant la fermeture Fleet, la découverte et le délai de 3 s du lot 6 ;
+- un run demandé après l'arrêt est refusé tout de suite avec une erreur claire, au lieu
+  d'attendre 5 min en file ;
+- un arrêt pendant un `ensureOrchestrator` en cours ne réactive pas le dispatch ensuite.
+
+Tests déterministes : vrai pont, imports du noyau factices et différés, câblage de `main`
+vérifié par lecture de la source (Electron non lancé, aucune sortie réelle revendiquée).
+
+Constats avant modification :
+- `main` crée un seul `workflowBridge` au boot (`let workflowBridge: WorkflowBridge | null`,
+  `new WorkflowBridge()` ligne 1906) ; aucune des deux sorties ne l'arrête ;
+- `runTracked` ne teste pas `stopped` ;
+- le boot différé appelle `orchestrator.start()` sans retester `stopped` ;
+- `shutdown()` appelle `orchestrator.stop()` deux fois, doublon sans effet.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/main/index.ts` (lot 6) | `d56399712af4e7d2a7f81115da6e48d75997032069e954a60621e3b2f935bcbc` |
+| `cowork/src/main/workflows/workflow-bridge.ts` (mission 11 bis) | `65fe8155a9d2181f5fc455d3be64fb5d2414031a92be5e04a48d8c9416646571` |
+| `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` (lot 6) | `649ee14f09441c7dc5427e77e08c7c307e99f292b01c76b7698e24f36cbd60d6` |
+| `cowork/tests/fleet-bridge-quit-lifecycle.test.ts` (lot 6) | `95cfee4c125e7f189d0ce4fd4e34eb1bd166d8bad4dfec2397228ed9fe7f8167` |
+| `cowork/tests/workflow-bridge-late-confirmation.test.ts` (mission 11 bis) | `0eb16eb0aaadea4c2b2d2547ed5d00d566df34fde115148ff19d90b4cd3d9745` |
+| `cowork/tests/workflow-bridge-late-task.test.ts` (mission 11 bis) | `b19818cc8c29bb0d09ee479917a15a7c44a591f1323061d1345e59fde1f9f924` |
+| `cowork/src/main/workflows/cowork-tool-agent.ts` (mission 11) | `6837b1238f3da9a8e9f98e97d1887a9caeb5c12ec5c0ec1d6ecfdd92a15aa8cf` |
+| `src/orchestration/orchestrator.ts` (gelé, lecture seule) | `3bc798506647b4297d9fa4a1a16cdb7dfa808e25a86f861e5ab2396b8f75f23d` |
+
 ### 02:56 — Mission 11, contre-relecture avant port (avant toute modification)
 
 Points demandés :
@@ -1662,3 +1830,7 @@ Vérifications : 48 tests orchestration et 45 tests Cowork passent sous Node 20 
 Limites conservées : aucune annulation d'un effet externe déjà parti ; pas d'identité distincte entre les tentatives retry d'une même tâche ; dans un batch concurrent, une dépendance logique répétée vise la dernière occurrence créée dans l'instance. Les historiques d'instances restent conservés comme avant.
 
 Validation complète du noyau après intégration : `npm run validate` avec HOME/XDG temporaires et sans configuration fournisseur héritée termine avec **38 550 tests verts, 37 ignorés et 1 todo** (2 151 fichiers verts, 9 ignorés), lint sans erreur, typechecks et paquet verts. Le passage précédent dans l'environnement utilisateur avait 11 échecs sur trois fichiers lisant l'état local ; ils disparaissent dans le profil isolé. Revue indépendante finale favorable. Les tests ciblés workflows sous Node 20 ont aussi vérifié les confirmations tardives avec le noyau corrigé.
+
+### Contre-validation du raccordement de fermeture
+
+Le lot 12 est porté avec le noyau `2120d48d8` : neuf suites fermeture/workflows passent sous Node 20 (70 tests). Une revue supplémentaire a corrigé le replay expurgé qui écrivait encore dans l'historique après arrêt : le garde de `replay()` précède maintenant toute lecture/écriture. Le test reproduit le rouge avant correction, puis six suites (27 tests) passent sous Node 20 et 24. Le typecheck Cowork, le lint ciblé et `npm run validate -- tests/security/donnees-personnelles.test.ts` passent. Aucun arrêt Electron réel n'est revendiqué : le câblage est vérifié sur la source et le cycle de vie sur le pont.
