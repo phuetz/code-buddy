@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Cowork poursuite Opus et intégration 2026-09-14 | **Codex pilote, Claude Opus actif** | Branche `integration/improvements-persistence-2026-09-13`, local `3c519b2d3`, main publié `56e757447` | Renderer silence `a95e8814b`, sondes confinées `6de75ddf5`, slash staging `b62fa1b30`, assertion Windows `3c519b2d3`. Tests GUI 58, staging 90 Node20, /help confiné Node20/24, garde40 verts. | CI34791032153 : Linux20/22 et macOS20/22 verts, Windows22 rouge assertion corrigée localement ; prochain push après revue fermeture. Opus lots diagnostics/route périmée actifs, abonnement Max confirmé, aucun refus quota. |
+
 | P1 | Fraîcheur affichée des pairs Cowork 2026-09-14 | **Claude Opus + Codex — VALIDÉ LOCAL** | Branche intégration après `5cc171870`, port du lot 4 | Horloge commune, âge mis à jour, silence après 90 s distinct du statut authentifié ; aucun changement de routage/reconnexion. | Opus 233 tests voisins ; intégration 61 ciblés + confidentialité 40/40 ; lint/typecheck/build Vite verts ; Chromium réel sur fixtures vert. Lot 5 encore réservé à Opus ailleurs. |
 
 | P1 | Compilation TypeScript Cowork 2026-09-14 | **Codex — VALIDÉ LOCAL** | Branche `integration/improvements-persistence-2026-09-13`, après `2b8d62ca7` | Déclarations optionnelles du noyau incluses et alias OSConfig exporté comme type ; 20 diagnostics historiques éliminés. | Typecheck Cowork exit 0 ; validate ciblé sandbox 12/12, lint/typechecks/pack verts. Rapport `COWORK-TYPECHECK-2026-09-14.md`. |

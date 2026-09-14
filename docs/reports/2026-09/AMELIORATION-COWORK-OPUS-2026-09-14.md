@@ -10,6 +10,13 @@
 
 ## Statut
 
+**Lot 7 livré au pilote, non commité** (2026-09-14). Régression réelle confirmée et corrigée :
+`FleetRoutePreview` présentait comme route actuelle un résultat calculé pour d'autres
+paramètres. Une route n'est désormais affichée que pour la requête exacte qu'elle a obtenue ;
+une réponse tardive ou antérieure à une fermeture est ignorée ; une nouvelle prévisualisation
+reste possible pendant qu'une ancienne attend. Aucune requête automatique, payload inchangé,
+route conservée sur changement de fraîcheur ou de `peersById`. Un seul fichier source modifié.
+
 **Lot 6 livré au pilote, non commité** (2026-09-14). Les deux défauts de fermeture relevés au
 lot 3 sont corrigés :
 - la découverte périodique des pairs (premier passage à 5 s, puis toutes les 5 min) s'arrête à la
@@ -101,6 +108,67 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 7 — aperçu de route périmé dans `FleetRoutePreview`
+
+### Audit
+
+- `FleetCommandCenter` laisse modifier, pendant et après une prévisualisation, l'objectif
+  (zone de saisie), le profil, la confidentialité, le parallélisme, le mode council et, par
+  rafraîchissement des capacités, les pairs routables (`targetPeerIds`).
+- `FleetRoutePreview` (base lot 5) :
+  - `setPreview(result)` enregistrait le résultat sans les paramètres de la requête : il restait
+    affiché sous « Planned route » quels que soient les changements ;
+  - `loading` était un booléen global : bouton désactivé tant que l'ancienne requête attendait,
+    même pour de nouveaux paramètres ;
+  - la réponse d'une requête lancée avant un changement, ou avant la fermeture (✕), était affichée
+    en arrivant et rouvrait une route fermée.
+- `targetPeerIds` est un **nouveau tableau à chaque rendu** du Command Center
+  (`routablePeers.map((peer) => peer.id)`) : les heartbeats le recréent avec les mêmes ids. Il
+  faut donc comparer les valeurs, jamais l'identité, pour ne pas perdre la route sur un simple
+  événement de fraîcheur.
+
+### Reproduction
+
+`cowork/tests/fleet-route-preview-stale.test.tsx` (nouveau, 11 tests, promesses différées),
+exécuté sur la base lot 5 : **10 rouges**, 1 vert (garde « même requête »).
+- route toujours affichée après changement d'objectif, de profil, de confidentialité, de
+  parallélisme, de council, de pairs routables, et erreur toujours affichée ;
+- bouton encore désactivé après changement de paramètres pendant l'attente ;
+- impossible de relancer (routeur appelé 1 fois au lieu de 2) ;
+- réponse tardive rouvrant la route fermée.
+
+### Correctif (`cowork/src/renderer/components/FleetRoutePreview.tsx` seulement)
+
+- La requête est construite une fois par rendu, **à l'identique** de l'ancien payload (mêmes
+  champs et même ordre : `goal` normalisé, `privacyTag`, `dispatchProfile`, `parallelism`
+  effectif si > 1, `council` si vrai, `targetPeerIds` si non vide). Sa clé est
+  `JSON.stringify(request)`, donc une comparaison par valeur.
+- Le résultat est mémorisé avec la clé de sa requête (`shown = { requestKey, result }`). Si la
+  clé courante diffère, l'état est vidé **pendant le rendu**, sans effet : motif React « ajuster
+  l'état quand une prop change », gardé contre les boucles. Rien n'est affiché ni relancé.
+- `loading` est dérivé : `pendingRequestKey === requestKey`. Une attente pour d'anciens
+  paramètres ne bloque plus le bouton.
+- `latestAttempt` (ref, modifiée seulement dans les gestionnaires) : chaque prévisualisation et
+  chaque fermeture l'incrémentent ; une réponse dont l'essai n'est plus le dernier est ignorée.
+  La fermeture (`closePreview`) vide aussi l'attente.
+- Inchangés :
+  - algorithme et payload de routage, IPC, pas de requête automatique ;
+  - `RouteLaneList` et badges de fraîcheur du lot 5 ;
+  - locales et `fleet-peer-freshness.tsx` (gelé) ;
+  - `FleetCommandCenter.tsx`.
+
+### Tests du lot 7
+
+| Test | Base lot 5 | Après |
+| --- | --- | --- |
+| objectif modifié : route retirée, aucune requête automatique, bouton actif | rouge | vert |
+| profil / confidentialité / parallélisme / council / pairs routables modifiés (5 cas) | 5 rouges | 5 verts |
+| erreur précédente retirée quand les pairs routables changent | rouge | vert |
+| même requête (espaces autour de l'objectif, parallélisme équivalent en council, nouveau tableau aux mêmes ids, heartbeat dans `peersById`) : route conservée, routeur appelé 1 fois | vert (garde) | vert |
+| réponse tardive pour d'anciens paramètres : jamais affichée, bouton libéré | rouge | vert |
+| nouvelle prévisualisation pendant l'attente : 2ᵉ appel avec le nouveau payload exact ; la 2ᵉ réponse s'affiche, la 1ʳᵉ arrivée après ne la remplace pas | rouge | vert |
+| rafraîchissement en attente puis fermeture : la réponse ne rouvre pas la route | rouge | vert |
 
 ## Lot 6 — fermeture : découverte arrêtée et sockets fermées en parallèle
 
@@ -489,6 +557,26 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 7
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-route-preview-stale.test.tsx` sur la base lot 5 | **10 rouges** / 1 vert. |
+| `… run tests/fleet-route-preview-stale.test.tsx tests/fleet-route-preview.test.tsx tests/fleet-freshness-choice.test.tsx` après correctif | **23/23 verts** (payload existant et Command Center complet du lot 5 compris). |
+| 17 suites renderer Fleet voisines (dont `advanced-command-center`, `fleet-command-center-board`, `fleet-panel-connection`, `fleet-freshness*`, `i18n-french-support`) avec `--sequence.shuffle` | **17 fichiers, 131 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0 src/renderer/components/FleetRoutePreview.tsx tests/fleet-route-preview-stale.test.tsx` | Propre. |
+| `tsc --noEmit -p tsconfig.json`, filtré sur `src/` | Aucune erreur dans `cowork/src`. |
+| Prettier | Nouveau test conforme ; `FleetRoutePreview.tsx` : seuls les 3 écarts antérieurs subsistent. |
+| `sha256sum` de `FleetCommandCenter.tsx`, `fleet-peer-freshness.tsx` (gelé), `fleet-route-preview.test.tsx`, `fleet-freshness-choice.test.tsx`, locale `en`, `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts` | Identiques à la base du lot 7. |
+| Build global | Non relancé. |
+
+Empreintes à la livraison du lot 7 :
+
+| Fichier | Delta lot 7 | SHA-256 |
+| --- | --- | --- |
+| `cowork/src/renderer/components/FleetRoutePreview.tsx` | `useRef` ; `shown`/`pendingRequestKey`/`latestAttempt` ; `request`/`requestKey` ; vidage au rendu ; `runPreview` gardé ; `closePreview` (273 lignes au total) | `55d07d26177afc4b7be6f869c70ac9d99cb72f1921160f4413e6b6eb27a9f2a4` |
+| `cowork/tests/fleet-route-preview-stale.test.tsx` | nouveau, 221 lignes, 11 tests | `ad190a2a448ead80eb1323c08ab917e0f21e4c907517db3a9f5811913075c8fe` |
+
 ### Lot 6
 
 | Commande | Résultat |
@@ -642,6 +730,20 @@ Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30�
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 7
+
+- Pas d'Electron réel : preuve par rendu DOM (happy-dom) avec promesses différées.
+- Revenir exactement aux paramètres d'une route déjà retirée ne la fait pas réapparaître : l'état
+  est vidé dès le premier écart (il faut relancer la prévisualisation).
+- Ordre des pairs : la clé suit l'ordre du payload. Un même ensemble de pairs livré dans un autre
+  ordre retirerait la route ; le Command Center conserve l'ordre d'insertion du store, ce n'est
+  pas observé en pratique.
+- Commande pour le pilote (lot 7 seul, après revue) :
+  `git add cowork/src/renderer/components/FleetRoutePreview.tsx cowork/tests/fleet-route-preview-stale.test.tsx
+  docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
+  puis `git commit -m "fix(cowork): never show a route preview computed for other parameters"`.
+  `FleetRoutePreview.tsx` porte aussi le lot 5, déjà en intégration.
+
 ## Limites du lot 6
 
 - Pas d'Electron réel : le câblage de sortie est prouvé par lecture statique de `index.ts` ; le
@@ -774,6 +876,28 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
    réseau inutile.
 
 ## Journal
+
+### 02:13 — Lot 7 : aperçu de route périmé dans `FleetRoutePreview` (avant toute modification)
+
+Lot 6 copié et gelé pour revue Codex. En intégration, Codex a remplacé la jointure par saut de
+ligne de `useSilentPeerIds` par `JSON.stringify`/`parse` (preuve rouge → vert, id persisté
+contenant un saut de ligne). Ce fichier reste gelé ici, non recopié. Le renderer du lot 5 est
+passé sur Chromium réel ; build et typecheck primaires verts. Question : un résultat
+`routePreview` reste-t-il affiché comme route actuelle quand le parent change les paramètres
+pendant l'`await` ou après ? Si oui, corriger l'invalidation. Contraintes :
+- aucune requête automatique, aucun changement de l'algorithme ni du payload de routage ;
+- conserver la route sur un simple changement de fraîcheur ou de `peersById`.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/renderer/components/FleetRoutePreview.tsx` (lot 5) | `c558f7ffe59930822cb0db92a4cdee1c08beec78e06ef57243b01cdc4980f8db` |
+| `cowork/src/renderer/components/FleetCommandCenter.tsx` (lot 5, lecture seule ici) | `6577f700f26c2eab5a6f7a74abca6139b307fb1c2caeeff3d056e679bd151cbb` |
+| `cowork/src/renderer/components/fleet-peer-freshness.tsx` (gelé) | `cd8f73b56d0411b58bcde5c0733c3cc67e2ea4f687466fbaf28a1d5f95543f43` |
+| `cowork/tests/fleet-route-preview.test.tsx` (= HEAD) | `f81bdf3c2cb26186bd66d7df502ecd88b48e388bc36e6384392f3d87a6f6c3bf` |
+| `cowork/tests/fleet-freshness-choice.test.tsx` (lot 5) | `a2aeacfed4dfb0325dc7ea489967522e9c6669c23108a0ceca0aa109ae3f0c71` |
+| `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts` (lot 6, interdits) | `d5639971…bcbc`, `11760ffe…139e`, `649ee14f…60d6` |
 
 ### 02:03 — Lot 6 : fermeture, découverte arrêtée et sockets fermées en parallèle (avant toute modification)
 
@@ -993,3 +1117,17 @@ stoppe ses timers et ne publie plus après la sortie ; une sonde réseau déjà
 lancée reste soumise à son propre délai. La fermeture des sockets est parallèle,
 la promesse est partagée entre appels et le budget de sortie reste trois secondes.
 Aucun lancement Electron, Tailscale ou fournisseur réel n'est revendiqué.
+
+### Complément pilote fermeture et route périmée
+
+La revue fermeture a reproduit puis corrigé trois courses supplémentaires :
+ajout après arrêt, arrêt pendant sauvegarde et lecture du registre après arrêt.
+Les 47 tests bridge/lifecycle passent sous Node 20 et 24 ; l'écriture déjà lancée
+peut rester durable pour le prochain démarrage, sans événement ni connexion tardive.
+Cette correction est dans `bd1c23721`.
+
+Lot 7 porté sélectivement : 24 tests route/fraîcheur passent, TypeScript et build
+Vite complet passent. Revue indépendante sans défaut bloqueur : les paramètres
+sont comparés par valeur et une réponse ancienne ne remplace pas la nouvelle.
+Les appels IPC obsolètes ne sont pas annulés côté main ; leurs résultats ne sont
+pas affichés pour d'autres paramètres.
