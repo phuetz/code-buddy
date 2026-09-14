@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -6,17 +6,48 @@ import { selectFastestModel, type LlmCandidate } from '../../src/fleet/model-sel
 import { ModelScoreboard } from '../../src/fleet/model-scoreboard.js';
 import type { TurnMetricsRecord } from '../../src/observability/turn-metrics.js';
 
-/** A fresh, file-backed scoreboard in a temp path (each test gets its own). */
+/**
+ * Scoreboards live in a private temp directory. Their turn-metrics journal is
+ * always explicit: the default one is the ~/.codebuddy/turn-metrics.jsonl of the
+ * user running the tests, whose real latencies would replace the heuristic.
+ */
+let scratchDir = '';
 let sbCounter = 0;
+
+beforeAll(() => {
+  scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-model-selector-'));
+});
+
+afterAll(() => {
+  fs.rmSync(scratchDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
+
+beforeEach(() => {
+  const home = path.join(scratchDir, `home-${sbCounter}`);
+  vi.stubEnv('HOME', home);
+  vi.stubEnv('USERPROFILE', home);
+  vi.stubEnv('XDG_CONFIG_HOME', path.join(home, '.config'));
+  vi.stubEnv('XDG_DATA_HOME', path.join(home, '.local', 'share'));
+  vi.stubEnv('XDG_STATE_HOME', path.join(home, '.local', 'state'));
+  vi.stubEnv('XDG_CACHE_HOME', path.join(home, '.cache'));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+/** A fresh, file-backed scoreboard with no outcomes and no turn journal (each test gets its own). */
 function emptyScoreboard(): ModelScoreboard {
-  const file = path.join(os.tmpdir(), `cb-sb-test-${process.pid}-${sbCounter++}.json`);
-  return new ModelScoreboard(file);
+  const id = sbCounter++;
+  const file = path.join(scratchDir, `cb-sb-test-${id}.json`);
+  const turns = path.join(scratchDir, `cb-turns-test-${id}-absent.jsonl`);
+  return new ModelScoreboard(file, { turnMetricsJournalPath: turns });
 }
 
 function scoreboardWithTurnMetrics(records: TurnMetricsRecord[]): ModelScoreboard {
   const id = sbCounter++;
-  const outcomes = path.join(os.tmpdir(), `cb-sb-test-${process.pid}-${id}.jsonl`);
-  const turns = path.join(os.tmpdir(), `cb-turns-test-${process.pid}-${id}.jsonl`);
+  const outcomes = path.join(scratchDir, `cb-sb-test-${id}.jsonl`);
+  const turns = path.join(scratchDir, `cb-turns-test-${id}.jsonl`);
   fs.writeFileSync(turns, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
   return new ModelScoreboard(outcomes, { turnMetricsJournalPath: turns });
 }
