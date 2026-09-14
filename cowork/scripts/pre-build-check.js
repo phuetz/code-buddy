@@ -21,6 +21,92 @@ const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
 const RESET = '\x1b[0m';
 const CODE_BUDDY_PACKAGE_NAME = /^@phuetz\/code-buddy$/;
+const CORE_RUNTIME_DIR = '.bundle-resources/core-runtime';
+
+/**
+ * Child-process source that imports one staged runtime module in isolation.
+ *
+ * The runtime is staged below cowork/, itself below the repository, so Node's
+ * ancestor lookup finds `cowork/node_modules` and `<repo>/node_modules` and can
+ * satisfy a dependency the staged runtime lacks. `<resources>/dist` has no such
+ * ancestors. Every resolution landing outside the staged runtime is refused
+ * like a missing package — ESM through a resolve hook, CommonJS through
+ * Module._resolveFilename — with the codes Node uses, so optional
+ * `try { require() }` / `try { await import() }` fallbacks behave as packaged.
+ */
+function confinedImportSource(entryPath, runtimeRoot) {
+  const root = JSON.stringify(runtimeRoot);
+  const outside = `(file) => {
+    const relative = path.relative(${root}, file);
+    return relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative);
+  }`;
+  const hook = `import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const outside = ${outside};
+export async function resolve(specifier, context, nextResolve) {
+  const resolved = await nextResolve(specifier, context);
+  if (resolved.url.startsWith('file:') && outside(fileURLToPath(resolved.url))) {
+    const error = new Error(
+      \`Cannot find package '\${specifier}' in the staged runtime (resolved outside it: \${fileURLToPath(resolved.url)})\`,
+    );
+    error.code = context.conditions?.includes('require') ? 'MODULE_NOT_FOUND' : 'ERR_MODULE_NOT_FOUND';
+    // The default stack would repeat this whole data: URL in the check detail.
+    error.stack = \`Error [\${error.code}]: \${error.message}\`;
+    throw error;
+  }
+  return resolved;
+}
+`;
+  return `import Module, { register } from 'node:module';
+import path from 'node:path';
+const outside = ${outside};
+register('data:text/javascript,' + encodeURIComponent(${JSON.stringify(hook)}));
+const resolveFilename = Module._resolveFilename;
+Module._resolveFilename = function (request, ...rest) {
+  const file = resolveFilename.call(this, request, ...rest);
+  if (path.isAbsolute(file) && outside(file)) {
+    const error = new Error(\`Cannot find module '\${request}' in the staged runtime (resolved outside it: \${file})\`);
+    error.code = 'MODULE_NOT_FOUND';
+    throw error;
+  }
+  return file;
+};
+await import(${JSON.stringify(pathToFileURL(entryPath).href)});
+`;
+}
+
+/**
+ * Import a staged runtime module in a child Node process, confined to the
+ * staged runtime directory.
+ *
+ * @param {string} rootDir - Cowork project root (child cwd)
+ * @param {string} entryPath - Absolute path of the staged module to import
+ * @param {string} runtimeRoot - Absolute path of the staged runtime directory
+ * @returns {{ ok: boolean; detail?: string }}
+ */
+function probeStagedImport(rootDir, entryPath, runtimeRoot) {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      confinedImportSource(fs.realpathSync(entryPath), fs.realpathSync(runtimeRoot)),
+    ],
+    {
+      cwd: rootDir,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: { ...process.env, NODE_PATH: '', NODE_OPTIONS: '', NODE_ENV: 'test' },
+    },
+  );
+  if (probe.status === 0 && !probe.error) return { ok: true };
+  return {
+    ok: false,
+    detail: (probe.error?.message || probe.stderr || probe.stdout || 'ESM import failed')
+      .trim()
+      .slice(0, 2_000),
+  };
+}
 
 /**
  * @typedef {'fatal' | 'warn'} Severity
@@ -332,26 +418,9 @@ function runChecks(rootDir, platform, arch) {
       const stat = fs.statSync(absolutePath);
       exists = check.type === 'dir' ? stat.isDirectory() : stat.isFile();
       if (exists && check.type === 'esm-import') {
-        const probe = spawnSync(
-          process.execPath,
-          [
-            '--input-type=module',
-            '--eval',
-            `await import(${JSON.stringify(pathToFileURL(absolutePath).href)})`,
-          ],
-          {
-            cwd: rootDir,
-            encoding: 'utf8',
-            timeout: 30_000,
-            env: { ...process.env, NODE_PATH: '', NODE_OPTIONS: '', NODE_ENV: 'test' },
-          },
-        );
-        exists = probe.status === 0 && !probe.error;
-        if (!exists) {
-          detail = (probe.error?.message || probe.stderr || probe.stdout || 'ESM import failed')
-            .trim()
-            .slice(0, 2_000);
-        }
+        const probe = probeStagedImport(rootDir, absolutePath, path.join(rootDir, CORE_RUNTIME_DIR));
+        exists = probe.ok;
+        detail = probe.detail;
       }
       if (exists && check.type === 'runtime-manifest') {
         const validation = validateCoreRuntimeManifest(absolutePath);
@@ -414,7 +483,7 @@ function main() {
   process.exit(0);
 }
 
-module.exports = { runChecks, buildCheckList, validateCoreRuntimeManifest };
+module.exports = { runChecks, buildCheckList, probeStagedImport, validateCoreRuntimeManifest };
 
 if (require.main === module) {
   main();

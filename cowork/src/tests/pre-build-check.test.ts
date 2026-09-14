@@ -361,6 +361,84 @@ describe('pre-build-check: runChecks', () => {
     expect(result.hasFatal).toBe(true);
   });
 
+  // The fixture parent stands for the repository root: a real checkout keeps
+  // node_modules above cowork/.bundle-resources/core-runtime, <resources>/dist does not.
+  describe('staged imports ignore ancestor node_modules', () => {
+    const stagedImportResults = (result: { results: Array<{ relPath: string }> }) =>
+      result.results.filter((entry) =>
+        /core-runtime\/dist\/(desktop\/codebuddy-engine-adapter|agent\/codebuddy-agent)\.js$/.test(
+          entry.relPath,
+        ),
+      );
+
+    it('blocks packaging when a staged ESM dependency only resolves from an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeChalk = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules', 'chalk');
+      fs.cpSync(runtimeChalk, path.join(parentDir, 'node_modules', 'chalk'), { recursive: true });
+      fs.rmSync(runtimeChalk, { recursive: true });
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((probe as { detail?: string }).detail).toContain("Cannot find package 'chalk'");
+      }
+    });
+
+    it('blocks packaging when a staged CommonJS require only resolves from an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeChalk = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules', 'chalk');
+      makeFile(path.join(runtimeChalk, 'package.json'), JSON.stringify({ main: 'index.cjs' }));
+      makeFile(
+        path.join(runtimeChalk, 'index.cjs'),
+        "require('ancestor-only-cjs'); module.exports = { blue(value) { return value; } };",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((probe as { detail?: string }).detail).toContain("Cannot find module 'ancestor-only-cjs'");
+      }
+    });
+
+    it('keeps optional fallbacks working when the optional package only exists in an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeModules = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules');
+      makeFile(
+        path.join(runtimeModules, 'chalk', 'index.js'),
+        [
+          "import accelerator from 'optional-accelerator';",
+          "try { await import('ancestor-only-esm'); throw new Error('ancestor ESM leaked'); }",
+          "catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; }",
+          "if (accelerator !== 'MODULE_NOT_FOUND') throw new Error(`ancestor CJS leaked: ${accelerator}`);",
+          'export default { blue(value) { return value; } };',
+        ].join('\n'),
+      );
+      makeFile(path.join(runtimeModules, 'optional-accelerator', 'package.json'), JSON.stringify({ main: 'index.js' }));
+      makeFile(
+        path.join(runtimeModules, 'optional-accelerator', 'index.js'),
+        "try { require('ancestor-only-cjs'); module.exports = 'leaked'; } catch (error) { module.exports = error.code; }",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+      makeFile(
+        path.join(parentDir, 'node_modules', 'ancestor-only-esm', 'package.json'),
+        JSON.stringify({ type: 'module', exports: './index.js' }),
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-esm', 'index.js'), 'export default 1;');
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: true, severity: 'fatal' });
+      }
+    });
+  });
+
   it('reports hasFatal when dist-electron directory is missing', () => {
     populateDarwinArtifacts(tmpDir, 'arm64');
     fs.rmSync(path.join(tmpDir, 'dist-electron'), { recursive: true });
