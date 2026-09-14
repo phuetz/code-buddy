@@ -144,7 +144,16 @@ export class PluginManager extends EventEmitter {
     const entries = await fs.readdir(this.config.pluginDir, { withFileTypes: true });
 
     // Load all plugins in parallel for faster startup
-    const directories = entries.filter(entry => entry.isDirectory());
+    const candidates = entries.filter(entry => entry.isDirectory());
+    const discovered = await Promise.all(candidates.map(async entry => {
+      // These are managed storage containers, not broken plugins. Still allow
+      // an explicit manifest if a user intentionally installs one under a reserved name.
+      if (entry.name === 'cache' || entry.name === 'installed') {
+        return await fs.pathExists(path.join(this.config.pluginDir, entry.name, 'manifest.json')) ? entry : null;
+      }
+      return entry;
+    }));
+    const directories = discovered.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const total = directories.length;
 
     this.emit('plugins:loading', { total, phase: 'starting' });

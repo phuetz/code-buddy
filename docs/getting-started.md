@@ -44,6 +44,19 @@ npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
 npx @phuetz/code-buddy@latest
 ```
 
+## Interactive terminal
+
+The compact Ink interface shows the active provider/model, edit permissions and a multiline draft. It stays editable while the agent works: pressing Enter during a reply queues the next message; starting that queued turn preserves your newer draft.
+
+- **Enter:** send, or queue while working.
+- **Ctrl+J:** insert a newline (Shift+Enter also works in terminals that distinguish it).
+- **Up/Down:** history on a single-line prompt, cursor navigation within a multiline draft.
+- **Ctrl+A / Ctrl+E:** start/end of the draft; **Ctrl+U:** clear before the cursor.
+- **Esc:** cancel the current operation; **Ctrl+C:** quit.
+- **/** opens command suggestions; **@** completes file references; **Shift+Tab** changes edit permissions.
+
+Starting `buddy` in your home directory or a drive root no longer runs deep cartography or starts background semantic indexing over your personal files. Open a project directory to enable project profiling. A ChatGPT subscription uses its Codex model family; stale API-only defaults such as GPT-4o are ignored in favor of the detected subscription default.
+
 ## First Run — free, in under 2 minutes
 
 You do **not** need an API key, and you do **not** need to edit any environment

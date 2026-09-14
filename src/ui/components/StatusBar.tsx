@@ -365,29 +365,32 @@ export function MiniStatusBar({
   tokenCount,
   cost,
   modelName,
+  providerName,
   mode = 'code',
   yolo = false,
 }: {
   tokenCount: number;
   cost?: number;
   modelName?: string;
+  providerName?: string;
   mode?: string;
   yolo?: boolean;
 }) {
   const { colors } = useTheme();
 
   return (
-    <Box>
+    <Box flexWrap="wrap">
       {mode && (
         <Text color={mode === 'plan' ? colors.info : colors.primary}>
-          {mode === 'plan' ? '📋' : mode === 'ask' ? '❓' : '💻'}
+          {mode}
         </Text>
       )}
-      {yolo && <Text color={colors.error}> 🔥</Text>}
+      {yolo && <Text color={colors.error}> · YOLO</Text>}
       <Text dimColor> • </Text>
+      {providerName && <Text color={colors.textMuted}>{providerName} · </Text>}
       {modelName && (
         <>
-          <Text color={colors.accent}>≋ {modelName}</Text>
+          <Text bold color={colors.accent}>{modelName}</Text>
           <Text dimColor> • </Text>
         </>
       )}

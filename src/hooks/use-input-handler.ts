@@ -84,6 +84,19 @@ export function useInputHandler({
     return sessionFlags.allOperations;
   });
 
+  const runningTurn = useRef(false);
+  const pendingMessages = useRef<string[]>([]);
+  const [queuedMessageCount, setQueuedMessageCount] = useState(0);
+
+  useEffect(() => {
+    if (isProcessing || isStreaming || runningTurn.current) return;
+    const next = pendingMessages.current.shift();
+    if (next !== undefined) {
+      setQueuedMessageCount(pendingMessages.current.length);
+      void processUserMessage(next);
+    }
+  }, [isProcessing, isStreaming, queuedMessageCount]);
+
   // Track last escape time for double-escape detection
   const lastEscapeTimeRef = useRef<number>(0);
   const DOUBLE_ESCAPE_THRESHOLD = 500; // ms
@@ -427,7 +440,12 @@ export function useInputHandler({
       if (userInput.startsWith("/")) {
         await handleDirectCommand(userInput);
       } else {
-        await processUserMessage(userInput);
+        if (runningTurn.current || pendingMessages.current.length > 0) {
+          pendingMessages.current.push(userInput);
+          setQueuedMessageCount(pendingMessages.current.length);
+        } else {
+          await processUserMessage(userInput);
+        }
       }
     }
   };
@@ -470,12 +488,13 @@ export function useInputHandler({
     onSubmit: handleInputSubmit,
     onSpecialKey: handleSpecialKey,
     disabled: isConfirmationActive,
+    multiline: true,
   });
 
   // Hook up the actual input handling
   useInput((inputChar: string, key: Key) => {
     handleInput(inputChar, key);
-  });
+  }, { isActive: !isConfirmationActive });
 
   // Update command suggestions when input changes
   useEffect(() => {
@@ -519,6 +538,7 @@ export function useInputHandler({
   };
 
   const processUserMessage = async (userInput: string) => {
+    runningTurn.current = true;
     const mySeq = ++turnSeqRef.current;
     goalInterruptedRef.current = false;
     const userEntry: ChatEntry = {
@@ -538,7 +558,8 @@ export function useInputHandler({
 
     setIsProcessing(true);
     setCurrentActivity?.('Sending to LLM...');
-    clearInput();
+    // The submit handler already cleared the sent text. A queued turn must
+    // preserve whatever draft the user is now editing.
 
     let fullResponseContent = "";
     try {
@@ -739,6 +760,8 @@ export function useInputHandler({
       setCurrentActivity?.('');
     }
 
+    runningTurn.current = false;
+    setIsStreaming(false);
     setIsProcessing(false);
     setCurrentActivity?.('');
     processingStartTime.current = 0;
@@ -766,10 +789,12 @@ export function useInputHandler({
       }
       // Skip the continuation if a newer turn started while we were judging —
       // the user's message preempts the loop and gets judged after its turn.
-      if (outcome?.continuationPrompt && turnSeqRef.current === mySeq) {
+      if (outcome?.continuationPrompt && turnSeqRef.current === mySeq && pendingMessages.current.length === 0) {
         const continuation = outcome.continuationPrompt;
         setTimeout(() => {
-          void processUserMessage(continuation);
+          if (turnSeqRef.current === mySeq && !runningTurn.current && pendingMessages.current.length === 0) {
+            void processUserMessage(continuation);
+          }
         }, 50);
       }
     } catch (error) {
@@ -792,6 +817,7 @@ export function useInputHandler({
     availableModels,
     agent,
     autoEditEnabled,
+    queuedMessageCount,
     handleInputSubmit,
   };
 }

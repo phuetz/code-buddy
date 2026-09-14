@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Box, Text, useInput, DOMElement } from "ink";
+import { Box, Text, DOMElement } from "ink";
 import type { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { StatusBlock } from "./StatusBlock.js";
@@ -16,13 +16,11 @@ import {
   ConfirmationOptions,
 } from "../../utils/confirmation-service.js";
 import ApiKeyInput from "./ApiKeyInput.js";
-import { renderColorBanner } from "../../utils/ascii-banner.js";
 import { ThemeProvider, useTheme } from "../context/theme-context.js";
 import { getErrorMessage } from "../../types/index.js";
 import { MiniStatusBar } from "./StatusBar.js";
-import { KeyboardHelp, useKeyboardHelp, KeyboardHelpButton } from "./KeyboardHelp.js";
+import { KeyboardHelp, useKeyboardHelp } from "./KeyboardHelp.js";
 import { ToastProvider } from "./ToastNotifications.js";
-import { logger } from "../../utils/logger.js";
 import { getTTSManager } from "../../input/text-to-speech.js";
 import {
   announceToScreenReader,
@@ -43,7 +41,7 @@ function ChatInterfaceWithAgent({
   agent: CodeBuddyAgent;
   initialMessage?: string;
 }) {
-  const { colors, theme } = useTheme();
+  const { colors } = useTheme();
   const { settings } = useAccessibilitySettings();
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -145,6 +143,7 @@ function ChatInterfaceWithAgent({
     commandSuggestions,
     availableModels,
     autoEditEnabled,
+    queuedMessageCount,
     handleInputSubmit,
   } = useInputHandler({
     agent,
@@ -158,48 +157,17 @@ function ChatInterfaceWithAgent({
     processingStartTime,
     isProcessing,
     isStreaming,
-    isConfirmationActive: !!confirmationOptions,
+    isConfirmationActive: !!confirmationOptions || !!pendingQuestion || keyboardHelp.isVisible,
     appendStreamingContent,
     finalizeStreamingEntry,
     updateToolCallEntry,
   });
 
   useEffect(() => {
-    // Only clear console on non-Windows platforms or if not PowerShell
-    // Windows PowerShell can have issues with console.clear() causing flickering
-    const isWindows = process.platform === "win32";
-    const isPowerShell =
-      process.env.ComSpec?.toLowerCase().includes("powershell") ||
-      process.env.PSModulePath !== undefined;
-
-    if (!isWindows || !isPowerShell) {
-      process.stdout.write('\x1b[2J\x1b[0f'); // ANSI escape code to clear screen
-    }
-
-    // Add top padding
-    logger.info("    ");
-
-    // Generate logo with MIT-licensed ascii-banner (replaces GPL cfonts)
-    const logoOutput = renderColorBanner("CODE BUDDY", ["magenta", "cyan"]);
-
-    // Add horizontal margin (2 spaces) to match Ink paddingX={2}
-    const logoLines = logoOutput.split("\n");
-    logoLines.forEach((line: string) => {
-      if (line.trim()) {
-        logger.info(" " + line); // Add 2 spaces for horizontal margin
-      } else {
-        logger.info(line); // Keep empty lines as-is
-      }
-    });
-
-    logger.info(" "); // Spacing after logo
-
-    setChatHistory([]);
-
     // Announce to screen readers
     if (settings.screenReader) {
       announceToScreenReader(
-        'Code Buddy started. Chat interface ready. Press Ctrl+H for help.',
+        'Code Buddy started. Chat interface ready. Type /help for commands.',
         'polite'
       );
     }
@@ -509,38 +477,13 @@ function ChatInterfaceWithAgent({
 
   return (
     <Box flexDirection="column" paddingX={2}>
-      {/* Show tips only when no chat history and no confirmation dialog */}
       {chatHistory.length === 0 && !confirmationOptions && (
-        <Box flexDirection="column" marginBottom={2}>
-          <Text color={colors.primary} bold>
-            Tips for getting started:
-          </Text>
-          <Box marginTop={1} flexDirection="column">
-            <Text color={colors.textMuted}>
-              1. Ask questions, edit files, or run commands.
-            </Text>
-            <Text color={colors.textMuted}>2. Be specific for the best results.</Text>
-            <Text color={colors.textMuted}>
-              3. Create CODEBUDDY.md files to customize your interactions with Code Buddy.
-            </Text>
-            <Text color={colors.textMuted}>
-              4. Press Shift+Tab to toggle auto-edit mode.
-            </Text>
-            <Text color={colors.textMuted}>5. /help for more information.</Text>
-            <Text color={colors.textMuted}>6. /theme to change the theme, /avatar to change avatars.</Text>
-          </Box>
-          <Box marginTop={1}>
-            <KeyboardHelpButton />
-          </Box>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color={colors.primary}>Code Buddy</Text>
+          <Text color={colors.textMuted} wrap="truncate-middle">{process.cwd()}</Text>
+          <Text color={colors.textMuted}>Ask a question or describe a change. /help commands · /model choose a model</Text>
         </Box>
       )}
-
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color={colors.textMuted}>
-          Type your request in natural language. Ctrl+C to clear, 'exit' to
-          quit.
-        </Text>
-      </Box>
 
       <Box flexDirection="column" ref={scrollRef}>
         <ChatHistory
@@ -572,7 +515,7 @@ function ChatInterfaceWithAgent({
         />
       )}
 
-      {!confirmationOptions && (
+      {!confirmationOptions && !pendingQuestion && !keyboardHelp.isVisible && (
         <>
           <StatusBlock
             isActive={isProcessing || isStreaming}
@@ -581,6 +524,7 @@ function ChatInterfaceWithAgent({
             activity={currentActivity}
           />
 
+          {queuedMessageCount > 0 && <Text color={colors.info}>{queuedMessageCount} message(s) queued · sent after the current reply</Text>}
           <ChatInput
             input={input}
             cursorPosition={cursorPosition}
@@ -589,20 +533,20 @@ function ChatInterfaceWithAgent({
             mode={agent.getMode()}
           />
 
-          <Box flexDirection="row" marginTop={1} justifyContent="space-between">
-            <Box flexDirection="row">
+          <Text color={colors.textMuted} dimColor>
+            {isProcessing || isStreaming ? 'Enter queue' : 'Enter send'} · Ctrl+J newline · Esc cancel · Ctrl+C quit
+          </Text>
+
+          <Box flexDirection="row" flexWrap="wrap" marginTop={1} justifyContent="space-between">
+            <Box flexDirection="row" flexWrap="wrap">
               <Box marginRight={2}>
                 <Text color={colors.primary}>
-                  {autoEditEnabled ? "▶" : "⏸"} auto-edit:{" "}
-                  {autoEditEnabled ? "on" : "off"}
+                  {autoEditEnabled ? "Edits: automatic" : "Edits: ask first"}
                 </Text>
                 <Text color={colors.textMuted} dimColor>
                   {" "}
                   (shift + tab)
                 </Text>
-              </Box>
-              <Box marginRight={2}>
-                <Text color={colors.secondary}>◐ {theme.name}</Text>
               </Box>
               <MCPStatus />
             </Box>
@@ -610,6 +554,7 @@ function ChatInterfaceWithAgent({
               <MiniStatusBar
                 tokenCount={tokenCount}
                 modelName={agent.getCurrentModel()}
+                providerName={agent.getClient().getProviderName()}
                 mode={agent.getMode()}
                 yolo={agent.isYoloModeEnabled()}
               />

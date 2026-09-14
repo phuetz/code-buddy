@@ -31,7 +31,9 @@ const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   { keys: 'Shift+Tab', description: 'Toggle auto-edit mode', category: 'Navigation' },
 
   // Editing
-  { keys: 'Ctrl+C', description: 'Clear current input / Interrupt', category: 'Editing' },
+  { keys: 'Ctrl+C', description: 'Quit Code Buddy', category: 'Session' },
+  { keys: 'Ctrl+J', description: 'Insert a new line', category: 'Editing' },
+  { keys: 'Enter', description: 'Send message (queue while working)', category: 'Editing' },
   { keys: 'Ctrl+U', description: 'Clear line', category: 'Editing' },
   { keys: 'Ctrl+W', description: 'Delete word', category: 'Editing' },
   { keys: 'Ctrl+K', description: 'Delete to end of line', category: 'Editing' },
@@ -45,7 +47,7 @@ const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   { keys: '/test', description: 'Run tests', category: 'Tools' },
 
   // View
-  { keys: '?', description: 'Toggle this help', category: 'View' },
+  { keys: '/help', description: 'Show help', category: 'View' },
   { keys: '/theme', description: 'Change theme', category: 'View' },
   { keys: '/avatar', description: 'Change avatars', category: 'View' },
   { keys: '/stats', description: 'Show statistics', category: 'View' },
@@ -126,7 +128,7 @@ export function KeyboardHelp({
     if (input === '?' || key.escape || key.return) {
       onClose();
     }
-  });
+  }, { isActive: isVisible });
 
   if (!isVisible) return null;
 
@@ -235,7 +237,7 @@ export function KeyboardHelpButton() {
   return (
     <Box>
       <Text dimColor>
-        Press <Text bold color={colors.accent}>?</Text> for help
+        Type <Text bold color={colors.accent}>/help</Text> for commands
       </Text>
     </Box>
   );
