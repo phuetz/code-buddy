@@ -15,6 +15,7 @@ const { computeDistDigest } = require('../../../scripts/runtime-manifest-utils.c
   };
 };
 const {
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
   collectInstalledRuntimePackagePaths,
   copyTreeWithHardlinks,
   prepareCoreRuntime,
@@ -23,9 +24,15 @@ const {
 } = require(
   '../../scripts/prepare-core-runtime.js',
 ) as {
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES: readonly string[];
   collectInstalledRuntimePackagePaths: (
     coreRoot: string,
-    options?: { platform?: string; arch?: string; includeRootOptional?: boolean },
+    options?: {
+      platform?: string;
+      arch?: string;
+      includeRootOptional?: boolean;
+      requiredOptionalDependencies?: readonly string[];
+    },
   ) => string[];
   copyTreeWithHardlinks: (
     source: string,
@@ -43,6 +50,7 @@ const {
     platform?: string;
     arch?: string;
     includeRootOptional?: boolean;
+    requiredOptionalDependencies?: readonly string[];
     useCoworkNativeOverrides?: boolean;
     env?: Record<string, string | undefined>;
     spawnSync?: (...args: unknown[]) => {
@@ -72,6 +80,7 @@ const {
         distPath: string;
         entrypoint: string;
       };
+      requiredOptionalDependencies: string[];
       nativeOverrides: string[];
     };
   };
@@ -109,6 +118,27 @@ function writeFile(filePath: string, content: string): void {
 function writePackage(root: string, packagePath: string, packageJson: object, index = ''): void {
   writeFile(path.join(root, packagePath, 'package.json'), JSON.stringify(packageJson));
   if (index) writeFile(path.join(root, packagePath, 'index.js'), index);
+}
+
+/** Root optional packages Cowork stages for its slash-command gateway. */
+const COWORK_REQUIRED_OPTIONAL = {
+  '@google/generative-ai': '^0.21.0',
+  'string-width': '^7.2.0',
+};
+
+function installCoworkRequiredOptional(coreRoot: string): void {
+  writePackage(
+    coreRoot,
+    'node_modules/@google/generative-ai',
+    { name: '@google/generative-ai', main: 'index.js' },
+    'exports.GoogleGenerativeAI = class GoogleGenerativeAI {};',
+  );
+  writePackage(
+    coreRoot,
+    'node_modules/string-width',
+    { name: 'string-width', type: 'module', exports: './index.js' },
+    'export default (value) => value.length;',
+  );
 }
 
 function writeCoreRuntimeManifest(
@@ -202,6 +232,84 @@ describe('collectInstalledRuntimePackagePaths', () => {
     expect(() => collectInstalledRuntimePackagePaths(coreRoot)).toThrow(
       /Invalid installed dependency name/,
     );
+  });
+
+  describe('Cowork-required optional dependencies', () => {
+    function requiredOptionalFixture(): string {
+      const root = temporaryRoot();
+      writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          dependencies: { 'fixture-a': '1.0.0' },
+          optionalDependencies: { ...COWORK_REQUIRED_OPTIONAL, 'fixture-root-optional': '1.0.0' },
+        }),
+      );
+      writePackage(root, 'node_modules/fixture-a', {});
+      writePackage(root, 'node_modules/fixture-root-optional', {});
+      writePackage(root, 'node_modules/@google/generative-ai', {});
+      writePackage(root, 'node_modules/string-width', { dependencies: { 'strip-ansi': '^7.1.0' } });
+      // string-width needs strip-ansi 7 nested; the hoisted strip-ansi 6 is not in its closure.
+      writePackage(root, 'node_modules/string-width/node_modules/strip-ansi', {
+        dependencies: { 'ansi-regex': '^6.0.1' },
+      });
+      writePackage(root, 'node_modules/strip-ansi', {});
+      writePackage(root, 'node_modules/ansi-regex', {});
+      return root;
+    }
+
+    it('stages exactly the Cowork list with its installed closure, not every root optional', () => {
+      expect(COWORK_REQUIRED_OPTIONAL_DEPENDENCIES).toEqual(Object.keys(COWORK_REQUIRED_OPTIONAL));
+      expect(
+        collectInstalledRuntimePackagePaths(requiredOptionalFixture(), {
+          platform: 'linux',
+          arch: 'x64',
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toEqual([
+        'node_modules/@google/generative-ai',
+        'node_modules/ansi-regex',
+        'node_modules/fixture-a',
+        'node_modules/string-width',
+        'node_modules/string-width/node_modules/strip-ansi',
+      ]);
+    });
+
+    it('names a required optional dependency missing from the source install', () => {
+      const root = requiredOptionalFixture();
+      fs.rmSync(path.join(root, 'node_modules', 'string-width'), { recursive: true });
+
+      expect(() =>
+        collectInstalledRuntimePackagePaths(root, {
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toThrow(
+        'Cowork-required optional dependency is not installed: string-width ' +
+          '(the packaged slash-command gateway imports it; run npm install without --omit=optional)',
+      );
+    });
+
+    it('refuses a required dependency the core package does not declare', () => {
+      expect(() =>
+        collectInstalledRuntimePackagePaths(requiredOptionalFixture(), {
+          requiredOptionalDependencies: ['ansi-regex'],
+        }),
+      ).toThrow(/Cowork-required dependency ansi-regex is not declared by the core package/);
+    });
+
+    it('fails instead of silently skipping a required dependency filtered out for the target', () => {
+      const root = requiredOptionalFixture();
+      writePackage(root, 'node_modules/@google/generative-ai', { os: ['win32'] });
+
+      expect(() =>
+        collectInstalledRuntimePackagePaths(root, {
+          platform: 'linux',
+          arch: 'x64',
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toThrow(
+        'Cowork-required optional dependency does not support linux/x64: node_modules/@google/generative-ai',
+      );
+    });
   });
 });
 
@@ -303,6 +411,34 @@ describe('prepareCoreRuntime', () => {
     ).toThrow(/Cross-target core runtime staging is unsafe/);
   });
 
+  it('stops before writing a runtime when a Cowork-required optional dependency is missing', () => {
+    const root = temporaryRoot();
+    const coreRoot = path.join(root, 'core');
+    const coworkRoot = path.join(root, 'cowork');
+    const runtimeRoot = path.join(coworkRoot, '.bundle-resources', 'core-runtime');
+    const corePackage = {
+      name: '@phuetz/code-buddy',
+      version: '1.0.0',
+      description: 'Slash gateway fixture',
+    };
+    writeFile(
+      path.join(coreRoot, 'package.json'),
+      JSON.stringify({ ...corePackage, optionalDependencies: COWORK_REQUIRED_OPTIONAL }),
+    );
+    writeFile(
+      path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+      'export class CodeBuddyEngineAdapter {}',
+    );
+    installCoworkRequiredOptional(coreRoot);
+    fs.rmSync(path.join(coreRoot, 'node_modules', '@google'), { recursive: true });
+    writeCoreRuntimeManifest(coreRoot, corePackage);
+
+    expect(() =>
+      prepareCoreRuntime({ coreRoot, coworkRoot, runtimeRoot, useCoworkNativeOverrides: false }),
+    ).toThrow(/Cowork-required optional dependency is not installed: @google\/generative-ai/);
+    expect(fs.existsSync(runtimeRoot)).toBe(false);
+  });
+
   it('creates an isolated ESM runtime whose bare dependency resolves outside the source tree', async () => {
     const root = temporaryRoot();
     const coreRoot = path.join(root, 'core');
@@ -316,8 +452,10 @@ describe('prepareCoreRuntime', () => {
         version: '9.8.7',
         description: 'Compiled Code Buddy fixture',
         dependencies: { 'fixture-a': '1.0.0' },
+        optionalDependencies: COWORK_REQUIRED_OPTIONAL,
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       "import value from 'fixture-a'; if (value !== 42) throw new Error('bad dependency'); export class CodeBuddyEngineAdapter {}",
@@ -352,8 +490,10 @@ describe('prepareCoreRuntime', () => {
     });
 
     expect(result.packagePaths).toEqual([
+      'node_modules/@google/generative-ai',
       'node_modules/fixture-a',
       'node_modules/fixture-b',
+      'node_modules/string-width',
     ]);
     expect(
       JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'dist', 'package.json'), 'utf8')),
@@ -375,6 +515,7 @@ describe('prepareCoreRuntime', () => {
         distPath: 'dist',
         entrypoint: 'dist/desktop/codebuddy-engine-adapter.js',
       },
+      requiredOptionalDependencies: ['@google/generative-ai', 'string-width'],
     });
     expect(
       JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'codebuddy-runtime.json'), 'utf8')),
@@ -400,8 +541,10 @@ describe('prepareCoreRuntime', () => {
         version: '1.0.0',
         description: 'SQLite runtime fixture',
         dependencies: { 'better-sqlite3': '1.0.0' },
+        optionalDependencies: COWORK_REQUIRED_OPTIONAL,
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export class CodeBuddyEngineAdapter {}',
@@ -465,9 +608,10 @@ describe('prepareCoreRuntime', () => {
         name: '@phuetz/code-buddy',
         version: '1.0.0',
         description: 'Optional SQLite runtime fixture',
-        optionalDependencies: { 'better-sqlite3': '1.0.0' },
+        optionalDependencies: { 'better-sqlite3': '1.0.0', ...COWORK_REQUIRED_OPTIONAL },
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export class CodeBuddyEngineAdapter {}',

@@ -310,6 +310,16 @@ function buildCheckList(platform, arch) {
       severity: 'fatal',
     },
     {
+      // Cowork's slash commands load this gateway on demand. Its handlers
+      // statically import root optional packages that prepare-core-runtime
+      // stages on purpose (COWORK_REQUIRED_OPTIONAL_DEPENDENCIES): no release
+      // may ship without a loadable slash-command gateway.
+      label: 'Code Buddy slash-command gateway dependency closure',
+      relPath: '.bundle-resources/core-runtime/dist/commands/headless-slash.js',
+      type: 'esm-import',
+      severity: 'fatal',
+    },
+    {
       label: 'Code Buddy staged ESM package boundary',
       relPath: '.bundle-resources/core-runtime/dist/package.json',
       type: 'file',

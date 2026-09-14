@@ -60,6 +60,32 @@ function populateEngineAdapter(root: string): void {
     path.join(runtime, 'dist', 'agent', 'codebuddy-agent.js'),
     "import chalk from 'chalk'; export class CodeBuddyAgent { color = chalk.blue('ok'); }",
   );
+  // Slash-command gateway and the two root optional packages Cowork stages for it.
+  makeFile(
+    path.join(runtime, 'dist', 'commands', 'headless-slash.js'),
+    [
+      "import stringWidth from 'string-width';",
+      "import { GoogleGenerativeAI } from '@google/generative-ai';",
+      "if (stringWidth('ok') !== 2 || typeof GoogleGenerativeAI !== 'function') throw new Error('bad slash dependencies');",
+      'export async function executeHeadlessSlashToken() { return { handled: true }; }',
+    ].join('\n'),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', 'string-width', 'package.json'),
+    JSON.stringify({ type: 'module', exports: './index.js' }),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', 'string-width', 'index.js'),
+    'export default (value) => value.length;',
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', '@google', 'generative-ai', 'package.json'),
+    JSON.stringify({ main: 'index.js' }),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', '@google', 'generative-ai', 'index.js'),
+    'exports.GoogleGenerativeAI = class GoogleGenerativeAI {};',
+  );
   makeFile(
     path.join(runtime, 'node_modules', 'chalk', 'package.json'),
     JSON.stringify({ type: 'module', exports: './index.js' }),
@@ -318,6 +344,51 @@ describe('pre-build-check: runChecks', () => {
     );
     expect(semanticGate).toMatchObject({ passed: false, severity: 'fatal' });
     expect(result.hasFatal).toBe(true);
+  });
+
+  describe('slash-command gateway', () => {
+    const runtimeModules = () => path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules');
+    const gatewayResult = (result: { results: Array<{ relPath: string }> }) =>
+      result.results.find((entry) => entry.relPath.endsWith('core-runtime/dist/commands/headless-slash.js'));
+
+    it('passes when the gateway and its staged optional dependencies load', () => {
+      populateWin32Artifacts(tmpDir);
+
+      const result = runChecks(tmpDir, 'win32', 'x64');
+
+      expect(gatewayResult(result)).toMatchObject({ passed: true, severity: 'fatal' });
+      expect(result.hasFatal).toBe(false);
+    });
+
+    it('blocks packaging when the gateway is missing', () => {
+      populateWin32Artifacts(tmpDir);
+      fs.rmSync(path.join(tmpDir, '.bundle-resources', 'core-runtime', 'dist', 'commands', 'headless-slash.js'));
+
+      const result = runChecks(tmpDir, 'win32', 'x64');
+
+      expect(gatewayResult(result)).toMatchObject({ passed: false, severity: 'fatal' });
+      expect(result.hasFatal).toBe(true);
+    });
+
+    it.each([
+      ['string-width', ['string-width']],
+      ['@google/generative-ai', ['@google', 'generative-ai']],
+    ])(
+      'blocks packaging when %s only exists in the source install, not in the staged runtime',
+      (dependency, segments) => {
+        populateWin32Artifacts(tmpDir);
+        const staged = path.join(runtimeModules(), ...segments);
+        fs.cpSync(staged, path.join(parentDir, 'node_modules', ...segments), { recursive: true });
+        fs.rmSync(staged, { recursive: true });
+
+        const result = runChecks(tmpDir, 'win32', 'x64');
+
+        const gateway = gatewayResult(result);
+        expect(gateway).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((gateway as { detail?: string }).detail).toContain(dependency);
+        expect(result.hasFatal).toBe(true);
+      },
+    );
   });
 
   it('blocks packaging when the core runtime manifest has no compiled identity proof', () => {

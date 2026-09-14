@@ -16,9 +16,10 @@
  * and several dependencies ship native binaries/assets that bundlers cannot
  * safely flatten.
  *
- * Root optionalDependencies are deliberately not seeded. They remain optional
- * capabilities, while every dependency (including optional platform helpers)
- * reachable from a required production package is included. Set
+ * Root optionalDependencies are deliberately not seeded, except the few Cowork
+ * cannot ship without (COWORK_REQUIRED_OPTIONAL_DEPENDENCIES). The others remain
+ * optional capabilities, while every dependency (including optional platform
+ * helpers) reachable from a required production package is included. Set
  * CODEBUDDY_CORE_INCLUDE_OPTIONAL=1 for a full, larger runtime. Native core
  * staging intentionally fails closed for cross-platform/architecture builds:
  * package on the target host so Electron bindings and optional binaries match.
@@ -38,6 +39,20 @@ const CORE_RUNTIME_ENTRYPOINT = 'dist/desktop/codebuddy-engine-adapter.js';
 const CODE_BUDDY_PACKAGE_NAME = /^@phuetz\/code-buddy$/;
 const NPM_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/i;
 const MAX_NPM_PACKAGE_NAME_LENGTH = 214;
+
+/**
+ * Root optionalDependencies that Cowork must ship. The CLI keeps them optional,
+ * but Cowork's slash-command gateway (`dist/commands/headless-slash.js`, loaded
+ * by slash-command-bridge.ts) imports them statically: `string-width` through
+ * commands/handlers/test-handlers and `@google/generative-ai` through
+ * commands/handlers/ultraplan-handler. They are staged like production
+ * dependencies, with their installed closure; an install without them fails
+ * staging by name instead of shipping a gateway that cannot load.
+ */
+const COWORK_REQUIRED_OPTIONAL_DEPENDENCIES = Object.freeze([
+  '@google/generative-ai',
+  'string-width',
+]);
 
 function isWithinRoot(root, candidate) {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
@@ -216,6 +231,7 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     process.env.CODEBUDDY_CORE_TARGET_ARCH ??
     configuredTargetArch(platform);
   const includeRootOptional = options.includeRootOptional === true;
+  const requiredOptionalDependencies = options.requiredOptionalDependencies ?? [];
   const rootPackagePath = path.join(coreRoot, 'package.json');
   if (!fs.existsSync(rootPackagePath)) {
     throw new Error(`Code Buddy package manifest is missing: ${rootPackagePath}`);
@@ -234,6 +250,25 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     }
   };
   enqueueRootGroup(rootPackage.dependencies, true);
+  const requiredOptionalPaths = requiredOptionalDependencies.map((dependencyName) => {
+    const declared =
+      Object.hasOwn(rootPackage.dependencies ?? {}, dependencyName) ||
+      Object.hasOwn(rootPackage.optionalDependencies ?? {}, dependencyName);
+    if (!declared) {
+      throw new Error(
+        `Cowork-required dependency ${dependencyName} is not declared by the core package: ${rootPackagePath}`,
+      );
+    }
+    const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+    if (!resolved) {
+      throw new Error(
+        `Cowork-required optional dependency is not installed: ${dependencyName} ` +
+          '(the packaged slash-command gateway imports it; run npm install without --omit=optional)',
+      );
+    }
+    queue.push(resolved);
+    return resolved;
+  });
   if (includeRootOptional) enqueueRootGroup(rootPackage.optionalDependencies, false);
 
   while (queue.length > 0) {
@@ -258,6 +293,14 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     enqueueGroup(packageJson.dependencies, true);
     enqueueGroup(packageJson.optionalDependencies, false);
     enqueueGroup(packageJson.peerDependencies, false);
+  }
+
+  for (const packagePath of requiredOptionalPaths) {
+    if (!included.has(packagePath)) {
+      throw new Error(
+        `Cowork-required optional dependency does not support ${platform}/${arch}: ${packagePath}`,
+      );
+    }
   }
 
   return [...included].sort((left, right) => {
@@ -341,6 +384,9 @@ function prepareCoreRuntime(options = {}) {
     configuredTargetArch(platform);
   const includeRootOptional =
     options.includeRootOptional ?? process.env.CODEBUDDY_CORE_INCLUDE_OPTIONAL === '1';
+  const requiredOptionalDependencies = [
+    ...(options.requiredOptionalDependencies ?? COWORK_REQUIRED_OPTIONAL_DEPENDENCIES),
+  ];
   const coreDist = path.join(coreRoot, 'dist');
 
   if (
@@ -376,6 +422,7 @@ function prepareCoreRuntime(options = {}) {
     platform,
     arch,
     includeRootOptional,
+    requiredOptionalDependencies,
   });
 
   fs.rmSync(runtimeRoot, { recursive: true, force: true });
@@ -433,6 +480,7 @@ function prepareCoreRuntime(options = {}) {
     platform,
     arch,
     includeRootOptional,
+    requiredOptionalDependencies,
     packageCount: packagePaths.length,
     nativeOverrides,
   };
@@ -457,6 +505,7 @@ function main() {
 }
 
 module.exports = {
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
   CORE_RUNTIME_RELATIVE_PATH,
   CORE_RUNTIME_ENTRYPOINT,
   collectInstalledRuntimePackagePaths,
