@@ -797,7 +797,12 @@ export class WorkflowBridge {
   }
 
   private emitWorkflowEvent(payload: WorkflowEventPayload): void {
-    this.activeRunEvents?.push(payload);
+    // A task can outlive its run (the core times it out while the tool is still
+    // busy): its late event still reaches the renderer, but only the active run's
+    // own events are persisted with that run.
+    if (payload.instanceId === this.currentRun?.instanceId) {
+      this.activeRunEvents?.push(payload);
+    }
     if (!this.sendToRenderer) return;
     this.sendToRenderer({ type: 'workflow.event', payload });
   }

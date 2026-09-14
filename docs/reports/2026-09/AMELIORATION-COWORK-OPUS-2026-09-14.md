@@ -10,6 +10,13 @@
 
 ## Statut
 
+**Lot 8 livré au pilote, non commité** (2026-09-14). Défaut réel confirmé et corrigé :
+`FleetPeerSessionPanel` mélangeait pairs et sessions. Liste, erreur, session démarrée, réponse
+d'un tour ou fin arrivant après un changement de pair ou de session s'appliquaient à la vue
+affichée, et une requête partait encore après démontage. Chaque réponse est désormais liée au
+pair (et à la session) pour lesquels elle a été demandée. Aucune fermeture distante automatique,
+aucune requête nouvelle ; protocole et IPC inchangés. Un seul fichier source modifié.
+
 **Lot 7 livré au pilote, non commité** (2026-09-14). Régression réelle confirmée et corrigée :
 `FleetRoutePreview` présentait comme route actuelle un résultat calculé pour d'autres
 paramètres. Une route n'est désormais affichée que pour la requête exacte qu'elle a obtenue ;
@@ -108,6 +115,176 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Mission 9 — pont workflows : événement tardif persisté dans le run suivant
+
+### Audit
+
+- **Pas de concurrence possible.** `runTracked` refuse un second run (`trackedRunActive`) ;
+  `executeDefinition` n'est appelé que par lui. Le pont n'expose aucune annulation de
+  workflow : le cas « workflow annulé qui continue à dispatcher » est sans objet.
+- **Listeners.** `captureHandler` est retiré dans `finally`. Les listeners globaux
+  (`task_assigned`, `workflow_started`, `loop_iteration_started`, `task_created`) sont posés une
+  seule fois au démarrage de l'orchestrateur. Les correctifs `queueTask` (`queueMicrotask` sur
+  `task_created`) et ordre des listeners (`prependListener`) sont intacts.
+- **Défaut trouvé.** Le noyau abandonne une tâche après `defaultTimeout` (`waitForTask` →
+  « Task timeout », `src/orchestration/orchestrator.ts:768`, lu sans modification) : le run se
+  termine alors que le gestionnaire `task_assigned` du pont attend encore l'outil (ou une
+  approbation). Au retour, `emitWorkflowEvent` poussait le `node_completed`/`node_failed`
+  (`instanceId` de l'ancien run) dans `activeRunEvents`, qui appartient alors au **run
+  suivant**. L'événement était ensuite persisté par `runStore.finish` dans l'historique de ce
+  run : mélange `instanceId` et historique faussé.
+
+### Reproduction et correctif
+
+- `cowork/tests/workflow-bridge-late-task.test.ts` (nouveau, 1 test) : vrai `WorkflowBridge`,
+  Orchestrator factice (EventEmitter, via `loadCoreModule` simulé), `CoworkToolAgent` factice
+  à réponse différée, `userData` temporaire. Aucun outil, LLM ni workflow réel.
+  - Run 1 : la tâche est assignée, puis le run se termine en « Task timeout » pendant que l'outil
+    attend.
+  - Run 2 démarré, puis l'outil du run 1 répond.
+  - Avant correctif : historique du run 2 = `['inst-2', 'inst-1', 'inst-2']` (**rouge**).
+- `cowork/src/main/workflows/workflow-bridge.ts`, `emitWorkflowEvent` : l'événement est
+  toujours envoyé au renderer, mais n'est ajouté à `activeRunEvents` que si son `instanceId`
+  est celui du run actif (`currentRun`). Les événements du run lui-même (`workflow_started` après
+  `captureHandler`, nœuds, boucles, `completed`/`failed` final émis avant `currentRun = null`)
+  restent enregistrés.
+- Non traité dans ce lot : `orchestrator.completeTask` est encore appelé après le délai du run.
+  Vérification du noyau réel par le pilote : l'attente rejette sans changer le statut de la tâche,
+  et `completeTask` peut encore la compléter. Le garde `assigned` appartient à `startTask`.
+  Ce comportement fait l'objet d'une mission suivante avec le véritable ordonnanceur.
+
+### Vérifications
+
+| Commande | Résultat |
+| --- | --- |
+| `tests/workflow-bridge-late-task.test.ts` avant correctif | **1 rouge** (`inst-1` dans l'historique du run 2). |
+| même test + `workflow-bridge-persistence`, `workflow-bridge-integration`, `workflow-bridge-compilation`, `workflow-supervision-bridge`, `workflow-supervisor`, `workflow-force-confirmation` après correctif | **7 fichiers, 46 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0` sur les 2 fichiers | Propre. |
+
+Empreintes : `workflow-bridge.ts` avant `960d4123…c540`, après
+`78048050591bbcd82856c628f1421df4a4fdc70bc8e80d05f93ddb26fbf8474c` ;
+test `dd2db7123bbd85cce0c871f03da02126faf2319f830fe15862c3478e1dc76c35`.
+
+Limites : typecheck complet et suites Cowork larges non relancés (quota). Aucun Electron ni
+`userData` réel.
+
+## Lot 8 bis — résidus de la revue pilote (remplace la première version du lot 8)
+
+### Reproduction (avant correction)
+
+4 nouveaux tests dans `fleet-peer-session-panel-isolation.test.tsx`, **4 rouges** sur la
+première version du lot 8 :
+1. lignes du pair A encore affichées et cliquables pendant `list(B)` en attente ;
+2. A→B→A : un `start` de la première visite ouvrait la session et libérait `busy` d'un
+   rafraîchissement plus récent ;
+3. A→B→A puis re-sélection de la même session : la réponse d'un tour de la première visite
+   s'ajoutait et effaçait le nouveau brouillon ;
+4. même pair, re-sélection de la même session (s1→s2→s1) : l'ancienne réponse s'ajoutait et
+   effaçait le nouveau brouillon.
+
+S'y ajoute une garde StrictMode (double effet : liste affichée, `busy` libéré), verte avant
+comme après.
+
+### Correctif (`FleetPeerSessionPanel.tsx`)
+
+- `viewRef = { visit, selection, shown }` remplace la comparaison `peerId`/`sessionId`, qui ne
+  distinguait pas deux visites du même pair :
+  - `visit` s'incrémente à chaque effet de pair et à son nettoyage (changement de pair,
+    démontage, cycle StrictMode) ;
+  - `selection` s'incrémente à chaque `selectSession`, même pour la même session ;
+  - `shown` passe à faux au nettoyage.
+- Chaque opération capture `{ visit, selection }` :
+  - liste, démarrage et libération de `busy` exigent la même visite ;
+  - transcription, brouillon, erreur de tour/fin et fermeture de la boîte exigent la même
+    sélection ;
+  - le démarrage n'ouvre la nouvelle session que si la sélection n'a pas changé.
+- L'effet de pair vide `sessions` : aucune ligne de l'ancien pair n'est cliquable pendant la
+  liste du nouveau.
+- Toujours aucune fermeture distante automatique ni requête nouvelle ; protocole et IPC
+  inchangés.
+
+### Vérifications
+
+| Commande | Résultat |
+| --- | --- |
+| `tests/fleet-peer-session-panel-isolation.test.tsx` avant correctif | **4 rouges** / 8 verts. |
+| isolation (12) + `fleet-peer-session-panel` (5) + `fleet-freshness-display` + `fleet-freshness-choice`, `--sequence.shuffle` | **4 fichiers, 35 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0` sur les 2 fichiers | Propre. |
+| `tsc --noEmit`, lignes d'erreur dans `src/` (Cowork) | **0**. |
+| `fleet-peer-panel.tsx`, `fleet-peer-session-panel.test.tsx` | SHA-256 inchangés (`39509a46…`, `91b63eab…`). |
+
+Empreintes livrées : `FleetPeerSessionPanel.tsx`
+`b0b0c20d7893c26ec4713f84370ceedd2b6a77af56a2a69370e03dd59ac6533c` ;
+`fleet-peer-session-panel-isolation.test.tsx`
+`ef8e60a2fe6e5be445e7a988c8f4f46ab057d1d6fc139d0e1b9c348e8dc0d800` (12 tests).
+
+Limites : pas d'Electron ni de pair réel. Deux listes concurrentes d'une **même** visite
+peuvent encore arriver dans le désordre (dernière arrivée gagnante, sans mélange entre pairs,
+visites ou sélections). Les suites Fleet plus larges du lot 8 initial (90 tests) n'ont pas été
+relancées, par économie de quota : seuls les 4 fichiers ci-dessus l'ont été.
+
+## Lot 8 — sessions multi-tours : réponses mélangées entre pairs et sessions
+
+### Périmètre audité
+
+- `cowork/src/renderer/components/FleetPeerSessionPanel.tsx` : seul consommateur renderer de
+  `fleet.peerSessionStart|Say|End|List`. Aucun hook dédié. Le flux `continue-stream` n'est pas
+  utilisé côté renderer, et `labs-catalog.ts` ne fait que citer la capacité.
+- Montage : `PeerDetail` (`fleet-peer-panel.tsx:189`, gelé) rend
+  `<FleetPeerSessionPanel peerId={peer.id} />` **sans `key`**. Choisir un autre pair dans le
+  Command Center réutilise la même instance ; seul l'effet sur `peerId` remet la vue à zéro.
+- Contrat IPC lu dans `preload/index.ts` (4261-4297) : non modifié.
+
+### Constat (reproduit)
+
+Aucune opération asynchrone ne vérifiait, à l'arrivée de la réponse, que le pair et la session
+étaient encore ceux affichés :
+- `refreshList` (liste ou erreur) d'un ancien pair remplaçait la liste du nouveau ;
+- `startSession` ouvrait la session de l'ancien pair sous le nouveau. Un envoi aurait alors
+  appelé `peerSessionSay(nouveauPair, sessionDeLAncien)` ; le rafraîchissement suivant listait
+  aussi l'ancien pair ;
+- `sendTurn` ajoutait la réponse de l'ancien pair, ou d'une autre session du même pair, à la
+  transcription affichée, et effaçait le brouillon en cours ;
+- `endSession` fermait la boîte de dialogue de la session choisie entre-temps ;
+- `busy` n'était pas remis à zéro au changement de pair ; le `finally` d'une ancienne opération
+  pouvait libérer les boutons pendant une opération plus récente ;
+- après démontage, un tour réussi déclenchait encore `peerSessionList` (requête réseau inutile).
+
+### Correctif (`FleetPeerSessionPanel.tsx` seulement)
+
+- `viewRef` (ref) : pair et session affichés. Posé par l'effet de changement de pair, mis à jour
+  par `selectSession()` (démarrage, rattachement, fin), remis à `null` au nettoyage de l'effet
+  (changement de pair ou démontage).
+- Chaque opération capture `askedPeer` (et la session concernée) avant l'`await` :
+  - liste et démarrage : appliqués seulement si `isShownPeer(askedPeer)` ;
+  - tour et fin : transcription, brouillon, erreur et fermeture de la boîte seulement si
+    `isShownSession(askedPeer, sessionId)` ; le rafraîchissement de liste qui suivait déjà un
+    succès est conservé pour le même pair ;
+  - démarrage : la nouvelle session ne remplace pas une session rattachée entre-temps ; elle
+    reste visible dans la liste ;
+  - `busy` libéré seulement pour le pair affiché, et remis à `null` au changement de pair.
+- Inchangés : aucun `peerSessionEnd` automatique, aucune nouvelle requête, protocole, textes et
+  structure DOM (tests existants intacts).
+
+### Tests du lot 8 — `cowork/tests/fleet-peer-session-panel-isolation.test.tsx` (nouveau, 7 tests)
+
+Même montage que le test existant (`createRoot`, `act`) ; changement de pair par re-rendu de la
+même instance ; réponses différées.
+
+| Test | Base | Après |
+| --- | --- | --- |
+| liste tardive de l'ancien pair jamais affichée sous le nouveau ; bouton de rafraîchissement libre | rouge | vert |
+| erreur tardive de liste de l'ancien pair jamais affichée | rouge | vert |
+| session démarrée sur l'ancien pair non ouverte sous le nouveau ; aucune liste supplémentaire de l'ancien pair ; aucun `peerSessionEnd` ; bouton « New session » libre | rouge | vert |
+| réponse de l'ancien pair non affichée ; brouillon du nouveau pair conservé ; aucun `peerSessionEnd` | rouge | vert |
+| réponse d'une session non ajoutée à l'autre session du même pair | rouge | vert |
+| fin d'une session après passage à une autre : la session choisie reste ouverte | rouge | vert |
+| démontage pendant un tour : aucune requête de liste ensuite | rouge | vert |
+
+Premier jet : un test mal construit (liste initiale de `spoke` en attente, donc bouton de
+rafraîchissement désactivé) ; scindé en deux tests (liste / erreur) avant de conclure.
+Rouge final : 7/7 sur la base, sur les assertions visées.
 
 ## Lot 7 — aperçu de route périmé dans `FleetRoutePreview`
 
@@ -557,6 +734,26 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 8
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-peer-session-panel-isolation.test.tsx` sur la base | **7 rouges** / 0 vert. |
+| `… run tests/fleet-peer-session-panel-isolation.test.tsx tests/fleet-peer-session-panel.test.tsx` après correctif | **12/12 verts** (5 tests existants inchangés). |
+| 11 suites renderer Fleet voisines (sessions, fraîcheur lots 4-5, route lots 5-7, `advanced-command-center`, `fleet-command-center-board`, `fleet-panel-connection`, `fleet-saga-detail-actions`, `i18n-french-support`) avec `--sequence.shuffle` | **11 fichiers, 90 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0 src/renderer/components/FleetPeerSessionPanel.tsx tests/fleet-peer-session-panel-isolation.test.tsx` | Propre. |
+| `tsc --noEmit -p tsconfig.json`, filtré sur `src/` | Aucune erreur dans `cowork/src`. |
+| Prettier | Nouveau test conforme ; écarts restants du panneau tous sur des lignes JSX non modifiées. |
+| `sha256sum` de `fleet-peer-panel.tsx`, `FleetRoutePreview.tsx`, `fleet-peer-freshness.tsx`, `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts`, `fleet-peer-session-panel.test.tsx` | Identiques à la base du lot 8. |
+| Build global | Non relancé. |
+
+Empreintes à la livraison du lot 8 :
+
+| Fichier | Delta lot 8 | SHA-256 |
+| --- | --- | --- |
+| `cowork/src/renderer/components/FleetPeerSessionPanel.tsx` | `useRef` ; `viewRef`, `isShownPeer`, `isShownSession`, `selectSession` ; gardes dans `refreshList`, `startSession`, `sendTurn`, `endSession` ; `setBusy(null)` et nettoyage dans l'effet de pair (329 lignes au total) | `83c6053d056a0eee77eac430d4cb220b4762cf43e7a204cb4a065dc6ef7bf987` |
+| `cowork/tests/fleet-peer-session-panel-isolation.test.tsx` | nouveau, 230 lignes, 7 tests | `ab07affb4247f9d5c19cd1a630aa9526717a9adc30f5eaabe138597377ff9229` |
+
 ### Lot 7
 
 | Commande | Résultat |
@@ -730,6 +927,21 @@ Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30�
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 8
+
+- Pas d'Electron réel ni de pair réel : preuve par rendu DOM avec réponses différées, sans
+  contenu réel.
+- Deux rafraîchissements de liste concurrents pour le **même** pair (par exemple au démarrage
+  puis au clic manuel) peuvent encore arriver dans le désordre ; la dernière réponse arrivée
+  l'emporte. Aucun mélange entre pairs ni sessions ; non corrigé, faute de preuve d'impact.
+- Une session démarrée pendant qu'une autre était rattachée n'est pas ouverte automatiquement :
+  elle apparaît dans la liste et reste ouverte côté pair (aucune fermeture distante).
+- Commande pour le pilote (lot 8 seul, après revue) :
+  `git add cowork/src/renderer/components/FleetPeerSessionPanel.tsx
+  cowork/tests/fleet-peer-session-panel-isolation.test.tsx docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md
+  docs/FABLE5-CODEX-COORDINATION.md` puis
+  `git commit -m "fix(cowork): keep peer session answers with their peer and session"`.
+
 ## Limites du lot 7
 
 - Pas d'Electron réel : preuve par rendu DOM (happy-dom) avec promesses différées.
@@ -876,6 +1088,51 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
    réseau inutile.
 
 ## Journal
+
+### 02:30 — Mission 9 : audit du pont workflows (avant toute modification)
+
+Lot 8 bis copié et gelé, revue indépendante en cours ; quota hebdomadaire presque épuisé
+(98 % selon le pilote). Cible : `cowork/src/main/workflows/workflow-bridge.ts`
+(821 lignes, SHA-256 `960d4123860f4ba90a2de3f0b8e8c724a5fec16623b4f237e7c488629cd8c540`).
+Défauts à chercher :
+- workflow annulé qui continue à dispatcher ;
+- callback tardif qui repeuple un run terminé ;
+- listeners non nettoyés ;
+- mélange `instanceId`/`workflowId`.
+
+Anciens correctifs `queueTask` et ordre des listeners à ne pas réintroduire. Au plus un défaut
+corrigé, dans le pont et ses tests, sans rien lancer de réel.
+
+### 02:30 env. — Lot 8, reprise après revue pilote (avant toute modification)
+
+Deux résidus signalés par la revue, à reproduire avant correction :
+1. L'effet de changement de pair ne vide pas `sessions` : les lignes du pair A restent cliquables
+   pendant `list(B)`, et l'envoi suivant part vers B avec la session de A.
+2. `viewRef` ne compare que `peerId`/`sessionId` : un aller-retour A→B→A accepte la réponse
+   de l'ancienne vue A et libère `busy` d'une opération plus récente.
+
+Garder à l'esprit StrictMode (cleanup puis remontage) et la re-sélection de la même session.
+Même périmètre : 2 fichiers et le rapport. Quota annoncé par le pilote : 2 % restants. La
+première version du lot 8, copiée en primaire sans commit, sera remplacée.
+
+### 02:18 — Lot 8 : audit des sessions multi-tours de pair (avant toute modification)
+
+Lot 7 copié et gelé en revue pilote. En intégration, la revue du lot 6 a ajouté des gardes
+`stopped` à `init`/`addPeer` et trois tests (47 verts sous Node 20/24) : non recopiés ici.
+Objectif : chercher et reproduire un vrai mélange entre pairs ou sessions dans
+`FleetPeerSessionPanel` et ses hooks (changement de pair pendant list/start/continue/end,
+réponse retardée, démontage, session terminée) ; corriger seulement sur preuve, sans fermer
+automatiquement une session distante ni créer d'action réseau non demandée. Si rien n'est
+trouvé : rapporter périmètre et lacunes.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/renderer/components/FleetPeerSessionPanel.tsx` (= HEAD) | `fced1e4071ea99a32f6176d488131c9da0a0be022a05764c59ab0527f9987937` |
+| `cowork/tests/fleet-peer-session-panel.test.tsx` (= HEAD) | `91b63eabe37fef0442b621ac70b266a83d381368f49dddf5e7f3b0386593902a` |
+| `cowork/src/renderer/components/fleet-peer-panel.tsx` (lot 4, gelé) | `39509a46d25450c4dffa6bb8ec8ed4e28c8abc52a2990c6357afa113057ac0ad` |
+| `FleetRoutePreview.tsx` (lot 7), `fleet-peer-freshness.tsx` (lot 5), `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts` (lot 6), tous gelés | `55d07d26…f2a4`, `cd8f73b5…3f43`, `d5639971…bcbc`, `11760ffe…139e`, `649ee14f…60d6` |
 
 ### 02:13 — Lot 7 : aperçu de route périmé dans `FleetRoutePreview` (avant toute modification)
 
@@ -1131,3 +1388,24 @@ Vite complet passent. Revue indépendante sans défaut bloqueur : les paramètre
 sont comparés par valeur et une réponse ancienne ne remplace pas la nouvelle.
 Les appels IPC obsolètes ne sont pas annulés côté main ; leurs résultats ne sont
 pas affichés pour d'autres paramètres.
+
+### Contre-validation finale sessions et historique workflows
+
+Sessions : après les deux livraisons Opus, la revue a reproduit trois cas encore
+ouvert : état ancien au commit du nouveau pair, brouillon conservé lors d'un
+changement de session et nouveau brouillon effacé par la réponse précédente.
+La vue est désormais remontée avec une clé de pair ; sélectionner une session
+réinitialise le brouillon ; une réponse préserve un brouillon modifié entre-temps.
+Les 20 tests du panneau passent sous Node 20 et 24, lint et TypeScript sont verts.
+Le build Vite complet passe. La QA Chromium réelle confirme les parcours A/B,
+les réponses/listes tardives, le brouillon pendant envoi et son effacement au
+changement de session : `/tmp/cb-fleet-sessions-browser-qa.json`. IPC de fixture,
+aucun Electron ou pair réel. Les brouillons ne sont pas persistés par session.
+
+Workflows : 44 tests de six suites passent. Le test de la course vérifie aussi
+explicitement que le renderer reçoit le `node_completed` tardif de l'ancienne
+instance, tandis que l'historique du nouveau run ne contient que sa propre
+instance. La revue confirme la capture du démarrage avant l'émetteur et le
+stockage du résultat final avant remise à zéro de `currentRun`.
+Cette preuve de persistance utilise un ordonnanceur simulé et ne vaut pas
+validation du traitement d'un timeout par le noyau réel.
