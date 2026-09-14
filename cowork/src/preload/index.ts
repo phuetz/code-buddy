@@ -121,6 +121,7 @@ import type {
   WorkflowRunComparison,
   WorkflowRunRecord,
 } from '../shared/workflow-supervision';
+import type { WorkflowApprovalAnswer } from '../shared/workflow-types';
 import type {
   AgentBaseAuditEvent,
   AgentBaseCodeBuddyDiscoveryResult,
@@ -2780,8 +2781,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('workflow.replay', runId),
     compare: (leftRunId: string, rightRunId: string): Promise<WorkflowRunComparison | null> =>
       ipcRenderer.invoke('workflow.compare', leftRunId, rightRunId),
-    approve: (stepId: string, approved: boolean): Promise<boolean> =>
-      ipcRenderer.invoke('workflow.approve', stepId, approved),
+    approve: (answer: WorkflowApprovalAnswer): Promise<boolean> =>
+      ipcRenderer.invoke('workflow.approve', answer),
   },
 
   /**
@@ -7330,7 +7331,7 @@ declare global {
           runId?: string;
         }>;
         compare: (leftRunId: string, rightRunId: string) => Promise<WorkflowRunComparison | null>;
-        approve: (stepId: string, approved: boolean) => Promise<boolean>;
+        approve: (answer: WorkflowApprovalAnswer) => Promise<boolean>;
       };
       tools: {
         list: () => Promise<Array<{ name: string; description: string; category: string }>>;

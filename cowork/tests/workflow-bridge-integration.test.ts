@@ -19,6 +19,7 @@ import { Orchestrator } from '../../src/orchestration/orchestrator.js';
 import {
   CoworkToolAgent,
   COWORK_TOOL_AGENT_ID,
+  type ApprovalRequestPayload,
   type FormalToolRegistryLike,
 } from '../src/main/workflows/cowork-tool-agent';
 import { compileVisualToCore } from '../src/main/workflows/dag-compiler';
@@ -31,6 +32,7 @@ interface BridgeFixture {
   orchestrator: InstanceType<typeof Orchestrator>;
   events: WorkflowEventPayload[];
   toolAgent: CoworkToolAgent;
+  approvals: ApprovalRequestPayload[];
   registryCalls: Array<{ name: string; input: Record<string, unknown> }>;
   run: (
     visual: WorkflowVisualDefinition,
@@ -58,11 +60,12 @@ function setupBridgeLikeFixture(): BridgeFixture {
   };
 
   const orchestrator = new Orchestrator({ maxAgents: 4, logLevel: 'warn' });
+  const approvals: ApprovalRequestPayload[] = [];
   const toolAgent = new CoworkToolAgent({
     registry,
     confirmToolInvocation: async () => ({ confirmed: true }),
-    onApprovalRequired: () => {
-      // Tests that need approvals install their own handler before running.
+    onApprovalRequired: (payload) => {
+      approvals.push(payload);
     },
   });
 
@@ -196,7 +199,7 @@ function setupBridgeLikeFixture(): BridgeFixture {
     }
   };
 
-  return { orchestrator, events, toolAgent, registryCalls, run };
+  return { orchestrator, events, toolAgent, approvals, registryCalls, run };
 }
 
 const node = (
@@ -314,7 +317,7 @@ describe('workflow-bridge integration (real Orchestrator)', () => {
     'pauses on approval, resumes on resolveApproval(true)',
     async () => {
       const fixture = setupBridgeLikeFixture();
-      // Override the agent's onApprovalRequired so we can resolve from the test.
+      // The fixture records approval requests so the test can answer them.
       const visual: WorkflowVisualDefinition = {
         id: 'wf_apv',
         name: 'approval',
@@ -333,8 +336,14 @@ describe('workflow-bridge integration (real Orchestrator)', () => {
       await new Promise((r) => setTimeout(r, 50));
       expect(fixture.toolAgent.pendingCount()).toBe(1);
 
-      // Approve it.
-      const matched = fixture.toolAgent.resolveApproval('apv', true);
+      // Approve it, quoting the request's identity as the renderer does.
+      const [request] = fixture.approvals;
+      const matched = fixture.toolAgent.resolveApproval({
+        approvalId: request.approvalId,
+        workflowInstanceId: request.workflowInstanceId,
+        stepId: request.stepId,
+        approved: true,
+      });
       expect(matched).toBe(true);
 
       const { instance } = await runPromise;

@@ -4,9 +4,11 @@
  *
  * Only the tool registry, the confirmation service and userData are fixtures.
  * The core times the task out (defaultTimeout, 5 min), fails the workflow and
- * abandons the task. A confirmation or an approval given afterwards must not
- * run the tool nor publish a node event for the finished instance; the worker
- * the executor kept busy is released by its report. Normal runs are unchanged.
+ * abandons the task. A confirmation given afterwards must not run the tool nor
+ * publish a node event for the finished instance; the worker the executor kept
+ * busy is released by its report. An approval of the ended run is cancelled by
+ * the bridge (worker released) and its late answer refused. Normal runs are
+ * unchanged.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -54,6 +56,7 @@ vi.mock('../src/main/utils/core-loader', () => ({
 
 import { WorkflowBridge } from '../src/main/workflows/workflow-bridge';
 import type { ServerEvent } from '../src/renderer/types';
+import type { PendingApproval } from '../src/shared/workflow-types';
 
 const CORE_TASK_TIMEOUT_MS = 300_000;
 
@@ -83,6 +86,20 @@ function linear(middle: Record<string, unknown>) {
       { id: 'mid-end', source: 'mid', target: 'end' },
     ],
   } as never;
+}
+
+/** The answer the dialog sends for the last approval shown: full identity. */
+function answerLastApproval(events: ServerEvent[], approved: boolean) {
+  const approval = events
+    .filter((event) => event.type === 'workflow.approval_required')
+    .map((event) => (event as { payload: PendingApproval }).payload)
+    .at(-1)!;
+  return {
+    approvalId: approval.approvalId,
+    workflowInstanceId: approval.workflowInstanceId,
+    stepId: approval.stepId,
+    approved,
+  };
 }
 
 function nodeEvents(events: ServerEvent[]) {
@@ -136,7 +153,7 @@ describe('WorkflowBridge answers after the run ended (real Orchestrator)', () =>
     expect(created[0].getAllAgents().filter((agent) => agent.status === 'busy')).toEqual([]);
   });
 
-  it('does not publish a node event for an approval answered after its run timed out', async () => {
+  it('refuses an approval answered after its run timed out, without publishing a node event', async () => {
     const bridge = new WorkflowBridge(tmpDir);
     const sent: ServerEvent[] = [];
     bridge.setSendToRenderer((event) => sent.push(event));
@@ -151,7 +168,8 @@ describe('WorkflowBridge answers after the run ended (real Orchestrator)', () =>
     expect((await run).success).toBe(false);
     const publishedBeforeAnswer = sent.length;
 
-    expect(bridge.approveStep('mid', true)).toBe(true);
+    // The run ended: main cancelled its approval, so even its exact answer is refused.
+    expect(bridge.approveStep(answerLastApproval(sent, true))).toBe(false);
     await vi.advanceTimersByTimeAsync(0);
 
     expect(nodeEvents(sent.slice(publishedBeforeAnswer))).toEqual([]);
@@ -238,7 +256,7 @@ describe('WorkflowBridge answers after the run ended (real Orchestrator)', () =>
 
     const run = bridge.run(workflow.id);
     await vi.advanceTimersByTimeAsync(0);
-    expect(bridge.approveStep('mid', true)).toBe(true);
+    expect(bridge.approveStep(answerLastApproval(sent, true))).toBe(true);
     await vi.advanceTimersByTimeAsync(500);
     const result = await run;
 

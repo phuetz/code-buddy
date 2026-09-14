@@ -70,9 +70,11 @@ Chaque étape émet vers le renderer des événements de cycle de vie (`workflow
 
 Un nœud `approval` compile vers une tâche `approval_wait`. À l'exécution, `runApprovalWait()` :
 
-1. émet `workflow.approval_required` vers le renderer (avec `stepId`, message, `expiresAt`, et un éventuel aperçu de l'action),
+1. émet `workflow.approval_required` vers le renderer (avec `approvalId`, `workflowInstanceId`, `stepId`, message, `expiresAt`, et un éventuel aperçu de l'action),
 2. **suspend** la tâche dans une `Promise`,
-3. attend que l'UI réponde via le canal IPC `workflow.approve(stepId, approved)`, relayé à `WorkflowBridge.approveStep()` → `CoworkToolAgent.resolveApproval()`.
+3. attend que l'UI réponde via le canal IPC `workflow.approve({ approvalId, workflowInstanceId, stepId, approved })`, relayé à `WorkflowBridge.approveStep()` → `CoworkToolAgent.resolveApproval()`.
+
+Chaque demande reçoit un `approvalId` unique, y compris lors d'une nouvelle occurrence dans une boucle. Le moteur vérifie les trois identifiants et exige un booléen `approved` : une réponse périmée, dupliquée ou utilisant l'ancienne signature est refusée. La fin du run annule ses attentes et retire uniquement ses demandes du renderer, sans les approuver automatiquement.
 
 Délai par défaut : **60 s**. En l'absence de réponse, la tâche est **auto-rejetée** (timeout → `failTask`), ce qui fait échouer le workflow.
 

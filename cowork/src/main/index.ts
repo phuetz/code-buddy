@@ -4678,10 +4678,9 @@ ipcMain.handle(
 
 ipcMain.handle(
   'workflow.approve',
-  async (_event, stepId: string, approved: boolean): Promise<boolean> => {
-    if (!workflowBridge) return false;
-    return workflowBridge.approveStep(stepId, approved);
-  }
+  // The whole answer goes to the bridge, which validates it against the pending request.
+  async (_event, answer: unknown): Promise<boolean> =>
+    workflowBridge ? workflowBridge.approveStep(answer) : false
 );
 
 // Tools list — exposes the core FormalToolRegistry's catalogue so the

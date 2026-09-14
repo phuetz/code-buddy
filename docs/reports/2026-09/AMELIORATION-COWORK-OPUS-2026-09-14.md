@@ -116,6 +116,257 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
 
+## Mission 14 — une réponse d'approbation est liée à sa demande et à son run, vérifiée par `main`
+
+**Livrée au pilote, non commitée** (2026-09-14, 03:40). Base et cadrage : journal de 03:27.
+
+### Reproduction du défaut (vrai pont, vrai noyau, vrai `CoworkToolAgent`)
+
+Sonde temporaire sur la base, supprimée après exécution :
+1. run 1 avec une approbation (`timeoutMs` 600 000) ; le noyau expire à 300 000 et le run 1
+   échoue ;
+2. run 2 du même workflow, qui attend sur le même pas `gate` ;
+3. la réponse que le dialogue envoyait pour le run 1 arrive : `approveStep('gate', true)`.
+
+Résultat mesuré : `accepted = true`, puis le run 2 (`wf_…z7cggpn`, différent du run 1
+`wf_…iv8gy92`) passe en `completed` sans avoir été approuvé. Aucun ordre IPC n'intervient :
+c'est `main` qui résout l'attente par le seul `stepId`.
+
+### Tests
+
+`cowork/tests/workflow-approval-identity.test.ts` (nouveau, 6 tests, **6 rouges** sur la base).
+Composants réels : `WorkflowBridge`, Orchestrator actuel et `CoworkToolAgent`.
+
+| Test | Base | Après |
+| --- | --- | --- |
+| **run 1 en attente puis expiré, run 2 sur le même pas, nouvelle attente** : aucun worker occupé après la fin du run 1 ; `approvalId` et `workflowInstanceId` différents ; appel positionnel `('gate', true)` → `false` ; réponse exacte du run 1 → `false` ; le run 2 n'avance pas et ne publie rien ; réponse du run 2 → `true`, `completed`, `node_completed` du run 2 ; seconde réponse identique → `false` | **rouge** (pas d'`approvalId`) | vert |
+| **boucle** (`maxIterations` 2, même run, même pas) : réponse de l'itération 1 → `true` ; nouvelle demande (même run et pas, autre id) ; la réponse de l'itération 1 renvoyée → `false`, le run attend ; celle de l'itération 2 → `true`, `completed` | **rouge** | vert |
+| **branches parallèles** (2 approbations simultanées) : réponse avec l'id de l'autre demande, ou avec l'autre pas → `false` ; chacune avec sa propre identité → `true`, `completed` | **rouge** | vert |
+| **validation stricte** : pont non démarré → `false` ; `'gate'`, `null`, `{ stepId, approved }`, `approvalId` vide, run absent, autre run, id forgé, `approved: 'yes'` → tous `false` sans résoudre ; réponse exacte `approved: false` → `true`, run `failed` | **rouge** (`'gate'` accepté) | vert |
+| contrat IPC `main` : `async (_event, answer: unknown)` → `workflowBridge.approveStep(answer)`, sans aucun `stepId` positionnel | **rouge** | vert |
+| contrat preload : `approve(answer: WorkflowApprovalAnswer)` → `invoke('workflow.approve', answer)`, implémentation et déclaration ; l'ancienne signature a disparu | **rouge** | vert |
+
+`workflow-approval-dialog-terminal.test.tsx` (mission 13) : les réponses attendues portent
+l'identité complète. Nouveau test « an answer still in flight never removes the same run's next
+request for the same step (loop) » : l'IPC de la demande 1 est en attente quand la demande 2 du
+même run et du même pas arrive ; quand la demande 1 reçoit sa réponse, la demande 2 reste
+affichée.
+
+Tests existants alignés sur la nouvelle API (sans affaiblir d'assertion) :
+- `workflow-bridge-late-confirmation.test.ts` : l'approbation répondue après expiration est
+  désormais **refusée** (`false`, auparavant `true`). Toujours aucun événement ni `execute`, et
+  aucun worker occupé : la libération vient maintenant de l'annulation en fin de run.
+- `workflow-approval-terminal-flow.test.ts` : réponse tardive exacte → `false` ;
+  `removePendingApproval(approvalId)`.
+- `cowork-tool-agent.test.ts` : réponses avec identité, et 2 tests ajoutés :
+  - un id par demande, seule la réponse exacte résout ;
+  - refus d'attendre sans run.
+- `workflow-bridge-integration.test.ts` : la fixture enregistre les demandes, la réponse cite
+  l'identité.
+
+### Correctif
+
+- **Types partagés** (`shared/workflow-types.ts`) :
+  - `PendingApproval.approvalId` est requis ;
+  - nouveau `WorkflowApprovalAnswer { approvalId, workflowInstanceId, stepId, approved }`.
+- **`CoworkToolAgent`** :
+  - chaque `runApprovalWait` crée un `approvalId` (`randomUUID`), gardé dans l'attente et envoyé
+    dans la demande ;
+  - une attente sans run (`workflowInstanceId` vide) est refusée ;
+  - `resolveApproval(answer)` ne résout que si l'id, le run **et** le pas correspondent.
+  - L'API `resolveApproval(stepId, approved)` est supprimée.
+- **`WorkflowBridge`** :
+  - `approveStep(answer: unknown)` valide strictement la forme (3 chaînes non vides + booléen),
+    sinon `logWarn` et `false` ;
+  - la demande envoyée au renderer porte `approvalId` ;
+  - à la fin d'un run (terminal ou `catch`), `cancelPending(instanceId, 'Workflow run ended')`
+    annule ses attentes : leurs réponses tardives sont refusées, et les workers que leurs tâches
+    abandonnées occupaient sont libérés ;
+  - la garde root `replay()` après arrêt (avant `runStore.get`) est intacte.
+- **IPC** :
+  - handler `workflow.approve` de `main/index.ts` (seul bloc touché, −4/+3) :
+    `async (_event, answer: unknown) => workflowBridge ? workflowBridge.approveStep(answer) :
+    false` ;
+  - preload : `approve(answer: WorkflowApprovalAnswer)`, implémentation et déclaration globale.
+- **Ancienne API positionnelle** : supprimée **sans repli**. Un ancien appel
+  `invoke('workflow.approve', stepId, approved)` arrive comme une chaîne, il est refusé (`false`)
+  et journalisé. Aucun autre appelant dans `cowork/` (recherche `workflow.approve`,
+  `approveStep`, `resolveApproval`).
+- **Renderer** :
+  - `ApprovalDialog` envoie l'identité complète et retire sa demande par `approvalId` ;
+  - store : `pendingApprovals` est typé `PendingApproval[]` (le type en ligne n'avait pas
+    `approvalId`) et `removePendingApproval(approvalId)` retire exactement cette demande.
+  - Modification nécessaire au transport de l'identité, hors liste initiale : je la signale.
+
+### Mutations (retrait temporaire, puis restauration)
+
+| Mutation | Rouges |
+| --- | --- |
+| retrait du dialogue par pas + run (comportement de la mission 13) | 1 (course en boucle) |
+| agent : `approvalId` non vérifié | 4 (unitaire id, boucle, parallèle, validation) |
+| agent : run non vérifié | 2 (unitaire id, validation « autre run ») |
+| pont : pas d'annulation en fin de run | 3 (run 1/run 2, test mission 11, flux mission 13) |
+| pont : validation désactivée | 1 (`TypeError` sur `null`) |
+| pont : type de `approved` non vérifié | 1 (`approved: 'yes'` accepté) |
+
+### Vérifications
+
+| Commande (dans `cowork/`) | Résultat |
+| --- | --- |
+| sonde sur la base | défaut reproduit (run 2 `completed` par la réponse du run 1) |
+| `workflow-approval-identity.test.ts` sur la base | **6 rouges** |
+| 8 fichiers approbations/workflow après correctif | **51/51 verts** |
+| 63 fichiers : suites workflow, lecteurs de `main/index.ts` et du preload, importateurs du store, `gui-a11y-wave1` | **63 fichiers, 403 tests verts** |
+| 6 fichiers approbations/pont, `--sequence.shuffle` | **41/41 verts** |
+| `node scripts/lint.cjs --max-warnings 0` sur les 13 fichiers | Propre |
+| `tsc --noEmit -p tsconfig.json` | 20 erreurs, toutes dans le noyau `../src/` ; **0 dans `cowork/src`** |
+| Prettier | nouveau test formaté ; lignes modifiées conformes, sauf 8 lignes de `workflow-bridge-integration.test.ts` qui suivent l'indentation du bloc `it(` existant (fichier déjà non conforme à HEAD) |
+
+Empreintes :
+
+| Fichier | Base → Après |
+| --- | --- |
+| `cowork/src/main/workflows/workflow-bridge.ts` | `81ae7793…b8e` → `549941e969f22f8c081c4d29ff0d0057efad7bae75144846f84f7551fb933480` |
+| `cowork/src/main/workflows/cowork-tool-agent.ts` | `6837b123…a8cf` → `40b26ebc20dbb0dc0949ab37ed1b816cbe5706c62e9ab72f96e45942682f0a8b` (commentaire `runApprovalWait` mis à jour après les vérifications ; 3 fichiers de tests concernés relancés, 28/28, lint propre) |
+| `cowork/src/main/index.ts` (handler seul) | `f1acd716…c633` → `210e2d62cbf922e848c67adf2e62edcd409bf22bfeeae8e786f803c8aed7f16b` |
+| `cowork/src/preload/index.ts` | `1f3836e1…9c72` → `4ce1e29db02e41d8b27e8aeb2344643cbcc7cffc1d61f498890467587df876d9` |
+| `cowork/src/shared/workflow-types.ts` | `6c88fe02…8899` → `03254bec352a99e2df1c1ce6b35ed75e27a1f9b08b2d0ff8ebb0ff86ff8680af` |
+| `cowork/src/renderer/components/ApprovalDialog.tsx` | `4ca5c920…f903` → `cb5dcc2cadd3b02f48f691ce7205f7f7295d73afe7dc627fffbe82f9f8c8dab0` |
+| `cowork/src/renderer/store/index.ts` | `49c00ce5…769f` → `1297b4a198d8f6c0499b0c629e1c34668795b1afa64907d8ebe13f03c865bc63` |
+| `cowork/tests/workflow-approval-identity.test.ts` | nouveau → `de3491649d5fccdc1b3b51b78c0dd17f88a35f416a80b870876f6343da469c8d` |
+| `cowork/tests/workflow-approval-dialog-terminal.test.tsx` | `a2b07c3c…d6ae` → `7fe989cd8d0504d931bada7329f5a238d490501c31bd03412afac5f0a3ec5451` |
+| `cowork/tests/workflow-approval-terminal-flow.test.ts` | `039b5dd1…c65b` → `8aac151b98908769ff922e3e37ff205b052ad6725cfcc906f7f5fcc805a794e2` |
+| `cowork/tests/workflow-bridge-late-confirmation.test.ts` | `9c87a9b2…c2cb` → `a8b3b3c45365060fb7a746a043f72938de3dd48db0c01671b8a787a23195458b` |
+| `cowork/tests/cowork-tool-agent.test.ts` (= HEAD à la base) | → `c1cd13a9a59325b04101f117dd09e033403a9377e878185759968ba31e8ae7cc` |
+| `cowork/tests/workflow-bridge-integration.test.ts` (= HEAD à la base) | → `fcfeb4c32fbb39a37a7f3c5b23fa7e7e14eb084dce439d0e3bb8d3f1f2699522` |
+| inchangés : `workflow-bridge-shutdown.test.ts` (synchro primaire), `src/orchestration/orchestrator.ts` | `515e18c1…3639`, `c2023902…d3a8` |
+
+### Limites réelles
+
+- **Effets déjà partis.** Une réponse valide et arrivée à temps agit : si le run continue après,
+  l'étape suivante démarre. Rien de ce qui a déjà démarré n'est défait.
+- **Une attente par pas dans `CoworkToolAgent`.** La table reste indexée par `stepId` : une
+  nouvelle demande pour un pas encore en attente remplace l'ancienne et la rejette. L'identité
+  empêche toute résolution croisée, mais deux demandes vivantes du même pas ne peuvent pas
+  coexister. D'après le compilateur et le verrou « un run à la fois » de `runTracked`, ce cas ne
+  se présente pas. Hors de ces cas, ce n'est pas prouvé.
+- **Branche `catch`.** L'annulation des attentes quand `startWorkflow` lève est codée mais **non
+  testée** : aucune reproduction réelle de cette exception.
+- **Identité, pas authentification.** L'`approvalId` n'est pas un secret : il protège contre les
+  réponses périmées ou croisées, pas contre un renderer compromis.
+- **Expiration.** Une approbation expirée dans `main` n'émet toujours rien : le dialogue la garde
+  jusqu'au terminal du run.
+- **Hors lot.** L'arrêt du pont ne ferme pas la modale.
+- **Documentation hors périmètre.** `docs/cowork/03-workflows.md` (lignes 75 et 122) décrit encore
+  `workflow.approve(stepId, approved)`. Non modifiée ici, à mettre à jour par le pilote.
+
+## Mission 13 — approbations d'un workflow terminé retirées du renderer
+
+**Livrée au pilote, non commitée** (2026-09-14, 03:25). Flux réel et base : voir le journal de
+03:18.
+
+### Compatibilité avec le noyau synchronisé (`2120d48d8`)
+
+Test du noyau 12/12, 97 tests workflow Cowork verts. Le nouveau test de flux ci-dessous tourne
+aussi sur ce noyau (IDs de tâche uniques). Sources `main` et noyau non modifiés : les empreintes
+de `workflow-bridge.ts` (`f466590b…42fe`), `cowork-tool-agent.ts` (`6837b123…a8cf`),
+`main/index.ts` (`f1acd716…c633`) et `orchestrator.ts` (`c2023902…d3a8`) sont inchangées.
+
+### Reproduction
+
+Deux nouveaux fichiers, **5 rouges** sur la base.
+
+`cowork/tests/workflow-approval-terminal-flow.test.ts` (3 tests). Composants réels :
+`WorkflowBridge`, Orchestrator actuel, `CoworkToolAgent` et store renderer. Les événements émis
+par le pont sont passés au store par les deux actions que `useIPC` appelle ; ce routage est
+vérifié sur la source de `useIPC`. Approbation avec `timeoutMs` 600 000, noyau expiré à 300 000
+(horloge simulée) :
+- `workflowInstanceId` de la demande = `instanceId` du `workflow.event` `failed` = `instanceId` du
+  run : la correspondance est prouvée sur le vrai flux ;
+- **rouge** : la demande restait dans `pendingApprovals` après le terminal ;
+- réponse tardive `approveStep('gate', true)` : aucun événement publié par `main` (garde) ;
+  *(mission 14 : `main` acceptait pourtant cette réponse, `approveStep` renvoyait `true` ; le
+  test n'en vérifiait pas le retour. Elle est désormais refusée, `false`.)*
+- run approuvé à temps : `completed`, file vide (garde) ; routage `useIPC` (garde).
+
+`cowork/tests/workflow-approval-dialog-terminal.test.tsx` (happy-dom, 6 tests). Composants
+réels : `ApprovalDialog` et store. Fixture : `window.electronAPI.workflow.approve` seul.
+
+| Test | Base | Après |
+| --- | --- | --- |
+| run `completed` avec 2 demandes → modale fermée, file vide, **aucun `workflow.approve`**, `pendingPermission` (confirmation globale d'outil) intacte | **rouge** : modale ouverte | vert |
+| idem pour `failed` | **rouge** | vert |
+| demandes des runs 1 et 2, fin du run 1 → la modale affiche celle du run 2 ; fin d'un run 3 sans demande → même tableau (référence), rien ne change | **rouge** : run 1 toujours affiché | vert |
+| `node_failed`/`node_completed` d'un run encore actif → sa demande reste | vert (garde) | vert |
+| **course** : clic « Approve » sur le run 1 (IPC en attente), fin du run 1, demande du run 2 sur le même `stepId`, puis l'IPC du run 1 répond → la demande du run 2 reste affichée ; un seul `approve` | **rouge** | vert |
+| rejet d'une demande d'un run actif → retire exactement celle-ci, la suivante s'affiche | vert (garde) | vert |
+
+La course a été rendue rouge en deux temps. Avec le seul correctif du terminal, elle échouait
+encore pour la raison visée : le `finally` de `reply` retirait par `stepId` la demande du run 2
+(modale fermée).
+
+### Correctif (2 fichiers source)
+
+- `store/index.ts` :
+  - `applyWorkflowEvent` `completed`/`failed` retire les demandes dont `workflowInstanceId` est
+    celui du run terminé, et seulement celles-là (`withoutRunApprovals`, même tableau si aucune) ;
+  - `removePendingApproval(stepId, workflowInstanceId)` ne retire plus que la demande de ce run
+    pour ce pas.
+- `ApprovalDialog.tsx` : `remove(head.stepId, head.workflowInstanceId)` ; commentaire d'en-tête
+  complété.
+- `useIPC.ts`, `UniversalPreviewRail.tsx` (le compteur suit le store), types partagés, `main` et
+  noyau : non modifiés.
+- Retirer une demande n'envoie aucune réponse : pas d'auto-consentement, pas de rejet implicite.
+  `pendingPermission` n'est jamais touché.
+
+### Vérifications
+
+| Commande (dans `cowork/`) | Résultat |
+| --- | --- |
+| 2 nouveaux fichiers avant correctif | **5 rouges**, 4 verts (gardes) |
+| après correctif du store seul | 1 rouge (course, raison visée) |
+| après correctif complet | **9/9 verts** |
+| mutation : le terminal vide toute la file | 1 rouge (« keeps the approvals of another run »), vert après restauration |
+| 43 fichiers : les 27 qui importent le store, `gui-a11y-wave1` (liste `ApprovalDialog`), les suites workflow (`bridge-*`, `supervision-*`, `supervisor`, `force-confirmation`, `service`, `pro-boot-streaming`) et les 2 nouveaux | **43 fichiers, 233 tests verts** |
+| 4 fichiers workflow/approbations, `--sequence.shuffle` | **20/20 verts** |
+| `node scripts/lint.cjs --max-warnings 0` sur les 4 fichiers | Propre |
+| `tsc --noEmit -p tsconfig.json` | 20 erreurs, toutes dans le noyau `../src/` ; **0 dans `cowork/src`** |
+| Prettier | 2 fichiers de test formatés ; mes lignes du store et du dialogue identiques à la sortie Prettier (les deux fichiers ne l'étaient déjà pas) |
+
+Empreintes :
+
+| Fichier | Base → Après |
+| --- | --- |
+| `cowork/src/renderer/store/index.ts` | `0912e25a…241e` → `49c00ce55cfeef44afe692ed40484e0baaa462e9fe5c62257f94ed07015c769f` |
+| `cowork/src/renderer/components/ApprovalDialog.tsx` | `8571845a…7487` → `4ca5c92062d5cb226f6ddaacd955549767987c5c09b034ff81a4329b3d2bf903` |
+| `cowork/tests/workflow-approval-dialog-terminal.test.tsx` | nouveau → `a2b07c3c6bd66eb021cf090ed3fce57d656030571d539142a9878e4b14b4d6ae` |
+| `cowork/tests/workflow-approval-terminal-flow.test.ts` | nouveau → `039b5dd18a09a99d8b3215cb253086a566b60bdf81f125686261c5041c3dc65b` |
+| `cowork/src/renderer/hooks/useIPC.ts` (inchangé) | `dbb7c634…46b9` |
+
+### Limites (réelles, non corrigées : `main` gelé)
+
+- **Réponse déjà partie.** Si l'utilisateur a cliqué avant la fin du run, la réponse arrive dans
+  `main`. ~~Elle y reste refusée (mission 11 : ni outil, ni événement de nœud), mais
+  `CoworkToolAgent` résout encore son attente, et la tâche abandonnée libère son worker.~~
+  *Correction, mission 14 : « refusée » était contradictoire. `main` **acceptait** la réponse
+  (`approveStep` → `true`) et résolvait l'attente ; seules l'exécution et la publication étaient
+  empêchées. Depuis la mission 14, les attentes d'un run terminé sont annulées et la réponse est
+  refusée (`false`).*
+- **Clé des attentes dans `main`.** ~~`approveStep(stepId)` et `CoworkToolAgent` identifient une
+  attente par `stepId` seul. Une réponse du run 1 traitée par `main` après qu'un run 2 a ouvert le
+  même pas résoudrait celle du run 2. Depuis le renderer, l'ordre des IPC l'empêche : le clic
+  précède forcément la demande du run 2. Un déclencheur hors de cette fenêtre, lui, n'est pas
+  couvert.~~ *Correction, mission 14 : la protection par l'ordre des IPC n'a jamais été prouvée.
+  Une sonde sur le vrai pont montre le contraire : la réponse `('gate', true)` du run 1, livrée
+  après sa fin, validait le run 2, passé en `completed`. Corrigé à la mission 14.*
+- **Pas de terminal, pas de retrait.** Si `startWorkflow` lève une exception (branche `catch` du
+  pont), le pont n'émet aucun `workflow.event` terminal : la demande reste affichée. Même chose
+  pour un run en vol lors d'un `shutdown()` ; Cowork se ferme alors de toute façon.
+- **Expiration.** Une approbation expirée dans `main` n'émet rien. Le compte à rebours reste à
+  0 s jusqu'au terminal du run, qui la retire désormais.
+- **Déjà affichée.** Une boîte de confirmation globale d'outil (`pendingPermission`) d'un run
+  terminé n'est pas concernée : ni touchée ni retirée.
+
 ## Mission 12 — arrêt du pont workflows câblé dans la sortie de `main`
 
 **Livrée au pilote, non commitée** (2026-09-14, 03:15).
@@ -240,7 +491,8 @@ second `stop()`, qui faisait doublon avec celui de HEAD ; ce doublon est retiré
   interrompu : aucune action nouvelle ne démarre, mais sa promesse ne se règle qu'à l'expiration
   du noyau (5 min). La sortie de `main` ne l'attend pas.
 - Un outil déjà lancé n'est pas interrompu. Les boîtes de confirmation ou d'approbation déjà
-  affichées ne sont pas retirées (renderer gelé).
+  affichées ne sont pas retirées (renderer gelé). *Mission 13 : une approbation est désormais
+  retirée au terminal de son run ; pas à l'arrêt du pont, qui n'émet aucun terminal.*
 - Un `replay()` dont l'instantané contient des valeurs masquées répond toujours par son erreur
   « Secret input required » et enregistre ce refus, même après l'arrêt. Réponse immédiate,
   rien n'est exécuté ; branche non modifiée.
@@ -1434,6 +1686,102 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
 
 ## Journal
 
+### 03:27 — Mission 14 : identité d'approbation liée au run dans `main` (avant toute modification)
+
+Mission 13 en revue. Défaut critique signalé à la mission 13 et confirmé par lecture :
+- `approveStep(stepId, approved)` → `CoworkToolAgent.resolveApproval(stepId, approved)` ;
+- les attentes sont indexées par `stepId` seul ; le run n'est ni transmis ni vérifié ;
+- le handler IPC `workflow.approve` et le preload (implémentation ligne 2783, type ligne 7333)
+  n'acceptent que `(stepId, approved)`.
+
+Une réponse du run 1 peut donc résoudre la demande du run 2 sur le même pas. J'avais écrit que
+l'ordre des IPC protégeait ce cas : **non prouvé**, à corriger dans le rapport.
+
+Dégelés **uniquement** :
+- `workflow-bridge.ts` et `cowork-tool-agent.ts` ;
+- le handler et le schéma IPC `workflow.approve` : bloc 4679-4685 de `main/index.ts`, preload,
+  types partagés d'approbation ;
+- `ApprovalDialog.tsx` et les tests nécessaires.
+
+Le reste de `main/index.ts`, le noyau et le serveur sont gelés. Le pilote a resynchronisé
+`workflow-bridge.ts` et `workflow-bridge-shutdown.test.ts` depuis le primaire, avec une garde root :
+`replay()` refuse après l'arrêt avant `runStore.get`, ce qui empêche l'enregistrement « redacted »
+après l'arrêt. **À préserver.**
+
+Constats du compilateur (`dag-compiler.ts`) utiles au cadrage :
+- une approbation ne porte pas `maxRetries` : pas de nouvelle tentative du noyau ;
+- elle peut se trouver dans un corps de `loop` : même run, même `stepId`, demandes successives ;
+- elle peut se trouver dans des branches `parallel` : plusieurs demandes simultanées du même run.
+
+Le couple (run, pas) ne suffit donc pas. Il faut en plus un identifiant propre à chaque demande.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/main/workflows/workflow-bridge.ts` (synchro primaire, garde `replay`) | `81ae77930be3324fcd1660782f73296c466bf93afbde31967e13160372b38b8e` |
+| `cowork/tests/workflow-bridge-shutdown.test.ts` (synchro primaire) | `515e18c1d83246904626fe135e719afdeef806a54dec3a98d409d04d0d463639` |
+| `cowork/src/main/workflows/cowork-tool-agent.ts` | `6837b1238f3da9a8e9f98e97d1887a9caeb5c12ec5c0ec1d6ecfdd92a15aa8cf` |
+| `cowork/src/main/index.ts` (mission 12) | `f1acd716bb6eadd7af619f4d624194a5d8112f2bf6d1ac69712ea1c9f859c633` |
+| `cowork/src/preload/index.ts` (= HEAD) | `1f3836e11ef44ddc22427d4c4df66efa3849d0eaff5060e0e44a9dc04d749c72` |
+| `cowork/src/shared/workflow-types.ts` (= HEAD) | `6c88fe023f850d0a0b6985b65354abc65a7e2c9d74a27bcb153c1db1b6e08899` |
+| `cowork/src/renderer/components/ApprovalDialog.tsx` (mission 13) | `4ca5c92062d5cb226f6ddaacd955549767987c5c09b034ff81a4329b3d2bf903` |
+| `cowork/src/renderer/store/index.ts` (mission 13) | `49c00ce55cfeef44afe692ed40484e0baaa462e9fe5c62257f94ed07015c769f` |
+| `cowork/tests/workflow-approval-dialog-terminal.test.tsx` / `workflow-approval-terminal-flow.test.ts` (mission 13) | `a2b07c3c…d6ae` / `039b5dd1…c65b` |
+| `cowork/tests/workflow-bridge-late-confirmation.test.ts` (mission 12) | `9c87a9b2…c2cb` |
+| `src/orchestration/orchestrator.ts` (gelé) | `c2023902…d3a8` |
+
+### 03:18 — Mission 13 : approbations d'un workflow terminé encore affichées (avant toute modification)
+
+Mission 12 en revue chez le pilote. Le pilote a synchronisé **uniquement**
+`src/orchestration/orchestrator.ts` et son test depuis l'intégration finale `2120d48d8` (IDs de
+tâche uniques, gardes, purge bornée). Noyau toujours gelé. `main/index.ts`, les sources `main` et
+serveur (autre Opus), les sessions Fleet et `FleetRoutePreview` sont gelés. Dégelés **uniquement**
+le renderer des approbations workflow, le store et les tests nécessaires.
+
+Compatibilité vérifiée d'abord avec le noyau actuel (`orchestrator.ts` `c2023902…d3a8`, test
+`orchestrator-abandoned-tasks.test.ts` `efa20b8c…610f`) :
+- `tests/orchestration/orchestrator-abandoned-tasks.test.ts` : **12/12 verts** ;
+- 12 fichiers Cowork (`workflow-bridge-*`, `workflow-supervision-bridge`, `workflow-supervisor`,
+  `workflow-force-confirmation`, `workflow-service`, `fleet-bridge-quit-lifecycle`) :
+  **97/97 verts**, aucune erreur non gérée.
+
+Le noyau nomme désormais ses tâches `instanceId:logicalId:n`. Le pont lit
+`cowork_visual_node_id` et `stepId` dans l'entrée de tâche, pas dans l'id : il n'est pas touché.
+
+Flux réel lu :
+1. `main` : `task_assigned` d'une tâche `approval_wait` → `CoworkToolAgent.runApprovalWait(input,
+   currentRun.instanceId)` → `onApprovalRequired` → `workflow.approval_required`
+   `{ stepId (id du nœud visuel), workflowInstanceId, message, expiresAt }` ;
+2. renderer : `useIPC` → `pushPendingApproval` (dédoublonnage par `stepId`) →
+   `pendingApprovals` → `ApprovalDialog` (tête de file, modale) et compteur de
+   `UniversalPreviewRail` ;
+3. fin de run : le pont émet `workflow.event` `completed`/`failed` avec le même `instanceId` →
+   `useIPC` → `applyWorkflowEvent`, qui ne met à jour que `workflowExecutions`. **Les approbations
+   de ce run restent dans `pendingApprovals`** : la modale reste ouverte et le compte à rebours
+   reste à 0 s.
+4. `ApprovalDialog.reply` retire l'entrée par `stepId` seul, dans le `finally` qui suit l'IPC.
+
+Hypothèses à prouver par des tests DOM avant toute correction :
+- le terminal ne retire pas les demandes de son run ;
+- la réponse d'un run terminé peut retirer la demande d'un autre run portant le même `stepId`.
+
+À ne pas faire :
+- auto-consentir (aucun `workflow.approve` implicite) ;
+- toucher `pendingPermission` (confirmations globales d'outil) ;
+- retirer la demande d'un autre run.
+
+Base (SHA-256, tous identiques à HEAD) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/renderer/store/index.ts` | `0912e25a0d86ed32e6979757586efe866617816e05d03f629c2e85e75b3d241e` |
+| `cowork/src/renderer/components/ApprovalDialog.tsx` | `8571845a5f44ca3ae3988657b2ea7e41ce7aefda8cb123ffb40580b2c7925487` |
+| `cowork/src/renderer/hooks/useIPC.ts` | `dbb7c634ade86ac9ef5c15728a38765eed776189e6af34ba05db576b092e46b9` |
+| `cowork/src/renderer/components/UniversalPreviewRail.tsx` (lecture) | `fc73c9dc8bcdb33e3014d60cdf7bb95023f29ce6fe836a7f26a76cf33d5ff649` |
+| `cowork/src/shared/workflow-types.ts` (lecture) | `6c88fe023f850d0a0b6985b65354abc65a7e2c9d74a27bcb153c1db1b6e08899` |
+| gelés : `workflow-bridge.ts`, `cowork-tool-agent.ts`, `main/index.ts` | `f466590b…42fe`, `6837b123…a8cf`, `f1acd716…c633` |
+
 ### 03:01 — Mission 12 : fermer le circuit réel de l'arrêt du pont workflows (avant toute modification)
 
 `main/index.ts` dégelé pour moi seul (fichier identique au primaire, vérifié par le pilote) ;
@@ -1834,3 +2182,15 @@ Validation complète du noyau après intégration : `npm run validate` avec HOME
 ### Contre-validation du raccordement de fermeture
 
 Le lot 12 est porté avec le noyau `2120d48d8` : neuf suites fermeture/workflows passent sous Node 20 (70 tests). Une revue supplémentaire a corrigé le replay expurgé qui écrivait encore dans l'historique après arrêt : le garde de `replay()` précède maintenant toute lecture/écriture. Le test reproduit le rouge avant correction, puis six suites (27 tests) passent sous Node 20 et 24. Le typecheck Cowork, le lint ciblé et `npm run validate -- tests/security/donnees-personnelles.test.ts` passent. Aucun arrêt Electron réel n'est revendiqué : le câblage est vérifié sur la source et le cycle de vie sur le pont.
+
+### Contre-validation finale des approbations et clôture Opus
+
+Les deux sessions Claude Opus ont terminé leurs dernières missions. La commande `/usage` affiche 100 % du quota hebdomadaire de l’abonnement ; aucun refus explicite ni basculement payant n’a été observé. Aucune nouvelle mission Opus n’est lancée.
+
+Le pilote a corrigé un état de soumission partagé : chaque dialogue conserve maintenant l’identité de sa propre demande en cours. Une réponse ancienne ne déverrouille ni ne supprime le dialogue suivant. Les sept tests DOM passent sous Node 20 et 24 ; les typechecks Cowork et le lint ciblé passent. Le lot final de onze suites Cowork (approbations, workflows, fermeture et serveur) passe sous Node 20 : **81/81**. Le build Vite final passe.
+
+Chromium sur le bundle compilé, avec IPC simulé, vérifie six propriétés : fin de A nettoyant A seulement ; B utilisable pendant la réponse A ; réponse A tardive sans effet sur B ; fin de C préservant D ; absence de réponse implicite lors d’un événement terminal ; identité complète dans les réponses IPC. Les captures ont été inspectées. L’unique erreur réseau vient du blocage volontaire des polices Google ; aucun service réel ni Electron n’est utilisé. Artefacts locaux : `/tmp/cb-workflow-approval-browser-qa.json`, `/tmp/cb-workflow-approval-ready.png`, `/tmp/cb-workflow-approval-other-run.png`.
+
+Limite conservée : deux approbations simultanées partageant le même `stepId` se remplacent encore dans la file historique. L’identifiant unique empêche une ancienne réponse de valider la nouvelle demande ; ce lot ne généralise pas la coexistence des étapes homonymes.
+
+La CI du commit publié `a45a9d4f8` est entièrement verte (run `34795282432`) : six combinaisons OS/Node, audit et paquet. Cela ne prouve pas la cause du précédent crash intermittent de worker Windows.

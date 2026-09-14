@@ -28,6 +28,7 @@ import type {
   WorkflowEventPayload,
   WorkflowRunResult,
   PendingApproval,
+  WorkflowApprovalAnswer,
 } from '../../shared/workflow-types';
 import type {
   WorkflowDryRunResult,
@@ -114,6 +115,16 @@ interface CoreToolRegistryModule {
 // ──────────────────────────────────────────────────────────────────────────
 // Bridge
 // ──────────────────────────────────────────────────────────────────────────
+
+function isWorkflowApprovalAnswer(value: unknown): value is WorkflowApprovalAnswer {
+  if (typeof value !== 'object' || value === null) return false;
+  const answer = value as Record<string, unknown>;
+  return (
+    [answer.approvalId, answer.workflowInstanceId, answer.stepId].every(
+      (field) => typeof field === 'string' && field.length > 0
+    ) && typeof answer.approved === 'boolean'
+  );
+}
 
 const BRIDGE_SHUT_DOWN_ERROR =
   'Workflow bridge is shut down (Cowork is quitting): no workflow run can start';
@@ -228,10 +239,18 @@ export class WorkflowBridge {
 
   // ────── Approval bridge ──────
 
-  /** Called by the IPC handler when the renderer answers an approval. */
-  approveStep(stepId: string, approved: boolean): boolean {
-    if (!this.toolAgent) return false;
-    return this.toolAgent.resolveApproval(stepId, approved);
+  /**
+   * Called by the `workflow.approve` IPC handler with the renderer's answer, as
+   * received. Only a well-formed `WorkflowApprovalAnswer` matching the pending
+   * request (approval id, run and step) resolves it; anything else — including
+   * the former `(stepId, approved)` call — is refused.
+   */
+  approveStep(answer: unknown): boolean {
+    if (!isWorkflowApprovalAnswer(answer)) {
+      logWarn('[WorkflowBridge] refused a malformed approval answer');
+      return false;
+    }
+    return this.toolAgent?.resolveApproval(answer) ?? false;
   }
 
   // ────── Execution ──────
@@ -469,6 +488,9 @@ export class WorkflowBridge {
 
       this.taskToVisualNode.clear();
       this.instanceToWorkflowId.delete(instance.instanceId);
+      // Approvals of an ended run can no longer be answered; cancelling them
+      // also releases the workers their abandoned tasks kept busy.
+      this.toolAgent?.cancelPending(instance.instanceId, 'Workflow run ended');
       this.currentRun = null;
 
       log('[WorkflowBridge] run finished:', definition.id ?? '', instance.status);
@@ -490,6 +512,7 @@ export class WorkflowBridge {
       this.loopBodyNodes.clear();
       if (this.currentRun) {
         this.instanceToWorkflowId.delete(this.currentRun.instanceId);
+        this.toolAgent?.cancelPending(this.currentRun.instanceId, 'Workflow run ended');
       }
       this.currentRun = null;
       return {
@@ -595,6 +618,7 @@ export class WorkflowBridge {
           },
           onApprovalRequired: (payload) => {
             const approval: PendingApproval = {
+              approvalId: payload.approvalId,
               workflowInstanceId: payload.workflowInstanceId,
               stepId: payload.stepId,
               message: payload.message,
