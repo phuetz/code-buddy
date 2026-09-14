@@ -25,6 +25,39 @@
  * package on the target host so Electron bindings and optional binaries match.
  */
 
+/**
+ * Platform compatibility helpers adapted from npm-install-checks 8.0.0.
+ * Upstream license retained for these helpers:
+ *
+ * Copyright (c) Robert Kowalski and Isaac Z. Schlueter ("Authors")
+ * All rights reserved.
+ *
+ * The BSD License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 'use strict';
 
 const fs = require('fs');
@@ -189,15 +222,76 @@ function packageParent(packagePath) {
   return match ? match[1].replace(/\/$/, '') : '';
 }
 
+/**
+ * npm's `os` / `cpu` / `libc` list check (npm-install-checks `checkList`): a
+ * string is a one-entry list, `['any']` accepts everything, a negated entry that
+ * matches rejects, otherwise one positive entry must match unless all entries are
+ * negated. An empty field is unrestricted; other shapes, which npm cannot
+ * install, stay unrestricted as before.
+ */
 function supportsValue(values, value) {
-  if (!Array.isArray(values) || values.length === 0) return true;
-  if (values.includes(`!${value}`)) return false;
-  const positive = values.filter((entry) => !entry.startsWith('!'));
-  return positive.length === 0 || positive.includes(value);
+  if (!values) return true;
+  const list = typeof values === 'string' ? [values] : values;
+  if (!Array.isArray(list)) return true;
+  if (list.length === 1 && list[0] === 'any') return true;
+  let negated = 0;
+  let match = false;
+  for (const entry of list) {
+    const text = String(entry);
+    if (text.startsWith('!')) {
+      negated += 1;
+      if (text.slice(1) === value) return false;
+    } else if (text === value) {
+      match = true;
+    }
+  }
+  return match || negated === list.length;
 }
 
-function supportsCurrentTarget(entry, platform, arch) {
-  return supportsValue(entry.os, platform) && supportsValue(entry.cpu, arch);
+/**
+ * npm's platform check: a package that declares `libc` needs a known target C
+ * library family that matches it, so it is unsupported on macOS/Windows and on
+ * a Linux target whose family is unknown.
+ */
+function supportsCurrentTarget(entry, platform, arch, libc) {
+  if (!supportsValue(entry.os, platform) || !supportsValue(entry.cpu, arch)) return false;
+  if (!entry.libc) return true;
+  return Boolean(libc) && supportsValue(entry.libc, libc);
+}
+
+function processReport() {
+  const excludeNetwork = process.report.excludeNetwork;
+  process.report.excludeNetwork = true;
+  try {
+    return process.report.getReport();
+  } finally {
+    process.report.excludeNetwork = excludeNetwork;
+  }
+}
+
+/**
+ * C library family of the Linux packaging host, detected the way npm does
+ * (npm-install-checks `lib/current-env.js`): `/usr/bin/ldd` first, the process
+ * report when ldd cannot be read. Returns 'glibc', 'musl' or null.
+ */
+function detectHostLibcFamily({
+  readLdd = () => fs.readFileSync('/usr/bin/ldd', 'utf8'),
+  getReport = processReport,
+} = {}) {
+  try {
+    const content = readLdd();
+    if (content.includes('musl')) return 'musl';
+    if (content.includes('GNU C Library')) return 'glibc';
+    return null;
+  } catch {
+    const report = getReport();
+    if (report?.header?.glibcVersionRuntime) return 'glibc';
+    const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : [];
+    if (sharedObjects.some((file) => file.includes('libc.musl-') || file.includes('ld-musl-'))) {
+      return 'musl';
+    }
+    return null;
+  }
 }
 
 /**
@@ -237,6 +331,14 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     options.arch ??
     process.env.CODEBUDDY_CORE_TARGET_ARCH ??
     configuredTargetArch(platform);
+  // Only a Linux target has a C library family. It is the packaging host's,
+  // since staging runs on the target; a Linux target staged from another OS has
+  // an unknown family, so packages that declare libc are unsupported there.
+  const libc = Object.hasOwn(options, 'libc')
+    ? options.libc
+    : platform === 'linux' && process.platform === 'linux'
+      ? detectHostLibcFamily()
+      : undefined;
   const includeRootOptional = options.includeRootOptional === true;
   const requiredOptionalDependencies = options.requiredOptionalDependencies ?? [];
   const rootPackagePath = path.join(coreRoot, 'package.json');
@@ -324,10 +426,13 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     }
     const packageJsonPath = path.join(coreRoot, edge.packagePath, 'package.json');
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    if (!supportsCurrentTarget(packageJson, platform, arch)) {
+    if (!supportsCurrentTarget(packageJson, platform, arch, libc)) {
       if (!obligatory) continue;
       const target = `${platform}/${arch}: ${edge.packagePath} ` +
-        `(os ${JSON.stringify(packageJson.os ?? [])}, cpu ${JSON.stringify(packageJson.cpu ?? [])})`;
+        `(os ${JSON.stringify(packageJson.os ?? [])}, cpu ${JSON.stringify(packageJson.cpu ?? [])})` +
+        (packageJson.libc
+          ? ` (libc ${JSON.stringify(packageJson.libc)}, target libc ${libc ?? 'unknown'})`
+          : '');
       if (edge.obligation === 'cowork') {
         throw new Error(`Cowork-required optional dependency does not support ${target}`);
       }
@@ -550,6 +655,7 @@ module.exports = {
   CORE_RUNTIME_ENTRYPOINT,
   collectInstalledRuntimePackagePaths,
   copyTreeWithHardlinks,
+  detectHostLibcFamily,
   prepareCoreRuntime,
   readCorePackageIdentity,
   resolveInstalledDependencyPath,

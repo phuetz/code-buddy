@@ -18,6 +18,7 @@ const {
   COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
   collectInstalledRuntimePackagePaths,
   copyTreeWithHardlinks,
+  detectHostLibcFamily,
   prepareCoreRuntime,
   readCorePackageIdentity,
   resolveInstalledDependencyPath,
@@ -25,6 +26,10 @@ const {
 } = require(
   '../../scripts/prepare-core-runtime.js',
 ) as {
+  detectHostLibcFamily: (sources?: {
+    readLdd?: () => string;
+    getReport?: () => { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] };
+  }) => 'glibc' | 'musl' | null;
   resolveInstalledDependencyPath: (
     coreRoot: string,
     fromPackagePath: string,
@@ -36,6 +41,7 @@ const {
     options?: {
       platform?: string;
       arch?: string;
+      libc?: string | null;
       includeRootOptional?: boolean;
       requiredOptionalDependencies?: readonly string[];
     },
@@ -527,6 +533,157 @@ describe('target filtering of dependency edges', () => {
       }),
     ).toThrow(/native-helper required by node_modules\/app does not support linux\/x64/);
     expect(fs.readFileSync(path.join(runtimeRoot, 'previous-runtime.marker'), 'utf8')).toBe('kept');
+  });
+});
+
+describe('npm platform fields os, cpu and libc', () => {
+  function installedTree(root: object, packages: Record<string, object>): string {
+    const coreRoot = temporaryRoot();
+    writeFile(path.join(coreRoot, 'package.json'), JSON.stringify(root));
+    for (const [packagePath, packageJson] of Object.entries(packages)) {
+      writePackage(coreRoot, packagePath, packageJson);
+    }
+    return coreRoot;
+  }
+
+  /** An app with optional native helpers built for each Linux C library, like sharp or resvg. */
+  function libcHelpersTree(): string {
+    return installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { optionalDependencies: { 'bin-gnu': '1', 'bin-musl': '1' } },
+        'node_modules/bin-gnu': { os: ['linux'], cpu: ['x64'], libc: ['glibc'] },
+        'node_modules/bin-musl': { os: ['linux'], cpu: ['x64'], libc: ['musl'] },
+      },
+    );
+  }
+
+  it.each([
+    ['glibc', 'node_modules/bin-gnu'],
+    ['musl', 'node_modules/bin-musl'],
+  ])('keeps only the %s helper for a Linux target', (libc, helper) => {
+    expect(
+      collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64', libc }),
+    ).toEqual(['node_modules/app', helper]);
+  });
+
+  it('skips libc packages when the Linux C library family is unknown and refuses an obligatory one', () => {
+    const obligatory = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'glibc-only': '1' } },
+        'node_modules/glibc-only': { libc: 'glibc' },
+      },
+    );
+
+    expect(
+      collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64', libc: null }),
+    ).toEqual(['node_modules/app']);
+    expect(() =>
+      collectInstalledRuntimePackagePaths(obligatory, { platform: 'linux', arch: 'x64', libc: null }),
+    ).toThrow('(libc "glibc", target libc unknown)');
+  });
+
+  it('refuses an obligatory dependency built for another C library', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'glibc-only': '1' } },
+        'node_modules/glibc-only': { os: ['linux'], libc: ['glibc'] },
+      },
+    );
+
+    expect(() =>
+      collectInstalledRuntimePackagePaths(coreRoot, { platform: 'linux', arch: 'x64', libc: 'musl' }),
+    ).toThrow(
+      'Installed dependency glibc-only required by node_modules/app does not support linux/x64: ' +
+        'node_modules/glibc-only (os ["linux"], cpu []) (libc ["glibc"], target libc musl)',
+    );
+  });
+
+  it.each([
+    ['darwin', 'arm64'],
+    ['win32', 'x64'],
+  ])('treats libc packages as unsupported on %s, like npm, and keeps its own helpers', (platform, arch) => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { optionalDependencies: { 'gnu-no-os': '1', 'own-helper': '1' } },
+        'node_modules/gnu-no-os': { libc: 'glibc' },
+        'node_modules/own-helper': { os: [platform], cpu: [arch] },
+      },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(coreRoot, { platform, arch })).toEqual([
+      'node_modules/app',
+      'node_modules/own-helper',
+    ]);
+  });
+
+  it('reads string fields and ["any"] like npm', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': {
+          dependencies: { 'anywhere-required': '1' },
+          optionalDependencies: { 'win-only': '1', 'anywhere-optional': '1', 'musl-string': '1' },
+        },
+        'node_modules/anywhere-required': { os: ['any'] },
+        'node_modules/anywhere-optional': { cpu: ['any'] },
+        'node_modules/win-only': { os: 'win32' },
+        'node_modules/musl-string': { os: 'linux', libc: 'musl' },
+      },
+    );
+    const stringRestrictedRequired = installedTree(
+      { dependencies: { 'win-required': '1' } },
+      { 'node_modules/win-required': { os: 'win32' } },
+    );
+
+    expect(
+      collectInstalledRuntimePackagePaths(coreRoot, { platform: 'linux', arch: 'x64', libc: 'musl' }),
+    ).toEqual([
+      'node_modules/anywhere-optional',
+      'node_modules/anywhere-required',
+      'node_modules/app',
+      'node_modules/musl-string',
+    ]);
+    expect(() =>
+      collectInstalledRuntimePackagePaths(stringRestrictedRequired, { platform: 'linux', arch: 'x64', libc: 'glibc' }),
+    ).toThrow('Installed production dependency win-required does not support linux/x64');
+  });
+
+  it('detects the host C library family like npm', () => {
+    const unreadable = () => {
+      throw new Error('ENOENT: /usr/bin/ldd');
+    };
+    const noReport = () => {
+      throw new Error('the process report must not be read when ldd answers');
+    };
+
+    expect(detectHostLibcFamily({ readLdd: () => 'musl libc (x86_64)', getReport: noReport })).toBe('musl');
+    expect(detectHostLibcFamily({ readLdd: () => 'ldd (GNU libc) — GNU C Library', getReport: noReport })).toBe(
+      'glibc',
+    );
+    expect(detectHostLibcFamily({ readLdd: () => '#!/bin/sh', getReport: noReport })).toBeNull();
+    expect(
+      detectHostLibcFamily({ readLdd: unreadable, getReport: () => ({ header: { glibcVersionRuntime: '2.39' } }) }),
+    ).toBe('glibc');
+    expect(
+      detectHostLibcFamily({
+        readLdd: unreadable,
+        getReport: () => ({ header: {}, sharedObjects: ['/lib/ld-musl-x86_64.so.1'] }),
+      }),
+    ).toBe('musl');
+    expect(detectHostLibcFamily({ readLdd: unreadable, getReport: () => ({ header: {} }) })).toBeNull();
+  });
+
+  it.runIf(process.platform === 'linux')('uses the host C library family for a Linux target on Linux', () => {
+    const helperByFamily: Record<string, string> = { glibc: 'node_modules/bin-gnu', musl: 'node_modules/bin-musl' };
+    const helper = helperByFamily[detectHostLibcFamily() ?? ''];
+
+    expect(collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64' })).toEqual(
+      helper ? ['node_modules/app', helper] : ['node_modules/app'],
+    );
   });
 });
 
