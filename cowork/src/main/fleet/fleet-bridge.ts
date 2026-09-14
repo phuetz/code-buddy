@@ -136,6 +136,7 @@ export class FleetBridge {
   private capabilityRefreshedAt: Map<string, number> = new Map();
   private loaded = false;
   private stopped = false;
+  private shutdownPromise: Promise<void> | null = null;
   private activityFeed: ActivityFeed | null = null;
   private readonly recoveryDelaysMs: number[];
 
@@ -161,10 +162,11 @@ export class FleetBridge {
 
   /** Load persisted peers and connect each one. Safe to call multiple times. */
   async init(): Promise<void> {
-    if (this.loaded) return;
+    if (this.loaded || this.stopped) return;
     this.loaded = true;
     try {
       const raw = await fs.readFile(this.registryPath, 'utf-8');
+      if (this.stopped) return;
       const parsed = JSON.parse(raw) as PersistedFile;
       for (const p of parsed.peers ?? []) {
         const meta: FleetPeer = {
@@ -593,6 +595,7 @@ export class FleetBridge {
     jwt?: string;
     label?: string;
   }): Promise<{ success: boolean; peer?: FleetPeer; error?: string }> {
+    if (this.stopped) return { success: false, error: BRIDGE_STOPPED };
     if (!input.url) return { success: false, error: 'url required' };
     if (!input.apiKey && !input.jwt) {
       return { success: false, error: 'apiKey or jwt required' };
@@ -610,6 +613,9 @@ export class FleetBridge {
     };
     this.peers.set(id, newPeerEntry(meta, input.apiKey, input.jwt));
     await this.save();
+    // An already-started save may complete during shutdown. Keep that durable
+    // registry entry for the next launch, but never publish or open a socket now.
+    if (this.stopped) return { success: false, error: BRIDGE_STOPPED };
     this.sendToRenderer({ type: 'fleet.peer.update', payload: { peer: { ...meta } } });
     void this.connectPeer(id);
     return { success: true, peer: { ...meta } };
@@ -671,25 +677,41 @@ export class FleetBridge {
     return entry.listener.request(method, params, options);
   }
 
-  /** Close every socket; resolves once no connection attempt is left in flight. */
-  async shutdown(): Promise<void> {
+  /**
+   * Close every socket; resolves once no teardown or connection attempt is left
+   * in flight. Idempotent: later calls share the first one.
+   *
+   * Every peer is detached, its recovery disarmed and its socket teardown started
+   * in the same tick, so one slow or failing socket neither delays nor skips the
+   * others. The wait is as long as the slowest teardown; the quit sequence bounds
+   * it (`shutdownFleetBridgeForQuit`).
+   */
+  shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.closeEverything();
+    return this.shutdownPromise;
+  }
+
+  private async closeEverything(): Promise<void> {
     this.stopped = true;
-    const inFlight: Promise<ConnectOutcome>[] = [];
+    const settling: Promise<unknown>[] = [];
     for (const entry of this.peers.values()) {
       this.cancelRecovery(entry);
-      if (entry.pendingConnect) inFlight.push(entry.pendingConnect);
+      // Attempts see `stopped` at their next checkpoint, or fail on the socket closed here.
+      if (entry.pendingConnect) settling.push(entry.pendingConnect);
       const listener = entry.listener;
       entry.listener = null;
-      if (listener) {
-        try {
-          await listener.disconnect();
-        } catch {
-          /* ignore */
-        }
-      }
+      if (listener) settling.push(disconnectQuietly(listener));
     }
-    // Attempts see `stopped` at their next checkpoint, or fail on the socket closed above.
-    await Promise.allSettled(inFlight);
+    await Promise.allSettled(settling);
+  }
+}
+
+/** Starts a teardown that never rejects, even when `disconnect()` throws synchronously. */
+function disconnectQuietly(listener: CoreFleetListener): Promise<void> {
+  try {
+    return Promise.resolve(listener.disconnect()).catch(() => undefined);
+  } catch {
+    return Promise.resolve();
   }
 }
 

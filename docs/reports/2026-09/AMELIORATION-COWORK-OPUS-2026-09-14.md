@@ -10,6 +10,16 @@
 
 ## Statut
 
+**Lot 6 livré au pilote, non commité** (2026-09-14). Les deux défauts de fermeture relevés au
+lot 3 sont corrigés :
+- la découverte périodique des pairs (premier passage à 5 s, puis toutes les 5 min) s'arrête à la
+  sortie ;
+- `FleetBridge.shutdown()` démarre toutes les fermetures de sockets dans le même tick,
+  idempotent, sans perdre le nettoyage si une déconnexion rejette ou lève.
+
+Toutes les protections des lots 2-3 (reprises, `pendingConnect`, `stopped`, identité des
+listeners) sont conservées. Aucun nouveau timer ; renderer du lot 5 intact.
+
 **Lot 5 livré au pilote, non commité** (2026-09-14). La fraîcheur apparaît là où l'on choisit un
 pair :
 - le Command Center affiche « N online · incl. M silent » ;
@@ -91,6 +101,92 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 6 — fermeture : découverte arrêtée et sockets fermées en parallèle
+
+### Constat (reproduit par tests avant correction)
+
+1. **Découverte jamais arrêtée.** `scheduleFleetDiscovery()` (`main/index.ts`) armait un
+   `setTimeout` de 5 s non conservé et un `setInterval` de 5 min (`discoveryTimer`) que rien
+   n'effaçait. Une passe lance `tailscale status --json` (`discovery.ts:181`), sonde
+   `/api/health` des pairs (`discovery.ts:228`) et pousse `fleet.peer.discovered` vers le
+   renderer. Elle pouvait donc démarrer ou publier pendant le long nettoyage de sortie, voire
+   après la fermeture de la fenêtre.
+2. **Sockets fermées une par une.** `FleetBridge.shutdown()` attendait chaque `disconnect()`
+   dans la boucle :
+   - le pair suivant n'était détaché qu'après la fermeture du précédent, et une requête
+     (`peerRequest`) pouvait encore partir sur sa socket ;
+   - avec le budget de 3 s de `shutdownFleetBridgeForQuit`, une socket lente empêchait les
+     suivantes de démarrer leur fermeture ;
+   - un second `shutdown()` concurrent refermait les pairs pas encore traités.
+
+   Mesures rouges : compteurs de déconnexion `[1, 0, 0]` au lieu de `[1, 1, 1]` ; `peerRequest`
+   résout au lieu d'échouer ; double appel qui ne se termine jamais (5 s de dépassement).
+
+### Correctif
+
+- `cowork/src/main/fleet/fleet-bridge.ts` :
+  - `shutdown()` n'est plus `async` : il mémorise une promesse unique (`shutdownPromise ??=`),
+    donc tout appel ultérieur partage le premier ;
+  - `closeEverything()` passe `stopped` à vrai puis, **dans le même tick** pour chaque pair :
+    désarme la reprise, collecte `pendingConnect`, détache le listener et démarre sa fermeture
+    via `disconnectQuietly()`. Cette fonction ne rejette jamais, même si `disconnect()` lève de
+    façon synchrone. `Promise.allSettled` attend fermetures et tentatives en vol ;
+  - la durée totale est celle de la fermeture la plus lente, plus leur somme. La borne reste le
+    budget existant de 3 s de `shutdownFleetBridgeForQuit` : aucun timer ajouté.
+  - Garde-fous inchangés : `openListener` (garde `abandoned()`), `isCurrent()`, `stillAsked()`,
+    `scheduleRecovery`, `pendingConnect`.
+- `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` : `createFleetDiscoverySchedule(pass,
+  { firstDelayMs, intervalMs })` arme exactement les deux timers d'avant et renvoie :
+  - `start()` : idempotent, sans effet après `stop()` ;
+  - `stop()` : définitif et idempotent ; efface les deux timers ; une passe en cours reçoit
+    `isActive() === false` ;
+  - `isRunning()`.
+
+  Une passe qui échoue est avalée, comme avant.
+- `cowork/src/main/index.ts` :
+  - `scheduleFleetDiscovery`/`discoveryTimer` remplacés par `runFleetDiscoveryPass(isActive)`
+    (même corps ; ne lance pas Tailscale si la sortie a commencé et ne publie rien après) et
+    `const fleetDiscovery = createFleetDiscoverySchedule(runFleetDiscoveryPass, { firstDelayMs:
+    5_000, intervalMs: DISCOVERY_INTERVAL_MS })` ;
+  - `fleetDiscovery.start()` au démarrage ;
+  - `fleetDiscovery.stop()` en tête de `cleanupSandboxResources()`, avant tout `await` et avant
+    la fermeture Fleet, ainsi que dans le chemin rapide dev de `before-quit` ;
+  - aucun `getFleetBridge()` ni singleton ;
+  - pas d'`await` de premier niveau dans `index.ts`, donc pas de zone morte temporelle sur
+    `fleetDiscovery` : le démarrage s'exécute dans `app.whenReady().then`.
+
+### Tests du lot 6
+
+`cowork/tests/fleet-bridge.test.ts`, bloc « shutdown closes every socket at once » (5 tests,
+vrai `FleetBridge`, sockets retenues par le faux listener) :
+
+| Test | Avant correctif | Après |
+| --- | --- | --- |
+| toutes les fermetures démarrent avant la fin de l'une d'elles | **rouge** `[1, 0, 0]` | vert |
+| tous les listeners détachés dès le début : `peerRequest` échoue « no active listener » | **rouge** (résout) | vert |
+| second appel avant la fin : chaque socket fermée une seule fois | **rouge** (ne se termine jamais) | vert |
+| une fermeture rejette, une autre lève de façon synchrone : les autres sont fermées, `shutdown` se résout, reconnexion refusée | vert (garde) | vert |
+| un pair en panne au moment de l'arrêt : aucune reprise pendant 10 s de timers simulés | vert (garde) | vert |
+
+`cowork/tests/fleet-bridge-quit-lifecycle.test.ts` :
+- câblage statique de `index.ts` :
+  - `fleetDiscovery.stop()` avant tout `await` de la sortie complète **(rouge → vert)** ;
+  - `fleetDiscovery.stop()` dans le chemin dev **(rouge → vert)** ;
+  - planification uniquement via le planificateur, même cadence, plus de `discoveryTimer` ni
+    de `setTimeout/setInterval(() => void runOnce` **(rouge → vert)** ;
+- `createFleetDiscoverySchedule` (5 tests, rouges tant que le helper était absent, puis verts) :
+  - deux timers armés une seule fois, passes à 5 s puis 5 min ;
+  - `stop()` avant la première passe → 0 timer, aucune passe en 30 min ;
+  - passe en cours au moment de la sortie → rien publié ;
+  - idempotent et définitif ;
+  - une passe qui lève n'interrompt pas le planning ;
+- helper de sortie sur vrai bridge : une socket bloquée n'empêche pas les deux autres de démarrer
+  leur fermeture ; `timed-out` à 3 000 ms, reconnexion refusée, aucun nouveau listener (vert
+  après le correctif du bridge).
+- **Test du lot 3 adapté** : le motif d'import exact `import { shutdownFleetBridgeForQuit } from
+  …` accepte désormais plusieurs noms importés depuis le même module ; ce qu'il vérifie (import
+  du helper, jamais `getFleetBridge(`) est inchangé.
 
 ## Lot 5 — fraîcheur au moment du choix d'un pair
 
@@ -393,6 +489,30 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 6
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-bridge.test.ts -t "shutdown closes every socket at once"` avant correctif | **3 rouges** / 2 verts. |
+| `… run tests/fleet-bridge-quit-lifecycle.test.ts` avant helper et câblage | **8 rouges** (3 câblage, 5 planificateur) / 10 verts. |
+| `… run tests/fleet-bridge.test.ts tests/fleet-bridge-quit-lifecycle.test.ts` après correctif | **44/44 verts** (26 + 18), idem avec `--sequence.shuffle`, idem après formatage. |
+| 16 tests lisant `src/main/index.ts` + `fleet-ipc`, `saga-runner`, `fleet-discovery`, `fleet-team-panel-browser-bridge`, `companion-gateway-fleet-launch`, `aggregator-wiring`, `live-launcher-bridge`, `test-runner-bridge-catalog` | **25 fichiers, 249 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0 src/main/fleet/fleet-bridge.ts src/main/fleet/fleet-bridge-lifecycle.ts tests/fleet-bridge.test.ts tests/fleet-bridge-quit-lifecycle.test.ts` | Propre. |
+| `node scripts/lint.cjs src/main/index.ts` | Propre. |
+| `tsc --noEmit -p tsconfig.json`, filtré sur `src/` (Cowork) | Aucune erreur dans `cowork/src` (les erreurs historiques de `../src` ne sont pas répétées, consigne). |
+| Prettier | Helper et test lifecycle conformes ; mes lignes conformes dans `fleet-bridge.ts`, `index.ts`, `fleet-bridge.test.ts` (écarts restants antérieurs). |
+| `sha256sum` renderer du lot 5 + `discovery.ts` | Identiques à la base du lot 6. |
+
+Empreintes à la livraison du lot 6 :
+
+| Fichier | Delta lot 6 | SHA-256 |
+| --- | --- | --- |
+| `cowork/src/main/index.ts` | import groupé ; `runFleetDiscoveryPass(isActive)` + `fleetDiscovery` à la place de `scheduleFleetDiscovery`/`discoveryTimer` ; `fleetDiscovery.start()` au démarrage ; `fleetDiscovery.stop()` dans les deux chemins de sortie | `d56399712af4e7d2a7f81115da6e48d75997032069e954a60621e3b2f935bcbc` |
+| `cowork/src/main/fleet/fleet-bridge.ts` | `shutdownPromise`, `shutdown()` mémorisé, `closeEverything()`, `disconnectQuietly()` (792 lignes au total) | `11760ffe9b8b82c57bd05272d310140edc4a2a50bf745855c5970a2022a4139e` |
+| `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` | + `createFleetDiscoverySchedule` (127 lignes au total) | `649ee14f09441c7dc5427e77e08c7c307e99f292b01c76b7698e24f36cbd60d6` |
+| `cowork/tests/fleet-bridge.test.ts` | + bloc de 5 tests (860 lignes au total) | `2a46a23e38b86d5bc687917ace9b9dfb9cfec2d9ad7db0806b7e1b2ac0e6397e` |
+| `cowork/tests/fleet-bridge-quit-lifecycle.test.ts` | + 3 câblage, 5 planificateur, 1 helper ; motif d'import assoupli (371 lignes au total) | `95cfee4c125e7f189d0ce4fd4e34eb1bd166d8bad4dfec2397228ed9fe7f8167` |
+
 ### Lot 5
 
 | Commande | Résultat |
@@ -522,6 +642,30 @@ Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30�
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 6
+
+- Pas d'Electron réel : le câblage de sortie est prouvé par lecture statique de `index.ts` ; le
+  comportement, par le helper et un vrai `FleetBridge` avec faux listener. Aucun serveur ni
+  Tailscale réel.
+- La fermeture parallèle est bornée par le budget de sortie existant (3 s), pas par un délai
+  interne au bridge (consigne : aucun nouveau timer). Hors séquence de sortie, `shutdown()`
+  attend la fermeture la plus lente, elle-même bornée à 1 s par le `FleetListener` du noyau.
+- `stop()` de la découverte est définitif : un redémarrage de la découverte sans relancer
+  l'application n'est pas prévu (aucun appelant ne le demande).
+- Commande pour le pilote (lot 6 seul, après revue) :
+  `git add cowork/src/main/index.ts cowork/src/main/fleet/fleet-bridge.ts
+  cowork/src/main/fleet/fleet-bridge-lifecycle.ts cowork/tests/fleet-bridge.test.ts
+  cowork/tests/fleet-bridge-quit-lifecycle.test.ts docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md
+  docs/FABLE5-CODEX-COORDINATION.md` puis
+  `git commit -m "fix(cowork): stop fleet discovery and close peer sockets in parallel on quit"`.
+  Ces fichiers portent aussi les lots 1-3, déjà en intégration.
+
+## Suite après le lot 6
+
+Aucune autre amélioration Fleet n'est étayée par une preuve concrète à ce stade : les défauts
+relevés pendant les lots 1 à 6 sont corrigés. Je ne propose pas de lot supplémentaire sans
+nouveau constat.
+
 ## Limites du lot 5
 
 - Pas d'Electron réel : preuves par rendus DOM complets (Command Center, Mission Control) sous
@@ -548,7 +692,7 @@ Côté fraîcheur Fleet, rien d'utile ne reste sans toucher au routage, ce qui e
 périmètre voulu. Seul point concret déjà identifié et encore ouvert : le micro-lot `main` noté au
 lot 3 (arrêter `discoveryTimer` et son premier `setTimeout` au début de la sortie, et fermer les
 sockets en parallèle dans `FleetBridge.shutdown()`). Il touche des fichiers livrés, donc à engager
-seulement si le pilote le juge utile.
+seulement si le pilote le juge utile. — **Fait au lot 6.**
 
 ## Limites du lot 4
 
@@ -630,6 +774,30 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
    réseau inutile.
 
 ## Journal
+
+### 02:03 — Lot 6 : fermeture, découverte arrêtée et sockets fermées en parallèle (avant toute modification)
+
+Coordination lue : « LOT 6 FERMETURE RÉSERVÉ ; Codex intègre le renderer lot 5 » (lots 1-4
+intégrés jusqu'à `56e757447`), réservation actualisée « en cours ». Périmètre : `main/index.ts`,
+`main/fleet/fleet-bridge.ts`, lifecycle si nécessaire, tests associés, rapport, ma ligne.
+Contraintes :
+- préserver reprises, `pendingConnect`, `stopped` et identité des listeners ;
+- fermeture parallèle bornée, idempotente, sans perte de nettoyage si une déconnexion rejette ;
+- aucun nouveau timer, aucun singleton créé pour fermer ;
+- ni serveur réel, ni Electron, ni dépendance ;
+- renderer du lot 5 gelé.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/main/index.ts` (lot 3) | `40418d1f401cfb2b72c60f2a33ce54dd6ae19951b124511528b35e8ba3c0777c` |
+| `cowork/src/main/fleet/fleet-bridge.ts` (lots 1-2) | `c7c001b9be300359570e5c985bb4a35e1dd864b6d7526757b5062da0e5cf7ebe` |
+| `cowork/src/main/fleet/fleet-bridge-lifecycle.ts` (lot 3) | `2df2e5d0b63239db71dd7d1099f656a1c9970733544438f7c2140ef870bb3671` |
+| `cowork/src/main/fleet/discovery.ts` (= HEAD) | `c3d6ac99752e2655fe6dc6814a8361077c1f7fecaacffc5c58e077a3aec24456` |
+| `cowork/tests/fleet-bridge.test.ts` (lots 1-2) | `750198f37c4e75a3d71a27ed5224df2dfbfadce6a8256e67276144b03e82562d` |
+| `cowork/tests/fleet-bridge-quit-lifecycle.test.ts` (lot 3) | `ccebdc2e2ee697ebbd6f42363a87609fdb73a46da664855fe2379af307a46791` |
+| renderer lot 5 gelé : `fleet-peer-freshness.tsx`, `FleetCommandCenter.tsx`, `FleetRoutePreview.tsx`, `MissionControlView.tsx` | `cd8f73b5…3f43`, `6577f700…1cbb`, `c558f7ff…f8db`, `487aace0…784d` |
 
 ### 01:50 — Lot 5 : fraîcheur au moment du choix d'un pair (avant toute inspection)
 
@@ -816,3 +984,12 @@ Preuve locale : `/tmp/cb-fleet-route-browser-qa.json`, captures
 `/tmp/cb-fleet-route-silent.png` et `/tmp/cb-fleet-route-fresh.png`.
 Validation avant commit : lint, typechecks, paquet (10 tests) et garde données
 personnelles (40 tests après indexation) passent.
+
+### Contre-validation lot 6 : fermeture
+
+Après port sélectif, les 44 tests bridge/lifecycle passent dans la branche
+d'intégration. Typecheck Cowork et ESLint ciblé passent également. La découverte
+stoppe ses timers et ne publie plus après la sortie ; une sonde réseau déjà
+lancée reste soumise à son propre délai. La fermeture des sockets est parallèle,
+la promesse est partagée entre appels et le budget de sortie reste trois secondes.
+Aucun lancement Electron, Tailscale ou fournisseur réel n'est revendiqué.

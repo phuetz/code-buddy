@@ -14,6 +14,9 @@
  * Success is deliberately not logged here: the dev quit path closes the log
  * file right after calling this, and a late write would reopen it.
  *
+ * It also owns the periodic peer discovery schedule, so the quit sequence can
+ * stop it instead of leaving Tailscale probes running while Cowork exits.
+ *
  * @module main/fleet/fleet-bridge-lifecycle
  */
 
@@ -24,6 +27,63 @@ import type { FleetBridge } from './fleet-bridge';
 export const FLEET_BRIDGE_QUIT_TIMEOUT_MS = 3_000;
 
 export type FleetBridgeQuitOutcome = 'no-bridge' | 'closed' | 'failed' | 'timed-out';
+
+export interface FleetDiscoveryCadence {
+  /** Delay before the first pass, so Tailscale and the bridge settle after boot. */
+  firstDelayMs: number;
+  intervalMs: number;
+}
+
+export interface FleetDiscoverySchedule {
+  /** Arms the first pass and the interval; a no-op while running or once stopped. */
+  start(): void;
+  /** Clears both timers for good; a pass already running then sees `isActive() === false`. */
+  stop(): void;
+  isRunning(): boolean;
+}
+
+/**
+ * Periodic peer discovery that the quit sequence can stop. It arms exactly the
+ * two timers main used to leave untracked — a first pass, then an interval —
+ * and swallows a failing pass, as discovery is best-effort.
+ */
+export function createFleetDiscoverySchedule(
+  pass: (isActive: () => boolean) => Promise<void>,
+  cadence: FleetDiscoveryCadence
+): FleetDiscoverySchedule {
+  let firstPass: ReturnType<typeof setTimeout> | null = null;
+  let interval: ReturnType<typeof setInterval> | null = null;
+  let stopped = false;
+  const isActive = () => !stopped;
+
+  const run = () => {
+    if (stopped) return;
+    try {
+      void pass(isActive).catch(() => undefined);
+    } catch {
+      /* best-effort: a synchronous failure must not break the schedule */
+    }
+  };
+
+  return {
+    start() {
+      if (stopped || interval !== null) return;
+      firstPass = setTimeout(() => {
+        firstPass = null;
+        run();
+      }, cadence.firstDelayMs);
+      interval = setInterval(run, cadence.intervalMs);
+    },
+    stop() {
+      stopped = true;
+      if (firstPass !== null) clearTimeout(firstPass);
+      if (interval !== null) clearInterval(interval);
+      firstPass = null;
+      interval = null;
+    },
+    isRunning: () => interval !== null,
+  };
+}
 
 type ClosableBridge = Pick<FleetBridge, 'shutdown'>;
 

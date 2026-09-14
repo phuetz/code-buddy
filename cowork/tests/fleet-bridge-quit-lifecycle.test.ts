@@ -66,6 +66,7 @@ vi.mock('../src/main/utils/core-loader', () => ({
 import { FleetBridge, getFleetBridge } from '../src/main/fleet/fleet-bridge';
 import {
   FLEET_BRIDGE_QUIT_TIMEOUT_MS,
+  createFleetDiscoverySchedule,
   shutdownFleetBridgeForQuit,
 } from '../src/main/fleet/fleet-bridge-lifecycle';
 
@@ -153,8 +154,116 @@ describe('FleetBridge quit lifecycle', () => {
     it('never reaches for the FleetBridge module singleton', () => {
       expect(indexSource).not.toMatch(/getFleetBridge\s*\(/);
       expect(indexSource).toMatch(
-        /import \{ shutdownFleetBridgeForQuit \} from '\.\/fleet\/fleet-bridge-lifecycle';/
+        /import \{[^}]*\bshutdownFleetBridgeForQuit\b[^}]*\} from '\.\/fleet\/fleet-bridge-lifecycle';/
       );
+    });
+
+    it('stops peer discovery at the start of the full quit cleanup, before any slow await', () => {
+      const cleanup = functionBody('async function cleanupSandboxResources(): Promise<void> {');
+      const stop = cleanup.indexOf('fleetDiscovery.stop()');
+
+      expect(stop).toBeGreaterThan(cleanup.indexOf('isCleaningUp = true'));
+      expect(stop).toBeLessThan(cleanup.indexOf('await '));
+    });
+
+    it('also stops peer discovery on the dev fast quit path', () => {
+      const beforeQuit = indexSource.slice(indexSource.indexOf("app.on('before-quit'"));
+      const devPath = beforeQuit.slice(
+        beforeQuit.indexOf('if (process.env.VITE_DEV_SERVER_URL) {'),
+        beforeQuit.indexOf('return;')
+      );
+
+      expect(devPath).toContain('fleetDiscovery.stop()');
+    });
+
+    it('schedules discovery through the stoppable schedule only, with the same cadence as before', () => {
+      expect(indexSource).toMatch(
+        /const fleetDiscovery = createFleetDiscoverySchedule\(runFleetDiscoveryPass, \{\s*firstDelayMs: 5_000,\s*intervalMs: DISCOVERY_INTERVAL_MS,?\s*\}\);/
+      );
+      expect(indexSource).toContain('const DISCOVERY_INTERVAL_MS = 5 * 60 * 1_000;');
+      expect(indexSource).toContain('fleetDiscovery.start();');
+      expect(indexSource).not.toContain('discoveryTimer');
+      expect(indexSource).not.toMatch(/set(Timeout|Interval)\(\(\) => void runOnce/);
+    });
+  });
+
+  describe('createFleetDiscoverySchedule', () => {
+    const cadence = { firstDelayMs: 5_000, intervalMs: 300_000 };
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    });
+
+    it('arms the first pass and the interval once, however often it is started', async () => {
+      const pass = vi.fn(async () => {});
+      const discovery = createFleetDiscoverySchedule(pass, cadence);
+
+      discovery.start();
+      discovery.start();
+      expect(vi.getTimerCount()).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(pass).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(pass).toHaveBeenCalledTimes(2);
+      discovery.stop();
+    });
+
+    it('cancels the pending first pass and the interval when quit comes early', async () => {
+      const pass = vi.fn(async () => {});
+      const discovery = createFleetDiscoverySchedule(pass, cadence);
+      discovery.start();
+
+      discovery.stop();
+
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(30 * 60_000);
+      expect(pass).not.toHaveBeenCalled();
+    });
+
+    it('keeps a pass already running at quit from publishing its result', async () => {
+      const released = { resolve: () => {} };
+      const published: string[] = [];
+      const discovery = createFleetDiscoverySchedule(async (isActive) => {
+        await new Promise<void>((resolve) => {
+          released.resolve = resolve;
+        });
+        if (isActive()) published.push('fleet.peer.discovered');
+      }, cadence);
+      discovery.start();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      discovery.stop();
+      released.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(published).toEqual([]);
+    });
+
+    it('is idempotent and final once stopped', () => {
+      const pass = vi.fn(async () => {});
+      const discovery = createFleetDiscoverySchedule(pass, cadence);
+      discovery.start();
+
+      discovery.stop();
+      discovery.stop();
+      discovery.start();
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(discovery.isRunning()).toBe(false);
+    });
+
+    it('survives a pass that throws, like the silent best-effort discovery it replaces', async () => {
+      const pass = vi.fn(async () => {
+        throw new Error('tailscale not installed');
+      });
+      const discovery = createFleetDiscoverySchedule(pass, cadence);
+      discovery.start();
+
+      await vi.advanceTimersByTimeAsync(305_000);
+
+      expect(pass).toHaveBeenCalledTimes(2);
+      discovery.stop();
     });
   });
 
@@ -223,6 +332,31 @@ describe('FleetBridge quit lifecycle', () => {
         expect.stringContaining('shutdown failed'),
         expect.any(Error)
       );
+    });
+
+    it('starts every socket teardown at once, so one hanging socket cannot keep the others open', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      QuitFakeListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge(() => {});
+      await bridge.init();
+      for (const label of ['hub', 'relay', 'spoke']) {
+        await bridge.addPeer({ url: `ws://203.0.113.10:3000/ws#${label}`, apiKey: 'k', label });
+      }
+      await flush();
+      const [hub, relay, spoke] = QuitFakeListener.instances;
+      QuitFakeListener.disconnectImpl = (listener) =>
+        listener === hub ? new Promise<void>(() => {}) : Promise.resolve();
+
+      const quitting = shutdownFleetBridgeForQuit(bridge);
+      expect([hub, relay, spoke].map((listener) => listener.disconnectCount)).toEqual([1, 1, 1]);
+      await vi.advanceTimersByTimeAsync(FLEET_BRIDGE_QUIT_TIMEOUT_MS);
+
+      await expect(quitting).resolves.toBe('timed-out');
+      await expect(bridge.reconnectPeer('relay')).resolves.toEqual({
+        success: false,
+        error: 'Fleet bridge is stopped',
+      });
+      expect(QuitFakeListener.instances).toHaveLength(3);
     });
 
     it('clears its timer once the bridge has closed', async () => {
