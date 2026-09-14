@@ -1,5 +1,7 @@
 # Fleet Guide — Multi-AI hub for real-time inter-AI collaboration
 
+Pour relier plusieurs machines et obtenir un travail commun avec `buddy fleet check` et `buddy fleet collaborate`, voir le [parcours de coopération multi-instance](fleet-collaboration.md).
+
 > *« Le but est que toutes mes IA collaborent dans l'harmonie. »*
 > — Patrice Huetz, 2026-05-03
 

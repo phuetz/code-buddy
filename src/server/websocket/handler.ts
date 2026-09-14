@@ -1473,10 +1473,6 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     sendError(ws, 'UNAUTHORIZED', 'Authentication required');
     return;
   }
-  if (!state.scopes.includes('peer:invoke')) {
-    sendError(ws, 'FORBIDDEN', 'peer:invoke scope required');
-    return;
-  }
   // payload is the request frame { id, method, params, traceId?, depth? }
   const frame = (payload ?? {}) as {
     id?: string;
@@ -1486,6 +1482,19 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     depth?: number;
   };
   const requestId = frame.id ?? '';
+  if (!state.scopes.includes('peer:invoke')) {
+    // Match the rejected RPC so callers fail immediately instead of timing out.
+    send(ws, {
+      type: 'peer:response',
+      payload: {
+        id: requestId || 'unknown',
+        ok: false,
+        error: { code: 'FORBIDDEN', message: 'peer:invoke scope required' },
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   if (!checkRateLimit(
     state,
     'peerRequestCount',
