@@ -21,7 +21,7 @@ import { handleColabCommand } from './colab-handler.js';
 // /model - Change Model
 // ============================================================================
 
-export async function handleChangeModel(args: string[]): Promise<CommandHandlerResult> {
+export async function handleChangeModel(args: string[], activeModel?: string): Promise<CommandHandlerResult> {
   const { getSupportedModels, getModelInfo, suggestModel } = await import('../../utils/model-utils.js');
   const { getSettingsManager } = await import('../../utils/settings-manager.js');
 
@@ -30,7 +30,7 @@ export async function handleChangeModel(args: string[]): Promise<CommandHandlerR
 
   // If no model specified, show current model and list available models
   if (!modelName || modelName === 'list') {
-    const currentModel = process.env.GROK_MODEL || 'grok-beta';
+    const currentModel = activeModel ?? settingsManager.getCurrentModel();
     const supportedModels = getSupportedModels();
 
     // Group models by provider
@@ -898,14 +898,14 @@ function formatStatusTimeAgo(date: Date, now: Date = new Date()): string {
   return `${day}d ago`;
 }
 
-export async function handleStatus(): Promise<CommandHandlerResult> {
+export async function handleStatus(activeModel?: string): Promise<CommandHandlerResult> {
   const lines: string[] = [];
   lines.push('Status Dashboard');
   lines.push('='.repeat(50));
   lines.push('');
 
   // Current model
-  const currentModel = process.env.GROK_MODEL || 'grok-beta';
+  const currentModel = activeModel ?? (await import('../../utils/settings-manager.js')).getSettingsManager().getCurrentModel();
   lines.push(`  Model:           ${currentModel}`);
 
   // Agent mode

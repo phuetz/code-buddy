@@ -9,6 +9,7 @@ import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";
 
 import { filterCommandSuggestions } from "../ui/components/CommandSuggestions.js";
+import { isModelCompatibleWithProvider } from "../providers/model-provider-compat.js";
 import { loadModelConfig } from "../utils/model-config.js";
 
 // Import enhanced features
@@ -73,6 +74,7 @@ export function useInputHandler({
 }: UseInputHandlerProps) {
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const commandSelectionMoved = useRef(false);
   const [showModelSelection, setShowModelSelection] = useState(false);
   const [selectedModelIndex, setSelectedModelIndex] = useState(0);
   const [showFileAutocomplete, setShowFileAutocomplete] = useState(false);
@@ -190,6 +192,15 @@ export function useInputHandler({
   };
 
   const handleCommandSuggestionsNav = (key: Key): boolean => {
+    const commandName = input.trim().split(/\s+/)[0]?.slice(1);
+    // Enter runs an explicitly typed command; Tab is completion only.
+    if (key.return && !commandSelectionMoved.current && commandName &&
+        (getSlashCommandManager().getCommand(commandName) || commandName === 'models')) {
+      setShowCommandSuggestions(false);
+      setSelectedCommandIndex(0);
+      void handleInputSubmit(input);
+      return true;
+    }
     const filteredSuggestions = filterCommandSuggestions(
       commandSuggestions,
       input
@@ -201,12 +212,14 @@ export function useInputHandler({
       return false; // Continue processing
     } else {
       if (key.upArrow) {
+        commandSelectionMoved.current = true;
         setSelectedCommandIndex((prev) =>
           prev === 0 ? filteredSuggestions.length - 1 : prev - 1
         );
         return true;
       }
       if (key.downArrow) {
+        commandSelectionMoved.current = true;
         setSelectedCommandIndex(
           (prev) => (prev + 1) % filteredSuggestions.length
         );
@@ -237,7 +250,14 @@ export function useInputHandler({
           }
         } else {
           // For commands, just use the command
-          newInput = selectedSuggestion.command + " ";
+          newInput = selectedSuggestion.command;
+          if (key.return) {
+            setShowCommandSuggestions(false);
+            setSelectedCommandIndex(0);
+            void handleInputSubmit(newInput);
+            return true;
+          }
+          newInput += ' ';
         }
 
         setInput(newInput);
@@ -453,6 +473,7 @@ export function useInputHandler({
   // Removed handleShellBypass as it's now in ClientCommandDispatcher
 
   const handleInputChange = (newInput: string) => {
+    commandSelectionMoved.current = false;
     // Update command suggestions based on input
     if (newInput.startsWith("/")) {
       setShowCommandSuggestions(true);
@@ -511,9 +532,14 @@ export function useInputHandler({
   }, []);
 
   // Load models from configuration with fallback to defaults
+  const current = agent.getCurrentModel?.();
+  const provider = agent.getClient?.().getCurrentProvider?.();
   const availableModels: ModelOption[] = useMemo(() => {
-    return loadModelConfig(); // Return directly, interface already matches
-  }, []);
+    const models = [...(current ? [{ model: current }] : []), ...loadModelConfig()];
+    return models.filter((option, index) =>
+      models.findIndex(other => other.model === option.model) === index &&
+      isModelCompatibleWithProvider(option.model, provider));
+  }, [current, provider]);
 
   const handleDirectCommand = async (input: string): Promise<boolean> => {
     const context: ClientCommandContext = {

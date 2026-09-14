@@ -460,10 +460,10 @@ export class EnhancedCommandHandler {
 
     // Commands previously handled inline in client-dispatcher
     ['__CLEAR_CHAT__', () => handleClearChat()],
-    ['__CHANGE_MODEL__', (args) => handleChangeModel(args)],
+    ['__CHANGE_MODEL__', (args) => handleChangeModel(args, this.agentProxy?.getCurrentModel())],
     ['__CHANGE_MODE__', (args) => handleChangeMode(args)],
     ['__PLAN_MODE__', () => handleChangeMode(['plan'])],
-    ['__STATUS__', () => handleStatus()],
+    ['__STATUS__', () => handleStatus(this.agentProxy?.getCurrentModel())],
     ['__NEW__', (args) => handleNew(args)],
     ['__ULTRAPLAN__', (args) => handleUltraplan(args)],
     ['__LIST_CHECKPOINTS__', (args) => handleListCheckpoints(args)],

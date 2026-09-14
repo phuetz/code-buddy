@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 
 interface ModelOption {
@@ -41,22 +41,20 @@ export const ModelSelection = React.memo(function ModelSelection({
   // Early return for invisible state
   if (!isVisible) return null;
 
-  // Memoize header text to prevent re-computation
-  const headerText = useMemo(
-    () => `Select Grok Model (current: ${currentModel}):`,
-    [currentModel]
-  );
+  const headerText = `Select model (current: ${currentModel}):`;
+  const start = Math.max(0, Math.min(selectedIndex - 4, models.length - 8));
+  const visibleModels = models.slice(start, start + 8);
 
   return (
     <Box marginTop={1} flexDirection="column">
       <Box marginBottom={1}>
         <Text color="cyan">{headerText}</Text>
       </Box>
-      {models.map((modelOption, index) => (
+      {visibleModels.map((modelOption, index) => (
         <ModelItem
           key={modelOption.model}
           model={modelOption.model}
-          isSelected={index === selectedIndex}
+          isSelected={start + index === selectedIndex}
         />
       ))}
       <Box marginTop={1}>
