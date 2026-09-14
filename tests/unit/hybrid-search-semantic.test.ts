@@ -111,6 +111,12 @@ describe('BM25Index', () => {
 
 describe('HybridMemorySearch', () => {
   beforeEach(async () => {
+    // Diagnose a missing mock before index() can initialize a real embedding runtime.
+    const { EmbeddingProvider } = await import('../../src/embeddings/embedding-provider.js');
+    expect(vi.isMockFunction(EmbeddingProvider), 'EmbeddingProvider must be mocked before hybrid search initialization').toBe(true);
+    const provider = new EmbeddingProvider();
+    expect(provider.initialize).toBe(mockInitialize);
+    expect(provider.embed).toBe(mockEmbed);
     // Allow fire-and-forget embedding tasks from prior tests to settle before resetting shared mocks.
     await new Promise(resolve => setTimeout(resolve, 60));
     HybridMemorySearch.resetInstance();
