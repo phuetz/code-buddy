@@ -84,7 +84,7 @@ export interface MemoryConfig {
 
 const DEFAULT_CONFIG: MemoryConfig = {
   projectMemoryPath: ".codebuddy/CODEBUDDY_MEMORY.md",
-  userMemoryPath: path.join(os.homedir(), ".codebuddy", "memory.md"),
+  get userMemoryPath() { return path.join(os.homedir(), ".codebuddy", "memory.md"); },
   autoCapture: true,
   maxMemories: 100,
   relevanceThreshold: 0.5,

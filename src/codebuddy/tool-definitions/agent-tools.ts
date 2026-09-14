@@ -343,7 +343,7 @@ export const SKILLS_LIST_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'skills_list',
-    description: 'List installed SKILL.md packages from the local SkillsHub lockfile. Read-only; use to inspect available skills without searching the remote hub.',
+    description: 'List local skills: bundled, built-in, workspace and hub-installed. Use availableSkills for usable skills; unavailableSkills gives disabled/missing/modified records. Read-only; no remote search.',
     parameters: {
       type: 'object',
       properties: {
@@ -365,7 +365,7 @@ export const SKILL_VIEW_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'skill_view',
-    description: 'Read one installed SKILL.md package from the local SkillsHub, including lockfile metadata, integrity status, and optionally the SKILL.md content.',
+    description: 'Read one local skill from the hub, bundled package, built-in specializations or workspace, with metadata and optional instructions.',
     parameters: {
       type: 'object',
       properties: {

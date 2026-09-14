@@ -28,12 +28,16 @@
 import { statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
 const GUARDED_FILES = [
   path.join(REPO_ROOT, '.codebuddy', 'settings.json'),
   path.join(REPO_ROOT, '.codebuddy', 'CODEBUDDY_MEMORY.md'),
+  // Test fixtures must not escape into the operator's real profile either.
+  ...['hub/lock.json', 'hub/taps.json', 'hub/trusted-keys.json', 'memory.md',
+    'history.json', 'auth-profiles.json', 'settings.json'].map(file => path.join(os.homedir(), '.codebuddy', file)),
 ];
 
 interface Fingerprint {
@@ -82,7 +86,7 @@ export default function setup() {
       // (CI, `npm test`) even when every individual test passed.
       process.exitCode = 1;
       throw new Error(
-        'no-repo-writes guard: the Vitest suite wrote into tracked .codebuddy/ ' +
+        'no-repo-writes guard: the Vitest suite wrote into repository or user profile ' +
         'state files. A test is missing an isolated (mkdtemp) path override — ' +
         'see tests/hygiene/no-repo-writes-global-setup.ts and the TESTWRITE1 ' +
         `report (docs/reports/2026-09/REPARATION-TESTWRITE1.md).\n${changed.join('\n')}`,

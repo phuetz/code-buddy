@@ -1404,7 +1404,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'utility',
     keywords: ['skill', 'skills', 'list', 'installed', 'enabled', 'disabled', 'hub', 'hermes'],
     priority: 5,
-    description: 'List installed SKILL.md packages from the local SkillsHub',
+    description: 'List available local skills across bundled, built-in, workspace and hub sources',
     fleetSafe: true,
   },
   {
@@ -1413,7 +1413,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'utility',
     keywords: ['skill', 'skills', 'view', 'read', 'content', 'inspect', 'show', 'hub', 'hermes'],
     priority: 6,
-    description: 'Read one installed SKILL.md package and its integrity metadata from the local SkillsHub',
+    description: 'Read one local skill and its source or hub integrity metadata',
     fleetSafe: true,
   },
   {

@@ -452,19 +452,21 @@ interface GitHubContentEntry {
 // Constants
 // ============================================================================
 
-const DEFAULT_HUB_CONFIG: HubConfig = {
-  registryUrl: 'https://hub.codebuddy.dev/api/v1',
-  cacheDir: path.join(os.homedir(), '.codebuddy', 'hub', 'cache'),
-  skillsDir: path.join(os.homedir(), '.codebuddy', 'skills', 'managed'),
-  lockfilePath: path.join(os.homedir(), '.codebuddy', 'hub', 'lock.json'),
-  tapsPath: path.join(os.homedir(), '.codebuddy', 'hub', 'taps.json'),
-  trustedKeysPath: path.join(os.homedir(), '.codebuddy', 'hub', 'trusted-keys.json'),
-  requireSignedInstalls: false,
-  githubApiBaseUrl: 'https://api.github.com',
-  githubRawBaseUrl: 'https://raw.githubusercontent.com',
-  autoUpdate: false,
-  checkIntervalMs: 24 * 60 * 60 * 1000, // 24 hours
-};
+function defaultHubConfig(): HubConfig {
+  return {
+    registryUrl: 'https://hub.codebuddy.dev/api/v1',
+    cacheDir: path.join(os.homedir(), '.codebuddy', 'hub', 'cache'),
+    skillsDir: path.join(os.homedir(), '.codebuddy', 'skills', 'managed'),
+    lockfilePath: path.join(os.homedir(), '.codebuddy', 'hub', 'lock.json'),
+    tapsPath: path.join(os.homedir(), '.codebuddy', 'hub', 'taps.json'),
+    trustedKeysPath: path.join(os.homedir(), '.codebuddy', 'hub', 'trusted-keys.json'),
+    requireSignedInstalls: false,
+    githubApiBaseUrl: 'https://api.github.com',
+    githubRawBaseUrl: 'https://raw.githubusercontent.com',
+    autoUpdate: false,
+    checkIntervalMs: 24 * 60 * 60 * 1000, // 24 hours
+  };
+}
 
 const LOCKFILE_VERSION = 1;
 const TAPS_FILE_VERSION = 1;
@@ -542,7 +544,7 @@ export class SkillsHub extends EventEmitter {
 
   constructor(config: Partial<HubConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_HUB_CONFIG, ...config };
+    this.config = { ...defaultHubConfig(), ...config };
     this.lockfile = this.readLockfile();
     this.ensureDirectories();
   }

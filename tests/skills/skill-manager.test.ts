@@ -6,7 +6,7 @@ import { SkillManager, Skill } from "../../src/skills/skill-manager.js";
 import * as fs from "fs-extra";
 import * as path from "path";
 import * as os from "os";
-import { resetSkillsHub } from "../../src/skills/hub.js";
+import { getSkillsHub, resetSkillsHub } from "../../src/skills/hub.js";
 
 describe("SkillManager", () => {
   let skillManager: SkillManager;
@@ -15,6 +15,13 @@ describe("SkillManager", () => {
   beforeEach(async () => {
     resetSkillsHub();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "skill-test-"));
+    getSkillsHub({
+      lockfilePath: path.join(tempDir, "skills-lock.json"),
+      cacheDir: path.join(tempDir, "cache"),
+      skillsDir: path.join(tempDir, "managed"),
+      tapsPath: path.join(tempDir, "taps.json"),
+      trustedKeysPath: path.join(tempDir, "trusted-keys.json"),
+    });
     skillManager = new SkillManager(tempDir);
     await skillManager.initialize();
   });

@@ -65,7 +65,7 @@ export class HistoryManager {
 
   static readonly DEFAULT_CONFIG: HistoryManagerConfig = {
     maxEntries: 1000, // Increased default limit
-    historyFile: path.join(os.homedir(), '.codebuddy', 'history.json'),
+    get historyFile() { return path.join(os.homedir(), '.codebuddy', 'history.json'); },
     excludePrefixes: [], // Include all commands by default
     includeSlashCommands: true, // Include slash commands
   };

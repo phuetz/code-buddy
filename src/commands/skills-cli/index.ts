@@ -169,11 +169,24 @@ export function registerSkillsCommands(program: Command): void {
       const all = hub.listWithIntegrity();
       const shown = opts.all ? all : all.filter((s) => s.enabled !== false);
       const health = buildSkillListHealth(all, shown);
-      const usableCount = all.filter((skill) => skill.enabled !== false && skill.integrityOk).length;
 
+      const { readLocalSkillInventory } = await import('../../skills/local-inventory.js');
+      const inventory = await readLocalSkillInventory(all);
+      const availableSkills = inventory.entries.filter((skill) => skill.available);
+      const usableCount = availableSkills.filter((skill) => skill.source === 'hub').length;
       if (opts.json) {
-        console.log(JSON.stringify({ count: shown.length, health, total: all.length, skills: shown }, null, 2));
+        console.log(JSON.stringify({ availableSkills, availableCount: availableSkills.length,
+          unavailableSkills: inventory.entries.filter((skill) => !skill.available),
+          discoveryErrors: inventory.errors,
+          count: shown.length, health, total: all.length, skills: shown }, null, 2));
         return;
+      }
+      console.log(`\nAvailable local skills (${availableSkills.length}):`);
+      for (const skill of availableSkills) {
+        console.log(`  + ${skill.name} (${skill.source})${skill.description ? ` — ${skill.description}` : ''}`);
+      }
+      if (inventory.errors.length > 0) {
+        console.log(`\n${inventory.errors.length} skill file(s) could not be loaded; use --json for details.`);
       }
       if (shown.length === 0) {
         if (all.length === 0) {

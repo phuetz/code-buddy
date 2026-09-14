@@ -95,7 +95,7 @@ export const DEFAULT_AUTH_PROFILE_MANAGER_CONFIG: AuthProfileManagerConfig = {
   cooldownMs: 60_000,          // 1 minute
   billingCooldownMs: 18_000_000, // 5 hours
   maxCooldownMs: 86_400_000,   // 24 hours
-  persistPath: path.join(os.homedir(), '.codebuddy', 'auth-profiles.json'),
+  get persistPath() { return path.join(os.homedir(), '.codebuddy', 'auth-profiles.json'); },
 };
 
 // ============================================================================
