@@ -4,7 +4,7 @@
  * Checks for new versions and notifies users (mistral-vibe style).
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import https from 'https';
@@ -61,29 +61,21 @@ interface CacheData {
 /**
  * Get current package version from package.json
  */
-function getCurrentVersion(): string {
+function getCurrentVersion(): string | null {
   try {
-    // Try to find package.json from various locations
-    // Works in both local dev and npm global install
-    const possiblePaths = [
-      // Local development or npx
-      join(process.cwd(), 'package.json'),
-      // npm global install (node_modules/@phuetz/code-buddy/package.json)
-      join(process.execPath, '..', '..', 'lib', 'node_modules', '@phuetz', 'code-buddy', 'package.json'),
-    ];
-
-    for (const pkgPath of possiblePaths) {
-      if (existsSync(pkgPath)) {
-        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string; version?: string };
-        if (pkg.name?.includes('code-buddy')) {
-          return pkg.version || '0.0.0';
-        }
-      }
+    // Resolve our own manifest in both src/utils and dist/utils. The caller's
+    // working directory and Node executable do not identify a global npm install.
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')) as {
+      name?: string;
+      version?: unknown;
+    };
+    if (pkg.name === '@phuetz/code-buddy' && typeof pkg.version === 'string' && pkg.version.trim()) {
+      return pkg.version;
     }
-    return '0.0.0';
   } catch {
-    return '0.0.0';
+    // An unknown installed version must never produce a fictitious upgrade.
   }
+  return null;
 }
 
 /**
@@ -197,6 +189,10 @@ export class UpdateNotifier {
     }
 
     const currentVersion = getCurrentVersion();
+    if (!currentVersion) {
+      this.updateInfo = null;
+      return null;
+    }
 
     // Check cache first
     const cache = loadCache();
@@ -244,6 +240,10 @@ export class UpdateNotifier {
    */
   async forceCheck(): Promise<UpdateInfo | null> {
     const currentVersion = getCurrentVersion();
+    if (!currentVersion) {
+      this.updateInfo = null;
+      return null;
+    }
     const latestVersion = await fetchLatestVersion(
       this.config.packageName,
       this.config.registryUrl

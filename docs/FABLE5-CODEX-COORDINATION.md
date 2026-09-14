@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P1 | Version du bandeau de mise à jour Windows | **Codex — VALIDÉ, livraison en cours** | Branche `integration/improvements-persistence-2026-09-13`, base `72648e651` | Détecter le paquet installé depuis le module, jamais depuis le dossier utilisateur ; supprimer le faux 0.0.0. Zone : update-notifier et ses tests. | Validate31 + pack10, lint/typechecks verts ; Node20 31 tests verts. Lecture du manifeste module-relative, version inconnue silencieuse. Paquet installé à vérifier avant livraison Partage. |
+
 | P1 | Navigation horizontale Ink | **Codex — VALIDÉ, livraison en cours** | Branche `integration/improvements-persistence-2026-09-13`, après `aad39f918` | →/Tab complètent commandes et références fichier en fin de saisie sans exécution ; → valide un modèle, ←/Esc ferme ; clavier capturé par sélecteur y compris Ctrl+J. Aides actualisées. | Validate31 + pack10, Node20 final32, tests fichiers ciblés verts ; PTY compilé Node20 : complétion → puis modèle → et parcours sept commandes/deux requêtes. Patrice confirme commandes de base opérationnelles et relance fluide. |
 
 | P1 | Commandes slash et sélection modèle Windows | **Codex — VALIDÉ, livraison en cours** | Branche `integration/improvements-persistence-2026-09-13`, après `ea561c3b7` | Entrée/Tab/flèches, modèle actif et alias, filtrage fournisseur, status cohérent et clear effectif. | Validate208 + pack10, Node20 final209 ; PTY compiled sept commandes et deux requêtes vérifiant modèle/changement de contexte. Rapport CLI-SLASH-COMMANDS-2026-09-14.md. Blocage initial Windows distinct, trace encore attendue. |
