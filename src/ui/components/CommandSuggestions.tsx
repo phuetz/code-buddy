@@ -198,7 +198,7 @@ export const CommandSuggestions = React.memo(function CommandSuggestions({
       )}
       <Box marginTop={1}>
         <Text color="gray" dimColor>
-          ↑↓ navigate • Enter/Tab select • Esc cancel • {totalMatches}/{totalCommands} commands
+          ↑↓ navigate • →/Tab complete • Enter run • Esc close • {totalMatches}/{totalCommands} commands
         </Text>
       </Box>
     </Box>

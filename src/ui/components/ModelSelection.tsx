@@ -59,7 +59,7 @@ export const ModelSelection = React.memo(function ModelSelection({
       ))}
       <Box marginTop={1}>
         <Text color="gray" dimColor>
-          ↑↓ navigate • Enter/Tab select • Esc cancel
+          ↑↓ navigate • →/Enter select • ←/Esc cancel
         </Text>
       </Box>
     </Box>

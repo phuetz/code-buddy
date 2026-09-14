@@ -283,7 +283,7 @@ export const FileAutocomplete = React.memo(function FileAutocomplete({
       paddingX={1}
     >
       <Text color={colors.textMuted} dimColor>
-        File suggestions (Tab to select):
+        File suggestions (→/Tab complete, Enter select):
       </Text>
       {suggestions.map((suggestion, index) => {
         const isSelected = index === selectedIndex;

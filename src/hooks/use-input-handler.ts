@@ -225,7 +225,7 @@ export function useInputHandler({
         );
         return true;
       }
-      if (key.tab || key.return) {
+      if (key.tab || key.return || (key.rightArrow && !key.ctrl && !key.meta && !key.shift && cursorPosition === input.length)) {
         const safeIndex = Math.min(
           selectedCommandIndex,
           filteredSuggestions.length - 1
@@ -271,6 +271,12 @@ export function useInputHandler({
   };
 
   const handleModelSelectionNav = (key: Key): boolean => {
+    if (key.leftArrow || key.escape) {
+      setShowModelSelection(false);
+      setSelectedModelIndex(0);
+      return true;
+    }
+    if (availableModels.length === 0) return true;
     if (key.upArrow) {
       setSelectedModelIndex((prev) =>
         prev === 0 ? availableModels.length - 1 : prev - 1
@@ -281,19 +287,8 @@ export function useInputHandler({
       setSelectedModelIndex((prev) => (prev + 1) % availableModels.length);
       return true;
     }
-    if (key.tab || key.return) {
+    if (key.tab || key.return || key.rightArrow) {
       const selectedModel = availableModels[selectedModelIndex];
-      // Delegate to Dispatcher implicitly via handleDirectCommand?
-      // No, UI navigation logic remains here, but the action can be manual.
-      // Or we can construct a command string and let dispatcher handle it.
-      // But we have state setters here.
-      // Let's keep UI state manipulation here for selection, but action execution via command if possible.
-      // Actually, standard behavior:
-      // agent.setModel(selectedModel.model);
-      // updateCurrentModel(selectedModel.model);
-      // ...
-
-      // We can use a helper, but for now let's leave this UI logic as is, or use handleDirectCommand("/models " + model)
       if (selectedModel) {
         handleDirectCommand(`/models ${selectedModel.model}`);
       }
@@ -302,7 +297,7 @@ export function useInputHandler({
       setSelectedModelIndex(0);
       return true;
     }
-    return false;
+    return true; // Keep typing from modifying the draft while choosing a model.
   };
 
   const handleFileAutocompleteNav = (key: Key): boolean => {
@@ -317,7 +312,7 @@ export function useInputHandler({
         setSelectedFileIndex((prev) => (prev + 1) % fileSuggestions.length);
         return true;
       }
-      if (key.tab || key.return) {
+      if (key.tab || key.return || (key.rightArrow && !key.ctrl && !key.meta && !key.shift && cursorPosition === input.length)) {
         const selectedFile = fileSuggestions[selectedFileIndex];
         const { startPos } = extractFileReference(input);
 
@@ -514,6 +509,11 @@ export function useInputHandler({
 
   // Hook up the actual input handling
   useInput((inputChar: string, key: Key) => {
+    // A picker owns the keyboard, including text-editing shortcuts such as Ctrl+J.
+    if (showModelSelection) {
+      handleModelSelectionNav(key);
+      return;
+    }
     handleInput(inputChar, key);
   }, { isActive: !isConfirmationActive });
 

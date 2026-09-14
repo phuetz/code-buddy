@@ -20,7 +20,7 @@ vi.mock('../../src/commands/client-dispatcher.js', () => ({ ClientCommandDispatc
 vi.mock('../../src/input/text-to-speech.js', () => ({ getTTSManager: () => ({ getConfig: () => ({ autoSpeak: false }) }) }));
 vi.mock('../../src/utils/history-manager.js', () => ({ getHistoryManager: () => ({ add: vi.fn() }) }));
 vi.mock('../../src/logging/interaction-logger.js', () => ({ getInteractionLogger: () => ({ getCurrentSessionId: () => null }) }));
-vi.mock('../../src/ui/components/FileAutocomplete.js', () => ({ extractFileReference: () => ({ found: false }), getFileSuggestions: () => [] }));
+vi.mock('../../src/ui/components/FileAutocomplete.js', () => ({ extractFileReference: (input: string) => ({ found: input.startsWith('@'), partial: input.slice(1), startPos: 0 }), getFileSuggestions: () => [{ path: 'src/file.ts', isDirectory: false }] }));
 vi.mock('../../src/utils/model-config.js', () => ({ loadModelConfig: () => [{ model: 'first-model' }, { model: 'second-model' }] }));
 afterEach(() => vi.clearAllMocks());
 
@@ -101,5 +101,74 @@ it('opens the model picker, selects with arrows/Enter and cancels with Escape', 
     await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(true));
     app.stdin.write('\x1b');
     await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(false));
+  } finally { app.close(); }
+});
+
+it('Right completes the selected command without executing it', async () => {
+  const app = mount();
+  try {
+    await vi.waitFor(() => expect(app.editor()).toBeDefined());
+    app.stdin.write('/mod');
+    await vi.waitFor(() => expect(app.editor().showCommandSuggestions).toBe(true));
+    app.stdin.write('\x1b[C');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/model '));
+    expect(ClientCommandDispatcher.dispatch).not.toHaveBeenCalled();
+    app.stdin.write('\r');
+    await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(true));
+  } finally { app.close(); }
+});
+
+it('Right moves the cursor within a command instead of accepting a suggestion', async () => {
+  const app = mount();
+  try {
+    await vi.waitFor(() => expect(app.editor()).toBeDefined());
+    app.stdin.write('/mod');
+    await vi.waitFor(() => expect(app.editor().cursorPosition).toBe(4));
+    app.stdin.write('\x1b[D');
+    await vi.waitFor(() => expect(app.editor().cursorPosition).toBe(3));
+    app.stdin.write('\x1b[C');
+    await vi.waitFor(() => expect(app.editor().cursorPosition).toBe(4));
+    expect(app.editor().input).toBe('/mod');
+    expect(ClientCommandDispatcher.dispatch).not.toHaveBeenCalled();
+  } finally { app.close(); }
+});
+
+it('Right selects a model; Left cancels and typing does not alter the draft', async () => {
+  const app = mount();
+  try {
+    await vi.waitFor(() => expect(app.editor()).toBeDefined());
+    app.stdin.write('/model');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/model'));
+    app.stdin.write('\r');
+    await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(true));
+    app.stdin.write('unexpected');
+    app.stdin.write('\n');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(app.editor().input).toBe('');
+    app.stdin.write('\x1b[B');
+    await vi.waitFor(() => expect(app.editor().selectedModelIndex).toBe(1));
+    app.stdin.write('\x1b[C');
+    await vi.waitFor(() => expect(ClientCommandDispatcher.dispatch).toHaveBeenCalledWith('/models second-model', expect.any(Object)));
+    expect(app.editor().showModelSelection).toBe(false);
+    app.stdin.write('/model');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/model'));
+    app.stdin.write('\r');
+    await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(true));
+    const count = vi.mocked(ClientCommandDispatcher.dispatch).mock.calls.length;
+    app.stdin.write('\x1b[D');
+    await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(false));
+    expect(ClientCommandDispatcher.dispatch).toHaveBeenCalledTimes(count);
+  } finally { app.close(); }
+});
+
+it('Right completes a file reference without submitting a message', async () => {
+  const app = mount();
+  try {
+    await vi.waitFor(() => expect(app.editor()).toBeDefined());
+    app.stdin.write('@src/f');
+    await vi.waitFor(() => expect(app.editor().showFileAutocomplete).toBe(true));
+    app.stdin.write('\x1b[C');
+    await vi.waitFor(() => expect(app.editor().input).toBe('@src/file.ts '));
+    expect(ClientCommandDispatcher.dispatch).not.toHaveBeenCalled();
   } finally { app.close(); }
 });
