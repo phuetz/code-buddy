@@ -383,6 +383,153 @@ describe('resolveInstalledDependencyPath', () => {
   });
 });
 
+describe('target filtering of dependency edges', () => {
+  const linuxX64 = { platform: 'linux', arch: 'x64' } as const;
+
+  /** Root package.json plus installed packages, keyed by node_modules path. */
+  function installedTree(root: object, packages: Record<string, object>): string {
+    const coreRoot = temporaryRoot();
+    writeFile(path.join(coreRoot, 'package.json'), JSON.stringify(root));
+    for (const [packagePath, packageJson] of Object.entries(packages)) {
+      writePackage(coreRoot, packagePath, packageJson);
+    }
+    return coreRoot;
+  }
+
+  it('fails when a transitive required dependency does not support the target', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'native-helper': '1' } },
+        'node_modules/native-helper': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      'Installed dependency native-helper required by node_modules/app does not support linux/x64: ' +
+        'node_modules/native-helper (os ["win32"], cpu [])',
+    );
+  });
+
+  it('fails when a root production dependency does not support the target', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1', 'root-native': '1' } },
+      { 'node_modules/app': {}, 'node_modules/root-native': { cpu: ['arm64'] } },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      'Installed production dependency root-native does not support linux/x64: node_modules/root-native',
+    );
+  });
+
+  it.each([
+    ['optional edge queued first', { a: '1', b: '1' }],
+    ['required edge queued first', { b: '1', a: '1' }],
+  ])('fails when an unsupported package is also reached optionally (%s)', (_order, dependencies) => {
+    const coreRoot = installedTree(
+      { dependencies },
+      {
+        'node_modules/a': { optionalDependencies: { shared: '1' } },
+        'node_modules/b': { dependencies: { shared: '1' } },
+        'node_modules/shared': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      /Installed dependency shared required by node_modules\/b does not support linux\/x64/,
+    );
+  });
+
+  it('re-walks a package first reached optionally once an obligatory edge reaches it', () => {
+    const coreRoot = installedTree(
+      { dependencies: { b: '1', a: '1' } },
+      {
+        'node_modules/a': { optionalDependencies: { mid: '1' } },
+        'node_modules/b': { dependencies: { mid: '1' } },
+        'node_modules/mid': { dependencies: { leaf: '1' } },
+        'node_modules/leaf': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      /Installed dependency leaf required by node_modules\/mid does not support linux\/x64/,
+    );
+  });
+
+  it('keeps skipping unsupported optional, peer and optional-subtree packages', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': {
+          dependencies: { dual: '1' },
+          optionalDependencies: { dual: '1', 'helper-win': '1', 'helper-linux': '1', 'opt-parent': '1' },
+          peerDependencies: { 'peer-native': '1' },
+        },
+        'node_modules/dual': { os: ['darwin'] },
+        'node_modules/helper-win': { os: ['win32'] },
+        'node_modules/helper-linux': { os: ['linux'], cpu: ['x64'] },
+        'node_modules/opt-parent': { dependencies: { 'opt-child': '1' } },
+        'node_modules/opt-child': { os: ['win32'] },
+        'node_modules/peer-native': { os: ['win32'] },
+      },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toEqual([
+      'node_modules/app',
+      'node_modules/helper-linux',
+      'node_modules/opt-parent',
+    ]);
+  });
+
+  it('treats a name in dependencies and optionalDependencies as optional, like npm', () => {
+    const skippedByNpm = installedTree(
+      { dependencies: { app: '1' } },
+      { 'node_modules/app': { dependencies: { dual: '1' }, optionalDependencies: { dual: '1' } } },
+    );
+    const reallyMissing = installedTree(
+      { dependencies: { app: '1' } },
+      { 'node_modules/app': { dependencies: { needed: '1' } } },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(skippedByNpm, linuxX64)).toEqual(['node_modules/app']);
+    expect(() => collectInstalledRuntimePackagePaths(reallyMissing, linuxX64)).toThrow(
+      'Installed dependency needed required by node_modules/app is missing (run npm install)',
+    );
+  });
+
+  it('refuses before replacing an existing staged runtime', () => {
+    const root = temporaryRoot();
+    const coreRoot = path.join(root, 'core');
+    const coworkRoot = path.join(root, 'cowork');
+    const runtimeRoot = path.join(coworkRoot, '.bundle-resources', 'core-runtime');
+    const corePackage = { name: '@phuetz/code-buddy', version: '1.0.0', description: 'Target fixture' };
+    writeFile(
+      path.join(coreRoot, 'package.json'),
+      JSON.stringify({ ...corePackage, dependencies: { app: '1' } }),
+    );
+    writePackage(coreRoot, 'node_modules/app', { dependencies: { 'native-helper': '1' } });
+    writePackage(coreRoot, 'node_modules/native-helper', { os: ['win32'] });
+    writeFile(
+      path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+      'export class CodeBuddyEngineAdapter {}',
+    );
+    writeCoreRuntimeManifest(coreRoot, corePackage);
+    writeFile(path.join(runtimeRoot, 'previous-runtime.marker'), 'kept');
+
+    expect(() =>
+      prepareCoreRuntime({
+        coreRoot,
+        coworkRoot,
+        runtimeRoot,
+        ...linuxX64,
+        useCoworkNativeOverrides: false,
+        requiredOptionalDependencies: [],
+      }),
+    ).toThrow(/native-helper required by node_modules\/app does not support linux\/x64/);
+    expect(fs.readFileSync(path.join(runtimeRoot, 'previous-runtime.marker'), 'utf8')).toBe('kept');
+  });
+});
+
 describe('copyTreeWithHardlinks confinement', () => {
   it.runIf(process.platform !== 'win32')(
     'refuses a nested package symlink that escapes the package root',

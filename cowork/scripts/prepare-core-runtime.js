@@ -244,23 +244,55 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     throw new Error(`Code Buddy package manifest is missing: ${rootPackagePath}`);
   }
   const rootPackage = JSON.parse(fs.readFileSync(rootPackagePath, 'utf8'));
+  // Queue entries are edges. `obligation` is 'production' (core dependencies),
+  // 'cowork' (COWORK_REQUIRED_OPTIONAL_DEPENDENCIES), 'transitive' (dependencies
+  // of an obligatory package) or 'optional'. As in npm, a name that a package
+  // also lists in optionalDependencies is optional, and so is everything below
+  // an optional package. Optional edges may be absent or filtered out for the
+  // target; an obligatory edge to an unsupported package fails before staging.
   const queue = [];
   const included = new Set();
+  const walkedAsObligatory = new Set();
 
-  const enqueueRootGroup = (group, required) => {
-    for (const dependencyName of Object.keys(group ?? {})) {
-      const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
-      if (resolved) queue.push(resolved);
-      else if (required) {
-        throw new Error(`Installed production dependency is missing: ${dependencyName} (run npm install)`);
+  const enqueueDependencies = (fromPackagePath, packageJson, obligatory) => {
+    const optionalNames = packageJson.optionalDependencies ?? {};
+    for (const dependencyName of Object.keys(packageJson.dependencies ?? {})) {
+      if (Object.hasOwn(optionalNames, dependencyName)) continue;
+      const resolved = resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName);
+      if (!resolved) {
+        throw new Error(
+          `Installed dependency ${dependencyName} required by ${fromPackagePath} is missing (run npm install)`,
+        );
+      }
+      queue.push({
+        packagePath: resolved,
+        dependencyName,
+        obligation: obligatory ? 'transitive' : 'optional',
+        requiredBy: fromPackagePath,
+      });
+    }
+    for (const group of [optionalNames, packageJson.peerDependencies]) {
+      for (const dependencyName of Object.keys(group ?? {})) {
+        const resolved = resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName);
+        if (resolved) queue.push({ packagePath: resolved, dependencyName, obligation: 'optional' });
       }
     }
   };
-  enqueueRootGroup(rootPackage.dependencies, true);
-  const requiredOptionalPaths = requiredOptionalDependencies.map((dependencyName) => {
+
+  const rootOptionalNames = rootPackage.optionalDependencies ?? {};
+  for (const dependencyName of Object.keys(rootPackage.dependencies ?? {})) {
+    const optional = Object.hasOwn(rootOptionalNames, dependencyName);
+    const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+    if (resolved) {
+      queue.push({ packagePath: resolved, dependencyName, obligation: optional ? 'optional' : 'production' });
+    } else if (!optional) {
+      throw new Error(`Installed production dependency is missing: ${dependencyName} (run npm install)`);
+    }
+  }
+  for (const dependencyName of requiredOptionalDependencies) {
     const declared =
       Object.hasOwn(rootPackage.dependencies ?? {}, dependencyName) ||
-      Object.hasOwn(rootPackage.optionalDependencies ?? {}, dependencyName);
+      Object.hasOwn(rootOptionalNames, dependencyName);
     if (!declared) {
       throw new Error(
         `Cowork-required dependency ${dependencyName} is not declared by the core package: ${rootPackagePath}`,
@@ -273,41 +305,42 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
           '(the packaged slash-command gateway imports it; run npm install without --omit=optional)',
       );
     }
-    queue.push(resolved);
-    return resolved;
-  });
-  if (includeRootOptional) enqueueRootGroup(rootPackage.optionalDependencies, false);
-
-  while (queue.length > 0) {
-    const packagePath = queue.pop();
-    if (!packagePath || included.has(packagePath)) continue;
-    const packageJsonPath = path.join(coreRoot, packagePath, 'package.json');
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    if (!supportsCurrentTarget(packageJson, platform, arch)) continue;
-    included.add(packagePath);
-
-    const enqueueGroup = (group, required) => {
-      for (const dependencyName of Object.keys(group ?? {})) {
-        const resolved = resolveInstalledDependencyPath(coreRoot, packagePath, dependencyName);
-        if (resolved) queue.push(resolved);
-        else if (required) {
-          throw new Error(
-            `Installed dependency ${dependencyName} required by ${packagePath} is missing (run npm install)`,
-          );
-        }
-      }
-    };
-    enqueueGroup(packageJson.dependencies, true);
-    enqueueGroup(packageJson.optionalDependencies, false);
-    enqueueGroup(packageJson.peerDependencies, false);
+    queue.push({ packagePath: resolved, dependencyName, obligation: 'cowork' });
+  }
+  if (includeRootOptional) {
+    for (const dependencyName of Object.keys(rootOptionalNames)) {
+      const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+      if (resolved) queue.push({ packagePath: resolved, dependencyName, obligation: 'optional' });
+    }
   }
 
-  for (const packagePath of requiredOptionalPaths) {
-    if (!included.has(packagePath)) {
+  while (queue.length > 0) {
+    const edge = queue.pop();
+    const obligatory = edge.obligation !== 'optional';
+    // A package first reached optionally is walked again once an obligatory
+    // edge reaches it, so queue order can never hide an obligatory dependency.
+    if (obligatory ? walkedAsObligatory.has(edge.packagePath) : included.has(edge.packagePath)) {
+      continue;
+    }
+    const packageJsonPath = path.join(coreRoot, edge.packagePath, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    if (!supportsCurrentTarget(packageJson, platform, arch)) {
+      if (!obligatory) continue;
+      const target = `${platform}/${arch}: ${edge.packagePath} ` +
+        `(os ${JSON.stringify(packageJson.os ?? [])}, cpu ${JSON.stringify(packageJson.cpu ?? [])})`;
+      if (edge.obligation === 'cowork') {
+        throw new Error(`Cowork-required optional dependency does not support ${target}`);
+      }
+      if (edge.obligation === 'production') {
+        throw new Error(`Installed production dependency ${edge.dependencyName} does not support ${target}`);
+      }
       throw new Error(
-        `Cowork-required optional dependency does not support ${platform}/${arch}: ${packagePath}`,
+        `Installed dependency ${edge.dependencyName} required by ${edge.requiredBy} does not support ${target}`,
       );
     }
+    included.add(edge.packagePath);
+    if (obligatory) walkedAsObligatory.add(edge.packagePath);
+    enqueueDependencies(edge.packagePath, packageJson, obligatory);
   }
 
   return [...included].sort((left, right) => {
