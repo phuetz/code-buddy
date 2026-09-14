@@ -3,7 +3,7 @@ import { Check, Grid3X3, Minus } from 'lucide-react';
 import { EmptyState } from '../ui/EmptyState.js';
 import { Pill } from '../ui/Pill.js';
 import { SectionCard } from '../ui/SectionCard.js';
-import type { Peer } from './util/fleet-model.js';
+import { QUIET_PEER_HINT, type Peer } from './util/fleet-model.js';
 import { buildMatrix, coverageOf } from './util/capability-matrix.js';
 
 export interface PeerCapabilityMatrixProps {
@@ -45,6 +45,16 @@ export function PeerCapabilityMatrix({ peers, capabilities }: PeerCapabilityMatr
                 <td className="sticky left-0 bg-surface p-2">
                   <div className="font-medium text-foreground">{peer.label}</div>
                   <Pill tone={peer.status === 'offline' ? 'danger' : peer.status === 'busy' ? 'warning' : 'success'}>{peer.role}</Pill>
+                  {peer.quiet && (
+                    <span
+                      className="ml-1"
+                      title={QUIET_PEER_HINT}
+                      data-testid="os-peer-quiet"
+                      data-peer-id={peer.id}
+                    >
+                      <Pill tone="default">silencieux</Pill>
+                    </span>
+                  )}
                 </td>
                 {matrix[rowIndex]?.map((cell) => (
                   <td key={cell.capability} className="p-2 text-center">

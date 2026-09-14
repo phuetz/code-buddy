@@ -10,6 +10,18 @@
 
 ## Statut
 
+**Lot 5 livré au pilote, non commité** (2026-09-14). La fraîcheur apparaît là où l'on choisit un
+pair :
+- le Command Center affiche « N online · incl. M silent » ;
+- la prévisualisation de route marque d'un badge le pair recommandé silencieux, avec une note
+  neutre ;
+- Mission Control affiche un badge « silencieux » dans la topologie et la matrice.
+
+Rien d'autre ne change : statuts, `online`/`busy`/`offline`, pairs routables, route planifiée,
+dispatch ; aucun appel réseau ni reconnexion supplémentaire. Aucun nouveau fichier source : un
+hook ajouté au module de fraîcheur du lot 4, qui réutilise son horloge partagée (un seul
+intervalle).
+
 **Lot 4 livré au pilote, non commité** (2026-09-14). Les étiquettes « vu il y a » de Fleet
 avancent désormais avec le temps grâce à une horloge partagée (un seul intervalle, arrêté quand
 aucun panneau visible ne l'utilise). Un pair authentifié qui n'a rien envoyé depuis plus de trois
@@ -79,6 +91,89 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   capturé ; échec de `fleet.list()` affiché (« Could not load peers: … ») au lieu d'un rejet non
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
+
+## Lot 5 — fraîcheur au moment du choix d'un pair
+
+### Constat
+
+- Command Center : la synthèse de disponibilité affichait `onlinePeers.length online`
+  (`authenticated` ou `connected`), sans distinguer les pairs silencieux.
+- `FleetRoutePreview` : le handler `fleet.routePreview` (`previewFleetRoute`, `main/ipc/fleet-ipc.ts`)
+  construit ses lanes avec `peerId = FleetPeer.id` du bridge, donc directement rapprochables du
+  store. Le routeur ne tient pas compte de la fraîcheur, et ce lot ne le change pas.
+- Mission Control : `toOsPeer` convertit le store en `Peer` OS (`online`/`busy`/`offline`) ;
+  `FleetTopologyView` et `PeerCapabilityMatrix` reçoivent ces pairs par props. Un champ optionnel
+  suffit pour un badge : aucune refonte du modèle, le résumé (`summarizeFleet`) n'est pas touché.
+- `MissionControlView` n'est monté que sur la vue `os` (`NewShell.tsx:785`), le Command Center
+  seulement ouvert, les lanes seulement quand une route est affichée.
+
+### Correctif
+
+- `fleet-peer-freshness.tsx` (lot 4) : **un seul ajout**, `useSilentPeerIds(peers)`. C'est un
+  `useSyncExternalStore` sur l'horloge partagée, dont l'instantané est l'ensemble des ids
+  silencieux (chaîne) : l'appelant ne se rend que lorsqu'un pair devient silencieux ou se
+  manifeste de nouveau, pas à chaque tick (règle React `rerender-derived-state`). Seule la règle
+  `describePeerFreshness` du lot 4 est appliquée : `never`, `invalid`, un statut non authentifié
+  ou un pair inconnu ne sont jamais comptés silencieux.
+- `FleetCommandCenter.tsx` :
+  - composant local `OnlinePeerCount` (`data-testid="fleet-online-count"`) : « `N online` » et, si
+    M > 0, « ` · incl. M silent` » avec info-bulle « restent en ligne et routables ». Il est
+    isolé pour que seule cette ligne se rende, pas tout le Command Center ;
+  - `peersById={fleetPeers}` transmis à `FleetRoutePreview` ;
+  - `onlinePeers`, `routablePeers`, `targetPeerIds`, disponibilité et dispatch inchangés.
+- `FleetRoutePreview.tsx` :
+  - prop optionnelle `peersById` (même nom que celle déjà passée ailleurs dans le Command Center) ;
+  - la liste des lanes devient le sous-composant local `RouteLaneList`, monté seulement quand une
+    route est affichée. Il ajoute un badge « silent » (`fleet-route-preview-silent`) sur les lanes
+    dont le pair est silencieux, et une note neutre (`fleet-route-preview-silence`) : « Silent for
+    over 90 s: … The router does not weigh freshness; the route is unchanged. » ;
+  - ordre, contenu et appels réseau des lanes inchangés ; sans `peersById`, comportement
+    identique à avant (`NO_PEERS`).
+- Mission Control :
+  - `os/util/fleet-model.ts` : `Peer.quiet?: boolean` documenté « présentation seulement »,
+    et `QUIET_PEER_HINT` (français, comme le reste de ces vues) ;
+  - `MissionControlView.tsx` : `useSilentPeerIds` sur les pairs du store, et
+    `toOsPeer(peer, quiet)` n'ajoute que `quiet: true` ;
+  - `FleetTopologyView.tsx` : badge « silencieux » (`os-peer-quiet`) à côté de la pastille de
+    statut, et `data-testid` sur la carte du pair ;
+  - `PeerCapabilityMatrix.tsx` : même badge sous le rôle ;
+  - `summarizeFleet`, `deriveFleetLoad` et les tons de statut inchangés.
+- Locales `en`/`fr`/`zh` : 3 clés ajoutées à la fin de `fleet.freshness` (`silentCount`,
+  `silentCountHint`, `routeSilent`), à la même position en `en` et `fr`.
+- Fichiers du lot 4 non touchés, hors `fleet-peer-freshness.tsx` : `fleet-freshness.ts`,
+  `use-shared-now.ts`, `FleetPanel.tsx`, `fleet-peer-panel.tsx` et les tests du lot 4 gardent
+  leurs empreintes.
+
+### Tests du lot 5 — `cowork/tests/fleet-freshness-choice.test.tsx` (nouveau, 8 tests)
+
+Rendus DOM réels (happy-dom), `setInterval`/`Date` simulés, i18n factice stable qui interpole.
+Flotte mixte : `hub` récent, `spoke` silencieux, `fresh` sans événement, `broken` horodatage NaN,
+`relay` `connected` ancien, `down` `disconnected`.
+- **Command Center complet** :
+  - « 5 online · incl. 1 silent » ; après 95 s « incl. 2 silent » ; deux réceptions ramènent à
+    « 5 online » ; 95 s plus tard « incl. 2 silent » ;
+  - le statut du pair reste `authenticated` ;
+  - la prévisualisation de route n'appelle le routeur qu'une fois, avec les 6 pairs routables
+    (silencieux compris).
+- **`FleetRoutePreview`** :
+  - 5 lanes dans l'ordre planifié ; badge seulement sur `spoke` (ni `hub`, ni `fresh`, ni
+    `broken`, ni le pair inconnu `gpuNode/repo`) ; note avec `spoke`, « 90 s », « route is
+    unchanged », sans `hub` ;
+  - après 95 s, `hub` badgé à son tour ; nouvelles réceptions → plus aucun badge ni note ;
+    routeur appelé une seule fois ; 1 timer affiché, 0 après fermeture ;
+  - pairs inconnus du store → aucun badge.
+- **Mission Control complet** :
+  - badges `quiet` pour `spoke` (topologie + matrice), info-bulle « 90 s » ;
+  - la carte de `spoke` affiche toujours `online`, `down` toujours `offline`, « En ligne » compte
+    toujours 5 ;
+  - après 95 s `hub` s'ajoute ; une réception de `spoke` retire son badge.
+- **Traductions** : les 3 clés, avec interpolation, présentes en `en`/`fr`/`zh`.
+
+| Exécution | Résultat |
+| --- | --- |
+| Avant correctif (sans hook, compteur, badges ni prop) | **4 rouges** (compteur absent, badge de lane absent, 0 timer au lieu de 1, badge OS absent), 1 vert (garde « pairs inconnus ») |
+| Après correctif | 5/5, puis 8/8 avec le test des traductions |
+| Deux corrections de test en cours de route, sans changement de comportement | sélecteur `getByRole('textbox')` ambigu dans le Command Center → `fleet-command-goal-input` ; chemin des locales via `process.cwd()` (happy-dom réécrit `import.meta.url`) |
 
 ## Lot 4 — fraîcheur Fleet dans le renderer
 
@@ -298,6 +393,36 @@ comportement des tests existants.
 
 ## Vérifications (exécutées dans `cowork/`)
 
+### Lot 5
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/fleet-freshness-choice.test.tsx` | 4 rouges → **8/8 verts** (voir ci-dessus). |
+| Lot 5 + `fleet-route-preview`, `fleet-model`, `capability-matrix`, `council-model`, `fleet-freshness-display`, `i18n-french-support`, `--sequence.shuffle` | **7 fichiers, 36 tests verts**. |
+| Suite Fleet voisine (les 26 du lot 4 + `fleet-route-preview`, `capability-matrix`, `council-model`, `fleet-model` et le nouveau fichier) | **29 fichiers, 245 tests verts**. |
+| `node scripts/lint.cjs --max-warnings 0` sur `fleet-peer-freshness.tsx`, `FleetRoutePreview.tsx`, `fleet-model.ts`, `FleetTopologyView.tsx`, `PeerCapabilityMatrix.tsx` et le test | Propre. |
+| `node scripts/lint.cjs FleetCommandCenter.tsx MissionControlView.tsx` | Propre. |
+| Prettier | Nouveau test formaté ; mes lignes conformes dans les autres fichiers (écarts restants antérieurs au lot : 3 dans `FleetRoutePreview.tsx`, 1 bloc dans `fleet-model.ts`). |
+| `tsc --noEmit -p tsconfig.json` | 0 erreur dans `cowork/src` ; 20 erreurs baseline de ce worktree inchangées (corrigées en intégration par Codex, non touchées ici). |
+| `sha256sum` de `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts`, `fleet-freshness.ts`, `use-shared-now.ts`, `FleetPanel.tsx`, `fleet-peer-panel.tsx` | Identiques à la base du lot 5 (journal 01:50). |
+| Build global | Non relancé (consigne). |
+
+Empreintes à la livraison du lot 5 :
+
+| Fichier | Delta lot 5 | SHA-256 |
+| --- | --- | --- |
+| `cowork/src/renderer/components/fleet-peer-freshness.tsx` | + `useSilentPeerIds` (134 lignes au total) | `cd8f73b56d0411b58bcde5c0733c3cc67e2ea4f687466fbaf28a1d5f95543f43` |
+| `cowork/src/renderer/components/FleetCommandCenter.tsx` | 4 hunks : 2 imports, `OnlinePeerCount`, `peersById` | `6577f700f26c2eab5a6f7a74abca6139b307fb1c2caeeff3d056e679bd151cbb` |
+| `cowork/src/renderer/components/FleetRoutePreview.tsx` | prop `peersById`, `RouteLaneList` (248 lignes au total) | `c558f7ffe59930822cb0db92a4cdee1c08beec78e06ef57243b01cdc4980f8db` |
+| `cowork/src/renderer/components/os/MissionControlView.tsx` | 4 hunks : import, `toOsPeer(peer, quiet)`, `quiet`, calcul des pairs | `487aace0008fccbe7cb3db0f79173f6d6a400c1eaf708011e08f19b48de8784d` |
+| `cowork/src/renderer/components/os/FleetTopologyView.tsx` | import, `data-testid` de carte, badge | `90ef23fb4cb29e0e4f39999bf25cb026232ef2f71c3e5ac6bcf7e77b8df268c5` |
+| `cowork/src/renderer/components/os/PeerCapabilityMatrix.tsx` | import, badge | `72c9c703513360030ca12f2bfde525c4d0d1b289c0eafd4ba36f3d04e342c965` |
+| `cowork/src/renderer/components/os/util/fleet-model.ts` | `quiet?`, `QUIET_PEER_HINT` | `a97902d32e26738f2924d3ba4ed4d1504422ec2e29ba38b43bc016f4e0220909` |
+| `cowork/src/renderer/i18n/locales/en.json` | +3 clés | `61bb568c873149e99d5be126595dac53038c04143df030b88b3d3e837ec192f7` |
+| `cowork/src/renderer/i18n/locales/fr.json` | +3 clés | `c33b933f6bef5e63cda4b88068b2599c0057dde1c7c6c4af2174439bc9aecf88` |
+| `cowork/src/renderer/i18n/locales/zh.json` | +3 clés | `9d39d05c95533c1acfeec5f9fe4b69b4890584327804bf7139fc75f9b296a788` |
+| `cowork/tests/fleet-freshness-choice.test.tsx` | nouveau, 289 lignes | `a2aeacfed4dfb0325dc7ea489967522e9c6669c23108a0ceca0aa109ae3f0c71` |
+
 ### Lot 4
 
 | Commande | Résultat |
@@ -397,6 +522,34 @@ Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30�
   docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md docs/FABLE5-CODEX-COORDINATION.md`
   puis `git commit -m "fix(cowork): recover fleet peers and keep connection failures visible"`.
 
+## Limites du lot 5
+
+- Pas d'Electron réel : preuves par rendus DOM complets (Command Center, Mission Control) sous
+  faux temps.
+- Le badge de lane et la note ne signalent que les pairs connus du store ; un id de lane inconnu
+  ne reçoit rien (aucune supposition).
+- Les chaînes de Mission Control restent en français codé en dur, comme le reste de ces vues
+  (pas d'i18n dans `os/`).
+- Aucun changement de routage : un pair silencieux peut toujours être recommandé ; la note le dit.
+- Commande pour le pilote (lot 5 seul, après revue) :
+  `git add cowork/src/renderer/components/fleet-peer-freshness.tsx cowork/src/renderer/components/FleetCommandCenter.tsx
+  cowork/src/renderer/components/FleetRoutePreview.tsx cowork/src/renderer/components/os/MissionControlView.tsx
+  cowork/src/renderer/components/os/FleetTopologyView.tsx cowork/src/renderer/components/os/PeerCapabilityMatrix.tsx
+  cowork/src/renderer/components/os/util/fleet-model.ts cowork/src/renderer/i18n/locales/en.json
+  cowork/src/renderer/i18n/locales/fr.json cowork/src/renderer/i18n/locales/zh.json
+  cowork/tests/fleet-freshness-choice.test.tsx docs/reports/2026-09/AMELIORATION-COWORK-OPUS-2026-09-14.md
+  docs/FABLE5-CODEX-COORDINATION.md` puis
+  `git commit -m "feat(cowork): surface silent fleet peers where peers are chosen"`.
+  `fleet-peer-freshness.tsx` et les locales portent aussi le lot 4, déjà en intégration.
+
+## Suite possible après le lot 5
+
+Côté fraîcheur Fleet, rien d'utile ne reste sans toucher au routage, ce qui est hors du
+périmètre voulu. Seul point concret déjà identifié et encore ouvert : le micro-lot `main` noté au
+lot 3 (arrêter `discoveryTimer` et son premier `setTimeout` au début de la sortie, et fermer les
+sockets en parallèle dans `FleetBridge.shutdown()`). Il touche des fichiers livrés, donc à engager
+seulement si le pilote le juge utile.
+
 ## Limites du lot 4
 
 - Pas d'Electron réel ni de capture : la preuve de rendu est le DOM happy-dom sous timers
@@ -423,7 +576,8 @@ Empreintes des locales avant le lot 4 : `en` `00dd2f16…12c7`, `fr` `6710df30�
 
 ## Suite proposée après le lot 4 (non démarrée, en attente de passation)
 
-**Lot 5 — le silence visible là où l'on décide** (renderer seul, sans changer le routage) :
+**Lot 5 — le silence visible là où l'on décide** (renderer seul, sans changer le routage) —
+**fait au lot 5** (voir la section Lot 5) :
 1. Command Center : dans la synthèse de disponibilité, séparer « en ligne » et « dont N
    silencieux », et avertir dans la prévisualisation de route (`FleetRoutePreview`) quand le pair
    recommandé est silencieux ; le dispatch reste inchangé.
@@ -476,6 +630,39 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
    réseau inutile.
 
 ## Journal
+
+### 01:50 — Lot 5 : fraîcheur au moment du choix d'un pair (avant toute inspection)
+
+Lot 4 copié en intégration (vérification root et revue indépendante en cours). Codex a réparé en
+intégration le build Vite complet et le typecheck Cowork ; ce worktree peut encore montrer les 20
+erreurs baseline, non corrigées ici, build global non relancé. Périmètre du lot 5 : renderer
+seul. Au programme :
+- compteur « en ligne dont N silencieux » du Command Center ;
+- avertissement neutre dans `FleetRoutePreview` si le pair recommandé est silencieux ;
+- badge `quiet` optionnel dans Mission Control / topologie / matrice, si c'est de la présentation
+  pure.
+
+Contraintes : réutiliser l'horloge et les utilitaires du lot 4, un seul intervalle ; ne jamais
+modifier `online`/`busy`/`offline`, le routage ni le dispatch ; aucun appel réseau ni reconnexion.
+Fichiers livrés `main`/`FleetBridge`/lifecycle/`vite.config.ts` inchangés.
+
+Base (SHA-256) :
+
+| Fichier | SHA-256 |
+| --- | --- |
+| `cowork/src/renderer/components/FleetCommandCenter.tsx` (= HEAD) | `7e84d1220737e7785092a10426586abf25539aea4b203c56bb9a5e9c543be7a9` |
+| `cowork/src/renderer/components/FleetRoutePreview.tsx` (= HEAD) | `cd9043c3707ab487a92de07a596407f2048a807b3720a676aa071045e482bbbb` |
+| `cowork/src/renderer/components/os/MissionControlView.tsx` (= HEAD) | `b9e1b5249a248b64063ba6930f47703d2eb80ef0d4f1af379ba1c443e16e1976` |
+| `cowork/src/renderer/components/os/FleetTopologyView.tsx` (= HEAD) | `4be6349b2fcf046ec1e91033942de2e3bc339a43250f6d5255edd1e0ad5a273e` |
+| `cowork/src/renderer/components/os/PeerCapabilityMatrix.tsx` (= HEAD) | `264ca00d60ae4dd8d00d823cb13bac4379031e4c8f293fa954d9639cc091808c` |
+| `cowork/src/renderer/components/os/util/fleet-model.ts` (= HEAD) | `7bc403e46fbdd8bb79412cb671afa3302afb7c06a8bf864723cc65d724216854` |
+| `cowork/src/renderer/components/fleet-peer-freshness.tsx` (lot 4) | `349764b6a0609e4593edd17a7d9e4f9adbf035faeddc3a0a35149b759ba07739` |
+| `cowork/src/renderer/utils/fleet-freshness.ts` (lot 4) | `290759780fc51a39c83610c1d1aa00e9de495e6a431bff5ee8573e2a09710f10` |
+| `cowork/src/renderer/hooks/use-shared-now.ts` (lot 4) | `45593fa84feab2059aa66eceeabb3fdceded80cb99837fd16fded8b6c45e24f6` |
+| `cowork/src/renderer/components/FleetPanel.tsx` (lots 1-2-4) | `87eea1cab5a1b9202a58151f780afe5a771708cf280ef7f4b0ad19e97a94f645` |
+| `cowork/src/renderer/components/fleet-peer-panel.tsx` (lot 4) | `39509a46d25450c4dffa6bb8ec8ed4e28c8abc52a2990c6357afa113057ac0ad` |
+| locales `en` / `fr` / `zh` (lot 4) | `8ab6c499…3fef` / `f55e893d…5f31` / `030084e5…0f1c` |
+| `main/index.ts`, `fleet-bridge.ts`, `fleet-bridge-lifecycle.ts` (interdits) | `40418d1f…777c`, `c7c001b9…7ebe`, `2df2e5d0…3671` |
 
 ### 01:31 — Lot 4 : présentation de la fraîcheur Fleet (avant toute inspection)
 
@@ -610,3 +797,22 @@ non testée ; helper et câblage sont vérifiés comme décrit ci-dessus.
 La compilation TypeScript est désormais entièrement verte grâce au correctif
 Codex `5cc171870` (`COWORK-TYPECHECK-2026-09-14.md`) ; les mentions des 20 erreurs
 dans les livraisons Opus décrivent leur base isolée antérieure.
+
+### Contre-validation lot 5 : choix des pairs
+
+Codex a porté le lot renderer et fait réaliser une revue indépendante :
+les statuts, ensembles de pairs et requêtes de routage restent inchangés.
+Le snapshot de pairs silencieux utilise désormais JSON au lieu d'un séparateur
+newline : les IDs persistés ne sont pas forcément issus du normaliseur actuel.
+Un test d'aperçu de route avec un tel ID échoue avant ce changement et passe après.
+Les quatre suites fraîcheur/locales passent, soit 58 tests. TypeScript Cowork et
+ESLint ciblé passent ; le build Vite complet du lot 5 passe également.
+
+La QA Chromium réelle sur le renderer compilé confirme : compteur incluant un
+pair silencieux, badge sur la recommandation, puis disparition après réception.
+Le pair, le modèle et le score sont inchangés et le routeur n'est appelé qu'une fois.
+IPC simulé, aucun Electron/backend ; Mission Control reste vérifié par tests DOM.
+Preuve locale : `/tmp/cb-fleet-route-browser-qa.json`, captures
+`/tmp/cb-fleet-route-silent.png` et `/tmp/cb-fleet-route-fresh.png`.
+Validation avant commit : lint, typechecks, paquet (10 tests) et garde données
+personnelles (40 tests après indexation) passent.

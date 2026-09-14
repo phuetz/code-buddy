@@ -3003,7 +3003,10 @@
       "unknownTime": "unknown",
       "unknownHint": "The last-seen time is invalid or ahead of this computer's clock.",
       "silent": "silent",
-      "silentHint": "Still authenticated, but nothing received for over {{threshold}} s (last event {{ago}}; peers send a heartbeat every {{heartbeat}} s). The link may be stale."
+      "silentHint": "Still authenticated, but nothing received for over {{threshold}} s (last event {{ago}}; peers send a heartbeat every {{heartbeat}} s). The link may be stale.",
+      "silentCount": "incl. {{count}} silent",
+      "silentCountHint": "Authenticated, but nothing received for over {{threshold}} s. They stay online and routable.",
+      "routeSilent": "Silent for over {{threshold}} s: {{peers}}. The router does not weigh freshness; the route is unchanged."
     },
     "detail": {
       "status": "Status",

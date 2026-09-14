@@ -2935,7 +2935,10 @@
       "unknownTime": "未知",
       "unknownHint": "最后在线时间无效，或晚于本机当前时间。",
       "silent": "静默",
-      "silentHint": "仍已认证，但超过 {{threshold}} 秒未收到任何内容（最后事件 {{ago}}；节点每 {{heartbeat}} 秒发送一次心跳）。连接可能已失效。"
+      "silentHint": "仍已认证，但超过 {{threshold}} 秒未收到任何内容（最后事件 {{ago}}；节点每 {{heartbeat}} 秒发送一次心跳）。连接可能已失效。",
+      "silentCount": "其中 {{count}} 个静默",
+      "silentCountHint": "已认证，但超过 {{threshold}} 秒未收到任何内容。它们仍在线且可路由。",
+      "routeSilent": "超过 {{threshold}} 秒静默：{{peers}}。路由器不考虑新鲜度；路由保持不变。"
     },
     "detail": {
       "status": "状态",

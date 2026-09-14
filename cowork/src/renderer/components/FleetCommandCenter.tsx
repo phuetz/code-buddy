@@ -89,6 +89,8 @@ import { FleetCostStrip } from './FleetCostStrip';
 import { FleetRoutePreview } from './FleetRoutePreview';
 import { FleetUtilizationStrip } from './FleetUtilizationStrip';
 import { PeerDetail, PeerRow } from './fleet-peer-panel';
+import { useSilentPeerIds } from './fleet-peer-freshness';
+import { FLEET_SILENCE_THRESHOLD_MS } from '../utils/fleet-freshness';
 import { SagaDetail } from './fleet-saga-detail';
 import {
   buildFleetInternetProofPlan,
@@ -922,9 +924,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                       <span>
                         {routablePeers.length}/{peers.length} {t('fleet.routable', 'routable')}
                       </span>
-                      <span>
-                        {onlinePeers.length} {t('fleet.online', 'online')}
-                      </span>
+                      <OnlinePeerCount peers={onlinePeers} />
                       <span>
                         {runningSagas} {t('fleet.running', 'running')}
                       </span>
@@ -1091,6 +1091,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                     council={council}
                     targetPeerIds={routablePeers.map((peer) => peer.id)}
                     disabled={routablePeers.length === 0}
+                    peersById={fleetPeers}
                   />
                 </div>
                 {error && (
@@ -1260,6 +1261,33 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
       </div>
       {showLessonsGraph && <LessonsVaultGraph onClose={() => setShowLessonsGraph(false)} />}
     </>
+  );
+};
+
+/**
+ * "N online", plus how many of them are silent. Its own component so the clock
+ * subscription re-renders this line, not the whole Command Center; silent peers
+ * stay online and routable.
+ */
+const OnlinePeerCount: React.FC<{ peers: FleetPeer[] }> = ({ peers }) => {
+  const { t } = useTranslation();
+  const silentCount = useSilentPeerIds(peers).length;
+  return (
+    <span data-testid="fleet-online-count">
+      {`${peers.length} ${t('fleet.online', 'online')}`}
+      {silentCount > 0 && (
+        <span
+          className="text-warning"
+          title={t(
+            'fleet.freshness.silentCountHint',
+            'Authenticated, but nothing received for over {{threshold}} s. They stay online and routable.',
+            { threshold: FLEET_SILENCE_THRESHOLD_MS / 1_000 }
+          )}
+        >
+          {` · ${t('fleet.freshness.silentCount', 'incl. {{count}} silent', { count: silentCount })}`}
+        </span>
+      )}
+    </span>
   );
 };
 

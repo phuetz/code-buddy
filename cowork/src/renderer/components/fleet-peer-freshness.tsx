@@ -3,9 +3,9 @@
  * clock so they keep ageing between events. Mount them only where they are
  * visible: every mounted label holds a subscription to the shared timer.
  */
-import React from 'react';
+import React, { useMemo, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSharedNow } from '../hooks/use-shared-now';
+import { sharedClock, useSharedNow } from '../hooks/use-shared-now';
 import type { FleetPeer } from '../types';
 import {
   FLEET_HEARTBEAT_INTERVAL_MS,
@@ -18,6 +18,24 @@ import {
 
 type FreshnessPeer = Pick<FleetPeer, 'id' | 'status' | 'lastSeenAt'>;
 type Translate = ReturnType<typeof useTranslation>['t'];
+
+/**
+ * Ids of the given peers that are silent right now. Subscribes to the shared
+ * clock, but the snapshot is the set itself, so the caller re-renders only when
+ * a peer falls silent or speaks again — not on every tick.
+ */
+export function useSilentPeerIds(peers: readonly FreshnessPeer[]): string[] {
+  const readSilentKey = () => {
+    const now = sharedClock.getSnapshot();
+    return JSON.stringify(
+      peers
+        .filter((peer) => describePeerFreshness(peer, now).kind === 'silent')
+        .map((peer) => peer.id)
+    );
+  };
+  const silentKey = useSyncExternalStore(sharedClock.subscribe, readSilentKey, readSilentKey);
+  return useMemo(() => JSON.parse(silentKey) as string[], [silentKey]);
+}
 
 function formatSeenAge(age: SeenAge, t: Translate): string {
   switch (age.unit) {

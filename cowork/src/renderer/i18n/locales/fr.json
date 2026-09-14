@@ -3003,7 +3003,10 @@
       "unknownTime": "inconnue",
       "unknownHint": "L'heure de dernière présence est invalide ou en avance sur l'horloge de cet ordinateur.",
       "silent": "silencieux",
-      "silentHint": "Toujours authentifié, mais rien reçu depuis plus de {{threshold}} s (dernier événement {{ago}} ; les peers envoient un heartbeat toutes les {{heartbeat}} s). La liaison est peut-être figée."
+      "silentHint": "Toujours authentifié, mais rien reçu depuis plus de {{threshold}} s (dernier événement {{ago}} ; les peers envoient un heartbeat toutes les {{heartbeat}} s). La liaison est peut-être figée.",
+      "silentCount": "dont {{count}} silencieux",
+      "silentCountHint": "Authentifiés, mais rien reçu depuis plus de {{threshold}} s. Ils restent en ligne et routables.",
+      "routeSilent": "Silencieux depuis plus de {{threshold}} s : {{peers}}. Le routeur ne tient pas compte de la fraîcheur ; la route est inchangée."
     },
     "detail": {
       "status": "Statut",
