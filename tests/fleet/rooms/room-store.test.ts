@@ -62,7 +62,7 @@ describe('RoomStore', () => {
     expect(reopened.append(first).status).toBe('duplicate');
     expect(reopened.append(message('three')).record.seq).toBe(3);
     expect(reopened.query(filters([{ '#h': ['general'] }])).records.map((r) => r.event.content)).toEqual(['one', 'two', 'three']);
-    expect(fs.statSync(ledger(dir)).mode & 0o777).toBe(process.platform === 'win32' ? expect.any(Number) : 0o600);
+    expect(fs.statSync(ledger(dir)).mode & 0o777).toEqual(process.platform === 'win32' ? expect.any(Number) : 0o600);
   });
 
   it('rejects a structurally valid event whose id or signature is not authentic', () => {
