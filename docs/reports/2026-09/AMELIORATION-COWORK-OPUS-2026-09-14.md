@@ -116,6 +116,216 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   géré et d'un panneau vide. Mises à jour d'état fonctionnelles, effet annulable au démontage
   (règles React `rerender-functional-setstate`, `client-*` du skill Vercel).
 
+## Mission 11 bis — contre-relecture avant port : activité prouvée et arrêt du pont
+
+### Constats et reproduction (vrai Orchestrator, vrai `CoworkToolAgent`)
+
+2 tests ajoutés à `cowork/tests/workflow-bridge-late-confirmation.test.ts`, **2 rouges** sur la
+livraison de la mission 11 :
+1. **Activité non prouvée.** `isTaskActive` considérait « actif » tout ce qui n'était pas
+   `completed`/`failed`/`cancelled`, y compris une tâche absente ou un statut `undefined`.
+   Reproduit en faisant renvoyer `undefined` au `getTask` du vrai noyau pendant qu'une
+   confirmation attend : l'outil était exécuté (`registry.execute` appelé 1 fois).
+2. **Arrêt du pont.** `WorkflowBridge.shutdown()` n'annulait que les approbations. Un outil
+   confirmé après `shutdown()` était exécuté (`registry.execute` appelé 1 fois), et la file de
+   l'Orchestrator restait active. Un premier jet de ce test (éventail de 5 outils) ne produisait
+   pas de branches parallèles avec ce compilateur ; il a été remplacé, avant toute conclusion, par
+   un outil unique suivi d'un run lancé après l'arrêt.
+
+Constat annexe, non modifié (main gelé) : `WorkflowBridge.shutdown()` n'est appelé nulle part dans
+`cowork/src/main`. La garantie n'existe donc que si un appelant l'invoque.
+
+### Correctif (`workflow-bridge.ts` seul ; `cowork-tool-agent.ts` inchangé depuis la mission 11)
+
+- `isTaskActive` n'accepte plus qu'une activité prouvée : pont non arrêté **et** statut du noyau
+  `assigned` ou `in_progress`. Une tâche absente ou sans statut est inactive.
+- Même preuve exigée dès `task_assigned`. Sans elle, le pont rapporte `failTask` (« not started:
+  the bridge is stopped or the task is not running ») et ne démarre rien : ni confirmation, ni
+  approbation, ni `set_variable`, ni événement.
+- `shutdown()` passe `stopped` à vrai, appelle `orchestrator.stop()` (API existante du noyau, plus
+  aucun dispatch de la file) et annule les approbations en attente comme avant.
+- Commentaire de `emitWorkflowEvent` corrigé : les événements de nœud tardifs ne sont plus publiés
+  du tout ; la garde n'y protège plus que l'historique persistant du run actif.
+- Test de la mission 9 : son Orchestrator factice déclare désormais la tâche `in_progress` à
+  l'assignation, comme le vrai noyau. C'est un mock honnête : sans ce statut, le pont ne démarre
+  plus la tâche.
+
+### Vérifications
+
+| Commande | Résultat |
+| --- | --- |
+| `tests/workflow-bridge-late-confirmation.test.ts` avant correctif | **2 rouges** / 4 verts. |
+| 8 fichiers workflow (`late-confirmation`, `late-task`, `persistence`, `integration`, `compilation`, `supervision-bridge`, `supervisor`, `force-confirmation`) | **8 fichiers, 52 tests verts**. |
+| `late-confirmation` + `late-task`, après formatage, `--sequence.shuffle` | **7/7 verts**. |
+| `node scripts/lint.cjs --max-warnings 0` sur les 4 fichiers | Propre. |
+| `tsc --noEmit` Cowork, lignes d'erreur dans `src/` | **0**. |
+| Prettier | Tests formatés ; aucun écart sur les lignes modifiées du pont. |
+
+Empreintes : `workflow-bridge.ts` `ffc565ed…2744` →
+`65fe8155a9d2181f5fc455d3be64fb5d2414031a92be5e04a48d8c9416646571` ;
+`cowork-tool-agent.ts` inchangé `6837b1238f3da9a8e9f98e97d1887a9caeb5c12ec5c0ec1d6ecfdd92a15aa8cf` ;
+`workflow-bridge-late-confirmation.test.ts` `fc1c4ae0…f026` →
+`0eb16eb0aaadea4c2b2d2547ed5d00d566df34fde115148ff19d90b4cd3d9745` ;
+`workflow-bridge-late-task.test.ts` `27c41207…82e2` →
+`b19818cc8c29bb0d09ee479917a15a7c44a591f1323061d1345e59fde1f9f924`. Noyau non modifié.
+
+Limites :
+- un outil déjà démarré avant l'arrêt n'est pas interrompu ;
+- les boîtes de confirmation et d'approbation déjà affichées ne sont pas retirées (renderer gelé) ;
+- après `shutdown()`, un run lancé reste en file jusqu'à l'expiration du noyau (5 min) ; aucune
+  action ne démarre ;
+- câbler `shutdown()` dans la séquence de sortie de `main` reste à décider par le pilote.
+
+## Mission 11 — confirmation/approbation après la fin du run : pas d'exécution, pas de publication
+
+### Reproduction (vrai Orchestrator, vrai `CoworkToolAgent`)
+
+`cowork/tests/workflow-bridge-late-confirmation.test.ts` (nouveau, 4 tests). Composants
+réels : `WorkflowBridge`, Orchestrator du noyau (mission 10, gelé) et `CoworkToolAgent`.
+Factices : registre d'outils (`execute` espionné), service de confirmation à réponse différée
+et `userData` temporaire. Horloge simulée : le noyau expire la tâche après son
+`defaultTimeout` (300 000 ms), fait échouer le workflow et abandonne la tâche.
+
+| Test | Base (mission 10) | Après |
+| --- | --- | --- |
+| outil `write_file` confirmé **après** l'expiration → `registry.execute` jamais appelé, aucun `node_completed`/`node_failed` publié, aucun worker `busy` | **rouge** : `execute` appelé 1 fois | vert |
+| approbation (`timeoutMs` 600 000) répondue après l'expiration → aucun événement de nœud publié, aucun `execute`, aucun worker `busy` | **rouge** : `node_completed` publié pour l'instance terminée | vert |
+| outil confirmé à temps → `execute` 1 fois, run `completed`, `node_completed` publié | vert (garde) | vert |
+| approbation donnée à temps → run `completed`, `node_completed` publié | vert (garde) | vert |
+
+### Correctif
+
+- `cowork-tool-agent.ts` : interface interne minimale `ToolTaskLifecycle { isActive(): boolean }`,
+  passée en second argument optionnel de `runToolInvoke`. Sans elle, comportement identique.
+  Vérifiée avant de demander la confirmation, puis juste avant `registry.execute`. Si la tâche
+  n'est plus active, l'appel échoue avec « Workflow tool '…' was not run: its workflow task is
+  no longer active ». Ce n'est ni un mode général ni un contournement de sécurité : la
+  confirmation reste exigée. Un outil déjà démarré n'est pas interrompu.
+- `workflow-bridge.ts` (`task_assigned`) :
+  - `isTaskActive()` lit le statut réel de la tâche du noyau (`completed`/`failed`/`cancelled`
+    = inactive) et est transmis à `runToolInvoke` ;
+  - la décision de publier est prise **avant** de rapporter au noyau : `completeTask`/`failTask`
+    sont toujours appelés (le noyau gelé libère ainsi le worker de façon sûre), mais
+    `node_completed`/`node_failed` ne sont émis que si la tâche était encore active ;
+  - le type interne `CoreOrchestrator.getTask` expose `status?`.
+- Inchangés : approbations et confirmations normales, `set_variable`, parallélisme, retries,
+  `cancelPending` (annulation manuelle) et noyau d'orchestration.
+
+### Évolution du test de la mission 9
+
+`workflow-bridge-late-task.test.ts` utilise un Orchestrator factice. Son script marque
+désormais la tâche `cancelled` à l'échec du run, comme le fait le vrai noyau (prouvé par
+`orchestrator-abandoned-tasks.test.ts` et le test ci-dessus). Il affirme en plus qu'aucun
+`workflow.event` de `inst-1` n'est publié après la réponse tardive ; l'assertion de persistance
+(`['inst-2', 'inst-2']`) est conservée. **Nouveau contrat** : un événement de nœud tardif d'un
+run terminé n'est plus livré au renderer. L'assertion ajoutée côté intégration par Codex (« le
+tardif `inst-1` est livré ») doit être inversée en conséquence. Non mesuré : je n'ai pas rejoué
+cette nouvelle assertion contre l'ancien pont. La preuve rouge du changement de contrat est le
+2ᵉ test ci-dessus, sur le vrai noyau.
+
+### Limites
+
+- Aucune annulation d'effet déjà parti : un outil lancé avant l'expiration va au bout, et seul
+  son rapport est ignoré par le noyau.
+- La confirmation elle-même (`ConfirmationService`) n'est pas retirée de l'écran : l'utilisateur
+  peut encore répondre, mais l'outil ne s'exécute pas.
+- L'approbation en attente reste affichée côté renderer (gelé) jusqu'à sa propre expiration ; y
+  répondre ne publie plus rien.
+
+### Vérifications
+
+| Commande | Résultat |
+| --- | --- |
+| `tests/workflow-bridge-late-confirmation.test.ts` avant correctif | **2 rouges** / 2 verts. |
+| `workflow-bridge-late-confirmation`, `-late-task`, `-persistence`, `-integration`, `-compilation`, `workflow-supervision-bridge`, `workflow-supervisor`, `workflow-force-confirmation` après correctif | **8 fichiers, 50 tests verts** ; rejoué après formatage (5/5 sur les deux fichiers de fin de run). |
+| `node scripts/lint.cjs --max-warnings 0` sur les 4 fichiers | Propre. |
+| `tsc --noEmit` Cowork, lignes d'erreur dans `src/` | **0**. |
+| Prettier | Tests formatés ; aucun écart sur les lignes modifiées du tool-agent. |
+
+Empreintes : `workflow-bridge.ts` `78048050…474c` → `ffc565edcc3828ffcce066f22783fd45df6c39e43c0c6a0a45a25a213c9e2744` ;
+`cowork-tool-agent.ts` `a4ba848b…751c` → `6837b1238f3da9a8e9f98e97d1887a9caeb5c12ec5c0ec1d6ecfdd92a15aa8cf` ;
+`workflow-bridge-late-confirmation.test.ts` `fc1c4ae0a0e41b4d58c108adc5999eebabd2e5003c5232c9f373ddabc4fdf026` ;
+`workflow-bridge-late-task.test.ts` `dd2db712…6c35` → `27c412077bf7b8e2658bd88e70e0dfe22c5d858de7622d8ae17346ded7ae82e2`.
+`src/orchestration/orchestrator.ts` inchangé (`3bc79850…f23d`).
+
+## Mission 10 — vrai Orchestrator : tâches abandonnées qui rouvrent, redispatchent ou libèrent le mauvais worker
+
+### Correction de la mission 9
+
+Le passage « Non traité : … Le noyau refuse ce cas (`task.status !== 'assigned'`, ligne 278) »
+de la mission 9 est **faux**. La ligne 278 est `startTask` ; `completeTask` et `failTask`
+n'avaient aucune garde. La conclusion reposait sur une lecture partielle, pas sur une
+exécution. Corrigée ici par des tests sur le vrai noyau.
+
+### État réel observé (vrai Orchestrator, avant correctif)
+
+- À l'expiration (`waitForTask`), la tâche garde son statut : `queued` (toujours en file) ou
+  `in_progress` (agent `busy`, `currentTask` = cette tâche). Le workflow passe en `failed`.
+- Un worker reste réservé par la tâche expirée tant que son exécuteur ne rend pas la main.
+- Consommateurs UI : le pont Cowork émet `workflow.event` ; le renderer
+  (`useIPC.ts:585` → `store.applyWorkflowEvent`) range `workflowExecutions` par `instanceId` et
+  crée une entrée `running` par défaut si elle manque.
+
+### Reproduction — `tests/orchestration/orchestrator-abandoned-tasks.test.ts` (nouveau, 5 tests)
+
+Vrai `Orchestrator` (`defaultTimeout: 300`, horloge simulée sur `setTimeout`) et un worker.
+L'exécuteur factice ne fait qu'enregistrer les `task_assigned` et rendre la main quand le test
+le décide ; toutes les conclusions sont lues sur l'état réel (`getTask`, `getAgent`,
+`getStats`, événements).
+
+| Test | Base réelle | Après |
+| --- | --- | --- |
+| run 1 (2 tâches parallèles) expire ; run 2 démarre ; résultat tardif de `run1-a` → `run1-b` (encore en file) n'est pas dispatchée, `run2-c` l'est | **rouge** : `assigned = ['run1-a', 'run1-b']`, le worker part à `run1-b` | vert |
+| résultat tardif : pas de `completed`, pas d'`output`, stats et événement `task_completed` inchangés ; le worker encore réservé est libéré | **rouge** : statut `completed` | vert |
+| erreur tardive d'une tâche à retries : pas de remise en file ni de second dispatch | **rouge** : `run1-a` assignée 2 fois | vert |
+| worker réattribué (`cancelTask` puis `run2-c`) ; approbation de `run1-a` répondue ensuite → worker toujours `busy` sur `run2-c` | **rouge** : worker passé `idle` | vert |
+| garde : succès, parallélisme sur 2 workers, retry réel puis succès, 3 tâches comptées | vert | vert |
+
+### Correctif (un invariant, `src/orchestration/orchestrator.ts`)
+
+« Les tâches d'un workflow terminé ne rouvrent rien, ne se redispatchent pas, et un rapport ne
+libère jamais un worker occupé par une autre tâche. »
+- `startWorkflow` (branche d'échec) : `abandonUnfinishedTasks(instance)`. Chaque tâche non
+  terminale de l'instance passe en `cancelled` et quitte la file. Une tâche encore exécutée
+  garde son worker jusqu'au rapport de son exécuteur.
+- `completeTask` / `failTask` : sur une tâche déjà terminale, `releaseWorkerAfterLateReport` ne
+  touche ni statut, ni sortie, ni retry, ni stats, ni événement. Elle libère le worker
+  uniquement si `agent.currentTask` est encore cette tâche, puis relance `processQueue`.
+- `completeTask` / `failTask` (échec définitif et retry) / `cancelTask` : l'agent n'est libéré
+  que si `agent.currentTask === taskId`.
+- Inchangés : API publique, signatures, délais (aucune protection timeout retirée), parcours de
+  succès, parallélisme, retries d'une tâche vivante. Pont et tool-agent Cowork non modifiés.
+
+### Limites (effets déjà partis)
+
+- Rien n'annule un effet externe déjà lancé : un outil en cours au moment de l'expiration va au
+  bout ; seul son rapport est ignoré.
+- `CoworkToolAgent.runToolInvoke` attend la confirmation (ligne 125) puis appelle
+  `registry.execute` (ligne 134). Une confirmation donnée **après** la fin du run exécute donc
+  encore l'outil. Non traité (au plus un défaut) ; proposition : vérifier dans le pont, entre
+  confirmation et exécution, que la tâche n'est pas terminale.
+- Le pont émet encore vers le renderer un `node_*` tardif de l'ancien `instanceId` (non persisté
+  depuis la mission 9). Le store renderer peut alors recréer une entrée `running` pour cette
+  instance. Proposition : ne pas émettre si `orchestrator.getTask(taskId)` est terminale.
+- Un exécuteur qui ne répond jamais laisse son worker réservé (comportement antérieur,
+  inchangé).
+
+### Vérifications
+
+| Commande | Résultat |
+| --- | --- |
+| `node node_modules/vitest/vitest.mjs run tests/orchestration/orchestrator-abandoned-tasks.test.ts` sur le noyau réel non modifié | **4 rouges** / 1 vert (garde). |
+| `… run tests/orchestration` après correctif (et après formatage) | **2 fichiers, 41 tests verts**. |
+| `cowork` : `workflow-bridge-late-task`, `-persistence`, `-integration` (vrai Orchestrator), `-compilation`, `workflow-supervision-bridge`, `workflow-supervisor`, `workflow-force-confirmation` | **7 fichiers, 46 tests verts**. |
+| `node node_modules/eslint/bin/eslint.js --max-warnings 0` (racine) sur le noyau et le test | Propre. |
+| `tsc --noEmit -p tsconfig.json` (racine, `--listFiles` inclut `src/orchestration/orchestrator.ts`) | Aucune ligne `error TS`. |
+| Prettier | Nouveau test formaté ; aucun écart sur les lignes modifiées de `orchestrator.ts`. |
+
+Empreintes : `orchestrator.ts` avant `9b521c64…d265`, après
+`3bc798506647b4297d9fa4a1a16cdb7dfa808e25a86f861e5ab2396b8f75f23d` ; test
+`fe4a041041d551b40e00635c8016bb4eb3f4767232c688b7ea0bbd2627cc32fc`. Suites Vitest racine
+complètes non relancées (validation large prise en charge par le pilote).
+
 ## Mission 9 — pont workflows : événement tardif persisté dans le run suivant
 
 ### Audit
@@ -149,10 +359,10 @@ Aucun fichier hors `cowork/` et `docs/` modifié ; `src/fleet/rooms` non touché
   est celui du run actif (`currentRun`). Les événements du run lui-même (`workflow_started` après
   `captureHandler`, nœuds, boucles, `completed`/`failed` final émis avant `currentRun = null`)
   restent enregistrés.
-- Non traité dans ce lot : `orchestrator.completeTask` est encore appelé après le délai du run.
-  Vérification du noyau réel par le pilote : l'attente rejette sans changer le statut de la tâche,
-  et `completeTask` peut encore la compléter. Le garde `assigned` appartient à `startTask`.
-  Ce comportement fait l'objet d'une mission suivante avec le véritable ordonnanceur.
+- Non traité (au plus un défaut) : `orchestrator.completeTask` est encore appelé sur une tâche
+  que le noyau a déjà abandonnée. ~~Le noyau refuse ce cas (`task.status !== 'assigned'`, ligne
+  278)~~ — **affirmation fausse, corrigée à la mission 10** : la ligne 278 est `startTask`, et
+  `completeTask` n'avait aucune garde.
 
 ### Vérifications
 
@@ -1089,6 +1299,36 @@ paralléliser les `disconnect()` de `FleetBridge.shutdown()` (touche `fleet-brid
 
 ## Journal
 
+### 02:56 — Mission 11, contre-relecture avant port (avant toute modification)
+
+Points demandés :
+- `isTaskActive` acceptait une tâche absente ou un statut `undefined` → exiger une activité
+  prouvée ;
+- le commentaire de `emitWorkflowEvent` est périmé ;
+- auditer l'arrêt du pont pendant une confirmation en attente.
+
+Noyau gelé (Codex y corrige les IDs partagés entre runs et la continuation des branches
+parallèles), renderer gelé. Base : `workflow-bridge.ts` `ffc565ed…2744`,
+`cowork-tool-agent.ts` `6837b123…a8cf`, `workflow-bridge-late-confirmation.test.ts`
+`fc1c4ae0…f026`, `workflow-bridge-late-task.test.ts` `27c41207…82e2`. Constat préalable :
+`WorkflowBridge.shutdown()` n'est appelé nulle part dans `cowork/src/main`.
+
+### 02:36 — Mission 10 : tâches abandonnées du vrai Orchestrator (avant toute modification)
+
+**Correction d'une affirmation de la mission 9.** J'avais écrit « le noyau refuse ce cas
+(`task.status !== 'assigned'`, ligne 278) ». C'est faux : la ligne 278 appartient à
+`startTask`. Lu sur le vrai `src/orchestration/orchestrator.ts` (SHA-256
+`9b521c648533afbae51b65f64843b76421dcdb859bb18e5e59d4f7c11621d265`) :
+- `completeTask` (288-318) passe la tâche en `completed` sans condition, incrémente les stats,
+  libère l'agent sans vérifier `agent.currentTask` et relance `processQueue` ;
+- `failTask` (323-370) fait de même, avec en plus une remise en file selon les retries ;
+- `waitForTask`, à l'expiration (765-770), rejette sans toucher la tâche, qui reste `queued`
+  ou `in_progress` avec son agent `busy`.
+
+Mission autorisée : core + pont/tool-agent Cowork, avec reproduction sur le **vrai**
+Orchestrator et un exécuteur factice. Au plus un défaut cohérent. Base :
+`workflow-bridge.ts` `78048050…474c`, `cowork-tool-agent.ts` `a4ba848b…751c`.
+
 ### 02:30 — Mission 9 : audit du pont workflows (avant toute modification)
 
 Lot 8 bis copié et gelé, revue indépendante en cours ; quota hebdomadaire presque épuisé
@@ -1316,6 +1556,7 @@ Lot retenu (deux problèmes) :
 - **P1 — connexion perdue mal récupérée / erreur invisible** (constats 1-3), dans le bridge.
 - **P2 — reconnexion manuelle non fiable** (constats 4-5), bridge + `FleetPanel`.
 
+
 ## Contre-validation du pilote après port sélectif
 
 Les deux premières passes Opus sont assemblées avec les corrections du transport
@@ -1409,3 +1650,15 @@ instance. La revue confirme la capture du démarrage avant l'émetteur et le
 stockage du résultat final avant remise à zéro de `currentRun`.
 Cette preuve de persistance utilise un ordonnanceur simulé et ne vaut pas
 validation du traitement d'un timeout par le noyau réel.
+
+### Contre-validation noyau : reprise du même workflow
+
+La contre-relecture a reproduit deux lacunes du lot 10 : un résultat de l'ancienne exécution modifiait la tâche homonyme du nouveau run ; une branche parallèle créait une étape après l'échec du run. Codex les corrige par des identités runtime propres à chaque exécution et occurrence, et par des gardes avant les étapes, créations, itérations et publications de boucle. Les alias `task_<nom logique>`, `aliasAs` et les dépendances logiques sont conservés. Les consommateurs de `task_assigned` doivent transmettre l'identifiant runtime reçu à `getTask`, `completeTask` et `failTask`.
+
+`cancelTask` est idempotent pour une tâche terminale. Le registre global garde sa borne `maxTasks` : sous pression, seuls les terminaux qui ne sont plus attendus par une exécution ou une dépendance active peuvent être retirés. Le worker d'une tâche abandonnée reste réservé jusqu'à son rapport tardif.
+
+Vérifications : 48 tests orchestration et 45 tests Cowork passent sous Node 20 et 24 ; lint ciblé, typecheck noyau et Cowork passent. Les nouveaux tests couvrent notamment replay, continuation parallèle, dépendance en avant, sorties, boucle et capacité après résultat tardif. La validation complète est lancée séparément.
+
+Limites conservées : aucune annulation d'un effet externe déjà parti ; pas d'identité distincte entre les tentatives retry d'une même tâche ; dans un batch concurrent, une dépendance logique répétée vise la dernière occurrence créée dans l'instance. Les historiques d'instances restent conservés comme avant.
+
+Validation complète du noyau après intégration : `npm run validate` avec HOME/XDG temporaires et sans configuration fournisseur héritée termine avec **38 550 tests verts, 37 ignorés et 1 todo** (2 151 fichiers verts, 9 ignorés), lint sans erreur, typechecks et paquet verts. Le passage précédent dans l'environnement utilisateur avait 11 échecs sur trois fichiers lisant l'état local ; ils disparaissent dans le profil isolé. Revue indépendante finale favorable. Les tests ciblés workflows sous Node 20 ont aussi vérifié les confirmations tardives avec le noyau corrigé.

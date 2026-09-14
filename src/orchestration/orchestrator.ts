@@ -55,6 +55,11 @@ export class Orchestrator extends EventEmitter {
   private failedTaskCount = 0;
   private totalTaskDuration = 0;
   private running = false;
+  private workflowTaskSequence = 0;
+  private workflowTaskIdentity = new WeakMap<
+    TaskInstance,
+    { instanceId: string; logicalTaskId: string }
+  >();
 
   constructor(config: Partial<OrchestratorConfig> = {}) {
     super();
@@ -187,6 +192,7 @@ export class Orchestrator extends EventEmitter {
    * Create a new task
    */
   createTask(definition: TaskDefinition): TaskInstance {
+    this.pruneTerminalTasksForCapacity();
     if (this.tasks.size >= this.config.maxTasks) {
       throw new Error(`Maximum task limit (${this.config.maxTasks}) reached`);
     }
@@ -288,6 +294,10 @@ export class Orchestrator extends EventEmitter {
   completeTask(taskId: string, output: Record<string, unknown>): void {
     const task = this.tasks.get(taskId);
     if (!task) throw new Error(`Task '${taskId}' not found`);
+    if (this.isTerminal(task)) {
+      this.releaseWorkerAfterLateReport(task);
+      return;
+    }
 
     task.status = 'completed';
     task.output = output;
@@ -299,10 +309,10 @@ export class Orchestrator extends EventEmitter {
       this.totalTaskDuration += task.completedAt.getTime() - task.startedAt.getTime();
     }
 
-    // Free up agent
+    // Free up agent — only if it is still on this task
     if (task.assignedAgent) {
       const agent = this.agents.get(task.assignedAgent);
-      if (agent) {
+      if (agent && agent.currentTask === taskId) {
         agent.status = 'idle';
         agent.currentTask = undefined;
         agent.completedTasks++;
@@ -323,6 +333,10 @@ export class Orchestrator extends EventEmitter {
   failTask(taskId: string, error: string): void {
     const task = this.tasks.get(taskId);
     if (!task) throw new Error(`Task '${taskId}' not found`);
+    if (this.isTerminal(task)) {
+      this.releaseWorkerAfterLateReport(task);
+      return;
+    }
 
     // Check for retries
     if (task.retries < (task.definition.maxRetries || 0)) {
@@ -331,10 +345,10 @@ export class Orchestrator extends EventEmitter {
       this.insertIntoQueue(task);
       this.log('warn', `Task ${taskId} failed, retrying (${task.retries}/${task.definition.maxRetries})`);
 
-      // Free up agent
+      // Free up agent — only if it is still on this task
       if (task.assignedAgent) {
         const agent = this.agents.get(task.assignedAgent);
-        if (agent) {
+        if (agent && agent.currentTask === taskId) {
           agent.status = 'idle';
           agent.currentTask = undefined;
           agent.lastActivity = new Date();
@@ -351,10 +365,10 @@ export class Orchestrator extends EventEmitter {
     task.completedAt = new Date();
     this.failedTaskCount++;
 
-    // Free up agent
+    // Free up agent — only if it is still on this task
     if (task.assignedAgent) {
       const agent = this.agents.get(task.assignedAgent);
-      if (agent) {
+      if (agent && agent.currentTask === taskId) {
         agent.status = 'idle';
         agent.currentTask = undefined;
         agent.failedTasks++;
@@ -382,6 +396,7 @@ export class Orchestrator extends EventEmitter {
   cancelTask(taskId: string): void {
     const task = this.tasks.get(taskId);
     if (!task) throw new Error(`Task '${taskId}' not found`);
+    if (this.isTerminal(task)) return;
 
     task.status = 'cancelled';
     task.completedAt = new Date();
@@ -392,10 +407,10 @@ export class Orchestrator extends EventEmitter {
       this.taskQueue.splice(queueIdx, 1);
     }
 
-    // Free up agent
+    // Free up agent — only if it is still on this task
     if (task.assignedAgent) {
       const agent = this.agents.get(task.assignedAgent);
-      if (agent) {
+      if (agent && agent.currentTask === taskId) {
         agent.status = 'idle';
         agent.currentTask = undefined;
         agent.lastActivity = new Date();
@@ -403,6 +418,97 @@ export class Orchestrator extends EventEmitter {
     }
 
     this.log('info', `Task cancelled: ${taskId}`);
+  }
+
+  private isTerminal(task: TaskInstance): boolean {
+    return task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled';
+  }
+
+  /**
+   * A report (result, error, answered approval) for a task that is already
+   * terminal — typically abandoned when its workflow timed out — changes
+   * nothing: no status, output, retry, stat or event. The worker its executor
+   * kept busy is released, but only if it is still on that task.
+   */
+  private releaseWorkerAfterLateReport(task: TaskInstance): void {
+    const taskId = task.definition.id;
+    const agent = task.assignedAgent ? this.agents.get(task.assignedAgent) : undefined;
+    this.log('debug', `Ignored late report for ${task.status} task ${taskId}`);
+    task.assignedAgent = undefined;
+    if (agent?.currentTask === taskId) {
+      agent.status = 'idle';
+      agent.currentTask = undefined;
+      agent.lastActivity = new Date();
+      this.processQueue();
+    }
+  }
+
+  /**
+   * A failed workflow must stop dispatching: its queued tasks leave the queue and
+   * every unfinished task becomes cancelled. A task whose executor is still busy
+   * keeps its worker until that executor reports back (see
+   * `releaseWorkerAfterLateReport`); an effect it already started is not undone.
+   */
+  private abandonUnfinishedTasks(instance: WorkflowInstance): void {
+    for (const task of instance.tasks.values()) {
+      if (this.isTerminal(task)) continue;
+      task.status = 'cancelled';
+      task.completedAt = new Date();
+      const queueIdx = this.taskQueue.indexOf(task);
+      if (queueIdx !== -1) this.taskQueue.splice(queueIdx, 1);
+    }
+  }
+
+  private assertWorkflowRunning(instance: WorkflowInstance): void {
+    if (instance.status !== 'running') {
+      throw new Error(`Workflow '${instance.instanceId}' is no longer running`);
+    }
+  }
+
+  private createWorkflowTask(
+    instance: WorkflowInstance,
+    definition: TaskDefinition
+  ): TaskInstance {
+    this.assertWorkflowRunning(instance);
+    const logicalTaskId = definition.id;
+    const runtimeTaskId = `${instance.instanceId}:${logicalTaskId}:${++this.workflowTaskSequence}`;
+    const task = this.createTask({ ...definition, id: runtimeTaskId });
+    this.workflowTaskIdentity.set(task, { instanceId: instance.instanceId, logicalTaskId });
+    instance.tasks.set(runtimeTaskId, task);
+    return task;
+  }
+
+  private isDependencyComplete(task: TaskInstance, dependencyId: string): boolean {
+    const identity = this.workflowTaskIdentity.get(task);
+    if (!identity) return this.tasks.get(dependencyId)?.status === 'completed';
+    const workflow = this.workflows.get(identity.instanceId);
+    if (!workflow) return false;
+    let latestDependency: TaskInstance | undefined;
+    for (const candidate of workflow.tasks.values()) {
+      const candidateIdentity = this.workflowTaskIdentity.get(candidate);
+      if (candidateIdentity?.logicalTaskId === dependencyId) latestDependency = candidate;
+    }
+    return latestDependency?.status === 'completed';
+  }
+
+  private pruneTerminalTasksForCapacity(): void {
+    if (this.tasks.size < this.config.maxTasks) return;
+    for (const [taskId, task] of this.tasks) {
+      if (!this.isTerminal(task)) continue;
+      const identity = this.workflowTaskIdentity.get(task);
+      if (identity && this.workflows.get(identity.instanceId)?.status === 'running') continue;
+      const hasOutstandingExecutor = task.status === 'cancelled' && task.assignedAgent !== undefined;
+      if (hasOutstandingExecutor) continue;
+      const isRequiredByActiveStandaloneTask = Array.from(this.tasks.values()).some(
+        (candidate) =>
+          !this.isTerminal(candidate) &&
+          !this.workflowTaskIdentity.has(candidate) &&
+          candidate.definition.dependsOn?.includes(taskId)
+      );
+      if (isRequiredByActiveStandaloneTask) continue;
+      this.tasks.delete(taskId);
+      if (this.tasks.size < this.config.maxTasks) return;
+    }
   }
 
   // ============================================================================
@@ -418,10 +524,9 @@ export class Orchestrator extends EventEmitter {
     for (const task of this.taskQueue) {
       // Check dependencies
       if (task.definition.dependsOn && task.definition.dependsOn.length > 0) {
-        const allDepsComplete = task.definition.dependsOn.every((depId) => {
-          const dep = this.tasks.get(depId);
-          return dep?.status === 'completed';
-        });
+        const allDepsComplete = task.definition.dependsOn.every((depId) =>
+          this.isDependencyComplete(task, depId)
+        );
         if (!allDepsComplete) continue;
       }
 
@@ -491,6 +596,7 @@ export class Orchestrator extends EventEmitter {
       instance.status = 'failed';
       instance.error = errorMessage;
       instance.completedAt = new Date();
+      this.abandonUnfinishedTasks(instance);
       this.emit('workflow_failed', { type: 'workflow_failed', instanceId, error: errorMessage });
       this.log('error', `Workflow failed: ${instanceId} - ${errorMessage}`);
     }
@@ -507,6 +613,7 @@ export class Orchestrator extends EventEmitter {
     for (const step of instance.definition.steps) {
       instance.currentStep = step.id;
       await this.executeWorkflowStep(instance, step, context);
+      this.assertWorkflowRunning(instance);
       instance.completedSteps.push(step.id);
       this.emit('workflow_step_completed', {
         type: 'workflow_step_completed',
@@ -526,6 +633,7 @@ export class Orchestrator extends EventEmitter {
     step: WorkflowStep,
     context: Record<string, unknown>
   ): Promise<void> {
+    this.assertWorkflowRunning(instance);
     switch (step.type) {
       case 'task':
         await this.executeTaskStep(instance, step, context);
@@ -556,23 +664,24 @@ export class Orchestrator extends EventEmitter {
     if (!step.tasks || step.tasks.length === 0) return;
 
     for (const taskDef of step.tasks) {
+      this.assertWorkflowRunning(instance);
       // Substitute variables in task input
       const resolvedInput = this.resolveVariables(taskDef.input, context);
       const resolvedDef = { ...taskDef, input: resolvedInput };
 
-      const task = this.createTask(resolvedDef);
-      instance.tasks.set(task.definition.id, task);
+      const task = this.createWorkflowTask(instance, resolvedDef);
       this.queueTask(task.definition.id);
 
       // Wait for completion
       await this.waitForTask(task.definition.id);
+      this.assertWorkflowRunning(instance);
 
       // Add output to context — both under the task's namespaced key and,
       // optionally, under a user-provided alias for readability in
       // downstream conditions / tool inputs.
       const completedTask = this.tasks.get(task.definition.id);
       if (completedTask?.output) {
-        context[`task_${task.definition.id}`] = completedTask.output;
+        context[`task_${taskDef.id}`] = completedTask.output;
         if (typeof taskDef.aliasAs === 'string' && taskDef.aliasAs.length > 0) {
           context[taskDef.aliasAs] = completedTask.output;
         }
@@ -599,6 +708,7 @@ export class Orchestrator extends EventEmitter {
     });
 
     const results = await Promise.all(branchPromises);
+    this.assertWorkflowRunning(instance);
 
     // Merge branch results
     for (let i = 0; i < results.length; i++) {
@@ -642,6 +752,7 @@ export class Orchestrator extends EventEmitter {
       this.evaluateCondition(step.loopCondition || 'false', context) &&
       iteration < maxIterations
     ) {
+      this.assertWorkflowRunning(instance);
       context['iteration'] = iteration;
 
       this.emit('loop_iteration_started', {
@@ -684,6 +795,7 @@ export class Orchestrator extends EventEmitter {
     }
 
     const tasks = items.map((item, index) => async () => {
+      this.assertWorkflowRunning(instance);
       // Create local context fork for this batch item execution
       const localContext = { ...context, [varName]: item, index };
 
@@ -710,6 +822,7 @@ export class Orchestrator extends EventEmitter {
       }
     });
     await Promise.all(workers);
+    this.assertWorkflowRunning(instance);
   }
 
   private evaluateExpression(expression: string, context: Record<string, unknown>): unknown {

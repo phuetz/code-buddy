@@ -79,7 +79,11 @@ interface CoreOrchestratorModule {
 interface CoreOrchestrator {
   registerAgent(definition: Record<string, unknown>): unknown;
   unregisterAgent(agentId: string): boolean;
-  getTask(taskId: string): { definition: { id: string; type: string; input: Record<string, unknown> } } | undefined;
+  getTask(
+    taskId: string
+  ):
+    | { status?: string; definition: { id: string; type: string; input: Record<string, unknown> } }
+    | undefined;
   completeTask(taskId: string, output: Record<string, unknown>): void;
   failTask(taskId: string, error: string): void;
   start(): void;
@@ -121,6 +125,8 @@ export class WorkflowBridge {
   private orchestratorBootPromise: Promise<void> | null = null;
   private orchestratorBootError: string | null = null;
   private sendToRenderer: ((event: ServerEvent) => void) | null = null;
+  /** Set by `shutdown()`: no workflow task may start any action afterwards. */
+  private stopped = false;
 
   /** Maps task.id → visual node.id, populated when a workflow is compiled. */
   private taskToVisualNode = new Map<string, string>();
@@ -484,8 +490,14 @@ export class WorkflowBridge {
     }
   }
 
-  /** Cancel any pending approvals (e.g. on app shutdown). */
+  /**
+   * Stop starting workflow actions (e.g. on app shutdown): queued tasks are no
+   * longer dispatched, a confirmation answered afterwards runs no tool, and
+   * pending approvals are cancelled. A tool that already started is not undone.
+   */
   shutdown(): void {
+    this.stopped = true;
+    this.orchestrator?.stop();
     this.toolAgent?.cancelPending(undefined, 'shutdown');
     this.orchestrator?.stop();
   }
@@ -629,10 +641,29 @@ export class WorkflowBridge {
             });
           }
 
+          // Activity must be proven: the bridge is running and the core reports the task
+          // as assigned or in progress. The core abandons a task when its workflow ends
+          // (e.g. timeout); from then on its tool must not start, and a late answer is
+          // still reported — so the core releases the worker — but not published.
+          const isTaskActive = () => {
+            if (this.stopped) return false;
+            const status = orchestrator.getTask(evt.taskId)?.status;
+            return status === 'assigned' || status === 'in_progress';
+          };
+          if (!isTaskActive()) {
+            orchestrator.failTask(
+              evt.taskId,
+              'Workflow task not started: the bridge is stopped or the task is not running'
+            );
+            return;
+          }
+
           try {
             let output: Record<string, unknown>;
             if (task.definition.type === 'tool_invoke') {
-              output = await toolAgent.runToolInvoke(task.definition.input);
+              output = await toolAgent.runToolInvoke(task.definition.input, {
+                isActive: isTaskActive,
+              });
             } else if (task.definition.type === 'approval_wait') {
               output = await toolAgent.runApprovalWait(
                 task.definition.input,
@@ -643,8 +674,9 @@ export class WorkflowBridge {
             } else {
               throw new Error(`Unsupported task type '${task.definition.type}'`);
             }
+            const publish = Boolean(visualNodeId) && isTaskActive();
             orchestrator.completeTask(evt.taskId, output);
-            if (visualNodeId) {
+            if (publish && visualNodeId) {
               this.emitWorkflowEvent({
                 type: 'node_completed',
                 workflowId,
@@ -655,8 +687,9 @@ export class WorkflowBridge {
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            const publish = Boolean(visualNodeId) && isTaskActive();
             orchestrator.failTask(evt.taskId, message);
-            if (visualNodeId) {
+            if (publish && visualNodeId) {
               this.emitWorkflowEvent({
                 type: 'node_failed',
                 workflowId,
@@ -798,8 +831,9 @@ export class WorkflowBridge {
 
   private emitWorkflowEvent(payload: WorkflowEventPayload): void {
     // A task can outlive its run (the core times it out while the tool is still
-    // busy): its late event still reaches the renderer, but only the active run's
-    // own events are persisted with that run.
+    // busy). Its late node events are not published at all (see `task_assigned`);
+    // this guard keeps anything not tagged with the active run's instance out of
+    // that run's persisted history.
     if (payload.instanceId === this.currentRun?.instanceId) {
       this.activeRunEvents?.push(payload);
     }

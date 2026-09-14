@@ -62,6 +62,12 @@ export interface CoworkToolAgentOptions {
   }) => Promise<{ confirmed: boolean; feedback?: string }>;
 }
 
+/** Lets a tool task stop before it starts once the orchestrator no longer wants it. */
+export interface ToolTaskLifecycle {
+  /** False once the task was abandoned (for instance, its workflow timed out and ended). */
+  isActive(): boolean;
+}
+
 interface PendingApproval {
   resolve: (approved: boolean) => void;
   reject: (err: Error) => void;
@@ -109,19 +115,35 @@ export class CoworkToolAgent {
    * Run a `tool_invoke` task: extract toolName/toolInput from `input`,
    * invoke the FormalToolRegistry, and shape the response so the
    * orchestrator stores it in the workflow context.
+   *
+   * With a `lifecycle`, the tool is not started once its task is no longer
+   * active — checked before asking for confirmation and again right before
+   * `registry.execute`, since a confirmation can be answered long after the run
+   * ended. A tool that already started is not interrupted.
    */
-  async runToolInvoke(taskInput: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async runToolInvoke(
+    taskInput: Record<string, unknown>,
+    lifecycle?: ToolTaskLifecycle
+  ): Promise<Record<string, unknown>> {
     const toolName = taskInput.toolName;
     if (typeof toolName !== 'string' || toolName.length === 0) {
       throw new Error('tool_invoke task missing string toolName');
     }
     const toolInput = (taskInput.toolInput as Record<string, unknown>) ?? {};
+    const ensureStillWanted = () => {
+      if (lifecycle && !lifecycle.isActive()) {
+        throw new Error(
+          `Workflow tool '${toolName}' was not run: its workflow task is no longer active`
+        );
+      }
+    };
     if (workflowToolRequiresConfirmation(toolName)) {
       if (!this.options.confirmToolInvocation) {
         throw new Error(
           `Fresh confirmation required for workflow tool '${toolName}', but no confirmation bridge is available`
         );
       }
+      ensureStillWanted();
       const confirmation = await this.options.confirmToolInvocation({ toolName, toolInput });
       if (!confirmation.confirmed) {
         throw new Error(
@@ -131,6 +153,7 @@ export class CoworkToolAgent {
         );
       }
     }
+    ensureStillWanted();
     const result = await this.options.registry.execute(toolName, toolInput);
     if (!result.success) {
       throw new Error(result.error ?? `Tool '${toolName}' failed without error message`);

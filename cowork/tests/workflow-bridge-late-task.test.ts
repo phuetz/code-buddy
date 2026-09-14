@@ -13,7 +13,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/main/utils/logger', () => ({ log: () => {}, logWarn: () => {}, logError: () => {} }));
+vi.mock('../src/main/utils/logger', () => ({
+  log: () => {},
+  logWarn: () => {},
+  logError: () => {},
+}));
 
 type Instance = Record<string, unknown>;
 type Script = (orchestrator: FakeOrchestrator) => Promise<Instance>;
@@ -67,10 +71,10 @@ afterEach(() => {
 });
 
 describe('WorkflowBridge late task answers', () => {
-  it('never records a finished run’s late node event into the next run', async () => {
+  it('never records a finished run’s late node event into the next run, nor publishes it', async () => {
     const bridge = new WorkflowBridge(tmpDir);
-    const sendToRenderer = vi.fn();
-    bridge.setSendToRenderer(sendToRenderer);
+    const sent: Array<{ type: string; payload?: { type?: string; instanceId?: string } }> = [];
+    bridge.setSendToRenderer((event) => sent.push(event as never));
     const workflow = bridge.create({
       name: 'late tool',
       description: '',
@@ -95,12 +99,23 @@ describe('WorkflowBridge late task answers', () => {
     FakeOrchestrator.scripts.push(
       async (orchestrator) => {
         orchestrator.emit('workflow_started', { instanceId: 'inst-1' });
+        // Like the real core at `task_assigned`, the task is reported as running.
         orchestrator.tasks.set('task-1', {
+          status: 'in_progress',
           definition: { type: 'tool_invoke', input: { cowork_visual_node_id: 't1' } },
         });
         orchestrator.emit('task_assigned', { taskId: 'task-1', agentId: 'cowork-tool-runner' });
-        // The core timed the task out: the run ends while the tool is still busy.
-        return { instanceId: 'inst-1', status: 'failed', error: 'Task timeout', completedSteps: [] };
+        // The core timed the task out: the run ends while the tool is still busy, and
+        // the real Orchestrator abandons the task (proved against the real core in
+        // tests/orchestration/orchestrator-abandoned-tasks.test.ts and
+        // workflow-bridge-late-confirmation.test.ts).
+        (orchestrator.tasks.get('task-1') as { status?: string }).status = 'cancelled';
+        return {
+          instanceId: 'inst-1',
+          status: 'failed',
+          error: 'Task timeout',
+          completedSteps: [],
+        };
       },
       (orchestrator) => {
         orchestrator.emit('workflow_started', { instanceId: 'inst-2' });
@@ -116,12 +131,16 @@ describe('WorkflowBridge late task answers', () => {
 
     const secondRun = bridge.run(workflow.id);
     await flush();
+    const publishedBeforeLateAnswer = sent.length;
     pendingTools[0]({ content: 'late answer from the first run' });
     await flush();
-    expect(sendToRenderer).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'workflow.event',
-      payload: expect.objectContaining({ type: 'node_completed', instanceId: 'inst-1', nodeId: 't1' }),
-    }));
+    expect(
+      sent
+        .slice(publishedBeforeLateAnswer)
+        .filter(
+          (event) => event.type === 'workflow.event' && event.payload?.instanceId === 'inst-1'
+        )
+    ).toEqual([]);
     finishSecond({ instanceId: 'inst-2', status: 'completed', output: {}, completedSteps: [] });
     const second = await secondRun;
 
