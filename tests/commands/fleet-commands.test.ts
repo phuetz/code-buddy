@@ -57,7 +57,7 @@ describe('Fleet CLI commands', () => {
       await program.parseAsync(['node', 'test', 'fleet', 'supervise', manifest, 'missing', '--json']);
       expect(process.exitCode).toBe(1);
       expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown operation'));
-    } finally { await fs.rm(root, { recursive: true, force: true }); }
+    } finally { await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
   });
 
   it('prints JSON policy decisions for a dispatch profile', async () => {
