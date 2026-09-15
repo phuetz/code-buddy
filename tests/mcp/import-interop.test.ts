@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -15,7 +16,7 @@ import { importMCPFile } from '../../src/commands/mcp-import.js';
 import { createTransport, resolveMCPTransport } from '../../src/mcp/transports.js';
 
 const directories: string[] = [];
-afterEach(() => { vi.unstubAllEnvs(); for (const dir of directories.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); vi.unstubAllEnvs(); for (const dir of directories.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
 function dir() { const value = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-interop-')); directories.push(value); return value; }
 
 describe('MCP import contracts', () => {
@@ -37,13 +38,20 @@ describe('MCP import contracts', () => {
     expect(JSON.stringify(result)).not.toMatch(/sk-test-fixture|never-copy-this/);
     expect(result.servers[0]).toMatchObject({ enabled: false, transport: { headers: { 'X-Key': '${EXISTING}', Authorization: '${MCP_IMPORT_FIXTURE_HEADERS_AUTHORIZATION}' } } });
   });
-  it('imports JSON/YAML without launching anything and writes 0600, preserving existing entries', () => {
+  it('imports JSON/YAML without launching anything and requests 0600, preserving existing entries', () => {
+    const chmod = vi.spyOn(fs, 'chmodSync');
+    syncBuiltinESMExports();
     const home = dir(), input = path.join(home, 'hermes.yaml'), target = path.join(home, 'mcp.json');
     fs.writeFileSync(input, 'mcp_servers:\n  remote:\n    url: http://127.0.0.1:1/mcp\n    headers:\n      Authorization: Bearer sk-test-fixture\n');
     expect(importMCPFile(input, 'hermes', { dryRun: true, output: target }).written).toBe(false); expect(fs.existsSync(target)).toBe(false);
     importMCPFile(input, 'hermes', { output: target });
-    expect(fs.statSync(target).mode & 0o777).toBe(0o600); expect(fs.readFileSync(target, 'utf8')).not.toContain('sk-test-fixture');
-    const first = fs.readFileSync(target, 'utf8'); fs.chmodSync(target, 0o644); importMCPFile(input, 'hermes', { output: target }); expect(fs.readFileSync(target, 'utf8')).toBe(first); expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+    expect(chmod).toHaveBeenCalledWith(target, 0o600);
+    if (process.platform !== 'win32') expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(target, 'utf8')).not.toContain('sk-test-fixture');
+    const first = fs.readFileSync(target, 'utf8'); fs.chmodSync(target, 0o644); chmod.mockClear(); importMCPFile(input, 'hermes', { output: target }); expect(fs.readFileSync(target, 'utf8')).toBe(first); expect(chmod).toHaveBeenCalledWith(target, 0o600);
+    if (process.platform !== 'win32') expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+    chmod.mockRestore();
+    syncBuiltinESMExports();
   });
   it('missing references fail closed rather than sending empty credentials', () => {
     vi.stubEnv('MCP_MISSING_QA', '');

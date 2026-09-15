@@ -700,3 +700,9 @@ RÉSERVÉ CI PR153 : tests update-tag suivent la version package, doctor isole H
 Attribution CI mémoire : reply-augment déclenche le préchargement relationnel asynchrone. Reproduction avec attente explicite : garde rouge, mémoire483octets ; profil temporaire et attente avant nettoyage :30tests et garde verts. Aucun changement production mémoire.
 
 Validation des corrections CI : npm run validate ciblé réussi, lint0erreur (2496avertissements existants), typecheck, pack10 et120tests. Publication toujours suspendue à la nouvelle matrice troisOS et revue technique.
+
+RÉSERVÉ second passage CI : relational-context.test écrit aussi memory.md via lecteur photos réel ; reproduction garde rouge isolée. Profil temporaire par fichier, conservation des sources mémoire réelles et de la garde. Trace complète des accès au profil en cours pour identifier les autres lecteurs créateurs éventuels.
+
+Deuxième passage étendu : trace complète identifie aussi inner-life, test agent historique racine et revue fusionGF1 ; profils jetables et attente initialisation/reset. Windows triage chemins natifs/USERPROFILE, MCP chmod600 réellement appelé sur tous OS et stat600 vérifiéPOSIX (ACLWindows distinctes). Sources produit inchangées depuisf25e24d40. Validation complète deuxworkers en cours.
+
+Validation finale locale complète CI=true/2workers : npm run validate exit0, lint/typecheck/pack10,2198fichiers et38956tests passent,43skips+1todo (prérequis locaux signalés), garde profil intacte. Sources production inchangées ; nouvelle matriceGitHub requise avant tag.

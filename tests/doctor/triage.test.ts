@@ -16,7 +16,7 @@ const SK = 'sk-test-TRIAGEfixtureABCDEFGHIJKLMNOPQRSTUV0123';
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0cmlhZ2UtZml4dHVyZSJ9.c2lnbmF0dXJlLXRyaWFnZS1maXh0dXJlLXZhbHVl';
 const DB_PASSWORD = 'Hunter2-fixture-pass';
 const DB_URL = `postgres://app:${DB_PASSWORD}@db.internal:5432/prod`;
-const ENV_KEYS = ['HOME', 'LOG_FILE', 'OPENAI_API_KEY', 'DATABASE_URL', 'CODEBUDDY_RUNS_DIR'];
+const ENV_KEYS = ['HOME', 'USERPROFILE', 'LOG_FILE', 'OPENAI_API_KEY', 'DATABASE_URL', 'CODEBUDDY_RUNS_DIR'];
 
 describe('buddy triage (P7)', () => {
   let tmp: string;
@@ -32,6 +32,7 @@ describe('buddy triage (P7)', () => {
     fs.mkdirSync(path.join(home, '.codebuddy', 'logs'), { recursive: true });
     fs.mkdirSync(repo, { recursive: true });
     process.env.HOME = home;
+    process.env.USERPROFILE = home;
     process.env.CODEBUDDY_RUNS_DIR = path.join(home, '.codebuddy', 'runs');
     delete process.env.LOG_FILE;
     delete process.env.OPENAI_API_KEY;
@@ -113,7 +114,7 @@ describe('buddy triage (P7)', () => {
     expect(bundle.doctor.offline).toBe(true);
     expect(bundle.config.files).toEqual(expect.arrayContaining([
       { file: '.env', keys: ['DATABASE_URL', 'LOG_LEVEL', 'OPENAI_API_KEY', 'SESSION_JWT'] },
-      { file: '~/.codebuddy/settings.json', keys: ['apiKey', 'baseURL', 'model'] },
+      { file: path.join('~', '.codebuddy', 'settings.json'), keys: ['apiKey', 'baseURL', 'model'] },
     ]));
     expect(bundle.logs.lines.length).toBe(200);
     expect(result.redactions).toBeGreaterThan(0);
