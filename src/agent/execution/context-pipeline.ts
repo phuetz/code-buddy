@@ -216,7 +216,6 @@ function unansweredPendingCalls(
  */
 function withoutPendingPlaceholders(
   compacted: readonly CodeBuddyMessage[],
-  original: readonly CodeBuddyMessage[],
   pending: ReadonlySet<string>,
 ): CodeBuddyMessage[] | null {
   const survivingCallIds = new Set<string>();
@@ -226,9 +225,10 @@ function withoutPendingPlaceholders(
   }
   for (const id of pending) if (!survivingCallIds.has(id)) return null;
 
-  const preExisting = new Set<CodeBuddyMessage>(original);
+  // `pending` only holds ids with no result in `original`, so every tool
+  // message carrying one of them was invented by repair just now.
   return compacted.filter((message) => {
-    if (message.role !== 'tool' || preExisting.has(message)) return true;
+    if (message.role !== 'tool') return true;
     const callId = (message as { tool_call_id?: string }).tool_call_id;
     return !(callId && pending.has(callId));
   });
@@ -261,7 +261,7 @@ export function compactTurnMessagesInPlace(
   if (prepared === messages) return false;
   let compacted: readonly CodeBuddyMessage[] = prepared;
   if (pending.size > 0) {
-    const protectedMessages = withoutPendingPlaceholders(prepared, messages, pending);
+    const protectedMessages = withoutPendingPlaceholders(prepared, pending);
     if (!protectedMessages) return false; // pending call dropped: never risk its real result
     compacted = protectedMessages;
   }

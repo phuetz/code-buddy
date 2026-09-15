@@ -164,6 +164,34 @@ describe('compactTurnMessagesInPlace with pending tool calls', () => {
     expect(toolMessages(outgoing, 'call1').map((m) => m.content)).toEqual(['{"invoice":"DS-8F32"}']);
   });
 
+  it('a compaction that would drop the pending call leaves the transcript untouched', () => {
+    // A plugin ContextEngine host whose assembly drops the in-flight assistant
+    // message: applying that would turn the real result into an orphan, which
+    // repair then deletes. Keeping the transcript is the safe outcome; the
+    // provider frontier still bounds the context.
+    const droppingManager = {
+      getStats: () => ({ isNearLimit: true }),
+      shouldAutoCompact: () => true,
+      getContextEngine: () => ({}),
+      prepareMessages: (msgs: CodeBuddyMessage[]) =>
+        msgs.filter((m) => !(m as { tool_calls?: Array<{ id?: string }> }).tool_calls?.some((c) => c.id === 'call1')),
+      prepareMessagesRaw: (msgs: CodeBuddyMessage[]) => msgs,
+    } as unknown as ContextManagerType;
+    const messages: CodeBuddyMessage[] = [
+      { role: 'user', content: 'Read invoice.json' },
+      { role: 'assistant', content: null, tool_calls: [call('call1', 'invoice.json')] } as CodeBuddyMessage,
+    ];
+    const snapshot = [...messages];
+
+    const changed = compactTurnMessagesInPlace(droppingManager, messages, { pendingToolCallIds: ['call1'] });
+
+    expect(changed).toBe(false);
+    expect(messages).toEqual(snapshot);
+    messages.push(toolResult('call1', '{"invoice":"DS-8F32"}'));
+    expect(toolMessages(prepareTurnMessages(repairOnlyManager, messages), 'call1').map((m) => m.content))
+      .toEqual(['{"invoice":"DS-8F32"}']);
+  });
+
   it('without pending ids the historical behaviour is unchanged (repair closes the open call)', () => {
     const messages: CodeBuddyMessage[] = [
       { role: 'user', content: 'Read invoice.json' },
