@@ -19,6 +19,7 @@ import { PromptBuilder } from '../../src/services/prompt-builder.js';
 import { createContextManager } from '../../src/context/context-manager-v2.js';
 import { resetLocalRuntimeContextProbeCache } from '../../src/config/local-runtime-context.js';
 import { resetRuntimeModelContextCache } from '../../src/config/model-tools.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
@@ -418,6 +419,19 @@ jest.mock('../../src/tools/hooks/index.js', () => ({
 // Tests
 // ---------------------------------------------------------------------------
 
+// Every CodeBuddyAgent fires initializeMemory() without awaiting, creating ~/.codebuddy/memory.md:
+// run this file with a throwaway HOME and wait for that in-flight init before cleaning up.
+const isolatedHome = createIsolatedHome('codebuddy-agent-home-');
+beforeAll(() => {
+  isolatedHome.enter();
+});
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  await getMemoryManager().initialize().catch(() => undefined);
+  resetMemoryManagerForTests();
+  isolatedHome.leave();
+});
+
 describe('CodeBuddyAgent', () => {
   let agent: CodeBuddyAgent;
   const originalEnv = { ...process.env };
@@ -426,6 +440,9 @@ describe('CodeBuddyAgent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    // originalEnv was captured before the isolated home existed: re-apply it.
+    process.env.HOME = isolatedHome.path;
+    process.env.USERPROFILE = isolatedHome.path;
     delete process.env.YOLO_MODE;
     delete process.env.MAX_COST;
     delete process.env.MORPH_API_KEY;

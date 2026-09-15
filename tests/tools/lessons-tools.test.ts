@@ -11,6 +11,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
+import { createRequire } from 'module';
 import {
   LessonsAddTool,
   LessonsProposeTool,
@@ -363,13 +364,46 @@ describe('Lessons Tool Adapters', () => {
       expect(result.error).toContain('Invalid checks');
     }, 15_000);
 
-    it('should run typescript check in workDir and return output with ✅ or ❌', async () => {
+    it('fails fast without downloading when the project has no local TypeScript compiler', async () => {
+      const started = Date.now();
       const result = await tool.execute({ checks: ['typescript'], workDir: tmpDir });
-      // tsc will fail in an empty tmpDir (no tsconfig) — that's fine, we just check format
-      const output = result.output ?? result.error ?? '';
-      const hasIcon = output.includes('✅') || output.includes('❌');
-      expect(hasIcon).toBe(true);
-    }, 60_000);
+      expect(result.success).toBe(false);
+      expect(result.output).toContain('❌ **typescript**: FAIL');
+      expect(result.output).toContain('tsc not found in node_modules/.bin');
+      expect(result.output).toContain('nothing was downloaded');
+      expect(Date.now() - started).toBeLessThan(5_000);
+    });
+
+    describe('with the repository TypeScript compiler installed locally in the project', () => {
+      // Real compiler, explicit: the project's node_modules/.bin/tsc launches this
+      // repository's typescript package. No npx, no registry, no mock of tsc.
+      const tscJs = createRequire(import.meta.url).resolve('typescript/lib/tsc.js');
+
+      async function project(source: string): Promise<void> {
+        const bin = path.join(tmpDir, 'node_modules', '.bin');
+        await fs.ensureDir(bin);
+        await fs.writeFile(path.join(bin, 'tsc'), `#!/usr/bin/env node\nrequire(${JSON.stringify(tscJs)});\n`, { mode: 0o755 });
+        await fs.writeJson(path.join(tmpDir, 'tsconfig.json'), { compilerOptions: { strict: true, noEmit: true }, include: ['src'] });
+        await fs.outputFile(path.join(tmpDir, 'src', 'index.ts'), source);
+      }
+
+      it('reports the real type error with ❌', async () => {
+        await project('export const answer: number = "forty-two";\n');
+        const result = await tool.execute({ checks: ['typescript'], workDir: tmpDir });
+        expect(result.success).toBe(false);
+        expect(result.output).toContain('❌ **typescript**: FAIL');
+        expect(result.output).toMatch(/src[\\/]index\.ts\(1,14\): error TS2322/);
+        expect(result.error).toBe('Verification failed for: typescript');
+      }, 30_000);
+
+      it('passes with ✅ on type-correct sources', async () => {
+        await project('export const answer: number = 42;\n');
+        const result = await tool.execute({ checks: ['typescript'], workDir: tmpDir });
+        expect(result.success).toBe(true);
+        expect(result.output).toContain('✅ **typescript**: PASS');
+        expect(result.error).toBeUndefined();
+      }, 30_000);
+    });
   });
 
   // ==========================================================================

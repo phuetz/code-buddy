@@ -61,7 +61,80 @@ describe('utility CLI commands', () => {
     }
 
     expect(logs.length).toBeGreaterThan(0);
-    expect(doctorMocks.runDoctorChecks).toHaveBeenCalledWith(targetDir);
+    expect(doctorMocks.runDoctorChecks).toHaveBeenCalledWith(targetDir, { offline: false });
+  });
+
+  it('keeps the historical text output when no new flag is passed (P3 golden)', async () => {
+    doctorMocks.runDoctorChecks.mockResolvedValueOnce([
+      { name: 'AI provider ready', status: 'ok', message: 'ChatGPT subscription — signed in' },
+      { name: 'Node.js version', status: 'ok', message: 'v24 OK' },
+      { name: 'Stale lock files', status: 'warn', message: '1 stale lock', fixable: true },
+      { name: 'Git', status: 'error', message: 'git not found' },
+      { name: 'TTS providers', status: 'warn', message: 'none installed', optional: true },
+    ]);
+    const integrations = await import('../../src/doctor/integrations.js');
+    const integrationSpy = vi.spyOn(integrations, 'runIntegrationChecks');
+    const program = new Command();
+    program.exitOverride();
+    registerUtilityCommands(program);
+    const lines: string[] = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { lines.push(args.join(' ')); });
+    try {
+      process.exitCode = 0;
+      await program.parseAsync(['node', 'test', 'doctor']);
+      expect(lines).toEqual([
+        '\n🔍 Code Buddy Doctor\n',
+        '  ✅ Ready to chat — a provider is configured (ChatGPT subscription — signed in)',
+        '     Start now:  buddy         (or try the demo:  buddy try)',
+        '',
+        '  ⚠️ Stale lock files: 1 stale lock [fixable]',
+        '  ❌ Git: git not found',
+        '  ⚠️ TTS providers: none installed',
+        '\n  Summary: 2 passed, 1 warnings, 1 errors',
+        '  1 optional tool(s) not installed (not a problem)',
+        '  1 issue(s) can be auto-fixed with --fix',
+        '',
+      ]);
+      expect(process.exitCode).toBe(1);
+      expect(integrationSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = 0;
+      logSpy.mockRestore();
+      integrationSpy.mockRestore();
+    }
+  });
+
+  it('--json --offline prints a schema-valid report including integrations and passes offline', async () => {
+    doctorMocks.runDoctorChecks.mockResolvedValueOnce([
+      { name: 'AI provider ready', status: 'ok', message: 'ready' },
+      { name: 'Git', status: 'error', message: 'git not found' },
+    ]);
+    const integrations = await import('../../src/doctor/integrations.js');
+    const integrationSpy = vi.spyOn(integrations, 'runIntegrationChecks').mockResolvedValueOnce([
+      { id: 'lm-resizer', section: 'integrations', name: 'LM Resizer', status: 'warn', message: 'lacks the tool-output protocol' },
+    ]);
+    const program = new Command();
+    program.exitOverride();
+    registerUtilityCommands(program);
+    const out: string[] = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { out.push(args.join(' ')); });
+    try {
+      process.exitCode = 0;
+      await program.parseAsync(['node', 'test', 'doctor', '--json', '--offline']);
+      const report = integrations.doctorJsonReportSchema.parse(JSON.parse(out.join('\n')));
+      expect(report.offline).toBe(true);
+      expect(report.checks.map((c) => [c.id, c.section, c.status])).toEqual([
+        ['ai-provider-ready', 'core', 'ok'],
+        ['git', 'core', 'error'],
+        ['lm-resizer', 'integrations', 'warn'],
+      ]);
+      expect(doctorMocks.runDoctorChecks).toHaveBeenLastCalledWith(expect.any(String), { offline: true });
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = 0;
+      logSpy.mockRestore();
+      integrationSpy.mockRestore();
+    }
   });
 
   it('returns a failing status when doctor finds no ready provider', async () => {

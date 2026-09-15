@@ -31,19 +31,23 @@ import {
 interface ChatInterfaceProps {
   agent?: CodeBuddyAgent;
   initialMessage?: string;
+  /** History of a resumed session, shown before the first new turn. */
+  initialHistory?: ChatEntry[];
 }
 
 // Main chat component that handles input when agent is available
 function ChatInterfaceWithAgent({
   agent,
   initialMessage,
+  initialHistory,
 }: {
   agent: CodeBuddyAgent;
   initialMessage?: string;
+  initialHistory?: ChatEntry[];
 }) {
   const { colors } = useTheme();
   const { settings } = useAccessibilitySettings();
-  const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatEntry[]>(() => initialHistory ?? []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingTime, setProcessingTime] = useState(0);
   const [tokenCount, setTokenCount] = useState(0);
@@ -406,6 +410,7 @@ function ChatInterfaceWithAgent({
           }
         }
 
+        await agent.persistInteractiveSession();
         setIsProcessing(false);
         processingStartTime.current = 0;
       };
@@ -597,6 +602,7 @@ function ChatInterfaceWithAgent({
 function ChatInterfaceInner({
   agent,
   initialMessage,
+  initialHistory,
 }: ChatInterfaceProps) {
   const [currentAgent, setCurrentAgent] = useState<CodeBuddyAgent | null>(
     agent || null
@@ -614,6 +620,7 @@ function ChatInterfaceInner({
     <ChatInterfaceWithAgent
       agent={currentAgent}
       initialMessage={initialMessage}
+      initialHistory={initialHistory}
     />
   );
 }
@@ -622,11 +629,12 @@ function ChatInterfaceInner({
 export default function ChatInterface({
   agent,
   initialMessage,
+  initialHistory,
 }: ChatInterfaceProps) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} initialHistory={initialHistory} />
       </ToastProvider>
     </ThemeProvider>
   );

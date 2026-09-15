@@ -43,6 +43,10 @@ Pour le tableau complet, voir [`CLAUDE.md`](CLAUDE.md) §Environment Variables.
 
 Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192`. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
 
+## Vérification réelle (demande Patrice, 2026-09-14)
+
+Pour les changements utilisateur CLI/flotte/DGM : lancer l'application réelle avec un profil temporaire, capturer entrées/sorties et appels/résultats d'outils, analyser les échecs puis ajouter les régressions ciblées. `scripts/verify-cli-live.py` capture Ink/ANSI et un vrai modèle (Linux/macOS). Une sortie processus 0, une revue IA ou un appel d'outil proposé ne prouvent pas le résultat utilisateur. Conserver les traces avant/après dans `<QA_ARTIFACTS>` (`Z:\Partage` sous Windows), sans secrets. Distinguer tests Linux, Windows et réseau ; ne pas valider une plateforme non exécutée. AGY/Grok peuvent relire les captures via la flotte ; leurs diagnostics restent à vérifier.
+
 ## Testing Gotchas
 
 - ESM project (`"type": "module"`). Use `import.meta.url` + `fileURLToPath` for `__dirname`. `@` alias → `./src` (see `vitest.config.ts`). Source imports need `.js` extensions even for `.ts` files.

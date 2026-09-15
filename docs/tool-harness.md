@@ -207,6 +207,12 @@ Limites : coordination sur une seule machine et un stockage local de confiance ;
 
 Le compilateur s’exécute dans un processus séparé, avec délai de 5 secondes, tas V8 de 128 Mo et diagnostics bornés. Les imports du programme ne sont pas autorisés ; seul le compilateur lit ses bibliothèques installées. Ce contrôle ne remplace pas les permissions d’exécution ni une validation JSON Schema complète (les schémas complexes non représentés peuvent rester `unknown`). L’option est désactivée par défaut ; elle ajoute un démarrage de compilateur lorsqu’elle est activée.
 
+## Politique `code_exec` par modèle
+
+`ModelToolConfig.codeExec` (`src/config/model-tools.ts`) vaut `off`, `offer` ou `prefer` ; sans valeur, `offer` conserve le comportement historique (outil proposé par pertinence ou demande explicite). `prefer` garde `code_exec` dans la sélection et ajoute une consigne courte ; `off` le retire même sur demande explicite et le signale au modèle. La politique effective apparaît dans `<runtime_settings>` (CLI et `-p`), dans une consigne `<code_exec_policy>` sur les autres surfaces lorsqu’elle n’est pas `offer`, et dans `buddy doctor --json` (check `code-exec-policy`).
+
+Aucun modèle n’est `prefer` par défaut. Une promotion exige `codeExecEvidence` pointant vers un rapport de recette Buddy ADV01–ADV09 sur ce modèle ; un test refuse `prefer` sans preuve. Les listes « preferred » d’autres projets ne valent pas preuve. `CODEBUDDY_CODE_EXEC_POLICY=off|offer|prefer` est une surcharge explicite de l’opérateur pour les essais.
+
 ## Diagnostic de stabilité du cache
 
 Le statut `/prompt-cache` affiche les changements locaux des composants système et outils. `PromptCacheManager.getPrefixStats()` donne les observations, répétitions consécutives et changements, sans conserver le texte des prompts. Ce sont des observations locales : les économies affichées restent estimées et ne mesurent pas les tokens de cache facturés par le fournisseur.

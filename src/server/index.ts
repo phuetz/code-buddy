@@ -1,3 +1,4 @@
+import { createA2AJsonRpcRoutes } from './routes/a2a-jsonrpc.js';
 /**
  * API Server
  *
@@ -252,6 +253,11 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
         ],
       })
     );
+  }
+
+  // Separate opt-in peer bearer auth, bounded parser and rate limit; existing REST/JWT routes unchanged.
+  if (process.env.CODEBUDDY_A2A_PEERS) {
+    app.use(createA2AJsonRpcRoutes({ publicUrl: process.env.CODEBUDDY_A2A_PUBLIC_URL ?? `http://127.0.0.1:${config.port}/a2a/v1` }));
   }
 
   // Body parsing

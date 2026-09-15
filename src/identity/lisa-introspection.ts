@@ -200,7 +200,8 @@ const DESCRIBE_PATTERNS = [
   /\bde quoi (?:es tu|etes vous) (?:fait|faite|faits|faites|compose|composee|composes|composees)\b/,
   /\bqui (?:es tu|etes vous)\b/,
   /\b(?:quell?e est )?(?:ton|votre) architecture\b/,
-  /\b(?:quels? (?:sont )?)?(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\b/,
+  /\bquels? (?:sont )?(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\b/,
+  /^(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\s*[?.!]*$/,
   /\bquels? (?:modules?|composants?|outils?) (?:as tu|avez vous)\b/,
   /\bquell?es? (?:sont )?(?:tes|vos) limit(?:e|es|ation|ations)\b/,
   /\b(?:lisa|l assistant|l assistante|l agent)\b.{0,96}\b(?:conscient|consciente|conscience d elle meme|modele d elle meme|se connaitre)\b/,
@@ -425,7 +426,12 @@ export function renderLisaOperationalSelfResponse(
 
 /** Classify a request about Lisa's own technical implementation. */
 export function classifyLisaIntrospection(raw: string): LisaIntrospectionIntent | null {
-  const text = normalizeIntrospectionText(raw);
+  // Using tools to do a task does not make the tools the inspection target.
+  // Keep any explicit target that follows (e.g. 'inspect your own code').
+  const text = normalizeIntrospectionText(raw).replace(
+    /\b(?:(?:utilise|utilisez|utiliser) (?:tes|vos)|use your) (?:outils|tools)\b/g,
+    '',
+  );
   if (!text) return null;
 
   // A request for introspection of the user's life, emotions, relationship, or

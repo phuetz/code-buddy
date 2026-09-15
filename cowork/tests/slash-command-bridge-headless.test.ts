@@ -4,6 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // `executeHeadlessSlashToken` (it honours the real allow set the bridge passes).
 vi.mock('../src/main/utils/core-loader', () => ({
   loadCoreModule: vi.fn(async (modPath: string) => {
+    if (modPath === 'commands/slash/index.js') {
+      // P4: the real core declaration is the source of the Cowork allowlist.
+      const surfaces = await import('../../src/commands/slash/surfaces');
+      return {
+        builtinCommands: [],
+        getCommandsByCategory: () => ({}),
+        coworkHeadlessAllowlist: surfaces.coworkHeadlessAllowlist,
+        resolveSlashAvailability: surfaces.resolveSlashAvailability,
+      };
+    }
     if (modPath === 'commands/headless-slash.js') {
       return {
         executeHeadlessSlashToken: async (

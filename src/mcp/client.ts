@@ -1,3 +1,4 @@
+import { mcpToolAllowed, validateMCPToolFilter } from './import-normalize.js';
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventEmitter } from "events";
@@ -40,6 +41,8 @@ export class MCPManager extends EventEmitter {
   private initializationPromise: Promise<void> | null = null;
 
   async addServer(config: MCPServerConfig): Promise<void> {
+    if (config.enabled === false) return;
+    validateMCPToolFilter(config.toolFilter);
     if (
       this.serverStatuses.get(config.name) === 'connected' &&
       this.clients.has(config.name) &&
@@ -119,6 +122,7 @@ export class MCPManager extends EventEmitter {
       
       // Register tools
       for (const tool of toolsResult.tools) {
+        if (!mcpToolAllowed(tool.name, config.toolFilter)) continue;
         const mcpTool: MCPTool = {
           name: `mcp__${config.name}__${tool.name}`,
           description: tool.description || `Tool from ${config.name} server`,

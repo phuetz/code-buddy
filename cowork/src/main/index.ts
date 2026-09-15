@@ -110,7 +110,13 @@ import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import { InProcessCoworkCognition } from './companion/cognitive-context';
 import { getServerBridge } from './server/server-bridge';
-import { getExternalSession, listExternalSessions } from './session/cli-session-continuity';
+import {
+  exportCoworkSessionToCli,
+  getExternalSession,
+  listExternalSessions,
+  type SessionHandoffCoreModule,
+} from './session/cli-session-continuity';
+import { listCoworkResources, type ResourceCatalogCoreModule } from './fleet/resource-catalog-view';
 import {
   classifyEngineLoadError,
   resolveEnginePathWithDiagnostic,
@@ -2890,6 +2896,18 @@ ipcMain.handle('session.externalImport', async (_event, id: string) => {
   if (!external) throw new Error('External session not found');
   return sessionManager.importExternalSession(external);
 });
+// P6: export the text conversation to the CLI store and return `buddy --resume <id>`.
+ipcMain.handle('session.exportToCli', async (_event, sessionId: string) => {
+  if (!sessionManager) throw new Error('SessionManager not initialized');
+  if (typeof sessionId !== 'string' || !sessionId) throw new Error('sessionId required');
+  const manager = sessionManager;
+  const session = manager.listSessions().find((item) => item.id === sessionId) ?? null;
+  return exportCoworkSessionToCli({
+    session,
+    messages: session ? manager.getMessages(sessionId) : [],
+    loadCore: () => loadCoreModule<SessionHandoffCoreModule>('persistence/session-handoff.js'),
+  });
+});
 
 ipcMain.handle(
   'session.updateSettings',
@@ -4813,6 +4831,11 @@ ipcMain.handle('tools.hermesTrajectories.export', async (_, options) => {
     return { success: false, error: String(err) };
   }
 });
+
+// P8: read-only resource catalog (no probe, no URL, no fingerprint).
+ipcMain.handle('tools.resourceCatalog.list', async () =>
+  listCoworkResources(() => loadCoreModule<ResourceCatalogCoreModule>('fleet/resource-catalog.js')),
+);
 
 ipcMain.handle('tools.hermesDoctor.get', async () => {
   try {

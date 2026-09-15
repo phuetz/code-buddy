@@ -114,7 +114,7 @@ const CAPABILITIES: HermesProtocolGatewayCapability[] = [
   },
   {
     id: 'a2a-http',
-    label: 'A2A HTTP gateway',
+    label: 'A2A REST gateway (legacy)',
     officialSurface: 'AgentCard discovery, agent listing, task send/status/cancel, remote agent registration',
     status: 'available',
     evidence: [
@@ -136,6 +136,13 @@ const CAPABILITIES: HermesProtocolGatewayCapability[] = [
     notes: [
       'The inbound Code Buddy A2A card intentionally advertises read-only skills by default.',
     ],
+  },
+  {
+    id: 'a2a-jsonrpc-v1', label: 'A2A 1.0 JSON-RPC text subset',
+    officialSurface: 'Authenticated SendMessage/GetTask; no streaming or cancellation', status: 'available',
+    evidence: ['src/server/routes/a2a-jsonrpc.ts', 'src/protocols/a2a/jsonrpc-v1.ts', 'src/tools/a2a-call-tool.ts'],
+    endpoints: ['POST /a2a/v1', 'GET /.well-known/agent-card.json'], commands: [],
+    notes: ['Opt-in CODEBUDDY_A2A_PEERS; operator token references, read-only workspace-scoped inbound tools. Existing REST surface unchanged.'],
   },
   {
     id: 'acp-http',

@@ -141,17 +141,20 @@ export class AITestRunner extends EventEmitter {
       }
     }
 
+    // Skipped entries carry passed:true for the progress display; they must not
+    // count as passed, and a wrong answer without an exception is a failure.
+    const ran = results.filter(r => r.details !== 'Skipped');
     const suite: AITestSuite = {
-      provider: 'grok',
+      provider: this.client.getProviderName?.() ?? this.client.getCurrentProvider?.() ?? 'unknown',
       model: this.client.getCurrentModel(),
       timestamp: Date.now(),
       duration: Date.now() - startTime,
       results,
       summary: {
         total: results.length,
-        passed: results.filter(r => r.passed).length,
-        failed: results.filter(r => !r.passed && r.error).length,
-        skipped: results.filter(r => r.details === 'Skipped').length,
+        passed: ran.filter(r => r.passed).length,
+        failed: ran.filter(r => !r.passed).length,
+        skipped: results.length - ran.length,
         totalTokens,
         totalCost,
       },
@@ -555,7 +558,7 @@ export class AITestRunner extends EventEmitter {
     }
 
     lines.push('├' + '─'.repeat(W - 2) + '┤');
-    lines.push('│' + AITestRunner.padEnd(`  SUMMARY: ${suite.summary.passed}/${suite.summary.total} passed, ${suite.summary.failed} failed, ${suite.summary.skipped} skipped`, W - 2) + '│');
+    lines.push('│' + AITestRunner.padEnd(`  SUMMARY: ${suite.summary.passed}/${suite.summary.total - suite.summary.skipped} passed, ${suite.summary.failed} failed, ${suite.summary.skipped} skipped`, W - 2) + '│');
     lines.push('│' + AITestRunner.padEnd(`  Tokens: ${suite.summary.totalTokens}   Cost: $${suite.summary.totalCost.toFixed(4)}`, W - 2) + '│');
     lines.push('└' + '─'.repeat(W - 2) + '┘');
 

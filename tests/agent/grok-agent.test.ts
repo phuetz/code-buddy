@@ -6,6 +6,7 @@
 // Mock all dependencies
 
 import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
+import { createIsolatedHome } from "../helpers/isolated-home.js";
 
 jest.mock("../../src/codebuddy/client.js", () => ({
   CodeBuddyClient: jest.fn().mockImplementation(function() { return {
@@ -200,6 +201,19 @@ jest.mock("../../src/utils/sanitize.js", () => ({
 jest.mock("../../src/types/errors.js", () => ({
   getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
 }));
+
+// Every CodeBuddyAgent fires initializeMemory() without awaiting, creating ~/.codebuddy/memory.md:
+// run this file with a throwaway HOME and wait for that in-flight init before cleaning up.
+const isolatedHome = createIsolatedHome('grok-agent-home-');
+beforeAll(() => {
+  isolatedHome.enter();
+});
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  await getMemoryManager().initialize().catch(() => undefined);
+  resetMemoryManagerForTests();
+  isolatedHome.leave();
+});
 
 describe("CodeBuddyAgent", () => {
   let agent: CodeBuddyAgent;

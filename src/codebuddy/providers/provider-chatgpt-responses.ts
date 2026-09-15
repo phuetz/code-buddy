@@ -216,6 +216,7 @@ type ResponsesInputItem =
 
 interface ResponsesFunctionTool {
   type: 'function';
+  strict: false;
   name: string;
   description: string;
   parameters: Record<string, unknown>;
@@ -890,6 +891,9 @@ export function flattenTools(tools: CodeBuddyTool[]): ResponsesTool[] {
       name: tool.function.name,
       description: tool.function.description,
       parameters: tool.function.parameters as Record<string, unknown>,
+      // Preserve optional MCP inputs instead of Responses strict normalization
+      // requiring every property (models then fill optional selectors with '').
+      strict: false,
     };
   });
 }

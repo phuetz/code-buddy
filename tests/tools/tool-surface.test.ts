@@ -31,6 +31,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let exposed: string[] = [];
 
+/** Exact set comparison between the exposed surface and the committed baseline (no pattern, no tolerance). */
+function diffToolSurface(current: readonly string[], baseline: readonly string[]): { added: string[]; removed: string[] } {
+  const baselineSet = new Set(baseline);
+  const currentSet = new Set(current);
+  return {
+    added: current.filter((n) => !baselineSet.has(n)),
+    removed: baseline.filter((n) => !currentSet.has(n)),
+  };
+}
+
 beforeAll(() => {
   initializeToolRegistry();
   exposed = getToolRegistry()
@@ -71,10 +81,7 @@ describe('tool surface (exposition ↔ dispatch)', () => {
     const baselinePath = path.join(__dirname, 'tool-surface.baseline.txt');
     const baseline = fs.readFileSync(baselinePath, 'utf8').split('\n').filter(Boolean);
 
-    const baselineSet = new Set(baseline);
-    const exposedSet = new Set(exposed);
-    const added = exposed.filter((n) => !baselineSet.has(n));
-    const removed = baseline.filter((n) => !exposedSet.has(n));
+    const { added, removed } = diffToolSurface(exposed, baseline);
 
     expect(
       { added, removed },
@@ -83,6 +90,26 @@ describe('tool surface (exposition ↔ dispatch)', () => {
         `  npx tsx scripts/update-tool-surface-baseline.ts\n` +
         `added: ${added.join(', ') || '(none)'}\nremoved: ${removed.join(', ') || '(none)'}`,
     ).toEqual({ added: [], removed: [] });
+  });
+
+  // The gate must stay strict: an exact, sorted, duplicate-free list of literal
+  // tool names covering every exposed tool — never a wildcard or a tolerance.
+  it('the baseline is strict: literal names, sorted, unique, one per exposed tool', () => {
+    const baseline = fs.readFileSync(path.join(__dirname, 'tool-surface.baseline.txt'), 'utf8').split('\n').filter(Boolean);
+    expect(baseline.filter((n) => !/^[a-z][a-z0-9_]*$/.test(n))).toEqual([]);
+    expect(baseline).toEqual([...new Set(baseline)].sort());
+    expect(baseline).toHaveLength(exposed.length);
+  });
+
+  it('the comparison detects an unexpected tool, a missing tool and a rename', () => {
+    const baseline = ['bash', 'resource_catalog', 'view_file'];
+    expect(diffToolSurface(['bash', 'resource_catalog', 'view_file'], baseline)).toEqual({ added: [], removed: [] });
+    expect(diffToolSurface(['bash', 'resource_catalog', 'rogue_tool', 'view_file'], baseline)).toEqual({ added: ['rogue_tool'], removed: [] });
+    expect(diffToolSurface(['bash', 'view_file'], baseline)).toEqual({ added: [], removed: ['resource_catalog'] });
+    expect(diffToolSurface(['bash', 'resource_catalogue', 'view_file'], baseline)).toEqual({ added: ['resource_catalogue'], removed: ['resource_catalog'] });
+    // Applied to the real surface: dropping or injecting one name is caught.
+    expect(diffToolSurface(exposed.filter((n) => n !== 'ragchat_search'), exposed).removed).toEqual(['ragchat_search']);
+    expect(diffToolSurface([...exposed, 'unexpected_tool'], exposed).added).toEqual(['unexpected_tool']);
   });
 
   // Audit 2026-09-02 — invariant inverse (famille « enregistré d'un côté,

@@ -33,6 +33,7 @@ import { restoreSessionHistory } from '../persistence/session-history.js';
 import { getUserHooksManager } from "../hooks/user-hooks.js";
 import { isFeatureEnabled } from "../config/feature-flags.js";
 import { getActiveRunStore } from "../observability/run-store.js";
+import { recordSkillActivity } from "../skills/skill-usage-store.js";
 import { resetIdentityManager } from "../identity/identity-manager.js";
 import { resetHotReloadManager } from "../config/hot-reload/index.js";
 import { resetConfigWatcher } from "../config/hot-reload/watcher.js";
@@ -104,6 +105,8 @@ export class CodeBuddyAgent extends BaseAgent {
   private _budgetAlertListener?: (alert: { type: string; message: string }) => void;
   /** Nested host gates currently holding assistant text in a private draft state. */
   private transcriptSnapshotSuspensions = 0;
+  /** Serializes interactive session writes (one per completed TUI turn). */
+  private interactivePersistence: Promise<void> = Promise.resolve();
 
   /**
    * Create a new CodeBuddyAgent instance
@@ -1253,6 +1256,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
           } catch {
             // Skill usage telemetry is best-effort and must not block a turn.
           }
+          recordSkillActivity(unifiedSkill.name, 'use', { source: 'match' });
         }
       } else {
         // No skill matched - clear any previous skill context
@@ -1734,6 +1738,34 @@ Look at the screenshot and find the element matching the user's intent. Output o
       totalCost: this.getSessionCost(),
       turns,
     });
+  }
+
+  /**
+   * Persist the interactive (TUI) conversation after a completed turn.
+   *
+   * The headless path creates its session up front and saves once; the TUI
+   * used to do neither, so interactive turns never reached the session file
+   * and `--resume` had nothing to continue. The first turn with a user message
+   * creates the session (named from that message); every later turn rewrites
+   * the session from the agent's chat history, which is idempotent: no turn is
+   * appended twice. Calls are serialized; `--ephemeral` stores nothing.
+   */
+  persistInteractiveSession(): Promise<void> {
+    this.interactivePersistence = this.interactivePersistence.then(async () => {
+      const store = this.sessionStore;
+      if (store.isEphemeral()) return;
+      const history = this.historyManager.getChatHistory();
+      const firstUser = history.find((entry) => entry.type === 'user');
+      if (!firstUser) return;
+      if (!store.getCurrentSessionId()) {
+        const { generateConversationTitle } = await import('../utils/conversation-title.js');
+        await store.createSession(generateConversationTitle(firstUser.content), this.getCurrentModel());
+      }
+      await this.saveCurrentSession();
+    }).catch((error: unknown) => {
+      logger.warn('[session] interactive turn not persisted', { error: error instanceof Error ? error.message : String(error) });
+    });
+    return this.interactivePersistence;
   }
 
   getCurrentSessionId(): string | null {

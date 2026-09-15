@@ -1,3 +1,5 @@
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { normalizeMCPImports } from '../mcp/import-normalize.js';
 /**
  * Hermes `claw migrate` — migrate a legacy OpenClaw installation into Code Buddy.
  *
@@ -917,7 +919,7 @@ export function buildClawMigrationPlan(opts: ClawMigrationOptions = {}): ClawMig
       action: importOrPresetArchive('mcp_servers', ctx),
       source: mcp.source,
       destination: settingsKeyDest(ctx, 'mcpServers'),
-      detail: `Merged servers: ${Object.keys(mcp.servers).join(', ')}.`,
+      detail: `MCP normalization required. ${[...normalizeMCPImports(mcp.servers, 'openclaw').warnings, ...normalizeMCPImports(mcp.servers, 'openclaw').rejected].join('; ')}`,
     });
   } else {
     entries.push({ category: 'mcp_servers', label: 'mcp servers', action: 'skip', source: null, destination: null, detail: 'No MCP servers in config.' });
@@ -1246,9 +1248,12 @@ function applyEntry(entry: ClawMigrationEntry, opts: ClawMigrationOptions, ctx: 
       if (!entry.destination) return;
       const mcp = clawMcpServers(ctx.config?.raw ?? {});
       if (!mcp) return;
+      const normalized = normalizeMCPImports(mcp.servers, 'openclaw');
+      entry.detail += ' ' + [...normalized.warnings, ...normalized.rejected].join('; ');
+      const servers = Object.fromEntries(normalized.servers.map(server => [server.name, server]));
       mergeSettings(ctx, (settings) => {
         const existing = (settings.mcpServers as Record<string, unknown> | undefined) ?? {};
-        settings.mcpServers = overwrite ? { ...existing, ...mcp.servers } : { ...mcp.servers, ...existing };
+        settings.mcpServers = overwrite ? { ...existing, ...servers } : { ...servers, ...existing };
       });
       entry.applied = true;
       return;
@@ -1374,11 +1379,11 @@ function mergeSettings(ctx: BuildContext, mutate: (settings: Record<string, unkn
     try {
       settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
     } catch {
-      settings = {};
+      throw new Error('Existing settings.json is invalid; migration did not replace it');
     }
   }
   mutate(settings);
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  writeJsonAtomicSync(settingsPath, settings, { mode: 0o600 });
 }
 
 // Extend BuildContext with a place to collect async skill installs during apply.

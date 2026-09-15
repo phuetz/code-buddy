@@ -43,6 +43,9 @@ export interface ListedPeer {
   eventCount: number;
   lastSeenAgeMs: number | null;
   lastSeenReason: string | null;
+  connected: boolean | null;
+  /** Result of the optional peer.describe probe, not an inference from configuration. */
+  reachable?: boolean;
   compacting: boolean;
   stale: boolean;
   /** Conservative hint — peer has been seen recently and isn't compacting. */
@@ -63,7 +66,7 @@ export async function executeListPeers(params: ListPeersParams = {}): Promise<To
     return {
       success: true,
       output:
-        'No fleet peers connected. The user must run /fleet listen <ws-url> --name <id> first to add a peer.',
+        'No fleet peers connected to this session. Code Buddy supports remote collaboration; this does not prove no other Buddy is running on the network. Connect a known peer with /fleet listen <ws-url> --name <id>, then use list_peers with includeCapabilities=true and peer_delegate. No automatic network scan was performed.',
       data: { peers: [] as ListedPeer[] },
     };
   }
@@ -78,9 +81,10 @@ export async function executeListPeers(params: ListPeersParams = {}): Promise<To
       eventCount: entry.eventCount,
       lastSeenAgeMs: seen.ageMs,
       lastSeenReason: seen.reason,
+      connected: entry.listener.isConnected?.() ?? null,
       compacting: compaction.active,
       stale: entry.listener.isStale(),
-      peerChatLikelyAvailable: seen.ageMs !== null && !compaction.active,
+      peerChatLikelyAvailable: entry.listener.isConnected?.() === true && !entry.listener.isStale() && seen.ageMs !== null && !compaction.active,
     };
   });
 
@@ -99,17 +103,21 @@ export async function executeListPeers(params: ListPeersParams = {}): Promise<To
             {},
             { timeoutMs },
           );
-          const described = raw as {
+          const described = raw && typeof raw === 'object' ? raw as {
             peerChatProvider?: unknown;
             capabilities?: unknown;
-          };
+          } : {};
+          peer.reachable = true;
           peer.peerChatProvider = normalizePeerChatProvider(
             described.peerChatProvider,
           );
+          peer.peerChatLikelyAvailable = entry.listener.isConnected?.() === true && !entry.listener.getPeerCompactionState().active && peer.peerChatProvider !== null;
           peer.capabilities = summarizeCapabilities(
             described.capabilities,
           );
         } catch (err) {
+          peer.reachable = false;
+          peer.peerChatLikelyAvailable = false;
           peer.describeError =
             err instanceof Error ? err.message : String(err);
         }
@@ -148,7 +156,11 @@ function normalizePeerChatProvider(raw: unknown): ListedPeerChatProvider | null 
 function summarizeCapabilities(raw: unknown): ListedPeerCapabilities | null {
   if (!raw || typeof raw !== 'object') return null;
   const cap = raw as Partial<PeerCapability>;
-  if (!Array.isArray(cap.models)) return null;
+  if (!Array.isArray(cap.models) || cap.models.some(model =>
+    !model || typeof model !== 'object' || typeof model.id !== 'string' ||
+    typeof model.provider !== 'string' || !Array.isArray(model.strengths) ||
+    model.strengths.some(strength => typeof strength !== 'string')
+  )) return null;
 
   const providers = new Set<FleetProvider>();
   const strengths = new Set<ModelStrength>();

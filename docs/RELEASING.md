@@ -1,92 +1,73 @@
 # Releasing `@phuetz/code-buddy`
 
-This package had a stale-npm problem (published `latest` = `0.4.0` while the repo
-sat at `1.0.0-rc.8`) because publishing was fully manual and easy to forget. This
-doc captures the two release paths and the guard rails that prevent that recurring.
+Stable releases use `.github/workflows/release.yml`: pushing a reviewed `vX.Y.Z`
+tag runs the release checks, publishes to npm using trusted publishing (OIDC),
+then creates the GitHub release and attaches the package tarball. Do not run a
+second publisher for the same version.
 
-## TL;DR — which path do I use?
+`2.0.0` is already published. Existing published versions and tags, including
+`v2.0.0`, are immutable: never delete or move them to restart version numbering.
+The manually triggered semantic-release workflow is a separate, dormant route;
+it is not part of this procedure. Its dry run is not a publication approval.
 
-| Situation | Path |
-|---|---|
-| Ship another **release candidate** (`1.0.0-rc.9`, …) | **Manual** — `npm publish --tag rc` |
-| Cut a **stable** release (`1.0.0`, `1.1.0`, …) once you decide it's ready | **semantic-release** — the `Release (semantic-release)` workflow |
+## Prepare a release candidate
 
-Both run `prepublishOnly` (clean + fresh build) and `prepack` (strip ~14 MB of
-source maps) automatically, so the tarball stays lean (~5.4 MB packed) and always
-matches source.
+1. Fetch current `origin/main` and tags. Start a dedicated release branch from
+   that current main, preserving remote changes. Integrate reviewed commits.
+2. Inspect `npm view @phuetz/code-buddy version dist-tags versions --json` and
+   select an unused SemVer version: a minor release for compatible new features,
+   a patch for fixes, and a major version for breaking changes.
+3. Update `package.json`, the root entries in `package-lock.json`, `CHANGELOG.md`,
+   and `docs/RELEASE-NOTES-X.Y.Z.md`. Keep README installation instructions and
+   feature limitations consistent. Cowork is a separate package and release.
+4. Run `npm run validate` with appropriate test path filters for the change,
+   plus the deterministic release suites `npm test -- tests/fleet tests/kanban`
+   and `node scripts/ci-audit-gate.mjs`. Build and inspect a fresh package.
+5. Check the tarball contents, version, runtime manifest and SHA256. No secrets,
+   private profiles, absolute developer paths or test state may ship. Test the
+   installed package with normal dependency installation in a private prefix;
+   an `--ignore-scripts`/`--omit=optional` smoke is not a native installation test.
+6. Push the branch and open a PR targeting main. The CI workflow triggers on
+   these PRs and main/develop pushes, not on arbitrary release-branch pushes.
+   Inspect every Node20/22 × Linux/Windows/macOS job. All matrix jobs are gating
+   in the workflow; a local pass does not establish a remote CI pass. Record any
+   unresolved failure and obtain a technical disposition before proceeding.
 
----
+Do not change branch protections or weaken CI to make a release appear green.
+Repository protection settings and workflow success are different controls.
 
-## Path A — Manual RC publish (current default while < 1.0.0)
+## Publish once, from the reviewed main commit
 
-```bash
-npm version 1.0.0-rc.9 --no-git-tag-version   # bump (or edit package.json)
-npm publish --tag rc --access public          # → installs via @rc, leaves `latest` alone
-```
+After the concrete candidate, package and CI results pass final technical review:
 
-- Requires `npm whoami` to return `phuetz`.
-- Under 2FA you need either an OTP (`--otp=123456`) **or** a granular token with
-  "bypass 2FA" in `~/.npmrc`. The web-login token alone **cannot** publish.
-- `latest` intentionally stays on the last stable so `npm i @phuetz/code-buddy`
-  never serves an RC by surprise.
+1. Merge the reviewed PR without overwriting concurrent changes. Fetch main
+   again and check the exact resulting commit and version.
+2. Verify that the npm version and tag are still unused, and that package.json
+   matches the intended tag. Create an annotated tag at that exact main commit
+   and push only that tag, for example `v2.1.0` for package version `2.1.0`.
+3. Follow the **Release** workflow (`release.yml`). It installs dependencies,
+   rebuilds SQLite for the runner ABI, type-checks, lints, builds, runs the audit
+   gate and fleet/kanban smoke, then publishes via npm trusted publishing.
+   The workflow grants `id-token: write`; never substitute a printed or copied
+   personal token for its OIDC identity.
+4. Verify npm's version/dist-tag, integrity and provenance, the GitHub release
+   and attached tarball, and a fresh installed-package smoke. Report the actual
+   published version and links only after these checks.
 
-Verify the tarball before publishing:
+`prepublishOnly` cleans and builds; `prepack` builds, strips source maps and writes
+`dist/codebuddy-runtime.json`. The final workflow package can therefore differ in
+build metadata from a local preview. Compare the published artifact, not just its
+version string. Build timestamps and source revisions are not interchangeable.
 
-```bash
-npm pack --dry-run        # confirms prepack stripped maps; check size + file count
-```
+## If publication is interrupted
 
----
+Read the workflow steps and npm registry state before retrying. Publication can
+succeed while GitHub release creation fails. Never attempt to overwrite a version
+already present on npm, move a published tag, or trigger both release workflows.
+If npm succeeded, repair only the missing GitHub release/asset stage against the
+published version. If npm did not publish, diagnose the failing gate or trusted
+publisher configuration before retrying the appropriate operation.
 
-## Path B — Automated stable release (semantic-release)
-
-semantic-release is installed and configured (`.releaserc.json`). It derives the
-version from Conventional Commits, writes `CHANGELOG.md`, bumps `package.json`,
-tags, publishes to npm, and opens the GitHub Release — no manual version juggling.
-
-**Trigger:** GitHub → Actions → **Release (semantic-release)** → *Run workflow*.
-It is `workflow_dispatch` only (never auto-fires on push) and **defaults to a dry
-run** — you must set `dry_run = false` to actually publish.
-
-Preview locally first:
-
-```bash
-npm run release:dry       # prints "The next release version is X"
-```
-
-### ⚠️ Three prerequisites before the first real run
-
-1. **`NPM_TOKEN` repo secret** — an npm **automation/granular** token with
-   *bypass two-factor authentication* enabled. (Settings → Secrets and variables →
-   Actions.) A plain token fails under 2FA exactly like the manual web-login did.
-
-2. **Delete the orphan `v2.0.0` tag.** It is an ancestor of `main`, so
-   semantic-release treats `2.0.0` as the baseline and would compute a `2.x`
-   version, **skipping `1.0.0` entirely**. Your call (nothing `2.x` was ever
-   published, so deleting it is almost certainly safe):
-   ```bash
-   git tag -d v2.0.0
-   git push origin :refs/tags/v2.0.0
-   ```
-
-3. **`main` cuts STABLE.** `.releaserc.json` has `branches: ["main"]` with no
-   prerelease channel, so a real run publishes to the `latest` dist-tag. Only arm
-   it when you mean to ship 1.0.0-stable. Until then, keep using Path A for RCs.
-
-### Relationship to the existing `release.yml`
-
-The older tag-triggered `.github/workflows/release.yml` (fires on `v*` tags,
-publishes to `latest`) is left in place but is **superseded** by Path B. Pick one:
-once semantic-release is proven on a real run, retire `release.yml` to avoid a
-double publish (a semantic-release-created `v*` tag could otherwise re-trigger it;
-its release commit carries `[skip ci]`, which GitHub honors, but don't rely on
-that long-term).
-
----
-
-## Pre-release checklist
-
-- [ ] CI green on `main` (`npm run validate` locally for a fast gate)
-- [ ] `npm pack --dry-run` shows no `*.js.map` and a sane file count
-- [ ] (Path B) `NPM_TOKEN` secret set, `v2.0.0` deleted, you intend stable
-- [ ] CHANGELOG reflects the release (semantic-release does this for Path B)
+For prereleases, deliberately choose an unused prerelease version and a non-latest
+dist-tag in a separately reviewed process. The stable tag workflow does not provide
+an automatic RC channel. Do not infer one from old `rc` dist-tags.

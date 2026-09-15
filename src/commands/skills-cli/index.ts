@@ -340,26 +340,36 @@ export function registerSkillsCommands(program: Command): void {
 
   skills
     .command('usage')
-    .description('Show local usage telemetry, most-used first')
+    .description('Show local usage telemetry: hub invocations and view/use activity of every skill')
     .option('--json', 'output JSON')
     .action(async (opts: { json?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
+      const { listSkillActivity } = await import('../../skills/skill-usage-store.js');
       const summary = getSkillsHub().usageSummary();
+      const activity = listSkillActivity();
 
       if (opts.json) {
-        console.log(JSON.stringify({ count: summary.length, skills: summary }, null, 2));
+        console.log(JSON.stringify({ count: summary.length, skills: summary, activityCount: activity.length, activity }, null, 2));
         return;
       }
-      if (summary.length === 0) {
+      if (summary.length === 0 && activity.length === 0) {
         console.log('No skill usage recorded yet.');
         return;
       }
-      console.log('\nSkill usage (most used first):');
-      for (const skill of summary) {
-        const u = skill.usage!;
-        const avg = u.averageDurationMs !== undefined ? `, avg ${Math.round(u.averageDurationMs)}ms` : '';
-        console.log(`  ${skill.name}: ${u.invocationCount} run(s), ${u.successCount} ok / ${u.failureCount} fail${avg}`);
-        if (u.lastError) console.log(`      last error: ${u.lastError}`);
+      if (summary.length > 0) {
+        console.log('\nSkill usage (most used first):');
+        for (const skill of summary) {
+          const u = skill.usage!;
+          const avg = u.averageDurationMs !== undefined ? `, avg ${Math.round(u.averageDurationMs)}ms` : '';
+          console.log(`  ${skill.name}: ${u.invocationCount} run(s), ${u.successCount} ok / ${u.failureCount} fail${avg}`);
+          if (u.lastError) console.log(`      last error: ${u.lastError}`);
+        }
+      }
+      if (activity.length > 0) {
+        console.log('\nSkill activity (most recent first):');
+        for (const entry of activity) {
+          console.log(`  ${entry.skill}: ${entry.viewCount} view(s), ${entry.useCount} use(s), last ${entry.lastActivityAt}`);
+        }
       }
       console.log('');
     });

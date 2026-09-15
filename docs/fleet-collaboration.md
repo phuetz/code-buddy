@@ -38,13 +38,13 @@ Créer `fleet.json` avec les adresses des deux machines :
   "peers": [
     {
       "id": "windows",
-      "url": "ws://192.168.1.20:3000/ws",
+      "url": "ws://203.0.113.20:3000/ws",
       "tokenEnv": "BUDDY_WINDOWS_TOKEN",
       "role": "Examiner l'architecture et proposer les changements."
     },
     {
       "id": "linux",
-      "url": "ws://192.168.1.21:3000/ws",
+      "url": "ws://203.0.113.21:3000/ws",
       "tokenEnv": "BUDDY_LINUX_TOKEN",
       "role": "Examiner les risques, la portabilite et les tests necessaires."
     }

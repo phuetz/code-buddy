@@ -28,6 +28,18 @@ jobs:
         registry-url: 'https://registry.npmjs.org'
         cache: 'npm'
 
+    - name: Validate tag matches package version
+      run: |
+        node --input-type=module <<'NODE'
+        import fs from 'node:fs';
+        const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+        const expected = `refs/tags/v${pkg.version}`;
+        if (process.env.GITHUB_REF !== expected || lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
+          throw new Error('Release tag, package.json and package-lock.json versions must match');
+        }
+        NODE
+
     - name: Ensure npm supports OIDC trusted publishing
       run: |
         npm install -g npm@latest
@@ -39,13 +51,9 @@ jobs:
     - name: Rebuild native modules (better-sqlite3) for the runner ABI
       run: npm rebuild better-sqlite3
 
-    # The full ~27K suite is no-mocks / real-integration (it needs live
-    # Ollama / Hermes / a browser), so it cannot gate a release on a vanilla
-    # GitHub runner — that brittleness is exactly why every tagged release
-    # since v1.2 failed here and never published. Gate instead on the
-    # deterministic checks that DO pass on a clean runner (type-check, lint,
-    # build, the documented security audit gate) plus a fast core smoke. The
-    # full env-dependent suite still runs in ci.yml.
+    # Full tests gate the reviewed PR in ci.yml on Linux/macOS/Windows and Node20/22.
+    # The tag workflow repeats build, lint, typecheck, audit and deterministic core
+    # smoke checks before trusted publication. A tag must target that reviewed commit.
     - name: Type check
       run: npm run typecheck
 

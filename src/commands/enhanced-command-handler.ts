@@ -2,6 +2,7 @@ import { ChatEntry } from "../agent/codebuddy-agent.js";
 import { handleGrillMe } from './handlers/grill-me-handler.js';
 import { handleDeepthink } from './handlers/deepthink-handler.js';
 import { CodeBuddyClient } from "../codebuddy/client.js";
+import { withFactsMemorySessionClient } from "../memory/facts-memory.js";
 
 // Import all handlers from modular files
 import {
@@ -134,7 +135,6 @@ import {
   handlePR,
   // Switch handler (mid-conversation model switching)
   handleSwitch,
-  setSwitchModelProvider,
   // Commands previously only handled in client-dispatcher
   handleChangeModel,
   handleChangeMode,
@@ -185,6 +185,7 @@ import {
 
 import { handleLessonsCommand } from "./handlers/index.js";
 import { handleContextStats } from "./handlers/extra-handlers.js";
+import { handleResources } from "./handlers/resources-handler.js";
 import { handleLogin, handleLogout, handleWhoami } from "./handlers/auth-handlers.js";
 import { handlePromptCommand as handlePromptCommandRaw } from "./slash/prompt-commands.js";
 import {
@@ -271,6 +272,39 @@ async function handlePromptCommand(args: string): Promise<CommandHandlerResult> 
   return {
     handled: true,
     entry: { type: 'assistant', content: output, timestamp: new Date() },
+  };
+}
+
+/**
+ * Legacy handler result shapes that predate `entry` (agent handlers return
+ * `output`/`error`, infra handlers return `response`, some newer ones
+ * `message`). The conversation loop and headless surfaces only render
+ * `entry`, so these results used to be dropped silently.
+ */
+interface LegacyHandlerFields {
+  output?: unknown;
+  error?: unknown;
+  response?: unknown;
+  message?: unknown;
+}
+
+/**
+ * Give every handled result a visible `entry` when the handler only produced
+ * legacy text fields. Results that already carry an entry are left untouched.
+ */
+export function normalizeHandlerResult(result: CommandHandlerResult): CommandHandlerResult {
+  if (!result.handled || result.entry) {
+    return result;
+  }
+  const legacy = result as CommandHandlerResult & LegacyHandlerFields;
+  const text = [legacy.output, legacy.response, legacy.message, legacy.error]
+    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  if (!text) {
+    return result;
+  }
+  return {
+    ...result,
+    entry: { type: 'assistant', content: text, timestamp: new Date() },
   };
 }
 
@@ -370,7 +404,7 @@ export class EnhancedCommandHandler {
 
     // Export (context-dependent: conversationHistory)
     ['__SAVE_CONVERSATION__', (args) => handleSaveConversation(args, this.conversationHistory)],
-    ['__EXPORT__', (args) => handleExport(args)],
+    ['__EXPORT__', (args) => handleExport(args, this.conversationHistory, this.agentProxy?.getCurrentModel())],
     ['__EXPORT_LIST__', () => handleExportList()],
     ['__EXPORT_FORMATS__', () => handleExportFormats()],
 
@@ -464,6 +498,7 @@ export class EnhancedCommandHandler {
     ['__CHANGE_MODE__', (args) => handleChangeMode(args)],
     ['__PLAN_MODE__', () => handleChangeMode(['plan'])],
     ['__STATUS__', () => handleStatus(this.agentProxy?.getCurrentModel())],
+    ['__RESOURCES__', () => handleResources()],
     ['__NEW__', (args) => handleNew(args)],
     ['__ULTRAPLAN__', (args) => handleUltraplan(args)],
     ['__LIST_CHECKPOINTS__', (args) => handleListCheckpoints(args)],
@@ -742,7 +777,8 @@ export class EnhancedCommandHandler {
   ): Promise<CommandHandlerResult> {
     const handler = this.handlerMap.get(token);
     if (handler) {
-      return handler(args);
+      return withFactsMemorySessionClient(this.codebuddyClient ?? null, async () =>
+        normalizeHandlerResult(await handler(args)));
     }
     return { handled: false };
   }

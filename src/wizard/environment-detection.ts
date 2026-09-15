@@ -174,6 +174,40 @@ export async function detectChatGptOAuth(): Promise<DetectedCapability> {
   }
 }
 
+/** Offline variant: credential presence only, never refreshes tokens. */
+export async function detectChatGptOAuthOffline(): Promise<DetectedCapability> {
+  const base: DetectedCapability = {
+    id: 'chatgpt',
+    label: 'ChatGPT subscription (OAuth, $0)',
+    kind: 'oauth',
+    free: true,
+    available: false,
+    detail: 'not signed in',
+    setupCommand: 'buddy login',
+  };
+  try {
+    const { hasCodexCredentials } = await import('../providers/codex-oauth.js');
+    if (!hasCodexCredentials()) return base;
+    return { ...base, available: true, detail: 'credentials present (not verified offline)', setupCommand: undefined };
+  } catch {
+    return base;
+  }
+}
+
+function notProbedLocalRuntime(id: string, label: string, rawHost: string, setupCommand: string): Promise<DetectedCapability> {
+  const host = normalizeHost(rawHost);
+  return Promise.resolve({
+    id,
+    label,
+    kind: 'local',
+    free: true,
+    available: false,
+    detail: 'not probed (--offline)',
+    baseURL: `${host}/v1`,
+    setupCommand,
+  });
+}
+
 /** Check the xAI (Grok) OAuth credential file. */
 export async function detectXaiOAuth(): Promise<DetectedCapability> {
   const base: DetectedCapability = {
@@ -227,13 +261,21 @@ export function detectApiKeys(): DetectedCapability[] {
  * One call to learn everything the setup surfaces need. Free local/OAuth probes
  * run in parallel; the API-key scan is synchronous.
  */
-export async function detectEnvironment(): Promise<EnvironmentSnapshot> {
-  const [ollama, lmstudio, chatgpt, xai] = await Promise.all([
-    detectOllama(),
-    detectLmStudio(),
-    detectChatGptOAuth(),
-    detectXaiOAuth(),
-  ]);
+export async function detectEnvironment(options: { offline?: boolean } = {}): Promise<EnvironmentSnapshot> {
+  // Offline: no HTTP probe and no OAuth refresh — only local credential files are read.
+  const [ollama, lmstudio, chatgpt, xai] = await Promise.all(options.offline
+    ? [
+      notProbedLocalRuntime('ollama', 'Ollama (local, $0)', process.env.OLLAMA_HOST || OLLAMA_DEFAULT_HOST, 'ollama serve'),
+      notProbedLocalRuntime('lmstudio', 'LM Studio (local, $0)', process.env.LMSTUDIO_HOST || LMSTUDIO_DEFAULT_HOST, 'Start the LM Studio local server'),
+      detectChatGptOAuthOffline(),
+      detectXaiOAuth(),
+    ]
+    : [
+      detectOllama(),
+      detectLmStudio(),
+      detectChatGptOAuth(),
+      detectXaiOAuth(),
+    ]);
   const apiKeys = detectApiKeys();
   const capabilities = [ollama, lmstudio, chatgpt, xai, ...apiKeys];
 

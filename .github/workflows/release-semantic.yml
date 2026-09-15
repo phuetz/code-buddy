@@ -1,24 +1,12 @@
 name: Release (semantic-release)
 
-# Manual trigger ONLY — this never auto-fires on push, by design.
-#
-# semantic-release reads Conventional Commits since the last release tag, then:
-#   computes the next version → updates CHANGELOG.md → bumps package.json →
-#   creates the git tag → publishes to npm → opens the GitHub Release.
-#
-# ⚠️ PREREQUISITES — read docs/RELEASING.md before the first real run:
-#   1. Repo secret NPM_TOKEN must be an npm *automation/granular* token with
-#      "bypass two-factor authentication" enabled (a plain web-login token can't
-#      publish under 2FA — this is the exact wall we hit publishing rc.8 by hand).
-#   2. The orphan tag v2.0.0 must be deleted first. It is an ancestor of main, so
-#      semantic-release would treat 2.0.0 as the baseline and compute a 2.x
-#      version — silently skipping the 1.0.0 release.
-#   3. `main` has no prerelease channel, so a real run cuts a STABLE version to
-#      the `latest` dist-tag. Keep publishing release candidates with the manual
-#      `npm publish --tag rc` flow until you decide 1.0.0 is ready.
-#
-# The dry_run input defaults to true: a manual trigger only PREVIEWS the next
-# version unless you explicitly set dry_run = false.
+# Manual, separate semantic-release route. The normal stable release procedure is
+# the tag-triggered release.yml workflow; see docs/RELEASING.md.
+# Do not execute both publishers for one version. The input remains dry-run by
+# default. Any real use of this alternative needs its own reviewed plan and
+# verification of npm authentication and current published versions.
+# Published versions/tags, including v2.0.0, are immutable: never delete or move
+# them to reset semantic-release's baseline. 2.0.0 is already published on npm.
 
 on:
   workflow_dispatch:

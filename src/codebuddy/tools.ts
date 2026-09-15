@@ -1,3 +1,7 @@
+import { A2A_CALL_TOOL_DEF } from './a2a-call-tool-defs.js';
+import { RESOURCE_CATALOG_TOOL_DEF } from './resource-catalog-tool-defs.js';
+import { RAGCHAT_TOOL_DEF } from './ragchat-tool-defs.js';
+import { integrationToolHints } from '../tools/integration-tool-hints.js';
 /**
  * Grok Tools
  *
@@ -7,7 +11,7 @@
 
 import { TOOL_METADATA as SEARCH_TOOL_METADATA } from '../tools/metadata.js';
 import type { CodeBuddyTool, JsonSchemaProperty } from "./client.js";
-import { setDeferredMCPSchemas } from "../tools/deferred-schema-state.js";
+import { setDeferredMCPSchemas, resolveDeferredSchemas as resolveSelectedSchemas } from "../tools/deferred-schema-state.js";
 import { MCPManager, MCPTool } from "../mcp/client.js";
 import { loadMCPConfig } from "../mcp/config.js";
 import {
@@ -222,6 +226,7 @@ export function getBuiltinToolNames(): string[] {
     MERGE_CONFLICT_TOOLS,
     VULN_SCANNER_TOOLS,
     SESSION_TOOLS,
+    [RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF],
     FLEET_TOOLS,
     CODE_EXPLORER_TOOLS,
     WINDOWS_TOOLS,
@@ -380,6 +385,7 @@ export function initializeToolRegistry(): void {
 
   // Fleet tools — peer_delegate, list_peers (Phase (d).17). Always available;
   // peer_delegate returns a clear error when no peers are connected.
+  registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF]);
   registerGroup(FLEET_TOOLS);
 
   // CodeExplorer tools
@@ -775,6 +781,13 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
 // Tool Selection (RAG-based)
 // ============================================================================
 
+/** Hydrate only names already exposed by assembly/selection; never add permissions. */
+function hydrateExposedToolSchemas(tools: CodeBuddyTool[]): CodeBuddyTool[] {
+  const resolved = new Map(resolveSelectedSchemas(tools.map(tool => tool.function.name))
+    .map(tool => [tool.function.name, tool]));
+  return tools.map(tool => resolved.get(tool.function.name) ?? tool);
+}
+
 /**
  * Get relevant tools for a specific query using RAG-based selection
  *
@@ -806,7 +819,7 @@ export async function getRelevantTools(
   // If RAG is disabled, return all tools
   if (!useRAG) {
     return {
-      selectedTools: allTools,
+      selectedTools: hydrateExposedToolSchemas(allTools),
       scores: new Map(allTools.map(t => [t.function.name, 1])),
       classification: {
         categories: ['file_read', 'file_write', 'system'] as ToolCategory[],
@@ -819,7 +832,14 @@ export async function getRelevantTools(
     };
   }
 
-  return selectRelevantTools(query, allTools, maxTools, options.alwaysInclude);
+  const preferred = integrationToolHints(query, allTools.map(tool => tool.function.name));
+  const selection = selectRelevantTools(query, allTools, maxTools, [
+    ...(options.alwaysInclude ?? ['view_file', 'bash']), ...preferred,
+  ]);
+  // Once selected, a deferred MCP tool must expose its argument schema.
+  // Empty stubs otherwise force valid models to emit {} for required inputs.
+  selection.selectedTools = hydrateExposedToolSchemas(selection.selectedTools);
+  return selection;
 }
 
 /**

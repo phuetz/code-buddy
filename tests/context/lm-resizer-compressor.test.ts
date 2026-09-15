@@ -10,6 +10,16 @@ describe('lm-resizer compressor', () => {
     expect(r).toBeNull();
   });
 
+  it('honors an explicitly configured missing binary instead of silently choosing another version', () => {
+    const previous = process.env.CODEBUDDY_LM_RESIZER_BIN;
+    process.env.CODEBUDDY_LM_RESIZER_BIN = '/nonexistent/explicit-lm-resizer';
+    try { expect(resolveLmResizerBin()).toBe('/nonexistent/explicit-lm-resizer'); }
+    finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_LM_RESIZER_BIN;
+      else process.env.CODEBUDDY_LM_RESIZER_BIN = previous;
+    }
+  });
+
   it('isLmResizerEnabled reflects the env flag (off by default)', () => {
     const prev = process.env.CODEBUDDY_LM_RESIZER;
     delete process.env.CODEBUDDY_LM_RESIZER;

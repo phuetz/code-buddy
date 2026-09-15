@@ -2,7 +2,7 @@
  * Agent command handlers
  *
  * Handles /agent commands for custom agent management:
- * - /agent - List all agents
+ * - /agent, /agent list - List all agents
  * - /agent <id> - Activate an agent
  * - /agent create <name> - Create a new agent
  * - /agent info <id> - Show agent details
@@ -26,15 +26,15 @@ export interface CommandHandlerResult {
 export function handleAgent(args: string[]): CommandHandlerResult {
   const loader = getCustomAgentLoader();
 
-  // No args - list agents
-  if (args.length === 0) {
+  const subcommand = args[0]?.toLowerCase() ?? '';
+
+  // No args or the documented `list` action - list agents
+  if (args.length === 0 || (subcommand === 'list' && args.length === 1)) {
     return {
       handled: true,
       output: loader.formatAgentList(),
     };
   }
-
-  const subcommand = args[0]?.toLowerCase() ?? '';
 
   // Create new agent
   if (subcommand === 'create') {

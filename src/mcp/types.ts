@@ -18,6 +18,8 @@ export interface MCPServerConfig {
   maxRetries?: number;
   /** Optional: Enable/disable this server (default: true) */
   enabled?: boolean;
+  /** Exact names and star globs; exclusions win. Empty include denies every tool. */
+  toolFilter?: { include?: string[]; exclude?: string[] };
 }
 
 export type ServerStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
