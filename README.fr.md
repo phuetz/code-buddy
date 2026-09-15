@@ -2,7 +2,7 @@
 
 Code Buddy peut conserver des informations utiles, proposer des leçons, réutiliser des skills et évaluer des variantes de code. Ces mécanismes agissent sur le contexte et les artefacts du système ; ils ne réentraînent pas les poids du modèle.
 
-Pour l’installation et les autres usages, consulter le [README principal](README.md). Cette présentation thématique en français, qui n’est pas une traduction intégrale du README principal, accompagne le [guide technique et ses preuves de source](docs/learning-mechanisms.md), vérifié sur le candidat `01fc0dbd3` le 14 septembre 2026.
+Pour l’installation et les autres usages, consulter le [README principal](README.md). Cette présentation thématique en français, qui n’est pas une traduction intégrale du README principal, accompagne le [guide technique et ses preuves de source](docs/learning-mechanisms.md).
 
 ## Nouveautés 2.1
 
@@ -50,3 +50,7 @@ Le moteur de raisonnement propose ToT/MCTS avec des budgets de recherche. `/thin
 Une recette de flotte a déjà relié deux hôtes : revue du Buddy Windows par RPC, correction du Buddy Linux, puis oracle indépendant réussi sur les deux systèmes (5/5 chacun). Le relais était assuré manuellement par le pilote. [Déroulement vérifié](docs/reports/2026-09/fleet-two-hosts-learning-example.md).
 
 Le gain se vérifie sur une tâche concrète : référence avant changement, actions capturées, résultat, coût et régressions. La présence du code, son activation et son bénéfice observé sont trois constats différents.
+
+## Portée des preuves
+
+Le guide d’apprentissage a initialement été relu sur le candidat `01fc0dbd3` le 14 septembre 2026. Ce contrôle historique ne constitue pas la validation de la version 2.1.0 ; consulter les [notes de version](docs/RELEASE-NOTES-2.1.0.md) et les contrôles du commit publié pour identifier cette livraison.

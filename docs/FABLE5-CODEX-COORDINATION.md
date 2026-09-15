@@ -690,3 +690,5 @@ RÉSERVÉ publication : état consolidé assaini sur release/code-buddy-2.1.0-pu
 Intégration snapshot résiduel jusqu’à ae96e0f9e : vérification locale TypeScript/ESLint, corrections de harnais/profils et mise en page Cowork. Delta final des écrivains de profils encore réservé à Opus ; aucune source production en mutation dans cette lane.
 
 Validation snapshot 2.1.0 : consolidation jusqu’à1ab88d1f0, données personnelles40/40, liens36/36, npm validate ciblé réussi (typecheck/pack10/168tests), delta isolation131tests. Paquet Windows et CI PR restent à vérifier avant autorisation technique du tag.
+
+Revue release : Grok a exécuté33outils et44tests Linux ; sonde Windows confirme le défaut du shim de test Unix (ENOENT), mais le lanceur production et TaskVerifyTool passent avec les vrais tsc/ESLint en chemin à espaces. Tests portables et description npm/portée historique FR clarifiés. npm validate ciblé repassé (pack10+84tests, lint/typecheck). CI PR153 reste requise avant tag.

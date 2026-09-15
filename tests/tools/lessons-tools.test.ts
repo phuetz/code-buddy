@@ -382,7 +382,11 @@ describe('Lessons Tool Adapters', () => {
       async function project(source: string): Promise<void> {
         const bin = path.join(tmpDir, 'node_modules', '.bin');
         await fs.ensureDir(bin);
-        await fs.writeFile(path.join(bin, 'tsc'), `#!/usr/bin/env node\nrequire(${JSON.stringify(tscJs)});\n`, { mode: 0o755 });
+        if (process.platform === 'win32') {
+          await fs.writeFile(path.join(bin, 'tsc.cmd'), `@"${process.execPath}" "${tscJs}" %*\r\n`);
+        } else {
+          await fs.writeFile(path.join(bin, 'tsc'), `#!/usr/bin/env node\nrequire(${JSON.stringify(tscJs)});\n`, { mode: 0o755 });
+        }
         await fs.writeJson(path.join(tmpDir, 'tsconfig.json'), { compilerOptions: { strict: true, noEmit: true }, include: ['src'] });
         await fs.outputFile(path.join(tmpDir, 'src', 'index.ts'), source);
       }
