@@ -117,6 +117,21 @@ describe('hermes claw migrate (real)', () => {
     });
   });
 
+  it('normalizes imported MCP HTTP and excludes literal credentials from settings/report', async () => {
+    const fixture = path.join(openclaw, 'clawdbot.json');
+    const config = fs.readJsonSync(fixture);
+    config.mcpServers = { remote: { url: 'http://127.0.0.1:12345/mcp', transport: 'streamable-http', headers: { Authorization: 'Bearer sk-test-never-copy' } } };
+    fs.writeJsonSync(fixture, config);
+    const report = await runClawMigration({ source: openclaw, workspaceTarget: target, apply: true, skillsHub: hub });
+    const settingsPath = path.join(target, '.codebuddy', 'settings.json');
+    const settings = fs.readJsonSync(settingsPath);
+    expect(settings.mcpServers.remote.transport.type).toBe('streamable_http');
+    expect(fs.readFileSync(settingsPath, 'utf8')).not.toContain('sk-test-never-copy');
+    expect(JSON.stringify(report)).not.toContain('sk-test-never-copy');
+    expect(JSON.stringify(report)).toContain('MCP_IMPORT_REMOTE_HEADERS_AUTHORIZATION');
+    expect(fs.statSync(settingsPath).mode & 0o777).toBe(0o600);
+  });
+
   afterEach(() => {
     fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
@@ -353,7 +368,7 @@ describe('hermes claw migrate (real)', () => {
     expect(settings.models).toBeUndefined();
     // The nested `mcp.servers` map lands on the real consumer key with the real
     // server name — the pre-fix reader wrote `mcpServers.servers` instead.
-    expect(settings.mcpServers.filesystem).toEqual({ command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] });
+    expect(settings.mcpServers.filesystem).toMatchObject({ name: 'filesystem', enabled: true, transport: { type: 'stdio', inheritEnv: false, command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] } });
     expect(settings.mcpServers.servers).toBeUndefined();
 
     // SECURITY: the gateway archive carries a nested token, so it MUST be 0600

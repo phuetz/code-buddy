@@ -19,6 +19,7 @@ interface ListenerStubOptions {
   lastSeenReason?: string | null;
   compactionActive?: boolean;
   stale?: boolean;
+  connected?: boolean;
   request?: FleetListenerPublicAPI['request'];
 }
 
@@ -33,6 +34,7 @@ function makeStubListener(opts: ListenerStubOptions = {}): FleetListenerPublicAP
       reason: opts.lastSeenReason ?? null,
       ageMs: opts.lastSeenAgeMs ?? null,
     }),
+    isConnected: () => opts.connected ?? true,
     isStale: () => opts.stale ?? false,
     getPeerCompactionState: () => ({
       active: opts.compactionActive ?? false,
@@ -191,6 +193,24 @@ describe('list_peers tool', () => {
       'reasoning',
       'thinking',
     ]);
+  });
+
+  it.each([null, { models: [null] }, { models: [{ id: 'x', provider: 'ollama' }] }])(
+    'keeps successful RPC reachability distinct from malformed capability metadata: %j', async capabilities => {
+      registerPeer('malformed', { request: async () => ({ capabilities }) });
+      const result = await executeListPeers({ includeCapabilities: true });
+      const peer = (result.data as { peers: ListedPeer[] }).peers[0];
+      expect(peer.reachable).toBe(true);
+      expect(peer.capabilities).toBeNull();
+      expect(peer.peerChatLikelyAvailable).toBe(false);
+      expect(peer.describeError).toBeUndefined();
+    },
+  );
+
+  it('does not infer availability from an old heartbeat on a disconnected peer', async () => {
+    registerPeer('offline', { lastSeenAgeMs: 500, connected: false });
+    const result = await executeListPeers();
+    expect((result.data as { peers: ListedPeer[] }).peers[0]).toMatchObject({ connected: false, peerChatLikelyAvailable: false });
   });
 
   it('keeps the peer listed when peer.describe enrichment fails', async () => {

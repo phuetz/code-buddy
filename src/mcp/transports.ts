@@ -1,17 +1,21 @@
 import { Transport, TransportSendOptions } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { SSEClientTransport as SDKSSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 import { EventEmitter } from "events";
 import axios, { AxiosInstance } from "axios";
 import { logger } from '../utils/logger.js';
 
-export type TransportType = 'stdio' | 'http' | 'sse' | 'streamable_http';
+export type TransportType = 'stdio' | 'http' | 'sse' | 'sse_sdk' | 'legacy_rpc' | 'streamable_http';
 
 export interface TransportConfig {
   type: TransportType;
   command?: string;
+  cwd?: string;
+  /** Imported stdio servers receive SDK baseline env plus explicit declarations only. */
+  inheritEnv?: boolean;
   args?: string[];
   env?: Record<string, string>;
   url?: string;
@@ -36,7 +40,7 @@ export class StdioTransport implements MCPTransport {
   async connect(): Promise<Transport> {
     // Create transport with environment variables to suppress verbose output
     const env = { 
-      ...process.env, 
+      ...(this.config.inheritEnv === false ? getDefaultEnvironment() : process.env),
       ...this.config.env,
       // Try to suppress verbose output from mcp-remote
       MCP_REMOTE_QUIET: '1',
@@ -48,6 +52,7 @@ export class StdioTransport implements MCPTransport {
     const transportConfig = {
       command: this.config.command!,
       args: this.config.args || [],
+      cwd: this.config.cwd,
       env,
       // The SDK default is stderr:'inherit', which lets a noisy MCP server
       // (startup banners, progress logs) write raw bytes into the CLI's own
@@ -98,6 +103,7 @@ export class HttpTransport extends EventEmitter implements MCPTransport {
   async connect(): Promise<Transport> {
     this.client = axios.create({
       baseURL: this.config.url,
+      maxRedirects: 0,
       headers: {
         'Content-Type': 'application/json',
         ...this.config.headers
@@ -126,36 +132,24 @@ export class HttpTransport extends EventEmitter implements MCPTransport {
   }
 }
 
-export class SSETransport extends EventEmitter implements MCPTransport {
-  private connected = false;
-
+export class SSETransport implements MCPTransport {
+  private transport?: SDKSSEClientTransport;
   constructor(private config: TransportConfig) {
-    super();
-    if (!config.url) {
-      throw new Error('URL is required for SSE MCP transport. Specify the server URL in your MCP configuration.');
-    }
+    if (!config.url) throw new Error('URL is required for SSE MCP transport');
   }
-
   async connect(): Promise<Transport> {
-    return new Promise((resolve, reject) => {
-      try {
-        // For Node.js environment, we'll use a simple HTTP-based approach
-        // In a real implementation, you'd use a proper SSE library like 'eventsource'
-        this.connected = true;
-        resolve(new SSEClientTransport(this.config.url!));
-      } catch (error) {
-        reject(error);
-      }
+    this.transport = new SDKSSEClientTransport(new URL(this.config.url!), {
+      requestInit: { headers: this.config.headers, redirect: 'error' },
+      eventSourceInit: { fetch: (url, init) => {
+        const headers = new Headers(init?.headers);
+        for (const [key, value] of Object.entries(this.config.headers ?? {})) headers.set(key, value);
+        return fetch(url, { ...init, headers, redirect: 'error' });
+      } },
     });
+    return this.transport;
   }
-
-  async disconnect(): Promise<void> {
-    this.connected = false;
-  }
-
-  getType(): TransportType {
-    return 'sse';
-  }
+  async disconnect(): Promise<void> { await this.transport?.close(); this.transport = undefined; }
+  getType(): TransportType { return 'sse'; }
 }
 
 // Custom HTTP Transport implementation
@@ -193,45 +187,6 @@ class HttpClientTransport extends EventEmitter implements Transport {
   }
 }
 
-// Custom SSE Transport implementation
-class SSEClientTransport extends EventEmitter implements Transport {
-  onclose?: () => void;
-  onerror?: (error: Error) => void;
-  onmessage?: <T extends JSONRPCMessage>(message: T) => void;
-  sessionId?: string;
-
-  constructor(private url: string) {
-    super();
-  }
-
-  async start(): Promise<void> {
-    // SSE transport is event-driven, so we're always "started"
-  }
-
-  async close(): Promise<void> {
-    // Nothing to close for basic SSE transport
-  }
-
-  async send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
-    // For bidirectional communication over SSE, we typically use HTTP POST
-    // for sending messages and SSE for receiving
-    try {
-      const response = await axios.post(this.url.replace('/sse', '/rpc'), message, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (this.onmessage && response.data) {
-        this.onmessage(response.data);
-      }
-    } catch (error) {
-      const err = new Error(`SSE transport error: ${error}`);
-      if (this.onerror) {
-        this.onerror(err);
-      }
-      throw err;
-    }
-  }
-}
-
 export class StreamableHttpTransport extends EventEmitter implements MCPTransport {
   private transport?: StreamableHTTPClientTransport;
 
@@ -246,7 +201,7 @@ export class StreamableHttpTransport extends EventEmitter implements MCPTranspor
       throw new Error('Streamable HTTP MCP requires an HTTP(S) URL');
     }
     this.transport = new StreamableHTTPClientTransport(url, {
-      requestInit: { headers: this.config.headers },
+      requestInit: { headers: this.config.headers, redirect: 'error' },
     });
     return this.transport;
   }
@@ -262,13 +217,36 @@ export class StreamableHttpTransport extends EventEmitter implements MCPTranspor
   }
 }
 
-export function createTransport(config: TransportConfig): MCPTransport {
+/** Resolve references only at connection time; missing credentials fail closed. */
+export function resolveMCPTransport(config: TransportConfig): TransportConfig {
+  const resolve = (value: string) => value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_match, key: string) => {
+    const result = process.env[key];
+    if (!result) throw new Error(`Missing MCP environment reference: ${key}`);
+    return result;
+  });
+  const map = (values?: Record<string, string>) => values && Object.fromEntries(Object.entries(values).map(([k, v]) => [k, resolve(v)]));
+  const resolved = { ...config, command: config.command && resolve(config.command), cwd: config.cwd && resolve(config.cwd),
+    args: config.args?.map(resolve), env: map(config.env), headers: map(config.headers), url: config.url && resolve(config.url) };
+  if (resolved.url) {
+    let url: URL;
+    try { url = new URL(resolved.url); } catch { throw new Error('Invalid MCP endpoint configuration'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('MCP requires HTTP(S) without embedded credentials, query or fragment');
+  }
+  return resolved;
+}
+
+export function createTransport(input: TransportConfig): MCPTransport {
+  const config = resolveMCPTransport(input);
   switch (config.type) {
     case 'stdio':
       return new StdioTransport(config);
     case 'http':
+      logger.warn('MCP http /rpc transport is deprecated; use legacy_rpc explicitly or streamable_http for MCP HTTP');
+      return new HttpTransport(config);
+    case 'legacy_rpc':
       return new HttpTransport(config);
     case 'sse':
+    case 'sse_sdk':
       return new SSETransport(config);
     case 'streamable_http':
       return new StreamableHttpTransport(config);

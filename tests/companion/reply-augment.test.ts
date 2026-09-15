@@ -4,8 +4,10 @@
  * end-to-end through the REAL relationship-state file (env-routed temp, no mocks) — an affectionate
  * utterance actually nudges Lisa's warmth up.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -30,6 +32,9 @@ import {
   personalityOf,
   DEFAULT_TRAITS,
 } from '../../src/companion/relationship-state.js';
+
+const isolatedHome = createIsolatedHome('reply-augment-home-');
+beforeAll(() => { isolatedHome.enter(); });
 
 describe('detectRelationalSignal', () => {
   it('classifies the dominant emotional colour', () => {
@@ -312,4 +317,14 @@ describe('default voice reply evolves Lisa’s mood through the shared helper', 
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+});
+
+// Wait for the asynchronous relational prewarm before this worker ends.
+afterAll(async () => {
+  const { prewarmVoiceRelationalContext } = await import('../../src/companion/relational-context.js');
+  try {
+    await prewarmVoiceRelationalContext();
+  } finally {
+    isolatedHome.leave();
+  }
 });

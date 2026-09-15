@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -132,6 +132,26 @@ describe('onboarding', () => {
         rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {
         // ignore
+      }
+    });
+
+    it('preserves unrelated project settings when onboarding again', () => {
+      mkdirSync(tmpDir, { recursive: true });
+      writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({ security: { mode: 'suggest' }, custom: 'keep', ttsProvider: 'piper' }));
+      writeConfig(tmpDir, { provider: 'ollama', apiKey: '', model: 'local-model', ttsEnabled: false });
+      const saved = JSON.parse(readFileSync(join(tmpDir, 'config.json'), 'utf8'));
+      expect(saved.security).toEqual({ mode: 'suggest' });
+      expect(saved.custom).toBe('keep');
+      expect(saved.ttsProvider).toBeUndefined();
+    });
+
+    it('does not overwrite an invalid existing project config', () => {
+      mkdirSync(tmpDir, { recursive: true });
+      const file = join(tmpDir, 'config.json');
+      for (const content of ['broken json', '[]', 'null']) {
+        writeFileSync(file, content);
+        expect(() => writeConfig(tmpDir, { provider: 'ollama', apiKey: '', model: 'local', ttsEnabled: false })).toThrow();
+        expect(readFileSync(file, 'utf8')).toBe(content);
       }
     });
 

@@ -169,7 +169,8 @@ function stringArray(value: unknown): string[] {
 /** Resolve lm-resizer: explicit env -> stable install -> PATH -> mutable DEV build. */
 export function resolveLmResizerBin(): string {
   const env = process.env.CODEBUDDY_LM_RESIZER_BIN;
-  if (env && existsSync(env)) return env;
+  // An explicit choice must not silently fall through to an older binary.
+  if (env?.trim()) return env.trim();
   const stable = join(homedir(), '.local', 'bin', 'lm-resizer');
   if (existsSync(stable)) return stable;
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {

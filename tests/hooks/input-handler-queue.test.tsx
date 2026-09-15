@@ -21,14 +21,18 @@ it('queues turns in order and preserves the next draft while the queued turn sta
   const stdout = Object.assign(new PassThrough(), { columns: 80, rows: 24 });
   stdout.resume();
   const calls: string[] = [];
+  const events: string[] = [];
   const release: Array<() => void> = [];
   const agent = {
     async *processUserMessageStream(text: string) {
       calls.push(text);
+      events.push(`turn:${text}`);
       await new Promise<void>(resolve => release.push(resolve));
       yield { type: 'done' };
     },
     getClient: () => ({}),
+    // Lot 2 A: each finished turn is persisted before a queued turn starts.
+    persistInteractiveSession: async () => { events.push('persist'); },
   } as unknown as CodeBuddyAgent;
   let editor: ReturnType<typeof useInputHandler>;
   function App() {
@@ -56,6 +60,7 @@ it('queues turns in order and preserves the next draft while the queued turn sta
     expect(editor!.queuedMessageCount).toBe(0);
     release[1]!();
     await vi.waitFor(() => expect(calls).toHaveLength(2));
+    await vi.waitFor(() => expect(events).toEqual(['turn:first', 'persist', 'turn:second', 'persist']));
   } finally {
     release.forEach(resolve => resolve());
     app.unmount();

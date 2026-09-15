@@ -128,6 +128,8 @@ are opt-in and stay out of your way until you go looking for them.
 | `buddy` | Start an interactive session. |
 | `buddy -p "…"` | One-shot / headless (great for scripts and CI). |
 | `buddy doctor [--fix]` | Am I ready? Auto-fix the fixable. |
+| `buddy doctor --json --offline` | Stable JSON report with no network call (no live key check, no OAuth refresh, no local probe) plus the Integrations section: LM Resizer protocol, Code Explorer freshness, MCP config, resource catalog, skills. `--integrations` adds that section to the text output. |
+| `buddy triage [--json] [--out <dir>]` | Local support bundle: offline doctor (no child process), versions, recent failed runs, a bounded masked log tail and config **key names** only, plus a prompt ≤ 8 KiB. Written 0600 in a fresh 0700 directory (default `~/.codebuddy/triage/`). Nothing is sent and no agent is started; a section the secret scanner still flags is withheld, and nothing is written if the scan fails. Review `prompt.md`, then run the printed command yourself. |
 | `buddy --continue` | Resume your last session. |
 | `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
 

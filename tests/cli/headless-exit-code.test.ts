@@ -12,12 +12,31 @@ function getCleanChildEnv(): Record<string, string> {
   );
 }
 
+/**
+ * Every spawned CLI gets a HOME of its own: a real headless run initializes persistent
+ * memory (~/.codebuddy/memory.md), so an inherited HOME would write the operator profile.
+ * Callers that inspect the profile pass `homeDir` and own its cleanup.
+ */
+function childHomeEnv(homeDir: string): Record<string, string> {
+  return {
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    CODEBUDDY_SESSIONS_DIR: path.join(homeDir, '.codebuddy', 'sessions'),
+    CODEBUDDY_RUNS_DIR: path.join(homeDir, '.codebuddy', 'runs'),
+  };
+}
+
+function removeOwnedHome(homeDir: string | null): void {
+  if (homeDir) fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
 function runCliAgainstFailingProvider(port: number): Promise<{
   exitCode: number | null;
   stdout: string;
   stderr: string;
 }> {
   const cleanEnv = getCleanChildEnv();
+  const ownedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-exit-home-'));
 
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
@@ -46,6 +65,7 @@ function runCliAgainstFailingProvider(port: number): Promise<{
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
         LOG_LEVEL: 'error',
+        ...childHomeEnv(ownedHome),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -58,8 +78,12 @@ function runCliAgainstFailingProvider(port: number): Promise<{
     child.stderr.on('data', chunk => {
       stderr += chunk;
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      removeOwnedHome(ownedHome);
+      reject(error);
+    });
     child.on('close', exitCode => {
+      removeOwnedHome(ownedHome);
       resolve({ exitCode, stdout, stderr });
     });
   });
@@ -85,6 +109,8 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
   stderr: string;
 }> {
   const cleanEnv = getCleanChildEnv();
+  const ownedHome = options.homeDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-exit-home-'));
+  const childHome = options.homeDir ?? ownedHome!;
 
   return new Promise((resolve, reject) => {
     const args = [
@@ -127,14 +153,7 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
         CODEBUDDY_DISABLE_MCP: 'true',
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
-        ...(options.homeDir
-          ? {
-            HOME: options.homeDir,
-            USERPROFILE: options.homeDir,
-            CODEBUDDY_SESSIONS_DIR: path.join(options.homeDir, '.codebuddy', 'sessions'),
-            CODEBUDDY_RUNS_DIR: path.join(options.homeDir, '.codebuddy', 'runs'),
-          }
-          : {}),
+        ...childHomeEnv(childHome),
         ...(options.timeline ? { CODEBUDDY_TIMELINE: 'true' } : {}),
         ...(options.widgets ? { CODEBUDDY_WIDGETS: 'true' } : {}),
         ...(options.widgetsAuto ? { CODEBUDDY_WIDGETS_AUTO: 'true' } : {}),
@@ -157,8 +176,12 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
     child.stderr.on('data', chunk => {
       stderr += chunk;
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      removeOwnedHome(ownedHome);
+      reject(error);
+    });
     child.on('close', exitCode => {
+      removeOwnedHome(ownedHome);
       resolve({ exitCode, stdout, stderr });
     });
   });

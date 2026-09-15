@@ -8,6 +8,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { GithubService, sanitizeRepoName } from '../src/main/studio/github-service.js';
+import { useHermeticGit } from './helpers/hermetic-git.js';
 
 const realExec = promisify(execFile);
 
@@ -50,6 +51,8 @@ describe('sanitizeRepoName', () => {
 });
 
 describe('GithubService.push', () => {
+  useHermeticGit();
+
   it('initialises git, commits, and pushes via gh when available', async () => {
     const root = await tmpProject();
     const service = new GithubService(fakeExec(true));

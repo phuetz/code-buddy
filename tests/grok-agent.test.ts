@@ -1,3 +1,4 @@
+import { createIsolatedHome } from './helpers/isolated-home.js';
 /**
  * Tests for CodeBuddyAgent
  */
@@ -18,6 +19,18 @@ jest.mock('../src/utils/custom-instructions', () => ({
 jest.mock('../src/mcp/config', () => ({
   loadMCPConfig: () => ({ servers: [] }),
 }));
+
+const isolatedHome = createIsolatedHome('legacy-grok-home-');
+beforeAll(() => { isolatedHome.enter(); });
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../src/memory/persistent-memory.js');
+  try {
+    await getMemoryManager().initialize();
+  } finally {
+    resetMemoryManagerForTests();
+    isolatedHome.leave();
+  }
+});
 
 describe('CodeBuddyAgent', () => {
   let agent: CodeBuddyAgent;

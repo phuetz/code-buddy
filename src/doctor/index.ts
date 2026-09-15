@@ -90,8 +90,32 @@ function commandExists(cmd: string): boolean {
   }
 }
 
-function getCommandAvailability(cmd: string): 'installed' | 'not found' {
-  return commandExists(cmd) ? 'installed' : 'not found';
+/** PATH lookup without a child process (used by `buddy triage`). */
+export function commandExistsOnPath(cmd: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const executable = (file: string) => {
+    try {
+      if (!statSync(file).isFile()) return false;
+      accessSync(file, fsConstants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (cmd.includes('/') || cmd.includes('\\')) return executable(cmd);
+  const extensions = process.platform === 'win32'
+    ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)]
+    : [''];
+  for (const dir of (env.PATH ?? env.Path ?? '').split(process.platform === 'win32' ? ';' : ':')) {
+    if (!dir) continue;
+    if (extensions.some((ext) => executable(join(dir, cmd + ext)))) return true;
+  }
+  return false;
+}
+
+type CommandLookup = (cmd: string) => boolean;
+
+function getCommandAvailability(cmd: string, lookup: CommandLookup = commandExists): 'installed' | 'not found' {
+  return lookup(cmd) ? 'installed' : 'not found';
 }
 
 function checkNodeVersion(): DoctorCheck {
@@ -129,7 +153,7 @@ async function checkNativeSqlite(): Promise<DoctorCheck> {
   }
 }
 
-function checkDependencies(): DoctorCheck[] {
+function checkDependencies(lookup: CommandLookup = commandExists): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
 
   // Optionality is INTRINSIC to the tool, never derived from whether it is
@@ -189,7 +213,7 @@ function checkDependencies(): DoctorCheck[] {
   ];
 
   for (const dep of externalTools) {
-    const installed = getCommandAvailability(dep.cmd) === 'installed';
+    const installed = getCommandAvailability(dep.cmd, lookup) === 'installed';
     checks.push({
       name: dep.label,
       status: installed ? 'ok' : dep.level,
@@ -199,7 +223,7 @@ function checkDependencies(): DoctorCheck[] {
   }
 
   const audioPlayers = ['ffplay', 'aplay', 'mpv'];
-  const found = audioPlayers.filter(cmd => commandExists(cmd));
+  const found = audioPlayers.filter(cmd => lookup(cmd));
   checks.push({
     name: 'Audio playback',
     status: found.length > 0 ? 'ok' : 'warn',
@@ -233,7 +257,7 @@ function checkApiKeys(): DoctorCheck[] {
  * credentials present (user might be using API keys instead — non-fatal).
  * `error` only when the file is corrupt or refresh fails.
  */
-async function checkChatGptOAuth(): Promise<DoctorCheck> {
+async function checkChatGptOAuth(offline = false): Promise<DoctorCheck> {
   try {
     const { hasCodexCredentials, getChatGptAuth, getCodexAuthFilePath } = await import(
       '../providers/codex-oauth.js'
@@ -243,6 +267,14 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
         name: 'ChatGPT OAuth',
         status: 'warn',
         message: `not signed in (run \`buddy login\` to use your ChatGPT subscription) — file: ${getCodexAuthFilePath()}`,
+      };
+    }
+    if (offline) {
+      // getChatGptAuth() may refresh (network + token rotation): never offline.
+      return {
+        name: 'ChatGPT OAuth',
+        status: 'ok',
+        message: 'credential file present (token refresh and model discovery skipped: --offline)',
       };
     }
     const auth = await getChatGptAuth();
@@ -356,8 +388,8 @@ function checkStaleLockFiles(cwd: string): DoctorCheck[] {
   return checks;
 }
 
-export function checkTtsProviders(): DoctorCheck[] {
-  const pocketLauncher = ['pocket-tts', 'uvx'].find((command) => commandExists(command));
+export function checkTtsProviders(lookup: CommandLookup = commandExists): DoctorCheck[] {
+  const pocketLauncher = ['pocket-tts', 'uvx'].find((command) => lookup(command));
   const available: string[] = [];
   if (pocketLauncher) available.push(`Pocket TTS (via ${pocketLauncher})`);
   if (process.env.ELEVENLABS_API_KEY?.trim()) {
@@ -450,7 +482,10 @@ function checkProfilePermissions(): DoctorCheck {
   };
 }
 
-function checkNativeSandbox(): DoctorCheck {
+function checkNativeSandbox(noSubprocess = false): DoctorCheck {
+  if (noSubprocess) {
+    return { name: 'Native sandbox (kernel)', status: 'ok', message: 'not probed (no child process in this mode); run `buddy doctor` to probe bwrap/Landlock', optional: true };
+  }
   const caps = detectNativeSandboxCapabilities();
   return {
     name: 'Native sandbox (kernel)',
@@ -460,9 +495,24 @@ function checkNativeSandbox(): DoctorCheck {
   };
 }
 
-function checkGit(cwd: string): DoctorCheck {
-  if (!commandExists('git')) {
+function insideGitWorkTree(cwd: string): boolean {
+  let dir = cwd;
+  for (;;) {
+    if (existsSync(join(dir, '.git'))) return true;
+    const parent = join(dir, '..');
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+function checkGit(cwd: string, noSubprocess = false): DoctorCheck {
+  if (!(noSubprocess ? commandExistsOnPath('git') : commandExists('git'))) {
     return { name: 'Git', status: 'error', message: 'git not found' };
+  }
+  if (noSubprocess) {
+    return insideGitWorkTree(cwd)
+      ? { name: 'Git', status: 'ok', message: 'installed, inside a git repo (.git found)' }
+      : { name: 'Git', status: 'warn', message: 'installed, but not inside a git repo (no .git found)' };
   }
   try {
     execSync('git rev-parse --is-inside-work-tree', { cwd, stdio: 'ignore' });
@@ -711,9 +761,9 @@ export function isOllamaSelectionCurrent(
  * it" (env var / onboarded settings / OAuth / API key), because a running
  * Ollama that was never selected still dead-ends the first chat.
  */
-async function checkProviderReadiness(): Promise<DoctorCheck> {
+async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   const { detectEnvironment } = await import('../wizard/environment-detection.js');
-  const snap = await detectEnvironment();
+  const snap = await detectEnvironment({ offline });
 
   const oauthOrKey = snap.capabilities.some(
     (c) => c.available && (c.kind === 'oauth' || c.kind === 'api-key'),
@@ -765,6 +815,14 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
   }
 
   const configured = oauthOrKey || ((envLocal || onboardedLocal) && ollamaModels > 0);
+
+  if (offline && !configured && (envLocal || onboardedLocal)) {
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: `local ${p || 'runtime'} configured but not probed (--offline); run \`buddy doctor\` without --offline to verify it`,
+    };
+  }
 
   if (configured) {
     const rec = snap.recommended;
@@ -857,30 +915,40 @@ function checkProviderFailoverHealth(): DoctorCheck {
   };
 }
 
-export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
+export interface DoctorRunOptions {
+  /** Skip every network call: live key validation, OAuth refresh/discovery, local runtime probes. */
+  offline?: boolean;
+  /** Never start a child process: PATH/.git filesystem lookups, sandbox probe skipped (`buddy triage`). */
+  noSubprocess?: boolean;
+}
+
+export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = {}): Promise<DoctorCheck[]> {
   const dir = cwd ?? process.cwd();
+  const offline = options.offline === true;
+  const noSubprocess = options.noSubprocess === true;
+  const lookup: CommandLookup = noSubprocess ? (cmd) => commandExistsOnPath(cmd) : commandExists;
   const { checkLlmKeysLive } = await import('./llm-key-check.js');
   return [
-    await checkProviderReadiness(),
+    await checkProviderReadiness(offline),
     checkNodeVersion(),
     await checkNativeSqlite(),
-    ...checkDependencies(),
+    ...checkDependencies(lookup),
     ...checkApiKeys(),
     // Validation LIVE des clés configurées (endpoint /models, 0 token) :
     // distingue clé invalide (401/403 → error) de quota épuisé (429 → warn).
-    ...(await checkLlmKeysLive()),
-    await checkChatGptOAuth(),
+    ...(offline ? [] : await checkLlmKeysLive()),
+    await checkChatGptOAuth(offline),
     ...checkConfigFiles(dir),
     // Accidents de collage dans .env (commande shell, guillemets, doublons) —
     // détectés sans jamais afficher les valeurs. src/doctor/env-sanity.ts.
     ...(await import('./env-sanity.js')).checkEnvSanity(dir),
     ...checkStaleLockFiles(dir),
-    ...checkTtsProviders(),
+    ...checkTtsProviders(lookup),
     checkServerExposureEnvironment(),
     checkProfilePermissions(),
     checkDiskSpace(dir),
-    checkGit(dir),
-    checkNativeSandbox(),
+    checkGit(dir, noSubprocess),
+    checkNativeSandbox(noSubprocess),
     checkProviderFailoverHealth(),
   ];
 }

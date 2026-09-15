@@ -1,3 +1,4 @@
+import { bindFactsMemorySession } from '../../memory/facts-memory.js';
 /**
  * Agent Executor Module
  *
@@ -67,6 +68,9 @@ import {
 } from "../../context/restorable-compression.js";
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
+import { ToolLoopGuard, type ToolLoopDecision } from "./tool-loop-guard.js";
+import { getGlobalEventBus } from "../../events/event-bus.js";
+import { takeFirstUseHint } from "../../utils/first-use-hints.js";
 import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
@@ -83,6 +87,7 @@ import {
   classifyLisaIntrospection,
   guardLisaOperationalSelfInspectionReply,
   isLisaEvolutionRequest,
+  isLisaSubjectiveConsciousnessQuestion,
   renderLisaOperationalSelfResponse,
 } from '../../identity/lisa-introspection.js';
 import type { TimelineToolCall } from '../../sessions/timeline.js';
@@ -1103,7 +1108,7 @@ export class AgentExecutor {
     let recordedFirstVisibleResponse = false;
 
     try {
-      for await (const event of this.runTurnLoop(
+      for await (const event of bindFactsMemorySession(this.deps.client, this.runTurnLoop(
         message,
         history,
         messages,
@@ -1112,7 +1117,7 @@ export class AgentExecutor {
         relationshipSafety,
         surface,
         introspectionText,
-      )) {
+      ))) {
         if (
           !recordedFirstVisibleResponse &&
           (event.type === 'content' || event.type === 'reasoning' || event.type === 'tool_calls')
@@ -1171,7 +1176,9 @@ export class AgentExecutor {
     const readOnlySelfInspection =
       introspectionIntent === 'describe' || introspectionIntent === 'inspect';
     const guardGenerativeSelfInspection = introspectionIntent === 'improve';
-    const isolatedSharedHost = surface === 'http';
+    const codeResearch = surface === 'cli' && introspectionIntent === 'inspect' &&
+      !isLisaSubjectiveConsciousnessQuestion(introspectionTextForTurn);
+    const isolatedSharedHost = surface === 'http' || codeResearch;
     const turnCwd = typeof this.deps.toolHandler.getWorkingDirectory === 'function'
       ? this.deps.toolHandler.getWorkingDirectory()
       : process.cwd();
@@ -1200,8 +1207,8 @@ export class AgentExecutor {
     let permissionMode: string | undefined;
     let providerName: string | undefined;
     let operationalRobotName: string | undefined;
-    if (introspectionIntent !== null) {
-      operationalRobotName = await this.getOperationalRobotName();
+    if (introspectionIntent !== null || surface === 'cli') {
+      if (introspectionIntent !== null) operationalRobotName = await this.getOperationalRobotName();
       try {
         const { getPermissionModeManager } = await import('../../security/permission-modes.js');
         permissionMode = getPermissionModeManager().getMode();
@@ -1215,7 +1222,7 @@ export class AgentExecutor {
       }
     }
 
-    if (readOnlySelfInspection) {
+    if (readOnlySelfInspection && !codeResearch) {
       if (isLisaEvolutionRequest(introspectionTextForTurn)) {
         const {
           formatEvolutionNotesForVoice,
@@ -1255,6 +1262,8 @@ export class AgentExecutor {
       const { buildOperationalSelfModel } = await import(
         '../../identity/operational-self-model.js'
       );
+      const { getRuntimeSettingsSnapshot } = await import('../../services/runtime-settings-context.js');
+      const activeSettings = getRuntimeSettingsSnapshot({ surface, model: this.deps.client.getCurrentModel(), provider: providerName, maxToolRounds: this.config.maxToolRounds });
       const selfModel = buildOperationalSelfModel({
         cwd: turnCwd,
         focus: introspectionTextForTurn,
@@ -1264,6 +1273,7 @@ export class AgentExecutor {
           : {}),
         runtime: {
           providerInvoked: false,
+          ...(activeSettings.theme ? { theme: activeSettings.theme.active } : {}),
           ...(this.deps.client.getCurrentModel()
             ? { model: this.deps.client.getCurrentModel() }
             : {}),
@@ -1332,6 +1342,11 @@ export class AgentExecutor {
 
     const maxToolRounds = this.config.maxToolRounds;
     let toolRounds = 0;
+    // One guard per task: warnings/stops never leak into the next user turn.
+    const loopGuard = new ToolLoopGuard();
+    let pendingLoopDecision: Exclude<ToolLoopDecision, { action: 'none' }> | null = null;
+    let loopGuardStopped = false;
+    let observationShortened = false;
     let totalOutputTokens = 0;
     let totalInputTokensForCost = 0;
     let providerPromptTokens = 0;
@@ -1480,6 +1495,14 @@ export class AgentExecutor {
             alwaysInclude: ['view_file', 'bash', 'search'],
           };
         }
+        if (surface === 'cli' && !codeResearch) {
+          const { runtimeInspectionTools } = await import('../../services/runtime-settings-context.js');
+          const inspectionTools = runtimeInspectionTools(turnQueryText);
+          if (inspectionTools.length) selectionOpts = { ...selectionOpts, alwaysInclude: [...(selectionOpts.alwaysInclude ?? []), ...inspectionTools] };
+        }
+        if (codeResearch) {
+          selectionOpts = { ...selectionOpts, alwaysInclude: ['self_describe'] };
+        }
         const selectionPromise = this.deps.toolSelectionStrategy.selectToolsForQuery(
           turnQueryText,
           selectionOpts,
@@ -1541,7 +1564,9 @@ export class AgentExecutor {
           );
         }
 
-        let tools = selectionResult.tools;
+        let tools = codeResearch
+          ? selectionResult.tools.filter(tool => tool.function.name === 'self_describe')
+          : selectionResult.tools;
         let forcedChatOnlyToolRunModel: string | null = null;
         if (toolRounds === 0) {
           this.deps.toolSelectionStrategy.cacheTools(tools, activeModelName);
@@ -1559,7 +1584,7 @@ export class AgentExecutor {
           }
         }
 
-        const turnExecutionExtra: Record<string, unknown> | undefined = introspectionIntent
+        const turnExecutionExtra: Record<string, unknown> | undefined = introspectionIntent || surface === 'cli'
           ? {
               ...(activeModelName ? { model: activeModelName } : {}),
               ...(providerName ? { provider: providerName } : {}),
@@ -1568,6 +1593,7 @@ export class AgentExecutor {
               ...(operationalRobotName
                 ? { robotName: operationalRobotName }
                 : {}),
+              maxToolRounds,
               exposedToolNames: tools.map((tool) => tool.function.name),
               introspectionIntent,
             }
@@ -1592,6 +1618,27 @@ export class AgentExecutor {
           throw error;
         }
         preparedMessages.push(...contextBlocks);
+        if (codeResearch) {
+          preparedMessages.push({ role: 'system', content:
+            'Research your actual implementation using self_describe: operation=list/read/search, relative src/ paths (source checkout) or dist/ paths (installed package). Search literal symbols, read relevant code, and cite paths and line numbers. Only this confined read-only tool is exposed for this turn. Do not mistake the user project for your implementation. Do not claim a code graph is available without evidence.' });
+        }
+        if (surface === 'cli') {
+          const { formatRuntimeSettingsContext } = await import('../../services/runtime-settings-context.js');
+          preparedMessages.push({ role: 'system', content: formatRuntimeSettingsContext({
+            surface, model: activeModelName, provider: providerName, maxToolRounds,
+          }) });
+        } else {
+          // P5: other surfaces have no runtime_settings block; only a non-default
+          // code_exec policy needs its short guidance.
+          const { resolveCodeExecPolicy, CODE_EXEC_PREFER_HINT, CODE_EXEC_OFF_NOTICE } = await import('../../config/code-exec-policy.js');
+          const codeExecPolicy = resolveCodeExecPolicy(activeModelName ?? undefined);
+          if (codeExecPolicy.policy !== 'offer') {
+            preparedMessages.push({
+              role: 'system',
+              content: `<code_exec_policy policy="${codeExecPolicy.policy}" source="${codeExecPolicy.source}">\n${codeExecPolicy.policy === 'prefer' ? CODE_EXEC_PREFER_HINT : CODE_EXEC_OFF_NOTICE}\n</code_exec_policy>`,
+            });
+          }
+        }
         if (emotionalPresenceContext) {
           preparedMessages.push({
             role: 'system',
@@ -1653,6 +1700,9 @@ export class AgentExecutor {
           tools,
           {
             streamRetry: false,
+            // An explicit request to inspect implementation needs an observation
+            // before an answer. Only the confined self_describe reader is exposed.
+            ...(codeResearch && toolRounds === 0 && tools.length ? { tool_choice: 'required' as const } : {}),
             turnMetrics: {
               recorder: getTurnMetricsRecorder(),
               inputTokens,
@@ -1775,6 +1825,11 @@ export class AgentExecutor {
             });
           }
           toolCalls = filteredToolCalls.length > 0 ? filteredToolCalls : undefined;
+        }
+        if (codeResearch && toolCalls?.some(call => call.function.name !== 'self_describe')) {
+          yield { type: 'content', content: 'Code inspection is read-only; the requested tool is not available in this inspection turn.' };
+          yield { type: 'done' };
+          return;
         }
         if (relationshipSafety && Array.isArray(toolCalls)) {
           toolCalls = toolCalls.map(prepareRelationshipSafeInteractiveToolCall);
@@ -2081,6 +2136,19 @@ export class AgentExecutor {
                 }
               }
 
+            // --- Tool loop guard (P1): observe the native result before any
+            // optimizer so "same call + same result" means no progress. The
+            // decision is applied at the batch boundary so tool_call/tool_result
+            // pairs are never split.
+            const loopDecision = loopGuard.observe({
+              name: toolCall.function.name,
+              argumentsJson: toolCall.function.arguments || '{}',
+              result,
+            });
+            if (loopDecision.action === 'stop' || (loopDecision.action === 'warn' && !pendingLoopDecision)) {
+              pendingLoopDecision = loopDecision;
+            }
+
             // Expand the current turn's cached schema after discovery or live
             // authoring. Without this, a newly created tool is dispatchable but
             // invisible to the model until the next user turn.
@@ -2244,6 +2312,7 @@ export class AgentExecutor {
             });
 
             let modelStreamContent = optimization.content;
+            if (optimization.optimized) observationShortened = true;
             // lm-resizer owns the semantic budget when available. Its absence or
             // an intentionally raw failure still receives a model-aware hard cap;
             // the exact observation remains available through restore_context.
@@ -2256,6 +2325,7 @@ export class AgentExecutor {
               ) {
                 const truncated = semanticTruncate(modelStreamContent, { maxChars: hardLimitChars });
                 if (truncated.truncated) {
+                  observationShortened = true;
                   const recoveryNote = toolCall.id
                     ? `\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(toolCall.id)}})]`
                     : '';
@@ -2409,6 +2479,66 @@ export class AgentExecutor {
             return;
           }
 
+          // First shortened observation in this profile: one user-facing tip (P4 first-use hints).
+          if (observationShortened) {
+            observationShortened = false;
+            const tip = takeFirstUseHint('restore_context');
+            if (tip) yield { type: "content", content: `\n💡 ${tip}\n` };
+          }
+
+          // Tool-call/result pairs are complete here: apply the loop guard.
+          if (pendingLoopDecision) {
+            const decision = pendingLoopDecision;
+            pendingLoopDecision = null;
+            const loopData = {
+              action: decision.action,
+              loopType: decision.kind,
+              toolNames: decision.toolNames,
+              repetitions: decision.repetitions,
+              toolRounds,
+            };
+            try {
+              getGlobalEventBus().emit('agent:loop_detected', {
+                loopType: decision.kind,
+                detail: decision.message,
+                count: decision.repetitions,
+                turnIndex: toolRounds,
+              });
+            } catch (err) {
+              logger.debug('[loop-guard] event emission failed', { error: String(err) });
+            }
+            if (decision.action === 'warn') {
+              logger.warn('[loop-guard] loop warning injected', loopData);
+              yield { type: "content", content: `\n⚠️ ${decision.message}\n` };
+              messages.push({
+                role: 'system' as const,
+                content: `<context type="loop-guard">\n${decision.message}\n</context>`,
+              });
+            } else {
+              logger.warn('[loop-guard] turn stopped', loopData);
+              const runId = typeof this.deps.toolHandler.getRunId === 'function'
+                ? this.deps.toolHandler.getRunId()
+                : undefined;
+              if (runId) {
+                try {
+                  getActiveRunStore()?.emit(runId, {
+                    type: 'decision',
+                    data: { kind: 'loop_guard_stopped', ...loopData },
+                  });
+                } catch { /* observability is optional */ }
+              }
+              yield {
+                type: 'run_event',
+                runEvent: { runId: runId ?? '', eventType: 'loop_guard_stopped', data: loopData },
+              };
+              history.push({ type: 'assistant', content: decision.message, timestamp: new Date() });
+              messages.push({ role: 'assistant', content: decision.message });
+              yield { type: "content", content: `\n\n${decision.message}` };
+              loopGuardStopped = true;
+              break;
+            }
+          }
+
           // Tool-call/result pairs are complete at this boundary, so a steer
           // that arrived while tools were running can now be injected safely.
           const deferredSteering = this.deps.messageQueue?.hasSteeringMessage()
@@ -2523,7 +2653,7 @@ export class AgentExecutor {
         }
       }
 
-      if (toolRounds >= maxToolRounds && !terminateDetectedStreaming) {
+      if (toolRounds >= maxToolRounds && !terminateDetectedStreaming && !loopGuardStopped) {
         const limitMessage = 'Maximum tool execution rounds reached.';
         history.push({ type: 'assistant', content: limitMessage, timestamp: new Date() });
         messages.push({ role: 'assistant', content: limitMessage });

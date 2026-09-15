@@ -1,3 +1,4 @@
+a2a_call
 a2ui
 advisor
 app_server
@@ -143,6 +144,7 @@ port_check
 process
 project_map
 qr
+ragchat_search
 read_file
 reason
 recall
@@ -151,6 +153,7 @@ remember
 remind
 replace_memory
 resolve_conflicts
+resource_catalog
 restore_context
 route_peer
 run_script

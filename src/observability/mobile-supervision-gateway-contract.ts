@@ -1,5 +1,7 @@
 import {
   buildMobileSupervisionSnapshot,
+  MOBILE_SUPERVISION_ALLOWED_ACTIONS,
+  MOBILE_SUPERVISION_BLOCKED_ACTIONS,
   evaluateMobileSupervisionAction,
   type BuildMobileSupervisionSnapshotOptions,
   type MobileSupervisionActionDecision,
@@ -63,17 +65,30 @@ export async function buildMobileSupervisionGatewayContract(
   query: string,
   options: BuildMobileSupervisionGatewayContractOptions = {},
 ): Promise<MobileSupervisionGatewayContract> {
-  const snapshot = await buildMobileSupervisionSnapshot(query, options);
+  // A contract-only preview must not query run/session databases. Besides
+  // unnecessary I/O, loading a host-native SQLite store in Electron can abort
+  // the process before a rejected promise can be caught by the IPC bridge.
+  const snapshot = options.includeSnapshot === false
+    ? undefined
+    : await buildMobileSupervisionSnapshot(query, options);
+  const policy: Pick<MobileSupervisionSnapshot, 'allowedActions' | 'blockedActions' | 'safety'> = snapshot ?? {
+    allowedActions: [...MOBILE_SUPERVISION_ALLOWED_ACTIONS],
+    blockedActions: [...MOBILE_SUPERVISION_BLOCKED_ACTIONS],
+    safety: {
+      autoDispatch: false, localApprovalRequired: true, outreachDisabled: true,
+      remoteExecutionDisabled: true, redaction: 'secrets-redacted',
+    },
+  };
   const basePath = normalizeBasePath(options.basePath);
   const auth = buildGatewayAuth();
-  const endpoints = buildGatewayEndpoints(snapshot, basePath, auth);
+  const endpoints = buildGatewayEndpoints(policy, basePath, auth);
 
   return {
     schemaVersion: MOBILE_SUPERVISION_GATEWAY_CONTRACT_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
     mode: 'contract_only',
     basePath,
-    query: snapshot.query,
+    query: snapshot?.query ?? query.trim(),
     auth,
     transport: {
       exposure: 'local_first',
@@ -81,11 +96,11 @@ export async function buildMobileSupervisionGatewayContract(
       remoteExecution: 'disabled',
     },
     endpoints,
-    blockedOperations: snapshot.blockedActions.map(action => ({
+    blockedOperations: policy.blockedActions.map(action => ({
       action,
-      policy: evaluateMobileSupervisionAction(snapshot, action),
+      policy: evaluateMobileSupervisionAction(policy, action),
     })),
-    snapshot: options.includeSnapshot === false ? undefined : snapshot,
+    snapshot,
   };
 }
 
@@ -127,7 +142,7 @@ function buildGatewayAuth(): MobileSupervisionGatewayAuth {
 }
 
 function buildGatewayEndpoints(
-  snapshot: MobileSupervisionSnapshot,
+  snapshot: Pick<MobileSupervisionSnapshot, 'allowedActions' | 'blockedActions' | 'safety'>,
   basePath: string,
   auth: MobileSupervisionGatewayAuth,
 ): MobileSupervisionGatewayEndpoint[] {

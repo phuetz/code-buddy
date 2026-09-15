@@ -23,9 +23,32 @@ export function registerUtilityCommands(program: Command): void {
     .description('Diagnose Code Buddy environment, dependencies, and configuration')
     .option('-v, --verbose', 'Show all checks including passing ones')
     .option('--fix', 'Auto-fix issues that can be resolved automatically')
-    .action(async (options: { verbose?: boolean; fix?: boolean }) => {
+    .option('--json', 'Print a stable JSON report (includes the Integrations section)')
+    .option('--offline', 'Skip every network call (live key checks, OAuth refresh, local runtime probes)')
+    .option('--integrations', 'Also check LM Resizer, Code Explorer, MCP config, resource catalog and skills (no network)')
+    .action(async (options: { verbose?: boolean; fix?: boolean; json?: boolean; offline?: boolean; integrations?: boolean }) => {
       const { runDoctorChecks, runFixes, summarizeDoctorChecks } = await import('../../doctor/index.js');
-      const checks = await runDoctorChecks(resolveCommandDirectory(program));
+      const cwd = resolveCommandDirectory(program);
+      const offline = options.offline === true;
+      const coreChecks = await runDoctorChecks(cwd, { offline });
+      const withIntegrations = options.json === true || options.integrations === true;
+      const integrationChecks = withIntegrations
+        ? await (await import('../../doctor/integrations.js')).runIntegrationChecks(cwd)
+        : [];
+      const checks = [...coreChecks, ...integrationChecks];
+
+      if (options.json) {
+        const { buildDoctorJsonReport } = await import('../../doctor/integrations.js');
+        const fixes = options.fix ? await runFixes(checks.filter((c) => c.fixable)) : undefined;
+        const summary = summarizeDoctorChecks(checks);
+        const report = buildDoctorJsonReport(checks, summary, { offline, ...(fixes ? { fixes } : {}) });
+        console.log(JSON.stringify(report, null, 2));
+        const readinessJson = checks.find((c) => c.name === 'AI provider ready');
+        if (summary.errors > 0 || (readinessJson && readinessJson.status !== 'ok') || fixes?.some((f) => !f.success)) {
+          process.exitCode = 1;
+        }
+        return;
+      }
 
       console.log('\n🔍 Code Buddy Doctor\n');
 
@@ -45,6 +68,7 @@ export function registerUtilityCommands(program: Command): void {
 
       for (const check of checks) {
         if (check.name === 'AI provider ready') continue; // already shown as the headline
+        if (integrationChecks.length > 0 && check === integrationChecks[0]) console.log('\n  Integrations (no network):');
         if (options.verbose || check.status !== 'ok') {
           const fixTag = check.fixable ? ' [fixable]' : '';
           console.log(`  ${icons[check.status]} ${check.name}: ${check.message}${fixTag}`);

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -63,6 +65,10 @@ describe('headless empty final response', () => {
       server.listen(0, '127.0.0.1', () => resolve());
     });
 
+    // The real headless run initializes persistent memory (~/.codebuddy/memory.md):
+    // the child gets a throwaway HOME, never the operator profile.
+    const childHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-empty-home-'));
+
     try {
       const address = server.address();
       if (!address || typeof address === 'string') {
@@ -103,6 +109,8 @@ describe('headless empty final response', () => {
             CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
             LOG_LEVEL: 'error',
             NO_COLOR: '1',
+            HOME: childHome,
+            USERPROFILE: childHome,
           },
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -120,6 +128,7 @@ describe('headless empty final response', () => {
       expect(result.stderr).toContain('modèle=qa-mock-model');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(childHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 90_000);
 });

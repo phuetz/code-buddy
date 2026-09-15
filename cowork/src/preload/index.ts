@@ -88,6 +88,7 @@ import type {
   SubTask,
 } from '../main/missions/mission-types';
 import type { Studio2Result } from '../main/studio2/archive-utils';
+import type { CoworkResourceCatalogView } from '../main/fleet/resource-catalog-view';
 import type {
   DeployRequest,
   DeployResult,
@@ -1507,6 +1508,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     > => ipcRenderer.invoke('session.externalList'),
     externalImport: (id: string): Promise<Session> =>
       ipcRenderer.invoke('session.externalImport', id),
+    exportToCli: (
+      sessionId: string
+    ): Promise<{ id: string; path: string; command: string; messageCount: number; redactions: number }> =>
+      ipcRenderer.invoke('session.exportToCli', sessionId),
     // Branching (Claude Cowork parity Phase 2)
     branches: (
       sessionId: string
@@ -2953,6 +2958,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     hermesDoctor: {
       get: (): Promise<HermesDoctorReviewPayload | null> =>
         ipcRenderer.invoke('tools.hermesDoctor.get'),
+    },
+    resourceCatalog: {
+      list: (): Promise<CoworkResourceCatalogView> => ipcRenderer.invoke('tools.resourceCatalog.list'),
     },
     hermesClaw: {
       status: (options?: {
@@ -6266,6 +6274,9 @@ declare global {
           }>
         >;
         externalImport: (id: string) => Promise<Session>;
+        exportToCli: (
+          sessionId: string
+        ) => Promise<{ id: string; path: string; command: string; messageCount: number; redactions: number }>;
         branches: (sessionId: string) => Promise<
           Array<{
             id: string;
@@ -7488,6 +7499,9 @@ declare global {
         };
         hermesDoctor: {
           get: () => Promise<HermesDoctorReviewPayload | null>;
+        };
+        resourceCatalog: {
+          list: () => Promise<CoworkResourceCatalogView>;
         };
         hermesClaw: {
           status: (options?: {

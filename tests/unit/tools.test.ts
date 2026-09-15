@@ -493,6 +493,49 @@ describe('RAG Tool Selection', () => {
   });
 
   describe('getRelevantTools', () => {
+    it('hydrates selected MCP stubs without adding unselected tools', async () => {
+      const manager = getMCPManager();
+      const mcpTools = Array.from({ length: 40 }, (_, index) => ({
+        name: `mcp__fixture__context${index}`,
+        description: 'Symbol context',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      }));
+      vi.mocked(manager.getTools).mockReturnValue(mcpTools);
+      const { selectRelevantTools } = await import('../../src/tools/tool-selector');
+      vi.mocked(selectRelevantTools).mockImplementationOnce((_query, tools) => ({
+        selectedTools: tools.filter(tool => tool.function.name === mcpTools[0].name),
+        scores: new Map(), classification: { categories: [], confidence: 1, keywords: [], requiresMultipleTools: false },
+        reducedTokens: 0, originalTokens: 0,
+      }));
+      try {
+        const result = await getRelevantTools('Find a symbol');
+        expect(result.selectedTools).toHaveLength(1);
+        expect(result.selectedTools[0].function.parameters.required).toEqual(['name']);
+        expect(result.selectedTools[0].function.description).not.toContain('[Deferred]');
+      } finally {
+        vi.mocked(manager.getTools).mockReturnValue([]);
+      }
+    });
+
+    it('exposes full required MCP parameters when RAG is disabled above the deferred threshold', async () => {
+      const manager = getMCPManager();
+      const mcpTools = Array.from({ length: 40 }, (_, index) => ({
+        name: `mcp__fixture__nonrag${index}`, description: 'Required symbol lookup',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      }));
+      vi.mocked(manager.getTools).mockReturnValue(mcpTools);
+      try {
+        const result = await getRelevantTools('Lookup', { useRAG: false });
+        const exposed = result.selectedTools.filter(tool => tool.function.name.startsWith('mcp__fixture__nonrag'));
+        expect(exposed.map(tool => tool.function.name)).toEqual(mcpTools.map(tool => tool.name));
+        for (const tool of exposed) {
+          expect(tool.function.parameters.required).toEqual(['name']);
+          expect(tool.function.parameters.properties.name).toEqual({ type: 'string' });
+          expect(tool.function.description).not.toContain('[Deferred]');
+        }
+      } finally { vi.mocked(manager.getTools).mockReturnValue([]); }
+    });
+
     it('should return selected tools for a query', async () => {
       const result = await getRelevantTools('Show me the package.json file');
 

@@ -20,6 +20,8 @@
  * full listener module (avoids pulling ws at handler-load time).
  */
 export interface FleetListenerPublicAPI {
+  /** Actual transport state when supplied by the listener. */
+  isConnected?: () => boolean;
   disconnect: () => Promise<void>;
   getReconnectAttempts: () => number;
   isReconnecting: () => boolean;

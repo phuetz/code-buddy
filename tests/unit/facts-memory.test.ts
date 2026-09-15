@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { FactsMemoryService, Fact, FactsExtractionError } from '../../src/memory/facts-memory.js';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { FactsMemoryService, Fact, FactsExtractionError, setFactsMemorySessionClient, withFactsMemorySessionClient, bindFactsMemorySession } from '../../src/memory/facts-memory.js';
 import { CodeBuddyClient } from '../../src/codebuddy/client.js';
+import { detectProviderFromEnv } from '../../src/utils/provider-detector.js';
+vi.mock('../../src/utils/provider-detector.js', () => ({ detectProviderFromEnv: vi.fn() }));
 import { logger } from '../../src/utils/logger.js';
 
 vi.mock('../../src/codebuddy/client.js', () => {
@@ -114,6 +116,104 @@ describe('FactsMemoryService', () => {
       expect(result.length).toBe(2);
       expect(result[0].text).toBe('Prefers 2 spaces instead of 4.');
       expect(result[1].text).toBe('Uses ESM.');
+    });
+  });
+
+  describe('session client', () => {
+    it('keeps iterator cleanup and thrown errors scoped without leaking to the caller', async () => {
+      const client = new CodeBuddyClient('iterator', 'local', 'http://localhost');
+      const observed: Array<CodeBuddyClient | null> = [];
+      const current = () => (new FactsMemoryService() as unknown as { getClient(): Promise<CodeBuddyClient | null> }).getClient();
+      async function* work() {
+        try { observed.push(await current()); yield 'first'; }
+        finally { await Promise.resolve(); observed.push(await current()); }
+      }
+      const first = bindFactsMemorySession(client, work());
+      await first.next();
+      expect(await current()).toBeNull();
+      await first.return();
+      const second = bindFactsMemorySession(client, work());
+      await second.next();
+      await expect(second.throw(new Error('abort fixture'))).rejects.toThrow('abort fixture');
+      expect(observed).toEqual([client, client, client, client]);
+      expect(await current()).toBeNull();
+    });
+
+    it('prefers sequential and concurrent session scopes over a warmed environment cache', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('VITEST', '');
+      vi.mocked(detectProviderFromEnv).mockReturnValue({ apiKey: 'fixture', defaultModel: 'fallback', baseURL: 'http://localhost:1' } as ReturnType<typeof detectProviderFromEnv>);
+      const service = new FactsMemoryService();
+      const getClient = () => (service as unknown as { getClient(): Promise<CodeBuddyClient | null> }).getClient();
+      try {
+        const fallback = await getClient();
+        expect(fallback).toBeInstanceOf(CodeBuddyClient);
+        const a = new CodeBuddyClient('a', 'a', 'http://localhost:2');
+        const b = new CodeBuddyClient('b', 'b', 'http://localhost:3');
+        for (const client of [a, b, null]) {
+          expect(await withFactsMemorySessionClient(client, getClient)).toBe(client);
+        }
+        await Promise.all([a, b, null].map(client => withFactsMemorySessionClient(client, async () => {
+          await new Promise(resolve => setTimeout(resolve, client === a ? 10 : 1));
+          expect(await getClient()).toBe(client);
+        })));
+        expect(await getClient()).toBe(fallback);
+        const explicit = new FactsMemoryService(a);
+        expect(await withFactsMemorySessionClient(null, () =>
+          (explicit as unknown as { getClient(): Promise<CodeBuddyClient | null> }).getClient())).toBe(a);
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it('keeps concurrent session scopes separate and prevents offline fallback', async () => {
+      const first = new CodeBuddyClient('first', 'model-a', 'http://localhost:1');
+      const second = new CodeBuddyClient('second', 'model-b', 'http://localhost:2');
+      const observed: Array<CodeBuddyClient | null> = [];
+      setFactsMemorySessionClient(first);
+      await Promise.all([first, second, null].map(client => withFactsMemorySessionClient(client, async () => {
+        await new Promise(resolve => setTimeout(resolve, client === first ? 10 : 1));
+        const service = new FactsMemoryService();
+        const actual = await (service as unknown as { getClient(): Promise<CodeBuddyClient | null> }).getClient();
+        expect(actual).toBe(client);
+        observed.push(actual);
+      })));
+      expect(observed).toHaveLength(3);
+    });
+
+    afterEach(() => {
+      setFactsMemorySessionClient(null);
+    });
+
+    it('reconciles through the live session client instead of an env-detected provider', async () => {
+      // Recette 2026-09-14: GROK_API_KEY was set while the CLI ran on a local
+      // Ollama base URL; reconciliation went to api.x.ai and failed with 400.
+      const sessionClient = new CodeBuddyClient('local-ollama', 'qwen3:4b-instruct', 'http://127.0.0.1:11434/v1');
+      const chatSpy = vi.spyOn(sessionClient, 'chat').mockResolvedValue({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify([
+          { action: 'ADD', fact: { category: 'Projet', text: 'test_key: test_valeur' } },
+        ]) }, finish_reason: 'stop' }],
+      } as any);
+      setFactsMemorySessionClient(sessionClient);
+
+      const service = new FactsMemoryService();
+      expect(await service.isAvailable()).toBe(true);
+      const result = await service.reconcileFacts([], [{ category: 'Projet', text: 'test_key: test_valeur' }]);
+
+      expect(chatSpy).toHaveBeenCalledTimes(1);
+      expect(result.map(fact => fact.text)).toEqual(['test_key: test_valeur']);
+    });
+
+    it('still prefers a client passed explicitly to the service', async () => {
+      const sessionClient = new CodeBuddyClient('session', 'm', 'u');
+      const explicitClient = new CodeBuddyClient('explicit', 'm', 'u');
+      const sessionChat = vi.spyOn(sessionClient, 'chat');
+      vi.spyOn(explicitClient, 'chat').mockResolvedValue({
+        choices: [{ message: { role: 'assistant', content: '[]' }, finish_reason: 'stop' }],
+      } as any);
+      setFactsMemorySessionClient(sessionClient);
+
+      await new FactsMemoryService(explicitClient).reconcileFacts([], [{ category: 'Projet', text: 'x' }]);
+
+      expect(sessionChat).not.toHaveBeenCalled();
     });
   });
 });

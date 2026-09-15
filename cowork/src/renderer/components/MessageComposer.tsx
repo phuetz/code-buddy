@@ -60,6 +60,15 @@ export interface MessageComposerProps {
   onSlashCommandSelect: (item: SlashCommandItem) => Promise<void>;
 }
 
+/**
+ * Below this form width the composer wraps: full-width textarea, controls on the next line.
+ * In the one-line layout the inline controls, Goal label and model pill take 434 px (measured
+ * in the real window: 736 -> 303 px and 707 -> 273 px of textarea). The form is capped at 736 px
+ * (max-w-3xl minus padding), so the one-line layout is kept from 720 px, where the textarea
+ * still gets at least 280 px, and only narrower forms wrap.
+ */
+export const COMPACT_COMPOSER_WIDTH_PX = 720;
+
 export function MessageComposer(props: MessageComposerProps) {
   const { t } = useTranslation();
   // Voice command mode: push-to-talk EXECUTES the transcript (vs. dictation into the composer).
@@ -76,8 +85,25 @@ export function MessageComposer(props: MessageComposerProps) {
   // pastes multi-line content. Mirrors the chat-ui code-explorer ChatInput pattern.
   useTextareaAutogrow(props.textareaRef, props.prompt);
 
+  // `sm:` follows the window, not this pane: in a narrow chat pane (docked Context panel,
+  // open activity rail) the Goal label and model pill squeezed the textarea to a few pixels.
+  // Measure the form itself: below a usable width drop those optional labels and put the
+  // textarea on its own full-width line above the controls (DOM and tab order unchanged).
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const [compact, setCompact] = React.useState(false);
+  React.useEffect(() => {
+    const form = formRef.current;
+    if (!form || typeof ResizeObserver === 'undefined') return;
+    const update = () => setCompact(form.getBoundingClientRect().width < COMPACT_COMPOSER_WIDTH_PX);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(form);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
+      data-testid="message-composer"
       className="pb-4 pt-2 w-full bg-gradient-to-t from-background via-background to-transparent"
       onDragOver={props.handleDragOver}
       onDragLeave={props.handleDragLeave}
@@ -85,6 +111,8 @@ export function MessageComposer(props: MessageComposerProps) {
     >
       <div className="max-w-3xl mx-auto px-4 w-full">
         <form
+          ref={formRef}
+          data-compact={compact ? 'true' : 'false'}
           onSubmit={props.handleSubmit}
           className="relative w-full bg-surface rounded-3xl shadow-sm border border-border-subtle"
         >
@@ -208,7 +236,7 @@ export function MessageComposer(props: MessageComposerProps) {
             )}
 
             <div
-              className={`flex items-end gap-2 transition-colors ${
+              className={`flex items-end gap-2 transition-colors ${compact ? 'flex-wrap' : ''} ${
                 props.isDragging ? 'ring-2 ring-accent bg-accent/5' : ''
               }`}
             >
@@ -242,7 +270,7 @@ export function MessageComposer(props: MessageComposerProps) {
               }
             >
               <Target className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('goalMode.composerLabel', 'Goal')}</span>
+              <span className={compact ? 'hidden' : 'hidden sm:inline'}>{t('goalMode.composerLabel', 'Goal')}</span>
             </button>
 
             <textarea
@@ -312,10 +340,10 @@ export function MessageComposer(props: MessageComposerProps) {
               disabled={props.isSubmitting}
               rows={1}
               style={{ minHeight: 44 }}
-              className="flex-1 resize-none bg-transparent border-none outline-none text-text-primary placeholder:text-text-muted text-[15px] py-2"
+              className={`${compact ? 'order-first basis-full' : ''} min-w-0 flex-1 resize-none bg-transparent border-none outline-none text-text-primary placeholder:text-text-muted text-[15px] py-2`}
             />
 
-            <div className="flex items-center gap-2">
+            <div className={`flex shrink-0 items-center gap-2 ${compact ? 'ml-auto' : ''}`}>
               <button
                 type="button"
                 onClick={toggleVoiceCommandMode}
@@ -352,7 +380,7 @@ export function MessageComposer(props: MessageComposerProps) {
                 }}
               />
 
-              <span className="hidden sm:inline-flex px-2.5 py-1 rounded-full border border-border-subtle bg-background/60 text-xs text-text-muted">
+              <span className={`${compact ? 'hidden' : 'hidden sm:inline-flex'} max-w-[12rem] truncate px-2.5 py-1 rounded-full border border-border-subtle bg-background/60 text-xs text-text-muted`}>
                 {props.appConfig?.model || t('chat.noModel')}
               </span>
 

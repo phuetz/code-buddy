@@ -24,6 +24,7 @@ import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/
 import { getInteractionLogger } from "../logging/interaction-logger.js";
 import { maybeContinueGoalAfterTurn } from "../goals/goal-loop.js";
 import { logger } from '../utils/logger.js';
+import { takeFirstUseHint } from "../utils/first-use-hints.js";
 
 // Import history manager for persistent command history
 import { getHistoryManager } from "../utils/history-manager.js";
@@ -95,6 +96,9 @@ export function useInputHandler({
     const next = pendingMessages.current.shift();
     if (next !== undefined) {
       setQueuedMessageCount(pendingMessages.current.length);
+      // No turn is streaming here, so a tip entry cannot split a streaming message.
+      const tip = takeFirstUseHint('message_queued');
+      if (tip) setChatHistory((prev) => [...prev, { type: "assistant", content: `💡 ${tip}`, timestamp: new Date() }]);
       void processUserMessage(next);
     }
   }, [isProcessing, isStreaming, queuedMessageCount]);
@@ -785,6 +789,9 @@ export function useInputHandler({
       setIsStreaming(false);
       setCurrentActivity?.('');
     }
+
+    // Persist the finished turn before a queued message or exit can start (never throws).
+    await agent.persistInteractiveSession();
 
     runningTurn.current = false;
     setIsStreaming(false);

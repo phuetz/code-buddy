@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+## [2.1.0] (2026-09-15)
+
+### Added
+
+- Explicit resource catalog with freshness-aware selection, and authorized RagChat search with page citations.
+- MCP configuration import for documented Hermes/OpenClaw subsets, SDK SSE/Streamable HTTP, native-name filtering and secret references.
+- Optional authenticated A2A JSON-RPC text bridge and `a2a_call`, with bounded contexts and read-only peer tools.
+
+### Fixed
+
+- Persona hot reload failures no longer terminate Windows Node 20 processes when a watched directory disappears; already-loaded personas remain available.
+
+- Session-scoped facts memory across interactive, headless and Cowork agent turns; complete MCP tool schemas with or without RAG selection.
+- Slash discovery and runtime settings, conversation export/resume, and Cowork Fleet, workflow and skill execution issues.
+- Non-mutating offline doctor diagnostics, explicit project configuration resolution and repeated-task detection that accounts for volatile task IDs.
+
+See [release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md) for setup and known integration limits. Earlier entries below retain their historical dates and validation scope.
+
 ### Added
 
 - Opt-in Fleet rooms on the existing `/ws` endpoint: member signatures, private room membership, threads, mentions, durable history and cursor replay. Manage them with `buddy fleet rooms`.

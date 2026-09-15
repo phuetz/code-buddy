@@ -1,3 +1,4 @@
+import { registerMCPImportCommand } from './mcp-import.js';
 import { registerMCPInvocationCommands } from './mcp-invoke.js';
 import { Command } from 'commander';
 import {
@@ -84,6 +85,7 @@ export async function serveMCP(options: MCPServeOptions = {}): Promise<void> {
 export function createMCPCommand(): Command {
   const mcpCommand = new Command('mcp');
   mcpCommand.description('Manage MCP servers or expose Code Buddy over MCP');
+  registerMCPImportCommand(mcpCommand);
 
   mcpCommand
     .command('serve')

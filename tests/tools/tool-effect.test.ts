@@ -28,6 +28,7 @@ const EMISSION_JUSTIFICATION: Record<string, string> = {
   deep_research: 'HTTP research',
   comfy_recipe: 'ComfyUI/GPU',
   web_fetch: 'HTTP fetch',
+  a2a_call: 'outbound A2A peer message',
   web_scrape: 'HTTP scrape',
   web_extract: 'HTTP extract',
   internet_scout_run: 'live browse',

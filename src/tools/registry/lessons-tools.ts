@@ -10,6 +10,8 @@
  */
 
 import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import {
@@ -543,11 +545,49 @@ function runCheck(cmd: string, args: string[], cwd: string, timeoutMs = 60_000):
   return { pass, output };
 }
 
+/**
+ * Resolve a project-local binary (`node_modules/.bin/<name>`, walking up from
+ * `cwd`). `npx <name>` is deliberately avoided: when the tool is not installed
+ * it silently fetches a package from the npm registry (for `tsc`, an unrelated
+ * package), which is slow, offline-hostile and not the project's compiler.
+ */
+export function resolveProjectBin(name: string, cwd: string): string | null {
+  const candidates = process.platform === 'win32' ? [`${name}.cmd`, name] : [name];
+  let dir = path.resolve(cwd);
+  for (;;) {
+    for (const candidate of candidates) {
+      const full = path.join(dir, 'node_modules', '.bin', candidate);
+      if (fs.existsSync(full)) return full;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function runProjectBin(name: string, args: string[], cwd: string, packageHint: string, timeoutMs = 60_000): { pass: boolean; output: string } {
+  const bin = resolveProjectBin(name, cwd);
+  if (!bin) {
+    return {
+      pass: false,
+      output: `${name} not found in node_modules/.bin of ${cwd} or its parents; install ${packageHint} in the project (nothing was downloaded).`,
+    };
+  }
+  if (bin.endsWith('.cmd')) {
+    // Windows shims need a shell; args are fixed internal flags, only the path needs quoting.
+    const quoted = [`"${bin}"`, ...args].join(' ');
+    const result = spawnSync(quoted, { cwd, encoding: 'utf-8', timeout: timeoutMs, shell: true });
+    const raw = [result.stdout ?? '', result.stderr ?? ''].join('\n').trim();
+    return { pass: result.status === 0 && !result.error, output: raw.length > 2000 ? '...(truncated)\n' + raw.slice(-2000) : raw };
+  }
+  return runCheck(bin, args, cwd, timeoutMs);
+}
+
 export class TaskVerifyTool implements ITool {
   readonly name = 'task_verify';
   readonly description = [
     'Run verification checks before marking a task complete (Verification Contract).',
-    'Checks: typescript (npx tsc --noEmit), tests (auto-detected from package.json), lint (eslint).',
+    'Checks: typescript (project-local tsc --noEmit), tests (auto-detected from package.json), lint (project-local eslint).',
     'Returns pass/fail per check with truncated output.',
     'Call this before every task completion to satisfy the Verification Contract.',
   ].join(' ');
@@ -569,7 +609,7 @@ export class TaskVerifyTool implements ITool {
       let res: { pass: boolean; output: string };
 
       if (check === 'typescript') {
-        res = runCheck('npx', ['tsc', '--noEmit'], workDir);
+        res = runProjectBin('tsc', ['--noEmit'], workDir, 'typescript');
       } else if (check === 'tests') {
         // Try to detect test command from RepoProfiler cache
         let testCmd = 'npm';
@@ -591,7 +631,7 @@ export class TaskVerifyTool implements ITool {
         res = runCheck(testCmd, testArgs, workDir, 120_000);
       } else {
         // lint
-        res = runCheck('npx', ['eslint', '.', '--max-warnings=0'], workDir, 60_000);
+        res = runProjectBin('eslint', ['.', '--max-warnings=0'], workDir, 'eslint', 60_000);
       }
 
       results.push({ check, pass: res.pass, output: res.output });

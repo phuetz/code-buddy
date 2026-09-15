@@ -200,6 +200,15 @@ describe('OpenAICompatProvider request payloads', () => {
     expect(payload).not.toHaveProperty('tool_choice');
   });
 
+  it.each(['required', 'none'] as const)('preserves explicit tool_choice=%s while streaming', async toolChoice => {
+    providerMocks.create.mockResolvedValueOnce(successStream());
+    const tools = [{ type: 'function' as const, function: { name: 'self_describe', description: 'Read own code', parameters: { type: 'object', properties: {} } } }];
+    for await (const _chunk of createProvider().chatStream(
+      [{ role: 'user', content: 'Inspect your code' }], tools, { tool_choice: toolChoice },
+    )) { /* drain */ }
+    expect(providerMocks.create.mock.calls[0]?.[0]).toMatchObject({ tools, tool_choice: toolChoice });
+  });
+
   it('omits tools and tool_choice from streaming requests without tools', async () => {
     providerMocks.create.mockResolvedValueOnce(successStream());
 

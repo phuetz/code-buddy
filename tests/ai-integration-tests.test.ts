@@ -100,7 +100,7 @@ describe('AITestRunner', () => {
         ],
         summary: {
           total: 3,
-          passed: 2,
+          passed: 1,
           failed: 1,
           skipped: 1,
           totalTokens: 500,
@@ -115,7 +115,31 @@ describe('AITestRunner', () => {
       expect(output).toContain('grok-3-latest');
       expect(output).toContain('Test 1');
       expect(output).toContain('Test 2');
-      expect(output).toContain('2/3 passed');
+      expect(output).toContain('1/2 passed, 1 failed, 1 skipped');
+    });
+
+    it('does not count skipped tests as passed and counts wrong answers as failures', async () => {
+      // Recette 2026-09-14: /ai-test quick on local Ollama printed
+      // "Provider: grok" and "9/9 passed" with 8 passed tests and 1 skipped.
+      const client = { ...mockCodeBuddyClient, getCurrentModel: () => 'qwen3:4b-instruct', getProviderName: () => 'Local', getCurrentProvider: () => 'custom' };
+      const runner = new AITestRunner(client, { skipExpensive: true });
+      const ok = (name: string) => async () => ({ name, passed: true, duration: 1, details: 'OK' });
+      for (const [method, name] of [
+        ['testBasicCompletion', 'Basic Completion'], ['testCodeGeneration', 'Code Generation'],
+        ['testContextUnderstanding', 'Context Understanding'], ['testStreaming', 'Streaming Response'],
+        ['testToolCalling', 'Tool Calling'], ['testErrorHandling', 'Error Handling'], ['testJSONOutput', 'JSON Output'],
+      ] as const) {
+        jest.spyOn(runner as never, method).mockImplementation(ok(name) as never);
+      }
+      jest.spyOn(runner as never, 'testSimpleMath').mockImplementation((async () => ({
+        name: 'Simple Math', passed: false, duration: 1, details: 'Got: 41',
+      })) as never);
+
+      const suite = await runner.runAll();
+
+      expect(suite.provider).toBe('Local');
+      expect(suite.summary).toMatchObject({ total: 9, passed: 7, failed: 1, skipped: 1 });
+      expect(AITestRunner.formatResults(suite)).toContain('SUMMARY: 7/8 passed, 1 failed, 1 skipped');
     });
 
     it('should include error details in output', () => {

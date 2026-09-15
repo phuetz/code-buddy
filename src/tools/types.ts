@@ -69,6 +69,12 @@ export interface ToolMetadata {
    * silently filtered out from peer-visible tool lists.
    */
   fleetSafe?: boolean;
+  /**
+   * Polling/status tool that may legitimately be called repeatedly with the
+   * same arguments and result (e.g. waiting on a background job). The tool
+   * loop guard (`src/agent/execution/tool-loop-guard.ts`) never counts it.
+   */
+  repeatSafe?: boolean;
 }
 
 /**

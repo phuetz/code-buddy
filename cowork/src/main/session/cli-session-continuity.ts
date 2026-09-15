@@ -53,3 +53,72 @@ export function listExternalSessions(): ExternalSessionSummary[] {
 export function getExternalSession(id: string): ExternalSessionDocument | null {
   return readDocuments().find((session) => session.id === id) ?? null;
 }
+
+// ── Cowork → terminal handoff (P6) ─────────────────────────────────────────
+
+export interface CliHandoffResult {
+  id: string;
+  path: string;
+  command: string;
+  messageCount: number;
+  redactions: number;
+}
+
+/** Core `persistence/session-handoff.js` (loaded from the engine build). */
+export interface SessionHandoffCoreModule {
+  writeHandoffSession(input: {
+    source: 'cowork';
+    sourceId: string;
+    name: string;
+    workingDirectory?: string;
+    model?: string;
+    createdAt?: number;
+    turns: Array<{ role: string; text: string; timestamp?: number }>;
+  }): Promise<CliHandoffResult>;
+}
+
+interface HandoffSessionView {
+  id: string;
+  title?: string;
+  cwd?: string;
+  model?: string;
+  createdAt?: number;
+}
+
+interface HandoffMessageView {
+  role: string;
+  content: Array<{ type: string; text?: string }>;
+  timestamp: number;
+  localStatus?: string;
+}
+
+/** Text-only turns: tool blocks, images and queued/cancelled drafts are never exported. */
+export function coworkMessagesToTurns(messages: HandoffMessageView[]): Array<{ role: string; text: string; timestamp: number }> {
+  return messages
+    .filter((message) => !message.localStatus && (message.role === 'user' || message.role === 'assistant'))
+    .map((message) => ({
+      role: message.role,
+      text: message.content.filter((block) => block.type === 'text' && typeof block.text === 'string').map((block) => block.text).join('\n\n'),
+      timestamp: message.timestamp,
+    }))
+    .filter((turn) => turn.text.trim().length > 0);
+}
+
+export async function exportCoworkSessionToCli(deps: {
+  session: HandoffSessionView | null;
+  messages: HandoffMessageView[];
+  loadCore: () => Promise<SessionHandoffCoreModule | null>;
+}): Promise<CliHandoffResult> {
+  if (!deps.session) throw new Error('Session not found');
+  const core = await deps.loadCore();
+  if (!core?.writeHandoffSession) throw new Error('Moteur Code Buddy non chargé : export vers le terminal indisponible');
+  return core.writeHandoffSession({
+    source: 'cowork',
+    sourceId: deps.session.id,
+    name: deps.session.title || deps.session.id,
+    workingDirectory: deps.session.cwd,
+    model: deps.session.model,
+    createdAt: deps.session.createdAt,
+    turns: coworkMessagesToTurns(deps.messages),
+  });
+}

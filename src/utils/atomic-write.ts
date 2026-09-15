@@ -557,6 +557,48 @@ export function resetAtomicReadWarningsForTests(): void {
   warnedReadPaths.clear();
 }
 
+/**
+ * Outcome of a strictly read-only JSON read. `missing` is normal (no file);
+ * `corrupt` means the file exists but is empty or not valid JSON; `unreadable`
+ * means the file exists but could not be read (permissions, EISDIR, ...).
+ */
+export type ReadOnlyJsonOutcome<T> =
+  | { status: 'ok'; value: T }
+  | { status: 'missing' }
+  | { status: 'corrupt' }
+  | { status: 'unreadable' };
+
+/**
+ * Strictly read-only JSON reader for diagnostics. Never restores, renames,
+ * chmods, creates, or writes anything — not the primary file, not `.bak`,
+ * not `.tmp.*`. Never consults recovery candidates. Callers that need the
+ * historical recovery policy must keep using `readJsonAtomicSync`.
+ */
+export function readJsonAtomicSyncReadOnly<T>(
+  filePath: string,
+  isValid?: (value: unknown) => value is T,
+): ReadOnlyJsonOutcome<T> {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    return isMissing(error) ? { status: 'missing' } : { status: 'unreadable' };
+  }
+  if (!contents.trim()) {
+    return { status: 'corrupt' };
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(contents);
+  } catch {
+    return { status: 'corrupt' };
+  }
+  if (isValid && !isValid(value)) {
+    return { status: 'corrupt' };
+  }
+  return { status: 'ok', value: value as T };
+}
+
 export interface CleanupOrphanedTemporariesOptions extends AtomicWriteOptions {
   /**
    * A temporary older than this (in ms) is considered orphaned and removed.

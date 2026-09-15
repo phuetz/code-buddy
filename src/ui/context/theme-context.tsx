@@ -3,7 +3,7 @@
  * Provides theme and avatar information to all UI components
  */
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { Theme, ThemeColor, ThemeColors, AvatarConfig, AvatarPreset } from '../../themes/theme.js';
 import { getThemeManager, ThemeManager } from '../../themes/theme-manager.js';
 
@@ -52,6 +52,7 @@ interface ThemeProviderProps {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [themeManager] = useState<ThemeManager>(() => getThemeManager());
   const [refreshKey, setRefreshKey] = useState(0);
+  const revision = useSyncExternalStore(themeManager.subscribe, themeManager.getSnapshot, themeManager.getSnapshot);
 
   // Force re-render when theme changes
   const refreshTheme = useCallback(() => {
@@ -126,7 +127,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     clearCustomColors,
     refreshTheme,
   }), [
-    theme, colors, avatars, refreshKey,
+    theme, colors, avatars, refreshKey, revision,
     setTheme, getAvailableThemes, setAvatarPreset,
     setCustomAvatar, clearCustomAvatars, getAvatarPresets,
     setCustomColor, clearCustomColors, refreshTheme
