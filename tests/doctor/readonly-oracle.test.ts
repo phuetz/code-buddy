@@ -5,7 +5,7 @@ import path from 'node:path';
 import { runIntegrationChecks } from '../../src/doctor/integrations.js';
 import { loadMCPConfig } from '../../src/mcp/config.js';
 let root: string;
-beforeEach(() => { root=fs.mkdtempSync(path.join(os.tmpdir(),'doctor-readonly-oracle-')); vi.stubEnv('HOME',path.join(root,'home')); fs.mkdirSync(path.join(root,'home')); });
+beforeEach(() => { root=fs.mkdtempSync(path.join(os.tmpdir(),'doctor-readonly-oracle-')); vi.stubEnv('HOME',path.join(root,'home')); vi.stubEnv('USERPROFILE',path.join(root,'home')); fs.mkdirSync(path.join(root,'home')); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); fs.rmSync(root,{recursive:true,force:true}); });
 function fixture(name: string, file: string, raw: string) {
  const dir=path.join(root,name); fs.mkdirSync(path.join(dir,'.codebuddy'),{recursive:true});

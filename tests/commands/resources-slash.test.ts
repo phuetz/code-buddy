@@ -36,6 +36,7 @@ describe('/resources (P8)', () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'resources-p8-'));
     file = path.join(tmp, 'home', '.codebuddy', 'resources', 'catalog.json');
     vi.stubEnv('HOME', path.join(tmp, 'home'));
+    vi.stubEnv('USERPROFILE', path.join(tmp, 'home'));
     vi.stubEnv('RAGCHAT_BASE_URL', ORIGIN);
     vi.stubEnv('GPU_INFER_URL', ORIGIN);
   });

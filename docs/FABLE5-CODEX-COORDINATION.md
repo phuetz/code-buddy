@@ -706,3 +706,7 @@ RÉSERVÉ second passage CI : relational-context.test écrit aussi memory.md via
 Deuxième passage étendu : trace complète identifie aussi inner-life, test agent historique racine et revue fusionGF1 ; profils jetables et attente initialisation/reset. Windows triage chemins natifs/USERPROFILE, MCP chmod600 réellement appelé sur tous OS et stat600 vérifiéPOSIX (ACLWindows distinctes). Sources produit inchangées depuisf25e24d40. Validation complète deuxworkers en cours.
 
 Validation finale locale complète CI=true/2workers : npm run validate exit0, lint/typecheck/pack10,2198fichiers et38956tests passent,43skips+1todo (prérequis locaux signalés), garde profil intacte. Sources production inchangées ; nouvelle matriceGitHub requise avant tag.
+
+RÉSERVÉ 2026-09-16 : PersonaManager watcher error Windows20.20.2, crash EPERM reproduit3/3 avec paquet45b (Node24survit3/3). Handlererreur borné fermewatcher/log/préservepersona, test et cleanup singleton avantHOMEtest ; aucun autre watcher/service modifié.
+
+Validation watcher : avant3/3 crash WindowsNode20, après3/3 survit ; validate147tests+lint/typecheck/pack10 et build verts, portabilité34tests verts. MatriceCI45b : Linux/macOS quatrejobs verts, Windows échecs attribués ; nouvelle matrice requise.

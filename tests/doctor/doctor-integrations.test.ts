@@ -15,7 +15,7 @@ import { runDoctorChecks, summarizeDoctorChecks } from '../../src/doctor/index.j
 import { buildDoctorJsonReport, doctorJsonReportSchema, runIntegrationChecks } from '../../src/doctor/integrations.js';
 import { ResourceCatalog } from '../../src/fleet/resource-catalog.js';
 
-const ENV_KEYS = ['HOME', 'CODEBUDDY_LM_RESIZER', 'CODEBUDDY_LM_RESIZER_BIN', 'OPENAI_API_KEY', 'RECETTE_ENDPOINT'];
+const ENV_KEYS = ['HOME', 'USERPROFILE', 'CODEBUDDY_LM_RESIZER', 'CODEBUDDY_LM_RESIZER_BIN', 'OPENAI_API_KEY', 'RECETTE_ENDPOINT'];
 
 describe('doctor --offline and integrations (P3)', () => {
   let tmp: string;
@@ -25,6 +25,7 @@ describe('doctor --offline and integrations (P3)', () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-p3-'));
     for (const key of ENV_KEYS) saved[key] = process.env[key];
     process.env.HOME = path.join(tmp, 'home');
+    process.env.USERPROFILE = process.env.HOME;
     fs.mkdirSync(process.env.HOME, { recursive: true });
   });
 

@@ -426,9 +426,14 @@ beforeAll(() => {
   isolatedHome.enter();
 });
 afterAll(async () => {
+  process.env.HOME = isolatedHome.path;
+  process.env.USERPROFILE = isolatedHome.path;
   const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
   await getMemoryManager().initialize().catch(() => undefined);
   resetMemoryManagerForTests();
+  const { getPersonaManager, resetPersonaManager } = await import('../../src/personas/persona-manager.js');
+  await getPersonaManager().ready();
+  resetPersonaManager();
   isolatedHome.leave();
 });
 

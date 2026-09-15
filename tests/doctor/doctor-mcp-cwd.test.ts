@@ -36,6 +36,7 @@ describe('doctor MCP check without process.chdir (lot 3)', () => {
     originalCwd = process.cwd();
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-mcp-cwd-'));
     vi.stubEnv('HOME', path.join(root, 'home'));
+    vi.stubEnv('USERPROFILE', path.join(root, 'home'));
     fs.mkdirSync(path.join(root, 'home'), { recursive: true });
     fs.mkdirSync(path.join(root, 'elsewhere'), { recursive: true });
     process.chdir(path.join(root, 'elsewhere'));

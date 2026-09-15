@@ -4,6 +4,8 @@ This release improves everyday terminal work, desktop workflows and explicit coo
 
 ## Everyday use
 
+- A failed persona directory watcher stops hot reload with a diagnostic instead of terminating the process; already-loaded personas remain usable, including on Windows Node 20.
+
 - Slash command discovery and help share a catalog; model, theme and configuration information reflect the running session.
 - Conversation exports retain their content, and terminal conversations can be saved and resumed.
 - Facts-memory clients follow the active agent turn, including headless and desktop execution, without leaking another session’s provider through a shared fallback cache.

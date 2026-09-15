@@ -52,7 +52,7 @@ describe('standalone pipeline runtime with real ToolHandler', () => {
           approval, fileCreated, listenersBefore, listenersAfter: service.listenerCount('confirmation-requested') }));
       } finally { await runtime.dispose(); }
     `;
-    const result = await exec(process.execPath, ['--import', path.join(root, 'node_modules/tsx/dist/loader.mjs'),
+    const result = await exec(process.execPath, ['--import', pathToFileURL(path.join(root, 'node_modules/tsx/dist/loader.mjs')).href,
       '--input-type=module', '-e', script], {
       cwd: workspace, timeout: 30000, maxBuffer: 2 * 1024 * 1024,
       env: { PATH: process.env.PATH, HOME: home, USERPROFILE: home,

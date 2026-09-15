@@ -35,6 +35,7 @@ describe('doctor MCP inventory matches the runtime contract for settings forms (
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-p2-forms-'));
     vi.stubEnv('HOME', path.join(root, 'home'));
+    vi.stubEnv('USERPROFILE', path.join(root, 'home'));
     fs.mkdirSync(path.join(root, 'home'), { recursive: true });
     project = path.join(root, 'project');
     fs.mkdirSync(path.join(project, '.codebuddy'), { recursive: true });

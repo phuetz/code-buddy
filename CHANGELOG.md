@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Persona hot reload failures no longer terminate Windows Node 20 processes when a watched directory disappears; already-loaded personas remain available.
+
 - Session-scoped facts memory across interactive, headless and Cowork agent turns; complete MCP tool schemas with or without RAG selection.
 - Slash discovery and runtime settings, conversation export/resume, and Cowork Fleet, workflow and skill execution issues.
 - Non-mutating offline doctor diagnostics, explicit project configuration resolution and repeated-task detection that accounts for volatile task IDs.
