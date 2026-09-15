@@ -4,6 +4,8 @@ This release improves everyday terminal work, desktop workflows and explicit coo
 
 ## Everyday use
 
+- Compaction before tool execution preserves calls still in progress; their real results reach the next model turn, including with small local context windows. Historical missing-result repair remains active.
+
 - A failed persona directory watcher stops hot reload with a diagnostic instead of terminating the process; already-loaded personas remain usable, including on Windows Node 20.
 
 - Slash command discovery and help share a catalog; model, theme and configuration information reflect the running session.

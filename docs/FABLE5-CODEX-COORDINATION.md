@@ -714,3 +714,7 @@ Validation watcher : avant3/3 crash WindowsNode20, après3/3 survit ; validate14
 RÉSERVÉ CI e3ce Windows : doctor fixture exécutable POSIX à remplacer par exécutable réellement portable ; hybrid-search-semantic worker interrompu en shard4, reproduction native isolée en cours. Aucun skip/gate affaibli, compaction pending tool séparée en coordination pilote.
 
 Diagnostic hybrid : WindowsNode20.20.2 + Vitest4.1.9 isolé, mêmepluginjestcompat :26/26 passent ; deuxpassesCIshard4 interrompent lefork après14assertions. Isolation dansparent dédié obligatoire Windows20, exclusionduseulshard compenséeparstepgatingexact ; aucun testretiré, causenative/OOMnonprouvée. DoctorfakePOSIXremplacéparprocess.execPath,6testsverts.
+
+Correctif pending tools relu et intégré : a90ab56ae/ae99e0c12 (sources Opus2037a5404/b430cf4d3, aucune coordination privée importée).13oracles et392tests voisins verts,4mutations tuées, typage/lint verts. Validation assemblée et replay paquetWindows requis avant publication.
+
+Validation assemblée du candidat pending : npm run validate ciblé exit0,85tests/5fichiers,lint/typecheck/pack10. Nouvelle matriceCI et replay réel Windows restent obligatoires ; aucune publication effectuée.

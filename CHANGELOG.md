@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Pre-execution context compaction preserves pending tool calls so their real results reach the model instead of being replaced by synthetic lost-result messages.
+
 - Persona hot reload failures no longer terminate Windows Node 20 processes when a watched directory disappears; already-loaded personas remain available.
 
 - Session-scoped facts memory across interactive, headless and Cowork agent turns; complete MCP tool schemas with or without RAG selection.
