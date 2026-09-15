@@ -710,3 +710,7 @@ Validation finale locale complète CI=true/2workers : npm run validate exit0, li
 RÉSERVÉ 2026-09-16 : PersonaManager watcher error Windows20.20.2, crash EPERM reproduit3/3 avec paquet45b (Node24survit3/3). Handlererreur borné fermewatcher/log/préservepersona, test et cleanup singleton avantHOMEtest ; aucun autre watcher/service modifié.
 
 Validation watcher : avant3/3 crash WindowsNode20, après3/3 survit ; validate147tests+lint/typecheck/pack10 et build verts, portabilité34tests verts. MatriceCI45b : Linux/macOS quatrejobs verts, Windows échecs attribués ; nouvelle matrice requise.
+
+RÉSERVÉ CI e3ce Windows : doctor fixture exécutable POSIX à remplacer par exécutable réellement portable ; hybrid-search-semantic worker interrompu en shard4, reproduction native isolée en cours. Aucun skip/gate affaibli, compaction pending tool séparée en coordination pilote.
+
+Diagnostic hybrid : WindowsNode20.20.2 + Vitest4.1.9 isolé, mêmepluginjestcompat :26/26 passent ; deuxpassesCIshard4 interrompent lefork après14assertions. Isolation dansparent dédié obligatoire Windows20, exclusionduseulshard compenséeparstepgatingexact ; aucun testretiré, causenative/OOMnonprouvée. DoctorfakePOSIXremplacéparprocess.execPath,6testsverts.

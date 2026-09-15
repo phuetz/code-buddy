@@ -22,6 +22,9 @@ jobs:
     env:
       # Inherited by CLI subprocesses too; Vitest execArgv only caps its forks.
       NODE_OPTIONS: --max-old-space-size=${{ matrix.os == 'ubuntu-latest' && '8192' || '4096' }}
+      # This suite remains mandatory, but gets a fresh parent on Windows Node 20.
+      # Two shard-4 runs lost its fork after 14 tests; native standalone 26/26 passed.
+      SEMANTIC_SEARCH_SHARD_FILTER: ${{ matrix.os == 'windows-latest' && matrix.node-version == '20.x' && '--exclude=tests/unit/hybrid-search-semantic.test.ts' || '' }}
 
     strategy:
       # Never cancel the other legs when one fails — otherwise a non-Linux failure
@@ -89,25 +92,29 @@ jobs:
     # any single fork lives through (~270 with 6 shards — 3 shards of ~535 still
     # lost a fork on Node 20) without changing
     # what runs; Linux keeps the single invocation. macOS also hit heap OOMs.
+    - name: Run semantic search in an isolated parent (Windows Node 20)
+      if: matrix.os == 'windows-latest' && matrix.node-version == '20.x'
+      run: npm test -- tests/unit/hybrid-search-semantic.test.ts
+
     - name: Run tests (shard 1/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
       # One retry: a fork can still be killed off-heap on windows-latest (0 red tests).
-      run: npm test -- --shard=1/6 || npm test -- --shard=1/6
+      run: npm test -- --shard=1/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=1/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
     - name: Run tests (shard 2/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
-      run: npm test -- --shard=2/6 || npm test -- --shard=2/6
+      run: npm test -- --shard=2/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=2/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
     - name: Run tests (shard 3/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
-      run: npm test -- --shard=3/6 || npm test -- --shard=3/6
+      run: npm test -- --shard=3/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=3/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
     - name: Run tests (shard 4/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
-      run: npm test -- --shard=4/6 || npm test -- --shard=4/6
+      run: npm test -- --shard=4/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=4/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
     - name: Run tests (shard 5/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
-      run: npm test -- --shard=5/6 || npm test -- --shard=5/6
+      run: npm test -- --shard=5/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=5/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
     - name: Run tests (shard 6/6)
       if: runner.os == 'Windows' || runner.os == 'macOS'
-      run: npm test -- --shard=6/6 || npm test -- --shard=6/6
+      run: npm test -- --shard=6/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }} || npm test -- --shard=6/6 ${{ env.SEMANTIC_SEARCH_SHARD_FILTER }}
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'

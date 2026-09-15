@@ -71,10 +71,10 @@ describe('doctor --offline and integrations (P3)', () => {
   });
 
   it('warns when LM Resizer is enabled but the binary lacks the tool-output protocol', async () => {
-    const fake = path.join(tmp, 'lm-resizer');
-    fs.writeFileSync(fake, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "lm-resizer 0.1.0"; exit 0; fi\nif [ "$1" = "tool-output" ]; then echo "unknown command" >&2; exit 2; fi\necho "usage: lm-resizer exec|compress"\n', { mode: 0o755 });
+    // A real executable on every platform, but deliberately not an LM Resizer CLI.
+    // A POSIX shebang fixture cannot run on Windows.
     process.env.CODEBUDDY_LM_RESIZER = 'true';
-    process.env.CODEBUDDY_LM_RESIZER_BIN = fake;
+    process.env.CODEBUDDY_LM_RESIZER_BIN = process.execPath;
     const [lm] = await runIntegrationChecks(tmp, {
       codeExplorerFreshness: async () => ({ indexed: false, stale: false }),
       mcpServers: async () => [],
