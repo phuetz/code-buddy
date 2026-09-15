@@ -692,3 +692,11 @@ Intégration snapshot résiduel jusqu’à ae96e0f9e : vérification locale Type
 Validation snapshot 2.1.0 : consolidation jusqu’à1ab88d1f0, données personnelles40/40, liens36/36, npm validate ciblé réussi (typecheck/pack10/168tests), delta isolation131tests. Paquet Windows et CI PR restent à vérifier avant autorisation technique du tag.
 
 Revue release : Grok a exécuté33outils et44tests Linux ; sonde Windows confirme le défaut du shim de test Unix (ENOENT), mais le lanceur production et TaskVerifyTool passent avec les vrais tsc/ESLint en chemin à espaces. Tests portables et description npm/portée historique FR clarifiés. npm validate ciblé repassé (pack10+84tests, lint/typecheck). CI PR153 reste requise avant tag.
+
+RÉSERVÉ correctif CI release : cohérence des interdictions compagnon avec resource_catalog et le pont A2A. Deux ajouts restrictifs dans companion-toolset et tests, sans élargir baseline/permissions ni modifier les services compagnon. Échec macOS reproduit localement avant correction.
+
+RÉSERVÉ CI PR153 : tests update-tag suivent la version package, doctor isole HOME/USERPROFILE, IPC préflight importe tsx via URL fichier portable. Attribution du dernier écrivain mémoire en cours ; garde conservée.
+
+Attribution CI mémoire : reply-augment déclenche le préchargement relationnel asynchrone. Reproduction avec attente explicite : garde rouge, mémoire483octets ; profil temporaire et attente avant nettoyage :30tests et garde verts. Aucun changement production mémoire.
+
+Validation des corrections CI : npm run validate ciblé réussi, lint0erreur (2496avertissements existants), typecheck, pack10 et120tests. Publication toujours suspendue à la nouvelle matrice troisOS et revue technique.

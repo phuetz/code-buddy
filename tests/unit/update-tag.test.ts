@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildGitHubInstallCommand, createUpdateCommand } from '../../src/commands/update.js';
+
+const currentVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version as string;
 
 // Mock child_process.execSync
 vi.mock('child_process', () => ({
@@ -150,7 +153,7 @@ describe('update --tag / --from-source', () => {
       expect(execSync).not.toHaveBeenCalled();
       const output = consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
       expect(output).toContain('Channel: stable');
-      expect(output).toContain('Current: 2.0.0');
+      expect(output).toContain(`Current: ${currentVersion}`);
       expect(output).toContain('Source: npm');
       expect(output).toContain('@phuetz/code-buddy@latest');
       expect(output).toMatch(/Would run: npm install -g @phuetz\/code-buddy@latest/);
@@ -261,7 +264,7 @@ describe('update --tag / --from-source', () => {
       await cmd.parseAsync(['node', 'test', '--check']);
 
       const output = consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
-      expect(output).toContain('Registry release is older than the current version: 2.0.0 > 1.6.1');
+      expect(output).toContain(`Registry release is older than the current version: ${currentVersion} > 1.6.1`);
       expect(output).not.toContain('Update available:');
     });
   });

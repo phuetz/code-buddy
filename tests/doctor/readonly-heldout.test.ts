@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runIntegrationChecks } from '../../src/doctor/integrations.js';
 let root: string;
-beforeEach(() => {root=fs.mkdtempSync(path.join(os.tmpdir(),'doctor-heldout-'));vi.stubEnv('HOME',path.join(root,'home'));fs.mkdirSync(path.join(root,'home','.codebuddy'),{recursive:true});});
+beforeEach(() => {root=fs.mkdtempSync(path.join(os.tmpdir(),'doctor-heldout-'));vi.stubEnv('HOME',path.join(root,'home'));vi.stubEnv('USERPROFILE',path.join(root,'home'));fs.mkdirSync(path.join(root,'home','.codebuddy'),{recursive:true});});
 afterEach(()=>{vi.unstubAllEnvs();fs.rmSync(root,{recursive:true,force:true});});
 it.each(['null','[]','42','{"mcpServers":[]}','{"mcpServers":{"bad":null}}'])('invalid shape %s warns without leaking content',async(raw)=>{
  const dir=path.join(root,'project');fs.mkdirSync(path.join(dir,'.codebuddy'),{recursive:true});const p=path.join(dir,'.codebuddy','settings.json');fs.writeFileSync(p,raw);const checks=await runIntegrationChecks(dir,{noSubprocess:true});expect(checks.find(c=>c.id==='mcp')?.status).toBe('warn');expect(fs.readFileSync(p,'utf8')).toBe(raw);

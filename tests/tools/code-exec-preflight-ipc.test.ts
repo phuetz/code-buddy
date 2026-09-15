@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { PreflightWorkerResult } from '../../src/tools/code-exec-preflight-runner.js';
 
@@ -17,7 +17,7 @@ describe('preflight child process response delivery', () => {
     const declarations = `//${'catalogue description '.repeat(30000)}\n`;
     const result = await new Promise<PreflightWorkerResult>((resolve, reject) => {
       const child = spawn(process.execPath, [
-        '--max-old-space-size=128', '--import', require.resolve('tsx'), runner,
+        '--max-old-space-size=128', '--import', pathToFileURL(require.resolve('tsx')).href, runner,
       ], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], serialization: 'advanced' });
       let received: PreflightWorkerResult | undefined;
       let stderr = '';
