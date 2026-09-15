@@ -2026,8 +2026,15 @@ export class AgentExecutor {
                     estimatedTokens,
                     contextWindow,
                   });
+                // The results of this round's calls are pushed after execution:
+                // name them so repair does not close them with a synthetic
+                // '[result lost during compaction]' that would then win over
+                // the real output.
                 const compacted = compactTurnMessagesInPlace(this.deps.contextManager, messages, {
                   isolatedSharedHost,
+                  pendingToolCallIds: toolCalls
+                    .map((call) => call.id)
+                    .filter((id): id is string => typeof id === 'string' && id.length > 0),
                 });
                 if (compacted) incrementalTokenCounter.invalidate();
                 inputTokens = incrementalTokenCounter.count(messages);
