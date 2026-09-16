@@ -4,7 +4,7 @@ import { useBackendStatus, type BackendStatus } from '../hooks/use-backend-statu
 
 /**
  * Small permanent badge showing the Code Buddy backend status. Mirrors
- * the chat-ui gitnexus-rs `BackendStatus` UX: a colored dot in a
+ * the chat-ui code-explorer `BackendStatus` UX: a colored dot in a
  * compact pill, click to open a tooltip-popup with the endpoint, last
  * success time, and the latest error if any.
  *

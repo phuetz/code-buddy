@@ -8,13 +8,14 @@
  * @module companion/assistant-config
  */
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { PRESET_VOICES } from '../talk-mode/providers/pocket-tts.js';
 import { synthesizePocketWav } from '../voice/local-tts.js';
 import { resolveSensoryResponsePolicy } from '../sensory/respond-decider.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 import { DEFAULT_MARKET_SYMBOLS, DEFAULT_NEWS_QUERY } from './prefetch-config.js';
 import {
   readVoiceRuntimeSnapshot,
@@ -67,10 +68,55 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'TTS engine',
     group: 'voice',
     type: 'enum',
-    options: ['pocket', 'voicebox', 'piper'],
+    options: ['pocket', 'kyutai', 'voicebox', 'piper'],
     default: 'pocket',
     envFile: 'both',
-    help: 'Pocket is realtime; Voicebox is expressive and GPU-ready; Piper is the final fallback.',
+    help: 'Pocket is realtime; Kyutai is the opt-in private GPU stream; Voicebox is expressive; Piper is the final fallback.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_TWO_SPEED',
+    label: 'Two-speed voice routing',
+    group: 'voice',
+    type: 'toggle',
+    default: 'false',
+    envFile: 'vision',
+    help: 'Routes short/fixed openings to local Kyutai and long continuations to ElevenLabs.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_LOCAL_URL',
+    label: 'Kyutai local URL',
+    group: 'voice',
+    type: 'text',
+    default: '',
+    envFile: 'vision',
+    help: 'Trusted Kyutai HTTP endpoint exposing GET /health and POST /tts raw PCM at 24 kHz.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_LOCAL_TIMEOUT_MS',
+    label: 'Kyutai first-audio timeout',
+    group: 'voice',
+    type: 'text',
+    default: '1500',
+    envFile: 'vision',
+    help: 'Maximum milliseconds to response headers and the first Kyutai PCM byte.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_LOCAL_N_Q',
+    label: 'Kyutai cache n_q',
+    group: 'voice',
+    type: 'text',
+    default: '12',
+    envFile: 'vision',
+    help: 'Private Kyutai server quantizer count used in the cache identity; must match the server.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_SHORT_MAX_CHARS',
+    label: 'Local short-phrase limit',
+    group: 'voice',
+    type: 'text',
+    default: '80',
+    envFile: 'vision',
+    help: 'Maximum trimmed segment length routed to Kyutai when two-speed voice is enabled.',
   },
   {
     key: 'CODEBUDDY_POCKET_VOICE',
@@ -133,7 +179,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     type: 'text',
     default: 'http://127.0.0.1:17493',
     envFile: 'both',
-    help: 'Voicebox REST endpoint. On Darkstar, expose it only through the trusted Tailscale network.',
+    help: 'Voicebox REST endpoint. On GPU node, expose it only through the trusted Tailscale network.',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_PROFILE',
@@ -183,7 +229,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     options: ['0.6B', '1.7B', '1B', '3B'],
     default: '1.7B',
     envFile: 'both',
-    help: 'Renderer size. 1.7B favors quality on Darkstar; 0.6B is the lower-latency option.',
+    help: 'Renderer size. 1.7B favors quality on GPU node; 0.6B is the lower-latency option.',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_INSTRUCT',
@@ -818,8 +864,7 @@ function hasOwn(obj: Record<string, string>, key: string): boolean {
 
 function readTextFile(path: string): string {
   try {
-    if (!existsSync(path)) return '';
-    return readFileSync(path, 'utf8');
+    return readTextAtomicSync(path, '');
   } catch {
     return '';
   }
@@ -827,8 +872,7 @@ function readTextFile(path: string): string {
 
 function writeTextFile(path: string, content: string): boolean {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, content, { encoding: 'utf8', mode: 0o600 });
+    writeFileAtomicSync(path, content, { mode: 0o600 });
     return true;
   } catch {
     return false;

@@ -34,6 +34,7 @@ import { createVectorStore, InMemoryVectorStore } from "./vector-store.js";
 import { getErrorMessage } from "../../types/index.js";
 import { getCrossEncoderReranker, RerankerStats } from "../cross-encoder-reranker.js";
 import { getMetrics, Histogram } from "../../metrics/metrics-collector.js";
+import { readJsonAtomic, writeJsonAtomic } from "../../utils/atomic-write.js";
 
 /**
  * Main Codebase RAG class
@@ -912,25 +913,13 @@ export class CodebaseRAG extends EventEmitter {
       embedding: undefined, // Don't save embeddings to chunk file
     }));
 
-    await fsPromises.writeFile(
-      path.join(dir, "chunks.json"),
-      JSON.stringify(chunks),
-      "utf-8"
-    );
+    await writeJsonAtomic(path.join(dir, "chunks.json"), chunks);
 
     // Save file index
-    await fsPromises.writeFile(
-      path.join(dir, "file-index.json"),
-      JSON.stringify(Object.fromEntries(this.fileIndex)),
-      "utf-8"
-    );
+    await writeJsonAtomic(path.join(dir, "file-index.json"), Object.fromEntries(this.fileIndex));
 
     // Save stats
-    await fsPromises.writeFile(
-      path.join(dir, "stats.json"),
-      JSON.stringify(this.indexStats),
-      "utf-8"
-    );
+    await writeJsonAtomic(path.join(dir, "stats.json"), this.indexStats);
 
     // Vector store saves itself
     if (this.vectorStore instanceof InMemoryVectorStore) {
@@ -953,7 +942,7 @@ export class CodebaseRAG extends EventEmitter {
       const chunksPath = path.join(dir, "chunks.json");
       const chunksExists = await fsPromises.access(chunksPath).then(() => true).catch(() => false);
       if (chunksExists) {
-        const chunks = JSON.parse(await fsPromises.readFile(chunksPath, "utf-8"));
+        const chunks = await readJsonAtomic<CodeChunk[]>(chunksPath, []);
         for (const chunk of chunks) {
           this.chunkStore.set(chunk.id, chunk);
         }
@@ -963,7 +952,7 @@ export class CodebaseRAG extends EventEmitter {
       const fileIndexPath = path.join(dir, "file-index.json");
       const fileIndexExists = await fsPromises.access(fileIndexPath).then(() => true).catch(() => false);
       if (fileIndexExists) {
-        const fileIndex = JSON.parse(await fsPromises.readFile(fileIndexPath, "utf-8"));
+        const fileIndex = await readJsonAtomic<Record<string, string[]>>(fileIndexPath, {});
         this.fileIndex = new Map(Object.entries(fileIndex));
       }
 
@@ -971,7 +960,7 @@ export class CodebaseRAG extends EventEmitter {
       const statsPath = path.join(dir, "stats.json");
       const statsExists = await fsPromises.access(statsPath).then(() => true).catch(() => false);
       if (statsExists) {
-        this.indexStats = JSON.parse(await fsPromises.readFile(statsPath, "utf-8"));
+        this.indexStats = await readJsonAtomic<IndexStats>(statsPath, this.indexStats);
         this.indexStats.lastUpdated = new Date(this.indexStats.lastUpdated);
       }
 

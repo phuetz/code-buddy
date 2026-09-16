@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { logger } from "../utils/logger.js";
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -244,11 +245,7 @@ export class PermissionManager extends EventEmitter {
    */
   saveConfig(): void {
     try {
-      const dir = path.dirname(this.configPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+      writeJsonAtomicSync(this.configPath, this.config, { mode: 0o600 });
       this.emit('config:saved', this.configPath);
     } catch (error) {
       this.emit('config:error', error);

@@ -4,6 +4,10 @@
  * Covers: TailscaleManager, Dashboard, DeviceNodeManager, MessageTool, GatewayTool
  */
 
+import nodeFs from 'fs';
+import nodePath from 'path';
+import nodeOs from 'os';
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -37,21 +41,35 @@ jest.mock('../../src/nodes/transports/local-transport.js', () => ({
   LocalTransport: jest.fn().mockImplementation(function() { return { ...mockTransport }; }),
 }));
 
-// Mock fs to prevent device-node from persisting/loading to/from disk
-jest.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs');
-  return {
-    ...actual,
-    existsSync: jest.fn((p: string) => {
-      if (typeof p === 'string' && p.includes('devices.json')) return false;
-      return actual.existsSync(p);
-    }),
-    writeFileSync: jest.fn((...fsArgs: Parameters<typeof actual.writeFileSync>) => {
-      const [p] = fsArgs;
-      if (typeof p === 'string' && p.includes('devices.json')) return;
-      return actual.writeFileSync(...fsArgs);
-    }),
-  };
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
+// Every test runs against a private, empty profile. DeviceNodeManager resolves
+// ~/.codebuddy/devices.json when its module loads (each describe re-imports it
+// after jest.resetModules), reads it with readFileSync and saves under a lock
+// directory next to it: none of that may touch the profile of the user running
+// the tests. writeJsonAtomicSync stays mocked, so devices.json is never written.
+let testHome = '';
+
+beforeEach(() => {
+  testHome = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'cb-device-nodes-profile-'));
+  vi.stubEnv('HOME', testHome);
+  vi.stubEnv('USERPROFILE', testHome);
+  vi.stubEnv('XDG_CONFIG_HOME', nodePath.join(testHome, '.config'));
+  vi.stubEnv('XDG_DATA_HOME', nodePath.join(testHome, '.local', 'share'));
+  vi.stubEnv('XDG_STATE_HOME', nodePath.join(testHome, '.local', 'state'));
+  vi.stubEnv('XDG_CACHE_HOME', nodePath.join(testHome, '.cache'));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  nodeFs.rmSync(testHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 // Mock child_process.execFile for Tailscale CLI calls
@@ -311,9 +329,14 @@ describe('Dashboard', () => {
 
 describe('DeviceNodeManager', () => {
   let DeviceNodeManager: typeof import('../../src/nodes/device-node').DeviceNodeManager;
+  // VERIF3 T10 : `mockWriteJsonAtomicSync` ne servait qu'à empêcher l'écriture
+  // réelle de devices.json ; aucun contrat de persistance n'était gardé ici.
+  const devicesFile = (): string => nodePath.join(testHome, '.codebuddy', 'devices.json');
 
   beforeEach(async () => {
     jest.resetModules();
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
     mockTransport.execute.mockReset();
     mockTransport.execute.mockResolvedValue({ stdout: 'stub: executed', stderr: '', exitCode: 0 });
     mockTransport.getCalendarEvents.mockReset();
@@ -334,6 +357,30 @@ describe('DeviceNodeManager', () => {
     const a = DeviceNodeManager.getInstance();
     const b = DeviceNodeManager.getInstance();
     expect(a).toBe(b);
+  });
+
+  it('should load devices only from the current profile and keep its save lock there', async () => {
+    const file = devicesFile();
+    nodeFs.mkdirSync(nodePath.dirname(file), { recursive: true });
+    nodeFs.writeFileSync(file, JSON.stringify({
+      version: 1,
+      devices: [{
+        id: 'profile-phone',
+        name: 'Profile phone',
+        type: 'android',
+        transportType: 'adb',
+        capabilities: [],
+        paired: true,
+        lastSeen: 1,
+      }],
+    }));
+
+    const mgr = DeviceNodeManager.getInstance();
+    expect(mgr.listDevices().map((device) => device.id)).toEqual(['profile-phone']);
+
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
+    expect(mockWriteJsonAtomicSync.mock.calls.at(-1)![0]).toBe(file);
+    expect(nodeFs.existsSync(`${file}.lock`)).toBe(false);
   });
 
   it('should pair a device', async () => {
@@ -383,6 +430,38 @@ describe('DeviceNodeManager', () => {
     await mgr.pairDevice('d1', 'Device 1', 'ssh');
     expect(mgr.isDevicePaired('d1')).toBe(true);
     expect(mgr.isDevicePaired('d99')).toBe(false);
+  });
+
+  it('should persist paired devices at the devices file in 0o600', async () => {
+    const mgr = DeviceNodeManager.getInstance();
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
+
+    expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
+    const [writtenPath, payload, options] = mockWriteJsonAtomicSync.mock.calls.at(-1)!;
+    expect(writtenPath).toBe(devicesFile());
+    expect(options).toEqual({ mode: 0o600 });
+    expect(payload.version).toBe(1);
+    expect(payload.devices).toHaveLength(1);
+    expect(payload.devices[0]).toMatchObject({
+      id: 'mac1',
+      name: 'My Mac',
+      transportType: 'ssh',
+      paired: true,
+    });
+  });
+
+  it('should persist the removal of an unpaired device', async () => {
+    const mgr = DeviceNodeManager.getInstance();
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
+    await mgr.pairDevice('mac2', 'Other Mac', 'ssh');
+    mockWriteJsonAtomicSync.mockClear();
+
+    expect(mgr.unpairDevice('mac1')).toBe(true);
+
+    const [writtenPath, payload, options] = mockWriteJsonAtomicSync.mock.calls.at(-1)!;
+    expect(writtenPath).toBe(devicesFile());
+    expect(options).toEqual({ mode: 0o600 });
+    expect(payload.devices.map((d: { id: string }) => d.id)).toEqual(['mac2']);
   });
 
   it('should take camera snap', async () => {

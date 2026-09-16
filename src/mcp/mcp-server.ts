@@ -24,6 +24,8 @@ import type {
 } from '../tools/registry/types.js';
 import { matchAnyGlob } from '../utils/glob-matcher.js';
 import { logger } from '../utils/logger.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
+import { createMcpApprovalBridge } from '../server/mcp/approval-elicitation.js';
 import { registerAgentTools } from './mcp-agent-tools.js';
 import { registerCkgTools } from './mcp-ckg-tools.js';
 import {
@@ -470,14 +472,19 @@ export class CodeBuddyMCPServer {
     };
   }
 
+  setupApprovalBridge(): void {
+    ConfirmationService.getInstance().setMcpApprovalBridge(
+      createMcpApprovalBridge(this.mcpServer, { cwd: this.workingDirectory }),
+    );
+  }
+
   private async ensureWriteAccess(): Promise<void> {
     if (!this.allowWrite) {
       throw new Error('Write-capable MCP tools require --allow-write');
     }
     if (this.writeAccessInitialized) return;
 
-    const { ConfirmationService } = await import('../utils/confirmation-service.js');
-    ConfirmationService.getInstance().setSessionFlag('allOperations', true);
+    this.setupApprovalBridge();
     this.writeAccessInitialized = true;
   }
 
@@ -487,10 +494,8 @@ export class CodeBuddyMCPServer {
     if (this.agentInitPromise) return this.agentInitPromise;
 
     this.agentInitPromise = (async () => {
-      const apiKey = process.env.GROK_API_KEY
-        || process.env.OPENAI_API_KEY
-        || process.env.ANTHROPIC_API_KEY
-        || '';
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey() || '';
 
       if (!apiKey) {
         throw new Error(
@@ -607,6 +612,7 @@ export class CodeBuddyMCPServer {
 
   async start(): Promise<void> {
     if (this.running) throw new Error('MCP server is already running');
+    this.setupApprovalBridge();
     this.transport = new StdioServerTransport();
     await this.mcpServer.connect(this.transport);
     this.running = true;
@@ -614,6 +620,8 @@ export class CodeBuddyMCPServer {
 
   async stop(): Promise<void> {
     if (!this.running) return;
+
+    ConfirmationService.getInstance().setMcpApprovalBridge(null);
 
     if (this.agent) {
       try {

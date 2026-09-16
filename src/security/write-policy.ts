@@ -10,6 +10,8 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { toLegacyName } from '../tools/registry/tool-aliases.js';
+import { RunStore } from '../observability/run-store.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -38,6 +40,22 @@ export interface GateResult {
 // ──────────────────────────────────────────────────────────────────
 // Tool names that trigger write-policy gating
 // ──────────────────────────────────────────────────────────────────
+
+/** Detect shell commands that write the workspace instead of using apply_patch. */
+export function isShellWriteCommand(command: string): boolean {
+  const c = command.trim();
+  if (!c) return false;
+  if (/(?:^|\s)(?:tee|install|cp|mv|rm|touch|mkdir|dd|truncate)\b/.test(c)) return true;
+  if (/(?:^|&&|\|\||;)\s*(?:cat|printf|echo)\b[\s\S]*[>\u003e]/.test(c)) return true;
+  if (/[>\u003e]{1,2}\s*\/|[>\u003e]{1,2}\s*\S/.test(c) && !/\b2>\s*\/dev\/null\b/.test(c.split('>')[0] ?? '')) {
+    if (/(?:^|\s)(?:grep|rg|find|ls|head|tail|wc|git|npm|node|python)\b/.test(c) && !/[>\u003e]/.test(c)) {
+      return false;
+    }
+    if (/[>\u003e]/.test(c) && !/2>\s*\/dev\/null/.test(c)) return true;
+  }
+  if (/<<['"]?\w+/.test(c)) return true;
+  return false;
+}
 
 export const WRITE_TOOL_NAMES = new Set([
   'str_replace_editor',
@@ -114,6 +132,7 @@ export class WritePolicy {
       case 'confirm': {
         // In confirm mode, direct writes are allowed but we log the decision
         const result: GateResult = { allowed: true, requiresPatch: false };
+        this.recordDecision(_runId, operation, result);
         this.notifyListeners(operation, result);
         return result;
       }
@@ -141,7 +160,28 @@ export class WritePolicy {
    * Returns true if the tool name is subject to write-policy gating.
    */
   isWriteTool(toolName: string): boolean {
-    return WRITE_TOOL_NAMES.has(toolName);
+    return WRITE_TOOL_NAMES.has(toLegacyName(toolName));
+  }
+
+  /**
+   * Strict mode also blocks bash/shell redirects so agents cannot bypass
+   * apply_patch with `echo x > file`.
+   */
+  async gateShell(command: string): Promise<GateResult> {
+    if (this.mode !== 'strict') {
+      return { allowed: true, requiresPatch: false };
+    }
+    if (!isShellWriteCommand(command)) {
+      return { allowed: true, requiresPatch: false };
+    }
+    const result: GateResult = {
+      allowed: false,
+      requiresPatch: true,
+      reason: 'WritePolicy (strict): shell write blocked. Use apply_patch with a unified diff instead.',
+    };
+    this.notifyListeners({ toolName: 'bash', paths: [], description: command }, result);
+    logger.info('WritePolicy blocked: bash shell write');
+    return result;
   }
 
   // ── Observability ─────────────────────────────────────────────
@@ -161,5 +201,23 @@ export class WritePolicy {
         // Ignore listener errors
       }
     }
+  }
+
+  private recordDecision(runId: string | undefined, operation: WriteOperation, result: GateResult): void {
+    if (!runId) return;
+
+    RunStore.getInstance().emit(runId, {
+      type: 'decision',
+      data: {
+        kind: 'write_policy',
+        mode: this.mode,
+        allowed: result.allowed,
+        requiresPatch: result.requiresPatch,
+        toolName: operation.toolName,
+        paths: [...operation.paths],
+        ...(operation.description ? { description: operation.description } : {}),
+        ...(result.reason ? { reason: result.reason } : {}),
+      },
+    });
   }
 }

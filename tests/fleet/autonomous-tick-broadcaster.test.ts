@@ -73,7 +73,7 @@ describe('autonomous-tick-broadcaster — active mode', () => {
   it('activates and stores the requested interval', () => {
     startAutonomousTick({
       repoPath: '/tmp/fake-fleet-repo',
-      host: 'ministar/grok-cli',
+      host: 'hub/grok-cli',
       intervalMs: 60_000,
     });
     expect(isAutonomousTickActive()).toBe(true);

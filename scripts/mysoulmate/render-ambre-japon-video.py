@@ -348,7 +348,7 @@ def write_metadata(
             'finalMeasurement': BASE.measure_audio(output),
         },
         'identityAdmission': {
-            'scorer': 'scripts/darkstar/score-arcface-images.py',
+            'scorer': 'scripts/gpuNode/score-arcface-images.py',
             'reference': str(IDENTITY_REFERENCE),
             'referenceSha256': BASE.sha256(IDENTITY_REFERENCE),
             'target': IDENTITY_THRESHOLD,

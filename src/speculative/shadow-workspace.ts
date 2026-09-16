@@ -45,6 +45,19 @@ export interface ShadowStatus {
   detail?: string;
 }
 
+export interface ShadowListEntry {
+  hash: string;
+  shadowPath: string;
+  repoRoot: string | null;
+  exists: boolean;
+}
+
+export interface ShadowCleanResult {
+  removed: boolean;
+  shadowPath: string | null;
+  detail?: string;
+}
+
 export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 
 interface ProcessResult {
@@ -141,6 +154,69 @@ export class ShadowWorkspace {
       timeoutMs,
       ...(command === null ? { detail: 'no validation command detected' } : {}),
     };
+  }
+
+  async list(): Promise<ShadowListEntry[]> {
+    let names: string[];
+    try {
+      names = await fs.readdir(this.shadowBaseDirectory);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return [];
+      throw error;
+    }
+
+    const entries: ShadowListEntry[] = [];
+    for (const name of names) {
+      if (name.endsWith('.origin')) continue;
+      const shadowPath = path.join(this.shadowBaseDirectory, name);
+      try {
+        if (!(await fs.lstat(shadowPath)).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+      entries.push({
+        hash: name,
+        shadowPath,
+        repoRoot: await this.readOrigin(shadowPath),
+        exists: await this.isWorktree(shadowPath),
+      });
+    }
+    return entries.sort((left, right) => left.hash.localeCompare(right.hash));
+  }
+
+  async clean(): Promise<ShadowCleanResult> {
+    const timeoutMs = parseTimeout(process.env);
+    const repo = await this.resolveRepoRoot(timeoutMs);
+    if (!repo.ok) {
+      return { removed: false, shadowPath: null, detail: repo.detail };
+    }
+
+    const shadowPath = this.shadowPathFor(repo.root);
+    if (!(await this.isWorktree(shadowPath))) {
+      await this.removeOrigin(shadowPath);
+      return { removed: false, shadowPath, detail: 'no shadow worktree' };
+    }
+
+    const remove = await this.runProcess(
+      'git',
+      ['-C', repo.root, 'worktree', 'remove', '--force', shadowPath],
+      { cwd: repo.root },
+      timeoutMs,
+    );
+    if (await this.isWorktree(shadowPath) || await this.pathExists(shadowPath)) {
+      try {
+        await fs.rm(shadowPath, { recursive: true, force: true });
+      } catch (error) {
+        return {
+          removed: false,
+          shadowPath,
+          detail: `unable to remove shadow worktree: ${outputTail(remove.stdout, remove.stderr) || String(error)}`,
+        };
+      }
+    }
+    await this.removeOrigin(shadowPath);
+    return { removed: true, shadowPath };
   }
 
   async runSpeculative(files: ShadowFile[]): Promise<ShadowResult> {
@@ -352,7 +428,9 @@ export class ShadowWorkspace {
       if (add.exitCode !== 0 || add.timedOut || add.error) {
         return { ok: false, detail: `unable to create shadow worktree: ${outputTail(add.stdout, add.stderr) || add.error || 'git failed'}` };
       }
+      await this.writeOrigin(shadowPath, repoRoot);
     }
+    await this.writeOrigin(shadowPath, repoRoot);
 
     const checkout = await this.runProcess(
       'git',
@@ -378,6 +456,47 @@ export class ShadowWorkspace {
   private async isWorktree(shadowPath: string): Promise<boolean> {
     try {
       await fs.lstat(path.join(shadowPath, '.git'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private originPath(shadowPath: string): string {
+    return `${shadowPath}.origin`;
+  }
+
+  private async writeOrigin(shadowPath: string, repoRoot: string): Promise<void> {
+    try {
+      await fs.writeFile(this.originPath(shadowPath), `${repoRoot}\n`, 'utf8');
+    } catch (error) {
+      logger.warn('Unable to record shadow worktree origin', {
+        shadowPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async readOrigin(shadowPath: string): Promise<string | null> {
+    try {
+      const origin = (await fs.readFile(this.originPath(shadowPath), 'utf8')).trim();
+      return origin || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async removeOrigin(shadowPath: string): Promise<void> {
+    try {
+      await fs.rm(this.originPath(shadowPath), { force: true });
+    } catch {
+      // Origin sidecar is diagnostic-only.
+    }
+  }
+
+  private async pathExists(target: string): Promise<boolean> {
+    try {
+      await fs.lstat(target);
       return true;
     } catch {
       return false;

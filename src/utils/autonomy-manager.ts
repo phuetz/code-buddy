@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import fse from "fs-extra";
 import * as path from "path";
 import { logger } from "./logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 export type AutonomyLevel = "suggest" | "confirm" | "auto" | "full" | "yolo";
 
@@ -151,12 +152,21 @@ export class AutonomyManager {
 
     if (existsSync(this.configPath)) {
       try {
-        const saved = fse.readJsonSync(this.configPath);
+        const saved = readJsonAtomicSync<Record<string, unknown> | null>(this.configPath, null, {
+          mode: 0o600,
+          isValid: (value): value is Record<string, unknown> => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value),
+          ),
+        });
+        if (!saved) return defaultConfig;
         return {
           ...defaultConfig,
           ...saved,
           sessionOverrides: new Map(Object.entries(saved.sessionOverrides || {})),
-          yolo: { ...DEFAULT_YOLO_CONFIG, ...saved.yolo },
+          yolo: {
+            ...DEFAULT_YOLO_CONFIG,
+            ...(saved.yolo && typeof saved.yolo === 'object' ? saved.yolo : {}),
+          },
         };
       } catch (error) {
         logger.warn("Failed to load autonomy config", { error: String(error) });
@@ -181,7 +191,7 @@ export class AutonomyManager {
         },
       };
 
-      fse.writeJsonSync(this.configPath, toSave, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, toSave, { mode: 0o600 });
     } catch (error) {
       logger.warn("Failed to save autonomy config", { error: String(error) });
     }

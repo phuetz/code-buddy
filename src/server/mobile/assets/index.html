@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="description" content="Code Buddy Mobile">
+  <link rel="manifest" href="/__codebuddy__/mobile/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/__codebuddy__/mobile/assets/icon.svg">
+  <link rel="apple-touch-icon" href="/__codebuddy__/mobile/assets/icon-192.png">
+  <title>Code Buddy Mobile</title>
+  <link rel="stylesheet" href="/__codebuddy__/mobile/assets/styles.css">
+</head>
+<body>
+  <div id="app">
+    <section id="login-screen" class="screen active">
+      <header class="brand">
+        <h1>Code Buddy</h1>
+        <p class="subtitle">Mobile</p>
+      </header>
+      <form id="login-form" class="login-form">
+        <label for="token-input">Jeton JWT</label>
+        <textarea id="token-input" rows="3" placeholder="Coller le jeton…" autocomplete="off"></textarea>
+        <p class="hint">Le jeton reste en sessionStorage. Un lien <code>#token=…</code> (commande <code>buddy token</code>) se connecte tout seul. L’API et le WebSocket exigent une authentification.</p>
+        <div class="button-row">
+          <button type="submit" id="connect-btn" class="btn primary">Se connecter</button>
+          <button type="button" id="copy-url-btn" class="btn secondary">Copier l’URL</button>
+        </div>
+        <p id="error-message" class="error-message hidden" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="main-screen" class="screen hidden">
+      <header class="app-header chat-header">
+        <img id="lisa-avatar" class="header-avatar" src="/__codebuddy__/mobile/assets/icon-192.png" alt="">
+        <div class="header-meta">
+          <button type="button" id="assistant-btn" class="btn ghost header-name" aria-haspopup="dialog">
+            <span id="current-assistant">Lisa</span>
+          </button>
+          <p id="presence-line" class="presence-line">hors ligne</p>
+        </div>
+        <span id="mood-chip" class="mood-chip hidden" aria-label="Humeur"></span>
+        <span id="connection-status" class="status-dot" title="Connexion">●</span>
+        <button type="button" id="search-btn" class="btn icon touch" aria-label="Rechercher">🔍</button>
+        <button type="button" id="settings-btn" class="btn icon touch" aria-label="Réglages">⚙</button>
+        <button type="button" id="logout-btn" class="btn icon touch" aria-label="Déconnexion">✕</button>
+      </header>
+
+      <main class="main-content">
+        <section id="chat-section" class="panel active">
+          <div id="search-bar" class="search-bar hidden" role="search">
+            <input id="search-input" type="search" placeholder="Rechercher…" aria-label="Rechercher dans la conversation" autocomplete="off">
+            <span id="search-count" class="search-count" aria-live="polite"></span>
+            <button type="button" id="search-prev" class="btn icon touch" aria-label="Résultat précédent">↑</button>
+            <button type="button" id="search-next" class="btn icon touch" aria-label="Résultat suivant">↓</button>
+            <button type="button" id="search-close" class="btn icon touch" aria-label="Fermer la recherche">✕</button>
+          </div>
+          <div id="pinned-bar" class="pinned-bar hidden">
+            <button type="button" id="pinned-toggle" class="pinned-toggle touch" aria-label="Messages épinglés" aria-expanded="false">
+              <span id="pinned-label">Épinglés</span>
+            </button>
+            <div id="pinned-list" class="pinned-list hidden"></div>
+          </div>
+          <div id="messages" class="messages" aria-live="polite"></div>
+          <div id="typing-indicator" class="typing-indicator hidden" aria-live="polite">
+            <span class="typing-label">Lisa écrit</span>
+            <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+          <button type="button" id="jump-bottom" class="jump-bottom hidden" aria-label="Aller en bas">
+            ↓ <span id="unread-count" class="unread-count hidden">0</span>
+          </button>
+          <div id="suggestions" class="suggestions" aria-label="Suggestions"></div>
+          <div id="attach-preview" class="attach-preview hidden" aria-label="Photos à envoyer"></div>
+          <div id="reply-quote" class="reply-quote hidden">
+            <button type="button" id="reply-quote-jump" class="reply-quote-body" aria-label="Aller au message cité">
+              <span class="reply-quote-kicker">Réponse</span>
+              <span id="reply-quote-text"></span>
+            </button>
+            <button type="button" id="reply-quote-close" class="btn icon touch" aria-label="Annuler la réponse">✕</button>
+          </div>
+          <div id="select-bar" class="select-bar hidden" role="toolbar" aria-label="Sélection">
+            <span id="select-count">0</span>
+            <button type="button" id="select-delete" class="btn danger touch" aria-label="Supprimer la sélection">Supprimer</button>
+            <button type="button" id="select-cancel" class="btn secondary touch" aria-label="Annuler la sélection">Annuler</button>
+          </div>
+          <div id="record-overlay" class="record-overlay hidden" aria-live="polite">
+            <canvas id="record-wave" class="record-wave" width="220" height="44" aria-hidden="true"></canvas>
+            <span id="record-timer" class="record-timer">0:00</span>
+            <span class="record-hint">Glisser pour annuler</span>
+          </div>
+          <form id="composer" class="composer">
+            <button type="button" id="attach-btn" class="btn icon touch" aria-label="Envoyer une photo">📷</button>
+            <input id="attach-input" class="visually-hidden" type="file" accept="image/*" capture="environment" multiple>
+            <button type="button" id="emoji-btn" class="btn icon touch" aria-label="Émojis" aria-expanded="false" aria-controls="emoji-picker">😊</button>
+            <button type="button" id="mic-btn" class="btn icon touch" aria-label="Message vocal" aria-pressed="false">🎤</button>
+            <textarea id="message-input" rows="1" placeholder="Message…" aria-label="Message"></textarea>
+            <button type="submit" id="send-btn" class="btn primary icon touch" aria-label="Envoyer">→</button>
+            <button type="button" id="stop-btn" class="btn danger icon touch hidden" aria-label="Arrêter">■</button>
+          </form>
+          <div id="emoji-picker" class="emoji-picker hidden" role="dialog" aria-label="Sélecteur d'émojis">
+            <input id="emoji-search" type="search" placeholder="Rechercher (cœur, rire, kiss…)" aria-label="Rechercher un émoji" autocomplete="off">
+            <div id="emoji-cats" class="emoji-cats" role="tablist"></div>
+            <div id="emoji-grid" class="emoji-grid" role="tabpanel"></div>
+            <div id="emoji-tones" class="emoji-tones" role="toolbar" aria-label="Tons de peau">
+              <button type="button" class="btn icon touch tone-btn" data-tone="" aria-label="Ton par défaut">👋</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏻" aria-label="Ton clair">👋🏻</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏼" aria-label="Ton moyen-clair">👋🏼</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏽" aria-label="Ton moyen">👋🏽</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏾" aria-label="Ton moyen-foncé">👋🏾</button>
+              <button type="button" class="btn icon touch tone-btn" data-tone="🏿" aria-label="Ton foncé">👋🏿</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="album-section" class="panel hidden">
+          <div class="section-header">
+            <h2>Album</h2>
+            <button type="button" id="refresh-album" class="btn icon touch" aria-label="Actualiser">↻</button>
+          </div>
+          <p id="album-empty" class="album-empty hidden">Aucune photo pour l’instant. Envoie-lui la première.</p>
+          <div id="album-grid" class="album-grid"></div>
+        </section>
+
+        <section id="runs-section" class="panel hidden">
+          <div class="section-header">
+            <h2>Runs</h2>
+            <button type="button" id="refresh-runs" class="btn icon touch" aria-label="Actualiser">↻</button>
+          </div>
+          <div id="runs-list" class="list"></div>
+          <pre id="trajectory-view" class="trajectory hidden"></pre>
+        </section>
+
+        <section id="confirmations-section" class="panel hidden">
+          <h2>Confirmations</h2>
+          <div id="confirmations-list" class="list"></div>
+        </section>
+
+        <section id="status-section" class="panel hidden">
+          <h2>Statut</h2>
+          <div id="status-info" class="status-grid"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav">
+        <button type="button" class="nav-item active" data-section="chat-section">Chat</button>
+        <button type="button" class="nav-item" data-section="album-section">Album</button>
+        <button type="button" class="nav-item" data-section="runs-section">Runs</button>
+        <button type="button" class="nav-item" data-section="confirmations-section">
+          Confirm
+          <span id="confirmation-badge" class="badge hidden">0</span>
+        </button>
+        <button type="button" class="nav-item" data-section="status-section">Statut</button>
+      </nav>
+    </section>
+  </div>
+
+  <dialog id="assistant-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Assistant</h2>
+        <button type="submit" class="btn icon touch" value="close" aria-label="Fermer">✕</button>
+      </header>
+      <div id="assistants-list" class="list"></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmation-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Confirmation requise</h2>
+      </header>
+      <div id="confirmation-content" class="modal-body"></div>
+      <footer class="button-row">
+        <button type="submit" id="confirm-deny" class="btn danger" value="deny">Refuser</button>
+        <button type="submit" id="confirm-approve" class="btn primary" value="approve">Approuver</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="settings-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Réglages</h2>
+        <button type="submit" class="btn icon touch" value="close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="modal-body">
+        <p>L’historique local et les réactions restent sur cet appareil. L’historique serveur se charge en remontant.</p>
+        <label class="setting-row" for="voice-reply-toggle">
+          <input id="voice-reply-toggle" type="checkbox">
+          Lisa me répond à voix haute
+        </label>
+        <label class="setting-row" for="sounds-toggle">
+          <input id="sounds-toggle" type="checkbox" checked>
+          Sons
+        </label>
+        <fieldset class="setting-fieldset">
+          <legend>Taille du texte</legend>
+          <button type="button" class="btn touch font-size-btn" data-font="1" aria-label="Texte petit">A</button>
+          <button type="button" class="btn touch font-size-btn" data-font="2" aria-label="Texte moyen">A</button>
+          <button type="button" class="btn touch font-size-btn" data-font="3" aria-label="Texte grand">A</button>
+        </fieldset>
+        <fieldset class="setting-fieldset">
+          <legend>Thème</legend>
+          <button type="button" class="btn touch theme-btn" data-theme="dark" aria-label="Thème sombre">Sombre</button>
+          <button type="button" class="btn touch theme-btn" data-theme="light" aria-label="Thème clair">Clair</button>
+          <button type="button" class="btn touch theme-btn" data-theme="auto" aria-label="Thème automatique">Auto</button>
+        </fieldset>
+        <fieldset class="setting-fieldset">
+          <legend>Fond</legend>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="0" aria-label="Fond uni">1</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="1" aria-label="Fond damier">2</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="2" aria-label="Fond rayures">3</button>
+          <button type="button" class="btn touch wallpaper-btn" data-wp="3" aria-label="Fond points">4</button>
+        </fieldset>
+        <button type="button" id="clear-chat-btn" class="btn danger">Effacer la conversation</button>
+        <p id="clear-chat-confirm" class="hidden clear-confirm">
+          <span>Supprimer les messages locaux ?</span>
+          <button type="button" id="clear-chat-yes" class="btn danger">Confirmer</button>
+          <button type="button" id="clear-chat-no" class="btn secondary">Annuler</button>
+        </p>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Image en plein écran">
+    <img id="lightbox-img" alt="Image">
+    <div id="lightbox-actions" class="lightbox-actions hidden">
+      <button type="button" id="album-fav-btn" class="btn icon touch" aria-label="Favori">🤍</button>
+      <button type="button" id="album-del-btn" class="btn icon touch danger" aria-label="Supprimer">🗑</button>
+    </div>
+    <p id="album-del-confirm" class="album-del-confirm hidden">
+      <span>Supprimer cette photo ?</span>
+      <button type="button" id="album-del-yes" class="btn danger">Confirmer</button>
+      <button type="button" id="album-del-no" class="btn secondary">Annuler</button>
+    </p>
+  </div>
+
+  <div id="reaction-bar" class="reaction-bar hidden" role="toolbar" aria-label="Actions du message">
+    <div class="react-emojis">
+      <button type="button" class="react-btn touch" data-emoji="❤️" aria-label="Cœur">❤️</button>
+      <button type="button" class="react-btn touch" data-emoji="😂" aria-label="Rire">😂</button>
+      <button type="button" class="react-btn touch" data-emoji="😮" aria-label="Surprise">😮</button>
+      <button type="button" class="react-btn touch" data-emoji="😢" aria-label="Triste">😢</button>
+      <button type="button" class="react-btn touch" data-emoji="👍" aria-label="Pouce">👍</button>
+      <button type="button" class="react-btn touch" data-emoji="🔥" aria-label="Feu">🔥</button>
+    </div>
+    <div class="react-actions">
+      <button type="button" id="reply-msg-btn" class="react-btn touch" aria-label="Répondre">↩</button>
+      <button type="button" id="copy-msg-btn" class="react-btn touch" aria-label="Copier">📋</button>
+      <button type="button" id="forward-msg-btn" class="react-btn touch hidden" aria-label="Transférer vers Telegram">↪</button>
+      <button type="button" id="pin-msg-btn" class="react-btn touch" aria-label="Épingler">📌</button>
+      <button type="button" id="edit-msg-btn" class="react-btn touch hidden" aria-label="Modifier">✎</button>
+      <button type="button" id="delete-msg-btn" class="react-btn touch" aria-label="Supprimer pour moi">🗑</button>
+      <button type="button" id="select-msg-btn" class="react-btn touch" aria-label="Sélectionner">☑</button>
+    </div>
+  </div>
+
+  <script src="/__codebuddy__/mobile/assets/emoji-data.js"></script>
+  <script src="/__codebuddy__/mobile/assets/app.js"></script>
+</body>
+</html>

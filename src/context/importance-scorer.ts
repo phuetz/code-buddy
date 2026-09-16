@@ -7,6 +7,7 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
+import { textFromMessageContent } from './token-counter.js';
 import type { ContentType } from './types.js';
 
 /**
@@ -200,7 +201,7 @@ export class ImportanceScorer {
     }
 
     // Length penalty
-    const content = typeof msg.content === 'string' ? msg.content : '';
+    const content = textFromMessageContent(msg.content);
     let lengthPen = 0;
     if (content.length > this.config.lengthPenalty) {
       lengthPen = -this.config.lengthPenaltyAmount;
@@ -228,7 +229,7 @@ export class ImportanceScorer {
   detectContentType(msg: CodeBuddyMessage): ContentType {
     if (msg.role === 'system') return 'system';
     if (msg.role === 'tool') {
-      const content = typeof msg.content === 'string' ? msg.content : '';
+      const content = textFromMessageContent(msg.content);
       const isFailure =
         /"success"\s*:\s*false/.test(content) ||
         /\berror\b.*:/i.test(content) ||
@@ -239,7 +240,7 @@ export class ImportanceScorer {
       return 'tool_result';
     }
 
-    const content = typeof msg.content === 'string' ? msg.content : '';
+    const content = textFromMessageContent(msg.content);
 
     for (const [type, patterns] of Object.entries(CONTENT_PATTERNS)) {
       for (const pattern of patterns) {

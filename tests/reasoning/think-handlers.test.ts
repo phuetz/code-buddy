@@ -9,6 +9,7 @@ import {
   getActiveThinkingMode,
   setActiveThinkingMode,
 } from '../../src/commands/handlers/think-handlers.js';
+import { getTreeOfThoughtReasoner } from '../../src/agent/reasoning/tree-of-thought.js';
 
 // Mock the tree-of-thought reasoner so tests never make real API calls
 const mockSolve = jest.fn();
@@ -284,6 +285,44 @@ describe('think-handlers', () => {
       expect(result.entry!.content).toContain('the answer');
       expect(result.entry!.content).toContain('90%');
       expect(result.entry!.timestamp).toBeInstanceOf(Date);
+    });
+
+    it('passes GROK_MODEL into the reasoner instead of defaulting to grok-3-latest', async () => {
+      const originalModel = process.env.GROK_MODEL;
+      const originalBase = process.env.GROK_BASE_URL;
+      process.env.GROK_MODEL = 'qwen3.8:27b';
+      process.env.GROK_BASE_URL = 'http://127.0.0.1:11434/v1';
+      mockSolve.mockResolvedValue({
+        success: false,
+        solution: { content: 'none', metadata: {} },
+        path: [],
+        alternatives: [],
+        stats: {
+          iterations: 1,
+          nodesCreated: 1,
+          nodesEvaluated: 1,
+          nodesRefined: 0,
+          maxDepthReached: 1,
+          totalTime: 1,
+          bestScore: 0,
+          tokensUsed: 0,
+        },
+        tree: { id: 'root', content: 'root' },
+      });
+      mockFormatResult.mockReturnValue('formatted');
+      try {
+        await handleThink(['deep', 'slugify problem']);
+        expect(getTreeOfThoughtReasoner).toHaveBeenCalledWith(
+          'test-key-123',
+          'http://127.0.0.1:11434/v1',
+          expect.objectContaining({ mode: 'deep', model: 'qwen3.8:27b' }),
+        );
+      } finally {
+        if (originalModel === undefined) delete process.env.GROK_MODEL;
+        else process.env.GROK_MODEL = originalModel;
+        if (originalBase === undefined) delete process.env.GROK_BASE_URL;
+        else process.env.GROK_BASE_URL = originalBase;
+      }
     });
 
     it('runs full tree-of-thought for non-shallow modes', async () => {

@@ -8,7 +8,7 @@
  */
 import { CoworkPilot, CHATGPT_PROFILE } from './pilot-core.mjs';
 
-const OUT = '/home/patrice/code-buddy/docs/qa/code-buddy-studio';
+const OUT = `${process.env.HOME}/code-buddy/docs/qa/code-buddy-studio`;
 const GOAL = 'Reply with exactly the single word DONE and nothing else, then stop.';
 const pilot = new CoworkPilot({ log: (m) => console.log(m) });
 

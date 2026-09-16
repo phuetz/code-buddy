@@ -57,7 +57,7 @@ describe('Hermes learning loop bridge', () => {
         skillLifecycleRequiresApproval: true,
         userModelWritesRequireApproval: true,
       },
-      runsDir: 'C:/Users/patri/.codebuddy/runs',
+      runsDir: 'C:/Users/user/.codebuddy/runs',
       schemaVersion: 1,
       state: {
         recentRuns: [

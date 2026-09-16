@@ -17,7 +17,7 @@ describe('resolveEnvFileCandidates', () => {
   });
 
   it('resolves the project .env two levels above the main bundle', () => {
-    const [project] = resolveEnvFileCandidates('/home/patrice/code-buddy/cowork/dist-electron/main', '/home/patrice');
-    expect(project).toBe('/home/patrice/code-buddy/cowork/.env');
+    const [project] = resolveEnvFileCandidates('/home/user/code-buddy/cowork/dist-electron/main', '/home/user');
+    expect(project).toBe('/home/user/code-buddy/cowork/.env');
   });
 });

@@ -32,7 +32,7 @@ import { initializeToolRegistry } from '../../codebuddy/tools.js';
  * Mutating skills (write/exec) intentionally NOT exposed in V1; they
  * require an upgraded scope + per-peer quota that lives in the V2 backlog.
  */
-function buildCodeBuddyAgentCard(): AgentCard {
+export function buildCodeBuddyAgentCard(): AgentCard {
   return createAgentCard({
     name: 'Code Buddy',
     description:

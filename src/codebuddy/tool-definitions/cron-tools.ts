@@ -71,6 +71,12 @@ export const CRONJOB_TOOL: CodeBuddyTool = {
           type: 'string',
           description: 'Chain target: job id (or unique id prefix) to run on successful completion of this job.',
         },
+        continuity: {
+          type: 'object',
+          description: 'Opt-in per-job memory: {enabled: true, notes: {key: value}}. Bounded notes and the last successful output persist across runs. Default off.',
+          properties: { enabled: { type: 'boolean' }, notes: { type: 'object', additionalProperties: { type: 'string' } } },
+          additionalProperties: false,
+        },
         preCheck: {
           type: 'object',
           description: 'Optional file_changed or command pre-check gate for create.',

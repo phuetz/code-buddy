@@ -8,9 +8,15 @@ export async function evolveRelationshipFromUtterance(heard: string): Promise<vo
       import('./relational-context.js'),
     ]);
     const signal = augmentation.detectRelationalSignal(heard);
-    relationship.saveRelationshipState(
-      relationship.evolveTraits(relationship.loadRelationshipState(), signal),
-    );
+    const current = relationship.loadRelationshipState();
+    const { isCopinePersona } = await import('./personas/index.js');
+    const { resolveHouseholdClock } = await import('./household-time.js');
+    const next = isCopinePersona()
+      ? relationship.evolveTraitsWithDayInertia(current, signal, {
+          localDate: resolveHouseholdClock(new Date()).localDate,
+        })
+      : relationship.evolveTraits(current, signal);
+    relationship.saveRelationshipState(next);
     relationalContext.invalidateVoiceRelationalContext();
     if (signal !== 'neutral') {
       void relationalContext.prewarmVoiceRelationalContext().catch(() => undefined);

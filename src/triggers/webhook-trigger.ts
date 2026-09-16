@@ -10,10 +10,10 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -163,20 +163,15 @@ export class WebhookTriggerManager extends EventEmitter {
    * Load triggers from disk.
    */
   async load(): Promise<void> {
-    try {
-      const data = await fs.readFile(this.persistPath, 'utf-8');
-      const configs: WebhookTriggerConfig[] = JSON.parse(data);
-      this.triggers.clear();
-      for (const config of configs) {
-        this.triggers.set(config.id, config);
-      }
-      logger.debug(`Loaded ${configs.length} webhook triggers from ${this.persistPath}`);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn(`Failed to load webhook triggers: ${(err as Error).message}`);
-      }
-      // No file yet — start empty
+    const configs = await readJsonAtomic<WebhookTriggerConfig[]>(this.persistPath, [], {
+      mode: 0o600,
+      isValid: (value): value is WebhookTriggerConfig[] => Array.isArray(value),
+    });
+    this.triggers.clear();
+    for (const config of configs) {
+      if (config && typeof config.id === 'string') this.triggers.set(config.id, config);
     }
+    logger.debug(`Loaded ${configs.length} webhook triggers from ${this.persistPath}`);
   }
 
   /**
@@ -184,10 +179,7 @@ export class WebhookTriggerManager extends EventEmitter {
    */
   async save(): Promise<void> {
     try {
-      const dir = path.dirname(this.persistPath);
-      await fs.mkdir(dir, { recursive: true });
-      const data = JSON.stringify(Array.from(this.triggers.values()), null, 2);
-      await fs.writeFile(this.persistPath, data, 'utf-8');
+      await writeJsonAtomic(this.persistPath, Array.from(this.triggers.values()), { mode: 0o600 });
     } catch (err) {
       logger.error(`Failed to persist webhook triggers: ${(err as Error).message}`);
     }

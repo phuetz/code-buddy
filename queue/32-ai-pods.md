@@ -1,6 +1,6 @@
 # Vague — AI Pods (lecteur podcast façon Genspark), props-driven
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/ai-pods`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/ai-pods`.
 
 ## But (inspiration Genspark « AI Pods »)
 Un lecteur de podcast généré : audio + transcript synchronisé + chapitres + intervenants. **Props-driven**, aucun accès

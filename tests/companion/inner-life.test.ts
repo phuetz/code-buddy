@@ -1,3 +1,4 @@
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 /**
  * Inner life — Lisa's own small interior. The invariants that protect her honesty and her ADN:
  *   - every activity is DIGITALLY authentic (no human-life fantasy: eating, sleeping, going out…);
@@ -5,7 +6,7 @@
  *   - the vignette only reaches a reply when inner-life is enabled.
  * Pure core + injected seams — no model, no real home dir.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -22,6 +23,18 @@ import {
   MOOD_BASELINE,
 } from '../../src/companion/relationship-state.js';
 import { buildRelationalContext } from '../../src/companion/relational-context.js';
+
+const isolatedHome = createIsolatedHome('inner-life-home-');
+beforeAll(() => { isolatedHome.enter(); });
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  try {
+    await getMemoryManager().initialize();
+  } finally {
+    resetMemoryManagerForTests();
+    isolatedHome.leave();
+  }
+});
 
 describe('INNER_LIFE_ACTIVITIES — digitally authentic only (honesty invariant)', () => {
   // Human-life verbs Lisa can never truthfully claim (she is digital). If any vignette used these,

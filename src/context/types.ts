@@ -284,5 +284,7 @@ export interface ContextArchive {
   sessionId?: string;
   /** Reason for archival. */
   reason: 'compression' | 'manual' | 'checkpoint';
+  /** SHA-256 prefix of the archived messages; recoverContext refuses a mismatch. */
+  contentHash: string;
 }
 

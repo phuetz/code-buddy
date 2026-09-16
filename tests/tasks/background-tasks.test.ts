@@ -3,9 +3,18 @@
  */
 
 import { BackgroundTaskManager } from "../../src/tasks/background-tasks";
+import { logger } from "../../src/utils/logger.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+
+const hoisted = vi.hoisted(() => ({
+  sendToUser: vi.fn(),
+}));
+
+vi.mock("../../src/channels/index.js", () => ({
+  getChannelManager: () => ({ sendToUser: hoisted.sendToUser }),
+}));
 
 describe("BackgroundTaskManager", () => {
   let taskManager: BackgroundTaskManager;
@@ -293,6 +302,33 @@ describe("BackgroundTaskManager", () => {
       });
 
       expect(task.prompt).toBe(unicodePrompt);
+    });
+  });
+
+  describe("channel notification delivery", () => {
+    it("warns when sendToUser reports a failed aggregate (jumeau D1)", async () => {
+      hoisted.sendToUser.mockResolvedValue({
+        success: false,
+        sent: 0,
+        failed: 1,
+        error: "ETIMEDOUT",
+        timestamp: new Date(),
+      });
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      const task = taskManager.createTask("Notify me", { workingDirectory: "/tmp" });
+      task.notifyOn = ["completed"];
+      task.notifyChannel = "telegram:chat-1";
+
+      taskManager.emit("task-completed", task);
+      await vi.waitFor(() => {
+        expect(hoisted.sendToUser).toHaveBeenCalled();
+      });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(task.id),
+        expect.objectContaining({ success: false, failed: 1, error: "ETIMEDOUT" })
+      );
+      warn.mockRestore();
     });
   });
 });

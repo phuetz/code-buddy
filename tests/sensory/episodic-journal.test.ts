@@ -3,8 +3,8 @@
  * short "what we talked about" line (distinct from dreaming's sensor stats) and promote it to memory.
  * Pure core + a best-effort pass, all seams injected (no real percept store / memory / home dir).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -14,6 +14,7 @@ import {
   type EpisodeSummary,
 } from '../../src/sensory/episodic-journal.js';
 import { recordCompanionPercept } from '../../src/companion/percepts.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('summarizeEpisode', () => {
   it('keeps the last few distinct utterances and drops consecutive duplicates', () => {
@@ -98,14 +99,75 @@ describe('runEpisodeConsolidation', () => {
     expect(promoted).toHaveLength(0);
   });
 
-  it('lets an LLM refine the episode line', async () => {
+  it('lets an LLM refine the episode line when the wording stays grounded', async () => {
     const ep = await runEpisodeConsolidation({
       cwd: tmp,
       readHeard: async () => ['des trucs', 'et des machins'],
-      refine: async () => 'On a surtout parlé du déploiement et des tests.',
+      refine: async () => 'On a surtout parlé de trucs et de machins.',
       promote: async () => {},
     });
-    expect(ep!.line).toBe('On a surtout parlé du déploiement et des tests.');
+    expect(ep!.line).toBe('On a surtout parlé de trucs et de machins.');
+  });
+
+  it('reports the template fallback when LLM refinement fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const ep = await runEpisodeConsolidation({
+        cwd: tmp,
+        readHeard: async () => ['du déploiement'],
+        refine: async () => {
+          throw new Error('refiner offline');
+        },
+        promote: async () => {},
+      });
+
+      expect(ep?.line).toContain('du déploiement');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] refinement failed; keeping template: refiner offline'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the never-throws contract when the dialogue reader fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        runEpisodeConsolidation({
+          cwd: tmp,
+          readHeard: async () => {
+            throw new Error('percept store unavailable');
+          },
+          promote: async () => {},
+        }),
+      ).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] could not read recent dialogue: percept store unavailable'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the never-throws contract when an injected promotion fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        runEpisodeConsolidation({
+          cwd: tmp,
+          readHeard: async () => ['un épisode à garder'],
+          promote: async () => {
+            throw new Error('memory offline');
+          },
+        }),
+      ).resolves.toMatchObject({ topics: ['un épisode à garder'] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] could not promote episode: memory offline'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('consolidates a complete cross-channel exchange and deduplicates an unchanged episode', async () => {
@@ -167,5 +229,28 @@ describe('runEpisodeConsolidation', () => {
     expect(episode?.topics).toEqual(['Buddy, résume mon travail', 'Oui, continue']);
     expect(episode?.line).not.toContain('émission');
     expect(promoted).toHaveLength(1);
+  });
+
+  it('fails closed instead of growing the journal when rotation cannot complete', async () => {
+    const dir = join(tmp, '.codebuddy', 'companion');
+    const journal = join(dir, 'episodes.jsonl');
+    const oversized = 'x'.repeat(512 * 1024 + 1);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(journal, oversized, 'utf8');
+    mkdirSync(`${journal}.1`); // rename(file, directory) fails deterministically
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await runEpisodeConsolidation({
+        cwd: tmp,
+        readHeard: async () => ['un nouvel épisode'],
+        promote: async () => {},
+      });
+
+      expect(statSync(journal).size).toBe(Buffer.byteLength(oversized));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[episode] could not persist episode:'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

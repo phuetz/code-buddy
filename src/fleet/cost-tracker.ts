@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface CostEntry {
   /** ISO timestamp. */
@@ -99,27 +100,17 @@ export class CostTracker {
     if (this.cached) return this.cached;
     if (!fs.existsSync(this.file)) {
       this.cached = [];
-      return [];
-    }
-    try {
-      const raw = await fs.promises.readFile(this.file, 'utf-8');
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed) || !parsed.every(isCostEntry)) {
-        throw new Error('ledger does not contain a valid CostEntry array');
-      }
-      this.cached = parsed;
       return this.cached;
-    } catch (err) {
-      logger.warn('[cost-tracker] failed to read ledger', {
-        err: err instanceof Error ? err.message : String(err),
-      });
-      // A missing ledger is handled above. Any other read/parse/schema
-      // failure must not look like an empty ledger or the budget gate would
-      // silently reset to zero spend.
-      throw new Error(
-        `FLEET_COST_LEDGER_UNAVAILABLE: ${err instanceof Error ? err.message : String(err)}`,
-      );
     }
+    const parsed = await readJsonAtomic<CostEntry[] | null>(this.file, null, {
+      mode: 0o600,
+      isValid: (value): value is CostEntry[] => Array.isArray(value) && value.every(isCostEntry),
+    });
+    if (!parsed) {
+      throw new Error('FLEET_COST_LEDGER_UNAVAILABLE: ledger is empty, unreadable, or malformed');
+    }
+    this.cached = parsed;
+    return this.cached;
   }
 
   /** Aggregate today's spend + 7-day total + per-provider/peer. */
@@ -258,9 +249,7 @@ export class CostTracker {
   }
 
   private async persist(ledger: CostEntry[]): Promise<void> {
-    const tmp = `${this.file}.tmp.${process.pid}`;
-    await fs.promises.writeFile(tmp, JSON.stringify(ledger, null, 2));
-    await fs.promises.rename(tmp, this.file);
+    await writeJsonAtomic(this.file, ledger, { mode: 0o600 });
   }
 }
 

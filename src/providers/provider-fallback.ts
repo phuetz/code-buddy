@@ -209,7 +209,7 @@ function canonicalProviderId(provider: string | undefined | null): string | unde
   return findRuntimeProvider(provider)?.id ?? provider.trim().toLowerCase();
 }
 
-function inferRuntimeProviderIdFromBaseURL(baseURL: string | undefined): string | undefined {
+export function inferRuntimeProviderIdFromBaseURL(baseURL: string | undefined): string | undefined {
   if (!baseURL) return undefined;
   const normalized = baseURL.replace(/\/+$/, '').toLowerCase();
 

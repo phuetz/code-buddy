@@ -33,6 +33,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { withSessionLock } from '../persistence/session-lock.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import type { GoalState } from '../goals/goal-state.js';
 import type {
   FleetDispatchProfile,
@@ -95,8 +96,12 @@ export class PeerSessionStore {
     const file = this.fileFor(sessionId);
     if (!fs.existsSync(file)) return null;
     try {
-      const raw = await fs.promises.readFile(file, 'utf-8');
-      return JSON.parse(raw) as PersistedChatSession;
+      return await readJsonAtomic<PersistedChatSession | null>(file, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistedChatSession => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch (err) {
       logger.warn?.('[peer-session-store] failed to read session', {
         sessionId,
@@ -195,9 +200,7 @@ export class PeerSessionStore {
 
   private async writeUnlocked(record: PersistedChatSession): Promise<void> {
     const file = this.fileFor(record.sessionId);
-    const tmp = `${file}.tmp.${process.pid}`;
-    await fs.promises.writeFile(tmp, JSON.stringify(record, null, 2));
-    await fs.promises.rename(tmp, file);
+    await writeJsonAtomic(file, record, { mode: 0o600 });
   }
 }
 

@@ -2,7 +2,17 @@
  * Tests for Persona Manager
  */
 
-import { PersonaManager, getPersonaManager, resetPersonaManager } from '../src/personas/persona-manager';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { makeTmpDir, removeTmpDir } from './helpers/tmp.js';
+import {
+  PersonaManager,
+  getDefaultPersonasDir,
+  getPersonaManager,
+  resetPersonaManager,
+} from '../src/personas/persona-manager';
+
+const qaRoot = path.join(process.cwd(), '_qa', 'persona1');
 
 // Mock fs-extra
 jest.mock('fs-extra', () => {
@@ -19,21 +29,42 @@ jest.mock('fs-extra', () => {
 
 describe('PersonaManager', () => {
   let manager: PersonaManager;
+  let customPersonasDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetPersonaManager();
+    customPersonasDir = makeTmpDir('personas-', qaRoot);
     manager = new PersonaManager({
       autoSwitch: true,
+      customPersonasDir,
+      persistActivePersona: false,
     });
+    await manager.ready();
   });
 
   afterEach(() => {
     manager.dispose();
+    removeTmpDir(customPersonasDir);
   });
 
   describe('Constructor', () => {
-    it('should create with default config', () => {
-      const m = new PersonaManager();
+    it('should keep the production default personas directory', () => {
+      expect(getDefaultPersonasDir()).toBe(path.join(os.homedir(), '.codebuddy', 'personas'));
+    });
+
+    it('should keep active-persona persistence enabled by default', async () => {
+      const m = new PersonaManager({ customPersonasDir });
+      expect(m.getConfig().persistActivePersona).toBe(true);
+      await m.ready();
+      m.dispose();
+    });
+
+    it('should create with custom config', async () => {
+      const m = new PersonaManager({
+        customPersonasDir,
+        persistActivePersona: false,
+      });
+      await m.ready();
       expect(m).toBeDefined();
       m.dispose();
     });
@@ -372,7 +403,10 @@ describe('PersonaManager', () => {
   describe('singleton', () => {
     it('should return same instance', () => {
       resetPersonaManager();
-      const instance1 = getPersonaManager();
+      const instance1 = getPersonaManager({
+        customPersonasDir,
+        persistActivePersona: false,
+      });
       const instance2 = getPersonaManager();
       expect(instance1).toBe(instance2);
     });

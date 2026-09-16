@@ -1,7 +1,7 @@
 /**
  * Client for heavyweight media/world-model workers (PanoWorld, LongCat).
  *
- * The model runtimes stay outside the Node/Electron process. A Darkstar worker
+ * The model runtimes stay outside the Node/Electron process. A GPU node worker
  * exposes this small authenticated HTTP protocol and owns CUDA, queueing and
  * output files. Code Buddy only validates contracts and submits bounded jobs.
  */
@@ -119,12 +119,19 @@ export function validateGpuWorkerUrl(value: string): URL {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('GPU worker URL must use http or https');
   }
+  // Un nom de machine sans point (« gpunode ») ou un suffixe de réseau local
+  // (.local, .lan, .internal, .home.arpa) ne peut pas être classé : il est
+  // accepté comme privé. Seules les adresses publiques en clair sont refusées.
+  const localName =
+    !url.hostname.includes('.') ||
+    /\.(local|lan|internal|home\.arpa)$/u.test(url.hostname);
   if (
     url.protocol === 'http:' &&
     url.hostname !== 'localhost' &&
     url.hostname !== '::1' &&
     !isPrivateIpv4(url.hostname) &&
-    !url.hostname.endsWith('.ts.net')
+    !url.hostname.endsWith('.ts.net') &&
+    !localName
   ) {
     throw new Error('Unencrypted GPU worker URL must be loopback, private, or Tailscale');
   }
@@ -202,7 +209,7 @@ export function parseAvatarVideoPayload(value: unknown): AvatarVideoPayload {
   }
   const input = value as Record<string, unknown>;
   if (input.resolution !== undefined && input.resolution !== '480p') {
-    throw new Error('Only the measured 480p profile is enabled for Darkstar');
+    throw new Error('Only the measured 480p profile is enabled for GPU node');
   }
   let channelTarget: AvatarVideoPayload['channelTarget'];
   const rawChannelTarget = input.channel_target ?? input.channelTarget;

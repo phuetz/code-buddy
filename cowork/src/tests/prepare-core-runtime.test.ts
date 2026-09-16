@@ -15,17 +15,36 @@ const { computeDistDigest } = require('../../../scripts/runtime-manifest-utils.c
   };
 };
 const {
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
   collectInstalledRuntimePackagePaths,
   copyTreeWithHardlinks,
+  detectHostLibcFamily,
   prepareCoreRuntime,
   readCorePackageIdentity,
+  resolveInstalledDependencyPath,
   resolveSourceRevision,
 } = require(
   '../../scripts/prepare-core-runtime.js',
 ) as {
+  detectHostLibcFamily: (sources?: {
+    readLdd?: () => string;
+    getReport?: () => { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] };
+  }) => 'glibc' | 'musl' | null;
+  resolveInstalledDependencyPath: (
+    coreRoot: string,
+    fromPackagePath: string,
+    dependencyName: string,
+  ) => string | null;
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES: readonly string[];
   collectInstalledRuntimePackagePaths: (
     coreRoot: string,
-    options?: { platform?: string; arch?: string; includeRootOptional?: boolean },
+    options?: {
+      platform?: string;
+      arch?: string;
+      libc?: string | null;
+      includeRootOptional?: boolean;
+      requiredOptionalDependencies?: readonly string[];
+    },
   ) => string[];
   copyTreeWithHardlinks: (
     source: string,
@@ -43,6 +62,7 @@ const {
     platform?: string;
     arch?: string;
     includeRootOptional?: boolean;
+    requiredOptionalDependencies?: readonly string[];
     useCoworkNativeOverrides?: boolean;
     env?: Record<string, string | undefined>;
     spawnSync?: (...args: unknown[]) => {
@@ -72,6 +92,7 @@ const {
         distPath: string;
         entrypoint: string;
       };
+      requiredOptionalDependencies: string[];
       nativeOverrides: string[];
     };
   };
@@ -109,6 +130,27 @@ function writeFile(filePath: string, content: string): void {
 function writePackage(root: string, packagePath: string, packageJson: object, index = ''): void {
   writeFile(path.join(root, packagePath, 'package.json'), JSON.stringify(packageJson));
   if (index) writeFile(path.join(root, packagePath, 'index.js'), index);
+}
+
+/** Root optional packages Cowork stages for its slash-command gateway. */
+const COWORK_REQUIRED_OPTIONAL = {
+  '@google/generative-ai': '^0.21.0',
+  'string-width': '^7.2.0',
+};
+
+function installCoworkRequiredOptional(coreRoot: string): void {
+  writePackage(
+    coreRoot,
+    'node_modules/@google/generative-ai',
+    { name: '@google/generative-ai', main: 'index.js' },
+    'exports.GoogleGenerativeAI = class GoogleGenerativeAI {};',
+  );
+  writePackage(
+    coreRoot,
+    'node_modules/string-width',
+    { name: 'string-width', type: 'module', exports: './index.js' },
+    'export default (value) => value.length;',
+  );
 }
 
 function writeCoreRuntimeManifest(
@@ -201,6 +243,446 @@ describe('collectInstalledRuntimePackagePaths', () => {
 
     expect(() => collectInstalledRuntimePackagePaths(coreRoot)).toThrow(
       /Invalid installed dependency name/,
+    );
+  });
+
+  describe('Cowork-required optional dependencies', () => {
+    function requiredOptionalFixture(): string {
+      const root = temporaryRoot();
+      writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          dependencies: { 'fixture-a': '1.0.0' },
+          optionalDependencies: { ...COWORK_REQUIRED_OPTIONAL, 'fixture-root-optional': '1.0.0' },
+        }),
+      );
+      writePackage(root, 'node_modules/fixture-a', {});
+      writePackage(root, 'node_modules/fixture-root-optional', {});
+      writePackage(root, 'node_modules/@google/generative-ai', {});
+      writePackage(root, 'node_modules/string-width', { dependencies: { 'strip-ansi': '^7.1.0' } });
+      // string-width needs strip-ansi 7 nested; the hoisted strip-ansi 6 is not in its closure.
+      writePackage(root, 'node_modules/string-width/node_modules/strip-ansi', {
+        dependencies: { 'ansi-regex': '^6.0.1' },
+      });
+      writePackage(root, 'node_modules/strip-ansi', {});
+      writePackage(root, 'node_modules/ansi-regex', {});
+      return root;
+    }
+
+    it('stages exactly the Cowork list with its installed closure, not every root optional', () => {
+      expect(COWORK_REQUIRED_OPTIONAL_DEPENDENCIES).toEqual(Object.keys(COWORK_REQUIRED_OPTIONAL));
+      expect(
+        collectInstalledRuntimePackagePaths(requiredOptionalFixture(), {
+          platform: 'linux',
+          arch: 'x64',
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toEqual([
+        'node_modules/@google/generative-ai',
+        'node_modules/ansi-regex',
+        'node_modules/fixture-a',
+        'node_modules/string-width',
+        'node_modules/string-width/node_modules/strip-ansi',
+      ]);
+    });
+
+    it('names a required optional dependency missing from the source install', () => {
+      const root = requiredOptionalFixture();
+      fs.rmSync(path.join(root, 'node_modules', 'string-width'), { recursive: true });
+
+      expect(() =>
+        collectInstalledRuntimePackagePaths(root, {
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toThrow(
+        'Cowork-required optional dependency is not installed: string-width ' +
+          '(the packaged slash-command gateway imports it; run npm install without --omit=optional)',
+      );
+    });
+
+    it('refuses a required dependency the core package does not declare', () => {
+      expect(() =>
+        collectInstalledRuntimePackagePaths(requiredOptionalFixture(), {
+          requiredOptionalDependencies: ['ansi-regex'],
+        }),
+      ).toThrow(/Cowork-required dependency ansi-regex is not declared by the core package/);
+    });
+
+    it('fails instead of silently skipping a required dependency filtered out for the target', () => {
+      const root = requiredOptionalFixture();
+      writePackage(root, 'node_modules/@google/generative-ai', { os: ['win32'] });
+
+      expect(() =>
+        collectInstalledRuntimePackagePaths(root, {
+          platform: 'linux',
+          arch: 'x64',
+          requiredOptionalDependencies: COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
+        }),
+      ).toThrow(
+        'Cowork-required optional dependency does not support linux/x64: node_modules/@google/generative-ai',
+      );
+    });
+  });
+});
+
+describe('resolveInstalledDependencyPath', () => {
+  function nestedFixture(): string {
+    const root = temporaryRoot();
+    for (const packagePath of [
+      'node_modules/a',
+      'node_modules/a/node_modules/b',
+      'node_modules/a/node_modules/b/node_modules/c',
+      'node_modules/a/node_modules/d',
+      'node_modules/d',
+      'node_modules/e',
+      'node_modules/@s/p',
+      'node_modules/@s/p/node_modules/@s/q',
+      'node_modules/@s/q',
+      'packages/app/node_modules/f',
+    ]) {
+      writePackage(root, packagePath, {});
+    }
+    return root;
+  }
+
+  it('resolves nearest-first and walks up through enclosing packages to the root', () => {
+    const root = nestedFixture();
+
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b', 'c')).toBe(
+      'node_modules/a/node_modules/b/node_modules/c',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b', 'd')).toBe(
+      'node_modules/a/node_modules/d',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/a/node_modules/b/node_modules/c', 'e')).toBe(
+      'node_modules/e',
+    );
+    expect(resolveInstalledDependencyPath(root, 'node_modules/@s/p', '@s/q')).toBe(
+      'node_modules/@s/p/node_modules/@s/q',
+    );
+    expect(resolveInstalledDependencyPath(root, 'packages/app', 'f')).toBe('packages/app/node_modules/f');
+  });
+
+  it('returns null once the root node_modules lookup misses, from any depth', () => {
+    const root = nestedFixture();
+
+    for (const fromPackagePath of ['', 'node_modules/a', 'node_modules/a/node_modules/b/node_modules/c', 'packages/app']) {
+      expect(resolveInstalledDependencyPath(root, fromPackagePath, 'missing')).toBeNull();
+    }
+    expect(fs.existsSync(path.join(root, 'node_modules', 'missing'))).toBe(false);
+  });
+
+  it('terminates when the core root is the filesystem root', () => {
+    const filesystemRoot = path.parse(os.tmpdir()).root;
+    const absent = `codebuddy-absent-${process.pid}-${Date.now()}`;
+
+    expect(
+      resolveInstalledDependencyPath(filesystemRoot, 'node_modules/a/node_modules/b/node_modules/c', absent),
+    ).toBeNull();
+    expect(resolveInstalledDependencyPath(filesystemRoot, '', `@codebuddy-absent/${absent}`)).toBeNull();
+  });
+
+  it('keeps refusing lookups that escape the core root', () => {
+    expect(() => resolveInstalledDependencyPath(nestedFixture(), '../escape', 'a')).toThrow(
+      /Installed dependency path escapes its allowed root/,
+    );
+  });
+});
+
+describe('target filtering of dependency edges', () => {
+  const linuxX64 = { platform: 'linux', arch: 'x64' } as const;
+
+  /** Root package.json plus installed packages, keyed by node_modules path. */
+  function installedTree(root: object, packages: Record<string, object>): string {
+    const coreRoot = temporaryRoot();
+    writeFile(path.join(coreRoot, 'package.json'), JSON.stringify(root));
+    for (const [packagePath, packageJson] of Object.entries(packages)) {
+      writePackage(coreRoot, packagePath, packageJson);
+    }
+    return coreRoot;
+  }
+
+  it('fails when a transitive required dependency does not support the target', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'native-helper': '1' } },
+        'node_modules/native-helper': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      'Installed dependency native-helper required by node_modules/app does not support linux/x64: ' +
+        'node_modules/native-helper (os ["win32"], cpu [])',
+    );
+  });
+
+  it('fails when a root production dependency does not support the target', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1', 'root-native': '1' } },
+      { 'node_modules/app': {}, 'node_modules/root-native': { cpu: ['arm64'] } },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      'Installed production dependency root-native does not support linux/x64: node_modules/root-native',
+    );
+  });
+
+  it.each([
+    ['optional edge queued first', { a: '1', b: '1' }],
+    ['required edge queued first', { b: '1', a: '1' }],
+  ])('fails when an unsupported package is also reached optionally (%s)', (_order, dependencies) => {
+    const coreRoot = installedTree(
+      { dependencies },
+      {
+        'node_modules/a': { optionalDependencies: { shared: '1' } },
+        'node_modules/b': { dependencies: { shared: '1' } },
+        'node_modules/shared': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      /Installed dependency shared required by node_modules\/b does not support linux\/x64/,
+    );
+  });
+
+  it('re-walks a package first reached optionally once an obligatory edge reaches it', () => {
+    const coreRoot = installedTree(
+      { dependencies: { b: '1', a: '1' } },
+      {
+        'node_modules/a': { optionalDependencies: { mid: '1' } },
+        'node_modules/b': { dependencies: { mid: '1' } },
+        'node_modules/mid': { dependencies: { leaf: '1' } },
+        'node_modules/leaf': { os: ['win32'] },
+      },
+    );
+
+    expect(() => collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toThrow(
+      /Installed dependency leaf required by node_modules\/mid does not support linux\/x64/,
+    );
+  });
+
+  it('keeps skipping unsupported optional, peer and optional-subtree packages', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': {
+          dependencies: { dual: '1' },
+          optionalDependencies: { dual: '1', 'helper-win': '1', 'helper-linux': '1', 'opt-parent': '1' },
+          peerDependencies: { 'peer-native': '1' },
+        },
+        'node_modules/dual': { os: ['darwin'] },
+        'node_modules/helper-win': { os: ['win32'] },
+        'node_modules/helper-linux': { os: ['linux'], cpu: ['x64'] },
+        'node_modules/opt-parent': { dependencies: { 'opt-child': '1' } },
+        'node_modules/opt-child': { os: ['win32'] },
+        'node_modules/peer-native': { os: ['win32'] },
+      },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(coreRoot, linuxX64)).toEqual([
+      'node_modules/app',
+      'node_modules/helper-linux',
+      'node_modules/opt-parent',
+    ]);
+  });
+
+  it('treats a name in dependencies and optionalDependencies as optional, like npm', () => {
+    const skippedByNpm = installedTree(
+      { dependencies: { app: '1' } },
+      { 'node_modules/app': { dependencies: { dual: '1' }, optionalDependencies: { dual: '1' } } },
+    );
+    const reallyMissing = installedTree(
+      { dependencies: { app: '1' } },
+      { 'node_modules/app': { dependencies: { needed: '1' } } },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(skippedByNpm, linuxX64)).toEqual(['node_modules/app']);
+    expect(() => collectInstalledRuntimePackagePaths(reallyMissing, linuxX64)).toThrow(
+      'Installed dependency needed required by node_modules/app is missing (run npm install)',
+    );
+  });
+
+  it('refuses before replacing an existing staged runtime', () => {
+    const root = temporaryRoot();
+    const coreRoot = path.join(root, 'core');
+    const coworkRoot = path.join(root, 'cowork');
+    const runtimeRoot = path.join(coworkRoot, '.bundle-resources', 'core-runtime');
+    const corePackage = { name: '@phuetz/code-buddy', version: '1.0.0', description: 'Target fixture' };
+    writeFile(
+      path.join(coreRoot, 'package.json'),
+      JSON.stringify({ ...corePackage, dependencies: { app: '1' } }),
+    );
+    writePackage(coreRoot, 'node_modules/app', { dependencies: { 'native-helper': '1' } });
+    writePackage(coreRoot, 'node_modules/native-helper', { os: ['win32'] });
+    writeFile(
+      path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+      'export class CodeBuddyEngineAdapter {}',
+    );
+    writeCoreRuntimeManifest(coreRoot, corePackage);
+    writeFile(path.join(runtimeRoot, 'previous-runtime.marker'), 'kept');
+
+    expect(() =>
+      prepareCoreRuntime({
+        coreRoot,
+        coworkRoot,
+        runtimeRoot,
+        ...linuxX64,
+        useCoworkNativeOverrides: false,
+        requiredOptionalDependencies: [],
+      }),
+    ).toThrow(/native-helper required by node_modules\/app does not support linux\/x64/);
+    expect(fs.readFileSync(path.join(runtimeRoot, 'previous-runtime.marker'), 'utf8')).toBe('kept');
+  });
+});
+
+describe('npm platform fields os, cpu and libc', () => {
+  function installedTree(root: object, packages: Record<string, object>): string {
+    const coreRoot = temporaryRoot();
+    writeFile(path.join(coreRoot, 'package.json'), JSON.stringify(root));
+    for (const [packagePath, packageJson] of Object.entries(packages)) {
+      writePackage(coreRoot, packagePath, packageJson);
+    }
+    return coreRoot;
+  }
+
+  /** An app with optional native helpers built for each Linux C library, like sharp or resvg. */
+  function libcHelpersTree(): string {
+    return installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { optionalDependencies: { 'bin-gnu': '1', 'bin-musl': '1' } },
+        'node_modules/bin-gnu': { os: ['linux'], cpu: ['x64'], libc: ['glibc'] },
+        'node_modules/bin-musl': { os: ['linux'], cpu: ['x64'], libc: ['musl'] },
+      },
+    );
+  }
+
+  it.each([
+    ['glibc', 'node_modules/bin-gnu'],
+    ['musl', 'node_modules/bin-musl'],
+  ])('keeps only the %s helper for a Linux target', (libc, helper) => {
+    expect(
+      collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64', libc }),
+    ).toEqual(['node_modules/app', helper]);
+  });
+
+  it('skips libc packages when the Linux C library family is unknown and refuses an obligatory one', () => {
+    const obligatory = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'glibc-only': '1' } },
+        'node_modules/glibc-only': { libc: 'glibc' },
+      },
+    );
+
+    expect(
+      collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64', libc: null }),
+    ).toEqual(['node_modules/app']);
+    expect(() =>
+      collectInstalledRuntimePackagePaths(obligatory, { platform: 'linux', arch: 'x64', libc: null }),
+    ).toThrow('(libc "glibc", target libc unknown)');
+  });
+
+  it('refuses an obligatory dependency built for another C library', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { dependencies: { 'glibc-only': '1' } },
+        'node_modules/glibc-only': { os: ['linux'], libc: ['glibc'] },
+      },
+    );
+
+    expect(() =>
+      collectInstalledRuntimePackagePaths(coreRoot, { platform: 'linux', arch: 'x64', libc: 'musl' }),
+    ).toThrow(
+      'Installed dependency glibc-only required by node_modules/app does not support linux/x64: ' +
+        'node_modules/glibc-only (os ["linux"], cpu []) (libc ["glibc"], target libc musl)',
+    );
+  });
+
+  it.each([
+    ['darwin', 'arm64'],
+    ['win32', 'x64'],
+  ])('treats libc packages as unsupported on %s, like npm, and keeps its own helpers', (platform, arch) => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': { optionalDependencies: { 'gnu-no-os': '1', 'own-helper': '1' } },
+        'node_modules/gnu-no-os': { libc: 'glibc' },
+        'node_modules/own-helper': { os: [platform], cpu: [arch] },
+      },
+    );
+
+    expect(collectInstalledRuntimePackagePaths(coreRoot, { platform, arch })).toEqual([
+      'node_modules/app',
+      'node_modules/own-helper',
+    ]);
+  });
+
+  it('reads string fields and ["any"] like npm', () => {
+    const coreRoot = installedTree(
+      { dependencies: { app: '1' } },
+      {
+        'node_modules/app': {
+          dependencies: { 'anywhere-required': '1' },
+          optionalDependencies: { 'win-only': '1', 'anywhere-optional': '1', 'musl-string': '1' },
+        },
+        'node_modules/anywhere-required': { os: ['any'] },
+        'node_modules/anywhere-optional': { cpu: ['any'] },
+        'node_modules/win-only': { os: 'win32' },
+        'node_modules/musl-string': { os: 'linux', libc: 'musl' },
+      },
+    );
+    const stringRestrictedRequired = installedTree(
+      { dependencies: { 'win-required': '1' } },
+      { 'node_modules/win-required': { os: 'win32' } },
+    );
+
+    expect(
+      collectInstalledRuntimePackagePaths(coreRoot, { platform: 'linux', arch: 'x64', libc: 'musl' }),
+    ).toEqual([
+      'node_modules/anywhere-optional',
+      'node_modules/anywhere-required',
+      'node_modules/app',
+      'node_modules/musl-string',
+    ]);
+    expect(() =>
+      collectInstalledRuntimePackagePaths(stringRestrictedRequired, { platform: 'linux', arch: 'x64', libc: 'glibc' }),
+    ).toThrow('Installed production dependency win-required does not support linux/x64');
+  });
+
+  it('detects the host C library family like npm', () => {
+    const unreadable = () => {
+      throw new Error('ENOENT: /usr/bin/ldd');
+    };
+    const noReport = () => {
+      throw new Error('the process report must not be read when ldd answers');
+    };
+
+    expect(detectHostLibcFamily({ readLdd: () => 'musl libc (x86_64)', getReport: noReport })).toBe('musl');
+    expect(detectHostLibcFamily({ readLdd: () => 'ldd (GNU libc) — GNU C Library', getReport: noReport })).toBe(
+      'glibc',
+    );
+    expect(detectHostLibcFamily({ readLdd: () => '#!/bin/sh', getReport: noReport })).toBeNull();
+    expect(
+      detectHostLibcFamily({ readLdd: unreadable, getReport: () => ({ header: { glibcVersionRuntime: '2.39' } }) }),
+    ).toBe('glibc');
+    expect(
+      detectHostLibcFamily({
+        readLdd: unreadable,
+        getReport: () => ({ header: {}, sharedObjects: ['/lib/ld-musl-x86_64.so.1'] }),
+      }),
+    ).toBe('musl');
+    expect(detectHostLibcFamily({ readLdd: unreadable, getReport: () => ({ header: {} }) })).toBeNull();
+  });
+
+  it.runIf(process.platform === 'linux')('uses the host C library family for a Linux target on Linux', () => {
+    const helperByFamily: Record<string, string> = { glibc: 'node_modules/bin-gnu', musl: 'node_modules/bin-musl' };
+    const helper = helperByFamily[detectHostLibcFamily() ?? ''];
+
+    expect(collectInstalledRuntimePackagePaths(libcHelpersTree(), { platform: 'linux', arch: 'x64' })).toEqual(
+      helper ? ['node_modules/app', helper] : ['node_modules/app'],
     );
   });
 });
@@ -303,6 +785,34 @@ describe('prepareCoreRuntime', () => {
     ).toThrow(/Cross-target core runtime staging is unsafe/);
   });
 
+  it('stops before writing a runtime when a Cowork-required optional dependency is missing', () => {
+    const root = temporaryRoot();
+    const coreRoot = path.join(root, 'core');
+    const coworkRoot = path.join(root, 'cowork');
+    const runtimeRoot = path.join(coworkRoot, '.bundle-resources', 'core-runtime');
+    const corePackage = {
+      name: '@phuetz/code-buddy',
+      version: '1.0.0',
+      description: 'Slash gateway fixture',
+    };
+    writeFile(
+      path.join(coreRoot, 'package.json'),
+      JSON.stringify({ ...corePackage, optionalDependencies: COWORK_REQUIRED_OPTIONAL }),
+    );
+    writeFile(
+      path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+      'export class CodeBuddyEngineAdapter {}',
+    );
+    installCoworkRequiredOptional(coreRoot);
+    fs.rmSync(path.join(coreRoot, 'node_modules', '@google'), { recursive: true });
+    writeCoreRuntimeManifest(coreRoot, corePackage);
+
+    expect(() =>
+      prepareCoreRuntime({ coreRoot, coworkRoot, runtimeRoot, useCoworkNativeOverrides: false }),
+    ).toThrow(/Cowork-required optional dependency is not installed: @google\/generative-ai/);
+    expect(fs.existsSync(runtimeRoot)).toBe(false);
+  });
+
   it('creates an isolated ESM runtime whose bare dependency resolves outside the source tree', async () => {
     const root = temporaryRoot();
     const coreRoot = path.join(root, 'core');
@@ -316,8 +826,10 @@ describe('prepareCoreRuntime', () => {
         version: '9.8.7',
         description: 'Compiled Code Buddy fixture',
         dependencies: { 'fixture-a': '1.0.0' },
+        optionalDependencies: COWORK_REQUIRED_OPTIONAL,
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       "import value from 'fixture-a'; if (value !== 42) throw new Error('bad dependency'); export class CodeBuddyEngineAdapter {}",
@@ -352,8 +864,10 @@ describe('prepareCoreRuntime', () => {
     });
 
     expect(result.packagePaths).toEqual([
+      'node_modules/@google/generative-ai',
       'node_modules/fixture-a',
       'node_modules/fixture-b',
+      'node_modules/string-width',
     ]);
     expect(
       JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'dist', 'package.json'), 'utf8')),
@@ -375,6 +889,7 @@ describe('prepareCoreRuntime', () => {
         distPath: 'dist',
         entrypoint: 'dist/desktop/codebuddy-engine-adapter.js',
       },
+      requiredOptionalDependencies: ['@google/generative-ai', 'string-width'],
     });
     expect(
       JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'codebuddy-runtime.json'), 'utf8')),
@@ -400,8 +915,10 @@ describe('prepareCoreRuntime', () => {
         version: '1.0.0',
         description: 'SQLite runtime fixture',
         dependencies: { 'better-sqlite3': '1.0.0' },
+        optionalDependencies: COWORK_REQUIRED_OPTIONAL,
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export class CodeBuddyEngineAdapter {}',
@@ -465,9 +982,10 @@ describe('prepareCoreRuntime', () => {
         name: '@phuetz/code-buddy',
         version: '1.0.0',
         description: 'Optional SQLite runtime fixture',
-        optionalDependencies: { 'better-sqlite3': '1.0.0' },
+        optionalDependencies: { 'better-sqlite3': '1.0.0', ...COWORK_REQUIRED_OPTIONAL },
       }),
     );
+    installCoworkRequiredOptional(coreRoot);
     writeFile(
       path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export class CodeBuddyEngineAdapter {}',

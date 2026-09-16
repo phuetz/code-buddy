@@ -20,7 +20,7 @@ describe('server exposure diagnostic', () => {
     },
   );
 
-  it.each(['0.0.0.0', '::', '192.168.1.50', '100.98.18.76', 'example.com'])(
+  it.each(['0.0.0.0', '::', '192.168.1.50', '203.0.113.10', 'example.com'])(
     'detects unauthenticated non-loopback bind %s',
     (host) => {
       const diagnostic = diagnoseServerExposure({ host, authEnabled: false });

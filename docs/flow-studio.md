@@ -55,8 +55,8 @@ Audit de parité et backlog vérifié :
 
 La production commerciale n'utilise pas un moteur unique :
 
-- LongCat sur Darkstar anime les avatars parlants et synchronise chaque langue ;
-- ComfyUI sur Darkstar produit le volume, avec Minstar comme secours ;
+- LongCat sur GPU node anime les avatars parlants et synchronise chaque langue ;
+- ComfyUI sur GPU node produit le volume, avec Minstar comme secours ;
 - Google Flow/Veo est réservé aux plans publics `safe` sans parole : variations,
   plans cinématiques et quelques plans premium ;
 - les médias `sensual` et `explicit` restent sur l'infrastructure contrôlée par le
@@ -70,7 +70,7 @@ compte et ne publie rien automatiquement.
 Depuis le dépôt MySoulmate, préparer un seul Short en simulation :
 
 ```bash
-npx tsx /home/patrice/code-buddy/scripts/mysoulmate/export-google-flow-batch.ts \
+npx tsx ~/code-buddy/scripts/mysoulmate/export-google-flow-batch.ts \
   --model fast \
   --remaining-credits 25000 \
   --max-credits 100
@@ -114,8 +114,8 @@ ne consomme aucun crédit et ne publie rien.
 Le rendu LongCat commercial possède un preflight sans génération :
 
 ```bash
-npx tsx /home/patrice/code-buddy/scripts/mysoulmate/render-youtube-short-batch.ts \
-  --plan /home/patrice/DEV/MySoulmate/youtube-shorts-workspace/plan.json \
+npx tsx ~/code-buddy/scripts/mysoulmate/render-youtube-short-batch.ts \
+  --plan ~/DEV/MySoulmate/youtube-shorts-workspace/plan.json \
   --all --preflight
 ```
 

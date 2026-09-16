@@ -96,6 +96,21 @@ describe('SegmentArchive', () => {
     expect(archive.get('session-lru', second!)).not.toBeNull();
   });
 
+  it('refuses to list a segment whose stored hash does not match its content', async () => {
+    const home = await tempHome();
+    const archive = new SegmentArchive(home);
+    const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'original payload' }];
+    const segmentId = archive.archive('session-integrity', messages, 'summary');
+    expect(segmentId).toBeTruthy();
+    const filePath = join(home, '.codebuddy', 'context-archive', 'session-integrity', `${segmentId}.json`);
+    const record = JSON.parse(await (await import('node:fs/promises')).readFile(filePath, 'utf8')) as {
+      messages: CodeBuddyMessage[];
+    };
+    record.messages = [{ role: 'user', content: 'tampered payload' }];
+    await writeFile(filePath, `${JSON.stringify(record, null, 2)}\n`);
+    expect(() => archive.list('session-integrity')).toThrow(/integrity/i);
+  });
+
   it('never throws when its archive directory cannot be written', async () => {
     // A home underneath a regular FILE: no mkdir can succeed below it on any OS
     // (`/sys` is read-only on Linux only; `C:\sys` is creatable on Windows).
@@ -144,7 +159,9 @@ describe('ContextManagerV2 context zoom wiring', () => {
     const contextManager = manager(archive);
 
     const compacted = contextManager.prepareMessages(messages);
-    const summary = compacted.find(message => message.role === 'system');
+    const summary = compacted.find(message =>
+      typeof message.content === 'string' && message.content.includes('[Conversation Summary]'),
+    );
 
     expect(summary?.content).toBe(
       '[Conversation Summary]\n' +
@@ -162,7 +179,9 @@ describe('ContextManagerV2 context zoom wiring', () => {
     const contextManager = manager(archive);
 
     const compacted = contextManager.prepareMessages(messages);
-    const summary = compacted.find(message => message.role === 'system');
+    const summary = compacted.find(message =>
+      typeof message.content === 'string' && message.content.includes('[Conversation Summary]'),
+    );
     expect(summary?.content).toMatch(/^\[segment:([a-f0-9]{16})\] \[Conversation Summary\]\n/);
 
     const segmentId = /^\[segment:([a-f0-9]{16})\]/.exec(String(summary?.content))?.[1];

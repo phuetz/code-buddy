@@ -13,6 +13,14 @@ import type {
   MiddlewareContext,
   MiddlewareResult,
 } from './types.js';
+import {
+  ThreadTaskRunner,
+  type ThreadTaskOutcome,
+} from '../delegation/thread-task-runner.js';
+import type {
+  ThreadDelegationEvent,
+  ThreadParentBudget,
+} from '../delegation/thread-delegation.js';
 import { logger } from '../../utils/logger.js';
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -39,7 +47,23 @@ export interface QualityGateConfig {
   minRoundsBeforeGate: number;
   /** Maximum gate runs per session (default: 2) */
   maxGateRuns: number;
+  /** Maximum simultaneously active quality delegates (hard-capped at 2). */
+  delegateConcurrency: number;
+  /** Parent allowance from which each quality delegate gets a reduced budget. */
+  delegateParentBudget: ThreadParentBudget;
 }
+
+export interface QualityGateRuntime {
+  /** Optional observer for the tagged multiplexed delegate stream. */
+  onDelegateEvent?: (event: ThreadDelegationEvent<GateResult>) => void;
+}
+
+const MAX_QUALITY_GATE_CONCURRENCY = 2;
+const DEFAULT_QUALITY_GATE_PARENT_BUDGET: ThreadParentBudget = {
+  maxTurns: 4,
+  maxCostUsd: 1,
+  maxContextTokens: 32_000,
+};
 
 export const DEFAULT_QUALITY_GATE_CONFIG: QualityGateConfig = {
   enabled: true,
@@ -47,13 +71,13 @@ export const DEFAULT_QUALITY_GATE_CONFIG: QualityGateConfig = {
     {
       id: 'code-guardian',
       agentId: 'code-guardian',
-      action: 'review',
+      action: 'find-issues',
       required: false,
     },
     {
       id: 'security-review',
       agentId: 'security-review',
-      action: 'scan',
+      action: 'quick-scan',
       required: false,
       filePatterns: [
         /auth/i,
@@ -68,6 +92,8 @@ export const DEFAULT_QUALITY_GATE_CONFIG: QualityGateConfig = {
   ],
   minRoundsBeforeGate: 3,
   maxGateRuns: 2,
+  delegateConcurrency: MAX_QUALITY_GATE_CONCURRENCY,
+  delegateParentBudget: DEFAULT_QUALITY_GATE_PARENT_BUDGET,
 };
 
 // ── Gate Result ────────────────────────────────────────────────────
@@ -83,12 +109,19 @@ export interface QualityFinding {
   recommendation?: string;
 }
 
-interface GateResult {
+export interface GateResult {
   gateId: string;
   passed: boolean;
   findings: QualityFinding[];
   /** True when the findings came from the agent's structured data (vs text re-parse). */
   structured: boolean;
+  /** Set when the delegate could not complete a trustworthy review. */
+  incomplete?: boolean;
+}
+
+interface DelegatedGateTask {
+  gate: QualityGate;
+  changedFiles: string[];
 }
 
 const SEVERITY_ORDER: Record<QualityFindingSeverity, number> = {
@@ -154,11 +187,23 @@ export class QualityGateMiddleware implements ConversationMiddleware {
   readonly priority = 200;
 
   private config: QualityGateConfig;
+  private readonly runtime: QualityGateRuntime;
   private gateRunCount = 0;
   private lastGateRound = -1;
 
-  constructor(config: Partial<QualityGateConfig> = {}) {
-    this.config = { ...DEFAULT_QUALITY_GATE_CONFIG, ...config };
+  constructor(
+    config: Partial<QualityGateConfig> = {},
+    runtime: QualityGateRuntime = {},
+  ) {
+    this.config = {
+      ...DEFAULT_QUALITY_GATE_CONFIG,
+      ...config,
+      delegateParentBudget: {
+        ...DEFAULT_QUALITY_GATE_PARENT_BUDGET,
+        ...config.delegateParentBudget,
+      },
+    };
+    this.runtime = runtime;
   }
 
   async afterTurn(context: MiddlewareContext): Promise<MiddlewareResult> {
@@ -201,6 +246,7 @@ export class QualityGateMiddleware implements ConversationMiddleware {
     const results = await this.runGates(applicableGates, changedFiles);
     const failedRequired = results.filter(r => !r.passed && this.isRequired(r.gateId));
     const allFindings = results.flatMap(r => r.findings);
+    const incomplete = results.filter(r => r.incomplete);
 
     if (allFindings.length === 0) {
       logger.info('Quality gates passed — no findings');
@@ -215,6 +261,14 @@ export class QualityGateMiddleware implements ConversationMiddleware {
         action: 'warn',
         message: `[Quality Gate — REQUIRED FIXES]\n${message}\n\n` +
           `Please address the required findings above before continuing.`,
+      };
+    }
+
+    if (incomplete.length > 0) {
+      logger.warn(`Quality gates: ${incomplete.length} incomplete review(s)`);
+      return {
+        action: 'warn',
+        message: `[Quality Gate — INCOMPLETE REVIEW]\n${message}`,
       };
     }
 
@@ -315,27 +369,65 @@ export class QualityGateMiddleware implements ConversationMiddleware {
     gates: QualityGate[],
     changedFiles: string[],
   ): Promise<GateResult[]> {
-    const results: GateResult[] = [];
-
-    for (const gate of gates) {
-      try {
-        const result = await this.runSingleGate(gate, changedFiles);
-        results.push(result);
-      } catch (error) {
-        logger.warn(`Quality gate ${gate.id} failed to execute`, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Non-execution = pass (don't block on infrastructure errors)
-        results.push({
-          gateId: gate.id,
-          passed: true,
-          findings: [],
-          structured: false,
-        });
+    const configuredConcurrency = Number.isFinite(this.config.delegateConcurrency)
+      ? Math.max(1, Math.floor(this.config.delegateConcurrency))
+      : MAX_QUALITY_GATE_CONCURRENCY;
+    const runner = new ThreadTaskRunner<DelegatedGateTask, GateResult>({
+      parentBudget: this.config.delegateParentBudget,
+      concurrency: Math.min(
+        MAX_QUALITY_GATE_CONCURRENCY,
+        configuredConcurrency,
+        gates.length,
+      ),
+      createAgent: () => ({
+        execute: ({ gate, changedFiles: files }) => this.runSingleGate(gate, files),
+        abortCurrentOperation() {},
+        dispose() {},
+      }),
+    });
+    const eventPump = (async () => {
+      for await (const event of runner.events()) {
+        try {
+          this.runtime.onDelegateEvent?.(event);
+        } catch {
+          // Observability is best effort; always drain the shared stream.
+        }
       }
-    }
+    })();
 
-    return results;
+    try {
+      const outcomes = await Promise.all(
+        gates.map((gate) => runner.submit(gate.agentId, { gate, changedFiles })),
+      );
+      return outcomes.map((outcome, index) => {
+        const gate = gates[index];
+        if (!gate) return this.incompleteGate('unknown', 'delegate result had no matching gate');
+        return this.gateResultFromOutcome(gate, outcome);
+      });
+    } finally {
+      await runner.close();
+      await eventPump;
+    }
+  }
+
+  private gateResultFromOutcome(
+    gate: QualityGate,
+    outcome: ThreadTaskOutcome<GateResult>,
+  ): GateResult {
+    if (outcome.success && outcome.output) return outcome.output;
+    const detail = outcome.message ?? outcome.reason ?? 'delegate returned no result';
+    logger.warn(`Quality gate ${gate.id} review incomplete`, { error: detail });
+    return this.incompleteGate(gate.id, detail);
+  }
+
+  private incompleteGate(gateId: string, detail: string): GateResult {
+    return {
+      gateId,
+      passed: false,
+      findings: [{ severity: 'high', message: `Incomplete review: ${detail}` }],
+      structured: false,
+      incomplete: true,
+    };
   }
 
   private async runSingleGate(
@@ -355,14 +447,10 @@ export class QualityGateMiddleware implements ConversationMiddleware {
       });
 
       if (!agentResult.success) {
-        return {
-          gateId: gate.id,
-          passed: !gate.required,
-          findings: agentResult.error
-            ? [{ severity: 'high' as const, message: agentResult.error }]
-            : [],
-          structured: false,
-        };
+        return this.incompleteGate(
+          gate.id,
+          agentResult.error ?? 'specialized agent returned an unsuccessful result',
+        );
       }
 
       // Structured findings FIRST — the agents return typed issues/findings
@@ -388,9 +476,11 @@ export class QualityGateMiddleware implements ConversationMiddleware {
         findings,
         structured: false,
       };
-    } catch {
-      // Module not available — pass silently
-      return { gateId: gate.id, passed: true, findings: [], structured: false };
+    } catch (error) {
+      return this.incompleteGate(
+        gate.id,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 

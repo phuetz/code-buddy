@@ -11,7 +11,7 @@ import type { CommandHandlerResult } from './branch-handlers.js';
 
 /**
  * Provider for model routing state.
- * Set from enhanced-command-handler when the agent is available.
+ * Set by the conversation-loop dispatcher from the live agent.
  */
 export interface SwitchModelProvider {
   /** Get list of available model names */
@@ -43,6 +43,21 @@ export function setSwitchModelProvider(provider: SwitchModelProvider | null): vo
  *   /switch auto            — Return to auto-routing / default
  */
 export async function handleSwitch(args: string[]): Promise<CommandHandlerResult> {
+  try {
+    return await runSwitch(args);
+  } catch (error) {
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: `Model switch failed: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: new Date(),
+      },
+    };
+  }
+}
+
+async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
   const modelName = args[0]?.trim();
 
   // No provider set — try to get models from config

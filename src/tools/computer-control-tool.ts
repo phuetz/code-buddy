@@ -780,29 +780,49 @@ export class ComputerControlTool {
       logger.debug('Screenshot capture failed in snapshot_with_screenshot', { error: err });
     }
 
-    // Apply OmniParser if requested and screenshot was successful
-    if (input.useOmniParser && screenshotData.base64) {
-      const omniResult = await this.omniParser.parseScreen(screenshotData.base64, {
-        width: screenshotData.width,
-        height: screenshotData.height,
-      });
+    // Apply OmniParser if requested. Off-server / no screenshot is an honest
+    // no-op in the report (never a silent pretend-parse).
+    const notes: string[] = [];
+    let omniParser: 'applied' | 'unavailable' | 'skipped' | 'not-requested' = 'not-requested';
 
-      if (omniResult.elements.length > 0) {
-        // Override screenshot with the annotated (Set-of-Marks) image whose numbers match the ids below.
-        screenshotData.base64 = omniResult.annotatedImageBase64;
+    if (!screenshotData.base64) {
+      notes.push('Screenshot not captured (honest no-op).');
+    }
 
-        const unit = omniResult.elements[0]?.normalized ? 'ratio 0-1' : 'px';
-        const parsedText = omniResult.elements
-          .map(
-            (e) =>
-              `[${e.id}] ${e.type}${e.interactable ? ' (interactive)' : ''} "${e.content}" center=(${e.center[0]},${e.center[1]})`,
-          )
-          .join('\n');
-        textRepresentation += `\n\n[OmniParser Elements] (coords in ${unit}; use 'click' at an element center to act):\n${parsedText}`;
+    if (input.useOmniParser) {
+      if (!screenshotData.base64) {
+        omniParser = 'skipped';
+        notes.push('OmniParser skipped: no screenshot to parse (honest no-op).');
+        logger.warn('OmniParser skipped: no screenshot to parse');
       } else {
-        // No elements => server down/misconfigured or empty parse. Keep the original snapshot, don't add noise.
-        logger.debug('OmniParser returned no elements; keeping original screenshot and snapshot text');
+        const omniResult = await this.omniParser.parseScreen(screenshotData.base64, {
+          width: screenshotData.width,
+          height: screenshotData.height,
+        });
+
+        if (omniResult.elements.length > 0) {
+          // Override screenshot with the annotated (Set-of-Marks) image whose numbers match the ids below.
+          screenshotData.base64 = omniResult.annotatedImageBase64;
+
+          const unit = omniResult.elements[0]?.normalized ? 'ratio 0-1' : 'px';
+          const parsedText = omniResult.elements
+            .map(
+              (e) =>
+                `[${e.id}] ${e.type}${e.interactable ? ' (interactive)' : ''} "${e.content}" center=(${e.center[0]},${e.center[1]})`,
+            )
+            .join('\n');
+          textRepresentation += `\n\n[OmniParser Elements] (coords in ${unit}; use 'click' at an element center to act):\n${parsedText}`;
+          omniParser = 'applied';
+        } else {
+          omniParser = 'unavailable';
+          notes.push('OmniParser unavailable or returned no elements (honest no-op).');
+          logger.warn('OmniParser returned no elements; keeping original screenshot and snapshot text');
+        }
       }
+    }
+
+    if (notes.length > 0) {
+      textRepresentation += `\n\n${notes.join('\n')}`;
     }
 
     return {
@@ -816,6 +836,7 @@ export class ComputerControlTool {
         screenshotContentType: screenshotData.contentType || null,
         screenshotWidth: screenshotData.width || null,
         screenshotHeight: screenshotData.height || null,
+        omniParser,
       },
     };
   }

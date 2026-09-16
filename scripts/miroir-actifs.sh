@@ -15,7 +15,14 @@
 # (même machine) : la copie hors site reste le disque externe.
 set -uo pipefail
 
-DEST="${MIROIR_DEST:-/data/backups/ministar}"
+DEST="${MIROIR_DEST:-/data/backups/hub}"
+# Refus fermé : sans MIROIR_DEST explicite, une destination absente signifie que le
+# miroir historique est ailleurs (le nom par défaut est générique). Créer un arbre neuf
+# recopierait tout et abandonnerait en silence le miroir existant (revue GF3, 04/09/2026).
+if [ -z "${MIROIR_DEST:-}" ] && [ ! -d "$DEST" ]; then
+  echo "miroir-actifs : $DEST n'existe pas et MIROIR_DEST n'est pas défini — refus (posez MIROIR_DEST=/chemin/du/miroir/existant)." >&2
+  exit 2
+fi
 DRY=""
 [ "${1:-}" = "--dry-run" ] && DRY="--dry-run"
 

@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { scanForSecrets, redactSecrets } from '../fleet/privacy-lint.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   getMemoryManager,
   PersistentMemoryManager,
@@ -111,10 +112,10 @@ interface MemoryCandidateFile {
 
 const registry = new Map<string, MemoryCandidateQueue>();
 
-export function getMemoryCandidateQueue(workDir: string = process.cwd()): MemoryCandidateQueue {
-  const key = path.resolve(workDir);
+export function getMemoryCandidateQueue(workDir: string = process.cwd(), botId?: string): MemoryCandidateQueue {
+  const key = JSON.stringify([path.resolve(workDir), botId ?? '']);
   if (!registry.has(key)) {
-    registry.set(key, new MemoryCandidateQueue(key));
+    registry.set(key, new MemoryCandidateQueue(path.resolve(workDir), botId ? getMemoryManager(undefined, botId, workDir) : undefined, botId));
     if (registry.size > 20) {
       const firstKey = registry.keys().next().value;
       if (firstKey) registry.delete(firstKey);
@@ -135,8 +136,9 @@ export class MemoryCandidateQueue {
   constructor(
     private workDir: string = process.cwd(),
     private memoryManager?: PersistentMemoryManager,
+    botId?: string,
   ) {
-    this.filePath = path.join(workDir, '.codebuddy', 'memory-candidates.json');
+    this.filePath = path.join(workDir, '.codebuddy', botId ? `memory-candidates-${encodeURIComponent(botId)}.json` : 'memory-candidates.json');
   }
 
   propose(input: ProposeMemoryCandidateInput): ProposeMemoryCandidateResult {
@@ -222,7 +224,7 @@ export class MemoryCandidateQueue {
     if (!key) throw new Error('Accepted memory key cannot be empty.');
     if (!value) throw new Error('Accepted memory value cannot be empty.');
 
-    const manager = this.memoryManager ?? getMemoryManager();
+    const manager = this.memoryManager ?? getMemoryManager(undefined, undefined, this.workDir);
     await manager.initialize();
     const write = await manager.remember(key, value, {
       scope,
@@ -283,8 +285,15 @@ export class MemoryCandidateQueue {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as MemoryCandidateFile;
+      const parsed = readJsonAtomicSync<MemoryCandidateFile>(this.filePath, {
+        schemaVersion: MEMORY_CANDIDATE_SCHEMA_VERSION,
+        candidates: [],
+      }, {
+        mode: 0o600,
+        isValid: (value): value is MemoryCandidateFile => Boolean(
+          value && typeof value === 'object' && Array.isArray((value as { candidates?: unknown }).candidates),
+        ),
+      });
       if (Array.isArray(parsed.candidates)) {
         this.candidates = parsed.candidates.filter(isValidCandidate);
       }
@@ -302,7 +311,7 @@ export class MemoryCandidateQueue {
         schemaVersion: MEMORY_CANDIDATE_SCHEMA_VERSION,
         candidates: this.candidates,
       };
-      fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
     } catch (err) {
       logger.warn('[memory-candidates] failed to save queue', {
         error: err instanceof Error ? err.message : String(err),

@@ -16,13 +16,51 @@ import { GeminiCliProvider } from "./providers/provider-gemini-cli.js";
 import { AgyCliProvider } from './providers/provider-agy-cli.js';
 import { withStreamRetry } from "./stream-retry.js";
 import { createAbortError } from './abort-signal.js';
+import type { TurnMetricsRecorder } from '../observability/turn-metrics.js';
 import {
+  inferRuntimeProviderIdFromBaseURL,
   recordRuntimeFallbackFailure,
   recordRuntimeFallbackSuccess,
   resolveRuntimeCredentialPoolProviders,
   resolveRuntimeFallbackProviders,
   type RuntimeFallbackProvider,
 } from "../providers/provider-fallback.js";
+import { isLocalLlmProvider } from "../config/headless-local-prompt.js";
+import {
+  classifyFailoverKind,
+  extractResetsInSeconds,
+} from "./provider-failover-kind.js";
+import {
+  formatSkippedFailoverTargetLog,
+  formatContextTokensK,
+  isFailoverTargetTooSmall,
+  prepareFailoverHandoff,
+  type FailoverHandoffResult,
+} from "./provider-handoff.js";
+import {
+  describeFailoverAttempt,
+  ProviderFailoverExhaustedError,
+  type FailoverAttemptDetail,
+} from "./provider-failover-error.js";
+import {
+  filterHealthyFallbacks,
+  isDeclaredProviderFallbackEnabled,
+  isFailoverLocalOnly,
+  isLocalFailoverCandidate,
+  resolveDeclaredFallbackProviders,
+  resolveDefaultFailoverProviders,
+} from "../providers/provider-failover-policy.js";
+import {
+  getProviderHealthEntry,
+  isProviderUnavailable,
+  recordProviderFailure,
+  recordProviderSuccess,
+} from "../providers/provider-health.js";
+import {
+  notifyAuthFailure,
+  notifyProviderFallback,
+  notifyProviderReturn,
+} from "../providers/provider-failover-notify.js";
 export { hasToolCalls } from './message-guards.js';
 export type { CodeBuddyMessageWithToolCalls } from './message-guards.js';
 
@@ -98,6 +136,9 @@ export interface CodeBuddyToolCall {
     name: string;
     arguments: string;
   };
+  /** Gemini 3.x: opaque `thoughtSignature` returned with a functionCall part; it must be echoed
+   *  back with the same call in later turns or the API answers 400. Other providers ignore it. */
+  thoughtSignature?: string;
 }
 
 export interface SearchParameters {
@@ -177,6 +218,15 @@ export interface ChatOptions {
     initialDelayMs?: number;
     maxDelayMs?: number;
   };
+  /**
+   * Internal streamed-turn observer. `runTurnLoop` supplies this once; the
+   * provider owns the request-send/first-chunk/message-complete lifecycle.
+   */
+  turnMetrics?: {
+    recorder: TurnMetricsRecorder;
+    inputTokens?: number;
+    getOutputTokens?: () => number;
+  };
 }
 
 export interface CodeBuddyClientOptions {
@@ -191,6 +241,12 @@ export interface CodeBuddyClientOptions {
 }
 
 export interface CodeBuddyResponse {
+  /** Model that actually produced the response, when the provider exposes it. */
+  model?: string;
+  /** True when the provider stopped at an output-token ceiling. */
+  truncated?: boolean;
+  /** False when the caller requested search but the provider could not honor it. */
+  searchHonored?: boolean;
   choices: Array<{
     message: {
       role: string;
@@ -210,6 +266,10 @@ export interface CodeBuddyResponse {
 
 export class CodeBuddyClient {
   private currentModel: string = "grok-code-fast-1";
+  /** Track the last model that was explicitly requested by the user */
+  private lastRequestedModel: string | undefined;
+  /** Track the last effective model that actually responded */
+  private lastEffectiveModel: string | undefined;
   private defaultMaxTokens: number;
   private baseURL: string;
   private apiKey: string;
@@ -238,6 +298,11 @@ export class CodeBuddyClient {
   private credentialPoolProviders: RuntimeFallbackProvider[] = [];
   /** Hermes-style cross-provider fallback candidates, tried per failed chat turn. */
   private fallbackProviders: RuntimeFallbackProvider[] = [];
+  /** True after a declared failover until the original provider is healthy again. */
+  private didDeclaredFailover = false;
+  private activeFallback?: RuntimeFallbackProvider;
+  /** Lazy default chain (authenticated registry) for CODEBUDDY_PROVIDER_FALLBACK. */
+  private defaultDeclaredChain?: Promise<RuntimeFallbackProvider[]>;
 
   /**
    * Configure the circuit breaker for this client.
@@ -460,7 +525,48 @@ export class CodeBuddyClient {
           model: this.currentModel,
         },
       });
+      if (isDeclaredProviderFallbackEnabled() && !options.fallbackProviders) {
+        const declared = resolveDeclaredFallbackProviders({
+          active: {
+            provider: this.getRuntimeProviderId(),
+            apiKey: this.apiKey,
+            baseURL: this.baseURL,
+            model: this.currentModel,
+          },
+        });
+        if (declared.length > 0) this.fallbackProviders = declared;
+      }
     }
+  }
+
+  private getRuntimeProviderId(): string {
+    if (this.isChatGptProvider) return 'chatgpt';
+    if (this.isGeminiProvider) return 'gemini';
+    if (this.isGeminiCliProvider) return 'gemini-cli';
+    if (this.isAgyCliProvider) return 'agy-cli';
+    return inferRuntimeProviderIdFromBaseURL(this.baseURL) ?? 'custom';
+  }
+
+  private usesDeclaredFailover(opts?: ChatOptions): boolean {
+    return isDeclaredProviderFallbackEnabled() && !opts?.disableProviderFallback;
+  }
+
+  private unavailablePrimaryError(): Error {
+    const id = this.getRuntimeProviderId();
+    const entry = getProviderHealthEntry(id);
+    return new Error(
+      entry?.message || `Provider ${id} is unavailable (${entry?.kind ?? 'outage'})`,
+    );
+  }
+
+  private maybeReturnToOriginal(opts: ChatOptions): void {
+    if (!this.usesDeclaredFailover(opts) || !this.didDeclaredFailover) return;
+    const id = this.getRuntimeProviderId();
+    if (isProviderUnavailable(id)) return;
+    notifyProviderReturn(id);
+    this.activeFallback = undefined;
+    this.didDeclaredFailover = false;
+    recordProviderSuccess(id);
   }
 
   /**
@@ -511,6 +617,26 @@ export class CodeBuddyClient {
   }
 
   /**
+   * Get the last model that was explicitly requested by the user
+   */
+  getLastRequestedModel(): string | undefined {
+    return this.lastRequestedModel;
+  }
+
+  /**
+   * Get the last effective model that actually responded
+   */
+  getLastEffectiveModel(): string | undefined {
+    // A provider that remaps the requested model (ChatGPT/Codex) knows better
+    // than the response echo; prefer its record when it has served a request.
+    const providerEffective =
+      this.chatgptProvider && typeof this.chatgptProvider.getEffectiveModel === 'function'
+        ? this.chatgptProvider.getEffectiveModel()
+        : undefined;
+    return providerEffective ?? this.lastEffectiveModel;
+  }
+
+  /**
    * True when the active strategy is the ChatGPT Codex OAuth backend, which is
    * billed against the user's flat-fee Plus/Pro plan, not per token. Cost
    * displays should report $0 here regardless of the reported model slug — the
@@ -522,6 +648,10 @@ export class CodeBuddyClient {
 
   getBaseURL(): string {
     return this.baseURL;
+  }
+
+  getApiKey(): string {
+    return this.apiKey;
   }
 
   /**
@@ -543,6 +673,23 @@ export class CodeBuddyClient {
     if (url.includes('fireworks.ai')) return 'Fireworks';
     if (url.includes('localhost') || url.includes('127.0.0.1')) return 'Local';
     return 'API';
+  }
+
+  getCurrentProvider(): string {
+    return this.activeFallback?.provider ?? this.getRuntimeProviderId();
+  }
+
+  getCurrentBaseUrl(): string {
+    return this.activeFallback?.baseURL ?? this.baseURL;
+  }
+
+  isEffectiveTargetLocal(): boolean {
+    if (this.activeFallback) return isLocalFailoverCandidate(this.activeFallback);
+    if (this.usesDeclaredFailover() && isProviderUnavailable(this.getRuntimeProviderId())) {
+      const first = this.fallbackProviders[0] ?? this.credentialPoolProviders[0];
+      if (first) return isLocalFailoverCandidate(first);
+    }
+    return isLocalLlmProvider();
   }
 
   /**
@@ -595,14 +742,39 @@ export class CodeBuddyClient {
       ? { model: options, searchOptions }
       : options || {};
 
+    // Track the requested model
+    const requestedModel = opts.model ?? this.currentModel;
+
+    const finish = (response: CodeBuddyResponse): CodeBuddyResponse => {
+      this.lastRequestedModel = requestedModel;
+      this.lastEffectiveModel = response.model ?? requestedModel;
+      return response;
+    };
+
+    if (this.usesDeclaredFailover(opts) && isProviderUnavailable(this.getRuntimeProviderId())) {
+      return finish(await this.chatWithDeclaredFailover(
+        this.unavailablePrimaryError(),
+        messages,
+        tools,
+        opts,
+        searchOptions,
+        { skippedPrimary: true },
+      ));
+    }
+    this.maybeReturnToOriginal(opts);
+
     // Dispatch to the active strategy.
     try {
-      return await this.dispatchChat(messages, tools, opts, searchOptions);
+      const response = await this.dispatchChat(messages, tools, opts, searchOptions);
+      return finish(response);
     } catch (error) {
       if (opts.signal?.aborted) {
         throw createAbortError('Chat request aborted by caller');
       }
-      return await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
+      if (this.usesDeclaredFailover(opts)) {
+        return finish(await this.chatWithDeclaredFailover(error, messages, tools, opts, searchOptions));
+      }
+      return finish(await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions));
     }
   }
 
@@ -695,6 +867,169 @@ export class CodeBuddyClient {
     throw primaryError;
   }
 
+  private skipDeclaredTargetIfTooSmall(
+    fallback: RuntimeFallbackProvider,
+    handed: FailoverHandoffResult,
+  ): FailoverAttemptDetail | undefined {
+    if (!isFailoverTargetTooSmall(handed.estimatedTokens, handed.contextWindow)) return undefined;
+    const target = `${fallback.provider}:${fallback.model}`;
+    const message = `contexte ${formatContextTokensK(handed.contextWindow)} < ${formatContextTokensK(handed.estimatedTokens)}`;
+    logger.warn(
+      formatSkippedFailoverTargetLog(target, handed.contextWindow, handed.estimatedTokens),
+      {
+        source: 'CodeBuddyClient',
+        toProvider: fallback.provider,
+        toModel: fallback.model,
+        estimatedTokens: handed.estimatedTokens,
+        contextWindow: handed.contextWindow,
+      },
+    );
+    return { target, status: 'skipped', message };
+  }
+
+  private async listDeclaredFailoverCandidates(): Promise<RuntimeFallbackProvider[]> {
+    const localOnly = isFailoverLocalOnly();
+    const listed = filterHealthyFallbacks([
+      ...this.credentialPoolProviders,
+      ...this.fallbackProviders,
+    ]).filter((item) => {
+      if (!item.apiKey) return false;
+      if (localOnly && item.fallbackSource !== 'auth-profile' && !isLocalFailoverCandidate(item)) {
+        return false;
+      }
+      return true;
+    });
+    if (listed.length > 0) return listed;
+    this.defaultDeclaredChain ??= resolveDefaultFailoverProviders({
+      active: {
+        provider: this.getRuntimeProviderId(),
+        apiKey: this.apiKey,
+        baseURL: this.baseURL,
+        model: this.currentModel,
+      },
+      localOnly,
+    });
+    const extra = await this.defaultDeclaredChain;
+    return filterHealthyFallbacks(extra).filter((item) => Boolean(item.apiKey));
+  }
+
+  private async chatWithDeclaredFailover(
+    primaryError: unknown,
+    messages: CodeBuddyMessage[],
+    tools: CodeBuddyTool[] | undefined,
+    opts: ChatOptions,
+    searchOptions: SearchOptions | undefined,
+    flags: { skippedPrimary?: boolean } = {},
+  ): Promise<CodeBuddyResponse> {
+    const primaryId = this.getRuntimeProviderId();
+    const errorMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+    const prior = flags.skippedPrimary ? getProviderHealthEntry(primaryId) : undefined;
+    const classification = flags.skippedPrimary
+      ? {
+          kind: prior?.kind ?? 'quota_exhausted' as const,
+          shouldFailover: prior?.kind !== 'auth' && prior?.kind !== 'other',
+          resetsAt: prior?.resetsAt,
+          reason: prior?.kind ?? 'quota_exhausted',
+        }
+      : classifyFailoverKind(primaryError);
+
+    if (!classification.shouldFailover) {
+      if (classification.kind === 'auth') {
+        notifyAuthFailure(primaryId, errorMessage);
+        recordProviderFailure(primaryId, 'auth', {
+          message: errorMessage,
+          lastModel: this.currentModel,
+        });
+      }
+      throw primaryError;
+    }
+
+    if (!flags.skippedPrimary) {
+      recordProviderFailure(primaryId, classification.kind, {
+        message: errorMessage,
+        resetsAt: classification.resetsAt,
+        lastModel: this.currentModel,
+        resetsInSeconds: extractResetsInSeconds(primaryError),
+      });
+    }
+
+    const candidates = await this.listDeclaredFailoverCandidates();
+    if (candidates.length === 0) throw primaryError;
+
+    const fallbackOptsBase: ChatOptions = {
+      ...opts,
+      disableProviderFallback: true,
+    };
+    const attempts: FailoverAttemptDetail[] = [];
+
+    for (const fallback of candidates) {
+      try {
+        const handed = await prepareFailoverHandoff(messages, tools, {
+          fromProvider: primaryId,
+          fromModel: this.currentModel,
+          toProvider: fallback.provider,
+          toModel: fallback.model,
+          kind: classification.kind,
+        });
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
+        this.activeFallback = fallback;
+        const fallbackClient = new CodeBuddyClient(
+          fallback.apiKey,
+          fallback.model,
+          fallback.baseURL,
+          { enableFallbacks: false },
+        );
+        if (this.circuitBreakerConfig) {
+          fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
+        }
+        const response = await fallbackClient.chat(handed.messages, handed.tools, {
+          ...fallbackOptsBase,
+          model: fallback.model,
+        }, searchOptions);
+        notifyProviderFallback({
+          fromProvider: primaryId,
+          fromModel: this.currentModel,
+          toProvider: fallback.provider,
+          toModel: fallback.model,
+          kind: classification.kind,
+          resetsAt: classification.resetsAt,
+        });
+        recordRuntimeFallbackSuccess(fallback);
+        recordProviderSuccess(fallback.provider);
+        this.didDeclaredFailover = true;
+        return response;
+      } catch (fallbackError) {
+        if (opts.signal?.aborted) {
+          throw createAbortError('Chat request aborted by caller');
+        }
+        recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
+        const fbKind = classifyFailoverKind(fallbackError);
+        if (fbKind.shouldFailover) {
+          recordProviderFailure(fallback.provider, fbKind.kind, {
+            message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            resetsAt: fbKind.resetsAt,
+            lastModel: fallback.model,
+            resetsInSeconds: extractResetsInSeconds(fallbackError),
+          });
+        }
+        logger.warn('Declared fallback provider failed', {
+          source: 'CodeBuddyClient',
+          fallbackProvider: fallback.provider,
+          fallbackModel: fallback.model,
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+        });
+      }
+    }
+
+    this.activeFallback = undefined;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
+  }
+
   async *chatStream(
     messages: CodeBuddyMessage[],
     tools?: CodeBuddyTool[],
@@ -712,6 +1047,22 @@ export class CodeBuddyClient {
     const callOptIn = opts.streamRetry;
     const retryEnabled = callOptIn !== undefined ? !!callOptIn : envOptIn;
     const retryOpts = typeof callOptIn === 'object' && callOptIn !== null ? callOptIn : {};
+    // Streaming is the headless path: record the requested model here too (MODELLABEL1).
+    this.lastRequestedModel = opts.model ?? this.currentModel;
+
+    if (this.usesDeclaredFailover(opts) && isProviderUnavailable(this.getRuntimeProviderId())) {
+      yield* this.chatStreamWithDeclaredFailover(
+        this.unavailablePrimaryError(),
+        messages,
+        tools,
+        opts,
+        searchOptions,
+        { skippedPrimary: true },
+      );
+      return;
+    }
+    this.maybeReturnToOriginal(opts);
+
     const primaryFactory = (): AsyncGenerator<ChatCompletionChunk, void, unknown> =>
       this.dispatchChatStream(messages, tools, opts, searchOptions);
     const primaryStream = retryEnabled
@@ -730,6 +1081,10 @@ export class CodeBuddyClient {
       }
       if (yieldedAnyChunk) {
         throw error;
+      }
+      if (this.usesDeclaredFailover(opts)) {
+        yield* this.chatStreamWithDeclaredFailover(error, messages, tools, opts, searchOptions);
+        return;
       }
       yield* this.chatStreamWithProviderFallback(error, messages, tools, opts, searchOptions);
     }
@@ -778,6 +1133,8 @@ export class CodeBuddyClient {
     };
 
     for (const fallback of fallbackCandidates) {
+      // Audit 2026-09-02 (D5) : visible du catch — déclaré hors du try.
+      let yieldedFromThisFallback = false;
       try {
         logger.warn('Primary provider stream failed before first chunk; trying fallback provider', {
           source: 'CodeBuddyClient',
@@ -799,10 +1156,15 @@ export class CodeBuddyClient {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
 
+        // Audit 2026-09-02 (D5) : si CE secours échoue après avoir émis des
+        // chunks, passer au secours suivant rejouerait toute la réponse à la
+        // suite du préfixe déjà livré — réponse HYBRIDE de deux modèles sans
+        // erreur. Après émission, l'échec doit se propager.
         for await (const chunk of fallbackClient.chatStream(messages, tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {
+          yieldedFromThisFallback = true;
           yield chunk;
         }
         recordRuntimeFallbackSuccess(fallback);
@@ -810,6 +1172,16 @@ export class CodeBuddyClient {
       } catch (fallbackError) {
         if (opts.signal?.aborted) {
           throw createAbortError('Chat stream aborted by caller');
+        }
+        if (yieldedFromThisFallback) {
+          recordRuntimeFallbackFailure(fallback, fallbackError);
+          logger.warn('Fallback provider stream failed AFTER emitting chunks — propagating (a further fallback would duplicate content)', {
+            source: 'CodeBuddyClient',
+            fallbackProvider: fallback.provider,
+            fallbackModel: fallback.model,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
         logger.warn('Fallback provider stream failed', {
@@ -824,6 +1196,139 @@ export class CodeBuddyClient {
     }
 
     throw primaryError;
+  }
+
+  private async *chatStreamWithDeclaredFailover(
+    primaryError: unknown,
+    messages: CodeBuddyMessage[],
+    tools: CodeBuddyTool[] | undefined,
+    opts: ChatOptions,
+    searchOptions: SearchOptions | undefined,
+    flags: { skippedPrimary?: boolean } = {},
+  ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+    const primaryId = this.getRuntimeProviderId();
+    const errorMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+    const prior = flags.skippedPrimary ? getProviderHealthEntry(primaryId) : undefined;
+    const classification = flags.skippedPrimary
+      ? {
+          kind: prior?.kind ?? 'quota_exhausted' as const,
+          shouldFailover: prior?.kind !== 'auth' && prior?.kind !== 'other',
+          resetsAt: prior?.resetsAt,
+          reason: prior?.kind ?? 'quota_exhausted',
+        }
+      : classifyFailoverKind(primaryError);
+
+    if (!classification.shouldFailover) {
+      if (classification.kind === 'auth') {
+        notifyAuthFailure(primaryId, errorMessage);
+        recordProviderFailure(primaryId, 'auth', {
+          message: errorMessage,
+          lastModel: this.currentModel,
+        });
+      }
+      throw primaryError;
+    }
+
+    if (!flags.skippedPrimary) {
+      recordProviderFailure(primaryId, classification.kind, {
+        message: errorMessage,
+        resetsAt: classification.resetsAt,
+        lastModel: this.currentModel,
+        resetsInSeconds: extractResetsInSeconds(primaryError),
+      });
+    }
+
+    const candidates = await this.listDeclaredFailoverCandidates();
+    if (candidates.length === 0) throw primaryError;
+
+    const fallbackOptsBase: ChatOptions = {
+      ...opts,
+      disableProviderFallback: true,
+    };
+    const attempts: FailoverAttemptDetail[] = [];
+
+    for (const fallback of candidates) {
+      let yieldedFromThisFallback = false;
+      try {
+        const handed = await prepareFailoverHandoff(messages, tools, {
+          fromProvider: primaryId,
+          fromModel: this.currentModel,
+          toProvider: fallback.provider,
+          toModel: fallback.model,
+          kind: classification.kind,
+        });
+        const skipped = this.skipDeclaredTargetIfTooSmall(fallback, handed);
+        if (skipped) {
+          attempts.push(skipped);
+          continue;
+        }
+        this.activeFallback = fallback;
+        const fallbackClient = new CodeBuddyClient(
+          fallback.apiKey,
+          fallback.model,
+          fallback.baseURL,
+          { enableFallbacks: false },
+        );
+        if (this.circuitBreakerConfig) {
+          fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
+        }
+        for await (const chunk of fallbackClient.chatStream(handed.messages, handed.tools, {
+          ...fallbackOptsBase,
+          model: fallback.model,
+        }, searchOptions)) {
+          if (!yieldedFromThisFallback) {
+            notifyProviderFallback({
+              fromProvider: primaryId,
+              fromModel: this.currentModel,
+              toProvider: fallback.provider,
+              toModel: fallback.model,
+              kind: classification.kind,
+              resetsAt: classification.resetsAt,
+            });
+            recordRuntimeFallbackSuccess(fallback);
+            recordProviderSuccess(fallback.provider);
+            this.didDeclaredFailover = true;
+          }
+          yieldedFromThisFallback = true;
+          yield chunk;
+        }
+        if (!yieldedFromThisFallback) {
+          notifyProviderFallback({
+            fromProvider: primaryId,
+            fromModel: this.currentModel,
+            toProvider: fallback.provider,
+            toModel: fallback.model,
+            kind: classification.kind,
+            resetsAt: classification.resetsAt,
+          });
+          recordRuntimeFallbackSuccess(fallback);
+          recordProviderSuccess(fallback.provider);
+          this.didDeclaredFailover = true;
+        }
+        return;
+      } catch (fallbackError) {
+        if (opts.signal?.aborted) {
+          throw createAbortError('Chat stream aborted by caller');
+        }
+        if (yieldedFromThisFallback) {
+          recordRuntimeFallbackFailure(fallback, fallbackError);
+          throw fallbackError;
+        }
+        recordRuntimeFallbackFailure(fallback, fallbackError);
+        attempts.push(describeFailoverAttempt(`${fallback.provider}:${fallback.model}`, fallbackError));
+        const fbKind = classifyFailoverKind(fallbackError);
+        if (fbKind.shouldFailover) {
+          recordProviderFailure(fallback.provider, fbKind.kind, {
+            message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            resetsAt: fbKind.resetsAt,
+            lastModel: fallback.model,
+          });
+        }
+      }
+    }
+
+    this.activeFallback = undefined;
+    throw new ProviderFailoverExhaustedError(primaryError, attempts);
   }
 
   async search(

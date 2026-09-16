@@ -132,7 +132,7 @@ deux contre-jours) contre 0,25 pour `ambre-031-foret` et 0,69 pour
 Avec `--mattes DIR`, le script cherche `<nom-du-fichier>-alpha.png` dans DIR et
 ne mesure que la **bande semi-transparente** (0,10 < alpha < 0,90). Les mattes
 se produisent avec BiRefNet `Matting-HR` (nœuds `ComfyUI_BiRefNet_ll` du
-ComfyUI de darkstar). C'est dans ce mode que se lit l'effet de
+ComfyUI de gpuNode). C'est dans ce mode que se lit l'effet de
 `reparer-lisere-chevelure.py`, qui ne touche que cette bande :
 
 | image                        | avant  | après  |     Δ | nature          |

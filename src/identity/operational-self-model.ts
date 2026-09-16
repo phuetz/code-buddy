@@ -65,6 +65,8 @@ export interface OperationalSelfArea {
 }
 
 export interface CompanionRuntimeEvidence {
+  /** Live CLI theme, only when attested by that UI host. */
+  theme?: string;
   model?: string;
   provider?: string;
   /** False when the report is built locally without dispatching a model. */
@@ -1131,6 +1133,11 @@ function runtimeFacts(
       ['agent turn metadata']
     )
   );
+  const theme = surface === 'cli' ? normalizedRuntimeIdentifier(runtime.theme) : undefined;
+  if (theme) {
+    facts.push(fact(observedAt, 'turn.theme', 'Thème CLI actif', 'verified', theme,
+      ['in-process Ink ThemeManager']));
+  }
   const registered = normalizedToolNames(runtime.registeredToolNames);
   const exposed = normalizedToolNames(runtime.exposedToolNames);
   facts.push(

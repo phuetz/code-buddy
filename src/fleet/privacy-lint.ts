@@ -105,15 +105,6 @@ const PATTERNS: Array<{
     regex: /\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g,
     highConfidence: true,
   },
-  // PII — IBAN (2 letters country + 2 check digits + up to 30 alnum).
-  // Accepted spellings: contiguous or grouped in 4. We normalise away
-  // spaces below in the test, the regex matches both forms.
-  {
-    kind: 'pii-iban',
-    regex:
-      /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,4})?\b/g,
-    highConfidence: false,
-  },
   // PII — phone numbers. E.164 (+ then 8-15 digits, optional spaces),
   // or French national format (0[1-9] + 8 digits with optional spaces).
   {
@@ -155,6 +146,78 @@ function luhnValid(digits: string): boolean {
   return sum % 10 === 0;
 }
 
+const IBAN_LENGTHS: Readonly<Record<string, number>> = {
+  AD: 24, AE: 23, AL: 28, AT: 20, AZ: 28,
+  BA: 20, BE: 16, BG: 22, BH: 22, BR: 29, BY: 28,
+  CH: 21, CR: 22, CY: 28, CZ: 24,
+  DE: 22, DK: 18, DO: 28,
+  EE: 20, EG: 29, ES: 24,
+  FI: 18, FO: 18, FR: 27,
+  GB: 22, GE: 22, GI: 23, GL: 18, GR: 27, GT: 28,
+  HR: 21, HU: 28,
+  IE: 22, IL: 23, IQ: 23, IS: 26, IT: 27,
+  JO: 30,
+  KW: 30, KZ: 20,
+  LB: 28, LC: 32, LI: 21, LT: 20, LU: 20, LV: 21,
+  MC: 27, MD: 24, ME: 22, MK: 19, MR: 27, MT: 31, MU: 30,
+  NL: 18, NO: 15,
+  PK: 24, PL: 28, PS: 29, PT: 25,
+  QA: 29,
+  RO: 24, RS: 22,
+  SA: 24, SC: 31, SE: 24, SI: 19, SK: 24, SM: 27, ST: 25, SV: 28,
+  TL: 23, TN: 24, TR: 26,
+  UA: 29,
+  VA: 22, VG: 24,
+  XK: 20,
+};
+
+function ibanMod97Valid(compact: string): boolean {
+  const rearranged = compact.slice(4) + compact.slice(0, 4);
+  let remainder = 0;
+  for (const char of rearranged) {
+    const numeric = char >= 'A' && char <= 'Z'
+      ? String(char.charCodeAt(0) - 55)
+      : char;
+    for (const digit of numeric) {
+      remainder = (remainder * 10 + Number(digit)) % 97;
+    }
+  }
+  return remainder === 1;
+}
+
+function findIbanRanges(text: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const startPattern = /\b[A-Z]{2}\d{2}/gi;
+  let match: RegExpExecArray | null;
+  while ((match = startPattern.exec(text)) !== null) {
+    const country = match[0].slice(0, 2).toUpperCase();
+    const expectedLength = IBAN_LENGTHS[country];
+    if (!expectedLength) continue;
+
+    let compact = match[0].toUpperCase();
+    let cursor = match.index + match[0].length;
+    while (cursor < text.length && compact.length < expectedLength) {
+      const char = text[cursor]!;
+      if (/[A-Z0-9]/i.test(char)) {
+        compact += char.toUpperCase();
+        cursor++;
+        continue;
+      }
+      if (/[ \t\u00a0-]/.test(char) && /[A-Z0-9]/i.test(text[cursor + 1] ?? '')) {
+        cursor++;
+        continue;
+      }
+      break;
+    }
+
+    if (compact.length !== expectedLength) continue;
+    if (/[A-Z0-9]/i.test(text[cursor] ?? '')) continue;
+    if (!ibanMod97Valid(compact)) continue;
+    ranges.push({ start: match.index, end: cursor });
+  }
+  return ranges;
+}
+
 /**
  * Scan a prompt for secrets. Returns matches with previews.
  */
@@ -162,6 +225,16 @@ export function scanForSecrets(prompt: string): PrivacyLintResult {
   const matches: PrivacyMatch[] = [];
   const seen: Array<[number, number]> = [];
   let highConfidence = false;
+
+  for (const { start, end } of findIbanRanges(prompt)) {
+    seen.push([start, end]);
+    matches.push({
+      kind: 'pii-iban',
+      start,
+      end,
+      preview: redactPreview(prompt, start, end),
+    });
+  }
 
   for (const { kind, regex, highConfidence: hc } of PATTERNS) {
     // Reset lastIndex for each fresh match — patterns are stateful.

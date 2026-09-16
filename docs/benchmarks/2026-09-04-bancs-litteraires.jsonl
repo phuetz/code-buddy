@@ -1,0 +1,11 @@
+{"at":"2026-09-04T00:00:00.000Z","taskType":"redaction-fr","model":"gpt-5.6-luna","provider":"chatgpt","won":true,"quality":0.9333333333333333,"latencyMs":278000,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"redaction-fr","model":"gemini-3.8-flash-high","provider":"agy-cli","won":false,"quality":0.7333333333333333,"latencyMs":730000,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"redaction-fr","model":"mistral-medium-3.5","provider":"mistral","won":false,"quality":0.4,"latencyMs":842000,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"arbitrage-litteraire","model":"gemini-3.8-flash-high","provider":"agy-cli","won":true,"quality":0.974,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"arbitrage-litteraire","model":"mistral-medium-3.5","provider":"mistral","won":false,"quality":0.795,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"arbitrage-litteraire","model":"codestral-latest","provider":"mistral","won":false,"quality":0.64,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"arbitrage-litteraire","model":"gpt-5.6-sol","provider":"chatgpt","won":false,"quality":0.205,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"arbitrage-litteraire","model":"gpt-5.6-luna","provider":"chatgpt","won":false,"quality":0.205,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"jugement-litteraire","model":"gpt-5.6-sol","provider":"chatgpt","won":true,"quality":1,"latencyMs":0,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"audit-adversarial","model":"gemini-3.8-flash-high","provider":"agy-cli","won":true,"quality":1,"latencyMs":480000,"costUsd":0}
+{"at":"2026-09-04T00:00:00.000Z","taskType":"relecture-typo","model":"mistral-medium-3.5","provider":"mistral","won":true,"quality":0.84,"latencyMs":0,"costUsd":0}

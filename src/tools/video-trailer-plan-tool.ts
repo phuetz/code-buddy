@@ -27,8 +27,12 @@ import {
 const OPERATIONS = ['validate', 'preview'] as const;
 
 const CAPACITY_PROPERTIES = {
-  darkstar: { type: 'boolean', description: 'Darkstar local GPU worker is available.' },
-  ministar: { type: 'boolean', description: 'Ministar local GPU worker is available.' },
+  gpuNode: { type: 'boolean', description: 'GPU node local GPU worker is available.' },
+  localGpu: {
+    type: 'boolean',
+    description:
+      'Local GPU worker is available. Generic compatibility aliases local_gpu, localGpuAvailable and local_gpu_available are accepted; machine-specific legacy keys are not read.',
+  },
   google_flow: { type: 'boolean', description: 'Google Flow (browser-assisted) is available.' },
   remaining_flow_credits: { type: 'number', description: 'Remaining Google Flow credits.' },
   max_flow_credits_per_batch: { type: 'number', description: 'Credit ceiling for this batch.' },
@@ -52,7 +56,7 @@ export const VIDEO_TRAILER_PLAN_PARAMETERS = {
       type: 'object',
       description: 'Required for preview: available engines and Flow credit budget.',
       properties: { ...CAPACITY_PROPERTIES },
-      required: ['darkstar', 'ministar', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
+      required: ['gpuNode', 'localGpu', 'google_flow', 'remaining_flow_credits', 'max_flow_credits_per_batch'],
       additionalProperties: false,
     },
   },

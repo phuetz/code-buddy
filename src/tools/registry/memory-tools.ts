@@ -28,7 +28,7 @@ export class RememberTool implements ITool {
     // Per-bot memory (multi-bot channels): scope by botId so bots don't share
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
-    const mm = getMemoryManager(undefined, context?.botId);
+    const mm = getMemoryManager(undefined, context?.botId, context?.cwd);
     await mm.initialize();
 
     let key = input.key as string;
@@ -37,7 +37,7 @@ export class RememberTool implements ITool {
     let category = (input.category as MemoryCategory) ?? 'custom';
 
     try {
-      const hookResult = await executeHermesLifecycleHook(process.cwd(), 'before_memory_write', {
+      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? process.cwd(), 'before_memory_write', {
         toolName: this.name,
         toolInput: { key, value, scope, category },
         memoryKey: key,
@@ -153,7 +153,7 @@ export class ReplaceMemoryTool implements ITool {
     // Per-bot memory (multi-bot channels): scope by botId so bots don't share
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
-    const mm = getMemoryManager(undefined, context?.botId);
+    const mm = getMemoryManager(undefined, context?.botId, context?.cwd);
     await mm.initialize();
 
     let key = input.key as string;
@@ -162,7 +162,7 @@ export class ReplaceMemoryTool implements ITool {
     let category = input.category as MemoryCategory | undefined;
 
     try {
-      const hookResult = await executeHermesLifecycleHook(process.cwd(), 'before_memory_write', {
+      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? process.cwd(), 'before_memory_write', {
         toolName: this.name,
         toolInput: { key, value, scope, category },
         memoryKey: key,
@@ -281,7 +281,7 @@ export class MemoryProposeTool implements ITool {
   readonly description =
     'Propose a long-term memory candidate for human review. Use this instead of remember when the fact is inferred, ambiguous, or should not be silently injected into future prompts.';
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     const key = input.key as string;
     const value = input.value as string;
     const scope = (input.scope as 'project' | 'user') ?? 'project';
@@ -290,7 +290,7 @@ export class MemoryProposeTool implements ITool {
     const rationale = typeof input.rationale === 'string' ? input.rationale : undefined;
 
     try {
-      const { candidate, deduped } = getMemoryCandidateQueue(process.cwd()).propose({
+      const { candidate, deduped } = getMemoryCandidateQueue(context?.cwd ?? process.cwd(), context?.botId).propose({
         key,
         value,
         scope,
@@ -395,24 +395,30 @@ export class RecallTool implements ITool {
     // Per-bot memory (multi-bot channels): scope by botId so bots don't share
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
-    const mm = getMemoryManager(undefined, context?.botId);
-    await mm.initialize();
-    const key = input.key as string;
-    const scope = input.scope as 'project' | 'user' | undefined;
+    const mm = getMemoryManager(undefined, context?.botId, context?.cwd);
+    try {
+      await mm.initialize();
+      const key = input.key as string;
+      const scope = input.scope as 'project' | 'user' | undefined;
 
-    const value = mm.recall(key, scope);
+      const value = mm.recall(key, scope);
 
-    if (value) {
-      return {
-        success: true,
-        output: `Memory for "${key}":
+      if (value) {
+        return {
+          success: true,
+          output: `Memory for "${key}":
 
 ${value}`,
-      };
-    } else {
+        };
+      }
       return {
         success: true,
         output: `No memory found for key "${key}"${scope ? ` in ${scope} scope` : ''}.`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to recall memory: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
@@ -481,22 +487,28 @@ export class ForgetTool implements ITool {
     // Per-bot memory (multi-bot channels): scope by botId so bots don't share
     // each other's facts. No botId = global memory (default). initialize() is
     // idempotent, so this is cheap for the already-initialized global instance.
-    const mm = getMemoryManager(undefined, context?.botId);
-    await mm.initialize();
-    const key = input.key as string;
-    const scope = (input.scope as 'project' | 'user') ?? 'project';
+    const mm = getMemoryManager(undefined, context?.botId, context?.cwd);
+    try {
+      await mm.initialize();
+      const key = input.key as string;
+      const scope = (input.scope as 'project' | 'user') ?? 'project';
 
-    const deleted = await mm.forget(key, scope);
+      const deleted = await mm.forget(key, scope);
 
-    if (deleted) {
-      return {
-        success: true,
-        output: `Successfully forgot "${key}" from ${scope} memory.`,
-      };
-    } else {
+      if (deleted) {
+        return {
+          success: true,
+          output: `Successfully forgot "${key}" from ${scope} memory.`,
+        };
+      }
       return {
         success: true,
         output: `No memory found for key "${key}" in ${scope} scope.`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to forget memory: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

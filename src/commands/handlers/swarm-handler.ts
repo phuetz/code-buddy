@@ -32,6 +32,9 @@ import {
   _peekActiveStrategy,
   _setActiveStrategy,
 } from './agents-handler.js';
+import { ThreadTaskRunner } from '../../agent/delegation/thread-task-runner.js';
+import type { ThreadDelegationEvent } from '../../agent/delegation/thread-delegation.js';
+import type { AgentExecutionResult } from '../../agent/multi-agent/types.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -59,8 +62,10 @@ Examples:
 Under the hood:
   - Auto-enables MultiAgentSystem (idempotent)
   - Forces strategy=parallel for this run (restored after)
+  - Multiplexes full workers through bounded thread delegation (default: 1)
   - Delegates to /agents run <task>
-  - Output is fire-and-forget; track progress with /swarm status
+  - Headless (buddy -p) waits for the team to finish and prints the report
+  - Interactive TUI is fire-and-forget; track progress with /swarm status
 
 Inspired by Korben's article on Claude Code's hidden Swarms mode
 (korben.info/claude-code-activer-mode-swarms-cache.html). Code Buddy
@@ -78,6 +83,32 @@ function textResult(content: string): CommandHandlerResult {
     handled: true,
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
+}
+
+function positiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function formatSwarmPayload(payload: unknown): string {
+  if (typeof payload === 'string') return payload;
+  if (typeof payload === 'object' && payload !== null) {
+    const record = payload as Record<string, unknown>;
+    if (typeof record.output === 'string' && record.output.trim()) return record.output.trim();
+    if (typeof record.message === 'string') return record.message;
+    if (typeof record.state === 'string') return record.state;
+  }
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function writeSwarmEvent(event: ThreadDelegationEvent<AgentExecutionResult>): void {
+  process.stdout.write(
+    `[swarm:${event.agentId}:${event.kind}] ${formatSwarmPayload(event.payload)}\n`,
+  );
 }
 
 export async function handleSwarm(args: string[]): Promise<CommandHandlerResult> {
@@ -109,7 +140,24 @@ export async function handleSwarm(args: string[]): Promise<CommandHandlerResult>
   _setActiveStrategy('parallel');
 
   try {
-    const result = await handleAgents(['run', task]);
+    const result = await handleAgents(['run', task], {
+      threadDelegation: {
+        concurrency: Math.floor(
+          positiveNumber(
+            process.env.CODEBUDDY_SWARM_CONCURRENCY,
+            ThreadTaskRunner.DEFAULT_CONCURRENCY,
+          ),
+        ),
+        parentBudget: {
+          maxTurns: Math.floor(positiveNumber(process.env.CODEBUDDY_SWARM_MAX_TURNS, 100)),
+          maxCostUsd: positiveNumber(process.env.CODEBUDDY_SWARM_MAX_COST_USD, 10),
+          maxContextTokens: Math.floor(
+            positiveNumber(process.env.CODEBUDDY_SWARM_MAX_CONTEXT_TOKENS, 128_000),
+          ),
+        },
+        onEvent: writeSwarmEvent,
+      },
+    });
 
     const banner =
       `🐝 Swarm spawning for: ${task}\n` +

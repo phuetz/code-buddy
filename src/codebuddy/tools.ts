@@ -1,3 +1,7 @@
+import { A2A_CALL_TOOL_DEF } from './a2a-call-tool-defs.js';
+import { RESOURCE_CATALOG_TOOL_DEF } from './resource-catalog-tool-defs.js';
+import { RAGCHAT_TOOL_DEF } from './ragchat-tool-defs.js';
+import { integrationToolHints } from '../tools/integration-tool-hints.js';
 /**
  * Grok Tools
  *
@@ -5,8 +9,9 @@
  * Tools are now organized in modular files under tool-definitions/.
  */
 
+import { TOOL_METADATA as SEARCH_TOOL_METADATA } from '../tools/metadata.js';
 import type { CodeBuddyTool, JsonSchemaProperty } from "./client.js";
-import { setDeferredMCPSchemas } from "../tools/deferred-schema-state.js";
+import { setDeferredMCPSchemas, resolveDeferredSchemas as resolveSelectedSchemas } from "../tools/deferred-schema-state.js";
 import { MCPManager, MCPTool } from "../mcp/client.js";
 import { loadMCPConfig } from "../mcp/config.js";
 import {
@@ -22,7 +27,7 @@ import { getToolRegistry } from "../tools/registry.js";
 import { createRegisterToolTool } from "../tools/register-tool-handler.js";
 import { loadAuthoredTools } from "../agent/self-improvement/tool-skill-mutator.js";
 import { applyToolFilter } from "../utils/tool-filter.js";
-import { TOOL_METADATA } from "../tools/metadata.js";
+import { getActiveToolMetadata } from "../tools/metadata.js";
 import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getWorkspace } from '../workspace/workspace-config.js';
 import {
@@ -34,6 +39,7 @@ import {
 import {
   CORE_TOOLS,
   SELF_DESCRIBE_TOOLS,
+  SELF_EVOLUTION_TOOLS,
   MORPH_EDIT_TOOL,
   isMorphEnabled,
   SEARCH_TOOLS,
@@ -77,6 +83,7 @@ import {
   WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
+import { isContextZoomEnabled } from '../context/segment-archive.js';
 
 // 20 pre-authored tool definitions (wired into the registry as AUTHORED_EXTRA_TOOLS).
 // Loosely-typed literal definitions → cast the group to CodeBuddyTool[] below.
@@ -170,7 +177,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
-  CORE_TOOLS, SELF_DESCRIBE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
+  CORE_TOOLS, SELF_DESCRIBE_TOOLS, SELF_EVOLUTION_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
   SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS, LSP_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
@@ -180,6 +187,7 @@ export function getBuiltinToolNames(): string[] {
   const groups: CodeBuddyTool[][] = [
     CORE_TOOLS,
     SELF_DESCRIBE_TOOLS,
+    SELF_EVOLUTION_TOOLS,
     [MORPH_EDIT_TOOL],
     SEARCH_TOOLS,
     WORKSPACE_TOOLS,
@@ -218,6 +226,7 @@ export function getBuiltinToolNames(): string[] {
     MERGE_CONFLICT_TOOLS,
     VULN_SCANNER_TOOLS,
     SESSION_TOOLS,
+    [RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF],
     FLEET_TOOLS,
     CODE_EXPLORER_TOOLS,
     WINDOWS_TOOLS,
@@ -225,9 +234,13 @@ export function getBuiltinToolNames(): string[] {
     [CONTEXT_EXPAND_TOOL],
   ];
 
-  return filterToolNamesForSurface(Array.from(new Set(
+  const names = Array.from(new Set(
     groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
-  )));
+  ));
+  const surfaceNames = isContextZoomEnabled()
+    ? names
+    : names.filter((name) => name !== 'context_expand');
+  return filterToolNamesForSurface(surfaceNames);
 }
 
 // ============================================================================
@@ -243,7 +256,7 @@ export function initializeToolRegistry(): void {
   if (isRegistryInitialized) return;
 
   const registry = getToolRegistry();
-  const metadataMap = new Map(TOOL_METADATA.map(m => [m.name, m]));
+  const metadataMap = new Map(getActiveToolMetadata().map(m => [m.name, m]));
 
   const registerGroup = (tools: CodeBuddyTool[], isEnabled: () => boolean = () => true) => {
     for (const tool of tools) {
@@ -262,6 +275,7 @@ export function initializeToolRegistry(): void {
   // Register all tool groups
   registerGroup(CORE_TOOLS);
   registerGroup(SELF_DESCRIBE_TOOLS);
+  registerGroup(SELF_EVOLUTION_TOOLS);
   registerGroup([CONTEXT_EXPAND_TOOL], () => process.env.CODEBUDDY_CONTEXT_ZOOM === 'true');
 
   // Register Morph tool separately with its own enabled check
@@ -371,6 +385,7 @@ export function initializeToolRegistry(): void {
 
   // Fleet tools — peer_delegate, list_peers (Phase (d).17). Always available;
   // peer_delegate returns a clear error when no peers are connected.
+  registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF]);
   registerGroup(FLEET_TOOLS);
 
   // CodeExplorer tools
@@ -468,6 +483,16 @@ export function codeExplorerToolPrefix(): string | null {
 }
 
 let mcpServersInitPromise: Promise<void> | null = null;
+
+/** Drop the process-wide MCP singleton (tests / one-shot CLI teardown). */
+export async function resetMCPManager(): Promise<void> {
+  const current = mcpManager;
+  mcpManager = null;
+  mcpServersInitPromise = null;
+  if (current) {
+    await current.dispose();
+  }
+}
 
 export function initializeMCPServers(): Promise<void> {
   if (mcpServersInitPromise) return mcpServersInitPromise;
@@ -741,6 +766,8 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
       allTools.map((t) => ({
         name: t.function.name,
         description: t.function.description ?? '',
+        parameters: t.function.parameters,
+        keywords: SEARCH_TOOL_METADATA.find(meta => meta.name === t.function.name)?.keywords,
       })),
     );
   } catch {
@@ -753,6 +780,13 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
 // ============================================================================
 // Tool Selection (RAG-based)
 // ============================================================================
+
+/** Hydrate only names already exposed by assembly/selection; never add permissions. */
+function hydrateExposedToolSchemas(tools: CodeBuddyTool[]): CodeBuddyTool[] {
+  const resolved = new Map(resolveSelectedSchemas(tools.map(tool => tool.function.name))
+    .map(tool => [tool.function.name, tool]));
+  return tools.map(tool => resolved.get(tool.function.name) ?? tool);
+}
 
 /**
  * Get relevant tools for a specific query using RAG-based selection
@@ -785,7 +819,7 @@ export async function getRelevantTools(
   // If RAG is disabled, return all tools
   if (!useRAG) {
     return {
-      selectedTools: allTools,
+      selectedTools: hydrateExposedToolSchemas(allTools),
       scores: new Map(allTools.map(t => [t.function.name, 1])),
       classification: {
         categories: ['file_read', 'file_write', 'system'] as ToolCategory[],
@@ -798,7 +832,14 @@ export async function getRelevantTools(
     };
   }
 
-  return selectRelevantTools(query, allTools, maxTools, options.alwaysInclude);
+  const preferred = integrationToolHints(query, allTools.map(tool => tool.function.name));
+  const selection = selectRelevantTools(query, allTools, maxTools, [
+    ...(options.alwaysInclude ?? ['view_file', 'bash']), ...preferred,
+  ]);
+  // Once selected, a deferred MCP tool must expose its argument schema.
+  // Empty stubs otherwise force valid models to emit {} for required inputs.
+  selection.selectedTools = hydrateExposedToolSchemas(selection.selectedTools);
+  return selection;
 }
 
 /**

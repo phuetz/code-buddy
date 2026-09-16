@@ -13,11 +13,11 @@ import {
 } from '../../src/companion/assistant-config.js';
 
 describe('assistant TTS defaults', () => {
-  it('presents Pocket first, Voicebox expressive, and Piper as the legacy fallback', () => {
+  it('keeps Pocket first/default and exposes opt-in Kyutai before the legacy engines', () => {
     const engine = ASSISTANT_SETTINGS.find((setting) => setting.key === 'CODEBUDDY_TTS_ENGINE');
     expect(engine).toMatchObject({
       default: 'pocket',
-      options: ['pocket', 'voicebox', 'piper'],
+      options: ['pocket', 'kyutai', 'voicebox', 'piper'],
     });
     expect(ASSISTANT_SETTINGS.find((setting) => setting.key === 'CODEBUDDY_POCKET_SERVER'))
       .toMatchObject({ default: 'true' });

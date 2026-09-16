@@ -12,8 +12,8 @@ import { verifyGoogleFlowHandoffDigest } from '../../src/tools/video/google-flow
 const SOURCE_PLAN_SHA256 = 'f'.repeat(64);
 
 const capacity = {
-  darkstar: true,
-  ministar: true,
+  gpuNode: true,
+  localGpu: true,
   google_flow: true,
   remaining_flow_credits: 25_000,
   max_flow_credits_per_batch: 100,
@@ -114,8 +114,8 @@ describe('video_flow_handoff — create + verify', () => {
       upscale_4k: false,
       remaining_flow_credits: 25_000,
       max_flow_credits_per_batch: 100,
-      darkstar_available: true,
-      ministar_available: true,
+      gpu_node_available: true,
+      local_gpu_available: true,
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/not safe|QA-approved|object/i);

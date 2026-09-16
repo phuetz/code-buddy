@@ -407,9 +407,12 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     const cwd = process.cwd();
     let output = '';
 
+    // Explicit `.` path: without one, ripgrep searches stdin whenever stdin is
+    // not a TTY (every non-interactive spawn), so real matches were reported as
+    // "No matches" (status 1).
     const rgResult = runCommand(
       'rg',
-      ['--line-number', '--no-heading', '--color=never', '--max-count=20', '--', query],
+      ['--line-number', '--no-heading', '--color=never', '--max-count=20', '--', query, '.'],
       { cwd, timeoutMs: 10000 }
     );
 
@@ -729,6 +732,7 @@ function runCommand(
 ): RunCommandResult {
   const result = spawnSync(command, args, {
     cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf-8',
     maxBuffer: 5 * 1024 * 1024,
     timeout: timeoutMs,

@@ -96,9 +96,9 @@ export function createPairingCommand(): Command {
     .command('approve <code>')
     .description('Approve a pending pairing request by code')
     .requiredOption('-c, --channel <channel>', 'Channel type (telegram, discord, slack, etc.)')
-    .action((code: string, opts) => {
+    .action(async (code: string, opts) => {
       const pairing = getDMPairing();
-      const sender = pairing.approve(opts.channel as ChannelType, code.toUpperCase());
+      const sender = await pairing.approve(opts.channel as ChannelType, code.toUpperCase());
 
       if (!sender) {
         console.error(`❌ No pending request found for code "${code}" on channel "${opts.channel}".`);
@@ -117,7 +117,7 @@ export function createPairingCommand(): Command {
     .option('-n, --name <name>', 'Display name for this sender')
     .action(async (senderId: string, opts) => {
       const pairing = getDMPairing();
-      const sender = pairing.approveDirectly(
+      const sender = await pairing.approveDirectly(
         opts.channel as ChannelType,
         senderId,
         'owner-cli',
@@ -134,7 +134,7 @@ export function createPairingCommand(): Command {
     .action(async (senderId: string, opts) => {
       const pairing = getDMPairing();
       await pairing.loadAllowlist();
-      const ok = pairing.revoke(opts.channel as ChannelType, senderId);
+      const ok = await pairing.revoke(opts.channel as ChannelType, senderId);
 
       if (!ok) {
         console.error(`❌ Sender "${senderId}" not found in allowlist for channel "${opts.channel}".`);
@@ -148,10 +148,9 @@ export function createPairingCommand(): Command {
     .command('enable')
     .description('Enable DM pairing mode (requires restart of channel adapters)')
     .action(() => {
-      console.log('⚠️  Pairing mode must be enabled via config or environment:');
-      console.log('   Set DM_PAIRING_ENABLED=true in your .env, then restart.');
-      console.log('');
-      console.log('   Or in code: getDMPairing({ enabled: true })');
+      console.log('DM pairing is ON by default (required for ids outside allowedUsers).');
+      console.log('   Disable with DM_PAIRING_ENABLED=false, then restart.');
+      console.log('   Pending one-time codes: buddy channels pairing');
     });
 
   return cmd;

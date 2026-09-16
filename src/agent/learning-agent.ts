@@ -21,6 +21,7 @@ import { getLessonCandidateQueue } from './lesson-candidate-queue.js';
 import type { LessonCategory } from './lessons-tracker.js';
 import { parseSkillFile, validateSkill } from '../skills/parser.js';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export const LEARNING_RETROSPECTIVE_SCHEMA_VERSION = 1;
 export const LEARNING_PATTERN_LIBRARY_SCHEMA_VERSION = 1;
@@ -945,8 +946,8 @@ function materializeLearningSkillCandidates(
 
       fs.mkdirSync(path.dirname(absoluteSkillPath), { recursive: true });
       fs.mkdirSync(path.dirname(absoluteReviewPath), { recursive: true });
-      fs.writeFileSync(absoluteSkillPath, `${skillMarkdown.trimEnd()}\n`, 'utf-8');
-      fs.writeFileSync(absoluteReviewPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+      writeFileAtomicSync(absoluteSkillPath, `${skillMarkdown.trimEnd()}\n`, { mode: 0o600 });
+      writeJsonAtomicSync(absoluteReviewPath, manifest, { mode: 0o600 });
       materialized.push(reviewedCandidate);
     } catch (error) {
       logger.debug('Learning Agent: failed to materialize skill candidate', {
@@ -1213,8 +1214,7 @@ function normalizeLearningSkillUsageRecord(record: LearningSkillUsageRecord): Le
 }
 
 function writeJsonFile(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
+  writeJsonAtomicSync(filePath, value, { mode: 0o600 });
 }
 
 function patternKey(sequence: string[]): string {

@@ -4,9 +4,8 @@
  * Persisted to .codebuddy/approval-patterns.json.
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { existsSync } from 'fs';
+import { readJsonAtomic, writeJsonAtomic } from './atomic-write.js';
 import { logger } from './logger.js';
 
 export interface ApprovalPattern {
@@ -117,12 +116,9 @@ export class ApprovalPatternTracker {
 
     const filePath = join(this.cwd, PATTERNS_FILE);
     try {
-      if (existsSync(filePath)) {
-        const content = await readFile(filePath, 'utf-8');
-        const data = JSON.parse(content) as ApprovalPattern[];
-        for (const p of data) {
-          this.patterns.set(this.getKey(p.tool, p.argsPattern), p);
-        }
+      const data = await readJsonAtomic<ApprovalPattern[]>(filePath, []);
+      for (const p of data) {
+        this.patterns.set(this.getKey(p.tool, p.argsPattern), p);
       }
     } catch (err) {
       logger.debug(`Failed to load approval patterns: ${err instanceof Error ? err.message : String(err)}`);
@@ -132,12 +128,8 @@ export class ApprovalPatternTracker {
   private async save(): Promise<void> {
     const filePath = join(this.cwd, PATTERNS_FILE);
     try {
-      const dir = join(this.cwd, '.codebuddy');
-      if (!existsSync(dir)) {
-        await mkdir(dir, { recursive: true });
-      }
       const data = [...this.patterns.values()];
-      await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+      await writeJsonAtomic(filePath, data);
     } catch (err) {
       logger.debug(`Failed to save approval patterns: ${err instanceof Error ? err.message : String(err)}`);
     }

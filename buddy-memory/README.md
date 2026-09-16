@@ -28,7 +28,20 @@ buddy-memory serve --ledger <path> [--agent <host/repo>]
 A newline-delimited JSON-RPC server over stdio: `{"id":N,"method":"...","params":{...}}` →
 `{"id":N,"result":...}`. Methods: `remember`, `ingest`, `ingestPublication`, `recall`,
 `recallHybrid`, `getSuperseded`, `getStats`, `ping`. Code Buddy spawns it as a sidecar; the TS
-CKG is a thin client and falls back to its in-process implementation when the binary is absent.
+CKG is a thin client and falls back to its in-process implementation when the binary is absent,
+the snapshot is unreadable, or any RPC fails.
+
+Phase 4 recall is sub-linear: inverted index (keyword) + HNSW (`hnsw_rs`) over embeddings,
+both updated on ingest and persisted in the v2 snapshot (`<ledger>.snap`). Default in Code Buddy:
+rust if this binary is built and the snapshot is loadable, else TypeScript. See
+[`docs/ckg-engine.md`](../docs/ckg-engine.md).
+
+Reproducible 50k-node bench (synthetic corpus, no real data, writes under `.gk6-work/`):
+
+```
+cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode exhaustive
+cargo run --release --bin ckg-bench -- --nodes 50000 --queries 100 --mode indexed
+```
 
 ## Build / test
 ```
@@ -38,8 +51,9 @@ cargo test
 
 ## Status
 Phase 1 (MVP): model + ledger + remember/recall (keyword) + JSON-RPC server — done.
-Phase 2: embeddings + hybrid recall (reuses Code Explorer's `code-explorer-search`).
-Phase 3: snapshot/index (end the O(N) replay) + full parity. Phase 4: cutover + scale.
+Phase 2: embeddings + hybrid recall (ONNX MiniLM, `embeddings` feature).
+Phase 3: snapshot/index (end the O(N) replay) + full parity — done.
+Phase 4: HNSW + inverted index (sub-linear recall) + measured default cutover — done.
 
 ## License
 MIT — same as Code Buddy (all dependencies are permissive: ort, tokenizers, serde, chrono, sha2).

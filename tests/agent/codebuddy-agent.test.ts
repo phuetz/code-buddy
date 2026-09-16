@@ -19,6 +19,7 @@ import { PromptBuilder } from '../../src/services/prompt-builder.js';
 import { createContextManager } from '../../src/context/context-manager-v2.js';
 import { resetLocalRuntimeContextProbeCache } from '../../src/config/local-runtime-context.js';
 import { resetRuntimeModelContextCache } from '../../src/config/model-tools.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
@@ -345,6 +346,7 @@ jest.mock('../../src/services/prompt-builder.js', () => ({
   PromptBuilder: jest.fn().mockImplementation(function() { return {
     buildSystemPrompt: jest.fn().mockResolvedValue('You are a helpful AI coding assistant.'),
     updateConfig: jest.fn(),
+    setPersistentMemory: jest.fn(),
   }; }),
 }));
 
@@ -417,6 +419,24 @@ jest.mock('../../src/tools/hooks/index.js', () => ({
 // Tests
 // ---------------------------------------------------------------------------
 
+// Every CodeBuddyAgent fires initializeMemory() without awaiting, creating ~/.codebuddy/memory.md:
+// run this file with a throwaway HOME and wait for that in-flight init before cleaning up.
+const isolatedHome = createIsolatedHome('codebuddy-agent-home-');
+beforeAll(() => {
+  isolatedHome.enter();
+});
+afterAll(async () => {
+  process.env.HOME = isolatedHome.path;
+  process.env.USERPROFILE = isolatedHome.path;
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  await getMemoryManager().initialize().catch(() => undefined);
+  resetMemoryManagerForTests();
+  const { getPersonaManager, resetPersonaManager } = await import('../../src/personas/persona-manager.js');
+  await getPersonaManager().ready();
+  resetPersonaManager();
+  isolatedHome.leave();
+});
+
 describe('CodeBuddyAgent', () => {
   let agent: CodeBuddyAgent;
   const originalEnv = { ...process.env };
@@ -425,6 +445,9 @@ describe('CodeBuddyAgent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    // originalEnv was captured before the isolated home existed: re-apply it.
+    process.env.HOME = isolatedHome.path;
+    process.env.USERPROFILE = isolatedHome.path;
     delete process.env.YOLO_MODE;
     delete process.env.MAX_COST;
     delete process.env.MORPH_API_KEY;
@@ -589,6 +612,21 @@ describe('CodeBuddyAgent', () => {
   // agent's .codebuddy/-backed tools target the active project rather than the
   // process directory. Uses lessons_propose (the Hermes self-improvement path).
   describe('Working Directory (Cowork project scoping)', () => {
+    it('binds the prompt reader when switching project or restoring a conversation', async () => {
+      const { getMemoryManager } = await import('../../src/memory/persistent-memory.js');
+      agent = new CodeBuddyAgent('test-api-key');
+      const builder = (PromptBuilder as jest.Mock).mock.results.at(-1)?.value;
+      const root = process.cwd();
+      const a = `${root}/_qa/scope-a`, b = `${root}/_qa/scope-b`;
+      agent.setWorkingDirectory(a);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, a));
+      const state = agent.exportConversationState();
+      agent.setWorkingDirectory(b);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, b));
+      agent.importConversationState(state);
+      expect(builder.setPersistentMemory).toHaveBeenLastCalledWith(getMemoryManager(undefined, undefined, a));
+    });
+
     it('routes .codebuddy tools to setWorkingDirectory(), not process.cwd()', async () => {
       const os = await import('os');
       const path = await import('path');
@@ -621,8 +659,8 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.remove(procDir);
-        await fs.remove(projectDir);
+        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -653,7 +691,7 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.remove(procDir);
+        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -685,7 +723,12 @@ describe('CodeBuddyAgent', () => {
 
         expect(FormalToolRegistry.getInstance().has(toolName)).toBe(true);
         const result = await FormalToolRegistry.getInstance().execute(toolName, { text: 'loaded' });
-        expect(result.output).toContain('loaded');
+        if (process.platform === 'linux') {
+          expect(result.output).toContain('loaded');
+        } else {
+          expect(result.success).toBe(false);
+          expect(result.error).toContain('Compute confinement requires Linux');
+        }
       } finally {
         FormalToolRegistry.getInstance().unregister(toolName);
         getToolRegistry().removeTool(toolName);

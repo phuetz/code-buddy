@@ -51,6 +51,22 @@ export function estimateImageUrlTokens(content: unknown): number {
   return imageCount * IMAGE_URL_TOKEN_ESTIMATE;
 }
 
+/** Flatten OpenAI-style string or multimodal `text` parts into plain text. */
+export function textFromMessageContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const part of content) {
+    if (!part || typeof part !== 'object') continue;
+    const candidate = part as { type?: unknown; text?: unknown };
+    if (typeof candidate.text !== 'string') continue;
+    if (candidate.type === undefined || candidate.type === 'text') {
+      parts.push(candidate.text);
+    }
+  }
+  return parts.join('\n');
+}
+
 /**
  * Create a token counter instance.
  * Returns the canonical lazy-loaded counter from utils/token-counter.ts

@@ -24,7 +24,7 @@ import { spawn } from 'node:child_process';
 import { log, logWarn } from '../utils/logger';
 
 export interface DiscoveredPeer {
-  /** Suggested label, e.g., 'darkstar' from Tailscale or YAML key. */
+  /** Suggested label, e.g., 'gpuNode' from Tailscale or YAML key. */
   label: string;
   /** WS URL to pair with — `ws://<ip>:3001/ws` typically. */
   url: string;
@@ -117,11 +117,11 @@ export function manualConfigPath(): string {
  * dependency for what's a flat list. Format:
  *
  *   peers:
- *     - label: darkstar
- *       url: ws://100.65.42.7:3001/ws
+ *     - label: gpuNode
+ *       url: ws://203.0.113.11:3001/ws
  *       apiKey: optional-bearer-token
  *     - label: g7
- *       url: ws://100.99.18.32:3001/ws
+ *       url: ws://203.0.113.12:3001/ws
  *
  * Indentation strictly 2 spaces, hyphenated lists.
  */

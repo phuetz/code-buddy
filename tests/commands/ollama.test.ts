@@ -13,7 +13,7 @@ describe('ollama command helpers', () => {
 
   it('normalizes Ollama base URLs', () => {
     expect(normalizeOllamaBaseUrl('http://localhost:11434/v1/')).toBe('http://localhost:11434');
-    expect(normalizeOllamaBaseUrl('http://darkstar.tailnet.ts.net:11434')).toBe('http://darkstar.tailnet.ts.net:11434');
+    expect(normalizeOllamaBaseUrl('http://gpuNode.tailnet.ts.net:11434')).toBe('http://gpuNode.tailnet.ts.net:11434');
   });
 
   it('builds a Windows update plan that points at the repo script', () => {
@@ -72,10 +72,10 @@ describe('ollama command helpers', () => {
       return new Response('not found', { status: 404 });
     }));
 
-    const status = await fetchOllamaStatus('http://darkstar.tail2a752c.ts.net:11434/v1');
+    const status = await fetchOllamaStatus('http://gpu-node.example.test:11434/v1');
 
     expect(status).toMatchObject({
-      baseUrl: 'http://darkstar.tail2a752c.ts.net:11434',
+      baseUrl: 'http://gpu-node.example.test:11434',
       reachable: true,
       version: '0.30.0',
       models: ['phi4:latest', 'gemma4:26b-a4b-it-qat'],

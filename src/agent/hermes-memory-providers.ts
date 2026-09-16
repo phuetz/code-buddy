@@ -268,7 +268,7 @@ const OFFICIAL_MEMORY_PROVIDERS: HermesMemoryProviderDefinition[] = [
     baseUrlEnv: ['HONCHO_BASE_URL'],
     selfHostable: true,
     notes: ['Adapter implemented (v3 REST: workspaces/peers/sessions + search). Self-hostable (FastAPI/Docker) or cloud.'],
-    remediation: ['Self-host: set HONCHO_BASE_URL (e.g. http://ministar-linux:8000). Cloud: set HONCHO_API_KEY.'],
+    remediation: ['Self-host: set HONCHO_BASE_URL (e.g. http://hub-linux:8000). Cloud: set HONCHO_API_KEY.'],
   },
   {
     id: 'openviking',
@@ -278,7 +278,7 @@ const OFFICIAL_MEMORY_PROVIDERS: HermesMemoryProviderDefinition[] = [
     baseUrlEnv: ['OPENVIKING_ENDPOINT'],
     selfHostable: true,
     notes: ['Adapter implemented (/api/v1/search/find + /api/v1/content/write, tenant headers). Fully self-hostable (AGPL).'],
-    remediation: ['Set OPENVIKING_ENDPOINT (e.g. http://ministar-linux:1933) to activate.'],
+    remediation: ['Set OPENVIKING_ENDPOINT (e.g. http://hub-linux:1933) to activate.'],
   },
   {
     id: 'mem0',
@@ -288,7 +288,7 @@ const OFFICIAL_MEMORY_PROVIDERS: HermesMemoryProviderDefinition[] = [
     baseUrlEnv: ['MEM0_BASE_URL'],
     selfHostable: true,
     notes: ['Adapter implemented (self-hosted OSS REST /memories+/search, or cloud /v1).'],
-    remediation: ['Self-host: set MEM0_BASE_URL (e.g. http://ministar-linux:8888). Cloud: set MEM0_API_KEY.'],
+    remediation: ['Self-host: set MEM0_BASE_URL (e.g. http://hub-linux:8888). Cloud: set MEM0_API_KEY.'],
   },
   {
     id: 'hindsight',

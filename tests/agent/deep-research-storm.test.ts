@@ -30,6 +30,7 @@ import {
   selectRelevantSources,
   renderTableOfContents,
   writeSectionBody,
+  stripLeadingSectionHeading,
   type StormBoundaries,
   type StormPerspective,
   type StormStage,
@@ -568,5 +569,19 @@ describe('outline + relevance helpers', () => {
     );
     expect(llmUsed).toBe(false);
     expect(body).toContain('[3]');
+  });
+
+  it('strips a leading heading that repeats the section title (GK33 live)', () => {
+    const raw = [
+      '# Introduction: Conceptual Foundations of Hystérésis in VAD Systems',
+      '',
+      'Hysteresis keeps the detector in speech [1].',
+    ].join('\n');
+    const out = stripLeadingSectionHeading(
+      raw,
+      'Introduction: Conceptual Foundations of Hystérésis in VAD Systems',
+    );
+    expect(out).not.toMatch(/^# Introduction/m);
+    expect(out).toContain('Hysteresis keeps the detector in speech [1].');
   });
 });

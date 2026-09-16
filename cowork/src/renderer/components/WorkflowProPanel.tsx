@@ -1,26 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, Square, RefreshCw, Server, AlertTriangle } from 'lucide-react';
 
 export const WorkflowProPanel: React.FC = () => {
-  const [status, setStatus] = useState<{ running: boolean; port: number }>({ running: false, port: 8080 });
+  const [status, setStatus] = useState<{ running: boolean; port: number; url?: string; managed?: boolean; external?: boolean; starting?: boolean; embeddable?: boolean; error?: string }>({ running: false, port: 8080 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bootLog, setBootLog] = useState<string[]>([]);
 
-  const checkStatus = async () => {
+  const mounted = useRef(false);
+  const statusRequest = useRef(0);
+
+  const checkStatus = useCallback(async () => {
+    const request = ++statusRequest.current;
     try {
       const s = await window.electronAPI.workflowBuilder.status();
-      setStatus(s);
+      if (mounted.current && request === statusRequest.current) setStatus(s);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    mounted.current = true;
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => { mounted.current = false; clearInterval(interval); };
+  }, [checkStatus]);
 
   // While starting, poll the server's boot log so the panel streams progress
   // (npm boot lines) instead of a blind "Starting…" spinner.
@@ -60,13 +65,28 @@ export const WorkflowProPanel: React.FC = () => {
 
   const handleStop = async () => {
     setLoading(true);
+    setError(null);
     try {
-      await window.electronAPI.workflowBuilder.stop();
+      const result = await window.electronAPI.workflowBuilder.stop();
+      if (!result.success) setError(result.error || 'Failed to stop WorkflowBuilder');
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
       checkStatus();
+    }
+  };
+
+  const openInBrowser = async () => {
+    try {
+      const url = new URL(status.url || `http://localhost:${status.port}`);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+        throw new Error('Invalid WorkflowBuilder URL');
+      }
+      const opened = await window.electronAPI.openExternal(url.href);
+      if (opened === false) setError('Could not open WorkflowBuilder in your browser');
+    } catch (err) {
+      setError(String(err));
     }
   };
 
@@ -89,21 +109,23 @@ export const WorkflowProPanel: React.FC = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {error && (
+          {(error || status.error) && (
             <span className="text-xs text-red-400 flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" />
-              {error}
+              {error || status.error}
             </span>
           )}
-          {!status.running ? (
+          {!status.running && status.managed !== true ? (
             <button
               onClick={handleStart}
               disabled={loading}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent/90 disabled:opacity-50 transition-colors"
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              {loading ? 'Starting...' : 'Start Server'}
+              {loading ? 'Connecting...' : status.external ? 'Connect' : 'Start Server'}
             </button>
+          ) : status.managed === false ? (
+            <span className="text-xs text-text-secondary">Externally managed</span>
           ) : (
             <button
               onClick={handleStop}
@@ -118,9 +140,15 @@ export const WorkflowProPanel: React.FC = () => {
       </div>
       
       <div className="flex-1 relative bg-surface-active">
-        {status.running ? (
+        {status.running && status.embeddable === false ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-text-secondary p-6">
+            <p>WorkflowBuilder is ready. Its security policy prevents embedding in Cowork.</p>
+            <p className="text-sm break-all">{status.url}</p>
+            <button onClick={openInBrowser} className="px-4 py-2 rounded bg-accent text-white">Open in browser</button>
+          </div>
+        ) : status.running ? (
           <iframe
-            src={`http://localhost:${status.port}`}
+            src={status.url || `http://localhost:${status.port}`}
             className="absolute inset-0 w-full h-full border-none bg-surface"
             title="WorkflowBuilder Pro"
             // Untrusted self-hosted server content: run it sandboxed (scripts +
@@ -141,7 +169,9 @@ export const WorkflowProPanel: React.FC = () => {
           <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted">
             <Server className="w-16 h-16 mb-4 opacity-20" />
             <p className="text-lg font-medium">WorkflowBuilder Pro is not running</p>
-            <p className="text-sm mt-2">Click "Start Server" to launch the self-hosted visual workflow editor.</p>
+            <p className="text-sm mt-2">{status.external ? 'The configured editor must be started by its own service manager.' : 'Click "Start Server" to launch the self-hosted visual workflow editor.'}</p>
+            {status.url && <p className="text-sm mt-2">{status.url}</p>}
+            <p className="text-xs mt-2">Set CODEBUDDY_WORKFLOW_URL to connect to an existing WorkflowBuilder.</p>
           </div>
         )}
       </div>

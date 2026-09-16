@@ -13,15 +13,18 @@
  */
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
+import { appendFile, mkdir, rename, stat } from 'fs/promises';
 import path from 'path';
 import { readRecentDialogueHearing } from '../companion/dialogue-percepts.js';
+import { detectEmotion } from '../companion/reply-augment.js';
 import {
   analyzeConversationTurn,
   extractSalientTerms,
+  normalizeConversationText,
 } from '../conversation/dialogue-act.js';
 import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface EpisodeSummary {
   at: number;
@@ -40,9 +43,20 @@ export interface EpisodeSummary {
   fingerprint?: string;
 }
 
+const PERSONAL_FACT =
+  /\b(train|souvenir|demain|rendez[- ]vous|anniversaire|je me souviens|j ai un)\b/;
+
+/** Emotion, a named plan, or an explicit memory — not just the last STT window. */
+export function isSalientHeard(text: string): boolean {
+  if (!text.trim()) return false;
+  if (detectEmotion(text).emotion !== 'neutral') return true;
+  return PERSONAL_FACT.test(normalizeConversationText(text));
+}
+
 /**
  * Pure consolidation: turn a list of heard utterances into a compact episode. Drops consecutive
- * duplicates (STT re-hears) and keeps the last few distinct ones. No LLM — the caller may refine.
+ * duplicates (STT re-hears). Keeps recent utterances AND earlier salient ones (a train tomorrow
+ * must not vanish because six small-talk turns followed). No LLM — the caller may refine.
  */
 export function summarizeEpisode(heard: string[], now: number): EpisodeSummary {
   const clean = heard.map((s) => (s ?? '').trim()).filter(Boolean);
@@ -50,9 +64,25 @@ export function summarizeEpisode(heard: string[], now: number): EpisodeSummary {
   for (const t of clean) {
     if (t !== distinct[distinct.length - 1]) distinct.push(t);
   }
-  const topics = distinct.slice(-6);
+  const salient = distinct.filter(isSalientHeard).slice(-6);
+  if (salient.length === 0) {
+    const topics = distinct.slice(-6);
+    const line = topics.length ? `Récemment, on a parlé de : ${topics.join(' ; ')}.` : '';
+    return { at: now, count: clean.length, topics, line };
+  }
+  const keep = new Set([...salient, ...distinct.slice(-4)]);
+  const topics = distinct.filter((t) => keep.has(t));
   const line = topics.length ? `Récemment, on a parlé de : ${topics.join(' ; ')}.` : '';
   return { at: now, count: clean.length, topics, line };
+}
+
+/** True when the candidate line is mostly made of words already present in the heard source. */
+export function episodeLineIsGrounded(line: string, source: string[]): boolean {
+  const blob = source.map((s) => normalizeConversationText(s)).join(' ');
+  const terms = extractSalientTerms(line, 12);
+  if (terms.length === 0) return false;
+  const hits = terms.filter((term) => blob.includes(term));
+  return hits.length * 2 >= terms.length;
 }
 
 function safeExcerpt(text: string, limit = 240): string {
@@ -186,11 +216,20 @@ async function defaultReadHeard(limit: number, cwd?: string): Promise<string[]> 
 export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<EpisodeSummary | null> {
   const limit = deps.limit ?? 20;
   const now = deps.now ?? Date.now();
-  const conversation = deps.readConversation ? await deps.readConversation(limit) : [];
-  const heard =
-    conversation.length > 0
-      ? conversation.filter((turn) => turn.role === 'user').map((turn) => turn.content)
-      : await (deps.readHeard ?? defaultReadHeard)(limit, deps.cwd);
+  let conversation: ConversationTurn[];
+  let heard: string[];
+  try {
+    conversation = deps.readConversation ? await deps.readConversation(limit) : [];
+    heard =
+      conversation.length > 0
+        ? conversation.filter((turn) => turn.role === 'user').map((turn) => turn.content)
+        : await (deps.readHeard ?? defaultReadHeard)(limit, deps.cwd);
+  } catch (err) {
+    logger.warn(
+      `[episode] could not read recent dialogue: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
   if (conversation.length === 0 && heard.length === 0) return null;
 
   const ep = conversation.length > 0
@@ -201,21 +240,29 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
   if (deps.refine) {
     try {
       const refined = await deps.refine(heard);
-      if (refined && refined.trim()) ep.line = refined.trim();
-    } catch {
-      /* keep the template line */
+      const candidate = refined?.trim() ?? '';
+      if (candidate && episodeLineIsGrounded(candidate, heard)) {
+        ep.line = candidate;
+      } else if (candidate) {
+        logger.warn('[episode] refinement dropped; invented content is not in the heard source');
+      }
+    } catch (err) {
+      logger.warn(
+        `[episode] refinement failed; keeping template: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
   ep.fingerprint = createHash('sha256').update(ep.line).digest('hex');
   const dir = path.join(deps.cwd ?? process.cwd(), '.codebuddy', 'companion');
   const statePath = deps.statePath ?? path.join(dir, 'episode-state.json');
-  try {
-    const previous = JSON.parse(await readFile(statePath, 'utf8')) as { fingerprint?: unknown };
-    if (previous.fingerprint === ep.fingerprint) return null;
-  } catch {
-    /* First episode or unreadable cursor: continue with a safe rebuild. */
-  }
+    const previous = await readJsonAtomic<{ fingerprint?: unknown } | null>(statePath, null, {
+      mode: 0o600,
+      isValid: (value): value is { fingerprint?: unknown } => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    if (previous?.fingerprint === ep.fingerprint) return null;
 
   try {
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -223,19 +270,23 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     try {
       const info = await stat(file);
       if (info.size > 512 * 1024) await rename(file, `${file}.1`); // rotate, one backup (disk-guard lesson)
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       /* no file yet */
     }
     await appendFile(file, `${JSON.stringify(ep)}\n`, { encoding: 'utf8', mode: 0o600 });
-    await writeFile(statePath, JSON.stringify({ fingerprint: ep.fingerprint, at: ep.at }), {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
+    await writeJsonAtomic(statePath, { fingerprint: ep.fingerprint, at: ep.at }, { mode: 0o600 });
   } catch (err) {
     logger.warn(`[episode] could not persist episode: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  await (deps.promote ?? promoteEpisode)(ep);
+  try {
+    await (deps.promote ?? promoteEpisode)(ep);
+  } catch (err) {
+    logger.warn(
+      `[episode] could not promote episode: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   logger.info(`[episode] consolidated ${ep.count} utterance(s) → ${ep.topics.length} topic(s)`);
   return ep;
 }

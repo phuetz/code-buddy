@@ -10,14 +10,11 @@
  * 6. Stale metrics (savedAt > metricsTtlDays) emits warning (not enforced V0.4.1)
  */
 
-// Set unique path per test file BEFORE imports — vitest pool=forks runs
-// files in parallel, race on the shared default location otherwise.
 import path from 'path';
 import os from 'os';
-process.env.CODEBUDDY_METRICS_PATH = path.join(
-  os.tmpdir(),
-  `codebuddy-metrics-test-${process.pid}-pi.json`
-);
+import { once } from 'node:events';
+import { promises as disk } from 'node:fs';
+import * as atomicWrite from '../../../src/utils/atomic-write.js';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -27,7 +24,6 @@ import {
 import {
   saveMetrics,
   loadMetrics,
-  clearMetrics,
   _metricsPathForTests,
 } from '../../../src/agent/multi-agent/metrics-persistence.js';
 import { logger } from '../../../src/utils/logger.js';
@@ -81,18 +77,33 @@ function makePersistedMetrics(role: AgentRole, totalTasks: number): AgentMetrics
 }
 
 describe('EnhancedCoordinator — Phase N persistence integration', () => {
+  let directory: string;
+  const coordinators: EnhancedCoordinator[] = [];
+  function coordinator(options: ConstructorParameters<typeof EnhancedCoordinator>[0]) {
+    const c = new EnhancedCoordinator(options);
+    coordinators.push(c);
+    return c;
+  }
   beforeEach(async () => {
-    await clearMetrics();
+    directory = await disk.mkdtemp(path.join(os.tmpdir(), 'metrics-integration-'));
+    vi.stubEnv('CODEBUDDY_METRICS_PATH', path.join(directory, 'metrics.json'));
     resetEnhancedCoordinator();
   });
 
   afterEach(async () => {
-    await clearMetrics();
+    for (const c of coordinators.splice(0)) {
+      await c.flushSave();
+      c.dispose();
+    }
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    await disk.rm(directory, { recursive: true, force: true });
   });
 
   describe('enablePersistence basics', () => {
     it('is idempotent — second call is a no-op', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 50 });
       expect(c.isPersistenceEnabled()).toBe(true);
       await c.enablePersistence({ saveDebounceMs: 999 });
@@ -104,7 +115,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     });
 
     it('reports null savedAt when no disk file exists yet', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence();
       expect(c.getMetricsSavedAt()).toBeNull();
       c.dispose();
@@ -114,7 +125,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
       // Pre-populate disk
       await saveMetrics(new Map([['coder', makePersistedMetrics('coder', 50)]]));
 
-      const c = new EnhancedCoordinator({ enableLearning: false });
+      const c = coordinator({ enableLearning: false });
       await c.enablePersistence();
       const m = c.getAgentMetrics('coder');
       expect(m!.totalTasks).toBe(0); // fresh init, NOT loaded
@@ -126,7 +137,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     it('merges persisted metrics into in-memory state at enablePersistence', async () => {
       await saveMetrics(new Map([['coder', makePersistedMetrics('coder', 50)]]));
 
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence();
 
       const coderMetrics = c.getAgentMetrics('coder');
@@ -149,7 +160,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
       await fs.writeFile(_metricsPathForTests(), JSON.stringify(parsed), 'utf8');
 
       const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ metricsTtlDays: 30 });
 
       // V0.5 (Phase d.21 ship 5) — TTL enforcement clears the file +
@@ -170,7 +181,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
       await saveMetrics(new Map([['coder', makePersistedMetrics('coder', 5)]]));
 
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ metricsTtlDays: 30 });
 
       const staleWarnings = warnSpy.mock.calls.filter((call) =>
@@ -182,15 +193,38 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     });
   });
 
+  it('keeps the latest snapshot when an earlier write is delayed', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let persisted = 0;
+    let writes = 0;
+    const mkdir = vi.spyOn(disk, 'mkdir').mockResolvedValue(undefined);
+    const write = vi.spyOn(atomicWrite, 'writeJsonAtomic').mockImplementation(async (_file, data) => {
+      if (++writes === 1) await gate;
+      persisted = (data as { metrics: Array<[string, { totalTasks: number }]> }).metrics[0][1].totalTasks;
+    });
+    const first = saveMetrics(new Map([['coder', makePersistedMetrics('coder', 1)]]));
+    const second = saveMetrics(new Map([['coder', makePersistedMetrics('coder', 5)]]));
+    try {
+      // Drain ready promise continuations while the first disk write is held.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      release();
+      await Promise.all([first, second]);
+      write.mockRestore();
+      mkdir.mockRestore();
+    }
+    expect(persisted).toBe(5);
+  });
+
   describe('debounced save on metrics:updated', () => {
     it('schedules a save when recordTaskCompletion fires metrics:updated', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 30 });
 
+      const saved = once(c, 'metrics:saved');
       c.recordTaskCompletion(makeTask('t1'), makeResult('coder'));
-
-      // Wait for debounce to elapse + a tick for the async save
-      await new Promise((r) => setTimeout(r, 80));
+      await saved;
 
       const loaded = await loadMetrics();
       expect(loaded).not.toBeNull();
@@ -199,15 +233,16 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     });
 
     it('coalesces a burst of updates into a single save (debounce reset)', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 30 });
 
+      const saved = once(c, 'metrics:saved');
       // 5 rapid updates within debounce window
       for (let i = 0; i < 5; i++) {
         c.recordTaskCompletion(makeTask(`t${i}`), makeResult('coder'));
       }
 
-      await new Promise((r) => setTimeout(r, 80));
+      await saved;
 
       const loaded = await loadMetrics();
       expect(loaded!.metrics.get('coder')!.totalTasks).toBe(5);
@@ -215,7 +250,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     });
 
     it('flushSave persists pending state synchronously (awaitable)', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 99999 }); // long debounce
 
       c.recordTaskCompletion(makeTask('t1'), makeResult('reviewer'));
@@ -230,7 +265,7 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
     });
 
     it('flushSave is no-op when persistence disabled', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await expect(c.flushSave()).resolves.toBeUndefined();
       const loaded = await loadMetrics();
       expect(loaded).toBeNull();
@@ -240,7 +275,8 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
 
   describe('dispose cleans up timers (prevents test leakage)', () => {
     it('dispose clears pending debounce timer', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 99999 });
 
       c.recordTaskCompletion(makeTask('t1'), makeResult('coder'));
@@ -248,28 +284,28 @@ describe('EnhancedCoordinator — Phase N persistence integration', () => {
 
       c.dispose();
 
-      // Wait long enough that if timer wasn't cleared, save would happen
-      await new Promise((r) => setTimeout(r, 50));
+      await vi.advanceTimersByTimeAsync(100000);
       const loaded = await loadMetrics();
       // No save should have happened — timer was cleared
       expect(loaded).toBeNull();
     });
 
     it('dispose unsubscribes from metrics:updated (no save after dispose)', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence({ saveDebounceMs: 30 });
 
       c.dispose();
 
       // Even though we'd emit, no listener → no scheduled save
       c.emit('metrics:updated');
-      await new Promise((r) => setTimeout(r, 60));
+      await vi.advanceTimersByTimeAsync(100);
       const loaded = await loadMetrics();
       expect(loaded).toBeNull();
     });
 
     it('dispose resets isPersistenceEnabled to false', async () => {
-      const c = new EnhancedCoordinator({ enableLearning: true });
+      const c = coordinator({ enableLearning: true });
       await c.enablePersistence();
       expect(c.isPersistenceEnabled()).toBe(true);
       c.dispose();

@@ -29,6 +29,7 @@ import path from 'path';
 import os from 'os';
 import { logger } from '../../utils/logger.js';
 import type { PersistedWorkflow } from './workflow-persistence.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 
 /** Sanity guard for workflowId — alphanumeric + dash + underscore only.
  *  Prevents path traversal via crafted ids and keeps filenames predictable. */
@@ -69,15 +70,12 @@ export async function saveWorkflowById(
     const dir = resolveWorkflowsDir();
     await ensureDir(dir);
     const filePath = workflowFilePath(workflowId);
-    const tmpPath = `${filePath}.tmp`;
     const enriched: PersistedWorkflow = {
       ...state,
       schemaVersion: state.schemaVersion ?? 'v0.3',
       completedTaskIds: state.completedTaskIds ?? state.results.map(([id]) => id),
     };
-    const json = JSON.stringify(enriched, null, 2);
-    await fs.writeFile(tmpPath, json, 'utf8');
-    await fs.rename(tmpPath, filePath);
+    await writeJsonAtomic(filePath, enriched, { mode: 0o600 });
   } catch (err) {
     logger.warn('[multi-agent] workflow-by-id save failed', {
       workflowId,
@@ -92,8 +90,14 @@ export async function saveWorkflowById(
 export async function loadWorkflowById(workflowId: string): Promise<PersistedWorkflow | null> {
   try {
     const filePath = workflowFilePath(workflowId);
-    const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as PersistedWorkflow;
+    const parsed = await readJsonAtomic<PersistedWorkflow | null>(filePath, null, {
+      mode: 0o600,
+      isValid: (value): value is PersistedWorkflow => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value) &&
+        Array.isArray((value as PersistedWorkflow).results),
+      ),
+    });
+    if (!parsed) return null;
     if (!parsed.schemaVersion) parsed.schemaVersion = 'v0.1';
     if (!parsed.completedTaskIds) {
       parsed.completedTaskIds = parsed.results.map(([id]) => id);
@@ -148,8 +152,14 @@ export async function listAllWorkflows(): Promise<Array<[string | null, Persiste
   if (out.length === 0) {
     try {
       const legacyPath = resolveLegacyCurrentPath();
-      const raw = await fs.readFile(legacyPath, 'utf8');
-      const parsed = JSON.parse(raw) as PersistedWorkflow;
+      const parsed = await readJsonAtomic<PersistedWorkflow | null>(legacyPath, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistedWorkflow => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          Array.isArray((value as PersistedWorkflow).results),
+        ),
+      });
+      if (!parsed) return [];
       if (!parsed.schemaVersion) parsed.schemaVersion = 'v0.1';
       if (!parsed.completedTaskIds) {
         parsed.completedTaskIds = parsed.results.map(([id]) => id);

@@ -14,9 +14,18 @@ const mockFs = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
 }));
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+
 vi.mock('fs', () => ({
   default: mockFs,
   ...mockFs,
+}));
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
 }));
 
 import { saveSnapshot, loadSnapshot, getSnapshotInfo, detectDrift, formatDrift } from '@/knowledge/graph-drift.js';
@@ -24,6 +33,7 @@ import { saveSnapshot, loadSnapshot, getSnapshotInfo, detectDrift, formatDrift }
 describe('saveSnapshot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWriteJsonAtomicSync.mockReset();
   });
 
   it('writes snapshot JSON to disk', () => {
@@ -32,10 +42,9 @@ describe('saveSnapshot', () => {
 
     saveSnapshot(graph, '/project');
 
-    expect(mockFs.writeFileSync).toHaveBeenCalledOnce();
-    const [filePath, content] = mockFs.writeFileSync.mock.calls[0];
+    expect(mockWriteJsonAtomicSync).toHaveBeenCalledOnce();
+    const [filePath, data] = mockWriteJsonAtomicSync.mock.calls[0];
     expect(filePath).toContain('code-graph-snapshot.json');
-    const data = JSON.parse(content as string);
     expect(data.version).toBe(1);
     expect(data.tripleCount).toBe(1);
     expect(data.triples).toHaveLength(1);
@@ -52,16 +61,16 @@ describe('saveSnapshot', () => {
 describe('loadSnapshot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
   });
 
   it('returns null when no snapshot exists', () => {
-    mockFs.existsSync.mockReturnValue(false);
+    mockReadJsonAtomicSync.mockReturnValue(null);
     expect(loadSnapshot('/project')).toBeNull();
   });
 
   it('loads snapshot into a KnowledgeGraph', () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({
+    mockReadJsonAtomicSync.mockReturnValue({
       version: 1,
       savedAt: '2026-03-10T00:00:00Z',
       tripleCount: 2,
@@ -69,7 +78,7 @@ describe('loadSnapshot', () => {
         { subject: 'mod:a', predicate: 'imports', object: 'mod:b' },
         { subject: 'fn:x', predicate: 'calls', object: 'fn:y' },
       ],
-    }));
+    });
 
     const snap = loadSnapshot('/project');
     expect(snap).not.toBeNull();
@@ -77,28 +86,31 @@ describe('loadSnapshot', () => {
   });
 
   it('returns null for invalid format', () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ version: 99 }));
+    mockReadJsonAtomicSync.mockReturnValue({ version: 99 });
     expect(loadSnapshot('/project')).toBeNull();
   });
 });
 
 describe('getSnapshotInfo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+  });
+
   it('returns metadata without loading triples', () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({
+    mockReadJsonAtomicSync.mockReturnValue({
       version: 1,
       savedAt: '2026-03-10T12:00:00Z',
       tripleCount: 42,
       triples: [],
-    }));
+    });
 
     const info = getSnapshotInfo('/project');
     expect(info).toEqual({ savedAt: '2026-03-10T12:00:00Z', tripleCount: 42 });
   });
 
   it('returns null when no snapshot', () => {
-    mockFs.existsSync.mockReturnValue(false);
+    mockReadJsonAtomicSync.mockReturnValue(null);
     expect(getSnapshotInfo('/project')).toBeNull();
   });
 });
@@ -108,11 +120,12 @@ describe('detectDrift', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
     currentGraph = new KnowledgeGraph();
   });
 
   it('returns null when no snapshot exists', () => {
-    mockFs.existsSync.mockReturnValue(false);
+    mockReadJsonAtomicSync.mockReturnValue(null);
     expect(detectDrift(currentGraph, '/project')).toBeNull();
   });
 
@@ -125,7 +138,7 @@ describe('detectDrift', () => {
       triples: [{ subject: 'mod:src/a', predicate: 'imports', object: 'mod:src/b' }],
     };
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(snapshotData));
+    mockReadJsonAtomicSync.mockReturnValue(snapshotData);
 
     // Current: mod:a → mod:b, mod:a → mod:c (new module)
     currentGraph.add('mod:src/a', 'imports', 'mod:src/b');
@@ -147,7 +160,7 @@ describe('detectDrift', () => {
       ],
     };
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(snapshotData));
+    mockReadJsonAtomicSync.mockReturnValue(snapshotData);
 
     currentGraph.add('mod:src/a', 'imports', 'mod:src/b');
 
@@ -163,7 +176,7 @@ describe('detectDrift', () => {
       triples: [{ subject: 'mod:src/a', predicate: 'imports', object: 'mod:src/b' }],
     };
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(snapshotData));
+    mockReadJsonAtomicSync.mockReturnValue(snapshotData);
 
     currentGraph.add('mod:src/a', 'imports', 'mod:src/b');
     currentGraph.add('mod:src/c', 'imports', 'mod:src/a'); // new edge
@@ -185,7 +198,7 @@ describe('detectDrift', () => {
       triples: [{ subject: 'fn:a', predicate: 'calls', object: 'fn:b' }],
     };
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(snapshotData));
+    mockReadJsonAtomicSync.mockReturnValue(snapshotData);
 
     // Current: many things call fn:b → higher rank
     currentGraph.add('fn:a', 'calls', 'fn:b');
@@ -207,7 +220,7 @@ describe('detectDrift', () => {
       triples: [{ subject: 'mod:a', predicate: 'imports', object: 'mod:b' }],
     };
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(snapshotData));
+    mockReadJsonAtomicSync.mockReturnValue(snapshotData);
 
     currentGraph.add('mod:a', 'imports', 'mod:b');
     currentGraph.add('mod:a', 'imports', 'mod:c');

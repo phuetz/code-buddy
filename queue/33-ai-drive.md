@@ -1,6 +1,6 @@
 # Vague — AI Drive (navigateur d'artefacts générés, façon Genspark), props-driven
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/ai-drive`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/ai-drive`.
 
 ## But (inspiration Genspark « AI Drive »)
 Un navigateur des artefacts générés par l'agent (decks, feuilles, docs, images, vidéos, rapports, apps). Props-driven,

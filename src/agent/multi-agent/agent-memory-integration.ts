@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -83,7 +84,7 @@ export function readAgentMemory(options: AgentMemoryOptions): string {
   }
 
   try {
-    return fs.readFileSync(memFile, 'utf-8');
+    return readTextAtomicSync(memFile, '');
   } catch (err) {
     logger.debug(`Failed to read agent memory for ${options.agentName}: ${err}`);
     return '';
@@ -100,7 +101,7 @@ export function writeAgentMemory(options: AgentMemoryOptions, content: string): 
 
   try {
     ensureMemoryDir(memDir);
-    fs.writeFileSync(memFile, content, 'utf-8');
+    writeFileAtomicSync(memFile, content, { mode: 0o600 });
     logger.debug(`Agent memory written for ${options.agentName} (${content.length} chars)`);
   } catch (err) {
     logger.debug(`Failed to write agent memory for ${options.agentName}: ${err}`);

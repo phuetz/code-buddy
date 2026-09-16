@@ -269,3 +269,14 @@ describe('buildCronJobUpdates', () => {
     expect('error' in conflict && conflict.error).toMatch(/mutually exclusive/);
   });
 });
+
+
+describe('per-job continuity options', () => {
+  it('parses bounded notes for create and explicit disable for update', () => {
+    expect(buildCronJobSpec('brief', { every: '60000', message: 'Summarize', continuity: '{"enabled":true,"notes":{"focus":"tests"}}' })).toMatchObject({ spec: { continuity: { enabled: true, notes: { focus: 'tests' } } } });
+    expect(buildCronJobUpdates(sampleJob(), { continuity: 'false' })).toMatchObject({ updates: { continuity: false } });
+  });
+  it.each(['null', '[]', '{"notes":[]}', '{"enabled":"yes"}'])('rejects malformed continuity %s', continuity => {
+    expect(buildCronJobSpec('brief', { every: '60000', message: 'Summarize', continuity })).toHaveProperty('error');
+  });
+});

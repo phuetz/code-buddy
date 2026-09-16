@@ -70,11 +70,20 @@ function lower(v: unknown): string {
 function getMessage(err: unknown): string {
   if (!err) return '';
   if (typeof err === 'string') return err;
-  const e = err as { message?: unknown; error?: { message?: unknown } };
+  const e = err as {
+    message?: unknown;
+    statusText?: unknown;
+    name?: unknown;
+    error?: { message?: unknown; status?: unknown; statusText?: unknown };
+  };
   const parts: string[] = [];
+  if (typeof e.name === 'string') parts.push(e.name);
   if (typeof e.message === 'string') parts.push(e.message);
-  if (e.error && typeof e.error === 'object' && typeof e.error.message === 'string') {
-    parts.push(e.error.message);
+  if (typeof e.statusText === 'string') parts.push(e.statusText);
+  if (e.error && typeof e.error === 'object') {
+    if (typeof e.error.message === 'string') parts.push(e.error.message);
+    if (typeof e.error.status === 'string') parts.push(e.error.status);
+    if (typeof e.error.statusText === 'string') parts.push(e.error.statusText);
   }
   return parts.join(' ');
 }
@@ -210,26 +219,39 @@ function extractRetryAfterMs(err: unknown, nowMs: number = Date.now()): number |
 // Signal detection
 // ---------------------------------------------------------------------------
 
+const NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/** Walk `.code` / `.cause.code` a few levels (OpenAI SDK wraps ECONNREFUSED). */
+function collectErrorCodes(err: unknown): string[] {
+  const codes: string[] = [];
+  let current: unknown = err;
+  for (let i = 0; i < 4 && current && typeof current === 'object'; i++) {
+    const rec = current as { code?: unknown; cause?: unknown };
+    if (typeof rec.code === 'string' && rec.code) codes.push(rec.code.toUpperCase());
+    current = rec.cause;
+  }
+  return codes;
+}
+
 /** Node/undici network-level error — a transient connectivity blip. */
 function isNetworkError(err: unknown): boolean {
   if (!err) return false;
   const e = err as { code?: string; name?: string; message?: string };
-  if (typeof e.code === 'string') {
-    const code = e.code;
-    if (
-      code === 'ECONNRESET' ||
-      code === 'ECONNREFUSED' ||
-      code === 'ETIMEDOUT' ||
-      code === 'ENOTFOUND' ||
-      code === 'EAI_AGAIN' ||
-      code === 'EPIPE' ||
-      code === 'UND_ERR_SOCKET'
-    ) {
-      return true;
-    }
-  }
+  if (collectErrorCodes(err).some((code) => NETWORK_CODES.has(code))) return true;
   if (typeof e.name === 'string') {
     const name = e.name;
+    if (name === 'APIConnectionError' || name === 'APIConnectionTimeoutError') return true;
     if (name === 'AbortError' && (e.message ?? '').toLowerCase().includes('network')) return true;
     if (name === 'FetchError' || name === 'NetworkError' || name === 'TimeoutError') return true;
   }
@@ -238,6 +260,11 @@ function isNetworkError(err: unknown): boolean {
     if (m.includes('socket hang up')) return true;
     if (m.includes('terminated') && m.includes('stream')) return true;
     if (m.includes('upstream connect error')) return true;
+    // OpenAI SDK: `APIConnectionError: Connection error.` re-wrapped as
+    // `CodeBuddy API error: Connection error.` — no errno in the message.
+    if (m.includes('connection error')) return true;
+    if (m.includes('econnrefused') || m.includes('enotfound') || m.includes('etimedout')) return true;
+    if (m.includes('connect timeout') || m.includes('fetch failed')) return true;
   }
   return false;
 }
@@ -268,6 +295,8 @@ export function classifyProviderError(
   const base = { status, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
 
   // ---- 1. FATAL: quota / balance exhausted -------------------------------
+  // Checked BEFORE 401/403/400: a 403 `out_of_credits` or Anthropic 400
+  // "credit balance is too low" is a billing outage, not an auth/schema bug.
   const hasQuota = message.includes('quota');
   const quotaFatal =
     code === 'insufficient_quota' ||
@@ -276,14 +305,31 @@ export function classifyProviderError(
     type === 'insufficient_balance' ||
     code === 'insufficient_funds' ||
     type === 'insufficient_funds' ||
+    code === 'usage_limit_reached' ||
+    type === 'usage_limit_reached' ||
+    code === 'out_of_credits' ||
+    type === 'out_of_credits' ||
+    code === 'resource_exhausted' ||
+    type === 'resource_exhausted' ||
     message.includes('insufficient_quota') ||
     message.includes('insufficient balance') ||
     message.includes('insufficient funds') ||
     message.includes('exceeded your current quota') ||
     message.includes('exceeded your quota') ||
+    message.includes('usage_limit_reached') ||
     message.includes('billing details') ||
+    message.includes('out_of_credits') ||
+    message.includes('out of credits') ||
+    message.includes('credit balance is too low') ||
+    message.includes('too low to access') ||
+    message.includes('exceeded your monthly limit') ||
+    message.includes('resource_exhausted') ||
+    message.includes('resource has been exhausted') ||
     (hasQuota &&
-      (message.includes('exceed') || message.includes('insufficient') || message.includes('billing')));
+      (message.includes('exceed') ||
+        message.includes('insufficient') ||
+        message.includes('billing') ||
+        message.includes('exhaust')));
   if (quotaFatal) {
     return { retryable: false, fatal: true, reason: 'quota_exhausted', ...base };
   }
@@ -390,7 +436,8 @@ export function preserveProviderErrorMetadata(target: Error, source: unknown): E
     const status = extractStatus(source);
     if (status !== undefined && t.status === undefined) t.status = status;
 
-    const code = extractField(source, 'code');
+    const nestedCodes = collectErrorCodes(source);
+    const code = extractField(source, 'code') || nestedCodes[0]?.toLowerCase() || '';
     if (code && t.code === undefined) t.code = code;
 
     const type = extractField(source, 'type');

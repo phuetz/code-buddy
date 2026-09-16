@@ -1,8 +1,7 @@
-import fs from 'fs/promises';
-import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import { readJsonAtomic, writeJsonAtomic } from './atomic-write.js';
 
 export interface CacheEntry {
   query: string;
@@ -50,28 +49,21 @@ export class ResponseCache {
 
   private async loadCache(): Promise<void> {
     try {
-      // Use sync for directory creation during init (only once)
-      if (!existsSync(this.cacheDir)) {
-        mkdirSync(this.cacheDir, { recursive: true });
-      }
+      const data = await readJsonAtomic<{
+        entries?: Record<string, CacheEntry>;
+        stats?: { hits: number; misses: number };
+      }>(this.cacheFile, { entries: {}, stats: { hits: 0, misses: 0 } });
 
-      try {
-        const content = await fs.readFile(this.cacheFile, 'utf-8');
-        const data = JSON.parse(content);
-
-        // Convert to Map and filter expired entries
-        const now = Date.now();
-        for (const [key, entry] of Object.entries(data.entries || {})) {
-          const cacheEntry = entry as CacheEntry;
-          if (now - cacheEntry.timestamp < cacheEntry.ttl * 1000) {
-            this.cache.set(key, cacheEntry);
-          }
+      // Convert to Map and filter expired entries
+      const now = Date.now();
+      for (const [key, entry] of Object.entries(data.entries ?? {})) {
+        const cacheEntry = entry as CacheEntry;
+        if (now - cacheEntry.timestamp < cacheEntry.ttl * 1000) {
+          this.cache.set(key, cacheEntry);
         }
-
-        this.stats = data.stats || { hits: 0, misses: 0 };
-      } catch {
-        // File doesn't exist or is invalid - start fresh
       }
+
+      this.stats = data.stats ?? { hits: 0, misses: 0 };
     } catch (_error) {
       // Start with empty cache on error
       this.cache.clear();
@@ -99,8 +91,8 @@ export class ResponseCache {
         stats: this.stats,
         savedAt: Date.now(),
       };
-      // Use compact JSON without pretty-printing for better performance
-      await fs.writeFile(this.cacheFile, JSON.stringify(data));
+      // Keep the compact payload while committing it atomically.
+      await writeJsonAtomic(this.cacheFile, data);
     } catch (_error) {
       // Silently fail on save errors
     }

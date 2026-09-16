@@ -12,6 +12,10 @@ import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
+import { getCompanionConductor, type Conductor } from '../companion/orchestrator.js';
+import { resolveCurrentHomeInteractionPolicy } from '../companion/home-interaction-policy.js';
+import type { HomeModeStore } from '../life-rhythm/home-mode-store.js';
+import { isSpeaking } from './voice-activity.js';
 import {
   buildArrivalOpener,
   buildLlmArrivalOpener,
@@ -60,6 +64,16 @@ export const CAMERA_MESSAGES: Record<string, string[]> = {
 };
 
 const lastMsgIdx: Record<string, number> = {};
+export const DEFAULT_SENSORY_REGREET_MIN_MS = 300_000;
+
+export function resolveSensoryRegreetMinMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_SENSORY_REGREET_MIN_MS?.trim();
+  if (!raw) return DEFAULT_SENSORY_REGREET_MIN_MS;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0
+    ? Math.min(86_400_000, Math.floor(value))
+    : DEFAULT_SENSORY_REGREET_MIN_MS;
+}
 
 /** Pick a varied alert caption for `kind`, avoiding the consecutive repeat. Returns `kind` if unknown. */
 export function pickCameraMessage(kind: string, rng: () => number = Math.random): string {
@@ -83,6 +97,18 @@ export interface SemanticVisionOptions {
   llmChat?: ArrivalChat;
   /** Local identity-presence hook. True only for CODEBUDDY_USER_NAME, compared case-insensitively. */
   onIdentityChange?: (recognizedUserPresent: boolean) => void;
+  /** Shared companion speech arbiter; injectable for deterministic tests. */
+  conductor?: Conductor;
+  /** Household posture store; injectable to isolate callers and tests. */
+  homeModeStore?: HomeModeStore;
+  /** Greeting cooldown override for deterministic callers and tests. */
+  greetCooldownMs?: number;
+  /** Arrival episode store override; production defaults to the user companion store. */
+  arrivalStatePath?: string;
+}
+
+function identityKey(name: string): string {
+  return name.normalize('NFKC').trim().toLocaleLowerCase();
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -90,11 +116,22 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   // Greet an arriving person aloud (opt-in) — the robot stops being a tool that waits and becomes a
   // presence that notices you. Cooldown'd so a person flickering in/out doesn't re-greet.
   const greetEnabled = process.env.CODEBUDDY_SENSORY_GREET === 'true';
-  const greetCooldownMs = Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS) || 60_000;
+  const configuredGreetCooldownMs = options.greetCooldownMs
+    ?? Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS);
+  const greetCooldownMs = Number.isFinite(configuredGreetCooldownMs)
+    && configuredGreetCooldownMs >= 0
+    ? configuredGreetCooldownMs
+    : 60_000;
+  const regreetMinMs = resolveSensoryRegreetMinMs();
   const now = options.now ?? (() => Date.now());
+  const conductor = options.conductor ?? getCompanionConductor();
   let lastGreetAt = Number.NEGATIVE_INFINITY;
   let awaitingIdentityGreeting = false;
   let recognizedUserPresent = false;
+  let lastLossAt = Number.NEGATIVE_INFINITY;
+  let presentIdentityKey: string | undefined;
+  let lostIdentityKey: string | undefined;
+  let suppressCurrentArrivalGreeting = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -116,10 +153,17 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       similarity?: unknown;
     };
     if (kind === 'person_entered') {
+      const enteredAt = now();
+      suppressCurrentArrivalGreeting = enteredAt - lastLossAt < regreetMinMs;
+      if (!suppressCurrentArrivalGreeting) lastLossAt = Number.NEGATIVE_INFINITY;
       recognizedUserPresent = false;
+      presentIdentityKey = undefined;
       options.onIdentityChange?.(false);
       awaitingIdentityGreeting = payload.identityPending === true;
     } else if (kind === 'person_lost' || kind === 'person_left') {
+      lastLossAt = now();
+      lostIdentityKey = presentIdentityKey;
+      presentIdentityKey = undefined;
       recognizedUserPresent = false;
       awaitingIdentityGreeting = false;
       options.onIdentityChange?.(false);
@@ -141,6 +185,20 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
           ? rawName
           : 'unknown';
         const unknown = safeName.toLocaleLowerCase() === 'unknown';
+        const arrivingIdentityKey = unknown ? undefined : identityKey(safeName);
+        if (
+          identityShouldOpenArrival
+          && suppressCurrentArrivalGreeting
+          && lostIdentityKey
+          && arrivingIdentityKey
+          && arrivingIdentityKey !== lostIdentityKey
+        ) {
+          // The cooldown is for detector flicker of the same occupant, not for a
+          // different identified person arriving shortly after somebody left.
+          suppressCurrentArrivalGreeting = false;
+          lastLossAt = Number.NEGATIVE_INFINITY;
+        }
+        presentIdentityKey = arrivingIdentityKey;
         const similarity = typeof payload.similarity === 'number' &&
           Number.isFinite(payload.similarity)
           ? Math.max(-1, Math.min(1, payload.similarity))
@@ -206,22 +264,60 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       const greetFromAnonymousArrival =
         kind === 'person_entered' && payload.identityPending !== true;
       const greetFromIdentity = identityShouldOpenArrival;
-      if ((greetFromAnonymousArrival || greetFromIdentity) && greetEnabled) {
+      if (
+        (greetFromAnonymousArrival || greetFromIdentity)
+        && greetEnabled
+        && !suppressCurrentArrivalGreeting
+      ) {
         const t = now();
         if (t - lastGreetAt < greetCooldownMs) return;
+        const homePolicy = await resolveCurrentHomeInteractionPolicy('arrival', {
+          ...(options.homeModeStore ? { homeModeStore: options.homeModeStore } : {}),
+        });
+        if (!homePolicy.allowed) {
+          logger.info(`[vision] arrival greeting skipped by home policy: ${homePolicy.reason}`);
+          return;
+        }
+        if (isSpeaking(t)) {
+          logger.info('[vision] arrival greeting skipped: voice active');
+          return;
+        }
+        if (!conductor.claim('arrival')) {
+          logger.info('[vision] arrival greeting skipped: conductor gap');
+          return;
+        }
         lastGreetAt = t;
         try {
           const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');
           const persona = await getActivePersonaVoiceAsync();
           // Varied, context-aware opener (time of day / gap since last seen) with anti-repetition,
           // instead of the single fixed persona.greeting that made it say the same line every time.
-          const state = loadArrivalState();
+          const state = loadArrivalState(options.arrivalStatePath);
+          let episodeLine = '';
+          if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+            try {
+              const { readFile } = await import('node:fs/promises');
+              const { join } = await import('node:path');
+              const raw = await readFile(
+                join(options.cwd ?? process.cwd(), '.codebuddy', 'companion', 'episodes.jsonl'),
+                'utf8',
+              );
+              const last = raw.trim().split('\n').filter(Boolean).at(-1);
+              if (last) {
+                const parsed = JSON.parse(last) as { line?: unknown };
+                if (typeof parsed.line === 'string') episodeLine = parsed.line;
+              }
+            } catch {
+              /* episode hint is optional */
+            }
+          }
           const opener = buildArrivalOpener({
             now: t,
             lastSeenAt: state.lastSeenAt ?? null,
             recent: state.recent,
             ...(arrivalName ? { name: arrivalName } : {}),
             recognizedUser: recognizedArrival,
+            ...(episodeLine ? { episodeLine } : {}),
           });
           let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
 
@@ -247,7 +343,10 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
               if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
                 try {
                   const { buildRelationalContext } = await import('../companion/relational-context.js');
-                  relationalContext = await buildRelationalContext(options.cwd ? { cwd: options.cwd } : {});
+                  relationalContext = await buildRelationalContext({
+                    ...(options.cwd ? { cwd: options.cwd } : {}),
+                    includeSelfEvolution: false,
+                  });
                 } catch {
                   /* relational context optional */
                 }
@@ -259,6 +358,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
                 recentHeard,
                 ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
                 ...(relationalContext ? { relationalContext } : {}),
+                ...(episodeLine ? { episodeLine } : {}),
                 ...(arrivalName ? { name: arrivalName } : {}),
                 ...(options.llmChat ? { chat: options.llmChat } : {}),
               });
@@ -281,7 +381,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
               ]);
               await speakCanonicalVoiceInitiative(
                 text,
-                (content) => sayNow(content, { phoneDelivery: 'never' }),
+                (content) => sayNow(content, { phoneDelivery: 'never', ttsRouteHint: 'opening' }),
               );
             });
           await greet(safeGreeting);
@@ -289,7 +389,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
             lastSeenAt: t,
             recent: pushRecent(state.recent, opener.template),
             recentSpoken: pushRecent(state.recentSpoken ?? [], safeGreeting),
-          });
+          }, options.arrivalStatePath);
           options.onEngage?.(); // open the conversation window — follow-ups are now treated as addressed
           logger.info(`[vision] greeted arrival (${opener.trigger}) → ${safeGreeting}`);
         } catch (err) {

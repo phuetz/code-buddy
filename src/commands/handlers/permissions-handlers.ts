@@ -8,6 +8,7 @@ import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getToolFilter, setToolFilter, createToolFilter, resetToolFilter } from "../../utils/tool-filter.js";
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -227,13 +228,13 @@ function savePermissions(): string {
     if (fs.existsSync(path.dirname(projectSettingsPath))) {
       let projectSettings: Record<string, unknown> = {};
       if (fs.existsSync(projectSettingsPath)) {
-        projectSettings = JSON.parse(fs.readFileSync(projectSettingsPath, 'utf-8'));
+        projectSettings = readJsonAtomicSync<Record<string, unknown>>(projectSettingsPath, {}, { mode: 0o600 });
       }
 
       projectSettings.allowedTools = filter.enabledPatterns;
       projectSettings.blockedTools = filter.disabledPatterns;
 
-      fs.writeFileSync(projectSettingsPath, JSON.stringify(projectSettings, null, 2));
+      writeJsonAtomicSync(projectSettingsPath, projectSettings, { mode: 0o600 });
 
       return `💾 Permissions saved to settings
 

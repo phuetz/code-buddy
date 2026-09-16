@@ -20,6 +20,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { EventEmitter } from "events";
 import { logger } from "../utils/logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Hook types
@@ -213,13 +214,14 @@ export class HooksManager extends EventEmitter {
     const configPath = path.join(this.workingDirectory, this.config.configPath);
     if (fs.existsSync(configPath)) {
       try {
-        const fileConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        const fileConfig = readJsonAtomicSync<Record<string, unknown> | null>(configPath, null, { mode: 0o600 });
+        if (!fileConfig) return;
         if (Array.isArray(fileConfig.hooks)) {
           for (const hook of fileConfig.hooks) {
             this.registerHook(hook);
           }
         }
-        logger.debug(`Loaded ${fileConfig.hooks?.length || 0} hooks from ${configPath}`);
+        logger.debug(`Loaded ${Array.isArray(fileConfig.hooks) ? fileConfig.hooks.length : 0} hooks from ${configPath}`);
       } catch (error) {
         logger.warn(`Failed to load hooks config: ${error}`);
       }
@@ -534,7 +536,7 @@ export class HooksManager extends EventEmitter {
       hooks: allHooks.filter(h => !BUILTIN_HOOKS.some(b => b.name === h.name)),
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeJsonAtomicSync(configPath, config, { mode: 0o600 });
     logger.debug(`Saved hooks config to ${configPath}`);
   }
 

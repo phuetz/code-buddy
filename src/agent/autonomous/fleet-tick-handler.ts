@@ -1,7 +1,7 @@
 /**
  * Fleet tick handler — Phase (d).18 (Autonomous Fleet Protocol v0.1).
  *
- * Native TypeScript port of `claude-et-patrice/tools/heartbeat_tick.py`,
+ * Native TypeScript port of the handover repo's `tools/heartbeat_tick.py`,
  * which has been operational since 2026-05-02 (6+ successful cycles).
  * The port lets Code Buddy run the fleet protocol in-process — no
  * external Python script, no Task Scheduler, works on Linux. The
@@ -41,6 +41,7 @@ import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import {
   resolveProviderFromEnv,
   type PeerChatProviderId,
@@ -80,9 +81,9 @@ export interface ResolvedTickProvider {
 export type AutonomousLlmProvider = 'cloud' | 'auto' | PeerChatProviderId;
 
 export interface FleetTickOptions {
-  /** Absolute path to the claude-et-patrice repo (fleet bus). */
+  /** Absolute path to the private handover repository (fleet bus). */
   repoPath: string;
-  /** Host identifier, e.g. `ministar/grok-cli`. */
+  /** Host identifier, e.g. `hub/grok-cli`. */
   host: string;
   /** Hard cap on the agent's wall-clock time per task. Default 600 000 ms. */
   maxTaskMs?: number;
@@ -299,7 +300,7 @@ export function buildTaskPrompt(host: string, task: FleetTask): string {
   const criteria =
     task.acceptanceCriteria.map((c) => `  - ${c}`).join('\n') || '  - (aucun)';
   return [
-    `Tu es Claude/${host} dans le fleet autonome (cf. claude-et-patrice/propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md).`,
+    `Tu es Claude/${host} dans le fleet autonome (cf. le dépôt privé de passation, propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md).`,
     `Tu viens de claimer la tâche ${task.id} :`,
     '',
     `TITRE : ${task.title}`,
@@ -498,13 +499,11 @@ async function defaultAgentRun(
 }
 
 async function readJsonFile<T>(p: string): Promise<T> {
-  const raw = await fs.readFile(p, 'utf-8');
-  return JSON.parse(raw) as T;
+  return readJsonAtomic<T>(p, {} as T, { mode: 0o600 });
 }
 
 async function writeJsonFile(p: string, data: unknown): Promise<void> {
-  const json = `${JSON.stringify(data, null, 2)}\n`;
-  await fs.writeFile(p, json, 'utf-8');
+  await writeJsonAtomic(p, data, { mode: 0o600 });
 }
 
 async function appendWorklog(repoPath: string, entry: WorklogFileEntry): Promise<void> {

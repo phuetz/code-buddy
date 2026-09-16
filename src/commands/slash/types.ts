@@ -34,7 +34,22 @@ export interface SlashCommand {
   isBuiltin: boolean;
   /** List of arguments accepted by the command. */
   arguments?: SlashCommandArgument[];
+  /**
+   * Optional per-surface restriction (P4). Resolution lives in `surfaces.ts`;
+   * a declaration can hide or disable a command on a surface, never widen the
+   * Cowork default-deny token allowlist.
+   */
+  surfaces?: Partial<Record<SlashSurface, SlashAvailability>>;
 }
+
+/** Surfaces that expose slash commands. */
+export type SlashSurface = 'cli' | 'cowork' | 'channels';
+
+/** Availability of a command on a surface. */
+export type SlashAvailability =
+  | { status: 'available' }
+  | { status: 'hidden' }
+  | { status: 'unavailable'; reason: string };
 
 /**
  * Result of executing or parsing a slash command.

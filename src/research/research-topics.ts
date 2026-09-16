@@ -11,9 +11,10 @@
  *
  * @module research/research-topics
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 function defaultStorePath(): string {
   return process.env.CODEBUDDY_RESEARCH_TOPICS_FILE || join(getCodeBuddyHome(), 'research-topics.json');
@@ -36,10 +37,8 @@ function normalize(topics: string[]): string[] {
 /** Load the persisted topic list (deduped, order-preserving). */
 export function loadStoredTopics(storePath = defaultStorePath()): string[] {
   try {
-    if (existsSync(storePath)) {
-      const data = JSON.parse(readFileSync(storePath, 'utf8'));
-      if (Array.isArray(data)) return normalize(data.filter((t): t is string => typeof t === 'string'));
-    }
+    const data = readJsonAtomicSync<unknown>(storePath, []);
+    if (Array.isArray(data)) return normalize(data.filter((t): t is string => typeof t === 'string'));
   } catch {
     /* best effort */
   }
@@ -49,7 +48,7 @@ export function loadStoredTopics(storePath = defaultStorePath()): string[] {
 export function saveStoredTopics(topics: string[], storePath = defaultStorePath()): void {
   try {
     mkdirSync(dirname(storePath), { recursive: true });
-    writeFileSync(storePath, JSON.stringify(normalize(topics), null, 2));
+    writeJsonAtomicSync(storePath, normalize(topics));
   } catch {
     /* best effort */
   }

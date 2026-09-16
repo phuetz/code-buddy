@@ -79,7 +79,7 @@ describe('LeadScoutPlanTool', () => {
       zone: 'Epinay-sur-Seine',
       offer: 'controle acces et renovation electrique',
       maxProspects: 20,
-      localDatasetPaths: ['/home/patrice/claude/elec/public/architectes-idf.json'],
+      localDatasetPaths: ['/home/user/claude/elec/public/architectes-idf.json'],
     });
 
     expect(result.success).toBe(true);

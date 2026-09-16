@@ -22,6 +22,7 @@ import {
 } from '../lora/lisa-avatar-bible.js';
 import { normalizeVoiceInteractionText } from '../sensory/voice-interactions.js';
 import { resolveUserName } from './user-name.js';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export type LisaSelfieMood = LisaAvatarMood;
 
@@ -50,6 +51,8 @@ export interface LisaSelfieOptions {
    * When set, preferred over sensory alert chat for the photo.
    */
   deliverPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
+  /** Skip the on-disk cache and always generate (CLI exact-scene). */
+  skipCache?: boolean;
   /** Injectables for tests. */
   generate?: (prompt: string, aspect: string) => Promise<{ success: boolean; outputPath?: string | null; error?: string }>;
   sendPhoto?: (caption: string, imagePath: string) => Promise<boolean>;
@@ -118,8 +121,9 @@ export async function selectCachedLisaSelfie(
   cacheDir: string,
   style: string,
   tier: LisaContentTier = 'safe',
-  options: { rotateAcrossStyles?: boolean } = {},
+  options: { rotateAcrossStyles?: boolean; exclude?: Iterable<string> } = {},
 ): Promise<string | undefined> {
+  const exclude = new Set(options.exclude ?? []);
   const candidates: Array<{ file: string; atimeMs: number }> = [];
   const tierDir = path.join(cacheDir, tier);
   let directories: string[];
@@ -168,7 +172,9 @@ export async function selectCachedLisaSelfie(
     if (!options.rotateAcrossStyles && candidates.length > 0) break;
   }
   candidates.sort((a, b) => a.atimeMs - b.atimeMs || a.file.localeCompare(b.file));
-  const selected = candidates[0]?.file;
+  const preferred = candidates.filter((entry) => !exclude.has(entry.file));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  const selected = pool[0]?.file;
   if (!selected) return undefined;
   try {
     const stat = await fs.stat(selected);
@@ -182,41 +188,82 @@ export async function selectCachedLisaSelfie(
 /** @deprecated use LISA_AVATAR_MOOD_SCENES — kept for call sites/tests. */
 const MOOD_SCENES: Record<LisaSelfieMood, string> = LISA_AVATAR_MOOD_SCENES;
 
+function isLisaSelfieOtherSubject(t: string): boolean {
+  if (/\b(?:photo|selfie|portrait|image|picture|pic|cliche)\s+(?:de|du|des|of)\s+(?!toi\b|you\b|lisa\b|moi\b)/.test(t)) {
+    return true;
+  }
+  if (/\bcette (?:photo|image|picture|pic)\b/.test(t)) return true;
+  if (/\bcomment (?:prendre|faire|capturer)\b/.test(t)) return true;
+  if (/\b(?:analyser|analyze|analysis)\b/.test(t)) return true;
+  if (/\bphotoshop\b/.test(t)) return true;
+  return false;
+}
+
 /** Detect spoken/text requests for Lisa to send a selfie/photo of herself. */
 export function isLisaSelfieRequest(text: string): boolean {
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
-  // Must be about her image of herself, not camera of the room.
-  const media = /\b(?:photo|selfie|portrait|image|picture|cliche)\b/.test(t);
-  // "selfie" alone implies a photo of herself; "photo" needs a self-referent.
-  const aboutSelf =
-    /\bselfie\b/.test(t) ||
-    (media &&
-      (/\b(?:toi|de toi|a toi|ta photo|ton selfie|ta tete|ton visage|toi meme|photo de lisa|you|your photo|your picture|picture of you|photo of you)\b/.test(
-        t,
-      ) ||
-        /\blisa\b/.test(t) ||
-        // In Lisa's own conversation, a bare direct request such as
-        // "montre-moi une image" naturally refers to her. Keep this narrow:
-        // an object after "image/photo" (for example "une image de chat") is
-        // left to the generic image tool instead.
-        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?\s*$/.test(t)));
-  const sendIntent =
-    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
-      t,
-    ) || /\b(?:selfie|photo de toi|photo a toi|ta photo)\b/.test(t);
+  if (isLisaSelfieOtherSubject(t)) return false;
   const negative =
-    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que j)\b/.test(
+    /\b(?:pas de photo|ne m envoie pas|webcam|ce que je te montre|regarde ici|la photo que je|je te montre)\b/.test(
       t,
     );
-  return aboutSelf && sendIntent && !negative;
+  if (negative) return false;
+
+  const media = /\b(?:photo|selfie|portrait|image|picture|cliche|pic)\b/.test(t);
+  const aboutLisa =
+    /\b(?:de toi|a toi|toi meme|te voir|te montrer|montre toi|yourself|of you|your (?:photo|picture|pic|selfie)|ur (?:pic|photo|selfie)|ta photo|ton selfie|ta tete|ton visage|photo de lisa|selfie de (?:toi|lisa))\b/.test(t);
+  const shortAsk =
+    /^(?:lisa\s+)?(?:t as|tu as|t a|as tu|ya tu|y a t il|got(?: any)?|have you got|you got|you have)\s+(?:une |un |a |an )?(?:photo|selfie|portrait|image|picture|pic)\b/.test(t)
+    || /^(?:lisa\s+)?(?:selfie|ta photo)$/.test(t);
+  const showYourself = /\b(?:montre toi|te voir|show yourself)\b/.test(t);
+  const sendOrMake =
+    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|fais|fait|genere|prend|prends|capture)\b/.test(t);
+  const directAsk =
+    /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:un |une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture|pic|selfie)\b/.test(t)
+    || /\b(?:fais|fait|genere|prend|prends)\s+(?:moi\s+)?(?:un |une |a |an )?(?:selfie|photo|portrait)\b/.test(t);
+
+  if (showYourself || shortAsk) return true;
+  if (aboutLisa && (sendOrMake || media)) return true;
+  if (directAsk) return true;
+  return false;
 }
 
 /**
- * Resolve elliptical follow-ups only after this session successfully produced
- * a Lisa selfie. This deliberately does not classify arbitrary image requests:
- * callers must provide the trusted, short-lived `hasRecentSelfie` state.
+ * Elliptical follow-ups ("encore une ?", "et une à la plage ?") only mean
+ * "another photo of you" when the PREVIOUS assistant turn served a selfie —
+ * that trusted, short-lived state is the caller's `hasRecentSelfie`. This
+ * function deliberately does not classify arbitrary image requests.
  */
+
+/** Openings that read as "another one" once a selfie is on screen. */
+const CONTINUATION_HEADS: RegExp[] = [
+  // encore / encore une / encore une photo
+  /^(?:et\s+)?encore(?:\s+une?)?(?:\s+(?:photo|image|selfie|portrait|pic))?\b/,
+  // une autre / un autre / une autre photo
+  /^(?:et\s+)?(?:une|un)\s+autre(?:\s+(?:photo|image|selfie|portrait|pic))?\b/,
+  // la même / le même (en plus sexy, à la plage…)
+  /^(?:et\s+)?(?:la|le)\s+meme\b/,
+  // une de plus
+  /^(?:et\s+)?(?:une|un)\s+de\s+plus\b/,
+  // another / another one / one more / more
+  /^(?:another|one\s+more|more)(?:\s+(?:one|photo|pic|picture|selfie|shot))?\b/,
+  // « et une à la plage », « une en pyjama », « une avec … »
+  /^(?:et\s+)?(?:une|un)(?=\s+(?:a|en|au|aux|dans|avec|sur|plus)\b)/,
+  // « génère la photo », « envoie-moi une autre »
+  /^(?:genere|cree|fais|envoie|envoies|montre)(?:\s+moi)?\s+(?:en\s+)?(?:une|la|cette)\b/,
+];
+
+/**
+ * Words that betray a different subject even behind a continuation opening
+ * ("encore une FOIS explique", "une autre QUESTION").
+ */
+const CONTINUATION_STOP_RE =
+  /\b(?:fois|question|questions|chose|truc|idee|idees|explique|explication|explications|dis|raconte|histoire|parle|essaie|essaye|coup|tentative|reponse|reponses|time|thing|round)\b/;
+
+/** A follow-up is short; a sentence is something else. */
+const CONTINUATION_MAX_WORDS = 8;
+
 export function isLisaSelfieContinuationRequest(
   text: string,
   hasRecentSelfie: boolean,
@@ -224,10 +271,13 @@ export function isLisaSelfieContinuationRequest(
   if (!hasRecentSelfie) return false;
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
-  if (/\b(?:image|photo|portrait|picture)\s+(?:de|du|des|of)\s+(?!(?:toi|lisa)\b)/.test(t)) {
+  if (t.split(/\s+/).length > CONTINUATION_MAX_WORDS) return false;
+  // "une autre image DE CHAT" is not a photo of Lisa.
+  if (/\b(?:image|photo|portrait|picture|selfie)\s+(?:de|du|des|of)\s+(?!(?:toi|lisa)\b)/.test(t)) {
     return false;
   }
-  return /^(?:(?:une|encore une)\s+autre(?:\s+(?:photo|image|selfie|portrait))?|(?:genere|cree|fais)\s+(?:moi\s+)?(?:la|cette|une)\s+(?:photo|image|selfie|portrait))(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?(?:\s+(?:s il te plait|stp|please))?$/.test(t);
+  if (CONTINUATION_STOP_RE.test(t)) return false;
+  return CONTINUATION_HEADS.some((head) => head.test(t));
 }
 
 export function inferSelfieMood(text: string): LisaSelfieMood {
@@ -247,6 +297,28 @@ export function inferSelfieMood(text: string): LisaSelfieMood {
  * such as "en pyjama" reaches the image model instead of returning an
  * unrelated ready-made portrait.
  */
+const STYLE_HINTS: Array<{ style: LisaSelfieMood; re: RegExp }> = [
+  { style: 'wet-selfie', re: /\b(?:plage|beach|mer|ocean|océan|piscine|wet|mouill)\b/ },
+  { style: 'street-rain', re: /\b(?:pluie|rain|street|rue|manteau|city)\b/ },
+  { style: 'neon-skate', re: /\b(?:n[eé]on|skate|nuit|cyber)\b/ },
+  { style: 'studio', re: /\b(?:studio|beauty)\b/ },
+  { style: 'soft-editorial', re: /\b(?:pull|sweater|hoodie|blouse|chemise|editorial|pyjama|pajamas?)\b/ },
+  { style: 'tender', re: /\b(?:tendre|douce|tender)\b/ },
+  { style: 'playful', re: /\b(?:espi[eè]gle|playful|rigol)\b/ },
+  { style: 'bold', re: /\b(?:audacieus|bold|glamour)\b/ },
+  { style: 'calm', re: /\b(?:calme|calm)\b/ },
+];
+
+/** Map a FR/EN look request onto a cached presentation style, if any. */
+export function inferLisaSelfieStyle(text: string): LisaSelfieMood | undefined {
+  const t = normalizeVoiceInteractionText(text);
+  if (!t) return undefined;
+  for (const hint of STYLE_HINTS) {
+    if (hint.re.test(t)) return hint.style;
+  }
+  return undefined;
+}
+
 export function inferLisaSelfieScene(text: string): string | undefined {
   const normalized = normalizeVoiceInteractionText(text);
   const media = /\b(?:photo|selfie|portrait|image|picture)\b/.exec(normalized);
@@ -304,7 +376,7 @@ export function buildLisaSelfiePrompt(options: {
   userName?: string;
   contentTier?: LisaContentTier;
 }): string {
-  const forWhom = options.userName?.trim() || resolveUserName();
+  const forWhom = options.userName?.trim() || undefined;
   const avatarId = resolveAvatarId(options.avatarId);
   const profile = getAvatarProfile(avatarId);
   // Multi-style: style pack from video (studio / wet-selfie / street-rain / …) or mood alias.
@@ -392,8 +464,8 @@ export async function createAndMaybeSendLisaSelfie(
       });
 
     const aspect = options.aspectRatio ?? 'portrait';
-    const cacheDir = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim()
-      || path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
+    const { resolveSelfieCacheDir } = await import('./lisa-selfie-ingest.js');
+    const cacheDir = resolveSelfieCacheDir(env);
     if (options.contentTier === 'explicit' && contentTier !== 'explicit') {
       return {
         success: false,
@@ -404,10 +476,9 @@ export async function createAndMaybeSendLisaSelfie(
         error: 'explicit content tier requires the verified adult-content gate',
       };
     }
-    // A cache is suitable for a generic request. If the user asks for a
-    // particular outfit or location, generate that exact prompt instead of
-    // silently substituting an unrelated cached portrait.
-    const cachedImage = options.scene?.trim()
+    // Companion path serves the cache even when a look is named (plage, pull).
+    // CLI/tool can pass skipCache to force a fresh generation.
+    const cachedImage = options.skipCache
       ? undefined
       : await selectCachedLisaSelfie(cacheDir, style, contentTier, {
           rotateAcrossStyles: options.rotateCacheStyles === true,
@@ -432,6 +503,27 @@ export async function createAndMaybeSendLisaSelfie(
       };
     }
 
+    if (!cachedImage && gen.outputPath) {
+      try {
+        const { maybeIngestGeneratedLisaSelfie } = await import('./lisa-selfie-ingest.js');
+        await maybeIngestGeneratedLisaSelfie({
+          sourcePath: gen.outputPath,
+          prompt,
+          contentTier,
+          style,
+          model: 'lisa-selfie',
+          provider: 'lisa-selfie',
+          env,
+          rootDir,
+          ...(options.now ? { now: options.now } : {}),
+        });
+      } catch (err) {
+        logger.warn(
+          `[lisa-selfie] cache ingest skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     // Archive under lora/lisa/selfies for continuity
     const archiveDir = path.join(defaultLoraRoot(rootDir), 'lisa', 'selfies');
     let imagePath = gen.outputPath;
@@ -443,22 +535,18 @@ export async function createAndMaybeSendLisaSelfie(
       const dest = path.join(archiveDir, `${stamp}-${mood}${path.extname(gen.outputPath) || '.png'}`);
       await fs.copyFile(gen.outputPath, dest);
       imagePath = dest;
-      await fs.writeFile(
+      await writeJsonAtomic(
         dest.replace(/\.[^.]+$/, '.json'),
-        JSON.stringify(
-          {
-            prompt,
-            trigger,
-            mood,
-            generatedAt: new Date().toISOString(),
-            hasLoraHint,
-            cached: Boolean(cachedImage),
-            contentTier,
-          },
-          null,
-          2,
-        ) + '\n',
-        'utf8',
+        {
+          prompt,
+          trigger,
+          mood,
+          generatedAt: new Date().toISOString(),
+          hasLoraHint,
+          cached: Boolean(cachedImage),
+          contentTier,
+        },
+        { mode: 0o600 },
       );
     } catch (err) {
       logger.warn(
@@ -541,14 +629,15 @@ export async function maybeHandleLisaSelfieRequest(
   options: Omit<LisaSelfieOptions, 'mood' | 'scene'> = {},
 ): Promise<LisaSelfieResult | null> {
   if (!isLisaSelfieRequest(heard)) return null;
-  const mood = inferSelfieMood(heard);
+  const mood = inferLisaSelfieStyle(heard) ?? inferSelfieMood(heard);
   const scene = inferLisaSelfieScene(heard);
   const contentTier = inferLisaContentTier(heard);
   return createAndMaybeSendLisaSelfie({
     ...options,
     mood,
     contentTier,
+    style: mood,
     ...(scene ? { scene } : {}),
-    rotateCacheStyles: !scene && mood === 'portrait',
+    rotateCacheStyles: !inferLisaSelfieStyle(heard) && mood === 'portrait',
   });
 }

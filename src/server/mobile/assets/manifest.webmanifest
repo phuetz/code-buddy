@@ -1,0 +1,37 @@
+{
+  "name": "Code Buddy Mobile",
+  "short_name": "CodeBuddy",
+  "description": "PWA pour piloter Code Buddy et dialoguer avec les assistants",
+  "start_url": "/__codebuddy__/mobile/",
+  "scope": "/__codebuddy__/mobile/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0a0f",
+  "background_color": "#0a0a0f",
+  "icons": [
+    {
+      "src": "/__codebuddy__/mobile/assets/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/__codebuddy__/mobile/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/__codebuddy__/mobile/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/__codebuddy__/mobile/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

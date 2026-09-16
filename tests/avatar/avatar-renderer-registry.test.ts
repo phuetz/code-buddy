@@ -6,7 +6,7 @@ import {
 } from '../../src/avatar/avatar-renderer-registry.js';
 
 const HELLO = {
-  rendererId: 'darkstar-metahuman',
+  rendererId: 'gpuNode-metahuman',
   displayName: 'Lisa MetaHuman',
   protocolVersion: 1,
   runtime: 'unreal',
@@ -29,7 +29,7 @@ describe('avatar renderer registry', () => {
     expect(registered).toMatchObject({
       ok: true,
       renderer: {
-        rendererId: 'darkstar-metahuman',
+        rendererId: 'gpuNode-metahuman',
         runtime: 'unreal',
         runtimeVersion: '5.8',
         phase: 'ready',
@@ -41,7 +41,7 @@ describe('avatar renderer registry', () => {
     const status = registry.report(
       'ws-1',
       {
-        rendererId: 'darkstar-metahuman',
+        rendererId: 'gpuNode-metahuman',
         phase: 'playing',
         activeTurnId: 'turn-1',
         lastSequence: 12,
@@ -77,7 +77,7 @@ describe('avatar renderer registry', () => {
     expect(registry.register('ws-1', HELLO).ok).toBe(true);
     expect(
       registry.report('ws-attacker', {
-        rendererId: 'darkstar-metahuman',
+        rendererId: 'gpuNode-metahuman',
         phase: 'playing',
       })
     ).toMatchObject({ ok: false, error: expect.stringContaining('hello') });

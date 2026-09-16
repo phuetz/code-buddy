@@ -103,8 +103,6 @@ import {
   _resetWorkflowCounterForTests,
 } from '../../../src/agent/multi-agent/workflow-orchestrator.js';
 
-const flushMicrotasks = () => new Promise((r) => setTimeout(r, 5));
-
 describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
   beforeEach(() => {
     broadcastFleetEventMock.mockReset();
@@ -126,7 +124,6 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('test-goal');
       if (r.status === 'started') await r.promise;
-      await flushMicrotasks();
       expect(broadcastFleetEventMock).not.toHaveBeenCalled();
       o.dispose();
     });
@@ -136,7 +133,6 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('streaming-goal');
       if (r.status === 'started') await r.promise;
-      await flushMicrotasks();
 
       const startCall = broadcastFleetEventMock.mock.calls.find(
         (c) => c[0] === 'fleet:workflow:start',
@@ -153,10 +149,7 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('event-goal');
       if (r.status === 'started') await r.promise;
-      // Longer flush to give all the chained dynamic-import promises a chance
-      // to resolve — the orchestrator emits 3 fleet broadcasts in rapid
-      // succession via lazy import; each spawns its own microtask chain.
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Fleet broadcasts are synchronous; r.promise completes the workflow.
 
       const allTypes = broadcastFleetEventMock.mock.calls.map((c) => c[0]);
       const eventCalls = broadcastFleetEventMock.mock.calls.filter(
@@ -173,7 +166,6 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('complete-goal');
       if (r.status === 'started') await r.promise;
-      await flushMicrotasks();
 
       const completeCall = broadcastFleetEventMock.mock.calls.find(
         (c) => c[0] === 'fleet:workflow:complete',
@@ -196,7 +188,6 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('no-fleet');
       if (r.status === 'started') await r.promise;
-      await flushMicrotasks();
       expect(broadcastFleetEventMock).not.toHaveBeenCalled();
       o.dispose();
     });
@@ -206,7 +197,6 @@ describe('fleet workflow events — Phase (d).3 V0.4.1', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 1 });
       const r = await o.submitWorkflow('id-test');
       if (r.status === 'started') await r.promise;
-      await flushMicrotasks();
 
       for (const call of broadcastFleetEventMock.mock.calls) {
         const payload = call[1] as { workflowId?: string };

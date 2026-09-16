@@ -102,6 +102,15 @@ describe('semantic response runtime', () => {
     ).toBe(false);
   });
 
+  it('reviews a short request to confirm what the system actually received', () => {
+    expect(
+      shouldReviewSemanticResponse(
+        { request: "Il t'as transmis Lisa tu m'entends ?" },
+        { enabled: true, env: { NODE_ENV: 'test' } }
+      )
+    ).toBe(true);
+  });
+
   it('resolves an explicit OpenRouter free critic and passes timeout and abort signal', async () => {
     const { chat, client } = chatClient([acceptedCritique()]);
     let resolvedProvider: { provider: string; model: string; apiKey: string } | undefined;

@@ -34,6 +34,7 @@ import * as os from 'os';
 import * as readline from 'readline';
 import open from 'open';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** xAI's public Grok CLI OAuth client id (PKCE public client; not a secret). */
 const CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -109,18 +110,9 @@ export interface XaiAuth {
 // Storage
 // ─────────────────────────────────────────────────────────────────────
 
-function ensureConfigDir(): void {
-  const dir = path.dirname(AUTH_FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
 function loadAuthFile(): XaiAuthDotJson | null {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return null;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8');
-    return JSON.parse(raw) as XaiAuthDotJson;
+    return readJsonAtomicSync<XaiAuthDotJson | null>(AUTH_FILE_PATH, null);
   } catch (err) {
     logger.error('Error reading xai-auth.json', err instanceof Error ? err : { error: String(err) });
     return null;
@@ -129,13 +121,7 @@ function loadAuthFile(): XaiAuthDotJson | null {
 
 function saveAuthFile(auth: XaiAuthDotJson): void {
   try {
-    ensureConfigDir();
-    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(auth, null, 2), 'utf-8');
-    if (process.platform !== 'win32') {
-      try {
-        fs.chmodSync(AUTH_FILE_PATH, 0o600);
-      } catch { /* non-fatal */ }
-    }
+    writeJsonAtomicSync(AUTH_FILE_PATH, auth, { mode: 0o600 });
   } catch (err) {
     logger.error('Error writing xai-auth.json', err instanceof Error ? err : { error: String(err) });
   }
@@ -156,10 +142,8 @@ export function clearXaiCredentials(): void {
  *  provider auto-detection (no token loading, just presence). */
 export function hasXaiCredentials(): boolean {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return false;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8').trim();
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as XaiAuthDotJson;
+    const parsed = readJsonAtomicSync<XaiAuthDotJson | null>(AUTH_FILE_PATH, null);
+    if (!parsed) return false;
     return Boolean(parsed.tokens?.access_token);
   } catch {
     return false;
@@ -483,11 +467,7 @@ interface PendingLogin {
 
 function savePending(p: PendingLogin): void {
   try {
-    ensureConfigDir();
-    fs.writeFileSync(PENDING_FILE_PATH, JSON.stringify(p, null, 2), 'utf-8');
-    if (process.platform !== 'win32') {
-      try { fs.chmodSync(PENDING_FILE_PATH, 0o600); } catch { /* non-fatal */ }
-    }
+    writeJsonAtomicSync(PENDING_FILE_PATH, p, { mode: 0o600 });
   } catch (err) {
     logger.error('Error writing xai-login-pending.json', err instanceof Error ? err : { error: String(err) });
   }
@@ -495,8 +475,7 @@ function savePending(p: PendingLogin): void {
 
 function loadPending(): PendingLogin | null {
   try {
-    if (!fs.existsSync(PENDING_FILE_PATH)) return null;
-    return JSON.parse(fs.readFileSync(PENDING_FILE_PATH, 'utf-8')) as PendingLogin;
+    return readJsonAtomicSync<PendingLogin | null>(PENDING_FILE_PATH, null);
   } catch {
     return null;
   }

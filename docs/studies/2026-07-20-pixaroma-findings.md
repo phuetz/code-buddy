@@ -18,7 +18,7 @@ Nodes MIT : gitlab.com/pixaroma/comfyui-pixaroma.
    saut de texture au démarrage des segments. **A/B à faire vs keyframes Krea2.**
 3. **LongCat pour le long-format (Ep 69)** : extension scène-par-scène SANS
    coupure start/end frame (notre problème de dérive) — et LongCat est DÉJÀ
-   installé sur darkstar (poids ComfyUI par Kijai, block-swap anti-OOM,
+   installé sur gpuNode (poids ComfyUI par Kijai, block-swap anti-OOM,
    portrait OK). Troisième option anti-dérive après PainterLongVideo et SVI.
 4. **Piège conversion LoRAs fal→ComfyUI (Ep 53/26)** : les LoRAs des trainers
    fal ne chargent pas tels quels (patch lym00/comfyui_nunchaku_lora_patch,

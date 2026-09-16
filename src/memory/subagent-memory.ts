@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -87,11 +88,8 @@ export class SubagentMemory {
    */
   readMemory(): string {
     const filePath = this.getMemoryFilePath();
-    if (!fs.existsSync(filePath)) {
-      return '';
-    }
-
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = readTextAtomicSync(filePath, '');
+    if (!content) return '';
     const lines = content.split('\n');
     const limited = lines.slice(0, this.config.maxLines);
     return limited.join('\n');
@@ -103,7 +101,7 @@ export class SubagentMemory {
   writeMemory(content: string): void {
     this.ensureDir();
     const filePath = this.getMemoryFilePath();
-    fs.writeFileSync(filePath, content, 'utf-8');
+    writeFileAtomicSync(filePath, content, { mode: 0o600 });
     logger.debug(`Memory written for agent: ${this.config.agentName}`);
   }
 
@@ -113,9 +111,9 @@ export class SubagentMemory {
   appendMemory(entry: string): void {
     this.ensureDir();
     const filePath = this.getMemoryFilePath();
-    const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+    const existing = readTextAtomicSync(filePath, '');
     const separator = existing.endsWith('\n') || existing === '' ? '' : '\n';
-    fs.writeFileSync(filePath, existing + separator + entry + '\n', 'utf-8');
+    writeFileAtomicSync(filePath, existing + separator + entry + '\n', { mode: 0o600 });
     logger.debug(`Memory appended for agent: ${this.config.agentName}`);
   }
 
@@ -128,7 +126,7 @@ export class SubagentMemory {
     if (!fs.existsSync(filePath)) {
       return null;
     }
-    return fs.readFileSync(filePath, 'utf-8');
+    return readTextAtomicSync(filePath, '');
   }
 
   /**
@@ -138,7 +136,7 @@ export class SubagentMemory {
     this.ensureDir();
     const safeTopic = topicName.replace(/[^a-zA-Z0-9_-]/g, '_');
     const filePath = path.join(this.memoryPath, `${safeTopic}.md`);
-    fs.writeFileSync(filePath, content, 'utf-8');
+    writeFileAtomicSync(filePath, content, { mode: 0o600 });
     logger.debug(`Topic written: ${topicName} for agent: ${this.config.agentName}`);
   }
 

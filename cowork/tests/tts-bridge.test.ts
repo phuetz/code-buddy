@@ -2,7 +2,7 @@
  * TTS bridge — unit tests for the parts that don't need spawning
  * Pocket or Piper. The real engine invocation is integration-tested manually
  * (the binary lives outside the repo at
- * `/home/patrice/DEV/ai-stack/voice/piper`).
+ * `/home/user/DEV/ai-stack/voice/piper`).
  */
 import { writeFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
@@ -135,11 +135,11 @@ describe('TTSBridge — portable runtime resolution', () => {
       root: process.env.COWORK_VOICE_ROOT,
     };
     process.env.OPENAI_API_KEY = 'sk-test-secret-that-must-not-leak';
-    process.env.COWORK_VOICE_ROOT = '/home/patrice/voice';
+    process.env.COWORK_VOICE_ROOT = '/home/user/voice';
     try {
       const env = buildPiperEnv();
       expect(env.OPENAI_API_KEY).toBeUndefined();
-      expect(env.COWORK_VOICE_ROOT).toBe('/home/patrice/voice');
+      expect(env.COWORK_VOICE_ROOT).toBe('/home/user/voice');
     } finally {
       if (previous.openai === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = previous.openai;
@@ -304,7 +304,7 @@ describe('TTSBridge — Voicebox expressive path', () => {
       pocketSynthesizer,
     });
 
-    const result = await bridge.synthesize('Darkstar est temporairement indisponible');
+    const result = await bridge.synthesize('GPU node est temporairement indisponible');
 
     expect(result.provider).toBe('pocket');
     expect(voiceboxSynthesizer).toHaveBeenCalledOnce();

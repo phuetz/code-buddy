@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""B-roll LOCAL $0 sans quota sur darkstar : texte → image (Krea 2 Turbo) → vidéo (WAN 2.2 i2v).
+"""B-roll LOCAL $0 sans quota sur gpuNode : texte → image (Krea 2 Turbo) → vidéo (WAN 2.2 i2v).
 Remplace Grok Imagine quand le quota est grillé. Même format de jobs que grok_imagine.py.
 
 Usage:
   python3 broll_local.py jobs.json            # jobs = [{"name":..., "prompt":..., "aspect_ratio":"16:9"}, ...]
   python3 broll_local.py --one <name> "<prompt>" [16:9|9:16]
-Env: COMFYUI_URL (défaut http://darkstar:8188), BROLL_OUT (défaut ~/.codebuddy/personas/lisa/broll-local),
+Env: COMFYUI_URL (défaut http://gpuNode:8188), BROLL_OUT (défaut ~/.codebuddy/personas/lisa/broll-local),
      BROLL_QUALITY=fast|full (fast = LoRA lightx2v 4 pas, défaut ; full = 20 pas cfg 3.5, ~10× plus lent)
 Sortie: <BROLL_OUT>/<name>.mp4 (+ <name>.png keyframe). Reprend là où il en était (saute les mp4 existants).
 """
 import json, sys, os, time, urllib.request, urllib.parse, mimetypes, uuid, zlib
 
-HOST = os.environ.get("COMFYUI_URL", "http://darkstar:8188")
+HOST = os.environ.get("COMFYUI_URL", "http://gpuNode:8188")
 OUT = os.path.expanduser(os.environ.get("BROLL_OUT", "~/.codebuddy/personas/lisa/broll-local"))
 os.makedirs(OUT, exist_ok=True)
 NEG = ("blurry, distorted, low quality, low resolution, static, watermark, text, letters, logo, "

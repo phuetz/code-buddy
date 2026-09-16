@@ -1,5 +1,10 @@
 import { countTokens } from '../context/token-counter.js';
-import { isContextZoomEnabled, SegmentArchive } from '../context/segment-archive.js';
+import {
+  isContextZoomEnabled,
+  SegmentArchive,
+  SegmentIntegrityError,
+  type ArchivedSegment,
+} from '../context/segment-archive.js';
 import type { ToolResult } from '../types/index.js';
 import type {
   ITool,
@@ -22,16 +27,18 @@ export class ContextExpandTool implements ITool {
     'Expand an exact archived conversation segment from the current session. Use this whenever a [segment:…] summary does not contain enough detail to answer precisely.';
 
   private readonly archive: SegmentArchive;
+  private readonly explicitArchive: boolean;
 
   constructor(options: ContextExpandToolOptions = {}) {
     this.archive = options.archive ?? new SegmentArchive();
+    this.explicitArchive = options.archive !== undefined;
   }
 
   async execute(
     input: Record<string, unknown>,
     context?: IToolExecutionContext,
   ): Promise<ToolResult> {
-    if (!isContextZoomEnabled()) {
+    if (!this.explicitArchive && !isContextZoomEnabled()) {
       return { success: false, error: 'context_expand is disabled; set CODEBUDDY_CONTEXT_ZOOM=true to enable it.' };
     }
 
@@ -41,7 +48,15 @@ export class ContextExpandTool implements ITool {
       return { success: false, error: 'No current session is available for context expansion.' };
     }
 
-    const segment = this.archive.get(context.sessionId, segmentId);
+    let segment: ArchivedSegment | null;
+    try {
+      segment = this.archive.get(context.sessionId, segmentId);
+    } catch (error) {
+      if (error instanceof SegmentIntegrityError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
     if (!segment) {
       return {
         success: false,

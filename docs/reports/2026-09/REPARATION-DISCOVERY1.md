@@ -1,0 +1,62 @@
+# Réparation DISCOVERY1 — catalogue Mistral bouchon
+
+Date : 2026-09-04  
+Dépôt : `~/DEV/cb-discovery1-2026-09-04`  
+Branche : `fix/discovery1-catalogue-bouchon-2026-09-04`
+
+## Périmètre
+
+Reproduire puis corriger l’abaissement indu d’une déclaration nominative de
+fenêtre de contexte par une entrée hébergée `/v1/models` sans capacité.
+Le catalogue Mistral sera rejoué uniquement par fixture locale : aucun service
+et aucune API payante ne sont requis.
+
+## État initial
+
+Rapport créé avant inspection du code, conformément à la mission. La
+réservation Fable 5 est inscrite dans `docs/FABLE5-CODEX-COORDINATION.md`.
+
+## Journal
+
+2026-09-04 — Point 1, reproduction ajoutée dans
+`~/DEV/cb-discovery1-2026-09-04/tests/config/local-runtime-context.test.ts`,
+avec la fixture locale
+`~/DEV/cb-discovery1-2026-09-04/tests/fixtures/mistral-v1-models.json` contenant exactement les deux entrées
+Mistral ciblées. Rouge confirmé avec :
+`HOME=~/DEV/cb-discovery1-2026-09-04/_qa/discovery1/home npx vitest run tests/config/local-runtime-context.test.ts --reporter=verbose`.
+Résultat : 18 tests, 17 verts et 1 rouge ; `mistral-medium-latest` reçoit
+32768 au lieu des 128000 attendus, tandis que Magistral est à 262144.
+
+Le rouge a été corrigé sans appel réseau : les tests de capacités et la
+provenance du contexte sont maintenant couverts.
+
+2026-09-04 — Point 2, le cache porte désormais la source (`local` ou
+`catalog`). Un catalogue hébergé sans capacité vraie est ignoré avec un
+`logger.debug` explicite ; une capacité vraie ne peut pas abaisser une
+déclaration nominative, alors qu’elle remplace toujours une estimation de
+famille. Les tests OpenRouter et GMI ont été rendus explicites sur leurs
+capacités ; le test vLLM local reste vert.
+
+2026-09-04 — Point 3, test d’intégration
+`~/DEV/cb-discovery1-2026-09-04/tests/services/prompt-builder-catalogue-budget.test.ts` : la fixture Medium
+est ignorée, `mistral-medium-latest` conserve 128000 et le budget du prompt
+système est exactement 32000 jetons, sans `CODEBUDDY_MAX_CONTEXT`. Résultat :
+1 test vert.
+
+## Vérifications finales
+
+- `HOME=~/DEV/cb-discovery1-2026-09-04/_qa/discovery1/home npx vitest run tests/config` : 23 fichiers, 310 tests verts.
+- Test d’intégration prompt-builder : 1/1 vert, 32000 jetons système mesurés.
+- `npm run typecheck` (TypeScript racine + GPU identity) : code 0.
+- ESLint ciblé sur les 5 fichiers source/tests touchés : code 0 avec `--max-warnings=0`.
+- `git diff --check` : code 0 ; worktree propre ; aucun service ni API payante utilisé.
+
+## Bilan final
+
+Correctif dans `7e37f800f` et `04f5fad4e`, tests rouges/fixture dans `8d150378b`, intégration prompt-builder dans `dcd827bbb`.
+Rapport initial dans `8adabdc73` ; réservation d’origine `47fa059dc`.
+Le catalogue hébergé sans capacité vraie est ignoré avec un debug explicite.
+Une capacité vraie remplace une famille, jamais une déclaration nominative.
+Le runtime local conserve son droit d’abaisser une fenêtre réellement servie.
+Medium reste à 128000 et son budget système est 32000 ; Magistral est à 262144.
+Aucun point ouvert dans le périmètre DISCOVERY1.

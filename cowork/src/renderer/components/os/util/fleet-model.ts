@@ -1,3 +1,5 @@
+import { FLEET_SILENCE_THRESHOLD_MS } from '../../../utils/fleet-freshness';
+
 export type PeerStatus = 'online' | 'busy' | 'offline';
 export type PeerRole = 'hub' | 'leaf' | 'reviewer' | 'research' | 'code' | 'safe' | string;
 
@@ -11,7 +13,16 @@ export interface Peer {
   models?: string[];
   tools?: string[];
   capabilities?: string[];
+  /**
+   * Authenticated, but nothing received for over three heartbeats. Presentation
+   * only: it never changes `status`, the summary or routing.
+   */
+  quiet?: boolean;
 }
+
+export const QUIET_PEER_HINT = `Authentifié, mais rien reçu depuis plus de ${
+  FLEET_SILENCE_THRESHOLD_MS / 1_000
+} s. Statut et routage inchangés.`;
 
 export interface FleetSummary {
   online: number;

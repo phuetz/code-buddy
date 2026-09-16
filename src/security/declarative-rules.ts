@@ -18,6 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import { matchGlobPatterns, resolvePathPattern } from '../utils/glob-utils.js';
+import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
 
 // ============================================================================
 // Types
@@ -38,6 +39,16 @@ export interface DeclarativePermissions {
 interface ParsedRule {
   toolName: string;
   argPattern: string | null; // null = match all args
+}
+
+function normalizePermissionToolName(name: string): string {
+  const lower = name.toLowerCase();
+  const primary = TOOL_ALIASES[lower] ?? lower;
+  if (['str_replace_editor', 'str_replace', 'edit'].includes(primary)) return 'edit';
+  if (['create_file', 'file_write', 'write'].includes(primary)) return 'write';
+  if (['view_file', 'file_read', 'read'].includes(primary)) return 'read';
+  if (['search', 'grep'].includes(primary)) return 'search';
+  return primary;
 }
 
 // ============================================================================
@@ -88,21 +99,21 @@ function patternToRegex(pattern: string): RegExp {
  * For Glob/Grep: the pattern or path
  */
 function extractPrimaryArg(toolName: string, toolArgs: Record<string, unknown>): string | null {
-  const name = toolName.toLowerCase();
+  const name = normalizePermissionToolName(toolName);
 
-  if (name === 'bash' || name === 'shell_exec') {
+  if (name === 'bash') {
     return (toolArgs.command as string) || (toolArgs.cmd as string) || null;
   }
 
-  if (name === 'edit' || name === 'str_replace_editor' || name === 'str_replace') {
+  if (name === 'edit') {
     return (toolArgs.file_path as string) || (toolArgs.path as string) || null;
   }
 
-  if (name === 'write' || name === 'create_file' || name === 'file_write') {
+  if (name === 'write') {
     return (toolArgs.file_path as string) || (toolArgs.path as string) || null;
   }
 
-  if (name === 'read' || name === 'view_file' || name === 'file_read') {
+  if (name === 'read') {
     return (toolArgs.file_path as string) || (toolArgs.path as string) || null;
   }
 
@@ -110,7 +121,7 @@ function extractPrimaryArg(toolName: string, toolArgs: Record<string, unknown>):
     return (toolArgs.pattern as string) || null;
   }
 
-  if (name === 'grep' || name === 'search') {
+  if (name === 'search') {
     return (toolArgs.path as string) || (toolArgs.pattern as string) || null;
   }
 
@@ -403,31 +414,8 @@ function matchesRule(
 ): boolean {
   const parsed = parseRule(rule);
 
-  // Tool name must match (case-insensitive)
-  if (parsed.toolName.toLowerCase() !== toolName.toLowerCase()) {
-    // Also try common aliases
-    const aliases: Record<string, string[]> = {
-      bash: ['shell_exec', 'bash'],
-      edit: ['str_replace_editor', 'str_replace', 'edit'],
-      write: ['create_file', 'file_write', 'write'],
-      read: ['view_file', 'file_read', 'read'],
-    };
-
-    const normalizedTool = toolName.toLowerCase();
-    const normalizedRule = parsed.toolName.toLowerCase();
-
-    let aliasMatch = false;
-    for (const [canonical, aliasList] of Object.entries(aliases)) {
-      if (
-        (aliasList.includes(normalizedRule) || normalizedRule === canonical) &&
-        (aliasList.includes(normalizedTool) || normalizedTool === canonical)
-      ) {
-        aliasMatch = true;
-        break;
-      }
-    }
-
-    if (!aliasMatch) return false;
+  if (normalizePermissionToolName(parsed.toolName) !== normalizePermissionToolName(toolName)) {
+    return false;
   }
 
   // No arg pattern = match all invocations of this tool
@@ -437,8 +425,9 @@ function matchesRule(
   if (primaryArg === null) return false;
 
   // CC15: Check if pattern contains path-like patterns (with /, ~, or //)
-  const isPathTool = ['edit', 'write', 'read', 'str_replace_editor', 'create_file',
-    'file_write', 'view_file', 'file_read', 'glob', 'grep'].includes(toolName.toLowerCase());
+  const isPathTool = ['edit', 'write', 'read', 'glob', 'search'].includes(
+    normalizePermissionToolName(toolName),
+  );
 
   if (isPathTool && (parsed.argPattern.includes('/') || parsed.argPattern.startsWith('~') || parsed.argPattern.includes('**'))) {
     // Parse comma-separated patterns with potential negation
@@ -496,7 +485,7 @@ export function explainDeclarativePermissionFromPermissions(
 
   // Bash control operators are evaluated command by command. Deny rules are
   // checked against the raw command too, so parsing can never weaken a deny.
-  if ((toolName.toLowerCase() === 'bash' || toolName.toLowerCase() === 'shell_exec') && primaryArg) {
+  if (normalizePermissionToolName(toolName) === 'bash' && primaryArg) {
     const analysis = analyzeBashCommand(primaryArg);
     const denyCandidates = [primaryArg, ...analysis.commands, ...analysis.nestedCommands];
 

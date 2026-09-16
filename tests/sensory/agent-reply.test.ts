@@ -240,6 +240,21 @@ describe('agent-reply — spoken instruction → full agent turn', () => {
     );
   });
 
+  it('answers the evolution question from the fact-provider result without a second summarizer', async () => {
+    const summarize = vi.fn(async () => 'Cette voie ne doit pas être appelée.');
+    const reply = makeAgentReply({
+      agentRunner: async () =>
+        'J’ai récemment appris à mieux distinguer ta voix de la mienne.\n' +
+        'J’ai aussi appris à vérifier ce que j’annonce.',
+      summarize,
+    });
+
+    await expect(reply("qu'est-ce qui a changé chez toi ?")).resolves.toBe(
+      'J’ai récemment appris à mieux distinguer ta voix de la mienne. J’ai aussi appris à vérifier ce que j’annonce.',
+    );
+    expect(summarize).not.toHaveBeenCalled();
+  });
+
   it('skips the second LLM pass when the agent result is already short spoken prose', async () => {
     const summarize = vi.fn(async () => 'inutile');
     const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);

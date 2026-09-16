@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -242,7 +243,8 @@ export class AutoMemoryManager {
         return;
       }
 
-      const content = fs.readFileSync(memoryPath, 'utf-8');
+      const content = readTextAtomicSync(memoryPath, '');
+      if (!content) return;
       const lines = content.split('\n');
 
       for (const line of lines) {
@@ -287,7 +289,7 @@ export class AutoMemoryManager {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(memoryPath, content);
+    writeFileAtomicSync(memoryPath, content, { mode: 0o600 });
   }
 }
 

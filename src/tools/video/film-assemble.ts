@@ -652,6 +652,13 @@ export function buildAudioMixGraph(
   }
 ): { segments: string[]; finalLabel: string } {
   const segments: string[] = [];
+  const D = round2(Math.max(opts.totalDuration, 0.1));
+  // acrossfade does not advertise an output duration. `apad=whole_dur` is then a
+  // no-op (it needs a known input length), and amix truncates to the music bed —
+  // measured on GK4 as 11.43s video / 10.83s audio. `pad_dur` always appends
+  // silence; atrim keeps the first D seconds. Keep the longest mixed input.
+  const mix = `amix=inputs=2:duration=longest:dropout_transition=0:normalize=0`;
+  const pin = `apad=pad_dur=${D},atrim=0:${D},asetpts=PTS-STARTPTS`;
 
   // Fold the voiceover into the "program" audio (clip audio + narration).
   let progLabel = baseLabel;
@@ -660,7 +667,7 @@ export function buildAudioMixGraph(
       `[${opts.voiceRef}]aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
         `asetpts=PTS-STARTPTS[vo]`
     );
-    segments.push(`[${progLabel}][vo]amix=inputs=2:duration=first:normalize=0[prog]`);
+    segments.push(`[${progLabel}][vo]${mix}[prog]`);
     progLabel = 'prog';
   }
 
@@ -668,9 +675,12 @@ export function buildAudioMixGraph(
     return { segments, finalLabel: progLabel };
   }
 
+  segments.push(`[${progLabel}]${pin}[prog_pad]`);
+  progLabel = 'prog_pad';
+
   // Bound the (possibly looped) music to the film length, then set its volume.
   segments.push(
-    `[${opts.musicRef}]atrim=0:${round2(opts.totalDuration)},` +
+    `[${opts.musicRef}]atrim=0:${D},${pin},` +
       `aformat=sample_rates=${SAMPLE_RATE}:channel_layouts=stereo,` +
       `volume=${opts.musicVolume}[music0]`
   );
@@ -681,9 +691,9 @@ export function buildAudioMixGraph(
     segments.push(
       `[music0][prog_b]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[music_d]`
     );
-    segments.push(`[prog_a][music_d]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[prog_a][music_d]${mix}[aout]`);
   } else {
-    segments.push(`[${progLabel}][music0]amix=inputs=2:duration=first:normalize=0[aout]`);
+    segments.push(`[${progLabel}][music0]${mix}[aout]`);
   }
   return { segments, finalLabel: 'aout' };
 }
@@ -783,6 +793,13 @@ export function buildFilmArgs(
     totalDuration: Math.max(estimated, 0.1),
   });
   segments.push(...mix.segments);
+  // sidechaincompress (ducking) drops the advertised duration; amix then EOFs
+  // one transition early (GK4: 0.6s). Pad the mixed audio and stop with the
+  // video via -shortest so the AAC stream covers the whole film.
+  const audioLabel = 'aoutp';
+  segments.push(
+    `[${mix.finalLabel}]apad=pad_dur=${round2(Math.max(estimated, 0.1))}[${audioLabel}]`
+  );
 
   const filterComplex = segments.join(';');
 
@@ -794,7 +811,7 @@ export function buildFilmArgs(
     '-map',
     `[${video.finalLabel}]`,
     '-map',
-    `[${mix.finalLabel}]`,
+    `[${audioLabel}]`,
     '-c:v',
     'libx264',
     '-preset',
@@ -809,10 +826,11 @@ export function buildFilmArgs(
     '192k',
     '-movflags',
     '+faststart',
+    '-shortest',
     opts.outputPath
   );
 
-  return { args, videoLabel: video.finalLabel, audioLabel: mix.finalLabel, filterComplex };
+  return { args, videoLabel: video.finalLabel, audioLabel, filterComplex };
 }
 
 // ============================================================================
@@ -930,6 +948,24 @@ async function probeOne(
   } catch {
     return empty;
   }
+}
+
+async function verifyRenderedFilm(
+  spawn: typeof realSpawn,
+  ffprobeBin: string,
+  file: string,
+): Promise<ClipProbe | null> {
+  try {
+    const metadata = await fs.lstat(file);
+    if (!metadata.isFile() || metadata.size <= 0) return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[film-assemble] could not inspect rendered film: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return null;
+  }
+  const probe = await probeOne(spawn, ffprobeBin, file);
+  return probe.duration > 0 && probe.width !== null ? probe : null;
 }
 
 async function ffmpegAvailable(spawn: typeof realSpawn, ffmpegBin: string): Promise<boolean> {
@@ -1082,6 +1118,18 @@ export async function assembleFilm(
     );
   }
 
+  const renderPath = path.join(
+    path.dirname(outputPath),
+    `.${path.basename(outputPath, path.extname(outputPath))}-${randomUUID()}-render.mp4`,
+  );
+  const cleanupRender = async (): Promise<void> => {
+    try {
+      await fs.rm(renderPath, { force: true });
+    } catch (error) {
+      logger.warn(`[film-assemble] could not clean temporary render: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const usingXfade = specs.some((s) => s.type !== 'cut' && s.duration > 0);
   const estimatedDuration = computeCrossfadedDuration(
     durations,
@@ -1091,7 +1139,7 @@ export async function assembleFilm(
   // 5. Build argv + render.
   const plan = buildFilmArgs(usable, profile, specs, {
     ffmpegBin,
-    outputPath,
+    outputPath: renderPath,
     engine,
     glFilter,
     music: input.music,
@@ -1108,8 +1156,21 @@ export async function assembleFilm(
 
   const render = await runProcess(spawn, ffmpegBin, plan.args, deps.timeoutMs ?? 30 * 60 * 1000);
   if (render.code !== 0) {
+    await cleanupRender();
     const tail = render.stderr.trim().split('\n').slice(-6).join('\n');
     return fail(`ffmpeg film render failed (exit ${render.code}).\n${tail}`, {
+      transitionCount: specs.length,
+      targetWidth: profile.width,
+      targetHeight: profile.height,
+      fps: profile.fps,
+      estimatedDuration,
+      transitions: specs,
+    });
+  }
+
+  if (!(await verifyRenderedFilm(spawn, ffprobeBin, renderPath))) {
+    await cleanupRender();
+    return fail('ffmpeg film render reported success but produced no valid non-empty video artifact.', {
       transitionCount: specs.length,
       targetWidth: profile.width,
       targetHeight: profile.height,
@@ -1131,10 +1192,11 @@ export async function assembleFilm(
       const measure = await runProcess(
         spawn,
         ffmpegBin,
-        buildLoudnormPass1Args(outputPath, input.mastering),
+        buildLoudnormPass1Args(renderPath, input.mastering),
         deps.timeoutMs ?? 30 * 60 * 1000,
       );
       if (measure.code !== 0) {
+        await cleanupRender();
         const tail = measure.stderr.trim().split('\n').slice(-6).join('\n');
         return fail(`ffmpeg loudnorm measurement failed (exit ${measure.code}).\n${tail}`);
       }
@@ -1142,28 +1204,37 @@ export async function assembleFilm(
       try {
         measurement = parseLoudnormMeasurement(measure.stderr);
       } catch (error) {
+        await cleanupRender();
         return fail(error instanceof Error ? error.message : String(error));
       }
       finishArgs = buildLoudnormPass2Args(
-        outputPath,
+        renderPath,
         finishedPath,
         measurement,
         input.mastering,
         lutPath ? buildLut3dFilter(lutPath) : undefined,
       );
     } else {
-      finishArgs = buildLutOutputArgs(outputPath, finishedPath, buildLut3dFilter(lutPath!));
+      finishArgs = buildLutOutputArgs(renderPath, finishedPath, buildLut3dFilter(lutPath!));
     }
     const finish = await runProcess(spawn, ffmpegBin, finishArgs, deps.timeoutMs ?? 30 * 60 * 1000);
     if (finish.code !== 0) {
       await fs.rm(finishedPath, { force: true });
+      await cleanupRender();
       const tail = finish.stderr.trim().split('\n').slice(-6).join('\n');
       return fail(`ffmpeg film finishing failed (exit ${finish.code}).\n${tail}`);
     }
+    if (!(await verifyRenderedFilm(spawn, ffprobeBin, finishedPath))) {
+      await fs.rm(finishedPath, { force: true });
+      await cleanupRender();
+      return fail('ffmpeg film finishing reported success but produced no valid non-empty video artifact.');
+    }
     try {
-      await fs.rename(finishedPath, outputPath);
+      await fs.rm(renderPath, { force: true });
+      await fs.rename(finishedPath, renderPath);
     } catch (error) {
       await fs.rm(finishedPath, { force: true });
+      await cleanupRender();
       return fail(`Film finishing output could not be installed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -1175,10 +1246,11 @@ export async function assembleFilm(
     const verification = await runProcess(
       spawn,
       ffmpegBin,
-      buildLoudnormPass1Args(outputPath, input.mastering),
+      buildLoudnormPass1Args(renderPath, input.mastering),
       deps.timeoutMs ?? 30 * 60 * 1000,
     );
     if (verification.code !== 0) {
+      await cleanupRender();
       const tail = verification.stderr.trim().split('\n').slice(-6).join('\n');
       return fail(`ffmpeg final loudness verification failed (exit ${verification.code}).\n${tail}`);
     }
@@ -1186,6 +1258,7 @@ export async function assembleFilm(
     try {
       measuredOutput = parseLoudnormMeasurement(verification.stderr);
     } catch (error) {
+      await cleanupRender();
       return fail(`Final loudness verification is invalid: ${
         error instanceof Error ? error.message : String(error)
       }`);
@@ -1195,6 +1268,7 @@ export async function assembleFilm(
       Math.abs(measuredOutput.inputI - target.targetLufs) > DELIVERY_LOUDNESS_TOLERANCE_LU ||
       measuredOutput.inputTruePeakDb > DELIVERY_MAX_TRUE_PEAK_DBTP
     ) {
+      await cleanupRender();
       return fail(
         `Final audio outside delivery spec: ${measuredOutput.inputI.toFixed(2)} LUFS ` +
         `(target ${target.targetLufs} ±${DELIVERY_LOUDNESS_TOLERANCE_LU}), ` +
@@ -1213,7 +1287,21 @@ export async function assembleFilm(
 
   // 8. Verify + sidecar. `prompt`/`provider`/`model` mirror the video_generate
   // sidecar shape so the media library shows a meaningful card for the film.
-  const outProbe = await probeOne(spawn, ffprobeBin, outputPath);
+  const outProbe = await verifyRenderedFilm(spawn, ffprobeBin, renderPath);
+  if (!outProbe) {
+    await cleanupRender();
+    return fail('Final film artifact is missing, empty, or not a valid video.');
+  }
+  try {
+    await fs.rename(renderPath, outputPath);
+    const installed = await fs.lstat(outputPath);
+    if (!installed.isFile() || installed.size <= 0) {
+      return fail('Final film artifact could not be installed as a non-empty regular file.');
+    }
+  } catch (error) {
+    await cleanupRender();
+    return fail(`Final film artifact could not be installed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const effectiveEngine = glFilter ? 'gl' : 'xfade';
   await writeMediaSidecar(outputPath, {
     kind: 'film',

@@ -4,7 +4,7 @@ import { EmptyState } from '../ui/EmptyState.js';
 import { Pill } from '../ui/Pill.js';
 import { SectionCard } from '../ui/SectionCard.js';
 import { StatTile } from '../ui/StatTile.js';
-import { summarizeFleet, utilizationTone, type Peer } from './util/fleet-model.js';
+import { QUIET_PEER_HINT, summarizeFleet, utilizationTone, type Peer } from './util/fleet-model.js';
 
 export interface FleetTopologyViewProps {
   peers: Peer[];
@@ -59,6 +59,7 @@ export function FleetTopologyView({ peers, onSelect }: FleetTopologyViewProps) {
               type="button"
               onClick={() => onSelect?.(peer)}
               className="rounded-xl border border-border bg-background p-3 text-left transition hover:bg-muted"
+              data-testid={`os-topology-peer-${peer.id}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -68,7 +69,18 @@ export function FleetTopologyView({ peers, onSelect }: FleetTopologyViewProps) {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{peer.role}</p>
                 </div>
-                <Pill tone={statusTone(peer.status)}>{peer.status}</Pill>
+                <div className="flex items-center gap-1">
+                  {peer.quiet && (
+                    <span
+                      title={QUIET_PEER_HINT}
+                      data-testid="os-peer-quiet"
+                      data-peer-id={peer.id}
+                    >
+                      <Pill tone="default">silencieux</Pill>
+                    </span>
+                  )}
+                  <Pill tone={statusTone(peer.status)}>{peer.status}</Pill>
+                </div>
               </div>
               <div className="mt-4 h-2 rounded-full bg-muted">
                 <div className={'h-2 rounded-full ' + toneClass[tone]} style={{ width: String(utilization * 100) + '%' }} />

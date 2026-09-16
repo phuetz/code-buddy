@@ -279,9 +279,66 @@ Make edits to a file in a single edit_file call instead of multiple edit_file ca
   }
 };
 
+// Codex-style unified-diff patch (audit 2026-09-02) : le dispatch existait
+// (`registry/text-editor-tools.ts`) et WritePolicy strict pointe vers cet
+// outil (« Use apply_patch with a unified diff instead »), mais aucune
+// définition LLM n'était enregistrée — le modèle ne pouvait ni le voir ni le
+// trouver via tool_search. Les alwaysInclude de tool-selection-strategy.ts et
+// agent-executor.ts le demandaient déjà.
+export const APPLY_PATCH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "apply_patch",
+    description:
+      "Apply a patch to modify files using the *** Begin Patch / *** End Patch format with -/+ lines. Supports adding, deleting, and updating files with fuzzy matching. Preferred (and required under strict write policy) for multi-file or multi-hunk edits.",
+    parameters: {
+      type: "object",
+      properties: {
+        patch: {
+          type: "string",
+          description:
+            "The patch content. Format: '*** Begin Patch' then one or more '*** Update File: path' / '*** Add File: path' / '*** Delete File: path' sections with context lines and -/+ change lines, then '*** End Patch'.",
+        },
+        intent: {
+          type: "string",
+          description: "What this change is trying to achieve (used by the diff-review gate when enabled).",
+        },
+      },
+      required: ["patch"],
+    },
+  },
+};
+
 /**
  * Core tools array (without Morph - that's added conditionally)
  */
+// PTY hand-off — dispatch: src/tools/interactive-shell-tool.ts.
+// The streaming runner intercepts __INTERACTIVE_SHELL_REQUEST__ and pauses
+// the agentic loop until the user types "exit".
+export const INTERACTIVE_SHELL_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "interactive_shell",
+    description:
+      "Launch an interactive PTY shell and hand over control to the user. Use this ONLY when a command requires manual user intervention (answering prompts, editing in Vim, resolving git conflicts) or when you are stuck and need the user to run commands manually. The agentic loop PAUSES until the user types \"exit\". Not a substitute for bash.",
+    parameters: {
+      type: "object",
+      properties: {
+        initial_command: {
+          type: "string",
+          description:
+            "Optional command to pre-fill or execute immediately when the interactive shell opens (e.g. \"npm init\" or \"git rebase -i HEAD~3\").",
+        },
+        reason: {
+          type: "string",
+          description: "Explain to the user why you are handing over control.",
+        },
+      },
+      required: ["reason"],
+    },
+  },
+};
+
 export const CORE_TOOLS: CodeBuddyTool[] = [
   VIEW_FILE_TOOL,
   READ_FILE_TOOL,
@@ -289,9 +346,11 @@ export const CORE_TOOLS: CodeBuddyTool[] = [
   WRITE_FILE_TOOL,
   STR_REPLACE_EDITOR_TOOL,
   PATCH_TOOL,
+  APPLY_PATCH_TOOL,
   LIST_DIRECTORY_TOOL,
   BASH_TOOL,
   TERMINAL_TOOL,
+  INTERACTIVE_SHELL_TOOL,
 ];
 
 /**

@@ -168,8 +168,8 @@ describe('resolveTickProvider — priority cascade', () => {
   });
 
   it('Ollama URL normalisation: bare host → http://host:port/v1', () => {
-    process.env.OLLAMA_HOST = '100.98.18.76:11434';
+    process.env.OLLAMA_HOST = '203.0.113.10:11434';
     const r = resolveTickProvider(taskBase(), 'ollama');
-    expect(r.baseUrl).toBe('http://100.98.18.76:11434/v1');
+    expect(r.baseUrl).toBe('http://203.0.113.10:11434/v1');
   });
 });

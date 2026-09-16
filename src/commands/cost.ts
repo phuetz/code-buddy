@@ -17,6 +17,10 @@ import {
 } from '../analytics/cost-report.js';
 import { getModelPricing } from '../config/model-pricing.js';
 import { logger } from '../utils/logger.js';
+import {
+  readTurnMetricsAggregates,
+  type TurnMetricsAggregate,
+} from '../observability/turn-metrics.js';
 
 export interface CostCommandOptions {
   last?: boolean;
@@ -24,6 +28,7 @@ export interface CostCommandOptions {
   since?: string;
   by: CostGroupBy;
   json?: boolean;
+  latency?: boolean;
 }
 
 export interface SavedCostSessions {
@@ -37,6 +42,7 @@ export interface CostCommandDependencies {
   now?: () => Date;
   resolvePricing?: CostPricingResolver;
   stdout?: (message: string) => void;
+  loadLatency?: () => TurnMetricsAggregate[];
 }
 
 const UNMETERED_PROVIDERS = new Set([
@@ -240,11 +246,14 @@ function qualityLabel(breakdown: CostBreakdown): string {
   return labels.length > 0 ? labels.join(', ') : 'stocké';
 }
 
-function renderTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
+function renderTable(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  numericColumns: ReadonlySet<number> = new Set([1, 2, 3, 4, 5]),
+): string {
   const widths = headers.map((header, column) =>
     Math.max(header.length, ...rows.map((row) => row[column]?.length ?? 0))
   );
-  const numericColumns = new Set([1, 2, 3, 4, 5]);
   const renderRow = (row: readonly string[]): string =>
     row
       .map((cell, column) =>
@@ -258,6 +267,39 @@ function renderTable(headers: readonly string[], rows: readonly (readonly string
     renderRow(headers),
     widths.map((width) => '-'.repeat(width)).join('  '),
     ...rows.map(renderRow),
+  ].join('\n');
+}
+
+function formatDuration(value: number | undefined): string {
+  return value === undefined ? '—' : `${Math.round(value)}ms`;
+}
+
+/** Render privacy-safe latency percentiles from the turn journal. */
+export function formatLatencyReport(aggregates: readonly TurnMetricsAggregate[]): string {
+  if (aggregates.length === 0) return 'Aucune mesure de latence LLM enregistrée.';
+  const rows = [...aggregates]
+    .sort(
+      (left, right) =>
+        left.provider.localeCompare(right.provider) || left.model.localeCompare(right.model),
+    )
+    .map((aggregate) => [
+      aggregate.provider,
+      aggregate.model,
+      formatInteger(aggregate.turns),
+      formatDuration(aggregate.ttftP50Ms),
+      formatDuration(aggregate.ttftP95Ms),
+      formatDuration(aggregate.ttfmP50Ms),
+      formatDuration(aggregate.ttfmP95Ms),
+      formatInteger(aggregate.totalTokens),
+    ]);
+  return [
+    'Code Buddy — Latence LLM mesurée',
+    '='.repeat(34),
+    renderTable(
+      ['Provider', 'Modèle', 'Tours', 'TTFT p50', 'TTFT p95', 'TTFM p50', 'TTFM p95', 'Tokens'],
+      rows,
+      new Set([2, 3, 4, 5, 6, 7]),
+    ),
   ].join('\n');
 }
 
@@ -353,8 +395,25 @@ export function createCostCommand(dependencies: CostCommandDependencies = {}): C
     .option('--session <id>', 'Limiter le rapport à un ID de session')
     .option('--since <7d|YYYY-MM-DD>', 'Limiter les tours à une période', validateSince)
     .option('--by <model|provider|day>', 'Ventilation du tableau', parseGroupBy, 'model')
+    .option('--latency', 'Afficher les p50/p95 TTFT et TTFM mesurés par modèle', false)
     .option('--json', 'Produire un JSON lisible par machine', false)
     .action(async (options: CostCommandOptions) => {
+      const write =
+        dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
+      if (options.latency) {
+        const models = dependencies.loadLatency?.() ?? readTurnMetricsAggregates();
+        if (options.json) {
+          write(JSON.stringify({
+            metric: 'turn-latency',
+            generatedAt: (dependencies.now?.() ?? new Date()).toISOString(),
+            models,
+          }, null, 2));
+          return;
+        }
+        write(formatLatencyReport(models));
+        return;
+      }
+
       const sessionsDirectory =
         dependencies.sessionsDirectory ??
         process.env.CODEBUDDY_SESSIONS_DIR ??
@@ -373,9 +432,6 @@ export function createCostCommand(dependencies: CostCommandDependencies = {}): C
         since: options.since,
         resolvePricing: dependencies.resolvePricing ?? resolveCostPricing,
       });
-      const write =
-        dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
-
       if (options.json) {
         const payload = {
           ...report,

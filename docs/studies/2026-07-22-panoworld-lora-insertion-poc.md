@@ -17,7 +17,7 @@ Boucle robot : perso navigant l'appartement = données pour le world-model AUSSI
 
 ## État des assets (vérifié 22/07)
 - ✅ Splats reconstruits : `D:\DEV\PanoWorld\evaluation-data\outputs\gpu-*\codebuddy_scene\...\point_cloud.ply` (208 Mo, 2M gaussiennes, scene00415).
-- ✅ Env gsplat : `~/.conda-envs/panoworld` (WSL darkstar) confirmé.
+- ✅ Env gsplat : `~/.conda-envs/panoworld` (WSL gpuNode) confirmé.
 - ✅ Runner : `scripts/gpu-runners/panoworld-runner.py`.
 - ⏳ ControlNet depth FLUX (Shakker-Labs) : en téléchargement (dossier controlnet était vide).
 - ❌ Script de rendu du splat : `render_probe.py`/`render_rollouts.py` étaient dans un scratchpad local (à retrouver ou réécrire — render depuis pose arbitraire, sortie RGB+depth).

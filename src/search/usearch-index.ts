@@ -17,6 +17,7 @@ import { EventEmitter } from 'events';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -387,8 +388,7 @@ export class USearchVectorIndex extends EventEmitter {
       nextKey: this.nextKey,
     };
 
-    const { writeFileSync } = await import('fs');
-    writeFileSync(mappingsPath, JSON.stringify(mappings));
+    writeJsonAtomicSync(mappingsPath, mappings);
 
     this.emit('index:saved', { path: savePath, size: this.size() });
   }
@@ -416,15 +416,21 @@ export class USearchVectorIndex extends EventEmitter {
 
     // Load mappings
     if (existsSync(mappingsPath)) {
-      const { readFileSync } = await import('fs');
-      const mappings = JSON.parse(readFileSync(mappingsPath, 'utf-8'));
+      const mappings = readJsonAtomicSync<{
+        idToKey?: unknown;
+        metadata?: unknown;
+        nextKey?: unknown;
+      } | null>(mappingsPath, null);
+      if (!mappings || !Array.isArray(mappings.idToKey) || !Array.isArray(mappings.metadata)) {
+        throw new Error(`Index mappings are empty or unreadable: ${mappingsPath}`);
+      }
 
       this.idToKey = new Map(mappings.idToKey);
       this.keyToId = new Map(
         mappings.idToKey.map(([id, key]: [string, number]) => [key, id])
       );
       this.metadata = new Map(mappings.metadata);
-      this.nextKey = mappings.nextKey;
+      this.nextKey = typeof mappings.nextKey === 'number' ? mappings.nextKey : 0;
     }
 
     this.emit('index:loaded', { path, size: this.size() });

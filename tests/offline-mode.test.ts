@@ -4,6 +4,11 @@
 
 import { OfflineMode, getOfflineMode, resetOfflineMode } from '../src/offline/offline-mode';
 
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import path from 'node:path';
+import { vi } from 'vitest';
+import * as atomicWrite from '../src/utils/atomic-write.js';
+
 // Mock dependencies
 jest.mock('fs-extra', () => {
   const impl = {
@@ -29,7 +34,23 @@ jest.mock('axios', () => ({
 describe('OfflineMode', () => {
   let offline: OfflineMode;
 
+  let home: string;
+  let writes: Promise<void>[];
+
   beforeEach(() => {
+    const root = path.resolve('_qa/ci-portable/home');
+    mkdirSync(root, { recursive: true });
+    home = mkdtempSync(path.join(root, 'offline-'));
+    vi.stubEnv('HOME', home);
+    vi.stubEnv('USERPROFILE', home);
+    vi.stubEnv('CODEBUDDY_HOME', path.join(home, '.codebuddy'));
+    writes = [];
+    const writeJsonAtomic = atomicWrite.writeJsonAtomic;
+    vi.spyOn(atomicWrite, 'writeJsonAtomic').mockImplementation((...args) => {
+      const pending = writeJsonAtomic(...args);
+      writes.push(pending);
+      return pending;
+    });
     resetOfflineMode();
     offline = new OfflineMode({
       enabled: true,
@@ -38,8 +59,14 @@ describe('OfflineMode', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     offline.dispose();
+    resetOfflineMode();
+    // dispose() starts real asynchronous persistence: drain it before removing HOME.
+    for (let i = 0; i < writes.length; i++) await writes[i];
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    rmSync(home, { recursive: true, force: true });
   });
 
   describe('Constructor', () => {

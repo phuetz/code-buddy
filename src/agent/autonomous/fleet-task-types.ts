@@ -1,13 +1,13 @@
 /**
  * Fleet task types — Phase (d).18 (Autonomous Fleet Protocol v0.1).
  *
- * Mirrors the JSON shapes used by `claude-et-patrice/.codebuddy/`:
+ * Mirrors the JSON shapes used by the handover repo's `.codebuddy/`:
  *   - `colab-tasks.json`     — queue of fleet tasks
  *   - `colab-worklog.json`   — append-only audit trail
  *   - `presence.json`        — liveness map
  *
  * These shapes were established by the Python wrapper
- * `claude-et-patrice/tools/heartbeat_tick.py` and proven over 6
+ * the handover repo's `tools/heartbeat_tick.py` and proven over 6
  * successful autonomous cycles on 2026-05-02. The native TypeScript
  * port keeps the shapes identical so both wrappers can co-exist.
  *

@@ -21,6 +21,7 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 import type { BenchmarkScore } from './types.js';
 
@@ -140,7 +141,7 @@ export class LearningStore {
 
   private writeSnapshot(manifest: VersionManifest): void {
     const write = (name: string, value: unknown) =>
-      fs.writeFileSync(path.join(this.storeDir, name), JSON.stringify(value, null, 2), 'utf-8');
+      writeJsonAtomicSync(path.join(this.storeDir, name), value, { mode: 0o600 });
     write('lessons.json', this.port.listLessons());
     write('archive.json', this.port.archive());
     if (this.port.listRules) write('rules.json', this.port.listRules());

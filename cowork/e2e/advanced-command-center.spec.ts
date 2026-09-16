@@ -27,7 +27,7 @@ async function installLauncherMock(electronApp: ElectronApplication): Promise<vo
       ladder: [],
       currentChoice: {
         model: 'qwen3.6:27b',
-        baseUrl: 'http://darkstar:11434/v1',
+        baseUrl: 'http://gpuNode:11434/v1',
         tier: 'local',
         paid: false,
         reason: 'E2E local model',
@@ -104,7 +104,7 @@ async function installGpuMediaMock(electronApp: ElectronApplication): Promise<vo
     };
     ipcMain.handle('gpuMedia.capabilities', async () => ({
       protocolVersion: 1,
-      workerId: 'darkstar-e2e',
+      workerId: 'gpuNode-e2e',
       jobs: ['panoworld_reconstruct', 'avatar_video_render'],
       queueDepth: 0,
       gpus: [{ name: 'RTX 3090', vramMb: 24_576, busy: false }],
@@ -191,7 +191,7 @@ test('advanced command center launches and administers a deep research result', 
     .fill('Étudier la continuité des conversations multimodales');
   await expect(appPage.getByTestId('advanced-launcher-model')).toHaveValue('qwen3.6:27b');
   await expect(appPage.getByTestId('advanced-launcher-ollama-url')).toHaveValue(
-    'http://darkstar:11434/v1'
+    'http://gpuNode:11434/v1'
   );
   await appPage.getByTestId('advanced-launcher-start').click();
 
@@ -220,7 +220,7 @@ test('advanced command center launches and administers a deep research result', 
   expect(runtimeErrors).toEqual([]);
 });
 
-test('advanced command center administers Darkstar GPU jobs', async ({ electronApp, appPage }) => {
+test('advanced command center administers GPU node GPU jobs', async ({ electronApp, appPage }) => {
   const runtimeErrors: string[] = [];
   appPage.on('pageerror', (error) => runtimeErrors.push(error.message));
   appPage.on('console', (message) => {
@@ -251,7 +251,7 @@ test('advanced command center administers Darkstar GPU jobs', async ({ electronA
 
   await appPage.getByTestId('advanced-tab-gpu').click();
   await expect(appPage.getByTestId('gpu-media-admin')).toBeVisible();
-  await expect(appPage.getByText(/darkstar-e2e/)).toBeVisible();
+  await expect(appPage.getByText(/gpuNode-e2e/)).toBeVisible();
   expect(await appPage.title()).toBeTruthy();
   expect(appPage.url()).toMatch(/^file:/);
   await expect(appPage.locator('vite-error-overlay')).toHaveCount(0);

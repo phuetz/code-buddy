@@ -120,6 +120,29 @@ describe('runDevLoop — Verifier gate', () => {
     expect(result.lastVerifierVerdict).toBe('NEEDS REVIEW');
   });
 
+  it('pauses instead of throwing when a turn fails (stall, network), and never marks done', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'done', reason: 'claims done', parseFailed: false });
+    const agent: DevLoopAgent = {
+      processUserMessage: async () => {
+        throw new Error('LLM stream stalled: no data received for 2s (backend accepted the request but stopped responding).');
+      },
+      getClient: () => ({}) as never,
+      executeToolByName: async () => ({ success: true, output: '' }),
+    };
+    const messages: string[] = [];
+    const result = await runDevLoop(agent, 'court objectif', {
+      maxTurns: 3,
+      verify: async () => ({ verdict: 'CONFIRMED', evidence: 'should not run' }),
+      currentCostUsd: zeroCost,
+      noPlan: true,
+      onMessage: (text) => messages.push(text),
+    });
+    expect(result.status).not.toBe('done');
+    expect(result.status).toBe('paused');
+    expect(messages.some((line) => line.includes('erreur du tour'))).toBe(true);
+    expect(messages.some((line) => /stalled/i.test(line))).toBe(true);
+  });
+
   it('--no-verify falls back to judge-only (done accepted on turn 1)', async () => {
     judgeMock.mockResolvedValue({ verdict: 'done', reason: 'done', parseFailed: false });
     const verify = vi.fn();

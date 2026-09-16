@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": ["Read", "Edit"]
+  },
+  "mcpServers": {
+    "claude-settings-nimbus": {
+      "command": "claude-settings-mcp",
+      "args": ["--from", "settings.json"]
+    }
+  }
+}

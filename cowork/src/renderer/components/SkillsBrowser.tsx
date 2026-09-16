@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAppStore } from '../store';
 import { Sparkles, Search, Play, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
 interface SkillMdSummary {
@@ -37,6 +38,8 @@ export const SkillsBrowser: React.FC = () => {
   const { t } = useTranslation();
   const [skills, setSkills] = useState<SkillMdSummary[]>([]);
   const [query, setQuery] = useState('');
+  const [request, setRequest] = useState('');
+  const workingDir = useAppStore((state) => state.workingDir);
   const [loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState<string | null>(null);
   const [disabledSkills, setDisabledSkills] = useState<Set<string>>(new Set());
@@ -118,7 +121,7 @@ export const SkillsBrowser: React.FC = () => {
     if (!api?.skillMd) return;
     setExecuting(skill.name);
     try {
-      const result = await api.skillMd.execute(skill.name, {});
+      const result = await api.skillMd.execute(skill.name, { userInput: request.trim() || skill.description, workspaceRoot: workingDir || undefined });
       setLastResult({
         skillName: skill.name,
         success: result.success,
@@ -133,7 +136,7 @@ export const SkillsBrowser: React.FC = () => {
     } finally {
       setExecuting(null);
     }
-  }, []);
+  }, [request, workingDir]);
 
   return (
     <div className="flex flex-col h-full">
@@ -148,6 +151,12 @@ export const SkillsBrowser: React.FC = () => {
           </span>
         </div>
 
+        <label className="block text-xs text-text-muted mb-3">
+          {t('skillsBrowser.request', { defaultValue: 'What should this skill help you do?' })}
+          <input value={request} onChange={(event) => setRequest(event.target.value)}
+            className="mt-1 w-full px-3 py-2 bg-surface border border-border rounded text-text-primary"
+            placeholder={t('skillsBrowser.requestPlaceholder', { defaultValue: 'Optional task — otherwise use the skill description' })} />
+        </label>
         <div className="relative">
           <Search
             size={12}

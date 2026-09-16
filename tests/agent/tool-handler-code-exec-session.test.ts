@@ -83,6 +83,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     observedScopes.splice(0);
     // The bash `pwd` below runs through the real ConfirmationService; hosts
     // without a sandbox backend (Windows CI) escalate it to an exact grant.
+    ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
     approveSandboxUnavailableEscalations(ConfirmationService.getInstance());
     // Repo-local tmp (gitignored): Linux bubblewrap mounts a tmpfs over `/tmp`,
     // so a cwd under os.tmpdir() disappears inside the sandbox. git rev-parse
@@ -145,6 +146,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     resetBashInstance();
     resetTrustFolderManager();
     resetPermissionModeManager();
+    ConfirmationService.getInstance().setSessionFlag('bashCommands', false);
     clearSandboxEscalationBridge(ConfirmationService.getInstance());
     restoreHostProcess();
     removeTmpDir(workDir);
@@ -161,6 +163,16 @@ describe('ToolHandler code_exec logical-session isolation', () => {
 
     expect(result.success).toBe(true);
     expect(observedScopes).toEqual(['logical-session-a']);
+  });
+
+  it('streams explicit code_exec yields through the guarded ToolHandler', async () => {
+    const generator = handler.executeToolStreaming(toolCall('stream-probe', `text('PHASE_ONE'); await yield_control(); text('PHASE_TWO');`));
+    const chunks: string[] = [];
+    let next = await generator.next();
+    while (!next.done) { chunks.push(next.value); next = await generator.next(); }
+    expect(chunks.join('')).toBe('PHASE_ONE');
+    expect(next.value.success).toBe(true);
+    expect(next.value.output).toContain('PHASE_TWO');
   });
 
   it('keeps code_exec store/load private when one host handler swaps sessions', async () => {
@@ -203,7 +215,9 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     handler.setRecoverySessionId('logical-session-b');
     const pwdB = await handler.executeTool(bashCall('pwd-b', 'pwd'));
     if (!pwdB.success) console.error('[macos-diag] pwd in restored cwd', realSessionB, ':', pwdB.error);
-    expect(pwdB.success).toBe(true);
+    // Carry the tool error in the assertion itself: reporters that drop console output
+    // (dot/json) otherwise lose the cause of a rare failure under heavy parallel load.
+    expect(pwdB.success, `pwd in restored cwd failed: ${pwdB.error ?? '(no error text)'}`).toBe(true);
     // Match on the unique mkdtemp leaf: `pwd` prints the shell's spelling of the
     // directory (MSYS `/c/Users/...` on Windows), not the Node one.
     expect(pwdB.output).toContain(path.basename(realSessionB));

@@ -11,11 +11,14 @@
  *
  * @module sensory/voice-activity
  */
+import { isBriefConversationAnswer } from './respond-decider.js';
+
 let activePlays = 0;
 let speakingUntilMs = 0;
 
 /** Echo tail after playback ends, ms (room reverberation + buffered audio). */
 export const DEFAULT_VOICE_ECHO_TAIL_MS = 1_200;
+export const SENSORY_AEC_TRUST_ENV = 'CODEBUDDY_SENSORY_AEC_TRUST';
 const configuredTailRaw = process.env.CODEBUDDY_SENSORY_ECHO_TAIL_MS?.trim();
 const configuredTailMs = configuredTailRaw ? Number(configuredTailRaw) : Number.NaN;
 const TAIL_MS = Number.isFinite(configuredTailMs) && configuredTailMs >= 0
@@ -24,7 +27,8 @@ const TAIL_MS = Number.isFinite(configuredTailMs) && configuredTailMs >= 0
 const MAX_PLAYBACK_INTERVALS = 8;
 const MAX_SPOKEN_REFERENCES = 8;
 const RESUME_WINDOW_MS = 5 * 60_000;
-const ECHO_REFERENCE_WINDOW_MS = 30_000;
+export const DEFAULT_OWN_ECHO_WINDOW_MS = 90_000;
+const OWN_ECHO_MIN_COVERAGE = 0.6;
 
 interface VoicePlaybackInterval {
   startedAtMs: number;
@@ -36,7 +40,7 @@ interface VoicePlaybackInterval {
 
 interface SpokenReference {
   normalized: string;
-  tokens: Set<string>;
+  tokens: string[];
   recordedAtMs: number;
 }
 
@@ -64,10 +68,23 @@ function finiteClock(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
 }
 
+/**
+ * Treat the capture-side AEC flag as a half-duplex bypass only after an explicit
+ * operator opt-in. Merely advertising AEC is not evidence that loudspeaker echo
+ * was removed from the actual microphone signal.
+ */
+export function isSensoryAecTrusted(
+  aecActive: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return aecActive && env[SENSORY_AEC_TRUST_ENV]?.trim().toLowerCase() === 'true';
+}
+
 function normalizeSpokenText(value: string): string {
   return value
-    .normalize('NFKC')
+    .normalize('NFKD')
     .toLowerCase()
+    .replace(/\p{M}+/gu, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -138,7 +155,7 @@ export async function withSpeakingGuard(play: () => Promise<void>): Promise<void
 }
 
 /**
- * Keep a short, memory-only fingerprint of what the loudspeaker is about to say.
+ * Keep a short, memory-only fingerprint of text sent to the loudspeaker TTS.
  * It is used solely to distinguish room echo from a genuinely new quick reply;
  * neither the original text nor the fingerprint is persisted by this module.
  */
@@ -147,18 +164,49 @@ export function noteSpokenText(text: string, now: number = Date.now()): void {
   if (!normalized || !finiteClock(now)) return;
   const bounded = normalized.slice(0, 1_000);
   for (let index = spokenReferences.length - 1; index >= 0; index--) {
-    if (now - spokenReferences[index]!.recordedAtMs > ECHO_REFERENCE_WINDOW_MS) {
+    if (now - spokenReferences[index]!.recordedAtMs > DEFAULT_OWN_ECHO_WINDOW_MS) {
       spokenReferences.splice(index, 1);
     }
   }
   spokenReferences.push({
     normalized: bounded,
-    tokens: new Set(bounded.split(' ').filter(Boolean)),
+    tokens: bounded.split(' ').filter(Boolean),
     recordedAtMs: now,
   });
   if (spokenReferences.length > MAX_SPOKEN_REFERENCES) {
     spokenReferences.splice(0, spokenReferences.length - MAX_SPOKEN_REFERENCES);
   }
+}
+
+/**
+ * Detect a short transcript wholly contained in a recent loudspeaker phrase.
+ * This conservative fingerprint is used while playback is active, where a
+ * one-to-three-word match is enough to identify a likely self-capture even
+ * though it cannot meet the normal whole-phrase coverage threshold.
+ */
+export function isRecentVoiceFragmentEcho(
+  transcript: string,
+  atMs: number = Date.now(),
+): boolean {
+  const normalized = normalizeSpokenText(transcript).slice(0, 1_000);
+  if (!normalized || !finiteClock(atMs)) return false;
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 3) return false;
+  return spokenReferences.some(reference =>
+    atMs >= reference.recordedAtMs - 1_000
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS
+      && !(isBriefConversationAnswer(normalized) && reference.tokens.length > tokens.length)
+      && tokens.every(token => reference.tokens.includes(token)),
+  );
+}
+
+/** Whether a loudspeaker fingerprint is still available for the given capture time. */
+export function hasRecentSpokenReference(atMs: number = Date.now()): boolean {
+  if (!finiteClock(atMs)) return false;
+  return spokenReferences.some(reference =>
+    atMs >= reference.recordedAtMs - 1_000
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
+  );
 }
 
 /** Classify a transcript against only the recent in-memory loudspeaker fingerprints. */
@@ -168,26 +216,32 @@ export function classifyRecentVoiceEcho(
 ): VoiceEchoClassification {
   const normalized = normalizeSpokenText(transcript).slice(0, 1_000);
   if (!normalized || !finiteClock(atMs)) return 'unknown';
+  if (isRecentVoiceFragmentEcho(normalized, atMs)) return 'echo';
   const references = spokenReferences.filter(
     reference => atMs >= reference.recordedAtMs - 1_000
-      && atMs - reference.recordedAtMs <= ECHO_REFERENCE_WINDOW_MS,
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
   );
   if (references.length === 0) return 'unknown';
-
-  const tokens = normalized.split(' ').filter(Boolean);
-  for (const reference of references) {
-    if (
-      (normalized.length >= 4 && reference.normalized.includes(normalized))
-      || (reference.normalized.length >= 8 && normalized.includes(reference.normalized))
-    ) {
+  // SENSE7 (substring containment) and GT2 (every-token-is-robot fragment) both apply.
+  const transcriptTokens = [...new Set(normalized.split(' ').filter(Boolean))];
+  const boundedTranscript = ` ${normalized} `;
+  for (const reference of [...references].reverse()) {
+    // A closed conversational answer copied from a longer question is ambiguous
+    // acoustically but must remain available to the engagement gate. Exact short
+    // loudspeaker utterances and all non-answer fragments retain SENSE7/GT2 filtering.
+    const briefReplyToLongerPrompt = isBriefConversationAnswer(normalized)
+      && reference.tokens.length > transcriptTokens.length;
+    if (!briefReplyToLongerPrompt && ` ${reference.normalized} `.includes(boundedTranscript)) {
       return 'echo';
     }
-    if (tokens.length > 0) {
-      const overlap = tokens.filter(token => reference.tokens.has(token)).length;
-      const coverage = overlap / tokens.length;
-      if ((tokens.length <= 2 && coverage === 1) || (tokens.length >= 3 && coverage >= 0.75)) {
-        return 'echo';
-      }
+    if (reference.tokens.length > 0) {
+      const referenceTokens = new Set(reference.tokens);
+      const referenceOverlap = reference.tokens.filter(token => transcriptTokens.includes(token)).length;
+      const transcriptIsRobotFragment = transcriptTokens.every(token => referenceTokens.has(token));
+      if (!briefReplyToLongerPrompt && (
+        transcriptIsRobotFragment
+        || referenceOverlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE
+      )) return 'echo';
     }
   }
   return 'distinct';

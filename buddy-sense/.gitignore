@@ -2,3 +2,8 @@
 
 # VAD models (large, downloadable — see models/README.md)
 /models/*.onnx
+
+# Pocket TTS ONNX graphs (INT8 french_24l is ~370 MB; fetch script restores them)
+/models/pocket-tts/**/*.onnx
+/models/pocket-tts/**/_gk5-test.wav
+/models/pocket-tts/out/

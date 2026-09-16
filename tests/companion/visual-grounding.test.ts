@@ -117,7 +117,7 @@ describe('one-shot visual grounding lifecycle', () => {
     const result = await groundExplicitVisualRequest('tu vois le hamburger', {
       env: {
         CODEBUDDY_VISION_MODEL: 'vision-remote',
-        CODEBUDDY_VISION_BASE_URL: 'http://darkstar.local:11434/v1',
+        CODEBUDDY_VISION_BASE_URL: 'http://gpuNode.local:11434/v1',
       },
       capture,
     });
@@ -163,7 +163,7 @@ describe('one-shot visual grounding lifecycle', () => {
       {
         env: {
           CODEBUDDY_VISION_MODEL: 'vision-local',
-          CODEBUDDY_VISION_BASE_URL: 'http://darkstar.local:11434/v1/',
+          CODEBUDDY_VISION_BASE_URL: 'http://gpuNode.local:11434/v1/',
           CODEBUDDY_VISION_ALLOW_INSECURE_REMOTE: 'true',
         },
         tempDir: directory,
@@ -197,7 +197,7 @@ describe('one-shot visual grounding lifecycle', () => {
       localDeletionVerified: true,
     });
     expect(result?.evidence?.summary.length).toBeLessThanOrEqual(1_200);
-    expect(analysisInput?.baseURL).toBe('http://darkstar.local:11434/v1');
+    expect(analysisInput?.baseURL).toBe('http://gpuNode.local:11434/v1');
     expect(JSON.stringify(result)).not.toContain(capturedPath);
     expect(JSON.stringify(result)).not.toContain('base64');
     await expect(readFile(capturedPath)).rejects.toThrow();
@@ -209,7 +209,7 @@ describe('one-shot visual grounding lifecycle', () => {
     const result = await groundExplicitVisualRequest('tu vois mon assiette', {
       env: {
         CODEBUDDY_VISION_MODEL: 'vision-local',
-        CODEBUDDY_VISION_BASE_URL: 'http://darkstar.local:11434/v1',
+        CODEBUDDY_VISION_BASE_URL: 'http://gpuNode.local:11434/v1',
         CODEBUDDY_VISION_ALLOW_INSECURE_REMOTE: 'true',
         OPENAI_API_KEY: 'must-not-leak',
       },

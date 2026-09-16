@@ -680,6 +680,30 @@ export class ExportManager extends EventEmitter {
   }
 
   /**
+   * Export an in-memory conversation (e.g. the live CLI transcript) to a file,
+   * with the same redaction and formatting as session exports.
+   */
+  async exportConversationData(
+    data: ConversationExport,
+    format: ExportFormat,
+    options: Partial<ExportOptions> = {},
+    prefix = 'conversation'
+  ): Promise<{ success: boolean; filePath?: string; error?: string }> {
+    try {
+      const content = this.formatExport(data, format, options);
+      const filePath = path.join(this.outputDir, this.generateFilename(prefix, format));
+      await this.ensureOutputDir();
+      await fs.writeFile(filePath, content, 'utf-8');
+      this.emit('conversation:exported', { filePath, format });
+      return { success: true, filePath };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.emit('error', error);
+      return { success: false, error: errorMsg };
+    }
+  }
+
+  /**
    * Export session to string
    */
   async exportSessionToString(

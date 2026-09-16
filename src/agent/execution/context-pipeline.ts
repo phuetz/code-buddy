@@ -9,8 +9,8 @@
  *   1. `prepareTurnMessages` — compaction + transcript repair (always)
  *   2. `injectInitialContext` — round 0 enrichment (workspace, lessons, KG,
  *      decision memory, ICM memory, code graph)
- *   3. `injectNextRoundContext` — subsequent rounds (lessons + KG when query
- *      is complex, todo suffix always)
+ *   3. `injectNextRoundContext` — subsequent rounds (lessons + CKG when the
+ *      collective-memory flag is on, KG when query is complex, todo suffix always)
  *   4. `sanitizeAssistantOutput` — strip leakage tokens from final text
  *
  * @module agent/execution/context-pipeline
@@ -24,7 +24,11 @@ import { getLessonsTracker } from '../lessons-tracker.js';
 import { getTodoTracker } from '../todo-tracker.js';
 import { getUserModel } from '../../memory/user-model.js';
 import { isFeatureEnabled } from '../../config/feature-flags.js';
-import type { ContextInjectionLevel, QueryComplexity } from './query-classifier.js';
+import {
+  getInjectionLevel,
+  type ContextInjectionLevel,
+  type QueryComplexity,
+} from './query-classifier.js';
 import { classifyLisaIntrospection } from '../../identity/lisa-introspection.js';
 import type { CompanionRuntimeEvidence } from '../../identity/operational-self-model.js';
 
@@ -186,6 +190,50 @@ export function prepareIsolatedTurnMessages(
     : [...messages];
 }
 
+/** Tool calls of the in-flight round that have no result in `messages` yet. */
+function unansweredPendingCalls(
+  messages: readonly CodeBuddyMessage[],
+  pendingToolCallIds: Iterable<string> | undefined,
+): Set<string> {
+  const pending = new Set<string>();
+  for (const id of pendingToolCallIds ?? []) if (id) pending.add(id);
+  if (pending.size === 0) return pending;
+  for (const message of messages) {
+    if (message.role !== 'tool') continue;
+    const callId = (message as { tool_call_id?: string }).tool_call_id;
+    if (callId) pending.delete(callId);
+  }
+  return pending;
+}
+
+/**
+ * Drop the synthetic `[result lost during compaction]` placeholders that
+ * transcript repair injected for calls that are merely still running.
+ *
+ * Returns null when a pending call did not survive compaction at all: the
+ * caller then keeps the transcript untouched rather than leaving a call whose
+ * real result would become an unpairable orphan.
+ */
+function withoutPendingPlaceholders(
+  compacted: readonly CodeBuddyMessage[],
+  pending: ReadonlySet<string>,
+): CodeBuddyMessage[] | null {
+  const survivingCallIds = new Set<string>();
+  for (const message of compacted) {
+    const calls = (message as { tool_calls?: Array<{ id?: string }> }).tool_calls;
+    if (Array.isArray(calls)) for (const call of calls) if (call?.id) survivingCallIds.add(call.id);
+  }
+  for (const id of pending) if (!survivingCallIds.has(id)) return null;
+
+  // `pending` only holds ids with no result in `original`, so every tool
+  // message carrying one of them was invented by repair just now.
+  return compacted.filter((message) => {
+    if (message.role !== 'tool') return true;
+    const callId = (message as { tool_call_id?: string }).tool_call_id;
+    return !(callId && pending.has(callId));
+  });
+}
+
 /**
  * Compact + repair IN PLACE — for mid-loop compaction sites where `messages`
  * is a SHARED reference (the turn loop and its helpers keep pushing into it).
@@ -194,14 +242,29 @@ export function prepareIsolatedTurnMessages(
  * transcript never shrank, the middleware 'compact' action did nothing, and
  * proactive compaction re-fired forever while the provider limit approached.
  * Returns true when the transcript actually changed.
+ *
+ * `pendingToolCallIds` names the calls of the round being executed. Their
+ * results are pushed AFTER this compaction, so repairing them here injected
+ * `[result lost during compaction]`; the real result then lost the first-wins
+ * duplicate arbitration and the model never saw the tool output. Those
+ * placeholders are removed while every other repair — historical orphans,
+ * id-less calls, duplicates, ordering — is kept. The provider frontier stays
+ * `prepareTurnMessages`, which still closes any call left unanswered.
  */
 export function compactTurnMessagesInPlace(
   contextManager: ContextManagerV2,
   messages: CodeBuddyMessage[],
-  options: { isolatedSharedHost?: boolean } = {},
+  options: { isolatedSharedHost?: boolean; pendingToolCallIds?: Iterable<string> } = {},
 ): boolean {
-  const compacted = prepareTurnMessages(contextManager, messages, options);
-  if (compacted === messages) return false;
+  const pending = unansweredPendingCalls(messages, options.pendingToolCallIds);
+  const prepared = prepareTurnMessages(contextManager, messages, options);
+  if (prepared === messages) return false;
+  let compacted: readonly CodeBuddyMessage[] = prepared;
+  if (pending.size > 0) {
+    const protectedMessages = withoutPendingPlaceholders(prepared, pending);
+    if (!protectedMessages) return false; // pending call dropped: never risk its real result
+    compacted = protectedMessages;
+  }
   const changed =
     compacted.length !== messages.length || compacted.some((m, i) => m !== messages[i]);
   if (!changed) return false;
@@ -249,6 +312,19 @@ export async function injectInitialContext(
   // time-to-first-token the sum of all provider latencies. Promise.all preserves
   // this array order, keeping the model-facing context deterministic.
   const blocks = await Promise.all([
+    // Collective Knowledge Graph first among extras so compaction of later
+    // optional blocks cannot drop the relevance-ranked recall.
+    buildOptionalContextBlock(
+      allowMutableSharedContext &&
+        deps.ctxLevel.collectiveGraph &&
+        process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true',
+      async () => {
+        const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
+        const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 1_600);
+        return ckgBlock ? { role: 'system', content: ckgBlock } : null;
+      }
+    ),
+
     buildOptionalContextBlock(!readOnlySelfInspection && deps.ctxLevel.workspace, async () => {
       const wsCtx = await deps.loadWorkspaceContext(deps.cwd);
       return wsCtx ? { role: 'system', content: wsCtx } : null;
@@ -316,18 +392,6 @@ export async function injectInitialContext(
       const kgBlock = kg.formatContextBlockSmart(deps.message, 600);
       return kgBlock ? { role: 'system', content: kgBlock } : null;
     }),
-
-    // Collective Knowledge Graph — shared cross-agent memory (opt-in).
-    buildOptionalContextBlock(
-      allowMutableSharedContext &&
-        deps.ctxLevel.collectiveGraph &&
-        process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true',
-      async () => {
-        const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
-        const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 600);
-        return ckgBlock ? { role: 'system', content: ckgBlock } : null;
-      }
-    ),
 
     buildOptionalContextBlock(
       allowMutableSharedContext &&
@@ -414,8 +478,36 @@ export interface NextRoundContextDeps {
   introspectionText?: string;
   cwd: string;
   queryComplexity: QueryComplexity;
+  /**
+   * When set, overrides the complexity table for CKG injection.
+   * Unset → `getInjectionLevel(queryComplexity).collectiveGraph`.
+   */
+  collectiveGraph?: boolean;
   /** Exclude process-global mutable memories on a shared HTTP host. */
   isolatedSharedHost?: boolean;
+}
+
+/** Collective graph: same opt-in as round 0. Unset flag is an explicit no-op. */
+async function injectCollectiveGraphIfWanted(
+  preparedMessages: CodeBuddyMessage[],
+  deps: NextRoundContextDeps,
+): Promise<void> {
+  const collectiveWanted =
+    deps.collectiveGraph ?? getInjectionLevel(deps.queryComplexity).collectiveGraph;
+  if (
+    deps.isolatedSharedHost ||
+    !collectiveWanted ||
+    process.env.CODEBUDDY_COLLECTIVE_MEMORY !== 'true'
+  ) {
+    return;
+  }
+  try {
+    const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
+    const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 1_600);
+    if (ckgBlock) {
+      preparedMessages.push({ role: 'system', content: ckgBlock });
+    }
+  } catch { /* collective graph is optional */ }
 }
 
 /**
@@ -434,6 +526,8 @@ export async function injectNextRoundContext(
     // The attested self-model was injected on round 0 and the following round
     // receives the root-confined tool observation. Do not re-open unrelated
     // workspace, lesson, user-model, KG, ICM, code-graph, docs, or todo sources.
+    // Collective memory stays opt-in on later rounds even here: skipping it
+    // dropped CODEBUDDY_COLLECTIVE_MEMORY=true for self-inspection follow-ups.
     preparedMessages.push({
       role: 'system',
       content:
@@ -442,6 +536,7 @@ export async function injectNextRoundContext(
         'Do not infer subjective consciousness; it remains not established.\n' +
         '</context>',
     });
+    await injectCollectiveGraphIfWanted(preparedMessages, deps);
     return;
   }
   if (deps.isolatedSharedHost) {
@@ -474,6 +569,8 @@ export async function injectNextRoundContext(
       }
     } catch { /* optional */ }
   }
+
+  await injectCollectiveGraphIfWanted(preparedMessages, deps);
 
   // Knowledge graph stays gated on complexity — it can be large and is
   // less universally relevant than lessons. Use the SAME smart formatter as

@@ -113,11 +113,11 @@ Plan -> Parallel/Sequential Execute -> Synthesize
 
 ## Batch Decomposition
 
-`/batch <goal>` decomposes a goal into parallel execution units via LLM:
-1. LLM breaks the goal into independent sub-tasks
-2. Dependency ordering determines execution order
-3. Plan approval before execution
-4. Agents spawned for each unit
+`/batch <goal>` decomposes a goal into parallel execution units and **runs them**:
+1. A numbered list (`1. … 2. …`) is split without an LLM; otherwise an LLM decomposes the goal
+2. Units that name the same file are serialised; distinct files may run together
+3. Each named-file unit spawns a full lightweight agent thread (`ThreadDelegation`, bounded context, tool execution up to 6 rounds by default) and writes that file — a write unit that reports success without changing any file is reported as `[FAIL] … No files changed` (GK12/TAUTFIX1 anti-tautology guard). A unit the planner (or the LLM decomposition) marks `verifyOnly: true` is a read/check unit, not a coding unit: it is expected to touch no file, so a zero-diff success is reported `[OK] … Verified — no write expected`, not a failure. Every unit that omits the flag keeps the strict write-unit guard.
+4. Headless `buddy -p "/batch …"` dispatches the slash command; it does not send `/batch` to the LLM as a user message
 
 ## A2A Protocol (Google Agent-to-Agent)
 

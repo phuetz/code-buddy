@@ -16,7 +16,7 @@ TypeScript strict ESM, tests Vitest). Branche : `cb2/multi-repo`. Campagne « Co
 
 ## Mission
 Un `workspace.json` fédère N repos ; l'agent peut chercher et lire **à travers tout l'écosystème**
-(ex. code-buddy + gitnexus-rs + NexusFile) au lieu d'être aveugle au-delà du repo courant.
+(ex. code-buddy + code-explorer + NexusFile) au lieu d'être aveugle au-delà du repo courant.
 Tous les concurrents sont mono-repo : c'est un différenciateur direct.
 
 ## Ancrage dans l'existant (à lire d'abord)

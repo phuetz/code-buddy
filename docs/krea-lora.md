@@ -117,9 +117,9 @@ Si tu as généré le dataset en `sd_turbo` et que tu trains en Krea, accepte un
 
 Overnight : `scripts/overnight-lisa.sh` → toujours écrit `.codebuddy/lora/lisa/MORNING-REPORT.md`.
 
-### Darkstar (2×3090) — train + Comfy offline
+### GPU node (2×3090) — train + Comfy offline
 
-Voir **[`docs/darkstar-lora.md`](darkstar-lora.md)** : SSH `patri@100.73.222.64`, Comfy `http://100.73.222.64:8188`, train local `train-lisa-lora-comfy.py` (sans FAL).
+Voir **[`docs/gpuNode-lora.md`](gpuNode-lora.md)** : SSH `patri@192.0.2.42`, Comfy `http://192.0.2.42:8188`, train local `train-lisa-lora-comfy.py` (sans FAL).
 
 ### Recette Comfy versionnée
 

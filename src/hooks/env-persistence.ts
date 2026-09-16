@@ -12,6 +12,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // EnvPersistence
@@ -85,7 +86,8 @@ export class EnvPersistence {
       if (!fs.existsSync(this.envFilePath)) {
         return {};
       }
-      const content = fs.readFileSync(this.envFilePath, 'utf-8');
+      const content = readTextAtomicSync(this.envFilePath, '');
+      if (!content) return {};
       const parsed = this.parseEnvFile(content);
       this.sessionEnv = { ...parsed };
       return { ...parsed };
@@ -220,12 +222,8 @@ export class EnvPersistence {
    */
   private flush(): void {
     try {
-      const dir = path.dirname(this.envFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
       const content = this.serializeEnv(this.sessionEnv);
-      fs.writeFileSync(this.envFilePath, content, 'utf-8');
+      writeFileAtomicSync(this.envFilePath, content, { mode: 0o600 });
     } catch (error) {
       logger.warn(`Failed to write env file: ${error}`, { source: 'EnvPersistence' });
     }

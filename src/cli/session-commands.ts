@@ -122,10 +122,18 @@ export function registerSessionCommands(program: Command): void {
 
   session
     .command('resume')
-    .description('Resume a saved session by ID or partial ID')
-    .argument('<sessionId>', 'session ID or unique prefix')
-    .action(async (sessionId: string) => {
-      await resumeSessionById(sessionId);
+    .description('Resume a saved session by ID or partial ID; without an ID, pick among recent sessions')
+    .argument('[sessionId]', 'session ID or unique prefix (omit to pick interactively)')
+    .option('--limit <count>', 'recent sessions offered by the picker', parsePositiveInteger, 20)
+    .action(async (sessionId: string | undefined, options: { limit: number }) => {
+      if (sessionId) {
+        await resumeSessionById(sessionId);
+        return;
+      }
+      const picked = await pickRecentSession(options.limit);
+      if (!picked) return;
+      await resumeSessionById(picked);
+      console.log(`Continue it in the terminal with: buddy --resume ${picked.slice(0, 8)}`);
     });
 
   session
@@ -177,8 +185,43 @@ export async function resumeSessionById(sessionId: string): Promise<void> {
   await sessionStore.resumeSession(session.id);
   console.log(`Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
   console.log(
-    `   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`
+    `   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}`
   );
+  const { buildSessionRecap, formatSessionRecap } = await import('./session-picker.js');
+  console.log(`${formatSessionRecap(buildSessionRecap(session)).join('\n')}\n`);
+}
+
+/**
+ * Offer recent sessions without requiring an ID (P6). Non-interactive stdio:
+ * print the list and set exit code 1 (never waits for input). Returns the
+ * chosen session id, or null.
+ */
+export async function pickRecentSession(
+  limit = 20,
+  streams: { input: NodeJS.ReadStream; output: NodeJS.WriteStream } = { input: process.stdin, output: process.stdout },
+): Promise<string | null> {
+  const { getSessionStore } = await import('../persistence/session-store.js');
+  const sessions = await getSessionStore().getRecentSessions(limit);
+  if (sessions.length === 0) {
+    console.log('No sessions found.');
+    process.exitCode = 1;
+    return null;
+  }
+  if (!streams.input.isTTY || !streams.output.isTTY) {
+    console.log(`Recent sessions (${sessions.length}):\n`);
+    sessions.forEach((session) => printSessionSummary(session));
+    console.log('\nNo interactive terminal: pass an ID, e.g. `buddy session resume <id>` or `buddy --resume <id>`.');
+    process.exitCode = 1;
+    return null;
+  }
+  const { pickSession } = await import('./session-picker.js');
+  const picked = await pickSession(sessions, streams);
+  if (!picked) {
+    console.log('Cancelled.');
+    process.exitCode = 1;
+    return null;
+  }
+  return picked.id;
 }
 
 /**

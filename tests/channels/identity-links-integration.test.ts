@@ -48,6 +48,14 @@ function makeMessage(
 describe('Identity Links Integration', () => {
   beforeEach(() => {
     resetIdentityLinker();
+    // Pre-create the singleton with autoPersist off: the default persistPath
+    // is the REAL ~/.codebuddy/identity-links.json, and this suite never
+    // asserts on-disk state. Without this, every run of this file fired
+    // unawaited writes at the user's actual home directory (see
+    // docs/reports/2026-09/REPARATION-IDLINKS1.md). getIdentityLinker() only
+    // honours a config argument the first time it creates the singleton, so
+    // this must run before any test calls getIdentityLinker()/getCanonicalIdentity().
+    getIdentityLinker({ autoPersist: false });
   });
 
   afterEach(() => {

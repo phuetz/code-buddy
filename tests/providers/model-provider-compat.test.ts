@@ -39,3 +39,11 @@ describe('isModelCompatibleWithProvider', () => {
     expect(isModelCompatibleWithProvider('grok-3', 'some-new-provider')).toBe(true);
   });
 });
+
+// A ChatGPT subscription uses the Codex catalog, not the full OpenAI API catalog.
+describe('stale API models after ChatGPT login', () => {
+  it.each(['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-3.5-turbo'])('rejects %s only for the subscription', (model) => {
+    expect(isModelCompatibleWithProvider(model, 'chatgpt')).toBe(false);
+    expect(isModelCompatibleWithProvider(model, 'openai')).toBe(true);
+  });
+});

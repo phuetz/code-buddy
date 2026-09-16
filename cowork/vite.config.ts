@@ -31,6 +31,50 @@ function copyMainAssets(): Plugin {
 
 // Node built-in modules must be external for Electron main process
 const nodeBuiltins = builtinModules.flatMap(m => [m, `node:${m}`]);
+
+/**
+ * React Native modules required by AlaSQL's Node entry (`dist/alasql.fs.js`,
+ * picked by the `node` export condition), reached through the core SqlAgent
+ * fallback: `require('react-native')` inside a try/catch, then
+ * `react-native-fs` and `react-native-fetch-blob` only when that probe
+ * succeeds. npm installs `react-native` and `react-native-fs` as peers of
+ * AlaSQL's optional dependency, so the CommonJS plugin would parse their Flow
+ * sources and abort the main build. Marking them external is not enough: the
+ * plugin hoists the unguarded requires to the top of the chunk, which throws at
+ * load time wherever they are absent. `commonjsOptions.ignore` leaves the calls
+ * untouched and lazy: AlaSQL is never externalized, stays bundled whenever the
+ * main graph includes it, and the probe simply fails under Electron.
+ */
+export const alasqlReactNativeModules = [
+  'react-native',
+  'react-native-fs',
+  'react-native-fetch-blob',
+];
+
+export const mainProcessExternals = [
+  ...nodeBuiltins,
+  'better-sqlite3',
+  'bufferutil',
+  'utf-8-validate',
+  'electron',
+  // Externalize large CJS-compatible main-process dependencies
+  // NOTE: ESM-only packages (pi-coding-agent, pi-ai, electron-store, uuid)
+  // must stay bundled — CJS require() can't load them
+  '@anthropic-ai/sdk',
+  '@larksuiteoapi/node-sdk',
+  'openai',
+  '@modelcontextprotocol/sdk',
+  'electron-updater',
+  'chokidar',
+  'archiver',
+  // Native N-API bindings are packaged separately and must not be
+  // parsed or inlined by Rollup.
+  '@ngrok/ngrok',
+  'ws',
+  'glob',
+  'dotenv',
+];
+
 const ignoredWatchPaths = [
   '**/release/**',
   '**/dist/**',
@@ -54,30 +98,11 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron/main',
             emptyOutDir: true,
+            commonjsOptions: {
+              ignore: alasqlReactNativeModules,
+            },
             rollupOptions: {
-              external: [
-                ...nodeBuiltins,
-                'better-sqlite3',
-                'bufferutil',
-                'utf-8-validate',
-                'electron',
-                // Externalize large CJS-compatible main-process dependencies
-                // NOTE: ESM-only packages (pi-coding-agent, pi-ai, electron-store, uuid)
-                // must stay bundled — CJS require() can't load them
-                '@anthropic-ai/sdk',
-                '@larksuiteoapi/node-sdk',
-                'openai',
-                '@modelcontextprotocol/sdk',
-                'electron-updater',
-                'chokidar',
-                'archiver',
-                // Native N-API bindings are packaged separately and must not be
-                // parsed or inlined by Rollup.
-                '@ngrok/ngrok',
-                'ws',
-                'glob',
-                'dotenv',
-              ],
+              external: mainProcessExternals,
               output: {
                 // Ensure consistent interop for CJS/ESM
                 interop: 'auto',

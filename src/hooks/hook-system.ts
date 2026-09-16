@@ -4,6 +4,7 @@ import os from 'os';
 import { spawn, SpawnOptions } from 'child_process';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type HookType =
   | 'pre-commit'
@@ -85,8 +86,8 @@ export class HookSystem extends EventEmitter {
       if (!fs.existsSync(configPath)) continue;
 
       try {
-        const content = fs.readFileSync(configPath, 'utf-8');
-        const config: HooksConfig = JSON.parse(content);
+        const config = readJsonAtomicSync<HooksConfig | null>(configPath, null, { mode: 0o600 });
+        if (!config) continue;
 
         if (config.globalTimeout) {
           this.globalTimeout = config.globalTimeout;
@@ -342,7 +343,7 @@ export class HookSystem extends EventEmitter {
       hooks: allHooks
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeJsonAtomicSync(configPath, config, { mode: 0o600 });
   }
 
   /**
@@ -395,7 +396,7 @@ export class HookSystem extends EventEmitter {
       ]
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    writeJsonAtomicSync(configPath, defaultConfig, { mode: 0o600 });
     this.reload();
 
     return configPath;

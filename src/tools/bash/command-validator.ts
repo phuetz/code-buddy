@@ -16,6 +16,7 @@ import {
   SAFE_ENV_VARS,
   BLOCKED_PATHS,
 } from './security-patterns.js';
+import * as os from 'node:os';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -209,11 +210,15 @@ export function validateCommand(command: string, shell?: string): { valid: boole
   }
 
   // Check for access to blocked paths
+  const commandWithExpandedHome = command.replace(/~(?=[\\/])/g, os.homedir());
   for (const blockedPath of BLOCKED_PATHS) {
     const isWindowsPath = blockedPath.includes('\\');
+    const commandVariants = [command, commandWithExpandedHome];
     const containsBlockedPath = isWindowsPath
-      ? command.replace(/\//g, '\\').toLowerCase().includes(blockedPath.toLowerCase())
-      : command.includes(blockedPath);
+      ? commandVariants.some((variant) =>
+          variant.replace(/\//g, '\\').toLowerCase().includes(blockedPath.toLowerCase()),
+        )
+      : commandVariants.some((variant) => variant.includes(blockedPath));
     if (containsBlockedPath) {
       auditLogger.logCommandValidation({ command, valid: false, reason: `Protected path: ${blockedPath}`, source: 'command-validator' });
       return {

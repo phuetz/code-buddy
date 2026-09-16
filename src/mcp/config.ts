@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { getSettingsManager } from "../utils/settings-manager.js";
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type { MCPServerConfig, MCPConfig } from "./types.js";
 
 // Re-export types for backwards compatibility
@@ -17,7 +18,7 @@ function resolveEnvVars(env: Record<string, string> | undefined): Record<string,
   for (const [key, value] of Object.entries(env)) {
     const match = value.match(/^\$\{(\w+)\}$/);
     const varName = match?.[1];
-    resolved[key] = varName !== undefined ? (process.env[varName] || '') : value;
+    resolved[key] = varName !== undefined ? (process.env[varName] || value) : value;
   }
   return resolved;
 }
@@ -42,6 +43,26 @@ function resolveServerEnv(server: MCPServerConfig): MCPServerConfig {
 export interface LoadMCPConfigOptions {
   /** Include disabled entries for inventory and diagnostics. Runtime callers omit this. */
   includeDisabled?: boolean;
+  /**
+   * Project directory whose `.codebuddy/mcp.json` and `.codebuddy/settings.json` are read.
+   * Defaults to `process.cwd()` (historical behaviour). Lets diagnostics inspect another
+   * project without `process.chdir()`, which is global state shared across awaits.
+   */
+  cwd?: string;
+}
+
+/** `mcpServers` of a project `.codebuddy/settings.json` read directly (explicit `cwd`). */
+function readProjectSettingsServers(projectDir: string): Record<string, unknown> | undefined {
+  const settingsPath = path.join(projectDir, '.codebuddy', 'settings.json');
+  if (!fs.existsSync(settingsPath)) return undefined;
+  try {
+    const settings = readJsonAtomicSync<Record<string, unknown> | null>(settingsPath, null, { mode: 0o600 });
+    const servers = settings?.mcpServers;
+    return servers && typeof servers === 'object' && !Array.isArray(servers) ? servers as Record<string, unknown> : undefined;
+  } catch (error) {
+    logger.warn('Failed to load project settings MCP servers', { error });
+    return undefined;
+  }
 }
 
 export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
@@ -49,10 +70,11 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   const seenServers = new Set<string>();
 
   // 1. First, try project-level .codebuddy/mcp.json (highest priority, committable)
-  const projectMCPPath = path.join(process.cwd(), '.codebuddy', 'mcp.json');
+  const projectDir = options.cwd ?? process.cwd();
+  const projectMCPPath = path.join(projectDir, '.codebuddy', 'mcp.json');
   if (fs.existsSync(projectMCPPath)) {
     try {
-      const projectMCP = JSON.parse(fs.readFileSync(projectMCPPath, 'utf-8'));
+      const projectMCP = readJsonAtomicSync<Record<string, unknown>>(projectMCPPath, {});
       const mcpServers = projectMCP.mcpServers || projectMCP.servers || {};
 
       for (const [name, config] of Object.entries(mcpServers)) {
@@ -72,11 +94,13 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
     }
   }
 
-  // 2. Then, try project settings (.codebuddy/settings.json)
-  const manager = getSettingsManager();
-  const projectSettings = manager.loadProjectSettings();
-  if (projectSettings.mcpServers) {
-    for (const [name, config] of Object.entries(projectSettings.mcpServers)) {
+  // 2. Then, try project settings (.codebuddy/settings.json). Without an explicit `cwd`
+  // the settings manager keeps its historical path; with one, that project's file is read.
+  const projectSettingsServers = options.cwd === undefined
+    ? getSettingsManager().loadProjectSettings().mcpServers
+    : readProjectSettingsServers(projectDir);
+  if (projectSettingsServers) {
+    for (const [name, config] of Object.entries(projectSettingsServers)) {
       if (!seenServers.has(name)) {
         const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
         if (serverConfig.enabled !== false || options.includeDisabled) {
@@ -91,7 +115,7 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   const userMCPPath = path.join(os.homedir(), '.codebuddy', 'mcp.json');
   if (fs.existsSync(userMCPPath)) {
     try {
-      const userMCP = JSON.parse(fs.readFileSync(userMCPPath, 'utf-8'));
+      const userMCP = readJsonAtomicSync<Record<string, unknown>>(userMCPPath, {});
       const mcpServers = userMCP.mcpServers || userMCP.servers || {};
 
       for (const [name, config] of Object.entries(mcpServers)) {
@@ -109,6 +133,119 @@ export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   }
 
   return { servers };
+}
+
+export interface MCPConfigReadOnlyResult {
+  servers: MCPServerConfig[];
+  /** Sanitized warnings (no config content, no secrets). Empty when all sources are missing/valid. */
+  warnings: string[];
+}
+
+function isServerMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Which keys the RUNTIME reads in a source (see loadMCPConfig): `mcp.json` files accept
+ * `mcpServers || servers`; project `settings.json` is read through `mcpServers` only.
+ */
+type RuntimeServerKeys = 'mcpServers-or-servers' | 'mcpServers-only';
+
+function readOnlyServersFromFile(
+  filePath: string,
+  label: string,
+  warnings: string[],
+  keys: RuntimeServerKeys,
+): Record<string, unknown> | undefined {
+  const outcome = readJsonAtomicSyncReadOnly<Record<string, unknown>>(filePath, isServerMap);
+  if (outcome.status === 'missing') return undefined;
+  if (outcome.status === 'unreadable') {
+    warnings.push(`${label} is unreadable`);
+    return undefined;
+  }
+  if (outcome.status === 'corrupt') {
+    warnings.push(`${label} is corrupt or not a JSON object`);
+    return undefined;
+  }
+  const parsed = outcome.value;
+  if (keys === 'mcpServers-only') {
+    // The runtime never reads a `servers` key here: report it instead of counting it.
+    if (parsed.servers !== undefined) {
+      warnings.push(`${label} has a "servers" key, which is not read at runtime; use mcpServers`);
+    }
+    if (parsed.mcpServers === undefined) return undefined;
+    if (!isServerMap(parsed.mcpServers)) {
+      warnings.push(`${label} has an invalid mcpServers value (expected an object)`);
+      return undefined;
+    }
+    return parsed.mcpServers;
+  }
+  // Same selection as the runtime (`mcpServers || servers`).
+  const servers = parsed.mcpServers || parsed.servers;
+  if (!servers) return undefined;
+  if (!isServerMap(servers)) {
+    warnings.push(`${label} has an invalid mcpServers/servers value (expected an object)`);
+    return undefined;
+  }
+  return servers;
+}
+
+/**
+ * Strictly read-only MCP configuration loader for diagnostics. Reads the same
+ * three sources with the same precedence, disabled masking, and env resolution
+ * as `loadMCPConfig`, but never restores/renames/chmods/creates config or
+ * backups/temporaries. Corrupt or unreadable sources yield sanitized warnings
+ * instead of being silently treated as "no server configured". Missing config
+ * is normal and produces no warning.
+ */
+export function loadMCPConfigReadOnly(options: LoadMCPConfigOptions = {}): MCPConfigReadOnlyResult {
+  const servers: MCPServerConfig[] = [];
+  const seenServers = new Set<string>();
+  const warnings: string[] = [];
+  const projectDir = options.cwd ?? process.cwd();
+
+  const projectMCPPath = path.join(projectDir, '.codebuddy', 'mcp.json');
+  const projectMCP = readOnlyServersFromFile(projectMCPPath, 'project .codebuddy/mcp.json', warnings, 'mcpServers-or-servers');
+  if (projectMCP) {
+    for (const [name, config] of Object.entries(projectMCP)) {
+      if (seenServers.has(name)) continue;
+      const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
+      if (serverConfig.enabled === false && !options.includeDisabled) {
+        seenServers.add(name);
+        continue;
+      }
+      servers.push(serverConfig);
+      seenServers.add(name);
+    }
+  }
+
+  const projectSettingsPath = path.join(projectDir, '.codebuddy', 'settings.json');
+  const projectSettings = readOnlyServersFromFile(projectSettingsPath, 'project .codebuddy/settings.json', warnings, 'mcpServers-only');
+  if (projectSettings) {
+    for (const [name, config] of Object.entries(projectSettings)) {
+      if (seenServers.has(name)) continue;
+      const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
+      if (serverConfig.enabled !== false || options.includeDisabled) {
+        servers.push(serverConfig);
+      }
+      seenServers.add(name);
+    }
+  }
+
+  const userMCPPath = path.join(os.homedir(), '.codebuddy', 'mcp.json');
+  const userMCP = readOnlyServersFromFile(userMCPPath, 'user ~/.codebuddy/mcp.json', warnings, 'mcpServers-or-servers');
+  if (userMCP) {
+    for (const [name, config] of Object.entries(userMCP)) {
+      if (seenServers.has(name)) continue;
+      const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
+      if (serverConfig.enabled !== false || options.includeDisabled) {
+        servers.push(serverConfig);
+      }
+      seenServers.add(name);
+    }
+  }
+
+  return { servers, warnings };
 }
 
 export function saveMCPConfig(config: MCPConfig): void {
@@ -161,7 +298,8 @@ function updateEnabledInJsonFile(
   enabled: boolean,
 ): boolean {
   if (!fs.existsSync(filePath)) return false;
-  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+  const parsed = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null);
+  if (!parsed) return false;
   const key = parsed.mcpServers && typeof parsed.mcpServers === 'object' ? 'mcpServers' : 'servers';
   const servers = parsed[key];
   if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return false;
@@ -169,7 +307,7 @@ function updateEnabledInJsonFile(
   const existing = record[serverName];
   if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
   record[serverName] = { ...existing, enabled };
-  fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`);
+  writeJsonAtomicSync(filePath, parsed);
   return true;
 }
 
@@ -257,7 +395,7 @@ export function saveProjectMCPConfig(servers: Record<string, MCPServerConfig>): 
     mcpServers: servers
   };
 
-  fs.writeFileSync(projectMCPPath, JSON.stringify(config, null, 2));
+  writeJsonAtomicSync(projectMCPPath, config);
   return projectMCPPath;
 }
 
@@ -316,7 +454,7 @@ export function createMCPConfigTemplate(): string {
     }
   };
 
-  fs.writeFileSync(projectMCPPath, JSON.stringify(template, null, 2));
+  writeJsonAtomicSync(projectMCPPath, template);
   return projectMCPPath;
 }
 

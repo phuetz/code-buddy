@@ -5,25 +5,16 @@
  * clears metrics that exceed the configured TTL (V0.4.1 was warn-only).
  */
 
-// Set unique path per test file BEFORE imports — vitest pool=forks runs
-// files in parallel, races on the shared default location otherwise.
 import path from 'path';
 import os from 'os';
-process.env.CODEBUDDY_METRICS_PATH = path.join(
-  os.tmpdir(),
-  `codebuddy-metrics-test-${process.pid}-ttl.json`,
-);
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
-import {
-  clearMetrics,
-  _metricsPathForTests,
-} from '../../../src/agent/multi-agent/metrics-persistence.js';
 import { EnhancedCoordinator } from '../../../src/agent/multi-agent/enhanced-coordination.js';
 import type { AgentRole } from '../../../src/agent/multi-agent/types.js';
 
-const METRICS_PATH = _metricsPathForTests();
+let METRICS_PATH: string;
+let directory: string;
 
 async function fileExists(p: string): Promise<boolean> {
   try {
@@ -65,11 +56,14 @@ async function writeMetricsFile(savedAt: Date): Promise<void> {
 
 describe('Metrics TTL — V0.5 auto-clear (Phase d.21 ship 5)', () => {
   beforeEach(async () => {
-    await clearMetrics();
+    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'metrics-test-'));
+    METRICS_PATH = path.join(directory, 'metrics.json');
+    vi.stubEnv('CODEBUDDY_METRICS_PATH', METRICS_PATH);
   });
 
   afterEach(async () => {
-    await clearMetrics();
+    await fs.rm(directory, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   });
 
   it('fresh metrics (within TTL) are loaded into memory, file kept', async () => {

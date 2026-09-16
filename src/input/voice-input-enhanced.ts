@@ -6,6 +6,7 @@ import os from 'os';
 import { getErrorMessage } from '../types/index.js';
 import { commandExists } from '../utils/command-exists.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Axios-like error response structure
@@ -119,14 +120,8 @@ export class VoiceInputManager extends EventEmitter {
   private loadConfig(): void {
     const configPath = path.join(os.homedir(), '.codebuddy', 'voice-config.json');
 
-    if (fs.existsSync(configPath)) {
-      try {
-        const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        this.config = { ...this.config, ...saved };
-      } catch (_error) {
-        // Use defaults
-      }
-    }
+    const saved = readJsonAtomicSync<Partial<VoiceInputConfig>>(configPath, {});
+    this.config = { ...this.config, ...saved };
   }
 
   /**
@@ -142,8 +137,7 @@ export class VoiceInputManager extends EventEmitter {
       fs.chmodSync(configDir, 0o700);
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), { mode: 0o600 });
-    fs.chmodSync(configPath, 0o600);
+    writeJsonAtomicSync(configPath, this.config);
   }
 
   /**

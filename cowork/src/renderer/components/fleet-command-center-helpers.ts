@@ -1084,15 +1084,6 @@ export function sagaStatusTone(status: SagaSummary['status']): string {
   return 'text-text-secondary';
 }
 
-export function formatPeerSeenAt(lastSeenAt?: number): string {
-  if (!lastSeenAt || !Number.isFinite(lastSeenAt)) return '-';
-  const elapsedMs = Math.max(0, Date.now() - lastSeenAt);
-  if (elapsedMs < 60_000) return 'now';
-  if (elapsedMs < 3_600_000) return `${Math.floor(elapsedMs / 60_000)}m ago`;
-  if (elapsedMs < 86_400_000) return `${Math.floor(elapsedMs / 3_600_000)}h ago`;
-  return `${Math.floor(elapsedMs / 86_400_000)}d ago`;
-}
-
 export function shortId(id: string): string {
   return id.length <= 10 ? id : id.slice(0, 8);
 }

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface MCPProfile {
   name: string;
@@ -27,9 +28,7 @@ export function getMCPProfilesPath(cwd: string = process.cwd()): string {
 
 export function loadMCPProfiles(cwd?: string): MCPProfilesConfig {
   const filePath = getMCPProfilesPath(cwd);
-  if (!fs.existsSync(filePath)) return { ...EMPTY_CONFIG, profiles: {} };
-
-  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<MCPProfilesConfig>;
+  const parsed = readJsonAtomicSync<Partial<MCPProfilesConfig>>(filePath, {});
   const profiles = parsed.profiles && typeof parsed.profiles === 'object' ? parsed.profiles : {};
   return {
     version: 1,
@@ -40,8 +39,7 @@ export function loadMCPProfiles(cwd?: string): MCPProfilesConfig {
 
 export function saveMCPProfiles(config: MCPProfilesConfig, cwd?: string): string {
   const filePath = getMCPProfilesPath(cwd);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  writeJsonAtomicSync(filePath, config);
   return filePath;
 }
 

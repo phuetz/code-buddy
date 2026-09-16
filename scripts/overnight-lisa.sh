@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fully autonomous overnight Lisa bootstrap.
 set -uo pipefail
-ROOT="/home/patrice/code-buddy"
+ROOT="$HOME/code-buddy"
 cd "$ROOT"
 LOG="$ROOT/.codebuddy/lora/lisa/overnight.log"
 mkdir -p "$ROOT/.codebuddy/lora/lisa"

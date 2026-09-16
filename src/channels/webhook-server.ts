@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
@@ -342,12 +343,18 @@ export class WebhookServer extends EventEmitter {
         status,
       });
     } catch (error) {
+      const traceId = randomUUID();
+      logger.error('Webhook request failed', {
+        traceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.emit('error', error);
 
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: error instanceof Error ? error.message : 'Internal server error',
+          error: 'Internal server error',
+          traceId,
         })
       );
     }

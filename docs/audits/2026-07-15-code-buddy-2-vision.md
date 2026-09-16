@@ -109,7 +109,7 @@ de l'écosystème — et de la monétisation.
 ### INNOV-10 — Workspace multi-repo (`cb2/multi-repo`)
 Un `workspace.json` fédère N repos ; le contexte JIT, la recherche et l'impact
 deviennent **cross-repo**. L'agent raisonne sur l'écosystème entier
-(code-buddy + gitnexus-rs + NexusFile…), pas sur un dossier.
+(code-buddy + code-explorer + NexusFile…), pas sur un dossier.
 
 ## 4. Pourquoi ça surpasse les concurrents
 

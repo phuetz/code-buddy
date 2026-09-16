@@ -15,8 +15,8 @@ Code Buddy first looks for `.codebuddy/workspace.json` at the current Git reposi
       "description": "Main coding agent"
     },
     {
-      "name": "gitnexus-rs",
-      "path": "/work/gitnexus-rs"
+      "name": "code-explorer",
+      "path": "/work/code-explorer"
     }
   ]
 }

@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import { commandExists } from '../utils/command-exists.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface TTSConfig {
   enabled: boolean;
@@ -14,6 +15,7 @@ export interface TTSConfig {
   volume?: string;
   pitch?: string;
   autoSpeak?: boolean;
+  format?: 'wav' | 'ogg' | 'mp3';
 }
 
 export interface TTSState {
@@ -63,6 +65,7 @@ export class TextToSpeechManager extends EventEmitter {
       volume: config.volume || '+0%',
       pitch: config.pitch || '+0Hz',
       autoSpeak: config.autoSpeak ?? false,
+      format: config.format,
     };
 
     this.state = {
@@ -119,25 +122,14 @@ export class TextToSpeechManager extends EventEmitter {
   private loadConfig(): void {
     const configPath = path.join(os.homedir(), '.codebuddy', 'tts-config.json');
 
-    if (fs.existsSync(configPath)) {
-      try {
-        const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        this.config = { ...this.config, ...saved };
-      } catch {
-        // Use defaults
-      }
-    }
+    const saved = readJsonAtomicSync<Partial<TTSConfig>>(configPath, {});
+    this.config = { ...this.config, ...saved };
   }
 
   saveConfig(): void {
-    const configDir = path.join(os.homedir(), '.codebuddy');
-    const configPath = path.join(configDir, 'tts-config.json');
+    const configPath = path.join(os.homedir(), '.codebuddy', 'tts-config.json');
 
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-
-    fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
+    writeJsonAtomicSync(configPath, this.config);
   }
 
   /**
@@ -152,7 +144,7 @@ export class TextToSpeechManager extends EventEmitter {
         });
         return { available: res.ok };
       } catch {
-        return { available: false, reason: 'AudioReader not running. Start it with: cd ~/claude/AudioReader && python main.py' };
+        return { available: false, reason: 'AudioReader not running. Start the AudioReader HTTP service (default http://localhost:8000).' };
       }
     }
 
@@ -412,6 +404,9 @@ export class TextToSpeechManager extends EventEmitter {
    */
   private async speakWithAudioReader(text: string): Promise<void> {
     const voice = this.config.voice || 'ff_siwis';
+    const format = this.config.format === 'ogg' || this.config.format === 'mp3'
+      ? this.config.format
+      : 'wav';
     const response = await fetch(`${this.audioreaderBaseURL}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -420,7 +415,7 @@ export class TextToSpeechManager extends EventEmitter {
         input: text,
         voice,
         speed: 1.0,
-        response_format: 'wav',
+        response_format: format,
       }),
     });
 
@@ -428,7 +423,7 @@ export class TextToSpeechManager extends EventEmitter {
       throw new Error(`AudioReader TTS error: ${response.status} ${await response.text()}`);
     }
 
-    const audioFile = path.join(this.tempDir, `tts_${Date.now()}.wav`);
+    const audioFile = path.join(this.tempDir, `tts_${Date.now()}.${format}`);
     const buffer = Buffer.from(await response.arrayBuffer());
     fs.writeFileSync(audioFile, buffer);
 

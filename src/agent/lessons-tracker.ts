@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 import { getLessonProvenanceIndex } from './lesson-provenance.js';
 import { BM25Index } from '../search/bm25.js';
 
@@ -469,7 +470,7 @@ export class LessonsTracker {
       const projectItems = this.items.filter(item =>
         this.locationsOf(item.id).some(loc => loc.path === this.projectPath),
       );
-      fs.writeFileSync(this.projectPath, this.serialiseItems(projectItems), 'utf-8');
+      writeFileAtomicSync(this.projectPath, this.serialiseItems(projectItems), { mode: 0o600 });
     });
   }
 
@@ -539,9 +540,9 @@ export class LessonsTracker {
     this.load();
     const item = this.items.find(i => i.id === id);
     if (!item) return undefined;
-    // The line format is `- [id] content <!-- date source[:context] -->`: the
-    // parser cuts content at the first `<!--`, and context is matched by
-    // `[^-]+` so it cannot contain hyphens; both must stay single-line.
+    // The line format is `- [id] content <!-- date source[:context] -->`:
+    // the parser cuts content at the first `<!--`; context is a single
+    // token (hyphens allowed, e.g. audit-execution) and must stay one line.
     if (patch.content !== undefined) {
       const content = patch.content.trim();
       if (!content) throw new Error('lesson content cannot be empty');
@@ -553,8 +554,8 @@ export class LessonsTracker {
     if (patch.category !== undefined) item.category = patch.category;
     if (patch.context !== undefined) {
       const context = patch.context === null ? '' : patch.context.trim();
-      if (/[-\r\n]/.test(context)) {
-        throw new Error('lesson context cannot contain hyphens or newlines (markdown metadata format)');
+      if (/[\r\n]/.test(context) || /\s/.test(context) || context.includes('<!--') || context.includes('-->')) {
+        throw new Error('lesson context must be a single token without whitespace or HTML comment markers');
       }
       if (context) item.context = context;
       else delete item.context;
@@ -597,9 +598,7 @@ export class LessonsTracker {
       const next = mutate(this.loadFile(filePath));
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const tmp = `${filePath}.tmp`;
-      fs.writeFileSync(tmp, this.serialiseItems(next), 'utf-8');
-      fs.renameSync(tmp, filePath);
+      writeFileAtomicSync(filePath, this.serialiseItems(next), { mode: 0o600 });
     });
   }
 
@@ -970,9 +969,9 @@ export class LessonsTracker {
   }
 
   private loadFile(filePath: string): LessonItem[] {
-    if (!fs.existsSync(filePath)) return [];
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = readTextAtomicSync(filePath, '');
+      if (!content) return [];
       return this.parseMd(content);
     } catch {
       return [];
@@ -991,8 +990,11 @@ export class LessonsTracker {
         continue;
       }
 
-      // Item: - [id] content <!-- date source:context -->
-      const itemMatch = rawLine.match(/^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::([^-]+))? -->/);
+      // Item: - [id] content <!-- date source[:context] -->
+      // Context is a single token (hyphens allowed: audit-execution).
+      const itemMatch = rawLine.match(
+        /^- \[([^\]]+)\] (.+?) <!-- ([^\s]+) ([^\s:]+)(?::(.+?))? -->\s*$/,
+      );
       if (itemMatch) {
         const [, id, rawContent, dateStr, sourceStr, ctx] = itemMatch;
         if (id === undefined || rawContent === undefined || dateStr === undefined || sourceStr === undefined) continue;
@@ -1003,6 +1005,23 @@ export class LessonsTracker {
           createdAt: new Date(dateStr).getTime() || 0,
           source: (sourceStr as LessonItem['source']) ?? 'manual',
           context: ctx?.trim() || undefined,
+        });
+        continue;
+      }
+
+      // Tagged fallback: keep a stored [id] even if the metadata comment is missing
+      // or slightly off — never invent a new id for a line that already has one.
+      const taggedMatch = rawLine.match(/^- \[([^\]]+)\] (.+)$/);
+      if (taggedMatch) {
+        const taggedId = taggedMatch[1];
+        const taggedContent = taggedMatch[2];
+        if (taggedId === undefined || taggedContent === undefined) continue;
+        items.push({
+          id: taggedId,
+          content: taggedContent.trim(),
+          category: currentCategory,
+          createdAt: 0,
+          source: 'manual',
         });
         continue;
       }

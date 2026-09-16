@@ -1,4 +1,6 @@
-import { appendFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { appendFile, mkdir } from 'fs/promises';
+import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import * as path from 'path';
 import type { ChannelManager, ChannelType, ContentType } from '../channels/core.js';
 import { readSendMessageOutbox } from '../channels/send-message.js';
@@ -35,6 +37,7 @@ export interface CompanionGatewayOptions {
   cwd?: string;
   now?: Date;
   storePath?: string;
+  channelManager?: ChannelManager;
 }
 
 export interface CompanionGatewayUpdateOptions extends CompanionGatewayOptions {
@@ -344,35 +347,39 @@ function sortChannels(channels: CompanionGatewayChannelConfig[]): CompanionGatew
 }
 
 async function writeProfile(profile: CompanionGatewayProfile): Promise<void> {
-  await mkdir(path.dirname(profile.storePath), { recursive: true });
-  await writeFile(profile.storePath, `${JSON.stringify(profile, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(profile.storePath, profile, { mode: 0o600 });
 }
 
 export async function readCompanionGatewayProfile(
   options: CompanionGatewayOptions = {},
 ): Promise<CompanionGatewayProfile> {
   const fallback = emptyProfile(options);
-  let raw: string;
+  const record = await readJsonAtomic<Partial<CompanionGatewayProfile> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionGatewayProfile> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+        && Array.isArray((value as { channels?: unknown }).channels),
+    ),
+  });
+  if (!record) return fallback;
   try {
-    raw = await readFile(fallback.storePath, 'utf8');
-  } catch {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<CompanionGatewayProfile>;
-    const defaultMode = isMode(parsed.defaultMode) ? parsed.defaultMode : fallback.defaultMode;
-    const parsedChannels = Array.isArray(parsed.channels)
-      ? parsed.channels.map(item => parseChannel(item, defaultMode)).filter((item): item is CompanionGatewayChannelConfig => Boolean(item))
-      : [];
+    const defaultMode = isMode(record.defaultMode) ? record.defaultMode : fallback.defaultMode;
+    const parsedChannels: CompanionGatewayChannelConfig[] = [];
+    for (const item of record.channels ?? []) {
+      const channel = parseChannel(item, defaultMode);
+      if (!channel) {
+        return fallback;
+      }
+      parsedChannels.push(channel);
+    }
     const byChannel = new Map<string, CompanionGatewayChannelConfig>();
     for (const channel of fallback.channels) byChannel.set(channel.channel, channel);
     for (const channel of parsedChannels) byChannel.set(channel.channel, channel);
     return {
       schemaVersion: 1,
-      cwd: typeof parsed.cwd === 'string' ? parsed.cwd : fallback.cwd,
+      cwd: typeof record.cwd === 'string' ? record.cwd : fallback.cwd,
       storePath: fallback.storePath,
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : fallback.updatedAt,
+      updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : fallback.updatedAt,
       defaultMode,
       channels: sortChannels([...byChannel.values()]),
     };
@@ -434,6 +441,7 @@ export async function buildCompanionGatewayLifecycleReport(
     readCompanionGatewayInbox({ cwd, now }),
     readSendMessageOutbox(cwd),
   ]);
+  const manager = await resolveChannelManager(options);
   const itemsByChannel = new Map<ChannelType, CompanionGatewayInboxItem[]>();
   for (const item of inbox.items) {
     const existing = itemsByChannel.get(item.channel) || [];
@@ -449,7 +457,11 @@ export async function buildCompanionGatewayLifecycleReport(
     const fleetDraftCount = items.filter(item => Boolean(item.draft?.fleet)).length;
     const replyDraftCount = items.filter(item => Boolean(item.draft?.fleet?.outboundReply)).length;
     const lastSendStatus = items.map(lastSendStatusFor).find(Boolean);
+    const adapterRunning = Boolean(manager.getChannel(channel.channel)?.getStatus().connected);
     const issues: string[] = [];
+    if (channel.enabled && channel.mode !== 'observe' && !adapterRunning) {
+      issues.push('adapter not running');
+    }
     if (channel.enabled && channel.mode !== 'observe' && queueCount > 0) {
       issues.push('queued gateway items require local review');
     }
@@ -774,7 +786,7 @@ export async function buildCompanionGatewayAdminPlan(
 function runtimeSnapshot(
   manager: ChannelManager,
   channel: ChannelType,
-): CompanionGatewayAdminExecutionRecord['result']['runtimeBefore'] {
+): NonNullable<CompanionGatewayAdminExecutionRecord['result']['runtimeBefore']> {
   const registered = Boolean(manager.getChannel(channel));
   const status = manager.getStatus()[channel];
   return {
@@ -789,7 +801,7 @@ function runtimeSnapshot(
   };
 }
 
-async function resolveChannelManager(options: CompanionGatewayAdminExecutionOptions): Promise<ChannelManager> {
+async function resolveChannelManager(options: CompanionGatewayOptions): Promise<ChannelManager> {
   if (options.channelManager) return options.channelManager;
   const { getChannelManager } = await import('../channels/index.js');
   return getChannelManager();
@@ -931,7 +943,18 @@ export async function executeCompanionGatewayAdminAction(
       }
     }
 
-    result.runtimeAfter = runtimeSnapshot(manager, input.channel);
+    const runtimeAfter = runtimeSnapshot(manager, input.channel);
+    result.runtimeAfter = runtimeAfter;
+    if (input.action === 'start' || input.action === 'reconnect') {
+      if (!(result.registered ?? []).includes(input.channel) && !result.error) {
+        result.error = (result.skipped ?? []).includes(input.channel)
+          ? `Channel ${input.channel} was skipped (not enabled in channels.json)`
+          : `Channel ${input.channel} adapter is not running`;
+      }
+      if (!result.error && runtimeAfter.registered && runtimeAfter.connected !== true) {
+        result.error = `Channel ${input.channel} adapter is not connected`;
+      }
+    }
     const failed = Boolean(result.error || result.failed?.length);
     const record: CompanionGatewayAdminExecutionRecord = {
       ...baseRecord,

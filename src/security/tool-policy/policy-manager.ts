@@ -36,6 +36,7 @@ import { DEFAULT_POLICY_CONFIG } from './types.js';
 import { PolicyResolver } from './policy-resolver.js';
 import { getProfile, getProfileNames } from './profiles.js';
 import { getToolGroups, registerToolGroups } from './tool-groups.js';
+import { writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 // ============================================================================
 // Policy Manager
@@ -417,7 +418,7 @@ export class PolicyManager extends EventEmitter {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+      writeJsonAtomicSync(this.configPath, this.config, { mode: 0o600 });
       this.emit('policy:config-saved', { config: this.config });
     } catch (error) {
       this.emit('policy:error', { error: error as Error });

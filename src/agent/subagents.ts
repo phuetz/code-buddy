@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { formatToolResultForRecovery } from "../context/restorable-compression.js";
+import { resolveMultiAgentModel } from "./multi-agent/base-agent.js";
 import {
   commandFromToolArguments,
   prepareToolObservationForPrompt,
@@ -500,7 +501,14 @@ export class SubagentManager {
       return null;
     }
 
-    const agent = new Subagent(this.apiKey, config, this.baseURL);
+    const agent = new Subagent(
+      this.apiKey,
+      {
+        ...config,
+        model: resolveMultiAgentModel(config.model, undefined, process.env.GROK_MODEL),
+      },
+      this.baseURL,
+    );
     this.runningAgents.set(`${name}-${Date.now()}`, agent);
     return agent;
   }

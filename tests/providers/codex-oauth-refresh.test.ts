@@ -40,6 +40,35 @@ afterEach(() => {
 });
 
 describe('refreshChatGptAuth', () => {
+  it('reports failed persistence and releases the in-flight refresh lock', async () => {
+    writeRecentAuth();
+    const authPath = path.join(tmpHome, '.codebuddy', 'codex-auth.json');
+    const original = fs.readFileSync(authPath, 'utf8');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        id_token: makeJwt(),
+        access_token: 'fresh-access',
+        refresh_token: 'rotating-refresh-2',
+      }), { status: 200 }),
+    );
+    const atomic = await import('../../src/utils/atomic-write.js');
+    const write = vi.spyOn(atomic, 'writeJsonAtomicSync').mockImplementationOnce(() => {
+      throw new Error('simulated disk write failure');
+    });
+    const { refreshChatGptAuth } = await import('../../src/providers/codex-oauth.js');
+    expect(await refreshChatGptAuth()).toBeNull();
+    expect(fs.readFileSync(authPath, 'utf8')).toBe(original);
+    write.mockRestore();
+    // The issuer may have rotated the old token already; a new attempt must
+    // reach it, rather than reuse the failed promise or claim recovery.
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response('invalid_grant', { status: 400 }),
+    );
+    expect(await refreshChatGptAuth()).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(fs.readFileSync(authPath, 'utf8')).toBe(original);
+  });
+
   it('forces refresh of a recent token and coalesces concurrent 401 recovery', async () => {
     writeRecentAuth();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

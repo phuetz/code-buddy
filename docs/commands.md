@@ -128,10 +128,10 @@ sont jamais imprimées par `status` sans `--reveal`.
 ### Dev Workflows
 
 ```bash
-buddy dev plan "<objective>"       # Profile repo + produce task plan
-buddy dev run "<objective>"        # Plan + implement + test + artifacts
-buddy dev pr "<objective>"         # Dev run + generate PR summary
-buddy dev fix-ci [--log <file>]    # Read CI logs + propose patch
+buddy dev plan "<objective>"       # Profile repo + write PLAN.md (exit 1 if the plan is empty)
+buddy dev run [objective]          # Resume PLAN.md if omitted; WritePolicy.strict / apply_patch; test; conventional commit
+buddy dev pr [objective]           # Print title/body, gh pr create (fail-closed without gh); local remotes are pushed
+buddy dev fix-ci [--log <file>]    # Requires --log or piped CI output (does not hang on an empty pipe)
 buddy dev issue <url-or-number>    # GitHub issue -> branch -> code -> tests -> PR
 buddy dev explain                  # Summarize repo conventions
 ```
@@ -141,7 +141,7 @@ buddy dev explain                  # Summarize repo conventions
 ```bash
 buddy cost [--last] [--session <id>] [--since <7d|YYYY-MM-DD>] [--by <model|provider|day>] [--json] # Read-only cost & token dashboard
 buddy changelog [--since <tag|YYYY-MM-DD|ref>] [--to <ref>] [--out <CHANGELOG.md>] [--json]         # Grouped release notes from Conventional Commits
-buddy import [--from <path>] [--dry-run]                                                             # Import Cursor/Cline/Copilot/Claude Code rules & MCP servers
+buddy import [--from <path>] [--dry-run]                                                             # Import Cursor/Cline/Copilot/Claude Code rules & MCP (`.mcp.json`, `settings.json`)
 buddy explain [path] [--out <f.md|.html>] [--depth <quick|deep>] [--html]                          # One-shot repository explanation report
 ```
 
@@ -258,6 +258,8 @@ buddy forge create|evaluate|compare|select ...                              # pr
 buddy exchange constitution|bid|rank|rehearse|award|reject ...              # policy-gated multi-LLM/Fleet market and Shadow Twin
 buddy capsule list|create|activate|revoke ...                               # proof-backed portable workflows from proven outcomes
 buddy autonomy status|run|briefing|bench|tasks ...                          # buddy colab ... is an alias
+#   tasks add "<title>" [--verify-command cmd] [--files-to-modify a,b] [--acceptance-criteria ...]
+#   run [--executor artifact|agent] [--workspace dir] [--verify] [--max-ticks N]
 buddy llm
 buddy llm ensemble "<question>"
 buddy council "<task>" [-n 3] [--models gpt,ollama] [--judge <model>] [--task-type code|reasoning|french|vision|general] [--fleet] [--no-conductor] [--no-synthesis] [--no-consensus]
@@ -497,9 +499,19 @@ buddy execpolicy check | check-argv | add-prefix | dashboard
 
 ```bash
 buddy deploy platforms | init | nix
-buddy update [--channel stable|beta|dev] [--check] [--force] [--tag <ref>]
-buddy backup create | verify | list | restore [--only-config] [--no-include-workspace]
+buddy update [--channel stable|beta|dev] [--check] [--dry-run] [--force] [--tag <ref>]
+buddy backup create | verify | list | restore [--only-config] [--no-include-workspace] [--output <dir>] [--confirm]
 ```
+
+`buddy backup` archives the **current project's** `.codebuddy/` directory
+(the working directory when you run the command). Archives are stored in
+`~/.codebuddy/backups` by default (`--output` overrides that). It does
+**not** back up the home profile (`~/.codebuddy` memory, global sessions,
+skills). Restore **merges**: files present in the archive overwrite
+matching paths; extra files already in the project `.codebuddy/` are
+left in place. `restore` requires `--confirm`. Files larger than 1 MB,
+`screenshots/`, `tool-results/`, `runs/`, `browser-data/`, and symbolic
+links are skipped on create.
 
 ### Setup
 
@@ -658,6 +670,7 @@ buddy run search <query> [--json]   # Search run summaries, events, artifacts
 buddy run index-doctor [--repair]   # Report/repair stale artifact index rows (pruned/moved runs)
 buddy run lineage <run-id>          # Show the fork family tree of a run (ancestors + descendants)
 buddy run recall-pack <query>       # Build a cited context handoff from runs
+buddy run trajectory <run-id> [--json] [--since]  # Unified read-only trajectory (tools, permissions, cost, side effects)
 buddy run trajectory-export <run-id> # Export a redacted run trajectory for audit/evals
 buddy run trajectory-batch [query]  # Export redacted trajectory batch + compressed context
 buddy run retrospective <run-id>    # Run the Learning Agent over a trajectory
@@ -677,12 +690,12 @@ buddy run mobile-pairing-acceptance-plan <query>
                                   # Build no-network pairing acceptance plan
 buddy run mobile-approval-queue <query>
                                   # Build local-only approval queue state
-buddy run tail [--follow]           # Tail the active run; --follow streams as it grows
-buddy run replay <run-id>           # Replay a run's tool events for debugging
+buddy run tail <run-id>             # Stream events of a running or completed run
+buddy run replay <run-id>           # Re-execute recorded view_file reads and test commands
 ```
 
-Runs are persisted as JSONL in `.codebuddy/runs/`. Each run captures
-the message thread, tool calls, results, errors, and timing. Combine
+Runs are persisted as JSONL under `CODEBUDDY_RUNS_DIR` (default `~/.codebuddy/runs`).
+Each run captures the message thread, tool calls, results, errors, and timing. Combine
 with `OTEL_EXPORTER_OTLP_ENDPOINT` for remote traces or `SENTRY_DSN`
 for error reporting (see `docs/configuration.md`).
 
@@ -690,6 +703,15 @@ for error reporting (see `docs/configuration.md`).
 ages, event counts, artifact counts, and only generic run sources; arbitrary
 run channel labels are collapsed to `custom` so operator diagnostics can be
 pasted into handoffs without exposing private channel names.
+
+`buddy run trajectory <run-id> [--json] [--since]` is a **read-only** unified
+view of one run assembled from journals that already exist (RunStore events,
+metrics, audit JSONL if present, session timeline when `CODEBUDDY_TIMELINE=true`,
+session turn usage, `cost-history.json`, `rule-runs.jsonl`). It does not write
+new telemetry. Missing fields print `non journalisé` and are listed in
+`unlogged`. `--since` accepts an ISO-8601 timestamp or epoch milliseconds.
+JSON is schemaVersion 1 (`kind: run_trajectory`), distinct from the redacted
+eval export below. Always available: no opt-in flag.
 
 `buddy run trajectory-export <run-id> --json` exports the run objective,
 selected context, tool calls, tool results, artifacts and final answer through

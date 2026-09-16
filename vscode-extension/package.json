@@ -4,6 +4,7 @@
   "description": "AI-powered terminal assistant for VS Code",
   "version": "1.0.0",
   "publisher": "code-buddy",
+  "license": "BUSL-1.1",
   "repository": {"type": "git", "url": "https://github.com/phuetz/code-buddy"},
   "engines": {"vscode": "^1.85.0"},
   "categories": ["Programming Languages", "Machine Learning"],

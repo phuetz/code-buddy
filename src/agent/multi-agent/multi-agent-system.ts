@@ -35,6 +35,7 @@ import { OrchestratorAgent, createOrchestratorAgent } from "./agents/orchestrato
 import { CoderAgent, createCoderAgent } from "./agents/coder-agent.js";
 import { ReviewerAgent, createReviewerAgent } from "./agents/reviewer-agent.js";
 import { TesterAgent, createTesterAgent } from "./agents/tester-agent.js";
+import { ThreadTaskRunner } from "../delegation/thread-task-runner.js";
 
 /**
  * Default workflow options
@@ -65,6 +66,9 @@ export class MultiAgentSystem extends EventEmitter {
   private tools: CodeBuddyTool[] = [];
   private toolExecutor: ToolExecutor;
   private defaultRegistryInitialized = false;
+  private activeThreadRunner: ThreadTaskRunner<AgentTask, AgentExecutionResult> | null = null;
+  private threadEventDrain: Promise<void> | null = null;
+  private readonly delegatedCostByRole = new Map<AgentRole, number>();
 
   /**
    * Handler references captured when forwarding agent events, so dispose
@@ -306,6 +310,10 @@ export class MultiAgentSystem extends EventEmitter {
       await this.initializeTools();
     }
 
+    if (opts.threadDelegation) {
+      this.startThreadDelegation(opts.threadDelegation);
+    }
+
     const startTime = Date.now();
     const results = new Map<string, AgentExecutionResult>();
     const errors: string[] = [];
@@ -443,8 +451,70 @@ export class MultiAgentSystem extends EventEmitter {
       return workflowResult;
 
     } finally {
+      await this.closeThreadDelegation();
       this.isRunning = false;
     }
+  }
+
+  private startThreadDelegation(
+    options: NonNullable<WorkflowOptions["threadDelegation"]>,
+  ): void {
+    if (this.activeThreadRunner) {
+      throw new Error("A threaded workflow is already active");
+    }
+    this.delegatedCostByRole.clear();
+    const runner = new ThreadTaskRunner<AgentTask, AgentExecutionResult>({
+      parentBudget: options.parentBudget,
+      ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
+      ...(options.parentSignal === undefined ? {} : { parentSignal: options.parentSignal }),
+      createAgent: ({ agentId }) => {
+        const role = agentId as AgentRole;
+        const agent = this.agents.get(role);
+        if (!agent) throw new Error(`No agent found for delegated role: ${agentId}`);
+        return {
+          execute: async (task) => {
+            const result = await agent.execute(
+              task,
+              this.sharedContext,
+              this.tools,
+              this.toolExecutor,
+            );
+            if (this.costManager && result.costUsd === undefined) {
+              const model = (agent as unknown as { model?: string }).model ?? "default";
+              result.costUsd = await this.costManager.recordExact(result, model, result.rounds);
+            }
+            this.delegatedCostByRole.set(
+              role,
+              (this.delegatedCostByRole.get(role) ?? 0) + (result.costUsd ?? 0),
+            );
+            return result;
+          },
+          abortCurrentOperation: () => agent.stop(),
+          dispose: () => undefined,
+          getSessionCost: () => this.delegatedCostByRole.get(role) ?? 0,
+        };
+      },
+    });
+    this.activeThreadRunner = runner;
+    this.threadEventDrain = (async () => {
+      for await (const event of runner.events()) {
+        try {
+          options.onEvent?.(event);
+        } catch {
+          // A display callback must never stop draining the shared channel.
+        }
+      }
+    })();
+  }
+
+  private async closeThreadDelegation(): Promise<void> {
+    const runner = this.activeThreadRunner;
+    const drain = this.threadEventDrain;
+    this.activeThreadRunner = null;
+    this.threadEventDrain = null;
+    if (!runner) return;
+    await runner.close();
+    await drain;
   }
 
   /**
@@ -740,20 +810,33 @@ export class MultiAgentSystem extends EventEmitter {
         return;
       }
 
-      // Execute the task
-      const result = await agent.execute(
-        task,
-        this.sharedContext,
-        this.tools,
-        this.toolExecutor
-      );
+      // `/swarm` opts into the bounded ThreadDelegation transport. Ordinary
+      // `/agents` calls retain their existing direct execution path.
+      let result: AgentExecutionResult;
+      if (this.activeThreadRunner) {
+        const delegated = await this.activeThreadRunner.submit(agent.getRole(), task);
+        if (!delegated.success || delegated.output === undefined) {
+          throw new Error(
+            delegated.message ??
+              `Delegated task stopped (${delegated.reason ?? "missing output"})`,
+          );
+        }
+        result = delegated.output;
+      } else {
+        result = await agent.execute(
+          task,
+          this.sharedContext,
+          this.tools,
+          this.toolExecutor,
+        );
+      }
 
       results.set(task.id, result);
 
       // Phase L (V0.4) — record cost (exact if token counts in result,
       // else estimation). Mutates result.costUsd so EnhancedCoordinator
       // can pick it up via recordTaskCompletion.
-      if (this.costManager) {
+      if (this.costManager && result.costUsd === undefined) {
         const model = (agent as unknown as { model?: string }).model ?? 'default';
         const cost = await this.costManager.recordExact(result, model, result.rounds);
         result.costUsd = cost;
@@ -873,6 +956,7 @@ export class MultiAgentSystem extends EventEmitter {
    */
   stop(): void {
     this.isRunning = false;
+    this.activeThreadRunner?.cancel("Parent workflow stopped");
     for (const agent of this.agents.values()) {
       agent.stop();
     }
@@ -973,6 +1057,8 @@ export class MultiAgentSystem extends EventEmitter {
    * MultiAgentSystem through their own listener arrays.
    */
   dispose(): void {
+    this.activeThreadRunner?.cancel("Multi-agent system disposed");
+    for (const agent of this.agents.values()) agent.stop();
     this.reset();
     for (const [role, handlers] of this.agentListeners) {
       const agent = this.agents.get(role);

@@ -29,6 +29,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, readTextAtomicSync, writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export const SPEC_SCHEMA_VERSION = 1;
 
@@ -258,7 +259,7 @@ export class SpecStore {
   writeArtifact(projectId: string, name: SpecArtifactName, content: string): void {
     this.requireProject(projectId);
     this.ensureProjectDirs(projectId);
-    fs.writeFileSync(this.artifactPath(projectId, name), content ?? '', 'utf-8');
+    writeFileAtomicSync(this.artifactPath(projectId, name), content ?? '', { mode: 0o600 });
   }
 
   /** Read a planning artifact back (the human may have edited it); null if absent. */
@@ -266,7 +267,7 @@ export class SpecStore {
     const filePath = this.artifactPath(projectId, name);
     if (!fs.existsSync(filePath)) return null;
     try {
-      return fs.readFileSync(filePath, 'utf-8');
+      return readTextAtomicSync(filePath, '');
     } catch (err) {
       logger.warn('[spec] failed to read artifact', { filePath, error: String(err) });
       return null;
@@ -286,7 +287,7 @@ export class SpecStore {
       summary: (input.summary ?? '').trim(),
       createdAt: Date.now(),
     };
-    fs.writeFileSync(this.epicPath(projectId, epic.id), renderEpicMarkdown(epic), 'utf-8');
+    writeFileAtomicSync(this.epicPath(projectId, epic.id), renderEpicMarkdown(epic), { mode: 0o600 });
     return epic;
   }
 
@@ -446,7 +447,7 @@ export class SpecStore {
 
   private writeStory(story: SpecStory): void {
     this.ensureProjectDirs(story.projectId);
-    fs.writeFileSync(this.storyPath(story.projectId, story.id), renderStoryMarkdown(story), 'utf-8');
+    writeFileAtomicSync(this.storyPath(story.projectId, story.id), renderStoryMarkdown(story), { mode: 0o600 });
   }
 
   private requireProject(projectId: string): SpecProject {
@@ -509,13 +510,13 @@ export class SpecStore {
 
   private writeJson(filePath: string, value: unknown): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf-8');
+    writeJsonAtomicSync(filePath, value, { mode: 0o600 });
   }
 
   private readJson<T>(filePath: string): T | null {
     if (!fs.existsSync(filePath)) return null;
     try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+      return readJsonAtomicSync<T | null>(filePath, null, { mode: 0o600 });
     } catch (err) {
       logger.warn('[spec] failed to read json', { filePath, error: String(err) });
       return null;

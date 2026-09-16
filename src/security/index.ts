@@ -64,6 +64,14 @@ export {
   type SandboxResult,
 } from './sandbox.js';
 
+export {
+  NATIVE_SANDBOX_ENV,
+  confineSpawn,
+  detectNativeSandboxCapabilities,
+  formatDoctorLine,
+  isNativeSandboxEnabled,
+} from './native-sandbox.js';
+
 // Credential management
 export {
   CredentialManager,
@@ -120,6 +128,21 @@ export {
   resetSecurityAuditor,
   DEFAULT_SECURITY_AUDIT_CONFIG,
 } from './security-audit.js';
+
+// Pack Contents Policy
+export type {
+  PackViolation,
+  PackAuditResult,
+  PackPolicyOptions,
+} from './pack-contents-policy.js';
+
+export {
+  auditPackContents,
+  DEFAULT_ALLOWED_PREFIXES,
+  FORBIDDEN_DIRECTORIES,
+  FORBIDDEN_PATTERNS,
+  FORBIDDEN_PERSONAL_PATTERNS,
+} from './pack-contents-policy.js';
 
 import { EventEmitter } from 'events';
 import { getApprovalModeManager, ApprovalMode, ApprovalResult, OperationRequest } from './approval-modes.js';

@@ -228,10 +228,15 @@ export {
 // Batch handlers (CC13 — parallel task decomposition)
 export {
   handleBatchCommand,
+  handleBatchSlashCommand,
   decomposeBatchGoal,
   executeBatchPlan,
   formatBatchPlan,
   formatBatchResults,
+  parseNumberedBatchUnits,
+  unitsShareFiles,
+  createBatchChatFn,
+  createDefaultBatchSpawnFn,
 } from './batch-handlers.js';
 
 // Starter pack handlers
@@ -380,3 +385,11 @@ export {
 
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';
+
+// R5 slash handlers backed by existing read-only/session/checkpoint services
+export {
+  handleRedo,
+  handleTimeline,
+  handleKnowledgeGraph,
+  handleApprovals,
+} from './slash-session-handlers.js';

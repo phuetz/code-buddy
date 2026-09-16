@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { createScienceCommand } from '../../src/commands/science/index.js';
+import { createScienceCommand, sciencePassExitCode } from '../../src/commands/science/index.js';
 import { resolveScienceSandbox } from '../../src/commands/science/sandbox-option.js';
 import { resolveLoopBudget, parseDuration } from '../../src/commands/science/loop-option.js';
 
@@ -68,6 +68,21 @@ describe('buddy science — opt-in gate', () => {
 // --------------------------------------------------------------------------
 // Phase 3 — loop budget resolution (pure)
 // --------------------------------------------------------------------------
+
+describe('buddy science — CLI exit code', () => {
+  it('exits 1 when the plan gate declined (nothing executed)', () => {
+    expect(sciencePassExitCode('declined-at-plan-gate')).toBe(1);
+  });
+
+  it('exits 1 on a hard stage failure', () => {
+    expect(sciencePassExitCode('failed')).toBe(1);
+  });
+
+  it('exits 0 when the experiment ran but publish was declined', () => {
+    expect(sciencePassExitCode('declined-at-publish-gate')).toBe(0);
+    expect(sciencePassExitCode('published')).toBe(0);
+  });
+});
 
 describe('buddy science --loop — Phase 3 budget resolution', () => {
   it('no flags, no env ⇒ ok with an empty budget (the loop applies conservative defaults)', () => {

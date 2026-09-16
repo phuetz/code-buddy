@@ -7,11 +7,12 @@
  * generated speech.
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type VoiceTurnPhase =
   | 'idle'
@@ -29,6 +30,7 @@ export type VoiceSceneClass =
   | 'near_speech'
   | 'broadcast'
   | 'assistant_playback'
+  | 'assistant_echo'
   | 'noise'
   | 'unknown';
 
@@ -43,6 +45,8 @@ export interface VoiceTurnTransitionDetails {
   firstAudioMs?: number;
   totalMs?: number;
   wordCount?: number;
+  /** One-based phrase that was active when a spoken turn was interrupted. */
+  interruptedAtSentence?: number;
   spoke?: boolean;
   aecActive?: boolean;
   errorCategory?: 'capture' | 'stt' | 'decision' | 'generation' | 'synthesis' | 'playback' | 'unknown';
@@ -106,7 +110,8 @@ export function readVoiceRuntimeSnapshot(
   path = resolveVoiceRuntimeFile(),
 ): VoiceTurnRuntimeSnapshot | null {
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as VoiceTurnRuntimeSnapshot;
+    const parsed = readJsonAtomicSync<VoiceTurnRuntimeSnapshot | null>(path, null);
+    if (!parsed) return null;
     if (parsed.version !== 1 || !PHASES.has(parsed.phase) || !parsed.counters) return null;
     const recent = Array.isArray(parsed.recent)
       ? parsed.recent.slice(-200).flatMap((item) => {
@@ -200,6 +205,9 @@ function sanitizeDetails(details: VoiceTurnTransitionDetails): VoiceTurnTransiti
       : {}),
     ...(finiteNonNegative(details.wordCount) !== undefined
       ? { wordCount: finiteNonNegative(details.wordCount) }
+      : {}),
+    ...(finiteNonNegative(details.interruptedAtSentence) !== undefined
+      ? { interruptedAtSentence: finiteNonNegative(details.interruptedAtSentence) }
       : {}),
     ...(details.spoke !== undefined ? { spoke: details.spoke } : {}),
     ...(details.aecActive !== undefined ? { aecActive: details.aecActive } : {}),
@@ -320,11 +328,8 @@ export class VoiceTurnCoordinator {
 
   private persist(snapshot: VoiceTurnRuntimeSnapshot): void {
     if (!this.persistEnabled) return;
-    const temporary = `${this.runtimeFile}.${process.pid}.tmp`;
     try {
-      mkdirSync(dirname(this.runtimeFile), { recursive: true });
-      writeFileSync(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, this.runtimeFile);
+      writeJsonAtomicSync(this.runtimeFile, snapshot, { mode: 0o600 });
     } catch (error) {
       logger.debug('[voice-turn] runtime snapshot write skipped', {
         error: error instanceof Error ? error.message : String(error),

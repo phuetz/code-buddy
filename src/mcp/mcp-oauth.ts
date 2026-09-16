@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { URL } from 'url';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -126,7 +127,8 @@ function getTokenFilePath(): string {
 function loadTokenStore(): StoredTokens {
   const filePath = getTokenFilePath();
   try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
+    const raw = readTextAtomicSync(filePath, '');
+    if (!raw) return {};
     const decrypted = decryptData(raw);
     return JSON.parse(decrypted);
   } catch {
@@ -141,7 +143,7 @@ function saveTokenStore(store: StoredTokens): void {
     fs.mkdirSync(dir, { recursive: true });
   }
   const encrypted = encryptData(JSON.stringify(store));
-  fs.writeFileSync(filePath, encrypted, { mode: 0o600 });
+  writeFileAtomicSync(filePath, encrypted, { mode: 0o600 });
 }
 
 // ============================================================================

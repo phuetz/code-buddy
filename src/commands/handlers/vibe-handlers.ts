@@ -135,6 +135,7 @@ export async function handleCompact(
 
   return {
     handled: true,
+    compactionRequested: true,
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -152,7 +153,7 @@ export async function handleTools(args: string[]): Promise<CommandHandlerResult>
   const lines: string[] = [];
 
   try {
-    const { getAllCodeBuddyTools } = await import('../../codebuddy/tools.js');
+    const { getAllCodeBuddyTools, initializeMCPServers } = await import('../../codebuddy/tools.js');
     const {
       getToolFilter,
       setToolFilter,
@@ -160,6 +161,14 @@ export async function handleTools(args: string[]): Promise<CommandHandlerResult>
       filterTools,
       parsePatterns,
     } = await import('../../utils/tool-filter.js');
+
+    const mcpDisabled =
+      process.env.CODEBUDDY_DISABLE_MCP === 'true' || process.env.CODEBUDDY_DISABLE_MCP === '1';
+    if (!mcpDisabled) {
+      // /tools is a listing command: wait for MCP init (per-server timeout)
+      // so connected tools are actually in the list instead of racing startup.
+      await initializeMCPServers().catch(() => undefined);
+    }
 
     const allTools = await getAllCodeBuddyTools();
 

@@ -25,6 +25,8 @@ export interface DigestArchiveRecord {
   targetScenarioId?: string;
   appliedRef?: string;
   absorbedInto?: string;
+  provenance?: string;
+  reviewedBy?: string;
   /** Current archive entries omit this because every entry is accepted. */
   accepted?: boolean;
   rejectionReason?: string;
@@ -111,6 +113,12 @@ export interface DigestBenchmarkModel {
   deltaPercentPoints: number | null;
 }
 
+export interface DigestDelegationLogSummary {
+  count: number;
+  engines: string[];
+  failures: Array<{ failure: string; count: number }>;
+}
+
 export interface ImprovementDigest {
   schemaVersion: typeof IMPROVEMENT_DIGEST_SCHEMA_VERSION;
   kind: 'self_improvement_digest';
@@ -151,6 +159,7 @@ export interface ImprovementDigest {
     rejectionReasons: Array<{ reason: string; count: number }>;
   };
   learningStoreVersions: number;
+  delegationLogs?: DigestDelegationLogSummary;
   sources: {
     archive: boolean;
     learningStore: boolean;
@@ -492,6 +501,33 @@ export function buildImprovementDigest(
   const lessonItems = Array.from(learned.values()).sort(
     (a, b) => a.learnedAt.localeCompare(b.learnedAt) || a.content.localeCompare(b.content)
   );
+  const delegationRecords = archive.filter(
+    (record) => record.provenance === 'delegation-log'
+  );
+  let delegationLogs: DigestDelegationLogSummary | undefined;
+  if (delegationRecords.length > 0) {
+    const engines = Array.from(
+      new Set(
+        delegationRecords.map((r) =>
+          r.reviewedBy ? r.reviewedBy.replace(/^auto:/, '') : 'inconnu'
+        )
+      )
+    ).sort();
+    const failureCounts = new Map<string, number>();
+    for (const r of delegationRecords) {
+      if (r.targetScenarioId && r.targetScenarioId !== 'delegation-log') {
+        failureCounts.set(r.targetScenarioId, (failureCounts.get(r.targetScenarioId) ?? 0) + 1);
+      }
+    }
+    delegationLogs = {
+      count: delegationRecords.length,
+      engines,
+      failures: Array.from(failureCounts.entries())
+        .map(([failure, count]) => ({ failure, count }))
+        .sort((a, b) => b.count - a.count || a.failure.localeCompare(b.failure)),
+    };
+  }
+
   const hasActivity =
     tools.count > 0 ||
     authored.count > 0 ||
@@ -499,7 +535,8 @@ export function buildImprovementDigest(
     lessonItems.length > 0 ||
     launched > 0 ||
     benchmark.available ||
-    periodLearningVersions.length > 0;
+    periodLearningVersions.length > 0 ||
+    (delegationLogs?.count ?? 0) > 0;
   const notes: string[] = [];
   if (!complete && launched > 0) {
     notes.push(
@@ -535,6 +572,7 @@ export function buildImprovementDigest(
       ),
     },
     learningStoreVersions: periodLearningVersions.length,
+    ...(delegationLogs ? { delegationLogs } : {}),
     sources: {
       archive: sources.archive !== undefined,
       learningStore: sources.learningStore !== undefined,
@@ -608,6 +646,21 @@ export function renderImprovementDigestMarkdown(digest: ImprovementDigest): stri
     `- **Cycles lancés : ${digest.cycles.launched}${partial}**`,
     `- **Gates : ${digest.gates.passed} passée${digest.gates.passed === 1 ? '' : 's'} · ${digest.gates.rejected} rejetée${digest.gates.rejected === 1 ? '' : 's'}${digest.gates.complete ? '' : ' (historique partiel)'}`
   );
+
+  if (digest.delegationLogs && digest.delegationLogs.count > 0) {
+    const engines = digest.delegationLogs.engines.length > 0
+      ? ` (${digest.delegationLogs.engines.map(markdownCode).join(', ')})`
+      : '';
+    lines.push(
+      `- **Journaux de délégation : ${digest.delegationLogs.count}**${engines} — provenance : \`delegation-log\``
+    );
+    if (digest.delegationLogs.failures.length > 0) {
+      const fStr = digest.delegationLogs.failures
+        .map((f) => `${markdownCode(f.failure)} (${f.count})`)
+        .join(', ');
+      lines.push(`  - Échecs observés : ${fStr}`);
+    }
+  }
 
   if (!digest.benchmark.available) {
     lines.push('- **Benchmark :** aucune mesure sur la période');
@@ -739,6 +792,11 @@ export function renderImprovementDigestHtml(digest: ImprovementDigest): string {
       <article class="metric good"><div class="label">Gates passées</div><strong>${digest.gates.passed}</strong><small>${digest.gates.complete ? 'comptage complet' : 'historique partiel'}</small></article>
       <article class="metric ${digest.gates.rejected > 0 ? 'bad' : ''}"><div class="label">Gates rejetées</div><strong>${digest.gates.rejected}</strong><small>${digest.gates.complete ? 'comptage complet' : 'rejets observés seulement'}</small></article>
       <article class="metric bench"><div class="label">Benchmark</div><strong>${escapeHtml(benchmarkValue)}</strong><small>${escapeHtml(benchmarkDetail)}</small></article>
+      ${
+        digest.delegationLogs && digest.delegationLogs.count > 0
+          ? `<article class="metric"><div class="label">Délégations</div><strong>${digest.delegationLogs.count}</strong><small>provenance delegation-log</small></article>`
+          : ''
+      }
     </section>
     <section class="columns">
       <article class="panel"><h2>Tools</h2>${renderHtmlNames(digest.tools)}<h2 style="margin-top:22px">Skills authored</h2>${renderHtmlNames(digest.skills.authored)}<h2 style="margin-top:22px">Skills importées</h2>${renderHtmlNames(digest.skills.imported)}</article>

@@ -34,6 +34,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { spawnSync, type SpawnSyncReturns, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
 import type { ColabTask } from '../fleet/colab-store.js';
 import type { AutonomousModelChoice } from '../agent/model-tier.js';
@@ -74,6 +75,41 @@ export interface AgentTaskExecutorOptions {
   allowVerifyCommand?: boolean;
   /** Injectable spawn (tests). */
   spawnImpl?: SpawnFn;
+}
+
+function hashFileIfExists(absPath: string): string | null {
+  try {
+    return createHash('sha256').update(fs.readFileSync(absPath)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+function resolveWorkspaceFile(workspaceRoot: string, rel: string): string | null {
+  const root = path.resolve(workspaceRoot);
+  const abs = path.resolve(root, rel);
+  const relToRoot = path.relative(root, abs);
+  if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) return null;
+  return abs;
+}
+
+function snapshotListedFiles(workspaceRoot: string, files: string[]): Map<string, string | null> {
+  const snap = new Map<string, string | null>();
+  for (const rel of files) {
+    const abs = resolveWorkspaceFile(workspaceRoot, rel);
+    snap.set(rel, abs ? hashFileIfExists(abs) : null);
+  }
+  return snap;
+}
+
+function listedFilesChanged(workspaceRoot: string, before: Map<string, string | null>): string[] {
+  const changed: string[] = [];
+  for (const [rel, prev] of before) {
+    const abs = resolveWorkspaceFile(workspaceRoot, rel);
+    const next = abs ? hashFileIfExists(abs) : null;
+    if (next !== prev) changed.push(rel);
+  }
+  return changed;
 }
 
 /** Resolve the buddy CLI entrypoint inside `repoRoot`. */
@@ -133,6 +169,8 @@ export function createAgentTaskExecutor(opts: AgentTaskExecutorOptions = {}): Ta
       : `${task.title}\n\n${task.description ?? ''}`.trim();
     const env = buildAgentEnv(model);
     const started = Date.now();
+    const listed = (task.filesToModify ?? []).map((f) => f.trim()).filter(Boolean);
+    const before = listed.length > 0 ? snapshotListedFiles(workspaceRoot, listed) : null;
     const res = doSpawn(
       entry.cmd,
       [...entry.baseArgs, '-p', prompt, '--permission-mode', permissionMode, '--output-format', 'text', ...extraArgs],
@@ -154,6 +192,19 @@ export function createAgentTaskExecutor(opts: AgentTaskExecutorOptions = {}): Ta
 
     // Tail of the agent's real output — what the goal-mode judge evaluates.
     const output = (res.stdout ?? '').slice(-OUTPUT_TAIL_CHARS).trim();
+    const changed = before ? listedFilesChanged(workspaceRoot, before) : [];
+    const filesModified = changed.map((file) => ({ file, changes: 'modified' }));
+
+    if (before && changed.length === 0) {
+      const elapsedSeconds = Math.round((Date.now() - started) / 1000);
+      return {
+        ok: false,
+        summary: `agent ran ${task.id} but filesToModify were unchanged`,
+        elapsedSeconds,
+        error: `no change in filesToModify (${listed.join(', ')})`,
+        ...(output ? { output } : {}),
+      };
+    }
 
     // Acceptance gate: if the task carries a verify command AND running task-
     // supplied shell is allowed (opt-in), the agent "finishing" isn't enough —
@@ -182,6 +233,7 @@ export function createAgentTaskExecutor(opts: AgentTaskExecutorOptions = {}): Ta
         ok: true,
         summary: `agent ran ${task.id} [${model.tier}/${model.model}] + gate \`${gate}\` passed (${elapsedSeconds}s)`,
         elapsedSeconds,
+        ...(filesModified.length ? { filesModified } : {}),
         ...(output ? { output } : {}),
       };
     }
@@ -191,6 +243,7 @@ export function createAgentTaskExecutor(opts: AgentTaskExecutorOptions = {}): Ta
       ok: true,
       summary: `agent ran ${task.id} [${model.tier}/${model.model}] in ${workspaceRoot} (${elapsedSeconds}s)`,
       elapsedSeconds,
+      ...(filesModified.length ? { filesModified } : {}),
       ...(output ? { output } : {}),
     };
   };

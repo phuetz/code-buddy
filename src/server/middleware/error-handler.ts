@@ -105,6 +105,24 @@ export function notFoundHandler(req: Request, res: Response) {
 }
 
 /**
+ * Determine whether stack traces and internal error details should be hidden.
+ * Masked in production OR whenever authentication is active.
+ */
+export function isAuthActive(req?: Request): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return true;
+  }
+  const appAuth = req?.app?.get('authEnabled');
+  if (typeof appAuth === 'boolean') {
+    return appAuth;
+  }
+  if (process.env.AUTH_ENABLED === 'false') {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Global error handler
  */
 export const errorHandler: ErrorRequestHandler = (
@@ -114,13 +132,23 @@ export const errorHandler: ErrorRequestHandler = (
   _next: NextFunction
 ) => {
   // Log error
-  const requestId = req.headers['x-request-id'] as string;
+  const requestId = (req.headers['x-request-id'] as string) || generateRequestId();
   logger.error(`[${requestId}] API Error`, err instanceof Error ? err : new Error(String(err)), { requestId });
+
+  const hideStack = isAuthActive(req);
 
   // Handle ApiServerError
   if (err instanceof ApiServerError) {
+    const errorJson = err.toJSON();
+    if (hideStack && errorJson.details && typeof errorJson.details === 'object') {
+      const details = { ...errorJson.details };
+      if ('stack' in details) {
+        delete details.stack;
+      }
+      errorJson.details = Object.keys(details).length > 0 ? details : undefined;
+    }
     const response: ApiError = {
-      ...err.toJSON(),
+      ...errorJson,
       requestId,
     };
     return res.status(err.status).json(response);
@@ -151,12 +179,12 @@ export const errorHandler: ErrorRequestHandler = (
   // Handle unknown errors
   const response: ApiError = {
     code: 'INTERNAL_ERROR',
-    message: process.env.NODE_ENV === 'production'
+    message: hideStack
       ? 'An unexpected error occurred'
       : err.message,
     status: 500,
     requestId,
-    details: process.env.NODE_ENV === 'production'
+    details: hideStack
       ? undefined
       : { stack: err.stack },
   };

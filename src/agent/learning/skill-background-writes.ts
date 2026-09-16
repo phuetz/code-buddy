@@ -25,6 +25,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 import { getBackgroundWritePolicy } from '../learning-background-writes.js';
 import { OMISSION_RE, SECRET_RE } from '../self-improvement/empirical-gate.js';
 import {
@@ -302,7 +303,7 @@ function recordSkillWriteAudit(workDir: string, entry: SkillWriteAuditEntry): vo
   file.entries.push(entry);
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(file, null, 2)}\n`, 'utf-8');
+    writeJsonAtomicSync(filePath, file, { mode: 0o600 });
   } catch (err) {
     logger.warn('[skill-background-writes] failed to persist audit entry', {
       error: err instanceof Error ? err.message : String(err),
@@ -312,10 +313,15 @@ function recordSkillWriteAudit(workDir: string, entry: SkillWriteAuditEntry): vo
 
 function readAuditFile(filePath: string): SkillWriteAuditFile {
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as SkillWriteAuditFile;
-    if (parsed.schemaVersion === SKILL_WRITE_AUDIT_SCHEMA_VERSION && Array.isArray(parsed.entries)) {
-      return parsed;
-    }
+    const parsed = readJsonAtomicSync<SkillWriteAuditFile | null>(filePath, null, {
+      mode: 0o600,
+      isValid: (value): value is SkillWriteAuditFile => Boolean(
+        value && typeof value === 'object' &&
+        (value as SkillWriteAuditFile).schemaVersion === SKILL_WRITE_AUDIT_SCHEMA_VERSION &&
+        Array.isArray((value as SkillWriteAuditFile).entries),
+      ),
+    });
+    if (parsed) return parsed;
   } catch {
     // Fall through to a fresh file.
   }

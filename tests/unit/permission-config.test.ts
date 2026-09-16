@@ -12,6 +12,14 @@
  * - Sandbox and dry-run modes
  */
 
+const { mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 import {
   PermissionManager,
   PermissionConfig,
@@ -34,6 +42,7 @@ describe('PermissionManager', () => {
     jest.resetAllMocks();
     resetPermissionManager();
     mockFs.existsSync.mockReturnValue(false);
+    mockWriteJsonAtomicSync.mockImplementation(() => undefined);
     manager = new PermissionManager(testConfigPath);
   });
 
@@ -155,20 +164,22 @@ describe('PermissionManager', () => {
 
       manager.saveConfig();
 
-      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         testConfigPath,
-        expect.any(String)
+        expect.objectContaining({ version: '1.0.0' }),
+        { mode: 0o600 }
       );
     });
 
-    it('should create directory if it does not exist', () => {
+    it('should delegate parent creation to the atomic writer', () => {
       mockFs.existsSync.mockReturnValue(false);
 
       manager.saveConfig();
 
-      expect(mockFs.mkdirSync).toHaveBeenCalledWith(
-        path.dirname(testConfigPath),
-        { recursive: true }
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+        testConfigPath,
+        expect.any(Object),
+        { mode: 0o600 }
       );
     });
 
@@ -184,7 +195,7 @@ describe('PermissionManager', () => {
 
     it('should emit config:error event on failure', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
       const listener = jest.fn();

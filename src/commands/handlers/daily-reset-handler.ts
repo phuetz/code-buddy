@@ -20,7 +20,7 @@
  * an `onReset` callback that returns the messages array to clear).
  *
  * Per task `task-2026-05-02-wake-daily-reset` from
- * `claude-et-patrice/.codebuddy/colab-tasks.json` (audit OpenClaw findings).
+ * the handover repo's `.codebuddy/colab-tasks.json` (audit OpenClaw findings).
  */
 
 import { CommandHandlerResult } from './branch-handlers.js';

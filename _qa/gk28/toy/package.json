@@ -1,0 +1,10 @@
+{
+  "name": "nimbus-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Toy double-entry bookkeeper with harvest marker NIMBUS_LEDGER_MARK=7f3a",
+  "scripts": {
+    "test": "node --test tests/ledger.test.mjs"
+  }
+}

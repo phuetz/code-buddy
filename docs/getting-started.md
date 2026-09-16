@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** 18.0.0 or higher
+- **Node.js** 20.0.0 or higher (the **Cowork** desktop GUI needs **Node.js ≥ 22**)
 - **ripgrep** (recommended for faster search)
 - **Docker** (optional, required for CodeAct/sandbox execution)
 
@@ -20,7 +20,7 @@ choco install ripgrep
 ## Installation
 
 ```bash
-# From source (recommended during the 1.0 release-candidate phase — gets the latest)
+# From source (recommended — gets the latest Code Buddy 2)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy
 npm install
@@ -32,9 +32,30 @@ npm link            # exposes `buddy` globally (or use: npm start / node dist/in
 # The npm release can lag the source; use @latest and check `buddy --version`.
 npm install -g @phuetz/code-buddy@latest
 
+# Note on npm >= 11: install-scripts are blocked by default during global installation.
+# Code Buddy includes 18 optional native packages (better-sqlite3, sharp, node-pty,
+# tree-sitter*, onnxruntime-node, usearch, etc.). They fall back gracefully to pure JS / JSON
+# when uncompiled, but to enable full native acceleration, allow compilation with:
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+# or selectively for SQLite:
+npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
+
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
 ```
+
+## Interactive terminal
+
+The compact Ink interface shows the active provider/model, edit permissions and a multiline draft. It stays editable while the agent works: pressing Enter during a reply queues the next message; starting that queued turn preserves your newer draft.
+
+- **Enter:** send, or queue while working.
+- **Ctrl+J:** insert a newline (Shift+Enter also works in terminals that distinguish it).
+- **Up/Down:** history on a single-line prompt, cursor navigation within a multiline draft.
+- **Ctrl+A / Ctrl+E:** start/end of the draft; **Ctrl+U:** clear before the cursor.
+- **Esc:** cancel the current operation; **Ctrl+C:** quit.
+- **/** opens command suggestions; **@** completes file references; **Shift+Tab** changes edit permissions.
+
+Starting `buddy` in your home directory or a drive root no longer runs deep cartography or starts background semantic indexing over your personal files. Open a project directory to enable project profiling. A ChatGPT subscription uses its Codex model family; stale API-only defaults such as GPT-4o are ignored in favor of the detected subscription default.
 
 ## First Run — free, in under 2 minutes
 
@@ -58,9 +79,15 @@ buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
-`buddy onboard` needs a terminal because it asks questions. In a pipe or CI
-job it exits with an explanation; use `buddy login`, environment variables, or
-`buddy doctor` for a non-interactive check.
+`buddy login` needs an interactive terminal and a browser. If the browser does
+not open automatically, copy the complete URL printed in the terminal into its
+address bar and keep the terminal open until sign-in finishes. The link expires
+when the login attempt ends (after five minutes). `--no-browser` skips the attempt
+and exits with an explanation; it is not a device-code login mode.
+
+`buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
+job, configure provider environment variables and use `buddy doctor` for a
+non-interactive check.
 
 ### The two $0 paths in detail
 
@@ -101,6 +128,8 @@ are opt-in and stay out of your way until you go looking for them.
 | `buddy` | Start an interactive session. |
 | `buddy -p "…"` | One-shot / headless (great for scripts and CI). |
 | `buddy doctor [--fix]` | Am I ready? Auto-fix the fixable. |
+| `buddy doctor --json --offline` | Stable JSON report with no network call (no live key check, no OAuth refresh, no local probe) plus the Integrations section: LM Resizer protocol, Code Explorer freshness, MCP config, resource catalog, skills. `--integrations` adds that section to the text output. |
+| `buddy triage [--json] [--out <dir>]` | Local support bundle: offline doctor (no child process), versions, recent failed runs, a bounded masked log tail and config **key names** only, plus a prompt ≤ 8 KiB. Written 0600 in a fresh 0700 directory (default `~/.codebuddy/triage/`). Nothing is sent and no agent is started; a section the secret scanner still flags is withheld, and nothing is written if the scan fails. Review `prompt.md`, then run the printed command yourself. |
 | `buddy --continue` | Resume your last session. |
 | `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
 
@@ -114,11 +143,16 @@ Code Buddy includes standalone CLI utilities for cost tracking, changelog genera
 
 | Command             | Description                                                                                                                    | Main Options                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `buddy cost`        | Read-only cost and token usage dashboard aggregated from saved session JSONs                                                   | `--by <model\|provider\|day>`, `--since <7d\|YYYY-MM-DD>`, `--last`, `--session <id>`, `--json` |
+| `buddy cost`        | Read-only cost/token dashboard, or measured per-model TTFT/TTFM percentiles with `--latency`                                    | `--by <model\|provider\|day>`, `--since <7d\|YYYY-MM-DD>`, `--last`, `--session <id>`, `--latency`, `--json` |
 | `buddy changelog`   | Generate structured release notes from Conventional Commits in Git history                                                     | `--since <tag\|YYYY-MM-DD\|ref>`, `--to <ref>`, `--out <file.md>`, `--json`                     |
 | `buddy import`      | Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code into `CODEBUDDY.md` and `.codebuddy/mcp.json` | `--from <path>`, `--dry-run`                                                                    |
 | `buddy explain`     | One-shot repository explanation report (conventions, hotspots, risks) as Markdown or self-contained HTML | `--out <f.md\|.html>`, `--depth <quick\|deep>`, `--html` |
 | `buddy dev explain` | Summarise repository conventions, architecture, critical paths, and workflows from a fresh repo profile                        | `buddy dev explain`                                                                             |
+
+`buddy changelog` reads the local Git history. It must be run from a Git checkout;
+an installation npm pack does not include the `.git` directory. From
+an npm installation, the command exits with an explicit “Ce dossier n’est pas
+un dépôt Git” message rather than pretending to generate release notes.
 
 ## In-Chat Context & Code Intelligence: @file Mentions and LSP Tools
 
@@ -142,23 +176,30 @@ Code Buddy connects to configured language servers to expose 5 read-only semanti
 
 ## Onboarding the Cowork GUI (Ollama, $0)
 
-Code Buddy also ships a desktop GUI — **Cowork** (`npm run build:gui`). On first launch a guided
+Code Buddy also ships a desktop GUI — **Cowork**. On Linux, do **not** run the
+full packager (`npm run build:gui` / `cowork`'s `npm run build`): that path
+downloads standalone Node/Python runtimes and electron-builder installers.
+Follow [`cowork/DEV-LINUX.md`](../cowork/DEV-LINUX.md) (`npx vite build`, then
+`buddy gui`). On first launch a guided
 wizard takes you from zero to your first chat. Here is the full journey against a **local Ollama**
 model (`qwen2.5:7b-instruct`) — no API key, $0. _(Screenshots are real captures from the
 Electron app, generated by `cowork/e2e/onboarding-ollama-screens.spec.ts`.)_
 
-1. **Welcome.** Pick your language and a setup path.
+1. **Welcome.** Pick your language and **Quick start** (that is the path that opens the
+   provider step next). _Full control_ jumps to the workspace step; _Configure later_ skips setup.
 
    ![Onboarding — welcome](assets/onboarding/01-welcome.png)
 
 2. **Connect an AI provider.** Choose a brain — _Code Buddy brain_ (your signed-in ChatGPT/Codex
-   backend), _Local runtimes_ (Ollama / LM Studio, discovered on this machine), or a _Custom
-   endpoint_. The connection panel verifies reachability with **Test connection** — the same live
-   probe as Settings → API.
+   backend), _Local runtimes_ (opens Settings → API on **Ollama**, then pick a local model such as
+   `qwen3:4b-instruct`), or a _Custom endpoint_. Use **Test connection**, then **Save this choice**.
+   The wizard stays open after the save so you can still pick a workspace.
 
    ![Onboarding — connect a provider](assets/onboarding/02-provider.png)
 
-3. **Pick a workspace.** The folder Code Buddy agents read and write in (changeable per session later).
+3. **Pick a workspace.** Click **Choose a folder…** (native directory dialog — needs a graphical
+   session). Agents can only write inside this folder. Skipping it leaves the Electron
+   `default_working_dir`, and the first file-write is rejected as outside the workspace.
 
    ![Onboarding — workspace](assets/onboarding/03-workspace.png)
 
@@ -200,9 +241,24 @@ buddy -p "run tests and fix failures" \
 
 # Auto-approve all tool executions
 buddy -p "fix lint errors" --auto-approve --output-format text
+
+# Write only the final assistant message to a file (atomic write)
+buddy -p "summarize the README" -o result.txt
+
+# Validate the final response against a JSON Schema; exits 1 if it doesn't match
+buddy -p "reply with {\"ok\": true}" --output-schema schema.json
 ```
 
 Headless mode exits cleanly after completion -- safe for `timeout`, shell scripts, and CI pipelines.
+
+`-o`/`--output-last-message <file>` writes the agent's last text response
+directly and atomically to a file — handy when you only want the answer, not
+the full JSON envelope. `--output-schema <file>` takes a path to a JSON
+Schema file and validates the final response against it before exiting; a
+non-conforming response makes the process exit with code `1` instead of
+silently returning bad output. Combine with `--permission-mode dontAsk` to
+run a real task (file writes, `bash`) without interactive confirmation
+prompts in a script or CI job.
 
 ## Session Management
 
@@ -283,7 +339,7 @@ buddy lora lisa                 # Init a Krea 2 character LoRA project for Lisa'
 # Full guide: docs/krea-lora.md
 buddy speak "Bonjour"           # Speak text aloud through the configured TTS provider
 buddy daemon start              # Run 24/7 in background
-buddy server --port 3000        # Expose REST/WebSocket API
+buddy server --port 3000        # Expose the REST API + the WebSocket `/ws` on that ONE port
 ```
 
 Code Buddy autonomously reads files, writes code, runs commands, and fixes errors -- typically 5-15 tool calls per task (up to 50, or 400 in YOLO mode). After each edit, it can auto-commit (Aider-style), run linters, and execute tests automatically.
@@ -351,7 +407,7 @@ Code Buddy can connect to other Code Buddy instances over your network so multip
 
 On the **listener** instance (the one that wants to be observable):
 ```bash
-buddy server --port 3000          # Start the local Gateway WS
+buddy server --port 3000          # One process, one port: REST + the fleet WebSocket on /ws
 ```
 
 On the **peer** instance (the one connecting):
@@ -364,13 +420,13 @@ You're now streaming the peer's `fleet:agent:tool_started`, `fleet:workflow:even
 
 To send a message to the peer (and have it route to its LLM):
 ```
-> /fleet send ministar-linux peer.chat {"prompt":"hello, can you analyze this file?"}
+> /fleet send hub-linux peer.chat {"prompt":"hello, can you analyze this file?"}
 ```
 
 For a longer conversation, open a multi-turn chat session with an
 operating posture:
 ```
-> /fleet chat start ministar-linux --provider lemonade --profile review
+> /fleet chat start hub-linux --provider lemonade --profile review
 > /fleet chat say audit the dispatch flow before we change it
 > /fleet status --with-sessions
 ```
@@ -390,6 +446,57 @@ buddy fleet profiles
 buddy fleet policy review bash
 ```
 
+### Calling the OpenAI-compatible REST API (curl, local, $0)
+
+`buddy server` also exposes an OpenAI-compatible `/v1/chat/completions`
+route. In production it requires a `JWT_SECRET` and a signed bearer token
+(see [Security](security.md)).
+
+You can mint a signed bearer token with `buddy token` (or its fleet alias `buddy fleet token`):
+
+```bash
+# Mint a token for local or peer use (prints JWT, expiry, PWA open URL)
+JWT_SECRET="your-secret" buddy token --user demo --url http://127.0.0.1:3000
+
+# Or using the fleet subcommand:
+JWT_SECRET="your-secret" buddy fleet token --user demo --ttl 24h
+```
+
+### Open the PWA on the phone in one command
+
+With `CODEBUDDY_MOBILE_PWA=true` on the server, `buddy token` prints an
+open URL `<base>/__codebuddy__/mobile/#token=<jwt>`. Opening that link on
+the phone stores the JWT, clears the hash, and connects — no copy-paste.
+
+```bash
+# Show the URL + an ANSI QR (needs `qrencode`)
+buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000 --qr
+
+# Or send the open URL to your phone as a Telegram DM (expiry warning included)
+buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000 --telegram
+```
+
+`--telegram` requires `CODEBUDDY_SENSORY_ALERT_TOKEN` and
+`CODEBUDDY_SENSORY_ALERT_CHAT`. Scripts should use `--json` and read `.token`
+/ `.url`. The signing secret is never printed.
+
+For a quick local check against your own
+machine, start the server with `--no-auth` and bind it to loopback so it
+never leaves your machine:
+
+```bash
+buddy server --port 3721 --host 127.0.0.1 --no-auth
+
+curl -s http://127.0.0.1:3721/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"say hi"}]}'
+```
+
+`--no-auth` is explicitly loopback-only — the server logs a warning if you
+combine it with a non-loopback `--host`. Drop `--no-auth` and set
+`JWT_SECRET` once you want the same endpoint reachable from another machine
+on your network (Fleet / A2A use cases above).
+
 ### Two stated objectives
 
 The fleet hub serves two complementary goals (per the design doc):
@@ -402,7 +509,30 @@ If you don't want to set up multiple peers but want the team-lead pattern, use t
 ```
 > /swarm refactor the auth module to use JWT with PKCE
 ```
-This auto-enables `MultiAgentSystem`, decomposes the task, and dispatches subtasks to specialized worker agents (orchestrator, coder, reviewer, tester) running concurrently. Inspired by Korben's article on Claude Code's hidden Swarms mode — but Code Buddy ships the infrastructure built-in (no patch needed). Track with `/swarm status`, stop with `/swarm stop`.
+This auto-enables `MultiAgentSystem`, decomposes the task, and submits specialized workers (orchestrator, coder, reviewer, tester) through bounded thread delegation. The scheduler defaults to one active worker; set `CODEBUDDY_SWARM_CONCURRENCY` explicitly when the provider can sustain more. Every worker stream is tagged `[swarm:<agent>:<kind>]`. Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` (no `GROK_API_KEY`).
+
+### Parallel batch (`/batch`)
+
+For independent work units, use `/batch <goal>`. It multiplexes separate
+`ThreadDelegate` sub-agents; `CODEBUDDY_BATCH_CONCURRENCY` caps concurrent
+sub-agents and defaults to `1`.
+
+### Self-improvement (`buddy improve`)
+
+`buddy improve status` shows coverage and autonomy. The `cycle`, `tools`,
+`skills`, and `loop` subcommands are `propose-only` by default. Set
+`CODEBUDDY_SELF_IMPROVE=true` (or `auto-apply`) and add `--apply` only when you
+want to keep an empirically validated improvement.
+
+For a persistent lead-managed task list, `/team` uses the same transport:
+```
+> /team start ship the toy feature
+> /team add coder builder
+> /team task implement the assigned change
+> /team assign <task-id> <member-id>
+> /team run all
+```
+Each member gets an independent full agent. Tasks for the same member remain FIFO; a member failure is reported without terminating its siblings. `/team stop` cancels active children before dissolving the team. Its scheduler also defaults to one active worker and accepts `CODEBUDDY_TEAM_CONCURRENCY` as an explicit override.
 
 ### Full guide
 
@@ -425,7 +555,7 @@ Most providers need an env var **and** the matching base URL. Common pairs:
 Run `buddy doctor` to verify which keys are detected. Check the active provider mid-session with `/status`.
 
 ### "Cannot find module" or ESM import errors
-Code Buddy is ESM-only. From source, ensure Node.js ≥ 18.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
+Code Buddy is ESM-only. From source, ensure Node.js ≥ 20.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
 
 ### Slow startup (> 5s) or noticeable cold-start cost
 Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on-demand only when first invoked, so a vanilla `buddy` should warm up in 1-2 seconds.

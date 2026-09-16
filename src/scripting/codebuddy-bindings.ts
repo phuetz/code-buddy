@@ -16,6 +16,7 @@ import * as path from 'path';
 import { execSync, execFileSync, spawnSync } from 'child_process';
 import { CodeBuddyScriptConfig, CodeBuddyValue, CodeBuddyFunction } from './types.js';
 import { getErrorMessage } from '../types/index.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // Lazy imports to avoid circular dependencies
 let codebuddyClientInstance: CodeBuddyClientInterface | null = null;
@@ -593,7 +594,7 @@ Think through the problem and execute the necessary steps.`;
     }
 
     const filePath = path.join(sessionsDir, filename);
-    fs.writeFileSync(filePath, JSON.stringify(sessionData, null, 2));
+    writeJsonAtomicSync(filePath, sessionData, { mode: 0o600 });
     print(`Session saved: ${filename}`);
     return filePath;
   };

@@ -26,6 +26,7 @@ import { ClipboardSummaryPanel } from './ClipboardSummaryPanel';
 import { VoiceChatOverlay } from './VoiceChatOverlay';
 import { ModelSwitcher } from './ModelSwitcher';
 import { LiveBudgetMeter } from './LiveBudgetMeter';
+import { APP_NAME } from '../brand';
 
 const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
 
@@ -160,6 +161,7 @@ export function Titlebar() {
             onClick={handleClose}
             className="w-12 h-full flex items-center justify-center hover:bg-red-500 transition-colors group"
             title={t('window.close')}
+            aria-label={`${t('window.close')} ${APP_NAME}`}
           >
             <X className="w-4 h-4 text-text-secondary group-hover:text-white" />
           </button>

@@ -12,9 +12,9 @@
  *
  * @module companion/prefetch-config
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type PrefetchKind = 'weather' | 'news' | 'market' | 'agenda' | 'date';
 export const PREFETCH_KINDS: readonly PrefetchKind[] = [
@@ -95,9 +95,10 @@ function isValidItem(x: unknown): x is PrefetchItem {
  */
 export function loadPrefetchItems(path: string = defaultPrefetchItemsPath()): PrefetchItem[] {
   try {
-    if (!existsSync(path)) return [...DEFAULT_PREFETCH_ITEMS];
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    if (!Array.isArray(raw)) return [...DEFAULT_PREFETCH_ITEMS];
+    const raw = readJsonAtomicSync<unknown[]>(path, [...DEFAULT_PREFETCH_ITEMS], {
+      mode: 0o600,
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
     return raw
       .filter(isValidItem)
       .map((o) => ({ kind: o.kind, ...(o.param?.trim() ? { param: o.param.trim() } : {}) }))
@@ -113,8 +114,7 @@ export function savePrefetchItems(
   path: string = defaultPrefetchItemsPath()
 ): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(items.slice(0, MAX_PREFETCH_ITEMS), null, 2));
+    writeJsonAtomicSync(path, items.slice(0, MAX_PREFETCH_ITEMS), { mode: 0o600 });
   } catch {
     /* best-effort */
   }

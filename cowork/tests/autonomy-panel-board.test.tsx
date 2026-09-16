@@ -204,7 +204,7 @@ describe('AutonomyPanel task board', () => {
 
   it('surfaces board errors inline, separately from daemon errors', async () => {
     const api = makeAutonomyApi();
-    api.taskClaim.mockResolvedValue({ ok: false, error: "already claimed by 'darkstar/repo'" });
+    api.taskClaim.mockResolvedValue({ ok: false, error: "already claimed by 'gpuNode/repo'" });
     await renderPanel(api);
 
     await click('autonomy-task-claim-t-open');

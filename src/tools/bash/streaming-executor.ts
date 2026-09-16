@@ -6,6 +6,8 @@
  */
 
 import { spawn } from 'child_process';
+import { StringDecoder } from 'node:string_decoder';
+import { BoundedOutput } from '../../utils/bounded-output.js';
 import { ToolResult } from '../../types/index.js';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
 import { validateCommand as validateCommandSafety } from '../../utils/input-validator.js';
@@ -13,7 +15,7 @@ import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
-import { getShellConfiguration } from '../../utils/shell-configuration.js';
+import { getShellConfiguration, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
 import {
   evaluateShellExecution,
@@ -21,9 +23,11 @@ import {
   executeInWorkspaceSandbox,
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
+import { confineSpawn } from '../../security/native-sandbox.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
+  maxOutputBytes?: number;
   getSandboxManager: () => { validateCommand(cmd: string): { valid: boolean; reason?: string } };
   getRunningProcesses: () => Set<import('child_process').ChildProcess>;
 }
@@ -160,100 +164,102 @@ export async function* executeStreaming(
   const shellConfiguration = getShellConfiguration();
   const shellCommand = shellConfiguration.shell === 'bash'
     ? `${buildBashEnvPrelude()}\n${executionCommand}`
-    : executionCommand;
-  const proc = spawn(shellConfiguration.executable, [...shellConfiguration.argsPrefix, shellCommand], {
-    shell: false,
+    : shellWorkingDirectoryCommand(executionCommand, shellConfiguration);
+  const confined = confineSpawn({
+    file: shellConfiguration.executable,
+    args: [...shellConfiguration.argsPrefix, shellCommand],
     cwd,
     env: controlledEnv,
+  });
+  if (!confined.ok) {
+    return { success: false, error: confined.error };
+  }
+  const proc = spawn(confined.file, confined.args, {
+    shell: false,
+    cwd,
+    env: confined.env,
     detached: !isWindows,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   const runningProcesses = deps.getRunningProcesses();
   runningProcesses.add(proc);
-  let stdout = '';
-  let stderr = '';
-  let timedOut = false;
-  let aborted = false;
-  let onAbort: () => void = () => {};
-
-  const timer = setTimeout(() => {
-    timedOut = true;
-    try { proc.kill('SIGTERM'); } catch { /* ignore */ }
-  }, timeout);
+  const stdout = new BoundedOutput(deps.maxOutputBytes);
+  const stderr = new BoundedOutput(deps.maxOutputBytes);
+  const pending = new BoundedOutput(deps.maxOutputBytes);
+  const outDecoder = new StringDecoder('utf8');
+  const errDecoder = new StringDecoder('utf8');
+  let done = false;
+  let failure: string | undefined;
+  let wake: (() => void) | undefined;
+  let killTimer: NodeJS.Timeout | undefined;
+  const notify = (): void => { wake?.(); wake = undefined; };
+  const kill = (signal: NodeJS.Signals): void => {
+    try {
+      if (!isWindows && proc.pid) process.kill(-proc.pid, signal);
+      else proc.kill(signal);
+    } catch { /* The process or its group already exited. */ }
+  };
+  const stop = (reason: string): void => {
+    if (done || failure) return;
+    failure = reason;
+    kill('SIGTERM');
+    // Sending a signal is not proof of exit. Escalate even if the parent
+    // closes its pipes while a descendant still holds the process group.
+    killTimer = setTimeout(() => {
+      kill('SIGKILL');
+      done = true;
+      notify();
+    }, 250);
+    notify();
+  };
+  const timer = setTimeout(() => stop(`Command timed out after ${timeout}ms`), timeout);
+  const onAbort = (): void => stop('Command aborted by user');
+  const onError = (error: Error): void => {
+    failure ??= `Command failed to start: ${error.message}`;
+    done = true;
+    notify();
+  };
+  const onClose = (): void => {
+    if (!failure) done = true;
+    notify();
+  };
+  const onData = (data: Buffer, target: BoundedOutput, decoder: StringDecoder): void => {
+    const text = decoder.write(data);
+    target.append(text);
+    pending.append(text);
+    notify();
+  };
+  const onStdout = (data: Buffer): void => onData(data, stdout, outDecoder);
+  const onStderr = (data: Buffer): void => onData(data, stderr, errDecoder);
+  proc.stdout?.on('data', onStdout);
+  proc.stderr?.on('data', onStderr);
+  proc.on('error', onError);
+  proc.on('close', onClose);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) onAbort();
 
   try {
-    // Create a readable stream from stdout and stderr combined
-    const chunks: string[] = [];
-    let resolve: (() => void) | null = null;
-    let done = false;
-
-    const killProcess = (): void => {
-      try {
-        if (!isWindows && proc.pid) process.kill(-proc.pid, 'SIGTERM');
-        else proc.kill('SIGTERM');
-      } catch {
-        try { proc.kill('SIGTERM'); } catch { /* process already exited */ }
-      }
-    };
-    onAbort = (): void => {
-      aborted = true;
-      killProcess();
-      if (resolve) { resolve(); resolve = null; }
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-    if (signal?.aborted) onAbort();
-
-    const onData = (data: Buffer, isStderr: boolean) => {
-      const text = data.toString();
-      if (isStderr) stderr += text;
-      else stdout += text;
-      chunks.push(text);
-      if (resolve) { resolve(); resolve = null; }
-    };
-
-    proc.stdout?.on('data', (data: Buffer) => onData(data, false));
-    proc.stderr?.on('data', (data: Buffer) => onData(data, true));
-    proc.on('close', () => { done = true; if (resolve) { resolve(); resolve = null; } });
-
-    while (!done) {
-      if (chunks.length > 0) {
-        while (chunks.length > 0) {
-          yield chunks.shift()!;
-        }
-      } else {
-        await new Promise<void>(r => { resolve = r; });
-      }
-    }
-
-    // Yield remaining chunks
-    while (chunks.length > 0) {
-      yield chunks.shift()!;
+    while (!done || pending.retainedBytes > 0) {
+      if (pending.retainedBytes > 0) yield pending.drain();
+      else if (!done) await new Promise<void>(resolve => { wake = resolve; });
     }
   } finally {
     clearTimeout(timer);
+    clearTimeout(killTimer);
     signal?.removeEventListener('abort', onAbort);
+    // Also handles a consumer calling return() before the child exits.
+    if (!done || failure) kill('SIGKILL');
+    proc.stdout?.removeListener('data', onStdout);
+    proc.stderr?.removeListener('data', onStderr);
+    proc.removeListener('close', onClose);
     runningProcesses.delete(proc);
-    if (!proc.killed && proc.exitCode === null) {
-      proc.kill('SIGTERM');
-      setTimeout(() => {
-        try { if (!proc.killed) proc.kill('SIGKILL'); } catch { /* already dead */ }
-      }, 5000);
-    }
   }
 
-  if (aborted) {
-    return { success: false, error: 'Command aborted by user', output: stdout };
+  const output = stdout.text();
+  if (failure) return { success: false, error: failure, output };
+  if (proc.exitCode !== 0) {
+    return { success: false, error: stderr.text() || `Exit code ${proc.exitCode}`, output };
   }
-
-  if (timedOut) {
-    return { success: false, error: `Command timed out after ${timeout}ms` };
-  }
-
-  const exitCode = proc.exitCode ?? 0;
-  if (exitCode !== 0) {
-    return { success: false, error: stderr || `Exit code ${exitCode}`, output: stdout };
-  }
-
-  return { success: true, output: stdout };
+  return { success: true, output };
 }

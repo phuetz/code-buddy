@@ -24,6 +24,8 @@ export interface ProviderOnboardingConfig {
   baseUrl: string;
   /** GET endpoint to validate the key (relative to baseUrl) */
   validateEndpoint: string;
+  /** Optional public catalog, fetched only after authentication succeeds. */
+  modelsEndpoint?: string;
   /** User-facing instructions for obtaining an API key */
   instructions: string;
 }
@@ -84,7 +86,10 @@ export const PROVIDER_CONFIGS: ProviderOnboardingConfig[] = [
     name: 'OpenRouter',
     envKey: 'OPENROUTER_API_KEY',
     baseUrl: 'https://openrouter.ai/api',
-    validateEndpoint: '/v1/models',
+    // /models is public and cannot establish whether a key is valid.
+    // https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key
+    validateEndpoint: '/v1/key',
+    modelsEndpoint: '/v1/models',
     instructions: 'Get your API key from https://openrouter.ai/keys',
   },
   {
@@ -192,8 +197,32 @@ export async function validateProviderKey(
     };
   }
 
-  // Extract model list from response
+  if (config.id === 'openrouter') {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* invalid response below */ }
+    if (!isRecord(body) || !isRecord(body.data) || typeof body.data.label !== 'string') {
+      return { valid: false, error: `Invalid authentication response from ${config.name}` };
+    }
+    // The key is authenticated even if the optional model catalog is unavailable.
+    if (!config.modelsEndpoint) return { valid: true };
+    try {
+      const catalog = await fetch(`${config.baseUrl}${config.modelsEndpoint}`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!catalog.ok) return { valid: true };
+      const models = await extractModels(config, catalog);
+      return models === null ? { valid: true } : { valid: true, models };
+    } catch {
+      return { valid: true };
+    }
+  }
+
   const models = await extractModels(config, response);
+  if (models === null) {
+    return { valid: false, error: `Invalid model-list response from ${config.name}` };
+  }
 
   return { valid: true, models };
 }
@@ -201,31 +230,31 @@ export async function validateProviderKey(
 /**
  * Parse the model list from a provider's validation response.
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 async function extractModels(
   config: ProviderOnboardingConfig,
   response: Response
-): Promise<string[]> {
+): Promise<string[] | null> {
   try {
-    const data = await response.json();
-    const body = data as Record<string, unknown>;
-
-    if (config.id === 'ollama') {
-      // Ollama: { models: [{ name: "llama3" }] }
-      const models = body.models as { name: string }[] | undefined;
-      return models?.map((m) => m.name) ?? [];
+    const body: unknown = await response.json();
+    if (!isRecord(body)) return null;
+    const usesNames = config.id === 'ollama' || config.id === 'google';
+    const rows = usesNames ? body.models : body.data;
+    const field = usesNames ? 'name' : 'id';
+    if (!Array.isArray(rows)) return null;
+    const models: string[] = [];
+    for (const row of rows) {
+      if (!isRecord(row)) return null;
+      const value = row[field];
+      if (typeof value !== 'string' || !value.trim()) return null;
+      models.push(config.id === 'google' ? value.replace(/^models\//, '') : value);
     }
-
-    if (config.id === 'google') {
-      // Gemini: { models: [{ name: "models/gemini-pro" }] }
-      const models = body.models as { name: string }[] | undefined;
-      return models?.map((m) => m.name.replace('models/', '')) ?? [];
-    }
-
-    // OpenAI-compatible: { data: [{ id: "gpt-4o" }] }
-    const modelData = body.data as { id: string }[] | undefined;
-    return modelData?.map((m) => m.id) ?? [];
+    return models;
   } catch {
-    return [];
+    return null;
   }
 }
 

@@ -101,6 +101,13 @@ export function pickOptionalBoolean(
   return value;
 }
 
+const LOCAL_GPU_CAPACITY_KEYS = [
+  'localGpu',
+  'local_gpu',
+  'localGpuAvailable',
+  'local_gpu_available',
+] as const;
+
 export function parseEnum<T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -115,8 +122,8 @@ export function parseEnum<T extends string>(
 export function parseHybridCapacity(value: unknown): HybridVideoCapacity {
   const record = requireRecord(value, 'capacity');
   return {
-    darkstar: pickBoolean(record, ['darkstar'], 'capacity.darkstar'),
-    ministar: pickBoolean(record, ['ministar'], 'capacity.ministar'),
+    gpuNode: pickBoolean(record, ['gpuNode'], 'capacity.gpuNode'),
+    localGpu: pickBoolean(record, LOCAL_GPU_CAPACITY_KEYS, 'capacity.localGpu'),
     googleFlow: pickBoolean(record, ['google_flow', 'googleFlow'], 'capacity.google_flow'),
     remainingFlowCredits: pickFiniteNumber(
       record,

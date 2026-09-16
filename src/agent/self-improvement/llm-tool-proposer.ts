@@ -26,7 +26,7 @@ export function buildToolDraftPrompt(view: ProposerScenarioView): string {
   const examples = view.visibleCases
     .map(
       (c, i) =>
-        `  ${i + 1}. input ${JSON.stringify(c.input)} → output must contain ${JSON.stringify(c.expectIncludes)}`,
+        `  ${i + 1}. input ${JSON.stringify(c.input)} → output must equal ${JSON.stringify(c.expectedOutput)}`,
     )
     .join('\n');
   return [

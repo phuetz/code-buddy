@@ -7,11 +7,11 @@ import {
 } from '../../src/commands/gpu-worker.js';
 
 const options = {
-  host: '100.73.222.64',
+  host: '192.0.2.42',
   port: '4310',
   stateDir: '/tmp/gpu-worker-state',
   root: ['/tmp/gpu-data'],
-  workerId: 'darkstar',
+  workerId: 'gpuNode',
   maxConcurrency: '1',
 };
 
@@ -28,9 +28,9 @@ describe('gpu-worker command', () => {
       CODEBUDDY_GPU_WORKER_MAX_TERMINAL_JOBS: '500',
     });
     expect(config).toMatchObject({
-      host: '100.73.222.64',
+      host: '192.0.2.42',
       port: 4310,
-      workerId: 'darkstar',
+      workerId: 'gpuNode',
       maxConcurrency: 1,
       terminalJobRetentionMs: 30 * 24 * 60 * 60 * 1000,
       maxStoredTerminalJobs: 500,

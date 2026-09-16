@@ -295,7 +295,7 @@ export const SettingsSchema = z.object({
 
   turboquant: z.object({
     vllmEndpoint: z.string().url().optional()
-      .describe('vLLM endpoint URL, e.g. http://192.168.1.50:8000'),
+      .describe('vLLM endpoint URL, e.g. http://203.0.113.20:8000'),
     ollamaEndpoint: z.string().url().optional()
       .describe('Ollama endpoint URL, e.g. http://localhost:11434'),
     turboquant: z.object({

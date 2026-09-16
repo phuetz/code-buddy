@@ -293,7 +293,7 @@ Public-safe real-provider proof screenshots:
 This documentation pass found no Cowork runtime regression, but it did harden
 the public evidence trail:
 
-- GitHub entry links now point at the actual lower-case `cowork/readme.md`
+- GitHub entry links now point at the actual lower-case `cowork/README.md`
   path.
 - Real-provider proof screenshots use reviewed `public-*` crops; raw GPT-5.5
   captures were removed from the tracked tree and ignored locally.
@@ -400,7 +400,7 @@ loopback endpoint, and no gateway token value.
 
 ## Useful Entry Points
 
-- [Cowork source README](../cowork/readme.md)
+- [Cowork source README](../cowork/README.md)
 - [Cowork architecture](../cowork/ARCHITECTURE.md)
 - [Application validation guide](application-validation-guide.md)
 - [Autonomous coding + Cowork progress](autonomous-coding-cowork-progress.md)

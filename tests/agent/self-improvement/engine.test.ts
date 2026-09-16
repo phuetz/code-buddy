@@ -44,10 +44,33 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('resolveAutonomy', () => {
-  it('is propose-only unless CODEBUDDY_SELF_IMPROVE=true', () => {
+  it('treats CODEBUDDY_SELF_IMPROVE=true as propose-only; only the literal auto-apply opts in', () => {
     expect(resolveAutonomy({})).toBe('propose-only');
     expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'false' })).toBe('propose-only');
-    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'true' })).toBe('auto-apply');
+    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'true' })).toBe('propose-only');
+    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: '1' })).toBe('propose-only');
+    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'yes' })).toBe('propose-only');
+    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'auto-apply' })).toBe('auto-apply');
+    expect(resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'AUTO-APPLY' })).toBe('auto-apply');
+  });
+
+  it('does not persist a cycle when the env flag is merely true', async () => {
+    const port = fakePort();
+    const archive = new EvolutionaryArchive({ workDir: dir, now });
+    const engine = new SelfImprovementEngine({
+      scenarios: SEED_BENCHMARK_SCENARIOS,
+      port,
+      proposer: new StaticProposer(SEED_LESSON_DRAFTS),
+      archive,
+      autonomy: resolveAutonomy({ CODEBUDDY_SELF_IMPROVE: 'true' }),
+      now,
+    });
+    const result = await engine.runCycle();
+    expect(result.autonomy).toBe('propose-only');
+    expect(result.gate?.accepted).toBe(true);
+    expect(result.applied).toBe(false);
+    expect(port.items).toHaveLength(0);
+    expect(archive.list()).toHaveLength(0);
   });
 });
 

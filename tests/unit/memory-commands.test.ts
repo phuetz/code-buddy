@@ -21,6 +21,7 @@ vi.mock('../../src/memory/index.js', () => {
     isEnabled: vi.fn().mockReturnValue(true),
   };
   const mockPersistentMemory = {
+    initialize: vi.fn().mockResolvedValue(undefined),
     remember: vi.fn().mockResolvedValue(undefined),
     replace: vi.fn().mockResolvedValue({
       status: 'replaced',

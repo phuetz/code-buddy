@@ -25,7 +25,8 @@ interface TerminalRendererOptions {
   };
   code?: (code: string, lang?: string) => string;
   codespan?: (text: string) => string;
-  heading?: (text: string, level: number) => string;
+  heading?: (text: string) => string;
+  firstHeading?: (text: string) => string;
   link?: (href: string, title: string | null, text: string) => string;
   list?: (body: string, ordered: boolean) => string;
   listitem?: (text: string) => string;
@@ -107,19 +108,10 @@ marked.setOptions({
     },
     // Inline code styling
     codespan: (text: string) => `${ANSI.cyan}${text}${ANSI.reset}`,
-    // Heading styles by level
-    heading: (text: string, level: number) => {
-      const colors = [
-        ANSI.magentaBold,
-        ANSI.blueBold,
-        ANSI.yellowBold,
-        ANSI.blue,
-        ANSI.yellow,
-        ANSI.white,
-      ];
-      const color = colors[Math.min(level - 1, colors.length - 1)];
-      return `\n${color}${'#'.repeat(level)} ${text}${ANSI.reset}\n`;
-    },
+    // marked-terminal supplies styled text only here (including its prefix),
+    // unlike a marked renderer method, which also receives the heading level.
+    heading: (text: string) => `${ANSI.blueBold}${text}${ANSI.reset}`,
+    firstHeading: (text: string) => `${ANSI.magentaBold}${text}${ANSI.reset}`,
     // Text emphasis
     strong: (text: string) => `${ANSI.bold}${text}${ANSI.reset}`,
     em: (text: string) => `${ANSI.italic}${text}${ANSI.reset}`,

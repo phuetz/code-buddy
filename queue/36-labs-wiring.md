@@ -1,6 +1,6 @@
 # Vague — Câbler les nouvelles surfaces Genspark dans la galerie Labs
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/labs-wiring`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/labs-wiring`.
 
 ## But
 Rendre visibles dans la **galerie Labs** tous les composants Genspark construits récemment (déjà sur main), avec des

@@ -9,6 +9,14 @@
  * - Mode restrictions (paths, commands, network)
  */
 
+const { mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 import {
   SecurityModeManager,
   SecurityMode,
@@ -224,9 +232,10 @@ describe('SecurityModeManager', () => {
 
         manager.saveConfig();
 
-        expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+        expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
           path.join(testWorkingDir, '.codebuddy', 'security.json'),
-          expect.any(String)
+          expect.objectContaining({ mode: 'suggest' }),
+          { mode: 0o600 }
         );
       });
 
@@ -247,9 +256,7 @@ describe('SecurityModeManager', () => {
 
         manager.saveConfig();
 
-        const savedConfig = JSON.parse(
-          (mockFs.writeFileSync as jest.Mock).mock.calls[0][1]
-        );
+        const savedConfig = mockWriteJsonAtomicSync.mock.calls[0][1];
         // Custom command should be saved, but defaults should not
         expect(savedConfig.blockedCommands).toContain('custom-command');
         expect(savedConfig.blockedCommands).not.toContain('rm -rf /');
@@ -261,9 +268,7 @@ describe('SecurityModeManager', () => {
 
         manager.saveConfig();
 
-        const savedConfig = JSON.parse(
-          (mockFs.writeFileSync as jest.Mock).mock.calls[0][1]
-        );
+        const savedConfig = mockWriteJsonAtomicSync.mock.calls[0][1];
         expect(savedConfig.blockedPaths).toContain('/custom/path');
         expect(savedConfig.blockedPaths).not.toContain('/etc/passwd');
       });
@@ -274,9 +279,7 @@ describe('SecurityModeManager', () => {
 
         manager.saveConfig();
 
-        const savedConfig = JSON.parse(
-          (mockFs.writeFileSync as jest.Mock).mock.calls[0][1]
-        );
+        const savedConfig = mockWriteJsonAtomicSync.mock.calls[0][1];
         expect(savedConfig.allowedDirectories).toContain(path.resolve('/extra/dir'));
         expect(savedConfig.allowedDirectories).not.toContain(testWorkingDir);
       });

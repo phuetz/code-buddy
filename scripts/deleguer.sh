@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NOTE (26/08/2026) — deux reglages valent pour TOUS les moteurs qui lancent Code Buddy
-# en headless (qwen, gmi, minimax, nvidia, darkstar) :
+# en headless (qwen, gmi, minimax, nvidia, gpuNode) :
 #
 #   CB_SRC pointe sur le depot COURANT, pas sur ~/code-buddy-vitrine. Le worktree vitrine
 #   etait reste a un vieux commit et rejouait des defauts deja corriges : `cd X && Y` refuse
@@ -12,6 +12,10 @@
 #   an interactive terminal ») — l'agent n'executait alors plus rien, echec impute a tort aux
 #   modeles. `dontAsk` leve la question sans lever les garde-fous : validateur statique de
 #   commandes et filtre de secrets restent actifs. CB_POSTURE permet de durcir au cas par cas.
+# NOTE (04/09/2026) — les moteurs qui pilotent Code Buddy en headless (qwen, gmi, openrouter,
+# minimax, nvidia, groq, cerebras, …) passent `--max-tool-rounds ${CB_MAX_ROUNDS:-300}` : le
+# défaut du mode -p est 50 tours, et une lane MiniMax (GF3FIX) s'est arrêtée sur « Maximum tool
+# execution rounds reached » après 20 outils, rapport écrit, aucun correctif commité.
 # Déléguer une mission à un moteur à $0, sans repayer les pièges déjà payés.
 #
 #   deleguer.sh <dépôt> <mission.md> [moteur]
@@ -20,6 +24,12 @@
 #   local  ollama sur la machine        — aucun quota, aucun réseau
 #   agy    Gemini (Antigravity)         — abonnement AI Ultra ; ⚠️ PLAFOND DUR
 #                                         de ~305 s : découper les missions
+#   openrouter modèles :free (1000 req/j, OPENROUTER_MODELE)
+#   groq / cerebras paliers gratuits directs — GROQ_MODELE / CEREBRAS_MODELE
+#          ⚠️ groq : palier gratuit à ~8 000 jetons/requête → 413 avec l’agent complet (mesuré 02/09) ;
+#            réservé aux prompts courts sans outils. cerebras : OK (gpt-oss-120b, 60 000 de contexte).
+#   omniroute passerelle locale OmniRoute — des centaines de modèles, un endpoint ;
+#                                         OMNIROUTE_MODELE=<id> (défaut auto/best-free)
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
 #                                         (kimi, minimax, deepseek, glm, qwen) ;
 #                                         choisir avec OC_MODELE=<id>
@@ -33,7 +43,11 @@
 #   nvidia NVIDIA Build (clé GRATUITE ~40 RPM) — Code Buddy headless sur Kimi K3 /
 #                                         Nemotron 3 ; 0 quota perso ; prompts → NVIDIA (pas de confidentiel)
 #   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
+#   spark  codex gpt-5.3-codex-spark    — quota Codex-Spark SÉPARÉ du général (à préférer
+#                                         quand le général est bas)
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
+#   vibe   Mistral Vibe (agent officiel) — ABONNEMENT Pro (login `vibe --setup`), $0 marginal
+#   mistral API Mistral pay-as-you-go via Code Buddy headless — clé media.env, plafond --max-price
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
 #
 # Aucun de ces moteurs ne touche au forfait Claude : c'est tout l'objet.
@@ -47,15 +61,39 @@
 #    `RTM_NEWADDR`, et rend une jolie prose sans avoir exécuté une seule commande.
 set -uo pipefail
 
+# Auto-copie (07/09/2026) : bash lit un script par décalage d'octets ; éditer deleguer.sh
+# pendant qu'une lane tourne faisait dérailler l'instance en cours (« MODELE: unbound
+# variable » dans l'épilogue). On exécute donc une copie temporaire ; l'original peut être
+# modifié librement. DELEGUER_NO_SELF_COPY=1 désactive (utile au test de non-régression).
+if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
+  DELEGUER_COPIE=$(mktemp "${TMPDIR:-/tmp}/deleguer-self-XXXXXX.sh")
+  cp "$0" "$DELEGUER_COPIE" && chmod +x "$DELEGUER_COPIE"
+  export DELEGUER_SELF_COPY="$DELEGUER_COPIE" DELEGUER_ORIGINE="$0"
+  exec bash "$DELEGUER_COPIE" "$@"
+fi
+DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
+LANE_FILES="$(cd "$(dirname "$DELEGUER_ORIGINE")" && pwd)/lane-files.mjs"
+
 usage() { sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 2; }
 [ $# -ge 2 ] || usage
 
 DEPOT=$(cd "$1" 2>/dev/null && pwd) || { echo "dépôt introuvable : $1" >&2; exit 2; }
 MISSION=$2
 MOTEUR=${3:-luna}
+# Pause globale des moteurs Codex (quota) : tant que ~/.codebuddy/PAUSE-CODEX existe, une lane astra/luna/sol
+# attend AVANT de démarrer (les lanes déjà lancées ne sont pas touchées). Créer/supprimer le fichier = pause/reprise.
+case "$MOTEUR" in astra|luna|sol)
+  while [ -f "$HOME/.codebuddy/PAUSE-CODEX" ]; do
+    [ -z "${PAUSE_ANNONCEE:-}" ] && { echo "$(date '+%d/%m %H:%M') PAUSE-CODEX : lane $MOTEUR en attente du reset ($(basename "$MISSION"))" >> "${CODEBUDDY_PAUSE_LOG:-$HOME/.codebuddy/delegations/pause-codex.log}"; PAUSE_ANNONCEE=1; }
+    sleep 120
+  done ;;
+esac
 [ -f "$MISSION" ] || { echo "mission introuvable : $MISSION" >&2; exit 2; }
 
-JOURNAUX=~/.codebuddy/delegations
+JOURNAUX=${CODEBUDDY_DELEGATIONS_DIR:-"$HOME/.codebuddy/delegations"}
+# Vitest borné pour toutes les lanes (04/09/2026 : deux lanes tuées par le moniteur mémoire
+# pendant une suite à 24 forks). Voir vitest.config.ts. CB_VITEST_WORKERS pour ajuster.
+export VITEST_MAX_WORKERS="${CB_VITEST_WORKERS:-6}"
 mkdir -p "$JOURNAUX"
 NOM=$(basename "$MISSION" .md)
 LOG="$JOURNAUX/$(date +%Y-%m-%dT%H%M%S)-$MOTEUR-$NOM.log"
@@ -63,9 +101,15 @@ LOG="$JOURNAUX/$(date +%Y-%m-%dT%H%M%S)-$MOTEUR-$NOM.log"
 # Les garde-fous voyagent AVEC la mission. Codex tourne ici sans isolation :
 # ce qui n'est pas écrit dans la consigne n'existe pas.
 CONSIGNE=$(mktemp)
-trap 'rm -f "$CONSIGNE"' EXIT
+trap 'rm -f "$CONSIGNE" ${DELEGUER_SELF_COPY:+"$DELEGUER_SELF_COPY"}' EXIT  # + copie temporaire du script
 {
   cat "$MISSION"
+  # Préambule d'outillage commun (Code Explorer d'abord, lm-resizer sur les commandes
+  # bruyantes, compte rendu chiffré) — demandé par Patrice le 07/09/2026 ; ignoré si absent.
+  PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE.md}"
+  # Pas de second préambule quand un moteur ré-exécute deleguer.sh sur une consigne déjà assemblée
+  # (qwenflash → openrouter : le préambule et les garde-fous étaient injectés deux fois, 08/09).
+  if [ -f "$PREAMBULE_OUTILLAGE" ] && ! grep -q "Outillage obligatoire (préambule commun" "$MISSION"; then printf '\n---\n'; cat "$PREAMBULE_OUTILLAGE"; fi
   cat <<'GARDE'
 
 ---
@@ -91,6 +135,9 @@ DEBUT=$(date +%s)
 # annoncee « depot INCHANGE » alors que le livrable venait d'etre produit (vu le 26/08/2026).
 # Un controle qui crie au loup finit par ne plus etre lu.
 empreinte_depot() {
+  # Le commit de tête fait partie de l'empreinte : une lane qui COMMITE son travail laissait
+  # l'arbre propre et le contrôle criait « aucun fichier créé NI modifié » (vu 3× le 03/09/2026).
+  (cd "$1" && git rev-parse HEAD 2>/dev/null)
   (cd "$1" && git status --porcelain 2>/dev/null | sort | while read -r ligne; do
     fichier=${ligne:3}
     fichier=${fichier%\"}; fichier=${fichier#\"}
@@ -104,11 +151,60 @@ empreinte_depot() {
 
 AVANT=$(empreinte_depot "$DEPOT")
 
+# Le journal de lane reste strictement opt-in : sans ce drapeau, le chemin
+# historique ci-dessous ne fait aucun appel Git ou cryptographique supplémentaire.
+if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
+  LANE_HEAD_AVANT=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
+  LANE_BRANCHE=$(git -C "$DEPOT" branch --show-current 2>/dev/null || true)
+  LANE_MISSION_SHA=$(node "$LANE_FILES" sha256 "$MISSION")
+fi
+
 case "$MOTEUR" in
-  luna|sol)
-    codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" \
-      --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
+  spark)
+    # GPT-5.3-Codex-Spark : quota SÉPARÉ du forfait ChatGPT général (jauge propre, 5 h + hebdo).
+    # À préférer quand le général est bas (03/09/2026 : général 21 %, Spark 55 %).
+    codex exec -C "$DEPOT" -m "gpt-5.3-codex-spark" \
+      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    ;;
+  astra)
+    # GPT-6 Astra — servi par le backend Codex/ChatGPT depuis le 05/09/2026 05 h 33 (sonde : 400
+    # « not supported » jusqu'au 04/09 16 h 35). Table OpenAI du 04/09 : DeepSWE 74,1, Terminal-Bench
+    # 64,6, SRE-Bench 99,2 → réserver au DUR (sécurité, infra, terminal), comme sol.
+    # ASTRA_RESUME=<uuid de session> (ou "last") : reprend une session Codex précédente au lieu d'en ouvrir
+    # une neuve — le préfixe (dépôt, missions précédentes) est alors servi depuis le cache (08/09/2026 :
+    # une session longue = 98 % de tokens en cache, une lane neuve ≈ 0 %). L'UUID d'une lane est écrit
+    # dans $JOURNAUX/sessions-codex.log à sa fin (fichier rollout dont le cwd est le dépôt).
+    _T0=$(date +%s)
+    if [ -n "${ASTRA_RESUME:-}" ]; then
+      if [ "$ASTRA_RESUME" = "last" ]; then _R=(resume --last); else _R=(resume "$ASTRA_RESUME"); fi
+      codex exec "${_R[@]}" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    else
+      codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    fi
+    _SID=$(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -newermt "@$_T0" 2>/dev/null \
+      | xargs -r grep -l -F "\"cwd\":\"$DEPOT\"" 2>/dev/null | head -1 | sed -E 's/.*rollout-[0-9T:-]+-([0-9a-f-]{36})\.jsonl$/\1/')
+    [ -n "$_SID" ] && echo "$(date '+%d/%m %H:%M') $_SID $DEPOT $(basename "$MISSION")" >> "$JOURNAUX/sessions-codex.log"
+    ;;
+  luna|sol)
+    # 07/09/2026 — décision Patrice « mets tout en astra low » (tweet de Tibo/OpenAI, Codex, 06/09 :
+    # « GPT-6 Astra on low performs better than GPT-5.6 Sol on high »). luna et sol sont donc
+    # réacheminés vers gpt-6-astra en low (0,2-0,3 % de quota par lane contre ~1 % et plus à xhigh).
+    # CODEX_VRAI_MOTEUR=1 rend l'ancien comportement (gpt-5.6-luna/sol, effort de config.toml ou CODEX_EFFORT).
+    if [ -n "${CODEX_VRAI_MOTEUR:-}" ]; then
+      codex exec -C "$DEPOT" -m "gpt-5.6-$MOTEUR" ${CODEX_EFFORT:+-c model_reasoning_effort="$CODEX_EFFORT"} \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    else
+      echo "[deleguer] moteur $MOTEUR réacheminé vers gpt-6-astra low (CODEX_VRAI_MOTEUR=1 pour l'ancien)" >&2
+      codex exec -C "$DEPOT" -m "gpt-6-astra" -c model_reasoning_effort="${ASTRA_EFFORT:-low}" \
+        --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --skip-git-repo-check \
+        - < "$CONSIGNE" 2>&1 | tee "$LOG"
+    fi
     ;;
   agy)
     # Sans cette option, agy en mode headless refuse TOUS les outils — il ne peut
@@ -132,7 +228,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=ollama OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   gmi)
     # GMI Cloud (api.gmi-serving.com), compatible OpenAI. Offre MiniMax : M3, M2.7, Speech 2.8
@@ -157,9 +253,47 @@ case "$MOTEUR" in
     # historique, il ne désigne pas xAI.
     (cd "$DEPOT" && GROK_API_KEY="$GKEY" GROK_BASE_URL="https://api.gmi-serving.com/v1" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GMI_MODELE:-MiniMaxAI/MiniMax-M3}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
+  mistral)
+    # API Mistral pay-as-you-go (clé de ~/.codebuddy/media.env) via Code Buddy headless. Le catalogue
+    # /v1/models de Mistral déclare 32k pour les Medium (bouchon) : CODEBUDDY_MAX_CONTEXT force 128k.
+    MKEY=$(grep -E "^(export )?MISTRAL_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$MKEY" ] || { echo "MISTRAL_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=mistral MISTRAL_API_KEY="$MKEY" CODEBUDDY_MAX_CONTEXT="${CB_MAX_CONTEXT:-128000}" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MISTRAL_MODELE:-mistral-medium-latest}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-3}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  vibe)
+    # Mistral Vibe (agent officiel de Mistral) sur l'ABONNEMENT Pro : clé de plan obtenue par
+    # `vibe --setup` (login navigateur, keyring), quota « all-day coding » — pas de facturation API.
+    # Entrée fermée + --trust, sinon le prompt de confiance du dossier bloque en headless (04/09/2026).
+    command -v vibe >/dev/null || export PATH="$HOME/.local/bin:$PATH"
+    (cd "$DEPOT" && vibe --trust --workdir "$DEPOT" --auto-approve --output "${VIBE_OUTPUT:-text}" \
+       --max-turns "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-5}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
+    ;;
+  qwenflash)
+    # Qwen 3.8 Flash via OpenRouter (06/09/2026 : 1 M de contexte, 0,15 $/M entrée, 0,47 $/M sortie,
+    # appels d'outils OK) — moteur de volume pendant les trous Codex. OpenRouter voit les prompts :
+    # code public et vérifications, JAMAIS de livre non publié ni de dépôt privé sans accord.
+    OPENROUTER_MODELE="${OPENROUTER_MODELE:-qwen/qwen3.7-flash}" exec "$DELEGUER_ORIGINE" "$DEPOT" "$CONSIGNE" openrouter
+    ;;
+  openrouter)
+    # OpenRouter, modèles `:free` — 1000 requêtes/jour gratuites dès que le compte porte > 10 $
+    # de crédit (c'est le cas, deux clés). 17 modèles gratuits acceptent les appels d'outils au
+    # 02/09/2026 ; OPENROUTER_MODELE choisit (défaut nvidia/nemotron-3-ultra-550b-a55b:free, 1 M de
+    # contexte ; alternatives : z-ai/glm-5.2:free, google/gemma-4-31b-it:free,
+    # nvidia/nemotron-3-super-120b-a12b:free). ⚠️ un palier `:free` peut mourir en deux heures ;
+    # OpenRouter voit les prompts : rien de confidentiel.
+    OKEY=$(grep -E "^(export )?OPENROUTER_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$OKEY" ] || { echo "OPENROUTER_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OPENROUTER_MODELE:-nvidia/nemotron-3-ultra-550b-a55b:free}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
   minimax)
     # OpenRouter, MiniMax. Défaut : m2.7:free (196 608 de contexte, 0 $).
     #
@@ -178,7 +312,7 @@ case "$MOTEUR" in
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MINIMAX_MODELE:-minimax/minimax-m2.7:free}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
   nvidia)
@@ -195,14 +329,48 @@ case "$MOTEUR" in
     # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  groq|cerebras)
+    # Paliers GRATUITS directs (clés régénérées le 02/09/2026, dans ~/.codebuddy/media.env) :
+    #   groq     ~1000 req/j, 483 tok/s — GROQ_MODELE (défaut qwen/qwen3.8-27b ; Llama 3.3 retiré du catalogue Groq)
+    #   cerebras 1581 tok/s            — CEREBRAS_MODELE (défaut gpt-oss-120b)
+    # Lignées différentes des abonnements (Llama, GLM, gpt-oss) : utiles en vérification croisée.
+    # Prompts → fournisseur tiers : rien de confidentiel.
+    UPPER=$(echo "$MOTEUR" | tr a-z A-Z)
+    PKEY=$(grep -E "^(export )?${UPPER}_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$PKEY" ] || { echo "${UPPER}_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    if [ "$MOTEUR" = groq ]; then PMODEL=${GROQ_MODELE:-qwen/qwen3.8-27b}; PCTX=${GROQ_CONTEXTE:-24000}; else PMODEL=${CEREBRAS_MODELE:-gpt-oss-120b}; PCTX=${CEREBRAS_CONTEXTE:-60000}; fi
+    # Les paliers gratuits plafonnent la TAILLE d'une requête (Groq : 413 « Request too large »
+    # avec le prompt système complet) : CODEBUDDY_MAX_CONTEXT borne le budget du prompt.
+    (cd "$DEPOT" && env "CODEBUDDY_PROVIDER=$MOTEUR" "${UPPER}_API_KEY=$PKEY" "CODEBUDDY_MAX_CONTEXT=$PCTX" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "$PMODEL" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  omniroute)
+    # OmniRoute (passerelle locale MIT, `omniroute serve`, port 20128) : des centaines de modèles
+    # derrière UN endpoint OpenAI-compatible, avec cascade abonnement → clé → gratuit. Intégré à
+    # Code Buddy le 22/08 (fournisseur `omniroute`, catalogue des paliers gratuits importé) ; exposé
+    # ici comme moteur de flotte le 02/09. Modèle via OMNIROUTE_MODELE (défaut `auto/best-free`,
+    # `auto/best-coding`, ou un id précis du catalogue : `omniroute` route). La passerelle doit
+    # tourner : `cd ~/.codebuddy/omniroute-cwd && omniroute serve` (répertoire NEUTRE : OmniRoute
+    # charge le .env du cwd). Les fournisseurs sans clé rendent 429/401 : poser des clés gratuites
+    # dans OmniRoute pour que la cascade tienne. Prompts → fournisseurs tiers : rien de confidentiel.
+    OMNI_URL=${OMNIROUTE_BASE_URL:-http://127.0.0.1:20128/v1}
+    curl -s -m 5 "$OMNI_URL/models" >/dev/null 2>&1 || { echo "⛔ passerelle OmniRoute injoignable sur $OMNI_URL — lance : cd ~/.codebuddy/omniroute-cwd && omniroute serve" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=omniroute OMNIROUTE_BASE_URL="$OMNI_URL" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OMNIROUTE_MODELE:-auto/best-free}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
     # ⛔ UN SEUL TRAVAIL OPENCODE À LA FOIS. Le quota d'une fenêtre de 5 h
     # (12 $) est trop étroit pour le partage : deux missions concurrentes se
     # font couper à mi-course toutes les deux — budget consommé, zéro livrable.
     # En séquentiel, la première aboutit. Constaté le 08/08.
-    if pgrep -f 'opencode run' | grep -qv "^$$\$"; then
+    source "$(dirname "$LANE_FILES")/opencode-guard.sh"
+    if opencode_lane_running; then
       echo "⛔ REFUS — un travail OpenCode tourne déjà. Le quota de 5 h ne" >&2
       echo "   supporte pas le parallélisme : attends son livrable." >&2
       exit 3
@@ -225,8 +393,8 @@ case "$MOTEUR" in
     (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
-  darkstar)
-    # Les DEUX RTX 3090 de darkstar (48 Go), en agentique. Le moteur `local` ci-dessous ne fait
+  gpuNode)
+    # Les DEUX RTX 3090 de gpuNode (48 Go), en agentique. Le moteur `local` ci-dessous ne fait
     # qu'un `ollama run` : il genere du texte mais n'a AUCUN outil, donc il ne peut ni lire ni
     # ecrire un fichier — c'est pourquoi les 3090 restaient a 0 % pendant que tout partait dans
     # le cloud. Ici l'executant est Code Buddy lui-meme, qui lit, edite et lance les commandes,
@@ -234,20 +402,28 @@ case "$MOTEUR" in
     #
     # Modele par defaut : qwen3.8:27b (tient sur une carte, sait appeler des outils). Pour un
     # modele qui ne tient pas sur 24 Go, ollama repartit sur les deux cartes automatiquement.
-    # DARKSTAR_MODELE=ornith-1.5:35b|deepseek-r1:32b|qwen3.6:35b-a3b-q4_K_M
-    DS_HOTE=${DARKSTAR_HOTE:-http://darkstar:11434}
+    # GPU_NODE_MODELE=ornith-1.5:35b|deepseek-r1:32b|qwen3.6:35b-a3b-q4_K_M
+    DS_HOTE=${GPU_NODE_HOTE:-http://gpuNode:11434}
     curl -sf --max-time 8 "$DS_HOTE/api/tags" >/dev/null || {
-      echo "darkstar injoignable sur $DS_HOTE — machine eteinte ou ollama arrete" >&2; exit 2; }
+      echo "gpuNode injoignable sur $DS_HOTE — machine eteinte ou ollama arrete" >&2; exit 2; }
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     # Comme pour nvidia : pas de -u (il PERSISTE baseURL dans user-settings.json), mais -m est
-    # necessaire sinon le defaultModel perime part vers darkstar et rend 404.
+    # necessaire sinon le defaultModel perime part vers gpuNode et rend 404.
     (cd "$DEPOT" && GROK_BASE_URL="$DS_HOTE/v1" GROK_API_KEY=ollama \
-       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${DARKSTAR_MODELE:-qwen3.8:27b}" \
-       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GPU_NODE_MODELE:-qwen3.8:27b}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" --max-tool-rounds "${CB_MAX_ROUNDS:-300}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
     (cd "$DEPOT" && ollama run "$MODELE" "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  echo)
+    # Moteur factice pour le test de non-régression tests/scripts/deleguer-self-copy.sh :
+    # imprime la taille de la consigne, attend, puis insère 20 lignes en tête du script
+    # d'ORIGINE pour simuler une édition à chaud pendant la lane.
+    (cd "$DEPOT" && echo "consigne: $(wc -c < "$CONSIGNE") octets" && sleep 2 \
+      && for i in $(seq 1 20); do sed -i "1i # ligne de test $i" "$DELEGUER_ORIGINE"; done \
+      && echo "moteur echo: source modifiée pendant l'exécution") 2>&1 | tee "$LOG"
     ;;
   *) echo "moteur inconnu : $MOTEUR" >&2; usage ;;
 esac
@@ -292,4 +468,34 @@ grep -oE '`?(~/|/)?[A-Za-zÀ-ÿ0-9_][A-Za-zÀ-ÿ0-9_.-]*(/[A-Za-zÀ-ÿ0-9_.-]+)+
   esac
   [ -e "$chemin" ] || echo "⚠️  livrable annoncé mais ABSENT : $chemin"
 done
+
+if [ "${CODEBUDDY_LANE_LEDGER:-0}" = 1 ]; then
+  LANE_HEAD_APRES=$(git -C "$DEPOT" rev-parse HEAD 2>/dev/null || true)
+  [ -n "$LANE_BRANCHE" ] || LANE_BRANCHE="detached-${LANE_HEAD_APRES:0:12}"
+  LANE_RAPPORT=$(node "$LANE_FILES" latest "$DEPOT")
+  LANE_LEDGER_ARGS=(
+    append delegation
+    --engine "$MOTEUR"
+    --lane "$NOM"
+    --repository "$DEPOT"
+    --branch "$LANE_BRANCHE"
+    --head-before "$LANE_HEAD_AVANT"
+    --head-after "$LANE_HEAD_APRES"
+    --exit-code "$CODE"
+    --mission-sha256 "$LANE_MISSION_SHA"
+  )
+  if [ -n "$LANE_RAPPORT" ]; then
+    LANE_LEDGER_ARGS+=(
+      --report "${LANE_RAPPORT#"$DEPOT"/}"
+      --report-sha256 "$(node "$LANE_FILES" sha256 "$LANE_RAPPORT")"
+    )
+  fi
+  # Le script tourne depuis une auto-copie temporaire (DELEGUER_SELF_COPY) : lane-ledger.sh vit
+  # à côté de l'ORIGINE, pas de la copie.
+  LANE_LEDGER_SCRIPT=$(cd "$(dirname "$DELEGUER_ORIGINE")" && pwd)/lane-ledger.sh
+  if ! LANE_LEDGER_RESULT=$("$LANE_LEDGER_SCRIPT" "${LANE_LEDGER_ARGS[@]}" 2>&1); then
+    echo "⚠️  journal de lane non écrit : $LANE_LEDGER_RESULT" >&2
+    [ "$CODE" -ne 0 ] || CODE=4
+  fi
+fi
 exit "$CODE"

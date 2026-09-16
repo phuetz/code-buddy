@@ -7,6 +7,8 @@
  *   replayRun()  — show timeline then re-execute test steps
  */
 
+import fs from 'fs';
+import path from 'path';
 import { RunStore, RunEvent, RunSummary, RunMetrics, ArtifactIndexRepairResult, RunLineageNode } from './run-store.js';
 import { buildRunRecallPack, buildRunRecallPackAsync } from './run-recall-pack.js';
 import {
@@ -285,8 +287,25 @@ export async function tailRun(runId: string): Promise<void> {
   console.log('[Stream ended]');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function replayCwd(store: RunStore, runId: string): string {
+  const cwd = store.getRun(runId)?.summary.metadata?.cwd;
+  return typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd();
+}
+
+function resolveReplayPath(cwd: string, requested: string): string {
+  return path.isAbsolute(requested) ? requested : path.resolve(cwd, requested);
+}
+
+function isTestCommand(command: string): boolean {
+  return /\b(test|jest|pytest|mocha|vitest|npm\s+test|cargo\s+test|go\s+test)\b/i.test(command);
+}
+
 /**
- * Replay: show timeline then list test steps that can be re-run.
+ * Replay: show timeline then re-execute recorded view_file reads and test commands.
  */
 export async function replayRun(runId: string, rerun = true): Promise<void> {
   const store = RunStore.getInstance();
@@ -294,20 +313,52 @@ export async function replayRun(runId: string, rerun = true): Promise<void> {
   await showRun(runId);
 
   const events = store.getEvents(runId);
-  const testCalls = events.filter(
-    (e) =>
-      e.type === 'tool_call' &&
-      typeof e.data.toolName === 'string' &&
-      e.data.toolName === 'bash' &&
-      typeof e.data.args === 'object' &&
-      typeof (e.data.args as Record<string, unknown>)?.command === 'string' &&
-      /\b(test|jest|pytest|mocha|vitest|npm\s+test|cargo\s+test|go\s+test)\b/i.test(
-        String((e.data.args as Record<string, unknown>)?.command)
-      )
-  );
+  const cwd = replayCwd(store, runId);
+  const toolCalls = events.filter((event) => event.type === 'tool_call');
+  const viewCalls = toolCalls.filter((event) => {
+    const name = event.data.toolName;
+    const args = event.data.args;
+    return (
+      (name === 'view_file' || name === 'file_read') &&
+      isRecord(args) &&
+      typeof args.path === 'string'
+    );
+  });
+  const testCalls = toolCalls.filter((event) => {
+    const args = event.data.args;
+    return (
+      event.data.toolName === 'bash' &&
+      isRecord(args) &&
+      typeof args.command === 'string' &&
+      isTestCommand(args.command)
+    );
+  });
+
+  if (viewCalls.length === 0 && testCalls.length === 0) {
+    console.log('No replayable tool events found in this run.');
+    return;
+  }
+
+  if (viewCalls.length > 0) {
+    console.log('── Replayed reads ────────────────────────');
+    for (const event of viewCalls) {
+      const args = event.data.args as Record<string, unknown>;
+      const relativePath = String(args.path);
+      const absolutePath = resolveReplayPath(cwd, relativePath);
+      console.log(`  view_file ${relativePath}`);
+      if (!rerun) continue;
+      try {
+        const contents = fs.readFileSync(absolutePath, 'utf8');
+        console.log(contents);
+      } catch (error) {
+        console.error(
+          `Failed to re-read ${relativePath}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  }
 
   if (testCalls.length === 0) {
-    console.log('No test steps found in this run.');
     return;
   }
 
@@ -325,7 +376,7 @@ export async function replayRun(runId: string, rerun = true): Promise<void> {
       const cmd = String((tc.data.args as Record<string, unknown>)?.command);
       console.log(`\n$ ${cmd}`);
       try {
-        const out = execSync(cmd, { encoding: 'utf-8', stdio: 'pipe' });
+        const out = execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', cwd });
         console.log(out);
       } catch (err: unknown) {
         const e = err as { stdout?: string; stderr?: string; message?: string };
@@ -736,6 +787,40 @@ export async function showRunRecallPack(
     return;
   }
   console.log(pack.promptContext);
+}
+
+/**
+ * Unified read-only trajectory assembled from existing journals. Never writes.
+ */
+export async function showRunTrajectory(
+  runId: string,
+  json = false,
+  sinceRaw?: string,
+): Promise<void> {
+  const { loadTrajectory, parseTrajectorySince } = await import('./run-trajectory-load.js');
+  const { renderTrajectory } = await import('./run-trajectory.js');
+  let since: number | undefined;
+  try {
+    since = parseTrajectorySince(sinceRaw);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+    return;
+  }
+
+  const store = RunStore.getInstance();
+  if (!store.getRun(runId)) {
+    console.error(`Run not found: ${runId}`);
+    process.exit(1);
+    return;
+  }
+
+  const trajectory = loadTrajectory(runId, { since, store });
+  if (json) {
+    console.log(JSON.stringify(trajectory, null, 2));
+    return;
+  }
+  console.log(renderTrajectory(trajectory));
 }
 
 /**

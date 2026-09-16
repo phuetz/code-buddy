@@ -67,7 +67,7 @@ describe('scanForSecrets', () => {
 
   it('detects private home paths', () => {
     const out = scanForSecrets(
-      'Help me debug this issue in /home/patrice/Documents/private',
+      'Help me debug this issue in /home/user/Documents/private',
     );
     expect(out.matches.some((m) => m.kind === 'private-path')).toBe(true);
   });
@@ -81,7 +81,7 @@ describe('scanForSecrets', () => {
 
   it('avoids overlapping matches when several patterns hit the same range', () => {
     const out = scanForSecrets(
-      'AIzaSyAbcdefghijklmnopqrstuvwxyz1234567A in /home/patrice/foo',
+      'AIzaSyAbcdefghijklmnopqrstuvwxyz1234567A in /home/user/foo',
     );
     // env-key + private-path should both register as separate matches.
     expect(out.matches.length).toBeGreaterThanOrEqual(2);
@@ -110,6 +110,11 @@ describe('scanForSecrets', () => {
     it('detects DE IBAN without spaces', () => {
       const out = scanForSecrets('IBAN DE89370400440532013000 for payments.');
       expect(out.matches.some((m) => m.kind === 'pii-iban')).toBe(true);
+    });
+
+    it('rejects an IBAN-shaped value with an invalid MOD-97 checksum', () => {
+      const out = scanForSecrets('Test value: DE89370400440532013001');
+      expect(out.matches.some((m) => m.kind === 'pii-iban')).toBe(false);
     });
 
     it('detects E.164 international phone numbers', () => {

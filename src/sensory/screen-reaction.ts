@@ -29,12 +29,29 @@ export interface ScreenReactionOptions {
   now?: () => number;
 }
 
+const DEFAULT_SCREEN_DEBOUNCE_MS = 5000;
+
+function resolveScreenDebounceMs(value: number | string | undefined): number {
+  const parsed =
+    typeof value === 'string' && !value.trim() ? Number.NaN : Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  if (value !== undefined) {
+    logger.warn(
+      `[screen] invalid debounce ${JSON.stringify(value)}; using ${DEFAULT_SCREEN_DEBOUNCE_MS}ms`,
+    );
+  }
+  return DEFAULT_SCREEN_DEBOUNCE_MS;
+}
+
 export function wireScreenReaction(options: ScreenReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? Number(process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS ?? 5000);
+  const debounceMs = resolveScreenDebounceMs(
+    options.debounceMs ?? process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS,
+  );
   const now = options.now ?? (() => Date.now());
   let lastAt = Number.NEGATIVE_INFINITY;
   let inFlight = false;
+  let disposed = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -52,6 +69,7 @@ export function wireScreenReaction(options: ScreenReactionOptions = {}): () => v
     void (async () => {
       try {
         const analysis = options.analyzer ? await options.analyzer.analyze() : {};
+        if (disposed) return;
         const { recordCompanionPercept } = await import('../companion/percepts.js');
         const score = (p.payload as { score?: number } | undefined)?.score;
         await recordCompanionPercept(
@@ -75,6 +93,7 @@ export function wireScreenReaction(options: ScreenReactionOptions = {}): () => v
   });
 
   return () => {
+    disposed = true;
     bus.off(id);
   };
 }

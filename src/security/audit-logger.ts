@@ -27,7 +27,10 @@ export type AuditAction =
   | 'sandbox_execute'
   | 'pattern_matched'
   | 'tool_execution'
-  | 'self_improvement';
+  | 'self_improvement'
+  | 'device_register'
+  | 'device_verify'
+  | 'device_revoke';
 
 export type AuditDecision = 'allow' | 'block' | 'warn' | 'confirm';
 
@@ -77,6 +80,9 @@ class AuditLoggerImpl {
         }
         const date = new Date().toISOString().slice(0, 10);
         this.logFile = path.join(options.logDir, `audit-${date}.jsonl`);
+        if (!fs.existsSync(this.logFile)) {
+          fs.writeFileSync(this.logFile, '', { flag: 'a', mode: 0o600 });
+        }
       } catch (error) {
         logger.debug('Failed to initialize audit log file', { error });
       }

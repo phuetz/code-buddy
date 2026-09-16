@@ -60,8 +60,18 @@ export function useEnhancedInput({
   disabled = false,
   multiline = false,
 }: UseEnhancedInputProps = {}): EnhancedInputHook {
-  const [input, setInputState] = useState("");
-  const [cursorPosition, setCursorPositionState] = useState(0);
+  const [input, updateInput] = useState('');
+  const inputRef = useRef('');
+  const setInputState = useCallback((text: string) => {
+    inputRef.current = text;
+    updateInput(text);
+  }, []);
+  const [cursorPosition, updateCursor] = useState(0);
+  const cursorRef = useRef(0);
+  const setCursorPositionState = useCallback((position: number) => {
+    cursorRef.current = position;
+    updateCursor(position);
+  }, []);
   const [isReverseSearchActive, setIsReverseSearchActive] = useState(false);
   const [reverseSearchPrompt, setReverseSearchPrompt] = useState("");
   const isMultilineRef = useRef(multiline);
@@ -84,7 +94,7 @@ export function useEnhancedInput({
   }, [cursorPosition, isNavigatingHistory, setOriginalInput]);
 
   const setCursorPosition = useCallback((position: number) => {
-    setCursorPositionState(Math.max(0, Math.min(input.length, position)));
+    setCursorPositionState(Math.max(0, Math.min(inputRef.current.length, position)));
   }, [input.length]);
 
   const clearInput = useCallback(() => {
@@ -94,13 +104,14 @@ export function useEnhancedInput({
   }, [setOriginalInput]);
 
   const insertAtCursor = useCallback((text: string) => {
-    const result = insertText(input, cursorPosition, text);
+    const result = insertText(inputRef.current, cursorRef.current, text);
     setInputState(result.text);
     setCursorPositionState(result.position);
     setOriginalInput(result.text);
   }, [input, cursorPosition, setOriginalInput]);
 
   const handleSubmit = useCallback(() => {
+    const input = inputRef.current;
     if (input.trim()) {
       addToHistory(input);
       onSubmit?.(input);
@@ -110,6 +121,25 @@ export function useEnhancedInput({
 
   const handleInput = useCallback((inputChar: string, key: Key) => {
     if (disabled) return;
+    // Read synchronously updated refs: multiple events may arrive before React
+    // commits a render (fast typing, Windows Terminal and pasted input).
+    const input = inputRef.current;
+    const cursorPosition = cursorRef.current;
+    // Ink 4 parses CRLF as Ctrl+M, and LF (Ctrl+J) as literal text.
+    // Normalize Enter without executing embedded newlines in pasted content.
+    if (inputChar === '\r\n' || (key.ctrl && inputChar === 'm')) {
+      key = { ...key, return: true };
+    }
+    if (inputChar === '\n' || (key.ctrl && inputChar === 'j')) {
+      const result = insertText(input, cursorPosition, '\n');
+      setInputState(result.text);
+      setCursorPositionState(result.position);
+      setOriginalInput(result.text);
+      return;
+    }
+    if (inputChar.length > 1 && !key.ctrl && !key.meta) {
+      inputChar = inputChar.replace(/\r\n?/g, '\n');
+    }
 
     // Handle Ctrl+C - check multiple ways it could be detected
     if ((key.ctrl && inputChar === "c") || inputChar === "\x03") {
@@ -140,6 +170,21 @@ export function useEnhancedInput({
         setOriginalInput(result.text);
       } else {
         handleSubmit();
+      }
+      return;
+    }
+
+    // In a multiline draft, arrows move within the draft instead of replacing
+    // it with history. History remains available on a single-line prompt.
+    if (input.includes('\n') && !isNavigatingHistory() && (key.upArrow || key.downArrow) && !key.ctrl && !key.meta) {
+      const before = input.slice(0, cursorPosition).split('\n');
+      const row = before.length - 1;
+      const column = before[row]?.length ?? 0;
+      const lines = input.split('\n');
+      const target = row + (key.upArrow ? -1 : 1);
+      if (target >= 0 && target < lines.length) {
+        const offset = lines.slice(0, target).reduce((sum, line) => sum + line.length + 1, 0);
+        setCursorPositionState(offset + Math.min(column, lines[target]?.length ?? 0));
       }
       return;
     }

@@ -136,12 +136,12 @@ describe('startChannelA2ABridge', () => {
       fetchImpl: fakeFetch,
     });
 
-    channel.simulateMessage('/agent ollama-darkstar ping');
+    channel.simulateMessage('/agent ollama-gpuNode ping');
     await flush();
 
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({
-      agent: 'ollama-darkstar',
+      agent: 'ollama-gpuNode',
       message: { parts: [{ text: 'ping' }] },
     });
     expect(calls[0].body).not.toHaveProperty('skill');

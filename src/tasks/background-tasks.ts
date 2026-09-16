@@ -3,6 +3,8 @@ import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, ChildProcess } from 'child_process';
+import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type TaskPriority = 'low' | 'normal' | 'high';
@@ -83,14 +85,30 @@ export class BackgroundTaskManager extends EventEmitter {
       const icon = event === 'completed' ? '✅' : '❌';
       const content = `${icon} Task **${task.id}**: ${event}\n${task.result?.output?.slice(0, 500) || task.result?.error || ''}`;
 
-      await manager.sendToUser(
+      const result = await manager.sendToUser(
         (channelType ?? task.notifyChannel) as import('../channels/index.js').ChannelType,
         channelId ?? 'default',
         content,
         event === 'failed' ? 'high' : 'normal'
       );
-    } catch {
-      // Notification delivery is best-effort
+      if (!result.success) {
+        logger.warn(
+          `[background-tasks] channel notification did not complete for task ${task.id} (${event})`,
+          {
+            success: result.success,
+            sent: result.sent,
+            failed: result.failed,
+            queued: result.queued,
+            error: result.error,
+          }
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        `[background-tasks] channel notification threw for task ${task.id} (${event}): ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
   }
 
@@ -115,7 +133,14 @@ export class BackgroundTaskManager extends EventEmitter {
 
         try {
           const taskPath = path.join(this.tasksDir, file);
-          const task: BackgroundTask = JSON.parse(fs.readFileSync(taskPath, 'utf-8'));
+          const task = readJsonAtomicSync<BackgroundTask | null>(taskPath, null, {
+            mode: 0o600,
+            isValid: (value): value is BackgroundTask => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value) &&
+              typeof (value as BackgroundTask).id === 'string',
+            ),
+          });
+          if (!task) continue;
           task.createdAt = new Date(task.createdAt);
           if (task.startedAt) task.startedAt = new Date(task.startedAt);
           if (task.completedAt) task.completedAt = new Date(task.completedAt);
@@ -140,7 +165,7 @@ export class BackgroundTaskManager extends EventEmitter {
    */
   private saveTask(task: BackgroundTask): void {
     const taskPath = path.join(this.tasksDir, `${task.id}.json`);
-    fs.writeFileSync(taskPath, JSON.stringify(task, null, 2));
+    writeJsonAtomicSync(taskPath, task, { mode: 0o600 });
   }
 
   /**

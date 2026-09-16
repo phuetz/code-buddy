@@ -71,7 +71,7 @@ coupure à quatre secondes `0,461` en 99 ms, correctement classée incomplète.
 ## Laboratoire Moshi Rust
 
 Le backend de production officiel Kyutai a été compilé depuis le commit
-`e6a55d2` dans `/home/patrice/DEV/moshi-rust/rust`. Le modèle féminin Moshika
+`e6a55d2` dans `~/DEV/moshi-rust/rust`. Le modèle féminin Moshika
 q8 et Mimi sont installés avec des permissions privées sous
 `~/.codebuddy/moshi/models/moshika/` (environ 8,55 Go au total). Le build final
 emploie `-C target-cpu=native`, qui active AVX et F16C sur le Ryzen ; le build

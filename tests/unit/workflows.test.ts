@@ -27,6 +27,23 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: (filePath: string, fallback: unknown, options: {
+    isValid?: (value: unknown) => boolean;
+  } = {}) => {
+    try {
+      const value: unknown = JSON.parse((fs.readFileSync as jest.Mock)(filePath, 'utf8'));
+      return options.isValid && !options.isValid(value) ? fallback : value;
+    } catch {
+      return fallback;
+    }
+  },
+  // VERIF3 T21 : le double jetait l'argument `mode`, donc 0o600 n'était gardé
+  // pour aucun état persisté. Il est désormais propagé au faux disque.
+  writeJsonAtomicSync: (filePath: string, value: unknown, options?: { mode?: number }) =>
+    (fs.writeFileSync as jest.Mock)(filePath, JSON.stringify(value, null, 2), options),
+}));
+
 // Mock os module
 jest.mock('os', () => {
   const impl = {
@@ -516,9 +533,29 @@ describe('WorkflowStateManager', () => {
     });
 
     it('should save state to disk on creation', () => {
-      stateManager.createState('test-workflow');
+      const state = stateManager.createState('test-workflow', { foo: 'bar' });
 
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // VERIF3 T21 : persister `{}` à la place de l'état sérialisé restait
+      // vert ; seul le chemin était gardé.
+      const statePath = path.join('/mock/states', `${state.instanceId}.json`);
+      const calls = (fs.writeFileSync as jest.Mock).mock.calls.filter(
+        (call) => call[0] === statePath
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0]![2]).toEqual({ mode: 0o600 });
+
+      const persisted = JSON.parse(calls[0]![1] as string);
+      expect(persisted).toMatchObject({
+        instanceId: state.instanceId,
+        workflowId: 'test-workflow',
+        status: 'pending',
+        currentStepIndex: 0,
+      });
+      expect(persisted.context.variables).toEqual({ foo: 'bar' });
+      // Les Map sont sérialisées en tableaux d'entrées.
+      expect(persisted.context.stepResults).toEqual([]);
+      expect(persisted.stepExecutions).toEqual([]);
+      expect(typeof persisted.createdAt).toBe('string');
     });
 
     it('should generate unique instance IDs', () => {

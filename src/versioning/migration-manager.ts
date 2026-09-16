@@ -18,6 +18,7 @@ import * as os from 'os';
 import semver from 'semver';
 import { EventEmitter } from 'events';
 import { createHash, randomUUID } from 'crypto';
+import { writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface Migration {
   version: string;
@@ -534,7 +535,7 @@ export class MigrationManager extends EventEmitter {
           }
         } else {
           // Restore original content
-          await fs.writeFile(filePath, content);
+          await writeFileAtomic(filePath, content, { mode: 0o600 });
           this.logger.debug(`Restored file: ${filePath}`);
         }
         restoredCount++;
@@ -599,13 +600,13 @@ export class MigrationManager extends EventEmitter {
     const auditPath = path.join(this.config.dataDir, this.config.auditFile);
 
     try {
-      await fs.writeJson(
+      await writeJsonAtomic(
         auditPath,
         {
           entries: this.auditLog,
           lastUpdated: new Date().toISOString(),
         },
-        { spaces: 2 }
+        { mode: 0o600 }
       );
     } catch (error) {
       this.logger.warn(`Failed to save audit log: ${error}`);
@@ -703,7 +704,7 @@ export class MigrationManager extends EventEmitter {
     if (this.config.dryRun) return;
 
     const historyPath = path.join(this.config.dataDir, this.config.historyFile);
-    await fs.writeJson(historyPath, { history: this.history }, { spaces: 2 });
+    await writeJsonAtomic(historyPath, { history: this.history }, { mode: 0o600 });
   }
 
   /**

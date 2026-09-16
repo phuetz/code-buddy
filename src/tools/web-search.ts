@@ -106,6 +106,14 @@ export interface SearchResult {
   published?: string;
 }
 
+/** One provider attempt from `searchStructured` (journal / Deep Research). */
+export interface StructuredSearchAttempt {
+  provider: SearchProvider;
+  hitsIn: number;
+  usableUrls: number;
+  error?: string;
+}
+
 export interface PerplexitySearchResult {
   content: string;
   citations: string[];
@@ -311,6 +319,12 @@ export class WebSearchTool {
   // Cache failed queries to avoid repeated timeouts (TTL: 2 minutes)
   private failedQueries = new Map<string, number>();
   private static readonly FAILED_QUERY_TTL = 120000;
+  private lastStructuredAttempts: StructuredSearchAttempt[] = [];
+
+  /** Last `searchStructured` provider attempts (empty until the first call). */
+  getLastStructuredAttempts(): StructuredSearchAttempt[] {
+    return this.lastStructuredAttempts.slice();
+  }
 
   async search(query: string, options: WebSearchOptions = {}): Promise<ToolResult> {
     // Mode check (Codex-inspired prompt injection mitigation)
@@ -508,8 +522,25 @@ export class WebSearchTool {
    * every provider fails (never throws).
    */
   async searchStructured(query: string, options: WebSearchOptions = {}): Promise<SearchResult[]> {
+    const { results } = await this.searchStructuredTraced(query, options);
+    return results;
+  }
+
+  /**
+   * Like {@link searchStructured} but returns THIS call's provider attempts.
+   * Parallel Deep Research queries must not share a mutable attempts array —
+   * mixing them produced a 17 KB CAPTCHA dump on a 0-source failure.
+   */
+  async searchStructuredTraced(
+    query: string,
+    options: WebSearchOptions = {},
+  ): Promise<{ results: SearchResult[]; attempts: StructuredSearchAttempt[] }> {
+    const attempts: StructuredSearchAttempt[] = [];
     const effectiveMode = options.mode ?? _globalSearchMode;
-    if (effectiveMode === 'disabled') return [];
+    if (effectiveMode === 'disabled') {
+      this.lastStructuredAttempts = attempts;
+      return { results: [], attempts };
+    }
 
     let effectiveOptions = options;
     if (effectiveMode === 'cached' && !options.provider) {
@@ -525,13 +556,43 @@ export class WebSearchTool {
     for (const provider of chain) {
       try {
         const results = await this.resolveProviderResults(provider, query, count, effectiveOptions);
-        const filtered = results.filter((r) => !r.url || isDomainAllowed(r.url));
-        if (filtered.length > 0) return filtered;
+        const filtered = results.filter(
+          (r) => typeof r.url === 'string' && r.url.trim().length > 0 && isDomainAllowed(r.url),
+        );
+        attempts.push({
+          provider,
+          hitsIn: results.length,
+          usableUrls: filtered.length,
+        });
+        logger.info('[web-search] structured provider', {
+          provider,
+          hitsIn: results.length,
+          usableUrls: filtered.length,
+        });
+        if (filtered.length > 0) {
+          this.lastStructuredAttempts = attempts.slice();
+          return { results: filtered, attempts };
+        }
+        logger.debug(`Structured search provider ${provider} returned no usable URLs, trying next`, {
+          raw: results.length,
+        });
       } catch (error) {
-        logger.debug(`Structured search provider ${provider} failed, trying next`, { error: getErrorMessage(error) });
+        const message = getErrorMessage(error);
+        attempts.push({
+          provider,
+          hitsIn: 0,
+          usableUrls: 0,
+          error: message,
+        });
+        logger.debug(`Structured search provider ${provider} failed, trying next`, { error: message });
       }
     }
-    return [];
+    logger.warn('[web-search] structured search empty', {
+      query,
+      attempts,
+    });
+    this.lastStructuredAttempts = attempts.slice();
+    return { results: [], attempts };
   }
 
   private buildCacheKey(query: string, count: number, options: WebSearchOptions): string {

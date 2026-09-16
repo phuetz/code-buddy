@@ -1,12 +1,9 @@
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
-  existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -20,6 +17,7 @@ import {
 } from '../conversation/conversation-evaluator.js';
 import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   addVoiceGuidance,
   defaultVoiceGuidancePath,
@@ -192,8 +190,12 @@ export function loadConversationImprovementState(
   path = defaultConversationQualityStatePath(),
 ): ConversationImprovementState {
   try {
-    if (!existsSync(path)) return { issueStreaks: {} };
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    const parsed = readJsonAtomicSync<Record<string, unknown>>(path, { issueStreaks: {} }, {
+      mode: 0o600,
+      isValid: (value): value is Record<string, unknown> => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
     const rawStreaks =
       parsed.issueStreaks && typeof parsed.issueStreaks === 'object'
         ? (parsed.issueStreaks as Record<string, unknown>)
@@ -255,13 +257,7 @@ function saveConversationImprovementState(
   path: string
 ): void {
   try {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    const temporaryPath = `${path}.${process.pid}.tmp`;
-    writeFileSync(temporaryPath, JSON.stringify(state, null, 2), {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    renameSync(temporaryPath, path);
+    writeJsonAtomicSync(path, state, { mode: 0o600 });
   } catch {
     /* A later cycle can safely reconstruct the bounded state. */
   }

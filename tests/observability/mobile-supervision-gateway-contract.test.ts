@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildMobileSupervisionGatewayContract,
@@ -22,6 +22,18 @@ describe('mobile supervision gateway contract', () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
     store.dispose();
     fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+
+  it('does not touch session or run stores for a contract-only preview', async () => {
+    const searchSessions = vi.fn(() => { throw new Error('must not open a native database'); });
+    const contract = await buildMobileSupervisionGatewayContract(' preview ', {
+      includeSnapshot: false, sessionStore: { searchSessions },
+    });
+    expect(searchSessions).not.toHaveBeenCalled();
+    expect(contract.snapshot).toBeUndefined();
+    expect(contract.query).toBe('preview');
+    expect(contract.blockedOperations.every(item => item.policy.allowed === false)).toBe(true);
+    expect(contract.endpoints).toHaveLength(4);
   });
 
   it('describes a local-first review-only gateway without remote execution', async () => {

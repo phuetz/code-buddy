@@ -27,6 +27,6 @@
       "@codebuddy/*": ["../src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "../src/types/optional-deps.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

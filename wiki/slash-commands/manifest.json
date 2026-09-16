@@ -1,0 +1,712 @@
+{
+  "commandCount": 140,
+  "counts": {
+    "BLOQUE_PREREQUIS": 5,
+    "ECHEC": 12,
+    "PARTIEL": 1,
+    "TESTE_LOCAL": 103,
+    "VALIDATION_SEULE": 19
+  },
+  "commands": [
+    {
+      "name": "help",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "shortcuts",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "clear",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "history",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "init",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "reinit",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "features",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "reload",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "log",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "compact",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "plan",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "ultraplan",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "config",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "login",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "logout",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "whoami",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "fast",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "model",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "mode",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "model-router",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "switch",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "checkpoints",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "restore",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "undo",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "redo",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "timeline",
+      "status": "BLOQUE_PREREQUIS",
+      "captures": 1
+    },
+    {
+      "name": "diff",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "pr",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "review",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "commit",
+      "status": "BLOQUE_PREREQUIS",
+      "captures": 1
+    },
+    {
+      "name": "worktree",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "test",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "lint",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "fix",
+      "status": "BLOQUE_PREREQUIS",
+      "captures": 1
+    },
+    {
+      "name": "debug",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "debug-issue",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "refactor",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "generate-tests",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "tdd",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "ai-test",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "watch",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "conflicts",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "vulns",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "bug",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "explain",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "docs",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "docs-generate",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "security",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "guardian",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "security-review",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "identity",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "pairing",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "elevated",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "secrets-scan",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "policy",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "add",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "context",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "workspace",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "cache",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "dry-run",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "prompt-cache",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "sessions",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "copy",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "branch",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "fork",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "branches",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "checkout",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "merge",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "save",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "export",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "export-list",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "export-formats",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "memory",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "remember",
+      "status": "PARTIEL",
+      "captures": 1
+    },
+    {
+      "name": "lessons",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "knowledge-graph",
+      "status": "BLOQUE_PREREQUIS",
+      "captures": 1
+    },
+    {
+      "name": "persona",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "goal",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "loop",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "subgoal",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "yolo",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "autonomy",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "permissions",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "approvals",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "heal",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "starter",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "tools",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "pipeline",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "skill",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "parallel",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "agent",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "subagent",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "swarm",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "cost",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "stats",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "tool-analytics",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "voice",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "speak",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "tts",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "companion",
+      "status": "BLOQUE_PREREQUIS",
+      "captures": 1
+    },
+    {
+      "name": "theme",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "avatar",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "vim",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "search",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "todo",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "scan-todos",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "address-todo",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "workflow",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "hooks",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "track",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "colab",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "script",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "fcs",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "plugins",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "plugin",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "team",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "batch",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "think",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "status",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "new",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "grill-me",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "deepthink",
+      "status": "VALIDATION_SEULE",
+      "captures": 1
+    },
+    {
+      "name": "btw",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "heartbeat",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "daily-reset",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "share",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "agents",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "fleet",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "suggest",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "telemetry",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "prompt",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "quota",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "coverage",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "voice-code",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "transform",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "infra",
+      "status": "ECHEC",
+      "captures": 1
+    },
+    {
+      "name": "dev",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "replace",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "cloud",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    },
+    {
+      "name": "trigger",
+      "status": "TESTE_LOCAL",
+      "captures": 1
+    }
+  ]
+}

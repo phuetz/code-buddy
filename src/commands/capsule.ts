@@ -7,9 +7,14 @@ import { OutcomeCapsuleStore, type OutcomeCapsuleParameter } from '../goals/outc
 import { ProvenOutcomeStore } from '../goals/proven-outcome-memory.js';
 import { ShadowTwinStore } from '../goals/shadow-twin.js';
 
-function currentCapsules() {
+const NO_DURABLE_INTENT = 'No durable intent. Start one with buddy loop "<goal>" first.';
+
+function currentCapsules(command: Command) {
   const state = getGoalManager().state;
-  if (!state) throw new Error('No durable intent. Start one with buddy loop "<goal>" first.');
+  if (!state) {
+    command.error(NO_DURABLE_INTENT);
+  }
+  if (!state) throw new Error(NO_DURABLE_INTENT);
   const graph = buildIntentGraph(state);
   const constitution = new MissionConstitutionStore(state.goalId).get(graph);
   const exchange = new MissionExchange(state.goalId);
@@ -41,8 +46,8 @@ export function createCapsuleCommand(): Command {
   command
     .command('list')
     .option('--json', 'Print structured JSON')
-    .action((options: { json?: boolean }) => {
-      const { state, capsules } = currentCapsules();
+    .action((options: { json?: boolean }, command: Command) => {
+      const { state, capsules } = currentCapsules(command);
       const items = capsules.list(state.goalId);
       if (options.json) console.log(JSON.stringify(items, null, 2));
       else if (items.length === 0) console.log('No outcome capsule yet.');
@@ -70,8 +75,8 @@ export function createCapsuleCommand(): Command {
       description?: string;
       parameters: OutcomeCapsuleParameter[];
       requiredRuntimes: number;
-    }) => {
-      const { constitution, evaluations, outcomes, capsules } = currentCapsules();
+    }, command: Command) => {
+      const { constitution, evaluations, outcomes, capsules } = currentCapsules(command);
       const outcome = options.outcome ? outcomes.find((entry) => entry.id === options.outcome) : outcomes[0];
       if (!outcome) throw new Error('No proven outcome. Complete a proof-gated loop first.');
       const capsule = capsules.create({
@@ -90,16 +95,16 @@ export function createCapsuleCommand(): Command {
     .command('activate')
     .argument('<id>')
     .option('--approve', 'Explicit human approval')
-    .action((id: string, options: { approve?: boolean }) => {
-      const { capsules } = currentCapsules();
+    .action((id: string, options: { approve?: boolean }, command: Command) => {
+      const { capsules } = currentCapsules(command);
       console.log(`Activated ${capsules.activate(id, options.approve === true).id}`);
     });
 
   command
     .command('revoke')
     .argument('<id>')
-    .action((id: string) => {
-      const { capsules } = currentCapsules();
+    .action((id: string, _options: unknown, command: Command) => {
+      const { capsules } = currentCapsules(command);
       console.log(`Revoked ${capsules.revoke(id).id}`);
     });
 

@@ -16,7 +16,11 @@ export interface ToolScore {
   failures: string[];
 }
 
-/** Run the authored tool over `cases`; a case passes if its output contains all expectIncludes. */
+function normalizeToolOutput(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+/** Run the authored tool over `cases`; a case passes only on normalized exact output. */
 export async function scoreToolCases(spec: AuthoredToolSpec, cases: ToolCase[]): Promise<ToolScore> {
   const tool = buildAuthoredTool(spec);
   const failures: string[] = [];
@@ -38,9 +42,12 @@ export async function scoreToolCases(spec: AuthoredToolSpec, cases: ToolCase[]):
       failures.push(`case ${i}: threw (${err instanceof Error ? err.message : String(err)})`);
     }
     if (ok) {
-      const missing = c.expectIncludes.filter((s) => !output.includes(s));
-      if (missing.length > 0) {
-        failures.push(`case ${i}: output missing ${JSON.stringify(missing)} (got ${JSON.stringify(output.slice(0, 80))})`);
+      const expected = normalizeToolOutput(c.expectedOutput);
+      const actual = normalizeToolOutput(output);
+      if (actual !== expected) {
+        failures.push(
+          `case ${i}: output mismatch (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual.slice(0, 80))})`,
+        );
       } else {
         passed++;
       }

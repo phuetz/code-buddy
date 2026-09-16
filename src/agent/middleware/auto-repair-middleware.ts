@@ -136,10 +136,14 @@ export class AutoRepairMiddleware implements ConversationMiddleware {
       if (entry.toolResult) {
         if (entry.toolResult.success) continue; // passed — not a failure
         const errorOutput = (entry.toolResult.error || entry.toolResult.output || content).slice(0, 3000);
+        // A WritePolicy block is not a broken command to re-run — retrying bash
+        // `echo > file` under strict mode is a loop. The agent must use apply_patch.
+        if (/WritePolicy/i.test(errorOutput)) continue;
         return { toolName, errorOutput };
       }
 
       if (!content) continue;
+      if (/WritePolicy/i.test(content)) continue;
       const hasError = this.config.errorPatterns.some(pattern => pattern.test(content));
       if (hasError) {
         return { toolName, errorOutput: content.slice(0, 3000) };

@@ -18,11 +18,11 @@
  *
  * @module companion/event-followups
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface EventFollowUp {
   id: string;
@@ -76,24 +76,37 @@ function defaultStatePath(): string {
   );
 }
 
-export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowUp[] {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      if (Array.isArray(data)) return data.filter((e) => e && typeof e.id === 'string');
-    }
-  } catch {
-    /* best effort */
-  }
-  return [];
+function isEventFollowUp(value: unknown): value is EventFollowUp {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.id === 'string' &&
+    typeof entry.event === 'string' &&
+    typeof entry.eventDayAt === 'number' &&
+    typeof entry.dueAt === 'number' &&
+    typeof entry.followUp === 'string' &&
+    typeof entry.createdAt === 'number' &&
+    (entry.firedAt === undefined || typeof entry.firedAt === 'number')
+  );
 }
 
-export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): void {
+export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowUp[] {
+  const parsed = readJsonAtomicSync<unknown[]>(statePath, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
+  return parsed.filter(isEventFollowUp);
+}
+
+export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): boolean {
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(statePath, JSON.stringify(items));
-  } catch {
-    /* best effort */
+    writeJsonAtomicSync(statePath, items, { mode: 0o600 });
+    return true;
+  } catch (err) {
+    logger.warn(
+      `[event-followups] could not persist store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
   }
 }
 
@@ -109,7 +122,9 @@ export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath 
     createdAt: nowMs,
   };
   items.push(followUp);
-  saveEventFollowUps(items, statePath);
+  if (!saveEventFollowUps(items, statePath)) {
+    throw new Error(`[event-followups] could not persist ${statePath}`);
+  }
   return followUp;
 }
 

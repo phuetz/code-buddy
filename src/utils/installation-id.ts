@@ -10,21 +10,14 @@
  * value. Don't store secrets here, don't read it for auth decisions.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { readTextAtomicSync, writeFileAtomicSync } from './atomic-write.js';
 
 const INSTALL_ID_PATH = path.join(os.homedir(), '.codebuddy', 'installation-id');
 
 let cached: string | null = null;
-
-function ensureDir(): void {
-  const dir = path.dirname(INSTALL_ID_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
 
 /** UUID v4 — RFC 4122 §4.4. Stays inside Node stdlib (`crypto.randomUUID`
  *  exists since Node 14.17 / 16; we already require ≥18). */
@@ -41,13 +34,11 @@ export function getInstallationId(): string {
   if (cached) return cached;
 
   try {
-    if (fs.existsSync(INSTALL_ID_PATH)) {
-      const raw = fs.readFileSync(INSTALL_ID_PATH, 'utf-8').trim();
-      // Loose UUID v4 shape check — be tolerant of older formats.
-      if (raw && /^[0-9a-f-]{8,}$/i.test(raw)) {
-        cached = raw;
-        return cached;
-      }
+    const raw = readTextAtomicSync(INSTALL_ID_PATH, '').trim();
+    // Loose UUID v4 shape check — be tolerant of older formats.
+    if (raw && /^[0-9a-f-]{8,}$/i.test(raw)) {
+      cached = raw;
+      return cached;
     }
   } catch {
     // Read error → fall through to (re)generate.
@@ -55,11 +46,7 @@ export function getInstallationId(): string {
 
   const fresh = newUuid();
   try {
-    ensureDir();
-    fs.writeFileSync(INSTALL_ID_PATH, fresh, 'utf-8');
-    if (process.platform !== 'win32') {
-      try { fs.chmodSync(INSTALL_ID_PATH, 0o600); } catch { /* non-fatal */ }
-    }
+    writeFileAtomicSync(INSTALL_ID_PATH, fresh);
   } catch {
     // Disk write failure is non-fatal — we still return the fresh id
     // for this process. Next launch will retry.

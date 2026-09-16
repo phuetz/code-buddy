@@ -19,6 +19,7 @@ interface ListenerStubOptions {
   lastSeenReason?: string | null;
   compactionActive?: boolean;
   stale?: boolean;
+  connected?: boolean;
   request?: FleetListenerPublicAPI['request'];
 }
 
@@ -33,6 +34,7 @@ function makeStubListener(opts: ListenerStubOptions = {}): FleetListenerPublicAP
       reason: opts.lastSeenReason ?? null,
       ageMs: opts.lastSeenAgeMs ?? null,
     }),
+    isConnected: () => opts.connected ?? true,
     isStale: () => opts.stale ?? false,
     getPeerCompactionState: () => ({
       active: opts.compactionActive ?? false,
@@ -72,13 +74,13 @@ describe('list_peers tool', () => {
   });
 
   it('lists multiple peers with full status', async () => {
-    registerPeer('darkstar', {
+    registerPeer('gpuNode', {
       lastSeenAgeMs: 1500,
       lastSeenReason: 'heartbeat',
       compactionActive: false,
       stale: false,
     });
-    registerPeer('ministar', {
+    registerPeer('hub', {
       lastSeenAgeMs: 200,
       lastSeenReason: 'event',
       compactionActive: false,
@@ -91,15 +93,15 @@ describe('list_peers tool', () => {
     const data = result.data as { peers: ListedPeer[] };
     expect(data.peers).toHaveLength(2);
 
-    const darkstar = data.peers.find((p) => p.id === 'darkstar')!;
-    expect(darkstar.url).toBe('ws://example/darkstar');
-    expect(darkstar.eventCount).toBe(5);
-    expect(darkstar.lastSeenAgeMs).toBe(1500);
-    expect(darkstar.lastSeenReason).toBe('heartbeat');
-    expect(darkstar.compacting).toBe(false);
-    expect(darkstar.stale).toBe(false);
-    expect(darkstar.peerChatLikelyAvailable).toBe(true);
-    expect(darkstar.connectedSince).toBe('2026-05-08T10:00:00.000Z');
+    const gpuNode = data.peers.find((p) => p.id === 'gpuNode')!;
+    expect(gpuNode.url).toBe('ws://example/gpuNode');
+    expect(gpuNode.eventCount).toBe(5);
+    expect(gpuNode.lastSeenAgeMs).toBe(1500);
+    expect(gpuNode.lastSeenReason).toBe('heartbeat');
+    expect(gpuNode.compacting).toBe(false);
+    expect(gpuNode.stale).toBe(false);
+    expect(gpuNode.peerChatLikelyAvailable).toBe(true);
+    expect(gpuNode.connectedSince).toBe('2026-05-08T10:00:00.000Z');
 
     // Output is JSON-pretty.
     expect(typeof result.output).toBe('string');
@@ -145,7 +147,7 @@ describe('list_peers tool', () => {
             isLocal: false,
           },
           capabilities: {
-            machineLabel: 'ministar',
+            machineLabel: 'hub',
             egress: 'cloud',
             models: [
               {
@@ -178,7 +180,7 @@ describe('list_peers tool', () => {
       isLocal: false,
     });
     expect(data.peers[0].capabilities).toMatchObject({
-      machineLabel: 'ministar',
+      machineLabel: 'hub',
       egress: 'cloud',
       modelCount: 2,
       providers: ['chatgpt-oauth', 'ollama'],
@@ -191,6 +193,24 @@ describe('list_peers tool', () => {
       'reasoning',
       'thinking',
     ]);
+  });
+
+  it.each([null, { models: [null] }, { models: [{ id: 'x', provider: 'ollama' }] }])(
+    'keeps successful RPC reachability distinct from malformed capability metadata: %j', async capabilities => {
+      registerPeer('malformed', { request: async () => ({ capabilities }) });
+      const result = await executeListPeers({ includeCapabilities: true });
+      const peer = (result.data as { peers: ListedPeer[] }).peers[0];
+      expect(peer.reachable).toBe(true);
+      expect(peer.capabilities).toBeNull();
+      expect(peer.peerChatLikelyAvailable).toBe(false);
+      expect(peer.describeError).toBeUndefined();
+    },
+  );
+
+  it('does not infer availability from an old heartbeat on a disconnected peer', async () => {
+    registerPeer('offline', { lastSeenAgeMs: 500, connected: false });
+    const result = await executeListPeers();
+    expect((result.data as { peers: ListedPeer[] }).peers[0]).toMatchObject({ connected: false, peerChatLikelyAvailable: false });
   });
 
   it('keeps the peer listed when peer.describe enrichment fails', async () => {

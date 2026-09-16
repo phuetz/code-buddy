@@ -4,7 +4,9 @@ import { getEnhancedCommandHandler } from "./enhanced-command-handler.js";
 import { GitWorkflowHandler } from "./workflow/git-workflow.js";
 import { getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
+import { isModelCompatibleWithProvider } from "../providers/model-provider-compat.js";
 import { updateCurrentModel } from "../utils/model-config.js";
+import { setSwitchModelProvider, type SwitchModelProvider } from "./handlers/switch-handler.js";
 
 export interface ClientCommandContext {
   agent: CodeBuddyAgent;
@@ -85,6 +87,8 @@ export class ClientCommandDispatcher {
     input: string,
     context: ClientCommandContext
   ): Promise<boolean> {
+    // Keep the historical plural spelling on the same live-agent path.
+    input = input.replace(/^\/models(?=\s|$)/, '/model');
     const slashManager = getSlashCommandManager();
     const result = slashManager.execute(input);
 
@@ -123,7 +127,7 @@ export class ClientCommandDispatcher {
          return true;
       }
 
-      if (input === "/exit") {
+      if (input === "/exit" || input === "/quit") {
           process.exit(0);
       }
 
@@ -159,12 +163,15 @@ export class ClientCommandDispatcher {
       const args = originalInput.trim().split(/\s+/).slice(1);
       if (args.length === 0) {
         context.setShowModelSelection(true);
-        context.setSelectedModelIndex(0);
+        context.setSelectedModelIndex(Math.max(0, context.availableModels.findIndex(option => option.model === context.agent.getCurrentModel())));
         context.clearInput();
         return true;
       }
-      // With args, delegate to enhanced handler for model switching
-      return await this.delegateToEnhanced(token, originalInput, context);
+      if (args[0] === 'auto' || args[0] === 'list') {
+        return await this.delegateToEnhanced(token, originalInput, context);
+      }
+      await this.handleModelSwitch(originalInput, context);
+      return true;
     }
 
     // __CLEAR_CHAT__ needs UI state resets beyond what the handler provides
@@ -172,6 +179,7 @@ export class ClientCommandDispatcher {
       const handled = await this.delegateToEnhanced(token, originalInput, context);
       if (handled) {
         // Apply UI-specific side effects
+        context.agent.clearChat();
         context.setChatHistory([]);
         context.setIsProcessing(false);
         context.setIsStreaming(false);
@@ -209,15 +217,22 @@ export class ClientCommandDispatcher {
       getContextStats: () => context.agent.getContextStats(),
       formatContextStats: () => context.agent.formatContextStats(),
       getCurrentModel: () => context.agent.getCurrentModel(),
+      getMemoryScope: () => context.agent.getMemoryScope(),
+      getCurrentSessionId: () => context.agent.getCurrentSessionId?.() ?? null,
       getContextMemoryMetrics: () => context.agent.getContextMemoryMetrics(),
       getCompressionStats: () => context.agent.getCompressionStats(),
       getContextBudgetBreakdown: () => context.agent.getContextBudgetBreakdown(),
     });
 
+    setSwitchModelProvider(this.createSwitchModelProvider(context));
+
     const args = overrideArgs ?? originalInput.trim().split(" ").slice(1);
     const handlerResult = await enhancedHandler.handleCommand(token, args, originalInput);
 
     if (handlerResult.handled) {
+      if (handlerResult.compactionRequested) {
+        context.agent.requestManualCompaction();
+      }
       if (handlerResult.entry) {
         context.setChatHistory((prev) => [...prev, handlerResult.entry!]);
       }
@@ -238,6 +253,44 @@ export class ClientCommandDispatcher {
     return true;
   }
 
+  /** Session-only /switch overrides, keyed by the live agent. */
+  private static readonly switchState = new WeakMap<object, { baseModel: string; switched: string | null }>();
+
+  /**
+   * Back /switch with the running agent so it changes the model used by the
+   * next turns (session only, unlike /model which also saves the preference).
+   */
+  private static createSwitchModelProvider(context: ClientCommandContext): SwitchModelProvider {
+    const agent = context.agent;
+    const state = () => {
+      let current = this.switchState.get(agent);
+      if (!current) {
+        current = { baseModel: agent.getCurrentModel(), switched: null };
+        this.switchState.set(agent, current);
+      }
+      return current;
+    };
+    return {
+      getAvailableModels: () => context.availableModels.map(option => option.model),
+      getCurrentModel: () => agent.getCurrentModel(),
+      getSwitchedModel: () => this.switchState.get(agent)?.switched ?? null,
+      setSwitchedModel: (model) => {
+        const current = state();
+        if (model === null) {
+          if (current.switched !== null) agent.setModel(current.baseModel);
+          this.switchState.delete(agent);
+          return;
+        }
+        const provider = agent.getClient().getCurrentProvider?.();
+        if (!isModelCompatibleWithProvider(model, provider)) {
+          throw new Error(`Model ${model} is incompatible with the active provider ${provider}. Choose a model for this connection.`);
+        }
+        agent.setModel(model);
+        current.switched = model;
+      },
+    };
+  }
+
   private static async handleEnhancedCommand(
     token: string,
     originalInput: string,
@@ -247,27 +300,32 @@ export class ClientCommandDispatcher {
   }
 
   private static async handleModelSwitch(input: string, context: ClientCommandContext) {
-      const modelArg = input.trim().split(" ")[1];
-      const modelNames = context.availableModels.map((m) => m.model);
-
-      if (modelArg !== undefined && modelNames.includes(modelArg)) {
-        context.agent.setModel(modelArg);
-        updateCurrentModel(modelArg);
-        const confirmEntry: ChatEntry = {
-          type: "assistant",
-          content: `✓ Switched to model: ${modelArg}`,
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, confirmEntry]);
-      } else {
-        const errorEntry: ChatEntry = {
-          type: "assistant",
-          content: `Invalid model: ${modelArg}\n\nAvailable models: ${modelNames.join(", ")}`,
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, errorEntry]);
-      }
-      context.clearInput();
+    const args = input.trim().split(/\s+/).slice(1);
+    const model = args[0];
+    if (!model || args.length !== 1) {
+      this.finishCommandWithMessage(context, 'Usage: /model <model-name>');
+      return;
+    }
+    const provider = context.agent.getClient().getCurrentProvider?.();
+    if (!isModelCompatibleWithProvider(model, provider)) {
+      this.finishCommandWithMessage(context, `Model ${model} is incompatible with the active provider ${provider}. Choose a model for this connection.`);
+      return;
+    }
+    // Change the running client and its context/token limits before announcing success.
+    context.agent.setModel(model);
+    // An explicit /model choice becomes the new base for later /switch auto.
+    this.switchState.delete(context.agent);
+    try {
+      updateCurrentModel(model);
+    } catch (error) {
+      this.finishCommandWithMessage(context,
+        `Model active for this session: ${model}. Could not save the preference: ${getErrorMessage(error)}`);
+      return;
+    }
+    context.setChatHistory(prev => [...prev, {
+      type: 'assistant', content: `Switched to model: ${model}`, timestamp: new Date(),
+    }]);
+    context.clearInput();
   }
 
   private static async handleShellBypass(command: string, context: ClientCommandContext) {

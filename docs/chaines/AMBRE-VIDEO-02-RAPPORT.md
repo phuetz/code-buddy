@@ -8,13 +8,13 @@ reprenant le moteur de montage et les seuils documentés pour la vidéo 01.
 Le master final est :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4
+~/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4
 ```
 
 Son sidecar auditable est placé à côté :
 
 ```text
-/home/patrice/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4.meta.json
+~/.codebuddy/media-video/ambre-japon/ambre-japon-v01.mp4.meta.json
 ```
 
 SHA-256 du master :
@@ -38,11 +38,11 @@ l’intérieur de chaque plan.
 ## Re-scoring canonique des dix composites
 
 Les dix fichiers `ambre-013` à `ambre-022` ont été recalculés avec
-`scripts/darkstar/score-arcface-images.py` contre une seule image du kit
+`scripts/gpuNode/score-arcface-images.py` contre une seule image du kit
 canonique, jamais contre un composite ni une image de garde-robe :
 
 ```text
-/home/patrice/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
+~/.codebuddy/personas/ambre/identity-kit/ambre-v3-preview.png
 ```
 
 SHA-256 de la référence :
@@ -81,7 +81,7 @@ la même V3 canonique :
 
 Le total atteint ainsi **exactement 8 sources sur 10 au-dessus de 0,75**. La
 condition « moins de 8 » n’étant plus vraie, aucune nouvelle génération n’a été
-lancée et aucun des deux services ComfyUI de darkstar n’a été touché.
+lancée et aucun des deux services ComfyUI de gpuNode n’a été touché.
 
 Les réparations 019 et 020 ont été admises dans le vivier, mais écartées du
 master : dans un premier rendu non livré, leur petite marge se réduisait après

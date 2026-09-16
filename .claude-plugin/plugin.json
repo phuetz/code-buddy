@@ -1,0 +1,23 @@
+{
+  "name": "code-buddy",
+  "version": "2.0.0",
+  "displayName": "Code Buddy",
+  "description": "Drive Code Buddy, the multi-provider AI coding agent (64 providers, local Ollama at $0), from Claude Code: the skill teaches headless one-shot runs, provider/model pinning, permission modes and the verify loop; the MCP server exposes Code Buddy's read-only tools. Requires `npm i -g @phuetz/code-buddy`.",
+  "author": {
+    "name": "Patrice Huetz",
+    "url": "https://github.com/phuetz"
+  },
+  "homepage": "https://phuetz.github.io/code-buddy/",
+  "repository": "https://github.com/phuetz/code-buddy",
+  "license": "BUSL-1.1",
+  "keywords": [
+    "coding-agent",
+    "ollama",
+    "mcp",
+    "claude-code",
+    "codex",
+    "multi-provider",
+    "fleet"
+  ],
+  "skills": "./skills/"
+}

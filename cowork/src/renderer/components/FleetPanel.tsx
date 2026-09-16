@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { FleetPeer, FleetPeerStatus } from '../types';
+import { PeerSeenLabel } from './fleet-peer-freshness';
 
 const STATUS_TOKEN: Record<FleetPeerStatus, string> = {
   connecting: 'text-warning',
@@ -50,13 +51,36 @@ function StatusIcon({ status }: { status: FleetPeerStatus }) {
   }
 }
 
-function formatRelativeTime(ts: number | undefined): string {
-  if (!ts) return '—';
-  const diff = Date.now() - ts;
-  if (diff < 1000) return 'just now';
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  return `${Math.floor(diff / 3_600_000)}h ago`;
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** A manual reconnect failure, tied to the peer registration it was reported for. */
+interface ReconnectError {
+  message: string;
+  addedAt: number;
+}
+
+/**
+ * A reconnect failure is obsolete once its peer has authenticated since (the
+ * bridge's own recovery succeeded), was removed, or was re-registered under the
+ * same id.
+ */
+function isReconnectErrorObsolete(error: ReconnectError, peer: FleetPeer | undefined): boolean {
+  return !peer || peer.status === 'authenticated' || peer.addedAt !== error.addedAt;
+}
+
+function pruneObsoleteReconnectErrors(
+  errors: Record<string, ReconnectError>,
+  peers: Record<string, FleetPeer>
+): Record<string, ReconnectError> {
+  let next: Record<string, ReconnectError> | null = null;
+  for (const [peerId, error] of Object.entries(errors)) {
+    if (!isReconnectErrorObsolete(error, peers[peerId])) continue;
+    next ??= { ...errors };
+    delete next[peerId];
+  }
+  return next ?? errors;
 }
 
 export function FleetPanel() {
@@ -75,9 +99,17 @@ export function FleetPanel() {
   const [addApiKey, setAddApiKey] = useState('');
   const [addLabel, setAddLabel] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [reconnectingPeerIds, setReconnectingPeerIds] = useState<Record<string, true>>({});
+  const [reconnectErrors, setReconnectErrors] = useState<Record<string, ReconnectError>>({});
   const fleetApi = window.electronAPI?.fleet;
 
   const peers = useMemo(() => Object.values(peersMap), [peersMap]);
+
+  // Forget failures the bridge has since resolved, so they cannot resurface on a later drop.
+  useEffect(() => {
+    setReconnectErrors((current) => pruneObsoleteReconnectErrors(current, peersMap));
+  }, [peersMap]);
 
   useEffect(() => {
     if (!show) return;
@@ -85,22 +117,33 @@ export function FleetPanel() {
       setFleetPeers([]);
       return;
     }
-    void fleetApi.list().then((list) => {
-      setFleetPeers(
-        list.map((p) => ({
-          id: p.id,
-          url: p.url,
-          label: p.label,
-          addedAt: p.addedAt,
-          status: p.status as FleetPeerStatus,
-          lastError: p.lastError,
-          lastSeenAt: p.lastSeenAt,
-          lastEventType: p.lastEventType,
-          peerChatProvider: p.peerChatProvider as FleetPeer['peerChatProvider'],
-          capability: p.capability as FleetPeer['capability'],
-        }))
-      );
-    });
+    let cancelled = false;
+    setListError(null);
+    fleetApi
+      .list()
+      .then((list) => {
+        if (cancelled) return;
+        setFleetPeers(
+          list.map((p) => ({
+            id: p.id,
+            url: p.url,
+            label: p.label,
+            addedAt: p.addedAt,
+            status: p.status as FleetPeerStatus,
+            lastError: p.lastError,
+            lastSeenAt: p.lastSeenAt,
+            lastEventType: p.lastEventType,
+            peerChatProvider: p.peerChatProvider as FleetPeer['peerChatProvider'],
+            capability: p.capability as FleetPeer['capability'],
+          }))
+        );
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setListError(errorMessage(err));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [show, fleetApi, setFleetPeers]);
 
   const filteredEvents = useMemo(
@@ -147,8 +190,26 @@ export function FleetPanel() {
   };
 
   const handleReconnect = async (peerId: string) => {
-    if (!fleetApi) return;
-    await fleetApi.reconnect(peerId);
+    const addedAt = peersMap[peerId]?.addedAt;
+    if (!fleetApi || addedAt === undefined || reconnectingPeerIds[peerId]) return;
+    setReconnectingPeerIds((current) => ({ ...current, [peerId]: true }));
+    setReconnectErrors(({ [peerId]: _previous, ...rest }) => rest);
+    let failure: string | undefined;
+    try {
+      const result = await fleetApi.reconnect(peerId);
+      if (!result.success) failure = result.error || 'Reconnect failed';
+    } catch (err) {
+      failure = errorMessage(err);
+    }
+    if (failure) {
+      const error: ReconnectError = { message: failure, addedAt };
+      // Read the store now, not the render snapshot: the peer may have recovered,
+      // been removed or re-registered while the attempt was running.
+      if (!isReconnectErrorObsolete(error, useAppStore.getState().fleetPeers[peerId])) {
+        setReconnectErrors((current) => ({ ...current, [peerId]: error }));
+      }
+    }
+    setReconnectingPeerIds(({ [peerId]: _done, ...rest }) => rest);
   };
 
   return (
@@ -195,7 +256,7 @@ export function FleetPanel() {
                 value={addUrl}
                 onChange={(e) => setAddUrl(e.target.value)}
                 data-testid="fleet-add-url-input"
-                placeholder="ws://100.98.18.76:3000/ws"
+                placeholder="ws://203.0.113.10:3000/ws"
                 className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent font-mono"
               />
               <input
@@ -211,7 +272,7 @@ export function FleetPanel() {
                 value={addLabel}
                 onChange={(e) => setAddLabel(e.target.value)}
                 data-testid="fleet-add-label-input"
-                placeholder="Label (optional, e.g. Ministar Linux)"
+                placeholder="Label (optional, e.g. Linux hub)"
                 className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
               />
               {addError && (
@@ -238,6 +299,16 @@ export function FleetPanel() {
             </div>
           )}
 
+          {listError && (
+            <p
+              className="flex items-center gap-1 border-t border-border px-4 py-2 text-xs text-error"
+              data-testid="fleet-list-error"
+            >
+              <AlertCircle className="w-3 h-3 shrink-0" />
+              Could not load peers: {listError}
+            </p>
+          )}
+
           <ul className="max-h-64 overflow-y-auto">
             {peers.length === 0 && (
               <li className="px-4 py-3 text-xs text-text-muted">
@@ -245,7 +316,7 @@ export function FleetPanel() {
                   ? (
                     <>
                       No peers configured. Add a Code Buddy instance running on your Tailscale mesh
-                      (e.g. <code className="font-mono text-text-secondary">ws://100.98.18.76:3000/ws</code>)
+                      (e.g. <code className="font-mono text-text-secondary">ws://203.0.113.10:3000/ws</code>)
                       with a key scoped for fleet:listen and peer:invoke.
                     </>
                   )
@@ -254,6 +325,16 @@ export function FleetPanel() {
             )}
             {peers.map((peer) => {
               const isActive = filterPeer === peer.id;
+              const isReconnecting = Boolean(reconnectingPeerIds[peer.id]);
+              const reconnectError = reconnectErrors[peer.id];
+              // Hidden as soon as it is obsolete (before the pruning effect runs), and shown
+              // once when the bridge already reports the same cause on the peer.
+              const shownReconnectError =
+                reconnectError &&
+                !isReconnectErrorObsolete(reconnectError, peer) &&
+                reconnectError.message !== peer.lastError
+                  ? reconnectError.message
+                  : null;
               return (
                 <li
                   key={peer.id}
@@ -273,20 +354,35 @@ export function FleetPanel() {
                       <div className="truncate text-[10px] text-text-muted font-mono">
                         {peer.url}
                       </div>
-                      {peer.lastError && (
-                        <div className="truncate text-[10px] text-error">{peer.lastError}</div>
+                      {(peer.lastError || shownReconnectError) && (
+                        <div
+                          className="text-[10px] text-error"
+                          data-testid={`fleet-peer-error-${peer.id}`}
+                        >
+                          {peer.lastError && (
+                            <div className="truncate" title={peer.lastError}>
+                              {peer.lastError}
+                            </div>
+                          )}
+                          {shownReconnectError && (
+                            <div className="truncate" title={shownReconnectError}>
+                              {shownReconnectError}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <span className="text-[10px] text-text-muted shrink-0">
-                      {formatRelativeTime(peer.lastSeenAt)}
-                    </span>
+                    <PeerSeenLabel peer={peer} className="text-[10px] shrink-0" />
                   </button>
                   <button
                     onClick={() => handleReconnect(peer.id)}
-                    className="rounded p-1 hover:bg-surface text-text-muted hover:text-text-primary transition-colors"
-                    title="Reconnect"
+                    disabled={isReconnecting}
+                    aria-busy={isReconnecting}
+                    data-testid={`fleet-peer-reconnect-${peer.id}`}
+                    className="rounded p-1 hover:bg-surface text-text-muted hover:text-text-primary transition-colors disabled:cursor-wait disabled:opacity-60"
+                    title={isReconnecting ? 'Reconnecting…' : 'Reconnect'}
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <RefreshCw className={`w-3.5 h-3.5 ${isReconnecting ? 'animate-spin' : ''}`} />
                   </button>
                   <button
                     onClick={() => handleRemove(peer.id)}

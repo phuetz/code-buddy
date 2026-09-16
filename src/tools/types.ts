@@ -19,6 +19,23 @@ export type ToolCategory =
   | 'mcp';           // External MCP tools
 
 /**
+ * Side-effect class declared on each catalog tool (C5).
+ *
+ * - `read` — observation only (no durable mutation, no outbound send, no spawn/kill)
+ * - `reversible` — mutation that CheckpointManager or a known inverse can undo
+ * - `emission` — irreversible send: network, message, spawn, kill, clipboard overwrite
+ *
+ * Additive: missing at runtime is `unknown`, never claimed reversible.
+ */
+export type ToolEffectClass = 'read' | 'reversible' | 'emission';
+
+export const TOOL_EFFECT_CLASSES: readonly ToolEffectClass[] = [
+  'read',
+  'reversible',
+  'emission',
+];
+
+/**
  * Metadata associated with a tool for selection and display purposes.
  */
 export interface ToolMetadata {
@@ -32,6 +49,11 @@ export interface ToolMetadata {
   priority: number;
   /** Human-readable description */
   description: string;
+  /**
+   * Declared side-effect class. Catalog tools must set this; MCP/authored
+   * tools may omit it (`unknown` at resolve time, unique warning).
+   */
+  effect?: ToolEffectClass;
   /**
    * Whether this tool is safe to expose to remote peers via A2A / fleet.
    *
@@ -47,6 +69,12 @@ export interface ToolMetadata {
    * silently filtered out from peer-visible tool lists.
    */
   fleetSafe?: boolean;
+  /**
+   * Polling/status tool that may legitimately be called repeatedly with the
+   * same arguments and result (e.g. waiting on a background job). The tool
+   * loop guard (`src/agent/execution/tool-loop-guard.ts`) never counts it.
+   */
+  repeatSafe?: boolean;
 }
 
 /**

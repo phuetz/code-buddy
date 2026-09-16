@@ -13,6 +13,7 @@
 
 import { log, logWarn } from '../utils/logger';
 import { loadCoreModule } from '../utils/core-loader';
+import type { SkillExecutionContext } from '../../../../src/skills/types';
 
 export interface SkillMdSummary {
   name: string;
@@ -74,12 +75,7 @@ type CoreSkillMdModule = {
   } | null;
   executeSkill: (
     skillName: string,
-    context: {
-      userInput?: string;
-      workspaceRoot?: string;
-      sessionId?: string;
-      [key: string]: unknown;
-    }
+    context: SkillExecutionContext
   ) => Promise<{
     success: boolean;
     output?: string;
@@ -190,7 +186,10 @@ export class SkillMdBridge {
       return { success: false, error: 'Skill registry unavailable' };
     }
     try {
-      const result = await mod.executeSkill(skillName, context);
+      const result = await mod.executeSkill(skillName, {
+        request: context?.userInput?.trim() || `Use the ${skillName} skill to guide work in the current project.`,
+        cwd: context?.workspaceRoot,
+      });
       return {
         success: result.success,
         output: result.output,

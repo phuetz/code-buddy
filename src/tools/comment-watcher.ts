@@ -1,10 +1,30 @@
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { execFile } from "child_process";
 import { EventEmitter } from "events";
 
-const execAsync = promisify(exec);
+const RIPGREP_TIMEOUT_MS = 30_000;
+
+/**
+ * Run ripgrep without a shell. Resolves with stdout; exit status 1 means
+ * "no match" and resolves empty. Missing binary, timeout or real errors reject
+ * so the caller can fall back to the manual scan.
+ */
+function runRipgrep(args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      "rg",
+      args,
+      { cwd, maxBuffer: 10 * 1024 * 1024, timeout: RIPGREP_TIMEOUT_MS, windowsHide: true },
+      (error, stdout) => {
+        if (!error) return resolve(stdout);
+        if ((error as { code?: unknown }).code === 1 && !error.killed) return resolve("");
+        reject(error);
+      },
+    );
+    child.stdin?.end();
+  });
+}
 
 export interface CommentTrigger {
   pattern: string;           // e.g., "AI:", "GROK:", "TODO(ai):"
@@ -146,20 +166,17 @@ export class CommentWatcher extends EventEmitter {
     const patterns = this.config.triggers.map((t) => t.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     const pattern = patterns.join("|");
 
-    // Build ignore patterns
-    const ignores = this.config.ignoreDirs.map((d) => `--glob '!${d}/**'`).join(" ");
-
-    // Build file type filters
-    const types = this.config.fileExtensions.map((e) => `--glob '*${e}'`).join(" ");
+    const rgArgs = [
+      "-n", "--no-heading", "--color=never", "--ignore-case",
+      ...this.config.ignoreDirs.flatMap((d) => ["--glob", `!${d}/**`]),
+      ...this.config.fileExtensions.flatMap((e) => ["--glob", `*${e}`]),
+      // Explicit path: without it ripgrep reads the inherited stdin pipe, which
+      // never closes inside the CLI, and the scan hangs forever.
+      "--", pattern, ".",
+    ];
 
     try {
-      const { stdout } = await execAsync(
-        `rg -n "${pattern}" ${ignores} ${types} || true`,
-        {
-          cwd: this.projectRoot,
-          maxBuffer: 10 * 1024 * 1024,
-        }
-      );
+      const stdout = await runRipgrep(rgArgs, this.projectRoot);
 
       const lines = stdout.trim().split("\n").filter(Boolean);
 
@@ -176,7 +193,7 @@ export class CommentWatcher extends EventEmitter {
           const triggerMatch = content.match(trigger.regex);
           if (triggerMatch) {
             this.detectedComments.push({
-              file,
+              file: path.resolve(this.projectRoot, file),
               line: parseInt(lineNum),
               column: content.indexOf(triggerMatch[0]),
               trigger: trigger.pattern,

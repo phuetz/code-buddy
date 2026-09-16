@@ -5,7 +5,7 @@ n'autorise aucune publication.
 
 ## Livrables canoniques
 
-Le dossier `/home/patrice/Videos/publication-2026-07-30/shorts-ambre/` contient
+Le dossier `~/Videos/publication-2026-07-30/shorts-ambre/` contient
 les trois masters v4, leurs métadonnées et la checklist commune
 `A-VERIFIER-AVANT-PUBLICATION-V4.md`. Les miniatures sont dans le dossier frère
 `miniatures/`.

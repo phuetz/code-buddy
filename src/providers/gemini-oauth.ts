@@ -8,6 +8,7 @@ import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
 import open from 'open';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 // Cloud Code First-Party Client ID & Secret
 const OAUTH_CLIENT_ID = process.env.GEMINI_OAUTH_CLIENT_ID || '';
@@ -60,15 +61,15 @@ export async function getGeminiOauthTokens(forceLogin = false): Promise<Credenti
   
   if (!forceLogin) {
     try {
-      const credsRaw = await fs.readFile(credsPath, 'utf-8');
-      const creds = JSON.parse(credsRaw) as Credentials;
+      const creds = await readJsonAtomic<Credentials | null>(credsPath, null);
+      if (!creds) throw new Error('Gemini credentials are unavailable');
       client.setCredentials(creds);
       
       // Attempt to get access token to see if it's still valid or can be refreshed
       const { token } = await client.getAccessToken();
       if (token) {
         // Save the updated credentials if they were refreshed
-        await fs.writeFile(credsPath, JSON.stringify(client.credentials, null, 2));
+        await writeJsonAtomic(credsPath, client.credentials, { mode: 0o600 });
         return client.credentials;
       }
     } catch (_e) {
@@ -116,8 +117,7 @@ export async function getGeminiOauthTokens(forceLogin = false): Promise<Credenti
           client.setCredentials(tokens);
           
           // Save credentials to disk
-          await fs.mkdir(path.dirname(credsPath), { recursive: true });
-          await fs.writeFile(credsPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+          await writeJsonAtomic(credsPath, tokens, { mode: 0o600 });
           
           res.writeHead(301, { Location: SIGN_IN_SUCCESS_URL });
           res.end();

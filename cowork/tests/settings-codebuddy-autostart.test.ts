@@ -103,7 +103,7 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
         get: vi.fn().mockResolvedValue({
           codebuddy: {
             enabled: true,
-            endpoint: 'http://100.73.222.64:3000',
+            endpoint: 'http://192.0.2.42:3000',
             model: '',
           },
         }),
@@ -130,7 +130,7 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
     });
 
     expect(listModels).toHaveBeenCalledWith({
-      endpoint: 'http://100.73.222.64:3000',
+      endpoint: 'http://192.0.2.42:3000',
       apiKey: undefined,
     });
 
@@ -155,7 +155,7 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
 
     expect(configSave).toHaveBeenCalledWith(expect.objectContaining({
       codebuddy: expect.objectContaining({
-        endpoint: 'http://100.73.222.64:3000',
+        endpoint: 'http://192.0.2.42:3000',
         model: 'qwen-remote:32b',
       }),
     }));
@@ -180,7 +180,7 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
         get: vi.fn().mockResolvedValue({
           codebuddy: {
             enabled: true,
-            endpoint: 'http://100.73.222.64:3000',
+            endpoint: 'http://192.0.2.42:3000',
           },
         }),
       },

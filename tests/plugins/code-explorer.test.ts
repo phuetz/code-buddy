@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
+import { EventEmitter } from 'node:events';
 import * as fs from 'fs';
 import { execFileSync, execSync, spawn } from 'child_process';
 
@@ -259,13 +260,14 @@ describe('CodeExplorerManager', () => {
 
   describe('auto-index', () => {
     const staleMeta = JSON.stringify({
-      lastCommit: 'oldsha',
+      lastCommit: 'a'.repeat(40),
       indexedAt: '2026-07-01T00:00:00.000Z',
       stats: {},
     });
 
     beforeEach(() => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockReset();
+      vi.mocked(execSync).mockReturnValue(Buffer.from('1.0.0'));
       (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (fs.readFileSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(staleMeta);
     });
@@ -279,11 +281,11 @@ describe('CodeExplorerManager', () => {
       const child = { on: vi.fn(), unref: vi.fn() };
       (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(child);
 
-      expect(manager.getFreshness(() => '2')).toMatchObject({ stale: true, commitsBehind: 2 });
-      manager.getFreshness(() => '2');
+      expect(manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '2')).toMatchObject({ stale: true, commitsBehind: 2 });
+      manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '2');
 
       expect(spawn).toHaveBeenCalledTimes(1);
-      expect(spawn).toHaveBeenCalledWith('gitnexus', ['analyze', '--incremental'], {
+      expect(spawn).toHaveBeenCalledWith('code-explorer', ['analyze', '--incremental'], {
         cwd: path.resolve(testRepoPath),
         detached: true,
         stdio: 'ignore',
@@ -293,17 +295,24 @@ describe('CodeExplorerManager', () => {
       expect(child.unref).toHaveBeenCalledOnce();
     });
 
+    it('does not launch an indexer when Git freshness is unverified', () => {
+      vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
+      expect(manager.getFreshness(() => { throw new Error('Git unavailable'); }))
+        .toMatchObject({ stale: true, unverified: true });
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
     it('does not refresh by default', () => {
       vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'false');
 
-      expect(manager.getFreshness(() => '1').stale).toBe(true);
+      expect(manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '1').stale).toBe(true);
       expect(spawn).not.toHaveBeenCalled();
     });
 
     it('never refreshes when a read-only caller disables auto-index', () => {
       vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
 
-      expect(manager.getFreshness(() => '3', { autoIndex: false })).toMatchObject({
+      expect(manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '3', { autoIndex: false })).toMatchObject({
         stale: true,
         commitsBehind: 3,
       });
@@ -316,8 +325,8 @@ describe('CodeExplorerManager', () => {
         throw new Error('spawn failed');
       });
 
-      expect(() => manager.getFreshness(() => '1')).not.toThrow();
-      expect(manager.getFreshness(() => '1')).toMatchObject({ stale: true, commitsBehind: 1 });
+      expect(() => manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '1')).not.toThrow();
+      expect(manager.getFreshness(args => args.startsWith('rev-parse') ? 'b'.repeat(40) : '1')).toMatchObject({ stale: true, commitsBehind: 1 });
     });
   });
 
@@ -375,6 +384,73 @@ describe('CodeExplorerManager', () => {
       (execSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
         Buffer.from('1.0.0'),
       );
+    });
+
+    function processFixture() {
+      return Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter() });
+    }
+
+    it('shares simultaneous identical requests across managers for the same repo', async () => {
+      const child = processFixture();
+      vi.mocked(spawn).mockReturnValue(child as unknown as ReturnType<typeof spawn>);
+      const requests = [manager.analyze({ incremental: true }), new CodeExplorerManager(testRepoPath).analyze({ incremental: true })];
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual(['analyze', '--incremental']);
+      child.emit('close', 0);
+      await Promise.all(requests);
+    });
+
+    it('serializes different options while preserving the requested forced rebuild', async () => {
+      const first = processFixture();
+      const second = processFixture();
+      vi.mocked(spawn).mockReturnValueOnce(first as unknown as ReturnType<typeof spawn>)
+        .mockReturnValueOnce(second as unknown as ReturnType<typeof spawn>);
+      const initial = manager.analyze();
+      const forced = new CodeExplorerManager(testRepoPath).analyze({ force: true });
+      expect(spawn).toHaveBeenCalledTimes(1);
+      first.emit('close', 0);
+      await initial;
+      await Promise.resolve();
+      expect(spawn).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(spawn).mock.calls[1]?.[1]).toEqual(['analyze', '--force']);
+      second.emit('close', 0);
+      await forced;
+    });
+
+    it('propagates a shared failure and allows a later retry', async () => {
+      const first = processFixture();
+      const second = processFixture();
+      vi.mocked(spawn).mockReturnValueOnce(first as unknown as ReturnType<typeof spawn>)
+        .mockReturnValueOnce(second as unknown as ReturnType<typeof spawn>);
+      const results = Promise.allSettled([manager.analyze(), manager.analyze()]);
+      first.emit('close', 1);
+      expect((await results).map(result => result.status)).toEqual(['rejected', 'rejected']);
+      const retry = manager.analyze();
+      second.emit('close', 0);
+      await retry;
+      expect(spawn).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not serialize independent repositories', async () => {
+      const first = processFixture();
+      const second = processFixture();
+      vi.mocked(spawn).mockReturnValueOnce(first as unknown as ReturnType<typeof spawn>)
+        .mockReturnValueOnce(second as unknown as ReturnType<typeof spawn>);
+      const requests = [manager.analyze(), new CodeExplorerManager('/another/repo').analyze()];
+      expect(spawn).toHaveBeenCalledTimes(2);
+      first.emit('close', 0); second.emit('close', 0);
+      await Promise.all(requests);
+    });
+
+    it('bounds stderr while retaining the final diagnostic', async () => {
+      const child = processFixture();
+      vi.mocked(spawn).mockReturnValue(child as unknown as ReturnType<typeof spawn>);
+      const result = manager.analyze().catch((error: Error) => error.message);
+      child.stderr.emit('data', Buffer.from('x'.repeat(100000) + 'FINAL_DIAGNOSTIC'));
+      child.emit('close', 1);
+      const message = await result;
+      expect(message).toContain('FINAL_DIAGNOSTIC');
+      expect(message!.length).toBeLessThan(66000);
     });
 
     it('should spawn code-explorer analyze', async () => {

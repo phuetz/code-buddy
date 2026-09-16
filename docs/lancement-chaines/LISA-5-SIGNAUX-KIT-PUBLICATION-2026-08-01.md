@@ -4,7 +4,7 @@
 
 Le kit est prêt dans :
 
-`/home/patrice/Videos/publication-2026-07-30/lisa-vision-ia/kit-publication-v4/`
+`~/Videos/publication-2026-07-30/lisa-vision-ia/kit-publication-v4/`
 
 Il cible exclusivement le master corrigé
 `lisa-vision-ia-5-signaux-v4.mp4`, SHA-256

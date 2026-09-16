@@ -5,28 +5,22 @@
  * gating, and graceful failure modes (corrupt JSON, missing file, ENOENT).
  */
 
-// Set unique path per test file BEFORE imports — vitest pool=forks runs
-// files in parallel, race on the shared default location otherwise.
 import path from 'path';
 import os from 'os';
-process.env.CODEBUDDY_METRICS_PATH = path.join(
-  os.tmpdir(),
-  `codebuddy-metrics-test-${process.pid}-mp.json`
-);
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import {
   saveMetrics,
   loadMetrics,
   clearMetrics,
-  _metricsPathForTests,
 } from '../../../src/agent/multi-agent/metrics-persistence.js';
 import type { AgentMetrics } from '../../../src/agent/multi-agent/enhanced-coordination.js';
 import type { AgentRole } from '../../../src/agent/multi-agent/types.js';
 
-const METRICS_PATH = _metricsPathForTests();
-const PERSIST_DIR = path.dirname(METRICS_PATH);
+let METRICS_PATH: string;
+let directory: string;
+let PERSIST_DIR: string;
 
 function makeMetrics(role: AgentRole, totalTasks = 0): AgentMetrics {
   return {
@@ -46,14 +40,15 @@ function makeMetrics(role: AgentRole, totalTasks = 0): AgentMetrics {
 
 describe('metrics-persistence — Phase N (V0.4.1)', () => {
   beforeEach(async () => {
-    // Clean slate between tests so file state is deterministic. Tests run
-    // against the real ~/.codebuddy/agents/metrics.json — acceptable for
-    // unit tests since the file is single-process; CI uses fresh HOME.
-    await clearMetrics();
+    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'metrics-test-'));
+    METRICS_PATH = path.join(directory, 'metrics.json');
+    vi.stubEnv('CODEBUDDY_METRICS_PATH', METRICS_PATH);
+    PERSIST_DIR = directory;
   });
 
   afterEach(async () => {
-    await clearMetrics();
+    await fs.rm(directory, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   });
 
   describe('saveMetrics + loadMetrics round-trip', () => {

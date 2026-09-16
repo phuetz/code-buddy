@@ -9,9 +9,12 @@
 
 import * as crypto from 'crypto';
 import fs from 'fs-extra';
+import { readFileSync } from 'node:fs';
+import { withSessionLock } from '../persistence/session-lock.js';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 // AES-256-GCM parameters
 const ALGORITHM = 'aes-256-gcm';
@@ -44,6 +47,8 @@ export interface EncryptionConfig {
   usePassword?: boolean;
   /** Enable encryption (can be disabled for performance) */
   enabled?: boolean;
+  /** Refuse volatile/machine-derived fallback for durable session storage. */
+  requirePersistentKey?: boolean;
 }
 
 const DEFAULT_CONFIG: EncryptionConfig = {
@@ -65,6 +70,7 @@ export class SessionEncryption {
       keyPath: config.keyPath ?? DEFAULT_CONFIG.keyPath!,
       usePassword: config.usePassword ?? DEFAULT_CONFIG.usePassword!,
       enabled: config.enabled ?? DEFAULT_CONFIG.enabled!,
+      requirePersistentKey: config.requirePersistentKey ?? false,
     };
   }
 
@@ -73,6 +79,23 @@ export class SessionEncryption {
    */
   async initialize(): Promise<void> {
     if (this.initialized || !this.config.enabled) {
+      return;
+    }
+
+    if (this.config.requirePersistentKey) {
+      await fs.ensureDir(path.dirname(this.config.keyPath));
+      await withSessionLock(this.config.keyPath, async () => {
+        let key: Buffer;
+        try { key = await fs.readFile(this.config.keyPath); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          key = crypto.randomBytes(KEY_LENGTH);
+          await writeFileAtomic(this.config.keyPath, key, { mode: 0o600 });
+        }
+        if (key.length !== KEY_LENGTH) throw new Error('Invalid session encryption key');
+        this.key = key;
+        this.initialized = true;
+      });
       return;
     }
 
@@ -86,7 +109,7 @@ export class SessionEncryption {
         this.key = crypto.randomBytes(KEY_LENGTH);
         // Store key securely
         await fs.ensureDir(path.dirname(this.config.keyPath));
-        await fs.writeFile(this.config.keyPath, this.key, { mode: 0o600 });
+        await writeFileAtomic(this.config.keyPath, this.key, { mode: 0o600 });
       }
 
       this.initialized = true;
@@ -95,6 +118,14 @@ export class SessionEncryption {
       this.key = this.deriveMachineKey();
       this.initialized = true;
     }
+  }
+
+  /** Read existing key only: decrypting must never generate a replacement key. */
+  initializeForRead(): void {
+    const key = readFileSync(this.config.keyPath);
+    if (key.length !== KEY_LENGTH) throw new Error('Invalid session encryption key');
+    this.key = key;
+    this.initialized = true;
   }
 
   /**
@@ -267,7 +298,7 @@ export class SessionEncryption {
     const newKey = crypto.randomBytes(KEY_LENGTH);
 
     // Store new key
-    await fs.writeFile(this.config.keyPath, newKey, { mode: 0o600 });
+    await writeFileAtomic(this.config.keyPath, newKey, { mode: 0o600 });
 
     this.key = newKey;
 

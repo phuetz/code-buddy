@@ -222,10 +222,11 @@ async function runReasoning(
     };
   }
 
+  const model = process.env.GROK_MODEL?.trim();
   const reasoner: TreeOfThoughtReasoner = getTreeOfThoughtReasoner(
     apiKey,
     baseURL,
-    { mode },
+    { mode, ...(model ? { model } : {}) },
   );
   reasoner.setMode(mode);
 

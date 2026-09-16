@@ -33,6 +33,7 @@ import { logger } from '../utils/logger.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { withSpeakingGuard } from './voice-activity.js';
 import type { SynthFn, PlayFn, StreamSpeakFn } from './voice-loop.js';
+import type { TwoSpeedTtsRouteHint } from '../voice/two-speed-voice.js';
 
 /**
  * After the first low-latency fragment, preserve longer natural French
@@ -278,6 +279,17 @@ class AsyncQueue<T> {
     }
   }
 
+  /** Wait for the head item WITHOUT removing it (look-ahead), or `null` once closed/stopped. */
+  async peek(stop: () => boolean): Promise<T | null> {
+    while (true) {
+      if (stop()) return null;
+      const head = this.items[0];
+      if (head !== undefined) return head;
+      if (this.closed) return null;
+      await new Promise<void>((r) => this.waiters.push(r));
+    }
+  }
+
   /** Wait until `depth` queued items are ready, the queue closes, or the timeout expires. */
   async waitForDepth(depth: number, timeoutMs: number, stop: () => boolean): Promise<void> {
     if (depth <= 0 || timeoutMs <= 0) return;
@@ -308,6 +320,11 @@ class AsyncQueue<T> {
     return rest;
   }
 
+  /** Drop queued items immediately when an abort races a producer. */
+  clear(): void {
+    this.items = [];
+  }
+
   private wake(): void {
     const w = this.waiters;
     this.waiters = [];
@@ -329,6 +346,8 @@ export interface StreamToSpeechParams {
    * fallback but are not used by the fast path.
    */
   streamSpeak?: StreamSpeakFn;
+  /** Assign one stable two-speed routing reason to each emitted text segment. */
+  ttsRouteHint?: (text: string, segmentIndex: number) => TwoSpeedTtsRouteHint | undefined;
   /**
    * Route-aware audio prebuffer. A positive value switches to synthesized WAV buffering and
    * waits for a second ready segment (or this timeout) before the first playback.
@@ -353,6 +372,8 @@ export interface StreamToSpeechResult {
   spoken: string;
   /** True when the turn was interrupted mid-way. */
   aborted: boolean;
+  /** One-based phrase number that was in flight when the turn was interrupted. */
+  interruptedSentence?: number;
   /** Each sentence that was spoken, in order. */
   sentences: string[];
   /** Segments recovered through WAV synthesis after the native audio stream failed. */
@@ -395,6 +416,8 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const onAbort = (): void => {
     sentenceQ.close();
     wavQ.close();
+    sentenceQ.clear();
+    wavQ.clear();
   };
   if (signal) {
     if (signal.aborted) onAbort();
@@ -405,6 +428,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const producer = (async (): Promise<void> => {
     const assembler = new SentenceAssembler(cap);
     const enqueue = (raw: string): void => {
+      if (stop()) return;
       const clean = sanitize(raw);
       if (clean) sentenceQ.push(clean);
     };
@@ -449,8 +473,22 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
         let segmentIndex = 0;
         while (true) {
           if (text === null) break;
+          const ttsRouteHint = params.ttsRouteHint?.(text, segmentIndex);
           let didPlay = false;
           if (nativeStreamHealthy) {
+            // Look-ahead: while this sentence streams and plays, open the next one's
+            // stream (engines exposing `prefetch` only — ElevenLabs; Pocket is
+            // single-request), so the inter-sentence gap is the 280 ms breath and
+            // not a full TTS round trip. Fire-and-forget, never throws.
+            const prefetch = params.streamSpeak!.prefetch;
+            if (prefetch) {
+              const current = text;
+              void sentenceQ.peek(stop).then((next) => {
+                if (next !== null && next !== current && !stop() && nativeStreamHealthy) {
+                  prefetch(next, signal ? { signal } : {});
+                }
+              }).catch(() => undefined);
+            }
             try {
               didPlay = await params.streamSpeak!(text, {
                 ...(signal ? { signal } : {}),
@@ -458,6 +496,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
                   ? { ttsNormalizationFactor: turnNormalizationFactor }
                   : {}),
                 ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+                ...(ttsRouteHint ? { ttsRouteHint } : {}),
                 onTtsNormalizationFactor: (factor) => {
                   if (turnNormalizationFactor === undefined) turnNormalizationFactor = factor;
                 },
@@ -486,6 +525,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
             try {
               wav = await params.synth(text, {
                 signal,
+                ...(ttsRouteHint ? { ttsRouteHint } : {}),
                 ...(turnNormalizationFactor !== undefined
                   ? { ttsNormalizationFactor: turnNormalizationFactor }
                   : {}),
@@ -528,6 +568,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
       played,
       spoken: spoken.join(' '),
       aborted: stop(),
+      ...(stop() ? { interruptedSentence: Math.max(1, spoken.length + 1) } : {}),
       sentences: [...spoken],
       ...(fallbackSegments > 0 ? { fallbackSegments } : {}),
     };
@@ -537,11 +578,16 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const synthWorker = (async (): Promise<void> => {
     try {
       let text: string | null = firstSentence;
+      let segmentIndex = 0;
       while (true) {
         if (text === null) break;
         let wav = '';
         try {
-          wav = await params.synth(text, { signal });
+          const ttsRouteHint = params.ttsRouteHint?.(text, segmentIndex);
+          wav = await params.synth(text, {
+            signal,
+            ...(ttsRouteHint ? { ttsRouteHint } : {}),
+          });
         } catch (err) {
           logger.warn(`[voice] stream synth failed (skipping sentence): ${errMsg(err)}`);
         }
@@ -550,6 +596,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           break;
         }
         if (wav) wavQ.push({ text, wav });
+        segmentIndex += 1;
         text = await sentenceQ.shift(stop);
       }
     } finally {
@@ -601,5 +648,11 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
     await unlink(wav);
   }
 
-  return { played, spoken: spoken.join(' '), aborted: stop(), sentences: [...spoken] };
+  return {
+    played,
+    spoken: spoken.join(' '),
+    aborted: stop(),
+    ...(stop() ? { interruptedSentence: Math.max(1, spoken.length + 1) } : {}),
+    sentences: [...spoken],
+  };
 }

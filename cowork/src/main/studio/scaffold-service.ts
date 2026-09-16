@@ -11,7 +11,7 @@
 import { basename, dirname } from 'path';
 import { loadCoreModule } from '../utils/core-loader.js';
 
-export type StudioTemplateId = 'react-ts' | 'express-api' | 'node-cli';
+export type StudioTemplateId = 'react-tailwind' | 'react-ts' | 'express-api' | 'node-cli';
 export type StudioTemplateVars = Record<string, string | boolean>;
 
 export interface TemplateCard {
@@ -63,9 +63,15 @@ interface CoreTemplateModule {
 
 export const STUDIO_TEMPLATES: TemplateCard[] = [
   {
+    id: 'react-tailwind',
+    label: 'React + Tailwind Studio',
+    description: 'Styled Vite app with tokens, reusable components, and light/dark themes.',
+    category: 'web',
+  },
+  {
     id: 'react-ts',
-    label: 'React + TypeScript',
-    description: 'Vite web app with React and TypeScript.',
+    label: 'React + TypeScript (bare)',
+    description: 'Minimal Vite web app with React and TypeScript.',
     category: 'web',
   },
   {

@@ -31,37 +31,125 @@ import {
   writeWideResearchTextAtomicSync,
 } from '../../agent/wide-research-files.js';
 
-async function runDirectResearch(
-  topic: string,
+export interface DirectResearchSource {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface DirectResearchDeps {
+  timeoutMs: number;
+  search?: (query: string, k: number) => Promise<DirectResearchSource[]>;
+  chat?: (messages: Array<{ role: 'system' | 'user'; content: string }>) => Promise<string>;
+  apiKey?: string;
+  providerConfig?: { model?: string; baseURL?: string };
+}
+
+/** Append a trailing "## Sources" section with the URLs actually consulted. */
+export function appendDirectResearchSources(
+  report: string,
+  sources: DirectResearchSource[],
+): string {
+  const unique: Array<{ title: string; url: string }> = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    const url = (source.url || '').trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    unique.push({ title: (source.title || url).trim() || url, url });
+  }
+  const body = report.trimEnd();
+  if (/(?:^|\n)##\s+Sources\b/i.test(body)) {
+    const missing = unique.filter((s) => !body.includes(s.url));
+    if (missing.length === 0) return `${body}\n`;
+    const extra = missing.map((s, i) => `[${unique.length - missing.length + i + 1}] ${s.title} — ${s.url}`);
+    return `${body}\n\n${extra.join('\n')}\n`;
+  }
+  if (unique.length === 0) {
+    return `${body}\n\n## Sources\n\nAucune URL consultée.\n`;
+  }
+  const lines = unique.map((s, i) => `[${i + 1}] ${s.title} — ${s.url}`);
+  return `${body}\n\n## Sources\n\n${lines.join('\n')}\n`;
+}
+
+async function defaultDirectSearch(topic: string, k: number): Promise<DirectResearchSource[]> {
+  const { WebSearchTool } = await import('../../tools/web-search.js');
+  const hits = await new WebSearchTool().searchStructured(topic, { maxResults: k });
+  return hits
+    .filter((h) => typeof h.url === 'string' && h.url.trim().length > 0)
+    .map((h) => ({
+      title: (h.title || h.url).trim(),
+      url: h.url.trim(),
+      ...(h.snippet ? { snippet: h.snippet } : {}),
+    }));
+}
+
+async function defaultDirectChat(
+  messages: Array<{ role: 'system' | 'user'; content: string }>,
   apiKey: string,
   providerConfig: { model?: string; baseURL?: string },
-  timeoutMs: number
 ): Promise<string> {
   const { CodeBuddyClient } = await import('../../codebuddy/client.js');
   const client = new CodeBuddyClient(apiKey, providerConfig.model, providerConfig.baseURL);
-
-  const response = await Promise.race([
-    client.chat([
-      {
-        role: 'system',
-        content:
-          'You are a senior research analyst. Produce a concise but complete Markdown research report with: executive summary, key findings, practical recommendations, and known uncertainties.',
-      },
-      {
-        role: 'user',
-        content: `Research topic: ${topic}\n\nProvide a structured report in Markdown.`,
-      },
-    ]),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs)
-    ),
-  ]);
-
+  const response = await client.chat(messages);
   const content = response?.choices?.[0]?.message?.content;
-  if (typeof content === 'string' && content.trim().length > 0) {
-    return content;
+  return typeof content === 'string' ? content : '';
+}
+
+export async function runDirectResearch(topic: string, deps: DirectResearchDeps): Promise<string> {
+  const timeoutMs = deps.timeoutMs;
+  let sources: DirectResearchSource[] = [];
+  try {
+    const search = deps.search ?? ((query, k) => defaultDirectSearch(query, k));
+    const hits = await search(topic, 8);
+    sources = Array.isArray(hits) ? hits.filter((h) => h.url?.trim()) : [];
+  } catch {
+    sources = [];
   }
-  return `# Research Report: ${topic}\n\nNo content returned by provider.`;
+
+  const sourceBlock = sources.length
+    ? sources
+        .map((s, i) => {
+          const snippet = s.snippet ? `\n    ${s.snippet.trim().slice(0, 240)}` : '';
+          return `[${i + 1}] ${s.title} — ${s.url}${snippet}`;
+        })
+        .join('\n')
+    : '(no URLs retrieved)';
+
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    {
+      role: 'system',
+      content:
+        'You are a senior research analyst. Produce a concise but complete Markdown research report with: executive summary, key findings, practical recommendations, and known uncertainties. Cite the consulted sources as [n]. Do not invent URLs.',
+    },
+    {
+      role: 'user',
+      content:
+        `Research topic: ${topic}\n\nConsulted sources:\n${sourceBlock}\n\nProvide a structured report in Markdown.`,
+    },
+  ];
+
+  const chat =
+    deps.chat ??
+    ((msgs) => defaultDirectChat(msgs, deps.apiKey ?? '', deps.providerConfig ?? {}));
+
+  let body = '';
+  try {
+    body = await Promise.race([
+      chat(messages),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+  } catch (err) {
+    if (!body) {
+      body = `# Research Report: ${topic}\n\n${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+  if (!body.trim()) {
+    body = `# Research Report: ${topic}\n\nNo content returned by provider.`;
+  }
+  return appendDirectResearchSources(body, sources);
 }
 
 function detectReportPathFromArgv(argv: string[]): string | undefined {
@@ -246,23 +334,47 @@ export function createResearchCommand(): Command {
       }
       const safeTopic = redactWideResearchText(topic, [apiKey]);
 
+      // Phase B: --iterations > 1 turns the single Phase-A round into the bounded
+      // gap loop. Default '1' ⇒ Phase A byte-identical (the loop delegates).
+      // Phase C (STORM): --perspectives N (or --storm ⇒ 4) turns Deep Research
+      // into the multi-perspective outline-first pipeline. STORM implies --deep
+      // and TAKES PRECEDENCE over --iterations (per-perspective single round).
+      const stormRequested = Boolean(opts.storm) || perspectivesN > 0;
+      const stormPerspectives = stormRequested ? perspectivesN || 4 : undefined;
+      const deepEnabled = Boolean(opts.deep) || stormRequested; // STORM implies --deep
+
       if (!jsonOutput) {
-        console.log(`\n🔬 Wide Research: "${safeTopic}"`);
-        console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
-        console.log(
-          `   Items: ${items}  |  Concurrency: ${concurrency} per wave` +
-            `  |  Max rounds per worker: ${maxRoundsPerWorker}`,
-        );
-        console.log(
-          `   Overall timeout: ${Math.ceil(overallTimeoutMs / 60_000)} min` +
-            `${explicitOverallTimeout ? ' (user override)' : ' (auto-scaled)'}`,
-        );
-        if (checkpointPath) {
+        if (deepEnabled) {
+          // GK33: do not leak the Wide Research header (items/concurrency/timeout)
+          // onto the Deep/STORM path — that banner describes a pipeline that is
+          // not running.
+          console.log(`\n🔬 Deep Research: "${safeTopic}"`);
+          console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
+          if (stormRequested) {
+            console.log(`   Mode: STORM (${stormPerspectives} perspective(s))`);
+          } else if (deepRounds > 1) {
+            console.log(`   Mode: deep (gap loop, ${deepRounds} round(s))`);
+          } else {
+            console.log('   Mode: deep');
+          }
+        } else {
+          console.log(`\n🔬 Wide Research: "${safeTopic}"`);
+          console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
           console.log(
-            resumeRequested
-              ? `   Resume checkpoint: ${checkpointPath}`
-              : `   Checkpoint: ${checkpointPath}`,
+            `   Items: ${items}  |  Concurrency: ${concurrency} per wave` +
+              `  |  Max rounds per worker: ${maxRoundsPerWorker}`,
           );
+          console.log(
+            `   Overall timeout: ${Math.ceil(overallTimeoutMs / 60_000)} min` +
+              `${explicitOverallTimeout ? ' (user override)' : ' (auto-scaled)'}`,
+          );
+          if (checkpointPath) {
+            console.log(
+              resumeRequested
+                ? `   Resume checkpoint: ${checkpointPath}`
+                : `   Checkpoint: ${checkpointPath}`,
+            );
+          }
         }
         console.log('─'.repeat(60));
       }
@@ -275,14 +387,6 @@ export function createResearchCommand(): Command {
       // FIRST and independently of TTY (it is automation-friendly). Strictly
       // gated: without `--deep`, the Wide/direct paths below run byte-identically.
       const { maybeRunDeepResearch, runDeepResearchCli } = await import('./deep.js');
-      // Phase B: --iterations > 1 turns the single Phase-A round into the bounded
-      // gap loop. Default '1' ⇒ Phase A byte-identical (the loop delegates).
-      // Phase C (STORM): --perspectives N (or --storm ⇒ 4) turns Deep Research
-      // into the multi-perspective outline-first pipeline. STORM implies --deep
-      // and TAKES PRECEDENCE over --iterations (per-perspective single round).
-      const stormRequested = Boolean(opts.storm) || perspectivesN > 0;
-      const stormPerspectives = stormRequested ? perspectivesN || 4 : undefined;
-      const deepEnabled = Boolean(opts.deep) || stormRequested; // STORM implies --deep
       // Phase D (CKG bridge): opt-in via --ckg OR the shared CODEBUDDY_COLLECTIVE_MEMORY
       // gate. Rides on the deep path (inert without --deep). Off ⇒ A/B/C byte-identical.
       const { resolveCkgEnabled } = await import('../../agent/deep-research-ckg.js');
@@ -309,7 +413,11 @@ export function createResearchCommand(): Command {
         console.log('ℹ️ Non-interactive mode detected, using direct research mode.');
         try {
           const report = redactWideResearchText(
-            await runDirectResearch(topic, apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000)),
+            await runDirectResearch(topic, {
+              timeoutMs: Math.min(overallTimeoutMs, 120_000),
+              apiKey,
+              providerConfig,
+            }),
             [apiKey],
           );
           const reportContent = [

@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -55,7 +56,7 @@ export class GitPinnedMarketplace {
   private loadFromDisk(): void {
     try {
       if (fs.existsSync(this.configPath)) {
-        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));
+        const data = readJsonAtomicSync<unknown>(this.configPath, []);
         if (Array.isArray(data)) {
           for (const plugin of data) {
             this.plugins.set(plugin.name, plugin);
@@ -73,7 +74,7 @@ export class GitPinnedMarketplace {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.configPath, JSON.stringify(Array.from(this.plugins.values()), null, 2));
+      writeJsonAtomicSync(this.configPath, Array.from(this.plugins.values()));
     } catch (err) {
       logger.warn('Failed to save git-pinned plugins', { error: err });
     }

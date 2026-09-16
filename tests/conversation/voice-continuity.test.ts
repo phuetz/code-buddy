@@ -88,6 +88,19 @@ describe('canonical voice continuity helpers', () => {
     expect(String(deliver.mock.calls[0]?.[1])).not.toContain('secret');
   });
 
+  it('does not journal a local initiative when the speaker reports failure (jumeau D8)', async () => {
+    const deliver = vi.fn(async () => true);
+    const speak = vi.fn(async () => false);
+    const bridge = new CrossChannelConversationBridge(config(), { deliver });
+
+    await speakCanonicalVoiceInitiative('Bonjour, contente de te revoir.', speak, bridge);
+    await bridge.flush();
+
+    expect(speak).toHaveBeenCalledOnce();
+    expect(deliver).not.toHaveBeenCalled();
+    expect(bridge.history()).toEqual([]);
+  });
+
   it('stays silent when a canonical initiative contains no speakable content', async () => {
     const deliver = vi.fn(async () => true);
     const speak = vi.fn(async () => undefined);

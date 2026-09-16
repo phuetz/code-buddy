@@ -1,0 +1,6 @@
+# Phrases fixes propres au projet. Les lignes dynamiques sont refusées par la commande.
+Je suis là.
+Oui, je t'écoute.
+Pardon ?
+Je m'en occupe.
+D'accord, je regarde ça.

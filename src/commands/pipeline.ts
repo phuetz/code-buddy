@@ -7,6 +7,87 @@
 
 import { Command } from 'commander';
 import { logger } from '../utils/logger.js';
+import type { PipelineConfig, ApprovalGateConfig } from '../workflows/pipeline.js';
+import type { ConfirmationOptions } from '../utils/confirmation-service.js';
+
+/** Standalone CLI bridge; tool policy, trust and confirmations stay in ToolHandler. */
+export function createPipelineRuntime(): Pick<PipelineConfig, 'toolExecutor' | 'approvalHandler'> & { dispose(): Promise<void> } {
+  const controller = new AbortController();
+  let handler: import('../agent/tool-handler.js').ToolHandler | undefined;
+  let marketplace: import('../plugins/marketplace.js').PluginMarketplace | undefined;
+  let repair: import('../agent/execution/repair-coordinator.js').RepairCoordinator | undefined;
+  let service: import('../utils/confirmation-service.js').ConfirmationService | undefined;
+  let readline: import('node:readline/promises').Interface | undefined;
+  let ownsListener = false;
+  const onConfirmation = (options: ConfirmationOptions): void => {
+    void (async () => {
+      try {
+        const { createInterface } = await import('node:readline/promises');
+        readline = createInterface({ input: process.stdin, output: process.stderr });
+        process.stderr.write(`${JSON.stringify({ operation: options.operation, target: options.filename,
+          preview: options.diffPreview ?? options.content })}\n`);
+        const answer = await readline.question('Approve this operation? [y/N] ');
+        service?.confirmOperation(/^(y|yes|o|oui)$/i.test(answer.trim()));
+      } catch {
+        service?.rejectOperation('Approval input closed');
+      } finally {
+        readline?.close();
+        readline = undefined;
+      }
+    })();
+  };
+  const confirmations = async () => {
+    if (!service) {
+      const { ConfirmationService } = await import('../utils/confirmation-service.js');
+      service = ConfirmationService.getInstance();
+      if (process.stdin.isTTY && service.listenerCount('confirmation-requested') === 0) {
+        service.on('confirmation-requested', onConfirmation);
+        ownsListener = true;
+      }
+    }
+    return service;
+  };
+  return {
+    toolExecutor: async (name, args) => {
+      await confirmations();
+      if (!handler) {
+        const [{ ToolHandler }, { CheckpointManager }, { HooksManager }, { PluginMarketplace }, { RepairCoordinator }] = await Promise.all([
+          import('../agent/tool-handler.js'), import('../checkpoints/checkpoint-manager.js'),
+          import('../hooks/lifecycle-hooks.js'), import('../plugins/marketplace.js'),
+          import('../agent/execution/repair-coordinator.js'),
+        ]);
+        marketplace = new PluginMarketplace({ autoUpdate: false });
+        repair = new RepairCoordinator({ enabled: false });
+        handler = new ToolHandler({ checkpointManager: new CheckpointManager(),
+          hooksManager: new HooksManager(process.cwd()), marketplace, repairCoordinator: repair });
+        handler.setWorkingDirectory(process.cwd());
+      }
+      const { randomUUID } = await import('node:crypto');
+      const result = await handler.executeTool({ id: `pipeline_${randomUUID()}`, type: 'function',
+        function: { name, arguments: JSON.stringify(args) } }, { surface: 'cli', abortSignal: controller.signal });
+      return { success: result.success, output: result.output ?? '', error: result.error };
+    },
+    approvalHandler: async (gate) => {
+      const confirmation = await confirmations();
+      const timer = setTimeout(() => {
+        confirmation.rejectOperation('Pipeline approval timed out');
+        readline?.close();
+      }, gate.timeoutMs);
+      try {
+        const result = await confirmation.requestConfirmation({ operation: 'Approve pipeline step',
+          filename: gate.message, toolName: 'pipeline_approval', forcePrompt: true }, 'tool');
+        return { approved: result.confirmed, timestamp: new Date(), comment: result.feedback };
+      } finally { clearTimeout(timer); }
+    },
+    dispose: async () => {
+      controller.abort();
+      if (ownsListener) service?.off('confirmation-requested', onConfirmation);
+      readline?.close();
+      repair?.dispose();
+      await marketplace?.dispose();
+    },
+  };
+}
 
 /**
  * Pipeline definition loaded from a file (YAML/JSON)
@@ -17,10 +98,11 @@ export interface PipelineFileDefinition {
   version?: string;
   steps: Array<{
     name: string;
-    type?: 'tool' | 'skill' | 'function' | 'transform';
+    type?: 'tool' | 'skill' | 'function' | 'transform' | 'approval';
     args?: Record<string, unknown>;
     timeout?: number;
     label?: string;
+    approvalGate?: Pick<ApprovalGateConfig, 'message' | 'timeoutMs'>;
   }>;
   config?: {
     maxSteps?: number;
@@ -132,8 +214,12 @@ export function validatePipelineDefinition(definition: PipelineFileDefinition): 
     }
     stepNames.add(step.name);
 
-    if (step.type && !['tool', 'skill', 'function', 'transform'].includes(step.type)) {
-      errors.push(`Step ${i + 1} ("${step.name}"): invalid type "${step.type}" (must be tool, skill, function, or transform)`);
+    if (step.type && !['tool', 'skill', 'function', 'transform', 'approval'].includes(step.type)) {
+      errors.push(`Step ${i + 1} ("${step.name}"): invalid type "${step.type}" (must be tool, skill, function, transform, or approval)`);
+    }
+    if (step.approvalGate && (typeof step.approvalGate.message !== 'string' ||
+      !Number.isFinite(step.approvalGate.timeoutMs) || step.approvalGate.timeoutMs <= 0)) {
+      errors.push(`Step ${i + 1}: approvalGate requires a message and positive timeoutMs`);
     }
 
     if (step.timeout !== undefined && (typeof step.timeout !== 'number' || step.timeout <= 0)) {
@@ -168,6 +254,8 @@ export function createPipelineCommand(): Command {
     .option('-t, --timeout <ms>', 'Override default step timeout in milliseconds')
     .option('--dry-run', 'Validate and show steps without executing')
     .action(async (file: string, options: { timeout?: string; dryRun?: boolean }) => {
+      let runtime: ReturnType<typeof createPipelineRuntime> | undefined;
+      let compositor: import('../workflows/pipeline.js').PipelineCompositor | undefined;
       try {
         console.log(`Loading pipeline from: ${file}`);
         const definition = await loadPipelineFile(file);
@@ -221,7 +309,9 @@ export function createPipelineCommand(): Command {
           config.maxDurationMs = definition.config.maxDurationMs;
         }
 
-        const compositor = new PipelineCompositor(config);
+        runtime = createPipelineRuntime();
+        compositor = new PipelineCompositor({ ...config, toolExecutor: runtime.toolExecutor,
+          approvalHandler: runtime.approvalHandler });
 
         // Set up event listeners for progress
         compositor.on('step:start', (step: { name: string }, index: number) => {
@@ -235,11 +325,13 @@ export function createPipelineCommand(): Command {
 
         // Convert file definition steps to PipelineStep format
         const steps = definition.steps.map(step => ({
-          type: (step.type || 'tool') as 'tool' | 'skill' | 'function' | 'transform',
+          type: step.type || 'tool' as const,
           name: step.name,
           args: step.args || {},
           timeout: step.timeout,
           label: step.label,
+          approvalGate: step.type === 'approval' ? { message: step.approvalGate?.message ?? step.name,
+            timeoutMs: step.approvalGate?.timeoutMs ?? 300000, requireExplicit: true } : undefined,
         }));
 
         console.log(`\nRunning pipeline: ${definition.name} (${steps.length} steps)`);
@@ -252,14 +344,16 @@ export function createPipelineCommand(): Command {
           }
         } else {
           console.error(`\nPipeline failed: ${result.error || 'Unknown error'}`);
-          process.exit(1);
+          process.exitCode = 1;
         }
 
-        compositor.dispose();
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         logger.error(`Pipeline error: ${msg}`);
-        process.exit(1);
+        process.exitCode = 1;
+      } finally {
+        compositor?.dispose();
+        await runtime?.dispose();
       }
     });
 

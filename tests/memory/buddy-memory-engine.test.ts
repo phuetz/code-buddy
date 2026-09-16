@@ -84,7 +84,7 @@ describe('CKG Rust engine (CODEBUDDY_CKG_ENGINE=rust)', () => {
   }, 60000);
 
   it.skipIf(!hasBin)('corroboration: same fact from two agents → corroborations=2 via engine', async () => {
-    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
+    const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'hub/code-buddy' });
     const b = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
     const fact = { name: 'k', text: 'le journal append-only évite les pertes concurrentes', confidence: 0.6 };
     await a.ingest(fact);

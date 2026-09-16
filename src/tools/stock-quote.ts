@@ -244,6 +244,9 @@ function fmtTime(sec: unknown, tz: unknown): string | undefined {
   if (typeof sec !== 'number' || !Number.isFinite(sec)) return undefined;
   try {
     return new Intl.DateTimeFormat('fr-FR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       ...(typeof tz === 'string' && tz ? { timeZone: tz } : {}),
@@ -251,6 +254,16 @@ function fmtTime(sec: unknown, tz: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function fmtFetchedAt(ts: number): string {
+  return `relevé ${new Intl.DateTimeFormat('fr-FR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(ts))}`;
 }
 
 /** Parse a Yahoo Finance v8 chart response into a StockWidgetData. Pure. null if unusable. */
@@ -330,6 +343,9 @@ export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidget
   const rawName = typeof d.companyName === 'string' ? d.companyName : '';
   const name = rawName.replace(/\s+(Common Stock|Common Shares|Ordinary Shares|Class [A-Z] Common Stock).*$/i, '').trim();
   const currency = (typeof pd?.currency === 'string' && pd.currency) || 'USD';
+  const time = typeof pd?.lastTradeTimestamp === 'string' && pd.lastTradeTimestamp.trim()
+    ? pd.lastTradeTimestamp.trim()
+    : undefined;
   return {
     type: 'stock',
     symbol: typeof d.symbol === 'string' ? d.symbol : symbolInput.toUpperCase(),
@@ -343,6 +359,7 @@ export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidget
     ...(previousClose != null ? { previousClose } : {}),
     ...(volume != null ? { volume } : {}),
     ...(typeof d.exchange === 'string' ? { market: d.exchange } : {}),
+    ...(time ? { time } : {}),
   };
 }
 
@@ -394,6 +411,7 @@ export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput:
   const change = num(q.d) ?? (prev != null ? round(price - prev) : undefined);
   const changePercent = num(q.dp) ?? (prev != null && prev !== 0 ? round(((price - prev) / prev) * 100, 2) : undefined);
   const ticker = (typeof p.ticker === 'string' && p.ticker) || symbolInput.toUpperCase();
+  const time = fmtTime(q.t, undefined);
   return {
     type: 'stock',
     symbol: ticker,
@@ -407,6 +425,7 @@ export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput:
     ...(num(q.l) != null ? { low: num(q.l)! } : {}),
     ...(prev != null ? { previousClose: prev } : {}),
     ...(typeof p.exchange === 'string' ? { market: p.exchange } : {}),
+    ...(time ? { time } : {}),
   };
 }
 
@@ -423,7 +442,9 @@ export function parseStooqCsv(text: string, symbolInput: string): StockWidgetDat
   const low = num(cols[5]);
   const volume = num(cols[7]);
   const sym = (cols[0] || symbolInput).toUpperCase();
-  const time = cols[2] && /^\d{2}:\d{2}/.test(cols[2]) ? cols[2].slice(0, 5) : undefined;
+  const date = cols[1] && /^\d{4}-\d{2}-\d{2}$/.test(cols[1]) ? cols[1] : undefined;
+  const clock = cols[2] && /^\d{2}:\d{2}/.test(cols[2]) ? cols[2].slice(0, 5) : undefined;
+  const time = [date, clock].filter(Boolean).join(' ') || undefined;
   return {
     type: 'stock',
     symbol: sym,
@@ -459,6 +480,7 @@ export function formatQuoteSummary(d: StockWidgetData): string {
   const h = num(d.high);
   const l = num(d.low);
   if (h != null && l != null) parts.push(`séance ${fmtFr(l)}–${fmtFr(h)}`);
+  if (d.time) parts.push(String(d.time));
   return parts.join(', ') + '.';
 }
 
@@ -467,13 +489,35 @@ function quoteResult(
   provider: StockQuoteProvider,
   sourceUrl: string
 ): ToolResult {
+  const fetchedAt = Date.now();
+  const dated: StockWidgetData = data.time
+    ? data
+    : { ...data, time: fmtFetchedAt(fetchedAt) };
   const metadata: StockQuoteMetadata = {
     provider,
     sourceUrl,
-    fetchedAt: Date.now(),
-    ...(data.time ? { quoteTime: data.time } : {}),
+    fetchedAt,
+    quoteTime: dated.time,
   };
-  return { success: true, output: formatQuoteSummary(data), data, metadata };
+  return { success: true, output: formatQuoteSummary(dated), data: dated, metadata };
+}
+
+function announceFallback(
+  result: ToolResult,
+  failed: readonly StockQuoteProvider[],
+): ToolResult {
+  if (!result.success || failed.length === 0 || !result.output) return result;
+  const provider = (result.metadata as StockQuoteMetadata | undefined)?.provider ?? 'repli';
+  const sources = failed.join(', ');
+  const verb = failed.length > 1 ? 'indisponibles' : 'indisponible';
+  return {
+    ...result,
+    output: `${sources} ${verb}. Repli ${provider} : ${result.output}`,
+    metadata: {
+      ...(result.metadata ?? {}),
+      fallbackFrom: [...failed],
+    },
+  };
 }
 
 export class StockQuoteTool {
@@ -506,6 +550,9 @@ export class StockQuoteTool {
       return { success: false, error: 'Aucun symbole fourni. Exemple : stock_quote({ symbol: "AAPL" }).' };
     }
 
+    const failed: StockQuoteProvider[] = [];
+    const succeed = (result: ToolResult): ToolResult => announceFallback(result, failed);
+
     // Preferred when configured: Finnhub (free key, reliable from any IP).
     if (this.finnhubKey) {
       try {
@@ -528,11 +575,12 @@ export class StockQuoteTool {
         const data = parseFinnhubQuote(quote.data, profile, s);
         if (data) {
           const sourceUrl = `${this.finnhubBaseUrl}/api/v1/quote?symbol=${encodeURIComponent(s)}`;
-          return quoteResult(data, 'Finnhub', sourceUrl);
+          return succeed(quoteResult(data, 'Finnhub', sourceUrl));
         }
       } catch {
         /* fall through to Yahoo */
       }
+      failed.push('Finnhub');
     }
 
     // Primary ($0): Yahoo Finance chart API (rich: price, change, OHLC, prev close, currency).
@@ -543,10 +591,11 @@ export class StockQuoteTool {
         headers: { 'User-Agent': UA, Accept: 'application/json' },
       });
       const data = parseYahooQuote(resp.data, s);
-      if (data) return quoteResult(data, 'Yahoo Finance', url);
+      if (data) return succeed(quoteResult(data, 'Yahoo Finance', url));
     } catch {
       /* fall through to CNBC/Nasdaq */
     }
+    failed.push('Yahoo Finance');
 
     // Index fallback ($0): CNBC's public quote cache is independent from
     // Yahoo's aggressive per-IP rate limit and covers the two US indices in
@@ -574,15 +623,16 @@ export class StockQuoteTool {
         });
         const data = parseCnbcQuote(resp.data, s);
         if (data) {
-          return quoteResult(
+          return succeed(quoteResult(
             data,
             'CNBC',
             `https://www.cnbc.com/quotes/${encodeURIComponent(cnbcSymbol)}`,
-          );
+          ));
         }
       } catch {
         /* fall through to Nasdaq/Euronext/Stooq */
       }
+      failed.push('CNBC');
     }
 
     // Fallback ($0, works from datacenter IPs where Yahoo/Stooq block): Nasdaq API.
@@ -595,10 +645,11 @@ export class StockQuoteTool {
           headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9' },
         });
         const data = parseNasdaqQuote(resp.data, s);
-        if (data) return quoteResult(data, 'Nasdaq', url);
+        if (data) return succeed(quoteResult(data, 'Nasdaq', url));
       } catch {
         /* fall through to Stooq */
       }
+      failed.push('Nasdaq');
     }
 
     // European fallback ($0): Euronext's public instrument search and official
@@ -628,12 +679,13 @@ export class StockQuoteTool {
           });
           const quoteHtml = decryptEuronextPayload(quote.data, key);
           const data = quoteHtml ? parseEuronextQuoteHtml(quoteHtml, instrument) : null;
-          if (data) return quoteResult(data, 'Euronext Live', quoteUrl);
+          if (data) return succeed(quoteResult(data, 'Euronext Live', quoteUrl));
         }
       }
     } catch {
       /* fall through to Stooq */
     }
+    failed.push('Euronext Live');
 
     // Fallback: Stooq CSV (basic OHLCV, no change).
     try {
@@ -641,7 +693,7 @@ export class StockQuoteTool {
       const url = `${this.stooqBaseUrl}/q/l/?s=${encodeURIComponent(stooqSym.toLowerCase())}&f=sd2t2ohlcv&h&e=csv`;
       const resp = await axios.get(url, { timeout: this.timeoutMs, responseType: 'text' });
       const data = parseStooqCsv(String(resp.data), s);
-      if (data) return quoteResult(data, 'Stooq', url);
+      if (data) return succeed(quoteResult(data, 'Stooq', url));
     } catch {
       /* fall through */
     }

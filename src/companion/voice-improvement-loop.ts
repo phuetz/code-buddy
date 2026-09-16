@@ -24,16 +24,14 @@
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
-  existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import {
   loadRelationshipState,
   saveRelationshipState,
@@ -180,7 +178,24 @@ function defaultJournalPath(cwd?: string): string {
 interface VoiceImprovementState {
   lastFingerprint?: string;
   processedAt?: number;
+  /** Dialogue whose reflection keeps failing, with how many attempts it cost. */
+  failedFingerprint?: string;
+  failures?: number;
 }
+
+/**
+ * How many times one unchanged dialogue may be re-submitted before the loop
+ * gives up on it.
+ *
+ * Why a bound exists at all: the cursor used to advance ONLY after a successful
+ * reflection, so an unreachable provider left the fingerprint unmatched forever
+ * and the heartbeat re-asked the identical question every minute. Observed live
+ * on 2026-09-02 — 289 identical 403 failures in six hours against a provider
+ * that had been out of credits all night, each one costing three retries and
+ * four ERROR lines. Three attempts absorb a transient blip; the fourth would
+ * only repeat a settled answer.
+ */
+const MAX_REFLECTION_ATTEMPTS = 3;
 
 function defaultDedupeStatePath(cwd?: string): string {
   return join(cwd ?? homedir(), '.codebuddy', 'companion', 'voice-improvement-state.json');
@@ -193,13 +208,21 @@ function conversationFingerprint(heard: string[]): string {
 
 function loadImprovementState(path: string): VoiceImprovementState {
   try {
-    if (!existsSync(path)) return {};
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    const parsed = readJsonAtomicSync<Record<string, unknown>>(path, {}, {
+      mode: 0o600,
+      isValid: (value): value is Record<string, unknown> => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
     return {
       ...(typeof parsed.lastFingerprint === 'string'
         ? { lastFingerprint: parsed.lastFingerprint }
         : {}),
       ...(typeof parsed.processedAt === 'number' ? { processedAt: parsed.processedAt } : {}),
+      ...(typeof parsed.failedFingerprint === 'string'
+        ? { failedFingerprint: parsed.failedFingerprint }
+        : {}),
+      ...(typeof parsed.failures === 'number' ? { failures: parsed.failures } : {}),
     };
   } catch {
     return {};
@@ -208,8 +231,7 @@ function loadImprovementState(path: string): VoiceImprovementState {
 
 function saveImprovementState(path: string, state: VoiceImprovementState): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(state));
+    writeJsonAtomicSync(path, state, { mode: 0o600 });
   } catch {
     /* best effort — a failed cursor write only causes a later safe retry */
   }
@@ -246,13 +268,35 @@ export async function runVoiceImprovementCycle(
 
   const fingerprint = conversationFingerprint(heard);
   const dedupeStatePath = deps.dedupeStatePath ?? defaultDedupeStatePath(deps.cwd);
-  if (loadImprovementState(dedupeStatePath).lastFingerprint === fingerprint) {
+  const state = loadImprovementState(dedupeStatePath);
+  if (state.lastFingerprint === fingerprint) {
     logger.debug?.('[voice-improve] unchanged addressed dialogue — reflection skipped');
     return null;
   }
 
+  // A dialogue we already gave up on stays given up on. New speech gets a fresh
+  // fingerprint and a fresh budget, so the loop is paused on one input, not off.
+  const priorFailures = state.failedFingerprint === fingerprint ? (state.failures ?? 0) : 0;
+  if (priorFailures >= MAX_REFLECTION_ATTEMPTS) return null;
+
   const reflection = await (deps.reflect ?? defaultReflect)(heard);
-  if (!reflection) return null;
+  if (!reflection) {
+    const failures = priorFailures + 1;
+    if (mode !== 'dry') {
+      saveImprovementState(dedupeStatePath, {
+        ...state,
+        failedFingerprint: fingerprint,
+        failures,
+      });
+    }
+    if (failures >= MAX_REFLECTION_ATTEMPTS) {
+      logger.warn(
+        `[voice-improve] reflection failed ${failures}× on the same dialogue — giving up on it. ` +
+          'The loop stays on: the next new conversation gets a fresh attempt.'
+      );
+    }
+    return null;
+  }
 
   const result: VoiceImprovementResult = {
     at: now,

@@ -49,6 +49,7 @@ const okQuality: FilmQualityReport = {
   silent: false,
   blackIntervals: [],
   totalBlackSeconds: 0,
+  audioMatchesVideo: true,
   warnings: [],
 };
 

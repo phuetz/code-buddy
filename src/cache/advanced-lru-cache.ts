@@ -31,6 +31,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
+import { readJsonAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -578,7 +579,7 @@ export class AdvancedLRUCache<V = unknown> extends EventEmitter {
       compressedSize = data.length;
     }
 
-    await fs.writeFile(filePath, data);
+    await writeFileAtomic(filePath, data);
 
     const now = Date.now();
     const entry: DiskEntry = {
@@ -661,8 +662,7 @@ export class AdvancedLRUCache<V = unknown> extends EventEmitter {
   private async loadDiskIndex(): Promise<void> {
     try {
       if (existsSync(this.indexPath)) {
-        const content = await fs.readFile(this.indexPath, 'utf-8');
-        const data = JSON.parse(content);
+        const data = await readJsonAtomic<{ entries?: DiskEntry[] }>(this.indexPath, { entries: [] });
 
         if (Array.isArray(data.entries)) {
           const now = Date.now();
@@ -682,11 +682,7 @@ export class AdvancedLRUCache<V = unknown> extends EventEmitter {
   private async saveDiskIndex(): Promise<void> {
     try {
       const entries = Array.from(this.diskIndex.values());
-      await fs.writeFile(
-        this.indexPath,
-        JSON.stringify({ entries, savedAt: Date.now() }),
-        'utf-8'
-      );
+      await writeJsonAtomic(this.indexPath, { entries, savedAt: Date.now() });
     } catch {
       // Failed to save index
     }

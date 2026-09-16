@@ -24,6 +24,8 @@ validées, et les textes des positionnements arrêtés par le propriétaire.
 
 from __future__ import annotations
 
+import os
+
 import argparse
 import subprocess
 import sys
@@ -56,7 +58,7 @@ CHAINES = (
         nom="Ambre",
         signature="Des destinations chics et de charme.",
         portrait=Path(
-            "/home/patrice/Videos/personas/garde-robe-reparee/ambre-trench-camel.png"
+            os.path.expanduser("~/Videos/personas/garde-robe-reparee/ambre-trench-camel.png")
         ),
         fond="#17120d",
         encre="#f5ece1",
@@ -70,7 +72,7 @@ CHAINES = (
         nom="Lisa IA",
         signature="Comprendre ce que l'IA change.",
         portrait=Path(
-            "/home/patrice/.codebuddy/personas/lisa/wardrobe/lisa-blazer.png"
+            os.path.expanduser("~/.codebuddy/personas/lisa/wardrobe/lisa-blazer.png")
         ),
         fond="#0b1020",
         encre="#eef2ff",

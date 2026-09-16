@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { confineComputeInvocation } from '../security/compute-confinement.js';
 import { logger } from '../utils/logger.js';
 import {
   isExecuteCodeToolRpcEnabled,
@@ -49,6 +50,8 @@ export interface ExecuteCodeRunnerOptions {
    *    cannot exfiltrate secrets — even during pre-accept scoring.
    */
   envMode?: 'inherit' | 'isolate';
+  /** Required OS confinement for authored computation; never falls back to unrestricted execution. */
+  confinement?: 'compute';
 }
 
 /**
@@ -141,15 +144,22 @@ export async function executeCode(
   // the responder is ALWAYS active so every request gets a structured
   // reply (denial when off / tool refused) — never a hang.
   const rpcEnabled = (options.rpcEnabled ?? isExecuteCodeToolRpcEnabled()) && !!options.rpcInvoke;
-  const rpcSupported = language === 'javascript' || language === 'typescript' || language === 'python';
+  const rpcSupported = options.confinement !== 'compute' && (language === 'javascript' || language === 'typescript' || language === 'python');
   const rpcDir = path.join(runDir, RPC_DIR_NAME);
   const rpcMaxCalls = Math.max(1, options.rpcMaxCalls ?? RPC_DEFAULT_MAX_CALLS);
   const rpcCallTimeoutMs = Math.max(1_000, options.rpcCallTimeoutMs ?? RPC_DEFAULT_CALL_TIMEOUT_MS);
 
+  await fs.mkdir(runDir, { recursive: true });
   let scriptCode = code;
   if (rpcSupported) {
     await fs.mkdir(rpcDir, { recursive: true });
-    scriptCode = `${buildRpcHelper(language)}\n${code}`;
+    const helper = buildRpcHelper(language);
+    // Python: `from __future__ import …` MUST stay at the top of the file
+    // (after the docstring/comments only). Prepending the helper used to
+    // raise SyntaxError and abort every `buddy science` Python experiment
+    // that started with a future import.
+    scriptCode =
+      language === 'python' ? injectAfterPythonPreamble(code, helper) : `${helper}\n${code}`;
   }
   await fs.writeFile(scriptPath, scriptCode, 'utf8');
   if (language === 'shell' && process.platform !== 'win32') {
@@ -171,7 +181,11 @@ export async function executeCode(
       options.envMode === 'isolate'
         ? buildIsolatedEnv(runDir, { ...env, ...runnerEnv })
         : { ...process.env, ...env, ...runnerEnv };
-    const child = spawn(invocation.command, [...invocation.args, scriptPath, ...scriptArgs], {
+    const commandArgs = [...invocation.args, scriptPath, ...scriptArgs];
+    const launch = options.confinement === 'compute'
+      ? confineComputeInvocation(invocation.command, commandArgs, runDir)
+      : { command: invocation.command, args: commandArgs };
+    const child = spawn(launch.command, launch.args, {
       cwd: runDir,
       env: childEnv,
       windowsHide: true,
@@ -208,8 +222,7 @@ export async function executeCode(
     child.on('close', (exitCode, signal) => {
       clearTimeout(timer);
       if (forceKillTimer) clearTimeout(forceKillTimer);
-      rpcPoller?.stop();
-      resolve({ exitCode, signal });
+      void Promise.resolve(rpcPoller?.stop()).then(() => resolve({ exitCode, signal }));
     });
   });
 
@@ -387,7 +400,7 @@ interface RpcResponderOptions {
 }
 
 interface RpcResponder {
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 /**
@@ -402,12 +415,16 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
   const seen = new Set<string>();
   let callCount = 0;
   let stopped = false;
+  const controller = new AbortController();
   let scanning = false;
+  let activeScan: Promise<void> = Promise.resolve();
 
   const writeResponse = async (id: string, payload: ExecuteCodeRpcResponse): Promise<void> => {
+    if (stopped) return;
     const finalPath = path.join(options.rpcDir, `${id}.res.json`);
     const tmpPath = path.join(options.rpcDir, `${id}.res.json.tmp`);
     await fs.writeFile(tmpPath, JSON.stringify(payload), 'utf8');
+    if (stopped) { await fs.rm(tmpPath, { force: true }); return; }
     await fs.rename(tmpPath, finalPath);
   };
 
@@ -420,6 +437,7 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
       return;
     }
 
+    if (stopped) return;
     if (!options.enabled || !options.invoke) {
       await writeResponse(id, {
         ok: false,
@@ -448,16 +466,23 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
       return;
     }
 
+    const callController = new AbortController();
+    const abort = (): void => callController.abort();
+    controller.signal.addEventListener('abort', abort, { once: true });
     try {
+      if (stopped) return;
       const result = await withTimeout(
-        options.invoke({ tool, args }),
+        options.invoke({ tool, args }, callController.signal),
         options.callTimeoutMs,
         `RPC_TOOL_TIMEOUT: tool "${tool}" exceeded ${options.callTimeoutMs}ms`,
+        callController,
       );
       await writeResponse(id, result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await writeResponse(id, { ok: false, error: message });
+    } finally {
+      controller.signal.removeEventListener('abort', abort);
     }
   };
 
@@ -467,6 +492,7 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
     try {
       const entries = await fs.readdir(options.rpcDir).catch(() => [] as string[]);
       for (const entry of entries) {
+        if (stopped) break;
         if (!entry.endsWith('.req.json')) continue;
         const id = entry.slice(0, -'.req.json'.length);
         if (seen.has(id)) continue;
@@ -483,14 +509,16 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
   };
 
   const interval = setInterval(() => {
-    void scan();
+    if (!scanning && !stopped) activeScan = scan();
   }, RPC_POLL_INTERVAL_MS);
   interval.unref?.();
 
   return {
-    stop(): void {
+    async stop(): Promise<void> {
       stopped = true;
+      controller.abort();
       clearInterval(interval);
+      await activeScan;
     },
   };
 }
@@ -502,20 +530,20 @@ interface ExecuteCodeRpcResponse {
   truncated?: boolean;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string, controller: AbortController): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
+    const abort = (): void => { clearTimeout(timer); reject(new Error('RPC_CANCELLED')); };
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+      controller.abort();
+    }, ms);
     timer.unref?.();
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
+    controller.signal.addEventListener('abort', abort, { once: true });
+    if (controller.signal.aborted) abort();
+    promise.then(resolve, reject).finally(() => {
+      clearTimeout(timer);
+      controller.signal.removeEventListener('abort', abort);
+    });
   });
 }
 
@@ -528,6 +556,86 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
  *   shape.
  * Both write `<uuid>.req.json` atomically and poll for the response.
  */
+const PYTHON_FUTURE_IMPORT = /^from\s+__future__\s+import\s+/;
+const PYTHON_TRIPLE_QUOTE = /^(\s*)("""|''')/;
+
+/**
+ * Insert `helper` after the legal Python module preamble so a user script
+ * that starts with a docstring and/or `from __future__ import …` stays valid.
+ * Never throws; empty code ⇒ helper alone.
+ */
+export function injectAfterPythonPreamble(userCode: string, helper: string): string {
+  const code = typeof userCode === 'string' ? userCode : '';
+  const block = helper.endsWith('\n') ? helper : `${helper}\n`;
+  if (!code) return block;
+  const insertion = findPythonPreambleEnd(code);
+  const before = code.slice(0, insertion);
+  const after = code.slice(insertion);
+  const nl = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+  return `${before}${nl}${block}${after}`;
+}
+
+/** Character offset immediately after shebang / comments / docstring / future imports. */
+export function findPythonPreambleEnd(code: string): number {
+  const raw = code.startsWith('\ufeff') ? code.slice(1) : code;
+  const bom = code.startsWith('\ufeff') ? 1 : 0;
+  const lines = raw.split('\n');
+  let i = 0;
+
+  const lineStart = (idx: number): number => {
+    let off = bom;
+    for (let k = 0; k < idx; k++) off += (lines[k]?.length ?? 0) + 1;
+    return off;
+  };
+
+  if (lines[0]?.startsWith('#!')) i++;
+
+  const skipCommentsAndBlanks = (): void => {
+    while (i < lines.length) {
+      const t = (lines[i] ?? '').trim();
+      if (t === '' || t.startsWith('#')) {
+        i++;
+        continue;
+      }
+      break;
+    }
+  };
+
+  skipCommentsAndBlanks();
+
+  const first = lines[i] ?? '';
+  const doc = first.match(PYTHON_TRIPLE_QUOTE);
+  if (doc) {
+    const quote = doc[2] ?? '"""';
+    const afterOpen = first.slice((doc[1]?.length ?? 0) + quote.length);
+    if (afterOpen.includes(quote)) {
+      i++;
+    } else {
+      i++;
+      while (i < lines.length && !(lines[i] ?? '').includes(quote)) i++;
+      if (i < lines.length) i++;
+    }
+    skipCommentsAndBlanks();
+  }
+
+  while (i < lines.length && PYTHON_FUTURE_IMPORT.test((lines[i] ?? '').trim())) {
+    const startLine = lines[i] ?? '';
+    const openParens = (startLine.match(/\(/g) ?? []).length - (startLine.match(/\)/g) ?? []).length;
+    i++;
+    if (openParens > 0) {
+      let depth = openParens;
+      while (i < lines.length && depth > 0) {
+        const l = lines[i] ?? '';
+        depth += (l.match(/\(/g) ?? []).length - (l.match(/\)/g) ?? []).length;
+        i++;
+      }
+    }
+  }
+
+  if (i >= lines.length) return code.length;
+  return lineStart(i);
+}
+
 function buildRpcHelper(language: ExecuteCodeLanguage): string {
   if (language === 'python') {
     return [
@@ -554,10 +662,12 @@ function buildRpcHelper(language: ExecuteCodeLanguage): string {
     ].join('\n');
   }
   // javascript / typescript
+  // Block-scoped dynamic imports avoid collisions with names in the user's module.
   return [
-    "import { writeFileSync, renameSync, existsSync, readFileSync } from 'node:fs';",
-    "import { join } from 'node:path';",
-    "import { randomUUID } from 'node:crypto';",
+    '{',
+    "const { writeFileSync, renameSync, existsSync, readFileSync } = await import('node:fs');",
+    "const { join } = await import('node:path');",
+    "const { randomUUID } = await import('node:crypto');",
     'globalThis.codebuddyToolCall = function codebuddyToolCall(tool, args) {',
     '  const dir = process.env.CODEBUDDY_EXECUTE_CODE_RPC_DIR;',
     "  if (!dir) return { ok: false, error: 'EXECUTE_CODE_TOOL_RPC_UNAVAILABLE' };",
@@ -577,6 +687,7 @@ function buildRpcHelper(language: ExecuteCodeLanguage): string {
     '  }',
     "  return { ok: false, error: 'RPC_RESPONSE_TIMEOUT' };",
     '};',
+    '}',
     '',
   ].join('\n');
 }

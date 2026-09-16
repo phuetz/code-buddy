@@ -87,7 +87,18 @@ describe('ComputerSkills — LLM step', () => {
 
     const result = await skills.run('llm-ask', { prompt: 'test' });
     expect(result.success).toBe(false);
-    expect(result.error).toContain('GROK_API_KEY');
+    // R33 : toute clé fournisseur est acceptée ; le message ne nomme plus Grok seul.
+    expect(result.error).toMatch(/API key/iu);
+  });
+
+  it('accepts a non-Grok provider API key for llm-ask', async () => {
+    delete process.env.GROK_API_KEY;
+    process.env.OPENAI_API_KEY = 'openai-test-key';
+    const skills = new ComputerSkills();
+    await skills.load();
+
+    const result = await skills.run('llm-ask', { prompt: 'test' });
+    expect(result.success).toBe(true);
   });
 
   it('lists llm-ask in available skills', async () => {

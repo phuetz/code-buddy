@@ -18,6 +18,7 @@ import { EventEmitter } from 'events';
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport as SDKSSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import axios from 'axios';
 import { logger } from '../../src/utils/logger';
 
@@ -362,6 +363,7 @@ describe('Transport Module', () => {
 
         expect(axios.create).toHaveBeenCalledWith({
           baseURL: 'http://localhost:3000',
+          maxRedirects: 0,
           headers: {
             'Content-Type': 'application/json',
             Authorization: 'Bearer token',
@@ -446,7 +448,7 @@ describe('Transport Module', () => {
         const transport = new SSETransport(config);
 
         expect(transport).toBeInstanceOf(SSETransport);
-        expect(transport).toBeInstanceOf(EventEmitter);
+        expect(transport).not.toBeInstanceOf(EventEmitter);
         expect(transport.getType()).toBe('sse');
       });
 
@@ -678,87 +680,50 @@ describe('Transport Module', () => {
     });
   });
 
-  describe('SSEClientTransport (internal)', () => {
-    let transport: SSETransport;
-    let sdkTransport: Transport;
+  describe('SSEClientTransport (SDK)', () => {
+    const originalFetch = globalThis.fetch;
+    let fetchMock: jest.Mock;
 
-    beforeEach(async () => {
-      const config: TransportConfig = {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      fetchMock = jest.fn().mockResolvedValue(new Response('refused', { status: 500 }));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('returns the SDK SSE client instead of a POST /rpc emulation', async () => {
+      const sdkTransport = await new SSETransport({ type: 'sse', url: 'http://localhost:3000/sse' }).connect();
+
+      expect(sdkTransport).toBeInstanceOf(SDKSSEClientTransport);
+      expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('refuses to send before the event stream is started', async () => {
+      const sdkTransport = await new SSETransport({ type: 'sse', url: 'http://localhost:3000/sse' }).connect();
+
+      await expect(sdkTransport.send({ jsonrpc: '2.0', id: 1, method: 'test' } as any)).rejects.toThrow('Not connected');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('opens the stream with configured headers, refuses redirects and surfaces a non-200 refusal', async () => {
+      const sdkTransport = await new SSETransport({
         type: 'sse',
         url: 'http://localhost:3000/sse',
-      };
+        headers: { Authorization: 'Bearer test' },
+      }).connect();
+      const onerror = jest.fn();
+      sdkTransport.onerror = onerror;
 
-      transport = new SSETransport(config);
-      sdkTransport = await transport.connect();
-    });
+      await expect(sdkTransport.start()).rejects.toThrow(/Non-200 status code \(500\)/);
 
-    describe('start()', () => {
-      it('should resolve immediately (SSE is event-driven)', async () => {
-        await expect(sdkTransport.start()).resolves.not.toThrow();
-      });
-    });
-
-    describe('close()', () => {
-      it('should resolve immediately', async () => {
-        await expect(sdkTransport.close()).resolves.not.toThrow();
-      });
-    });
-
-    describe('send()', () => {
-      it('should send message via HTTP POST', async () => {
-        const mockAxios = axios as jest.Mocked<typeof axios>;
-        mockAxios.post.mockResolvedValue({ data: { result: 'ok' } });
-
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
-        await sdkTransport.send(message);
-
-        expect(mockAxios.post).toHaveBeenCalledWith(
-          'http://localhost:3000/rpc',
-          message,
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-      });
-
-      it('should call onmessage callback with response data', async () => {
-        const mockResponse = { jsonrpc: '2.0', id: 1, result: 'test' };
-        const mockAxios = axios as jest.Mocked<typeof axios>;
-        mockAxios.post.mockResolvedValue({ data: mockResponse });
-
-        const onmessage = jest.fn();
-        sdkTransport.onmessage = onmessage;
-
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
-        await sdkTransport.send(message);
-
-        expect(onmessage).toHaveBeenCalledWith(mockResponse);
-      });
-
-      it('should call onerror callback on error', async () => {
-        const mockAxios = axios as jest.Mocked<typeof axios>;
-        mockAxios.post.mockRejectedValue(new Error('Connection refused'));
-
-        const onerror = jest.fn();
-        sdkTransport.onerror = onerror;
-
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
-        await expect(sdkTransport.send(message)).rejects.toThrow('SSE transport error');
-        expect(onerror).toHaveBeenCalled();
-      });
+      expect(onerror).toHaveBeenCalled();
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(String(url)).toBe('http://localhost:3000/sse');
+      expect(init.redirect).toBe('error');
+      expect(new Headers(init.headers).get('authorization')).toBe('Bearer test');
     });
   });
 
@@ -789,34 +754,16 @@ describe('Transport Module', () => {
     });
 
     describe('send()', () => {
-      it('should throw error indicating SSE incompatibility with MCP', async () => {
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
-        await expect(sdkTransport.send(message)).rejects.toThrow(
-          'StreamableHttpTransport: SSE endpoints are not compatible with MCP request-response pattern'
-        );
-      });
-
-      it('should log warning about SSE incompatibility', async () => {
-        const message: JSONRPCMessage = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'test',
-        };
-
+      it('uses HTTP and surfaces a server refusal without logging request payloads', async () => {
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('Unavailable', { status: 503 }));
         try {
-          await sdkTransport.send(message);
-        } catch {
-          // Expected to throw
+          await expect(sdkTransport.send({ jsonrpc: '2.0', id: 1, method: 'test' })).rejects.toThrow();
+          expect(fetchMock).toHaveBeenCalled();
+          expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('not compatible'));
+        } finally {
+          fetchMock.mockRestore();
+          await transport.disconnect();
         }
-
-        expect(logger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('SSE endpoints require persistent connections')
-        );
       });
     });
   });
@@ -898,17 +845,13 @@ describe('Transport Module', () => {
     });
 
     describe('SSETransport Events', () => {
-      it('should inherit from EventEmitter', () => {
-        const config: TransportConfig = {
-          type: 'sse',
-          url: 'http://localhost:3000/sse',
-        };
+      it('delegates events to the SDK transport callbacks instead of emitting itself', async () => {
+        const transport = new SSETransport({ type: 'sse', url: 'http://localhost:3000/sse' });
 
-        const transport = new SSETransport(config);
-
-        expect(typeof transport.on).toBe('function');
-        expect(typeof transport.emit).toBe('function');
-        expect(typeof transport.removeListener).toBe('function');
+        expect(typeof (transport as unknown as { on?: unknown }).on).toBe('undefined');
+        const sdkTransport = await transport.connect();
+        expect(sdkTransport).toBeInstanceOf(SDKSSEClientTransport);
+        await transport.disconnect();
       });
     });
 
@@ -1169,10 +1112,10 @@ describe('Transport Module', () => {
 
   describe('Transport Type Constants', () => {
     it('should support all defined transport types', () => {
-      const types: TransportType[] = ['stdio', 'http', 'sse', 'streamable_http'];
+      const types: TransportType[] = ['stdio', 'http', 'sse', 'sse_sdk', 'legacy_rpc', 'streamable_http'];
 
       types.forEach((type) => {
-        expect(['stdio', 'http', 'sse', 'streamable_http']).toContain(type);
+        expect(['stdio', 'http', 'sse', 'sse_sdk', 'legacy_rpc', 'streamable_http']).toContain(type);
       });
     });
   });
@@ -1193,6 +1136,7 @@ describe('Transport Module', () => {
 
       expect(axios.create).toHaveBeenCalledWith({
         baseURL: 'http://localhost:3000',
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': 'secret-key',
@@ -1215,6 +1159,7 @@ describe('Transport Module', () => {
 
       expect(axios.create).toHaveBeenCalledWith({
         baseURL: 'http://localhost:3000',
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },

@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.codebuddy');
 const TRUST_FILE = path.join(CONFIG_DIR, 'trusted-folders.json');
@@ -207,10 +208,10 @@ export class TrustFolderManager {
       if (!fs.existsSync(CONFIG_DIR)) {
         fs.mkdirSync(CONFIG_DIR, { recursive: true });
       }
-      fs.writeFileSync(TRUST_FILE, JSON.stringify({
-        folders: [...this.trustedFolders],
-        enforcement: this.enforcementEnabled,
-      }, null, 2));
+        writeJsonAtomicSync(TRUST_FILE, {
+          folders: [...this.trustedFolders],
+          enforcement: this.enforcementEnabled,
+        }, { mode: 0o600 });
     } catch (error) {
       logger.debug('Failed to save trusted folders', { error });
     }

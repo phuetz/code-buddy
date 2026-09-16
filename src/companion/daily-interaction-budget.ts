@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { resolveZonedDateTime } from '../life-rhythm/day-context.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 const SCHEMA_VERSION = 1;
 const RETAIN_DAYS = 14;
@@ -88,43 +89,43 @@ function isRealLocalDate(value: string): boolean {
 }
 
 async function loadState(path: string): Promise<DailyBudgetState | null> {
-  try {
-    const parsed: unknown = JSON.parse(await fs.readFile(path, 'utf8'));
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    const record = parsed as { schemaVersion?: unknown; days?: unknown };
-    if (record.schemaVersion !== SCHEMA_VERSION || typeof record.days !== 'object' || record.days === null) {
+  const parsed = await readJsonAtomic<Record<string, unknown> | null>(path, null, {
+    mode: 0o600,
+    isValid: (value): value is Record<string, unknown> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!parsed) {
+    try {
+      await fs.access(path);
+      return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyState();
+      logger.warn('[companion-budget] state unreadable; denying spontaneous interaction', {
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
-    const days: Record<string, DailyBudgetEntry> = {};
-    for (const [date, value] of Object.entries(record.days)) {
-      if (!isRealLocalDate(date) || typeof value !== 'object' || value === null) continue;
-      const events = (value as { events?: unknown }).events;
-      if (Array.isArray(events) && events.every(isEvent)) days[date] = { events };
-    }
-    return { schemaVersion: SCHEMA_VERSION, days };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyState();
-    logger.warn('[companion-budget] state unreadable; denying spontaneous interaction', {
-      path,
-      error: error instanceof Error ? error.message : String(error),
-    });
+  }
+  const record = parsed as { schemaVersion?: unknown; days?: unknown };
+  if (record.schemaVersion !== SCHEMA_VERSION || typeof record.days !== 'object' || record.days === null) {
     return null;
   }
+  const days: Record<string, DailyBudgetEntry> = {};
+  for (const [date, value] of Object.entries(record.days)) {
+    if (!isRealLocalDate(date) || typeof value !== 'object' || value === null) continue;
+    const events = (value as { events?: unknown }).events;
+    if (Array.isArray(events) && events.every(isEvent)) days[date] = { events };
+  }
+  return { schemaVersion: SCHEMA_VERSION, days };
 }
 
 async function saveState(path: string, state: DailyBudgetState): Promise<boolean> {
-  const temporary = `${path}.tmp.${process.pid}.${randomUUID()}`;
   try {
-    await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    await fs.rename(temporary, path);
-    if (process.platform !== 'win32') await fs.chmod(path, 0o600);
+    await writeJsonAtomic(path, state, { mode: 0o600 });
     return true;
   } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => undefined);
     logger.warn('[companion-budget] state write failed; denying spontaneous interaction', {
       path,
       error: error instanceof Error ? error.message : String(error),

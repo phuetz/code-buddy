@@ -12,7 +12,10 @@ import type { ChatEntry } from '../../agent/types.js';
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
 import type { CompanionRuntimeRoute } from '../../conversation/companion-model-routing.js';
 import type { PreparedConversationTurn } from '../../conversation/conversation-orchestrator.js';
-import { deriveArgumentObligations } from '../../conversation/argument-obligations.js';
+import {
+  deriveArgumentObligations,
+  isRuntimeEvidenceVerificationRequest,
+} from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
 import {
@@ -24,12 +27,22 @@ import {
   __resetSessionModelOverridesForTests,
 } from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
-import { resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
+import { channelEnvToken, resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
 import type { ModelEgress } from '../../providers/model-egress.js';
 import {
   getChannelCognitivePort,
   type ChannelCognitiveTurn,
 } from '../../channels/channel-cognitive-port.js';
+import {
+  assembleCompanionChannelPrompt,
+  channelWaitNoticeMs,
+  companionWaitNoticeText,
+  isCompanionSurfaceEnabled,
+  shouldUseCompanionChannelProfile,
+} from '../../channels/companion-channel-profile.js';
+import { runCompanionChannelTurn } from '../../channels/companion-channel-turn.js';
+import { speakChannelProviderFailure } from '../../channels/provider-failure-speech.js';
+import { prependUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
 
 interface ChannelOptions {
   type?: string;
@@ -88,6 +101,7 @@ export interface ChannelStatusReport {
       connected: boolean;
       authenticated: boolean;
       lastActivity?: string;
+      lastSuccessfulPoll?: string;
       error?: string;
       info?: Record<string, unknown>;
     }>;
@@ -205,7 +219,12 @@ export async function startConfiguredChannels(
       const channel = await instantiateChannel(chConfig);
       if (channel) {
         manager.registerChannel(channel);
-        await channel.connect();
+        try {
+          await channel.connect();
+        } catch (connectErr) {
+          manager.unregisterChannel(channelType);
+          throw connectErr;
+        }
         result.registered.push(chConfig.type);
       }
     } catch (err) {
@@ -220,14 +239,72 @@ export async function startConfiguredChannels(
 
 function getChannelConfigPaths(configPath?: string): string[] {
   const envConfigPath = process.env.CODEBUDDY_CHANNEL_CONFIG?.trim();
+  const home = process.env.HOME || process.env.USERPROFILE || '';
   return configPath
     ? [configPath]
     : envConfigPath
       ? [envConfigPath]
     : [
         path.join(process.cwd(), '.codebuddy', 'channels.json'),
-        path.join(process.env.HOME || process.env.USERPROFILE || '', '.codebuddy', 'channels.json'),
+        path.join(home, '.codebuddy', 'channels.json'),
+        path.join(process.cwd(), '.codebuddy', 'settings.json'),
+        path.join(home, '.codebuddy', 'settings.json'),
       ];
+}
+
+function mapSettingsChannelEntry(key: string, value: unknown): ChannelConfigEntry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const type = typeof entry.type === 'string' && entry.type.trim() ? entry.type.trim() : key;
+  const options: Record<string, unknown> = {
+    ...(entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)
+      ? (entry.options as Record<string, unknown>)
+      : {}),
+  };
+  if (Array.isArray(entry.adminUsers)) options.adminUsers = entry.adminUsers;
+  const mapped: ChannelConfigEntry = {
+    type,
+    enabled: entry.enabled !== false,
+  };
+  if (typeof entry.token === 'string') mapped.token = entry.token;
+  if (typeof entry.webhookUrl === 'string') mapped.webhookUrl = entry.webhookUrl;
+  if (Array.isArray(entry.allowedUsers)) {
+    mapped.allowedUsers = entry.allowedUsers.filter((item): item is string => typeof item === 'string');
+  }
+  if (Array.isArray(entry.allowedChannels)) {
+    mapped.allowedChannels = entry.allowedChannels.filter((item): item is string => typeof item === 'string');
+  }
+  if (Object.keys(options).length > 0) mapped.options = options;
+  return mapped;
+}
+
+function asChannelConfig(raw: unknown): ChannelsConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const channelsField = (raw as { channels?: unknown }).channels;
+  if (Array.isArray(channelsField)) {
+    return { channels: channelsField as ChannelConfigEntry[] };
+  }
+  if (channelsField && typeof channelsField === 'object') {
+    const channels = Object.entries(channelsField as Record<string, unknown>)
+      .map(([key, value]) => mapSettingsChannelEntry(key, value))
+      .filter((entry): entry is ChannelConfigEntry => entry !== null);
+    if (channels.length === 0) return null;
+    return { channels };
+  }
+  return null;
+}
+
+function applyEnvChannelTokens(config: ChannelsConfig): ChannelsConfig {
+  const telegramToken = channelEnvToken('telegram');
+  if (!telegramToken) return config;
+  const existing = config.channels.find((channel) => channel.type === 'telegram');
+  if (existing) {
+    if (!existing.token) existing.token = telegramToken;
+    return config;
+  }
+  return {
+    channels: [...config.channels, { type: 'telegram', enabled: true, token: telegramToken }],
+  };
 }
 
 export function loadChannelConfigWithPath(configPath?: string): { config: ChannelsConfig; path: string } | null {
@@ -235,11 +312,17 @@ export function loadChannelConfigWithPath(configPath?: string): { config: Channe
     try {
       if (fs.existsSync(p)) {
         const content = fs.readFileSync(p, 'utf-8');
-        return { config: JSON.parse(content) as ChannelsConfig, path: p };
+        const parsed = asChannelConfig(JSON.parse(content));
+        if (!parsed) continue;
+        return { config: applyEnvChannelTokens(parsed), path: p };
       }
     } catch (err) {
       logger.debug(`Failed to load channel config from ${p}`, { error: err instanceof Error ? err.message : String(err) });
     }
+  }
+  const fromEnv = applyEnvChannelTokens({ channels: [] });
+  if (fromEnv.channels.length > 0) {
+    return { config: fromEnv, path: 'env:TELEGRAM_BOT_TOKEN' };
   }
   return null;
 }
@@ -361,6 +444,9 @@ export function buildChannelStatusReport(
       connected: status.connected,
       authenticated: status.authenticated,
       ...(status.lastActivity ? { lastActivity: status.lastActivity.toISOString() } : {}),
+      ...(status.lastSuccessfulPoll
+        ? { lastSuccessfulPoll: status.lastSuccessfulPoll.toISOString() }
+        : {}),
       ...(status.error ? { error: status.error } : {}),
       ...(status.info ? { info: status.info } : {}),
     }))
@@ -436,7 +522,10 @@ export async function handleChannels(action: string, options: ChannelOptions): P
       }
       console.log('Channel Status:\n');
       for (const [type, status] of Object.entries(allStatus)) {
-        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${status.error ? ` (error: ${status.error})` : ''}`);
+        const pollStatus = type === 'telegram'
+          ? `, last successful poll: ${status.lastSuccessfulPoll?.toISOString() ?? 'never'}`
+          : '';
+        console.log(`  ${type}: ${status.connected ? 'connected' : 'disconnected'}${pollStatus}${status.error ? ` (error: ${status.error})` : ''}`);
       }
       if (Object.keys(allStatus).length === 0) {
         console.log('  No channels registered.');
@@ -498,6 +587,26 @@ export async function handleChannels(action: string, options: ChannelOptions): P
       break;
     }
 
+    case 'pairing': {
+      const { getDMPairing } = await import('../../channels/dm-pairing.js');
+      const pairing = getDMPairing();
+      const stats = pairing.getStats();
+      console.log(`DM pairing: ${stats.enabled ? 'on' : 'off'} (DM_PAIRING_ENABLED, default on)`);
+      console.log(`Approved senders: ${stats.totalApproved}`);
+      const pending = pairing.listPending();
+      if (pending.length === 0) {
+        console.log('No pending pairing codes. An unknown DM generates a one-time code logged server-side only.');
+        break;
+      }
+      console.log(`Pending one-time codes (${pending.length}):`);
+      for (const request of pending) {
+        console.log(
+          `  [${request.channelType}] sender=${request.senderId} code=${request.code} expires=${request.expiresAt.toISOString()}`,
+        );
+      }
+      break;
+    }
+
     case 'stop': {
       const channelType = options.type;
       if (channelType) {
@@ -517,7 +626,7 @@ export async function handleChannels(action: string, options: ChannelOptions): P
     }
 
     default:
-      console.log(`Usage: buddy channels [start|stop|status|list] [--type <type>] [--instance <name|default>] [--config <path>]`);
+      console.log(`Usage: buddy channels [start|stop|status|list|pairing] [--type <type>] [--instance <name|default>] [--config <path>]`);
   }
 }
 
@@ -536,6 +645,7 @@ export function __resetChannelAIHandlerForTests(): void {
   }
   channelTurnTails.clear();
   channelBotPersonas.clear();
+  companionChannelHistories.clear();
   recentLisaSelfieSessions.clear();
   __resetSessionModelOverridesForTests();
 }
@@ -562,6 +672,7 @@ interface CachedChannelAgent {
 }
 const channelAgentCache = new Map<string, CachedChannelAgent>();
 const channelTurnTails = new Map<string, Promise<void>>();
+const companionChannelHistories = new Map<string, ConversationTurn[]>();
 const CHANNEL_AGENT_IDLE_MS = 2 * 60 * 60 * 1000; // evict after 2h idle
 const CHANNEL_AGENT_MAX = 50;
 const DEFAULT_CHANNEL_TURN_TIMEOUT_MS = 3 * 60 * 1000;
@@ -838,6 +949,56 @@ function channelTypingLifecycle(
   };
 }
 
+function channelWaitNoticeLifecycle(
+  channel: import('../../channels/index.js').BaseChannel,
+  channelId: string,
+  replyTo?: string,
+): { onStart: () => void; onSettled: () => void } {
+  const delayMs = channelWaitNoticeMs();
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+  return {
+    onStart: () => {
+      if (delayMs <= 0) return;
+      timer = setTimeout(() => {
+        if (stopped) return;
+        void channel
+          .send({
+            channelId,
+            content: companionWaitNoticeText(),
+            ...(replyTo ? { replyTo } : {}),
+          })
+          .catch((error: unknown) => {
+            logger.debug('Channel wait notice skipped', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }, delayMs);
+      timer.unref?.();
+    },
+    onSettled: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
+function rememberCompanionChannelTurn(
+  sessionKey: string,
+  userText: string,
+  assistantText: string,
+): void {
+  const previous = companionChannelHistories.get(sessionKey) ?? [];
+  companionChannelHistories.set(
+    sessionKey,
+    [
+      ...previous,
+      { role: 'user' as const, content: userText },
+      { role: 'assistant' as const, content: assistantText },
+    ].slice(-20),
+  );
+}
+
 function hashForLog(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
@@ -1076,6 +1237,21 @@ async function getOrCreateChannelAgent(
   };
 }
 
+function isChannelAllowlistedSender(
+  channel: { getAllowedUsers?: () => string[] },
+  message: { sender?: { id?: string; username?: string } },
+): boolean {
+  if (typeof channel.getAllowedUsers !== 'function') return false;
+  const listed = channel.getAllowedUsers();
+  if (!listed || listed.length === 0) return false;
+  const identities = [message.sender?.id, message.sender?.username].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (identities.length === 0) return false;
+  const allowed = new Set(listed.map((entry) => entry.trim().replace(/^@/, '').toLowerCase()));
+  return identities.some((identity) => allowed.has(identity.trim().replace(/^@/, '').toLowerCase()));
+}
+
 export async function registerAIMessageHandler(manager: import('../../channels/index.js').ChannelManager): Promise<void> {
   if (aiHandlerRegistered) return;
   aiHandlerRegistered = true;
@@ -1088,19 +1264,24 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
     let deliveryState: 'not_started' | 'started' | 'delivered' = 'not_started';
     try {
       // 1. DM pairing gate — unapproved senders get a code, then we stop.
+      // A sender already on the channel static allowlist skipped pairing in the
+      // adapter; do not re-gate them here (pairing default-on would otherwise
+      // refuse the operator's own Telegram id).
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
-      const pairingStatus = await checkDMPairing(message);
-      if (!pairingStatus.approved) {
-        if (pairingStatus.code) {
+      if (!isChannelAllowlistedSender(channel, message)) {
+        const pairingStatus = await checkDMPairing(message);
+        if (!pairingStatus.approved) {
           const pairing = getDMPairing();
           const pairingMsg = pairing.getPairingMessage(pairingStatus);
-          await channel.send({
-            channelId: message.channel.id,
-            content: pairingMsg,
-            replyTo: message.id,
-          });
+          if (pairingMsg) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: pairingMsg,
+              replyTo: message.id,
+            });
+          }
+          return;
         }
-        return;
       }
 
       // Nothing to answer (e.g. a non-text message with no transcription).
@@ -1108,96 +1289,145 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
+      try {
+        const { observeInboundForAwayPause } = await import('../../companion/away-mode.js');
+        observeInboundForAwayPause(channel.type, message.content);
+      } catch {
+        /* travel-mode pause is optional and must never block inbound chat */
+      }
+
       const sessionKey = message.sessionKey || 'default-global';
 
-      // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
+      // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
+      // The photo sender is scoped to the requesting chat, not the global alert chat.
+      if (channel.type === 'telegram') {
+        try {
+          const { maybeHandleCameraShareRequest } = await import('../../companion/camera-share.js');
+          const share = await maybeHandleCameraShareRequest(message.content, {
+            surface: 'telegram',
+            inboundChatId: message.channel.id,
+            rootDir: process.cwd(),
+            sendPhoto: async (caption, imagePath) => {
+              const imageChannel = channel as {
+                sendImageFile?: (channelId: string, imagePath: string, caption?: string) => Promise<void>;
+                send: (outbound: {
+                  channelId: string;
+                  content: string;
+                  replyTo?: string;
+                  attachments?: Array<{
+                    type: 'image';
+                    filePath?: string;
+                    fileName?: string;
+                    mimeType?: string;
+                  }>;
+                }) => Promise<{ success: boolean }>;
+              };
+              if (typeof imageChannel.sendImageFile === 'function') {
+                await imageChannel.sendImageFile(message.channel.id, imagePath, caption);
+                return true;
+              }
+              const path = await import('node:path');
+              const extension = path.extname(imagePath).slice(1).toLowerCase();
+              const sent = await imageChannel.send({
+                channelId: message.channel.id,
+                content: caption,
+                replyTo: message.id,
+                attachments: [{
+                  type: 'image',
+                  filePath: imagePath,
+                  fileName: path.basename(imagePath),
+                  mimeType: extension === 'jpg' || extension === 'jpeg'
+                    ? 'image/jpeg'
+                    : `image/${extension || 'png'}`,
+                }],
+              });
+              return Boolean(sent?.success);
+            },
+          });
+          if (share) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: share.spokenReply,
+              replyTo: message.id,
+            });
+            return;
+          }
+        } catch (cameraShareErr) {
+          logger.warn('Camera share channel path failed', {
+            error: cameraShareErr instanceof Error ? cameraShareErr.message : String(cameraShareErr),
+          });
+        }
+      }
+
+      // Lisa selfie — cache-first, BEFORE the LLM. Companion profile has no tools,
+      // so a description of lisa_selfie / image_generate never fires here.
       if (
-        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
-        (channel.type === 'telegram' || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all')
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false'
+        && isCompanionSurfaceEnabled()
       ) {
         try {
-          const {
-            isLisaSelfieRequest,
-            createAndMaybeSendLisaSelfie,
-            inferLisaSelfieScene,
-            inferLisaContentTier,
-            inferSelfieMood,
-            isLisaSelfieContinuationRequest,
-          } =
-            await import('../../companion/lisa-selfie.js');
+          const { tryServeCompanionSelfie } = await import('../../companion/lisa-selfie-router.js');
           const previousSelfie = recentLisaSelfieSessions.get(sessionKey);
           const hasRecentSelfie = previousSelfie !== undefined
             && Date.now() - previousSelfie.at <= LISA_SELFIE_CONTINUATION_TTL_MS;
           if (previousSelfie && !hasRecentSelfie) recentLisaSelfieSessions.delete(sessionKey);
-          const isContinuation = (message.attachments?.length ?? 0) === 0
-            && isLisaSelfieContinuationRequest(message.content, hasRecentSelfie);
-          if (isLisaSelfieRequest(message.content) || isContinuation) {
-            await channel.send({
-              channelId: message.channel.id,
-              content: 'Un instant mon cœur — je me prépare une photo…',
-              replyTo: message.id,
-            });
-            const inferredMood = inferSelfieMood(message.content);
-            const mood = isContinuation && inferredMood === 'portrait' && previousSelfie
-              ? previousSelfie.mood
-              : inferredMood;
-            const inferredTier = inferLisaContentTier(message.content);
-            const contentTier = isContinuation && inferredTier === 'safe' && previousSelfie
-              ? previousSelfie.contentTier
-              : inferredTier;
-            const scene = inferLisaSelfieScene(message.content);
-            const result = await createAndMaybeSendLisaSelfie({
-              mood,
-              contentTier,
-              ...(scene ? { scene } : {}),
-              rotateCacheStyles: !scene && mood === 'portrait',
-              sendTelegram: true,
-              deliverPhoto: async (caption, imagePath) => {
-                const ch = channel as {
-                  sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
-                  send: (m: {
-                    channelId: string;
-                    content: string;
-                    attachments?: Array<{
-                      type: 'image';
-                      filePath?: string;
-                      data?: string;
-                      fileName?: string;
-                      mimeType?: string;
-                    }>;
-                    replyTo?: string;
-                  }) => Promise<{ success: boolean }>;
-                };
-                if (typeof ch.sendImageFile === 'function') {
-                  await ch.sendImageFile(message.channel.id, imagePath, caption);
-                  return true;
-                }
-                const path = await import('node:path');
-                const ext = path.extname(imagePath).slice(1) || 'png';
-                const r = await ch.send({
+          const served = await tryServeCompanionSelfie(message.content, {
+            surface: channel.type === 'telegram' ? 'telegram' : 'mobile',
+            hasRecentSelfie,
+            includeImageBytes: false,
+          });
+          if (served) {
+            if (served.imagePath) {
+              const ch = channel as {
+                sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
+                send: (m: {
+                  channelId: string;
+                  content: string;
+                  attachments?: Array<{
+                    type: 'image';
+                    filePath?: string;
+                    data?: string;
+                    fileName?: string;
+                    mimeType?: string;
+                  }>;
+                  replyTo?: string;
+                }) => Promise<{ success: boolean }>;
+              };
+              if (typeof ch.sendImageFile === 'function') {
+                await ch.sendImageFile(message.channel.id, served.imagePath, served.caption);
+              } else {
+                const pathMod = await import('node:path');
+                const ext = pathMod.extname(served.imagePath).slice(1) || 'png';
+                await ch.send({
                   channelId: message.channel.id,
-                  content: caption,
+                  content: served.caption,
                   replyTo: message.id,
                   attachments: [
                     {
                       type: 'image',
-                      filePath: imagePath,
-                      fileName: path.basename(imagePath),
-                      mimeType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`,
+                      filePath: served.imagePath,
+                      fileName: pathMod.basename(served.imagePath),
+                      mimeType: served.mimeType
+                        ?? (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`),
                     },
                   ],
                 });
-                return Boolean(r?.success);
-              },
-            });
-            if (result.success) {
-              recentLisaSelfieSessions.set(sessionKey, { at: Date.now(), mood, contentTier });
+              }
+              recentLisaSelfieSessions.set(sessionKey, {
+                at: Date.now(),
+                mood: served.style ?? 'portrait',
+                contentTier: served.contentTier,
+              });
+            } else {
+              await channel.send({
+                channelId: message.channel.id,
+                content: served.caption,
+                replyTo: message.id,
+              });
             }
-            await channel.send({
-              channelId: message.channel.id,
-              content: result.spokenReply,
-              replyTo: message.id,
-            });
+            // The selfie IS a turn of the conversation: without this the next
+            // companion prompt has no trace of the photo that was just sent.
+            rememberCompanionChannelTurn(sessionKey, message.content, served.caption);
             return;
           }
         } catch (selfieErr) {
@@ -1502,29 +1732,87 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
         return;
       }
+      const useCompanionProfile = shouldUseCompanionChannelProfile({
+        text: message.content,
+        isCommand: message.isCommand === true,
+      });
       turn.phase('runtime');
-      const { agent, effectiveRuntime } = await getOrCreateChannelAgent(
-        sessionKey,
-        runtimeResolved,
-        agentConfig,
-        botId,
-        routeModel,
-        companionRoute
-      );
+      let agent: import('../../agent/codebuddy-agent.js').CodeBuddyAgent | undefined;
+      let effectiveRuntime: {
+        apiKey: string;
+        baseUrl: string;
+        model: string;
+        egress: ModelEgress;
+      } = {
+        apiKey: runtimeResolved.apiKey,
+        baseUrl: runtimeResolved.baseUrl,
+        model: runtimeResolved.model,
+        egress: (runtimeResolved as { egress?: ModelEgress }).egress ?? 'cloud',
+      };
+      if (!useCompanionProfile) {
+        const created = await getOrCreateChannelAgent(
+          sessionKey,
+          runtimeResolved,
+          agentConfig,
+          botId,
+          routeModel,
+          companionRoute,
+        );
+        agent = created.agent;
+        effectiveRuntime = created.effectiveRuntime;
+      }
       turn.throwIfAborted();
 
       turn.phase('grounding');
       let attachedImageEvidence: string | undefined;
+      // A photo shared with the companion is not an analysis request: it goes
+      // through the shared-photo pipeline (privacy posture, reaction contract,
+      // album, memory) instead of the analytical evidence card the agent path
+      // uses. See `companion/companion-photo.ts`.
+      let companionPhotos: import('../../companion/companion-photo.js').PreparedCompanionPhotos | null = null;
       const imageAttachmentCount = message.attachments?.filter((attachment) => attachment.type === 'image').length ?? 0;
-      if (imageAttachmentCount > 0) {
+      const telegramFileResolver = channel.type === 'telegram' &&
+        typeof (channel as unknown as { getFileUrl?: unknown }).getFileUrl === 'function'
+        ? (reference: string) => (channel as unknown as { getFileUrl: (fileId: string) => Promise<string> }).getFileUrl(reference)
+        : undefined;
+      if (imageAttachmentCount > 0 && useCompanionProfile) {
+        try {
+          const [{ loadChannelPhotos }, { prepareCompanionPhotos }] = await Promise.all([
+            import('../../companion/companion-photo-intake.js'),
+            import('../../companion/companion-photo.js'),
+          ]);
+          const loaded = await loadChannelPhotos(message.attachments, {
+            ...(telegramFileResolver ? { resolveUrl: telegramFileResolver } : {}),
+            signal: turn.signal,
+          });
+          turn.throwIfAborted();
+          companionPhotos = await prepareCompanionPhotos(loaded, {
+            caption: message.content,
+            model: effectiveRuntime.model,
+            baseUrl: effectiveRuntime.baseUrl,
+          });
+          logger.info('Companion shared-photo perception completed', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            messageHash: hashForLog(message.id),
+            mode: companionPhotos?.mode,
+            accepted: companionPhotos?.photos.length ?? 0,
+            rejected: companionPhotos?.rejected.length ?? 0,
+          });
+        } catch (error) {
+          turn.throwIfAborted();
+          companionPhotos = null;
+          logger.warn('Companion shared-photo perception unavailable', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else if (imageAttachmentCount > 0) {
         const {
           groundAttachedImages,
           renderAttachedImageEvidence,
         } = await import('../../companion/attached-image-grounding.js');
-        const telegramFileResolver = channel.type === 'telegram' &&
-          typeof (channel as unknown as { getFileUrl?: unknown }).getFileUrl === 'function'
-          ? (reference: string) => (channel as unknown as { getFileUrl: (fileId: string) => Promise<string> }).getFileUrl(reference)
-          : undefined;
         const visual = await groundAttachedImages(message.attachments, message.content, {
           ...(telegramFileResolver ? { resolveUrl: telegramFileResolver } : {}),
         });
@@ -1541,7 +1829,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
       }
 
-      if (companionConversation) {
+      if (companionConversation && !useCompanionProfile) {
         cognitiveTurn = await getChannelCognitivePort().begin({
           channelType: channel.type,
           sessionKey,
@@ -1552,12 +1840,14 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         turn.throwIfAborted();
       }
 
-      const agentInput = attachedImageEvidence
-        ? `${message.content}\n\n${attachedImageEvidence}\n\n` +
-          'Réponds à la demande en t’appuyant sur cette fiche visuelle. Distingue les faits visibles des incertitudes.'
-        : imageAttachmentCount > 0
-          ? `${message.content}\n\nL’analyse des images jointes a échoué. Dis-le honnêtement et demande un nouvel envoi net si nécessaire.`
-          : message.content;
+      const agentInput = companionPhotos
+        ? companionPhotos.userText
+        : attachedImageEvidence
+          ? `${message.content}\n\n${attachedImageEvidence}\n\n` +
+            'Réponds à la demande en t’appuyant sur cette fiche visuelle. Distingue les faits visibles des incertitudes.'
+          : imageAttachmentCount > 0
+            ? `${message.content}\n\nL’analyse des images jointes a échoué. Dis-le honnêtement et demande un nouvel envoi net si nécessaire.`
+            : message.content;
       let transientConversationContext: string | undefined;
       let preparedConversation: PreparedConversationTurn | undefined;
       let companionConversationHistory: ConversationTurn[] = [];
@@ -1572,21 +1862,23 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ]);
         const history: ConversationTurn[] = sharedConversationHistory.length
           ? sharedConversationHistory.slice(-12)
-          : agent
-              .getChatHistory()
-              .filter((entry) => entry.type === 'user' || entry.type === 'assistant')
-              .slice(-12)
-              .map((entry) => {
-                const content = String(entry.content ?? '')
-                  .replace(/<companion_turn>[\s\S]*?<\/companion_turn>\s*/g, '')
-                  .replace(/^Message de l'utilisateur\s*:\s*/i, '')
-                  .trim();
-                return {
-                  role: entry.type === 'user' ? ('user' as const) : ('assistant' as const),
-                  content,
-                };
-              })
-              .filter((entry) => entry.content);
+          : useCompanionProfile
+            ? (companionChannelHistories.get(sessionKey) ?? []).slice(-12)
+            : (agent
+                ?.getChatHistory()
+                .filter((entry) => entry.type === 'user' || entry.type === 'assistant')
+                .slice(-12)
+                .map((entry) => {
+                  const content = String(entry.content ?? '')
+                    .replace(/<companion_turn>[\s\S]*?<\/companion_turn>\s*/g, '')
+                    .replace(/^Message de l'utilisateur\s*:\s*/i, '')
+                    .trim();
+                  return {
+                    role: entry.type === 'user' ? ('user' as const) : ('assistant' as const),
+                    content,
+                  };
+                })
+                .filter((entry) => entry.content) ?? []);
         companionConversationHistory = history;
         const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'
           ? null
@@ -1632,20 +1924,28 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ].filter((part): part is string => Boolean(part?.trim())).join('\n\n') || undefined;
       }
 
+      const semanticReviewProfile = isRuntimeEvidenceVerificationRequest(message.content)
+        ? ('factual_analytical' as const)
+        : undefined;
       const semanticReviewPlanned =
+        !useCompanionProfile &&
         companionConversation &&
         !prefetchedDirectResponse &&
         preparedConversation !== undefined &&
-        shouldRunSemanticResponseGate({ plan: preparedConversation.plan }) &&
+        shouldRunSemanticResponseGate({
+          plan: preparedConversation.plan,
+          ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
+        }) &&
         deriveArgumentObligations(preparedConversation.plan, message.content).length > 0;
-      if (semanticReviewPlanned) {
-        agent.suspendTranscriptSnapshots();
+      if (semanticReviewPlanned && agent) {
+        const snapshotAgent = agent;
+        snapshotAgent.suspendTranscriptSnapshots();
         let released = false;
         releaseTranscriptSnapshotHold = () => {
           if (released) return;
           released = true;
-          if (channelAgentCache.get(sessionKey)?.agent === agent) {
-            agent.resumeTranscriptSnapshots();
+          if (channelAgentCache.get(sessionKey)?.agent === snapshotAgent) {
+            snapshotAgent.resumeTranscriptSnapshots();
           }
         };
       }
@@ -1655,15 +1955,18 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // promise) must discard that private state unless delivery and
       // persistence complete normally.
       generativeSessionKey = sessionKey;
-      generativeTurnEngaged = true;
+      generativeTurnEngaged = Boolean(agent);
       let response = '';
       let rawAgentFailure = false;
       let hasGeneratedResponse = false;
       let successfulLisaSelfieToolResult = false;
-      let shouldPersistChannelSession = true;
+      let shouldPersistChannelSession = Boolean(agent);
+      let telegramWidget: { widgetHtml?: string; data?: unknown } | undefined;
+      let companionMediaResult: import('../../channels/companion-channel-turn.js').CompanionChannelMedia[] | undefined;
+      let companionHistorySuffix: string | undefined;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
-        if (!agent.recordTrustedExternalConversationTurn(agentInput, response)) {
+        if (agent && !agent.recordTrustedExternalConversationTurn(agentInput, response)) {
           throw new Error('trusted prefetched turn could not be recorded');
         }
         logger.info('Channel served trusted prefetched companion response directly', {
@@ -1672,9 +1975,92 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           messageHash: hashForLog(message.id),
           responseLength: response.length,
         });
+      } else if (useCompanionProfile) {
+        turn.phase('generation');
+        const hasSharedPhotos = (companionPhotos?.photos.length ?? 0) > 0;
+        const prompt = await assembleCompanionChannelPrompt({
+          userText: agentInput,
+          history: companionConversationHistory.length
+            ? companionConversationHistory
+            : companionChannelHistories.get(sessionKey),
+          ...(hasSharedPhotos && companionPhotos
+            ? { extraSystem: companionPhotos.guidance }
+            : {}),
+        });
+        let companionMessages = prompt.messages;
+        if (hasSharedPhotos && companionPhotos?.mode === 'cloud') {
+          const { attachPhotoParts } = await import('../../companion/companion-photo.js');
+          companionMessages = attachPhotoParts(
+            prompt.messages as unknown as Array<{ role: string; content?: unknown }>,
+            companionPhotos.photos,
+          ) as typeof prompt.messages;
+        }
+        logger.info('Companion channel profile prompt', {
+          channelType: channel.type,
+          sessionHash: hashForLog(sessionKey),
+          tokenEstimate: prompt.tokenEstimate,
+          messageCount: prompt.messages.length,
+          sharedPhotos: companionPhotos?.photos.length ?? 0,
+        });
+        try {
+          let companionIdentity: import('../../companion/companion-identity.js').CompanionIdentity | undefined;
+          if (channel.type === 'telegram') {
+            const { resolveCompanionIdentity } = await import('../../companion/companion-identity.js');
+            const telegramChannel = channel as unknown as { config?: { allowedUsers?: string[] } };
+            companionIdentity = resolveCompanionIdentity({
+              channel: 'telegram',
+              chatId: message.channel.id,
+              senderId: message.sender?.id,
+              senderUsername: message.sender?.username,
+              allowedUsers: telegramChannel.config?.allowedUsers ?? [],
+              env: process.env,
+            });
+          }
+          const generated = await runCompanionChannelTurn({
+            apiKey: effectiveRuntime.apiKey,
+            baseUrl: effectiveRuntime.baseUrl,
+            model: effectiveRuntime.model,
+            messages: companionMessages,
+            signal: turn.signal,
+            ...(companionIdentity ? { identity: companionIdentity } : {}),
+            surface: channel.type,
+            env: process.env,
+          });
+          turn.throwIfAborted();
+          response = generated.text;
+          hasGeneratedResponse = response.trim() !== '';
+          companionMediaResult = generated.media;
+          companionHistorySuffix = generated.historySuffix;
+          if (hasSharedPhotos && companionPhotos) {
+            // The album write is deliberately after the reply: a full disk must
+            // cost the memory, never the reaction.
+            const { rememberSharedPhotos } = await import(
+              '../../companion/shared-photo-memory.js'
+            );
+            const stored = await rememberSharedPhotos(companionPhotos.photos, {
+              surface: 'telegram',
+              caption: message.content,
+            });
+            logger.info('Companion shared photos filed', {
+              channelType: channel.type,
+              sessionHash: hashForLog(sessionKey),
+              stored: stored.length,
+            });
+          }
+        } catch (error) {
+          turn.throwIfAborted();
+          response = speakChannelProviderFailure(error, {
+            copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+          });
+          logger.warn('Companion channel provider failure spoken to conversation', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         turn.phase('generation');
-        const entries = await agent.processUserMessage(agentInput, {
+        const entries = await agent!.processUserMessage(agentInput, {
           surface: channel.type,
           ...(attachedImageEvidence || imageAttachmentCount > 0
             ? { introspectionText: message.content }
@@ -1694,8 +2080,26 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         turn.throwIfAborted();
         const lastEntry = entries[entries.length - 1];
         response = lastEntry ? String(lastEntry.content) : '';
+        if (channel.type === 'telegram') {
+          const { autoWidget } = await import('../../widgets/auto-widget.js');
+          const widget = await autoWidget(
+            response,
+            entries
+              .filter((entry) => entry.type === 'tool_result')
+              .map((entry) => entry.toolResult ?? { output: entry.content }),
+          );
+          if (widget.widgetHtml || widget.candidate) {
+            telegramWidget = {
+              ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
+              ...(widget.candidate?.kind === 'payload' ? { data: widget.candidate.data } : {}),
+            };
+          }
+        }
         rawAgentFailure = isAgentFailureResponse(response);
         hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
+      }
+      if (hasGeneratedResponse) {
+        response = prependUserFacingFailoverNotice(response, `channel:${channel.type}`);
       }
       if (!response.trim() || rawAgentFailure) {
         const { conversationFailureReply } = await import(
@@ -1703,10 +2107,14 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         );
         const replacement =
           prefetchedGroundedFallback ??
-          conversationFailureReply(
-            message.content,
-            companionConversationHistory,
-          );
+          (rawAgentFailure
+            ? speakChannelProviderFailure(response, {
+                copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+              })
+            : conversationFailureReply(
+                message.content,
+                companionConversationHistory,
+              ));
         if (prefetchedGroundedFallback) {
           logger.info('Channel provider failure recovered from prefetched companion context', {
             channelType: channel.type,
@@ -1714,7 +2122,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           });
         }
         if (rawAgentFailure) {
-          if (!agent.replaceLastAssistantResponse(response, replacement)) {
+          if (agent && !agent.replaceLastAssistantResponse(response, replacement)) {
             evictChannelAgent(sessionKey, true);
             shouldPersistChannelSession = false;
             logger.error('Channel provider failure rewrite missed agent history', {
@@ -1722,7 +2130,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
               sessionHash: hashForLog(sessionKey),
             });
           }
-          logger.warn('Channel provider failure hidden from conversation', {
+          logger.warn('Channel provider failure spoken to conversation', {
             channelType: channel.type,
             sessionHash: hashForLog(sessionKey),
           });
@@ -1749,6 +2157,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             request: message.content,
             draft: unreviewedResponse,
             plan: preparedConversation.plan,
+            ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
             history: companionConversationHistory,
             ...(semanticEvidence ? { evidence: semanticEvidence } : {}),
             mainProvider: {
@@ -1769,7 +2178,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             : undefined;
           response = groundedRecovery ?? (reviewed.response.trim() || unreviewedResponse);
           if (response !== unreviewedResponse) {
-            if (!agent.replaceLastAssistantResponse(unreviewedResponse, response)) {
+            if (agent && !agent.replaceLastAssistantResponse(unreviewedResponse, response)) {
               // Delivery may continue with the reviewed text, but an agent
               // containing the rejected draft can neither be cached nor saved.
               evictChannelAgent(sessionKey, true);
@@ -1806,15 +2215,27 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           });
         }
       }
-      if (companionConversation && response.trim()) {
+      if ((companionConversation || useCompanionProfile) && response.trim()) {
         const { guardRelationshipReply } = await import(
           '../../conversation/relationship-safety.js'
         );
         const guarded = guardRelationshipReply(response);
         const unguardedResponse = response;
         response = guarded.response;
+        try {
+          const { applyLimitsContract } = await import('../../companion/reply-augment.js');
+          response = applyLimitsContract(response, { heard: message.content }).text;
+        } catch {
+          /* limits contract is optional */
+        }
+        try {
+          const { rememberSaid } = await import('../../companion/recent-said.js');
+          rememberSaid(response, 'telegram');
+        } catch {
+          /* recent-said is optional */
+        }
         if (guarded.intervened) {
-          if (!agent.replaceLastAssistantResponse(unguardedResponse, response)) {
+          if (agent && !agent.replaceLastAssistantResponse(unguardedResponse, response)) {
             // Never retain a response that the delivery gate rejected. A cold
             // agent will restore the safe persisted transcript on the next turn.
             evictChannelAgent(sessionKey, true);
@@ -1843,7 +2264,44 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       turn.throwIfAborted();
       turn.phase('delivery');
       deliveryState = 'started';
-      if (channel.type === 'telegram' && response.trim()) {
+      if (channel.type === 'telegram' && response.trim() && companionMediaResult && companionMediaResult.length > 0) {
+        const media = companionMediaResult[0];
+        if (media) {
+          const pathMod = await import('path');
+          const ext = pathMod.extname(media.imagePath).slice(1) || 'png';
+          const result = await channel.send({
+            channelId: message.channel.id,
+            content: response,
+            replyTo: message.id,
+            attachments: [
+              {
+                type: 'image',
+                filePath: media.imagePath,
+                fileName: pathMod.basename(media.imagePath),
+                mimeType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`,
+              },
+            ],
+          });
+          delivered = result?.success === true;
+          deliveredChunks = delivered ? 1 : 0;
+          if (delivered) deliveredAssistantContent = response;
+          if (delivered) deliveryMode = 'telegram-photo';
+          else deliveryMode = 'failed';
+        }
+      } else if (channel.type === 'telegram' && response.trim() && telegramWidget) {
+        const result = await channel.send({
+          channelId: message.channel.id,
+          content: response,
+          parseMode: 'plain',
+          replyTo: message.id,
+          channelData: { telegram: telegramWidget },
+        });
+        delivered = result?.success === true;
+        deliveredChunks = delivered ? 1 : 0;
+        if (delivered) deliveredAssistantContent = response;
+        if (delivered) deliveryMode = 'telegram-widget';
+        else deliveryMode = 'failed';
+      } else if (channel.type === 'telegram' && response.trim()) {
         const {
           renderTelegramHtml,
           renderPlain,
@@ -2037,10 +2495,29 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // 8. Persist the conversation so it survives a daemon restart / cache eviction.
       turn.throwIfAborted();
       turn.phase('persistence');
-      if (shouldPersistChannelSession) await persistChannelSession(agent, sessionKey);
+      if (useCompanionProfile && response.trim()) {
+        const recordedResponse = companionHistorySuffix
+          ? `${response}${companionHistorySuffix}`
+          : response;
+        rememberCompanionChannelTurn(sessionKey, message.content, recordedResponse);
+      }
+      if (shouldPersistChannelSession && agent) await persistChannelSession(agent, sessionKey);
       turn.throwIfAborted();
       }, {
-        ...channelTypingLifecycle(channel, message.channel.id),
+        ...(() => {
+          const typing = channelTypingLifecycle(channel, message.channel.id);
+          const wait = channelWaitNoticeLifecycle(channel, message.channel.id, message.id);
+          return {
+            onStart: () => {
+              typing.onStart();
+              wait.onStart();
+            },
+            onSettled: () => {
+              wait.onSettled();
+              typing.onSettled();
+            },
+          };
+        })(),
         onTimeout: async () => {
           await (cognitiveTurn as ChannelCognitiveTurn | null)?.fail().catch(() => undefined);
           cognitiveTurn = null;
@@ -2053,8 +2530,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             deliveryState = 'started';
             const result = await channel.send({
               channelId: message.channel.id,
-              content:
-                "Je suis restée bloquée trop longtemps sur cette réponse. J’ai libéré la conversation : renvoie-moi ta demande et je repars proprement.",
+              content: speakChannelProviderFailure(
+                Object.assign(new Error('channel turn timed out after timeout during generation'), {
+                  name: 'ChannelTurnTimeoutError',
+                }),
+                { copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA) },
+              ),
               replyTo: message.id,
             });
             if (result?.success) deliveryState = 'delivered';
@@ -2089,9 +2570,15 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         const { conversationFailureReply } = await import(
           '../../conversation/conversation-orchestrator.js'
         );
+        const raw = err instanceof Error ? err.message : String(err);
+        const spoken = timedOut || /sorry, i encountered an error/i.test(raw)
+          ? speakChannelProviderFailure(err, {
+              copine: Boolean(process.env.CODEBUDDY_COMPANION_PERSONA),
+            })
+          : conversationFailureReply(message.content);
         await channel.send({
           channelId: message.channel.id,
-          content: conversationFailureReply(message.content),
+          content: spoken,
           replyTo: message.id,
         });
       } catch {
@@ -2122,6 +2609,14 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
     options: opts,
   };
 
+  const optsAllowlist = Array.isArray(opts.allowedUsers)
+    ? opts.allowedUsers.filter((item): item is string => typeof item === 'string')
+    : undefined;
+  const inboundAllowlist = {
+    allowedUsers: config.allowedUsers ?? optsAllowlist,
+    allowedChannels: config.allowedChannels,
+  };
+
   switch (config.type) {
     case 'telegram': {
       const { TelegramChannel } = await import('../../channels/telegram/index.js');
@@ -2140,15 +2635,32 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
       // TelegramChannel reads `config.token` (client.ts) — pass `token`, not
       // `botToken`, or it throws "Telegram bot token is required" and the
       // channel never starts from channels.json / server intake.
-      return new TelegramChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').TelegramConfig);
+      // Root `allowedUsers` used to be dropped here (only `...opts` was passed).
+      return new TelegramChannel({
+        ...channelConfig,
+        token: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').TelegramConfig);
     }
     case 'discord': {
       const { DiscordChannel } = await import('../../channels/discord/index.js');
-      return new DiscordChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').DiscordConfig);
+      return new DiscordChannel({
+        ...channelConfig,
+        token: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').DiscordConfig);
     }
     case 'slack': {
       const { SlackChannel } = await import('../../channels/slack/index.js');
-      return new SlackChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').SlackConfig);
+      return new SlackChannel({
+        ...channelConfig,
+        token: config.token || '',
+        botToken: config.token || '',
+        ...opts,
+        ...inboundAllowlist,
+      } as unknown as import('../../channels/index.js').SlackConfig);
     }
     case 'whatsapp': {
       const { WhatsAppChannel } = await import('../../channels/whatsapp/index.js');

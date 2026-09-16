@@ -5,11 +5,11 @@
  * Includes predefined trigger templates.
  */
 
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import * as crypto from 'crypto';
 import { EventTriggerManager, type Trigger, type TriggerType, type TriggerAction } from './event-trigger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import { logger } from '../../utils/logger.js';
 
 const TRIGGERS_FILE = path.join(homedir(), '.codebuddy', 'triggers.json');
@@ -54,8 +54,7 @@ export class TriggerRegistry {
    */
   async load(): Promise<void> {
     try {
-      const data = await fs.readFile(TRIGGERS_FILE, 'utf-8');
-      const triggers = JSON.parse(data) as Trigger[];
+      const triggers = await readJsonAtomic<Trigger[]>(TRIGGERS_FILE, []);
 
       for (const trigger of triggers) {
         trigger.createdAt = new Date(trigger.createdAt);
@@ -74,9 +73,8 @@ export class TriggerRegistry {
    */
   async save(): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(TRIGGERS_FILE), { recursive: true });
       const triggers = this.triggerManager.listTriggers();
-      await fs.writeFile(TRIGGERS_FILE, JSON.stringify(triggers, null, 2));
+      await writeJsonAtomic(TRIGGERS_FILE, triggers);
     } catch (error) {
       logger.warn('Failed to save triggers', { error: String(error) });
     }

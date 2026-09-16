@@ -9,6 +9,7 @@ import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";
 
 import { filterCommandSuggestions } from "../ui/components/CommandSuggestions.js";
+import { isModelCompatibleWithProvider } from "../providers/model-provider-compat.js";
 import { loadModelConfig } from "../utils/model-config.js";
 
 // Import enhanced features
@@ -23,6 +24,7 @@ import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/
 import { getInteractionLogger } from "../logging/interaction-logger.js";
 import { maybeContinueGoalAfterTurn } from "../goals/goal-loop.js";
 import { logger } from '../utils/logger.js';
+import { takeFirstUseHint } from "../utils/first-use-hints.js";
 
 // Import history manager for persistent command history
 import { getHistoryManager } from "../utils/history-manager.js";
@@ -73,6 +75,7 @@ export function useInputHandler({
 }: UseInputHandlerProps) {
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const commandSelectionMoved = useRef(false);
   const [showModelSelection, setShowModelSelection] = useState(false);
   const [selectedModelIndex, setSelectedModelIndex] = useState(0);
   const [showFileAutocomplete, setShowFileAutocomplete] = useState(false);
@@ -83,6 +86,22 @@ export function useInputHandler({
     const sessionFlags = confirmationService.getSessionFlags();
     return sessionFlags.allOperations;
   });
+
+  const runningTurn = useRef(false);
+  const pendingMessages = useRef<string[]>([]);
+  const [queuedMessageCount, setQueuedMessageCount] = useState(0);
+
+  useEffect(() => {
+    if (isProcessing || isStreaming || runningTurn.current) return;
+    const next = pendingMessages.current.shift();
+    if (next !== undefined) {
+      setQueuedMessageCount(pendingMessages.current.length);
+      // No turn is streaming here, so a tip entry cannot split a streaming message.
+      const tip = takeFirstUseHint('message_queued');
+      if (tip) setChatHistory((prev) => [...prev, { type: "assistant", content: `💡 ${tip}`, timestamp: new Date() }]);
+      void processUserMessage(next);
+    }
+  }, [isProcessing, isStreaming, queuedMessageCount]);
 
   // Track last escape time for double-escape detection
   const lastEscapeTimeRef = useRef<number>(0);
@@ -177,6 +196,15 @@ export function useInputHandler({
   };
 
   const handleCommandSuggestionsNav = (key: Key): boolean => {
+    const commandName = input.trim().split(/\s+/)[0]?.slice(1);
+    // Enter runs an explicitly typed command; Tab is completion only.
+    if (key.return && !commandSelectionMoved.current && commandName &&
+        (getSlashCommandManager().getCommand(commandName) || commandName === 'models')) {
+      setShowCommandSuggestions(false);
+      setSelectedCommandIndex(0);
+      void handleInputSubmit(input);
+      return true;
+    }
     const filteredSuggestions = filterCommandSuggestions(
       commandSuggestions,
       input
@@ -188,18 +216,20 @@ export function useInputHandler({
       return false; // Continue processing
     } else {
       if (key.upArrow) {
+        commandSelectionMoved.current = true;
         setSelectedCommandIndex((prev) =>
           prev === 0 ? filteredSuggestions.length - 1 : prev - 1
         );
         return true;
       }
       if (key.downArrow) {
+        commandSelectionMoved.current = true;
         setSelectedCommandIndex(
           (prev) => (prev + 1) % filteredSuggestions.length
         );
         return true;
       }
-      if (key.tab || key.return) {
+      if (key.tab || key.return || (key.rightArrow && !key.ctrl && !key.meta && !key.shift && cursorPosition === input.length)) {
         const safeIndex = Math.min(
           selectedCommandIndex,
           filteredSuggestions.length - 1
@@ -224,7 +254,14 @@ export function useInputHandler({
           }
         } else {
           // For commands, just use the command
-          newInput = selectedSuggestion.command + " ";
+          newInput = selectedSuggestion.command;
+          if (key.return) {
+            setShowCommandSuggestions(false);
+            setSelectedCommandIndex(0);
+            void handleInputSubmit(newInput);
+            return true;
+          }
+          newInput += ' ';
         }
 
         setInput(newInput);
@@ -238,6 +275,12 @@ export function useInputHandler({
   };
 
   const handleModelSelectionNav = (key: Key): boolean => {
+    if (key.leftArrow || key.escape) {
+      setShowModelSelection(false);
+      setSelectedModelIndex(0);
+      return true;
+    }
+    if (availableModels.length === 0) return true;
     if (key.upArrow) {
       setSelectedModelIndex((prev) =>
         prev === 0 ? availableModels.length - 1 : prev - 1
@@ -248,19 +291,8 @@ export function useInputHandler({
       setSelectedModelIndex((prev) => (prev + 1) % availableModels.length);
       return true;
     }
-    if (key.tab || key.return) {
+    if (key.tab || key.return || key.rightArrow) {
       const selectedModel = availableModels[selectedModelIndex];
-      // Delegate to Dispatcher implicitly via handleDirectCommand?
-      // No, UI navigation logic remains here, but the action can be manual.
-      // Or we can construct a command string and let dispatcher handle it.
-      // But we have state setters here.
-      // Let's keep UI state manipulation here for selection, but action execution via command if possible.
-      // Actually, standard behavior:
-      // agent.setModel(selectedModel.model);
-      // updateCurrentModel(selectedModel.model);
-      // ...
-
-      // We can use a helper, but for now let's leave this UI logic as is, or use handleDirectCommand("/models " + model)
       if (selectedModel) {
         handleDirectCommand(`/models ${selectedModel.model}`);
       }
@@ -269,7 +301,7 @@ export function useInputHandler({
       setSelectedModelIndex(0);
       return true;
     }
-    return false;
+    return true; // Keep typing from modifying the draft while choosing a model.
   };
 
   const handleFileAutocompleteNav = (key: Key): boolean => {
@@ -284,7 +316,7 @@ export function useInputHandler({
         setSelectedFileIndex((prev) => (prev + 1) % fileSuggestions.length);
         return true;
       }
-      if (key.tab || key.return) {
+      if (key.tab || key.return || (key.rightArrow && !key.ctrl && !key.meta && !key.shift && cursorPosition === input.length)) {
         const selectedFile = fileSuggestions[selectedFileIndex];
         const { startPos } = extractFileReference(input);
 
@@ -427,7 +459,12 @@ export function useInputHandler({
       if (userInput.startsWith("/")) {
         await handleDirectCommand(userInput);
       } else {
-        await processUserMessage(userInput);
+        if (runningTurn.current || pendingMessages.current.length > 0) {
+          pendingMessages.current.push(userInput);
+          setQueuedMessageCount(pendingMessages.current.length);
+        } else {
+          await processUserMessage(userInput);
+        }
       }
     }
   };
@@ -435,6 +472,7 @@ export function useInputHandler({
   // Removed handleShellBypass as it's now in ClientCommandDispatcher
 
   const handleInputChange = (newInput: string) => {
+    commandSelectionMoved.current = false;
     // Update command suggestions based on input
     if (newInput.startsWith("/")) {
       setShowCommandSuggestions(true);
@@ -470,12 +508,18 @@ export function useInputHandler({
     onSubmit: handleInputSubmit,
     onSpecialKey: handleSpecialKey,
     disabled: isConfirmationActive,
+    multiline: true,
   });
 
   // Hook up the actual input handling
   useInput((inputChar: string, key: Key) => {
+    // A picker owns the keyboard, including text-editing shortcuts such as Ctrl+J.
+    if (showModelSelection) {
+      handleModelSelectionNav(key);
+      return;
+    }
     handleInput(inputChar, key);
-  });
+  }, { isActive: !isConfirmationActive });
 
   // Update command suggestions when input changes
   useEffect(() => {
@@ -492,9 +536,14 @@ export function useInputHandler({
   }, []);
 
   // Load models from configuration with fallback to defaults
+  const current = agent.getCurrentModel?.();
+  const provider = agent.getClient?.().getCurrentProvider?.();
   const availableModels: ModelOption[] = useMemo(() => {
-    return loadModelConfig(); // Return directly, interface already matches
-  }, []);
+    const models = [...(current ? [{ model: current }] : []), ...loadModelConfig()];
+    return models.filter((option, index) =>
+      models.findIndex(other => other.model === option.model) === index &&
+      isModelCompatibleWithProvider(option.model, provider));
+  }, [current, provider]);
 
   const handleDirectCommand = async (input: string): Promise<boolean> => {
     const context: ClientCommandContext = {
@@ -519,6 +568,7 @@ export function useInputHandler({
   };
 
   const processUserMessage = async (userInput: string) => {
+    runningTurn.current = true;
     const mySeq = ++turnSeqRef.current;
     goalInterruptedRef.current = false;
     const userEntry: ChatEntry = {
@@ -538,7 +588,8 @@ export function useInputHandler({
 
     setIsProcessing(true);
     setCurrentActivity?.('Sending to LLM...');
-    clearInput();
+    // The submit handler already cleared the sent text. A queued turn must
+    // preserve whatever draft the user is now editing.
 
     let fullResponseContent = "";
     try {
@@ -739,6 +790,11 @@ export function useInputHandler({
       setCurrentActivity?.('');
     }
 
+    // Persist the finished turn before a queued message or exit can start (never throws).
+    await agent.persistInteractiveSession();
+
+    runningTurn.current = false;
+    setIsStreaming(false);
     setIsProcessing(false);
     setCurrentActivity?.('');
     processingStartTime.current = 0;
@@ -766,10 +822,12 @@ export function useInputHandler({
       }
       // Skip the continuation if a newer turn started while we were judging —
       // the user's message preempts the loop and gets judged after its turn.
-      if (outcome?.continuationPrompt && turnSeqRef.current === mySeq) {
+      if (outcome?.continuationPrompt && turnSeqRef.current === mySeq && pendingMessages.current.length === 0) {
         const continuation = outcome.continuationPrompt;
         setTimeout(() => {
-          void processUserMessage(continuation);
+          if (turnSeqRef.current === mySeq && !runningTurn.current && pendingMessages.current.length === 0) {
+            void processUserMessage(continuation);
+          }
         }, 50);
       }
     } catch (error) {
@@ -792,6 +850,7 @@ export function useInputHandler({
     availableModels,
     agent,
     autoEditEnabled,
+    queuedMessageCount,
     handleInputSubmit,
   };
 }
