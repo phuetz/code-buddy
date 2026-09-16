@@ -20,6 +20,10 @@ describe('model-tools: local tool-call gating', () => {
       'devstral-small-2:24b-instruct-2512-q4_K_M',
       'mistral',
       'gemma4:12b',
+      'qwen2.5:14b-instruct',
+      'qwen2.5-coder:32b',
+      'llama3.1:70b-instruct',
+      'llama3.3:70b',
     ]) {
       expect(getModelToolConfig(m).supportsToolCalls, m).toBe(true);
     }
