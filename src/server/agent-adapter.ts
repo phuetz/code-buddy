@@ -77,7 +77,6 @@ export interface ServerAgentCompletion {
     data?: unknown;
     error?: string;
     executionTime?: number;
-    arguments?: string;
   }>;
   data?: unknown;
   widgetHtml?: string;
@@ -220,7 +219,6 @@ export async function runAgentCompletion(
         output: entry.toolResult?.output,
         data: entry.toolResult?.data,
         error: entry.toolResult?.error,
-        arguments: entry.toolCall!.function.arguments,
         executionTime: 0,
       }));
 

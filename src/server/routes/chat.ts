@@ -468,7 +468,6 @@ router.post(
           data: tc.data,
           error: tc.error,
           executionTime: tc.executionTime || 0,
-          arguments: tc.arguments,
         })),
         ...(result.data !== undefined ? { data: result.data } : {}),
         ...(result.widgetHtml ? { widgetHtml: result.widgetHtml } : {}),
