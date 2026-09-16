@@ -87,6 +87,42 @@ the same recipe with your real hosts.
 
 ---
 
+## Modèle par défaut recommandé : Qwen3.6-35B-A3B (Lemonade)
+
+Décision 2026-09-16 : le pair flotte local parle à **Qwen3.6-35B-A3B** servi par Lemonade
+(OpenAI-compat, tunnel déjà ouvert sur `127.0.0.1:13305`). Banc brut : ~34 tok/s et appel
+d'outil structuré. L'id catalogue Lemonade est `Qwen3.6-35B-A3B-MTP-GGUF` (casse et suffixe
+GGUF). Code Buddy le reconnaît (`Qwen3.6-*-GGUF*`, insensible à la casse) avec
+`supportsToolCalls: true` et le profil `lite` de la boucle agent.
+
+```bash
+export CODEBUDDY_PROVIDER=lemonade
+export CODEBUDDY_PEER_PROVIDER=lemonade
+export LEMONADE_HOST=http://127.0.0.1:13305/api/v1
+export LEMONADE_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+export LEMONADE_API_KEY=lemonade
+export CODEBUDDY_PEER_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+export CODEBUDDY_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+# JWT_SECRET partagé + CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT comme ci-dessous
+JWT_SECRET=<shared-secret> buddy server --port 3010 --host 0.0.0.0
+```
+
+**Repli** si Lemonade est indisponible ou si la boucle agent doit rester sur Ollama distant :
+
+```bash
+export CODEBUDDY_PROVIDER=ollama
+export CODEBUDDY_PEER_PROVIDER=ollama
+export OLLAMA_HOST=http://127.0.0.1:11435
+export CODEBUDDY_PEER_MODEL=gemma4:12b
+export CODEBUDDY_MODEL=gemma4:12b
+```
+
+`gemma4:12b` est le modèle qui a fini la recette agent `peer_tool_invoke` (oracle exact) quand
+Qwen3.6 n'était pas encore reconnu comme GGUF lite. Ne pas pointer `CODEBUDDY_PEER_MODEL` sur un
+id `qwen2.5*` : la table `model-tools` les marque `supportsToolCalls: false`.
+
+---
+
 ## Architecture
 
 ```
