@@ -1,9 +1,9 @@
 # Mission Grok n° 12 — PR #155 : corrections de la revue de fusion
 
-**STATUT : COMPLET** (push simple de la branche ; pas de fusion)
+**STATUT : PARTIEL** (corrections revue poussées ; CI d’abord rouge sur un chemin personnel dans ce rapport, corrigé)
 
 Branche : `fable/peer-tool-invoke-2026-09-16`
-Worktree : `/home/patrice/DEV/cb-peer-tool-invoke-2026-09-16`
+Worktree : `cb-peer-tool-invoke-2026-09-16`
 PR : https://github.com/phuetz/code-buddy/pull/155
 HEAD de départ : `d5513a875`
 Revue : `REVUE-OPUS-PR155.md` (verdict NE PAS FUSIONNER)
@@ -42,4 +42,12 @@ Un seul `git push origin fable/peer-tool-invoke-2026-09-16` (non forcé). PR non
 
 ## Checks GitHub (`gh pr checks 155`)
 
-*(rempli après l’attente ≤ 25 min)*
+Run `35137202818` (HEAD `902fe57d1`), attente ~25 min :
+
+| Check | Résultat |
+|---|---|
+| Security Audit | pass (2m5s) |
+| Test Node 20/22 × ubuntu/macOS/Windows | **fail** (1 test) : `tests/security/donnees-personnelles.test.ts` — `LIVRAISON/RAPPORT-12.md` contenait un chemin personnel. 39017 verts / 1 rouge. |
+| Build and Package | skipped |
+
+Le chemin a été retiré de ce rapport. Nouveau push simple ensuite. La PR n’est pas fusionnée.

@@ -1,6 +1,6 @@
 # Mission Grok n° 12 — PR #155 : corrections de la revue de fusion
 
-**STATUT : COMPLET**
+**STATUT : PARTIEL** (CI : fuite de chemin dans `LIVRAISON/RAPPORT-12.md`, corrigée)
 
 Détail opérationnel : `LIVRAISON/RAPPORT-12.md`.
 
