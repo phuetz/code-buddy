@@ -722,3 +722,7 @@ Validation assemblée du candidat pending : npm run validate ciblé exit0,85test
 RÉSERVÉ CI c875 Windows22 : intégration du correctif lifecycle code_exec réalisé par Opus dans son worktree séparé. Contrat close confirmé avant succès, timeout borné explicite ; aucune généralisation de permissions ni retry cleanup. Matrice c875 : cinq configurations vertes, seul Windows22 EBUSY DGM. Revue du delta net et oracles requises avant nouveau push.
 
 Validation lifecycle assemblée : npm run validate ciblé exit0,75tests/6fichiers,lint/typecheck/pack10. Sources nettes Opus c875→88fe8def6 relues : close uniquement, délai borné sans fauxsuccès, plus de disconnect anticipé ;18oracles et7mutations détectées,500tests voisins. Preuves natives Windows22 mécanisme cwd3/3 et ordreIPC3/3, timingCI non reproduit isolément. Nouveau paquet/CI requis.
+
+RÉSERVÉ CI7c6 Windows22 : même suite hybrid-search-semantic manquante au shard4 dans deux tentatives, aucune assertion rouge. Collecte369fichiers compare logs : seule suite absente,12assertions inachevées. Sonde nativeNode22.23.2/Vitest4.1.9 isolée26/26verte. Étendre exécution dédiée obligatoire aux deux versionsWindows ; aucune suppression de test ni changement produit.
+
+Validation extensionWindows : sonde nativeNode22.23.2/Vitest4.1.9 26/26, modulesfixture identiques àsource ; npmvalidate66tests/2fichiers+lint/typecheck/pack10. YAML parse et étape obligatoire vérifiés. Sources produit inchangées depuis7c6 ; nouvellematrice requise, aucun tag/publish.
