@@ -63,6 +63,7 @@ export interface ServerAgentCompletion {
     output?: string;
     error?: string;
     executionTime?: number;
+    arguments?: string;
   }>;
 }
 
@@ -199,6 +200,7 @@ export async function runAgentCompletion(
         success: entry.toolResult?.success,
         output: entry.toolResult?.output,
         error: entry.toolResult?.error,
+        arguments: entry.toolCall!.function.arguments,
         executionTime: 0,
       }));
 

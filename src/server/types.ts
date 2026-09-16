@@ -338,6 +338,8 @@ export interface ToolCallResult {
   error?: string;
   /** Execution time (ms) */
   executionTime: number;
+  /** Raw JSON arguments string as emitted by the model */
+  arguments?: string;
 }
 
 // Session Endpoints

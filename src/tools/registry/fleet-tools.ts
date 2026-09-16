@@ -20,8 +20,8 @@ import { executeListPeers } from '../list-peers-tool.js';
 import { executeRoutePeer } from '../route-peer-tool.js';
 import {
   DEFAULT_PEER_TOOL_INVOKE_TOOLS,
-  DEFAULT_TIMEOUT_MS as PEER_TOOL_INVOKE_DEFAULT_TIMEOUT_MS,
-  MAX_TIMEOUT_MS as PEER_TOOL_INVOKE_MAX_TIMEOUT_MS,
+  PEER_TOOL_INVOKE_DESCRIPTION,
+  PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
   executePeerToolInvoke,
   isFlatToolArgs,
 } from '../peer-tool-invoke-tool.js';
@@ -164,11 +164,7 @@ export class PeerDelegateTool implements ITool {
 
 export class PeerToolInvokeTool implements ITool {
   readonly name = 'peer_tool_invoke';
-  readonly description =
-    'Read or search files on a connected fleet peer (read-only). Wraps peer.tool.invoke. ' +
-    'Use list_peers first to get the peer id, then call this with tool view_file, list_directory, or search. ' +
-    'The remote peer enforces its own allowlist and workspace root — this host does not interpret paths. ' +
-    'Does not run bash or write tools.';
+  readonly description = PEER_TOOL_INVOKE_DESCRIPTION;
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     return executePeerToolInvoke({
@@ -188,26 +184,36 @@ export class PeerToolInvokeTool implements ITool {
         properties: {
           peer: {
             type: 'string',
-            description:
-              'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
+            minLength: 1,
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.peer,
           },
           tool: {
             type: 'string',
             enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
-            description:
-              'Read-only tool to run on the peer. Default allowlist: view_file, list_directory, search. ' +
-              'The peer may advertise extra names via peer.describe; extra names still pass the peer-side gates.',
+            minLength: 1,
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
           },
           args: {
             type: 'object',
-            description:
-              'Flat arguments for the remote tool (e.g. {"file_path":"oracle.txt"} for view_file). ' +
-              'Paths are forwarded as given; this host does not resolve them.',
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.args,
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Peer-relative path, e.g. "oracle.txt" (accepted by view_file and list_directory).',
+              },
+              file_path: {
+                type: 'string',
+                description: 'Alias of path for view_file.',
+              },
+              query: {
+                type: 'string',
+                description: 'Search query when tool is search.',
+              },
+            },
           },
           timeoutMs: {
             type: 'number',
-            description:
-              `Request timeout in milliseconds. Default ${PEER_TOOL_INVOKE_DEFAULT_TIMEOUT_MS}. Max ${PEER_TOOL_INVOKE_MAX_TIMEOUT_MS}.`,
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.timeoutMs,
           },
         },
         required: ['peer', 'tool'],
@@ -221,8 +227,13 @@ export class PeerToolInvokeTool implements ITool {
     }
     const inp = input as Record<string, unknown>;
     const errors: string[] = [];
-    if (typeof inp.peer !== 'string' || !inp.peer) errors.push('peer is required (string)');
-    if (typeof inp.tool !== 'string' || !inp.tool) errors.push('tool is required (string)');
+    const keys = Object.keys(inp).join(',') || '(none)';
+    if (typeof inp.peer !== 'string' || !inp.peer) {
+      errors.push(`peer is required (string); received keys: ${keys}`);
+    }
+    if (typeof inp.tool !== 'string' || !inp.tool) {
+      errors.push(`tool is required (string); received keys: ${keys}`);
+    }
     if (inp.args !== undefined && !isFlatToolArgs(inp.args)) {
       errors.push('args must be a flat object of string/number/boolean values');
     }

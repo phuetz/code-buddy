@@ -1535,7 +1535,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'tool', 'invoke', 'fleet', 'view_file', 'list_directory', 'search', 'read', 'remote', 'workspace', 'allowlist', 'file', 'oracle'],
     priority: 8,
-    description: 'Read or search files on a connected fleet peer (read-only, allowlist on the peer). Wraps peer.tool.invoke; does not run bash or writes'
+    description: 'Read a file on a connected fleet peer. Always pass peer and tool, e.g. {"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}'
     // fleetSafe omitted / false: outbound fleet call, not peer-exposable.
   },
   {

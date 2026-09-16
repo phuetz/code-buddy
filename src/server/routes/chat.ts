@@ -374,6 +374,7 @@ router.post(
           output: tc.output,
           error: tc.error,
           executionTime: tc.executionTime || 0,
+          arguments: tc.arguments,
         })),
         sessionId: body.sessionId,
         latency: Date.now() - startTime,

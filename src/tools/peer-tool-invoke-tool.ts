@@ -33,6 +33,24 @@ export const MAX_ARGS_BYTES = 64 * 1024;
 export const MAX_OUTPUT_BYTES = 256 * 1024;
 export const MAX_PEER_ID_LENGTH = 128;
 export const MAX_TOOL_NAME_LENGTH = 64;
+
+/** Imperative tool description with a concrete call example for local models. */
+export const PEER_TOOL_INVOKE_DESCRIPTION =
+  'Read or search a file on a connected fleet peer (read-only, allowlist on that peer). ' +
+  'Always pass peer and tool; never call with empty arguments. ' +
+  'Example: {"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}. ' +
+  'Allowed tools: view_file, list_directory, search. Do not use local view_file for files that live on another peer.';
+
+export const PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS = {
+  peer:
+    'Required. Connected peer id from list_peers (the --name of /fleet listen). Example: "B".',
+  tool:
+    'Required. Read-only tool on that peer. One of: view_file, list_directory, search. Example: "view_file".',
+  args:
+    'Object of arguments for the remote tool. For view_file use {"path":"oracle.txt"} or {"file_path":"oracle.txt"}. For list_directory use {"path":"."}. For search use {"query":"TODO","path":"src"}. Paths are relative to the peer workspace and are not resolved on this host.',
+  timeoutMs:
+    `Optional timeout in milliseconds. Default ${DEFAULT_TIMEOUT_MS}. Min ${MIN_TIMEOUT_MS}. Max ${MAX_TIMEOUT_MS}.`,
+} as const;
 const DESCRIBE_TIMEOUT_MS = 3_000;
 
 export const PEER_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;

@@ -9,7 +9,11 @@
 
 import type { CodeBuddyTool } from './client.js';
 import { FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT } from '../fleet/dispatch-profile.js';
-import { DEFAULT_PEER_TOOL_INVOKE_TOOLS } from '../tools/peer-tool-invoke-tool.js';
+import {
+  DEFAULT_PEER_TOOL_INVOKE_TOOLS,
+  PEER_TOOL_INVOKE_DESCRIPTION,
+  PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
+} from '../tools/peer-tool-invoke-tool.js';
 
 const DISPATCH_PROFILE_PARAMETER_DESCRIPTION =
   'Optional Fleet dispatch profile. When set, carries the operating posture through peer.chat ' +
@@ -221,35 +225,26 @@ export const PEER_TOOL_INVOKE_TOOL_DEF: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'peer_tool_invoke',
-    description:
-      'Read or search files on a connected fleet peer (read-only). Wraps peer.tool.invoke. ' +
-      'Use list_peers first to get the peer id, then call this with tool view_file, list_directory, or search. ' +
-      'The remote peer enforces its own allowlist and workspace root — this host does not interpret paths. ' +
-      'Does not run bash or write tools.',
+    description: PEER_TOOL_INVOKE_DESCRIPTION,
     parameters: {
       type: 'object',
       properties: {
         peer: {
           type: 'string',
-          description:
-            'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.peer,
         },
         tool: {
           type: 'string',
           enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
-          description:
-            'Read-only tool to run on the peer. Default allowlist: view_file, list_directory, search. ' +
-            'The peer may advertise extra names via peer.describe; extra names still pass the peer-side gates.',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
         },
         args: {
           type: 'object',
-          description:
-            'Flat arguments for the remote tool (e.g. {"file_path":"oracle.txt"} for view_file). ' +
-            'Paths are forwarded as given; this host does not resolve them.',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.args,
         },
         timeoutMs: {
           type: 'number',
-          description: 'Request timeout in milliseconds. Default 15000. Max 120000.',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.timeoutMs,
         },
       },
       required: ['peer', 'tool'],

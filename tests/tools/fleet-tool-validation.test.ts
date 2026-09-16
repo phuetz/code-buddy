@@ -143,6 +143,13 @@ describe('Fleet tool validation', () => {
     expect(tool.name).toBe('peer_tool_invoke');
     expect(tool.getMetadata().fleetSafe).toBe(false);
     expect(tool.getSchema().parameters.required).toEqual(['peer', 'tool']);
+    expect(tool.getSchema().description).toContain('{"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}');
+    expect(tool.getSchema().parameters.properties?.peer?.description).toContain('Required');
+    expect(tool.getSchema().parameters.properties?.tool?.enum).toEqual([
+      'view_file',
+      'list_directory',
+      'search',
+    ]);
     expect(tool.validate({ peer: 'B', tool: 'view_file', args: { file_path: 'oracle.txt' } })).toEqual({
       valid: true,
     });
@@ -150,6 +157,10 @@ describe('Fleet tool validation', () => {
     expect(PEER_TOOL_INVOKE_TOOL_DEF.function.name).toBe('peer_tool_invoke');
     expect(PEER_TOOL_INVOKE_TOOL_DEF.function.description).toContain('read-only');
     expect(PEER_TOOL_INVOKE_TOOL_DEF.function.description).toContain('allowlist');
+    expect(PEER_TOOL_INVOKE_TOOL_DEF.function.parameters.required).toEqual(['peer', 'tool']);
+    expect(PEER_TOOL_INVOKE_TOOL_DEF.function.description).toContain(
+      '{"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}',
+    );
   });
 
   it('tags formal fleet tools for Hermes dispatch discovery', () => {
