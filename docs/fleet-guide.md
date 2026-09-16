@@ -749,6 +749,26 @@ Two new tools registered on every Code Buddy:
   Add `--profile review` (or another dispatch profile) to select a
   posture, and `--delegate` to route and immediately perform one
   `peer.chat` call on the selected peer/model.
+- `peer_tool_invoke(peer, tool, [args], [timeoutMs])` — wraps
+  `peer.tool.invoke`. Read-only remote file access: `view_file`,
+  `list_directory`, or `search` (plus extra names only if the peer
+  advertises them in `peer.describe`). Default timeout 15 s, max 120 s.
+  **Limits:** this tool does not grant new capabilities on the peer —
+  the remote allowlist (`CODEBUDDY_PEER_TOOL_ALLOWLIST`), `fleetSafe`
+  metadata, and `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` still fail closed
+  on B. Args are a flat object; paths are forwarded as given and are
+  **not** resolved on A. `fleetSafe: false` on the outbound tool (same
+  as `peer_delegate`). Example:
+
+  ```
+  list_peers()
+  peer_tool_invoke({
+    "peer": "darkstar",
+    "tool": "view_file",
+    "args": { "file_path": "oracle.txt" }
+  })
+  ```
+
 - `peer_delegate(peer, prompt, [systemPrompt], [model], [dispatchProfile],
   [timeoutMs])` — wraps `peer.chat`. Returns the peer's text response,
   usage, traceId, and any peer-side `toolPolicy/toolDecisions` metadata.

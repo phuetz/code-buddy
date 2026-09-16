@@ -118,6 +118,7 @@ once it reaches `1.0.0`.
 
 ### Added
 
+- **fleet:** add `peer_tool_invoke` agent tool wrapping `peer.tool.invoke` so a local agent can read/search on a connected peer (`view_file`, `list_directory`, `search`). Outbound only (`fleetSafe: false`); the three remote gates (allowlist, fleetSafe, workspace root) stay on the peer. Paths are forwarded, not resolved on the caller.
 - **cli:** add `buddy cost` (aggregated token & cost dashboard), `buddy changelog` (release notes from Conventional Commits), and `buddy import` (rules & MCP server migration from Cursor/Cline/Copilot/Claude Code) (#104).
 - **cli:** add `buddy explain [path]` — one-shot repository explanation report (Markdown or self-contained HTML, `--depth quick|deep`), extracted from PR #70 (#107)
 - **ui:** read-only LSP navigation tools (`lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`) and ephemeral `@file` mentions with bounded project-root resolution (#103).
