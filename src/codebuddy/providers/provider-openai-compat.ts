@@ -281,6 +281,7 @@ export class OpenAICompatProvider implements Provider {
     'llama3.2',      // Alternative naming
     'qwen2.5',       // Qwen 2.5 supports tools
     'qwen-2.5',      // Alternative naming
+    'qwen3',         // Qwen3 / Qwen3.6 GGUF (Lemonade) — includes() covers qwen3.5+
     'mistral',       // Mistral models support function calling
     'mixtral',       // Mixtral supports function calling
     'command-r',     // Cohere Command-R
@@ -565,6 +566,35 @@ export class OpenAICompatProvider implements Provider {
    * Can be overridden with GROK_FORCE_TOOLS=true for models that support function calling.
    * Auto-enables tools for models known to support function calling.
    */
+  /**
+   * Trace whether `tools` / `tool_choice` actually leave the process. Local
+   * runtimes that trip `isLocalInference()` omit both fields — that is the
+   * second suspect when a model that emits tool calls in a raw bench falls
+   * back to `bash` inside the agent loop.
+   */
+  private logToolPayload(
+    useTools: boolean,
+    tools: CodeBuddyTool[] | undefined,
+    toolChoice: ChatOptions['tool_choice'],
+  ): void {
+    const names = (tools ?? []).map((tool) => tool.function.name);
+    const payload = {
+      source: 'OpenAICompatProvider',
+      model: this.currentModel,
+      baseURL: this.baseURL,
+      localInference: this.isLocalInference(),
+      toolsPresent: useTools,
+      toolCount: useTools ? names.length : 0,
+      toolChoice: useTools ? (toolChoice ?? 'auto') : 'omitted',
+      toolNames: useTools ? names : [],
+    };
+    if (process.env.CODEBUDDY_LOG_LLM_TOOLS === 'true') {
+      logger.info('[openai-compat] chat tools payload', payload);
+    } else {
+      logger.debug('[openai-compat] chat tools payload', payload);
+    }
+  }
+
   private isLocalInference(): boolean {
     if (process.env.GROK_FORCE_TOOLS === 'true') {
       return false;
@@ -940,6 +970,7 @@ export class OpenAICompatProvider implements Provider {
   ): Promise<CodeBuddyResponse> {
     try {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
+      this.logToolPayload(useTools, tools, opts.tool_choice);
 
       // Strict-template local runtimes (Ollama/LM Studio/vLLM) require a single
       // leading system message — merge any late/duplicate system injections
@@ -1132,6 +1163,7 @@ export class OpenAICompatProvider implements Provider {
     };
     try {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
+      this.logToolPayload(useTools, tools, opts.tool_choice);
 
       // Strict-template local runtimes (Ollama/LM Studio/vLLM) require a single
       // leading system message — merge any late/duplicate system injections
