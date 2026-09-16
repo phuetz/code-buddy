@@ -905,6 +905,15 @@ describe('AgentExecutor', () => {
         setupLLMFlow(deps, [{ content: 'ok' }]);
         const query = 'read package.json and summarize it';
         await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+        const options = (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][1] as {
+          alwaysInclude?: string[];
+        };
+        expect(options.alwaysInclude?.slice(0, 4)).toEqual([
+          'list_peers',
+          'route_peer',
+          'peer_delegate',
+          'peer_tool_invoke',
+        ]);
         expect(deps.toolSelectionStrategy.selectToolsForQuery).toHaveBeenCalledWith(
           query,
           expect.objectContaining({

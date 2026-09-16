@@ -1501,7 +1501,18 @@ export class AgentExecutor {
             ...(surface === 'cli' ? runtimeInspectionTools(turnQueryText) : []),
             ...connectedFleetSurfaceTools(),
           ])];
-          if (inspectionTools.length) selectionOpts = { ...selectionOpts, alwaysInclude: [...(selectionOpts.alwaysInclude ?? []), ...inspectionTools] };
+          if (inspectionTools.length) {
+            const existing = selectionOpts.alwaysInclude ?? [];
+            // Fleet tools first: Qwen3.6 GGUF otherwise prefers the compact
+            // `bash` slot and shells `list_peers` (mission 8).
+            selectionOpts = {
+              ...selectionOpts,
+              alwaysInclude: [
+                ...inspectionTools,
+                ...existing.filter((name) => !inspectionTools.includes(name)),
+              ],
+            };
+          }
         }
         if (codeResearch) {
           selectionOpts = { ...selectionOpts, alwaysInclude: ['self_describe'] };
