@@ -17,6 +17,7 @@
  */
 
 import { getFleetRegistry } from '../fleet/fleet-registry.js';
+import { redactSecrets } from '../fleet/privacy-lint.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -45,7 +46,7 @@ export const PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS = {
   peer:
     'Required. Connected peer id from list_peers (the --name of /fleet listen). Example: "B".',
   tool:
-    'Required. Read-only tool on that peer. One of: view_file, list_directory, search. Example: "view_file".',
+    'Required. Read-only tool on that peer. Default set: view_file, list_directory, search. Extra names from peer.describe are accepted only when CODEBUDDY_PEER_TRUST_DESCRIBE=true. Example: "view_file".',
   args:
     'Object of arguments for the remote tool. For view_file use {"path":"oracle.txt"} or {"file_path":"oracle.txt"}. For list_directory use {"path":"."}. For search use {"query":"TODO","path":"src"}. Paths are relative to the peer workspace and are not resolved on this host.',
   timeoutMs:
@@ -116,6 +117,26 @@ function argsByteLength(args: Record<string, unknown>): number {
   } catch {
     return MAX_ARGS_BYTES + 1;
   }
+}
+
+const POSIX_ABS_PATH = /(^|[^A-Za-z0-9._~-])((?:\/[A-Za-z0-9._-]+)+)/g;
+const WIN_ABS_PATH = /[A-Za-z]:\\[^\s"'`,;)\]]+/g;
+const FILE_URL_PATH = /file:\/\/\/?[^\s"'`,;)\]]+/g;
+const HOME_TILDE_PATH = /(^|[^A-Za-z0-9._-])(~\/[^\s"'`,;)\]]*)/g;
+
+/**
+ * Strip absolute paths and secrets from a peer error before it reaches the
+ * model. Known refusal codes are mapped to path-free sentences; this covers
+ * the unrecognized fallback (and peer.describe failures).
+ */
+export function redactPeerToolInvokeError(text: string): string {
+  let out = text;
+  out = out.replace(WIN_ABS_PATH, '[redacted-path]');
+  out = out.replace(FILE_URL_PATH, '[redacted-path]');
+  out = out.replace(POSIX_ABS_PATH, (_full, prefix: string) => `${prefix}[redacted-path]`);
+  out = out.replace(HOME_TILDE_PATH, (_full, prefix: string) => `${prefix}[redacted-path]`);
+  out = redactSecrets(out);
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 function truncateOutput(text: string): { output: string; truncated: boolean } {
@@ -274,7 +295,11 @@ function mapRemoteError(peer: string, err: unknown, timeoutMs: number): PeerTool
       error: `Peer "${peer}" refused: rate limited.`,
     };
   }
-  return { success: false, error: `Peer "${peer}" failed: ${message}` };
+  const safe = redactPeerToolInvokeError(message);
+  return {
+    success: false,
+    error: `Peer "${peer}" failed: ${safe || 'unrecognized error'}.`,
+  };
 }
 
 async function withLocalTimeout<T>(
@@ -385,7 +410,7 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
   );
   if (!allowed.allowed) {
     const extra = allowed.describeError
-      ? ` peer.describe failed: ${allowed.describeError}`
+      ? ` peer.describe failed: ${redactPeerToolInvokeError(allowed.describeError) || 'unrecognized error'}.`
       : trustDescribeExtras()
         ? ` Advertised extra tools: ${allowed.advertised.filter((n) => !(DEFAULT_PEER_TOOL_INVOKE_TOOLS as readonly string[]).includes(n)).join(', ') || '(none)'}.`
         : ' Extra names from peer.describe require CODEBUDDY_PEER_TRUST_DESCRIBE=true.';

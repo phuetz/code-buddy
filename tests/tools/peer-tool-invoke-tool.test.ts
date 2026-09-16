@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   executePeerToolInvoke,
   clampPeerToolInvokeTimeout,
+  redactPeerToolInvokeError,
   DEFAULT_TIMEOUT_MS,
   MIN_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
@@ -199,6 +200,21 @@ describe('peer_tool_invoke tool', () => {
       expect(r.success).toBe(false);
       expect(r.error).toContain('peer.describe failed');
       expect(r.error).toContain('describe boom');
+      expect(invokeTool).not.toHaveBeenCalled();
+    });
+
+    it('redacts a peer.describe failure that contains a workspace path', async () => {
+      process.env.CODEBUDDY_PEER_TRUST_DESCRIBE = 'true';
+      const invokeTool = vi.fn();
+      const request = vi.fn().mockRejectedValue(
+        new Error('ENOENT /home/peer/workspace/.codebuddy/describe.json'),
+      );
+      registerPeer('B', { invokeTool, request });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'workspace_read' });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('peer.describe failed');
+      expect(r.error).not.toContain('/home/peer');
+      expect(r.error).not.toContain('describe.json');
       expect(invokeTool).not.toHaveBeenCalled();
     });
 
@@ -483,6 +499,30 @@ describe('peer_tool_invoke tool', () => {
       const r = await executePeerToolInvoke({ peer: 'B', tool: 'view_file' });
       expect(r.success).toBe(false);
       expect(r.error).toContain('failed: boom');
+    });
+
+    it('redacts an unrecognized error that contains a peer workspace path', async () => {
+      const invokeTool = vi.fn().mockRejectedValue(
+        new Error('view_file: /home/peer/workspace/oracle.txt is not a regular file'),
+      );
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'view_file', args: { path: 'oracle.txt' } });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('failed:');
+      expect(r.error).not.toContain('/home/peer');
+      expect(r.error).not.toContain('/workspace/');
+      expect(r.error).not.toContain('oracle.txt');
+      expect(r.error).toContain('[redacted-path]');
+    });
+
+    it('redactPeerToolInvokeError strips absolute paths and secrets', () => {
+      const redacted = redactPeerToolInvokeError(
+        'ENOENT /tmp/secret-ws/oracle.txt token=sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345',
+      );
+      expect(redacted).not.toContain('/tmp/secret-ws');
+      expect(redacted).not.toContain('oracle.txt');
+      expect(redacted).not.toContain('sk-ant-api03');
+      expect(redacted).toContain('[redacted-path]');
     });
 
     it('enforces a local timeout if invokeTool hangs', async () => {
