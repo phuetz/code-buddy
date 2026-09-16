@@ -6,15 +6,12 @@
  * no tools). The three security gates stay on the remote peer
  * (`peer-tool-bridge.ts`): allowlist, fleetSafe, workspace root.
  *
- * This side (A) does not interpret paths and does not add new remote
- * capabilities. It only:
- *   1. Validates params (peer, tool, flat args, timeout).
- *   2. Restricts the tool name to the known read-only set unless the
- *      peer advertises extra names via `peer.describe`.
- *   3. Forwards `{ tool, args }` through `listener.invokeTool`.
+ * Extra tool names from `peer.describe` are trusted only when
+ * `CODEBUDDY_PEER_TRUST_DESCRIBE=true`. B still enforces its own
+ * allowlist even then.
  *
- * Failures (unknown peer, missing invokeTool, remote allowlist /
- * workspace / depth refusals, timeout) always return `success: false`.
+ * This side (A) does not interpret paths and does not add new remote
+ * capabilities. Failures always return `success: false`.
  *
  * @module src/tools/peer-tool-invoke-tool
  */
@@ -30,10 +27,19 @@ export const DEFAULT_PEER_TOOL_INVOKE_TOOLS = [
 ] as const;
 
 export const DEFAULT_TIMEOUT_MS = 15_000;
+export const MIN_TIMEOUT_MS = 1_000;
 export const MAX_TIMEOUT_MS = 120_000;
+export const MAX_ARGS_BYTES = 64 * 1024;
+export const MAX_OUTPUT_BYTES = 256 * 1024;
+export const MAX_PEER_ID_LENGTH = 128;
+export const MAX_TOOL_NAME_LENGTH = 64;
 const DESCRIBE_TIMEOUT_MS = 3_000;
 
-const TOOL_NAME_RE = /^[a-z][a-z0-9_]*$/;
+export const PEER_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
+const TOOL_NAME_RE = /^[a-z][a-z0-9_]{0,63}$/;
+const ARG_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/;
+const DENIED_TOOL_PREFIXES = ['peer_', 'fleet_', 'agent_', 'delegate_'] as const;
+const DENIED_ARG_KEYS = new Set(['constructor', 'prototype', '__proto__']);
 
 export interface PeerToolInvokeParams {
   peer: string;
@@ -42,11 +48,32 @@ export interface PeerToolInvokeParams {
   timeoutMs?: number;
 }
 
+export interface PeerToolInvokeData {
+  peer: string;
+  tool: string;
+  output: string;
+  durationMs: number;
+  truncated?: boolean;
+  elapsedMs: number;
+}
+
+export type PeerToolInvokeResult = ToolResult & { data?: PeerToolInvokeData };
+
 export function clampPeerToolInvokeTimeout(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
     return DEFAULT_TIMEOUT_MS;
   }
-  return Math.min(Math.floor(raw), MAX_TIMEOUT_MS);
+  const n = Math.floor(raw);
+  if (n < MIN_TIMEOUT_MS) return MIN_TIMEOUT_MS;
+  return Math.min(n, MAX_TIMEOUT_MS);
+}
+
+function isDeniedToolName(name: string): boolean {
+  return DENIED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+function trustDescribeExtras(): boolean {
+  return process.env.CODEBUDDY_PEER_TRUST_DESCRIBE === 'true';
 }
 
 export function isFlatToolArgs(value: unknown): value is Record<string, unknown> {
@@ -54,11 +81,36 @@ export function isFlatToolArgs(value: unknown): value is Record<string, unknown>
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  return Object.values(value as Record<string, unknown>).every((item) => {
-    if (item === null || item === undefined) return true;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (DENIED_ARG_KEYS.has(key) || !ARG_KEY_RE.test(key)) return false;
+    const item = record[key];
+    if (item === null || item === undefined) continue;
     const t = typeof item;
-    return t === 'string' || t === 'number' || t === 'boolean';
-  });
+    if (t !== 'string' && t !== 'number' && t !== 'boolean') return false;
+  }
+  return true;
+}
+
+function argsByteLength(args: Record<string, unknown>): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(args), 'utf8');
+  } catch {
+    return MAX_ARGS_BYTES + 1;
+  }
+}
+
+function truncateOutput(text: string): { output: string; truncated: boolean } {
+  if (Buffer.byteLength(text, 'utf8') <= MAX_OUTPUT_BYTES) {
+    return { output: text, truncated: false };
+  }
+  let end = text.length;
+  let slice = text;
+  while (end > 0 && Buffer.byteLength(slice, 'utf8') > MAX_OUTPUT_BYTES) {
+    end = Math.max(0, end - Math.ceil((Buffer.byteLength(slice, 'utf8') - MAX_OUTPUT_BYTES) / 2) - 1);
+    slice = text.slice(0, end);
+  }
+  return { output: `${slice}\n…[truncated by peer_tool_invoke at ${MAX_OUTPUT_BYTES} bytes]`, truncated: true };
 }
 
 function extractAdvertisedPeerTools(describe: unknown): string[] {
@@ -66,7 +118,7 @@ function extractAdvertisedPeerTools(describe: unknown): string[] {
   const add = (value: unknown): void => {
     if (typeof value === 'string') {
       const name = value.trim();
-      if (TOOL_NAME_RE.test(name) && !name.startsWith('peer')) {
+      if (TOOL_NAME_RE.test(name) && !isDeniedToolName(name)) {
         names.add(name);
       }
       return;
@@ -95,6 +147,12 @@ async function isToolAllowedOnPeer(
   if ((DEFAULT_PEER_TOOL_INVOKE_TOOLS as readonly string[]).includes(toolName)) {
     return { allowed: true, advertised: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS] };
   }
+  if (isDeniedToolName(toolName)) {
+    return { allowed: false, advertised: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS] };
+  }
+  if (!trustDescribeExtras()) {
+    return { allowed: false, advertised: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS] };
+  }
   try {
     const described = await request('peer.describe', {}, { timeoutMs: DESCRIBE_TIMEOUT_MS });
     const advertised = extractAdvertisedPeerTools(described);
@@ -108,7 +166,7 @@ async function isToolAllowedOnPeer(
   }
 }
 
-function mapRemoteError(peer: string, err: unknown, timeoutMs: number): ToolResult {
+function mapRemoteError(peer: string, err: unknown, timeoutMs: number): PeerToolInvokeResult {
   const message = err instanceof Error ? err.message : String(err);
   const code = (err as { code?: string }).code ?? '';
   const combined = `${code} ${message}`;
@@ -123,7 +181,7 @@ function mapRemoteError(peer: string, err: unknown, timeoutMs: number): ToolResu
   if (code === 'MAX_DEPTH_EXCEEDED' || combined.includes('MAX_DEPTH_EXCEEDED')) {
     return {
       success: false,
-      error: `Peer "${peer}" refused: call chain depth exceeded (MAX_DEPTH_EXCEEDED). ${message}`,
+      error: `Peer "${peer}" refused: call chain depth exceeded (MAX_DEPTH_EXCEEDED).`,
     };
   }
   if (code === 'REQUEST_TIMEOUT' || combined.includes('REQUEST_TIMEOUT')) {
@@ -145,27 +203,85 @@ function mapRemoteError(peer: string, err: unknown, timeoutMs: number): ToolResu
     };
   }
   if (combined.includes('TOOL_NOT_ALLOWED_FOR_PEER_INVOKE')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: tool is not in the peer-invoke allowlist.`,
+    };
   }
   if (combined.includes('TOOL_NOT_FLEET_SAFE')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: tool is not fleetSafe.`,
+    };
   }
   if (combined.includes('PEER_WORKSPACE_NOT_CONFIGURED')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: peer workspace is not configured for remote tool invoke.`,
+    };
   }
   if (combined.includes('PATH_OUTSIDE_PEER_WORKSPACE')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: path is outside the peer workspace.`,
+    };
   }
   if (combined.includes('UNKNOWN_PEER_TOOL')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: unknown peer tool.`,
+    };
   }
   if (combined.includes('PEER_SCOPE_DENIED')) {
-    return { success: false, error: `Peer "${peer}" refused: ${message}` };
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: peer scope does not permit this tool.`,
+    };
+  }
+  if (combined.includes('METHOD_NOT_FOUND')) {
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: peer.tool.invoke is not available (METHOD_NOT_FOUND).`,
+    };
+  }
+  if (combined.includes('INVALID_PARAMS')) {
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: invalid peer.tool.invoke params.`,
+    };
+  }
+  if (combined.includes('RATE_LIMITED')) {
+    return {
+      success: false,
+      error: `Peer "${peer}" refused: rate limited.`,
+    };
   }
   return { success: false, error: `Peer "${peer}" failed: ${message}` };
 }
 
-export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promise<ToolResult> {
+async function withLocalTimeout<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(
+        `peer.invoke REQUEST_TIMEOUT: peer.tool.invoke did not respond within ${timeoutMs}ms`,
+      );
+      (err as Error & { code?: string }).code = 'REQUEST_TIMEOUT';
+      reject(err);
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promise<PeerToolInvokeResult> {
   if (process.env.CODEBUDDY_PEER_ROLE === 'leaf') {
     return {
       success: false,
@@ -178,14 +294,22 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
   if (!params.peer || typeof params.peer !== 'string') {
     return { success: false, error: 'peer_tool_invoke: "peer" parameter is required (string).' };
   }
-  if (!params.tool || typeof params.tool !== 'string') {
-    return { success: false, error: 'peer_tool_invoke: "tool" parameter is required (string).' };
-  }
-  if (!TOOL_NAME_RE.test(params.tool)) {
+  if (params.peer.length > MAX_PEER_ID_LENGTH || !PEER_ID_RE.test(params.peer)) {
     return {
       success: false,
       error:
-        `peer_tool_invoke: "tool" must be a lowercase identifier (got ${JSON.stringify(params.tool)}). ` +
+        'peer_tool_invoke: "peer" must be 1–128 characters matching [A-Za-z0-9._-].',
+    };
+  }
+  if (!params.tool || typeof params.tool !== 'string') {
+    return { success: false, error: 'peer_tool_invoke: "tool" parameter is required (string).' };
+  }
+  if (params.tool.length > MAX_TOOL_NAME_LENGTH || !TOOL_NAME_RE.test(params.tool)) {
+    return {
+      success: false,
+      error:
+        `peer_tool_invoke: "tool" must be a lowercase identifier up to ${MAX_TOOL_NAME_LENGTH} characters ` +
+        `(got ${JSON.stringify(params.tool.slice(0, 80))}). ` +
         `Known read-only tools: ${DEFAULT_PEER_TOOL_INVOKE_TOOLS.join(', ')}.`,
     };
   }
@@ -193,13 +317,20 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
     return {
       success: false,
       error:
-        'peer_tool_invoke: "args" must be a flat object of string/number/boolean values. ' +
-        'Nested objects/arrays are rejected. Paths are forwarded as given (not resolved on this host).',
+        'peer_tool_invoke: "args" must be a flat object of string/number/boolean values ' +
+        'with safe keys (no nested objects/arrays, no __proto__/constructor). ' +
+        'Paths are forwarded as given (not resolved on this host).',
     };
   }
 
   const timeoutMs = clampPeerToolInvokeTimeout(params.timeoutMs);
   const args: Record<string, unknown> = params.args ? { ...params.args } : {};
+  if (argsByteLength(args) > MAX_ARGS_BYTES) {
+    return {
+      success: false,
+      error: `peer_tool_invoke: "args" is too large (max ${MAX_ARGS_BYTES} bytes).`,
+    };
+  }
 
   const reg = getFleetRegistry();
   if (reg.size() === 0) {
@@ -237,7 +368,9 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
   if (!allowed.allowed) {
     const extra = allowed.describeError
       ? ` peer.describe failed: ${allowed.describeError}`
-      : ` Advertised extra tools: ${allowed.advertised.filter((n) => !(DEFAULT_PEER_TOOL_INVOKE_TOOLS as readonly string[]).includes(n)).join(', ') || '(none)'}.`;
+      : trustDescribeExtras()
+        ? ` Advertised extra tools: ${allowed.advertised.filter((n) => !(DEFAULT_PEER_TOOL_INVOKE_TOOLS as readonly string[]).includes(n)).join(', ') || '(none)'}.`
+        : ' Extra names from peer.describe require CODEBUDDY_PEER_TRUST_DESCRIBE=true.';
     return {
       success: false,
       error:
@@ -248,21 +381,27 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
 
   const t0 = Date.now();
   try {
-    const payload = await entry.listener.invokeTool(params.tool, args, { timeoutMs });
+    // keep listener this — call invokeTool on the listener object, never unbound.
+    const payload = await withLocalTimeout(
+      entry.listener.invokeTool(params.tool, args, { timeoutMs }),
+      timeoutMs,
+    );
     const elapsedMs = Date.now() - t0;
-    const output =
+    const rawOutput =
       typeof payload?.output === 'string' ? payload.output : JSON.stringify(payload ?? {});
+    const { output, truncated } = truncateOutput(rawOutput);
+    const data: PeerToolInvokeData = {
+      peer: params.peer,
+      tool: payload?.tool ?? params.tool,
+      output,
+      durationMs: payload?.durationMs ?? elapsedMs,
+      truncated: truncated || payload?.truncated === true,
+      elapsedMs,
+    };
     return {
       success: true,
       output: [`[peer: ${params.peer}] [tool: ${params.tool}] [${elapsedMs}ms]`, output].join('\n'),
-      data: {
-        peer: params.peer,
-        tool: payload?.tool ?? params.tool,
-        output,
-        durationMs: payload?.durationMs ?? elapsedMs,
-        truncated: payload?.truncated,
-        elapsedMs,
-      },
+      data,
     };
   } catch (err) {
     logger.debug('[peer-tool-invoke-tool] peer.tool.invoke error', {

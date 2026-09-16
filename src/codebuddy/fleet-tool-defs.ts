@@ -9,6 +9,7 @@
 
 import type { CodeBuddyTool } from './client.js';
 import { FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT } from '../fleet/dispatch-profile.js';
+import { DEFAULT_PEER_TOOL_INVOKE_TOOLS } from '../tools/peer-tool-invoke-tool.js';
 
 const DISPATCH_PROFILE_PARAMETER_DESCRIPTION =
   'Optional Fleet dispatch profile. When set, carries the operating posture through peer.chat ' +
@@ -235,7 +236,7 @@ export const PEER_TOOL_INVOKE_TOOL_DEF: CodeBuddyTool = {
         },
         tool: {
           type: 'string',
-          enum: ['view_file', 'list_directory', 'search'],
+          enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
           description:
             'Read-only tool to run on the peer. Default allowlist: view_file, list_directory, search. ' +
             'The peer may advertise extra names via peer.describe; extra names still pass the peer-side gates.',

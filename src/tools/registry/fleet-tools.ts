@@ -174,7 +174,7 @@ export class PeerToolInvokeTool implements ITool {
     return executePeerToolInvoke({
       peer: typeof input.peer === 'string' ? input.peer : '',
       tool: typeof input.tool === 'string' ? input.tool : '',
-      args: isFlatToolArgs(input.args) ? input.args : (input.args as Record<string, unknown> | undefined),
+      args: input.args as Record<string, unknown> | undefined,
       timeoutMs: typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined,
     });
   }
