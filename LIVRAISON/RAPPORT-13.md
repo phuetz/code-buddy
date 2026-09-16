@@ -3,7 +3,7 @@
 **STATUT : PARTIEL** — correctif, tests, paquet et docs livrés ; recette agent A/B non rejouée : Lemonade `POST /api/v1/load` et `POST /api/v1/chat/completions` pendent 0 octet (GET `/health` et `/models` répondent). Cause exacte : backend LLM Lemonade coincé derrière le tunnel `127.0.0.1:13305` ; le superviseur doit le relancer / basculer ROCm.
 
 Branche : `fable/peer-tool-invoke-2026-09-16`
-Worktree : `/home/patrice/DEV/cb-peer-tool-invoke-2026-09-16`
+Worktree : `cb-peer-tool-invoke-2026-09-16`
 HEAD de départ : `e1e353b58`
 PR : https://github.com/phuetz/code-buddy/pull/155
 
@@ -46,7 +46,7 @@ Tests ciblés : `tests/config/model-tools-qwen36-gguf.test.ts`, payload Lemonade
 ## 4. Paquet
 
 - `npm run build` + `npm pack` → `phuetz-code-buddy-2.1.0.tgz` (npm shasum `037503548733a63261fb1036d45f8742f7c1a07a`, SHA256 `8e985440016a431f8608179456d83d1f51fcb956cf63626c88ac1af9dd7aad44`)
-- Réinstall : `npm install --prefix ~/.local/share/code-buddy-fleet/20260916-b/prefix <tgz> --no-save`
+- Réinstall : `npm install --prefix <prefix-20260916-b> <tgz> --no-save`
 - Grep préfixe : `model: 'Qwen3.6-*-GGUF*'` présent.
 
 ## 5. Recette A/B + ROCm
@@ -71,4 +71,6 @@ Section « Modèle par défaut recommandé : Qwen3.6-35B-A3B (Lemonade) » dans 
 
 ## 7. Push / checks
 
-À remplir après `git push origin fable/peer-tool-invoke-2026-09-16` (non forcé) et `gh pr checks 155`.
+Push simple `e1e353b58..166d6b7b7` (non forcé).
+
+Run CI `35146467919` (HEAD `166d6b7b7`) : Security Audit pass ; 5 legs test **fail** sur `donnees-personnelles` (`LIVRAISON/RAPPORT-13.md` et `docs/reports/2026-09/RAPPORT-13.md` → chemin personnel). Chemin retiré (ce commit). Relance attendue.
