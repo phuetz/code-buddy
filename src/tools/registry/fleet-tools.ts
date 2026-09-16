@@ -1,9 +1,9 @@
 /**
  * Fleet Tool Adapters — Phase (d).17.
  *
- * ITool-compliant wrappers for `peer_delegate` and `list_peers`.
- * Both tools are explicitly NOT fleetSafe — they're outbound from the
- * caller; inbound peers run their own gating via the A2A executor.
+ * ITool-compliant wrappers for `peer_delegate`, `peer_tool_invoke`, and
+ * `list_peers`. Fleet tools are explicitly NOT fleetSafe — they're
+ * outbound from the caller; inbound peers run their own gating.
  */
 
 import type { ToolResult } from '../../types/index.js';
@@ -18,6 +18,13 @@ import { executePeerDelegate } from '../peer-delegate-tool.js';
 import { executePeerChain } from '../peer-chain-tool.js';
 import { executeListPeers } from '../list-peers-tool.js';
 import { executeRoutePeer } from '../route-peer-tool.js';
+import {
+  DEFAULT_PEER_TOOL_INVOKE_TOOLS,
+  DEFAULT_TIMEOUT_MS as PEER_TOOL_INVOKE_DEFAULT_TIMEOUT_MS,
+  MAX_TIMEOUT_MS as PEER_TOOL_INVOKE_MAX_TIMEOUT_MS,
+  executePeerToolInvoke,
+  isFlatToolArgs,
+} from '../peer-tool-invoke-tool.js';
 import {
   FLEET_DISPATCH_PROFILES,
   FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT,
@@ -144,6 +151,105 @@ export class PeerDelegateTool implements ITool {
         'policy',
       ],
       priority: 7,
+      modifiesFiles: false,
+      makesNetworkRequests: true,
+      fleetSafe: false,
+    };
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}
+
+export class PeerToolInvokeTool implements ITool {
+  readonly name = 'peer_tool_invoke';
+  readonly description =
+    'Read or search files on a connected fleet peer (read-only). Wraps peer.tool.invoke. ' +
+    'Use list_peers first to get the peer id, then call this with tool view_file, list_directory, or search. ' +
+    'The remote peer enforces its own allowlist and workspace root — this host does not interpret paths. ' +
+    'Does not run bash or write tools.';
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    return executePeerToolInvoke({
+      peer: typeof input.peer === 'string' ? input.peer : '',
+      tool: typeof input.tool === 'string' ? input.tool : '',
+      args: isFlatToolArgs(input.args) ? input.args : (input.args as Record<string, unknown> | undefined),
+      timeoutMs: typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined,
+    });
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          peer: {
+            type: 'string',
+            description:
+              'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
+          },
+          tool: {
+            type: 'string',
+            enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
+            description:
+              'Read-only tool to run on the peer. Default allowlist: view_file, list_directory, search. ' +
+              'The peer may advertise extra names via peer.describe; extra names still pass the peer-side gates.',
+          },
+          args: {
+            type: 'object',
+            description:
+              'Flat arguments for the remote tool (e.g. {"file_path":"oracle.txt"} for view_file). ' +
+              'Paths are forwarded as given; this host does not resolve them.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description:
+              `Request timeout in milliseconds. Default ${PEER_TOOL_INVOKE_DEFAULT_TIMEOUT_MS}. Max ${PEER_TOOL_INVOKE_MAX_TIMEOUT_MS}.`,
+          },
+        },
+        required: ['peer', 'tool'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    const inp = input as Record<string, unknown>;
+    const errors: string[] = [];
+    if (typeof inp.peer !== 'string' || !inp.peer) errors.push('peer is required (string)');
+    if (typeof inp.tool !== 'string' || !inp.tool) errors.push('tool is required (string)');
+    if (inp.args !== undefined && !isFlatToolArgs(inp.args)) {
+      errors.push('args must be a flat object of string/number/boolean values');
+    }
+    return errors.length === 0 ? { valid: true } : { valid: false, errors };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'utility' as ToolCategoryType,
+      keywords: [
+        'peer',
+        'tool',
+        'invoke',
+        'fleet',
+        'view_file',
+        'list_directory',
+        'search',
+        'read',
+        'remote',
+        'workspace',
+        'allowlist',
+        'file',
+        'oracle',
+      ],
+      priority: 8,
       modifiesFiles: false,
       makesNetworkRequests: true,
       fleetSafe: false,
@@ -539,7 +645,13 @@ export class PeerChainTool implements ITool {
 }
 
 export function createFleetTools(): ITool[] {
-  return [new PeerDelegateTool(), new PeerChainTool(), new ListPeersTool(), new RoutePeerTool()];
+  return [
+    new PeerDelegateTool(),
+    new PeerToolInvokeTool(),
+    new PeerChainTool(),
+    new ListPeersTool(),
+    new RoutePeerTool(),
+  ];
 }
 
 export function resetFleetToolInstances(): void {

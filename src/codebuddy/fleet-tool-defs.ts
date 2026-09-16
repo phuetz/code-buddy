@@ -216,8 +216,49 @@ export const ROUTE_PEER_TOOL_DEF: CodeBuddyTool = {
   },
 };
 
+export const PEER_TOOL_INVOKE_TOOL_DEF: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'peer_tool_invoke',
+    description:
+      'Read or search files on a connected fleet peer (read-only). Wraps peer.tool.invoke. ' +
+      'Use list_peers first to get the peer id, then call this with tool view_file, list_directory, or search. ' +
+      'The remote peer enforces its own allowlist and workspace root — this host does not interpret paths. ' +
+      'Does not run bash or write tools.',
+    parameters: {
+      type: 'object',
+      properties: {
+        peer: {
+          type: 'string',
+          description:
+            'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
+        },
+        tool: {
+          type: 'string',
+          enum: ['view_file', 'list_directory', 'search'],
+          description:
+            'Read-only tool to run on the peer. Default allowlist: view_file, list_directory, search. ' +
+            'The peer may advertise extra names via peer.describe; extra names still pass the peer-side gates.',
+        },
+        args: {
+          type: 'object',
+          description:
+            'Flat arguments for the remote tool (e.g. {"file_path":"oracle.txt"} for view_file). ' +
+            'Paths are forwarded as given; this host does not resolve them.',
+        },
+        timeoutMs: {
+          type: 'number',
+          description: 'Request timeout in milliseconds. Default 15000. Max 120000.',
+        },
+      },
+      required: ['peer', 'tool'],
+    },
+  },
+};
+
 export const FLEET_TOOLS: CodeBuddyTool[] = [
   PEER_DELEGATE_TOOL_DEF,
+  PEER_TOOL_INVOKE_TOOL_DEF,
   PEER_CHAIN_TOOL_DEF,
   LIST_PEERS_TOOL_DEF,
   ROUTE_PEER_TOOL_DEF,

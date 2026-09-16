@@ -713,6 +713,7 @@ describe('PromptBuilder — Phase T4', () => {
       expect(prompt).toContain('review: read-first code review');
       expect(prompt).toContain('safe: high-risk');
       expect(prompt).toContain('reuse the dispatchProfile returned by route_peer');
+      expect(prompt).toContain('peer_tool_invoke');
     });
   });
 

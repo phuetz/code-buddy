@@ -478,9 +478,10 @@ export type {
   DelegateExecuteTool,
 } from './delegate-agent-tools.js';
 
-// Tool Adapters - Fleet (peer_delegate, list_peers, route_peer)
+// Tool Adapters - Fleet (peer_delegate, peer_tool_invoke, list_peers, route_peer)
 export {
   PeerDelegateTool,
+  PeerToolInvokeTool,
   PeerChainTool,
   ListPeersTool,
   RoutePeerTool,

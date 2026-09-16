@@ -1531,6 +1531,14 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Delegate a one-shot question to a connected fleet peer Code Buddy and get its answer plus Hermes-style dispatch policy metadata back inline'
   },
   {
+    name: 'peer_tool_invoke',
+    category: 'utility' as ToolCategory,
+    keywords: ['peer', 'tool', 'invoke', 'fleet', 'view_file', 'list_directory', 'search', 'read', 'remote', 'workspace', 'allowlist', 'file', 'oracle'],
+    priority: 8,
+    description: 'Read or search files on a connected fleet peer (read-only, allowlist on the peer). Wraps peer.tool.invoke; does not run bash or writes'
+    // fleetSafe omitted / false: outbound fleet call, not peer-exposable.
+  },
+  {
     name: 'peer_chain',
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'chain', 'fleet', 'delegate', 'multi-agent', 'collaborate', 'orchestrate', 'hermes', 'handoff', 'roles', 'review', 'safe', 'code'],

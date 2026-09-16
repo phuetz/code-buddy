@@ -130,7 +130,7 @@ const DEFAULT_CONFIG: ToolSelectionConfig = {
   // direct editors and points at apply_patch, so a selection without it
   // re-opens the historical edit deadlock. `extension_forge` is the one safe,
   // confirmation-gated entry point for creating reusable runtime capabilities.
-  alwaysInclude: ['view_file', 'create_file', 'str_replace_editor', 'apply_patch', 'bash', 'search', 'web_search', 'restore_context', 'remember', 'memory_propose', 'lessons_add', 'lessons_propose', 'lessons_search', 'tool_search', 'extension_forge'],
+  alwaysInclude: ['view_file', 'create_file', 'str_replace_editor', 'apply_patch', 'bash', 'search', 'web_search', 'restore_context', 'remember', 'memory_propose', 'lessons_add', 'lessons_propose', 'lessons_search', 'tool_search', 'extension_forge', 'list_peers', 'peer_tool_invoke'],
   useAdaptiveThreshold: true,
   enableCaching: true,
   cacheTTLMs: 5 * 60 * 1000, // 5 minutes
