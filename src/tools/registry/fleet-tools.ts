@@ -21,7 +21,6 @@ import { executeFleetRoom, fleetRoomInputSchema } from '../fleet-room-tool.js';
 import { FLEET_ROOM_TOOL_DEF } from '../../codebuddy/fleet-tool-defs.js';
 import { executeRoutePeer } from '../route-peer-tool.js';
 import {
-  DEFAULT_PEER_TOOL_INVOKE_TOOLS,
   PEER_TOOL_INVOKE_DESCRIPTION,
   PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
   executePeerToolInvoke,
@@ -191,7 +190,6 @@ export class PeerToolInvokeTool implements ITool {
           },
           tool: {
             type: 'string',
-            enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
             minLength: 1,
             description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
           },

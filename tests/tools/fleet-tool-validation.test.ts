@@ -145,11 +145,9 @@ describe('Fleet tool validation', () => {
     expect(tool.getSchema().parameters.required).toEqual(['peer', 'tool']);
     expect(tool.getSchema().description).toContain('{"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}');
     expect(tool.getSchema().parameters.properties?.peer?.description).toContain('Required');
-    expect(tool.getSchema().parameters.properties?.tool?.enum).toEqual([
-      'view_file',
-      'list_directory',
-      'search',
-    ]);
+    expect(tool.getSchema().parameters.properties?.tool?.enum).toBeUndefined();
+    expect(tool.getSchema().parameters.properties?.tool?.description).toContain('view_file');
+    expect(tool.getSchema().parameters.properties?.tool?.description).toContain('CODEBUDDY_PEER_TRUST_DESCRIBE');
     expect(tool.validate({ peer: 'B', tool: 'view_file', args: { file_path: 'oracle.txt' } })).toEqual({
       valid: true,
     });

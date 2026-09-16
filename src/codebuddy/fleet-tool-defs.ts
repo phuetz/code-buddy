@@ -10,7 +10,6 @@
 import type { CodeBuddyTool } from './client.js';
 import { FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT } from '../fleet/dispatch-profile.js';
 import {
-  DEFAULT_PEER_TOOL_INVOKE_TOOLS,
   PEER_TOOL_INVOKE_DESCRIPTION,
   PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
 } from '../tools/peer-tool-invoke-tool.js';
@@ -235,7 +234,6 @@ export const PEER_TOOL_INVOKE_TOOL_DEF: CodeBuddyTool = {
         },
         tool: {
           type: 'string',
-          enum: [...DEFAULT_PEER_TOOL_INVOKE_TOOLS],
           description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
         },
         args: {
