@@ -11,7 +11,9 @@ import {
   executePeerToolInvoke,
   clampPeerToolInvokeTimeout,
   DEFAULT_TIMEOUT_MS,
+  MIN_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
+  MAX_OUTPUT_BYTES,
 } from '../../src/tools/peer-tool-invoke-tool.js';
 import {
   getFleetRegistry,
@@ -66,6 +68,7 @@ describe('peer_tool_invoke tool', () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
     delete process.env.CODEBUDDY_PEER_ROLE;
+    delete process.env.CODEBUDDY_PEER_TRUST_DESCRIBE;
     _resetFleetRegistryForTests();
   });
 
@@ -129,15 +132,26 @@ describe('peer_tool_invoke tool', () => {
       expect(args).toEqual({ file_path: '/etc/passwd' });
     });
 
-    it('clamps timeoutMs to the documented max', () => {
+    it('clamps timeoutMs to the documented max and min', () => {
       expect(clampPeerToolInvokeTimeout(undefined)).toBe(DEFAULT_TIMEOUT_MS);
       expect(clampPeerToolInvokeTimeout(0)).toBe(DEFAULT_TIMEOUT_MS);
       expect(clampPeerToolInvokeTimeout(-5)).toBe(DEFAULT_TIMEOUT_MS);
+      expect(clampPeerToolInvokeTimeout('5000')).toBe(DEFAULT_TIMEOUT_MS);
       expect(clampPeerToolInvokeTimeout(500_000)).toBe(MAX_TIMEOUT_MS);
       expect(clampPeerToolInvokeTimeout(8_000)).toBe(8_000);
+      expect(clampPeerToolInvokeTimeout(1)).toBe(MIN_TIMEOUT_MS);
     });
 
-    it('rejects unknown tool names unless peer.describe advertises them', async () => {
+    it('rejects invalid peer ids before contacting the listener', async () => {
+      const invokeTool = vi.fn();
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B has spaces', tool: 'view_file' });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('[A-Za-z0-9._-]');
+      expect(invokeTool).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown tool names unless peer.describe advertises them under TRUST_DESCRIBE', async () => {
       const invokeTool = vi.fn();
       const request = vi.fn().mockResolvedValue({ methods: ['peer.tool.invoke'] });
       registerPeer('B', { invokeTool, request });
@@ -150,10 +164,11 @@ describe('peer_tool_invoke tool', () => {
       expect(r.error).toContain('bash');
       expect(r.error).toContain('not in the local read-only set');
       expect(invokeTool).not.toHaveBeenCalled();
-      expect(request).toHaveBeenCalledWith('peer.describe', {}, expect.objectContaining({ timeoutMs: 3_000 }));
+      expect(request).not.toHaveBeenCalled();
     });
 
-    it('allows an extra tool advertised via peer.describe', async () => {
+    it('allows an extra tool advertised via peer.describe when TRUST_DESCRIBE is set', async () => {
+      process.env.CODEBUDDY_PEER_TRUST_DESCRIBE = 'true';
       const invokeTool = vi.fn().mockResolvedValue({
         tool: 'workspace_read',
         output: 'extra-ok',
@@ -174,9 +189,86 @@ describe('peer_tool_invoke tool', () => {
         { timeoutMs: DEFAULT_TIMEOUT_MS },
       );
     });
+
+    it('surfaces peer.describe failure when tool is not in the default set', async () => {
+      process.env.CODEBUDDY_PEER_TRUST_DESCRIBE = 'true';
+      const invokeTool = vi.fn();
+      const request = vi.fn().mockRejectedValue(new Error('describe boom'));
+      registerPeer('B', { invokeTool, request });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'workspace_read' });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('peer.describe failed');
+      expect(r.error).toContain('describe boom');
+      expect(invokeTool).not.toHaveBeenCalled();
+    });
+
+    it('does not invoke when describe advertises a tool that B then refuses', async () => {
+      process.env.CODEBUDDY_PEER_TRUST_DESCRIBE = 'true';
+      const invokeTool = vi.fn().mockRejectedValue(
+        remoteError(
+          'METHOD_ERROR',
+          'TOOL_NOT_ALLOWED_FOR_PEER_INVOKE: tool "workspace_read" is not in the peer-invoke allowlist',
+        ),
+      );
+      const request = vi.fn().mockResolvedValue({ peerTools: ['workspace_read'] });
+      registerPeer('B', { invokeTool, request });
+      const r = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'workspace_read',
+        args: { path: 'notes.md' },
+      });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('not in the peer-invoke allowlist');
+      expect(invokeTool).toHaveBeenCalled();
+    });
+
+    it('rejects args with prototype-polluting keys', async () => {
+      const invokeTool = vi.fn();
+      registerPeer('B', { invokeTool });
+      const protoArgs = Object.defineProperty({}, '__proto__', {
+        value: { polluted: true },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      }) as Record<string, unknown>;
+      let r = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'view_file',
+        args: protoArgs,
+      });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('args');
+      r = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'view_file',
+        args: { constructor: 'nope' },
+      });
+      expect(r.success).toBe(false);
+      expect(invokeTool).not.toHaveBeenCalled();
+    });
+
+    it('rejects oversized args', async () => {
+      const invokeTool = vi.fn();
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'view_file',
+        args: { file_path: 'x'.repeat(128 * 1024) },
+      });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('too large');
+      expect(invokeTool).not.toHaveBeenCalled();
+    });
   });
 
   describe('guards', () => {
+    it('refuses when CODEBUDDY_PEER_ROLE=leaf even with an invalid peer id', async () => {
+      process.env.CODEBUDDY_PEER_ROLE = 'leaf';
+      const result = await executePeerToolInvoke({ peer: '!!!', tool: 'view_file' });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('leaf peer');
+    });
+
     it('refuses when CODEBUDDY_PEER_ROLE=leaf', async () => {
       process.env.CODEBUDDY_PEER_ROLE = 'leaf';
       const result = await executePeerToolInvoke({ peer: 'B', tool: 'view_file' });
@@ -272,6 +364,38 @@ describe('peer_tool_invoke tool', () => {
       expect(data.tool).toBe('view_file');
       expect(data.output).toBe('ORACLE-abc');
     });
+
+    it('truncates oversized output and flags truncated', async () => {
+      const invokeTool = vi.fn().mockResolvedValue({
+        tool: 'view_file',
+        output: 'A'.repeat(512 * 1024),
+        durationMs: 5,
+      });
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'view_file' });
+      expect(r.success).toBe(true);
+      expect((r.data as { truncated?: boolean }).truncated).toBe(true);
+      expect(Buffer.byteLength(r.output ?? '', 'utf8')).toBeLessThan(MAX_OUTPUT_BYTES + 4096);
+    });
+
+    it('handles non-string output payloads', async () => {
+      const invokeTool = vi.fn().mockResolvedValue({
+        tool: 'list_directory',
+        output: { entries: ['a'] },
+      });
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'list_directory' });
+      expect(r.success).toBe(true);
+      expect(r.output).toContain('"entries"');
+    });
+
+    it('stringifies a missing payload as empty object', async () => {
+      const invokeTool = vi.fn().mockResolvedValue(undefined);
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'view_file' });
+      expect(r.success).toBe(true);
+      expect(r.output).toContain('{}');
+    });
   });
 
   describe('remote refusals and timeout', () => {
@@ -289,7 +413,7 @@ describe('peer_tool_invoke tool', () => {
         args: { file_path: 'x' },
       });
       expect(result.success).toBe(false);
-      expect(result.error).toContain('TOOL_NOT_ALLOWED_FOR_PEER_INVOKE');
+      expect(result.error).toContain('not in the peer-invoke allowlist');
     });
 
     it('propagates workspace path refusal as failure', async () => {
@@ -306,7 +430,22 @@ describe('peer_tool_invoke tool', () => {
         args: { file_path: '/etc/passwd' },
       });
       expect(result.success).toBe(false);
-      expect(result.error).toContain('PATH_OUTSIDE_PEER_WORKSPACE');
+      expect(result.error).toContain('outside the peer workspace');
+    });
+
+    it('does not leak peer workspace root in PATH_OUTSIDE_PEER_WORKSPACE', async () => {
+      const invokeTool = vi.fn().mockRejectedValue(
+        remoteError('METHOD_ERROR', 'PATH_OUTSIDE_PEER_WORKSPACE: /etc/passwd outside /tmp/secret-ws'),
+      );
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'view_file',
+        args: { file_path: '/etc/passwd' },
+      });
+      expect(r.success).toBe(false);
+      expect(r.error).not.toContain('/tmp/secret-ws');
+      expect(r.error).not.toContain('/etc/passwd');
     });
 
     it('propagates depth refusal as failure', async () => {
@@ -336,6 +475,33 @@ describe('peer_tool_invoke tool', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('did not respond');
       expect(result.error).toContain('15000ms');
+    });
+
+    it('falls back to a generic message for errors without code', async () => {
+      const invokeTool = vi.fn().mockRejectedValue(new Error('boom'));
+      registerPeer('B', { invokeTool });
+      const r = await executePeerToolInvoke({ peer: 'B', tool: 'view_file' });
+      expect(r.success).toBe(false);
+      expect(r.error).toContain('failed: boom');
+    });
+
+    it('enforces a local timeout if invokeTool hangs', async () => {
+      vi.useFakeTimers();
+      try {
+        const invokeTool = vi.fn().mockReturnValue(new Promise(() => undefined));
+        registerPeer('B', { invokeTool });
+        const pending = executePeerToolInvoke({
+          peer: 'B',
+          tool: 'view_file',
+          timeoutMs: MIN_TIMEOUT_MS,
+        });
+        await vi.advanceTimersByTimeAsync(MIN_TIMEOUT_MS);
+        const r = await pending;
+        expect(r.success).toBe(false);
+        expect(r.error).toContain('did not respond');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
