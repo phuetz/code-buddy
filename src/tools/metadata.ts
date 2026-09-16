@@ -1780,6 +1780,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'peer_tool_invoke',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'tool', 'invoke', 'fleet', 'view_file', 'list_directory', 'search', 'read', 'remote', 'workspace', 'allowlist', 'file', 'oracle'],
     priority: 8,

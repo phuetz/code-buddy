@@ -265,6 +265,7 @@ export class PeerToolInvokeTool implements ITool {
       priority: 8,
       modifiesFiles: false,
       makesNetworkRequests: true,
+      effect: 'emission',
       fleetSafe: false,
     };
   }
