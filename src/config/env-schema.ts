@@ -5,6 +5,13 @@
  * Provides validation, documentation, and a CLI summary.
  */
 
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import {
+  getDirectRuntimeProviderCatalog,
+  getPluginNativeRuntimeProviderCatalog,
+  isProviderConfigured,
+} from '../providers/provider-catalog.js';
+
 export interface EnvVarDef {
   /** Environment variable name */
   name: string;
@@ -76,8 +83,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_API_KEY',
     type: 'string',
-    description: 'Primary API key (xAI / Grok)',
-    required: true,
+    description: 'xAI / Grok API key (one of several supported provider authentications)',
     sensitive: true,
     category: 'core',
   },
@@ -282,6 +288,26 @@ export const ENV_SCHEMA: EnvVarDef[] = [
     name: 'CODEBUDDY_FALLBACK_MODEL',
     type: 'string',
     description: 'Fallback model used with CODEBUDDY_FALLBACK_PROVIDER',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_PROVIDER_FALLBACK',
+    type: 'boolean',
+    default: 'false',
+    description: 'Opt-in automatic LLM provider failover on quota/overload/outage (default off = byte-identical)',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_FALLBACK_CHAIN',
+    type: 'string',
+    description: 'Declared failover chain provider[:model] separated by >, e.g. chatgpt-oauth>xai>gemini>ollama:qwen3.8-ctx32k:latest',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_LOCAL_ONLY',
+    type: 'boolean',
+    default: 'false',
+    description: 'Restrict declared provider failover to local runtimes (Ollama / LM Studio / Lemonade)',
     category: 'core',
   },
   {
@@ -511,7 +537,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROQ_MODEL',
     type: 'string',
-    default: 'llama-3.3-70b-versatile',
+    default: 'qwen/qwen3.8-27b',
     description: 'Default Groq model',
     category: 'provider',
   },
@@ -957,7 +983,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'CEREBRAS_MODEL',
     type: 'string',
-    default: 'zai-glm-4.7',
+    default: 'gpt-oss-120b',
     description: 'Cerebras default model',
     category: 'provider',
   },
@@ -1488,6 +1514,91 @@ export const ENV_SCHEMA: EnvVarDef[] = [
     type: 'string',
     description: 'Custom OpenAI-compatible provider model id',
     category: 'provider',
+  },
+  {
+    name: 'CODEBUDDY_PEER_MODEL',
+    type: 'string',
+    description: 'Global model override for the default peer/channel client; ignored when it belongs to another provider than CODEBUDDY_PROVIDER',
+    category: 'provider',
+  },
+  {
+    name: 'CODEBUDDY_CHANNEL_PROFILE',
+    type: 'string',
+    description: 'Channel prompt profile: companion (spokenPrompt + last 10 turns, no tools) or agent (default). Auto companion when CODEBUDDY_COMPANION_PERSONA is set',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_CACHE_DIR',
+    type: 'string',
+    description: 'On-disk Lisa selfie cache directory (tier/style layout). Never inside the git worktree',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_CACHE_MAX',
+    type: 'number',
+    default: '200',
+    min: 1,
+    max: 2000,
+    description: 'Maximum images kept in the Lisa selfie cache (oldest non-favorites evicted)',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_REFILL',
+    type: 'boolean',
+    default: 'false',
+    description: 'Opt-in heartbeat refill of the Lisa selfie cache (one image per beat when the generator is reachable and load is low)',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_REFILL_EVERY',
+    type: 'number',
+    default: '40',
+    min: 1,
+    max: 1000,
+    description: 'Heartbeat beats between Lisa selfie refill attempts (default 40)',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_REFILL_MIN',
+    type: 'number',
+    default: '2',
+    min: 1,
+    max: 20,
+    description: 'Minimum cached images per tier/style before refill stops',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_REFILL_MAX_LOAD',
+    type: 'number',
+    default: '4',
+    min: 0.1,
+    max: 64,
+    description: 'Skip selfie refill when 1-minute load average is at or above this value',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_LISA_SELFIE_RECENT_FILE',
+    type: 'string',
+    description: 'Override path for recent-selfies.json (anti-repeat rotation)',
+    category: 'cache',
+  },
+  {
+    name: 'CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS',
+    type: 'number',
+    default: '180000',
+    min: 1000,
+    max: 900000,
+    description: 'Per-conversation channel turn timeout in milliseconds (default 180000)',
+    category: 'core',
+  },
+  {
+    name: 'CODEBUDDY_CHANNEL_WAIT_NOTICE_MS',
+    type: 'number',
+    default: '20000',
+    min: 0,
+    max: 120000,
+    description: 'Send a Telegram wait notice ("je réfléchis…") after this many ms of generation silence (default 20000; 0 disables)',
+    category: 'core',
   },
   providerStringEnv('CODEBUDDY_CHATGPT_OAUTH', 'Presence marker for ChatGPT OAuth credentials'),
   providerStringEnv('LMSTUDIO_API_KEY', 'Optional LM Studio API key', { sensitive: true }),
@@ -2056,6 +2167,30 @@ export interface ValidationResult {
   errors: string[];
 }
 
+export function hasActiveProvider(env: Record<string, string | undefined> = process.env): boolean {
+  const hasChatGptOAuth = Boolean(env.CODEBUDDY_CHATGPT_OAUTH?.trim())
+    || (env === process.env && hasCodexCredentials());
+  const entries = [
+    ...getDirectRuntimeProviderCatalog(),
+    ...getPluginNativeRuntimeProviderCatalog(),
+  ];
+  return entries.some((entry) => isProviderConfigured(entry, env, hasChatGptOAuth));
+}
+
+export function resolveActiveProviderApiKey(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const grok = env.GROK_API_KEY?.trim();
+  if (grok) return grok;
+  for (const entry of getDirectRuntimeProviderCatalog()) {
+    for (const key of entry.apiKeyEnvKeys) {
+      const value = env[key]?.trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Validate the current `process.env` against the schema.
  *
@@ -2065,6 +2200,12 @@ export interface ValidationResult {
 export function validateEnv(env: Record<string, string | undefined> = process.env): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+
+  if (!hasActiveProvider(env)) {
+    errors.push(
+      'No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.',
+    );
+  }
 
   for (const def of ENV_SCHEMA) {
     const raw = env[def.name];
@@ -2228,7 +2369,7 @@ export function getEnvSummary(env: Record<string, string | undefined> = process.
     return v !== undefined && v !== '';
   }).length;
   lines.push(`${setCount}/${ENV_SCHEMA.length} variables set`);
-  lines.push(`Legend: * = set, [required] = must be configured`);
+  lines.push('Legend: * = set; validation requires at least one provider authentication');
 
   return lines.join('\n');
 }

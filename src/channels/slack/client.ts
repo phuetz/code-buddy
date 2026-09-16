@@ -33,7 +33,14 @@ import type {
   MessageAttachment,
   MessageButton,
 } from '../core.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
+import {
+  BaseChannel,
+  getSessionKey,
+  checkDMPairing,
+  getDMPairing,
+  resolveInboundSenderAccess,
+  UNPAIRED_SENDER_REPLY,
+} from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 
 const SLACK_API_BASE = 'https://slack.com/api';
@@ -264,11 +271,24 @@ export class SlackChannel extends BaseChannel {
     // Ignore bot messages
     if (event.bot_id || event.app_id) return;
 
-    // Check if user is allowed
-    if (event.user && !this.isUserAllowed(event.user)) return;
-
     // Check if channel is allowed
     if (event.channel && !this.isChannelAllowed(event.channel)) return;
+
+    const access = resolveInboundSenderAccess({
+      allowedUsers: this.config.allowedUsers,
+      identities: event.user ? [event.user] : [],
+      pairingRequired: getDMPairing().requiresPairing('slack'),
+    });
+    if (access === 'refuse') {
+      if (event.channel) {
+        try {
+          await this.send({ channelId: event.channel, content: UNPAIRED_SENDER_REPLY });
+        } catch {
+          /* refuse must not throw */
+        }
+      }
+      return;
+    }
 
     switch (event.type) {
       case 'message':
@@ -301,18 +321,40 @@ export class SlackChannel extends BaseChannel {
     // Attach session key for session isolation
     parsed.sessionKey = getSessionKey(parsed);
 
-    // DM pairing check: gate unapproved DM senders
-    const pairingStatus = await checkDMPairing(parsed);
-    if (!pairingStatus.approved) {
-      const { getDMPairing } = await import('../dm-pairing.js');
-      const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
-      if (pairingMessage && event.channel) {
-        await this.send({
-          channelId: event.channel,
-          content: pairingMessage,
-        });
+    const access = resolveInboundSenderAccess({
+      allowedUsers: this.config.allowedUsers,
+      identities: event.user ? [event.user] : [],
+      pairingRequired: getDMPairing().requiresPairing('slack'),
+    });
+    if (access === 'refuse') {
+      if (event.channel) {
+        try {
+          await this.send({ channelId: event.channel, content: UNPAIRED_SENDER_REPLY });
+        } catch {
+          /* refuse must not throw */
+        }
       }
       return;
+    }
+    // DM pairing check: gate unapproved DM senders
+    if (access !== 'allow') {
+      const pairingStatus = await checkDMPairing(parsed);
+      if (!pairingStatus.approved) {
+        const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
+        if (pairingMessage && event.channel) {
+          await this.send({
+            channelId: event.channel,
+            content: pairingMessage,
+          });
+        } else if (event.channel) {
+          try {
+            await this.send({ channelId: event.channel, content: UNPAIRED_SENDER_REPLY });
+          } catch {
+            /* refuse must not throw */
+          }
+        }
+        return;
+      }
     }
 
     this.emit('message', parsed);

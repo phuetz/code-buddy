@@ -106,6 +106,21 @@ export interface RawStreamingChunk {
 }
 
 /**
+ * Token counters as the PROVIDER reported them for one streamed round.
+ * A field is present only when the provider actually sent it.
+ */
+export interface ProviderStreamUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+}
+
+function normalizeUsageCount(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : undefined;
+}
+
+/**
  * Result of processing a streaming chunk.
  */
 export interface ProcessedChunk {
@@ -245,6 +260,7 @@ export class StreamingHandler {
   private toolCallsYielded: boolean = false;
   private pendingDisplayContent: string = '';
   private displaySuppressionEnds: readonly string[] | null = null;
+  private providerUsage: ProviderStreamUsage | null = null;
 
   /**
    * Creates a new StreamingHandler instance.
@@ -272,6 +288,12 @@ export class StreamingHandler {
    * @returns Processed chunk with display content and metadata
    */
   accumulateChunk(chunk: RawStreamingChunk): ProcessedChunk {
+    // A provider that honours `stream_options.include_usage` sends its real
+    // counters in a trailing chunk that carries NO choices — capture it before
+    // the early return below, otherwise the only usage the server can report
+    // is a `length / 4` guess.
+    this.captureProviderUsage(chunk);
+
     // Skip chunks without choices
     if (!chunk.choices?.[0]) {
       return {
@@ -525,6 +547,27 @@ export class StreamingHandler {
   }
 
   /**
+   * Returns the counters the provider itself reported for this round, or
+   * `undefined` when it reported none. Never a local estimate: the caller must
+   * be able to tell a measured number from a guessed one.
+   */
+  getProviderUsage(): ProviderStreamUsage | undefined {
+    return this.providerUsage ?? undefined;
+  }
+
+  private captureProviderUsage(chunk: RawStreamingChunk): void {
+    const usage = chunk.usage;
+    if (!usage) return;
+    const promptTokens = normalizeUsageCount(usage.prompt_tokens);
+    const completionTokens = normalizeUsageCount(usage.completion_tokens);
+    if (promptTokens === undefined && completionTokens === undefined) return;
+    this.providerUsage = {
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(completionTokens !== undefined ? { completionTokens } : {}),
+    };
+  }
+
+  /**
    * Resets the handler state for a new streaming session.
    * Call this before processing a new response stream.
    */
@@ -537,6 +580,7 @@ export class StreamingHandler {
     this.toolCallsYielded = false;
     this.pendingDisplayContent = '';
     this.displaySuppressionEnds = null;
+    this.providerUsage = null;
   }
 
   private sanitizeStreamingDelta(rawContentDelta: string): string {

@@ -84,6 +84,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
+    // TESTWRITE1 (2026-09-04): fingerprints .codebuddy/settings.json and
+    // .codebuddy/CODEBUDDY_MEMORY.md before any test file runs and fails the
+    // whole run if either changed by the time every worker is done — see the
+    // guard file for the two real incidents this catches.
+    globalSetup: ['./tests/hygiene/no-repo-writes-global-setup.ts'],
     // windows-latest runners show I/O stall bursts: on 2026-08-22 three
     // different real-I/O suites (migration-e2e, execute-code RPC, ocr-tool)
     // each crossed 20 s once on a Windows job while finishing in < 5 s on
@@ -115,7 +120,12 @@ export default defineConfig({
         statements: 70,
       },
     },
-    include: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
+    include: [
+      'tests/**/*.{test,spec}.{ts,tsx}',
+      'src/**/*.{test,spec}.{ts,tsx}',
+      // Workspace packages (packages/*) keep their tests next to their own source.
+      'packages/*/tests/**/*.{test,spec}.{ts,tsx}',
+    ],
     exclude: [
       'node_modules',
       'dist',
@@ -127,20 +137,14 @@ export default defineConfig({
       ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],
     pool: 'forks',
-    // Per-fork V8 heap ceiling. On windows-latest (7 GB RAM, 2 CI forks) the
-    // 8 GB ceiling over-subscribes physical memory: the Node 20 Windows job of
-    // the PR #95 run ended with "[vitest-pool]: Worker forks emitted error /
-    // Worker exited unexpectedly" — 1596 files passed, 0 failed, one file
-    // (tests/unit/hybrid-search-semantic, pure, 2.2 s in the 8 earlier runs)
-    // never reported: its fork died mid-run, outside any test. 4 GB per fork
-    // keeps two forks inside the runner's RAM and turns a runaway heap into a
-    // visible V8 "heap out of memory" instead of a silent OS kill.
-    // Linux/macOS keep 8 GB. (The 4 GB cap alone was not enough — the fork still
-    // died with no V8 FATAL, i.e. off-heap growth; see the sharded Windows test
-    // steps in .github/workflows/ci.yml.)
-    execArgv: [`--max-old-space-size=${process.platform === 'win32' ? 4096 : 8192}`],
+    // Vitest 4 uses test.execArgv (formerly poolOptions.forks.execArgv).
+    // Keep this explicit: NODE_OPTIONS in CI also covers spawned CLI processes.
+    // macOS/Windows CI runners have limited RAM: cap each fork at 4 GiB.
+    // Six sequential shards in ci.yml also bound accumulated off-heap growth;
+    // the heap ceiling alone is not a bound on total worker RSS.
+    execArgv: [`--max-old-space-size=${['win32', 'darwin'].includes(process.platform) ? 4096 : 8192}`],
     // Bound worker concurrency on CI only. The default is one worker per CPU, and
-    // each fork carries an 8 GB heap ceiling — on GitHub's constrained runners
+    // each fork carries a substantial heap ceiling — on GitHub's constrained runners
     // (esp. macos-latest: 3 vCPU / 7 GB) that over-subscribes RAM, causing swap
     // thrash that slows module imports enough to trip hook timeouts. This is the
     // honest root-cause fix for the historically-red macOS "Run tests" job: no
@@ -149,6 +153,12 @@ export default defineConfig({
     // (Vitest 4 moved the old `poolOptions.forks` knobs to top-level maxWorkers/
     // minWorkers.)
     ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
+    // VITEST_MAX_WORKERS borne le pool hors CI : une lane de la flotte qui lance la suite avec
+    // 24 forks (8 Go de tas chacun) a fait couper deux tâches de fond par le moniteur mémoire
+    // du pilote (04/09/2026). `scripts/deleguer.sh` la fixe à 6 pour toutes les lanes.
+    ...(!process.env.CI && Number(process.env.VITEST_MAX_WORKERS) > 0
+      ? { maxWorkers: Number(process.env.VITEST_MAX_WORKERS) }
+      : {}),
   },
   resolve: {
     alias: {

@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+
+const qaTempRoot = path.join(process.cwd(), '_qa', 'swarmfix1', 'tmp');
 
 // ============================================================================
 // CC10 — Glob Utils + Instruction Excludes
@@ -60,7 +61,7 @@ describe('CC10: Glob Utils', () => {
 });
 
 describe('CC10: Instruction Excludes', () => {
-  const tmpDir = path.join(os.tmpdir(), 'cc10-test-' + Date.now());
+  const tmpDir = path.join(qaTempRoot, 'cc10-test-' + Date.now());
 
   beforeEach(() => {
     fs.mkdirSync(path.join(tmpDir, '.codebuddy'), { recursive: true });
@@ -103,7 +104,7 @@ describe('CC10: Instruction Excludes', () => {
 // ============================================================================
 
 describe('CC9: Import Directive Parser', () => {
-  const tmpDir = path.join(os.tmpdir(), 'cc9-test-' + Date.now());
+  const tmpDir = path.join(qaTempRoot, 'cc9-test-' + Date.now());
 
   beforeEach(() => {
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -417,8 +418,7 @@ describe('CC15: Enhanced Permission Rules', () => {
 
 describe('CC12: Extended Hook Events', () => {
   it('ExtendedHookEvent type includes new events', async () => {
-    const hookTypes = await import('../../src/hooks/hook-types.js');
-    // Verify the type exists by checking we can create contexts with new events
+    // Verify the type exists by checking we can create contexts with new events.
     const ctx: import('../../src/hooks/hook-types.js').ExtendedHookContext = {
       event: 'ModelRequest',
       model: 'grok-3',
@@ -449,7 +449,7 @@ describe('CC12: Extended Hook Events', () => {
 // ============================================================================
 
 describe('CC14: Agent Memory Integration', () => {
-  const tmpDir = path.join(os.tmpdir(), 'cc14-test-' + Date.now());
+  const tmpDir = path.join(qaTempRoot, 'cc14-test-' + Date.now());
 
   beforeEach(() => {
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -536,23 +536,49 @@ describe('CC14: Agent Memory Integration', () => {
 });
 
 describe('CC14: SpawnOptions memory field', () => {
+  const tmpDir = path.join(qaTempRoot, 'cc14-spawn-test-' + Date.now());
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+
   it('SpawnOptions supports memory field', async () => {
-    const { spawnAgent, completeAgent, closeAgent, resetAgentState } = await import('../../src/agent/multi-agent/agent-tools.js');
+    const repositoryMemoryFile = path.join(
+      process.cwd(),
+      '.codebuddy',
+      'agent-memory',
+      'alice',
+      'MEMORY.md',
+    );
+    const repositoryMemoryBefore = fs.existsSync(repositoryMemoryFile)
+      ? fs.readFileSync(repositoryMemoryFile, 'utf8')
+      : undefined;
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    try {
+      const { spawnAgent, completeAgent, closeAgent, resetAgentState } = await import('../../src/agent/multi-agent/agent-tools.js');
 
-    // Reset state
-    resetAgentState();
+      // Reset state
+      resetAgentState();
 
-    const result = spawnAgent({
-      prompt: 'test',
-      memory: 'project',
-    });
+      const result = spawnAgent({
+        prompt: 'test',
+        memory: 'project',
+      });
 
-    expect('error' in result).toBe(false);
-    if (!('error' in result)) {
-      expect(result.memoryScope).toBe('project');
-      completeAgent(result.id, 'done');
-      closeAgent(result.id);
+      expect('error' in result).toBe(false);
+      if (!('error' in result)) {
+        expect(result.memoryScope).toBe('project');
+        expect(completeAgent(result.id, 'done')).toBe(true);
+        expect(fs.existsSync(path.join(tmpDir, '.codebuddy', 'agent-memory', 'alice', 'MEMORY.md'))).toBe(true);
+        closeAgent(result.id);
+      }
+    } finally {
+      cwdSpy.mockRestore();
     }
+    const repositoryMemoryAfter = fs.existsSync(repositoryMemoryFile)
+      ? fs.readFileSync(repositoryMemoryFile, 'utf8')
+      : undefined;
+    expect(repositoryMemoryAfter).toBe(repositoryMemoryBefore);
   });
 });
 
@@ -622,6 +648,15 @@ describe('CC13: Batch Handlers', () => {
     const { handleBatchCommand } = await import('../../src/commands/handlers/batch-handlers.js');
     const result = await handleBatchCommand('');
     expect(result).toContain('Usage');
+  });
+
+  it('handleBatchSlashCommand awaits the plan instead of claiming the batch started', async () => {
+    const { handleBatchSlashCommand } = await import('../../src/commands/handlers/batch-handlers.js');
+    const result = await handleBatchSlashCommand(['create', 'src/title-case.js']);
+    expect(result.handled).toBe(true);
+    expect(result.entry?.content).toContain('plan only');
+    expect(result.entry?.content).not.toContain('Batch command initiated');
+    expect((result as { asyncAction?: unknown }).asyncAction).toBeUndefined();
   });
 });
 

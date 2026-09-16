@@ -17,6 +17,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import WebSocket from 'ws';
+import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface TeamMember {
   id: string;
@@ -198,11 +200,17 @@ export class TeamSessionManager extends EventEmitter {
 
     if (fs.existsSync(profilePath)) {
       try {
-        const profile = fs.readJSONSync(profilePath);
+        const profile = readJsonAtomicSync<Record<string, unknown> | null>(profilePath, null, {
+          mode: 0o600,
+          isValid: (value): value is Record<string, unknown> => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value),
+          ),
+        });
+        if (!profile) throw new Error('profile is unavailable');
         this.currentMember = {
-          id: profile.id || this.generateId(),
-          name: profile.name || os.userInfo().username,
-          email: profile.email || '',
+          id: typeof profile.id === 'string' ? profile.id : this.generateId(),
+          name: typeof profile.name === 'string' ? profile.name : os.userInfo().username,
+          email: typeof profile.email === 'string' ? profile.email : '',
           role: 'owner',
           status: 'online',
           lastSeen: new Date(),
@@ -412,14 +420,13 @@ export class TeamSessionManager extends EventEmitter {
 
     // Store invite
     const invitePath = path.join(this.sessionsDir, 'invites', `${inviteCode}.json`);
-    await fs.ensureDir(path.dirname(invitePath));
-    await fs.writeJSON(invitePath, {
+    await writeJsonAtomic(invitePath, {
       sessionId: this.currentSession.id,
       email,
       role,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-    });
+    }, { mode: 0o600 });
 
     this.addAuditEntry(this.currentSession, 'member_invited', { email, role });
     await this.saveSession(this.currentSession);
@@ -768,9 +775,9 @@ export class TeamSessionManager extends EventEmitter {
 
     if (this.config.enableEncryption && this.config.encryptionKey) {
       const encrypted = this.encrypt(JSON.stringify(serializable));
-      await fs.writeFile(sessionPath, encrypted);
+      await writeFileAtomic(sessionPath, encrypted, { mode: 0o600 });
     } else {
-      await fs.writeJSON(sessionPath, serializable, { spaces: 2 });
+      await writeJsonAtomic(sessionPath, serializable, { mode: 0o600 });
     }
   }
 
@@ -788,10 +795,18 @@ export class TeamSessionManager extends EventEmitter {
       let data: string | object;
 
       if (this.config.enableEncryption && this.config.encryptionKey) {
-        const encrypted = await fs.readFile(sessionPath, 'utf-8');
+        const encrypted = await readTextAtomic(sessionPath, '');
+        if (!encrypted) return null;
         data = JSON.parse(this.decrypt(encrypted));
       } else {
-        data = await fs.readJSON(sessionPath);
+        const parsed = await readJsonAtomic<Record<string, unknown> | null>(sessionPath, null, {
+          mode: 0o600,
+          isValid: (value): value is Record<string, unknown> => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value),
+          ),
+        });
+        if (!parsed) return null;
+        data = parsed;
       }
 
       const session = data as SharedSession;

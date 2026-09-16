@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const RUNNER = resolve('scripts/gpu-runners/longcat-runner.py');
 const LOWMEM_UNIT = resolve('tests/gpu-worker/longcat-lowmem-unit.py');
 const SETUP = resolve('scripts/gpu-runners/setup-longcat-env.sh');
-const DARKSTAR_START = resolve('scripts/gpu-runners/start-darkstar-worker.ps1');
+const GPU_NODE_START = resolve('scripts/gpu-runners/start-gpuNode-worker.ps1');
 const created: string[] = [];
 
 async function git(...args: string[]): Promise<string> {
@@ -60,10 +60,10 @@ describe('LongCat GPU runner hardening', () => {
     expect(setup).toContain('quantize_(linear, int8_weight_only())');
   });
 
-  it('keeps the Darkstar readiness gate aligned with runner version 2', async () => {
+  it('keeps the GPU node readiness gate aligned with runner version 2', async () => {
     const [runner, launcher] = await Promise.all([
       readFile(RUNNER, 'utf8'),
-      readFile(DARKSTAR_START, 'utf8'),
+      readFile(GPU_NODE_START, 'utf8'),
     ]);
     expect(runner).toContain('RUNNER_VERSION = "2"');
     expect(launcher).toContain("$longcatReady.runnerVersion -ne '2'");
@@ -139,7 +139,8 @@ describe('LongCat GPU runner hardening', () => {
     expect(() => globalThis.process.kill(childPid, 0)).toThrow();
   });
 
-  it('fails closed and kills inference after two over-temperature samples', async () => {
+  // The thermal stop also uses os.killpg/SIGKILL, unavailable on Windows.
+  it.skipIf(process.platform === 'win32')('fails closed and kills inference after two over-temperature samples', async () => {
     const code = [
       'import importlib.util, pathlib, sys, time',
       'spec = importlib.util.spec_from_file_location("longcat_runner", pathlib.Path(sys.argv[1]))',

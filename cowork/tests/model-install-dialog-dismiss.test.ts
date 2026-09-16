@@ -8,10 +8,11 @@ const modelInstallDialogPath = path.resolve(
 );
 
 describe('ModelInstallDialog dismissal', () => {
-  it('lets users close the missing-model prompt for the current session', () => {
+  it('does not auto-open on first run when the face model is missing', () => {
     const source = fs.readFileSync(modelInstallDialogPath, 'utf8');
-    expect(source).toContain('dismissedForSession');
-    expect(source).toContain('installed === false && !showModelInstallDialog && dismissedForSession');
+    expect(source).toContain('if (!showModelInstallDialog)');
+    expect(source).toContain('return null;');
+    expect(source).not.toContain('installed === false && !showModelInstallDialog && dismissedForSession');
     expect(source).toContain('setDismissedForSession(true)');
     expect(source).toContain('data-testid="model-install-dialog"');
     expect(source).toContain('data-testid="model-install-close"');

@@ -30,6 +30,7 @@ import * as path from 'path';
 import * as os from 'os';
 import open from 'open';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** OpenAI's public OAuth client id for the Codex CLI. Not a secret —
  *  identifies the application to the IdP, paired with PKCE for security.
@@ -66,6 +67,7 @@ const TOKEN_REFRESH_AGE_MS = 60 * 60 * 1000; // 1 hour
 let refreshAuthInFlight: Promise<ChatGptAuth | null> | null = null;
 
 const AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
+const CODEX_CLI_AUTH_PATH = path.join(os.homedir(), '.codex', 'auth.json');
 
 /** Token bundle returned by `https://auth.openai.com/oauth/token`. */
 interface OauthTokens {
@@ -102,18 +104,15 @@ export interface ChatGptAuth {
 // Storage
 // ─────────────────────────────────────────────────────────────────────
 
-function ensureConfigDir(): void {
-  const dir = path.dirname(AUTH_FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
 function loadAuthFile(): CodexAuthDotJson | null {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return null;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8');
-    return JSON.parse(raw) as CodexAuthDotJson;
+    const primary = readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
+    if (primary?.tokens?.access_token) return primary;
+    if (fs.existsSync(CODEX_CLI_AUTH_PATH)) {
+      const fallback = readJsonAtomicSync<CodexAuthDotJson | null>(CODEX_CLI_AUTH_PATH, null);
+      if (fallback?.tokens?.access_token) return fallback;
+    }
+    return primary;
   } catch (err) {
     logger.error('Error reading codex-auth.json', err instanceof Error ? err : { error: String(err) });
     return null;
@@ -122,16 +121,13 @@ function loadAuthFile(): CodexAuthDotJson | null {
 
 function saveAuthFile(auth: CodexAuthDotJson): void {
   try {
-    ensureConfigDir();
-    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(auth, null, 2), 'utf-8');
-    // Restrict permissions on Unix (0o600 = owner read/write only).
-    if (process.platform !== 'win32') {
-      try {
-        fs.chmodSync(AUTH_FILE_PATH, 0o600);
-      } catch { /* non-fatal */ }
-    }
-  } catch (err) {
-    logger.error('Error writing codex-auth.json', err instanceof Error ? err : { error: String(err) });
+    writeJsonAtomicSync(AUTH_FILE_PATH, auth, { mode: 0o600 });
+  } catch {
+    // A successful exchange is not a successful login until tokens survive
+    // a restart. Never return freshly rotated tokens as if they were saved.
+    throw new Error(
+      'Could not save ChatGPT credentials. Check file permissions and available disk space, then run `buddy login` again.',
+    );
   }
 }
 
@@ -150,11 +146,13 @@ export function clearCodexCredentials(): void {
  *  provider auto-detection (no token loading, just file presence). */
 export function hasCodexCredentials(): boolean {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return false;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8').trim();
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as CodexAuthDotJson;
-    return Boolean(parsed.tokens?.access_token);
+    const parsed = readJsonAtomicSync<CodexAuthDotJson | null>(AUTH_FILE_PATH, null);
+    if (parsed?.tokens?.access_token) return true;
+    if (fs.existsSync(CODEX_CLI_AUTH_PATH)) {
+      const fallback = readJsonAtomicSync<CodexAuthDotJson | null>(CODEX_CLI_AUTH_PATH, null);
+      return Boolean(fallback?.tokens?.access_token);
+    }
+    return false;
   } catch {
     return false;
   }
@@ -467,8 +465,10 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
     let serverInstance: http.Server | null = null;
     let timeoutHandle: NodeJS.Timeout | null = null;
     let actualPort = CALLBACK_PORT;
+    let finished = false;
 
     const cleanup = () => {
+      finished = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (serverInstance) {
         try { serverInstance.close(); } catch { /* ignore */ }
@@ -520,6 +520,13 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
 
         const redirectUri = `http://localhost:${actualPort}/auth/callback`;
         const tokens = await exchangeCodeForTokens(code, pkce.code_verifier, redirectUri);
+        if (finished) {
+          // Cancellation/timeout may happen while the issuer is responding.
+          // A late response must not replace credentials after the UI has ended.
+          res.writeHead(410, { 'Content-Type': 'text/plain' });
+          res.end('Login is no longer active. Run buddy login again.');
+          return;
+        }
 
         const authFile: CodexAuthDotJson = {
           tokens,
@@ -556,25 +563,28 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
           reject(new Error('Login timed out after 5 minutes'));
         }, 5 * 60 * 1000);
 
-        // Open the browser. If it fails, log the URL so the user can
-        // copy-paste manually.
+        const failOpen = (detail?: unknown) => {
+          cleanup();
+          const reason = detail instanceof Error ? detail.message : '';
+          reject(new Error(
+            `Couldn't open a browser${reason ? ` (${reason})` : ''}. `
+            + 'ChatGPT login needs a browser. Use `buddy onboard` for a local model.',
+          ));
+        };
+
+        // Open the browser. If that fails, reject immediately — waiting
+        // five minutes for a callback that cannot arrive is a hang.
         if (openUrl) {
           try {
             const res = openUrl(authUrl);
             if (res instanceof Promise) {
-              res.catch(() => {
-                console.error(`Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`);
-              });
+              res.catch(failOpen);
             }
-          } catch {
-            console.error(`Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`);
+          } catch (err) {
+            failOpen(err);
           }
         } else {
-          open(authUrl).catch(() => {
-            console.error(
-              `Couldn't auto-open the browser. Open this URL manually:\n${authUrl}`
-            );
-          });
+          open(authUrl).catch(failOpen);
         }
       })
       .catch(reject);

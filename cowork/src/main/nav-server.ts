@@ -14,8 +14,8 @@ import * as http from 'http';
 import { URL } from 'url';
 import { BrowserWindow } from 'electron';
 import { log, logError, logWarn } from './utils/logger';
+import { listenOnFreePort, NAV_PORT } from './nav-server-bind';
 
-const PORT = 19888;
 const HOST = '127.0.0.1';
 const EXEC_TIMEOUT_MS = 3000;
 const VALID_TABS = new Set([
@@ -97,7 +97,7 @@ export function startNavServer(getMainWindow: () => BrowserWindow | null): void 
 
   server = http.createServer(async (req, res) => {
     try {
-      const url = new URL(req.url || '/', `http://${HOST}:${PORT}`);
+      const url = new URL(req.url || '/', `http://${HOST}:${NAV_PORT}`);
       const pathname = url.pathname;
 
       if (!isTrustedBrowserRequest(req)) {
@@ -199,21 +199,24 @@ export function startNavServer(getMainWindow: () => BrowserWindow | null): void 
     }
   });
 
-  server.listen(PORT, HOST, () => {
-    log(`[NavServer] Listening on http://${HOST}:${PORT}`);
-  });
-
   // Don't let the server prevent app exit
   server.unref();
 
-  server.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') {
-      logWarn(`[NavServer] Port ${PORT} already in use, skipping`);
-    } else {
-      logError('[NavServer] Failed to start:', err);
-    }
-    server = null;
-  });
+  void listenOnFreePort(server, HOST)
+    .then((port) => {
+      if (port !== NAV_PORT) {
+        logWarn(`[NavServer] Port ${NAV_PORT} already in use, listening on ${port}`);
+      }
+      log(`[NavServer] Listening on http://${HOST}:${port}`);
+    })
+    .catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        logWarn(`[NavServer] Port ${NAV_PORT} already in use, skipping`);
+      } else {
+        logError('[NavServer] Failed to start:', err);
+      }
+      server = null;
+    });
 }
 
 export function stopNavServer(): void {

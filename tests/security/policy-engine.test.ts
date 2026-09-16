@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { PolicyEngine } from '../../src/security/policy-engine.js';
+import { PolicyEngine, type Capability } from '../../src/security/policy-engine.js';
 
 describe('PolicyEngine', () => {
   let policyEngine: PolicyEngine;
@@ -89,9 +89,32 @@ describe('PolicyEngine', () => {
     expect(policyEngine.evaluate({ capability: 'peer:invoke', risk: 'low' }).decision).toBe('needs_approval');
   });
 
+  it('allows only the pre-authorized read-only peer tool profile in headless mode', () => {
+    expect(policyEngine.evaluate({
+      capability: 'peer:invoke',
+      risk: 'low',
+      detail: {
+        fleetSafe: true,
+        readOnly: true,
+        scopeAuthorized: true,
+        workspaceRestricted: true,
+      },
+    }).decision).toBe('allow');
+    expect(policyEngine.evaluate({
+      capability: 'peer:invoke',
+      risk: 'low',
+      detail: {
+        fleetSafe: true,
+        readOnly: false,
+        scopeAuthorized: true,
+        workspaceRestricted: true,
+      },
+    }).decision).toBe('needs_approval');
+  });
+
   it('should evaluate unknown capabilities as needs_approval', () => {
     const result = policyEngine.evaluate({
-      capability: 'fs:delete-system' as any,
+      capability: 'fs:delete-system' as Capability,
       risk: 'high',
     });
     expect(result.decision).toBe('needs_approval');
@@ -124,5 +147,27 @@ describe('PolicyEngine', () => {
       detail: { command: 'npm run deploy' },
     });
     expect(resultDeploy.decision).toBe('needs_approval');
+  });
+
+  it('does not mistake a workspace or worktree path containing "release" or "prod" for a deployment command', () => {
+    const result = policyEngine.evaluate({
+      capability: 'shell:safe',
+      risk: 'low',
+      detail: {
+        command: 'cat README.md',
+        path: '/home/user/DEV/cb-release-audit-2026-09-06',
+      },
+    });
+    expect(result.decision).toBe('allow');
+
+    const resultProd = policyEngine.evaluate({
+      capability: 'shell:safe',
+      risk: 'low',
+      detail: {
+        command: 'git status',
+        path: '/workspace/prod-deploy-branch',
+      },
+    });
+    expect(resultProd.decision).toBe('allow');
   });
 });

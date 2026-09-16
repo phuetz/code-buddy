@@ -99,6 +99,7 @@ export class WorktreeSessionManager {
 
     try {
       execSync(`git worktree remove "${session.worktreePath}" --force`, {
+        cwd: session.worktreePath,
         stdio: 'pipe',
       });
     } catch {

@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as os from 'os';
 import semver from 'semver';
 import { EventEmitter } from 'events';
+import { writeJsonAtomic } from '../utils/atomic-write.js';
 
 export interface VersionInfo {
   version: string;
@@ -263,7 +264,7 @@ export class VersionDetector extends EventEmitter {
       metadata,
     };
 
-    await fs.writeJson(versionPath, data, { spaces: 2 });
+    await writeJsonAtomic(versionPath, data, { mode: 0o600 });
 
     this.cachedVersions.set('stored', {
       version,

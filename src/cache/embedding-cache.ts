@@ -17,6 +17,7 @@ import * as fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -414,16 +415,13 @@ export class EmbeddingCache extends EventEmitter {
           embedding: e.embedding,
         }));
 
-      await fs.writeFile(
-        this.config.cachePath,
-        JSON.stringify({
+      await writeJsonAtomic(this.config.cachePath, {
           version: 1,
           dimension: this.config.dimension,
           model: this.config.modelName,
           entries: entries.slice(0, this.config.maxEntries),
           stats: this.stats,
-        })
-      );
+      });
 
       this.pendingSave = [];
       logger.debug(`Saved ${entries.length} embeddings to cache`);
@@ -440,8 +438,8 @@ export class EmbeddingCache extends EventEmitter {
 
     (async () => {
       try {
-        const content = await fs.readFile(this.config.cachePath, 'utf-8');
-        const data = JSON.parse(content);
+        const data = await readJsonAtomic<Record<string, unknown> | null>(this.config.cachePath, null);
+        if (!data) return;
 
         // Validate version and dimension
         if (data.version !== 1 || data.dimension !== this.config.dimension) {

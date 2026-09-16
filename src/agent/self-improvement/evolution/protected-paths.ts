@@ -31,8 +31,14 @@ export const PROTECTED_GLOBS: readonly string[] = [
   'src/agent/self-improvement/paired-runner.ts',
   'src/agent/self-improvement/tool-proposer.ts',
   'src/agent/self-improvement/self-knowledge.ts',
+  // Application receipts and replay must not be rewritten by a scored candidate.
+  'src/agent/self-improvement/skill-apply-journal.ts',
+  'src/agent/self-improvement/skill-engine.ts',
+  'src/agent/self-improvement/evolutionary-archive.ts',
   // Security scanners the skill firewall relies on
   'src/security/skill-scanner.ts',
+  'src/security/compute-confinement.ts',
+  'src/agent/self-improvement/authored-tool-runtime.ts',
   'src/security/dangerous-patterns.ts',
   // Tests that verify the gates / self-improvement (used by the fitness unit-tests component)
   'tests/agent/self-improvement/**',

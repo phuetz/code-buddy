@@ -17,6 +17,8 @@ import type {
 import { executePeerDelegate } from '../peer-delegate-tool.js';
 import { executePeerChain } from '../peer-chain-tool.js';
 import { executeListPeers } from '../list-peers-tool.js';
+import { executeFleetRoom, fleetRoomInputSchema } from '../fleet-room-tool.js';
+import { FLEET_ROOM_TOOL_DEF } from '../../codebuddy/fleet-tool-defs.js';
 import { executeRoutePeer } from '../route-peer-tool.js';
 import {
   FLEET_DISPATCH_PROFILES,
@@ -538,8 +540,28 @@ export class PeerChainTool implements ITool {
   }
 }
 
+export class FleetRoomTool implements ITool {
+  readonly name = 'fleet_room';
+  readonly description = FLEET_ROOM_TOOL_DEF.function.description;
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    return executeFleetRoom(input);
+  }
+  getSchema(): ToolSchema {
+    return { name: this.name, description: this.description, parameters: FLEET_ROOM_TOOL_DEF.function.parameters as ToolSchema['parameters'] };
+  }
+  validate(input: unknown): IValidationResult {
+    return fleetRoomInputSchema.safeParse(input).success
+      ? { valid: true }
+      : { valid: false, errors: ['Invalid fleet_room action or arguments; destination and identity cannot be overridden.'] };
+  }
+  getMetadata(): IToolMetadata {
+    return { name: this.name, description: this.description, category: 'utility', keywords: ['fleet', 'room', 'salon', 'message', 'coordination', 'history', 'robot'], priority: 7, modifiesFiles: false, makesNetworkRequests: true, effect: 'emission', fleetSafe: false, requiresConfirmation: true };
+  }
+  isAvailable(): boolean { return true; }
+}
+
 export function createFleetTools(): ITool[] {
-  return [new PeerDelegateTool(), new PeerChainTool(), new ListPeersTool(), new RoutePeerTool()];
+  return [new PeerDelegateTool(), new PeerChainTool(), new ListPeersTool(), new RoutePeerTool(), new FleetRoomTool()];
 }
 
 export function resetFleetToolInstances(): void {

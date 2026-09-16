@@ -31,7 +31,7 @@ Configuration minimale :
 ```bash
 CODEBUDDY_IMAGE_PROVIDER=comfyui
 COMFYUI_URL=http://127.0.0.1:8188
-CODEBUDDY_COMFYUI_INPAINT_WORKFLOW=/home/patrice/.codebuddy/comfyui/inpaint-api.json
+CODEBUDDY_COMFYUI_INPAINT_WORKFLOW=~/.codebuddy/comfyui/inpaint-api.json
 ```
 
 Le bundle utilise des liaisons explicites, par exemple :

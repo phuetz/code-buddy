@@ -4,22 +4,37 @@
  */
 
 import { vi } from 'vitest';
+import path from 'path';
 import SessionReplayManager, {
   getSessionReplayManager,
   ReplaySession,
 } from '../../src/advanced/session-replay';
 
+const { mockEnsureDir, mockWriteJson, mockReadJson, mockReaddir, mockPathExists } = vi.hoisted(() => ({
+  mockEnsureDir: vi.fn().mockResolvedValue(undefined),
+  mockWriteJson: vi.fn().mockResolvedValue(undefined),
+  mockReadJson: vi.fn(),
+  mockReaddir: vi.fn(),
+  mockPathExists: vi.fn(),
+}));
+
 // Mock fs-extra
 jest.mock('fs-extra', () => {
   const impl = {
-  ensureDir: jest.fn().mockResolvedValue(undefined),
-  writeJson: jest.fn().mockResolvedValue(undefined),
-  readJson: jest.fn(),
-  readdir: jest.fn(),
-  pathExists: jest.fn(),
+  ensureDir: mockEnsureDir,
+  writeJson: mockWriteJson,
+  readJson: mockReadJson,
+  readdir: mockReaddir,
+  pathExists: mockPathExists,
 };
   return { ...impl, default: impl };
 });
+
+// Session payloads moved to the MEM1 atomic persistence seam.
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomic: mockReadJson,
+  writeJsonAtomic: mockWriteJson,
+}));
 
 // Mock crypto
 jest.mock('crypto', () => {
@@ -228,16 +243,29 @@ describe('SessionReplayManager', () => {
           id: 'test123',
           name: 'Test Session',
           startTime: new Date(),
-          events: [],
+          events: [
+            { id: 'evt-1', timestamp: 1, type: 'input', data: { text: 'bonjour' }, hash: 'aaaa1111' },
+            { id: 'evt-2', timestamp: 2, type: 'output', data: { text: 'salut' }, hash: 'bbbb2222' },
+          ],
           metadata: mockMetadata,
         };
 
         const filePath = await manager.saveSession(session);
 
+        // VERIF3 T7 : un `toHaveBeenCalled()` nu laissait passer un chemin
+        // suffixé, une session dont les événements sont vidés et un mode
+        // dégradé en 0o644.
         expect(mockFs.ensureDir).toHaveBeenCalledWith('.codebuddy/replays');
-        expect(mockFs.writeJson).toHaveBeenCalled();
-        expect(filePath).toContain('test123');
-        expect(filePath).toContain('Test-Session');
+
+        const expectedPath = path.join('.codebuddy/replays', 'test123-Test-Session.json');
+        expect(filePath).toBe(expectedPath);
+        expect(mockWriteJson).toHaveBeenCalledTimes(1);
+        expect(mockWriteJson).toHaveBeenCalledWith(expectedPath, session, { mode: 0o600 });
+
+        const [, persisted] = mockWriteJson.mock.calls[0]!;
+        expect(persisted.events).toHaveLength(2);
+        expect(persisted.events[0]).toEqual(session.events[0]);
+        expect(persisted.metadata).toEqual(mockMetadata);
       });
 
       it('should sanitize session name for filename', async () => {

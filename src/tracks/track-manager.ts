@@ -20,6 +20,7 @@ import {
   TrackListOptions,
   ProjectContext
 } from './types';
+import { writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 export class TrackManager {
   private workingDirectory: string;
@@ -56,14 +57,14 @@ export class TrackManager {
     for (const file of defaultFiles) {
       const filePath = path.join(this.contextDir, file.name);
       if (!await fs.pathExists(filePath)) {
-        await fs.writeFile(filePath, file.content);
+        await writeFileAtomic(filePath, file.content, { mode: 0o600 });
       }
     }
 
     // Create tracks index file
     const tracksIndexPath = path.join(this.codeBuddyDir, 'tracks.md');
     if (!await fs.pathExists(tracksIndexPath)) {
-      await fs.writeFile(tracksIndexPath, this.getTracksIndexTemplate());
+      await writeFileAtomic(tracksIndexPath, this.getTracksIndexTemplate(), { mode: 0o600 });
     }
   }
 
@@ -346,7 +347,7 @@ export class TrackManager {
   ): Promise<void> {
     await fs.ensureDir(this.contextDir);
     const filePath = path.join(this.contextDir, `${file}.md`);
-    await fs.writeFile(filePath, content);
+    await writeFileAtomic(filePath, content, { mode: 0o600 });
   }
 
   /**
@@ -375,7 +376,7 @@ export class TrackManager {
 
   private async saveTrackMetadata(trackId: string, metadata: TrackMetadata): Promise<void> {
     const filePath = path.join(this.tracksDir, trackId, 'metadata.json');
-    await fs.writeJson(filePath, metadata, { spaces: 2 });
+    await writeJsonAtomic(filePath, metadata, { mode: 0o600 });
   }
 
   private async loadTrackMetadata(trackId: string): Promise<TrackMetadata | null> {
@@ -387,7 +388,7 @@ export class TrackManager {
   private async saveTrackSpec(trackId: string, spec: TrackSpec): Promise<void> {
     const filePath = path.join(this.tracksDir, trackId, 'spec.md');
     const content = this.specToMarkdown(spec);
-    await fs.writeFile(filePath, content);
+    await writeFileAtomic(filePath, content, { mode: 0o600 });
   }
 
   private async loadTrackSpec(trackId: string): Promise<TrackSpec> {
@@ -402,7 +403,7 @@ export class TrackManager {
   private async saveTrackPlan(trackId: string, plan: TrackPlan): Promise<void> {
     const filePath = path.join(this.tracksDir, trackId, 'plan.md');
     const content = this.planToMarkdown(plan);
-    await fs.writeFile(filePath, content);
+    await writeFileAtomic(filePath, content, { mode: 0o600 });
   }
 
   private async loadTrackPlan(trackId: string): Promise<TrackPlan> {
@@ -668,14 +669,14 @@ export class TrackManager {
       filteredLines.splice(tableHeaderIndex + 2, 0, entry);
     }
 
-    await fs.writeFile(indexPath, filteredLines.join('\n'));
+    await writeFileAtomic(indexPath, filteredLines.join('\n'), { mode: 0o600 });
   }
 
   private async removeFromTracksIndex(trackId: string): Promise<void> {
     const indexPath = path.join(this.codeBuddyDir, 'tracks.md');
     const content = await fs.readFile(indexPath, 'utf-8').catch(() => '');
     const lines = content.split('\n').filter(line => !line.includes(`tracks/${trackId}/`));
-    await fs.writeFile(indexPath, lines.join('\n'));
+    await writeFileAtomic(indexPath, lines.join('\n'), { mode: 0o600 });
   }
 
   private getStatusEmoji(status: TrackStatus): string {

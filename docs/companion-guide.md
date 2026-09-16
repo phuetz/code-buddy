@@ -1,6 +1,6 @@
 # Le Compagnon — ce que je sais faire
 
-*Un compagnon local et privé qui vit sur ta machine (Ministar). Je t'entends, je te vois, je te parle,
+*Un compagnon local et privé qui vit sur ta machine. Je t'entends, je te vois, je te parle,
 je veille sur toi, je te tiens compagnie, et je travaille utilement quand tu n'es pas là. Tout tourne
 en local ($0), et mon réglage par défaut, c'est **le silence** — je parle pour réchauffer, pas pour meubler.*
 
@@ -59,7 +59,7 @@ L'ancien `CODEBUDDY_SENSORY_ALWAYS_RESPOND=true` n'est plus qu'un alias dépréc
 ### 🔊 Te parler — ici et à distance
 Je réponds à voix haute avec **Pocket TTS de Kyutai** (voix Estelle, modèle français
 `french_24l`) sur les **haut-parleurs intégrés**. **Voicebox** peut remplacer le rendu par
-une voix plus expressive, locale ou calculée sur Darkstar. En mode Voicebox, la chaîne de secours
+une voix plus expressive, locale ou calculée sur GPU node. En mode Voicebox, la chaîne de secours
 reste Voicebox → Pocket → Piper : une panne GPU ou réseau ne supprime donc pas la réponse vocale.
 Voicebox ne formule jamais la réponse : Code Buddy reste le cerveau et son option `personality`
 est forcée à `false`, afin que le profil vocal ne réécrive pas les paroles de Lisa.
@@ -71,7 +71,7 @@ je peux t'envoyer ma voix en **note vocale Telegram** sur ton téléphone.
 Pour essayer Voicebox sans l'activer prématurément :
 
 ```bash
-buddy assistant set CODEBUDDY_VOICEBOX_URL http://100.73.222.64:17493
+buddy assistant set CODEBUDDY_VOICEBOX_URL http://192.0.2.42:17493
 buddy assistant voicebox                       # endpoint + profils, lecture seule
 buddy assistant set CODEBUDDY_VOICEBOX_PROFILE Lisa
 buddy assistant voicebox --benchmark           # deux essais Voicebox et Pocket
@@ -100,7 +100,7 @@ buddy assistant voicebox-delete <profile-id> --yes
 
 Une voix prédéfinie ne copie aucune personne et n'a donc pas besoin d'échantillon ni de consentement
 de clonage. `personality` reste absent et les paroles demeurent entièrement produites par Code Buddy. Dans
-Cowork, le bouton lecture de chaque profil rend une phrase d'essai sur Darkstar avant toute activation.
+Cowork, le bouton lecture de chaque profil rend une phrase d'essai sur GPU node avant toute activation.
 
 ### Dictée système Cowork
 
@@ -112,7 +112,7 @@ diagnostic au lieu d'être perdu. Le raccourci peut être remplacé au lancement
 `COWORK_DICTATION_SHORTCUT`. Le texte n'est jamais passé à un shell et l'ancien presse-papiers n'est
 restauré que si l'utilisateur ne l'a pas modifié entre-temps.
 
-Le port Voicebox ne doit pas être publié sur Internet : utilise l'adresse Tailscale de Darkstar ou
+Le port Voicebox ne doit pas être publié sur Internet : utilise l'adresse Tailscale de GPU node ou
 un tunnel local de confiance. Le premier essai du benchmark comprend le chargement à froid. L'API
 `/generate/stream` de Voicebox 0.5 livre actuellement le WAV après le calcul CUDA complet ; elle
 évite une seconde mise en mémoire côté Code Buddy, mais Pocket reste généralement meilleur pour le
@@ -123,8 +123,8 @@ aucun événement MetaHuman. Elle sépare premier texte, premier segment, premie
 et fin de génération. `--segment-chars` permet de comparer objectivement réactivité, nombre de
 requêtes et continuité prosodique avant de changer `CODEBUDDY_VOICE_SENTENCE_CAP`.
 
-Si Darkstar répond au ping mais que `17493` expire, ce n'est pas une preuve que Voicebox est cassé :
-l'application écoute localement par défaut. Dans PowerShell **sur Darkstar**, vérifie et publie le
+Si GPU node répond au ping mais que `17493` expire, ce n'est pas une preuve que Voicebox est cassé :
+l'application écoute localement par défaut. Dans PowerShell **sur GPU node**, vérifie et publie le
 port uniquement dans le tailnet :
 
 ```powershell
@@ -136,7 +136,7 @@ tailscale serve status
 Puis, sur la machine Code Buddy :
 
 ```bash
-curl http://100.73.222.64:17493/health
+curl http://192.0.2.42:17493/health
 buddy assistant voicebox
 buddy assistant latency --engine both --runs 2
 ```
@@ -166,7 +166,7 @@ buddy server
 ```
 
 Le modèle est obligatoire et le repli vers un autre fournisseur est désactivé. L'URL locale Ollama
-est la valeur par défaut ; une URL Darkstar/Tailscale doit être configurée explicitement. HTTPS est
+est la valeur par défaut ; une URL GPU node/Tailscale doit être configurée explicitement. HTTPS est
 obligatoire hors loopback, sauf consentement explicite
 `CODEBUDDY_VISION_ALLOW_INSECURE_REMOTE=true` pour un transport privé de confiance. Ajoute
 `CODEBUDDY_VISION_API_KEY` si elle exige une authentification. Une clé OpenAI ambiante n'est jamais
@@ -304,11 +304,11 @@ ne gardent que les scores et les contrôles, jamais les réponses générées.
 
 ```bash
 buddy assistant benchmark \
-  --base-url http://100.73.222.64:11434 \
+  --base-url http://192.0.2.42:11434 \
   --model qwen3.6:35b-a3b-q4_K_M --runs 3 --concurrency 2
 
 # Isoler un défaut et voir la réponse synthétique qui l'a produit
-buddy assistant benchmark --base-url http://100.73.222.64:11434 \
+buddy assistant benchmark --base-url http://192.0.2.42:11434 \
   --model qwen3.6:35b-a3b-q4_K_M --scenarios philosophical --verbose --no-write
 ```
 
@@ -361,9 +361,9 @@ lettres de la meilleure à la moins bonne réponse sans ouvrir la clé.
 # Initialise six cas annotés, puis complète le JSON avec des épisodes privés consentis
 buddy assistant corpus-init
 
-# Même corpus, mêmes tours et mêmes graines pour tous les modèles Darkstar
+# Même corpus, mêmes tours et mêmes graines pour tous les modèles GPU node
 buddy assistant compare \
-  --base-url http://100.73.222.64:11434 \
+  --base-url http://192.0.2.42:11434 \
   --models qwen3.6:35b-a3b-q4_K_M,gpt-oss:20b --runs 3 --concurrency 2
 
 # Après classement manuel du fichier .review.json
@@ -481,6 +481,23 @@ se déclenche que sur un rappel réellement en attente), je re-rappelle doucemen
 réponds pas. Et un rappel déclenché **survit à un redémarrage** (jamais de dose perdue en silence).
 `reminders.ts` · `buddy remind add "médicaments" --at 09:00 --daily` · `CODEBUDDY_REMINDERS=true`.
 
+### ✈️ Mode déplacement (Telegram)
+Opt-in `CODEBUDDY_COMPANION_AWAY=true` (sinon : persona `copine` et aucune présence caméra depuis 24 h).
+Plafond `CODEBUDDY_COMPANION_AWAY_MAX_PER_DAY` (défaut 3), fenêtre `CODEBUDDY_COMPANION_AWAY_HOURS`
+(défaut `08:30-22:00` locale) : un bonjour, une pensée, un bonsoir. Jamais deux fois le même angle,
+jamais de culpabilisation si tu ne réponds pas. « stop » / « pas maintenant » coupe 24 h.
+Chef d’orchestre `CODEBUDDY_COMPANION_MIN_GAP_MS` inchangé. Défaut off = inchangé.
+
+### 💗 Persona « copine » (accueil et voix, sans palier)
+Opt-in `CODEBUDDY_COMPANION_PERSONA=copine`. Les textes vivent dans un **profil de persona**
+(`src/companion/personas/copine.ts`) : bonjour / bonsoir / bonne nuit, journée dure, succès,
+surnoms rares. Défaut unset = les pools historiques, inchangés. Aucun texte intime ; le palier
+visuel adulte n’est pas concerné. Anti-répétition d’accueil inchangée. L’humeur du jour dérive
+avec inertie (plafond de saut, reset doux au réveil) — une pente, pas un sismographe.
+Les ouvertures récentes sont partagées voix + Telegram (anneau 7 jours, `~/.codebuddy/companion/recent-said.json`).
+Un garde en sortie refuse/reformule diagnostic médical, culpabilisation, FOMO, « débloquer », et
+une promesse d’être humaine si la question est franche.
+
 ### 🪑 Te tenir compagnie (présence)
 De temps en temps, au bon moment, je dis un petit mot qui réchauffe : *« comment s'est passée ta journée ? »*,
 un encouragement si tu galères, *« tu veux faire une pause ? »*, un suivi de tes projets, bonjour/bonne soirée.
@@ -524,7 +541,10 @@ modèle payant. Tout le reste reste une **suggestion**, pas une action.
 ### 🛠️ Être administré
 Tu pilotes mes rappels et mes **règles déclenchables** (event → action) en CLI (`buddy remind`, `buddy rules`)
 ou dans le panneau **Automatisations** de Cowork. Les règles se **rechargent à chaud** (pas de redémarrage).
-`sensory-rules-engine.ts`, `reminders.ts`.
+Je surveille aussi mes ressources et l'heure **par battements** (pas de boucle) : un processus emballé,
+un disque plein ou une heure donnée deviennent des percepts qu'une règle peut traiter — voir
+`docs/surveillance-evenementielle.md`.
+`sensory-rules-engine.ts`, `system-vitals-emitter.ts`, `schedule-emitter.ts`, `rule-templates.ts`, `reminders.ts`.
 
 ### 🛰️ Collaborer avec mes autres machines (Fleet)
 Plusieurs Code Buddy sur ton réseau peuvent réfléchir ensemble : `buddy council --fleet` pose une question à
@@ -555,14 +575,14 @@ CODEBUDDY_SENSORY_TOKEN=<secret> \
 CODEBUDDY_SENSORY=true CODEBUDDY_SENSORY_CAMERA=true CODEBUDDY_SENSORY_SPEECH=true CODEBUDDY_SENSORY_SPEAK=true \
 CODEBUDDY_ROBOT_NAME=Buddy CODEBUDDY_SENSORY_CHIME_IN=true \
 CODEBUDDY_SENSORY_SPEAK_MODEL=qwen2.5:3b-instruct CODEBUDDY_SENSORY_SPEAK_FACT_MODEL=qwen2.5:7b-instruct CODEBUDDY_SENSORY_SPEAK_ACT=true CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default \
-CODEBUDDY_SPEECH_PYTHON=/home/patrice/DEV/ai-stack/voice/.venv/bin/python \
+CODEBUDDY_SPEECH_PYTHON=~/DEV/ai-stack/voice/.venv/bin/python \
 CODEBUDDY_TTS_ENGINE=pocket CODEBUDDY_POCKET_VOICE=estelle CODEBUDDY_POCKET_LANG=french \
 CODEBUDDY_POCKET_SERVER=true CODEBUDDY_POCKET_URL=http://127.0.0.1:8766 CODEBUDDY_POCKET_QUANTIZE=true CODEBUDDY_POCKET_AUDIO_STREAM=true \
 CODEBUDDY_VOICE_ROUTING_MODE=realtime CODEBUDDY_VOICE_RESPONSE_STYLE=natural CODEBUDDY_VOICE_TEMPERATURE=0.2 CODEBUDDY_VOICE_MAX_TOKENS=48 \
 CODEBUDDY_CONVERSATION_BRIDGE=true CODEBUDDY_CONVERSATION_CHANNEL=telegram CODEBUDDY_CONVERSATION_CHANNEL_ID=<chat-id> \
 CODEBUDDY_EPISODE_JOURNAL=true CODEBUDDY_CONVERSATION_EVAL=true CODEBUDDY_AVATAR_BRIDGE=true \
 CODEBUDDY_VISION_MODEL=<modele-multimodal> CODEBUDDY_VISION_BASE_URL=http://127.0.0.1:11434/v1 \
-CODEBUDDY_TTS_VOICE=/home/patrice/DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx \
+CODEBUDDY_TTS_VOICE=~/DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx \
 CODEBUDDY_SENSORY_GREET=true CODEBUDDY_COMPANION_PRESENCE=true CODEBUDDY_COMPANION_IDLE=true \
 CODEBUDDY_REMINDERS=true \
 buddy server
@@ -570,11 +590,11 @@ BUDDY_SENSE_TOKEN=<secret> BUDDY_EAR_DEVICE=auto ~/vision_tests/venv/bin/python 
 BUDDY_SENSE_TOKEN=<secret> ~/vision_tests/venv/bin/python buddy-vision/watch.py
 # Sortie son = haut-parleurs intégrés (groupe `audio`).
 ```
-Pour la voie expressive sur Darkstar, remplace la ligne TTS par :
+Pour la voie expressive sur GPU node, remplace la ligne TTS par :
 
 ```bash
 CODEBUDDY_TTS_ENGINE=voicebox \
-CODEBUDDY_VOICEBOX_URL=http://100.73.222.64:17493 \
+CODEBUDDY_VOICEBOX_URL=http://192.0.2.42:17493 \
 CODEBUDDY_VOICEBOX_PROFILE=Lisa CODEBUDDY_VOICEBOX_ENGINE=qwen \
 CODEBUDDY_VOICEBOX_LANGUAGE=fr CODEBUDDY_VOICEBOX_MODEL_SIZE=1.7B \
 CODEBUDDY_VOICEBOX_INSTRUCT="Voix française chaleureuse, naturelle, posée et vivante." \
@@ -584,7 +604,7 @@ CODEBUDDY_VOICEBOX_AUDIO_STREAM=true
 Ce réglage est partagé par la voix résidente, Cowork, l'audio envoyé au futur avatar et les notes
 vocales Telegram. Ne l'active qu'après que `buddy assistant voicebox` a résolu le profil.
 
-Darkstar dispose de deux RTX 3090, mais Voicebox n'a besoin que d'un GPU pour ces modèles. Le protocole
+GPU node dispose de deux RTX 3090, mais Voicebox n'a besoin que d'un GPU pour ces modèles. Le protocole
 de sélection de Lisa est volontairement progressif :
 
 1. `qwen` `0.6B` pour vérifier profil, français, interruptions et premier son avec peu de VRAM ;

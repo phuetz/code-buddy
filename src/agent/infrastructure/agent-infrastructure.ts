@@ -603,6 +603,7 @@ export function createAgentInfrastructureSync(
     model: string;
     baseURL?: string;
     maxContextTokens?: number;
+    workingDirectory?: string;
   },
   config: AgentInfrastructureConfig = {}
 ): AgentInfrastructure {
@@ -612,7 +613,7 @@ export function createAgentInfrastructureSync(
   const deps: AgentInfrastructureDeps = {
     container,
     tokenCounter: createTokenCounter(options.model),
-    contextManager: createContextManager(options.model, options.maxContextTokens),
+    contextManager: createContextManager(options.model, options.maxContextTokens, options.workingDirectory),
     modeManager: getAgentModeManager(),
     sandboxManager: getSandboxManager(),
     mcpClient: getMCPClient(),

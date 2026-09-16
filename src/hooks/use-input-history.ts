@@ -38,6 +38,7 @@ export function useInputHistory(): InputHistoryHook {
         return null;
       } else if (currentIndex === history.length - 1) {
         newIndex = -1;
+        setCurrentIndex(-1);
         return originalInput;
       } else {
         newIndex = Math.min(history.length - 1, currentIndex + 1);

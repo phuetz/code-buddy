@@ -1,5 +1,8 @@
 import type { AddressInfo } from 'net';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { createApiKey } from '../../src/server/auth/api-keys.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 
 interface MutatorCase {
   method: 'POST' | 'PUT' | 'DELETE';
@@ -34,8 +37,12 @@ describe('inline mutator scope enforcement', () => {
   let chatKey: string;
   let adminKey: string;
   let previousCsrfProtection: string | undefined;
+  // Admin mutators really run (e.g. /api/auth-profiles/reset saves ~/.codebuddy/auth-profiles.json):
+  // the server gets a throwaway HOME so the operator profile is never touched.
+  const home = createIsolatedHome('scope-mutators-home-');
 
   beforeAll(async () => {
+    home.enter();
     previousCsrfProtection = process.env.CSRF_PROTECTION;
     process.env.CSRF_PROTECTION = 'false';
     chatKey = createApiKey({
@@ -75,6 +82,10 @@ describe('inline mutator scope enforcement', () => {
     } else {
       process.env.CSRF_PROTECTION = previousCsrfProtection;
     }
+    // Flush singletons bound to the isolated home before restoring the environment.
+    const { resetAuthProfileManager } = await import('../../src/auth/profile-manager.js');
+    resetAuthProfileManager();
+    home.leave();
   });
 
   async function request(testCase: MutatorCase, key: string): Promise<Response> {
@@ -99,5 +110,9 @@ describe('inline mutator scope enforcement', () => {
 
     expect(response.status).not.toBe(401);
     expect(response.status).not.toBe(403);
+  });
+
+  it('persists the admin auth-profile reset inside the isolated home', () => {
+    expect(existsSync(join(home.path, '.codebuddy', 'auth-profiles.json'))).toBe(true);
   });
 });

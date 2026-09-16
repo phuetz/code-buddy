@@ -44,7 +44,7 @@ function getLogOutput(): string {
   return consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
 }
 
-function runBuddyCliJson(args: string[]): unknown {
+function runBuddyCliJson(args: string[], expectedStatus = 0): unknown {
   const result = spawnSync(process.execPath, [tsxCli, path.join(repoRoot, 'src/index.ts'), ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -61,7 +61,7 @@ function runBuddyCliJson(args: string[]): unknown {
   });
 
   expect(result.error, result.stderr).toBeUndefined();
-  expect(result.status, result.stderr).toBe(0);
+  expect(result.status, result.stderr).toBe(expectedStatus);
   expect(result.stdout.trim()).toMatch(/^\{/);
   return JSON.parse(result.stdout) as unknown;
 }
@@ -579,7 +579,7 @@ describe('buddy skills command with real SkillsHub state', () => {
       '--approved-by',
       'Patrice',
       '--json',
-    ]) as {
+    ], 1) as {
       issueCount: number;
       issues: Array<{ issue: string; name: string }>;
       ok: boolean;
@@ -665,7 +665,7 @@ describe('buddy skills command with real SkillsHub state', () => {
       '--approved-by',
       'Patrice',
       '--json',
-    ]) as {
+    ], 1) as {
       issueCount: number;
       issues: Array<{ issue: string; name: string; staleTempPath?: true }>;
       ok: boolean;

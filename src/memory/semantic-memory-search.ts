@@ -16,6 +16,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs-extra';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -320,18 +321,23 @@ export class SemanticMemorySearch extends EventEmitter {
   private async loadIndex(): Promise<void> {
     const indexPath = this.config.indexFile!;
 
-    if (await fs.pathExists(indexPath)) {
-      try {
-        const data = await fs.readJson(indexPath);
+    try {
+      const data = await readJsonAtomic<{ entries?: MemoryEntry[] } | null>(indexPath, null, {
+        mode: 0o600,
+        isValid: (value): value is { entries?: MemoryEntry[] } => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (data) {
         for (const entry of data.entries || []) {
           entry.metadata.timestamp = new Date(entry.metadata.timestamp);
           this.index.set(entry.id, entry);
           this.indexEntry(entry);
         }
         logger.debug(`Loaded ${this.index.size} memory entries from index`);
-      } catch (_error) {
-        logger.warn('Failed to load memory index, starting fresh');
       }
+    } catch (_error) {
+      logger.warn('Failed to load memory index, starting fresh');
     }
   }
 
@@ -340,15 +346,13 @@ export class SemanticMemorySearch extends EventEmitter {
    */
   private async saveIndex(): Promise<void> {
     const indexPath = this.config.indexFile!;
-    await fs.ensureDir(path.dirname(indexPath));
-
     const data = {
       version: 1,
       updatedAt: new Date().toISOString(),
       entries: Array.from(this.index.values()),
     };
 
-    await fs.writeJson(indexPath, data, { spaces: 2 });
+    await writeJsonAtomic(indexPath, data, { mode: 0o600 });
   }
 
   /**

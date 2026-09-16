@@ -247,5 +247,7 @@ describe('cost report helpers', () => {
     expect(inferCostProvider('claude-sonnet-4')).toBe('anthropic');
     expect(inferCostProvider('qwen3:8b')).toBe('ollama');
     expect(inferCostProvider('openai/gpt-oss-120b:free')).toBe('openrouter');
+    expect(inferCostProvider(undefined)).toBe('unknown');
+    expect(inferCostProvider('')).toBe('unknown');
   });
 });

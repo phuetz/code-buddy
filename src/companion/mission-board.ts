@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import * as path from 'path';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import {
   buildCompanionCompetitiveRadar,
   type CompanionCompetitiveGap,
@@ -130,8 +131,7 @@ function parseMission(value: unknown): CompanionMission | null {
 }
 
 async function writeMissionBoard(board: CompanionMissionBoard): Promise<void> {
-  await mkdir(path.dirname(board.storePath), { recursive: true });
-  await writeFile(board.storePath, `${JSON.stringify(board, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(board.storePath, board, { mode: 0o600 });
 }
 
 function missionId(gap: CompanionCompetitiveGap): string {
@@ -217,15 +217,14 @@ export async function readCompanionMissionBoard(
   options: CompanionMissionBoardOptions = {},
 ): Promise<CompanionMissionBoard> {
   const fallback = emptyBoard(options);
-  let raw: string;
+  const parsed = await readJsonAtomic<Partial<CompanionMissionBoard> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionMissionBoard> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!parsed) return fallback;
   try {
-    raw = await readFile(fallback.storePath, 'utf8');
-  } catch {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<CompanionMissionBoard>;
     const missions = Array.isArray(parsed.missions)
       ? parsed.missions.map(parseMission).filter((mission): mission is CompanionMission => Boolean(mission))
       : [];

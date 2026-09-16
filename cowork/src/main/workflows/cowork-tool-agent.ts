@@ -12,6 +12,8 @@
  * by `WorkflowBridge` which subscribes to `task_assigned` events and routes
  * those targeting `cowork-tool-runner` to this class.
  */
+import { randomUUID } from 'crypto';
+import type { WorkflowApprovalAnswer } from '../../shared/workflow-types';
 import { logWarn } from '../utils/logger';
 import { workflowToolRequiresConfirmation } from './workflow-supervisor';
 
@@ -40,6 +42,8 @@ export interface FormalToolRegistryLike {
 }
 
 export interface ApprovalRequestPayload {
+  /** Unique to this request; an answer must quote it. */
+  approvalId: string;
   workflowInstanceId: string;
   stepId: string;
   message: string;
@@ -62,10 +66,17 @@ export interface CoworkToolAgentOptions {
   }) => Promise<{ confirmed: boolean; feedback?: string }>;
 }
 
+/** Lets a tool task stop before it starts once the orchestrator no longer wants it. */
+export interface ToolTaskLifecycle {
+  /** False once the task was abandoned (for instance, its workflow timed out and ended). */
+  isActive(): boolean;
+}
+
 interface PendingApproval {
   resolve: (approved: boolean) => void;
   reject: (err: Error) => void;
   timeoutHandle: ReturnType<typeof setTimeout>;
+  approvalId: string;
   workflowInstanceId: string;
 }
 
@@ -109,19 +120,35 @@ export class CoworkToolAgent {
    * Run a `tool_invoke` task: extract toolName/toolInput from `input`,
    * invoke the FormalToolRegistry, and shape the response so the
    * orchestrator stores it in the workflow context.
+   *
+   * With a `lifecycle`, the tool is not started once its task is no longer
+   * active — checked before asking for confirmation and again right before
+   * `registry.execute`, since a confirmation can be answered long after the run
+   * ended. A tool that already started is not interrupted.
    */
-  async runToolInvoke(taskInput: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async runToolInvoke(
+    taskInput: Record<string, unknown>,
+    lifecycle?: ToolTaskLifecycle
+  ): Promise<Record<string, unknown>> {
     const toolName = taskInput.toolName;
     if (typeof toolName !== 'string' || toolName.length === 0) {
       throw new Error('tool_invoke task missing string toolName');
     }
     const toolInput = (taskInput.toolInput as Record<string, unknown>) ?? {};
+    const ensureStillWanted = () => {
+      if (lifecycle && !lifecycle.isActive()) {
+        throw new Error(
+          `Workflow tool '${toolName}' was not run: its workflow task is no longer active`
+        );
+      }
+    };
     if (workflowToolRequiresConfirmation(toolName)) {
       if (!this.options.confirmToolInvocation) {
         throw new Error(
           `Fresh confirmation required for workflow tool '${toolName}', but no confirmation bridge is available`
         );
       }
+      ensureStillWanted();
       const confirmation = await this.options.confirmToolInvocation({ toolName, toolInput });
       if (!confirmation.confirmed) {
         throw new Error(
@@ -131,6 +158,7 @@ export class CoworkToolAgent {
         );
       }
     }
+    ensureStillWanted();
     const result = await this.options.registry.execute(toolName, toolInput);
     if (!result.success) {
       throw new Error(result.error ?? `Tool '${toolName}' failed without error message`);
@@ -145,7 +173,7 @@ export class CoworkToolAgent {
 
   /**
    * Run an `approval_wait` task: emit an approval request to the renderer
-   * (via the bridge), then await `resolveApproval(stepId, approved)`.
+   * (via the bridge), then await `resolveApproval(answer)` quoting this request.
    * Auto-rejects after `timeoutMs` (default 60 s) if no answer arrives.
    */
   async runApprovalWait(
@@ -156,6 +184,10 @@ export class CoworkToolAgent {
     if (typeof stepId !== 'string' || stepId.length === 0) {
       throw new Error('approval_wait task missing stepId');
     }
+    if (workflowInstanceId.length === 0) {
+      throw new Error(`approval_wait for step '${stepId}' has no workflow run to answer for`);
+    }
+    const approvalId = randomUUID();
     const message =
       typeof taskInput.message === 'string' ? taskInput.message : 'Approval required';
     const timeoutMs =
@@ -195,11 +227,13 @@ export class CoworkToolAgent {
           reject(err);
         },
         timeoutHandle,
+        approvalId,
         workflowInstanceId,
       });
 
       try {
         this.options.onApprovalRequired({
+          approvalId,
           workflowInstanceId,
           stepId,
           message,
@@ -240,13 +274,20 @@ export class CoworkToolAgent {
   }
 
   /**
-   * Called by the bridge when the renderer answers the approval IPC.
-   * Returns true if a pending approval matched.
+   * Called by the bridge when the renderer answers the approval IPC. Only an
+   * answer quoting the pending request's approval id, run and step resolves it;
+   * returns false otherwise (stale, duplicate or another run's answer).
    */
-  resolveApproval(stepId: string, approved: boolean): boolean {
-    const entry = this.pending.get(stepId);
-    if (!entry) return false;
-    entry.resolve(approved);
+  resolveApproval(answer: WorkflowApprovalAnswer): boolean {
+    const entry = this.pending.get(answer.stepId);
+    if (
+      !entry ||
+      entry.approvalId !== answer.approvalId ||
+      entry.workflowInstanceId !== answer.workflowInstanceId
+    ) {
+      return false;
+    }
+    entry.resolve(answer.approved);
     return true;
   }
 

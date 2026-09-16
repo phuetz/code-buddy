@@ -1,3 +1,4 @@
+import { FactsMemoryService, setFactsMemorySessionClient } from '../../../src/memory/facts-memory.js';
 /**
  * Comprehensive Tests for AgentExecutor
  *
@@ -228,6 +229,38 @@ describe('AgentExecutor', () => {
     deps = createMockDeps();
     config = createMockConfig();
     executor = new AgentExecutor(deps, config);
+  });
+
+  it('keeps concurrent sequential and streaming memory work on each agent client', async () => {
+    const globalClient = createMockDeps().client;
+    setFactsMemorySessionClient(globalClient);
+    const currentClient = () => (new FactsMemoryService() as unknown as {
+      getClient(): Promise<ExecutorDependencies['client'] | null>;
+    }).getClient();
+    try {
+      await Promise.all(['sequential', 'streaming'].map(async mode => {
+        const local = createMockDeps();
+        const agent = new AgentExecutor(local, createMockConfig());
+        setupLLMFlow(local, [
+          { content: '', tool_calls: [makeToolCall('remember', { key: mode, value: 'fixture' })] },
+          { content: 'done' },
+        ]);
+        const observed: unknown[] = [];
+        (local.toolHandler.executeTool as jest.Mock).mockImplementation(async () => {
+          await new Promise(resolve => setTimeout(resolve, mode === 'streaming' ? 5 : 1));
+          observed.push(await currentClient());
+          return { success: true, output: 'stored' };
+        });
+        if (mode === 'sequential') await agent.processUserMessage('Remember a fact', [], []);
+        else {
+          for await (const _event of agent.processUserMessageStream('Remember a fact', [], [], null)) {
+            expect(await currentClient()).toBe(globalClient);
+          }
+        }
+        expect(observed).toEqual([local.client]);
+      }));
+      expect(await currentClient()).toBe(globalClient);
+    } finally { setFactsMemorySessionClient(null); }
   });
 
   // =========================================================================
@@ -804,6 +837,29 @@ describe('AgentExecutor', () => {
       }
     });
 
+    it('requires a confined observation before answering an explicit CLI code inspection', async () => {
+      const reader = { type: 'function', function: { name: 'self_describe', description: 'Read core', parameters: { type: 'object', properties: {} } } };
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen3:4b-instruct');
+      (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mockResolvedValue({ tools: [reader], selection: null, fromCache: false });
+      setupLLMFlow(deps, [{ content: 'Observation du code.' }]);
+      await executor.processUserMessage('Lis ton propre code', [], [], Date.now(), undefined, false, 'cli');
+      expect((deps.client.chatStream as jest.Mock).mock.calls[0][1]).toEqual([reader]);
+      expect((deps.client.chatStream as jest.Mock).mock.calls[0][2]).toMatchObject({ tool_choice: 'required' });
+    });
+
+    it('keeps fleet probes available after applying a lite model profile', async () => {
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen3:4b-instruct');
+      setupLLMFlow(deps, [{ content: 'Je vérifie les pairs configurés.' }]);
+      const query = "Y a-t-il d'autres Code Buddy actifs avec lesquels tu peux travailler ?";
+      await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+      expect(deps.toolSelectionStrategy.selectToolsForQuery).toHaveBeenCalledWith(
+        query,
+        expect.objectContaining({
+          alwaysInclude: expect.arrayContaining(['list_peers', 'route_peer', 'peer_delegate']),
+        }),
+      );
+    });
+
     it('keeps normal effectful schemas available for an explicit self-improvement request', async () => {
       setupLLMFlow(deps, [{ content: 'Je commence par établir les preuves.' }]);
 
@@ -1308,9 +1364,8 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle empty/missing assistant content gracefully', async () => {
-      // Phase D: streaming flow returns accumulated message; an empty content
-      // is handled by runTurnLoop's "Using tools to help you..." fallback.
-      // Test that we still get an entry (no crash) with no content from the LLM.
+      // Empty provider reply without tools is an honest failure, not a
+      // fabricated "Using tools to help you..." assistant message.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content delta at all
       });
@@ -1328,8 +1383,10 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should produce at least one entry (no crash)
+      const joined = entries.map((entry) => entry.content).join('\n');
       expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(joined).toMatch(/réponse vide du fournisseur/i);
+      expect(joined).not.toContain('Using tools to help you');
     });
 
     it('should handle tool execution failure', async () => {
@@ -2850,8 +2907,8 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle null content in assistant message', async () => {
-      // Streaming flow: getAccumulatedMessage returns null content; runTurnLoop
-      // applies a fallback "Using tools to help you..." when content is empty.
+      // Null provider content without tools is an honest failure, not a
+      // fabricated assistant placeholder.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content
       });
@@ -2869,9 +2926,8 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should use fallback content
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toBeDefined();
+      expect(entries[0].content).toMatch(/réponse vide du fournisseur/i);
     });
 
     it('should handle tool returning no output', async () => {

@@ -16,13 +16,11 @@ import type {
   SkillRegistryConfig,
   SkillMatch,
   SkillSearchOptions,
-  SkillEvents,
   UnifiedSkill,
 } from './types.js';
 import { DEFAULT_SKILL_REGISTRY_CONFIG } from './types.js';
 import { parseSkillFile, validateSkill } from './parser.js';
 import {
-  legacyToUnified,
   skillMdToUnified,
   type LegacySkill,
 } from './adapters/index.js';
@@ -33,12 +31,30 @@ import { getSkillsHub } from './hub.js';
 // Skill Registry Class
 // ============================================================================
 
+/** Watchers whose close was started but whose handle may still be held. */
+const pendingWatcherCloses = new Set<Promise<void>>();
+
+/** A watcher that already errored never emits 'close': never wait forever. */
+const WATCHER_CLOSE_TIMEOUT_MS = 2000;
+
+function trackWatcherClose(watcher: fs.FSWatcher): void {
+  const closed = new Promise<void>(resolve => {
+    watcher.once('close', () => resolve());
+    const timer = setTimeout(resolve, WATCHER_CLOSE_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  pendingWatcherCloses.add(closed);
+  void closed.then(() => pendingWatcherCloses.delete(closed));
+}
+
 export class SkillRegistry extends EventEmitter {
   private config: SkillRegistryConfig;
   private skills: Map<string, Skill> = new Map();
   private skillsByTier: Map<SkillTier, Map<string, Skill>> = new Map();
   private watchers: Map<string, fs.FSWatcher> = new Map();
   private loaded: boolean = false;
+  private watchingPauses = 0;
+  private resumeWatchingAfterPause = false;
 
   constructor(config: Partial<SkillRegistryConfig> = {}) {
     super();
@@ -95,14 +111,22 @@ export class SkillRegistry extends EventEmitter {
       return;
     }
 
-    const files = await this.findSkillFiles(resolvedPath);
+    let files: string[];
+    try {
+      files = await this.findSkillFiles(resolvedPath);
+    } catch (error) {
+      if (this.isEnoent(error)) return;
+      throw error;
+    }
 
     for (const file of files) {
       try {
         const skill = await this.loadSkillFile(file, tier);
         this.registerSkill(skill);
       } catch (error) {
-        this.emit('skill:error', file, error instanceof Error ? error : new Error(String(error)));
+        if (!this.isEnoent(error)) {
+          this.emit('skill:error', file, error instanceof Error ? error : new Error(String(error)));
+        }
       }
     }
   }
@@ -590,7 +614,9 @@ export class SkillRegistry extends EventEmitter {
       this.registerSkill(reloaded);
       return true;
     } catch (error) {
-      this.emit('skill:error', name, error instanceof Error ? error : new Error(String(error)));
+      if (!this.isEnoent(error)) {
+        this.emit('skill:error', name, error instanceof Error ? error : new Error(String(error)));
+      }
       return false;
     }
   }
@@ -630,6 +656,12 @@ export class SkillRegistry extends EventEmitter {
    * Start watching skill directories
    */
   private startWatching(): void {
+    this.stopWatching();
+    if (this.watchingPauses > 0) {
+      this.resumeWatchingAfterPause = true;
+      return;
+    }
+
     const paths = [
       { tier: 'workspace' as SkillTier, path: this.config.workspacePath },
       { tier: 'managed' as SkillTier, path: this.config.managedPath },
@@ -641,18 +673,233 @@ export class SkillRegistry extends EventEmitter {
       const resolved = this.resolvePath(dirPath);
       if (!fs.existsSync(resolved)) continue;
 
-      try {
-        const watcher = fs.watch(resolved, { recursive: true }, (event, filename) => {
-          if (filename && (filename.endsWith('.md') || filename.endsWith('.skill.md'))) {
-            this.handleFileChange(tier, path.join(resolved, filename), event);
-          }
-        });
-
-        this.watchers.set(resolved, watcher);
-      } catch {
-        // Watching not supported or permission denied
+      if (this.watchDirectory(tier, resolved, resolved, true)) {
+        this.refreshChildWatchers(tier, resolved);
       }
     }
+  }
+
+  private watcherKey(tier: SkillTier, directory: string): string {
+    return `${tier}:${directory}`;
+  }
+
+  /**
+   * Watch exactly one directory. Recursive fs.watch is intentionally avoided:
+   * Node's Linux recursive watcher can throw outside our callback when a newly
+   * discovered child disappears before its internal scandir runs.
+   */
+  private watchDirectory(
+    tier: SkillTier,
+    rootPath: string,
+    directory: string,
+    isRoot: boolean
+  ): boolean {
+    const key = this.watcherKey(tier, directory);
+    if (this.watchers.has(key)) {
+      return true;
+    }
+
+    try {
+      const watcher = fs.watch(directory, { recursive: false }, (event, filename) => {
+        if (isRoot) {
+          this.handleRootWatchEvent(tier, rootPath, event, filename);
+        } else {
+          this.handleChildWatchEvent(tier, rootPath, directory, event, filename);
+        }
+      });
+
+      watcher.on('error', error => {
+        this.closeWatcher(key);
+        if (isRoot) {
+          this.removeChildWatchers(tier, rootPath);
+          if (this.isEnoent(error)) {
+            this.unloadSkillsUnder(rootPath, tier);
+          }
+        } else if (this.isEnoent(error)) {
+          this.unloadSkillsUnder(directory, tier);
+        }
+        this.reportWatchError(directory, error);
+      });
+
+      this.watchers.set(key, watcher);
+      return true;
+    } catch (error) {
+      this.reportWatchError(directory, error);
+      return false;
+    }
+  }
+
+  private handleRootWatchEvent(
+    tier: SkillTier,
+    rootPath: string,
+    event: string,
+    filename: string | Buffer | null
+  ): void {
+    if (!this.loaded || this.watchingPauses > 0) return;
+
+    const name = filename?.toString();
+    if (name && path.basename(name) === name) {
+      const changedPath = path.join(rootPath, name);
+      if (this.isSkillFilename(name)) {
+        this.queueFileChange(tier, changedPath, event);
+      } else if (event === 'rename') {
+        const childKey = this.watcherKey(tier, changedPath);
+        if (this.watchers.has(childKey)) {
+          this.closeWatcher(childKey);
+          this.unloadSkillsUnder(changedPath, tier);
+        }
+      }
+    }
+
+    this.refreshChildWatchers(tier, rootPath);
+  }
+
+  private handleChildWatchEvent(
+    tier: SkillTier,
+    rootPath: string,
+    directory: string,
+    event: string,
+    filename: string | Buffer | null
+  ): void {
+    if (!this.loaded || this.watchingPauses > 0) return;
+
+    if (!this.isDirectory(directory)) {
+      this.closeWatcher(this.watcherKey(tier, directory));
+      this.unloadSkillsUnder(directory, tier);
+      this.refreshChildWatchers(tier, rootPath);
+      return;
+    }
+
+    const name = filename?.toString();
+    if (name && path.basename(name) === name && this.isSkillFilename(name)) {
+      this.queueFileChange(tier, path.join(directory, name), event);
+    } else if (!name) {
+      this.refreshSkillFilesInChild(tier, directory);
+    }
+  }
+
+  /**
+   * Keep one non-recursive watcher for every first-level skill directory.
+   * Every filesystem lookup is guarded because a directory may disappear at
+   * any point between readdir, watch, and the first callback.
+   */
+  private refreshChildWatchers(tier: SkillTier, rootPath: string): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(rootPath, { withFileTypes: true });
+    } catch (error) {
+      if (this.isEnoent(error)) {
+        this.closeWatcher(this.watcherKey(tier, rootPath));
+        this.removeChildWatchers(tier, rootPath);
+        this.unloadSkillsUnder(rootPath, tier);
+      } else {
+        this.reportWatchError(rootPath, error);
+      }
+      return;
+    }
+
+    const rootKey = this.watcherKey(tier, rootPath);
+    const childKeyPrefix = `${rootKey}${path.sep}`;
+    const childDirectories = new Set(
+      entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => path.join(rootPath, entry.name))
+    );
+
+    for (const key of Array.from(this.watchers.keys())) {
+      if (!key.startsWith(childKeyPrefix)) continue;
+
+      const directory = key.slice(`${tier}:`.length);
+      if (!childDirectories.has(directory)) {
+        this.closeWatcher(key);
+        this.unloadSkillsUnder(directory, tier);
+      }
+    }
+
+    for (const directory of childDirectories) {
+      const key = this.watcherKey(tier, directory);
+      if (!this.watchers.has(key) && this.watchDirectory(tier, rootPath, directory, false)) {
+        this.refreshSkillFilesInChild(tier, directory);
+      }
+    }
+  }
+
+  private refreshSkillFilesInChild(tier: SkillTier, directory: string): void {
+    for (const name of ['skill.md', 'SKILL.md']) {
+      this.queueFileChange(tier, path.join(directory, name), 'rename');
+    }
+  }
+
+  private queueFileChange(tier: SkillTier, filePath: string, event: string): void {
+    void this.handleFileChange(tier, filePath, event).catch(error => {
+      this.reportWatchError(filePath, error);
+    });
+  }
+
+  private isSkillFilename(filename: string): boolean {
+    const lower = filename.toLowerCase();
+    return lower === 'skill.md' || lower.endsWith('.skill.md');
+  }
+
+  private isDirectory(directory: string): boolean {
+    try {
+      return fs.statSync(directory).isDirectory();
+    } catch (error) {
+      this.reportWatchError(directory, error);
+      return false;
+    }
+  }
+
+  private unloadSkillsUnder(directory: string, tier: SkillTier): void {
+    const prefix = `${directory}${path.sep}`;
+    const names = Array.from(this.skillsByTier.get(tier)?.values() ?? [])
+      .filter(skill => skill.sourcePath === directory || skill.sourcePath.startsWith(prefix))
+      .map(skill => skill.metadata.name);
+
+    for (const name of names) {
+      this.unload(name);
+    }
+  }
+
+  private removeChildWatchers(tier: SkillTier, rootPath: string): void {
+    const prefix = `${this.watcherKey(tier, rootPath)}${path.sep}`;
+    for (const key of Array.from(this.watchers.keys())) {
+      if (key.startsWith(prefix)) {
+        this.closeWatcher(key);
+      }
+    }
+  }
+
+  private closeWatcher(key: string): void {
+    const watcher = this.watchers.get(key);
+    if (!watcher) return;
+
+    this.watchers.delete(key);
+    trackWatcherClose(watcher);
+    try {
+      watcher.close();
+    } catch {
+      // The watcher may already be closed after an error event.
+    }
+  }
+
+  private isEnoent(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'ENOENT'
+    );
+  }
+
+  private reportWatchError(targetPath: string, error: unknown): void {
+    if (this.isEnoent(error)) return;
+
+    this.emit(
+      'skill:error',
+      targetPath,
+      error instanceof Error ? error : new Error(String(error))
+    );
   }
 
   /**
@@ -696,14 +943,33 @@ export class SkillRegistry extends EventEmitter {
     }
   }
 
+  /** Suspend handles during removal; restore only a previously active watcher set. */
+  pauseWatching(): () => void {
+    if (this.watchingPauses === 0) this.resumeWatchingAfterPause = this.watchers.size > 0;
+    this.watchingPauses++;
+    this.stopWatching();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      this.watchingPauses--;
+      if (this.watchingPauses === 0 && this.resumeWatchingAfterPause && this.loaded) {
+        // Removal events were deliberately missed while handles were closed.
+        for (const skill of [...this.skills.values()]) {
+          if (!fs.existsSync(skill.sourcePath)) this.unload(skill.metadata.name);
+        }
+        this.startWatching();
+      }
+    };
+  }
+
   /**
    * Stop watching
    */
   stopWatching(): void {
-    for (const watcher of this.watchers.values()) {
-      watcher.close();
+    for (const key of Array.from(this.watchers.keys())) {
+      this.closeWatcher(key);
     }
-    this.watchers.clear();
   }
 
   // ==========================================================================
@@ -777,6 +1043,30 @@ export function getSkillRegistry(config?: Partial<SkillRegistryConfig>): SkillRe
     registryInstance = new SkillRegistry(config);
   }
   return registryInstance;
+}
+
+/** Do not create a registry just to remove an installed package. */
+export function pauseSkillRegistryWatching(): () => void {
+  return registryInstance?.pauseWatching() ?? (() => {});
+}
+
+/**
+ * Wait until every closed watcher released its operating-system handle.
+ *
+ * Windows refuses to remove a directory that still carries a change
+ * notification handle, and `watcher.close()` only starts that release: the
+ * 'close' event is emitted on the next tick while libuv frees the handle in a
+ * later loop phase. Callers that remove a watched directory must await this
+ * before the removal, otherwise the first `rm` attempt races the release.
+ */
+export async function awaitSkillRegistryWatchersClosed(): Promise<void> {
+  const pending = [...pendingWatcherCloses];
+  pendingWatcherCloses.clear();
+  await Promise.all(pending);
+  // libuv runs handle close callbacks after the check phase: two turns of the
+  // loop are enough for the descriptor to be gone, on every platform.
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  await new Promise<void>(resolve => { setImmediate(resolve); });
 }
 
 export function resetSkillRegistry(): void {

@@ -4,6 +4,30 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
+const fsInterlock = vi.hoisted(() => ({
+  readGate: null as Promise<void> | null,
+  readEntered: null as (() => void) | null,
+  writeGate: null as Promise<void> | null,
+  writeEntered: null as (() => void) | null,
+}));
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    readFile: async (...args: unknown[]) => {
+      fsInterlock.readEntered?.();
+      if (fsInterlock.readGate) await fsInterlock.readGate;
+      return Reflect.apply(actual.readFile, actual, args);
+    },
+    writeFile: async (...args: unknown[]) => {
+      fsInterlock.writeEntered?.();
+      if (fsInterlock.writeGate) await fsInterlock.writeGate;
+      return Reflect.apply(actual.writeFile, actual, args);
+    },
+  };
+});
+
 const tmpDir = path.join(os.tmpdir(), `cowork-fleet-bridge-${Date.now()}`);
 
 vi.mock('electron', () => ({
@@ -21,9 +45,17 @@ vi.mock('../src/main/utils/logger', () => ({
 
 class FakeFleetListener extends EventEmitter {
   static instances: FakeFleetListener[] = [];
+  /** Per-test override of connect(); the default authenticates on the next tick. */
+  static connectImpl: ((listener: FakeFleetListener) => Promise<void>) | null = null;
+  /** Per-test override of the socket teardown, e.g. to hold it open. */
+  static disconnectImpl: ((listener: FakeFleetListener) => Promise<void>) | null = null;
+  /** Per-test override of peer.describe, e.g. to answer late. */
+  static describeImpl: ((listener: FakeFleetListener) => Promise<unknown>) | null = null;
   options: { url: string; apiKey?: string };
   connected = false;
+  authenticated = false;
   requestCount = 0;
+  disconnectCount = 0;
 
   constructor(options: { url: string; apiKey?: string }) {
     super();
@@ -32,15 +64,20 @@ class FakeFleetListener extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    if (FakeFleetListener.connectImpl) return FakeFleetListener.connectImpl(this);
     this.connected = true;
     setImmediate(() => {
       this.emit('connected');
+      this.authenticated = true;
       this.emit('authenticated');
     });
   }
 
   async disconnect(): Promise<void> {
+    this.disconnectCount += 1;
+    if (FakeFleetListener.disconnectImpl) return FakeFleetListener.disconnectImpl(this);
     this.connected = false;
+    this.authenticated = false;
     this.emit('disconnected');
   }
 
@@ -48,27 +85,46 @@ class FakeFleetListener extends EventEmitter {
     if (method !== 'peer.describe') {
       throw new Error(`unexpected method: ${method}`);
     }
+    // Mirrors the core listener: no RPC before authentication.
+    if (!this.authenticated) {
+      throw new Error('peer.invoke NOT_AUTHENTICATED: listener is not authenticated');
+    }
     this.requestCount += 1;
-    return {
-      peerChatProvider: {
-        provider: 'chatgpt-oauth',
-        model: 'gpt-5.1-codex',
-        isLocal: false,
-      },
-      capabilities: {
-        egress: 'cloud',
-        machineLabel: 'Ministar Linux',
-        models: [
-          {
-            id: 'gpt-5.1-codex',
-            contextWindow: 200_000,
-            strengths: ['reasoning', 'thinking', 'code'],
-            provider: 'chatgpt-oauth',
-          },
-        ],
-      },
-    };
+    if (FakeFleetListener.describeImpl) return FakeFleetListener.describeImpl(this);
+    return describeAnswer();
   }
+}
+
+function describeAnswer(machineLabel = 'Hub Linux'): Record<string, unknown> {
+  return {
+    peerChatProvider: {
+      provider: 'chatgpt-oauth',
+      model: 'gpt-5.1-codex',
+      isLocal: false,
+    },
+    capabilities: {
+      egress: 'cloud',
+      machineLabel,
+      models: [
+        {
+          id: 'gpt-5.1-codex',
+          contextWindow: 200_000,
+          strengths: ['reasoning', 'thinking', 'code'],
+          provider: 'chatgpt-oauth',
+        },
+      ],
+    },
+  };
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 vi.mock('../src/main/utils/core-loader', () => ({
@@ -76,11 +132,43 @@ vi.mock('../src/main/utils/core-loader', () => ({
 }));
 
 import { FleetBridge } from '../src/main/fleet/fleet-bridge';
-import type { ServerEvent } from '../src/renderer/types';
+import type { FleetPeer as FleetPeerUpdate, ServerEvent } from '../src/renderer/types';
+
+const HUB_URL = 'ws://203.0.113.10:3000/ws';
+
+async function flush(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+/** Core listener shape of an unreachable peer: error, close, then a rejected connect(). */
+function refuse(listener: FakeFleetListener): Promise<void> {
+  const err = new Error('connect ECONNREFUSED 203.0.113.10:3000');
+  listener.emit('error', err);
+  listener.emit('disconnected');
+  return Promise.reject(err);
+}
+
+/** Core listener shape of a successful handshake: connect() resolves after `authenticated`. */
+function authenticate(listener: FakeFleetListener): Promise<void> {
+  listener.connected = true;
+  listener.emit('connected');
+  listener.authenticated = true;
+  listener.emit('authenticated');
+  return Promise.resolve();
+}
 
 describe('FleetBridge', () => {
   beforeEach(async () => {
     FakeFleetListener.instances = [];
+    FakeFleetListener.connectImpl = null;
+    FakeFleetListener.disconnectImpl = null;
+    FakeFleetListener.describeImpl = null;
+    fsInterlock.readGate = null;
+    fsInterlock.readEntered = null;
+    fsInterlock.writeGate = null;
+    fsInterlock.writeEntered = null;
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -94,12 +182,12 @@ describe('FleetBridge', () => {
     await bridge.init();
 
     const result = await bridge.addPeer({
-      url: 'ws://100.98.18.76:3000/ws',
+      url: 'ws://203.0.113.10:3000/ws',
       apiKey: 'test-key',
-      label: 'Ministar Linux',
+      label: 'Hub Linux',
     });
     expect(result.success).toBe(true);
-    expect(result.peer?.id).toBe('ministar-linux');
+    expect(result.peer?.id).toBe('hub-linux');
 
     // Wait for the listener event chain
     await new Promise((r) => setImmediate(r));
@@ -116,7 +204,7 @@ describe('FleetBridge', () => {
       'utf-8'
     );
     const parsed = JSON.parse(raw);
-    expect(parsed.peers[0].url).toBe('ws://100.98.18.76:3000/ws');
+    expect(parsed.peers[0].url).toBe('ws://203.0.113.10:3000/ws');
     expect(parsed.peers[0].apiKey).toBe('test-key');
   });
 
@@ -126,9 +214,9 @@ describe('FleetBridge', () => {
     await bridge.init();
 
     const result = await bridge.addPeer({
-      url: 'ws://100.98.18.76:3000/ws',
+      url: 'ws://203.0.113.10:3000/ws',
       apiKey: 'test-key',
-      label: 'Ministar Linux',
+      label: 'Hub Linux',
     });
     expect(result.success).toBe(true);
 
@@ -144,7 +232,7 @@ describe('FleetBridge', () => {
     });
     expect(peers[0].capability).toMatchObject({
       egress: 'cloud',
-      machineLabel: 'Ministar Linux',
+      machineLabel: 'Hub Linux',
       models: [
         {
           id: 'gpt-5.1-codex',
@@ -184,7 +272,7 @@ describe('FleetBridge', () => {
       type: 'fleet:agent:tool_started',
       payload: {
         toolName: 'view_file',
-        source: { hostname: 'ministar', agentId: 'agent-1' },
+        source: { hostname: 'hub', agentId: 'agent-1' },
       },
     });
 
@@ -192,7 +280,7 @@ describe('FleetBridge', () => {
     const fleetEvents = events.filter((e) => e.type === 'fleet.event');
     expect(fleetEvents).toHaveLength(1);
     expect(fleetEvents[0].payload.type).toBe('fleet:agent:tool_started');
-    expect(fleetEvents[0].payload.hostname).toBe('ministar');
+    expect(fleetEvents[0].payload.hostname).toBe('hub');
   });
 
   it('tracks chat-session metadata on the peer without adding content to peer state', async () => {
@@ -216,7 +304,7 @@ describe('FleetBridge', () => {
         sessionId: 'sess_review_123456',
         model: 'gpt-5.1-codex',
         dispatchProfile: 'review',
-        source: { hostname: 'ministar' },
+        source: { hostname: 'hub' },
       },
     });
     listener.emit('fleet:event', {
@@ -226,7 +314,7 @@ describe('FleetBridge', () => {
         turnCount: 2,
         prompt: 'must not be kept',
         content: 'must not be kept either',
-        source: { hostname: 'ministar' },
+        source: { hostname: 'hub' },
       },
     });
 
@@ -344,5 +432,523 @@ describe('FleetBridge', () => {
     await new Promise((r) => setImmediate(r));
     const peersIdle = await bridge.listPeers();
     expect(peersIdle[0].capability?.activeRequests).toBe(0);
+  });
+
+  describe('connection loss and recovery', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps a refused key visible after the server drops the socket, and does not retry it', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      FakeFleetListener.connectImpl = async (listener) => {
+        listener.emit('connected');
+        const err = Object.assign(new Error('Invalid credentials'), { code: 'AUTH_FAILED' });
+        listener.emit('error', err);
+        throw err;
+      };
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [1_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'wrong-key', label: 'hub' });
+      await flush();
+
+      // The server leaves the unauthenticated socket open, then terminates it at its idle timeout.
+      FakeFleetListener.instances[0].emit('disconnected');
+      const [peer] = await bridge.listPeers();
+
+      expect(peer.lastError).toBe('Invalid credentials');
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flush();
+      expect(FakeFleetListener.instances).toHaveLength(1);
+    });
+
+    it('does not replace the connection cause with a peer.describe failure when the panel lists peers', async () => {
+      FakeFleetListener.connectImpl = (listener) => refuse(listener);
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [60_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      const [peer] = await bridge.listPeers();
+
+      expect(peer.status).toBe('error');
+      expect(peer.lastError).toBe('connect ECONNREFUSED 203.0.113.10:3000');
+      await bridge.shutdown();
+    });
+
+    it('retries a peer that was unreachable at startup and clears the cause once it answers', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      let attempts = 0;
+      FakeFleetListener.connectImpl = (listener) => {
+        attempts += 1;
+        return attempts === 1 ? refuse(listener) : authenticate(listener);
+      };
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [5_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+      expect((await bridge.listPeers())[0].status).toBe('error');
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flush();
+
+      const [peer] = await bridge.listPeers();
+      expect(FakeFleetListener.instances).toHaveLength(2);
+      expect(FakeFleetListener.instances[0].disconnectCount).toBe(1);
+      expect(peer.status).toBe('authenticated');
+      expect(peer.lastError).toBeUndefined();
+      await bridge.shutdown();
+    });
+
+    it('surfaces an abandoned auto-reconnect with its cause and keeps recovering at the bridge level', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [5_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      const first = FakeFleetListener.instances[0];
+      first.authenticated = false;
+      first.emit('error', new Error('connect ECONNREFUSED 203.0.113.10:3000'));
+      first.emit('disconnected');
+      first.emit('reconnecting', { attempt: 10, delayMs: 60_000 });
+      first.emit('exhausted', { totalAttempts: 10 });
+
+      let [peer] = await bridge.listPeers();
+      expect(peer.status).toBe('error');
+      expect(peer.lastError).toContain('10 attempts');
+      expect(peer.lastError).toContain('ECONNREFUSED');
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flush();
+
+      [peer] = await bridge.listPeers();
+      expect(FakeFleetListener.instances).toHaveLength(2);
+      expect(peer.status).toBe('authenticated');
+      expect(peer.lastError).toBeUndefined();
+      await bridge.shutdown();
+    });
+
+    it('shares one attempt between concurrent reconnects and ignores the replaced listener', async () => {
+      const events: ServerEvent[] = [];
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge((e) => events.push(e));
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+      const initial = FakeFleetListener.instances[0];
+
+      const results = await Promise.all([bridge.reconnectPeer('hub'), bridge.reconnectPeer('hub')]);
+      await flush();
+
+      expect(results).toEqual([{ success: true }, { success: true }]);
+      expect(FakeFleetListener.instances).toHaveLength(2);
+      const current = FakeFleetListener.instances[1];
+
+      // Late signals from the torn-down socket must not repaint the live peer.
+      initial.emit('disconnected');
+      initial.emit('error', new Error('socket hang up'));
+      events.length = 0;
+      current.emit('fleet:event', { type: 'fleet:agent:tool_started', payload: {} });
+      initial.emit('fleet:event', { type: 'fleet:agent:tool_started', payload: {} });
+
+      const [peer] = await bridge.listPeers();
+      expect(peer.status).toBe('authenticated');
+      expect(peer.lastError).toBeUndefined();
+      expect(events.filter((e) => e.type === 'fleet.event')).toHaveLength(1);
+    });
+
+    it('reports why a manual reconnect failed instead of a blind success', async () => {
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [60_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      FakeFleetListener.connectImpl = (listener) => refuse(listener);
+      const result = await bridge.reconnectPeer('hub');
+
+      expect(result).toEqual({
+        success: false,
+        error: 'connect ECONNREFUSED 203.0.113.10:3000',
+      });
+      await bridge.shutdown();
+    });
+
+    it('explains that a single-peer capability refresh needs a live connection', async () => {
+      FakeFleetListener.connectImpl = (listener) => refuse(listener);
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [60_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      const result = await bridge.refreshCapabilities('hub');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not connected');
+      expect(result.peer?.lastError).toBe('connect ECONNREFUSED 203.0.113.10:3000');
+      expect(FakeFleetListener.instances[0].requestCount).toBe(0);
+      await bridge.shutdown();
+    });
+
+    it('stops recovering a peer once it is removed or the bridge shuts down', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      FakeFleetListener.connectImpl = (listener) => refuse(listener);
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [1_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await bridge.addPeer({ url: 'ws://203.0.113.11:3000/ws', apiKey: 'k', label: 'spoke' });
+      await flush();
+      expect(FakeFleetListener.instances).toHaveLength(2);
+
+      await bridge.removePeer('hub');
+      await bridge.shutdown();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flush();
+
+      expect(FakeFleetListener.instances).toHaveLength(2);
+    });
+  });
+
+  describe('shutdown with an attempt in flight', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('opens no socket when shutdown lands while the listener module is loading', async () => {
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge(() => {});
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      // Suspended on `await loadFleetModule()` when shutdown starts.
+      const attempt = bridge.reconnectPeer('hub');
+      await bridge.shutdown();
+      const result = await attempt;
+      await flush();
+
+      expect(FakeFleetListener.instances).toHaveLength(1);
+      expect(result.success).toBe(false);
+    });
+
+    it('opens no socket when shutdown lands while the previous socket is still closing', async () => {
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge(() => {});
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      const closing = deferred();
+      FakeFleetListener.disconnectImpl = () => closing.promise;
+      const attempt = bridge.reconnectPeer('hub');
+      await flush();
+      expect(FakeFleetListener.instances[0].disconnectCount).toBe(1);
+
+      const stopping = bridge.shutdown();
+      closing.resolve();
+      await stopping;
+      const result = await attempt;
+      await flush();
+
+      expect(FakeFleetListener.instances).toHaveLength(1);
+      expect(result.success).toBe(false);
+    });
+
+    it('refuses to reconnect a peer after shutdown', async () => {
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const bridge = new FleetBridge(() => {});
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+      await bridge.shutdown();
+
+      const result = await bridge.reconnectPeer('hub');
+
+      expect(result).toEqual({ success: false, error: 'Fleet bridge is stopped' });
+      expect(FakeFleetListener.instances).toHaveLength(1);
+    });
+
+    it('neither repaints nor retries a handshake that fails after shutdown', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const handshake = deferred();
+      FakeFleetListener.connectImpl = () => handshake.promise;
+      const events: ServerEvent[] = [];
+      const bridge = new FleetBridge((e) => events.push(e), null, { recoveryDelaysMs: [1_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+
+      events.length = 0;
+      const stopping = bridge.shutdown();
+      handshake.reject(new Error('Connection closed before authentication'));
+      await stopping;
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flush();
+
+      expect(FakeFleetListener.instances).toHaveLength(1);
+      expect(events).toEqual([]);
+    });
+  });
+
+  describe('late peer.describe answers', () => {
+    function lastPeerUpdate(events: ServerEvent[]): FleetPeerUpdate {
+      const updates = events.filter(
+        (e): e is Extract<ServerEvent, { type: 'fleet.peer.update' }> =>
+          e.type === 'fleet.peer.update'
+      );
+      return updates[updates.length - 1].payload.peer;
+    }
+
+    it('keeps a newer AUTH_FAILED when the previous session answers peer.describe late', async () => {
+      const answer = deferred<unknown>();
+      FakeFleetListener.describeImpl = () => answer.promise;
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const events: ServerEvent[] = [];
+      const bridge = new FleetBridge((e) => events.push(e), null, { recoveryDelaysMs: [60_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+      const listener = FakeFleetListener.instances[0];
+      expect(listener.requestCount).toBe(1);
+
+      listener.authenticated = false;
+      listener.emit(
+        'error',
+        Object.assign(new Error('Invalid credentials'), { code: 'AUTH_FAILED' })
+      );
+      answer.resolve(describeAnswer());
+      await flush();
+
+      const peer = lastPeerUpdate(events);
+      expect(peer.status).toBe('error');
+      expect(peer.lastError).toBe('Invalid credentials');
+      expect(peer.capability).toBeUndefined();
+      await bridge.shutdown();
+    });
+
+    it('ignores a stale peer.describe failure that arrives after the peer reconnected', async () => {
+      const answers: Array<ReturnType<typeof deferred<unknown>>> = [];
+      FakeFleetListener.describeImpl = () => {
+        const answer = deferred<unknown>();
+        answers.push(answer);
+        return answer.promise;
+      };
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const events: ServerEvent[] = [];
+      const bridge = new FleetBridge((e) => events.push(e));
+      await bridge.init();
+      await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await flush();
+      const listener = FakeFleetListener.instances[0];
+      expect(answers).toHaveLength(1);
+
+      // The socket drops and the core reconnects on its own before the first answer settles.
+      listener.authenticated = false;
+      listener.emit('disconnected');
+      listener.emit('reconnecting', { attempt: 1, delayMs: 1_000 });
+      listener.authenticated = true;
+      listener.emit('authenticated');
+      listener.emit('reconnected', { attempt: 1 });
+      for (const fresh of answers.slice(1)) {
+        fresh.resolve(describeAnswer('Hub Linux (reconnected)'));
+      }
+      await flush();
+      answers[0].reject(new Error('peer.invoke TIMEOUT: peer.describe timed out'));
+      await flush();
+
+      const peer = lastPeerUpdate(events);
+      expect(peer.status).toBe('authenticated');
+      expect(peer.lastError).toBeUndefined();
+      expect(peer.capability?.machineLabel).toBe('Hub Linux (reconnected)');
+      await bridge.shutdown();
+    });
+  });
+
+  describe('shutdown closes every socket at once', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Three authenticated peers whose socket teardown waits for the test. */
+    async function bridgeWithHeldSockets(labels = ['hub', 'relay', 'spoke']) {
+      FakeFleetListener.connectImpl = (listener) => authenticate(listener);
+      const closing = new Map<string, ReturnType<typeof deferred>>();
+      FakeFleetListener.disconnectImpl = (listener) => {
+        const held = deferred();
+        closing.set(listener.options.url, held);
+        return held.promise;
+      };
+      const bridge = new FleetBridge(() => {});
+      await bridge.init();
+      for (const [index, label] of labels.entries()) {
+        await bridge.addPeer({ url: `ws://203.0.113.${10 + index}:3000/ws`, apiKey: 'k', label });
+      }
+      await flush();
+      expect(FakeFleetListener.instances).toHaveLength(labels.length);
+      return { bridge, closing };
+    }
+
+    function releaseAll(closing: Map<string, ReturnType<typeof deferred>>) {
+      for (const held of closing.values()) held.resolve();
+    }
+
+    it('starts every disconnect before any of them has finished', async () => {
+      const { bridge, closing } = await bridgeWithHeldSockets();
+
+      const stopping = bridge.shutdown();
+
+      expect(FakeFleetListener.instances.map((listener) => listener.disconnectCount)).toEqual([
+        1, 1, 1,
+      ]);
+      releaseAll(closing);
+      await expect(stopping).resolves.toBeUndefined();
+    });
+
+    it('detaches every listener as soon as shutdown starts, so no request reaches a closing socket', async () => {
+      const { bridge, closing } = await bridgeWithHeldSockets();
+
+      const stopping = bridge.shutdown();
+
+      await expect(bridge.peerRequest('spoke', 'peer.describe')).rejects.toThrow(
+        'has no active listener'
+      );
+      expect(FakeFleetListener.instances[2].requestCount).toBe(1); // only the boot describe
+      releaseAll(closing);
+      await stopping;
+    });
+
+    it('still closes the other sockets and settles when a disconnect rejects or throws', async () => {
+      const { bridge, closing } = await bridgeWithHeldSockets();
+      const [hub, relay, spoke] = FakeFleetListener.instances;
+      FakeFleetListener.disconnectImpl = (listener) =>
+        listener === hub
+          ? Promise.reject(new Error('socket already destroyed'))
+          : Promise.resolve();
+      relay.disconnect = () => {
+        relay.disconnectCount += 1;
+        throw new Error('ws not open');
+      };
+
+      await expect(bridge.shutdown()).resolves.toBeUndefined();
+
+      expect([hub, relay, spoke].map((listener) => listener.disconnectCount)).toEqual([1, 1, 1]);
+      expect(closing.size).toBe(0);
+      await expect(bridge.peerRequest('hub', 'peer.describe')).rejects.toThrow(
+        'no active listener'
+      );
+      await expect(bridge.reconnectPeer('spoke')).resolves.toEqual({
+        success: false,
+        error: 'Fleet bridge is stopped',
+      });
+    });
+
+    it('closes each socket once when shutdown is called again before it settles', async () => {
+      const { bridge, closing } = await bridgeWithHeldSockets();
+
+      const first = bridge.shutdown();
+      const second = bridge.shutdown();
+      releaseAll(closing);
+      await Promise.all([first, second]);
+      await bridge.shutdown();
+
+      expect(FakeFleetListener.instances.map((listener) => listener.disconnectCount)).toEqual([
+        1, 1, 1,
+      ]);
+    });
+
+    it('still disarms recovery for a peer that was down when shutdown started', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      let attempts = 0;
+      FakeFleetListener.connectImpl = (listener) => {
+        attempts += 1;
+        return listener.options.url.includes('203.0.113.12')
+          ? refuse(listener)
+          : authenticate(listener);
+      };
+      const held = deferred();
+      FakeFleetListener.disconnectImpl = () => held.promise;
+      const bridge = new FleetBridge(() => {}, null, { recoveryDelaysMs: [1_000] });
+      await bridge.init();
+      await bridge.addPeer({ url: 'ws://203.0.113.10:3000/ws', apiKey: 'k', label: 'hub' });
+      await bridge.addPeer({ url: 'ws://203.0.113.12:3000/ws', apiKey: 'k', label: 'spoke' });
+      await flush();
+      const attemptsBeforeShutdown = attempts;
+
+      const stopping = bridge.shutdown();
+      await vi.advanceTimersByTimeAsync(10_000);
+      held.resolve();
+      await stopping;
+      await flush();
+
+      expect(attempts).toBe(attemptsBeforeShutdown);
+      expect(FakeFleetListener.instances).toHaveLength(2);
+    });
+
+    it('refuses to add, persist, or publish a peer after shutdown', async () => {
+      const events: ServerEvent[] = [];
+      const bridge = new FleetBridge((event) => events.push(event));
+      await bridge.init();
+      await bridge.shutdown();
+
+      const result = await bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+
+      expect(result).toEqual({ success: false, error: 'Fleet bridge is stopped' });
+      expect(await bridge.listPeers()).toEqual([]);
+      expect(FakeFleetListener.instances).toHaveLength(0);
+      expect(events).toEqual([]);
+      await expect(fs.access(path.join(tmpDir, 'fleet-peers.json'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    });
+
+    it('does not publish or connect when shutdown lands during addPeer persistence', async () => {
+      const events: ServerEvent[] = [];
+      const bridge = new FleetBridge((event) => events.push(event));
+      await bridge.init();
+      const enteredWrite = deferred();
+      const releaseWrite = deferred();
+      fsInterlock.writeEntered = enteredWrite.resolve;
+      fsInterlock.writeGate = releaseWrite.promise;
+
+      const adding = bridge.addPeer({ url: HUB_URL, apiKey: 'k', label: 'hub' });
+      await enteredWrite.promise;
+      await bridge.shutdown();
+      releaseWrite.resolve();
+      const result = await adding;
+
+      expect(result).toEqual({ success: false, error: 'Fleet bridge is stopped' });
+      const persisted = JSON.parse(
+        await fs.readFile(path.join(tmpDir, 'fleet-peers.json'), 'utf8'),
+      ) as { peers: Array<{ id: string }> };
+      expect(persisted.peers.map((peer) => peer.id)).toEqual(['hub']);
+      expect(FakeFleetListener.instances).toHaveLength(0);
+      expect(events).toEqual([]);
+    });
+
+    it('does not repopulate peers when shutdown lands during init readFile', async () => {
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(
+        path.join(tmpDir, 'fleet-peers.json'),
+        JSON.stringify({
+          peers: [{ id: 'hub', url: HUB_URL, apiKey: 'k', addedAt: 1 }],
+        }),
+        'utf8',
+      );
+      const enteredRead = deferred();
+      const releaseRead = deferred();
+      fsInterlock.readEntered = enteredRead.resolve;
+      fsInterlock.readGate = releaseRead.promise;
+      const bridge = new FleetBridge(() => {});
+
+      const initializing = bridge.init();
+      await enteredRead.promise;
+      await bridge.shutdown();
+      releaseRead.resolve();
+      await initializing;
+
+      expect(await bridge.listPeers()).toEqual([]);
+      expect(FakeFleetListener.instances).toHaveLength(0);
+    });
   });
 });

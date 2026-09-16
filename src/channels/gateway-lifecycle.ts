@@ -32,6 +32,8 @@ export interface GatewayChannelStatus {
   authenticated: boolean;
   /** Last activity timestamp (ISO string) */
   lastActivity?: string;
+  /** Last successful long-poll timestamp (ISO string) */
+  lastSuccessfulPoll?: string;
   /** Error message if readiness is 'error' */
   error?: string;
   /** Additional platform-specific info */
@@ -246,6 +248,7 @@ export class GatewayLifecycleManager extends EventEmitter {
         readiness,
         authenticated: s.authenticated,
         lastActivity: s.lastActivity?.toISOString(),
+        lastSuccessfulPoll: s.lastSuccessfulPoll?.toISOString(),
         error: errorMsg,
         info: s.info,
       });

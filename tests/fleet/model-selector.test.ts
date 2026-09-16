@@ -1,14 +1,74 @@
-import { describe, it, expect } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { selectFastestModel, type LlmCandidate } from '../../src/fleet/model-selector.js';
 import { ModelScoreboard } from '../../src/fleet/model-scoreboard.js';
+import type { TurnMetricsRecord } from '../../src/observability/turn-metrics.js';
 
-/** A fresh, file-backed scoreboard in a temp path (each test gets its own). */
+/**
+ * Scoreboards live in a private temp directory. Their turn-metrics journal is
+ * always explicit: the default one is the ~/.codebuddy/turn-metrics.jsonl of the
+ * user running the tests, whose real latencies would replace the heuristic.
+ */
+let scratchDir = '';
 let sbCounter = 0;
+
+beforeAll(() => {
+  scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-model-selector-'));
+});
+
+afterAll(() => {
+  fs.rmSync(scratchDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
+
+beforeEach(() => {
+  const home = path.join(scratchDir, `home-${sbCounter}`);
+  vi.stubEnv('HOME', home);
+  vi.stubEnv('USERPROFILE', home);
+  vi.stubEnv('XDG_CONFIG_HOME', path.join(home, '.config'));
+  vi.stubEnv('XDG_DATA_HOME', path.join(home, '.local', 'share'));
+  vi.stubEnv('XDG_STATE_HOME', path.join(home, '.local', 'state'));
+  vi.stubEnv('XDG_CACHE_HOME', path.join(home, '.cache'));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+/** A fresh, file-backed scoreboard with no outcomes and no turn journal (each test gets its own). */
 function emptyScoreboard(): ModelScoreboard {
-  const file = path.join(os.tmpdir(), `cb-sb-test-${process.pid}-${sbCounter++}.json`);
-  return new ModelScoreboard(file);
+  const id = sbCounter++;
+  const file = path.join(scratchDir, `cb-sb-test-${id}.json`);
+  const turns = path.join(scratchDir, `cb-turns-test-${id}-absent.jsonl`);
+  return new ModelScoreboard(file, { turnMetricsJournalPath: turns });
+}
+
+function scoreboardWithTurnMetrics(records: TurnMetricsRecord[]): ModelScoreboard {
+  const id = sbCounter++;
+  const outcomes = path.join(scratchDir, `cb-sb-test-${id}.jsonl`);
+  const turns = path.join(scratchDir, `cb-turns-test-${id}.jsonl`);
+  fs.writeFileSync(turns, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
+  return new ModelScoreboard(outcomes, { turnMetricsJournalPath: turns });
+}
+
+function turnRecord(
+  provider: string,
+  model: string,
+  ttfmMs: number,
+): TurnMetricsRecord {
+  return {
+    version: 1,
+    at: '2026-09-03T12:00:00.000Z',
+    provider,
+    model,
+    ttftMs: Math.floor(ttfmMs / 2),
+    ttfmMs,
+    totalMs: ttfmMs + 10,
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15,
+  };
 }
 
 const QWEN_7B: LlmCandidate = {
@@ -101,6 +161,63 @@ describe('model-selector — latency-aware selection', () => {
     expect(sel?.model).toBe('gemma4:31b');
     expect(sel?.measured).toBe(true);
     expect(sel?.estLatencyMs).toBe(900);
+  });
+
+  it('prefers measured TTFM p50 after three real streamed turns', async () => {
+    const sb = scoreboardWithTurnMetrics([
+      turnRecord('ollama', 'gemma4:31b', 700),
+      turnRecord('ollama', 'gemma4:31b', 800),
+      turnRecord('ollama', 'gemma4:31b', 900),
+    ]);
+
+    const sel = await selectFastestModel('Bonjour', {
+      taskType: 'french',
+      localOnly: true,
+      candidates: [GEMMA_31B, QWEN_7B],
+      scoreboard: sb,
+    });
+
+    expect(sel?.model).toBe('gemma4:31b');
+    expect(sel?.measured).toBe(true);
+    expect(sel?.estLatencyMs).toBe(800);
+    expect(sel?.reason).toContain('TTFM p50');
+  });
+
+  it('requires three real turns before replacing the heuristic', async () => {
+    const sb = scoreboardWithTurnMetrics([
+      turnRecord('ollama', 'gemma4:31b', 100),
+      turnRecord('ollama', 'gemma4:31b', 110),
+    ]);
+
+    const sel = await selectFastestModel('Bonjour', {
+      taskType: 'french',
+      localOnly: true,
+      candidates: [GEMMA_31B, QWEN_7B],
+      scoreboard: sb,
+    });
+
+    expect(sel?.model).toBe('qwen2.5:7b-instruct');
+    expect(sel?.measured).toBe(false);
+  });
+
+  it('keeps empty-journal routing byte-identical to the heuristic result', async () => {
+    const sb = scoreboardWithTurnMetrics([]);
+    const sel = await selectFastestModel('Bonjour, qui es-tu ?', {
+      taskType: 'french',
+      candidates: [GEMMA_31B, QWEN_7B, GROK_FAST],
+      scoreboard: sb,
+    });
+
+    expect(JSON.stringify(sel)).toBe(JSON.stringify({
+      provider: 'grok',
+      model: 'grok-3-fast',
+      apiKey: 'xai-token',
+      baseURL: 'https://api.x.ai/v1',
+      isLocal: false,
+      estLatencyMs: 3000,
+      measured: false,
+      reason: 'french → grok-3-fast (est 3.0s, grok, $0.5/Mtok)',
+    }));
   });
 
   it('aggregate latency (any task type) is used when the task type has no data', async () => {

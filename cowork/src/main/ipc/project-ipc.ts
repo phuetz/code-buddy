@@ -36,8 +36,8 @@ export function registerProjectIpcHandlers(
 ) {
   ipcMain.handle('project.list', async () => {
     const projectManager = resolveProjectManager(projectManagerSource);
-    if (!projectManager) return { projects: [] };
-    return { projects: projectManager.list() };
+    if (!projectManager) return [];
+    return projectManager.list();
   });
 
   ipcMain.handle('project.get', async (_event, id: string) => {

@@ -23,6 +23,16 @@ jest.mock('fs', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn(),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock os
 jest.mock('os', () => {
   const impl = {
@@ -65,6 +75,10 @@ import {
   getMCPConfigPaths,
   setMCPServerEnabled,
 } from '../../src/mcp/config';
+
+mockReadJsonAtomicSync.mockImplementation((filePath: string) =>
+  JSON.parse((fs.readFileSync as jest.Mock)(filePath, 'utf8'))
+);
 
 describe('loadMCPConfig', () => {
   beforeEach(() => {
@@ -500,14 +514,14 @@ describe('setMCPServerEnabled', () => {
     const result = setMCPServerEnabled('social', false);
 
     expect(result).toEqual(expect.objectContaining({ updated: true, source: 'project-mcp' }));
-    const written = JSON.parse((fs.writeFileSync as jest.Mock).mock.calls[0][1]);
+    const written = mockWriteJsonAtomicSync.mock.calls[0][1];
     expect(written.mcpServers.social.enabled).toBe(false);
     expect(written.mcpServers.social.transport.env.TOKEN).toBe('${SOCIAL_TOKEN}');
   });
 
   it('reports when no source defines the server', () => {
     expect(setMCPServerEnabled('missing', true)).toEqual({ updated: false });
-    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(mockWriteJsonAtomicSync).not.toHaveBeenCalled();
     expect(mockUpdateProjectSetting).not.toHaveBeenCalled();
   });
 });
@@ -568,9 +582,9 @@ describe('saveProjectMCPConfig', () => {
 
     saveProjectMCPConfig(servers);
 
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
+    expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
       expect.stringContaining('mcp.json'),
-      expect.stringContaining('"mcpServers"')
+      { mcpServers: servers }
     );
   });
 
@@ -583,7 +597,7 @@ describe('saveProjectMCPConfig', () => {
     expect(result).toContain('mcp.json');
   });
 
-  it('should format JSON with 2-space indentation', () => {
+  it('should pass structured JSON to the atomic writer', () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
 
     const servers: Record<string, MCPServerConfig> = {
@@ -592,9 +606,10 @@ describe('saveProjectMCPConfig', () => {
 
     saveProjectMCPConfig(servers);
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    expect(writtenContent).toContain('  '); // 2-space indent
-    expect(writtenContent).toContain('\n');
+    expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+      expect.stringContaining('mcp.json'),
+      { mcpServers: servers }
+    );
   });
 });
 
@@ -618,9 +633,8 @@ describe('createMCPConfigTemplate', () => {
 
     createMCPConfigTemplate();
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    expect(writtenContent).toContain('"$schema"');
-    expect(writtenContent).toContain('json-schema.org');
+    const writtenTemplate = mockWriteJsonAtomicSync.mock.calls[0][1];
+    expect(writtenTemplate.$schema).toContain('json-schema.org');
   });
 
   it('should create template with description', () => {
@@ -628,9 +642,8 @@ describe('createMCPConfigTemplate', () => {
 
     createMCPConfigTemplate();
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    expect(writtenContent).toContain('"description"');
-    expect(writtenContent).toContain('MCP server configuration');
+    const writtenTemplate = mockWriteJsonAtomicSync.mock.calls[0][1];
+    expect(writtenTemplate.description).toContain('MCP server configuration');
   });
 
   it('should include example-stdio server template', () => {
@@ -638,11 +651,12 @@ describe('createMCPConfigTemplate', () => {
 
     createMCPConfigTemplate();
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    expect(writtenContent).toContain('"example-stdio"');
-    expect(writtenContent).toContain('"type": "stdio"');
-    expect(writtenContent).toContain('"command": "npx"');
-    expect(writtenContent).toContain('@example/mcp-server');
+    const writtenTemplate = mockWriteJsonAtomicSync.mock.calls[0][1];
+    expect(writtenTemplate.mcpServers['example-stdio']).toEqual(expect.objectContaining({
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@example/mcp-server'],
+    }));
   });
 
   it('should include example-http server template', () => {
@@ -650,10 +664,11 @@ describe('createMCPConfigTemplate', () => {
 
     createMCPConfigTemplate();
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    expect(writtenContent).toContain('"example-http"');
-    expect(writtenContent).toContain('"type": "http"');
-    expect(writtenContent).toContain('"url": "http://localhost:3000/mcp"');
+    const writtenTemplate = mockWriteJsonAtomicSync.mock.calls[0][1];
+    expect(writtenTemplate.mcpServers['example-http']).toEqual(expect.objectContaining({
+      type: 'http',
+      url: 'http://localhost:3000/mcp',
+    }));
   });
 
   it('should set example servers as disabled by default', () => {
@@ -661,8 +676,7 @@ describe('createMCPConfigTemplate', () => {
 
     createMCPConfigTemplate();
 
-    const writtenContent = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
-    const config = JSON.parse(writtenContent);
+    const config = mockWriteJsonAtomicSync.mock.calls[0][1];
 
     expect(config.mcpServers['example-stdio'].enabled).toBe(false);
     expect(config.mcpServers['example-http'].enabled).toBe(false);
@@ -847,10 +861,10 @@ describe('Integration Scenarios', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       expect(hasProjectMCPConfig()).toBe(false);
 
-      // Create template (mock writeFileSync to update existsSync behavior)
+      // Create template (the atomic writer is the persistence observation point)
       (fs.existsSync as jest.Mock).mockImplementation((_p: string) => {
         // After first write, return true for directory check
-        return (fs.writeFileSync as jest.Mock).mock.calls.length > 0;
+        return mockWriteJsonAtomicSync.mock.calls.length > 0;
       });
 
       createMCPConfigTemplate();

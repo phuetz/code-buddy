@@ -1,6 +1,6 @@
-import fs from "fs-extra";
 import * as path from "path";
 import { EventEmitter } from "events";
+import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 
 export type TaskType =
   | "search"      // Fast searches
@@ -140,22 +140,18 @@ export class ModelRouter extends EventEmitter {
   }
 
   private loadConfig(): ModelRouterConfig {
-    if (fs.existsSync(this.configPath)) {
-      try {
-        const saved = fs.readJsonSync(this.configPath);
-        return { ...DEFAULT_ROUTER_CONFIG, ...saved };
-      } catch (_error) {
-        // Use defaults
-      }
+    try {
+      const saved = readJsonAtomicSync<Partial<ModelRouterConfig>>(this.configPath, {});
+      return { ...DEFAULT_ROUTER_CONFIG, ...saved };
+    } catch (_error) {
+      // Use defaults
     }
     return { ...DEFAULT_ROUTER_CONFIG };
   }
 
   private saveConfig(): void {
     try {
-      const dir = path.dirname(this.configPath);
-      fs.ensureDirSync(dir);
-      fs.writeJsonSync(this.configPath, this.config, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, this.config);
     } catch (_error) {
       // Ignore save errors
     }

@@ -44,6 +44,21 @@ describe('PluginManager', () => {
       expect(fs.ensureDir).toHaveBeenCalledWith(mockPluginDir);
     });
 
+    it('ignores managed storage folders but accepts an explicit plugin manifest there', async () => {
+      (fs.pathExists as jest.Mock).mockImplementation(async (name) =>
+        name === mockPluginDir || name === path.join(mockPluginDir, 'installed', 'manifest.json'));
+      (fs.readdir as unknown as jest.Mock).mockResolvedValue([
+        { name: 'cache', isDirectory: () => true },
+        { name: 'installed', isDirectory: () => true },
+        { name: 'plugin-a', isDirectory: () => true },
+      ]);
+      const loadSpy = jest.spyOn(manager, 'loadPlugin').mockResolvedValue(true);
+      await manager.discover();
+      expect(loadSpy).not.toHaveBeenCalledWith(path.join(mockPluginDir, 'cache'));
+      expect(loadSpy).toHaveBeenCalledWith(path.join(mockPluginDir, 'installed'));
+      expect(loadSpy).toHaveBeenCalledWith(path.join(mockPluginDir, 'plugin-a'));
+    });
+
     it('should scan for plugins', async () => {
       (fs.pathExists as jest.Mock).mockResolvedValue(true);
       (fs.readdir as unknown as jest.Mock).mockResolvedValue([

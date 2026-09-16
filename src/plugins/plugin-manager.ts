@@ -18,6 +18,7 @@ import {
 import { getToolManager, ToolRegistration } from '../tools/tool-manager.js';
 import { getSlashCommandManager, SlashCommand } from '../commands/slash-commands.js';
 import { createLogger, Logger } from '../utils/logger.js';
+import { readJsonAtomicSync, readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { IsolatedPluginRunner, createIsolatedPluginRunner } from './isolated-plugin-runner.js';
 import { getBundledProviders } from './bundled/index.js';
 
@@ -84,11 +85,9 @@ export class PluginManager extends EventEmitter {
   private loadTrustedPlugins(): string[] {
     try {
       const settingsPath = path.join(process.cwd(), '.codebuddy', 'settings.json');
-      if (fs.existsSync(settingsPath)) {
-        const settings = fs.readJsonSync(settingsPath);
-        if (Array.isArray(settings.trustedPlugins)) {
-          return settings.trustedPlugins.filter((p: unknown) => typeof p === 'string');
-        }
+      const settings = readJsonAtomicSync<{ trustedPlugins?: unknown }>(settingsPath, {});
+      if (Array.isArray(settings.trustedPlugins)) {
+        return settings.trustedPlugins.filter((p: unknown): p is string => typeof p === 'string');
       }
     } catch {
       // Ignore — no settings or parse error
@@ -119,11 +118,9 @@ export class PluginManager extends EventEmitter {
     const settingsPath = path.join(process.cwd(), '.codebuddy', 'settings.json');
     try {
       let settings: Record<string, unknown> = {};
-      if (await fs.pathExists(settingsPath)) {
-        settings = await fs.readJson(settingsPath);
-      }
+      settings = await readJsonAtomic<Record<string, unknown>>(settingsPath, {});
       settings.trustedPlugins = this.config.trustedPlugins;
-      await fs.writeJson(settingsPath, settings, { spaces: 2 });
+      await writeJsonAtomic(settingsPath, settings);
       this.logger.info(`Plugin ${pluginId} added to trusted list`);
     } catch (err) {
       this.logger.warn(`Failed to persist trusted plugin: ${err instanceof Error ? err.message : String(err)}`);
@@ -147,7 +144,16 @@ export class PluginManager extends EventEmitter {
     const entries = await fs.readdir(this.config.pluginDir, { withFileTypes: true });
 
     // Load all plugins in parallel for faster startup
-    const directories = entries.filter(entry => entry.isDirectory());
+    const candidates = entries.filter(entry => entry.isDirectory());
+    const discovered = await Promise.all(candidates.map(async entry => {
+      // These are managed storage containers, not broken plugins. Still allow
+      // an explicit manifest if a user intentionally installs one under a reserved name.
+      if (entry.name === 'cache' || entry.name === 'installed') {
+        return await fs.pathExists(path.join(this.config.pluginDir, entry.name, 'manifest.json')) ? entry : null;
+      }
+      return entry;
+    }));
+    const directories = discovered.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const total = directories.length;
 
     this.emit('plugins:loading', { total, phase: 'starting' });

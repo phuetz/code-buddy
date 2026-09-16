@@ -15,7 +15,7 @@ use crate::event::{Modality, SensoryEvent};
 /// At/above this salience, an event is escalated and never coalesced/dropped.
 pub const ESCALATE_SALIENCE: u8 = 128;
 
-/// Parallel short-term memory: a bounded ring buffer per modality.
+/// Parallel short-term memory: a bounded ring buffer per modality; zero disables storage.
 pub struct Memory {
     cap: usize,
     buffers: HashMap<Modality, VecDeque<SensoryEvent>>,
@@ -30,6 +30,9 @@ impl Memory {
     }
 
     pub fn push(&mut self, ev: &SensoryEvent) {
+        if self.cap == 0 {
+            return;
+        }
         let b = self.buffers.entry(ev.modality).or_default();
         if b.len() >= self.cap {
             b.pop_front();
@@ -71,7 +74,8 @@ impl Memory {
 
 /// Should `ev` be dropped as redundant, given the immediately-preceding event of
 /// the same modality? Coalesces a burst of the same low-salience kind within
-/// `window_ms`. Salient events always pass.
+/// `window_ms`, in either timestamp order (attention batches reorder by salience).
+/// Salient events always pass.
 pub fn should_coalesce(prev: Option<&SensoryEvent>, ev: &SensoryEvent, window_ms: u64) -> bool {
     // Salient events bypass coalescing; vital signs (the heartbeat) are a
     // deliberate rhythm and must never be dropped, even at fast rates.
@@ -80,7 +84,7 @@ pub fn should_coalesce(prev: Option<&SensoryEvent>, ev: &SensoryEvent, window_ms
     }
     match prev {
         Some(p) if p.modality == ev.modality && p.kind == ev.kind => {
-            ev.ts_ms.saturating_sub(p.ts_ms) < window_ms
+            ev.ts_ms.abs_diff(p.ts_ms) < window_ms
         }
         _ => false,
     }
@@ -240,6 +244,45 @@ mod tests {
     }
 
     #[test]
+    fn zero_capacity_disables_memory_without_disabling_admission_or_coalescing() {
+        let mut t = Thalamus::new(0, 100);
+        assert!(t.admit(ev(Modality::Vision, "motion", 0, 10)).is_some());
+        assert!(t.admit(ev(Modality::Vision, "motion", 10, 10)).is_none());
+        assert!(t
+            .admit(ev(Modality::Audio, "speech_start", 20, 200))
+            .is_some());
+        assert_eq!(t.memory().len(Modality::Vision), 0);
+        assert_eq!(t.memory().len(Modality::Audio), 0);
+        assert!(t.memory().recent(Modality::Vision, 8).is_empty());
+        assert_eq!(t.memory().digest(), json!({ "modalities": {} }));
+    }
+
+    #[test]
+    fn coalescing_uses_the_same_time_window_in_both_timestamp_orders() {
+        for (previous, current, expected) in [
+            (1000, 1099, true),
+            (1099, 1000, true),
+            (1000, 1100, false),
+            (1100, 1000, false),
+            (1000, 0, false),
+            (u64::MAX, 0, false),
+            (0, u64::MAX, false),
+            (1000, 1000, true),
+        ] {
+            let previous = ev(Modality::Vision, "motion", previous, 80);
+            let current = ev(Modality::Vision, "motion", current, 10);
+            assert_eq!(
+                should_coalesce(Some(&previous), &current, 100),
+                expected,
+                "previous={}, current={}",
+                previous.ts_ms,
+                current.ts_ms
+            );
+            assert!(!should_coalesce(Some(&previous), &current, 0));
+        }
+    }
+
+    #[test]
     fn memory_digest_reflects_per_modality_counts() {
         let mut t = Thalamus::new(8, 0); // window 0 → no coalescing
         t.admit(ev(Modality::Vision, "motion", 0, 180));
@@ -308,6 +351,31 @@ mod tests {
         }
         // Served by descending salience (200 > 90 > 10), not arrival order.
         assert_eq!(kinds, vec!["speech_start", "focus", "motion"]);
+    }
+
+    #[tokio::test]
+    async fn priority_reordering_keeps_older_events_outside_the_coalescing_window() {
+        let (stx, srx) = mpsc::channel::<SensoryEvent>(8);
+        let (btx, mut brx) = broadcast::channel::<SensoryEvent>(8);
+        // Preload one batch. Priority serves 1000 first, then the nearby 980,
+        // then 0. Only 980 is redundant, despite both later arrivals being older.
+        stx.send(ev(Modality::Vision, "motion", 0, 10))
+            .await
+            .unwrap();
+        stx.send(ev(Modality::Vision, "motion", 980, 30))
+            .await
+            .unwrap();
+        stx.send(ev(Modality::Vision, "motion", 1000, 80))
+            .await
+            .unwrap();
+        drop(stx);
+        Thalamus::new(8, 100).run_multi(vec![srx], btx).await;
+
+        let mut timestamps = Vec::new();
+        while let Ok(event) = brx.try_recv() {
+            timestamps.push(event.ts_ms);
+        }
+        assert_eq!(timestamps, vec![1000, 0]);
     }
 
     #[tokio::test]

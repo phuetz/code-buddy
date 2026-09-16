@@ -1,3 +1,5 @@
+import { isChatGptSubscriptionModel } from './chatgpt-models.js';
+
 /**
  * Model ↔ provider compatibility for the CLI model resolver (`loadModel`).
  *
@@ -37,7 +39,7 @@ export function isModelCompatibleWithProvider(model: string, provider?: string):
   if (!provider) return true;
   const looksGrok = /grok/i.test(model);
   if (provider === 'grok') return looksGrok;
-  if (provider === 'chatgpt') return /^(gpt-|o[1-9]|codex)/i.test(model) && !looksGrok;
+  if (provider === 'chatgpt') return isChatGptSubscriptionModel(model) && !looksGrok;
   if (LOCAL_RUNTIME_PROVIDERS.has(provider)) return !looksLikeCloudModel(model);
   if (FIRST_PARTY_PROVIDERS.has(provider)) {
     const family = FIRST_PARTY_MODEL_FAMILIES.find(([pattern]) => pattern.test(model));

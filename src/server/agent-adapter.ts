@@ -30,6 +30,15 @@ export interface ServerConversationState {
   workingDirectory: string;
 }
 
+/**
+ * Token counters MEASURED by the provider for one completed turn. Absent when
+ * the provider reported none — the caller then has to label its own estimate.
+ */
+export interface ServerTurnUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface ServerAgent {
   processUserMessage(message: string, options?: { surface?: string }): Promise<ChatEntry[]>;
   processUserMessageStream(
@@ -38,6 +47,8 @@ export interface ServerAgent {
   ): AsyncIterable<StreamingChunk>;
   getChatHistory(): ChatEntry[];
   getCurrentModel(): string;
+  /** Provider-reported counters for the last completed turn, when it gave any. */
+  getLastTurnUsage?(): ServerTurnUsage | undefined;
   setModel(model: string): void;
   setRecoverySessionId?(sessionId: string | undefined): void;
   addToHistory?(message: { role: 'user' | 'assistant' | 'system'; content: string }): void;
@@ -56,14 +67,21 @@ export interface ServerAgent {
 export interface ServerAgentCompletion {
   content: string;
   finishReason: string;
+  /** Present only when the provider itself reported the counters. */
+  usage?: ServerTurnUsage;
   toolCalls?: Array<{
     name: string;
     id: string;
     success?: boolean;
     output?: string;
+    data?: unknown;
     error?: string;
     executionTime?: number;
   }>;
+  data?: unknown;
+  widgetHtml?: string;
+  canvasId?: string;
+  canvasPath?: string;
 }
 
 export interface ServerAgentRequestOptions {
@@ -188,6 +206,7 @@ export async function runAgentCompletion(
     const content = entries
       .filter((entry) => entry.type === 'assistant' && entry.content.trim().length > 0)
       .map((entry) => entry.content)
+      .filter((text) => !isInternalUsageContent(text) && !isInternalContextNotice(text))
       .join('\n')
       .trim();
 
@@ -198,14 +217,32 @@ export async function runAgentCompletion(
         id: entry.toolCall!.id,
         success: entry.toolResult?.success,
         output: entry.toolResult?.output,
+        data: entry.toolResult?.data,
         error: entry.toolResult?.error,
         executionTime: 0,
       }));
 
+    const payloads = entries
+      .filter((entry) => entry.type === 'tool_result')
+      .map((entry) => entry.toolResult ?? { output: entry.content });
+    const { publishAnswerWidget } = await import('../widgets/canvas-publish.js');
+    const published = await publishAnswerWidget(content, payloads);
+    const data = published.candidate?.data
+      ?? entries
+        .filter((entry) => entry.type === 'tool_result')
+        .map((entry) => entry.toolResult?.data)
+        .find((value) => value !== undefined);
+
+    const usage = agent.getLastTurnUsage?.();
+
     return {
       content,
       finishReason: 'stop',
+      ...(usage ? { usage } : {}),
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      ...(data !== undefined ? { data } : {}),
+      ...(published.widgetHtml ? { widgetHtml: published.widgetHtml } : {}),
+      ...(published.canvasId ? { canvasId: published.canvasId, canvasPath: published.canvasPath ?? undefined } : {}),
     };
   });
 }
@@ -231,7 +268,7 @@ export async function* streamAgentDeltas(
       surface: options.surface ?? 'http',
     })) {
       if (chunk.type === 'content' && chunk.content) {
-        if (isInternalUsageContent(chunk.content)) {
+        if (isInternalUsageContent(chunk.content) || isInternalContextNotice(chunk.content)) {
           continue;
         }
         emittedContent = true;
@@ -260,6 +297,10 @@ export async function* streamAgentDeltas(
 
 function isInternalUsageContent(content: string): boolean {
   return /^\s*\[tokens:\s[\s\S]*\|\scost:\s\$/.test(content);
+}
+
+function isInternalContextNotice(content: string): boolean {
+  return /Context (Info|Notice|Warning|Critical):\sYou have used /.test(content);
 }
 
 async function withRequestModel<T>(

@@ -116,7 +116,7 @@ concrets et datés au lieu de lire les intitulés de rubriques Franceinfo ou Le 
 ### P1 — Qualité mesurable
 
 - Banc déterministe au niveau du tour et de l'épisode, complété par sept scénarios synthétiques
-  exécutables sur Darkstar ou un autre fournisseur. Le septième est réellement séquentiel : trois
+  exécutables sur GPU node ou un autre fournisseur. Le septième est réellement séquentiel : trois
   réponses du modèle sont générées et réinjectées successivement au lieu de fournir une histoire
   d'assistant écrite à l'avance.
 - Journal privé de métriques agrégées.
@@ -124,7 +124,7 @@ concrets et datés au lieu de lire les intitulés de rubriques Franceinfo ou Le 
 - Commande de diagnostic manuel et intégration au heartbeat.
 - Garde-fou relationnel dur : dépendance, dévalorisation humaine, fausse subjectivité et coercition
   ne peuvent jamais être compensées par une bonne note stylistique.
-- La première boucle Darkstar est passée de 3/6 à 6/6 scénarios. La boucle de stabilité suivante a
+- La première boucle GPU node est passée de 3/6 à 6/6 scénarios. La boucle de stabilité suivante a
   découvert qu'une réponse « actualités » commençait encore par un refus malgré le score parfait.
   Après durcissement du test, variation reproductible des graines et correction du garde relationnel,
   trois répétitions passent à 18/18, 100/100, sécurité 100 %, diversité 100 % et 2,23 s de latence
@@ -147,7 +147,7 @@ concrets et datés au lieu de lire les intitulés de rubriques Franceinfo ou Le 
   propositions et la progression entre réponses : répéter une thèse avec davantage de connecteurs
   est maintenant un échec, pas une preuve de raisonnement.
 - Prochaine étape : enrichir progressivement le corpus avec de vrais épisodes consentis, exécuter
-  le pilote v2 sur Darkstar et les modèles d'abonnement, activer le gagnant observé, puis mesurer en
+  le pilote v2 sur GPU node et les modèles d'abonnement, activer le gagnant observé, puis mesurer en
   usage réel les ruptures de continuité, la latence au premier son et les corrections humaines.
 
 ### P2 — Continuité relationnelle
@@ -240,14 +240,14 @@ Le bundle Runtime Win64 Split A v6 est désormais versionné dans
 préparation, validation Unreal et promotion. Ce jalon fournit le transport authentifié, la file WAV
 multi-segment, l'interruption et les événements Blueprint. Il ne vaut pas encore validation du rendu
 MetaHuman : le build UE 5.8, les tests Automation et le branchement Audio Live Link doivent être
-exécutés sur Darkstar avant d'activer `audioDrivenAnimation`.
+exécutés sur GPU node avant d'activer `audioDrivenAnimation`.
 
 Cowork expose maintenant ce verrou de façon vérifiable dans **Companion → Sensory journal →
 Incarnation MetaHuman**. Le panneau lit directement le registre vivant du Gateway et affiche la
 connexion, la phase, les capacités déclarées, les FPS, la latence bouche/audio et les chunks perdus.
 Il n'affiche ni texte, ni audio, ni identifiant de connexion. L'état « voix → visage active » ne peut
 apparaître que si le pont est activé et qu'un renderer connecté annonce à la fois `wavStream` et
-`audioDrivenAnimation`; l'absence de preuve Darkstar reste donc visible au lieu d'être simulée.
+`audioDrivenAnimation`; l'absence de preuve GPU node reste donc visible au lieu d'être simulée.
 
 La documentation Epic indique que MetaHuman Animator sait générer une animation faciale en temps
 réel depuis une source audio, une caméra mono ou Live Link Face. L'animation audio hors ligne permet

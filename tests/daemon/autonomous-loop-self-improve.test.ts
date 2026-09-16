@@ -21,7 +21,7 @@ describe('FleetAutonomousLoop — idle self-improvement trigger', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'auto-loop-si-'));
-    store = new FleetColabStore({ dir, agentId: 'ministar-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
+    store = new FleetColabStore({ dir, agentId: 'hub-linux/code-buddy', now: () => 1_000, generateId: (p) => `${p}-x` });
     writeFileSync(join(dir, 'colab-tasks.json'), JSON.stringify({ version: '0.1', tasks: [] }, null, 2)); // idle
     prevFlag = process.env.CODEBUDDY_SELF_IMPROVE;
   });
@@ -117,6 +117,6 @@ describe('FleetAutonomousLoop — idle self-improvement trigger', () => {
     const r = await loop(async () => { throw new Error('boom'); }).tick();
     expect(r.outcome).toBe('idle');
     expect(r.detail).toContain('boom');
-    expect(store.listPresence()['ministar-linux/code-buddy']?.status).toBe('idle');
+    expect(store.listPresence()['hub-linux/code-buddy']?.status).toBe('idle');
   });
 });

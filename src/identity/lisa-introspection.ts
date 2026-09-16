@@ -200,7 +200,8 @@ const DESCRIBE_PATTERNS = [
   /\bde quoi (?:es tu|etes vous) (?:fait|faite|faits|faites|compose|composee|composes|composees)\b/,
   /\bqui (?:es tu|etes vous)\b/,
   /\b(?:quell?e est )?(?:ton|votre) architecture\b/,
-  /\b(?:quels? (?:sont )?)?(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\b/,
+  /\bquels? (?:sont )?(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\b/,
+  /^(?:tes|vos) (?:capteurs?|outils?|modules?)(?: (?:sont|restent|semblent))?(?: (?:actifs?|disponibles?|operationnels?))?\s*[?.!]*$/,
   /\bquels? (?:modules?|composants?|outils?) (?:as tu|avez vous)\b/,
   /\bquell?es? (?:sont )?(?:tes|vos) limit(?:e|es|ation|ations)\b/,
   /\b(?:lisa|l assistant|l assistante|l agent)\b.{0,96}\b(?:conscient|consciente|conscience d elle meme|modele d elle meme|se connaitre)\b/,
@@ -228,6 +229,14 @@ const DESCRIBE_PATTERNS = [
   /\b(?:explain|describe) your (?:architecture|memory|tools?|modules?|internal components?)\b/,
 ] as const;
 
+const EVOLUTION_PATTERNS = [
+  /\bqu est ce qui a change (?:chez|dans) (?:toi|vous)\b/,
+  /\b(?:quoi de neuf|quelles? evolutions?) (?:chez|pour|dans) (?:toi|vous)\b/,
+  /\b(?:qu as tu|qu avez vous) appris (?:recemment|depuis)\b/,
+  /\b(?:what changed|what s new) (?:about|with) (?:you|yourself)\b/,
+  /\bwhat have you learned recently\b/,
+] as const;
+
 const EXPLICIT_EXTERNAL_SCOPE =
   /\b(?:dans|de|du|sur|pour)\s+(?:(?:l|ce|cet|cette|ces|le|la|les|un|une|mon|ma|mes|notre|nos|votre|vos)\s+)?(?:code(?! buddy\b)|projet|serveur|module|application|site|interface|codebase|depot|repository)\b|\b(?:mon|ma|mes|notre|nos|ce|cet|cette|ces)\s+(?:code|projet|serveur|module|application|site|interface|codebase|depot|repository)\b|\b(?:this|my|our|the|the current)\s+(?:code|project|server|module|application|site|interface|codebase|repository)\b|\b(?:ton|votre) architecture (?:css|frontend|backend|web|du projet|de l application)\b/;
 
@@ -236,6 +245,15 @@ const EXPLICIT_PERSONAL_INTROSPECTION_SCOPE =
 
 function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+/** Whether a question asks specifically for documented changes to Lisa herself. */
+export function isLisaEvolutionRequest(raw: string): boolean {
+  const text = normalizeIntrospectionText(raw);
+  return (
+    matchesAny(text, EVOLUTION_PATTERNS) &&
+    (!EXPLICIT_PERSONAL_INTROSPECTION_SCOPE.test(text) || SELF_IMPLEMENTATION_TARGET.test(text))
+  );
 }
 
 /**
@@ -408,7 +426,12 @@ export function renderLisaOperationalSelfResponse(
 
 /** Classify a request about Lisa's own technical implementation. */
 export function classifyLisaIntrospection(raw: string): LisaIntrospectionIntent | null {
-  const text = normalizeIntrospectionText(raw);
+  // Using tools to do a task does not make the tools the inspection target.
+  // Keep any explicit target that follows (e.g. 'inspect your own code').
+  const text = normalizeIntrospectionText(raw).replace(
+    /\b(?:(?:utilise|utilisez|utiliser) (?:tes|vos)|use your) (?:outils|tools)\b/g,
+    '',
+  );
   if (!text) return null;
 
   // A request for introspection of the user's life, emotions, relationship, or
@@ -425,6 +448,10 @@ export function classifyLisaIntrospection(raw: string): LisaIntrospectionIntent 
   // deterministic epistemic boundary, even when the exact wording was not
   // listed in the broader descriptive patterns below.
   if (isLisaPrimarilySubjectiveConsciousnessQuestion(text)) {
+    return 'describe';
+  }
+
+  if (isLisaEvolutionRequest(text)) {
     return 'describe';
   }
 

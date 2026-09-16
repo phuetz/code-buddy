@@ -748,7 +748,7 @@ export function AdvancedCommandCenter() {
             }`}
             data-testid="advanced-tab-gpu"
           >
-            GPU Darkstar
+            GPU GPU node
           </button>
         </div>
       </header>
@@ -927,7 +927,7 @@ export function AdvancedCommandCenter() {
                       value={ollamaUrl}
                       onChange={(event) => setOllamaUrl(event.target.value)}
                       disabled={runningCount > 0}
-                      placeholder="Configuration Cowork (ex. http://darkstar:11434)"
+                      placeholder="Configuration Cowork (ex. http://gpuNode:11434)"
                       className="block w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted disabled:opacity-50"
                       data-testid="advanced-launcher-ollama-url"
                     />

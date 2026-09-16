@@ -237,9 +237,10 @@ describe('Gemini SSE Streaming', () => {
       expect(fcPart).toBeDefined();
       expect((fcPart!.functionCall as Record<string, unknown>).name).toBe('read_file');
 
-      // Find function response turn
-      const funcTurn = contents.find(c => c.role === 'function');
+      // Find function response turn (Gemini 3.x encodes function responses under role 'user')
+      const funcTurn = contents.find(c => c.parts.some((p: unknown) => typeof p === 'object' && p !== null && 'functionResponse' in p));
       expect(funcTurn).toBeDefined();
+      expect(funcTurn!.role).toBe('user');
     });
 
     it('should ensure conversation starts with user role', () => {

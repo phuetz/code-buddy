@@ -87,7 +87,7 @@ export class ArchitectMode extends EventEmitter {
   ) {
     super();
     this.config = {
-      architectModel: config.architectModel || "grok-3-latest",
+      architectModel: config.architectModel || process.env.GROK_MODEL || "grok-3-latest",
       editorModel: config.editorModel || "grok-code-fast-1",
       autoApprove: config.autoApprove || false,
       maxSteps: config.maxSteps || 20,

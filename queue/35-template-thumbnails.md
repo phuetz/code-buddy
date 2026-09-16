@@ -1,6 +1,6 @@
 # Vague — Galerie de vignettes de templates (façon Genspark : « voir ce qui va être créé »)
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/template-thumbnails`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/template-thumbnails`.
 
 ## But (inspiration Genspark)
 Avant de générer, Genspark montre des **vignettes** qui préfigurent le RÉSULTAT (une mini-maquette du type de livrable).

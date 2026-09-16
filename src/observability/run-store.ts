@@ -10,6 +10,7 @@
  * Automatic pruning keeps the 30 most recent runs.
  */
 
+import { RunEventWriter, type RunPersistenceStatus } from './run-event-writer.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -23,6 +24,8 @@ import {
 } from '../database/optional-sqlite.js';
 import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { auditLogger } from '../security/audit-logger.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -60,6 +63,8 @@ export interface RunMetadata {
   userId?: string;
   /** Session ID */
   sessionId?: string;
+  /** Working directory of the run, used by `buddy run replay` */
+  cwd?: string;
   /** Tags for filtering */
   tags?: string[];
   /**
@@ -95,6 +100,7 @@ export interface RunSummary {
 }
 
 export interface RunRecord {
+  persistence?: RunPersistenceStatus;
   summary: RunSummary;
   metrics: Partial<RunMetrics>;
   artifacts: string[]; // file paths relative to run dir
@@ -231,6 +237,7 @@ export class RunStore {
   private runsDir: string;
   /** File handles for active run event streams */
   private handles: Map<string, fs.WriteStream> = new Map();
+  private eventWriters = new Map<string, RunEventWriter>();
   /** Immediate in-process view of events, avoiding read-after-write stream races. */
   private eventBuffers: Map<string, RunEvent[]> = new Map();
   /** In-memory event counts per run */
@@ -335,12 +342,9 @@ export class RunStore {
     const eventsPath = path.join(runDir, 'events.jsonl');
     fs.writeFileSync(eventsPath, '', { flag: 'a' }); // ensure file exists
     const ws = fs.createWriteStream(eventsPath, { flags: 'a', encoding: 'utf-8' });
-    ws.on('error', (err) => {
-      logger.debug('RunStore: event stream error', {
-        runId,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    });
+    this.eventWriters.set(runId, new RunEventWriter(ws, error => {
+      logger.warn('RunStore: journal persistence failed', { runId, error: error.message });
+    }));
     this.handles.set(runId, ws);
 
     // Emit run_start event
@@ -359,6 +363,14 @@ export class RunStore {
 
     this.saveSummary(runId, summary);
     this.pruneOldRuns();
+
+    // Initialize audit logger in production where RunStore starts
+    try {
+      const auditDir = process.env.CODEBUDDY_AUDIT_DIR || path.join(os.homedir(), '.codebuddy');
+      auditLogger.init({ logDir: auditDir, sessionId: metadata?.sessionId });
+    } catch {
+      // Ignore
+    }
 
     this._currentRunId = runId;
     setActiveRunStore(this);
@@ -405,6 +417,16 @@ export class RunStore {
   /**
    * Emit an event for a run. Thread-safe: writes are serialized by the writable stream.
    */
+  getPersistenceStatus(runId: string): RunPersistenceStatus | undefined {
+    return this.eventWriters.get(runId)?.status();
+  }
+
+  async flushRun(runId: string): Promise<RunPersistenceStatus> {
+    const writer = this.eventWriters.get(runId);
+    if (!writer) throw new Error(`No active journal writer for run ${runId}`);
+    return writer.flush();
+  }
+
   emit(runId: string, event: Omit<RunEvent, 'ts' | 'runId'>): void {
     const ws = this.handles.get(runId);
     if (!ws) return;
@@ -420,11 +442,7 @@ export class RunStore {
       buffer.push(fullEvent);
     }
 
-    try {
-      ws.write(JSON.stringify(fullEvent) + '\n');
-    } catch (err) {
-      logger.debug('RunStore: failed to write event', { runId, err });
-    }
+    this.eventWriters.get(runId)?.write(JSON.stringify(fullEvent) + '\n');
 
     // Update in-memory count
     const count = (this.eventCounts.get(runId) || 0) + 1;
@@ -434,15 +452,40 @@ export class RunStore {
     if (summary) {
       summary.eventCount = count;
     }
+
+    if (event.type === 'tool_call') {
+      const current = this.getRun(runId)?.metrics.toolCallCount ?? 0;
+      this.updateMetrics(runId, { toolCallCount: current + 1 });
+    }
   }
 
   /**
    * End a run and flush the event stream.
    */
-  endRun(runId: string, status: 'completed' | 'failed' | 'cancelled'): void {
+  endRun(runId: string, status: 'completed' | 'failed' | 'cancelled', finalMetrics?: Partial<RunMetrics>): void {
+    if (finalMetrics) {
+      this.updateMetrics(runId, finalMetrics);
+    }
     this.emit(runId, { type: 'run_end', data: { status } });
 
-    const summary = this.summaries.get(runId);
+    let summary = this.summaries.get(runId);
+    if (!summary) {
+      try {
+        const summaryPath = path.join(this.runDir(runId), 'summary.json');
+        summary = readJsonAtomicSync<RunSummary | null>(summaryPath, null, {
+          mode: 0o600,
+          isValid: (value): value is RunSummary => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value) &&
+            typeof (value as RunSummary).runId === 'string',
+          ),
+        }) ?? undefined;
+        if (summary) {
+          this.summaries.set(runId, summary);
+        }
+      } catch {
+        // ignore
+      }
+    }
     if (summary) {
       summary.status = status;
       summary.endedAt = Date.now();
@@ -452,10 +495,28 @@ export class RunStore {
     // Update metrics duration
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
-      if (fs.existsSync(metricsPath)) {
-        const metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8')) as RunMetrics;
-        metrics.durationMs = (summary?.endedAt || Date.now()) - (summary?.startedAt || Date.now());
-        fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
+      const metrics = fs.existsSync(metricsPath)
+        ? readJsonAtomicSync<RunMetrics | null>(metricsPath, null, {
+            mode: 0o600,
+            isValid: (value): value is RunMetrics => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          })
+        : null;
+      const durationMs = Math.max(1, (summary?.endedAt || Date.now()) - (summary?.startedAt || Date.now()));
+      if (metrics) {
+        metrics.durationMs = durationMs;
+        writeJsonAtomicSync(metricsPath, metrics, { mode: 0o600 });
+      } else {
+        writeJsonAtomicSync(metricsPath, {
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalCost: 0,
+          durationMs,
+          toolCallCount: 0,
+          failoverCount: 0,
+        }, { mode: 0o600 });
       }
     } catch {
       // Ignore
@@ -536,11 +597,14 @@ export class RunStore {
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
       let existing: Partial<RunMetrics> = {};
-      if (fs.existsSync(metricsPath)) {
-        existing = JSON.parse(fs.readFileSync(metricsPath, 'utf-8'));
-      }
+      existing = readJsonAtomicSync<Partial<RunMetrics>>(metricsPath, {}, {
+        mode: 0o600,
+        isValid: (value): value is Partial<RunMetrics> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
       const merged = { ...existing, ...metrics };
-      fs.writeFileSync(metricsPath, JSON.stringify(merged, null, 2));
+      writeJsonAtomicSync(metricsPath, merged, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -562,9 +626,12 @@ export class RunStore {
     let metrics: Partial<RunMetrics> = {};
     try {
       const metricsPath = path.join(runDir, 'metrics.json');
-      if (fs.existsSync(metricsPath)) {
-        metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8'));
-      }
+      metrics = readJsonAtomicSync<Partial<RunMetrics>>(metricsPath, {}, {
+        mode: 0o600,
+        isValid: (value): value is Partial<RunMetrics> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch {
       // Ignore
     }
@@ -579,7 +646,8 @@ export class RunStore {
       // Ignore
     }
 
-    return { summary, metrics, artifacts };
+    const persistence = this.getPersistenceStatus(runId);
+    return { summary, metrics, artifacts, ...(persistence ? { persistence } : {}) };
   }
 
   /**
@@ -1227,7 +1295,7 @@ export class RunStore {
   private saveMetrics(runId: string, metrics: Partial<RunMetrics>): void {
     try {
       const metricsPath = path.join(this.runDir(runId), 'metrics.json');
-      fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
+      writeJsonAtomicSync(metricsPath, metrics, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -1236,7 +1304,7 @@ export class RunStore {
   private saveSummary(runId: string, summary: RunSummary): void {
     try {
       const summaryPath = path.join(this.runDir(runId), 'summary.json');
-      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+      writeJsonAtomicSync(summaryPath, summary, { mode: 0o600 });
     } catch {
       // Ignore
     }
@@ -1250,8 +1318,14 @@ export class RunStore {
       for (const dir of dirs) {
         try {
           const summaryPath = path.join(this.runsDir, dir, 'summary.json');
-          if (fs.existsSync(summaryPath)) {
-            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')) as RunSummary;
+          const summary = readJsonAtomicSync<RunSummary | null>(summaryPath, null, {
+            mode: 0o600,
+            isValid: (value): value is RunSummary => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value) &&
+              typeof (value as RunSummary).runId === 'string',
+            ),
+          });
+          if (summary) {
             this.summaries.set(summary.runId, summary);
             // Count events from file size heuristic (avoid full parse on load)
             const eventsPath = path.join(this.runsDir, dir, 'events.jsonl');
@@ -1287,6 +1361,7 @@ export class RunStore {
       if (ws) {
         ws.destroy();
         this.handles.delete(s.runId);
+      this.eventWriters.delete(s.runId);
       }
 
       // Remove directory after a short delay to let the stream fully close

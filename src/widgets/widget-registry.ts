@@ -11,7 +11,7 @@
  *
  * @module widgets/widget-registry
  */
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { renderWeatherWidget } from './curated/weather.js';
@@ -20,6 +20,7 @@ import { renderStockWidget } from './curated/stock.js';
 import { widgetKind, type AuthoredWidget } from './widget-types.js';
 import { renderTemplate } from './template-engine.js';
 import { scanWidgetFirewall } from './widget-gate.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Curated server-side renderers: data → self-contained HTML fragment (no script). */
 const CURATED: Record<string, (data: unknown) => string> = {
@@ -72,13 +73,9 @@ export function readAuthoredWidget(
     let metadata: Record<string, unknown> = {};
     const metadataPath = join(dir, 'meta.json');
     if (existsSync(metadataPath)) {
-      try {
-        const parsed: unknown = JSON.parse(readFileSync(metadataPath, 'utf8'));
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          metadata = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // A malformed/legacy sidecar must not make the inert template disappear.
+      const parsed = readJsonAtomicSync<unknown>(metadataPath, null);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        metadata = parsed as Record<string, unknown>;
       }
     }
     return {
@@ -121,31 +118,18 @@ export function recordAuthoredWidgetUse(
   try {
     const path = join(authoredWidgetDir(widget.kind, env), 'meta.json');
     let metadata: Record<string, unknown> = {};
-    if (existsSync(path)) {
-      try {
-        const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          metadata = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Recreate a valid sidecar below while preserving registry defaults.
-      }
+    const parsed = readJsonAtomicSync<unknown>(path, null);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      metadata = parsed as Record<string, unknown>;
     }
-    writeFileSync(
-      path,
-      JSON.stringify(
-        {
-          ...metadata,
-          kind: widget.kind,
-          source: 'authored',
-          dataTypes: widget.dataTypes,
-          usedCount: widget.usedCount + 1,
-          lastUsedAt: now,
-        },
-        null,
-        2
-      )
-    );
+    writeJsonAtomicSync(path, {
+      ...metadata,
+      kind: widget.kind,
+      source: 'authored',
+      dataTypes: widget.dataTypes,
+      usedCount: widget.usedCount + 1,
+      lastUsedAt: now,
+    }, { mode: 0o600 });
     return true;
   } catch {
     return false;

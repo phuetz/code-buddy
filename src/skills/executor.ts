@@ -15,6 +15,7 @@ import type {
 } from './types.js';
 import { SkillVariableResolver, type SkillContext } from './skill-enhancements.js';
 import { resolveBashInjections } from './bash-injection.js';
+import { recordSkillActivity } from './skill-usage-store.js';
 
 // ============================================================================
 // Types
@@ -70,6 +71,7 @@ export class SkillExecutor extends EventEmitter {
     const startTime = Date.now();
     const toolCalls: SkillExecutionResult['toolCalls'] = [];
     this.emit('skill:start', skill, context);
+    recordSkillActivity(skill.metadata.name, 'use', { source: 'executor' });
 
     try {
       // Check requirements

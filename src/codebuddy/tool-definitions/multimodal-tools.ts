@@ -343,7 +343,7 @@ export const GPU_MEDIA_JOB_TOOL: CodeBuddyTool = {
   function: {
     name: 'gpu_media_job',
     description:
-      'Inspect, submit, monitor, or cancel isolated GPU jobs on the configured Darkstar worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.',
+      'Inspect, submit, monitor, or cancel isolated GPU jobs on the configured GPU node worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.',
     parameters: {
       type: 'object',
       properties: {
@@ -512,8 +512,12 @@ export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
 };
 
 const HYBRID_CAPACITY_PROPERTIES = {
-  darkstar: { type: "boolean", description: "Darkstar local GPU worker is available." },
-  ministar: { type: "boolean", description: "Ministar local GPU worker is available." },
+  gpuNode: { type: "boolean", description: "GPU node local GPU worker is available." },
+  localGpu: {
+    type: "boolean",
+    description:
+      "Local GPU worker is available. Generic compatibility aliases local_gpu, localGpuAvailable and local_gpu_available are accepted; machine-specific legacy keys are not read.",
+  },
   google_flow: { type: "boolean", description: "Google Flow (browser-assisted) is available." },
   remaining_flow_credits: { type: "number", description: "Remaining Google Flow credits." },
   max_flow_credits_per_batch: { type: "number", description: "Credit ceiling for this batch." },
@@ -653,7 +657,7 @@ export const VIDEO_TRAILER_PLAN_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Required for preview: available engines and Flow credit budget.",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "localGpu", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
       },
@@ -690,7 +694,7 @@ export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Engine availability and Flow credits (create).",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "localGpu", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
         source_plan_sha256: { type: "string", description: "Canonical SHA-256 of the V3 source plan (create)." },
@@ -705,8 +709,12 @@ export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
         include_all_shorts: { type: "boolean", description: "Export every Short in the plan." },
         remaining_flow_credits: { type: "number", description: "Remaining Flow credits (export)." },
         max_flow_credits_per_batch: { type: "number", description: "Batch credit ceiling (export)." },
-        darkstar_available: { type: "boolean", description: "Darkstar available (export)." },
-        ministar_available: { type: "boolean", description: "Ministar available (export)." },
+        gpu_node_available: { type: "boolean", description: "GPU node available (export)." },
+        local_gpu_available: {
+          type: "boolean",
+          description:
+            "Local GPU available (export). Generic compatibility aliases localGpuAvailable and local_gpu are accepted; machine-specific legacy keys are not read.",
+        },
         expected_receipt_sha256: { type: "string", description: "Expected import receipt digest (review_import)." },
         reviewer: { type: "string", description: "Reviewer name (review_import)." },
         reason: { type: "string", description: "Review reason (review_import)." },
@@ -737,7 +745,7 @@ export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   function: {
     name: "video_route",
     description:
-      "Route hybrid image/video production requests to a local engine (Darkstar/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
+      "Route hybrid image/video production requests to a local engine (GPU node/Local GPU/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
     parameters: {
       type: "object",
       properties: {
@@ -762,7 +770,7 @@ export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
           type: "object",
           description: "Available engines and Flow credit budget.",
           properties: HYBRID_CAPACITY_PROPERTIES,
-          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          required: ["gpuNode", "localGpu", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
           additionalProperties: false,
         },
       },
@@ -858,21 +866,25 @@ export const CAMERA_ANALYZE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "camera_analyze",
-    description: "Capture one local webcam frame and return a natural-language description from a local multimodal vision model (default Ollama gemma4:12b). Use this to actually SEE what the camera shows, not just save a PNG. Requires ffmpeg, OS camera permission, and a reachable local vision model.",
+    description: "Describe a still image with a local multimodal vision model (default Ollama moondream, or CODEBUDDY_VISION_MODEL). Pass image_path to analyze an existing file without the webcam. Omitting image_path captures one local webcam frame. Dark frames (mean luma < 12) are refused.",
     parameters: {
       type: "object",
       properties: {
+        image_path: {
+          type: "string",
+          description: "Existing still image to describe (no webcam). JPEG/PNG/WebP."
+        },
         prompt: {
           type: "string",
           description: "What to ask the vision model about the frame. Default \"Describe what you see.\""
         },
         device: {
           type: "string",
-          description: "Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0."
+          description: "Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0. Ignored when image_path is set."
         },
         model: {
           type: "string",
-          description: "Local multimodal model id served by Ollama. Default gemma4:12b."
+          description: "Local multimodal model id served by Ollama. Default moondream (or CODEBUDDY_VISION_MODEL). gemma* is text-only and will invent."
         },
         include_ocr: {
           type: "boolean",
@@ -1402,6 +1414,79 @@ export const ARCHIVE_TOOL: CodeBuddyTool = {
 /**
  * All multimodal tools as an array
  */
+export const MARKDOWN_CONVERT_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "markdown_convert",
+    description:
+      "Convert a document (PDF, Word, Excel, PowerPoint, HTML, CSV, JSON, XML, ZIP, EPub, image, audio, or a URL) to structured Markdown — keeps headings, lists and TABLES instead of flattening them. Requires MarkItDown (`pip install markitdown[all]`); falls back with install instructions when absent. Optional `output_path` writes the Markdown to a file instead of returning it inline.",
+    parameters: {
+      type: "object",
+      properties: {
+        source: {
+          type: "string",
+          description:
+            "Local file path, or an http(s)/YouTube URL. Handles PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPub, images (OCR) and audio (transcription).",
+        },
+        output_path: {
+          type: "string",
+          description:
+            "Write the Markdown to this file instead of returning it inline. Use it for long documents.",
+        },
+        max_chars: {
+          type: "number",
+          description: "Inline truncation budget (default 60000 characters).",
+        },
+      },
+      required: ["source"],
+    },
+  },
+};
+
+export const SCREEN_MEMORY_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "screen_memory",
+    description:
+      "Recall what was on the user's screen, said, or heard by querying a local screenpipe instance (24/7 screen+audio history). Read-only; results are secret/PII-redacted. Requires screenpipe running locally (SCREENPIPE_URL, default http://localhost:3030).",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural-language search over screen+audio history (omit for most recent).",
+        },
+        content_type: {
+          type: "string",
+          enum: ["all", "ocr", "audio", "ui"],
+          description: "all (default), ocr (screen text), audio (transcripts), or ui.",
+        },
+        limit: {
+          type: "number",
+          description: "Max results, 1–50 (default 10).",
+        },
+        app_name: {
+          type: "string",
+          description: "Filter by application name.",
+        },
+        window_name: {
+          type: "string",
+          description: "Filter by window title.",
+        },
+        start_time: {
+          type: "string",
+          description: "ISO-8601 start of time range.",
+        },
+        end_time: {
+          type: "string",
+          description: "ISO-8601 end of time range.",
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   PDF_TOOL,
   AUDIO_TOOL,
@@ -1432,4 +1517,6 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   EXPORT_TOOL,
   QR_TOOL,
   ARCHIVE_TOOL,
+  MARKDOWN_CONVERT_TOOL,
+  SCREEN_MEMORY_TOOL,
 ];

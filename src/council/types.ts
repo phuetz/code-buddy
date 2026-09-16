@@ -14,6 +14,9 @@ import type { ModelStrength } from '../fleet/types.js';
 import type { ConsensusSummary } from '../fleet/result-aggregator.js';
 import type { ModelScoreboard } from '../fleet/model-scoreboard.js';
 import type { DeliberationHealth } from './deliberation-health.js';
+import type { TaskType } from './task-types.js';
+
+export type { KnownTaskType, TaskType } from './task-types.js';
 
 /** One usable LLM as exposed by the active-LLM registry. */
 export interface CouncilCandidate {
@@ -40,7 +43,7 @@ export interface CouncilOptions {
   /** Provider/model substring to use as the judge (default: a neutral strong model). */
   judge?: string;
   /** Override the inferred task type. */
-  taskType?: string;
+  taskType?: TaskType;
   /** commander sets this false on --no-consensus. */
   consensus?: boolean;
   /** Just print the learned scoreboard and exit. */
@@ -188,11 +191,19 @@ export interface GatherPeerAnswersOptions {
 export type CouncilProgressEvent =
   | {
       type: 'panel';
-      taskType: string;
+      taskType: TaskType;
       entries: Array<{ model: string; histWinRate: number }>;
       peerCount: number;
       /** Model granted the ε-exploration seat this run, if any. */
       explored?: string;
+      /** Usable models after apiKey + --models filtering (before pickDiverse). */
+      poolSize?: number;
+      /** Requested seat count (`--count`, default 3). */
+      requestedCount?: number;
+      /** Raw `--models` filter, when set. */
+      modelsFilter?: string;
+      /** False when `--models` matched nothing and the full pool was kept. */
+      modelsMatched?: boolean;
     }
   | { type: 'conductor'; roles: string[] }
   | { type: 'fleet_no_peers' }
@@ -256,7 +267,7 @@ export interface CouncilEngineDeps {
 }
 
 export interface CouncilRunResult {
-  taskType: string;
+  taskType: TaskType;
   plan: CouncilConductorPlan;
   answers: CouncilAnswer[];
   failures: Array<{ source: string; error: string }>;

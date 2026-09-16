@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 import { CodeBuddyClient } from '../codebuddy/client.js';
@@ -23,6 +24,16 @@ export const FactSchema = z.object({
 
 export type Fact = z.infer<typeof FactSchema>;
 
+export class FactsExtractionError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'FactsExtractionError';
+    if (options?.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
 export const ReconciliationActionSchema = z.object({
   action: z.enum(['ADD', 'UPDATE', 'DELETE', 'NONE']),
   targetIndex: z.number().optional(),
@@ -31,13 +42,51 @@ export const ReconciliationActionSchema = z.object({
 
 export type ReconciliationAction = z.infer<typeof ReconciliationActionSchema>;
 
+/**
+ * Client of the live session (the provider and endpoint the user actually
+ * started with). Without it, reconciliation fell back to environment
+ * auto-detection and could send project memories to a different, cloud
+ * provider than the local session (e.g. xAI because GROK_API_KEY was set while
+ * the CLI ran on --base-url http://127.0.0.1:11434/v1).
+ */
+let sessionClient: CodeBuddyClient | null = null;
+const sessionScope = new AsyncLocalStorage<{ client: CodeBuddyClient | null }>();
+
+/** Keep concurrent command sessions on their own provider, including an explicit offline scope. */
+export function withFactsMemorySessionClient<T>(client: CodeBuddyClient | null, action: () => T): T {
+  return sessionScope.run({ client }, action);
+}
+
+/**
+ * Async generators execute on next/return/throw, not when they are created.
+ * Scope every resumption so model/tool/cleanup work belongs to this agent,
+ * while consumers outside a yielded event keep their own async context.
+ */
+export function bindFactsMemorySession<T>(
+  client: CodeBuddyClient,
+  iterator: AsyncGenerator<T, void, unknown>,
+): AsyncGenerator<T, void, unknown> {
+  return {
+    next(...args) { return withFactsMemorySessionClient(client, () => iterator.next(...args)); },
+    return(value) { return withFactsMemorySessionClient(client, () => iterator.return(value)); },
+    throw(error) { return withFactsMemorySessionClient(client, () => iterator.throw(error)); },
+    [Symbol.asyncIterator]() { return this; },
+    async [Symbol.asyncDispose]() {
+      await withFactsMemorySessionClient(client, () => iterator.return());
+    },
+  };
+}
+
+export function setFactsMemorySessionClient(client: CodeBuddyClient | null): void {
+  sessionClient = client;
+}
+
 export class FactsMemoryService {
-  private client: CodeBuddyClient | null = null;
+  private readonly explicitClient: CodeBuddyClient | null;
+  private fallbackClient: CodeBuddyClient | null = null;
 
   constructor(client?: CodeBuddyClient) {
-    if (client) {
-      this.client = client;
-    }
+    this.explicitClient = client ?? null;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -46,7 +95,11 @@ export class FactsMemoryService {
   }
 
   private async getClient(): Promise<CodeBuddyClient | null> {
-    if (this.client) return this.client;
+    if (this.explicitClient) return this.explicitClient;
+    const scoped = sessionScope.getStore();
+    if (scoped) return scoped.client;
+    if (sessionClient) return sessionClient;
+    if (this.fallbackClient) return this.fallbackClient;
     // Skip auto-detecting client in unit tests to prevent timeouts/real API calls
     if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
       return null;
@@ -56,8 +109,8 @@ export class FactsMemoryService {
       logger.warn('[FactsMemory] No LLM provider configuration found.');
       return null;
     }
-    this.client = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
-    return this.client;
+    this.fallbackClient = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    return this.fallbackClient;
   }
 
   /**
@@ -67,7 +120,7 @@ export class FactsMemoryService {
     const client = await this.getClient();
     if (!client) {
       logger.warn('[FactsMemory] LLM Client not available for fact extraction.');
-      return [];
+      throw new FactsExtractionError('Fact extraction impossible: LLM client not available');
     }
 
     const systemPrompt = `You are a structured fact extraction engine for an AI coding assistant.
@@ -110,9 +163,13 @@ Example:
           source: 'auto-captured',
           updatedAt: new Date()
         }));
-    } catch (error: any) {
-      logger.error(`[FactsMemory] Failed to extract facts: ${error.message}`);
-      return [];
+    } catch (error: unknown) {
+      if (error instanceof FactsExtractionError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[FactsMemory] Failed to extract facts: ${message}`);
+      throw new FactsExtractionError(`Fact extraction impossible: ${message}`, { cause: error });
     }
   }
 
@@ -197,8 +254,12 @@ Output the result strictly as a JSON array of transaction actions.`;
 
       return resultFacts;
     } catch (error: any) {
+      // Audit 2026-09-02 : ne PAS retourner currentFacts ici — le nouveau fait
+      // serait perdu alors que l'appelant annoncerait « Stored ». On propage :
+      // remember() et autoCapture() ont chacun un catch avec un repli
+      // d'écriture directe qui préserve le souvenir.
       logger.error(`[FactsMemory] Failed to reconcile facts: ${error.message}`);
-      return currentFacts;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 }

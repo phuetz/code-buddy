@@ -19,6 +19,7 @@ import {
 import { BUILTIN_THEMES, DEFAULT_THEME } from './default-themes.js';
 import { themeSchema, themePreferencesSchema } from './theme-schema.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
  * Singleton manager for themes and avatars
@@ -31,6 +32,30 @@ export class ThemeManager {
   private customColors: Partial<ThemeColors> = {};
   private themesDir: string;
   private preferencesPath: string;
+  private revision = 0;
+  private listeners = new Set<() => void>();
+  private lastSaveSucceeded: boolean | null = null;
+
+  /** Stable external-store API shared by slash commands and mounted Ink views. */
+  public subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
+
+  public getSnapshot = (): number => this.revision;
+
+  private notifyChange(): void {
+    this.revision += 1;
+    for (const listener of this.listeners) listener();
+  }
+
+  public getPreferenceSaveStatus(): boolean | null {
+    return this.lastSaveSucceeded;
+  }
+
+  public getOverrideKeys(): { colors: string[]; avatars: string[] } {
+    return { colors: Object.keys(this.customColors), avatars: Object.keys(this.customAvatars) };
+  }
 
   private constructor() {
     // Themes directory: ~/.codebuddy/themes/
@@ -90,8 +115,8 @@ export class ThemeManager {
         if (file.endsWith('.json')) {
           try {
             const filePath = path.join(this.themesDir, file);
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const parsed = JSON.parse(content);
+            const parsed = readJsonAtomicSync<unknown>(filePath, null);
+            if (!parsed) continue;
 
             // Validate theme structure with Zod
             const validationResult = themeSchema.safeParse(parsed);
@@ -125,8 +150,8 @@ export class ThemeManager {
         return;
       }
 
-      const content = fs.readFileSync(this.preferencesPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = readJsonAtomicSync<unknown>(this.preferencesPath, null);
+      if (!parsed) return;
 
       // Validate preferences structure with Zod
       const validationResult = themePreferencesSchema.safeParse(parsed);
@@ -172,9 +197,13 @@ export class ThemeManager {
         customColors: Object.keys(this.customColors).length > 0 ? this.customColors : undefined,
       };
 
-      fs.writeFileSync(this.preferencesPath, JSON.stringify(preferences, null, 2));
+      writeJsonAtomicSync(this.preferencesPath, preferences);
+      this.lastSaveSucceeded = true;
     } catch (_error) {
+      this.lastSaveSucceeded = false;
       logger.warn('Failed to save theme preferences', { source: 'ThemeManager' });
+    } finally {
+      this.notifyChange();
     }
   }
 
@@ -335,9 +364,11 @@ export class ThemeManager {
     try {
       this.ensureDirectoryExists(this.themesDir);
       const filePath = path.join(this.themesDir, `${theme.id}.json`);
-      fs.writeFileSync(filePath, JSON.stringify(theme, null, 2));
+      writeJsonAtomicSync(filePath, theme);
     } catch (_error) {
       logger.warn(`Failed to save custom theme: ${theme.id}`, { source: 'ThemeManager' });
+    } finally {
+      this.notifyChange();
     }
   }
 
@@ -367,6 +398,7 @@ export class ThemeManager {
     } catch (_error) {
       logger.warn(`Failed to delete theme file: ${themeId}`, { source: 'ThemeManager' });
     }
+    this.notifyChange();
 
     return true;
   }

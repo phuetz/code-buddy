@@ -29,7 +29,14 @@ import type {
   MessageAttachment,
   MessageButton,
 } from '../core.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
+import {
+  BaseChannel,
+  getSessionKey,
+  checkDMPairing,
+  getDMPairing,
+  resolveInboundSenderAccess,
+  UNPAIRED_SENDER_REPLY,
+} from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 import { logger } from '../../utils/logger.js';
 
@@ -496,11 +503,22 @@ export class DiscordChannel extends BaseChannel {
     // Ignore bot messages (including our own)
     if (msg.author.bot) return;
 
-    // Check if user is allowed
-    if (!this.isUserAllowed(msg.author.id)) return;
-
     // Check if channel is allowed
     if (!this.isChannelAllowed(msg.channel_id)) return;
+
+    const access = resolveInboundSenderAccess({
+      allowedUsers: this.config.allowedUsers,
+      identities: [msg.author.id, msg.author.username, msg.author.username ? `@${msg.author.username}` : undefined],
+      pairingRequired: getDMPairing().requiresPairing('discord'),
+    });
+    if (access === 'refuse') {
+      try {
+        await this.send({ channelId: msg.channel_id, content: UNPAIRED_SENDER_REPLY });
+      } catch {
+        /* refuse must not throw */
+      }
+      return;
+    }
 
     // Check mention-only mode
     if (
@@ -518,17 +536,24 @@ export class DiscordChannel extends BaseChannel {
     parsed.sessionKey = getSessionKey(parsed);
 
     // DM pairing check: gate unapproved DM senders
-    const pairingStatus = await checkDMPairing(parsed);
-    if (!pairingStatus.approved) {
-      const { getDMPairing } = await import('../dm-pairing.js');
-      const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
-      if (pairingMessage) {
-        await this.send({
-          channelId: msg.channel_id,
-          content: pairingMessage,
-        });
+    if (access !== 'allow') {
+      const pairingStatus = await checkDMPairing(parsed);
+      if (!pairingStatus.approved) {
+        const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
+        if (pairingMessage) {
+          await this.send({
+            channelId: msg.channel_id,
+            content: pairingMessage,
+          });
+        } else {
+          try {
+            await this.send({ channelId: msg.channel_id, content: UNPAIRED_SENDER_REPLY });
+          } catch {
+            /* refuse must not throw */
+          }
+        }
+        return;
       }
-      return;
     }
 
     this.emit('message', parsed);

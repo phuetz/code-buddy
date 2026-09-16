@@ -102,14 +102,14 @@ Correction immédiate recommandée :
 # sudo systemctl edit codebuddy-a2a.service
 [Service]
 ExecStart=
-ExecStart=/home/patrice/.nvm/versions/node/v24.14.1/bin/node /home/patrice/code-buddy/dist/index.js server --port 3000 --host 127.0.0.1 --no-auth
+ExecStart=~/.nvm/versions/node/v24.14.1/bin/node ~/code-buddy/dist/index.js server --port 3000 --host 127.0.0.1 --no-auth
 ```
 
 ```ini
 # sudo systemctl edit codebuddy-fleet.service
 [Service]
 ExecStart=
-ExecStart=/home/patrice/.nvm/versions/node/v24.14.1/bin/node /home/patrice/code-buddy/dist/index.js server --port 3001 --host 100.98.18.76 --no-auth
+ExecStart=~/.nvm/versions/node/v24.14.1/bin/node ~/code-buddy/dist/index.js server --port 3001 --host 203.0.113.10 --no-auth
 ```
 
 Le lancement direct est intentionnel : le shebang `env node` de `npx` peut

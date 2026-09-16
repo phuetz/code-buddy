@@ -12,8 +12,8 @@ import type { CinematicTrailerPlan, TrailerShot } from '../../src/tools/video/ci
 const SHA = 'a'.repeat(64);
 
 const capacity = {
-  darkstar: true,
-  ministar: true,
+  gpuNode: true,
+  localGpu: true,
   google_flow: true,
   remaining_flow_credits: 25_000,
   max_flow_credits_per_batch: 5_000,

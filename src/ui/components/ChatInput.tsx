@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
-import { Box, Text } from "ink";
-import { useTheme } from "../context/theme-context.js";
+import React, { useMemo } from 'react';
+import { Box, Text } from 'ink';
+import { useTheme } from '../context/theme-context.js';
 
 interface ChatInputProps {
   input: string;
@@ -10,153 +10,49 @@ interface ChatInputProps {
   mode?: string;
 }
 
-// Memoized ChatInput to reduce re-renders and prevent flickering
+/** A bounded draft viewport. Editing remains available while the agent works. */
 export const ChatInput = React.memo(function ChatInput({
-  input,
-  cursorPosition,
-  isProcessing,
-  isStreaming,
-  mode = 'code',
+  input, cursorPosition, isProcessing, isStreaming, mode = 'code',
 }: ChatInputProps) {
   const { colors } = useTheme();
-
-  // Mode icons and colors for prompt
-  const modePromptIcons: Record<string, string> = {
-    plan: '📋',
-    code: '❯',
-    ask: '❓',
-  };
-  
-  const modePromptColors: Record<string, string> = {
-    plan: colors.info,
-    code: colors.primary,
-    ask: colors.secondary,
-  };
-
-  const promptIcon = modePromptIcons[mode] || '❯';
-  const promptColor = modePromptColors[mode] || colors.primary;
-
-  // Memoize cursor calculations to avoid recomputing on every render
-  const cursorData = useMemo(() => {
-    const lines = input.split("\n");
-    const isMultiline = lines.length > 1;
-    const beforeCursor = input.slice(0, cursorPosition);
-
-    // Calculate cursor position across lines
-    let currentLineIndex = 0;
-    let currentCharIndex = 0;
-    let totalChars = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i] ?? "";
-      if (totalChars + line.length >= cursorPosition) {
-        currentLineIndex = i;
-        currentCharIndex = cursorPosition - totalChars;
-        break;
-      }
-      totalChars += line.length + 1; // +1 for newline
-    }
-
-    return { lines, isMultiline, beforeCursor, currentLineIndex, currentCharIndex };
+  const busy = isProcessing || isStreaming;
+  const viewport = useMemo(() => {
+    const position = Math.max(0, Math.min(input.length, cursorPosition));
+    const lines = input.split('\n');
+    const before = input.slice(0, position).split('\n');
+    const row = before.length - 1;
+    const column = before[row]?.length ?? 0;
+    const start = Math.max(0, Math.min(row - 3, lines.length - 6));
+    return { lines, row, column, start, visible: lines.slice(start, start + 6) };
   }, [input, cursorPosition]);
-
-  const { lines, isMultiline, beforeCursor, currentLineIndex, currentCharIndex } = cursorData;
-
-  const showCursor = !isProcessing && !isStreaming;
-  const borderColor = isProcessing || isStreaming ? colors.borderBusy : colors.borderActive;
-
-  // Display placeholder when input is empty
-  const placeholderText = mode === 'plan' 
-    ? "Describe the task you want to plan..." 
-    : mode === 'ask'
-      ? "Ask a question..."
-      : "Ask me anything...";
-  const isPlaceholder = !input;
-
-  if (isMultiline) {
-    return (
-      <Box
-        borderStyle="round"
-        borderColor={borderColor}
-        paddingY={0}
-        marginTop={1}
-      >
-        {lines.map((line, index) => {
-          const isCurrentLine = index === currentLineIndex;
-          const promptChar = index === 0 ? promptIcon : "│";
-
-          if (isCurrentLine) {
-            const beforeCursorInLine = line.slice(0, currentCharIndex);
-            const cursorChar =
-              line.slice(currentCharIndex, currentCharIndex + 1) || " ";
-            const afterCursorInLine = line.slice(currentCharIndex + 1);
-
-            return (
-              <Box key={index}>
-                <Text color={promptColor}>{promptChar} </Text>
-                <Text>
-                  {beforeCursorInLine}
-                  {showCursor && (
-                    <Text backgroundColor="white" color="black">
-                      {cursorChar}
-                    </Text>
-                  )}
-                  {!showCursor && cursorChar !== " " && cursorChar}
-                  {afterCursorInLine}
-                </Text>
-              </Box>
-            );
-          } else {
-            return (
-              <Box key={index}>
-                <Text color={promptColor}>{promptChar} </Text>
-                <Text>{line}</Text>
-              </Box>
-            );
-          }
-        })}
-      </Box>
-    );
-  }
-
-  // Single line input box
-  const cursorChar = input.slice(cursorPosition, cursorPosition + 1) || " ";
-  const afterCursorText = input.slice(cursorPosition + 1);
+  const placeholder = mode === 'plan' ? 'Describe what you want to plan…'
+    : mode === 'ask' ? 'Ask a question…'
+    : busy ? 'Write a follow-up while I work…' : 'Describe a task, or type / for commands…';
 
   return (
-    <Box
-      borderStyle="round"
-      borderColor={borderColor}
-      paddingX={1}
-      paddingY={0}
-      marginTop={1}
-    >
-      <Box>
-        <Text color={promptColor}>{promptIcon} </Text>
-        {isPlaceholder ? (
-          <>
-            <Text color={colors.textMuted} dimColor>
-              {placeholderText}
-            </Text>
-            {showCursor && (
-              <Text backgroundColor="white" color="black">
-                {" "}
-              </Text>
-            )}
-          </>
-        ) : (
-          <Text>
-            {beforeCursor}
-            {showCursor && (
-              <Text backgroundColor="white" color="black">
-                {cursorChar}
-              </Text>
-            )}
-            {!showCursor && cursorChar !== " " && cursorChar}
-            {afterCursorText}
-          </Text>
-        )}
+    <Box flexDirection="column" borderStyle="round"
+      borderColor={busy ? colors.borderBusy : colors.borderActive}
+      paddingX={1} marginTop={1}>
+      <Box justifyContent="space-between">
+        <Text bold color={colors.primary}>{mode === 'plan' ? 'Plan' : mode === 'ask' ? 'Question' : 'Message'}</Text>
+        <Text color={colors.textMuted}>{busy ? 'Draft · working' : 'Ready'}{viewport.lines.length > 1 ? ` · ${viewport.lines.length} lines` : ''}</Text>
       </Box>
+      {viewport.start > 0 && <Text dimColor>… {viewport.start} lines above</Text>}
+      {viewport.visible.map((line, index) => {
+        const active = viewport.start + index === viewport.row;
+        const char = Array.from(line.slice(viewport.column))[0] || ' ';
+        return (
+          <Box key={viewport.start + index}>
+            <Text color={colors.primary}>{active ? '❯ ' : '  '}</Text>
+            {!input ? (
+              <Text><Text inverse> </Text><Text dimColor>{placeholder}</Text></Text>
+            ) : active ? (
+              <Text>{line.slice(0, viewport.column)}<Text inverse>{char}</Text>{line.slice(viewport.column + char.length)}</Text>
+            ) : <Text>{line || ' '}</Text>}
+          </Box>
+        );
+      })}
+      {viewport.start + 6 < viewport.lines.length && <Text dimColor>… {viewport.lines.length - viewport.start - 6} lines below</Text>}
     </Box>
   );
 });

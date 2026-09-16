@@ -29,7 +29,7 @@ Sur Machine A:
 
 ```bash
 set CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=D:\CascadeProjects\grok-cli
-set CODEBUDDY_FLEET_HOSTNAME=ministar-linux
+set CODEBUDDY_FLEET_HOSTNAME=hub-linux
 node dist/index.js server --host 0.0.0.0 --port 3000
 ```
 
@@ -52,7 +52,7 @@ node dist/index.js
 Dans la session:
 
 ```text
-/fleet listen ws://<machine-a-ip>:3000/ws --name ministar-linux --auto-reconnect
+/fleet listen ws://<machine-a-ip>:3000/ws --name hub-linux --auto-reconnect
 /fleet status
 ```
 
@@ -65,7 +65,7 @@ Resultat attendu:
 ## 3. Decrire les capacites
 
 ```text
-/fleet describe ministar-linux
+/fleet describe hub-linux
 ```
 
 Resultat attendu:
@@ -116,7 +116,7 @@ Resultat attendu:
 Alternative multi-tour:
 
 ```text
-/fleet chat start ministar-linux --model gpt-5.1-codex --name audit
+/fleet chat start hub-linux --model gpt-5.1-codex --name audit
 /fleet chat say resume les risques du dernier diff
 /fleet chat end audit
 ```
@@ -124,8 +124,8 @@ Alternative multi-tour:
 ## 6. Lire un fichier distant autorise
 
 ```text
-/fleet tool ministar-linux view_file {"file_path":"README.md"} --timeout 30000
-/fleet tool ministar-linux search {"query":"route_peer","path":"src"} --stream
+/fleet tool hub-linux view_file {"file_path":"README.md"} --timeout 30000
+/fleet tool hub-linux search {"query":"route_peer","path":"src"} --stream
 ```
 
 Resultat attendu:
@@ -138,7 +138,7 @@ Resultat attendu:
 ## 7. Fermer proprement
 
 ```text
-/fleet stop ministar-linux
+/fleet stop hub-linux
 /fleet status
 ```
 

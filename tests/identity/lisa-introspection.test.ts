@@ -284,3 +284,19 @@ describe('Lisa introspection intent classifier', () => {
     expect(negated).toContain('Rapport mémoire vérifié');
   });
 });
+
+// Live developer smoke: mentioning "tes outils" must not hijack an action.
+describe('developer tool-use requests', () => {
+  it.each([
+    'Utilise tes outils pour lister les skills avec skills_list puis inspecte le skill qa-developer avec skill_view.',
+    'Utilise tes outils pour inspecter l état Git via git status --short, git diff et git log -1.',
+    "Utilise tes outils pour inspecter l'etat Git via git status --short, git diff et git log -1. Ne fais aucune modification et ne cree aucun commit. Rapporte les observations de facon factuelle et courte sans presumer du contenu.",
+    'Utilise vos outils pour rechercher calculateTotal dans les fichiers.',
+  ])('keeps the normal execution path: %s', request => {
+    expect(classifyLisaIntrospection(request)).toBeNull();
+  });
+});
+
+it('preserves an explicit self-code target after the tool-use preamble', () => {
+  expect(classifyLisaIntrospection('Utilise tes outils pour inspecter ton propre code sans le modifier')).toBe('inspect');
+});

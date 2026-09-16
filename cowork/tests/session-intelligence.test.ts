@@ -102,10 +102,14 @@ describe('Session Intelligence routing', () => {
     });
   });
 
+  // Adresse RFC 1918 canonique et impersonnelle : ce test PROUVE qu'un endpoint
+  // de plage privee est classe 'lan'. Une adresse de documentation RFC 5737 est
+  // publique et rendrait l'assertion fausse — d'ou l'exemption nommee dans
+  // tests/security/donnees-personnelles.test.ts.
   it('classifies private compatible endpoints as LAN runtimes', () => {
     const set = {
       id: 'vllm-lan', name: 'vLLM LAN', provider: 'vllm', customProtocol: 'openai', activeProfileKey: 'vllm',
-      profiles: { vllm: { apiKey: '', baseUrl: 'http://192.168.1.42:8000/v1', model: 'gemma-4' } },
+      profiles: { vllm: { apiKey: '', baseUrl: 'http://192.168.1.1:8000/v1', model: 'gemma-4' } },
       enableThinking: false, updatedAt: '',
     } as ApiConfigSet;
     expect(inferExecutionLocation(set)).toBe('lan');

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# GK23 fake audio player. Never talks to ALSA/Pulse. Copies WAV arguments
+# into $GK23_APLAY_LOG_DIR and logs argv. Exit 0 so sayNow treats playback
+# as successful.
+set -eu
+logdir="${GK23_APLAY_LOG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/artifacts}"
+mkdir -p "$logdir"
+{
+  printf '%s' "$(date -Iseconds) "
+  printf '%q ' "$0" "$@"
+  printf '\n'
+} >> "$logdir/aplay.log"
+seq=0
+copied=0
+for arg in "$@"; do
+  case "$arg" in
+    *.wav|*.WAV)
+      seq=$((seq + 1))
+      dest="$logdir/played-${seq}-$(basename "$arg")"
+      cp -f "$arg" "$dest"
+      copied=1
+      ;;
+  esac
+done
+if [ "$copied" -eq 0 ]; then
+  # stdin playback (`aplay -q -`) — drain and keep a copy, never play.
+  dest="$logdir/played-stdin-$$.wav"
+  cat > "$dest"
+fi
+exit 0

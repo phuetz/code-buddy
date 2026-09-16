@@ -161,7 +161,9 @@ describe('LessonsTracker management (show/rm/edit)', () => {
     await expect(tracker.update(added.id, { content: 'line1\nline2' })).rejects.toThrow(/single line/);
     await expect(tracker.update(added.id, { content: 'sneaky <!-- comment' })).rejects.toThrow(/single line/);
     await expect(tracker.update(added.id, { content: '   ' })).rejects.toThrow(/empty/);
-    await expect(tracker.update(added.id, { context: 'has-hyphen' })).rejects.toThrow(/hyphens/);
+    await expect(tracker.update(added.id, { context: 'has space' })).rejects.toThrow(/single token/);
+    const hyphenated = await tracker.update(added.id, { context: 'has-hyphen' });
+    expect(hyphenated?.context).toBe('has-hyphen');
     expect(await tracker.update('missing-id', { content: 'x' })).toBeUndefined();
   });
 

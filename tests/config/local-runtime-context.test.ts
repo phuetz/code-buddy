@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import mistralModelsCatalogue from '../fixtures/mistral-v1-models.json';
 import {
   isLocalRuntimeURL,
   primeLocalRuntimeModelConfig,
@@ -10,6 +11,7 @@ import {
   getModelToolConfig,
   resetRuntimeModelContextCache,
 } from '../../src/config/model-tools.js';
+import { logger } from '../../src/utils/logger.js';
 
 function response(body: unknown, ok = true): Response {
   return { ok, json: async () => body } as Response;
@@ -51,7 +53,7 @@ describe('Ollama local runtime context discovery', () => {
 
     await expect(probeLocalRuntimeContext({
       model: 'qwen3.8:27b',
-      baseURL: 'http://darkstar:11434/v1',
+      baseURL: 'http://gpuNode:11434/v1',
       fetchImpl,
     })).resolves.toEqual({
       runtime: 'ollama',
@@ -223,7 +225,7 @@ describe('synchronous config cache priming', () => {
 });
 
 describe('probe scope', () => {
-  it('does not send startup probes to a cloud endpoint', async () => {
+  it('sends a cloud endpoint one read-only catalogue GET and none of the local runtime probes', async () => {
     const fetchImpl = routedFetch(() => response({}));
     expect(isLocalRuntimeURL('https://api.openai.com/v1')).toBe(false);
     await expect(probeLocalRuntimeContext({
@@ -231,6 +233,136 @@ describe('probe scope', () => {
       baseURL: 'https://api.openai.com/v1',
       fetchImpl,
     })).resolves.toBeNull();
-    expect(fetchImpl).not.toHaveBeenCalled();
+    const calls = (fetchImpl as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+    // `<base>/models` and `/v1/models` coincide here, so exactly one GET — and
+    // never /api/show, /api/ps or /server_info against a hosted endpoint.
+    expect(calls.map(([url]) => url)).toEqual(['https://api.openai.com/v1/models']);
+    expect(calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true);
+  });
+});
+
+describe('hosted OpenAI-compatible catalogue discovery', () => {
+  it('reproduces the Mistral catalogue values for Medium and Magistral', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response(mistralModelsCatalogue)
+      : response({}, false));
+
+    await primeLocalRuntimeModelConfig({
+      model: 'mistral-medium-latest',
+      baseURL: 'https://api.mistral.ai/v1',
+      fetchImpl,
+    });
+    expect(getModelToolConfig('mistral-medium-latest').contextWindow).toBe(128_000);
+
+    await primeLocalRuntimeModelConfig({
+      model: 'magistral-small-latest',
+      baseURL: 'https://api.mistral.ai/v1',
+      fetchImpl,
+    });
+    expect(getModelToolConfig('magistral-small-latest').contextWindow).toBe(262_144);
+  });
+
+  it('does not let a valid hosted catalogue lower a nominative declaration', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response({ data: [{
+        id: 'mistral-medium-latest',
+        max_context_length: 32768,
+        capabilities: { completion_chat: true, function_calling: true },
+      }] })
+      : response({}, false));
+
+    await primeLocalRuntimeModelConfig({
+      model: 'mistral-medium-latest',
+      baseURL: 'https://api.mistral.ai/v1',
+      fetchImpl,
+    });
+    expect(getModelToolConfig('mistral-medium-latest').contextWindow).toBe(128_000);
+  });
+
+  it('reads OpenRouter and keeps the serving provider\'s smaller limit', async () => {
+    const fetchImpl = routedFetch((url, init) => {
+      if (url === 'https://openrouter.ai/api/v1/models') {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer sk-or-test');
+        return response({
+          data: [
+            { id: 'minimax/minimax-m3', context_length: 1048576, top_provider: { context_length: 524288, max_completion_tokens: 512000 }, capabilities: { completion_chat: true, function_calling: true } },
+            { id: 'moonshotai/kimi-k3', context_length: 1048576, top_provider: { context_length: 1048576 }, capabilities: { completion_chat: true, function_calling: true } },
+          ],
+        });
+      }
+      return response({}, false);
+    });
+
+    await expect(probeLocalRuntimeContext({
+      model: 'minimax/minimax-m3',
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-or-test',
+      fetchImpl,
+    })).resolves.toEqual({ runtime: 'catalog', advertisedContextWindow: 524288, contextWindow: 524288 });
+    // Only the catalogue GET is issued against a hosted gateway — never /api/show or /api/ps.
+    expect((fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls).toHaveLength(1);
+  });
+
+  it('reads a GMI-style catalogue and tolerates a prefix mismatch between the request and the catalogue', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response({ data: [{ id: 'MiniMaxAI/MiniMax-M3', context_length: 1048576, quantization: 'fp8', capabilities: { completion_chat: true, function_calling: true } }] })
+      : response({}, false));
+    await expect(probeLocalRuntimeContext({
+      model: 'minimax-m3',
+      baseURL: 'https://api.gmi-serving.com/v1',
+      fetchImpl,
+    })).resolves.toMatchObject({ runtime: 'catalog', contextWindow: 1048576 });
+  });
+
+  it('ignores missing or all-false capabilities and logs the catalogue rejection', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response({ data: [
+        { id: 'no-capability-model', max_context_length: 262144 },
+        { id: 'disabled-model', max_context_length: 262144, capabilities: { completion_chat: false, function_calling: false } },
+      ] })
+      : response({}, false));
+
+    await expect(probeLocalRuntimeContext({
+      model: 'no-capability-model',
+      baseURL: 'https://catalogue.example/v1',
+      fetchImpl,
+    })).resolves.toBeNull();
+    await expect(probeLocalRuntimeContext({
+      model: 'disabled-model',
+      baseURL: 'https://catalogue.example/v1',
+      fetchImpl,
+    })).resolves.toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Ignoring hosted catalogue entry without usable capabilities',
+      expect.objectContaining({ reason: 'capabilities missing or all false' }),
+    );
+    debugSpy.mockRestore();
+  });
+
+  it('yields null when the catalogue lists the model without any length (NVIDIA Build)', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response({ data: [{ id: 'moonshotai/kimi-k3', object: 'model', owned_by: 'moonshotai', created: 1 }] })
+      : response({}, false));
+    await expect(probeLocalRuntimeContext({
+      model: 'moonshotai/kimi-k3',
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      fetchImpl,
+    })).resolves.toBeNull();
+    // …so the family table keeps the window it declares for these weights.
+    expect(getModelToolConfig('moonshotai/kimi-k3').contextWindow).toBe(1048576);
+  });
+
+  it('primes the synchronous config from a hosted catalogue and fails open on a dead endpoint', async () => {
+    const fetchImpl = routedFetch((url) => url.endsWith('/v1/models')
+      ? response({ data: [{ id: 'acme/house-model', max_model_len: 65536, capabilities: { completion_chat: true, function_calling: true } }] })
+      : response({}, false));
+    await primeLocalRuntimeModelConfig({ model: 'acme/house-model', baseURL: 'https://llm.acme.example/v1', fetchImpl });
+    expect(getModelToolConfig('acme/house-model').contextWindow).toBe(65536);
+
+    const dead = routedFetch(() => { throw new Error('ECONNRESET'); });
+    await expect(primeLocalRuntimeModelConfig({ model: 'acme/other', baseURL: 'https://down.example/v1', fetchImpl: dead }))
+      .resolves.toBeNull();
+    expect(getModelToolConfig('acme/other').contextWindow).toBe(32768);
   });
 });

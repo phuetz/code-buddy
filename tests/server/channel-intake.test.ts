@@ -175,4 +175,16 @@ describe('startConfiguredChannels server intake (GAP-7 P2)', () => {
     expect(hoisted.unregisterChannel).toHaveBeenCalledWith('telegram');
     expect(hoisted.registerChannel).toHaveBeenCalledTimes(1);
   });
+
+  it('unregisters a channel whose connect() failed (jumeau D7)', async () => {
+    hoisted.connect.mockRejectedValueOnce(new Error('auth failed'));
+    const cfg = writeConfig({ channels: [{ type: 'telegram', enabled: true, token: 'bot-token' }] });
+
+    const result = await startConfiguredChannels(cfg);
+
+    expect(result.registered).toEqual([]);
+    expect(result.failed).toEqual([{ type: 'telegram', error: 'auth failed' }]);
+    expect(hoisted.registerChannel).toHaveBeenCalledTimes(1);
+    expect(hoisted.unregisterChannel).toHaveBeenCalledWith('telegram');
+  });
 });

@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'node:crypto';
+import { readJsonAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { readCompanionMissionBoard, type CompanionMission } from './mission-board.js';
 import {
   readRecentCompanionPercepts,
@@ -239,23 +240,21 @@ function sortCandidates(candidates: CompanionSkillCandidate[]): CompanionSkillCa
 }
 
 async function writeStore(store: CompanionSkillCandidateStore): Promise<void> {
-  await mkdir(path.dirname(store.storePath), { recursive: true });
-  await writeFile(store.storePath, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
+  await writeJsonAtomic(store.storePath, store, { mode: 0o600 });
 }
 
 export async function readCompanionSkillCandidates(
   options: CompanionSkillCuratorOptions = {}
 ): Promise<CompanionSkillCandidateStore> {
   const fallback = emptyStore(options);
-  let raw: string;
+  const parsed = await readJsonAtomic<Partial<CompanionSkillCandidateStore> | null>(fallback.storePath, null, {
+    mode: 0o600,
+    isValid: (value): value is Partial<CompanionSkillCandidateStore> => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!parsed) return fallback;
   try {
-    raw = await readFile(fallback.storePath, 'utf8');
-  } catch {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<CompanionSkillCandidateStore>;
     const candidates = Array.isArray(parsed.candidates)
       ? parsed.candidates
           .map(parseCandidate)
@@ -663,7 +662,7 @@ export async function promoteCompanionSkillCandidate(
     artifactPath,
   };
   await mkdir(skillsDir, { recursive: true });
-  await writeFile(artifactPath, buildSkillMarkdown(promoted, now), 'utf8');
+  await writeFileAtomic(artifactPath, buildSkillMarkdown(promoted, now), { mode: 0o600 });
   await updateCandidateInStore(store, promoted);
 
   let perceptId: string | undefined;

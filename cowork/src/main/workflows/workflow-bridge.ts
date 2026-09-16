@@ -28,6 +28,7 @@ import type {
   WorkflowEventPayload,
   WorkflowRunResult,
   PendingApproval,
+  WorkflowApprovalAnswer,
 } from '../../shared/workflow-types';
 import type {
   WorkflowDryRunResult,
@@ -79,7 +80,11 @@ interface CoreOrchestratorModule {
 interface CoreOrchestrator {
   registerAgent(definition: Record<string, unknown>): unknown;
   unregisterAgent(agentId: string): boolean;
-  getTask(taskId: string): { definition: { id: string; type: string; input: Record<string, unknown> } } | undefined;
+  getTask(
+    taskId: string
+  ):
+    | { status?: string; definition: { id: string; type: string; input: Record<string, unknown> } }
+    | undefined;
   completeTask(taskId: string, output: Record<string, unknown>): void;
   failTask(taskId: string, error: string): void;
   start(): void;
@@ -111,6 +116,19 @@ interface CoreToolRegistryModule {
 // Bridge
 // ──────────────────────────────────────────────────────────────────────────
 
+function isWorkflowApprovalAnswer(value: unknown): value is WorkflowApprovalAnswer {
+  if (typeof value !== 'object' || value === null) return false;
+  const answer = value as Record<string, unknown>;
+  return (
+    [answer.approvalId, answer.workflowInstanceId, answer.stepId].every(
+      (field) => typeof field === 'string' && field.length > 0
+    ) && typeof answer.approved === 'boolean'
+  );
+}
+
+const BRIDGE_SHUT_DOWN_ERROR =
+  'Workflow bridge is shut down (Cowork is quitting): no workflow run can start';
+
 export class WorkflowBridge {
   private filePath: string;
   private runStore: WorkflowRunStore;
@@ -121,6 +139,8 @@ export class WorkflowBridge {
   private orchestratorBootPromise: Promise<void> | null = null;
   private orchestratorBootError: string | null = null;
   private sendToRenderer: ((event: ServerEvent) => void) | null = null;
+  /** Set by `shutdown()`: no workflow task may start any action afterwards. */
+  private stopped = false;
 
   /** Maps task.id → visual node.id, populated when a workflow is compiled. */
   private taskToVisualNode = new Map<string, string>();
@@ -219,10 +239,18 @@ export class WorkflowBridge {
 
   // ────── Approval bridge ──────
 
-  /** Called by the IPC handler when the renderer answers an approval. */
-  approveStep(stepId: string, approved: boolean): boolean {
-    if (!this.toolAgent) return false;
-    return this.toolAgent.resolveApproval(stepId, approved);
+  /**
+   * Called by the `workflow.approve` IPC handler with the renderer's answer, as
+   * received. Only a well-formed `WorkflowApprovalAnswer` matching the pending
+   * request (approval id, run and step) resolves it; anything else — including
+   * the former `(stepId, approved)` call — is refused.
+   */
+  approveStep(answer: unknown): boolean {
+    if (!isWorkflowApprovalAnswer(answer)) {
+      logWarn('[WorkflowBridge] refused a malformed approval answer');
+      return false;
+    }
+    return this.toolAgent?.resolveApproval(answer) ?? false;
   }
 
   // ────── Execution ──────
@@ -273,6 +301,16 @@ export class WorkflowBridge {
   }
 
   async replay(runId: string): Promise<WorkflowRunResult> {
+    if (this.stopped) {
+      return {
+        success: false,
+        status: 'failed',
+        duration: 0,
+        completedSteps: 0,
+        totalSteps: 0,
+        error: BRIDGE_SHUT_DOWN_ERROR,
+      };
+    }
     const prior = this.runStore.get(runId);
     if (!prior) {
       return {
@@ -328,14 +366,14 @@ export class WorkflowBridge {
     source: WorkflowRunSource,
     replayOf?: string
   ): Promise<WorkflowRunResult> {
-    if (this.trackedRunActive) {
+    if (this.stopped || this.trackedRunActive) {
       return {
         success: false,
         status: 'failed',
         duration: 0,
         completedSteps: 0,
         totalSteps: definition.nodes.filter((node) => node.type !== 'start' && node.type !== 'end').length,
-        error: 'Another visual workflow is already running',
+        error: this.stopped ? BRIDGE_SHUT_DOWN_ERROR : 'Another visual workflow is already running',
       };
     }
     this.trackedRunActive = true;
@@ -393,14 +431,16 @@ export class WorkflowBridge {
 
     // Lazy-boot orchestrator on first run.
     await this.ensureOrchestrator();
-    if (!this.orchestrator || !this.toolAgent) {
+    if (this.stopped || !this.orchestrator || !this.toolAgent) {
       return {
         success: false,
         status: 'failed',
         duration: 0,
         completedSteps: 0,
         totalSteps: totalNodes,
-        error: this.orchestratorBootError ?? 'Orchestrator unavailable',
+        error: this.stopped
+          ? BRIDGE_SHUT_DOWN_ERROR
+          : (this.orchestratorBootError ?? 'Orchestrator unavailable'),
       };
     }
 
@@ -448,6 +488,9 @@ export class WorkflowBridge {
 
       this.taskToVisualNode.clear();
       this.instanceToWorkflowId.delete(instance.instanceId);
+      // Approvals of an ended run can no longer be answered; cancelling them
+      // also releases the workers their abandoned tasks kept busy.
+      this.toolAgent?.cancelPending(instance.instanceId, 'Workflow run ended');
       this.currentRun = null;
 
       log('[WorkflowBridge] run finished:', definition.id ?? '', instance.status);
@@ -469,6 +512,7 @@ export class WorkflowBridge {
       this.loopBodyNodes.clear();
       if (this.currentRun) {
         this.instanceToWorkflowId.delete(this.currentRun.instanceId);
+        this.toolAgent?.cancelPending(this.currentRun.instanceId, 'Workflow run ended');
       }
       this.currentRun = null;
       return {
@@ -484,10 +528,17 @@ export class WorkflowBridge {
     }
   }
 
-  /** Cancel any pending approvals (e.g. on app shutdown). */
+  /**
+   * Stop starting workflow actions (e.g. on app shutdown): queued tasks are no
+   * longer dispatched, a confirmation answered afterwards runs no tool, and
+   * pending approvals are cancelled. A run requested afterwards is refused at
+   * once, and an orchestrator still booting never starts dispatching. Final and
+   * idempotent. A tool that already started is not undone.
+   */
   shutdown(): void {
-    this.toolAgent?.cancelPending(undefined, 'shutdown');
+    this.stopped = true;
     this.orchestrator?.stop();
+    this.toolAgent?.cancelPending(undefined, 'shutdown');
   }
 
   // ──────── Internals ────────
@@ -567,6 +618,7 @@ export class WorkflowBridge {
           },
           onApprovalRequired: (payload) => {
             const approval: PendingApproval = {
+              approvalId: payload.approvalId,
               workflowInstanceId: payload.workflowInstanceId,
               stepId: payload.stepId,
               message: payload.message,
@@ -629,10 +681,29 @@ export class WorkflowBridge {
             });
           }
 
+          // Activity must be proven: the bridge is running and the core reports the task
+          // as assigned or in progress. The core abandons a task when its workflow ends
+          // (e.g. timeout); from then on its tool must not start, and a late answer is
+          // still reported — so the core releases the worker — but not published.
+          const isTaskActive = () => {
+            if (this.stopped) return false;
+            const status = orchestrator.getTask(evt.taskId)?.status;
+            return status === 'assigned' || status === 'in_progress';
+          };
+          if (!isTaskActive()) {
+            orchestrator.failTask(
+              evt.taskId,
+              'Workflow task not started: the bridge is stopped or the task is not running'
+            );
+            return;
+          }
+
           try {
             let output: Record<string, unknown>;
             if (task.definition.type === 'tool_invoke') {
-              output = await toolAgent.runToolInvoke(task.definition.input);
+              output = await toolAgent.runToolInvoke(task.definition.input, {
+                isActive: isTaskActive,
+              });
             } else if (task.definition.type === 'approval_wait') {
               output = await toolAgent.runApprovalWait(
                 task.definition.input,
@@ -643,8 +714,9 @@ export class WorkflowBridge {
             } else {
               throw new Error(`Unsupported task type '${task.definition.type}'`);
             }
+            const publish = Boolean(visualNodeId) && isTaskActive();
             orchestrator.completeTask(evt.taskId, output);
-            if (visualNodeId) {
+            if (publish && visualNodeId) {
               this.emitWorkflowEvent({
                 type: 'node_completed',
                 workflowId,
@@ -655,8 +727,9 @@ export class WorkflowBridge {
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            const publish = Boolean(visualNodeId) && isTaskActive();
             orchestrator.failTask(evt.taskId, message);
-            if (visualNodeId) {
+            if (publish && visualNodeId) {
               this.emitWorkflowEvent({
                 type: 'node_failed',
                 workflowId,
@@ -703,6 +776,8 @@ export class WorkflowBridge {
           queueMicrotask(() => orchestrator.processQueue());
         });
 
+        // Shut down while the core was loading: this orchestrator never dispatches.
+        if (this.stopped) return;
         orchestrator.start();
         this.orchestrator = orchestrator;
         this.toolAgent = toolAgent;
@@ -797,7 +872,13 @@ export class WorkflowBridge {
   }
 
   private emitWorkflowEvent(payload: WorkflowEventPayload): void {
-    this.activeRunEvents?.push(payload);
+    // A task can outlive its run (the core times it out while the tool is still
+    // busy). Its late node events are not published at all (see `task_assigned`);
+    // this guard keeps anything not tagged with the active run's instance out of
+    // that run's persisted history.
+    if (payload.instanceId === this.currentRun?.instanceId) {
+      this.activeRunEvents?.push(payload);
+    }
     if (!this.sendToRenderer) return;
     this.sendToRenderer({ type: 'workflow.event', payload });
   }

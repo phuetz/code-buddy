@@ -1703,12 +1703,7 @@ export type ClientEvent =
   | { type: 'folder.select'; payload: Record<string, never> }
   | { type: 'workdir.get'; payload: Record<string, never> }
   | { type: 'workdir.set'; payload: { path: string; sessionId?: string } }
-  | { type: 'workdir.select'; payload: { sessionId?: string; currentPath?: string } }
-  | { type: 'config.geminiOauthLogin'; payload: Record<string, never> }
-  | { type: 'config.geminiOauthClear'; payload: Record<string, never> }
-  | { type: 'config.codexOauthLogin'; payload: Record<string, never> }
-  | { type: 'config.codexOauthClear'; payload: Record<string, never> }
-  | { type: 'config.codexOauthStatus'; payload: Record<string, never> };
+  | { type: 'workdir.select'; payload: { sessionId?: string; currentPath?: string } };
 
 // Sandbox setup types (app startup)
 export type SandboxSetupPhase = 

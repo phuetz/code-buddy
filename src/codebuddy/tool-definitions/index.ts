@@ -16,9 +16,11 @@ export {
   WRITE_FILE_TOOL,
   STR_REPLACE_EDITOR_TOOL,
   PATCH_TOOL,
+  APPLY_PATCH_TOOL,
   LIST_DIRECTORY_TOOL,
   BASH_TOOL,
   TERMINAL_TOOL,
+  INTERACTIVE_SHELL_TOOL,
   MORPH_EDIT_TOOL,
   CORE_TOOLS,
   isMorphEnabled,
@@ -29,6 +31,12 @@ export {
   SELF_DESCRIBE_TOOL,
   SELF_DESCRIBE_TOOLS,
 } from './self-describe-tools.js';
+
+// Read-only release notes about the agent's own evolution
+export {
+  SELF_EVOLUTION_TOOL,
+  SELF_EVOLUTION_TOOLS,
+} from './self-evolution-tools.js';
 
 // Search tools
 export {
@@ -143,6 +151,7 @@ export {
   WEB_FETCH_TOOL,
   WEB_SCRAPE_TOOL,
   WEB_EXTRACT_TOOL,
+  COMMUNITY_SEARCH_TOOL,
   WEB_TOOLS,
 } from './web-tools.js';
 
@@ -187,6 +196,9 @@ export {
   PLAN_TOOL,
   EXECUTE_CODE_TOOL,
   RUN_SCRIPT_TOOL,
+  DEPLOY_TOOL,
+  DOCS_SEARCH_TOOL,
+  KNOWLEDGE_GRAPH_TOOL,
   ADVANCED_TOOLS,
 } from './advanced-tools.js';
 
@@ -219,6 +231,8 @@ export {
   EXPORT_TOOL,
   QR_TOOL,
   ARCHIVE_TOOL,
+  MARKDOWN_CONVERT_TOOL,
+  SCREEN_MEMORY_TOOL,
   MULTIMODAL_TOOLS,
 } from './multimodal-tools.js';
 
@@ -265,6 +279,9 @@ export {
   DEVICE_MANAGE_TOOL,
   SPAWN_PARALLEL_AGENTS_TOOL,
   REMEMBER_TOOL,
+  REPLACE_MEMORY_TOOL,
+  REMIND_TOOL,
+  MEMORY_PROPOSE_TOOL,
   RECALL_TOOL,
   FORGET_TOOL,
   RELATIONSHIP_CONTEXT_TOOL,
@@ -358,6 +375,7 @@ export {
 // ExitPlanMode tool (request approval to leave plan mode)
 export {
   EXIT_PLAN_MODE_TOOL,
+  SUBMIT_PLAN_TOOL,
   EXIT_PLAN_MODE_TOOLS,
 } from './exit-plan-mode-tools.js';
 

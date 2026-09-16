@@ -35,6 +35,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import type { AgentMetrics } from './enhanced-coordination.js';
 import type { AgentRole } from './types.js';
 
@@ -112,25 +113,33 @@ function deserializeMetrics(s: SerializedAgentMetrics): AgentMetrics {
   };
 }
 
+const pendingSaves = new Map<string, Promise<void>>();
+
 /**
  * Save metrics atomically (write to .tmp + rename).
  * Best-effort — never throws; logs and swallows on failure.
  */
 export async function saveMetrics(map: Map<AgentRole, AgentMetrics>): Promise<void> {
   const metricsPath = resolveMetricsPath();
-  const tmpPath = `${metricsPath}.tmp`;
+  // Capture before yielding: later mutations must not change this snapshot.
+  const envelope: PersistedMetrics = {
+    schemaVersion: 'v0.4',
+    savedAt: new Date().toISOString(),
+    metrics: Array.from(map.entries()).map(([role, m]) => [role, serializeMetrics(m)]),
+  };
+  const save = (pendingSaves.get(metricsPath) ?? Promise.resolve()).then(async () => {
+    try {
+      await ensureDir(metricsPath);
+      await writeJsonAtomic(metricsPath, envelope, { mode: 0o600 });
+    } catch (err) {
+      logger.warn('[multi-agent] metrics persistence save failed', { error: String(err) });
+    }
+  });
+  pendingSaves.set(metricsPath, save);
   try {
-    await ensureDir(metricsPath);
-    const envelope: PersistedMetrics = {
-      schemaVersion: 'v0.4',
-      savedAt: new Date().toISOString(),
-      metrics: Array.from(map.entries()).map(([role, m]) => [role, serializeMetrics(m)]),
-    };
-    const json = JSON.stringify(envelope, null, 2);
-    await fs.writeFile(tmpPath, json, 'utf8');
-    await fs.rename(tmpPath, metricsPath);
-  } catch (err) {
-    logger.warn('[multi-agent] metrics persistence save failed', { error: String(err) });
+    await save;
+  } finally {
+    if (pendingSaves.get(metricsPath) === save) pendingSaves.delete(metricsPath);
   }
 }
 
@@ -149,8 +158,13 @@ export interface LoadedMetrics {
 export async function loadMetrics(): Promise<LoadedMetrics | null> {
   const metricsPath = resolveMetricsPath();
   try {
-    const raw = await fs.readFile(metricsPath, 'utf8');
-    const parsed = JSON.parse(raw) as PersistedMetrics;
+    const parsed = await readJsonAtomic<PersistedMetrics | null>(metricsPath, null, {
+      mode: 0o600,
+      isValid: (value): value is PersistedMetrics => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
+    if (!parsed) return null;
 
     if (parsed.schemaVersion !== 'v0.4') {
       logger.warn(

@@ -8,12 +8,12 @@
     "45-60": "conséquence et question"
   },
   "script": "Texte du Short validé par le générateur amont.",
-  "audio_file": "/home/patrice/Videos/lisa/transcription-locale.mp3",
-  "presenter_video": "/home/patrice/Videos/lisa/heygen-transcription-locale.mp4",
+  "audio_file": "~/Videos/lisa/transcription-locale.mp3",
+  "presenter_video": "~/Videos/lisa/heygen-transcription-locale.mp4",
   "hook": "Cette IA transcrit sans envoyer votre voix dans le cloud",
   "broll": [
     {
-      "path": "/home/patrice/Documents/preuves-lisa/preuve-split-1080x960.png",
+      "path": "~/Documents/preuves-lisa/preuve-split-1080x960.png",
       "trigger": "Cette",
       "duration": 3
     }
@@ -25,6 +25,6 @@
   "scheduled_for": "2026-08-04T12:30:00+02:00",
   "platforms": ["youtube", "tiktok", "instagram"],
   "evidence_manifests": [
-    "/home/patrice/Documents/preuves-lisa/exemple.meta.json"
+    "~/Documents/preuves-lisa/exemple.meta.json"
   ]
 }

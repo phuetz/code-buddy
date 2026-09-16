@@ -189,7 +189,7 @@ No existing solution offers:
 All research documents are located in:
 
 ```
-/home/patrice/claude/code-buddy/deep_research/filecommander-integration/
+~/claude/code-buddy/deep_research/filecommander-integration/
   |
   +-- architecture-analysis.md      - Technical architecture comparison
   +-- integration-points.md         - Specific integration opportunities

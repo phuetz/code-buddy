@@ -4,8 +4,10 @@
  *
  * Driven by `state.pendingApprovals[0]` from the app store: as soon as
  * the bridge emits `workflow.approval_required`, the head of the queue
- * pops up. Approving or rejecting calls the IPC bridge and removes the
- * entry from the local queue.
+ * pops up. Approving or rejecting sends the request's full identity
+ * (approval id, run, step) over the IPC bridge and removes exactly that
+ * request from the local queue. When a run ends, the store drops its
+ * remaining approvals without answering them; main cancels them too.
  *
  * @module cowork/renderer/components/ApprovalDialog
  */
@@ -15,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { CheckCircle2, XCircle, Clock, AlertTriangle, Wrench } from 'lucide-react';
 import { useAppStore } from '../store';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
+import type { PendingApproval } from '../../shared/workflow-types';
 
 /**
  * Heuristic detector for approval payloads that look destructive
@@ -49,7 +52,7 @@ export const ApprovalDialog: React.FC = () => {
   const remove = useAppStore((s) => s.removePendingApproval);
 
   const head = pending[0] ?? null;
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingApproval, setSubmittingApproval] = useState<PendingApproval | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -81,14 +84,21 @@ export const ApprovalDialog: React.FC = () => {
   const inputJson = head.payload?.toolInput
     ? JSON.stringify(head.payload.toolInput, null, 2)
     : null;
+  const submitting = submittingApproval === head;
 
   const reply = async (approved: boolean) => {
-    setSubmitting(true);
+    const approval = head;
+    setSubmittingApproval(approval);
     try {
-      await window.electronAPI.workflow.approve(head.stepId, approved);
+      await window.electronAPI.workflow.approve({
+        approvalId: approval.approvalId,
+        workflowInstanceId: approval.workflowInstanceId,
+        stepId: approval.stepId,
+        approved,
+      });
     } finally {
-      setSubmitting(false);
-      remove(head.stepId);
+      setSubmittingApproval((current) => (current === approval ? null : current));
+      remove(approval.approvalId);
     }
   };
 

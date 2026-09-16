@@ -132,6 +132,19 @@ function isSameMissionRuntimeEvent(a: MissionRuntimeEvent, b: MissionRuntimeEven
   return a.ts === b.ts && a.type === b.type && a.message === b.message;
 }
 
+/**
+ * A workflow run that ended can no longer use its approvals: drop them, and only
+ * them. Same array when the run had none.
+ */
+function withoutRunApprovals<T extends { workflowInstanceId: string }>(
+  approvals: T[],
+  instanceId: string
+): T[] {
+  return approvals.some((approval) => approval.workflowInstanceId === instanceId)
+    ? approvals.filter((approval) => approval.workflowInstanceId !== instanceId)
+    : approvals;
+}
+
 function appendMissionRuntimeEvent(
   events: MissionRuntimeEvent[],
   event: MissionRuntimeEvent
@@ -380,16 +393,7 @@ export interface AppState {
   missionRuntimeEvents: Record<string, MissionRuntimeEvent[]>;
   missionRuntimeHeartbeats: Record<string, string>;
   /** Approvals waiting for the user to click Approve/Reject. */
-  pendingApprovals: Array<{
-    workflowInstanceId: string;
-    stepId: string;
-    message: string;
-    expiresAt?: number;
-    payload?: {
-      toolName?: string;
-      toolInput?: Record<string, unknown>;
-    };
-  }>;
+  pendingApprovals: import('../../shared/workflow-types').PendingApproval[];
   openTabs: Array<{
     id: string;
     sessionId: string;
@@ -721,7 +725,8 @@ export interface AppState {
   pushPendingApproval: (
     approval: import('../../shared/workflow-types').PendingApproval
   ) => void;
-  removePendingApproval: (stepId: string) => void;
+  /** Removes this approval request only: another run or loop iteration can reuse its step. */
+  removePendingApproval: (approvalId: string) => void;
   openTab: (sessionId: string, title: string) => void;
   closeTab: (tabId: string) => void;
   /** Close every tab except the protected list (used by "Close others" menu). */
@@ -1807,6 +1812,7 @@ export const useAppStore = create<AppState>((set) => ({
               ...state.workflowExecutions,
               [payload.instanceId]: { ...base, status: 'completed', completedAt: Date.now() },
             },
+            pendingApprovals: withoutRunApprovals(state.pendingApprovals, payload.instanceId),
           };
         case 'failed':
           return {
@@ -1819,6 +1825,7 @@ export const useAppStore = create<AppState>((set) => ({
                 error: payload.error,
               },
             },
+            pendingApprovals: withoutRunApprovals(state.pendingApprovals, payload.instanceId),
           };
         default:
           return {};
@@ -1873,9 +1880,9 @@ export const useAppStore = create<AppState>((set) => ({
       const filtered = state.pendingApprovals.filter((a) => a.stepId !== approval.stepId);
       return { pendingApprovals: [...filtered, approval] };
     }),
-  removePendingApproval: (stepId) =>
+  removePendingApproval: (approvalId) =>
     set((state) => ({
-      pendingApprovals: state.pendingApprovals.filter((a) => a.stepId !== stepId),
+      pendingApprovals: state.pendingApprovals.filter((a) => a.approvalId !== approvalId),
     })),
   openTab: (sessionId, title) =>
     set((state) => {

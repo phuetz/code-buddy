@@ -230,7 +230,7 @@ export async function generateToolsMd(): Promise<void> {
     // Lazy-import to avoid pulling tool definitions into the critical startup path
     const { initializeToolRegistry } = await import('../codebuddy/tools.js');
     const { getToolRegistry } = await import('./registry.js');
-    const { TOOL_METADATA } = await import('./metadata.js');
+    const { getActiveToolMetadata } = await import('./metadata.js');
 
     // Ensure registry is populated
     initializeToolRegistry();
@@ -266,7 +266,7 @@ export async function generateToolsMd(): Promise<void> {
 
     // Build metadata map
     const metadataMap = new Map<string, ToolMetadata>(
-      TOOL_METADATA.map(m => [m.name, m])
+      getActiveToolMetadata().map(m => [m.name, m])
     );
 
     // Generate markdown

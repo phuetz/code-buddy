@@ -48,6 +48,10 @@ export interface ConfirmationResult {
 
 export type ConfirmationOperationType = 'file' | 'bash' | 'tool';
 
+function normalizePermissionToolName(toolName: string): string {
+  return toolName.trim().toLowerCase();
+}
+
 /**
  * Execute a command safely using spawn with separate arguments
  * This prevents command injection attacks
@@ -107,6 +111,8 @@ export class ConfirmationService extends EventEmitter {
   // Remote approval service (for non-interactive fallback)
   private remoteApproval: RemoteApprovalService | null = null;
   private interactiveBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null = null;
+  private mcpApprovalBridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null = null;
+  private wsApprovalBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null = null;
 
   static getInstance(): ConfirmationService {
     if (!ConfirmationService.instance) {
@@ -137,6 +143,35 @@ export class ConfirmationService extends EventEmitter {
     bridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null
   ): void {
     this.interactiveBridge = bridge;
+  }
+
+  /**
+   * Register an MCP server approval bridge. When Code Buddy operates as an
+   * MCP server, confirmation requests are routed to the connected MCP client
+   * via structured elicitation (`elicitation/create`).
+   */
+  setMcpApprovalBridge(
+    bridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null
+  ): void {
+    this.mcpApprovalBridge = bridge;
+  }
+
+  getMcpApprovalBridge(): ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null {
+    return this.mcpApprovalBridge;
+  }
+
+  /**
+   * Register a WebSocket approval bridge (mobile PWA).
+   * Returning null means "no mobile client, fall through".
+   */
+  setWsApprovalBridge(
+    bridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null,
+  ): void {
+    this.wsApprovalBridge = bridge;
+  }
+
+  getWsApprovalBridge(): ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null {
+    return this.wsApprovalBridge;
   }
 
   /** Isolate exact grants between concurrent desktop/voice/CLI sessions. */
@@ -331,11 +366,13 @@ export class ConfirmationService extends EventEmitter {
     // that `shell:safe` always evaluates to `allow`) would silently bypass a
     // restrictive mode. We only short-circuit to BLOCKED here; the permissive path
     // (mode allows) falls through unchanged, so normal UX is preserved.
-    const modeToolName = operationType === 'bash'
-      ? 'bash'
-      : operationType === 'tool'
-        ? options.toolName ?? options.operation
-        : 'edit';
+    const modeToolName = normalizePermissionToolName(
+      operationType === 'bash'
+        ? 'bash'
+        : operationType === 'tool'
+          ? options.toolName ?? options.operation
+          : 'edit',
+    );
     const permissionAction = operationType === 'bash' ? options.filename : options.operation;
     const earlyModeDecision = getPermissionModeManager().checkPermission(permissionAction, modeToolName);
     if (!isSelfImprovement && !earlyModeDecision.allowed) {
@@ -350,6 +387,7 @@ export class ConfirmationService extends EventEmitter {
       : operationType === 'tool'
         ? options.toolName ?? options.operation
         : 'Edit';
+    const normalizedToolName = normalizePermissionToolName(toolName);
     // Denials are evaluated before every convenience allow. Previously the
     // PolicyEngine's broad `shell:safe` allow returned before project deny
     // rules were even consulted.
@@ -379,7 +417,7 @@ export class ConfirmationService extends EventEmitter {
 
     // CC18: Check permission mode before other negotiable checks.
     const permMgr = getPermissionModeManager();
-    const modeDecision = permMgr.checkPermission(permissionAction, toolName.toLowerCase());
+    const modeDecision = permMgr.checkPermission(permissionAction, normalizedToolName);
     if (!modeDecision.allowed) {
       return this.auditGate('permission-mode', true, options, {
         confirmed: false,
@@ -442,6 +480,22 @@ export class ConfirmationService extends EventEmitter {
         `Diff preview:${magnitude}\n${preview}`;
     }
 
+    // MCP Server approval bridge: when running in MCP server mode, route
+    // confirmation requests through structured elicitation to the connected client.
+    if (this.mcpApprovalBridge) {
+      const bridged = await this.mcpApprovalBridge(options, operationType);
+      if (!forcePrompt && bridged.dontAskAgain && bridged.confirmed) {
+        if (options.approvalKey) {
+          this.scopedSessionApprovals.add(this.scopedApprovalKey(options.approvalKey));
+        } else if (operationType === 'file') {
+          this.sessionFlags.fileOperations = true;
+        } else if (operationType === 'bash') {
+          this.sessionFlags.bashCommands = true;
+        }
+      }
+      return this.auditGate('mcp-elicitation', false, options, bridged);
+    }
+
     // Interactive GUI bridge (Cowork permission dialog): the desktop app is
     // the interactive surface, so it takes precedence over the TTY check.
     if (this.interactiveBridge) {
@@ -456,6 +510,15 @@ export class ConfirmationService extends EventEmitter {
         }
       }
       return this.auditGate('interactive-bridge', false, options, bridged);
+    }
+
+    // Mobile PWA WebSocket bridge: only when an approval-capable tools socket
+    // is present. null = no such client, fall through to Telegram / TTY.
+    if (this.wsApprovalBridge) {
+      const bridged = await this.wsApprovalBridge(options);
+      if (bridged) {
+        return this.auditGate('ws-approval', false, options, bridged);
+      }
     }
 
     // Remote approval fallback: when not in interactive terminal, try channels
@@ -567,6 +630,7 @@ export class ConfirmationService extends EventEmitter {
       allOperations: false,
     };
     this.scopedSessionApprovals.clear();
+    this.mcpApprovalBridge = null;
   }
 
   getSessionFlags() {
@@ -584,6 +648,8 @@ export class ConfirmationService extends EventEmitter {
     this.pendingConfirmation = null;
     this.resolveConfirmation = null;
     this.scopedSessionApprovals.clear();
+    this.mcpApprovalBridge = null;
+    this.wsApprovalBridge = null;
     this.removeAllListeners();
   }
 }

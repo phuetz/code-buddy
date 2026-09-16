@@ -40,6 +40,8 @@ describe('npm runtime self-attestation', () => {
     execFileSync(process.execPath, [script, '--root', root], {
       env: {
         ...process.env,
+        // A dist-only fixture must not inherit the surrounding checkout's Git identity.
+        GIT_CEILING_DIRECTORIES: path.dirname(fs.realpathSync(root)),
         CODEBUDDY_SOURCE_REVISION: '',
         GITHUB_SHA: '',
         CI_COMMIT_SHA: '',

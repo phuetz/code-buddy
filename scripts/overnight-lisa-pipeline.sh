@@ -8,7 +8,7 @@
 #   6) write morning report
 set -uo pipefail
 
-ROOT="/home/patrice/code-buddy"
+ROOT="$HOME/code-buddy"
 cd "$ROOT"
 REPORT="$ROOT/.codebuddy/lora/lisa/MORNING-REPORT.md"
 LOG="$ROOT/.codebuddy/lora/lisa/overnight.log"
@@ -20,9 +20,9 @@ echo "===== overnight start $(date -Is) ====="
 # Load env without printing secrets
 set -a
 # shellcheck disable=SC1091
-[[ -f /home/patrice/.codebuddy/vision.env ]] && source /home/patrice/.codebuddy/vision.env 2>/dev/null || true
+[[ -f $HOME/.codebuddy/vision.env ]] && source $HOME/.codebuddy/vision.env 2>/dev/null || true
 # shellcheck disable=SC1091
-[[ -f /home/patrice/.codebuddy/lisa.env ]] && source /home/patrice/.codebuddy/lisa.env 2>/dev/null || true
+[[ -f $HOME/.codebuddy/lisa.env ]] && source $HOME/.codebuddy/lisa.env 2>/dev/null || true
 set +a
 
 export CODEBUDDY_IMAGE_PROVIDER="${CODEBUDDY_IMAGE_PROVIDER:-comfyui}"

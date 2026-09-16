@@ -72,35 +72,9 @@ function checkDatabase(): 'ok' | 'error' {
   }
 }
 
-/**
- * Check if at least one LLM provider is reachable. The original check
- * only looked at `GROK_API_KEY`, which falsely reported "error" for
- * users running Ollama/OpenAI/Anthropic/Gemini. We now accept any of:
- *  - GROK_API_KEY / XAI_API_KEY (xAI)
- *  - OPENAI_API_KEY (OpenAI)
- *  - ANTHROPIC_API_KEY (Anthropic)
- *  - GEMINI_API_KEY (Google)
- *  - OPENAI_BASE_URL pointing at a local Ollama / LM-Studio (no key needed)
- */
-function checkApi(): 'ok' | 'error' {
-  if (detectProviderFromEnv()) {
-    return 'ok';
-  }
-
-  if (
-    process.env.GROK_API_KEY ||
-    process.env.XAI_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.GEMINI_API_KEY
-  ) {
-    return 'ok';
-  }
-  // Local provider (Ollama, LM Studio, …) — accept loopback baseUrls
-  // even without an API key.
-  const baseUrl = process.env.OPENAI_BASE_URL ?? '';
-  if (/(127\.0\.0\.1|localhost|0\.0\.0\.0|::1)/i.test(baseUrl)) return 'ok';
-  return 'error';
+/** Report only observed provider health; configuration alone is not a probe. */
+function checkApi(): 'ok' | 'stale' | 'unknown' {
+  return getApiHeartbeatStatus();
 }
 
 /**
@@ -130,6 +104,61 @@ function getGrokModelsUrl(baseURL: string): string {
   return `${baseURL.replace(/\/+$/, '')}/models`;
 }
 
+function isLocalRuntimeProvider(provider: string | undefined): boolean {
+  return provider === 'ollama'
+    || provider === 'lmstudio'
+    || provider === 'vllm'
+    || provider === 'lemonade'
+    || provider === 'omniroute';
+}
+
+async function probeProviderApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
+  const provider = detectProviderFromEnv();
+  const apiKey = process.env.GROK_API_KEY?.trim()
+    || provider?.apiKey?.trim()
+    || undefined;
+  if (!apiKey) {
+    const configured = process.env.CODEBUDDY_PROVIDER?.trim() || provider?.provider;
+    if (!configured || isLocalRuntimeProvider(configured)) {
+      return undefined;
+    }
+    return {
+      ready: false,
+      message: `No API key for provider ${configured}`,
+      latencyMs: 0,
+    };
+  }
+  const baseURL = process.env.GROK_BASE_URL?.trim()
+    || provider?.baseURL
+    || 'https://api.x.ai/v1';
+  const apiStart = Date.now();
+  const label = provider?.provider ?? 'provider';
+  try {
+    const response = await fetch(getGrokModelsUrl(baseURL), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(3000),
+    });
+    const apiLatency = Date.now() - apiStart;
+    if (response.ok) {
+      updateApiHeartbeat(apiLatency);
+    }
+    return {
+      ready: response.ok,
+      message: response.ok ? `${label} API reachable` : `${label} API returned ${response.status}`,
+      latencyMs: apiLatency,
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      message: `${label} API unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      latencyMs: Date.now() - apiStart,
+    };
+  }
+}
+
 /**
  * Health check response type
  */
@@ -141,7 +170,7 @@ interface HealthCheckResponse {
   timestamp: string;
   checks: {
     database: 'ok' | 'error';
-    api: 'ok' | 'error';
+    api: 'ok' | 'stale' | 'unknown';
     memory: 'ok' | 'error';
     sensoryBridge?: 'ok' | 'error';
   };
@@ -271,7 +300,6 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { ready: boolean; message?: string; latencyMs?: number }> = {};
 
-    const provider = detectProviderFromEnv();
     checks.provider = getConfiguredProviderStatus();
 
     // Check database connection
@@ -306,34 +334,9 @@ router.get(
       };
     }
 
-    if (provider?.provider === 'grok') {
-      const apiStart = Date.now();
-      try {
-        const response = await fetch(getGrokModelsUrl(provider.baseURL), {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${provider.apiKey}`,
-          },
-          signal: AbortSignal.timeout(3000),
-        });
-        const apiLatency = Date.now() - apiStart;
-
-        if (response.ok) {
-          updateApiHeartbeat(apiLatency);
-        }
-
-        checks.grokApi = {
-          ready: response.ok,
-          message: response.ok ? 'Grok API reachable' : `Grok API returned ${response.status}`,
-          latencyMs: apiLatency,
-        };
-      } catch (error) {
-        checks.grokApi = {
-          ready: false,
-          message: `Grok API unreachable: ${error instanceof Error ? error.message : String(error)}`,
-          latencyMs: Date.now() - apiStart,
-        };
-      }
+    const providerApi = await probeProviderApi();
+    if (providerApi) {
+      checks.providerApi = providerApi;
     }
 
     const allPassing = Object.values(checks).every((c) => c.ready);
@@ -341,7 +344,8 @@ router.get(
       checks.provider.ready &&
       checks.database.ready &&
       checks.memory.ready &&
-      (checks.sensoryBridge?.ready ?? true);
+      (checks.sensoryBridge?.ready ?? true) &&
+      (checks.providerApi?.ready ?? true);
 
     const response = {
       ready: criticalPassing,
@@ -555,31 +559,12 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { status: string; latency?: number; error?: string }> = {};
 
-    // Check Grok API
-    const grokStart = Date.now();
-    try {
-      const response = await fetch('https://api.x.ai/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${process.env.GROK_API_KEY || ''}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      const grokLatency = Date.now() - grokStart;
-
-      if (response.ok) {
-        updateApiHeartbeat(grokLatency);
-      }
-
-      checks.grokApi = {
-        status: response.ok ? 'healthy' : 'degraded',
-        latency: grokLatency,
-      };
-    } catch (error) {
-      checks.grokApi = {
-        status: 'unhealthy',
-        latency: Date.now() - grokStart,
-        error: error instanceof Error ? error.message : String(error),
+    const providerApi = await probeProviderApi();
+    if (providerApi) {
+      checks.providerApi = {
+        status: providerApi.ready ? 'healthy' : 'unhealthy',
+        latency: providerApi.latencyMs,
+        error: providerApi.ready ? undefined : providerApi.message,
       };
     }
 
@@ -633,10 +618,17 @@ export function createK8sHealthAliases(): Router {
     const providerOk = getConfiguredProviderStatus().ready;
     const databaseOk = checkDatabase() === 'ok';
     const memOk = process.memoryUsage().heapUsed < 1024 * 1024 * 1024;
-    const ready = providerOk && databaseOk && memOk;
+    const providerApi = await probeProviderApi();
+    const providerApiOk = providerApi?.ready ?? true;
+    const ready = providerOk && databaseOk && memOk && providerApiOk;
     res.status(ready ? 200 : 503).json({
       ready,
-      checks: { provider: providerOk, database: databaseOk, memory: memOk },
+      checks: {
+        provider: providerOk,
+        database: databaseOk,
+        memory: memOk,
+        ...(providerApi ? { providerApi: providerApi.ready } : {}),
+      },
     });
   }));
 

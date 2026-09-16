@@ -15,6 +15,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import fs from 'node:fs/promises';
 import type { ITool, ToolSchema } from '../../tools/registry/types.js';
 import type { ToolResult } from '../../types/index.js';
 import { executeCode, type ExecuteCodeLanguage } from '../../tools/execute-code-runner.js';
@@ -50,11 +51,15 @@ export function buildAuthoredTool(spec: AuthoredToolSpec): ITool {
     async execute(input: Record<string, unknown>): Promise<ToolResult> {
       const rootDir = path.join(os.tmpdir(), `cb-authored-${randomUUID()}`);
       try {
+        await fs.mkdir(rootDir, { recursive: true, mode: 0o700 });
+        const source = language === 'typescript'
+          ? (await import('typescript')).transpileModule(code, { compilerOptions: { module: 99, target: 9 } }).outputText
+          : code;
         const res = await executeCode(
-          { code, language, env: { CODEBUDDY_TOOL_INPUT: JSON.stringify(input ?? {}) } },
+          { code: source, language: language === 'typescript' ? 'javascript' : language, env: { CODEBUDDY_TOOL_INPUT: JSON.stringify(input ?? {}) } },
           // envMode 'isolate' → the sandbox (used for BOTH pre-accept scoring
           // and live calls) never inherits the host's secrets.
-          { rootDir, rpcEnabled: false, envMode: 'isolate' },
+          { rootDir, rpcEnabled: false, envMode: 'isolate', confinement: 'compute' },
         );
         if (!res.ok) {
           return {
@@ -70,6 +75,8 @@ export function buildAuthoredTool(spec: AuthoredToolSpec): ITool {
           success: false,
           error: `authored tool "${name}" error: ${err instanceof Error ? err.message : String(err)}`,
         };
+      } finally {
+        await fs.rm(rootDir, { recursive: true, force: true });
       }
     },
     getSchema(): ToolSchema {

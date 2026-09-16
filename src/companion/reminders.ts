@@ -16,9 +16,10 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { readFile, writeFile, mkdir, appendFile, stat, rename } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { mkdir, appendFile, stat, rename } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { resolveUserName } from './user-name.js';
 
 /** A reminder definition (shape mirrors prospective-memory's Reminder; stored as JSON). */
@@ -52,42 +53,48 @@ export type ReminderLogEvent = 'fired' | 'done' | 'missed' | 'renag';
 function remindersFile(): string {
   return process.env.CODEBUDDY_REMINDERS_FILE || join(homedir(), '.codebuddy', 'reminders.json');
 }
+
+/**
+ * Companion stores (log / pending acks / snoozes) follow the reminders file
+ * unless an explicit env override is set. Default layout is unchanged:
+ * `~/.codebuddy/reminders.json` + `~/.codebuddy/companion/<name>`. A custom
+ * `CODEBUDDY_REMINDERS_FILE` must not leak into the operator home.
+ */
+function companionStore(envKey: string, name: string): string {
+  const override = process.env[envKey];
+  if (override) return override;
+  return join(dirname(remindersFile()), 'companion', name);
+}
+
 function logFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_LOG_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'reminder-log.jsonl')
-  );
+  return companionStore('CODEBUDDY_REMINDER_LOG_FILE', 'reminder-log.jsonl');
 }
 
 // ── store ─────────────────────────────────────────────────────────────
 
 export async function loadReminders(): Promise<Reminder[]> {
-  try {
-    const raw = (await readFile(remindersFile(), 'utf8')).trim();
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.reminders)
-        ? parsed.reminders
-        : [];
-    return list.filter(
-      (r: unknown): r is Reminder => !!r && typeof (r as Reminder).id === 'string'
-    );
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not read store: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    return [];
-  }
+  const file = remindersFile();
+  const parsed = await readJsonAtomic<unknown>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown => Boolean(
+      Array.isArray(value)
+      || (value && typeof value === 'object' && Array.isArray((value as { reminders?: unknown }).reminders)),
+    ),
+  });
+  const record = parsed as { reminders?: unknown } | null;
+  const list = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(record?.reminders)
+      ? record.reminders
+      : null;
+  return (Array.isArray(list) ? list : []).filter(
+    (r: unknown): r is Reminder => !!r && typeof (r as Reminder).id === 'string'
+  );
 }
 
 export async function saveReminders(list: Reminder[]): Promise<void> {
   const file = remindersFile();
-  await mkdir(join(file, '..'), { recursive: true });
-  await writeFile(file, JSON.stringify(list, null, 2), 'utf8');
+  await writeJsonAtomic(file, list, { mode: 0o600 });
 }
 
 /** 'HH:MM' validator. */
@@ -203,6 +210,7 @@ export function isDue(r: Reminder, now: Date): boolean {
   const occ = new Date(now);
   occ.setHours(h, m, 0, 0);
   if (now < occ) return false; // not yet time today
+  if (isOneShot(r) && r.lastFiredAt) return false; // a dated occurrence is consumed permanently
   if (r.lastFiredAt) {
     const lf = new Date(r.lastFiredAt);
     if (sameDay(lf, occ) && lf >= occ) return false; // already fired this occurrence
@@ -344,10 +352,7 @@ export function resetAcks(): void {
 // every mutation and reloaded at runner start, so a fired-but-unacked dose still escalates.
 
 function pendingAcksFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_PENDING_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'pending-acks.json')
-  );
+  return companionStore('CODEBUDDY_REMINDER_PENDING_FILE', 'pending-acks.json');
 }
 
 /**
@@ -356,11 +361,11 @@ function pendingAcksFile(): string {
  * remove the store directory (tests, a tear-down) wait for them first — on
  * Windows an unfinished write leaves the directory ENOTEMPTY.
  */
-const pendingWrites = new Set<Promise<void>>();
-function trackWrite(write: Promise<void>): Promise<void> {
+const pendingWrites = new Set<Promise<unknown>>();
+function trackWrite(write: Promise<unknown>): Promise<void> {
   pendingWrites.add(write);
   void write.finally(() => pendingWrites.delete(write));
-  return write;
+  return write.then(() => undefined);
 }
 export async function whenRemindersPersisted(): Promise<void> {
   while (pendingWrites.size > 0) {
@@ -375,7 +380,7 @@ async function savePendingAcksNow(): Promise<void> {
   try {
     const file = pendingAcksFile();
     await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, JSON.stringify([...pending.values()]), 'utf8');
+    await writeJsonAtomic(file, [...pending.values()], { mode: 0o600 });
   } catch (err) {
     logger.warn(
       `[reminders] could not persist pending acks: ${err instanceof Error ? err.message : String(err)}`
@@ -383,30 +388,27 @@ async function savePendingAcksNow(): Promise<void> {
   }
 }
 
-/** Restore the pending-ack registry from disk (call at runner start). Never-throws. */
+/** Restore the pending-ack registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadPendingAcks(): Promise<void> {
-  try {
-    const raw = (await readFile(pendingAcksFile(), 'utf8')).trim();
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return;
-    for (const a of list) {
-      if (a && typeof a.id === 'string' && Number.isFinite(a.firedAt)) {
-        pending.set(a.id, {
-          id: a.id,
-          label: typeof a.label === 'string' ? a.label : a.id,
-          firedAt: a.firedAt,
-          nags: Number.isFinite(a.nags) ? a.nags : 0,
-        });
-      }
-    }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not load pending acks: ${err instanceof Error ? err.message : String(err)}`
-      );
+  const file = pendingAcksFile();
+  const parsed = await readJsonAtomic<unknown[]>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
+  const loaded = new Map<string, PendingAck>();
+  for (const a of parsed) {
+    if (a && typeof (a as PendingAck).id === 'string' && Number.isFinite((a as PendingAck).firedAt)) {
+      const ack = a as PendingAck;
+      loaded.set(ack.id, {
+        id: ack.id,
+        label: typeof ack.label === 'string' ? ack.label : ack.id,
+        firedAt: ack.firedAt,
+        nags: Number.isFinite(ack.nags) ? ack.nags : 0,
+      });
     }
   }
+  pending.clear();
+  for (const [id, ack] of loaded) pending.set(id, ack);
 }
 
 // ── the safety-critical matcher ───────────────────────────────────────
@@ -441,11 +443,23 @@ const DONE_PHRASE = new RegExp(
 /**
  * Does this transcript acknowledge a pending reminder? Returns the reminder id to mark done, or
  * null. PURE (no mutation): binds ONLY when an explicit done-phrase is heard AND a reminder is
- * pending in its window. Multiple pending → the most-recently-fired (read-back disambiguates).
+ * pending in its window. An explicitly mentioned label wins; otherwise multiple pending reminders
+ * retain the most-recently-fired fallback and the caller reads the bind back.
  */
 export function matchAck(text: string, nowMs: number, windowMs = ackWindowMs()): string | null {
   if (!text || !DONE_PHRASE.test(text)) return null;
   const candidates = pendingAcks(nowMs, windowMs);
+  const words = normLabel(text).split(' ').filter(Boolean);
+  const mentionsLabel = (label: string): boolean => {
+    const labelWords = normLabel(label).split(' ').filter(Boolean);
+    if (labelWords.length === 0 || labelWords.length > words.length) return false;
+    return words.some((_, start) =>
+      start + labelWords.length <= words.length &&
+      labelWords.every((word, offset) => words[start + offset] === word),
+    );
+  };
+  const explicitlyNamed = candidates.find((candidate) => mentionsLabel(candidate.label));
+  if (explicitlyNamed) return explicitlyNamed.id;
   return candidates[0]?.id ?? null;
 }
 
@@ -801,7 +815,7 @@ export function describeRemindersForSpeech(reminders: Reminder[]): string {
 
 export interface ReminderVoiceDeps {
   /** Speak a line aloud (required). */
-  speak: (text: string) => Promise<void>;
+  speak: (text: string) => Promise<void | boolean>;
   /** Store ops — default to the real store; injectable for tests. */
   list?: () => Promise<Reminder[]>;
   remove?: (id: string) => Promise<boolean>;
@@ -893,49 +907,45 @@ const snoozes = new Map<string, SnoozedReminder>();
 // deferral and its re-announce must NOT silently drop the reminder — for a meds dose that's a missed
 // dose. Mirrored to disk on every mutation and reloaded at runner start.
 function snoozesFile(): string {
-  return (
-    process.env.CODEBUDDY_REMINDER_SNOOZE_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'snoozes.json')
-  );
+  return companionStore('CODEBUDDY_REMINDER_SNOOZE_FILE', 'snoozes.json');
 }
 function saveSnoozes(): Promise<void> {
   return trackWrite(saveSnoozesNow());
 }
-async function saveSnoozesNow(): Promise<void> {
+async function saveSnoozesNow(): Promise<boolean> {
   try {
     const file = snoozesFile();
     await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, JSON.stringify([...snoozes.values()]), 'utf8');
+    await writeJsonAtomic(file, [...snoozes.values()], { mode: 0o600 });
+    return true;
   } catch (err) {
     logger.warn(
       `[reminders] could not persist snoozes: ${err instanceof Error ? err.message : String(err)}`
     );
+    return false;
   }
 }
 
-/** Restore the snooze registry from disk (call at runner start). Never-throws. */
+/** Restore the snooze registry from disk (call at runner start). ENOENT = empty; anything else throws. */
 export async function loadSnoozes(): Promise<void> {
-  try {
-    const raw = (await readFile(snoozesFile(), 'utf8')).trim();
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return;
-    for (const s of list) {
-      if (s && typeof s.id === 'string' && Number.isFinite(s.fireAt)) {
-        snoozes.set(s.id, {
-          id: s.id,
-          label: typeof s.label === 'string' ? s.label : s.id,
-          fireAt: s.fireAt,
-        });
-      }
-    }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      logger.warn(
-        `[reminders] could not load snoozes: ${err instanceof Error ? err.message : String(err)}`
-      );
+  const file = snoozesFile();
+  const parsed = await readJsonAtomic<unknown[]>(file, [], {
+    mode: 0o600,
+    isValid: (value): value is unknown[] => Array.isArray(value),
+  });
+  const loaded = new Map<string, SnoozedReminder>();
+  for (const s of parsed) {
+    if (s && typeof (s as SnoozedReminder).id === 'string' && Number.isFinite((s as SnoozedReminder).fireAt)) {
+      const snooze = s as SnoozedReminder;
+      loaded.set(snooze.id, {
+        id: snooze.id,
+        label: typeof snooze.label === 'string' ? snooze.label : snooze.id,
+        fireAt: snooze.fireAt,
+      });
     }
   }
+  snoozes.clear();
+  for (const [id, snooze] of loaded) snoozes.set(id, snooze);
 }
 
 /** Schedule a reminder to re-announce at `fireAtMs`. */
@@ -943,12 +953,24 @@ export function snoozeReminder(id: string, label: string, fireAtMs: number): voi
   snoozes.set(id, { id, label, fireAt: fireAtMs });
   void saveSnoozes();
 }
-/** Snoozed reminders now due to re-announce (returned + removed). */
+/** Snoozed reminders now due to re-announce (peek — consume only after a successful announcement). */
 export function dueSnoozes(nowMs: number): Array<{ id: string; label: string }> {
-  const due = [...snoozes.values()].filter((s) => nowMs >= s.fireAt);
-  for (const s of due) snoozes.delete(s.id);
-  if (due.length) void saveSnoozes();
-  return due.map((s) => ({ id: s.id, label: s.label }));
+  return [...snoozes.values()]
+    .filter((s) => nowMs >= s.fireAt)
+    .map((s) => ({ id: s.id, label: s.label }));
+}
+/** Drop a snooze after it was actually announced. Restores it if the durable write fails. */
+export async function consumeSnooze(id: string): Promise<boolean> {
+  const existing = snoozes.get(id);
+  if (!existing) return true;
+  snoozes.delete(id);
+  const persisted = await saveSnoozesNow();
+  if (!persisted) {
+    snoozes.set(id, existing);
+    logger.warn(`[reminders] snooze consume not durable for ${id}; restoring`);
+    return false;
+  }
+  return true;
 }
 /** Test seam. */
 export function resetSnoozes(): void {
@@ -958,17 +980,25 @@ export function resetSnoozes(): void {
 /**
  * If `text` is a snooze AND a reminder is currently pending its ack, defer that reminder: close its
  * ack and schedule a re-announce. Returns the deferral (for the spoken confirmation) or null.
+ * The durable snooze write happens BEFORE closeAck; a failed write leaves the ack open and
+ * returns null so the voice path does not promise a later reminder.
  */
-export function snoozePending(
+export async function snoozePending(
   text: string,
   nowMs: number
-): { id: string; label: string; delayMs: number } | null {
+): Promise<{ id: string; label: string; delayMs: number } | null> {
   const delayMs = parseSnooze(text);
   if (delayMs == null) return null;
   const target = pendingAcks(nowMs)[0]; // most-recently-fired pending
   if (!target) return null;
+  snoozes.set(target.id, { id: target.id, label: target.label, fireAt: nowMs + delayMs });
+  const persisted = await saveSnoozesNow();
+  if (!persisted) {
+    snoozes.delete(target.id);
+    logger.warn(`[reminders] snooze not durable for ${target.id}; leaving ack open`);
+    return null;
+  }
   closeAck(target.id);
-  snoozeReminder(target.id, target.label, nowMs + delayMs);
   return { id: target.id, label: target.label, delayMs };
 }
 

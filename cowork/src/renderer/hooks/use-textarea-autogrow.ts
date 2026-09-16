@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, type RefObject } from 'react';
 
 export interface AutogrowOptions {
   /** Minimum textarea height in pixels (default 44 = single comfortable row). */
@@ -24,7 +24,7 @@ export function computeAutogrowHeight(
 /**
  * Auto-grow a controlled `<textarea>` between `minPx` (44 px) and
  * `maxPx` (200 px) as its content changes. Mirrors the chat-ui
- * gitnexus-rs `ChatInput` pattern: reset to `auto` to recompute
+ * code-explorer `ChatInput` pattern: reset to `auto` to recompute
  * scrollHeight, then clamp + apply.
  *
  * Beyond `maxPx`, the textarea stops growing and an internal vertical
@@ -49,14 +49,35 @@ export function useTextareaAutogrow(
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Reset to `auto` so scrollHeight reflects the *new* content, not
-    // the previously-sized height (which would clamp scrollHeight at
-    // the current style.height).
-    el.style.height = 'auto';
-    const next = computeAutogrowHeight(el.scrollHeight, { minPx, maxPx });
-    el.style.height = `${next}px`;
-    // Show vertical scrollbar only when capped at max — keeps the
-    // chrome out of the way for short inputs.
-    el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden';
+    applyAutogrow(el, minPx, maxPx);
   }, [ref, value, minPx, maxPx]);
+
+  // Wrapping depends on width too: when the pane narrows or widens (docked panels, activity
+  // rail, compact composer) the text re-wraps, so recompute on width changes only — the
+  // height this hook sets must not retrigger it.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let lastWidth = el.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => {
+      const width = el.getBoundingClientRect().width;
+      if (Math.abs(width - lastWidth) < 1) return;
+      lastWidth = width;
+      applyAutogrow(el, minPx, maxPx);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, minPx, maxPx]);
+}
+
+function applyAutogrow(el: HTMLTextAreaElement, minPx: number, maxPx: number): void {
+  // Reset to `auto` so scrollHeight reflects the *new* content, not
+  // the previously-sized height (which would clamp scrollHeight at
+  // the current style.height).
+  el.style.height = 'auto';
+  const next = computeAutogrowHeight(el.scrollHeight, { minPx, maxPx });
+  el.style.height = `${next}px`;
+  // Show vertical scrollbar only when capped at max — keeps the
+  // chrome out of the way for short inputs.
+  el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden';
 }

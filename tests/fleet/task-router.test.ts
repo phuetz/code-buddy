@@ -65,14 +65,27 @@ function classify(
 const router = new TaskRouter();
 
 describe('TaskRouter — basic plan', () => {
+  it('accepts the shared literary task category on a classification', () => {
+    const plan = router.plan(classify({ taskType: 'redaction-fr' }), [
+      peer('hub', {
+        models: [
+          model('generic', { provider: 'openai' }),
+          model('writer', { provider: 'mistral', strengths: ['french'] }),
+        ],
+      }),
+    ], { taskType: 'redaction-fr' });
+    expect(plan.primary.model).toBe('writer');
+    expect(plan.rationale).toContain('redaction-fr');
+  });
+
   it('returns the only candidate when one peer × one model is available', () => {
     const peers: PeerSlot[] = [
-      peer('ministar', {
+      peer('hub', {
         models: [model('qwen3.6:35b', { provider: 'ollama' })],
       }),
     ];
     const plan = router.plan(classify(), peers);
-    expect(plan.primary.peerId).toBe('ministar');
+    expect(plan.primary.peerId).toBe('hub');
     expect(plan.primary.model).toBe('qwen3.6:35b');
     expect(plan.primary.provider).toBe('ollama');
     expect(plan.fallback).toBeUndefined(); // only one peer
@@ -118,7 +131,7 @@ describe('TaskRouter — basic plan', () => {
 describe('TaskRouter — strength matching', () => {
   it('prefers a model with reasoning + thinking for complex tasks', () => {
     const peers: PeerSlot[] = [
-      peer('ministar', {
+      peer('hub', {
         models: [
           model('gemma4:8b', {
             provider: 'ollama',
@@ -167,7 +180,7 @@ describe('TaskRouter — strength matching', () => {
 describe('TaskRouter — privacy veto', () => {
   it('drops cloud peers when privacyTag=sensitive', () => {
     const peers: PeerSlot[] = [
-      peer('ministar', {
+      peer('hub', {
         egress: 'local',
         models: [model('qwen3.6:35b', { provider: 'ollama' })],
       }),
@@ -177,7 +190,7 @@ describe('TaskRouter — privacy veto', () => {
       }),
     ];
     const plan = router.plan(classify(), peers, { privacyTag: 'sensitive' });
-    expect(plan.primary.peerId).toBe('ministar');
+    expect(plan.primary.peerId).toBe('hub');
     expect(plan.fallback).toBeUndefined(); // cloud vetoed
   });
 
@@ -205,7 +218,7 @@ describe('TaskRouter — privacy veto', () => {
   });
 
   it('keeps a local model on a mixed local/cloud peer for sensitive work', () => {
-    const peers = [peer('darkstar', {
+    const peers = [peer('gpuNode', {
       egress: 'cloud',
       models: [
         model('qwen-local', { provider: 'ollama', egress: 'local' }),
@@ -312,7 +325,7 @@ describe('TaskRouter — cost scoring', () => {
 
   it('local (no cost) beats cloud at equal match', () => {
     const peers: PeerSlot[] = [
-      peer('ministar', {
+      peer('hub', {
         egress: 'local',
         models: [
           model('qwen3.6:35b', {
@@ -337,7 +350,7 @@ describe('TaskRouter — cost scoring', () => {
       classify({ complexity: 'reasoning_heavy', requiresReasoning: true }),
       peers,
     );
-    expect(plan.primary.peerId).toBe('ministar');
+    expect(plan.primary.peerId).toBe('hub');
     expect(plan.fallback?.peerId).toBe('cloud');
   });
 
@@ -510,7 +523,7 @@ describe('TaskRouter — parallelism', () => {
 describe('TaskRouter — rationale text', () => {
   it('mentions primary peer + score in rationale', () => {
     const peers: PeerSlot[] = [
-      peer('ministar', {
+      peer('hub', {
         models: [model('qwen3.6:35b', { strengths: ['reasoning'] })],
       }),
     ];
@@ -518,7 +531,7 @@ describe('TaskRouter — rationale text', () => {
       classify({ requiresReasoning: true }),
       peers,
     );
-    expect(plan.rationale).toContain('ministar');
+    expect(plan.rationale).toContain('hub');
     expect(plan.rationale).toContain('qwen3.6:35b');
   });
 });

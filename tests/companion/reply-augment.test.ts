@@ -4,8 +4,10 @@
  * end-to-end through the REAL relationship-state file (env-routed temp, no mocks) — an affectionate
  * utterance actually nudges Lisa's warmth up.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -30,6 +32,9 @@ import {
   personalityOf,
   DEFAULT_TRAITS,
 } from '../../src/companion/relationship-state.js';
+
+const isolatedHome = createIsolatedHome('reply-augment-home-');
+beforeAll(() => { isolatedHome.enter(); });
 
 describe('detectRelationalSignal', () => {
   it('classifies the dominant emotional colour', () => {
@@ -276,6 +281,7 @@ describe('hybrid reply evolves Lisa’s traits per utterance (real state file, o
   });
 });
 
+
 describe('default voice reply evolves Lisa’s mood through the shared helper', () => {
   it('drifts on a fast pure-voice reply without invoking a model', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'replyaug-default-'));
@@ -313,39 +319,12 @@ describe('default voice reply evolves Lisa’s mood through the shared helper', 
   });
 });
 
-describe('default voice reply evolves Lisa’s mood through the shared helper', () => {
-  it('drifts on a fast pure-voice reply without invoking a model', async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'replyaug-default-'));
-    const statePath = join(tmp, 'relationship-state.json');
-    process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE = statePath;
-    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
-    try {
-      await expect(defaultReply('merci beaucoup')).resolves.toBe('Avec plaisir.');
-      await vi.waitFor(() => {
-        expect(personalityOf(loadRelationshipState(statePath)).mood).toBeGreaterThan(60);
-      });
-    } finally {
-      delete process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE;
-      delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
-      rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it('honors the hybrid handoff and does not apply drift a second time', async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'replyaug-handoff-'));
-    const statePath = join(tmp, 'relationship-state.json');
-    process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE = statePath;
-    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
-    try {
-      await expect(
-        defaultReply('merci beaucoup', [], { relationshipEvolutionHandled: true }),
-      ).resolves.toBe('Avec plaisir.');
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(personalityOf(loadRelationshipState(statePath)).mood).toBe(60);
-    } finally {
-      delete process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE;
-      delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
-      rmSync(tmp, { recursive: true, force: true });
-    }
-  });
+// Wait for the asynchronous relational prewarm before this worker ends.
+afterAll(async () => {
+  const { prewarmVoiceRelationalContext } = await import('../../src/companion/relational-context.js');
+  try {
+    await prewarmVoiceRelationalContext();
+  } finally {
+    isolatedHome.leave();
+  }
 });

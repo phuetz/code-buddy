@@ -42,7 +42,7 @@ export interface ModelRoutingConfig {
 }
 
 export interface TurboQuantProviderConfig {
-  /** vLLM endpoint, e.g. "http://192.168.1.50:8000" */
+  /** vLLM endpoint, e.g. "http://203.0.113.20:8000" */
   vllmEndpoint?: string;
   /** Ollama endpoint, e.g. "http://localhost:11434" */
   ollamaEndpoint?: string;

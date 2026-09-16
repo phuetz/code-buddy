@@ -100,6 +100,31 @@ describe('resolveEngineRuntimeConfig', () => {
     });
   });
 
+  it('supplies a vLLM placeholder API key for the embedded engine', () => {
+    const runtime = resolveEngineRuntimeConfig(
+      createConfig({
+        provider: 'vllm',
+        activeProfileKey: 'vllm',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:8000/v1',
+        model: 'local-vllm-model',
+        profiles: {
+          vllm: {
+            apiKey: '',
+            baseUrl: 'http://127.0.0.1:8000/v1',
+            model: 'local-vllm-model',
+          },
+        },
+      })
+    );
+
+    expect(runtime).toMatchObject({
+      apiKey: 'sk-vllm-local-proxy',
+      baseURL: 'http://127.0.0.1:8000/v1',
+      model: 'local-vllm-model',
+    });
+  });
+
   it('supplies a Gemini placeholder only for loopback custom Gemini gateways', () => {
     const runtime = resolveEngineRuntimeConfig(
       createConfig({

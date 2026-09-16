@@ -1,0 +1,7 @@
+home/
+tmp/
+npm-cache/
+artifacts/
+work/
+*.wav
+aplay.log

@@ -267,6 +267,10 @@ export interface FilmQualityReport {
   silent: boolean;
   blackIntervals: BlackInterval[];
   totalBlackSeconds: number;
+  /** Audio stream duration in seconds (when ffprobe reported it). */
+  audioDuration?: number | null;
+  /** False when the audio stream is materially shorter than the video. */
+  audioMatchesVideo: boolean;
   warnings: string[];
 }
 
@@ -321,10 +325,18 @@ function run(
   });
 }
 
+/** Mean level at or below which an audio track is inaudible in practice — the gate fails. */
+const SILENT_MEAN_DB = -50;
+/** Mean level at or below which a mix is suspiciously quiet — warned about, but still passes. */
+const QUIET_MEAN_DB = -35;
+/** Audio shorter than the video by more than this is a truncated mix, not encoder delay. */
+const AUDIO_SHORT_TOLERANCE_S = 0.25;
+
 /**
  * Reduce raw probe values into a pass/fail report (pure — the testable core of
  * the gate). `pass` requires: duration within 12%/±0.6s of expected (when
- * given), not silent when there is an audio track, and < 15% black frames.
+ * given), audible when there is an audio track (mean > -50 dB), < 15% black
+ * frames, and an audio stream not truncated vs the video.
  */
 export function reduceQuality(params: {
   probedDuration: number | null;
@@ -333,9 +345,18 @@ export function reduceQuality(params: {
   meanDb: number | null;
   maxDb: number | null;
   blackIntervals: BlackInterval[];
+  audioDuration?: number | null;
 }): FilmQualityReport {
   const warnings: string[] = [];
-  const { probedDuration, expectedDuration, hasAudio, meanDb, maxDb, blackIntervals } = params;
+  const {
+    probedDuration,
+    expectedDuration,
+    hasAudio,
+    meanDb,
+    maxDb,
+    blackIntervals,
+    audioDuration,
+  } = params;
 
   let durationOk = true;
   if (expectedDuration && probedDuration != null) {
@@ -351,9 +372,17 @@ export function reduceQuality(params: {
     warnings.push('Could not probe the rendered film duration.');
   }
 
-  // "silent" = has an audio track but the mean level is essentially inaudible.
-  const silent = hasAudio && meanDb != null && meanDb <= -60;
+  // "silent" = has an audio track but nobody could hear it. The threshold is set by
+  // audibility, not by digital silence: a presentation film whose narration was skipped
+  // came out at -54.7 dB and passed the old -60 dB gate while being inaudible.
+  const silent = hasAudio && meanDb != null && meanDb <= SILENT_MEAN_DB;
   if (silent) warnings.push(`Audio track present but effectively silent (mean ${meanDb} dB).`);
+  const missingMeanVolume = hasAudio && meanDb == null;
+  if (missingMeanVolume) warnings.push('Audio track present but mean volume could not be measured.');
+  else if (hasAudio && meanDb != null && meanDb <= QUIET_MEAN_DB) {
+    // Audible, but far below anything a viewer expects — worth surfacing, not worth failing.
+    warnings.push(`Audio is unusually quiet (mean ${meanDb} dB); check the voice track.`);
+  }
   if (hasAudio && maxDb != null && maxDb >= -0.1) {
     warnings.push(`Audio may be clipping (max ${maxDb} dB).`);
   }
@@ -367,7 +396,21 @@ export function reduceQuality(params: {
     );
   }
 
-  const pass = durationOk && !silent && blackRatio <= 0.15;
+  // Format duration follows the longer stream, so a truncated mix (GK4: 10.83s
+  // audio on an 11.43s video) still looked like a healthy 11.43s film.
+  let audioMatchesVideo = true;
+  if (hasAudio && audioDuration != null && probedDuration != null && probedDuration > 0) {
+    const shortBy = Math.round((probedDuration - audioDuration) * 100) / 100;
+    if (shortBy > AUDIO_SHORT_TOLERANCE_S) {
+      audioMatchesVideo = false;
+      warnings.push(
+        `Audio track is ${audioDuration}s but the video is ${probedDuration}s (truncated by ${shortBy}s).`
+      );
+    }
+  }
+
+  const pass =
+    durationOk && !silent && !missingMeanVolume && blackRatio <= 0.15 && audioMatchesVideo;
   return {
     pass,
     probedDuration,
@@ -379,6 +422,8 @@ export function reduceQuality(params: {
     silent,
     blackIntervals,
     totalBlackSeconds,
+    ...(audioDuration !== undefined ? { audioDuration } : {}),
+    audioMatchesVideo,
     warnings,
   };
 }
@@ -403,17 +448,32 @@ export async function assessFilmQuality(
   );
   let probedDuration: number | null = null;
   let hasAudio = false;
-  try {
-    const json = JSON.parse(probe.stdout) as {
-      format?: { duration?: string };
-      streams?: Array<{ codec_type?: string }>;
-    };
-    probedDuration = json.format?.duration
-      ? Math.round(Number(json.format.duration) * 100) / 100
-      : null;
-    hasAudio = !!json.streams?.some((s) => s.codec_type === 'audio');
-  } catch {
-    /* leave defaults */
+  let audioDuration: number | null = null;
+  const probeWarnings: string[] = [];
+  if (probe.code !== 0) {
+    probeWarnings.push(`ffprobe failed while inspecting the film (exit ${probe.code}).`);
+  } else {
+    try {
+      const json = JSON.parse(probe.stdout) as {
+        format?: { duration?: string };
+        streams?: Array<{ codec_type?: string; duration?: string }>;
+      };
+      const duration = json.format?.duration ? Number(json.format.duration) : NaN;
+      probedDuration = Number.isFinite(duration) && duration > 0
+        ? Math.round(duration * 100) / 100
+        : null;
+      const audioStream = json.streams?.find((s) => s.codec_type === 'audio');
+      hasAudio = !!audioStream;
+      const audioDur = audioStream?.duration ? Number(audioStream.duration) : NaN;
+      audioDuration = Number.isFinite(audioDur) && audioDur > 0
+        ? Math.round(audioDur * 100) / 100
+        : null;
+      if (probedDuration == null) probeWarnings.push('ffprobe returned no valid positive film duration.');
+    } catch (error) {
+      probeWarnings.push(
+        `ffprobe returned invalid film metadata: ${error instanceof Error ? error.message : String(error)}.`,
+      );
+    }
   }
 
   // Single ffmpeg analysis pass: blackdetect (video) + volumedetect (audio) → stderr.
@@ -444,7 +504,13 @@ export async function assessFilmQuality(
     meanDb,
     maxDb,
     blackIntervals,
+    audioDuration,
   });
+  if (analysis.code !== 0) {
+    report.warnings.push(`ffmpeg film analysis failed (exit ${analysis.code}).`);
+  }
+  report.warnings.push(...probeWarnings);
+  if (analysis.code !== 0 || probe.code !== 0 || probeWarnings.length > 0) report.pass = false;
 
   logger.info(
     `[film-quality] ${report.pass ? 'PASS' : 'REVIEW'} — ${report.probedDuration}s, ` +

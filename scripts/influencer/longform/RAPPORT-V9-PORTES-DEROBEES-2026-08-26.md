@@ -47,8 +47,8 @@ commande refuse la sortie avant écriture :
 
 ```bash
 python3 scripts/influencer/longform/srt_depuis_rendu.py \
-  /home/patrice/.codebuddy/personas/lisa/longform-02-glm-2026-08-23/work/render-v2 \
-  --media /home/patrice/.codebuddy/personas/lisa/longform-02-glm-2026-08-23/v3-voix/LONG02-glm-talonne-claude-v2.mp4 \
+  ~/.codebuddy/personas/lisa/longform-02-glm-2026-08-23/work/render-v2 \
+  --media ~/.codebuddy/personas/lisa/longform-02-glm-2026-08-23/v3-voix/LONG02-glm-talonne-claude-v2.mp4 \
   --out scripts/influencer/longform/.v9-ne-doit-pas-exister.srt
 ```
 

@@ -1,37 +1,45 @@
 import { CommandHandlerResult } from './branch-handlers.js';
 
+// Written as the user's own request about their own work. The previous wording
+// (role orders addressed to the assistant: "Mène un interrogatoire", "Exige",
+// "Ne flatte pas l'auteur", "ce qui ment") made qwen3:4b answer the injection
+// refusal sentence in the real CLI (recette 2026-09-14), without any tool call.
 function buildPrompt(target: string | null, yolo: boolean): string {
   const scope = target
-    ? `Sujet ciblé par l'utilisateur : ${target}`
-    : 'Sujet par défaut : le travail récent du dépôt.';
+    ? `Sujet ciblé : ${target}`
+    : 'Sujet par défaut : mon travail récent dans ce dépôt.';
 
+  // The recent work includes uncommitted changes, and HEAD~1 does not exist in
+  // a single-commit repository: inspect the working tree first.
+  const gitInspection = 'git status --short, git diff (modifications non indexées), git diff --cached (modifications indexées) et git log -5 --oneline ; git diff HEAD~1 seulement si le dépôt compte au moins deux commits';
   const baseInstructions = target
-    ? `Examine d'abord ce sujet précis avec les outils disponibles : ${target}. Utilise aussi le contexte git pertinent si nécessaire, notamment git log -5, git diff HEAD~1 et les fichiers modifiés.`
-    : 'Examine d\'abord le travail récent avec les outils disponibles : git log -5, git diff HEAD~1 et la liste des fichiers modifiés.';
+    ? `Examine d'abord ce sujet avec les outils disponibles : ${target}. Utilise aussi le contexte git utile et la liste des fichiers modifiés : ${gitInspection}.`
+    : `Examine d'abord mon travail récent et la liste des fichiers modifiés avec les outils disponibles : ${gitInspection}.`;
 
   if (yolo) {
-    return `${scope}
+    return `J'ai lancé /grill-me --yolo : je veux une revue technique de mon propre travail en mode ROAST intégral.
+
+${scope}
 
 ${baseInstructions}
 
-Tu es en mode ROAST intégral pour /grill-me --yolo.
-Interroge techniquement l'auteur sans aucune complaisance : brutal, sarcastique, aucune politesse, aucun coussin diplomatique.
-Chaque pique DOIT rester techniquement exacte, vérifiable et actionnable : cite les fichiers, diffs, noms, tests ou choix qui justifient l'attaque.
-Grille l'auteur sur les choix discutables, la dette introduite, les tests manquants, les cas limites ignorés, la sécurité, les abstractions inutiles et les noms mensongers.
-Exige des réponses concrètes, pas des excuses : pour chaque accusation, demande quelle preuve, quel test ou quel correctif va fermer le sujet.
-Si une critique n'est pas étayée par le dépôt ou le diff, ne la formule pas.`;
+Ensuite, sois brutal et sarcastique avec moi, sans politesse ni précautions diplomatiques.
+Chaque critique doit rester techniquement exacte, vérifiable et actionnable : cite les fichiers, diffs, noms, tests ou choix qui la justifient.
+Vise mes choix discutables, la dette introduite, les tests manquants, les cas limites ignorés, la sécurité, les abstractions inutiles et les noms trompeurs.
+Pour chaque critique, demande-moi quelle preuve, quel test ou quel correctif fermera le sujet.
+N'invente rien : une critique que le dépôt ou le diff ne prouve pas ne doit pas être formulée.`;
   }
 
-  return `${scope}
+  return `J'ai lancé /grill-me : je veux une revue technique exigeante de mon propre travail.
+
+${scope}
 
 ${baseInstructions}
 
-Mène un interrogatoire technique ferme mais constructif.
-Après examen, pose 5 à 7 questions dures et précises sur les choix discutables, la dette introduite, les tests manquants, les cas limites ignorés, la sécurité et les noms mensongers.
-Les questions doivent viser des lignes, fichiers, comportements ou décisions observables, pas des généralités.
-Exige des réponses et des preuves concrètes, pas des excuses.
-Ajoute ensuite 3 risques classés par sévérité, avec pour chacun l'impact, la probabilité et l'action minimale pour le réduire.
-Ne flatte pas l'auteur : aide-le à voir ce qui casse, ce qui ment et ce qui manque.`;
+Ensuite, pose-moi 5 à 7 questions difficiles et précises sur mes choix discutables, la dette introduite, les tests manquants, les cas limites ignorés, la sécurité et les noms trompeurs.
+Chaque question doit viser des lignes, fichiers, comportements ou décisions observables, pas des généralités, et me demander une preuve concrète.
+Termine par 3 risques classés par sévérité, avec pour chacun l'impact, la probabilité et l'action minimale pour le réduire.
+Reste franc et constructif, sans compliments inutiles : aide-moi à voir ce qui casse, ce qui est inexact et ce qui manque.`;
 }
 
 export async function handleGrillMe(args: string[]): Promise<CommandHandlerResult> {

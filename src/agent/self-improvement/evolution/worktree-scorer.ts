@@ -11,6 +11,8 @@
  * @module agent/self-improvement/evolution/worktree-scorer
  */
 
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../../../utils/logger.js';
@@ -131,4 +133,14 @@ function linkNodeModules(basePath: string, worktreePath: string): void {
   } catch (err) {
     logger.warn(`[evolve] node_modules symlink failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/** Score exactly a pinned commit, including when that commit is already checked out elsewhere. */
+export async function scoreReferenceInWorktree(ref: string, opts: ScoreBranchOptions = {}): Promise<ScoreBranchResult> {
+  const cwd = opts.basePath ?? process.cwd();
+  const sha = execFileSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], { cwd, encoding: 'utf8' }).trim();
+  const branch = `codebuddy/evaluate/${randomUUID()}`;
+  execFileSync('git', ['branch', branch, sha], { cwd });
+  try { return await scoreBranchInWorktree(branch, { ...opts, baselineRef: sha }); }
+  finally { execFileSync('git', ['branch', '-D', branch], { cwd, stdio: 'ignore' }); }
 }

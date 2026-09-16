@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>GK21 Mini App</title>
+  </head>
+  <body>
+    <h1>GK21 Mini App</h1>
+    <p>Formulaire de démonstration pour web_test.</p>
+    <form id="greet-form" action="/greet" method="get">
+      <label for="name">Nom</label>
+      <input id="name" name="name" value="Patrice" />
+      <button id="submit" type="submit">Envoyer</button>
+    </form>
+    <p>
+      <a id="about-link" href="/about.html">Lien about</a>
+      <button id="nav-about" type="button">Aller à propos</button>
+    </p>
+    <script>
+      console.error('GK21 voluntary console error');
+      document.getElementById('nav-about').addEventListener('click', function () {
+        window.location.href = '/about.html';
+      });
+    </script>
+  </body>
+</html>

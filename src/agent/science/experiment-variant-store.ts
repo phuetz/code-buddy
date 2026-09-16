@@ -22,9 +22,10 @@
  * @module agent/science/experiment-variant-store
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../../utils/logger.js';
+import { writeFileAtomicSync } from '../../utils/atomic-write.js';
 import type { ExecuteCodeLanguage } from '../../tools/execute-code-runner.js';
 
 /** A compact, faithful summary of an execution (not the full multi-KB blob). */
@@ -179,7 +180,7 @@ export class ExperimentVariantStore {
     try {
       const data = JSON.parse(trimmed) as Partial<StoreFile>;
       const variants = Array.isArray(data?.variants) ? (data.variants as ExperimentVariantRecord[]) : [];
-      writeFileSync(this.path, variants.map((v) => JSON.stringify(v)).join('\n') + (variants.length ? '\n' : ''));
+      writeFileAtomicSync(this.path, variants.map((v) => JSON.stringify(v)).join('\n') + (variants.length ? '\n' : ''));
     } catch {
       /* leave a non-parseable legacy file as-is */
     }

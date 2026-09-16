@@ -21,6 +21,7 @@ describe('Lisa selfie cache generator', () => {
 
     const result = await generateLisaSelfieCache({
       rootDir: root,
+      cacheDir: path.join(root, 'cache'),
       styles: ['tender', 'playful'],
       imagesPerStyle: 2,
       generate,
@@ -42,6 +43,7 @@ describe('Lisa selfie cache generator', () => {
 
     const result = await generateLisaSelfieCache({
       rootDir: root,
+      cacheDir: path.join(root, 'cache'),
       contentTier: 'sensual',
       styles: ['studio'],
       imagesPerStyle: 1,

@@ -47,7 +47,7 @@ const HELP_TEXT = [
   'Commands:',
   '  /help, /start          Show this message.',
   '  /skill <id> <text>     Route to a specific A2A skill (e.g. /skill ollama-qwen3-4b hello).',
-  '  /agent <name> <text>   Route to a specific spoke (e.g. /agent ollama-darkstar hello).',
+  '  /agent <name> <text>   Route to a specific spoke (e.g. /agent ollama-gpuNode hello).',
   '',
   'Plain text routes via the default skill picked by smart skill selection.',
 ].join('\n');

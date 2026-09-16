@@ -3,6 +3,7 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import type { ChatEntry } from '../agent/types.js';
+import { decryptSessionContent, encryptSessionContent, hasEncryptedSessionContent, SessionDecryptionError } from './session-content.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
 import type { Message as DBMessage, Session as DBSession } from '../database/schema.js';
 import {
@@ -11,6 +12,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomic, readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -32,7 +34,27 @@ export interface SessionMetadata {
   [key: string]: string | string[] | number | boolean | undefined;
 }
 
+export interface SessionTurnUsage {
+  timestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  model?: string;
+  provider?: string;
+}
+
+export interface SessionUsageSnapshot {
+  provider?: string;
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  turns?: SessionTurnUsage[];
+}
+
 export interface Session {
+  /** Sticky protection: metadata changes and forks must remain encrypted. */
+  encrypted?: boolean;
   id: string;
   name: string;
   workingDirectory: string;
@@ -41,6 +63,11 @@ export interface Session {
   createdAt: Date;
   lastAccessedAt: Date;
   metadata?: SessionMetadata;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalCost?: number;
+  turns?: SessionTurnUsage[];
 }
 
 export interface SessionMessage {
@@ -49,9 +76,18 @@ export interface SessionMessage {
   timestamp: string;
   toolCallName?: string;
   toolCallSuccess?: boolean;
+  toolCall?: ChatEntry['toolCall'];
+  toolCalls?: ChatEntry['toolCalls'];
+  toolResult?: ChatEntry['toolResult'];
+  truncated?: boolean;
   /** Task state for cross-session continuity */
   taskState?: Record<string, unknown>;
 }
+
+type PersistedSession = Omit<Session, 'createdAt' | 'lastAccessedAt'> & {
+  createdAt: string;
+  lastAccessedAt: string;
+};
 
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codebuddy', 'sessions');
 const FALLBACK_SESSIONS_DIR = path.join(os.tmpdir(), 'codebuddy', 'sessions');
@@ -60,6 +96,7 @@ const MAX_SESSIONS = 50;
 export interface SessionStoreConfig {
   /** Use SQLite database instead of JSON files */
   useSQLite: boolean;
+  encryptionKeyPath?: string;
 }
 
 const DEFAULT_CONFIG: SessionStoreConfig = {
@@ -223,10 +260,27 @@ export class SessionStore {
     const filePath = this.getSessionFilePath(session.id);
     const data = {
       ...session,
+      ...(this.shouldEncrypt(session) ? { encrypted: true } : {}),
+      messages: this.shouldEncrypt(session)
+        ? await encryptSessionContent(session.messages, this.config.encryptionKeyPath)
+        : session.messages,
       createdAt: session.createdAt.toISOString(),
       lastAccessedAt: new Date().toISOString(),
     };
-    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2));
+    await writeJsonAtomic(filePath, data, { mode: 0o600 });
+  }
+
+  private shouldEncrypt(session: Session): boolean {
+    return session.encrypted === true || process.env.SESSION_ENCRYPTION === 'true' || hasEncryptedSessionContent(session.messages);
+  }
+
+  private decodeContent(session: Pick<Session, 'messages' | 'encrypted'>): Pick<Session, 'messages' | 'encrypted'> {
+    const encrypted = hasEncryptedSessionContent(session.messages);
+    if (session.encrypted && !encrypted) throw new SessionDecryptionError(new Error('Missing encrypted envelope'));
+    return {
+      messages: decryptSessionContent(session.messages, this.config.encryptionKeyPath),
+      ...(encrypted ? { encrypted: true } : {}),
+    };
   }
 
   /**
@@ -245,8 +299,13 @@ export class SessionStore {
 
     try {
       await fsPromises.access(filePath);
-      const content = await fsPromises.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content);
+      const data = await readJsonAtomic<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
 
       if (typeof data !== 'object' || data === null) {
         logger.warn(`[session-store] invalid session file (not an object): ${sessionId}`);
@@ -256,19 +315,22 @@ export class SessionStore {
         logger.warn(`[session-store] invalid session file (messages is not an array): ${sessionId}`);
         return null;
       }
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         logger.warn(`[session-store] invalid session file (bad timestamps): ${sessionId}`);
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
+        ...this.decodeContent(persisted),
         createdAt,
         lastAccessedAt,
       };
     } catch (_error) {
+      if (_error instanceof SessionDecryptionError) throw _error;
       return null;
     }
   }
@@ -285,6 +347,29 @@ export class SessionStore {
     session.messages = this.convertChatEntriesToMessages(chatHistory);
     session.lastAccessedAt = new Date();
 
+    await this.saveSession(session);
+  }
+
+  /**
+   * Persist directional token usage and cost onto the current session JSON
+   * so `buddy cost` can report real tokens instead of "unknown $0".
+   */
+  async attachUsageToCurrentSession(usage: SessionUsageSnapshot): Promise<void> {
+    if (!this.currentSessionId || this.ephemeral) return;
+    const session = await this.loadSession(this.currentSessionId);
+    if (!session) return;
+
+    session.provider = usage.provider;
+    session.inputTokens = usage.inputTokens;
+    session.outputTokens = usage.outputTokens;
+    session.totalCost = usage.totalCost;
+    session.turns = usage.turns;
+    session.metadata = {
+      ...session.metadata,
+      tokenCount: usage.inputTokens + usage.outputTokens,
+      totalCost: usage.totalCost,
+      ...(usage.provider ? { provider: usage.provider } : {}),
+    };
     await this.saveSession(session);
   }
 
@@ -313,7 +398,7 @@ export class SessionStore {
       session.lastAccessedAt = new Date();
 
       // Auto-generate title from first user message if session has default name
-      if (entry.type === 'user' && session.messages.filter(m => m.type === 'user').length === 1) {
+      if (!this.shouldEncrypt(session) && entry.type === 'user' && session.messages.filter(m => m.type === 'user').length === 1) {
         try {
           const { generateConversationTitle } = await import('../utils/conversation-title.js');
           const title = generateConversationTitle(entry.content);
@@ -325,13 +410,13 @@ export class SessionStore {
 
       // Store in SQLite if enabled
       const dbRepository = await this.ensureDatabaseRepository();
-      if (dbRepository) {
+      if (dbRepository && !this.shouldEncrypt(session)) {
         const dbMessage: Omit<DBMessage, 'id' | 'created_at'> = {
           session_id: this.currentSessionId!,
           role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type === 'diff_preview' ? 'assistant' : message.type,
           content: message.content,
-          tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
-          metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
+          tool_calls: message.toolCalls ?? (message.toolCall ? [message.toolCall] : message.toolCallName ? [{ name: message.toolCallName }] : undefined),
+          metadata: { sessionMessage: message, ...(message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : {}) },
         };
         dbRepository.addMessage(dbMessage);
       }
@@ -350,7 +435,11 @@ export class SessionStore {
       content: entry.content,
       timestamp: entry.timestamp.toISOString(),
       toolCallName: entry.toolCall?.function?.name,
-      toolCallSuccess: entry.toolResult?.success
+      toolCallSuccess: entry.toolResult?.success,
+      ...(entry.toolCall ? { toolCall: entry.toolCall } : {}),
+      ...(entry.toolCalls ? { toolCalls: entry.toolCalls } : {}),
+      ...(entry.toolResult ? { toolResult: entry.toolResult } : {}),
+      ...(entry.truncated !== undefined ? { truncated: entry.truncated } : {}),
     };
   }
 
@@ -369,17 +458,19 @@ export class SessionStore {
       type: msg.type,
       content: msg.content,
       timestamp: new Date(msg.timestamp),
-      toolCall: msg.toolCallName ? {
+      toolCall: msg.toolCall ?? (msg.toolCallName ? {
         id: `restored_${Date.now()}_${idx}`,
         type: 'function' as const,
         function: {
           name: msg.toolCallName,
           arguments: '{}'
         }
-      } : undefined,
-      toolResult: msg.toolCallSuccess !== undefined ? {
+      } : undefined),
+      ...(msg.toolCalls ? { toolCalls: msg.toolCalls } : {}),
+      ...(msg.truncated !== undefined ? { truncated: msg.truncated } : {}),
+      toolResult: msg.toolResult ?? (msg.toolCallSuccess !== undefined ? {
         success: msg.toolCallSuccess
-      } : undefined
+      } : undefined)
     }));
   }
 
@@ -524,13 +615,7 @@ export class SessionStore {
         lastAccessedAt: session.lastAccessedAt.toISOString(),
         metadata: session.metadata,
       },
-      messages: session.messages.map(msg => ({
-        type: msg.type,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        toolCallName: msg.toolCallName,
-        toolCallSuccess: msg.toolCallSuccess,
-      })),
+      messages: session.messages,
       statistics: {
         totalMessages: session.messages.length,
         userMessages: session.messages.filter(m => m.type === 'user').length,
@@ -970,13 +1055,19 @@ export class SessionStore {
         const filePath = path.join(sessionsDir, fileName);
 
         try {
-          const raw = _fs.readFileSync(filePath, 'utf-8');
-          const data = JSON.parse(raw);
+          const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
           if (data && typeof data.id === 'string') {
+            const persisted = data as unknown as PersistedSession;
             sessions.push({
-              ...data,
-              createdAt: new Date(data.createdAt),
-              lastAccessedAt: new Date(data.lastAccessedAt),
+              ...persisted,
+              ...this.decodeContent(persisted),
+              createdAt: new Date(persisted.createdAt),
+              lastAccessedAt: new Date(persisted.lastAccessedAt),
             });
           }
         } catch {
@@ -994,24 +1085,32 @@ export class SessionStore {
     const filePath = this.getSessionFilePath(sessionId);
 
     try {
-      const raw = _fs.readFileSync(filePath, 'utf-8');
-      const data = JSON.parse(raw);
+      const data = readJsonAtomicSync<Record<string, unknown> | null>(filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is Record<string, unknown> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!data) return null;
       if (typeof data !== 'object' || data === null || !Array.isArray(data.messages)) {
         return null;
       }
 
-      const createdAt = new Date(data.createdAt);
-      const lastAccessedAt = new Date(data.lastAccessedAt);
+      const persisted = data as unknown as PersistedSession;
+      const createdAt = new Date(persisted.createdAt);
+      const lastAccessedAt = new Date(persisted.lastAccessedAt);
       if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
         return null;
       }
 
       return {
-        ...data,
+        ...persisted,
+        ...this.decodeContent(persisted),
         createdAt,
         lastAccessedAt,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof SessionDecryptionError) throw error;
       return null;
     }
   }
@@ -1034,6 +1133,10 @@ export class SessionStore {
   }
 
   private convertDatabaseMessage(message: DBMessage): SessionMessage {
+    const stored = message.metadata?.sessionMessage;
+    if (stored && typeof stored === 'object' && 'type' in stored && 'content' in stored && 'timestamp' in stored) {
+      return stored as SessionMessage;
+    }
     const type = message.role === 'tool'
       ? 'tool_result'
       : message.role === 'system'
@@ -1311,7 +1414,7 @@ export class SessionStore {
 
   private async persistDatabaseSessionSnapshot(session: Session, parentSessionId?: string): Promise<void> {
     const dbRepository = await this.ensureDatabaseRepository();
-    if (!dbRepository) {
+    if (!dbRepository || this.shouldEncrypt(session)) {
       return;
     }
 
@@ -1334,8 +1437,8 @@ export class SessionStore {
           session_id: session.id,
           role: message.type === 'tool_result' ? 'tool' : message.type === 'user' ? 'user' : 'assistant',
           content: message.content,
-          tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
-          metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
+          tool_calls: message.toolCalls ?? (message.toolCall ? [message.toolCall] : message.toolCallName ? [{ name: message.toolCallName }] : undefined),
+          metadata: { sessionMessage: message, ...(message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : {}) },
         });
       }
     } catch (error) {

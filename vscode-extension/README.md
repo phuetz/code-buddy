@@ -99,4 +99,4 @@ Right-click on selected code to access:
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE) for details.
+Business Source License 1.1 - see [LICENSE](../LICENSE) for details.

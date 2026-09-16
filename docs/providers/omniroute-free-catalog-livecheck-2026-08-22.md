@@ -1,6 +1,6 @@
 # Livecheck des fournisseurs gratuits OmniRoute — 2026-08-22
 
-Test réalisé le `2026-08-22T11:55:47.110Z` (UTC), depuis `/home/patrice/code-buddy-vitrine`, sur les 24 fournisseurs importés et le gateway local `omniroute`. Chaque cible a reçu `GET <defaultBaseURL>/models` sans en-tête d’autorisation, puis avec `Authorization: Bearer test`. Timeout par appel : 10 s ; quatre fournisseurs au maximum en parallèle ; aucune clé réelle utilisée.
+Test réalisé le `2026-08-22T11:55:47.110Z` (UTC), depuis `~/code-buddy-vitrine`, sur les 24 fournisseurs importés et le gateway local `omniroute`. Chaque cible a reçu `GET <defaultBaseURL>/models` sans en-tête d’autorisation, puis avec `Authorization: Bearer test`. Timeout par appel : 10 s ; quatre fournisseurs au maximum en parallèle ; aucune clé réelle utilisée.
 
 Le tableau ci-dessous reprend la dernière exécution ciblée. La colonne HTTP est dans l’ordre `sans clé / Bearer test`.
 
@@ -34,7 +34,7 @@ Le tableau ci-dessous reprend la dernière exécution ciblée. La colonne HTTP e
 
 ## Correction probable pour les réponses problématiques
 
-Lecture seule du registre OmniRoute : `/home/patrice/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/config/providers/registry/`.
+Lecture seule du registre OmniRoute : `~/.nvm/versions/node/v24.14.1/lib/node_modules/omniroute/open-sse/config/providers/registry/`.
 
 - `featherless-ai` : `registry/featherless-ai/index.ts` déclare `baseUrl: "https://api.featherless.ai/v1/chat/completions"`, ce qui confirme que `https://api.featherless.ai/v1` est la bonne racine déjà présente dans `provider-catalog.ts`. Le registre ne déclare aucun `modelsUrl` dédié. Correction probable : ne pas remplacer le `defaultBaseURL`; considérer plutôt `/models` comme non exposé et utiliser la liste statique du registre ou une vérification de `chat/completions` authentifiée. Aucun changement n’a été fait dans `provider-catalog.ts`.
 - Aucun résultat `dns` n’a été observé, donc aucune correction de nom d’hôte ne peut être proposée.

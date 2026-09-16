@@ -8,9 +8,9 @@
  * - Communication style adaptation
  */
 
-import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface CodingStyle {
   /** Indentation: spaces or tabs */
@@ -459,14 +459,12 @@ export class PreferencesManager {
    */
   private loadPreferences(): void {
     try {
-      if (fs.existsSync(this.configPath)) {
-        const data = fs.readJsonSync(this.configPath);
-        this.preferences = {
-          ...DEFAULT_PREFERENCES,
-          ...data,
-          lastUpdated: new Date(data.lastUpdated || Date.now()),
-        };
-      }
+      const data = readJsonAtomicSync<Partial<UserPreferences>>(this.configPath, {});
+      this.preferences = {
+        ...DEFAULT_PREFERENCES,
+        ...data,
+        lastUpdated: new Date(data.lastUpdated || Date.now()),
+      };
     } catch {
       // Use defaults
     }
@@ -477,8 +475,7 @@ export class PreferencesManager {
    */
   private savePreferences(): void {
     try {
-      fs.ensureDirSync(path.dirname(this.configPath));
-      fs.writeJsonSync(this.configPath, this.preferences, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, this.preferences);
     } catch {
       // Ignore save errors
     }

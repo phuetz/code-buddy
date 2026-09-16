@@ -3,7 +3,7 @@
  * convention (`AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md`).
  *
  * The convention is three shared JSON files (today living in
- * `claude-et-patrice/.codebuddy/`, driven until now by an external
+ * the handover repo's `.codebuddy/`, driven until now by an external
  * `heartbeat_tick.py` wrapper):
  *   - `colab-tasks.json`   — the fleet task queue
  *   - `colab-worklog.json` — append-only work log
@@ -18,7 +18,7 @@
  *    git push order ("first to push wins"), per the protocol — callers must
  *    `git pull --rebase` before and reconcile after. Unit tests prove the local
  *    store logic, NOT the cross-machine race resolution.
- *  - The shared dir is usually a DIFFERENT repo (claude-et-patrice) with its own
+ *  - The shared dir is usually a DIFFERENT repo (the private handover repository) with its own
  *    write rules; this module only mutates the JSON it owns and preserves the
  *    human `version`/`comment` fields.
  *
@@ -26,9 +26,9 @@
  * — `critical`-priority tasks are never auto-claimed (they need Patrice).
  */
 
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type ColabTaskStatus = 'open' | 'in_progress' | 'completed' | 'blocked';
 export type ColabTaskPriority = 'critical' | 'high' | 'medium' | 'low';
@@ -254,7 +254,6 @@ export class FleetColabStore {
   private readonly generateId: (prefix: string) => string;
   private readonly claimTtlMs: number;
   private readonly retryBudget: number;
-  private writeSeq = 0;
   private readonly tasksPath: string;
   private readonly worklogPath: string;
   private readonly presencePath: string;
@@ -757,15 +756,11 @@ export class FleetColabStore {
   }
 
   private readJson<T>(filePath: string): T | null {
-    try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
-    } catch {
-      return null;
-    }
+    return readJsonAtomicSync<T | null>(filePath, null, { mode: 0o600 });
   }
 
   /**
-   * Atomic write (temp file + rename). `fs.renameSync` is atomic on POSIX, so a
+   * Atomic write through the shared durable temp-file + rename utility. A
    * concurrent same-host reader/writer never sees a half-written file — important
    * now that the daemon, the `kanban_*` tools, and `/colab` can all drive the
    * same `colab-tasks.json`. (Cross-machine arbitration stays git-push-order by
@@ -773,18 +768,6 @@ export class FleetColabStore {
    * `src/kanban/kanban-store.ts`.
    */
   private writeJson(filePath: string, value: unknown): void {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const tempPath = `${filePath}.${process.pid}.${++this.writeSeq}.tmp`;
-    try {
-      fs.writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
-      fs.renameSync(tempPath, filePath);
-    } catch (err) {
-      try {
-        fs.rmSync(tempPath, { force: true });
-      } catch {
-        /* best-effort cleanup */
-      }
-      throw err;
-    }
+    writeJsonAtomicSync(filePath, value, { mode: 0o600 });
   }
 }

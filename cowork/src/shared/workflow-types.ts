@@ -121,8 +121,14 @@ export interface WorkflowExecutionState {
 }
 
 export interface PendingApproval {
-  /** Stable id derived from the visual node id, used to match the IPC reply. */
+  /**
+   * Unique to this request. The same step can be asked again — by the next run
+   * or the next loop iteration — under another id, so an answer must quote it.
+   */
+  approvalId: string;
+  /** Visual node id of the approval step. Not unique on its own. */
   stepId: string;
+  /** Run that asked. */
   workflowInstanceId: string;
   message: string;
   /** Absolute timestamp in ms when the approval will auto-reject. */
@@ -136,6 +142,18 @@ export interface PendingApproval {
     toolName?: string;
     toolInput?: Record<string, unknown>;
   };
+}
+
+/**
+ * Answer to one approval request, sent over `workflow.approve`. All fields are
+ * required and must match the pending request exactly; main refuses anything
+ * else (there is no step-id-only form).
+ */
+export interface WorkflowApprovalAnswer {
+  approvalId: string;
+  workflowInstanceId: string;
+  stepId: string;
+  approved: boolean;
 }
 
 export type WorkflowEventPayload =

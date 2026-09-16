@@ -1,11 +1,8 @@
 /**
  * Phase d.24 — E2E test for the Codex OAuth login flow.
  *
- * One end-to-end happy path: spin up the real `loginInteractive()`
- * server, mock the browser open + the token endpoint, simulate the
- * redirect callback, verify tokens land on disk. State-mismatch /
- * provider-error / /cancel scenarios are covered in `codex-oauth.test.ts`
- * via direct helper exposure (avoids port-conflict races between tests).
+ * Exercise the real callback server with a simulated browser and issuer:
+ * normal login, manual browser fallback, and a real persistence failure.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -51,7 +48,48 @@ async function waitForOpenCalled(timeoutMs = 5000): Promise<string> {
 }
 
 describe('Codex OAuth — E2E login happy path', () => {
-  it('full flow: open browser → callback → token exchange → tokens persisted to disk', async () => {
+  it('does not persist a delayed token exchange after login is cancelled', async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    let releaseTokens!: (response: Response) => void;
+    let markExchangeStarted!: () => void;
+    const delayedTokens = new Promise<Response>((resolve) => { releaseTokens = resolve; });
+    const exchangeStarted = new Promise<void>((resolve) => { markExchangeStarted = resolve; });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === 'https://auth.openai.com/oauth/token') {
+        markExchangeStarted();
+        return delayedTokens;
+      }
+      return realFetch(input, init);
+    });
+    const { loginInteractive, getCodexAuthFilePath } = await import('../../src/providers/codex-oauth.js');
+    const original = JSON.stringify({ tokens: { access_token: 'existing-access', refresh_token: 'existing-refresh' } });
+    fs.mkdirSync(path.dirname(getCodexAuthFilePath()), { recursive: true });
+    fs.writeFileSync(getCodexAuthFilePath(), original);
+    const outcome = loginInteractive().then(() => null, (error: unknown) => error);
+    const authorize = new URL(await waitForOpenCalled());
+    const callback = new URL(authorize.searchParams.get('redirect_uri')!);
+    callback.hostname = '127.0.0.1';
+    callback.searchParams.set('code', 'delayed-code');
+    callback.searchParams.set('state', authorize.searchParams.get('state')!);
+    const callbackResponse = realFetch(callback, { headers: { Connection: 'close' } });
+    await exchangeStarted;
+    const cancelled = await realFetch(new URL('/cancel', callback), { headers: { Connection: 'close' } });
+    expect(cancelled.status).toBe(200);
+    expect(await outcome).toEqual(expect.objectContaining({ message: 'Login cancelled by another instance' }));
+    releaseTokens(new Response(JSON.stringify({
+      id_token: 'header.e30.sig', access_token: 'late-access', refresh_token: 'late-refresh',
+    }), { status: 200 }));
+    const response = await callbackResponse;
+    expect(response.status).toBe(410);
+    await response.text();
+    expect(fs.readFileSync(getCodexAuthFilePath(), 'utf8')).toBe(original);
+  });
+
+  it.each([
+    { browserFails: false, storageFails: false },
+    { browserFails: true, storageFails: false },
+    { browserFails: false, storageFails: true },
+  ])('full flow with browser failure=$browserFails and storage failure=$storageFails', async ({ browserFails, storageFails }) => {
     // Capture the real fetch BEFORE we mock global fetch, so the
     // simulated callback request can still hit our local server.
     const realFetch = globalThis.fetch.bind(globalThis);
@@ -80,14 +118,33 @@ describe('Codex OAuth — E2E login happy path', () => {
       return realFetch(input as RequestInfo, init);
     });
 
-    const { loginInteractive, getChatGptAuth, getCodexAuthFilePath } = await import(
+    const { getChatGptAuth, getCodexAuthFilePath } = await import(
       '../../src/providers/codex-oauth.js'
     );
-
-    const loginPromise = loginInteractive();
+    const { loginChatGptWithBrowser } = await import('../../src/commands/login-chatgpt.js');
+    if (storageFails) {
+      // A directory at the target path makes the real atomic rename fail.
+      fs.mkdirSync(getCodexAuthFilePath(), { recursive: true });
+    }
+    if (browserFails) {
+      openMock.fn.mockImplementationOnce((url: string) => {
+        openMock.capturedUrl = url;
+        return Promise.reject(new Error('Browser unavailable'));
+      });
+    }
+    const output = { stdout: vi.fn(), warn: vi.fn() };
+    const loginPromise = loginChatGptWithBrowser(output);
+    const loginFailure = loginPromise.then(() => null, (error: unknown) => error);
 
     // Wait for browser-open, parse the URL.
     const authorizeUrl = await waitForOpenCalled();
+    expect(output.stdout).toHaveBeenCalledWith(authorizeUrl);
+    expect(output.stdout.mock.invocationCallOrder[1]).toBeLessThan(openMock.fn.mock.invocationCallOrder[0]!);
+    if (browserFails) {
+      expect(output.warn).toHaveBeenCalledWith(expect.stringContaining('Open the URL above manually'));
+    } else {
+      expect(output.warn).not.toHaveBeenCalled();
+    }
     const u = new URL(authorizeUrl);
     const redirectUri = u.searchParams.get('redirect_uri') ?? '';
     const portMatch = redirectUri.match(/:(\d+)\/auth\/callback/);
@@ -100,7 +157,19 @@ describe('Codex OAuth — E2E login happy path', () => {
     const cbUrl = new URL(`http://127.0.0.1:${port}/auth/callback`);
     cbUrl.searchParams.set('code', 'auth-code-e2e');
     cbUrl.searchParams.set('state', state);
-    const cb = await realFetch(cbUrl.toString());
+    const cb = await realFetch(cbUrl.toString(), { headers: { Connection: 'close' } });
+    if (storageFails) {
+      expect(cb.status).toBe(500);
+      const html = await cb.text();
+      expect(html).toContain('Could not save ChatGPT credentials');
+      expect(html).not.toContain('Authentifié à ChatGPT');
+      expect(html).not.toContain('access-tok-e2e');
+      expect(await loginFailure).toEqual(expect.objectContaining({
+        message: expect.stringContaining('Could not save ChatGPT credentials'),
+      }));
+      expect(fs.statSync(getCodexAuthFilePath()).isDirectory()).toBe(true);
+      return;
+    }
     expect(cb.status).toBe(200);
     const html = await cb.text();
     expect(html).toContain('Authentifié à ChatGPT');

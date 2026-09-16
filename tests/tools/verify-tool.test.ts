@@ -67,7 +67,7 @@ describe('Verify tool', () => {
   });
 
   describe('runtime routing to the Verifier agent', () => {
-    it('delegates to executeOn(\'verifier\') and returns the verdict (fake LLM, no real call)', async () => {
+    it('delegates to executeOn(\'verifier\') and fails closed without a real oracle (fake LLM)', async () => {
       const seen: { systemPrompt?: string; userMsg?: string } = {};
       // The Verifier's loop calls llmCall(messages, tools). Returning a final
       // answer with no tool_calls ends the loop immediately with that verdict.
@@ -96,7 +96,7 @@ describe('Verify tool', () => {
       // Verdict flows back through the tool result.
       expect(result.success).toBe(true);
       expect(result.output).toContain('CONFIRMED');
-      expect(result.output).toContain('[Verifier verdict: CONFIRMED]');
+      expect(result.output).toContain('[Verifier verdict: NEEDS REVIEW]');
     });
 
     it('threads the optional url hint into the verification request', async () => {

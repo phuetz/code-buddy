@@ -14,13 +14,13 @@ describe('vision description safety', () => {
 
   it('redacts known secrets, PII and private paths before authorised egress', () => {
     const result = redactVisionDescriptionForEgress(
-      'mail test@example.com tel 06 12 34 56 78 clé sk-proj-abcdefghijklmnopqrstuvwxyz dans /home/patrice/secret.txt',
+      'mail test@example.com tel 06 12 34 56 78 clé sk-proj-abcdefghijklmnopqrstuvwxyz dans /home/user/secret.txt',
     );
     expect(result).toContain('[REDACTED:pii-email]');
     expect(result).toContain('[REDACTED:pii-phone]');
     expect(result).toContain('[REDACTED:env-key]');
     expect(result).not.toContain('test@example.com');
-    expect(result).not.toContain('/home/patrice');
+    expect(result).not.toContain('/home/user');
   });
 
   it('redacts the complete input before truncation can hide a multiline secret', () => {

@@ -44,8 +44,19 @@ const hoisted = vi.hoisted(() => {
     cognitiveComplete: vi.fn(),
     cognitiveFail: vi.fn(),
     cognitiveCancel: vi.fn(),
+    maybeHandleCameraShareRequest: vi.fn(),
+    runCompanionChannelTurn: vi.fn(),
   };
 });
+
+vi.mock('../../src/companion/camera-share.js', () => ({
+  maybeHandleCameraShareRequest: hoisted.maybeHandleCameraShareRequest,
+}));
+
+vi.mock('../../src/channels/companion-channel-turn.js', () => ({
+  runCompanionChannelTurn: hoisted.runCompanionChannelTurn,
+  COMPANION_CHANNEL_FAILOVER_SEAM: 'CodeBuddyClient.chat',
+}));
 
 vi.mock('../../src/channels/core.js', () => ({
   checkDMPairing: hoisted.checkDMPairing,
@@ -130,6 +141,7 @@ import { savePrefetchCache } from '../../src/companion/prefetch-engine.js';
 import { savePrefetchItems } from '../../src/companion/prefetch-config.js';
 import { telegramHtmlChunkToPlain } from '../../src/rendering/telegram-html.js';
 import * as lisaSelfieRuntime from '../../src/companion/lisa-selfie.js';
+import * as lisaSelfieRouter from '../../src/companion/lisa-selfie-router.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -171,6 +183,9 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
     delete process.env.CODEBUDDY_PREFETCH;
     delete process.env.CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS;
+    delete process.env.CODEBUDDY_CHANNEL_WAIT_NOTICE_MS;
+    delete process.env.CODEBUDDY_CHANNEL_PROFILE;
+    delete process.env.CODEBUDDY_COMPANION_PERSONA;
     process.env.CODEBUDDY_CONVERSATION_PERSIST = 'false';
     resetCrossChannelConversationBridge();
     process.env.GROK_API_KEY = 'test-key';
@@ -219,21 +234,43 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.cognitiveComplete.mockResolvedValue(undefined);
     hoisted.cognitiveFail.mockResolvedValue(undefined);
     hoisted.cognitiveCancel.mockResolvedValue(undefined);
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue(null);
+    hoisted.runCompanionChannelTurn.mockResolvedValue({ text: 'Hey. Je suis là.', model: 'local' });
   });
 
   it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
-    const selfie = vi.spyOn(lisaSelfieRuntime, 'createAndMaybeSendLisaSelfie')
-      .mockImplementation(async (options) => ({
-        success: true,
-        prompt: 'ohwx lisa, portrait',
-        trigger: 'ohwx lisa',
-        imagePath: '/tmp/lisa.png',
-        telegramSent: true,
-        spokenReply: 'Voilà mon cœur.',
-        ...(options.contentTier === 'explicit'
-          ? { success: false, telegramSent: false, error: 'explicit gate' }
-          : {}),
-      }));
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const tiers: string[] = [];
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie')
+      .mockImplementation(async (text, options) => {
+        if (
+          !lisaSelfieRuntime.isLisaSelfieRequest(text)
+          && !lisaSelfieRuntime.isLisaSelfieContinuationRequest(text, options.hasRecentSelfie === true)
+        ) {
+          return null;
+        }
+        const contentTier = lisaSelfieRuntime.inferLisaContentTier(text);
+        tiers.push(contentTier);
+        if (contentTier === 'explicit') {
+          return {
+            handled: true,
+            caption: 'refus',
+            refused: true,
+            reason: 'explicit-gate',
+            contentTier: 'safe',
+          };
+        }
+        return {
+          handled: true,
+          caption: 'Voilà.',
+          imagePath: join('cache', 'hit.png'),
+          mimeType: 'image/png',
+          refused: false,
+          reason: 'ok',
+          contentTier,
+          style: lisaSelfieRuntime.inferSelfieMood(text),
+        };
+      });
     try {
       const manager = makeManager();
       await registerAIMessageHandler(manager as any);
@@ -246,24 +283,116 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       await manager.emit(makeMessage('Montre moi une autre photo plus sexy', session), channel);
 
       expect(selfie).toHaveBeenCalledTimes(4);
-      expect(selfie.mock.calls.map(([options]) => options.contentTier)).toEqual([
+      expect(tiers).toEqual([
         'safe',
         'safe',
         'safe',
         'sensual',
       ]);
-      expect(selfie.mock.calls[3]?.[0]).toMatchObject({
-        mood: 'bold',
-        contentTier: 'sensual',
-      });
       expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(hoisted.runCompanionChannelTurn).not.toHaveBeenCalled();
 
       await manager.emit(makeMessage('Génère une image de chat', session), channel);
-      expect(selfie).toHaveBeenCalledTimes(4);
-      expect(hoisted.processUserMessage).toHaveBeenCalledTimes(1);
+      expect(selfie).toHaveBeenCalledTimes(5);
+      expect(selfie.mock.calls[4]?.[0]).toBe('Génère une image de chat');
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
     } finally {
       selfie.mockRestore();
     }
+  });
+
+  it('records the served selfie as a conversation turn for the next companion prompt', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie')
+      .mockImplementation(async (text) => {
+        if (!lisaSelfieRuntime.isLisaSelfieRequest(text)) return null;
+        return {
+          handled: true,
+          caption: 'Hop. Photo de moi, sans attendre le générateur.',
+          imagePath: join('cache', 'hit.png'),
+          mimeType: 'image/png',
+          refused: false,
+          reason: 'ok',
+          contentTier: 'safe',
+          style: 'portrait',
+        };
+      });
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const channel = { type: 'telegram', send: makeSuccessfulSend() };
+      const session = 'sess-lisa-selfie-history';
+
+      await manager.emit(makeMessage('Lisa, envoie-moi une photo de toi', session), channel);
+      await manager.emit(makeMessage('Coucou', session), channel);
+
+      expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
+      const payload = hoisted.runCompanionChannelTurn.mock.calls[0]?.[0] as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      const roles = payload.messages.map((entry) => entry.role);
+      expect(roles).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(payload.messages[2]?.content).toContain('Photo de moi');
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
+  it('does not call the selfie router on Telegram without a companion surface', async () => {
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie');
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(
+        makeMessage('Lisa, envoie-moi une photo de toi'),
+        { type: 'telegram', send: makeSuccessfulSend() },
+      );
+      expect(selfie).not.toHaveBeenCalled();
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
+  it('calls the selfie router on Telegram when the copine persona is set', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie').mockResolvedValue(null);
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(
+        makeMessage('Lisa, envoie-moi une photo de toi'),
+        { type: 'telegram', send: makeSuccessfulSend() },
+      );
+      expect(selfie).toHaveBeenCalled();
+    } finally {
+      selfie.mockRestore();
+    }
+  });
+
+  it('handles an inbound Telegram camera-share request before the agent turn', async () => {
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue({
+      success: true,
+      telegramSent: false,
+      spokenReply: 'Un bureau avec un écran allumé.',
+      description: 'Un bureau avec un écran allumé.',
+    });
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage("qu'est-ce que tu vois ?"), { type: 'telegram', send });
+
+    expect(hoisted.maybeHandleCameraShareRequest).toHaveBeenCalledOnce();
+    expect(hoisted.maybeHandleCameraShareRequest.mock.calls[0]?.[1]).toMatchObject({
+      surface: 'telegram',
+      inboundChatId: 'chan-42',
+    });
+    expect(send).toHaveBeenCalledWith({
+      channelId: 'chan-42',
+      content: 'Un bureau avec un écran allumé.',
+      replyTo: expect.any(String),
+    });
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
@@ -362,6 +491,28 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.processUserMessage).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].content).toContain('pair');
+  });
+
+  it('replies to a blocked sender instead of staying silent (jumeau D3)', async () => {
+    hoisted.checkDMPairing.mockResolvedValue({
+      approved: false,
+      blocked: true,
+      senderId: 'user-42',
+      channelType: 'telegram',
+    });
+    hoisted.getDMPairing.mockReturnValue({
+      getPairingMessage: () => 'This sender is temporarily blocked after too many pairing attempts.',
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('hello'), { send });
+
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].content).toMatch(/blocked/i);
   });
 
   it('reuses the same session across follow-up messages (no re-create)', async () => {
@@ -471,7 +622,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         'next turn',
       ]);
       expect(delivered).toHaveLength(2);
-      expect(delivered[0]).toContain('libéré la conversation');
+      expect(delivered[0]).toMatch(/trop long|délai/i);
       expect(telegramHtmlChunkToPlain(delivered[1] ?? '')).toBe('answer:next turn');
       expect(hoisted.dispose).toHaveBeenCalledWith({ skipSessionLearning: true });
     } finally {
@@ -534,7 +685,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         'answer:first delivered',
         'answer:second queued',
       ]);
-      expect(delivered.join('\n')).not.toContain('libéré la conversation');
+      expect(delivered.join('\n')).not.toMatch(/trop long|délai/i);
       expect(hoisted.processUserMessage.mock.calls.map((call) => call[0])).toEqual([
         'first delivered',
         'second queued',
@@ -787,18 +938,18 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       order.push('telegram:delivered');
       return { success: true, timestamp: new Date() };
     });
-    const message = makeMessage('Que vois-tu ?', 'sess-cognitive', 'lisa-cognitive');
+    const message = makeMessage('Que penses-tu de cet objet rouge ?', 'sess-cognitive', 'lisa-cognitive');
 
     await manager.emit(message, { type: 'telegram', send });
 
     expect(hoisted.cognitiveBegin).toHaveBeenCalledWith(expect.objectContaining({
       channelType: 'telegram',
       messageId: message.id,
-      content: 'Que vois-tu ?',
+      content: 'Que penses-tu de cet objet rouge ?',
       egress: 'cloud',
     }));
     expect(hoisted.processUserMessage).toHaveBeenCalledWith(
-      'Que vois-tu ?',
+      'Que penses-tu de cet objet rouge ?',
       expect.objectContaining({
         surface: 'telegram',
         transientContext: expect.stringContaining('objet rouge détecté'),
@@ -1098,6 +1249,49 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         }),
       }),
     );
+  });
+
+  it('reviews a short Telegram claim about what the sensory system received', async () => {
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
+    resetCrossChannelConversationBridge();
+    const bridge = getCrossChannelConversationBridge();
+    await bridge.recordVoiceTurn({
+      role: 'assistant',
+      content: 'Je ne peux confirmer que ce que les traces me donnent.',
+    });
+    const request = "Il t'as transmis Lisa tu m'entends ?";
+    const unsupported = 'Oui, il me l’a transmis exactement.';
+    const honest = 'Je ne peux pas le confirmer sans une trace sensorielle correspondante.';
+    hoisted.processUserMessage.mockResolvedValue([{ role: 'assistant', content: unsupported }]);
+    hoisted.getChatHistory.mockReturnValue([
+      { type: 'user', content: request, timestamp: new Date() },
+      { type: 'assistant', content: unsupported, timestamp: new Date() },
+    ]);
+    hoisted.reviewSemanticResponse.mockResolvedValue({
+      response: honest,
+      outcome: 'revised',
+      reason: 'revision_completed',
+      revisionAttempts: 1,
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage(request, 'sess-runtime-evidence'), {
+      type: 'telegram',
+      send,
+    });
+
+    expect(hoisted.reviewSemanticResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request,
+        draft: unsupported,
+        profile: 'factual_analytical',
+      }),
+    );
+    expect(send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n'))
+      .toContain('sans une trace sensorielle');
   });
 
   it('runs relationship safety after semantic revision before any Telegram persistence', async () => {
@@ -1762,5 +1956,93 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       ]);
       expect(hoisted.setChatHistory).toHaveBeenCalled();
     });
+  });
+
+  it('sends an honest wait notice when generation exceeds 20s (configurable)', async () => {
+    vi.useFakeTimers();
+    process.env.CODEBUDDY_CHANNEL_WAIT_NOTICE_MS = '50';
+    try {
+      hoisted.processUserMessage.mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return [{ role: 'assistant', content: 'answer:late' }];
+      });
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const delivered: string[] = [];
+      const send = vi.fn(async (outbound: { content?: string }) => {
+        delivered.push(telegramHtmlChunkToPlain(String(outbound.content ?? '')));
+        return { success: true, timestamp: new Date() };
+      });
+      const turn = manager.emit(makeMessage('slow hello', 'sess-wait-notice'), {
+        type: 'telegram',
+        send,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      expect(delivered.some((line) => line.includes('réfléchis'))).toBe(true);
+      await vi.advanceTimersByTimeAsync(80);
+      await turn;
+      expect(delivered.some((line) => line.includes('answer:late'))).toBe(true);
+    } finally {
+      delete process.env.CODEBUDDY_CHANNEL_WAIT_NOTICE_MS;
+      vi.useRealTimers();
+    }
+  });
+
+  it('companion profile skips the agent, MCP, and tools', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    hoisted.runCompanionChannelTurn.mockResolvedValue({
+      text: 'Hey. Je suis là.',
+      model: 'qwen3:4b-instruct',
+      promptTokens: 220,
+    });
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('salut toi', 'sess-companion-light'), {
+      type: 'telegram',
+      send,
+    });
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+    expect(hoisted.constructorCalls).toHaveLength(0);
+    expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
+    const payload = hoisted.runCompanionChannelTurn.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content?: string }>;
+    };
+    expect(payload.messages[0]?.role).toBe('system');
+    expect(JSON.stringify(payload.messages)).not.toMatch(/view_file|mcp__/);
+    const delivered = send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n');
+    expect(telegramHtmlChunkToPlain(delivered)).toContain('Hey. Je suis là.');
+  });
+
+  it('keeps the agent profile for a code/lance command even with a companion persona', async () => {
+    process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('lance les tests', 'sess-companion-agent'), {
+      type: 'telegram',
+      send,
+    });
+    expect(hoisted.runCompanionChannelTurn).not.toHaveBeenCalled();
+    expect(hoisted.processUserMessage).toHaveBeenCalled();
+    expect(hoisted.constructorCalls.length).toBeGreaterThan(0);
+  });
+
+  it('speaks a quota failure instead of hiding it', async () => {
+    const rawFailure =
+      'Sorry, I encountered an error: ChatGPT Responses backend error (429): {"type":"usage_limit_reached","resets_in_seconds":3600}';
+    hoisted.processUserMessage.mockResolvedValue([{ role: 'assistant', content: rawFailure }]);
+    hoisted.getChatHistory.mockReturnValue([
+      { type: 'user', content: 'salut', timestamp: new Date() },
+      { type: 'assistant', content: rawFailure, timestamp: new Date() },
+    ]);
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage('salut', 'sess-quota-spoken'), { type: 'telegram', send });
+    const delivered = send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n');
+    expect(delivered).toMatch(/quota/i);
+    expect(delivered).not.toContain('Channel provider failure hidden');
+    expect(delivered).not.toContain('usage_limit_reached');
   });
 });

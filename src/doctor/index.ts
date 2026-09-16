@@ -1,5 +1,8 @@
 import { execSync } from 'child_process';
 import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -8,12 +11,25 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
+import { freemem, homedir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
 import { SERVER_CONFIG } from '../config/constants.js';
 import { diagnoseServerExposure } from '../server/exposure-diagnostic.js';
-import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
+import {
+  detectNativeSandboxCapabilities,
+  formatDoctorLine,
+} from '../security/native-sandbox.js';
+import { loadBetterSqlite3, getSqliteInstallGuidance } from '../database/optional-sqlite.js';
+import type { UserSettings } from '../utils/settings-manager.js';
+import {
+  selectOllamaModel,
+  type OllamaModelSelection,
+} from './ollama-model-selection.js';
+import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
+import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
+import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
 
 export interface FixResult {
   success: boolean;
@@ -74,23 +90,47 @@ function commandExists(cmd: string): boolean {
   }
 }
 
-function getCommandAvailability(cmd: string): 'installed' | 'not found' {
-  return commandExists(cmd) ? 'installed' : 'not found';
+/** PATH lookup without a child process (used by `buddy triage`). */
+export function commandExistsOnPath(cmd: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const executable = (file: string) => {
+    try {
+      if (!statSync(file).isFile()) return false;
+      accessSync(file, fsConstants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (cmd.includes('/') || cmd.includes('\\')) return executable(cmd);
+  const extensions = process.platform === 'win32'
+    ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)]
+    : [''];
+  for (const dir of (env.PATH ?? env.Path ?? '').split(process.platform === 'win32' ? ';' : ':')) {
+    if (!dir) continue;
+    if (extensions.some((ext) => executable(join(dir, cmd + ext)))) return true;
+  }
+  return false;
+}
+
+type CommandLookup = (cmd: string) => boolean;
+
+function getCommandAvailability(cmd: string, lookup: CommandLookup = commandExists): 'installed' | 'not found' {
+  return lookup(cmd) ? 'installed' : 'not found';
 }
 
 function checkNodeVersion(): DoctorCheck {
   const major = parseInt(process.version.slice(1), 10);
-  if (major < 18) {
-    return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 18 is required` };
+  if (major < 20) {
+    return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 20 is required (playwright-core, loaded by the browser tools, exits on < 20)` };
   }
   if (major < 22) {
     return {
       name: 'Node.js version',
       status: 'warn',
-      message: `${process.version} — OK for the CLI (>= 18), but the Cowork desktop app needs >= 22`,
+      message: `${process.version} — OK for the CLI (>= 20), but the Cowork desktop app needs >= 22`,
     };
   }
-  return { name: 'Node.js version', status: 'ok', message: `${process.version} (CLI >= 18 and Cowork >= 22 OK)` };
+  return { name: 'Node.js version', status: 'ok', message: `${process.version} (CLI >= 20 and Cowork >= 22 OK)` };
 }
 
 // The SQLite layer (memory/sessions/cache/analytics) is a native module. On a
@@ -108,12 +148,12 @@ async function checkNativeSqlite(): Promise<DoctorCheck> {
       status: 'warn',
       message:
         'native module unavailable — sessions remain persisted as JSON files, but DB-backed memory, cache, and indexed search are disabled. ' +
-        SQLITE_INSTALL_GUIDANCE,
+        getSqliteInstallGuidance(),
     };
   }
 }
 
-function checkDependencies(): DoctorCheck[] {
+function checkDependencies(lookup: CommandLookup = commandExists): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
 
   // Optionality is INTRINSIC to the tool, never derived from whether it is
@@ -156,10 +196,24 @@ function checkDependencies(): DoctorCheck[] {
       optional: true,
       missingMessage: 'not found — optional; install ICM only to use infinite-context memory',
     },
+    {
+      cmd: 'ffmpeg',
+      label: 'ffmpeg',
+      level: 'warn',
+      optional: true,
+      missingMessage: 'not found — optional; install ffmpeg for film, video stitch, and screen capture',
+    },
+    {
+      cmd: process.env.CODEBUDDY_PIPER_BIN || 'piper',
+      label: 'Piper TTS',
+      level: 'warn',
+      optional: true,
+      missingMessage: 'not found — optional; install Piper for offline narration (`buddy film` / local TTS)',
+    },
   ];
 
   for (const dep of externalTools) {
-    const installed = getCommandAvailability(dep.cmd) === 'installed';
+    const installed = getCommandAvailability(dep.cmd, lookup) === 'installed';
     checks.push({
       name: dep.label,
       status: installed ? 'ok' : dep.level,
@@ -169,7 +223,7 @@ function checkDependencies(): DoctorCheck[] {
   }
 
   const audioPlayers = ['ffplay', 'aplay', 'mpv'];
-  const found = audioPlayers.filter(cmd => commandExists(cmd));
+  const found = audioPlayers.filter(cmd => lookup(cmd));
   checks.push({
     name: 'Audio playback',
     status: found.length > 0 ? 'ok' : 'warn',
@@ -203,7 +257,7 @@ function checkApiKeys(): DoctorCheck[] {
  * credentials present (user might be using API keys instead — non-fatal).
  * `error` only when the file is corrupt or refresh fails.
  */
-async function checkChatGptOAuth(): Promise<DoctorCheck> {
+async function checkChatGptOAuth(offline = false): Promise<DoctorCheck> {
   try {
     const { hasCodexCredentials, getChatGptAuth, getCodexAuthFilePath } = await import(
       '../providers/codex-oauth.js'
@@ -213,6 +267,14 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
         name: 'ChatGPT OAuth',
         status: 'warn',
         message: `not signed in (run \`buddy login\` to use your ChatGPT subscription) — file: ${getCodexAuthFilePath()}`,
+      };
+    }
+    if (offline) {
+      // getChatGptAuth() may refresh (network + token rotation): never offline.
+      return {
+        name: 'ChatGPT OAuth',
+        status: 'ok',
+        message: 'credential file present (token refresh and model discovery skipped: --offline)',
       };
     }
     const auth = await getChatGptAuth();
@@ -326,18 +388,20 @@ function checkStaleLockFiles(cwd: string): DoctorCheck[] {
   return checks;
 }
 
-function checkTtsProviders(): DoctorCheck[] {
-  const providers: Array<{ cmd: string; label: string }> = [
-    { cmd: 'edge-tts', label: 'edge-tts' },
-    { cmd: 'espeak', label: 'espeak' },
-  ];
-
-  const found = providers.filter(p => commandExists(p.cmd));
+export function checkTtsProviders(lookup: CommandLookup = commandExists): DoctorCheck[] {
+  const pocketLauncher = ['pocket-tts', 'uvx'].find((command) => lookup(command));
+  const available: string[] = [];
+  if (pocketLauncher) available.push(`Pocket TTS (via ${pocketLauncher})`);
+  if (process.env.ELEVENLABS_API_KEY?.trim()) {
+    available.push('ElevenLabs (ELEVENLABS_API_KEY)');
+  }
 
   return [{
     name: 'TTS providers',
-    status: found.length > 0 ? 'ok' : 'warn',
-    message: found.length > 0 ? `available: ${found.map(p => p.label).join(', ')}` : 'none found (install edge-tts, espeak)',
+    status: available.length > 0 ? 'ok' : 'warn',
+    message: available.length > 0
+      ? `available: ${available.join(', ')}`
+      : 'none found — use `buddy speak --engine pocket` with Pocket TTS (pip install pocket-tts), or configure ElevenLabs with ELEVENLABS_API_KEY',
   }];
 }
 
@@ -355,9 +419,100 @@ function checkDiskSpace(cwd: string): DoctorCheck {
   return { name: 'Disk space', status: 'ok', message: `${freeGB.toFixed(1)} GB free` };
 }
 
-function checkGit(cwd: string): DoctorCheck {
-  if (!commandExists('git')) {
+function checkProfilePermissions(): DoctorCheck {
+  const dir = join(homedir(), '.codebuddy');
+  if (!existsSync(dir)) {
+    return {
+      name: 'Profile permissions',
+      status: 'ok',
+      message: `${dir} not created yet (will be created 0700 on first save)`,
+    };
+  }
+  try {
+    accessSync(dir, fsConstants.W_OK);
+  } catch {
+    return {
+      name: 'Profile permissions',
+      status: 'error',
+      message: `${dir} is not writable`,
+    };
+  }
+  // Windows mode bits do not describe ACLs; keep the real writability check above.
+  if (process.platform === 'win32') {
+    return { name: 'Profile permissions', status: 'ok', message: `${dir} writable` };
+  }
+  let mode = 0;
+  try {
+    mode = statSync(dir).mode & 0o777;
+  } catch {
+    return {
+      name: 'Profile permissions',
+      status: 'ok',
+      message: `${dir} writable`,
+    };
+  }
+  if ((mode & 0o002) !== 0) {
+    return {
+      name: 'Profile permissions',
+      status: 'warn',
+      message: `${dir} is world-writable (mode ${mode.toString(8)}) — chmod 700 recommended`,
+      fixable: true,
+      fix: async () => {
+        try {
+          chmodSync(dir, 0o700);
+          return {
+            success: true,
+            message: `Restricted ${dir} to mode 700`,
+            action: 'chmod-profile',
+          };
+        } catch (err) {
+          return {
+            success: false,
+            message: `Failed to chmod ${dir}: ${err instanceof Error ? err.message : String(err)}`,
+            action: 'chmod-profile',
+          };
+        }
+      },
+    };
+  }
+  return {
+    name: 'Profile permissions',
+    status: 'ok',
+    message: `${dir} writable (mode ${mode.toString(8)})`,
+  };
+}
+
+function checkNativeSandbox(noSubprocess = false): DoctorCheck {
+  if (noSubprocess) {
+    return { name: 'Native sandbox (kernel)', status: 'ok', message: 'not probed (no child process in this mode); run `buddy doctor` to probe bwrap/Landlock', optional: true };
+  }
+  const caps = detectNativeSandboxCapabilities();
+  return {
+    name: 'Native sandbox (kernel)',
+    status: caps.recommended === 'none' ? 'warn' : 'ok',
+    message: formatDoctorLine(caps),
+    optional: true,
+  };
+}
+
+function insideGitWorkTree(cwd: string): boolean {
+  let dir = cwd;
+  for (;;) {
+    if (existsSync(join(dir, '.git'))) return true;
+    const parent = join(dir, '..');
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+function checkGit(cwd: string, noSubprocess = false): DoctorCheck {
+  if (!(noSubprocess ? commandExistsOnPath('git') : commandExists('git'))) {
     return { name: 'Git', status: 'error', message: 'git not found' };
+  }
+  if (noSubprocess) {
+    return insideGitWorkTree(cwd)
+      ? { name: 'Git', status: 'ok', message: 'installed, inside a git repo (.git found)' }
+      : { name: 'Git', status: 'warn', message: 'installed, but not inside a git repo (no .git found)' };
   }
   try {
     execSync('git rev-parse --is-inside-work-tree', { cwd, stdio: 'ignore' });
@@ -565,6 +720,40 @@ async function fixStaleLockFiles(lockFiles: string[]): Promise<FixResult> {
 // Provider readiness — the ONE thing a newcomer needs answered
 // ============================================================================
 
+export type OllamaSelectionSettings = Pick<UserSettings, 'model' | 'defaultModel'>;
+
+export { selectOllamaModel } from './ollama-model-selection.js';
+export type { OllamaModelSelection } from './ollama-model-selection.js';
+export type { OllamaModelCandidate } from '../wizard/environment-detection.js';
+
+function advertisedModel(models: readonly string[], requested: string | undefined): string | undefined {
+  const normalized = requested?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return models.find((model) => model.trim().toLowerCase() === normalized);
+}
+
+/** Pick a model that Ollama actually advertised, preserving its tag spelling. */
+export function resolveOllamaModel(
+  models: readonly string[],
+  settings: OllamaSelectionSettings = {},
+): string | undefined {
+  return (
+    advertisedModel(models, settings.model) ??
+    advertisedModel(models, settings.defaultModel) ??
+    models.find((model) => model.trim())
+  );
+}
+
+/** Both persisted model fields must point at a model currently served by Ollama. */
+export function isOllamaSelectionCurrent(
+  models: readonly string[],
+  settings: OllamaSelectionSettings = {},
+): boolean {
+  return Boolean(
+    advertisedModel(models, settings.model) && advertisedModel(models, settings.defaultModel),
+  );
+}
+
 /**
  * Answer "can `buddy` actually talk to a model on the next run?" — the single
  * most important diagnostic for someone who just installed. It distinguishes
@@ -572,9 +761,9 @@ async function fixStaleLockFiles(lockFiles: string[]): Promise<FixResult> {
  * it" (env var / onboarded settings / OAuth / API key), because a running
  * Ollama that was never selected still dead-ends the first chat.
  */
-async function checkProviderReadiness(): Promise<DoctorCheck> {
+async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   const { detectEnvironment } = await import('../wizard/environment-detection.js');
-  const snap = await detectEnvironment();
+  const snap = await detectEnvironment({ offline });
 
   const oauthOrKey = snap.capabilities.some(
     (c) => c.available && (c.kind === 'oauth' || c.kind === 'api-key'),
@@ -582,16 +771,58 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
   const ollama = snap.capabilities.find((c) => c.id === 'ollama');
   const ollamaModels = ollama?.models?.length ?? 0;
 
-  let onboardedLocal = false;
+  let userSettings: (UserSettings & OllamaSelectionSettings) | undefined;
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
-    const p = (getSettingsManager().loadUserSettings().provider || '').toLowerCase();
-    onboardedLocal = p === 'ollama' || p === 'lmstudio';
+    userSettings = getSettingsManager().readUserSettingsIfPresent();
   } catch {
     /* settings unreadable — treat as not onboarded */
   }
+  const p = (userSettings?.provider || '').toLowerCase();
+  const onboardedLocal = p === 'ollama' || p === 'lmstudio';
   const envLocal = Boolean(process.env.OLLAMA_HOST || process.env.LMSTUDIO_HOST);
+  // OLLAMA_HOST alone is not a saved model selection. Treating the grok
+  // defaultModel that loadUserSettings() used to invent as "the user's
+  // Ollama tag" made doctor lie on a virgin profile.
+  const liveOllamaSelection: OllamaModelSelection | undefined = ollama?.available && ollama.baseURL
+    ? selectOllamaModel(
+      ollama.modelDetails ?? (ollama.models ?? []).map((name): OllamaModelCandidate => ({ name })),
+      freemem(),
+    )
+    : undefined;
+
+  if (ollama?.available && ollamaModels > 0 && ollama.baseURL && !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
+    const selection = liveOllamaSelection;
+    if (!selection?.model) {
+      const reason = selection?.reason ?? 'no model-selection data was returned by Ollama';
+      return {
+        name: 'AI provider ready',
+        status: 'warn',
+        message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but no suitable model was selected — ${reason}; --fix made no changes`,
+      };
+    }
+    const savedModel = userSettings?.defaultModel ?? userSettings?.model ?? 'none';
+    const selectionContext = onboardedLocal
+      ? `saved model ${savedModel} is not currently advertised`
+      : 'no model is currently selected';
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — --fix to select ${selection.model} ($0; ${selection.reason})`,
+      fixable: true,
+      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason),
+    };
+  }
+
   const configured = oauthOrKey || ((envLocal || onboardedLocal) && ollamaModels > 0);
+
+  if (offline && !configured && (envLocal || onboardedLocal)) {
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: `local ${p || 'runtime'} configured but not probed (--offline); run \`buddy doctor\` without --offline to verify it`,
+    };
+  }
 
   if (configured) {
     const rec = snap.recommended;
@@ -599,18 +830,6 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
       name: 'AI provider ready',
       status: 'ok',
       message: rec ? `${rec.label} — ${rec.detail}` : 'a provider is configured',
-    };
-  }
-
-  if (ollama?.available && ollamaModels > 0 && ollama.baseURL) {
-    const model = ollama.models![0]!;
-    const baseURL = ollama.baseURL;
-    return {
-      name: 'AI provider ready',
-      status: 'warn',
-      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but not selected — run \`buddy onboard\`, or --fix to select ${model} ($0)`,
-      fixable: true,
-      fix: async () => fixSelectRunningOllama(baseURL, model),
     };
   }
 
@@ -633,13 +852,13 @@ async function checkProviderReadiness(): Promise<DoctorCheck> {
 }
 
 /** Point buddy at an already-running Ollama by writing user-settings (no download). */
-async function fixSelectRunningOllama(baseURL: string, model: string): Promise<FixResult> {
+async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string): Promise<FixResult> {
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
     getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
     return {
       success: true,
-      message: `Selected local Ollama model ${model} (written to user-settings.json) — try: buddy try`,
+      message: `Selected local Ollama model ${model}: ${reason ?? 'selected from the installed model list'} (written to user-settings.json) — try: buddy try`,
       action: 'select-running-ollama',
     };
   } catch (err) {
@@ -670,28 +889,67 @@ async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
 // Public API
 // ============================================================================
 
-export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
+function checkProviderFailoverHealth(): DoctorCheck {
+  if (!isDeclaredProviderFallbackEnabled()) {
+    return {
+      name: 'Provider failover',
+      status: 'ok',
+      message: 'CODEBUDDY_PROVIDER_FALLBACK off (no automatic switch)',
+      optional: true,
+    };
+  }
+  const snapshot = readProviderHealthSnapshot();
+  const down = Object.keys(snapshot.providers);
+  const lines = formatProviderHealthLines();
+  if (down.length === 0) {
+    return {
+      name: 'Provider failover',
+      status: 'ok',
+      message: 'enabled; no provider currently benched',
+    };
+  }
+  return {
+    name: 'Provider failover',
+    status: 'warn',
+    message: lines.slice(1).join('; ') || `${down.length} provider(s) benched`,
+  };
+}
+
+export interface DoctorRunOptions {
+  /** Skip every network call: live key validation, OAuth refresh/discovery, local runtime probes. */
+  offline?: boolean;
+  /** Never start a child process: PATH/.git filesystem lookups, sandbox probe skipped (`buddy triage`). */
+  noSubprocess?: boolean;
+}
+
+export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = {}): Promise<DoctorCheck[]> {
   const dir = cwd ?? process.cwd();
+  const offline = options.offline === true;
+  const noSubprocess = options.noSubprocess === true;
+  const lookup: CommandLookup = noSubprocess ? (cmd) => commandExistsOnPath(cmd) : commandExists;
   const { checkLlmKeysLive } = await import('./llm-key-check.js');
   return [
-    await checkProviderReadiness(),
+    await checkProviderReadiness(offline),
     checkNodeVersion(),
     await checkNativeSqlite(),
-    ...checkDependencies(),
+    ...checkDependencies(lookup),
     ...checkApiKeys(),
     // Validation LIVE des clés configurées (endpoint /models, 0 token) :
     // distingue clé invalide (401/403 → error) de quota épuisé (429 → warn).
-    ...(await checkLlmKeysLive()),
-    await checkChatGptOAuth(),
+    ...(offline ? [] : await checkLlmKeysLive()),
+    await checkChatGptOAuth(offline),
     ...checkConfigFiles(dir),
     // Accidents de collage dans .env (commande shell, guillemets, doublons) —
     // détectés sans jamais afficher les valeurs. src/doctor/env-sanity.ts.
     ...(await import('./env-sanity.js')).checkEnvSanity(dir),
     ...checkStaleLockFiles(dir),
-    ...checkTtsProviders(),
+    ...checkTtsProviders(lookup),
     checkServerExposureEnvironment(),
+    checkProfilePermissions(),
     checkDiskSpace(dir),
-    checkGit(dir),
+    checkGit(dir, noSubprocess),
+    checkNativeSandbox(noSubprocess),
+    checkProviderFailoverHealth(),
   ];
 }
 

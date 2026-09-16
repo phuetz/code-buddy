@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CoworkToolAgent,
+  type ApprovalRequestPayload,
   type FormalToolRegistryLike,
 } from '../src/main/workflows/cowork-tool-agent';
+
+/** The answer the renderer sends for an approval request: its full identity. */
+const answerTo = (request: ApprovalRequestPayload, approved: boolean) => ({
+  approvalId: request.approvalId,
+  workflowInstanceId: request.workflowInstanceId,
+  stepId: request.stepId,
+  approved,
+});
 
 const mkRegistry = (
   impl: FormalToolRegistryLike['execute']
@@ -134,7 +143,7 @@ describe('CoworkToolAgent / runApprovalWait', () => {
   });
 
   it('resolves on approve', async () => {
-    const requested: unknown[] = [];
+    const requested: ApprovalRequestPayload[] = [];
     const agent = new CoworkToolAgent({
       registry: mkRegistry(async () => ({
         success: true,
@@ -152,7 +161,7 @@ describe('CoworkToolAgent / runApprovalWait', () => {
     expect(requested).toHaveLength(1);
     expect(agent.pendingCount()).toBe(1);
 
-    const matched = agent.resolveApproval('s1', true);
+    const matched = agent.resolveApproval(answerTo(requested[0], true));
     expect(matched).toBe(true);
 
     await expect(promise).resolves.toEqual({ approved: true, stepId: 's1' });
@@ -160,22 +169,68 @@ describe('CoworkToolAgent / runApprovalWait', () => {
   });
 
   it('rejects on reject', async () => {
+    const requested: ApprovalRequestPayload[] = [];
     const agent = new CoworkToolAgent({
       registry: mkRegistry(async () => ({
         success: true,
         toolName: '',
         duration: 0,
       })),
-      onApprovalRequired: () => undefined,
+      onApprovalRequired: (payload) => requested.push(payload),
     });
 
     const promise = agent.runApprovalWait(
       { stepId: 's2', message: 'ok?', timeoutMs: 60000 },
       'inst_456'
     );
-    agent.resolveApproval('s2', false);
+    agent.resolveApproval(answerTo(requested[0], false));
 
     await expect(promise).rejects.toThrow(/was rejected/);
+  });
+
+  it('gives each request its own id and resolves only the answer quoting it, its run and its step', async () => {
+    const requested: ApprovalRequestPayload[] = [];
+    const agent = new CoworkToolAgent({
+      registry: mkRegistry(async () => ({
+        success: true,
+        toolName: '',
+        duration: 0,
+      })),
+      onApprovalRequired: (payload) => requested.push(payload),
+    });
+
+    const first = agent.runApprovalWait({ stepId: 's', message: '?', timeoutMs: 60000 }, 'run_1');
+    expect(agent.resolveApproval(answerTo(requested[0], true))).toBe(true);
+    await first;
+    const second = agent.runApprovalWait({ stepId: 's', message: '?', timeoutMs: 60000 }, 'run_1');
+    expect(requested[1].approvalId).not.toBe(requested[0].approvalId);
+
+    expect(agent.resolveApproval(answerTo(requested[0], true))).toBe(false);
+    expect(
+      agent.resolveApproval({ ...answerTo(requested[1], true), workflowInstanceId: 'run_2' })
+    ).toBe(false);
+    expect(agent.resolveApproval({ ...answerTo(requested[1], true), stepId: 'other' })).toBe(false);
+    expect(agent.pendingCount()).toBe(1);
+
+    expect(agent.resolveApproval(answerTo(requested[1], true))).toBe(true);
+    await expect(second).resolves.toEqual({ approved: true, stepId: 's' });
+  });
+
+  it('refuses to wait for an approval that belongs to no workflow run', async () => {
+    const requested: ApprovalRequestPayload[] = [];
+    const agent = new CoworkToolAgent({
+      registry: mkRegistry(async () => ({
+        success: true,
+        toolName: '',
+        duration: 0,
+      })),
+      onApprovalRequired: (payload) => requested.push(payload),
+    });
+    await expect(
+      agent.runApprovalWait({ stepId: 's', message: '?', timeoutMs: 60000 }, '')
+    ).rejects.toThrow(/no workflow run/);
+    expect(requested).toEqual([]);
+    expect(agent.pendingCount()).toBe(0);
   });
 
   it('rejects on timeout', async () => {
@@ -199,13 +254,14 @@ describe('CoworkToolAgent / runApprovalWait', () => {
   });
 
   it('cancelPending rejects active approvals scoped to a workflow', async () => {
+    const requested: ApprovalRequestPayload[] = [];
     const agent = new CoworkToolAgent({
       registry: mkRegistry(async () => ({
         success: true,
         toolName: '',
         duration: 0,
       })),
-      onApprovalRequired: () => undefined,
+      onApprovalRequired: (payload) => requested.push(payload),
     });
     const p1 = agent.runApprovalWait(
       { stepId: 'a', message: '?', timeoutMs: 60000 },
@@ -220,7 +276,9 @@ describe('CoworkToolAgent / runApprovalWait', () => {
     await e1;
     // p2 should still be pending
     expect(agent.pendingCount()).toBe(1);
-    agent.resolveApproval('b', true);
+    // instA's cancelled request can no longer be answered; instB's still can.
+    expect(agent.resolveApproval(answerTo(requested[0], true))).toBe(false);
+    expect(agent.resolveApproval(answerTo(requested[1], true))).toBe(true);
     await expect(p2).resolves.toMatchObject({ approved: true });
   });
 

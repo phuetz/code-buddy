@@ -16,6 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -114,6 +115,70 @@ export function extractMemoriesFromMessages(
   return memories;
 }
 
+/**
+ * Extract memories from a rollout or a persisted session payload.
+ *
+ * Rollouts are commonly represented as JSONL, while SessionStore persists a
+ * JSON object containing a `messages` array. Supporting both shapes keeps the
+ * background worker independent from the session persistence format.
+ */
+export function extractMemoriesFromRollout(
+  rollout: unknown,
+  source: string = 'rollout',
+): ExtractedMemory[] {
+  let payload: unknown = rollout;
+
+  if (typeof rollout === 'string') {
+    let contents = rollout;
+    try {
+      if (fs.existsSync(rollout)) {
+        contents = fs.readFileSync(rollout, 'utf8');
+        source = rollout;
+      }
+    } catch {
+      // Treat the input as rollout content when a path cannot be read.
+    }
+    try {
+      payload = JSON.parse(contents);
+    } catch {
+      payload = contents
+        .split(/\r?\n/)
+        .filter(line => line.trim())
+        .flatMap(line => {
+          try {
+            return [JSON.parse(line) as unknown];
+          } catch {
+            return [];
+          }
+        });
+    }
+  }
+
+  const rawMessages = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.messages)
+      ? payload.messages
+      : [];
+  const messages = rawMessages.flatMap(message => {
+    if (!isRecord(message) || typeof message.content !== 'string') {
+      return [];
+    }
+
+    const role = typeof message.role === 'string'
+      ? message.role
+      : typeof message.type === 'string'
+        ? message.type
+        : null;
+    return role ? [{ role, content: message.content }] : [];
+  });
+
+  return extractMemoriesFromMessages(messages, source);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // ============================================================================
 // Phase 2: Consolidation
 // ============================================================================
@@ -139,10 +204,7 @@ export function consolidateMemories(
 
   // Load existing memories
   const memoryFilePath = path.join(memDir, MEMORY_FILE);
-  let existingContent = '';
-  if (fs.existsSync(memoryFilePath)) {
-    existingContent = fs.readFileSync(memoryFilePath, 'utf-8');
-  }
+  const existingContent = readTextAtomicSync(memoryFilePath, '');
 
   const existingLines = new Set(
     existingContent.split('\n')
@@ -192,13 +254,13 @@ export function consolidateMemories(
       // Atomic lock: O_EXCL fails if file exists
       fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
       try {
-        fs.appendFileSync(memoryFilePath, section);
+        fs.appendFileSync(memoryFilePath, section, { encoding: 'utf8', mode: 0o600 });
       } finally {
         try { fs.unlinkSync(lockPath); } catch { /* best effort */ }
       }
     } catch {
       // Lock failed (another process writing) — append anyway (appendFileSync is atomic on most OS for small writes)
-      fs.appendFileSync(memoryFilePath, section);
+      fs.appendFileSync(memoryFilePath, section, { encoding: 'utf8', mode: 0o600 });
     }
   }
 
@@ -211,7 +273,7 @@ export function consolidateMemories(
     .join('\n');
   if (preferences.trim()) {
     const summaryContent = `# Memory Summary\n\nKey preferences and patterns:\n${preferences}\n`;
-    fs.writeFileSync(summaryPath, summaryContent.substring(0, 2000));
+    writeFileAtomicSync(summaryPath, summaryContent.substring(0, 2000), { mode: 0o600 });
   }
 
   // Write rollout summary
@@ -227,7 +289,7 @@ export function consolidateMemories(
       ``,
       ...newMemories.map(m => `- [${m.category}] ${m.summary}`),
     ].join('\n');
-    fs.writeFileSync(rolloutPath, rolloutContent);
+    writeFileAtomicSync(rolloutPath, rolloutContent, { mode: 0o600 });
 
     // Prune old rollout summaries (keep last 30)
     try {
@@ -256,11 +318,6 @@ export function consolidateMemories(
  */
 export function loadMemorySummary(cwd: string = process.cwd()): string | null {
   const summaryPath = path.join(cwd, MEMORY_DIR, SUMMARY_FILE);
-  try {
-    if (fs.existsSync(summaryPath)) {
-      const content = fs.readFileSync(summaryPath, 'utf-8');
-      if (content.trim()) return content;
-    }
-  } catch { /* optional */ }
-  return null;
+  const content = readTextAtomicSync(summaryPath, '');
+  return content || null;
 }

@@ -29,7 +29,7 @@ import {
   sanitizeForShell
 } from '../../utils/input-validator.js';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
-import { getShellConfiguration } from '../../utils/shell-configuration.js';
+import { getShellConfiguration, shellListFilesCommand, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
@@ -44,6 +44,7 @@ import {
   executeInWorkspaceSandbox,
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
+import { confineSpawn } from '../../security/native-sandbox.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -197,12 +198,21 @@ export class BashTool implements Disposable {
       const shellConfiguration = getShellConfiguration();
       const shellCommand = shellConfiguration.shell === 'bash'
         ? `${buildBashEnvPrelude()}\n${command}`
-        : command;
-      const proc = spawn(
-        shellConfiguration.executable,
-        [...shellConfiguration.argsPrefix, shellCommand],
-        spawnOptions,
-      );
+        : shellWorkingDirectoryCommand(command, shellConfiguration);
+      const confined = confineSpawn({
+        file: shellConfiguration.executable,
+        args: [...shellConfiguration.argsPrefix, shellCommand],
+        cwd: options.cwd,
+        env: controlledEnv,
+      });
+      if (!confined.ok) {
+        resolve({ stdout: '', stderr: confined.error, exitCode: 1 });
+        return;
+      }
+      const proc = spawn(confined.file, confined.args, {
+        ...spawnOptions,
+        env: confined.env,
+      });
       this.runningProcesses.add(proc);
 
       // Store process group ID for cleanup
@@ -712,10 +722,21 @@ export class BashTool implements Disposable {
       let stderr = '';
       let timedOut = false;
 
-      const proc = spawn(cmd, args, {
-        shell: false,
+      const confined = confineSpawn({
+        file: cmd,
+        args,
         cwd: workDir,
         env: policyEnv,
+      });
+      if (!confined.ok) {
+        resolve({ success: false, error: confined.error });
+        return;
+      }
+
+      const proc = spawn(confined.file, confined.args, {
+        shell: false,
+        cwd: workDir,
+        env: confined.env,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -784,7 +805,10 @@ export class BashTool implements Disposable {
   }
 
   /**
-   * List files in a directory (wrapper for `ls -la`)
+   * List files in a directory (`ls -la`, or its PowerShell equivalent).
+   *
+   * The command is built for the shell that actually runs it: a POSIX `ls -la`
+   * always fails on a PowerShell host.
    *
    * @param directory - Directory path to list (default: current directory)
    * @returns Formatted directory listing or error
@@ -804,8 +828,7 @@ export class BashTool implements Disposable {
       };
     }
 
-    const safeDir = sanitizeForShell(directory);
-    return this.execute(`ls -la ${safeDir}`);
+    return this.execute(shellListFilesCommand(directory));
   }
 
   /**

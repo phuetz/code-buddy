@@ -2,7 +2,9 @@
 
 La couche d’interface générative détecte au plus un candidat par réponse : un
 payload d’outil `data: { type: … }`, ou un tableau Markdown d’au moins trois
-lignes visibles (hors séparateur Markdown) et deux colonnes. Les réponses de moins de 200 caractères sont ignorées.
+lignes visibles (hors séparateur Markdown) et deux colonnes. Un payload
+structuré est détecté quelle que soit la longueur de la réponse texte ; le
+seuil de 200 caractères s’applique uniquement aux tableaux Markdown.
 Le texte original n’est jamais modifié ; le pipeline renvoie séparément un
 document HTML optionnel destiné au renderer inline existant.
 
@@ -15,17 +17,24 @@ CODEBUDDY_WIDGETS=true
 CODEBUDDY_WIDGETS_AUTO=true
 ```
 
-Sans elles, le résultat texte est byte-identique et aucune détection, lecture du
-registre ou génération n’est effectuée. La création LLM sur un type sans widget
-compatible demande en plus :
+Sans elles, le résultat texte est byte-identique et aucune détection ni lecture
+du registre n’est effectuée. Le chemin automatique n’appelle aucun LLM : un
+payload structuré sans widget compatible reçoit un tableau HTML déterministe.
+Pour créer volontairement un nouveau template authored avec un LLM, utiliser
+`buddy widgets gen <kind>` ; cette commande explicite applique le gate
+fail-closed avant toute persistance sous `authored-<kind>/widget.html`.
 
-```bash
-CODEBUDDY_WIDGETS_AUTOGEN=true
-```
+## Contrat JSON headless
 
-Cette troisième variable est désactivée par défaut. La génération réutilise le
-proposer existant, puis le gate fail-closed et la persistance
-`authored-<kind>/widget.html`; elle ne contourne jamais la validation authored.
+Avec `--output json` (ou `--output-format json`), la réponse expose le payload
+structuré détecté dans le champ optionnel `data`, par exemple
+`{ "type": "stock", "symbol": "AAPL", "price": 324.85 }`. Ce champ est
+indépendant du rendu HTML et reste disponible pour les consommateurs
+machine-à-machine, y compris quand la réponse texte est courte. Quand
+`CODEBUDDY_WIDGETS=true` et `CODEBUDDY_WIDGETS_AUTO=true`, le même objet peut
+également contenir le document complet `widgetHtml`. Le champ `widgetHtml` est
+absent lorsqu’aucun rendu automatique n’a été demandé ou lorsqu’aucun widget ne
+peut être rendu.
 
 ## Registre et sélection
 

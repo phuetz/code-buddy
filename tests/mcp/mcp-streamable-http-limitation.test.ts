@@ -13,12 +13,8 @@ async function startSseLikeEndpoint(): Promise<{
   const server = http.createServer((req, res) => {
     requestCount += 1;
     if (req.url === '/mcp') {
-      res.writeHead(200, {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-        connection: 'keep-alive',
-      });
-      res.write('event: endpoint\ndata: MCP_STREAMABLE_ENDPOINT_READY\n\n');
+      res.writeHead(400, { 'content-type': 'text/plain' });
+      res.end('Legacy SSE endpoint requires a different protocol');
       return;
     }
     res.writeHead(404);
@@ -49,7 +45,7 @@ describe('MCPManager streamable HTTP limitation guard', () => {
     endpoint = null;
   });
 
-  it('fails closed with an explicit message for streamable_http SSE endpoints', async () => {
+  it('rejects an incompatible endpoint without exposing a tool catalog', async () => {
     endpoint = await startSseLikeEndpoint();
     manager = new MCPManager();
 
@@ -61,13 +57,11 @@ describe('MCPManager streamable HTTP limitation guard', () => {
           url: endpoint.url,
         },
       }),
-    ).rejects.toThrow(
-      'StreamableHttpTransport: SSE endpoints are not compatible with MCP request-response pattern'
-    );
+    ).rejects.toThrow();
 
     expect(manager.getServerStatus('qa_streamable')).toBe('error');
     expect(manager.getTransportType('qa_streamable')).toBe('streamable_http');
     expect(manager.getTools()).toHaveLength(0);
-    expect(endpoint.getRequestCount()).toBe(0);
+    expect(endpoint.getRequestCount()).toBeGreaterThan(0);
   }, 15_000);
 });

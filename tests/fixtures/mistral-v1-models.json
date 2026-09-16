@@ -1,0 +1,31 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "mistral-medium-latest",
+      "object": "model",
+      "owned_by": "mistralai",
+      "max_context_length": 32768,
+      "capabilities": {
+        "completion_chat": false,
+        "function_calling": false,
+        "fine_tuning": false,
+        "classification": false,
+        "vision": false
+      }
+    },
+    {
+      "id": "magistral-small-latest",
+      "object": "model",
+      "owned_by": "mistralai",
+      "max_context_length": 262144,
+      "capabilities": {
+        "completion_chat": true,
+        "function_calling": true,
+        "fine_tuning": true,
+        "classification": true,
+        "vision": true
+      }
+    }
+  ]
+}

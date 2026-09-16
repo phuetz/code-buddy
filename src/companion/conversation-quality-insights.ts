@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readJsonLinesAtomicSync } from '../utils/atomic-write.js';
 
 import type {
   ConversationEpisodeIssue,
@@ -228,22 +228,14 @@ export function readConversationQualityInsights(
     Math.min(200, Math.floor(options.windowSize ?? DEFAULT_CONVERSATION_QUALITY_WINDOW)),
   );
   const journalPath = options.journalPath ?? defaultConversationQualityJournalPath();
-  if (!existsSync(journalPath)) return buildInsights([], { ...options, windowSize });
-  let lines: string[] = [];
-  try {
-    lines = readFileSync(journalPath, 'utf8').split(/\r?\n/).filter(Boolean).slice(-windowSize);
-  } catch {
-    return buildInsights([], { ...options, windowSize });
-  }
-  const snapshots: ConversationQualitySnapshot[] = [];
-  for (const line of lines) {
-    try {
-      const snapshot = snapshotFrom(JSON.parse(line));
-      if (snapshot) snapshots.push(snapshot);
-    } catch {
-      // A torn/corrupt line does not hide the surrounding valid measurements.
-    }
-  }
+  const rawSnapshots = readJsonLinesAtomicSync<unknown>(
+    journalPath,
+    [],
+    (value): value is unknown => snapshotFrom(value) !== null,
+  ).slice(-windowSize);
+  const snapshots = rawSnapshots
+    .map(snapshotFrom)
+    .filter((snapshot): snapshot is ConversationQualitySnapshot => Boolean(snapshot));
   return buildInsights(snapshots, { ...options, windowSize });
 }
 

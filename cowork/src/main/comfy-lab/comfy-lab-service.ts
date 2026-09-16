@@ -71,7 +71,7 @@ export interface ComfyLabServiceOptions {
  *
  * It never downloads a model, imports a workflow, starts ComfyUI or queues a
  * prompt. Network requests target either loopback or an explicitly configured
- * private/HTTPS ComfyUI endpoint (for example Darkstar).
+ * private/HTTPS ComfyUI endpoint (for example GPU node).
  */
 export class ComfyLabService {
   private readonly environment: NodeJS.ProcessEnv;
@@ -277,7 +277,7 @@ function resolveComfyEndpoint(environment: NodeJS.ProcessEnv): { url: string; sc
     if (parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('origin');
     const host = parsed.hostname.toLowerCase();
     const local = host === '127.0.0.1' || host === 'localhost' || host === '::1';
-    const privateHost = local || host === 'darkstar' || host.endsWith('.local')
+    const privateHost = local || host.endsWith('.local')
       || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.)/.test(host);
     if (parsed.protocol === 'http:' && !privateHost) throw new Error('public-http');
     return { url: parsed.origin, scope: local ? 'local' : 'remote' };
@@ -502,7 +502,7 @@ function assertProbeUrl(input: string): void {
   const url = new URL(input);
   const host = url.hostname.toLowerCase();
   const privateHost = host === '127.0.0.1' || host === 'localhost' || host === '::1'
-    || host === 'darkstar' || host.endsWith('.local')
+    || host.endsWith('.local')
     || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.)/.test(host);
   if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && privateHost))) {
     throw new Error('la sonde ComfyUI doit utiliser HTTPS ou un endpoint HTTP privé explicitement configuré');

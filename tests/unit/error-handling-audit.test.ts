@@ -158,9 +158,7 @@ describe('Error handling audit', () => {
           const details = violations
             .map(v => `  Line ${v.line}: ${v.text}`)
             .join('\n');
-          fail(
-            `Found ${violations.length} catch block(s) without error parameter in ${relPath}:\n${details}`
-          );
+          expect(violations, `Found ${violations.length} catch block(s) without error parameter in ${relPath}:\n${details}`).toEqual([]);
         }
       });
     }

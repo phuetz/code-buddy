@@ -40,8 +40,13 @@ describe('register_tool — self-authored tools (dual registry)', () => {
       code: GREET_CODE,
     });
     const out = await FormalToolRegistry.getInstance().execute('authored__greet', { who: 'Lisa' });
-    expect(out.success).toBe(true);
-    expect(out.output).toContain('hello Lisa');
+    if (process.platform === 'linux') {
+      expect(out.success).toBe(true);
+      expect(out.output).toContain('hello Lisa');
+    } else {
+      expect(out.success).toBe(false);
+      expect(out.error).toContain('Compute confinement requires Linux');
+    }
   });
 
   it('refuses authored code matching dangerous patterns', async () => {

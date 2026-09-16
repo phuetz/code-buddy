@@ -1,0 +1,80 @@
+1
+00:00:01,000 --> 00:00:04,140
+Premier ajout : un hub multi-IA.
+
+2
+00:00:04,420 --> 00:00:08,780
+Plusieurs Code Buddy qui tournent
+buddy server s’observent et s’appellent.
+
+3
+00:00:08,940 --> 00:00:11,680
+Un message : peer.chat.
+
+4
+00:00:12,100 --> 00:00:16,640
+Une session multi-tours :
+peer.chat-session.
+
+5
+00:00:17,313 --> 00:00:22,533
+Si tu veux l’essayer maintenant :
+npm i -g @phuetz/code-buddy.
+
+6
+00:00:22,933 --> 00:00:24,553
+Le lien npm est en description.
+
+7
+00:00:25,093 --> 00:00:26,453
+Abonne-toi si tu veux la suite.
+
+8
+00:00:26,853 --> 00:00:28,733
+La prochaine : lm-resizer.
+
+9
+00:00:29,293 --> 00:00:32,313
+Comment on évite de noyer
+l’agent sous les logs.
+
+10
+00:00:32,313 --> 00:00:33,773
+Puis Code Explorer.
+
+11
+00:00:34,453 --> 00:00:35,393
+La carte du dépôt.
+
+12
+00:00:35,833 --> 00:00:36,793
+Une couche de perception.
+
+13
+00:00:37,333 --> 00:00:41,533
+Un démon Rust : audio, vision,
+écran, focus, battement.
+
+14
+00:00:41,753 --> 00:00:44,313
+Les événements passent par
+un pont en loopback seulement.
+
+15
+00:00:44,313 --> 00:00:48,733
+Parole, réactions caméra,
+rappels parlés s’appuient dessus.
+
+16
+00:00:49,133 --> 00:00:51,233
+Ça reste muet tant que
+tu ne l’allumes pas.
+
+17
+00:00:51,633 --> 00:00:53,893
+Voix et robot demandent
+des binaires en plus.
+
+18
+00:00:54,293 --> 00:00:56,133
+Ils ne viennent pas de npm install.

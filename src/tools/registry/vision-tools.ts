@@ -21,6 +21,10 @@ import {
 } from '../vision/object-detection.js';
 import { captureCameraSnapshot } from '../../companion/camera.js';
 import { BrowserExecuteTool } from './misc-tools.js';
+import {
+  DARK_SCENE_LUMA_THRESHOLD,
+  meanLumaOfImage,
+} from '../vision/mean-luma.js';
 
 // ============================================================================
 // VisionAnalyzeTool (Hermes vision_analyze parity)
@@ -692,12 +696,40 @@ export interface CameraAnalyzeRuntime {
   env?: NodeJS.ProcessEnv;
 }
 
-const DEFAULT_CAMERA_VISION_MODEL = 'gemma4:12b';
+const DEFAULT_CAMERA_VISION_MODEL = 'moondream';
 const CAMERA_VISION_TIMEOUT_MS = 180_000;
+
+export function resolveCameraVisionModel(
+  requested: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const fromInput = requested?.trim();
+  if (fromInput) return fromInput;
+  const fromEnv = env.CODEBUDDY_VISION_MODEL?.trim();
+  if (fromEnv) return fromEnv;
+  return DEFAULT_CAMERA_VISION_MODEL;
+}
+
+function mimeTypeForImage(filePath: string, bytes: Buffer): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png';
+  }
+  if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  return 'image/png';
+}
 
 export class CameraAnalyzeTool implements ITool {
   readonly name = 'camera_analyze';
-  readonly description = 'Capture one local webcam frame and return a natural-language description from a local multimodal vision model (default Ollama gemma4:12b). Requires ffmpeg, OS camera permission, and a reachable local vision model.';
+  readonly description = 'Describe a still image with a local multimodal vision model (default Ollama moondream, or CODEBUDDY_VISION_MODEL). Pass image_path to analyze an existing file without touching the webcam. Omitting image_path captures one local webcam frame (ffmpeg). Dark frames (mean luma < 12) are refused — the SENSE1 darkness door.';
 
   constructor(
     private readonly options: VisionAnalysisOptions = {},
@@ -707,39 +739,70 @@ export class CameraAnalyzeTool implements ITool {
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     const cwd = this.options.rootDir ?? context?.cwd;
     const prompt = optionalString(input, 'prompt') ?? 'Describe what you see.';
-    const model = optionalString(input, 'model') ?? DEFAULT_CAMERA_VISION_MODEL;
+    const model = resolveCameraVisionModel(
+      optionalString(input, 'model'),
+      this.runtime.env ?? process.env,
+    );
     const device = optionalString(input, 'device');
     const outputPath = optionalString(input, 'output_path');
     const includeOcr = input.include_ocr === true;
+    const providedPath = optionalString(input, 'image_path');
 
-    // (1) Capture a frame from the local webcam.
-    const captureSnapshot = this.runtime.captureSnapshot ?? captureCameraSnapshot;
-    const snapshot = await captureSnapshot({
-      cwd,
-      ...(outputPath ? { outputPath } : {}),
-      ...(device ? { device } : {}),
-      timeoutMs: typeof input.timeout_ms === 'number' ? input.timeout_ms : undefined,
-    });
+    let imagePath: string;
+    if (providedPath) {
+      imagePath = path.isAbsolute(providedPath)
+        ? path.resolve(providedPath)
+        : path.resolve(cwd ?? process.cwd(), providedPath);
+      try {
+        const stat = await fs.stat(imagePath);
+        if (!stat.isFile()) {
+          return { success: false, error: `image_path is not a file: ${imagePath}` };
+        }
+      } catch {
+        return { success: false, error: `image_path not found: ${imagePath}` };
+      }
+    } else {
+      // Capture a frame from the local webcam only when no file was given.
+      const captureSnapshot = this.runtime.captureSnapshot ?? captureCameraSnapshot;
+      const snapshot = await captureSnapshot({
+        cwd,
+        ...(outputPath ? { outputPath } : {}),
+        ...(device ? { device } : {}),
+        timeoutMs: typeof input.timeout_ms === 'number' ? input.timeout_ms : undefined,
+      });
 
-    if (!snapshot.success || !snapshot.path) {
-      return {
-        success: false,
-        error: snapshot.error || 'Camera snapshot failed before analysis',
-        output: snapshot.command,
-      };
+      if (!snapshot.success || !snapshot.path) {
+        return {
+          success: false,
+          error: snapshot.error || 'Camera snapshot failed before analysis',
+          output: snapshot.command,
+        };
+      }
+      imagePath = snapshot.path;
     }
 
-    // (2) base64 the captured PNG into a data URL.
-    let dataUrl: string;
+    let bytes: Buffer;
     try {
-      const bytes = await fs.readFile(snapshot.path);
-      dataUrl = `data:image/png;base64,${bytes.toString('base64')}`;
+      bytes = await fs.readFile(imagePath);
     } catch (error) {
       return {
         success: false,
-        error: `Failed to read captured frame ${snapshot.path}: ${error instanceof Error ? error.message : String(error)}`,
+        error: `Failed to read frame ${imagePath}: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+
+    const meanLuma = await meanLumaOfImage(imagePath);
+    if (meanLuma !== undefined && meanLuma < DARK_SCENE_LUMA_THRESHOLD) {
+      return {
+        success: false,
+        error:
+          `Dark frame refused (meanLuma=${meanLuma} < ${DARK_SCENE_LUMA_THRESHOLD}). ` +
+          'SENSE1 darkness door skips VLM analysis on near-black images.',
+        data: { imagePath, meanLuma, model },
+      };
+    }
+
+    const dataUrl = `data:${mimeTypeForImage(imagePath, bytes)};base64,${bytes.toString('base64')}`;
 
     // (3) Make a REAL vision completion against the local Ollama /v1 endpoint.
     let description: string;
@@ -749,7 +812,7 @@ export class CameraAnalyzeTool implements ITool {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        output: `Captured frame saved to ${snapshot.path}, but the vision model could not describe it.`,
+        output: `Frame saved to ${imagePath}, but the vision model could not describe it.`,
       };
     }
 
@@ -757,7 +820,7 @@ export class CameraAnalyzeTool implements ITool {
     let ocr: VisionAnalysisResult['ocr'] | undefined;
     if (includeOcr) {
       try {
-        const analysis = await analyzeVisionImage(snapshot.path, {
+        const analysis = await analyzeVisionImage(imagePath, {
           ...this.options,
           rootDir: cwd,
           includeOcr: true,
@@ -772,9 +835,10 @@ export class CameraAnalyzeTool implements ITool {
 
     // (5) Return the description text as the primary output.
     const data = {
-      imagePath: snapshot.path,
+      imagePath,
       description,
       model,
+      ...(meanLuma !== undefined ? { meanLuma } : {}),
       ...(ocr ? { ocr } : {}),
     };
 
@@ -861,17 +925,21 @@ export class CameraAnalyzeTool implements ITool {
       parameters: {
         type: 'object',
         properties: {
+          image_path: {
+            type: 'string',
+            description: 'Existing still image to describe (no webcam). JPEG/PNG/WebP. Use this for files; omit to capture the camera.',
+          },
           prompt: {
             type: 'string',
             description: 'What to ask the vision model about the frame. Default "Describe what you see."',
           },
           device: {
             type: 'string',
-            description: 'Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0.',
+            description: 'Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0. Ignored when image_path is set.',
           },
           model: {
             type: 'string',
-            description: 'Local multimodal model id served by Ollama. Default gemma4:12b.',
+            description: 'Local multimodal model id served by Ollama. Default moondream (or CODEBUDDY_VISION_MODEL). gemma* is text-only and will invent.',
           },
           include_ocr: {
             type: 'boolean',
@@ -901,6 +969,9 @@ export class CameraAnalyzeTool implements ITool {
     if (input === undefined || input === null) return { valid: true };
     if (typeof input !== 'object') return { valid: false, errors: ['Input must be an object'] };
     const data = input as Record<string, unknown>;
+    if (data.image_path !== undefined && typeof data.image_path !== 'string') {
+      return { valid: false, errors: ['image_path must be a string'] };
+    }
     if (data.prompt !== undefined && typeof data.prompt !== 'string') {
       return { valid: false, errors: ['prompt must be a string'] };
     }

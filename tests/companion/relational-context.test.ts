@@ -7,7 +7,7 @@
  * skipped, never crashes the voice loop), and — through the REAL user-model privacy screen, no mock
  * — that only accepted facts surface and a sensitive fact is refused at write time so it can't leak.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -17,6 +17,15 @@ import {
 } from '../../src/companion/relational-context.js';
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { buildLlmArrivalOpener } from '../../src/sensory/arrival-opener.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+import { resetMemoryManagerForTests } from '../../src/memory/persistent-memory.js';
+
+const isolatedHome = createIsolatedHome('relational-context-home-');
+beforeAll(() => { isolatedHome.enter(); });
+afterAll(() => {
+  resetMemoryManagerForTests();
+  isolatedHome.leave();
+});
 
 describe('buildRelationalContext — composition', () => {
   it('composes facts → recent episode → personality → presence, in order', async () => {
@@ -43,6 +52,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => 'Récemment, on a parlé de : la refonte.',
     });
     expect(withEp).toBe(
@@ -54,6 +64,7 @@ describe('buildRelationalContext — composition', () => {
       includePersonality: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       episodeBlock: async () => null,
     });
     expect(noEp).toBe('');
@@ -65,6 +76,7 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePresence: false,
       includeGuidance: false,
+      includePhotos: false,
       personalitySummary: () => 'Humeur actuelle : sereine (60/100). Lien : familier.',
     });
     expect(ctx).toBe(
@@ -95,6 +107,7 @@ describe('buildRelationalContext — composition', () => {
     const ctx = await buildRelationalContext({
       factsBlock: () => null,
       episodeBlock: async () => null,
+      photosBlock: async () => null,
       personalitySummary: () => '',
       presenceBlock: async () => '',
       guidanceBlock: () => null,
@@ -108,9 +121,42 @@ describe('buildRelationalContext — composition', () => {
       includeEpisode: false,
       includePersonality: false,
       includeGuidance: false,
+      includePhotos: false,
       presenceBlock: async () => '<presence>seul</presence>',
     });
     expect(ctx).toBe('<presence>seul</presence>');
+  });
+
+  it('keeps self-evolution silent by default and injects at most three first-person lines when invited', async () => {
+    const block = async (): Promise<string> =>
+      'J’ai appris à mieux écouter.\nJ’ai appris à mieux vérifier.\nJ’ai appris à garder le fil.\nCette quatrième ligne doit disparaître.';
+
+    const disabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      includePhotos: false,
+      selfEvolutionBlock: block,
+    });
+    expect(disabled).toBe('');
+
+    const enabled = await buildRelationalContext({
+      includeFacts: false,
+      includeEpisode: false,
+      includePersonality: false,
+      includeGuidance: false,
+      includePresence: false,
+      includePhotos: false,
+      includeSelfEvolution: true,
+      selfEvolutionBlock: block,
+    });
+    expect(enabled).toContain('<lisa_evolution>');
+    expect(enabled).toContain('J’ai appris à mieux écouter.');
+    expect(enabled).not.toContain('quatrième ligne');
+    expect(enabled).not.toMatch(/(?:src\/|tests\/|[0-9a-f]{12,})/i);
+    expect(enabled.split('\n')).toHaveLength(3);
   });
 
   it('starts episode and presence reads concurrently while preserving prompt order', async () => {

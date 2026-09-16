@@ -10,17 +10,16 @@
  * commands it uses repeatedly and codify them as reusable skills.
  *
  * Skill file location:
- *   .codebuddy/skills/workspace/<slug>/SKILL.md
+ *   .codebuddy/skills/<authored-slug>/SKILL.md
  *
  * The tool generates valid SKILL.md frontmatter and validates that
  * the slug does not already exist before writing.
  */
 
-import * as fs from 'fs/promises';
 import * as path from 'path';
-import { existsSync } from 'fs';
+import * as yaml from 'yaml';
 import type { ToolResult } from '../types/index.js';
-import { validateGeneratedCode, formatValidationReport } from '../security/code-validator.js';
+import { LiveSkillMutator, toAuthoredSkillName } from '../agent/self-improvement/skill-mutator.js';
 
 export interface CreateSkillInput {
   /** Human-readable skill name (e.g. "Deploy to Railway") */
@@ -43,101 +42,20 @@ export interface CreateSkillInput {
 }
 
 export class CreateSkillTool {
-  private get workspaceDir(): string {
-    return path.join(process.cwd(), '.codebuddy', 'skills', 'workspace');
-  }
-
-  async execute(input: CreateSkillInput): Promise<ToolResult> {
-    const {
-      name,
-      description,
-      body,
-      tags = [],
-      env = {},
-      requires = [],
-      overwrite = false,
-    } = input;
-
-    if (!name?.trim()) {
-      return { success: false, error: 'name is required' };
-    }
-    if (!description?.trim()) {
-      return { success: false, error: 'description is required' };
-    }
-    if (!body?.trim()) {
-      return { success: false, error: 'body is required' };
-    }
-
-    // Derive a filesystem-safe slug
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-
-    const skillDir = path.join(this.workspaceDir, slug);
-    const skillFile = path.join(skillDir, 'SKILL.md');
-
-    // Check for existing skill
-    if (existsSync(skillFile) && !overwrite) {
-      return {
-        success: false,
-        error: `Skill "${slug}" already exists. Set overwrite: true to replace it.`,
-      };
-    }
-
-    // Build YAML frontmatter
-    const fm: string[] = ['---', `name: ${name}`, `version: 1.0.0`, `description: ${description}`];
-
-    if (tags.length > 0) {
-      fm.push(`tags: [${tags.join(', ')}]`);
-    }
-
-    if (Object.keys(env).length > 0) {
-      fm.push('env:');
-      for (const [k, v] of Object.entries(env)) {
-        fm.push(`  ${k}: ${v}`);
-      }
-    }
-
-    if (requires.length > 0) {
-      fm.push(`requires: [${requires.join(', ')}]`);
-    }
-
-    fm.push('---');
-
-    const skillContent = `${fm.join('\n')}\n\n${body.trim()}\n`;
-
-    // Validate skill body for security (prevent malicious code in LLM-generated skills)
-    const validation = validateGeneratedCode(body);
-    if (!validation.safe) {
-      return {
-        success: false,
-        error: `Code validation failed:\n${formatValidationReport(validation)}\nSkill creation blocked for security reasons.`,
-      };
-    }
-
-    // Write to disk
+  async execute(input: CreateSkillInput, cwd = process.cwd()): Promise<ToolResult> {
     try {
-      await fs.mkdir(skillDir, { recursive: true });
-      await fs.writeFile(skillFile, skillContent, 'utf-8');
-    } catch (err) {
-      return {
-        success: false,
-        error: `Failed to write skill: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      for (const field of ['name', 'description', 'body'] as const) {
+        if (typeof input[field] !== 'string' || !input[field].trim()) return { success: false, error: `${field} is required` };
+      }
+      const name = toAuthoredSkillName(input.name);
+      const root = path.join(cwd, '.codebuddy', 'skills');
+      // Serialize metadata, including names containing ':' or YAML control characters.
+      const content = `---\n${yaml.stringify({ name, description: input.description, tags: input.tags ?? [], env: input.env ?? {}, requires: input.requires ?? [] })}---\n\n${input.body.trim()}\n`;
+      new LiveSkillMutator(root).create({ name, description: input.description, content }, { overwrite: input.overwrite === true });
+      return { success: true, output: `Skill created and loaded: ${name}\nPath: ${path.join(root, name, 'SKILL.md')}`, data: { name, loaded: true } };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
-
-    return {
-      success: true,
-      output: [
-        `✅ Skill created: ${name}`,
-        `   Path: ${skillFile}`,
-        `   Tags: ${tags.join(', ') || 'none'}`,
-        '',
-        'The skill is now available in the workspace registry.',
-        'Run `buddy hub search ${name}` or `/skills` to verify.',
-      ].join('\n'),
-    };
   }
 
   getSchema() {

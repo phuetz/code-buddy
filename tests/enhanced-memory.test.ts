@@ -2,7 +2,17 @@
  * Tests for Enhanced Memory System
  */
 
-import { EnhancedMemory, getEnhancedMemory, resetEnhancedMemory } from '../src/memory/enhanced-memory';
+import {
+  EnhancedMemory,
+  getDefaultMemoryDataDir,
+  getEnhancedMemory,
+  resetEnhancedMemory,
+} from '../src/memory/enhanced-memory';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { makeTmpDir, removeTmpDir } from './helpers/tmp.js';
+
+const qaRoot = path.join(process.cwd(), '_qa', 'persona1');
 
 async function flushAsyncInitialization(): Promise<void> {
   for (let i = 0; i < 5; i++) {
@@ -27,45 +37,54 @@ jest.mock('fs-extra', () => {
 
 describe('EnhancedMemory', () => {
   let memory: EnhancedMemory;
+  let dataDir: string;
 
   beforeEach(() => {
     resetEnhancedMemory();
+    dataDir = makeTmpDir('memory-', qaRoot);
     memory = new EnhancedMemory({
       enabled: true,
       maxMemories: 100,
       embeddingEnabled: false,
+      useSQLite: false,
+      dataDir,
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     memory.dispose();
+    await memory.flush();
+    removeTmpDir(dataDir);
   });
 
   describe('Constructor', () => {
-    it('should create with default config', () => {
-      const m = new EnhancedMemory();
-      expect(m).toBeDefined();
-      m.dispose();
+    it('should keep the production default data directory', () => {
+      expect(getDefaultMemoryDataDir()).toBe(path.join(os.homedir(), '.codebuddy', 'memory'));
     });
 
-    it('should accept custom config', () => {
+    it('should accept custom config', async () => {
       const m = new EnhancedMemory({
         maxMemories: 50,
         decayRate: 0.05,
+        dataDir,
+        useSQLite: false,
       });
       expect(m).toBeDefined();
       m.dispose();
+      await m.flush();
     });
 
     it('should not start decay timer after immediate dispose', async () => {
       const m = new EnhancedMemory({
         embeddingEnabled: false,
         useSQLite: false,
+        dataDir,
       });
       const timerState = m as unknown as { decayIntervalId: ReturnType<typeof setInterval> | null };
 
       m.dispose();
       await flushAsyncInitialization();
+      await m.flush();
 
       expect(timerState.decayIntervalId).toBeNull();
     });
@@ -431,7 +450,7 @@ describe('EnhancedMemory', () => {
   describe('singleton', () => {
     it('should return same instance', () => {
       resetEnhancedMemory();
-      const instance1 = getEnhancedMemory();
+      const instance1 = getEnhancedMemory({ dataDir, useSQLite: false, embeddingEnabled: false });
       const instance2 = getEnhancedMemory();
       expect(instance1).toBe(instance2);
     });

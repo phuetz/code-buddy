@@ -71,11 +71,11 @@ flowchart LR
 | `HooksBridge` | `cowork/src/main/hooks/hooks-bridge.ts` | CRUD on `.codebuddy/hooks.json` + dry-run for the four handler types (`command`, `http`, `prompt`, `agent`). |
 | `A2ABridge` | `cowork/src/main/a2a/a2a-bridge.ts` | Google A2A protocol — register remote agents by URL, fetch `/.well-known/agent.json`, invoke `/tasks/send`. |
 | `PresenceBridge` | `cowork/src/main/presence/presence-bridge.ts` | Face memory: webcam → Buffalo_S ArcFace ONNX → cosine match → `current.json` cross-process file consumed by the core agent. |
-| `ServerBridge` | `cowork/src/main/server/server-bridge.ts` | Boots / stops the core HTTP server (port 3000 + WS 3001) in-process. Reads persisted settings from `configStore.getAll().server`. |
+| `ServerBridge` | `cowork/src/main/server/server-bridge.ts` | Boots / stops the core HTTP server in-process (one port, default 3000, WebSocket on `/ws` of that port). Reads persisted settings from `configStore.getAll().server`. |
 | `SubAgentBridge` | `cowork/src/main/agent/sub-agent-bridge.ts` | Wraps `agent/multi-agent/agent-tools.ts` and translates its event stream into `subagent.spawned/status/completed/output` ServerEvents. Also exposes `dryRunSubAgent()` for hooks-bridge. |
 | `TeamBridge` | `cowork/src/main/agent/team-bridge.ts` | Agent Teams (Phase 4 layer 9) — multi-host coordination on top of SubAgentBridge. |
 | `FleetBridge` | `cowork/src/main/agent/orchestrator-bridge.ts` | OrchestratorLauncher / `peer_delegate` dispatch (d.17). |
-| `GpuMediaAdminBridge` | `cowork/src/main/gpu-media/gpu-media-admin-bridge.ts` | Typed Cowork administration for the authenticated Darkstar worker: submit/status/cancel, PanoWorld manifest export and LongCat MP4 download. |
+| `GpuMediaAdminBridge` | `cowork/src/main/gpu-media/gpu-media-admin-bridge.ts` | Typed Cowork administration for the authenticated GPU node worker: submit/status/cancel, PanoWorld manifest export and LongCat MP4 download. |
 
 ## IPC channels (one-shot)
 
@@ -170,6 +170,6 @@ level if anyone ever reintroduces the same shape.
 - **Vite-only** (`npx vite build`): the production bundle for
   `dist/` (renderer) + `dist-electron/main` + `dist-electron/preload`,
   ~30 s, no Python download. **Use this for iterative dev on Linux**
-  — see `docs/dev-linux.md`.
+  — see `DEV-LINUX.md`.
 - **Full build** (`npm run build`): vite + `electron-builder` package.
   Required only for shipping installers.

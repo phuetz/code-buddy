@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
+import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -496,11 +497,19 @@ export class SessionRegistry extends EventEmitter {
   private async loadPersistedSessions(): Promise<void> {
     try {
       const indexPath = path.join(this.config.persistPath, 'sessions.json');
-      const data = await fs.readFile(indexPath, 'utf-8');
-      const persisted = JSON.parse(data) as {
+      const persisted = await readJsonAtomic<{
         sessions: SessionInfo[];
         messages: Record<string, SessionMessage[]>;
-      };
+      } | null>(indexPath, null, {
+        mode: 0o600,
+        isValid: (value): value is {
+          sessions: SessionInfo[];
+          messages: Record<string, SessionMessage[]>;
+        } => Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+      });
+      if (!persisted || !Array.isArray(persisted.sessions) || !persisted.messages || typeof persisted.messages !== 'object') {
+        return;
+      }
 
       for (const session of persisted.sessions) {
         session.createdAt = new Date(session.createdAt);
@@ -529,7 +538,7 @@ export class SessionRegistry extends EventEmitter {
       };
 
       const indexPath = path.join(this.config.persistPath, 'sessions.json');
-      await fs.writeFile(indexPath, JSON.stringify(data, null, 2));
+      await writeJsonAtomic(indexPath, data, { mode: 0o600 });
     } catch (error) {
       this.emit('error', error);
     }

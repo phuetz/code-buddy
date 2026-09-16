@@ -4,6 +4,7 @@ import * as os from "os";
 import { EventEmitter } from "events";
 import { CodeBuddyMessage } from "../codebuddy/client.js";
 import { logger } from "../utils/logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Metadata for conversation branches */
 export interface BranchMetadata {
@@ -63,7 +64,14 @@ export class ConversationBranchManager extends EventEmitter {
         if (!file.endsWith(".json")) continue;
 
         const filePath = path.join(this.storagePath, file);
-        const branch = fs.readJsonSync(filePath) as ConversationBranch;
+        const branch = readJsonAtomicSync<ConversationBranch | null>(filePath, null, {
+          mode: 0o600,
+          isValid: (value): value is ConversationBranch => Boolean(
+            value && typeof value === 'object' && !Array.isArray(value) &&
+            typeof (value as ConversationBranch).id === 'string',
+          ),
+        });
+        if (!branch) continue;
         branch.createdAt = new Date(branch.createdAt);
         branch.updatedAt = new Date(branch.updatedAt);
         this.branches.set(branch.id, branch);
@@ -83,7 +91,7 @@ export class ConversationBranchManager extends EventEmitter {
     try {
       fs.ensureDirSync(this.storagePath);
       const filePath = path.join(this.storagePath, `${branch.id}.json`);
-      fs.writeJsonSync(filePath, branch, { spaces: 2 });
+      writeJsonAtomicSync(filePath, branch, { mode: 0o600 });
     } catch (error) {
       // Log save errors instead of silently swallowing
       const errMsg = error instanceof Error ? error.message : String(error);

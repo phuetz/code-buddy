@@ -141,8 +141,7 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
       tempWorkspace,
       '.codebuddy',
       'skills',
-      'workspace',
-      'real-test-skill',
+      'authored-real-test-skill',
       'SKILL.md',
     );
     await expect(fs.readFile(createdFile, 'utf8')).resolves.toContain('Real Test Skill');
@@ -690,6 +689,6 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
         path.join(tempWorkspace, '.codebuddy', 'skills', 'research-skill-manage-candidate', 'SKILL.md'),
         'utf8',
       ),
-    ).resolves.toContain('- Approved by: Patrice');
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

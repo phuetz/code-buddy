@@ -6,6 +6,7 @@ export interface CommandHandlerResult {
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
+  compactionRequested?: boolean;
 }
 
 // ─── Helper: resolve a branch by ID or name prefix ────────────────────────────

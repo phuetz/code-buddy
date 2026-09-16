@@ -11,16 +11,78 @@ import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { isOriginAllowed } from '../origin-check.js';
 import { verifyToken } from '../auth/jwt.js';
+import { getDeviceAuthStore } from '../auth/device-store.js';
+import { withDeviceSessionIdentity } from '../auth/device-session-context.js';
+import { getPermissionModeManager } from '../../security/permission-modes.js';
+import { ConfirmationService } from '../../utils/confirmation-service.js';
 import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } from '../../gateway/device-pairing.js';
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
+import { peekUserFacingFailoverNotice } from '../../providers/provider-failover-user-notice.js';
+import { applyChatReplyContext, readClientMsgId } from '../mobile/chat-extras.js';
+import {
+  assertVoiceNoteDuration,
+  assertVoiceNoteDurationSync,
+  isAudioMime,
+  sniffAudioMime,
+  synthesizeMobileVoiceReply,
+  transcribeVoiceAttachment,
+  WS_MAX_VOICE_BYTES,
+} from '../mobile/voice-note.js';
+
+function parsePositiveMsEnv(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function resolveWsHeartbeatIntervalMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return parsePositiveMsEnv(env.CODEBUDDY_WS_HEARTBEAT_INTERVAL_MS, TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+}
+
+export function resolveWsIdleTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return parsePositiveMsEnv(env.CODEBUDDY_WS_IDLE_TIMEOUT_MS, TIMEOUT_CONFIG.WS_IDLE_TIMEOUT);
+}
+
+/** True when the heartbeat sweeper should kill this socket as idle. */
+/** Lane timeout for peer:* RPCs. Longer than the 120s channel default so a local LLM can finish. */
+export const PEER_REQUEST_LANE_TIMEOUT_MS = 15 * 60 * 1000;
+
+export function shouldTerminateIdleWs(
+  state: {
+    lastActivity: number;
+    peerHandlersActive: number;
+    streaming: boolean;
+    activeTurn?: unknown;
+  },
+  now: number,
+  idleTimeoutMs: number,
+): boolean {
+  if (state.peerHandlersActive > 0 || state.streaming || state.activeTurn) {
+    return false;
+  }
+  return now - state.lastActivity > idleTimeoutMs;
+}
 import {
   createServerAgent,
   streamAgentDeltas,
   type ServerAgent,
 } from '../agent-adapter.js';
+import { isMobilePwaEnabled } from '../mobile/index.js';
+import { sniffImageMime } from '../../companion/companion-photo.js';
+import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
+import type { CompanionHistoryTurn } from '../../companion/companion-turn.js';
+import {
+  appendCompanionHistory,
+  loadMobileCompanionHistory,
+  saveMobileCompanionHistory,
+} from '../../companion/mobile-history.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -48,9 +110,18 @@ interface ConnectionState {
   keyId?: string;
   /** Paired device id when authenticated via the device-pairing flow. */
   deviceId?: string;
+  /** Signed Android identity, available to companion extensions. */
+  profile?: 'agent' | 'companion';
+  identity?: 'owner';
+  amr?: readonly string[];
+  deviceAuthExpiresAt?: number;
+  /** Server configuration secret, used only for the new device token path. */
+  deviceJwtSecret?: string;
   scopes: string[];
   /** No-auth network clients remain transport-visible but cannot run agent chat. */
   anonymousRemote?: boolean;
+  /** Client declared itself as a human approval surface (PWA / status). */
+  approvalCapable?: boolean;
   lastActivity: number;
   agent?: ServerAgent;
   agentInitializing?: Promise<void>;
@@ -75,6 +146,11 @@ interface ConnectionState {
   /** Transport facts captured from the server-side upgrade request. */
   loopback?: boolean;
   secure?: boolean;
+  /**
+   * Bounded companion conversation for this connection (`assistant:'companion'`).
+   * Text only — a served selfie leaves a `kind:'selfie'` marker, never its bytes.
+   */
+  companionHistory?: CompanionHistoryTurn[];
   /** Opaque extension lifecycle hooks. Never exposed with the socket itself. */
   extensionCloseHandlers?: Set<() => void>;
   extensionsCleaned?: boolean;
@@ -120,9 +196,14 @@ export interface WebSocketExtensionPrincipal {
   /** Server-derived principal id; request payloads cannot override it. */
   readonly id: string;
   readonly source: string;
+  readonly profile?: 'agent' | 'companion';
+  readonly identity?: 'owner';
+  readonly amr?: readonly string[];
   readonly scopes: readonly string[];
   readonly loopback: boolean;
   readonly secure: boolean;
+  /** True for `--no-auth` clients that are not direct loopback. */
+  readonly anonymousRemote: boolean;
 }
 
 export interface WebSocketExtensionContext {
@@ -162,9 +243,11 @@ function extensionPrincipal(state: ConnectionState): WebSocketExtensionPrincipal
   return Object.freeze({
     id,
     source,
+    ...sessionIdentityClaims(state),
     scopes: Object.freeze(state.authenticated ? [...state.scopes] : []),
     loopback: state.loopback === true,
     secure: state.secure === true,
+    anonymousRemote: state.anonymousRemote === true,
   });
 }
 
@@ -216,9 +299,37 @@ function cleanupWebSocketExtensions(state: ConnectionState): void {
   listeners.clear();
 }
 
-function resetWebSocketExtensionsForIdentityChange(state: ConnectionState): void {
+function resetWebSocketExtensionsForIdentityChange(state: ConnectionState, deviceIdentity = false): void {
+  if (deviceIdentity || state.profile !== undefined) {
+    state.agent?.dispose?.();
+    state.agent = undefined;
+    state.agentInitializing = undefined;
+  }
+  state.profile = undefined;
+  state.identity = undefined;
+  state.amr = undefined;
+  state.deviceAuthExpiresAt = undefined;
+  state.approvalCapable = false;
   cleanupWebSocketExtensions(state);
   state.extensionsCleaned = false;
+  // A new principal on the same socket must never inherit the previous one's
+  // companion conversation.
+  state.companionHistory = undefined;
+}
+
+/** Conditional spreads preserve the exact legacy principal and auth payload. */
+function sessionIdentityClaims(state: ConnectionState) {
+  return {
+    ...(state.profile ? { profile: state.profile } : {}),
+    ...(state.identity ? { identity: state.identity } : {}),
+    ...(state.amr ? { amr: state.amr } : {}),
+  };
+}
+
+function deviceSessionIsActive(state: ConnectionState): boolean {
+  return state.deviceAuthExpiresAt === undefined || (
+    state.deviceAuthExpiresAt > Date.now() && !!state.deviceId && getDeviceAuthStore().isActive(state.deviceId)
+  );
 }
 
 /**
@@ -286,8 +397,101 @@ interface AuthPayload {
   displayName?: string;
   clientId?: string;
   requestedScopes?: string[];
+  /** PWA / interactive UI: this socket can answer confirmation_required. */
+  approvalCapable?: boolean;
 }
-interface ChatPayload { message?: string; model?: string; stream?: boolean; sessionId?: string }
+interface ChatPayload {
+  message?: string;
+  model?: string;
+  stream?: boolean;
+  sessionId?: string;
+  /** `agent` (default), `companion` (Lisa), or a fleet peer id. */
+  assistant?: string;
+  peerId?: string;
+  /** Photos the phone attached to this message (companion assistant only). */
+  attachments?: Array<{ mimeType?: unknown; data?: unknown }>;
+  /** Optional quote of another bubble. Absent on older clients. */
+  replyTo?: unknown;
+  /** Client-generated id so delivery/read acks can target the right bubble. */
+  clientMsgId?: unknown;
+  /** When true, Lisa's reply is also synthesized and pushed as an `audio` frame. */
+  voiceReply?: unknown;
+  /** Client-declared duration of an attached voice note (milliseconds). */
+  durationMs?: unknown;
+}
+
+/** Most photos accepted on one mobile message. */
+export const WS_MAX_CHAT_ATTACHMENTS = 4;
+/** Per-photo base64 ceiling. The PWA resizes to ~200 KB before sending. */
+export const WS_MAX_ATTACHMENT_BYTES = 600 * 1024;
+
+export interface ValidatedChatAttachment {
+  mimeType: string;
+  data: string;
+}
+
+/**
+ * Validate the attachments of a `chat` frame. The payload is remote input:
+ * the count, each size and the actual image type are checked here, and the
+ * type comes from the DECODED BYTES — a declared `mimeType` is never proof.
+ */
+function readDeclaredDurationMs(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return undefined;
+  return raw;
+}
+
+export function validateChatAttachments(
+  raw: unknown,
+  opts: { declaredDurationMs?: number } = {},
+): { ok: true; attachments: ValidatedChatAttachment[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, attachments: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: 'Attachments must be an array' };
+  if (raw.length > WS_MAX_CHAT_ATTACHMENTS) {
+    return { ok: false, error: `At most ${WS_MAX_CHAT_ATTACHMENTS} photos per message` };
+  }
+  const attachments: ValidatedChatAttachment[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, error: 'Each attachment must be an object' };
+    }
+    const data = (entry as { data?: unknown }).data;
+    if (typeof data !== 'string' || data.trim().length === 0) {
+      return { ok: false, error: 'Attachment data must be a base64 string' };
+    }
+    const payload = data.startsWith('data:') ? data.slice(data.indexOf(',') + 1) : data;
+    if (!/^[A-Za-z0-9+/\r\n]*={0,2}$/.test(payload)) {
+      return { ok: false, error: 'Attachment data must be base64' };
+    }
+    const bytes = Buffer.from(payload, 'base64');
+    if (bytes.length === 0) return { ok: false, error: 'Attachment is empty' };
+    const image = sniffImageMime(bytes);
+    if (image) {
+      if (bytes.length > WS_MAX_ATTACHMENT_BYTES) {
+        return {
+          ok: false,
+          error: `Each photo must be at most ${Math.floor(WS_MAX_ATTACHMENT_BYTES / 1024)} KB`,
+        };
+      }
+      attachments.push({ mimeType: image, data: payload });
+      continue;
+    }
+    const audio = sniffAudioMime(bytes);
+    if (audio) {
+      if (bytes.length > WS_MAX_VOICE_BYTES) {
+        return { ok: false, error: 'Each voice note must be at most 2 MB' };
+      }
+      const declared = readDeclaredDurationMs(
+        (entry as { durationMs?: unknown }).durationMs ?? opts.declaredDurationMs,
+      );
+      const duration = assertVoiceNoteDurationSync(bytes, declared);
+      if (!duration.ok) return duration;
+      attachments.push({ mimeType: audio, data: payload });
+      continue;
+    }
+    return { ok: false, error: 'Attachment is not an image' };
+  }
+  return { ok: true, attachments };
+}
 interface ToolPayload { name?: string; parameters?: Record<string, unknown> }
 
 /**
@@ -356,6 +560,7 @@ export interface GatewayStatusInput {
  */
 export function buildGatewayStatus(input: GatewayStatusInput): WebSocketResponse {
   const c = input.connection;
+  const notice = peekUserFacingFailoverNotice();
   return {
     type: 'status',
     payload: {
@@ -374,6 +579,9 @@ export function buildGatewayStatus(input: GatewayStatusInput): WebSocketResponse
         pairingRequired: input.server.pairingRequired,
         connections: input.connections,
       },
+      ...(notice
+        ? { failoverNotice: notice.text, failoverNoticeKind: notice.kind }
+        : {}),
     },
     timestamp: new Date().toISOString(),
   };
@@ -386,6 +594,18 @@ function send(ws: WebSocket, message: WebSocketResponse): void {
   if (ws.readyState === 1) { // OPEN
     ws.send(JSON.stringify(message));
   }
+}
+
+function sendChatAck(
+  ws: WebSocket,
+  ack: 'received' | 'read',
+  clientMsgId?: string,
+): void {
+  send(ws, {
+    type: 'ack',
+    payload: { ack, ...(clientMsgId ? { clientMsgId } : {}) },
+    timestamp: new Date().toISOString(),
+  });
 }
 
 /**
@@ -470,7 +690,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     return;
   }
 
-  const { token, apiKey } = payload as AuthPayload;
+  const { token, apiKey, approvalCapable } = payload as AuthPayload;
 
   if (apiKey) {
     const key = validateApiKey(apiKey);
@@ -482,6 +702,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
       state.deviceId = undefined;
       state.scopes = key.scopes;
       state.anonymousRemote = false;
+      if (approvalCapable === true) state.approvalCapable = true;
       send(ws, {
         type: 'authenticated',
         payload: { keyId: key.id, scopes: key.scopes },
@@ -494,22 +715,39 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   if (token) {
     // JWT_SECRET is required - if not set, authentication will fail (secure by default)
     const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
+    const configuredToken = state.deviceJwtSecret ? verifyToken(token, state.deviceJwtSecret) : null;
+    const deviceToken = Array.isArray(configuredToken?.amr) && configuredToken.amr.includes('device') ? configuredToken : null;
+    if (!jwtSecret && !deviceToken) {
       sendError(ws, 'CONFIG_ERROR', 'Server JWT configuration missing');
       return;
     }
-    const decoded = verifyToken(token, jwtSecret);
+    const decoded = deviceToken ?? verifyToken(token, jwtSecret!);
     if (decoded) {
-      resetWebSocketExtensionsForIdentityChange(state);
+      const isDevice = Array.isArray(decoded.amr) && decoded.amr.includes('device');
+      if (isDevice && (!Number.isFinite(decoded.exp) || decoded.exp * 1000 <= Date.now() || !getDeviceAuthStore().isActive(decoded.sub))) {
+        sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
+        return;
+      }
+      resetWebSocketExtensionsForIdentityChange(state, decoded.profile !== undefined);
       state.authenticated = true;
       state.userId = decoded.userId ?? decoded.sub;
       state.keyId = undefined;
-      state.deviceId = undefined;
+      state.deviceId = isDevice ? decoded.sub : undefined;
+      state.deviceAuthExpiresAt = isDevice ? decoded.exp * 1000 : undefined;
+      state.profile = decoded.profile === 'agent' || decoded.profile === 'companion' ? decoded.profile : undefined;
+      state.identity = decoded.identity === 'owner' ? 'owner' : undefined;
+      state.amr = Array.isArray(decoded.amr) ? Object.freeze(decoded.amr.filter((method): method is string => typeof method === 'string')) : undefined;
       state.scopes = decoded.scopes || ['chat'];
       state.anonymousRemote = false;
+      if (approvalCapable === true) state.approvalCapable = true;
+      if (state.profile === 'agent') {
+        // Native Android is an approval surface even when the PWA is disabled.
+        state.approvalCapable = true;
+        wireMobileConfirmationBridge({ broadcast, collectApprovalSurfaceIds, registerExtension: registerWebSocketExtension });
+      }
       send(ws, {
         type: 'authenticated',
-        payload: { userId: state.userId, scopes: state.scopes },
+        payload: { userId: state.userId, scopes: state.scopes, ...sessionIdentityClaims(state) },
         timestamp: new Date().toISOString(),
       });
       return;
@@ -535,6 +773,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     state.keyId = undefined;
     state.scopes = deviceOutcome.scopes ?? [];
     state.anonymousRemote = false;
+    if (approvalCapable === true) state.approvalCapable = true;
     send(ws, {
       type: 'authenticated',
       payload: { deviceId: deviceOutcome.deviceId, scopes: state.scopes, paired: true },
@@ -553,6 +792,146 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
 
   sendError(ws, 'AUTH_FAILED', 'Invalid credentials');
 });
+
+/**
+ * Lisa's reply for the mobile PWA (`assistant: 'companion'`).
+ *
+ * Delegates to `runCompanionTurn` — the SINGLE companion path, shared with the
+ * channels surface: cached selfie first, then the companion profile (persona
+ * spoken prompt + relational context + history) through the provider the
+ * server is configured for. It no longer calls `defaultReply`, which is the
+ * VOICE loop (fastest-model routing, empty history) and stays untouched.
+ */
+export async function produceCompanionReply(
+  message: string,
+  options: {
+    history?: CompanionHistoryTurn[];
+    /** Photos the phone attached — already validated by `validateChatAttachments`. */
+    attachments?: ValidatedChatAttachment[];
+    userId?: string;
+  } = {},
+): Promise<
+  string | { text: string; image?: { mimeType: string; data: string }; kind?: 'selfie' | 'text'; imagePath?: string; historySuffix?: string }
+> {
+  const { runCompanionTurn } = await import('../../companion/companion-turn.js');
+  const result = await runCompanionTurn(message, {
+    surface: 'mobile',
+    includeImageBytes: true,
+    ...(options.userId ? { userId: options.userId } : {}),
+    ...(options.history ? { history: options.history } : {}),
+    ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+  });
+  if (result.image || result.kind === 'selfie' || result.imagePath) {
+    return {
+      text: result.text,
+      ...(result.image ? { image: result.image } : {}),
+      kind: result.kind,
+      ...(result.imagePath ? { imagePath: result.imagePath } : {}),
+      ...(result.historySuffix ? { historySuffix: result.historySuffix } : {}),
+    };
+  }
+  return result.historySuffix
+    ? { text: result.text, kind: 'text', historySuffix: result.historySuffix }
+    : result.text;
+}
+
+/** Persistence identity for this connection, or undefined (memory-only). */
+function companionHistoryIdentity(state: ConnectionState): string | undefined {
+  return state.userId ?? state.deviceId ?? state.keyId;
+}
+
+/**
+ * The connection's companion history, restored once from disk on first use so
+ * a phone that reconnected mid-conversation does not start from nothing.
+ */
+function companionHistoryFor(state: ConnectionState): CompanionHistoryTurn[] {
+  if (!state.companionHistory) {
+    state.companionHistory = loadMobileCompanionHistory(companionHistoryIdentity(state));
+  }
+  return state.companionHistory;
+}
+
+/** Record one companion exchange; never stores image bytes. */
+function rememberCompanionTurn(
+  state: ConnectionState,
+  userText: string,
+  produced: string | { text: string; kind?: 'selfie' | 'text'; historySuffix?: string },
+): void {
+  const baseAssistantText = typeof produced === 'string' ? produced : produced.text;
+  const historySuffix = typeof produced === 'string' ? '' : (produced.historySuffix ?? '');
+  const assistantText = `${baseAssistantText}${historySuffix}`.trim();
+  const kind = typeof produced === 'string' ? undefined : produced.kind;
+  state.companionHistory = appendCompanionHistory(companionHistoryFor(state), [
+    { role: 'user', content: userText },
+    {
+      role: 'assistant',
+      content: assistantText,
+      ...(kind === 'selfie' ? { kind: 'selfie' as const } : {}),
+    },
+  ]);
+  saveMobileCompanionHistory(companionHistoryIdentity(state), state.companionHistory);
+}
+
+async function producePeerReply(peerId: string, message: string): Promise<string> {
+  const { getFleetRegistry } = await import('../../fleet/fleet-registry.js');
+  const entry = getFleetRegistry().get(peerId);
+  if (!entry) {
+    throw new Error(`Unknown fleet peer: ${peerId}`);
+  }
+  const result = await entry.listener.request('peer.chat', { prompt: message });
+  if (result && typeof result === 'object' && typeof (result as { text?: unknown }).text === 'string') {
+    return (result as { text: string }).text;
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result ?? '');
+}
+
+async function runPlainChatTurn(
+  ws: WebSocket,
+  state: ConnectionState,
+  turn: ConnectionTurn,
+  options: {
+    stream: boolean;
+    produce: () => Promise<string | { text: string; image?: { mimeType: string; data: string } }>;
+    clientMsgId?: string;
+  },
+): Promise<void> {
+  const messageId = `msg_${Date.now()}`;
+  if (options.stream) {
+    state.streaming = true;
+    send(ws, {
+      type: 'stream_start',
+      id: messageId,
+      timestamp: new Date().toISOString(),
+    });
+    sendChatAck(ws, 'read', options.clientMsgId);
+  }
+  const produced = await options.produce();
+  const content = typeof produced === 'string' ? produced : produced.text;
+  const image = typeof produced === 'string' ? undefined : produced.image;
+  if (turn.cancelled) return;
+  if (options.stream) {
+    if (content || image) {
+      send(ws, {
+        type: 'stream_chunk',
+        id: messageId,
+        payload: { delta: content, ...(image ? { image } : {}) },
+        timestamp: new Date().toISOString(),
+      });
+    }
+    send(ws, {
+      type: 'stream_end',
+      id: messageId,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    sendChatAck(ws, 'read', options.clientMsgId);
+    send(ws, {
+      type: 'chat_response',
+      payload: { content, finishReason: 'stop', ...(image ? { image } : {}) },
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
 
 /**
  * Handle chat message
@@ -577,22 +956,26 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
-  const { message, model, stream = true, sessionId: _sessionId } = payload as ChatPayload;
+  const {
+    message,
+    model,
+    stream = true,
+    sessionId: _sessionId,
+    assistant: assistantRaw,
+    peerId: peerIdRaw,
+    attachments: attachmentsRaw,
+    replyTo: replyToRaw,
+    clientMsgId: clientMsgIdRaw,
+    voiceReply: voiceReplyRaw,
+    durationMs: durationMsRaw,
+  } = payload as ChatPayload;
 
-  // Validate message
-  if (!message) {
-    sendError(ws, 'INVALID_REQUEST', 'Message is required');
-    return;
-  }
-  if (typeof message !== 'string') {
+  if (message !== undefined && message !== null && typeof message !== 'string') {
     sendError(ws, 'INVALID_REQUEST', 'Message must be a string');
     return;
   }
-  if (message.trim().length === 0) {
-    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
-    return;
-  }
-  if (message.length > 100000) {
+  const rawMessage = typeof message === 'string' ? message : '';
+  if (rawMessage.length > 100000) {
     sendError(ws, 'INVALID_REQUEST', 'Message exceeds maximum length of 100000 characters');
     return;
   }
@@ -608,7 +991,110 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   const turn: ConnectionTurn = { cancelled: false, abortDelivered: false };
   state.activeTurn = turn;
 
+  const assistant = state.profile === 'agent' ? 'agent'
+    : typeof assistantRaw === 'string' ? assistantRaw.trim() : state.profile ?? 'agent';
+  const peerId = typeof peerIdRaw === 'string' ? peerIdRaw.trim() : '';
+
+  // Photos are accepted only for the companion; every other assistant keeps the
+  // exact payload contract it had.
+  const declaredDurationMs = readDeclaredDurationMs(durationMsRaw);
+  const validatedAttachments = validateChatAttachments(
+    assistant === 'companion' ? attachmentsRaw : undefined,
+    { declaredDurationMs },
+  );
+  if (!validatedAttachments.ok) {
+    sendError(ws, 'INVALID_REQUEST', validatedAttachments.error);
+    return;
+  }
+
+  const audioAttachments = validatedAttachments.attachments.filter((item) => isAudioMime(item.mimeType));
+  const imageAttachments = validatedAttachments.attachments.filter((item) =>
+    item.mimeType.startsWith('image/'),
+  );
+  for (const audio of audioAttachments) {
+    const duration = await assertVoiceNoteDuration(
+      Buffer.from(audio.data, 'base64'),
+      declaredDurationMs,
+    );
+    if (!duration.ok) {
+      sendError(ws, 'INVALID_REQUEST', duration.error);
+      return;
+    }
+  }
+  if (rawMessage.trim().length === 0 && audioAttachments.length === 0) {
+    sendError(
+      ws,
+      'INVALID_REQUEST',
+      message ? 'Message cannot be empty or whitespace only' : 'Message is required',
+    );
+    return;
+  }
+
+  let userText = applyChatReplyContext(rawMessage, replyToRaw).trim();
+  if (audioAttachments[0] && assistant === 'companion') {
+    const transcript = await transcribeVoiceAttachment(audioAttachments[0]);
+    if (transcript) {
+      userText =
+        userText && userText !== '(message vocal)' ? `${userText}\n\n${transcript}` : transcript;
+    } else if (!userText) {
+      userText = '(message vocal)';
+    }
+  }
+  if (!userText) {
+    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
+    return;
+  }
+
+  const clientMsgId = readClientMsgId(clientMsgIdRaw);
+  sendChatAck(ws, 'received', clientMsgId);
+  const wantVoiceReply = voiceReplyRaw === true;
+
   try {
+    if (assistant === 'companion') {
+      let spoken = '';
+      await runPlainChatTurn(ws, state, turn, {
+        stream,
+        clientMsgId,
+        produce: async () => {
+          const history = companionHistoryFor(state);
+          const produced = await produceCompanionReply(userText, {
+            history,
+            userId: state.userId,
+            ...(imageAttachments.length ? { attachments: imageAttachments } : {}),
+          });
+          spoken = typeof produced === 'string' ? produced : produced.text;
+          if (!turn.cancelled) rememberCompanionTurn(state, userText, produced);
+          return produced;
+        },
+      });
+      if (wantVoiceReply && spoken && !turn.cancelled) {
+        const audio = await synthesizeMobileVoiceReply(spoken);
+        if (audio) {
+          send(ws, {
+            type: 'audio',
+            payload: audio,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+      return;
+    }
+
+    const resolvedPeerId = peerId || (assistant.startsWith('peer:') ? assistant.slice(5) : '');
+    if (assistant === 'peer' || resolvedPeerId) {
+      const target = resolvedPeerId || assistant;
+      if (!target || target === 'peer' || target === 'agent' || target === 'companion') {
+        sendError(ws, 'INVALID_REQUEST', 'peerId is required for peer chat');
+        return;
+      }
+      await runPlainChatTurn(ws, state, turn, {
+        stream,
+        clientMsgId,
+        produce: () => producePeerReply(target, userText),
+      });
+      return;
+    }
+
     // Lazy load agent (with mutex to prevent duplicate creation)
     if (!state.agent) {
       if (!state.agentInitializing) {
@@ -649,8 +1135,9 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         id: messageId,
         timestamp: new Date().toISOString(),
       });
+      sendChatAck(ws, 'read', clientMsgId);
 
-      const streamGen = streamAgentDeltas(agent, message, { model, surface: 'websocket' });
+      const streamGen = streamAgentDeltas(agent, userText, { model, surface: 'websocket' });
 
       for await (const delta of streamGen) {
         if (turn.cancelled || !state.streaming) break;
@@ -683,7 +1170,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       // preserves the single chat_response protocol and makes stop/close/error
       // capable of releasing a blocked provider and the per-connection lane.
       let content = '';
-      for await (const delta of streamAgentDeltas(agent, message, {
+      for await (const delta of streamAgentDeltas(agent, userText, {
         model,
         surface: 'websocket',
       })) {
@@ -692,6 +1179,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       }
 
       if (!turn.cancelled) {
+        sendChatAck(ws, 'read', clientMsgId);
         send(ws, {
           type: 'chat_response',
           payload: {
@@ -825,7 +1313,27 @@ messageHandlers.set('ping', async (ws, _state, _payload) => {
 /**
  * Handle get status
  */
-messageHandlers.set('status', async (ws, state, _payload) => {
+messageHandlers.set('status', async (ws, state, payload) => {
+  if (
+    payload
+    && typeof payload === 'object'
+    && !Array.isArray(payload)
+    && (payload as { approvalCapable?: unknown }).approvalCapable === true
+  ) {
+    if (state.authenticated && !state.anonymousRemote && state.scopes.includes('tools')) {
+      state.approvalCapable = true;
+    } else {
+      state.approvalCapable = false;
+      logger.warn('[ws] status approvalCapable ignored — requires authenticated non-anonymous socket with tools scope', {
+        connectionId: state.id,
+        authenticated: state.authenticated,
+        anonymousRemote: state.anonymousRemote,
+        scopes: state.scopes,
+      });
+    }
+  } else {
+    state.approvalCapable = false;
+  }
   send(ws, buildGatewayStatus({
     connection: {
       connectionId: state.id,
@@ -965,10 +1473,6 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     sendError(ws, 'UNAUTHORIZED', 'Authentication required');
     return;
   }
-  if (!state.scopes.includes('peer:invoke')) {
-    sendError(ws, 'FORBIDDEN', 'peer:invoke scope required');
-    return;
-  }
   // payload is the request frame { id, method, params, traceId?, depth? }
   const frame = (payload ?? {}) as {
     id?: string;
@@ -978,6 +1482,19 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     depth?: number;
   };
   const requestId = frame.id ?? '';
+  if (!state.scopes.includes('peer:invoke')) {
+    // Match the rejected RPC so callers fail immediately instead of timing out.
+    send(ws, {
+      type: 'peer:response',
+      payload: {
+        id: requestId || 'unknown',
+        ok: false,
+        error: { code: 'FORBIDDEN', message: 'peer:invoke scope required' },
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   if (!checkRateLimit(
     state,
     'peerRequestCount',
@@ -1081,9 +1598,29 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
     ...(id ? { id } : {}),
     ...(requestId ? { requestId } : {}),
   };
+  const invoke = async () => {
+    if (type !== 'authenticate' && !deviceSessionIsActive(state)) {
+      state.authenticated = false;
+      state.approvalCapable = false;
+      abortActiveTurn(state);
+      sendError(ws, 'AUTH_FAILED', 'Invalid credentials', id);
+      return;
+    }
+    const run = () => handler(ws, state, payload ?? {}, envelope);
+    const withIdentity = () => state.profile || state.identity || state.amr
+      ? withDeviceSessionIdentity({
+        ...sessionIdentityClaims(state), ...(state.deviceId ? { deviceId: state.deviceId } : {}),
+      }, run)
+      : run();
+    if (state.profile === 'agent') {
+      return getPermissionModeManager().withModeAsync('default', () =>
+        ConfirmationService.getInstance().withApprovalContextAsync(`ws:${state.id}`, withIdentity));
+    }
+    return withIdentity();
+  };
   if (laneBypassMessageTypes.has(type)) {
     try {
-      await handler(ws, state, payload ?? {}, envelope);
+      await invoke();
     } catch (error) {
       sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
     }
@@ -1104,11 +1641,15 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
       const peerRequestId = typeof frame.id === 'string' ? frame.id : 'unknown';
       await enqueuePeerHandler(state, () => enqueueMessage(
         `${sessionKey}:peer:${peerRequestId}`,
-        () => handler(ws, state, payload ?? {}, envelope),
-        { parallel: true },
+        invoke,
+        {
+          parallel: true,
+          // Channel default is 120s; cold local Ollama peer.chat exceeded it (GK17).
+          timeout: PEER_REQUEST_LANE_TIMEOUT_MS,
+        },
       ));
     } else {
-      await enqueueMessage(sessionKey, () => handler(ws, state, payload ?? {}, envelope));
+      await enqueueMessage(sessionKey, invoke);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1142,6 +1683,17 @@ export async function setupWebSocket(
   const { WebSocketServer } = await import('ws');
 
   serverStartedAt = Date.now();
+
+  if (isMobilePwaEnabled()) {
+    unwireMobileConfirmationBridge();
+    wireMobileConfirmationBridge({
+      broadcast,
+      collectApprovalSurfaceIds,
+      registerExtension: registerWebSocketExtension,
+    });
+  } else {
+    unwireMobileConfirmationBridge();
+  }
 
   const wss = new WebSocketServer({
     server,
@@ -1177,6 +1729,7 @@ export async function setupWebSocket(
     const state: ConnectionState = {
       id: generateConnectionId(),
       authenticated: !config.authEnabled, // Auto-auth if auth disabled
+      deviceJwtSecret: config.jwtSecret,
       scopes: config.authEnabled
         ? []
         : [
@@ -1217,7 +1770,12 @@ export async function setupWebSocket(
 
     connections.set(ws, state);
 
-    // Send welcome message (enriched with server identity + advertised capabilities)
+    ws.on('message', async (data: RawData) => {
+      await processMessage(ws, state, data);
+    });
+
+    // Greeting after the message listener so the first client frame cannot
+    // be dropped (connected is what clients wait on before authenticate).
     send(ws, buildConnectedGreeting({
       connectionId: state.id,
       authRequired: config.authEnabled,
@@ -1227,11 +1785,15 @@ export async function setupWebSocket(
       methods: Array.from(messageHandlers.keys()),
     }));
 
-    ws.on('message', async (data: RawData) => {
-      await processMessage(ws, state, data);
+    // Protocol pings must count as activity. /fleet listen is receive-only
+    // after auth; a slow peer.chat also sends no application frames. Without
+    // this, WS_IDLE_TIMEOUT (60s) kills live fleet sockets (GK17).
+    ws.on('pong', () => {
+      state.lastActivity = Date.now();
     });
 
     ws.on('close', () => {
+      state.approvalCapable = false;
       rejectQueuedPeerHandlers(state, 'WebSocket closed before peer request execution');
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
@@ -1241,6 +1803,7 @@ export async function setupWebSocket(
 
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
+      state.approvalCapable = false;
       rejectQueuedPeerHandlers(state, 'WebSocket failed before peer request execution');
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
@@ -1250,11 +1813,14 @@ export async function setupWebSocket(
   });
 
   // Heartbeat to detect stale connections
+  const heartbeatIntervalMs = resolveWsHeartbeatIntervalMs();
+  const idleTimeoutMs = resolveWsIdleTimeoutMs();
   const heartbeatInterval = setInterval(() => {
     const now = Date.now();
 
     for (const [ws, state] of connections.entries()) {
-      if (now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
+      if (shouldTerminateIdleWs(state, now, idleTimeoutMs)) {
+        state.approvalCapable = false;
         abortActiveTurn(state);
         cleanupWebSocketExtensions(state);
         ws.terminate();
@@ -1265,7 +1831,7 @@ export async function setupWebSocket(
         }
       }
     }
-  }, TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+  }, heartbeatIntervalMs);
 
   wss.on('close', () => {
     clearInterval(heartbeatInterval);
@@ -1331,11 +1897,50 @@ function getBroadcastBufferLimit(): number {
  * Drops are logged at debug level once per 100 drops per client to keep
  * logs informative without spamming under sustained backpressure.
  */
-export function broadcast(message: WebSocketResponse, scopeFilter?: string): void {
+export interface WsBroadcastTarget {
+  readonly id: string;
+  readonly authenticated: boolean;
+  readonly scopes: readonly string[];
+  readonly anonymousRemote: boolean;
+  readonly approvalCapable: boolean;
+}
+
+function toBroadcastTarget(state: ConnectionState): WsBroadcastTarget {
+  return {
+    id: state.id,
+    authenticated: state.authenticated,
+    scopes: state.scopes,
+    anonymousRemote: state.anonymousRemote === true,
+    approvalCapable: state.approvalCapable === true,
+  };
+}
+
+export function collectApprovalSurfaceIds(): string[] {
+  const ids: string[] = [];
+  for (const state of connections.values()) {
+    if (!isMobilePwaEnabled() && state.profile !== 'agent') continue;
+    if (!state.authenticated) continue;
+    if (state.anonymousRemote) continue;
+    if (state.approvalCapable !== true) continue;
+    if (!state.scopes.includes('tools')) continue;
+    if (!deviceSessionIsActive(state)) continue;
+    ids.push(state.id);
+  }
+  return ids;
+}
+
+export function broadcast(
+  message: WebSocketResponse,
+  scopeFilter?: string,
+  targetFilter?: (target: WsBroadcastTarget) => boolean,
+): string[] {
+  const delivered: string[] = [];
   const limit = getBroadcastBufferLimit();
   for (const [ws, state] of connections.entries()) {
     if (!state.authenticated) continue;
+    if (!deviceSessionIsActive(state)) continue;
     if (scopeFilter && !state.scopes.includes(scopeFilter)) continue;
+    if (targetFilter && !targetFilter(toBroadcastTarget(state))) continue;
 
     if (ws.bufferedAmount > limit) {
       state.droppedBroadcasts++;
@@ -1351,7 +1956,9 @@ export function broadcast(message: WebSocketResponse, scopeFilter?: string): voi
     }
 
     send(ws, message);
+    delivered.push(state.id);
   }
+  return delivered;
 }
 
 /**
@@ -1359,6 +1966,7 @@ export function broadcast(message: WebSocketResponse, scopeFilter?: string): voi
  */
 export function closeAllConnections(): void {
   for (const [ws, state] of connections.entries()) {
+    state.approvalCapable = false;
     abortActiveTurn(state);
     cleanupWebSocketExtensions(state);
     ws.close(1001, 'Server shutting down');

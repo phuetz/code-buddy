@@ -19,6 +19,7 @@ import { BaseTool, type ParameterDefinition } from './base-tool.js';
 import type { IToolExecutionContext, IValidationResult } from './registry/types.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { ToolCallScheduler } from './tool-call-scheduler.js';
 
 // ============================================================================
 // Public runtime contract
@@ -27,7 +28,14 @@ import { logger } from '../utils/logger.js';
 export type ToolExecutor = (
   toolName: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ) => Promise<ToolResult>;
+
+export interface ToolCatalogEntry {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+}
 
 /** Per-agent/per-session bridge injected by ToolHandler for one invocation. */
 export interface CodeExecRuntime {
@@ -37,6 +45,11 @@ export interface CodeExecRuntime {
   agentId?: string;
   cwd?: string;
   availableTools: readonly string[];
+  toolMetadata?: readonly { name: string; description: string }[];
+  toolCatalog?: readonly ToolCatalogEntry[];
+  parallelTools?: readonly string[];
+  onOutput?: (delta: string) => void;
+  resultFormat?: 'structured' | 'legacy';
   executor: ToolExecutor;
   abortSignal?: AbortSignal;
 }
@@ -100,6 +113,14 @@ interface ScopedState {
 }
 
 const scopedStates = new Map<string, ScopedState>();
+const scopeSchedulers = new Map<string, { scheduler: ToolCallScheduler; users: number }>();
+async function runScoped<T>(scopeId: string, action: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  let entry = scopeSchedulers.get(scopeId);
+  if (!entry) { entry = { scheduler: new ToolCallScheduler(1), users: 0 }; scopeSchedulers.set(scopeId, entry); }
+  entry.users++;
+  try { return await entry.scheduler.schedule(false, action, signal); }
+  finally { if (--entry.users === 0) scopeSchedulers.delete(scopeId); }
+}
 
 /** Backward-compatible direct-use runtime. Production ToolHandler never uses it. */
 let legacySessionId = 'default';
@@ -225,14 +246,15 @@ function truncate(value: string, limit: number): string {
 }
 
 function jsonSafe(value: unknown): unknown {
-  const seen = new WeakSet<object>();
+  const ancestors: object[] = [];
   try {
-    const encoded = JSON.stringify(value, (_key, current: unknown) => {
+    const encoded = JSON.stringify(value, function(this: unknown, _key, current: unknown) {
       if (typeof current === 'bigint') return current.toString();
       if (typeof current === 'function' || typeof current === 'symbol') return undefined;
       if (current && typeof current === 'object') {
-        if (seen.has(current)) return '[Circular]';
-        seen.add(current);
+        while (ancestors.length && ancestors[ancestors.length - 1] !== this) ancestors.pop();
+        if (ancestors.includes(current)) return '[Circular]';
+        ancestors.push(current);
       }
       return current;
     });
@@ -249,30 +271,42 @@ function jsonSafe(value: unknown): unknown {
   }
 }
 
-function serializeToolResult(result: ToolResult): string {
+function serializeToolResult(result: ToolResult, format: CodeExecRuntime['resultFormat']): string {
+  if (format !== 'legacy') {
+    const payload = jsonSafe(result);
+    if (payload && typeof payload === 'object' && 'truncated' in payload && 'preview' in payload) {
+      return JSON.stringify({ success: result.success, truncated: true,
+        output: truncate(result.output ?? String(payload.preview), CODE_EXEC_LIMITS.maxToolResultChars - CODE_EXEC_LIMITS.maxErrorChars),
+        ...(result.error ? { error: truncate(result.error, CODE_EXEC_LIMITS.maxErrorChars) } : {}),
+      });
+    }
+    return JSON.stringify(payload);
+  }
   const payload = result.success
     ? (result.output ?? result.data ?? '')
     : { error: truncate(result.error ?? 'Tool execution failed', CODE_EXEC_LIMITS.maxErrorChars) };
   return JSON.stringify(jsonSafe(payload));
 }
 
-function sanitizeToolName(name: string): string {
+export function sanitizeToolName(name: string): string {
   const replaced = name.replace(/[^a-zA-Z0-9_$]/g, '_');
   if (!replaced) return '_tool';
   return /^[a-zA-Z_$]/.test(replaced) ? replaced : `_${replaced}`;
 }
 
-interface ToolBinding {
+export interface ToolBinding {
   exposedName: string;
   toolName: string;
 }
 
-function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
+export function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
   const bindings: ToolBinding[] = [];
   const seenTools = new Set<string>();
   const seenBindings = new Set<string>(['call']);
 
-  for (const toolName of toolNames) {
+  // Keep discovery reachable even when direct bindings hit their budget.
+  const ordered = toolNames.includes('tool_search') ? ['tool_search', ...toolNames] : toolNames;
+  for (const toolName of ordered) {
     if (bindings.length >= CODE_EXEC_LIMITS.maxAvailableTools) break;
     if (
       typeof toolName !== 'string' ||
@@ -284,8 +318,10 @@ function buildToolBindings(toolNames: readonly string[]): ToolBinding[] {
       continue;
     }
     seenTools.add(toolName);
-    const exposedName = sanitizeToolName(toolName);
-    if (seenBindings.has(exposedName)) continue;
+    const baseName = sanitizeToolName(toolName);
+    let exposedName = baseName;
+    let suffix = 2;
+    while (seenBindings.has(exposedName)) exposedName = `${baseName}_${suffix++}`;
     seenBindings.add(exposedName);
     bindings.push({ exposedName, toolName });
   }
@@ -368,27 +404,31 @@ async function execute(message) {
   const outputLimit = ${CODE_EXEC_LIMITS.maxOutputChars};
   const storeEntries = JSON.stringify(message.storeEntries || []);
   const toolBindings = JSON.stringify(message.toolBindings || []);
-  const allTools = JSON.stringify((message.toolBindings || []).map((entry) => entry.toolName));
+  const allTools = JSON.stringify(message.toolMetadata || (message.toolBindings || []).map((entry) => ({ name: entry.toolName, description: '' })));
   const bootstrap =
     'const __cbOutput = []; let __cbOutputLength = 0; let __cbTruncated = false; let __cbYielded = false;' +
     'const __cbStore = new Map(' + storeEntries + ');' +
     'const __cbBindings = ' + toolBindings + ';' +
     'const __cbBridge = globalThis.__codeBuddyBridge; delete globalThis.__codeBuddyBridge;' +
+    'const __cbYield = globalThis.__codeBuddyYield; delete globalThis.__codeBuddyYield;' +
     'function __cbFormat(value) { if (typeof value === "string") return value; try { const json = JSON.stringify(value); return json === undefined ? String(value) : json; } catch { return String(value); } }' +
     'function __cbAppend(values, prefix = "") { if (__cbTruncated) return; const line = prefix + values.map(__cbFormat).join(" "); const separator = __cbOutput.length ? "\\n" : ""; const remaining = ' + outputLimit + ' - __cbOutputLength; if (remaining <= 0) { __cbTruncated = true; return; } const next = separator + line; if (next.length > remaining) { __cbOutput.push(next.slice(0, remaining)); __cbOutputLength += remaining; __cbTruncated = true; return; } __cbOutput.push(next); __cbOutputLength += next.length; }' +
     'function text(content) { __cbAppend([content]); }' +
     'function store(key, value) { if (typeof key !== "string" || key.length === 0 || key.length > 256) throw new Error("store key must be 1..256 characters"); const encoded = JSON.stringify(value); if (encoded === undefined) throw new Error("store values must be JSON-compatible"); const cloned = JSON.parse(encoded); const candidate = new Map(__cbStore); candidate.set(key, cloned); if (candidate.size > ${CODE_EXEC_LIMITS.maxStoreEntries}) throw new Error("store entry limit reached"); const total = JSON.stringify(Array.from(candidate.entries())).length; if (total > ${CODE_EXEC_LIMITS.maxStoreBytes}) throw new Error("store byte limit reached"); __cbStore.set(key, cloned); }' +
     'function load(key) { const value = __cbStore.get(key); return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }' +
-    'function yield_control() { __cbYielded = true; }' +
+    'let __cbEmittedLength = 0; async function yield_control() { __cbYielded = true; const output = __cbOutput.join(""); const delta = output.slice(__cbEmittedLength); __cbEmittedLength = output.length; await __cbYield(delta); }' +
     'const tools = Object.create(null);' +
     'for (const binding of __cbBindings) { tools[binding.exposedName] = async function(args = {}) { const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); }; }' +
-    'tools.call = async function(name, args = {}) { if (typeof name !== "string") throw new Error("tool name must be a string"); const binding = __cbBindings.find((entry) => entry.toolName === name); if (!binding) throw new Error("tool is not available: " + name); const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(binding.toolName, encoded)); };' +
+    'tools.call = async function(name, args = {}) { if (typeof name !== "string") throw new Error("tool name must be a string"); const encoded = JSON.stringify(args); if (encoded === undefined || args === null || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be a JSON object"); return JSON.parse(await __cbBridge(name, encoded)); };' +
     'Object.freeze(tools); Object.freeze(__cbBindings);' +
-    'const ALL_TOOLS = Object.freeze(' + allTools + ');' +
+    'const ALL_TOOLS = Object.freeze(' + allTools + '.map(Object.freeze)); const ALL_TOOL_NAMES = Object.freeze(ALL_TOOLS.map(t => t.name));' +
     'const console = Object.freeze({ log: (...args) => __cbAppend(args), error: (...args) => __cbAppend(args, "[ERROR] "), warn: (...args) => __cbAppend(args, "[WARN] ") });';
 
   const sandbox = Object.create(null);
   sandbox.__codeBuddyBridge = bridgeCall;
+  const yieldOutput = (output) => send({ type: 'output', output });
+  Object.setPrototypeOf(yieldOutput, null);
+  sandbox.__codeBuddyYield = yieldOutput;
   const context = vm.createContext(sandbox, {
     name: 'codebuddy-code-exec',
     codeGeneration: { strings: false, wasm: false },
@@ -429,6 +469,7 @@ interface RunnerSnapshot {
 
 type RunnerMessage =
   | { type: 'tool_call'; id: number; toolName: string; argsJson: string }
+  | { type: 'output'; output: string }
   | { type: 'done'; snapshotJson: string }
   | { type: 'failed'; error: string; partialOutput?: string };
 
@@ -443,16 +484,69 @@ function childExecArgs(): string[] {
   return args;
 }
 
+/** Upper bound on waiting for the sandbox process to report `close`. */
+export const CHILD_CLOSE_GRACE_MS = 2_000;
+
+/**
+ * Wait for the OBSERVED `close` of the sandbox process — the event that says
+ * the process ended and its stdio is released. `exit` alone is not enough:
+ * `exitCode` can be set while stdio is still open, and the sandbox runs with
+ * the caller's workspace as its working directory, so the caller must not be
+ * told the workspace is free before the process really let go of it.
+ *
+ * @returns true when `close` was observed (or there is no process to wait for),
+ *          false when the grace elapsed first. The caller decides what an
+ *          unterminated sandbox means; this function never claims success.
+ */
+export function waitForChildClose(child: ChildProcess, graceMs = CHILD_CLOSE_GRACE_MS): Promise<boolean> {
+  // Spawn failed: no process exists, nothing holds the workspace, nothing to wait for.
+  if (child.pid === undefined && child.exitCode === null && child.signalCode === null) {
+    return Promise.resolve(true);
+  }
+  return new Promise<boolean>((resolve) => {
+    // Named handlers so every listener and the timer are removed on both paths.
+    const onClose = (): void => settle(true);
+    const onTimeout = (): void => settle(false);
+    // Deliberately referenced: a killed child can leave nothing else pending,
+    // and an unreferenced timer would let the host exit with this promise
+    // unsettled instead of finishing the run. The wait stays bounded by graceMs.
+    const timer = setTimeout(onTimeout, graceMs);
+    const settle = (closed: boolean): void => {
+      clearTimeout(timer);
+      child.removeListener('close', onClose);
+      resolve(closed);
+    };
+    child.on('close', onClose);
+  });
+}
+
+/**
+ * A sandbox process that did not close within the grace is a cleanup failure:
+ * it may still hold the workspace. Never report success in that case, and keep
+ * the original diagnosis when the run had already failed.
+ */
+export function sandboxNotTerminatedResult(result: ChildRunResult, graceMs = CHILD_CLOSE_GRACE_MS): ChildRunResult {
+  const notice = `Sandbox process did not terminate within ${graceMs}ms; its workspace may still be locked`;
+  return {
+    ...result,
+    success: false,
+    output: result.output ? `${result.output}\n${notice}` : notice,
+  };
+}
+
 function terminateChild(child: ChildProcess): void {
-  try {
-    if (child.connected) child.disconnect();
-  } catch { /* already disconnected */ }
+  // No explicit disconnect(): measured on Node 24, closing the IPC channel by
+  // hand before the kill suppresses the process 'close' event entirely (only
+  // 'disconnect' and 'exit' arrive), and 'close' is the signal that the process
+  // released its stdio — and with it the working directory. The channel is
+  // closed by the kill anyway ('disconnect' still fires), and no message can be
+  // sent after this point: `settled` is already true.
   try {
     if (!child.killed) child.kill('SIGKILL');
   } catch { /* already exited */ }
 }
 
-interface ChildRunResult {
+export interface ChildRunResult {
   success: boolean;
   output: string;
   yielded?: boolean;
@@ -467,12 +561,16 @@ async function runInChild(
   state: ScopedState,
 ): Promise<ChildRunResult> {
   const toolBindings = buildToolBindings(runtime.availableTools);
-  const allowedTools = new Set(toolBindings.map((binding) => binding.toolName));
+  // Canonical calls use the full scoped catalogue; only JS shortcuts are capped.
+  const allowedTools = new Set(runtime.availableTools.filter(name => typeof name === 'string' && name && !['exec', 'code_exec'].includes(name)));
 
   return await new Promise<ChildRunResult>((resolve) => {
     let settled = false;
     let stderr = '';
-    let toolQueue = Promise.resolve();
+    const scheduler = new ToolCallScheduler();
+    const controller = new AbortController();
+    let toolCallCount = 0;
+    let emittedChars = 0;
     const child = spawn(process.execPath, childExecArgs(), {
       cwd: runtime.cwd || process.cwd(),
       env: {
@@ -490,10 +588,16 @@ async function runInChild(
     const finish = (result: ChildRunResult): void => {
       if (settled) return;
       settled = true;
+      controller.abort();
       clearTimeout(timer);
       runtime.abortSignal?.removeEventListener('abort', onAbort);
       terminateChild(child);
-      resolve(result);
+      // Report completion only once `close` was observed: callers treat the
+      // resolved promise as "the sandbox no longer touches my workspace". A
+      // process that never closes is reported as a failure, never as success.
+      void waitForChildClose(child).then((closed) => {
+        resolve(closed ? result : sandboxNotTerminatedResult(result));
+      });
     };
 
     const timer = setTimeout(() => {
@@ -531,8 +635,19 @@ async function runInChild(
       const message = raw as RunnerMessage;
       if (!message || typeof message !== 'object' || settled) return;
 
+      if (message.type === 'output') {
+        if (typeof message.output === 'string' && emittedChars + message.output.length <= CODE_EXEC_LIMITS.maxOutputChars) {
+          emittedChars += message.output.length;
+          try { runtime.onOutput?.(message.output); } catch { /* Observers do not control execution. */ }
+        }
+        return;
+      }
       if (message.type === 'tool_call') {
-        toolQueue = toolQueue.then(async () => {
+        if (++toolCallCount > CODE_EXEC_LIMITS.maxToolCalls || typeof message.argsJson !== 'string' || message.argsJson.length > CODE_EXEC_LIMITS.maxCodeChars) {
+          finish({ success: false, output: 'code_exec tool-call or argument limit exceeded' });
+          return;
+        }
+        void scheduler.schedule(runtime.parallelTools?.includes(message.toolName) === true, async () => {
           if (settled || !child.connected) return;
           if (
             !allowedTools.has(message.toolName) ||
@@ -566,13 +681,13 @@ async function runInChild(
           }
 
           try {
-            const result = await runtime.executor(message.toolName, args);
+            const result = await runtime.executor(message.toolName, args, controller.signal);
             if (!settled && child.connected) {
               child.send({
                 type: 'tool_result',
                 id: message.id,
                 ok: true,
-                valueJson: serializeToolResult(result),
+                valueJson: serializeToolResult(result, runtime.resultFormat),
               });
             }
           } catch (error) {
@@ -632,6 +747,10 @@ async function runInChild(
       code,
       timeoutMs,
       toolBindings,
+      toolMetadata: toolBindings.map(binding => ({
+        name: binding.toolName,
+        description: runtime.toolMetadata?.find(tool => tool.name === binding.toolName)?.description.slice(0, 2000) ?? '',
+      })),
       storeEntries: Array.from(state.values.entries()),
     }, (error) => {
       if (error) finish({ success: false, output: `Sandbox IPC failed: ${error.message}` });
@@ -663,6 +782,11 @@ export class CodeExecTool extends BaseTool {
         type: 'number',
         description: `Execution timeout in milliseconds (${CODE_EXEC_LIMITS.minTimeoutMs}..${CODE_EXEC_LIMITS.maxTimeoutMs}, default ${CODE_EXEC_LIMITS.defaultTimeoutMs}).`,
       },
+      typecheck: {
+        type: 'boolean',
+        description:
+          'Perform isolated TypeScript typechecking before execution. Rejects code on diagnostic errors with zero runtime side effects. Default false.',
+      },
     };
   }
 
@@ -688,6 +812,15 @@ export class CodeExecTool extends BaseTool {
         errors: [`timeout_ms must be between ${CODE_EXEC_LIMITS.minTimeoutMs} and ${CODE_EXEC_LIMITS.maxTimeoutMs}`],
       };
     }
+    if (
+      args.typecheck !== undefined &&
+      typeof args.typecheck !== 'boolean'
+    ) {
+      return {
+        valid: false,
+        errors: ['typecheck must be a boolean'],
+      };
+    }
     return { valid: true };
   }
 
@@ -700,9 +833,11 @@ export class CodeExecTool extends BaseTool {
 
     const code = input.code as string;
     const timeoutMs = normalizeTimeout(input.timeout_ms);
+    const typecheck = input.typecheck === true;
     const injectedRuntime = runtimeFromContext(context);
-    const runtime: CodeExecRuntime = injectedRuntime ?? {
+    const runtime: CodeExecRuntime = injectedRuntime ? { ...injectedRuntime } : {
       scopeId: legacyScopeId(),
+      resultFormat: 'legacy',
       sessionId: legacySessionId,
       cwd: context?.cwd ?? process.cwd(),
       availableTools: legacyAvailableTools,
@@ -712,31 +847,50 @@ export class CodeExecTool extends BaseTool {
       })),
     };
 
-    const state = getScopedState(runtime);
-    const startedAt = Date.now();
-    const childResult = await runInChild(code, timeoutMs, runtime, state);
-    const elapsed = Date.now() - startedAt;
+    runtime.abortSignal ??= context?.abortSignal;
 
-    if (!childResult.success) {
-      logger.debug('code_exec failed', {
-        scopeId: runtime.scopeId,
-        timedOut: childResult.timedOut === true,
-        elapsed,
+    let codeToRun = code;
+    if (typecheck) {
+      const { runCodeExecPreflight } = await import('./code-exec-preflight.js');
+      const preflightResult = await runCodeExecPreflight(code, runtime, context, {
+        signal: runtime.abortSignal,
       });
-      return this.error(truncate(childResult.output, CODE_EXEC_LIMITS.maxErrorChars));
+      if (!preflightResult.success) {
+        return this.error(preflightResult.error || 'TypeScript preflight validation failed');
+      }
+      if (preflightResult.transpiledCode) {
+        codeToRun = preflightResult.transpiledCode;
+      }
     }
 
-    // Commit state transactionally only after a successful script.
-    if (childResult.storeEntries) {
-      state.values = new Map(childResult.storeEntries);
-      state.lastAccess = Date.now();
-    }
+    return runScoped(runtime.scopeId, async () => {
+      if (runtime.abortSignal?.aborted) return this.error('Script cancelled');
+      const state = getScopedState(runtime);
+      const startedAt = Date.now();
+      const childResult = await runInChild(codeToRun, timeoutMs, runtime, state);
+      const elapsed = Date.now() - startedAt;
 
-    const status = childResult.yielded
-      ? `Script yielded control after ${elapsed}ms`
-      : `Script completed in ${elapsed}ms`;
-    const output = childResult.output ? `${status}\n\n${childResult.output}` : status;
-    return this.success(truncate(output, CODE_EXEC_LIMITS.maxOutputChars));
+      if (!childResult.success) {
+        logger.debug('code_exec failed', {
+          scopeId: runtime.scopeId,
+          timedOut: childResult.timedOut === true,
+          elapsed,
+        });
+        return this.error(truncate(childResult.output, CODE_EXEC_LIMITS.maxErrorChars));
+      }
+
+      // Commit state transactionally only after a successful script.
+      if (childResult.storeEntries) {
+        state.values = new Map(childResult.storeEntries);
+        state.lastAccess = Date.now();
+      }
+
+      const status = childResult.yielded
+        ? `Script yielded control after ${elapsed}ms`
+        : `Script completed in ${elapsed}ms`;
+      const output = childResult.output ? `${status}\n\n${childResult.output}` : status;
+      return this.success(truncate(output, CODE_EXEC_LIMITS.maxOutputChars));
+    }, runtime.abortSignal).catch(error => this.error(error instanceof Error ? error.message : String(error)));
   }
 }
 

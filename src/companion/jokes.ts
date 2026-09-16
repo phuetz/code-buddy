@@ -9,9 +9,9 @@
  *
  * @module companion/jokes
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /** Curated, clean, audibly-working French jokes (no spelling-only puns). */
 export const CURATED_JOKES: string[] = [
@@ -97,11 +97,11 @@ function storePath(name: string, env: NodeJS.ProcessEnv = process.env): string {
 
 function loadList(path: string): string[] {
   try {
-    if (!existsSync(path)) return [];
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    return Array.isArray(raw)
-      ? raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-      : [];
+    const raw = readJsonAtomicSync<unknown[]>(path, [], {
+      mode: 0o600,
+      isValid: (value): value is unknown[] => Array.isArray(value),
+    });
+    return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
   } catch {
     return [];
   }
@@ -109,8 +109,7 @@ function loadList(path: string): string[] {
 
 function saveList(path: string, items: string[]): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(items, null, 2));
+    writeJsonAtomicSync(path, items, { mode: 0o600 });
   } catch {
     /* best-effort */
   }

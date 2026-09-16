@@ -184,7 +184,28 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
     it('rejects without apiKey when env not set', async () => {
       const r = await handleFleet(['listen', 'ws://peer:3000/ws']);
-      expect(r.entry?.content).toContain('no apiKey provided');
+      expect(r.entry?.content).toMatch(/no apiKey|no jwt/i);
+    });
+
+    it('accepts jwt via --jwt without requiring --api-key (documented fleet token path)', async () => {
+      const r = await handleFleet([
+        'listen',
+        'ws://peer:3000/ws',
+        '--jwt',
+        'eyJ.test-token',
+        '--name',
+        'gpuNode',
+      ]);
+      expect(r.entry?.content).toContain('connected to');
+      expect(fleetListenerMock.constructorCalls).toHaveLength(1);
+      expect(fleetListenerMock.constructorCalls[0]?.url).toBe('ws://peer:3000/ws');
+      expect(fleetListenerMock.constructorCalls[0]?.jwt).toBe('eyJ.test-token');
+      expect(fleetListenerMock.constructorCalls[0]?.apiKey).toBeUndefined();
+    });
+
+    it('help documents --jwt for buddy fleet token', async () => {
+      const r = await handleFleet(['help']);
+      expect(r.entry?.content).toContain('--jwt');
     });
 
     it('accepts apiKey via --api-key flag', async () => {
@@ -450,21 +471,21 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         {
           at: t0,
           type: 'fleet:agent:tool_started',
-          payload: { tool: 'view_file', source: { hostname: 'darkstar', agentId: 'abcdef0123' } },
-          hostname: 'darkstar',
+          payload: { tool: 'view_file', source: { hostname: 'gpuNode', agentId: 'abcdef0123' } },
+          hostname: 'gpuNode',
           agentId: 'abcdef0123',
         },
         {
           at: t0 + 2000,
           type: 'fleet:peer:heartbeat',
-          payload: { source: { hostname: 'darkstar' } },
-          hostname: 'darkstar',
+          payload: { source: { hostname: 'gpuNode' } },
+          hostname: 'gpuNode',
         },
         {
           at: t0 + 4000,
           type: 'fleet:workflow:start',
-          payload: { workflowId: 'wf-x', source: { hostname: 'ministar' } },
-          hostname: 'ministar',
+          payload: { workflowId: 'wf-x', source: { hostname: 'hub' } },
+          hostname: 'hub',
         },
       ]);
       const r = await handleFleet(['history']);
@@ -472,12 +493,12 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(out).toContain('Fleet event history for "peer:3000" — last 3 of 3');
       expect(out).toContain('fleet:agent:tool_started');
       expect(out).toContain('tool=view_file');
-      expect(out).toContain('[darkstar:abcdef01]');
+      expect(out).toContain('[gpuNode:abcdef01]');
       expect(out).toContain('fleet:peer:heartbeat');
       expect(out).toContain('(heartbeat)');
       expect(out).toContain('fleet:workflow:start');
       expect(out).toContain('workflowId=wf-x');
-      expect(out).toContain('[ministar]');
+      expect(out).toContain('[hub]');
       // Timestamps formatted HH:mm:ss
       expect(out).toMatch(/\[\d{2}:\d{2}:\d{2}\]/);
     });
@@ -551,7 +572,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
           at: t0,
           type: 'fleet:agent:tool_started',
           payload: { tool: 'view_file' },
-          hostname: 'darkstar',
+          hostname: 'gpuNode',
           agentId: 'abc',
         },
       ]);
@@ -562,7 +583,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         peer: 'peer:3000',
         at: t0,
         type: 'fleet:agent:tool_started',
-        hostname: 'darkstar',
+        hostname: 'gpuNode',
         agentId: 'abc',
       });
       expect(parsed[0].payload.tool).toBe('view_file');
@@ -596,9 +617,9 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     });
 
     it('defaults to the only active peer and renders a capability summary', async () => {
-      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'ministar']);
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'hub']);
       fleetListenerMock.requestMock.mockResolvedValueOnce({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         pid: 42,
         methods: ['peer.describe', 'peer.chat', 'peer.tool.invoke'],
         apiVersion: 'd.21',
@@ -611,7 +632,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         },
         capabilities: {
           egress: 'cloud',
-          machineLabel: 'ministar',
+          machineLabel: 'hub',
           models: [
             {
               id: 'gpt-5.1-codex',
@@ -625,8 +646,8 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
       const r = await handleFleet(['describe']);
       const out = r.entry?.content ?? '';
-      expect(out).toContain('Fleet peer "ministar"');
-      expect(out).toContain('Hostname:      ministar-linux');
+      expect(out).toContain('Fleet peer "hub"');
+      expect(out).toContain('Hostname:      hub-linux');
       expect(out).toContain('Peer chat:     chatgpt-oauth / gpt-5.1-codex');
       expect(out).toContain('Capabilities: 1 model(s), egress=cloud');
       expect(out).toContain('Top models:   gpt-5.1-codex');
@@ -638,16 +659,16 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     });
 
     it('--json returns the raw peer.describe payload', async () => {
-      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'ministar']);
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'hub']);
       fleetListenerMock.requestMock.mockResolvedValueOnce({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         methods: ['peer.describe'],
       });
 
-      const r = await handleFleet(['describe', 'ministar', '--json']);
+      const r = await handleFleet(['describe', 'hub', '--json']);
       const parsed = JSON.parse(r.entry?.content ?? '{}');
       expect(parsed).toMatchObject({
-        hostname: 'ministar-linux',
+        hostname: 'hub-linux',
         methods: ['peer.describe'],
       });
     });
@@ -816,6 +837,34 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     it('reports no peers when nothing is connected', async () => {
       const r = await handleFleet(['route', 'think', 'deeply']);
       expect(r.entry?.content).toContain('No fleet peers connected');
+    });
+
+    it('surfaces IBAN privacy lint on /fleet route even without connected peers', async () => {
+      const r = await handleFleet([
+        'route',
+        'Virement',
+        'vers',
+        'FR76',
+        '3000',
+        '6000',
+        '0112',
+        '3456',
+        '7890',
+        '189',
+        'pour',
+        'le',
+        'fournisseur',
+        'test.',
+        '--json',
+      ]);
+      const out = r.entry?.content ?? '';
+      expect(out).toMatch(/No fleet peers connected/i);
+      expect(out).toMatch(/pii-iban/);
+      const parsed = JSON.parse(out) as {
+        error?: string;
+        data?: { privacyLint?: { matchKinds?: string[] } };
+      };
+      expect(parsed.data?.privacyLint?.matchKinds).toContain('pii-iban');
     });
 
     it('renders a human recommendation from peer.describe capabilities', async () => {

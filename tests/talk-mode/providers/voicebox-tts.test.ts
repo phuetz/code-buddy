@@ -40,7 +40,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   voiceboxMocks.probe.mockResolvedValue({
     available: true,
-    baseUrl: 'http://darkstar:17493',
+    baseUrl: 'http://gpuNode:17493',
     configuredProfile: 'Lisa',
     profiles: [],
     engine: 'qwen',
@@ -62,7 +62,7 @@ describe('Voicebox Talk Mode provider', () => {
       provider: 'voicebox',
       enabled: true,
       priority: 1,
-      settings: { baseURL: 'http://darkstar:17493', profile: 'Lisa', language: 'fr' },
+      settings: { baseURL: 'http://gpuNode:17493', profile: 'Lisa', language: 'fr' },
     });
 
     expect(await provider.isAvailable()).toBe(true);

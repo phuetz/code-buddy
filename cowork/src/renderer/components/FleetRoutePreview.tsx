@@ -6,9 +6,12 @@
  * scores and the router's rationale, so the operator can sanity-check
  * peer/model selection and privacy handling before spending anything.
  */
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Route, X } from 'lucide-react';
+import type { FleetPeer } from '../types';
+import { FLEET_SILENCE_THRESHOLD_MS } from '../utils/fleet-freshness';
+import { useSilentPeerIds } from './fleet-peer-freshness';
 
 interface PreviewLane {
   peerId: string;
@@ -37,6 +40,8 @@ export interface FleetRoutePreviewProps {
   council: boolean;
   targetPeerIds: string[];
   disabled?: boolean;
+  /** Known peers, to point out a silent recommended peer. Never alters the route. */
+  peersById?: Record<string, FleetPeer>;
 }
 
 function laneChips(label: string, lanes: PreviewLane[]): Array<{ label: string; lane: PreviewLane }> {
@@ -46,6 +51,80 @@ function laneChips(label: string, lanes: PreviewLane[]): Array<{ label: string; 
   }));
 }
 
+/**
+ * The planned lanes, with a neutral heads-up when a recommended peer is silent.
+ * Mounted only while a route is shown, so no clock runs otherwise.
+ */
+const RouteLaneList: React.FC<{
+  lanes: Array<{ label: string; lane: PreviewLane }>;
+  peersById: Record<string, FleetPeer>;
+}> = ({ lanes, peersById }) => {
+  const { t } = useTranslation();
+  const lanePeers = useMemo(
+    () =>
+      Array.from(new Set(lanes.map(({ lane }) => lane.peerId)))
+        .map((peerId) => peersById[peerId])
+        .filter((peer): peer is FleetPeer => Boolean(peer)),
+    [lanes, peersById]
+  );
+  const silentPeerIds = useSilentPeerIds(lanePeers);
+  const silent = new Set(silentPeerIds);
+
+  return (
+    <>
+      <ol className="space-y-1">
+        {lanes.map(({ label, lane }, index) => (
+          <li
+            key={`${lane.peerId}-${lane.model}-${index}`}
+            className="flex items-center gap-2 rounded bg-surface/70 px-2 py-1 text-[11px]"
+            data-testid="fleet-route-preview-lane"
+          >
+            <span className="shrink-0 text-[9px] uppercase tracking-wide text-text-muted">
+              {lane.role ?? label}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-mono text-text-secondary">
+              {lane.peerId}
+            </span>
+            {silent.has(lane.peerId) && (
+              <span
+                className="shrink-0 text-[9px] text-warning"
+                data-testid="fleet-route-preview-silent"
+              >
+                {t('fleet.freshness.silent', 'silent')}
+              </span>
+            )}
+            <span className="min-w-0 max-w-[40%] truncate font-mono text-text-muted">
+              {lane.model}
+            </span>
+            {typeof lane.score === 'number' && (
+              <span className="shrink-0 tabular-nums text-[10px] text-text-muted">
+                {(lane.score * 100).toFixed(0)}%
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      {silentPeerIds.length > 0 && (
+        <p
+          className="text-[10px] leading-snug text-text-muted"
+          data-testid="fleet-route-preview-silence"
+        >
+          {t(
+            'fleet.freshness.routeSilent',
+            'Silent for over {{threshold}} s: {{peers}}. The router does not weigh freshness; the route is unchanged.',
+            {
+              threshold: FLEET_SILENCE_THRESHOLD_MS / 1_000,
+              peers: silentPeerIds.map((peerId) => peersById[peerId]?.label ?? peerId).join(', '),
+            }
+          )}
+        </p>
+      )}
+    </>
+  );
+};
+
+const NO_PEERS: Record<string, FleetPeer> = {};
+
 export const FleetRoutePreview: React.FC<FleetRoutePreviewProps> = ({
   goal,
   dispatchProfile,
@@ -54,37 +133,63 @@ export const FleetRoutePreview: React.FC<FleetRoutePreviewProps> = ({
   council,
   targetPeerIds,
   disabled = false,
+  peersById = NO_PEERS,
 }) => {
   const { t } = useTranslation();
-  const [preview, setPreview] = useState<RoutePreviewResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  // A result is only valid for the exact request it answered.
+  const [shown, setShown] = useState<{ requestKey: string; result: RoutePreviewResult } | null>(
+    null
+  );
+  const [pendingRequestKey, setPendingRequestKey] = useState<string | null>(null);
+  // Bumped by every new preview and by closing: an older answer is then ignored.
+  const latestAttempt = useRef(0);
+
+  const effectiveParallelism = council ? Math.max(2, parallelism) : parallelism;
+  const request = {
+    goal: goal.trim(),
+    privacyTag,
+    dispatchProfile,
+    ...(effectiveParallelism > 1 ? { parallelism: effectiveParallelism } : {}),
+    ...(council ? { council: true } : {}),
+    ...(targetPeerIds.length > 0 ? { targetPeerIds } : {}),
+  };
+  // Compared by value: the Command Center passes a new peer-id array on every render.
+  const requestKey = JSON.stringify(request);
+  const loading = pendingRequestKey === requestKey;
+
+  // The router would now receive something else: the shown route no longer applies.
+  if (shown && shown.requestKey !== requestKey) {
+    setShown(null);
+  }
+  const preview = shown?.result ?? null;
 
   const runPreview = async () => {
-    if (!goal.trim() || loading) return;
-    setLoading(true);
+    if (!request.goal || loading) return;
+    const attempt = ++latestAttempt.current;
+    const show = (result: RoutePreviewResult) => {
+      if (attempt !== latestAttempt.current) return;
+      setShown({ requestKey, result });
+      setPendingRequestKey(null);
+    };
+    setPendingRequestKey(requestKey);
     try {
       const api = window.electronAPI as unknown as {
         fleet?: { routePreview?: (input: Record<string, unknown>) => Promise<RoutePreviewResult> };
       };
       if (!api?.fleet?.routePreview) {
-        setPreview({ ok: false, error: 'Fleet IPC bridge unavailable' });
+        show({ ok: false, error: 'Fleet IPC bridge unavailable' });
         return;
       }
-      const effectiveParallelism = council ? Math.max(2, parallelism) : parallelism;
-      const result = await api.fleet.routePreview({
-        goal: goal.trim(),
-        privacyTag,
-        dispatchProfile,
-        ...(effectiveParallelism > 1 ? { parallelism: effectiveParallelism } : {}),
-        ...(council ? { council: true } : {}),
-        ...(targetPeerIds.length > 0 ? { targetPeerIds } : {}),
-      });
-      setPreview(result);
+      show(await api.fleet.routePreview(request));
     } catch (err) {
-      setPreview({ ok: false, error: String(err) });
-    } finally {
-      setLoading(false);
+      show({ ok: false, error: String(err) });
     }
+  };
+
+  const closePreview = () => {
+    latestAttempt.current += 1;
+    setShown(null);
+    setPendingRequestKey(null);
   };
 
   const lanes: Array<{ label: string; lane: PreviewLane }> = preview?.ok
@@ -104,7 +209,7 @@ export const FleetRoutePreview: React.FC<FleetRoutePreviewProps> = ({
     <div data-testid="fleet-route-preview">
       <button
         onClick={() => void runPreview()}
-        disabled={disabled || loading || !goal.trim()}
+        disabled={disabled || loading || !request.goal}
         className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50 text-xs"
         title={t(
           'fleet.route.previewHint',
@@ -137,7 +242,7 @@ export const FleetRoutePreview: React.FC<FleetRoutePreviewProps> = ({
               </span>
             )}
             <button
-              onClick={() => setPreview(null)}
+              onClick={closePreview}
               className="ml-auto p-0.5 text-text-muted hover:text-text-primary"
               title={t('common.close', 'Close')}
               data-testid="fleet-route-preview-close"
@@ -155,28 +260,7 @@ export const FleetRoutePreview: React.FC<FleetRoutePreviewProps> = ({
               {preview.lintWarning}
             </p>
           )}
-          {lanes.length > 0 && (
-            <ol className="space-y-1">
-              {lanes.map(({ label, lane }, index) => (
-                <li
-                  key={`${lane.peerId}-${lane.model}-${index}`}
-                  className="flex items-center gap-2 rounded bg-surface/70 px-2 py-1 text-[11px]"
-                  data-testid="fleet-route-preview-lane"
-                >
-                  <span className="shrink-0 text-[9px] uppercase tracking-wide text-text-muted">
-                    {lane.role ?? label}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-text-secondary">{lane.peerId}</span>
-                  <span className="min-w-0 max-w-[40%] truncate font-mono text-text-muted">{lane.model}</span>
-                  {typeof lane.score === 'number' && (
-                    <span className="shrink-0 tabular-nums text-[10px] text-text-muted">
-                      {(lane.score * 100).toFixed(0)}%
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
+          {lanes.length > 0 && <RouteLaneList lanes={lanes} peersById={peersById} />}
           {preview.ok && preview.rationale && (
             <p className="text-[10px] leading-snug text-text-muted" data-testid="fleet-route-preview-rationale">
               {preview.rationale}

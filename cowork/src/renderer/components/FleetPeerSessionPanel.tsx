@@ -8,7 +8,7 @@
  * transcript of the turns sent from this window, and attaching to a
  * pre-existing session shows new turns only.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, MessageSquarePlus, RefreshCw, Send, Square } from 'lucide-react';
 
@@ -57,7 +57,7 @@ function shortSessionId(sessionId: string): string {
   return sessionId.length <= 14 ? sessionId : `${sessionId.slice(0, 14)}...`;
 }
 
-export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) => {
+const FleetPeerSessionPanelView: React.FC<{ peerId: string }> = ({ peerId }) => {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<PeerSessionMeta[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -65,13 +65,31 @@ export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) 
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState<'start' | 'send' | 'end' | 'list' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The view on screen. The exported wrapper remounts this stateful view for each
+  // peer, while these generations keep late answers with the mount and session
+  // they came from. `selection` changes on every pick, even of the same session.
+  const viewRef = useRef({ visit: 0, selection: 0, shown: false });
+  const captureView = () => ({ visit: viewRef.current.visit, selection: viewRef.current.selection });
+  type View = ReturnType<typeof captureView>;
+  const isShownVisit = (view: View) => viewRef.current.shown && viewRef.current.visit === view.visit;
+  const isShownSelection = (view: View) =>
+    isShownVisit(view) && viewRef.current.selection === view.selection;
+
+  const selectSession = (sessionId: string | null) => {
+    viewRef.current = { ...viewRef.current, selection: viewRef.current.selection + 1 };
+    setActiveSessionId(sessionId);
+    setInput('');
+  };
 
   const refreshList = useCallback(async () => {
     const api = getApi();
     if (!api) return;
+    const visit = viewRef.current.visit;
+    const isShown = () => viewRef.current.shown && viewRef.current.visit === visit;
     setBusy('list');
     try {
       const result = await api.peerSessionList(peerId);
+      if (!isShown()) return;
       if (result.ok) {
         setSessions(result.sessions);
         setError(null);
@@ -79,44 +97,62 @@ export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) 
         setError(result.error ?? 'session list unavailable');
       }
     } catch (err) {
-      setError(String(err));
+      if (isShown()) setError(String(err));
     } finally {
-      setBusy(null);
+      if (isShown()) setBusy(null);
     }
   }, [peerId]);
 
-  // New peer selected — drop the local view and re-list.
+  // Initialise this peer's local view and list its remote sessions.
   useEffect(() => {
+    viewRef.current = {
+      visit: viewRef.current.visit + 1,
+      selection: viewRef.current.selection + 1,
+      shown: true,
+    };
+    // The previous peer's rows must not stay clickable while this peer lists.
+    setSessions([]);
     setActiveSessionId(null);
     setTranscript([]);
     setInput('');
     setError(null);
+    // An operation still pending for the previous peer no longer blocks this one.
+    setBusy(null);
     void refreshList();
+    return () => {
+      // Pending answers belong to a view that is gone (peer change, unmount, StrictMode).
+      viewRef.current = { ...viewRef.current, visit: viewRef.current.visit + 1, shown: false };
+    };
   }, [peerId, refreshList]);
 
   const startSession = async () => {
     const api = getApi();
     if (!api) return;
+    const view = captureView();
     setBusy('start');
     setError(null);
     try {
       const result = await api.peerSessionStart(peerId);
+      if (!isShownVisit(view)) return;
       if (result.ok && result.sessionId) {
-        setActiveSessionId(result.sessionId);
-        setTranscript([]);
+        // Open it unless another session was picked meanwhile; it is listed either way.
+        if (isShownSelection(view)) {
+          selectSession(result.sessionId);
+          setTranscript([]);
+        }
         await refreshList();
       } else {
         setError(result.error ?? 'start failed');
       }
     } catch (err) {
-      setError(String(err));
+      if (isShownVisit(view)) setError(String(err));
     } finally {
-      setBusy(null);
+      if (isShownVisit(view)) setBusy(null);
     }
   };
 
   const attachSession = (sessionId: string) => {
-    setActiveSessionId(sessionId);
+    selectSession(sessionId);
     // Earlier turns live on the peer only — the local transcript starts empty.
     setTranscript([]);
     setError(null);
@@ -124,48 +160,61 @@ export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) 
 
   const sendTurn = async () => {
     const api = getApi();
-    const prompt = input.trim();
-    if (!api || !activeSessionId || !prompt || busy) return;
+    const inputAtSend = input;
+    const prompt = inputAtSend.trim();
+    const sessionId = activeSessionId;
+    if (!api || !sessionId || !prompt || busy) return;
+    const view = captureView();
     setBusy('send');
     setError(null);
     try {
-      const result = await api.peerSessionSay(peerId, activeSessionId, prompt);
+      const result = await api.peerSessionSay(peerId, sessionId, prompt);
+      if (!isShownVisit(view)) return;
       if (result.ok) {
-        setTranscript((prev) => [
-          ...prev,
-          { role: 'user', text: prompt },
-          { role: 'assistant', text: result.text ?? '' },
-        ]);
-        setInput('');
+        // The turn belongs to its selection: never append it to, or clear the draft of, another one.
+        if (isShownSelection(view)) {
+          setTranscript((prev) => [
+            ...prev,
+            { role: 'user', text: prompt },
+            { role: 'assistant', text: result.text ?? '' },
+          ]);
+          setInput((current) => (current === inputAtSend ? '' : current));
+        }
         await refreshList();
-      } else {
+      } else if (isShownSelection(view)) {
         setError(result.error ?? 'turn failed');
       }
     } catch (err) {
-      setError(String(err));
+      if (isShownSelection(view)) setError(String(err));
     } finally {
-      setBusy(null);
+      if (isShownVisit(view)) setBusy(null);
     }
   };
 
   const endSession = async () => {
     const api = getApi();
-    if (!api || !activeSessionId) return;
+    const sessionId = activeSessionId;
+    if (!api || !sessionId) return;
+    const view = captureView();
     setBusy('end');
     setError(null);
     try {
-      const result = await api.peerSessionEnd(peerId, activeSessionId);
+      const result = await api.peerSessionEnd(peerId, sessionId);
+      if (!isShownVisit(view)) return;
       if (result.ok) {
-        setActiveSessionId(null);
-        setTranscript([]);
+        // Close the chat box only if it still shows the selection that was ended.
+        if (isShownSelection(view)) {
+          selectSession(null);
+          setTranscript([]);
+        }
         await refreshList();
-      } else {
+      } else if (isShownSelection(view)) {
         setError(result.error ?? 'end failed');
       }
     } catch (err) {
-      setError(String(err));
+      if (isShownSelection(view)) setError(String(err));
     } finally {
-      setBusy(null);
+      if (isShownVisit(view)) setBusy(null);
     }
   };
 
@@ -286,3 +335,7 @@ export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) 
     </div>
   );
 };
+
+export const FleetPeerSessionPanel: React.FC<{ peerId: string }> = ({ peerId }) => (
+  <FleetPeerSessionPanelView key={peerId} peerId={peerId} />
+);

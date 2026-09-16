@@ -38,6 +38,7 @@ export interface StudioComposerProps {
 const SUGGESTIONS = ['a React todo app', 'an Express CRUD API', 'a landing page'];
 
 const VARS_BY_TEMPLATE: Record<StudioTemplateId, string[]> = {
+  'react-tailwind': ['projectName', 'description'],
   'react-ts': ['projectName', 'description'],
   'express-api': ['projectName', 'description'],
   'node-cli': ['projectName', 'binName', 'description'],
@@ -68,7 +69,7 @@ function joinPath(base: string, child: string): string {
 
 export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onPrompt, busy = false, workingDir = '', seedPrompt }: StudioComposerProps) {
   const [prompt, setPrompt] = useState('');
-  const [template, setTemplate] = useState<StudioTemplateId>('react-ts');
+  const [template, setTemplate] = useState<StudioTemplateId>('react-tailwind');
   const [projectName, setProjectName] = useState('app-studio-project');
   const [binName, setBinName] = useState('app-studio-project');
   const [description, setDescription] = useState('');
@@ -94,7 +95,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
   useEffect(() => {
     if (templates.length === 0) return;
     if (!templates.some((item) => item.id === template)) {
-      setTemplate(templates[0]?.id ?? 'react-ts');
+      setTemplate(templates[0]?.id ?? 'react-tailwind');
     }
   }, [template, templates]);
 

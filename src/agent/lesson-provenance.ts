@@ -19,6 +19,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface LessonCreationProvenance {
   runId?: string;
@@ -128,8 +129,15 @@ export class LessonProvenanceIndex {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as ProvenanceFile;
+      const parsed = readJsonAtomicSync<ProvenanceFile | null>(this.filePath, null, {
+        mode: 0o600,
+        isValid: (value): value is ProvenanceFile => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          (value as ProvenanceFile).schemaVersion === 1 &&
+          typeof (value as ProvenanceFile).records === 'object',
+        ),
+      });
+      if (!parsed) return;
       for (const [id, record] of Object.entries(parsed.records ?? {})) {
         this.records.set(id, { ...record, lessonId: id, usedBy: record.usedBy ?? [] });
       }
@@ -145,7 +153,7 @@ export class LessonProvenanceIndex {
         schemaVersion: 1,
         records: Object.fromEntries(this.records),
       };
-      fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
     } catch (err) {
       logger.debug('LessonProvenanceIndex: failed to save index', { error: String(err) });
     }

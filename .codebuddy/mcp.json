@@ -31,10 +31,10 @@
     "code-explorer": {
       "name": "code-explorer",
       "type": "stdio",
-      "command": "/home/patrice/DEV/gitnexus-rs/target/release/gitnexus",
+      "command": "code-explorer",
       "args": ["mcp"],
       "enabled": true,
-      "description": "Code Explorer (gitnexus binary) — graph-powered code intelligence: query, impact/blast-radius, callers, hotspots, complexity over a pre-indexed knowledge graph. Canonical name `code-explorer` so it de-dups with a user-level entry of the same name (avoids loading 31 tools twice). Local path /home/patrice/DEV/gitnexus-rs/target/release/gitnexus; /home/patrice/code-buddy/src is indexed. https://github.com/phuetz/code-explorer"
+      "description": "Code Explorer — graph-powered code intelligence: query, impact/blast-radius, callers, hotspots, complexity over a pre-indexed knowledge graph. Canonical name `code-explorer` (the older `gitnexus` binary name is still recognized). Enable after `code-explorer` is on PATH; index with `code-explorer analyze .`. https://github.com/phuetz/code-explorer"
     },
     "lm-resizer": {
       "name": "lm-resizer",
@@ -49,19 +49,19 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"
+        "${PUBCOMMANDER_MCP_STDIO}"
       ],
       "env": {
         "LOG_LEVEL": "silent"
       },
-      "enabled": true,
+      "enabled": false,
       "description": "PubCommander editorial control: drafts, approval queue, scheduling dry-runs, guarded publication and analytics."
     },
     "pubcommander-editorial": {
       "name": "pubcommander-editorial",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "editorial" },
       "enabled": false,
       "description": "PubCommander templates, writing styles, content pillars, ideas and viral references."
@@ -70,7 +70,7 @@
       "name": "pubcommander-media",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "media" },
       "enabled": false,
       "description": "PubCommander generated-media inventory and YouTube transcription."
@@ -79,7 +79,7 @@
       "name": "pubcommander-autoblog",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "autoblog" },
       "enabled": false,
       "description": "PubCommander AutoBlog configuration visibility for book and website campaigns."
@@ -88,7 +88,7 @@
       "name": "pubcommander-analytics",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "analytics" },
       "enabled": false,
       "description": "PubCommander real stored publication performance by platform."
@@ -97,7 +97,7 @@
       "name": "pubcommander-automation",
       "type": "stdio",
       "command": "node",
-      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "args": ["${PUBCOMMANDER_MCP_STDIO}"],
       "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "automation" },
       "enabled": false,
       "description": "PubCommander visual automations and execution history."

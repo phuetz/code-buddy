@@ -31,6 +31,7 @@
  */
 
 import { CodeBuddyClient } from '../../codebuddy/client.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import type {
   CodeBuddyMessage,
   CodeBuddyResponse,
@@ -48,6 +49,27 @@ import {
 
 const MAX_TURNS = 3;
 const MAX_TOKENS = 100_000;
+
+export function resolveA2AProviderCredentials():
+  | { ok: true; apiKey: string; baseURL?: string; model: string }
+  | { ok: false; error: string } {
+  const detected = detectProviderFromEnv();
+  const apiKey = process.env.GROK_API_KEY || detected?.apiKey || '';
+  if (!apiKey) {
+    if (!detected) {
+      return { ok: false, error: 'No LLM provider configured' };
+    }
+    return { ok: false, error: `Provider API key not configured (${detected.provider})` };
+  }
+  return {
+    ok: true,
+    apiKey,
+    ...(process.env.GROK_BASE_URL || detected?.baseURL
+      ? { baseURL: process.env.GROK_BASE_URL || detected?.baseURL }
+      : {}),
+    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+  };
+}
 
 const SYSTEM_PROMPT = `You are Code Buddy, exposed via the Agent-to-Agent (A2A) protocol.
 A remote peer agent has submitted a task to you. You only have access to read-only,
@@ -78,30 +100,30 @@ function failTask(task: Task, message: string): Task {
  * surface. Returned function is safe to register multiple times — each
  * invocation builds an isolated `CodeBuddyClient`.
  */
-export function createCodeBuddyTaskExecutor(): TaskExecutor {
-  return async function executeCodeBuddyTask(task: Task): Promise<Task> {
+export function createCodeBuddyTaskExecutor(options: { allowedTools?: string[]; executeTool?: (name: string, args: Record<string, unknown>, task: Task) => Promise<{ success: boolean; output?: string; error?: string; content?: string; data?: unknown }> } = {}): TaskExecutor {
+  return async function executeCodeBuddyTask(task: Task, signal?: AbortSignal): Promise<Task> {
     const start = Date.now();
     const peerId = String(task.metadata?.peerId ?? 'unknown');
 
     // Extract user message — A2A submitTask injects exactly one user
     // message into task.messages[0] before calling the executor.
-    const userMessage = task.messages[0];
+    const userMessage = task.messages.filter(message => message.role === 'user').at(-1);
     const userText = userMessage ? extractMessageText(userMessage) : '';
     if (!userText) {
       return failTask(task, 'Empty user message');
     }
 
-    // Provider credentials. We deliberately fail closed if missing rather
-    // than fall through to a default that might surface partial answers.
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    if (!apiKey) {
-      return failTask(task, 'Provider API key not configured (GROK_API_KEY)');
+    // Provider credentials. Local runtimes (Ollama) are valid without GROK_API_KEY.
+    // Hosted providers still fail closed when no key is configured.
+    const credentials = resolveA2AProviderCredentials();
+    if (!credentials.ok) {
+      return failTask(task, credentials.error);
     }
 
     // Fleet-safe tool list — the security boundary. If the legacy
     // registry is empty (server booted without any tools registered yet),
     // we refuse rather than expose a free-form LLM with no tools.
-    const fleetSafeTools = getToolRegistry().getFleetSafeTools();
+    const fleetSafeTools = getToolRegistry().getFleetSafeTools().filter(tool => !options.allowedTools || options.allowedTools.includes(tool.function.name));
     if (fleetSafeTools.length === 0) {
       return failTask(
         task,
@@ -110,14 +132,14 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
     }
 
     const client = new CodeBuddyClient(
-      apiKey,
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL ?? 'grok-3-latest'
+      credentials.apiKey,
+      credentials.model,
+      credentials.baseURL
     );
 
     const messages: CodeBuddyMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userText },
+      ...task.messages.map(message => ({ role: message.role === 'agent' ? 'assistant' as const : 'user' as const, content: extractMessageText(message) })),
     ];
 
     const formalRegistry = getFormalToolRegistry();
@@ -132,7 +154,7 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
 
       let response: CodeBuddyResponse;
       try {
-        response = await client.chat(messages, fleetSafeTools, { temperature: 0.1 });
+        response = await client.chat(messages, fleetSafeTools, { temperature: 0.1, signal });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn('[a2a:inbound]', {
@@ -186,7 +208,7 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
         // Defensive double-check: even though the LLM only sees
         // fleet-safe tools, refuse explicitly if it tries to invoke
         // anything else (e.g. a hallucinated tool name).
-        if (!getToolRegistry().isFleetSafe(name)) {
+        if (!getToolRegistry().isFleetSafe(name) || (options.allowedTools && !options.allowedTools.includes(name))) {
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -208,7 +230,8 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
         }
 
         try {
-          const result = await formalRegistry.execute(name, args);
+          signal?.throwIfAborted();
+          const result = options.executeTool ? await options.executeTool(name, args, task) : await formalRegistry.execute(name, args);
           const resultText = result.success
             ? (result.output ??
                 result.content ??

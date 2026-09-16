@@ -31,6 +31,15 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 import {
   HistoryManager,
   HistoryManagerConfig,
@@ -44,7 +53,8 @@ describe('HistoryManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockExistsSync.mockReturnValue(false);
-    mockReadFileSync.mockReturnValue('[]');
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
 
     manager = new HistoryManager({
       maxEntries: 10,
@@ -74,7 +84,7 @@ describe('HistoryManager', () => {
         { text: 'command 2', timestamp: Date.now() },
       ];
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(existingHistory));
+      mockReadJsonAtomicSync.mockReturnValue(existingHistory);
 
       const loadedManager = new HistoryManager({
         historyFile: '/tmp/existing-history.json',
@@ -86,7 +96,7 @@ describe('HistoryManager', () => {
     it('should handle old string array format', () => {
       const oldFormat = ['command 1', 'command 2'];
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(oldFormat));
+      mockReadJsonAtomicSync.mockReturnValue(oldFormat);
 
       const loadedManager = new HistoryManager({
         historyFile: '/tmp/old-format.json',
@@ -97,7 +107,7 @@ describe('HistoryManager', () => {
 
     it('should handle corrupted history file gracefully', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('File corrupted');
       });
 
@@ -116,7 +126,7 @@ describe('HistoryManager', () => {
         timestamp: Date.now() + i,
       }));
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(JSON.stringify(largeHistory));
+      mockReadJsonAtomicSync.mockReturnValue(largeHistory);
 
       const trimmedManager = new HistoryManager({
         maxEntries: 10,
@@ -181,7 +191,7 @@ describe('HistoryManager', () => {
 
     it('should save history after adding', () => {
       manager.add('new command');
-      expect(mockWriteFileSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
 
     it('should add timestamp to entry', () => {
@@ -496,7 +506,7 @@ describe('HistoryManager', () => {
     it('should save after clearing', () => {
       jest.clearAllMocks();
       manager.clear();
-      expect(mockWriteFileSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
     });
   });
 

@@ -22,6 +22,8 @@ import {
   telegramVisionPhotoPath,
 } from './camera-keyframe-policy.js';
 import { redactVisionDescriptionForEgress } from './vision-description-safety.js';
+import { DARK_SCENE_SALIENCE, isDarkScenePerception } from './dreaming.js';
+import { DARK_SCENE_LUMA_THRESHOLD } from '../tools/vision/mean-luma.js';
 
 /** Varied prefixes for the motion Telegram caption (the `${desc}` suffix already
  *  varies with the scene) so the notification isn't the exact same opening
@@ -52,6 +54,51 @@ export interface VisionReactionOptions {
   debounceMs?: number;
   cwd?: string;
   now?: () => number;
+}
+
+const DEFAULT_VISION_DEBOUNCE_MS = 8000;
+const DEFAULT_VISION_ALERT_COOLDOWN_MS = 300_000;
+const DEFAULT_VISION_ALERT_SIMILARITY = 0.6;
+export const DEFAULT_VISION_MIN_LUMA = DARK_SCENE_LUMA_THRESHOLD;
+export const DEFAULT_VISION_MAX_ANALYSES_PER_MIN = 4;
+
+function configuredNumber(value: number | string | undefined): number {
+  return typeof value === 'string' && !value.trim() ? Number.NaN : Number(value);
+}
+
+function resolveNonNegativeMs(
+  value: number | string | undefined,
+  fallback: number,
+  label: string,
+): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  if (value !== undefined) {
+    logger.warn(`[vision] invalid ${label} ${JSON.stringify(value)}; using ${fallback}`);
+  }
+  return fallback;
+}
+
+function resolveSimilarityThreshold(value: string | undefined): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+  if (value !== undefined) {
+    logger.warn(
+      `[vision] invalid alert similarity ${JSON.stringify(value)}; using ${DEFAULT_VISION_ALERT_SIMILARITY}`,
+    );
+  }
+  return DEFAULT_VISION_ALERT_SIMILARITY;
+}
+
+function resolveMaxAnalysesPerMinute(value: string | undefined): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0) return Math.min(60, Math.floor(parsed));
+  if (value !== undefined) {
+    logger.warn(
+      `[vision] invalid max analyses per minute ${JSON.stringify(value)}; using ${DEFAULT_VISION_MAX_ANALYSES_PER_MIN}`,
+    );
+  }
+  return DEFAULT_VISION_MAX_ANALYSES_PER_MIN;
 }
 
 export function shouldAllowVisionImageEndpoint(
@@ -118,21 +165,47 @@ function sceneSimilarity(a: string, b: string): number {
 
 export function wireVisionReaction(options: VisionReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? Number(process.env.CODEBUDDY_VISION_DEBOUNCE_MS ?? 8000);
+  const debounceMs = resolveNonNegativeMs(
+    options.debounceMs ?? process.env.CODEBUDDY_VISION_DEBOUNCE_MS,
+    DEFAULT_VISION_DEBOUNCE_MS,
+    'debounce',
+  );
   const now = options.now ?? (() => Date.now());
   const analyzer: VisionAnalyzer = options.analyzer ?? { analyze: defaultAnalyze };
   // Anti-spam: for a remote watch, only alert when the scene meaningfully CHANGES
   // vs the last alerted scene, or after a long cooldown (periodic refresh).
-  const alertCooldownMs = Number(process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS ?? 300_000);
-  const alertSimThreshold = Number(process.env.CODEBUDDY_VISION_ALERT_SIM ?? 0.6);
+  const alertCooldownMs = resolveNonNegativeMs(
+    process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS,
+    DEFAULT_VISION_ALERT_COOLDOWN_MS,
+    'alert cooldown',
+  );
+  const alertSimThreshold = resolveSimilarityThreshold(process.env.CODEBUDDY_VISION_ALERT_SIM);
+  const maxAnalysesPerMinute = resolveMaxAnalysesPerMinute(
+    process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN,
+  );
   let lastAlertAt = Number.NEGATIVE_INFINITY;
   let lastAlertedDesc = '';
   let lastAt = Number.NEGATIVE_INFINITY;
   let inFlight = false;
+  let disposed = false;
+  let analysisStarts: number[] = [];
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
     if (p.modality !== 'vision' || p.kind !== 'motion') return;
+    const payload = (p.payload ?? {}) as {
+      imagePath?: string;
+      camera?: string;
+      meanLuma?: unknown;
+      motionScore?: unknown;
+    };
+    const meanLuma = typeof payload.meanLuma === 'number' && Number.isFinite(payload.meanLuma)
+      ? payload.meanLuma
+      : undefined;
+    if (meanLuma !== undefined && meanLuma < DEFAULT_VISION_MIN_LUMA) {
+      logger.info(`[vision] motion skipped (dark frame meanLuma=${meanLuma})`);
+      return;
+    }
 
     const t = now();
     if (t - lastAt < debounceMs) {
@@ -140,10 +213,14 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
       return;
     }
     if (inFlight) return; // a prior analyze() (VLM, 1–10s) is still running
+    analysisStarts = analysisStarts.filter(startedAt => t >= startedAt && t - startedAt < 60_000);
+    if (analysisStarts.length >= maxAnalysesPerMinute) {
+      logger.info(`[vision] motion skipped (analysis rate limit ${maxAnalysesPerMinute}/min)`);
+      return;
+    }
     lastAt = t;
     inFlight = true;
 
-    const payload = (p.payload ?? {}) as { imagePath?: string; camera?: string };
     void (async () => {
       try {
         const suppliedFrame = await safeCameraKeyframePath(payload.imagePath);
@@ -151,14 +228,29 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
           logger.warn('[vision] rejected keyframe outside the configured camera spool');
           return;
         }
+        analysisStarts.push(t);
         const res = await analyzer.analyze(
           'Décris la scène en une phrase courte : objets génériques et situation notable. Ne transcris aucun texte/OCR, nom, adresse, téléphone, identifiant, secret ou visage reconnu.',
           suppliedFrame,
         );
+        if (disposed) return;
         if (!res.success) return;
-        const desc = res.description ?? '(no description)';
+        const desc = res.description?.trim();
+        if (!desc) {
+          logger.warn('[vision] analyzer reported success without a description; ignoring result');
+          return;
+        }
         const alertDescription = redactVisionDescriptionForEgress(desc, 900) ?? '(description indisponible)';
         const frame = await safeCameraKeyframePath(res.imagePath ?? suppliedFrame);
+        const scenePayload = {
+          meanLuma: payload.meanLuma,
+          motionScore: payload.motionScore,
+        };
+        const darkScene = isDarkScenePerception({
+          modality: 'vision',
+          kind: 'scene_described',
+          payload: scenePayload,
+        });
         // Publish perception before optional journaling/notification work. A
         // filesystem or channel failure must not make Lisa cognitively blind.
         const describedAt = now();
@@ -168,11 +260,13 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
             modality: 'vision',
             kind: 'scene_described',
             tsMs: describedAt,
-            salience: 150,
+            salience: darkScene ? DARK_SCENE_SALIENCE : 150,
             payload: {
               camera: payload.camera,
               description: desc,
               confidence: 0.9,
+              ...(payload.meanLuma !== undefined ? { meanLuma: payload.meanLuma } : {}),
+              ...(payload.motionScore !== undefined ? { motionScore: payload.motionScore } : {}),
             },
           },
         });
@@ -183,7 +277,13 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
             source: 'sensory_motion_reaction',
             summary: `Motion → ${desc}`,
             confidence: 0.9,
-            payload: { description: desc, imagePath: frame, camera: payload.camera },
+            payload: {
+              description: desc,
+              imagePath: frame,
+              camera: payload.camera,
+              ...(payload.meanLuma !== undefined ? { meanLuma: payload.meanLuma } : {}),
+              ...(payload.motionScore !== undefined ? { motionScore: payload.motionScore } : {}),
+            },
             tags: ['motion', 'camera', 'vision'],
           },
           options.cwd ? { cwd: options.cwd } : {},
@@ -191,12 +291,19 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
         logger.info(`[vision] motion analyzed → ${desc}`);
         // Alert only on a meaningfully different scene OR after the cooldown.
         if (sceneSimilarity(desc, lastAlertedDesc) < alertSimThreshold || now() - lastAlertAt >= alertCooldownMs) {
-          lastAlertAt = now();
-          lastAlertedDesc = desc;
-          await sendTelegramAlert(
+          const delivered = await sendTelegramAlert(
             `${pickMotionPrefix()}${payload.camera ? ' (caméra locale)' : ''} : ${alertDescription}`,
             telegramVisionPhotoPath(frame),
           );
+          if (delivered) {
+            lastAlertAt = now();
+            lastAlertedDesc = desc;
+          } else if (
+            process.env.CODEBUDDY_SENSORY_ALERT_TOKEN &&
+            process.env.CODEBUDDY_SENSORY_ALERT_CHAT
+          ) {
+            logger.warn('[vision] Telegram alert was not delivered; cooldown not armed');
+          }
         } else {
           logger.info('[vision] alert suppressed (scène similaire dans le cooldown)');
         }
@@ -209,6 +316,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
   });
 
   return () => {
+    disposed = true;
     bus.off(id);
   };
 }

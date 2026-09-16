@@ -24,7 +24,8 @@ import {
   SummarizationConfig,
 } from './types.js';
 import { logger } from '../utils/logger.js';
-import { isContextZoomEnabled, SegmentArchive } from './segment-archive.js';
+import { hashArchivedMessages, isContextZoomEnabled, SegmentArchive, SegmentIntegrityError } from './segment-archive.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Configuration for the enhanced compression engine.
@@ -251,6 +252,8 @@ export class EnhancedContextCompressor {
     if (systemMsgs.length > 0) {
       compressed = [...systemMsgs, ...compressed];
     }
+
+    compressed = repairToolCallPairs(compressed);
 
     return this.createResult(
       compressed,
@@ -509,18 +512,27 @@ export class EnhancedContextCompressor {
   private hardTruncate(messages: CodeBuddyMessage[], tokenLimit: number): CodeBuddyMessage[] {
     const result: CodeBuddyMessage[] = [];
     let currentTokens = 0;
+    const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+    const lastUserTokens = lastUser ? this.countTokens([lastUser]) : 0;
 
-    // Process from most recent backwards
+    // Process from most recent backwards, but never drop the current request.
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (!msg) continue;
+      if (lastUser && msg === lastUser) {
+        result.unshift(msg);
+        currentTokens += lastUserTokens;
+        continue;
+      }
       const msgTokens = this.countTokens([msg]);
       if (currentTokens + msgTokens <= tokenLimit) {
         result.unshift(msg);
         currentTokens += msgTokens;
-      } else {
-        break;
       }
+    }
+
+    if (lastUser && !result.includes(lastUser)) {
+      result.push(lastUser);
     }
 
     return result;
@@ -779,6 +791,7 @@ export class EnhancedContextCompressor {
       tokenCount,
       sessionId,
       reason: 'compression',
+      contentHash: hashArchivedMessages(messages),
     };
 
     this.archives.push(archive);
@@ -800,14 +813,15 @@ export class EnhancedContextCompressor {
    * @returns The archived messages, or undefined if not found.
    */
   recoverContext(archiveId?: string): CodeBuddyMessage[] | undefined {
-    if (!archiveId) {
-      // Return most recent archive
-      const latest = this.archives[this.archives.length - 1];
-      return latest?.messages;
+    const archive = archiveId
+      ? this.archives.find(a => a.id === archiveId)
+      : this.archives[this.archives.length - 1];
+    if (!archive) return undefined;
+    const contentHash = hashArchivedMessages(archive.messages);
+    if (!archive.contentHash || contentHash !== archive.contentHash) {
+      throw new SegmentIntegrityError(archive.id);
     }
-
-    const archive = this.archives.find(a => a.id === archiveId);
-    return archive?.messages;
+    return archive.messages;
   }
 
   /**

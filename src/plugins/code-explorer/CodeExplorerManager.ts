@@ -37,6 +37,8 @@ export interface CodeExplorerFreshness {
   commitsBehind?: number;
   /** The graph no longer matches HEAD (or the legacy `stale` flag was set). */
   stale: boolean;
+  /** True when Git or index metadata could not establish freshness. */
+  unverified?: boolean;
 }
 
 export interface CodeExplorerFreshnessOptions {
@@ -55,6 +57,8 @@ const DEFAULT_STATS: CodeExplorerStats = {
 
 /** Singleton cache keyed by resolved repo path */
 const instances = new Map<string, CodeExplorerManager>();
+interface AnalyzeOptions { force?: boolean; withSkills?: boolean; incremental?: boolean }
+const analyses = new Map<string, { key: string; promise: Promise<void> }>();
 
 /**
  * The engine ships under TWO binary names: `code-explorer` (the product name)
@@ -123,12 +127,14 @@ export class CodeExplorerManager {
       const metaPath = path.join(this.repoPath, dir, 'meta.json');
       if (!fs.existsSync(metaPath)) continue;
       try {
-        return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as Record<string, unknown>;
+        const value: unknown = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        return value as Record<string, unknown>;
       } catch (err) {
         logger.warn('CodeExplorer: failed to read meta.json', {
           error: err instanceof Error ? err.message : String(err),
         });
-        return null;
+        continue;
       }
     }
     return null;
@@ -140,9 +146,25 @@ export class CodeExplorerManager {
    * @param options.force  - Re-index even if `.codeexplorer/` already exists.
    * @param options.withSkills - Also generate skill annotations.
    */
-  async analyze(options: { force?: boolean; withSkills?: boolean } = {}): Promise<void> {
+  async analyze(options: AnalyzeOptions = {}): Promise<void> {
+    const key = JSON.stringify([!!options.force, !!options.withSkills, !!options.incremental]);
+    const active = analyses.get(this.repoPath);
+    if (active) {
+      if (active.key === key) return active.promise;
+      // A differently configured request must run after the current writer releases the index.
+      await active.promise.catch(() => undefined);
+      return this.analyze(options);
+    }
+    const promise = this.performAnalysis(options);
+    analyses.set(this.repoPath, { key, promise });
+    try { await promise; }
+    finally { if (analyses.get(this.repoPath)?.promise === promise) analyses.delete(this.repoPath); }
+  }
+
+  private async performAnalysis(options: AnalyzeOptions): Promise<void> {
     const args = ['analyze'];
     if (options.force) args.push('--force');
+    else if (options.incremental) args.push('--incremental');
     if (options.withSkills) args.push('--with-skills');
 
     logger.info(`CodeExplorer: analyzing repo at ${this.repoPath}`, { args });
@@ -169,7 +191,7 @@ export class CodeExplorerManager {
       });
 
       child.stderr?.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        stderr = (stderr + chunk.toString()).slice(-65536);
       });
 
       child.on('error', (err) => {
@@ -235,15 +257,22 @@ export class CodeExplorerManager {
    */
   getFreshness(
     runGit: (args: string, cwd: string) => string = (args, cwd) =>
-      execSync(`git ${args}`, { cwd, stdio: 'pipe', timeout: 10_000 }).toString().trim(),
+      execFileSync('git', args.split(' '), { cwd, stdio: 'pipe', timeout: 10_000 }).toString().trim(),
     options: CodeExplorerFreshnessOptions = {},
   ): CodeExplorerFreshness {
     const meta = this.readMeta();
-    if (!meta) return { indexed: false, stale: false };
+    if (!meta) return this.isRepoIndexed()
+      ? { indexed: true, stale: true, unverified: true }
+      : { indexed: false, stale: false };
 
     const lastCommit = typeof meta.lastCommit === 'string' ? meta.lastCommit : undefined;
     const indexedAt = typeof meta.indexedAt === 'string' ? meta.indexedAt : undefined;
 
+    const legacy = !('stats' in meta) &&
+      (typeof meta.stale === 'boolean' || typeof meta.symbols === 'number' || typeof meta.relations === 'number');
+    if (!lastCommit && ('lastCommit' in meta || !legacy)) {
+      return { indexed: true, stale: true, unverified: true };
+    }
     // Legacy flat schema: no commit recorded, trust the explicit stale flag.
     if (!lastCommit) {
       const freshness = {
@@ -256,20 +285,34 @@ export class CodeExplorerManager {
     }
 
     let commitsBehind: number | undefined;
-    try {
-      const out = runGit(`rev-list --count ${lastCommit}..HEAD`, this.repoPath);
-      const n = Number.parseInt(out, 10);
-      if (Number.isFinite(n)) commitsBehind = n;
-    } catch {
-      // Not a git repo, unknown commit, or git unavailable → leave undefined.
+    let stale = true;
+    let unverified = true;
+    // Index files are not shell input or Git options. Accept only full object IDs.
+    if (/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/.test(lastCommit)) {
+      try {
+        const head = runGit('rev-parse --verify HEAD', this.repoPath).trim();
+        if (!/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/.test(head)) throw new Error('Invalid HEAD');
+        stale = head.toLowerCase() !== lastCommit.toLowerCase();
+        if (!stale) {
+          commitsBehind = 0;
+        } else {
+          const out = runGit(`rev-list --count ${lastCommit}..HEAD`, this.repoPath).trim();
+          if (!/^\d+$/.test(out) || !Number.isSafeInteger(Number(out))) throw new Error('Invalid commit count');
+          commitsBehind = Number(out);
+        }
+        unverified = false;
+      } catch {
+        // An unknown revision or unavailable Git must never certify the index as fresh.
+        stale = true;
+      }
     }
-
     const freshness = {
       indexed: true,
       lastCommit,
       ...(indexedAt ? { indexedAt } : {}),
       ...(commitsBehind !== undefined ? { commitsBehind } : {}),
-      stale: (commitsBehind ?? 0) > 0,
+      stale,
+      ...(unverified ? { unverified: true } : {}),
     };
     if (options.autoIndex !== false) this.maybeAutoIndex(freshness);
     return freshness;
@@ -313,14 +356,16 @@ export class CodeExplorerManager {
 
   /** Launch one detached incremental refresh per stale index revision when explicitly enabled. */
   private maybeAutoIndex(freshness: CodeExplorerFreshness): void {
-    if (!freshness.stale || process.env.CODEBUDDY_CODE_EXPLORER_AUTOINDEX !== 'true') return;
+    if (!freshness.stale || freshness.unverified || analyses.has(this.repoPath) || process.env.CODEBUDDY_CODE_EXPLORER_AUTOINDEX !== 'true') return;
 
     const revision = freshness.lastCommit ?? freshness.indexedAt ?? 'legacy';
     if (this.autoIndexAttemptedFor === revision) return;
     this.autoIndexAttemptedFor = revision;
 
     try {
-      const child = spawn('gitnexus', ['analyze', '--incremental'], {
+      const binary = this.resolveBinary();
+      if (!binary) return;
+      const child = spawn(binary, ['analyze', '--incremental'], {
         cwd: this.repoPath,
         detached: true,
         stdio: 'ignore',

@@ -19,6 +19,10 @@ export const CODE_EXPLORER_ASK_TOOL: CodeBuddyTool = {
           type: 'string',
           description: 'The query or task description to ask CodeExplorer about.',
         },
+        repo: {
+          type: 'string',
+          description: 'Indexed repository path or id. Defaults to the graph that contains the current working directory.',
+        },
       },
       required: ['query'],
     },

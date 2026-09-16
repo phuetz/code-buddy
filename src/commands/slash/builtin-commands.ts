@@ -230,17 +230,20 @@ const checkpointCommands: SlashCommand[] = [
   },
   {
     name: 'redo',
-    description: 'Redo previously undone changes (restore forward in ghost snapshot timeline)',
+    description: 'Redo previously undone changes from checkpoint history',
     prompt: '__REDO__',
     filePath: '',
     isBuiltin: true
   },
   {
     name: 'timeline',
-    description: 'Show ghost snapshot timeline with current position',
+    description: 'Show the persisted session timeline (requires CODEBUDDY_TIMELINE=true)',
     prompt: '__TIMELINE__',
     filePath: '',
-    isBuiltin: true
+    isBuiltin: true,
+    arguments: [
+      { name: 'session-id', description: 'Session ID (current session by default)', required: false }
+    ]
   },
   {
     name: 'diff',
@@ -351,9 +354,12 @@ const devCommands: SlashCommand[] = [
   {
     name: 'debug-issue',
     description: 'Help debug a code issue',
-    prompt: `Help debug the described issue:
+    // A bare /debug-issue used to send "the described issue" with nothing
+    // described; the prompt now stands on its own with or without a symptom.
+    prompt: `Debug a problem in this project.
+Reported symptom (empty if the user gave none): $ARGUMENTS
 
-1. Gather information about the problem
+1. Gather information about the problem. Without a reported symptom, start from the working tree: git status --short, git diff for unstaged changes, git diff --cached for staged changes, then run the project's test script if one exists
 2. Analyze relevant code and logs
 3. Identify potential causes
 4. Suggest debugging steps
@@ -361,7 +367,10 @@ const devCommands: SlashCommand[] = [
 
 Be systematic and thorough in your analysis.`,
     filePath: '',
-    isBuiltin: true
+    isBuiltin: true,
+    arguments: [
+      { name: 'symptom', description: 'Error message or behaviour to debug (optional)', required: false }
+    ]
   },
   {
     name: 'refactor',
@@ -802,12 +811,12 @@ const memoryCommands: SlashCommand[] = [
   },
   {
     name: 'knowledge-graph',
-    description: 'View and manage the persistent knowledge graph (memU-style memory)',
+    description: 'View persistent knowledge graph stats and recall (requires CODEBUDDY_COLLECTIVE_MEMORY=true)',
     prompt: '__KNOWLEDGE_GRAPH__',
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'action', description: 'stats, entities [type], relations [entity], query <name>, decay, clear', required: false }
+      { name: 'action', description: 'stats, entities, recall <query>', required: false }
     ]
   }
 ];
@@ -896,13 +905,10 @@ const autonomyCommands: SlashCommand[] = [
   },
   {
     name: 'approvals',
-    description: 'Manage approval pattern learning (patterns, clear, threshold)',
+    description: 'Show approval flags, rules, and learned patterns (read-only)',
     prompt: '__APPROVALS__',
     filePath: '',
-    isBuiltin: true,
-    arguments: [
-      { name: 'action', description: 'patterns (list), clear (reset all), threshold <n>', required: false }
-    ]
+    isBuiltin: true
   },
   {
     name: 'heal',
@@ -914,16 +920,6 @@ const autonomyCommands: SlashCommand[] = [
       { name: 'action', description: 'on, off, status, or stats', required: false }
     ]
   },
-  {
-    name: 'batch-review',
-    description: 'Toggle batch review mode for multi-file changes (consolidate approve/reject)',
-    prompt: '__BATCH_REVIEW__',
-    filePath: '',
-    isBuiltin: true,
-    arguments: [
-      { name: 'action', description: 'on, off, status, show (view pending)', required: false }
-    ]
-  }
 ];
 
 // ============================================================================
@@ -1357,6 +1353,13 @@ const agentControlCommands: SlashCommand[] = [
     name: 'status',
     description: 'Show key configuration info at a glance (model, mode, cost, context, persona, security, YOLO)',
     prompt: '__STATUS__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'resources',
+    description: 'List declared resources (RagChat, GPU, storage…) and observation freshness — read-only, no probe',
+    prompt: '__RESOURCES__',
     filePath: '',
     isBuiltin: true
   },

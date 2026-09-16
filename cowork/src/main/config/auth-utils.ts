@@ -10,6 +10,7 @@ export const OPENAI_PLATFORM_BASE_URL = 'https://api.openai.com/v1';
 export const LOCAL_OPENAI_PLACEHOLDER_KEY = 'sk-openai-local-proxy';
 export const OLLAMA_PLACEHOLDER_KEY = 'sk-ollama-local-proxy';
 export const LMSTUDIO_PLACEHOLDER_KEY = 'sk-lmstudio-local-proxy';
+export const VLLM_PLACEHOLDER_KEY = 'sk-vllm-local-proxy';
 
 type OpenAIConfigLike = Pick<AppConfig, 'provider' | 'customProtocol' | 'apiKey' | 'baseUrl'>;
 
@@ -44,6 +45,12 @@ export function isOpenAIProvider(config: Pick<AppConfig, 'provider' | 'customPro
     config.provider === 'openai' ||
     config.provider === 'ollama' ||
     config.provider === 'lmstudio' ||
+    config.provider === 'grok' ||
+    config.provider === 'groq' ||
+    config.provider === 'together' ||
+    config.provider === 'fireworks' ||
+    config.provider === 'vllm' ||
+    config.provider === 'mistral' ||
     (config.provider === 'custom' && config.customProtocol === 'openai')
   );
 }
@@ -227,6 +234,12 @@ export function shouldAllowEmptyLmStudioApiKey(
   return config.provider === 'lmstudio';
 }
 
+export function shouldAllowEmptyVllmApiKey(
+  config: Pick<AppConfig, 'provider' | 'customProtocol' | 'baseUrl'>
+): boolean {
+  return config.provider === 'vllm';
+}
+
 export function resolveOllamaCredentials(
   config: OpenAIConfigLike
 ): ResolvedOpenAICredentials | null {
@@ -250,6 +263,19 @@ export function resolveLmStudioCredentials(
   return {
     apiKey: trimmedApiKey || LMSTUDIO_PLACEHOLDER_KEY,
     baseUrl: normalizeLmStudioBaseUrl(config.baseUrl),
+  };
+}
+
+export function resolveVllmCredentials(
+  config: OpenAIConfigLike
+): ResolvedOpenAICredentials | null {
+  if (config.provider !== 'vllm') {
+    return null;
+  }
+  const trimmedApiKey = config.apiKey?.trim();
+  return {
+    apiKey: trimmedApiKey || VLLM_PLACEHOLDER_KEY,
+    baseUrl: normalizeOpenAICompatibleBaseUrl(config.baseUrl),
   };
 }
 

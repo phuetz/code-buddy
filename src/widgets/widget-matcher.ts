@@ -89,15 +89,16 @@ function detectMarkdownTable(text: string): TableWidgetCandidate | null {
 
 /**
  * Detect at most one widgetable candidate. Typed payloads take precedence over
- * markdown tables. Answers under 200 characters are always ignored.
+ * markdown tables. The 200-character gate applies only to markdown tables;
+ * structured payloads already carry their own discriminator and data.
  */
 export function detectWidgetable(text: string, payloads: readonly unknown[] = []): WidgetCandidate | null {
-  if (text.length < MIN_ANSWER_LENGTH) return null;
   for (const payload of payloads) {
     const data = typedPayload(payload);
     const dataType = widgetKind(data)?.trim().toLowerCase();
     if (dataType) return { kind: 'payload', dataType, data };
   }
+  if (text.length < MIN_ANSWER_LENGTH) return null;
   return detectMarkdownTable(text);
 }
 

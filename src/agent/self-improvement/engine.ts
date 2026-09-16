@@ -3,11 +3,12 @@
  *   curriculum (pick the weakest capability) → propose → empirical gate
  *   (snapshot/apply/re-score) → keep or roll back → archive → audit.
  *
- * Autonomy is tiered and fail-safe: 'propose-only' (default) validates and
- * REPORTS what would help but persists nothing; 'auto-apply'
- * (CODEBUDDY_SELF_IMPROVE=true) keeps only changes that empirically improve the
- * deterministic benchmark with zero regressions. Even then, every kept change
- * is reversible (a lesson that can be removed) and archived for audit — code
+ * Autonomy is tiered and fail-safe: 'propose-only' (default, including
+ * CODEBUDDY_SELF_IMPROVE=true) validates and REPORTS what would help but
+ * persists nothing; 'auto-apply' (CODEBUDDY_SELF_IMPROVE=auto-apply, or
+ * `--apply`) keeps only changes that empirically improve the deterministic
+ * benchmark with zero regressions. Even then, every kept change is reversible
+ * (a lesson that can be removed) and archived for audit — code
  * self-modification is out of scope.
  *
  * @module agent/self-improvement/engine
@@ -29,9 +30,14 @@ import {
 
 export type Autonomy = 'propose-only' | 'auto-apply';
 
-/** Resolve autonomy from the environment (fail-safe to propose-only). */
+/**
+ * Resolve autonomy from the environment (fail-safe to propose-only).
+ * Enabling the feature (`true` / `1` / `yes`) is NOT permission to apply:
+ * only the literal value `auto-apply` opts into keeping validated changes.
+ */
 export function resolveAutonomy(env: NodeJS.ProcessEnv = process.env): Autonomy {
-  return env.CODEBUDDY_SELF_IMPROVE === 'true' ? 'auto-apply' : 'propose-only';
+  const raw = (env.CODEBUDDY_SELF_IMPROVE ?? '').trim().toLowerCase();
+  return raw === 'auto-apply' ? 'auto-apply' : 'propose-only';
 }
 
 export interface SelfImprovementEngineOptions {

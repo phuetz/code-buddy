@@ -339,13 +339,22 @@ function findMatchingLines(text: string, query: string, limit: number): string[]
 // Browser Tool
 // ============================================================================
 
+/** Evidence dir for screenshots/PDFs: env override, else $HOME/.codebuddy — never shared /tmp. */
+export function resolveBrowserEvidenceDir(): string {
+  const override = process.env.CODEBUDDY_SCREENSHOT_DIR?.trim();
+  if (override) return path.resolve(override);
+  return path.join(os.homedir(), '.codebuddy', 'browser-screenshots');
+}
+
 export class BrowserTool {
   private manager: BrowserManager;
-  private screenshotDir: string;
 
   constructor() {
     this.manager = getBrowserManager();
-    this.screenshotDir = path.join(os.tmpdir(), 'codebuddy-screenshots');
+  }
+
+  private evidenceDir(): string {
+    return resolveBrowserEvidenceDir();
   }
 
   /**
@@ -971,7 +980,8 @@ export class BrowserTool {
   // ============================================================================
 
   private async screenshot(input: BrowserToolInput): Promise<ToolResult> {
-    await fs.mkdir(this.screenshotDir, { recursive: true });
+    const evidenceDir = this.evidenceDir();
+    await fs.mkdir(evidenceDir, { recursive: true });
 
     const buffer = await this.manager.screenshot({
       fullPage: input.fullPage,
@@ -981,7 +991,7 @@ export class BrowserTool {
     });
 
     const filename = input.outputPath ||
-      path.join(this.screenshotDir, `screenshot-${Date.now()}.${input.format || 'png'}`);
+      path.join(evidenceDir, `screenshot-${Date.now()}.${input.format || 'png'}`);
 
     await fs.writeFile(filename, buffer);
 
@@ -993,12 +1003,13 @@ export class BrowserTool {
   }
 
   private async pdf(input: BrowserToolInput): Promise<ToolResult> {
-    await fs.mkdir(this.screenshotDir, { recursive: true });
+    const evidenceDir = this.evidenceDir();
+    await fs.mkdir(evidenceDir, { recursive: true });
 
     const buffer = await this.manager.pdf({});
 
     const filename = input.outputPath ||
-      path.join(this.screenshotDir, `page-${Date.now()}.pdf`);
+      path.join(evidenceDir, `page-${Date.now()}.pdf`);
 
     await fs.writeFile(filename, buffer);
 

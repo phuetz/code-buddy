@@ -63,7 +63,7 @@ interface CodeBuddyLSPSettings {
 
 const defaultSettings: CodeBuddyLSPSettings = {
   apiKey: '',
-  model: 'grok-3-latest',
+  model: process.env.GROK_MODEL?.trim() || 'grok-3-latest',
   enableDiagnostics: true,
   enableCompletions: true,
   maxTokens: 2048,

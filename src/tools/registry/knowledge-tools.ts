@@ -7,7 +7,7 @@
  */
 
 import type { ToolResult } from '../../types/index.js';
-import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
+import type { ITool, IToolExecutionContext, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 import { getKnowledgeManager } from '../../knowledge/knowledge-manager.js';
 
 // ============================================================================
@@ -275,7 +275,7 @@ export class CreateSkillExecuteTool implements ITool {
   readonly description =
     'Create a new SKILL.md file in the workspace skills directory. Use this to codify reusable workflows or procedures for future sessions. Skills are hot-reloaded immediately.';
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     return await getCreateSkillTool().execute({
       name: input.name as string,
       description: input.description as string,
@@ -284,7 +284,7 @@ export class CreateSkillExecuteTool implements ITool {
       env: input.env as Record<string, string> | undefined,
       requires: input.requires as string[] | undefined,
       overwrite: input.overwrite as boolean | undefined,
-    });
+    }, context?.cwd);
   }
 
   getSchema(): ToolSchema {

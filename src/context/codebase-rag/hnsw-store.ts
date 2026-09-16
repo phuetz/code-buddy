@@ -16,6 +16,7 @@ import { EventEmitter } from "events";
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "../../utils/logger.js";
+import { readJsonAtomic, writeJsonAtomic } from "../../utils/atomic-write.js";
 
 /**
  * Vector entry with metadata
@@ -44,6 +45,19 @@ interface HNSWNode {
   metadata?: Record<string, unknown>;
   neighbors: Map<number, Set<string>>; // level -> neighbor IDs
   level: number; // Max level this node exists at
+}
+
+interface PersistedHNSWData {
+  config?: Partial<HNSWConfig>;
+  entryPoint?: string | null;
+  maxLevel?: number;
+  nodes: Array<{
+    id: string;
+    vector: number[];
+    metadata?: Record<string, unknown>;
+    level: number;
+    neighbors: Array<{ level: number; ids: string[] }>;
+  }>;
 }
 
 /**
@@ -640,7 +654,7 @@ export class HNSWVectorStore extends EventEmitter {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(filePath, JSON.stringify(data));
+    await writeJsonAtomic(filePath, data);
     logger.debug(`HNSW index saved: ${this.nodes.size} vectors`);
   }
 
@@ -652,11 +666,16 @@ export class HNSWVectorStore extends EventEmitter {
       throw new Error(`Index file not found: ${filePath}`);
     }
 
-    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const data = await readJsonAtomic<PersistedHNSWData | null>(filePath, null, {
+      isValid: (value): value is PersistedHNSWData => Boolean(
+        value && typeof value === 'object' && Array.isArray((value as PersistedHNSWData).nodes)
+      ),
+    });
+    if (!data) throw new Error(`Index file is empty or unreadable: ${filePath}`);
 
     this.config = { ...DEFAULT_HNSW_CONFIG, ...data.config };
-    this.entryPoint = data.entryPoint;
-    this.maxLevel = data.maxLevel;
+    this.entryPoint = data.entryPoint ?? null;
+    this.maxLevel = data.maxLevel ?? 0;
     this.nodes.clear();
 
     for (const nodeData of data.nodes) {

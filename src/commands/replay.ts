@@ -136,6 +136,18 @@ export function createReplayCommand(deps: ReplayCommandDependencies = {}): Comma
         return;
       }
 
+      if (!deps.checkpointManager) {
+        const { restoreTimelineSnapshot } = await import('../sessions/timeline-snapshot.js');
+        const snapshot = restoreTimelineSnapshot(entry.checkpointId);
+        if (snapshot.found) {
+          if (!snapshot.success) {
+            throw new Error(snapshot.errors.join('\n') || `Failed to restore snapshot ${entry.checkpointId}`);
+          }
+          console.log(`Restored checkpoint ${entry.checkpointId}: ${snapshot.restored.join(', ') || 'no file changes'}.`);
+          return;
+        }
+      }
+
       const checkpointManager = deps.checkpointManager ?? getCheckpointManager();
       const result = checkpointManager.rewindTo(entry.checkpointId);
       if (!result.success) {

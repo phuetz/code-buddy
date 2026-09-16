@@ -203,12 +203,13 @@ const BUILTIN_RULES: PolicyRule[] = [
     constraints: {
       allowedArgs: [
         '^(?:status|log|diff|show|rev-parse|describe|ls-files|ls-tree|cat-file|blame|shortlog)(?:\\s|$).*',
+        '^(?:-C\\s+\\S+\\s+)?(?:status|log|diff|show|rev-parse|describe|ls-files|ls-tree|cat-file|blame|shortlog)(?:\\s|$).*',
         '^remote(?:\\s+-v)?$',
         '^branch(?:\\s+(?:--list|--show-current|--contains|--no-contains|--merged|--no-merged)(?:\\s.*)?)?$',
         '^tag(?:\\s+--list(?:\\s.*)?)?$',
       ],
       deniedArgs: [
-        '(^|\\s)(?:-C|--git-dir|--work-tree|--paginate)(?:\\s|=|$)',
+        '(^|\\s)(?:--git-dir|--work-tree|--paginate)(?:\\s|=|$)',
         '(^|\\s)(?:branch\\s+-(?:D|d)|log\\s+--output|push|reset.*--hard|clean|commit|merge|rebase|checkout|switch|restore|tag\\s+-d)(?:\\s|$).*',
       ],
     },
@@ -230,6 +231,9 @@ const BUILTIN_RULES: PolicyRule[] = [
         '^branch\\s+(?:-[dDmMcC]|--delete|--move|--copy|--edit-description|--set-upstream-to|--unset-upstream|--create-reflog)(?:\\s|$).*',
         '^tag\\s+(?!--list(?:\\s|$)).*',
         '^(?:-C|--git-dir|--work-tree|--paginate)(?:\\s|=|$).*',
+      ],
+      deniedArgs: [
+        '^-C\\s+\\S+\\s+(?:status|log|diff|show|rev-parse|describe|ls-files|ls-tree|cat-file|blame|shortlog)(?:\\s|$).*',
       ],
     },
     priority: 115,

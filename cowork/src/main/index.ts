@@ -110,7 +110,13 @@ import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import { InProcessCoworkCognition } from './companion/cognitive-context';
 import { getServerBridge } from './server/server-bridge';
-import { getExternalSession, listExternalSessions } from './session/cli-session-continuity';
+import {
+  exportCoworkSessionToCli,
+  getExternalSession,
+  listExternalSessions,
+  type SessionHandoffCoreModule,
+} from './session/cli-session-continuity';
+import { listCoworkResources, type ResourceCatalogCoreModule } from './fleet/resource-catalog-view';
 import {
   classifyEngineLoadError,
   resolveEnginePathWithDiagnostic,
@@ -128,6 +134,10 @@ import { ProjectEvolutionService } from './project/project-evolution';
 import { SubAgentBridge } from './agent/sub-agent-bridge';
 import { OrchestratorBridge } from './agent/orchestrator-bridge';
 import { FleetBridge } from './fleet/fleet-bridge';
+import {
+  createFleetDiscoverySchedule,
+  shutdownFleetBridgeForQuit,
+} from './fleet/fleet-bridge-lifecycle';
 import { SagaRunner } from './fleet/saga-runner';
 import { resolveWorkDir } from './ipc/ipc-workdir';
 import {
@@ -278,7 +288,6 @@ import {
   getAutonomyModelTierForReview,
   getAutonomyServiceLogsForReview,
 } from './autonomy/autonomy-daemon-bridge';
-import { bootstrapDarkstarNetworkModel } from './config/darkstar-network-model';
 import {
   addColabTaskForReview,
   blockColabTaskForReview,
@@ -992,7 +1001,12 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: THEME.background,
     icon: (() => {
-      const windowIconName = isMac ? 'icon.icns' : isWindows ? 'icon.ico' : 'icon.png';
+      if (!isMac && !isWindows) {
+        return app.isPackaged
+          ? join(app.getAppPath(), 'dist/logo.png')
+          : join(__dirname, '../../public/logo.png');
+      }
+      const windowIconName = isMac ? 'icon.icns' : 'icon.ico';
       return app.isPackaged
         ? join(process.resourcesPath, windowIconName)
         : join(__dirname, `../../resources/${windowIconName}`);
@@ -1629,13 +1643,6 @@ app
     // labelled concat). Runs regardless of the embedded engine: the Council
     // executes in this main process via saga-runner. Best-effort.
     void wireFleetAggregator(configStore);
-    const darkstarBootstrap = await bootstrapDarkstarNetworkModel(process.env);
-    if (darkstarBootstrap.applied) {
-      log('[main] Darkstar network model bootstrapped:', darkstarBootstrap.model, darkstarBootstrap.baseUrl);
-    } else {
-      log('[main] Darkstar network model bootstrap skipped:', darkstarBootstrap.reason);
-    }
-
     // Single source of truth for which runtime is in use. Logged AFTER
     // the load attempt so it never contradicts the engine init log
     // above (an earlier "[Runtime] Using pi-coding-agent SDK..." line
@@ -1747,7 +1754,7 @@ app
     // (W6) Schedule Tailscale + manual YAML discovery at boot and
     // every 5 minutes thereafter. Newly-detected peers are emitted as
     // `fleet.peer.discovered` events; the UI shows a confirm modal.
-    void scheduleFleetDiscovery();
+    fleetDiscovery.start();
 
     // Initialize team bridge — Phase 4 layer 9 (Agent Teams observability)
     teamBridge = new TeamBridge(sendToRenderer);
@@ -2384,34 +2391,34 @@ let isCleaningUp = false;
 // Diffs against the FleetBridge's current peer registry and surfaces
 // new candidates to the renderer for an "Add this peer?" confirm UI.
 const DISCOVERY_INTERVAL_MS = 5 * 60 * 1_000;
-let discoveryTimer: ReturnType<typeof setInterval> | null = null;
 
-async function scheduleFleetDiscovery(): Promise<void> {
-  const runOnce = async () => {
-    if (!fleetBridge) return;
-    try {
-      const { discoverPeers } = await import('./fleet/discovery');
-      const all = await discoverPeers();
-      const known = new Set((await Promise.resolve(fleetBridge.listPeers())).map((p) => p.url));
-      const fresh = all.filter((p) => !known.has(p.url));
-      if (fresh.length > 0) {
-        sendToRenderer({
-          type: 'fleet.peer.discovered',
-          payload: { peers: fresh },
-        });
-      }
-    } catch (err) {
-      // Silent fail — discovery is best-effort, don't pollute the log.
-      void err;
+async function runFleetDiscoveryPass(isActive: () => boolean): Promise<void> {
+  if (!fleetBridge) return;
+  try {
+    const { discoverPeers } = await import('./fleet/discovery');
+    // Quit may have started meanwhile: don't spawn a Tailscale probe while exiting.
+    if (!isActive()) return;
+    const all = await discoverPeers();
+    const known = new Set((await Promise.resolve(fleetBridge.listPeers())).map((p) => p.url));
+    const fresh = all.filter((p) => !known.has(p.url));
+    if (fresh.length > 0 && isActive()) {
+      sendToRenderer({
+        type: 'fleet.peer.discovered',
+        payload: { peers: fresh },
+      });
     }
-  };
-  // First pass after boot — small delay so Tailscale, FleetBridge init,
-  // and any startup races settle.
-  setTimeout(() => void runOnce(), 5_000);
-  if (!discoveryTimer) {
-    discoveryTimer = setInterval(() => void runOnce(), DISCOVERY_INTERVAL_MS);
+  } catch (err) {
+    // Silent fail — discovery is best-effort, don't pollute the log.
+    void err;
   }
 }
+
+// First pass after boot — small delay so Tailscale, FleetBridge init,
+// and any startup races settle — then every 5 minutes; stopped at quit.
+const fleetDiscovery = createFleetDiscoverySchedule(runFleetDiscoveryPass, {
+  firstDelayMs: 5_000,
+  intervalMs: DISCOVERY_INTERVAL_MS,
+});
 
 function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -2446,6 +2453,17 @@ async function cleanupSandboxResources(): Promise<void> {
   tray?.destroy();
   tray = null;
   liveLauncherBridge?.shutdown();
+  // No Tailscale probe or discovery push while quitting.
+  fleetDiscovery.stop();
+  // Disarm fleet reconnection now (the sandbox steps below can take tens of
+  // seconds) and let the peer sockets close alongside them; awaited, bounded, below.
+  const fleetBridgeClosing = shutdownFleetBridgeForQuit(fleetBridge);
+  // No workflow task, confirmation or tool starts while quitting; runs are refused.
+  try {
+    workflowBridge?.shutdown();
+  } catch (error) {
+    logError('[App] Error shutting down workflow bridge:', error);
+  }
 
   // 停止远程控制
   try {
@@ -2516,6 +2534,10 @@ async function cleanupSandboxResources(): Promise<void> {
   } catch (error) {
     logError('[App] Error stopping clipboard watcher:', error);
   }
+
+  // Never rejects; a hang is cut at FLEET_BRIDGE_QUIT_TIMEOUT_MS.
+  const fleetBridgeOutcome = await fleetBridgeClosing;
+  if (fleetBridgeOutcome === 'closed') log('[App] Fleet bridge closed');
 
   sessionManager?.dispose();
   try {
@@ -2588,6 +2610,14 @@ app.on('before-quit', async (event) => {
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
       liveLauncherBridge?.shutdown();
+      fleetDiscovery.stop();
+      // Synchronously disarms fleet reconnection; sockets close best-effort.
+      void shutdownFleetBridgeForQuit(fleetBridge);
+      try {
+        workflowBridge?.shutdown();
+      } catch {
+        /* best-effort */
+      }
       sessionManager?.dispose();
       try {
         closeDatabase();
@@ -2865,6 +2895,18 @@ ipcMain.handle('session.externalImport', async (_event, id: string) => {
   const external = getExternalSession(id);
   if (!external) throw new Error('External session not found');
   return sessionManager.importExternalSession(external);
+});
+// P6: export the text conversation to the CLI store and return `buddy --resume <id>`.
+ipcMain.handle('session.exportToCli', async (_event, sessionId: string) => {
+  if (!sessionManager) throw new Error('SessionManager not initialized');
+  if (typeof sessionId !== 'string' || !sessionId) throw new Error('sessionId required');
+  const manager = sessionManager;
+  const session = manager.listSessions().find((item) => item.id === sessionId) ?? null;
+  return exportCoworkSessionToCli({
+    session,
+    messages: session ? manager.getMessages(sessionId) : [],
+    loadCore: () => loadCoreModule<SessionHandoffCoreModule>('persistence/session-handoff.js'),
+  });
 });
 
 ipcMain.handle(
@@ -3649,6 +3691,30 @@ ipcMain.handle('dialog.selectFiles', async () => {
   }
 
   return result.filePaths;
+});
+
+ipcMain.handle('dialog.selectDirectory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Directory',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selectedPath = result.filePaths[0];
+  try {
+    if (!fs.statSync(selectedPath).isDirectory()) {
+      logWarn('[dialog.selectDirectory] Refusing a path that is not a directory:', selectedPath);
+      return null;
+    }
+  } catch (error) {
+    logWarn('[dialog.selectDirectory] Cannot inspect selected path:', selectedPath, error);
+    return null;
+  }
+
+  return selectedPath;
 });
 
 // Config IPC handlers
@@ -4630,10 +4696,9 @@ ipcMain.handle(
 
 ipcMain.handle(
   'workflow.approve',
-  async (_event, stepId: string, approved: boolean): Promise<boolean> => {
-    if (!workflowBridge) return false;
-    return workflowBridge.approveStep(stepId, approved);
-  }
+  // The whole answer goes to the bridge, which validates it against the pending request.
+  async (_event, answer: unknown): Promise<boolean> =>
+    workflowBridge ? workflowBridge.approveStep(answer) : false
 );
 
 // Tools list — exposes the core FormalToolRegistry's catalogue so the
@@ -4766,6 +4831,11 @@ ipcMain.handle('tools.hermesTrajectories.export', async (_, options) => {
     return { success: false, error: String(err) };
   }
 });
+
+// P8: read-only resource catalog (no probe, no URL, no fingerprint).
+ipcMain.handle('tools.resourceCatalog.list', async () =>
+  listCoworkResources(() => loadCoreModule<ResourceCatalogCoreModule>('fleet/resource-catalog.js')),
+);
 
 ipcMain.handle('tools.hermesDoctor.get', async () => {
   try {

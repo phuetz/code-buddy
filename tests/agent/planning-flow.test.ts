@@ -32,6 +32,49 @@ describe('PlanningFlow', () => {
     };
   }
 
+  it('parses a plan JSON that contains a stray quote-comma line (GK33 live)', async () => {
+    mockPlanLLM.mockResolvedValue(`{
+  "steps": [
+    { "id": "step_1", "title": "Define metrics", "description": "Choose false-cut metric", "agentKey": "default", "dependencies": [] },
+    {
+      "id": "step_2",
+     ",
+      "title": "Run offline VAD",
+      "description": "Score hangover 0 vs 300 ms",
+      "agentKey": "default",
+      "dependencies": ["step_1"]
+    }
+  ]
+}`);
+    const flow = new PlanningFlow(createConfig());
+    const result = await flow.execute('Measure VAD hangover');
+    expect(flow.plan!.steps.map((s) => s.title)).toEqual(['Define metrics', 'Run offline VAD']);
+    expect(result).toContain('2 completed');
+  });
+
+  it('parses a plan JSON wrapped in prose or markdown fences (GK33 live)', async () => {
+    mockPlanLLM.mockResolvedValue(
+      [
+        'Sure, here is the plan.',
+        '```json',
+        JSON.stringify({
+          steps: [
+            { id: 'step_1', title: 'Define metrics', description: 'Choose false-cut metric', agentKey: 'default', dependencies: [] },
+            { id: 'step_2', title: 'Run offline VAD', description: 'Score hangover 0 vs 300 ms', agentKey: 'default', dependencies: ['step_1'] },
+          ],
+        }),
+        '```',
+      ].join('\n'),
+    );
+
+    const flow = new PlanningFlow(createConfig());
+    const result = await flow.execute('Measure VAD hangover');
+
+    expect(flow.plan!.steps.map((s) => s.title)).toEqual(['Define metrics', 'Run offline VAD']);
+    expect(result).toContain('2 completed');
+    expect(flow.plan!.steps[0]!.title).not.toBe('Execute task');
+  });
+
   it('creates plan and executes steps', async () => {
     mockPlanLLM.mockResolvedValue(JSON.stringify({
       steps: [
@@ -88,6 +131,26 @@ describe('PlanningFlow', () => {
 
     const plan = flow.plan!;
     expect(plan.steps[1].status).toBe(PlanStepStatus.SKIPPED);
+  });
+
+  it('does not complete a step that only emits unexecuted tool-call markup', async () => {
+    mockPlanLLM.mockResolvedValue(JSON.stringify({
+      steps: [
+        { id: 's1', title: 'Create file', description: 'write title-case.js', agentKey: 'swe', dependencies: [] },
+      ],
+    }));
+    (mockSWEAgent.run as ReturnType<typeof vi.fn>).mockResolvedValue(
+      '<tool_call>\n<function=Bash>\n<parameter=command>\nls\n</parameter>\n</function>\n</tool_call>',
+    );
+
+    const flow = new PlanningFlow(createConfig({ maxRetries: 0 }));
+    const result = await flow.execute('create src/title-case.js');
+
+    expect(result).toContain('1 failed');
+    expect(result).toMatch(/unexecuted tool call/i);
+    expect(flow.status).toBe(AgentStatus.ERROR);
+    expect(flow.succeeded).toBe(false);
+    expect(flow.plan!.steps[0]!.status).toBe(PlanStepStatus.FAILED);
   });
 
   it('does not report an empty plan as a successful flow', async () => {

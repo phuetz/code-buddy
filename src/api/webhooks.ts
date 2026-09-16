@@ -14,6 +14,7 @@ import * as crypto from 'crypto';
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type WebhookEvent =
   | 'session.start'
@@ -414,17 +415,14 @@ export class WebhookManager {
    * Load config from file
    */
   private loadConfig(): void {
-    try {
-      if (fs.existsSync(this.configPath)) {
-        const data = fs.readJsonSync(this.configPath);
-        if (Array.isArray(data)) {
-          for (const webhook of data) {
-            this.webhooks.set(webhook.id, webhook);
-          }
-        }
+    const data = readJsonAtomicSync<WebhookConfig[]>(this.configPath, [], {
+      mode: 0o600,
+      isValid: (value): value is WebhookConfig[] => Array.isArray(value),
+    });
+    for (const webhook of data) {
+      if (webhook && typeof webhook.id === 'string') {
+        this.webhooks.set(webhook.id, webhook);
       }
-    } catch {
-      // Start with empty webhooks
     }
   }
 
@@ -433,9 +431,8 @@ export class WebhookManager {
    */
   private saveConfig(): void {
     try {
-      fs.ensureDirSync(path.dirname(this.configPath));
       const webhooks = Array.from(this.webhooks.values());
-      fs.writeJsonSync(this.configPath, webhooks, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, webhooks, { mode: 0o600 });
     } catch {
       // Ignore save errors
     }

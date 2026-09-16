@@ -6,6 +6,7 @@
  */
 
 import { promises } from 'fs';
+const { join: nativeJoin, normalize: nativeNormalize } = await vi.importActual<typeof import('node:path')>('node:path');
 
 import {
   CodebaseRAG,
@@ -32,6 +33,12 @@ jest.mock('fs', async () => {
 };
   return { ...impl, default: impl };
 });
+
+const mockWriteJsonAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/utils/atomic-write.js')>()),
+  writeJsonAtomic: mockWriteJsonAtomic,
+}));
 
 // Mock path
 jest.mock('path', async () => {
@@ -462,12 +469,44 @@ describe('CodebaseRAG', () => {
       fsPromises.mkdir.mockResolvedValue(undefined);
       fsPromises.writeFile.mockResolvedValue(undefined);
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       fsPromises.readFile.mockResolvedValue('function test() {}');
       await ragWithPath.indexFile('/test/file.ts');
       await ragWithPath.saveIndex();
 
-      expect(fsPromises.writeFile).toHaveBeenCalled();
+      // VERIF3 T4 : `saveIndex` écrit trois fichiers, l'unique assertion était
+      // `toHaveBeenCalled()`. Renommer chunks.json, supprimer l'écriture des
+      // chunks, du file-index ou des stats restait vert.
+      expect(mockWriteJsonAtomic.mock.calls.map((call) => nativeNormalize(call[0]))).toEqual([
+        nativeJoin('test', 'index', 'chunks.json'),
+        nativeJoin('test', 'index', 'file-index.json'),
+        nativeJoin('test', 'index', 'stats.json'),
+      ]);
+
+      const savedChunks = mockWriteJsonAtomic.mock.calls[0]![1] as CodeChunk[];
+      expect(Array.isArray(savedChunks)).toBe(true);
+      expect(savedChunks.length).toBeGreaterThan(0);
+      for (const chunk of savedChunks) {
+        expect(chunk.filePath).toBe('/test/file.ts');
+        expect(typeof chunk.id).toBe('string');
+        expect(typeof chunk.content).toBe('string');
+        // Les embeddings sont volontairement exclus du fichier de chunks.
+        expect(chunk.embedding).toBeUndefined();
+      }
+
+      const savedFileIndex = mockWriteJsonAtomic.mock.calls[1]![1] as Record<string, string[]>;
+      expect(Object.keys(savedFileIndex)).toEqual(['/test/file.ts']);
+      expect(savedFileIndex['/test/file.ts']).toEqual(savedChunks.map((chunk) => chunk.id));
+
+      const savedStats = mockWriteJsonAtomic.mock.calls[2]![1] as {
+        totalTokens: number;
+        languages: Record<string, number>;
+        chunkTypes: Record<string, number>;
+      };
+      expect(savedStats.totalTokens).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.languages).length).toBeGreaterThan(0);
+      expect(Object.keys(savedStats.chunkTypes).length).toBeGreaterThan(0);
+
       await ragWithPath.dispose();
     });
   });
@@ -481,7 +520,7 @@ describe('CodebaseRAG', () => {
     it('should return false if directory does not exist', async () => {
       fsPromises.access.mockRejectedValue(new Error('Not found'));
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       const result = await ragWithPath.loadIndex();
 
       expect(result).toBe(false);
@@ -522,7 +561,7 @@ describe('CodebaseRAG', () => {
         return Promise.resolve('');
       });
 
-      const ragWithPath = new CodebaseRAG({ indexPath: '/test/index' });
+      const ragWithPath = new CodebaseRAG({ indexPath: nativeJoin('test', 'index') });
       const result = await ragWithPath.loadIndex();
 
       expect(result).toBe(true);

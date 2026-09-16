@@ -4,6 +4,7 @@ import os from "os";
 import { spawn } from "child_process";
 import { getErrorMessage } from "../types/index.js";
 import { logger } from "../utils/logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type HookEvent =
   | "PreToolUse"
@@ -78,8 +79,8 @@ export class HookManager {
     // Load global hooks first
     if (fs.existsSync(this.globalConfigPath)) {
       try {
-        const globalConfig = fs.readJsonSync(this.globalConfigPath) as HooksConfig;
-        this.hooks = [...(globalConfig.hooks || [])];
+        const globalConfig = readJsonAtomicSync<HooksConfig | null>(this.globalConfigPath, null, { mode: 0o600 });
+        if (globalConfig) this.hooks = [...(globalConfig.hooks || [])];
       } catch (error) {
         logger.warn(`Failed to load global hooks config: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -88,8 +89,8 @@ export class HookManager {
     // Load project-level hooks (override/extend global)
     if (fs.existsSync(this.configPath)) {
       try {
-        const projectConfig = fs.readJsonSync(this.configPath) as HooksConfig;
-        this.hooks = [...this.hooks, ...(projectConfig.hooks || [])];
+        const projectConfig = readJsonAtomicSync<HooksConfig | null>(this.configPath, null, { mode: 0o600 });
+        if (projectConfig) this.hooks = [...this.hooks, ...(projectConfig.hooks || [])];
       } catch (error) {
         logger.warn(`Failed to load project hooks config: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -135,9 +136,7 @@ export class HookManager {
 
   private saveHooks(): void {
     try {
-      const dir = path.dirname(this.configPath);
-      fs.ensureDirSync(dir);
-      fs.writeJsonSync(this.configPath, { hooks: this.hooks }, { spaces: 2 });
+      writeJsonAtomicSync(this.configPath, { hooks: this.hooks }, { mode: 0o600 });
     } catch (error) {
       logger.warn(`Failed to save hooks config: ${error instanceof Error ? error.message : String(error)}`);
     }

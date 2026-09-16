@@ -8,6 +8,7 @@ import { ClipboardTool } from '../../src/tools/clipboard-tool.js';
 import { BrowserTool } from '../../src/tools/browser-tool.js';
 import { VideoTool } from '../../src/tools/video-tool.js';
 import { UnifiedVfsRouter } from '../../src/services/vfs/unified-vfs-router.js';
+import nodePath from 'path';
 
 // Mock UnifiedVfsRouter
 const mockReadFile = jest.fn();
@@ -38,6 +39,13 @@ jest.mock('../../src/services/vfs/unified-vfs-router.js', () => ({
   },
 }));
 
+// Cloud Vision is the last OCR engine: never let a developer's provider key reach it from a unit test.
+const mockResolveActiveProviderApiKey = vi.fn();
+vi.mock('../../src/config/env-schema.js', async () => ({
+  ...(await vi.importActual<typeof import('../../src/config/env-schema.js')>('../../src/config/env-schema.js')),
+  resolveActiveProviderApiKey: (...args: unknown[]) => mockResolveActiveProviderApiKey(...args),
+}));
+
 describe('Miscellaneous Tools VFS Migration Part 2', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -45,21 +53,26 @@ describe('Miscellaneous Tools VFS Migration Part 2', () => {
 
   describe('OCRTool', () => {
     it('should use VFS for extracting text', async () => {
-      const tool = new OCRTool();
-      
+      // Unit scope: the VFS contract before any engine runs. Engines are injected
+      // so nothing is downloaded (tesseract.js language data), no host binary is
+      // consulted and no cloud key is used. Real OCR lives in ocr-tool.real.test.ts.
+      const tesseractJs = jest.fn().mockRejectedValue(new Error('tesseract.js disabled in unit test'));
+      const execSync = jest.fn(() => { throw new Error('tesseract CLI disabled in unit test'); });
+      const tool = new OCRTool({ platform: 'linux', loadTesseractJs: tesseractJs, execSync: execSync as never });
+      mockResolveActiveProviderApiKey.mockReturnValue(undefined);
+
       mockExists.mockResolvedValue(true);
       mockStat.mockResolvedValue({ size: 1024 });
-      
-      // We assume tesseract check will pass or fail gracefully
-      // This test mainly verifies VFS calls before tesseract execution
-      try {
-        await tool.extractText('test.png');
-      } catch {
-        // Expected if tesseract not found or similar
-      }
-      
-      expect(mockExists).toHaveBeenCalled();
-      expect(mockStat).toHaveBeenCalled();
+
+      const result = await tool.extractText('test.png');
+
+      expect(mockExists).toHaveBeenCalledWith(nodePath.resolve(process.cwd(), 'test.png'));
+      expect(mockStat).toHaveBeenCalledWith(nodePath.resolve(process.cwd(), 'test.png'));
+      expect(tesseractJs).toHaveBeenCalledTimes(1);
+      expect(execSync).toHaveBeenCalledWith('tesseract --version', { stdio: 'ignore' });
+      expect(mockResolveActiveProviderApiKey).toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('All OCR engines failed or were unavailable');
     });
   });
 
@@ -130,9 +143,19 @@ describe('Miscellaneous Tools VFS Migration Part 2', () => {
       // note: readImage might use spawn, but we check dir creation
       
       // copyFileContent
+      mockReadFile.mockResolvedValue('clipboard file content');
+      const writeTextSpy = vi.spyOn(tool, 'writeText').mockResolvedValue({
+        success: true,
+        output: 'copied',
+      });
       await tool.copyFileContent('test.txt');
-      expect(mockExists).toHaveBeenCalledWith(expect.stringContaining('test.txt'));
-      expect(mockReadFile).toHaveBeenCalled();
+      // VERIF3 T19 : `stringContaining('test.txt')` laissait passer un suffixe
+      // ajouté au chemin lu (seul l'encodage était discriminant). Le chemin
+      // résolu exact est désormais asserté des deux côtés.
+      const resolvedPath = nodePath.resolve(process.cwd(), 'test.txt');
+      expect(mockExists).toHaveBeenCalledWith(resolvedPath);
+      expect(mockReadFile).toHaveBeenCalledWith(resolvedPath, 'utf8');
+      expect(writeTextSpy).toHaveBeenCalledWith('clipboard file content');
     });
   });
 

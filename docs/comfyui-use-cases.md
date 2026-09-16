@@ -1,6 +1,6 @@
 # ComfyUI comme moteur créatif de Code Buddy
 
-Audit local : 12 juillet 2026. Les états « prêt » ci-dessous reposent sur les fichiers non vides et les nœuds réellement présents dans `/home/patrice/DEV/ComfyUI`, pas seulement sur l'existence d'un modèle dans un catalogue.
+Audit local : 12 juillet 2026. Les états « prêt » ci-dessous reposent sur les fichiers non vides et les nœuds réellement présents dans `~/DEV/ComfyUI`, pas seulement sur l'existence d'un modèle dans un catalogue.
 
 ## Vision produit
 

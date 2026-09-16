@@ -103,6 +103,11 @@ export interface IToolMetadata {
   /** Whether tool makes network requests */
   makesNetworkRequests?: boolean;
   /**
+   * Declared side-effect class (`read` / `reversible` / `emission`).
+   * Kept in lockstep with `ToolMetadata.effect`.
+   */
+  effect?: 'read' | 'reversible' | 'emission';
+  /**
    * Whether this tool is safe to expose to remote peers via A2A / fleet.
    * Default `false` (opt-in). See `src/tools/types.ts:ToolMetadata.fleetSafe`
    * for the binding criteria — kept in lockstep with the legacy registry's

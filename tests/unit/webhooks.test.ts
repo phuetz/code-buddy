@@ -3,6 +3,18 @@
  * Tests webhook registration, event delivery, retry logic, signature verification, and persistence
  */
 
+const {
+  mockHttpsRequest,
+  mockHttpRequest,
+  mockReadJsonAtomicSync,
+  mockWriteJsonAtomicSync,
+} = vi.hoisted(() => ({
+  mockHttpsRequest: vi.fn(),
+  mockHttpRequest: vi.fn(),
+  mockReadJsonAtomicSync: vi.fn(),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+
 import * as https from 'node:https';
 import * as http from 'node:http';
 import * as crypto from 'node:crypto';
@@ -41,8 +53,8 @@ vi.mock('node:https', async () => {
   const actualHttps = await vi.importActual<typeof import('node:https')>('node:https');
   return {
     ...actualHttps,
-    request: vi.fn(),
-    default: { ...actualHttps, request: vi.fn() },
+    request: mockHttpsRequest,
+    default: { ...actualHttps, request: mockHttpsRequest },
   };
 });
 
@@ -50,10 +62,15 @@ vi.mock('node:http', async () => {
   const actualHttp = await vi.importActual<typeof import('node:http')>('node:http');
   return {
     ...actualHttp,
-    request: vi.fn(),
-    default: { ...actualHttp, request: vi.fn() },
+    request: mockHttpRequest,
+    default: { ...actualHttp, request: mockHttpRequest },
   };
 });
+
+vi.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
 
 // Mock EventEmitter for request/response
 class MockClientRequest {
@@ -115,6 +132,21 @@ class MockIncomingMessage {
     }
   }
 }
+
+mockReadJsonAtomicSync.mockImplementation((filePath: string, fallback: unknown, options: {
+  isValid?: (value: unknown) => boolean;
+} = {}) => {
+  if (!(fs.existsSync as jest.Mock)(filePath)) return fallback;
+  try {
+    const value: unknown = (fs.readJsonSync as jest.Mock)(filePath);
+    return options.isValid && !options.isValid(value) ? fallback : value;
+  } catch {
+    return fallback;
+  }
+});
+mockWriteJsonAtomicSync.mockImplementation((filePath: string, value: unknown) =>
+  (fs.writeJsonSync as jest.Mock)(filePath, value, { spaces: 2 })
+);
 
 describe('WebhookManager', () => {
   let manager: WebhookManager;
@@ -1207,11 +1239,10 @@ describe('WebhookManager', () => {
         enabled: true,
       });
 
-      expect(fs.ensureDirSync).toHaveBeenCalled();
-      expect(fs.writeJsonSync).toHaveBeenCalledWith(
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
         tempConfigPath,
         expect.any(Array),
-        { spaces: 2 }
+        { mode: 0o600 }
       );
     });
 
@@ -1342,7 +1373,7 @@ describe('All Webhook Events', () => {
     (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
     (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
 
-    manager = new WebhookManager('/tmp/test-webhooks.json');
+    manager = new WebhookManager(path.join(os.tmpdir(), 'test-webhooks.json'));
 
     mockRequest = new MockClientRequest();
     const mockResponse = new MockIncomingMessage(200, '{}');
@@ -1386,7 +1417,7 @@ describe('Edge Cases', () => {
     (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
     (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
 
-    manager = new WebhookManager('/tmp/test-webhooks.json');
+    manager = new WebhookManager(path.join(os.tmpdir(), 'test-webhooks.json'));
     mockRequest = new MockClientRequest();
   });
 

@@ -21,10 +21,11 @@ export class CodeExplorerAskTool implements ITool {
         error: 'Missing required parameter "query".',
       };
     }
+    const repo = typeof input.repo === 'string' && input.repo.trim() ? input.repo.trim() : undefined;
 
     try {
       const codeExplorer = new CodeExplorerTool();
-      const result = await codeExplorer.ask(query);
+      const result = await codeExplorer.ask(query, repo);
       return {
         success: true,
         output: JSON.stringify(result, null, 2),
@@ -47,6 +48,10 @@ export class CodeExplorerAskTool implements ITool {
           query: {
             type: 'string',
             description: 'The query or task description to ask CodeExplorer about.',
+          },
+          repo: {
+            type: 'string',
+            description: 'Indexed repository path or id. Defaults to the graph that contains the current working directory.',
           },
         },
         required: ['query'],

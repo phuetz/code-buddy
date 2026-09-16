@@ -2,7 +2,6 @@
  * Canvas HTTP Routes
  *
  * Serves canvas content from the Gateway HTTP server.
- * Advanced enterprise architecture for /__Native Engine__/canvas/ and /__Native Engine__/a2ui/ routes.
  *
  * Endpoints:
  *   GET /__codebuddy__/canvas/         — Serve canvas HTML
@@ -14,6 +13,7 @@
  *   GET /__codebuddy__/a2ui/snapshot   — Get A2UI snapshot
  */
 
+import { Router, type Request, type Response } from 'express';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================
@@ -64,6 +64,13 @@ class CanvasStore {
     this.current = null;
   }
 
+  /** Wipe every snapshot. Tests and POST /reset use this so a blank canvas stays blank. */
+  clear(): void {
+    this.snapshots.clear();
+    this.current = null;
+    this.idCounter = 0;
+  }
+
   list(): CanvasSnapshot[] {
     return Array.from(this.snapshots.values()).sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
@@ -86,6 +93,60 @@ export interface RouteHandler {
   }, body?: string) => Promise<void>;
 }
 
+function isFullHtmlDocument(html: string): boolean {
+  return /^\s*<(!doctype\s+html\b|html[\s>])/i.test(html);
+}
+
+function snapshotPage(snapshot: CanvasSnapshot): string {
+  if (isFullHtmlDocument(snapshot.html) && !snapshot.css && !snapshot.js) {
+    return snapshot.html;
+  }
+  return buildCanvasPage(snapshot);
+}
+
+function extractHtml(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const html = (payload as { html?: unknown }).html;
+  if (typeof html !== 'string' || html.trim().length === 0) return null;
+  return html;
+}
+
+function parsePushBody(raw: string | undefined, maxSize: number): {
+  html: string;
+  css?: string;
+  js?: string;
+  metadata?: Record<string, unknown>;
+} | { error: string } {
+  if (!raw || raw.length > maxSize) {
+    return { error: 'Body required and must be < 1MB' };
+  }
+  try {
+    const data: unknown = JSON.parse(raw);
+    const html = extractHtml(data);
+    if (!html) return { error: 'HTML required' };
+    if (Buffer.byteLength(html, 'utf8') > maxSize) {
+      return { error: 'Body required and must be < 1MB' };
+    }
+    const record = data as { css?: unknown; js?: unknown; metadata?: unknown };
+    return {
+      html,
+      ...(typeof record.css === 'string' ? { css: record.css } : {}),
+      ...(typeof record.js === 'string' ? { js: record.js } : {}),
+      ...(record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+        ? { metadata: record.metadata as Record<string, unknown> }
+        : {}),
+    };
+  } catch {
+    return { error: 'Invalid JSON body' };
+  }
+}
+
+function canvasIdFromUrl(url: string): string {
+  const path = url.split('?')[0] ?? url;
+  const parts = path.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
 export function createCanvasRoutes(config?: Partial<CanvasRouteConfig>): RouteHandler[] {
   const basePath = config?.basePath || '/__codebuddy__';
   const maxSize = config?.maxCanvasSize || 1024 * 1024; // 1MB
@@ -97,59 +158,51 @@ export function createCanvasRoutes(config?: Partial<CanvasRouteConfig>): RouteHa
       handler: async (_req, res) => {
         const current = canvasStore.getCurrent();
         if (!current) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<html><body><p>No canvas content. Push content via POST.</p></body></html>');
           return;
         }
-        const page = buildCanvasPage(current);
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(page);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(snapshotPage(current));
       },
     },
     {
       method: 'GET',
       path: `${basePath}/canvas/:id`,
       handler: async (req, res) => {
-        // Extract ID from URL
         const url = (req as { url?: string }).url || '';
-        const id = url.split('/').pop() || '';
+        const id = canvasIdFromUrl(url);
         const snapshot = canvasStore.get(id);
         if (!snapshot) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Canvas not found' }));
           return;
         }
-        const page = buildCanvasPage(snapshot);
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(page);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(snapshotPage(snapshot));
       },
     },
     {
       method: 'POST',
       path: `${basePath}/canvas/push`,
       handler: async (_req, res, body) => {
-        if (!body || body.length > maxSize) {
+        const parsed = parsePushBody(body, maxSize);
+        if ('error' in parsed) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Body required and must be < 1MB' }));
+          res.end(JSON.stringify({ error: parsed.error }));
           return;
         }
-        try {
-          const data = JSON.parse(body);
-          const snapshot = canvasStore.push(data.html, data.css, data.js, data.metadata);
-          logger.debug('Canvas pushed', { id: snapshot.id });
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ id: snapshot.id, createdAt: snapshot.createdAt }));
-        } catch {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
-        }
+        const snapshot = canvasStore.push(parsed.html, parsed.css, parsed.js, parsed.metadata);
+        logger.debug('Canvas pushed', { id: snapshot.id });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: snapshot.id, createdAt: snapshot.createdAt }));
       },
     },
     {
       method: 'POST',
       path: `${basePath}/canvas/reset`,
       handler: async (_req, res) => {
-        canvasStore.reset();
+        canvasStore.clear();
         logger.debug('Canvas reset');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ reset: true }));
@@ -199,6 +252,90 @@ export function createCanvasRoutes(config?: Partial<CanvasRouteConfig>): RouteHa
   ];
 
   return routes;
+}
+
+/**
+ * Express router mounted at `/__codebuddy__`. Same store as createCanvasRoutes.
+ */
+export function createCanvasRouter(config?: Partial<CanvasRouteConfig>): Router {
+  const maxSize = config?.maxCanvasSize || 1024 * 1024;
+  const router = Router();
+
+  const sendHtml = (res: Response, html: string): void => {
+    res.status(200).type('html').send(html);
+  };
+
+  router.get('/canvas/', (_req: Request, res: Response) => {
+    const current = canvasStore.getCurrent();
+    if (!current) {
+      sendHtml(res, '<html><body><p>No canvas content. Push content via POST.</p></body></html>');
+      return;
+    }
+    sendHtml(res, snapshotPage(current));
+  });
+
+  router.post('/canvas/push', (req: Request, res: Response) => {
+    const html = extractHtml(req.body);
+    if (!html) {
+      res.status(400).json({ error: 'HTML required' });
+      return;
+    }
+    if (Buffer.byteLength(html, 'utf8') > maxSize) {
+      res.status(400).json({ error: 'Body required and must be < 1MB' });
+      return;
+    }
+    const record = req.body as { css?: unknown; js?: unknown; metadata?: unknown };
+    const snapshot = canvasStore.push(
+      html,
+      typeof record.css === 'string' ? record.css : undefined,
+      typeof record.js === 'string' ? record.js : undefined,
+      record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+        ? record.metadata as Record<string, unknown>
+        : undefined,
+    );
+    logger.debug('Canvas pushed', { id: snapshot.id });
+    res.status(200).json({ id: snapshot.id, createdAt: snapshot.createdAt });
+  });
+
+  router.post('/canvas/reset', (_req: Request, res: Response) => {
+    canvasStore.clear();
+    logger.debug('Canvas reset');
+    res.status(200).json({ reset: true });
+  });
+
+  router.get('/canvas/:id', (req: Request, res: Response) => {
+    const id = String(req.params.id || '');
+    const snapshot = canvasStore.get(id);
+    if (!snapshot) {
+      res.status(404).json({ error: 'Canvas not found' });
+      return;
+    }
+    sendHtml(res, snapshotPage(snapshot));
+  });
+
+  router.get('/a2ui/', (_req: Request, res: Response) => {
+    sendHtml(res, buildA2UIPage());
+  });
+
+  router.post('/a2ui/eval', (req: Request, res: Response) => {
+    const expression = (req.body as { expression?: unknown } | undefined)?.expression;
+    if (typeof expression !== 'string') {
+      res.status(400).json({ error: 'Body required' });
+      return;
+    }
+    logger.debug('A2UI eval', { expression: expression.slice(0, 100) });
+    res.status(200).json({ evaluated: true, expression });
+  });
+
+  router.get('/a2ui/snapshot', (_req: Request, res: Response) => {
+    const current = canvasStore.getCurrent();
+    res.status(200).json({
+      hasCanvas: !!current,
+      snapshot: current ? { id: current.id, createdAt: current.createdAt } : null,
+    });
+  });
+
+  return router;
 }
 
 // ============================================================================

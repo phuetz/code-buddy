@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 import type { RepoProfile } from './types.js';
 
 const CACHE_FILENAME = '.codebuddy/repoProfile.json';
@@ -15,9 +16,12 @@ export function getCachePath(cwd: string): string {
 
 export function loadCache(cachePath: string): RepoProfile | null {
   try {
-    if (!fs.existsSync(cachePath)) return null;
-    const raw = fs.readFileSync(cachePath, 'utf-8');
-    return JSON.parse(raw) as RepoProfile;
+    return readJsonAtomicSync<RepoProfile | null>(cachePath, null, {
+      mode: 0o600,
+      isValid: (value): value is RepoProfile => Boolean(
+        value && typeof value === 'object' && !Array.isArray(value),
+      ),
+    });
   } catch {
     return null;
   }
@@ -44,11 +48,7 @@ export function isCacheStale(cached: RepoProfile, cwd: string): boolean {
 
 export function saveCache(cachePath: string, profile: RepoProfile): void {
   try {
-    const dir = path.dirname(cachePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(cachePath, JSON.stringify(profile, null, 2));
+    writeJsonAtomicSync(cachePath, profile, { mode: 0o600 });
   } catch (err) {
     logger.debug('RepoProfiler: failed to save cache', { err });
   }

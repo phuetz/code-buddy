@@ -27,6 +27,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { CodeBuddyClient } from '../codebuddy/client.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
 import {
@@ -363,8 +364,15 @@ export class LocalUserModel {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as UserModelFile;
+      const parsed = readJsonAtomicSync<UserModelFile>(this.filePath, {
+        schemaVersion: USER_MODEL_SCHEMA_VERSION,
+        observations: [],
+      }, {
+        mode: 0o600,
+        isValid: (value): value is UserModelFile => Boolean(
+          value && typeof value === 'object' && Array.isArray((value as { observations?: unknown }).observations),
+        ),
+      });
       if (Array.isArray(parsed.observations)) {
         this.observations = parsed.observations.filter(isValidObservation);
       }
@@ -382,7 +390,7 @@ export class LocalUserModel {
         schemaVersion: USER_MODEL_SCHEMA_VERSION,
         observations: this.observations,
       };
-      fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+      writeJsonAtomicSync(this.filePath, file, { mode: 0o600 });
     } catch (err) {
       logger.warn('[user-model] failed to save model', {
         error: err instanceof Error ? err.message : String(err),

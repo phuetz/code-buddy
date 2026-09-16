@@ -7,7 +7,7 @@
  * model, no network, no real home dir.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -23,6 +23,7 @@ import {
 } from '../../src/companion/proactive-engine.js';
 import { saveRelationshipState, loadRelationshipState } from '../../src/companion/relationship-state.js';
 import { _resetConductorForTests } from '../../src/companion/orchestrator.js';
+import { SAFE_RELATIONSHIP_REPAIR } from '../../src/conversation/relationship-safety.js';
 
 const DAY = 24 * 3600_000;
 const ORIGINAL_TIMEZONE = process.env.CODEBUDDY_TIMEZONE;
@@ -120,7 +121,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('does nothing when the feature is off', async () => {
     delete process.env.CODEBUDDY_COMPANION_PROACTIVE;
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, say, telegramVoice: async () => true, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toBeNull();
     expect(say).not.toHaveBeenCalled();
@@ -128,14 +129,14 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('stays silent during quiet hours', async () => {
     const quiet = Date.parse('2026-07-02T23:30:00');
-    const line = await runProactiveTick({ now: () => quiet, statePath, relationshipStatePath: relPath, recentHearing: async () => [], present: async () => true, say: async () => {} });
+    const line = await runProactiveTick({ now: () => quiet, statePath, relationshipStatePath: relPath, recentHearing: async () => [], present: async () => true, say: async () => true });
     expect(line).toBeNull();
   });
 
   it('uses the household timezone for quiet hours instead of the host timezone', async () => {
     process.env.CODEBUDDY_TIMEZONE = 'Pacific/Auckland';
     const householdNight = Date.parse('2026-07-12T10:30:00.000Z'); // 22:30 in Auckland
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => householdNight,
       statePath,
@@ -151,7 +152,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   it('speaks aloud when present, and throttles the next immediate tick', async () => {
     // Tenure milestone at 30 days, present → spoken.
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const tg = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, present: async () => true, say, telegramVoice: tg, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toContain('30');
@@ -166,29 +167,35 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   });
 
   it('gates an unsafe LLM refinement before local or Telegram delivery', async () => {
+    // DEPENDENCY_PRESSURE is empty by operator request; SUBJECTIVE_CLAIMS still fire.
     saveRelationshipState(
       { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
       relPath,
     );
-    const say = vi.fn(async () => undefined);
+    const say = vi.fn(async () => true);
+    const telegramVoice = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => NOW,
       present: async () => true,
       say,
+      telegramVoice,
       statePath,
       relationshipStatePath: relPath,
       recentHearing: async () => [],
-      refine: async () => "Tu n'as besoin que de moi.",
+      refine: async () => "J'ai une conscience.",
     });
 
-    expect(line).toContain("Tu n'as besoin que de moi");
-    expect(say).toHaveBeenCalledWith(line);
+    expect(line).toBe(SAFE_RELATIONSHIP_REPAIR);
+    expect(line).not.toMatch(/j'ai une conscience/i);
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(say).toHaveBeenCalledWith(SAFE_RELATIONSHIP_REPAIR);
+    expect(telegramVoice).not.toHaveBeenCalled();
   });
 
   it('reaches the phone (Telegram voice) when away after an absence', async () => {
     // 3 days without a sighting → inactivity, absent → Telegram.
     saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const tg = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, present: async () => false, say, telegramVoice: tg, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toContain('3');
@@ -269,9 +276,43 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
   });
 
+  it('yields to the conductor when absent (Telegram still honours MIN_GAP)', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
+    const tg = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => false,
+      telegramVoice: tg,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      conductor: { claim: () => false },
+    });
+    expect(line).toBeNull();
+    expect(tg).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
+  it('stays silent when the mouth is already speaking', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      speaking: () => true,
+      say,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
   it('yields to the conductor when present (another voice has the floor)', async () => {
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => NOW,
       present: async () => true,
@@ -289,10 +330,72 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('persists the cooldown anchor after sending', async () => {
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    await runProactiveTick({ now: () => NOW, present: async () => true, say: async () => {}, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
+    await runProactiveTick({ now: () => NOW, present: async () => true, say: async () => true, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     const st = loadProactiveState(statePath);
     expect(st.lastSentAt).toBe(NOW);
     expect(st.recentLines.length).toBe(1);
+  });
+
+  it('does not return a line when the cooldown cursor cannot be persisted (D1)', async () => {
+    const blocked = join(tmp, 'blocked-as-file');
+    writeFileSync(blocked, 'x');
+    const unwritable = join(blocked, 'proactive-state.json');
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      telegramVoice: async () => true,
+      statePath: unwritable,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(loadProactiveState(unwritable).lastSentAt).toBeUndefined();
+  });
+
+  it('uses a safe fallback for corrupt proactive state (MEM1)', async () => {
+    writeFileSync(statePath, '{this is not json');
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      rng: () => 0.99,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toContain('30 jours');
+    expect(say).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not persist cooldown when local say reports failure (D8)', async () => {
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => false);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
   });
 });
 

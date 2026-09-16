@@ -21,6 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { nextEnabledIndex, paletteItemState, type PaletteAvailability } from '../commands/slash-availability';
 
 export interface SlashCommandItem {
   name: string;
@@ -34,6 +35,8 @@ export interface SlashCommandItem {
     required: boolean;
     default?: string;
   }>;
+  /** Computed by the main process (P4); unavailable entries are shown disabled. */
+  availability?: PaletteAvailability;
 }
 
 interface SlashCommandPaletteProps {
@@ -125,8 +128,10 @@ export const SlashCommandPalette: React.FC<SlashCommandPaletteProps> = ({
       try {
         const results = await api.command.autocomplete(prefix, 40);
         if (cancelled) return;
-        setItems(results as SlashCommandItem[]);
-        setHighlightedIdx(0);
+        const next = results as SlashCommandItem[];
+        setItems(next);
+        const firstEnabled = next.findIndex((item) => !paletteItemState(item).disabled);
+        setHighlightedIdx(firstEnabled >= 0 ? firstEnabled : 0);
       } catch {
         if (!cancelled) setItems([]);
       } finally {
@@ -147,13 +152,14 @@ export const SlashCommandPalette: React.FC<SlashCommandPaletteProps> = ({
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setHighlightedIdx((idx) => (idx + 1) % items.length);
+        setHighlightedIdx((idx) => nextEnabledIndex(items, idx, 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setHighlightedIdx((idx) => (idx - 1 + items.length) % items.length);
+        setHighlightedIdx((idx) => nextEnabledIndex(items, idx, -1));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        onSelect(items[highlightedIdx]);
+        const current = items[highlightedIdx];
+        if (current && !paletteItemState(current).disabled) onSelect(current);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -196,6 +202,7 @@ export const SlashCommandPalette: React.FC<SlashCommandPaletteProps> = ({
 
   const handleClickItem = useCallback(
     (item: SlashCommandItem) => {
+      if (paletteItemState(item).disabled) return;
       onSelect(item);
     },
     [onSelect]
@@ -239,15 +246,19 @@ export const SlashCommandPalette: React.FC<SlashCommandPaletteProps> = ({
                 </div>
                 {catItems.map((item) => {
                   const globalIdx = items.indexOf(item);
-                  const isHighlighted = globalIdx === highlightedIdx;
+                  const { disabled, reason } = paletteItemState(item);
+                  const isHighlighted = !disabled && globalIdx === highlightedIdx;
                   return (
                     <button
                       key={`${category}-${item.name}`}
                       data-idx={globalIdx}
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      title={reason}
                       onClick={() => handleClickItem(item)}
-                      onMouseEnter={() => setHighlightedIdx(globalIdx)}
+                      onMouseEnter={() => { if (!disabled) setHighlightedIdx(globalIdx); }}
                       className={`w-full flex items-start gap-2 px-3 py-1.5 text-left transition-colors ${
-                        isHighlighted ? 'bg-accent-muted' : 'hover:bg-surface-hover'
+                        disabled ? 'opacity-50 cursor-not-allowed' : isHighlighted ? 'bg-accent-muted' : 'hover:bg-surface-hover'
                       }`}
                     >
                       <Icon size={12} className="text-text-muted shrink-0 mt-0.5" />
@@ -256,7 +267,7 @@ export const SlashCommandPalette: React.FC<SlashCommandPaletteProps> = ({
                           /{item.name}
                         </div>
                         <div className="text-[10px] text-text-muted truncate">
-                          {item.description}
+                          {disabled && reason ? reason : item.description}
                         </div>
                       </div>
                       {item.arguments && item.arguments.length > 0 && (

@@ -382,9 +382,11 @@ describe('ContextManagerV2', () => {
         recentMessagesCount: 5,
       });
 
-      // Should still return something, even if truncated
-      const prepared = smallManager.prepareMessages(messages);
-      expect(prepared.length).toBeGreaterThan(0);
+      // R29 (2026-09-02) : une requête qui ne tient pas seule dans le budget
+      // n'est plus tronquée en silence, elle est refusée explicitement.
+      expect(() => smallManager.prepareMessages(messages)).toThrow(
+        /Current user request exceeds the context budget/,
+      );
 
       smallManager.dispose();
     });

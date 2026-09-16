@@ -53,7 +53,7 @@ describe('FleetCostStrip', () => {
       summary: {
         todayUsd: 0.42,
         todayByProvider: { grok: 0.3, openai: 0.12 },
-        todayByPeer: { 'darkstar/repo': 0.42 },
+        todayByPeer: { 'gpuNode/repo': 0.42 },
         weekUsd: 1.1,
       },
       budget: { maxDailyUsd: 5, maxSagaUsd: 1 },

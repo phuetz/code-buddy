@@ -8,6 +8,7 @@
 
 import type { ChannelType, BaseChannel } from './core.js';
 import { ChannelManager, getChannelManager } from './core.js';
+import { CHANNEL_SLASH_SURFACES } from '../commands/slash/surfaces.js';
 
 // ============================================================================
 // Types
@@ -84,51 +85,17 @@ export interface SlashParityManifest {
 // ============================================================================
 
 /**
- * The canonical set of slash commands expected on each platform.
- *
- * These represent the Code Buddy bot commands that users should be
- * able to invoke from each messaging platform. The manifest is
- * intentionally conservative — platforms may support additional
- * commands beyond what is listed here.
+ * The canonical set of slash commands expected on each platform, derived from
+ * the single surface declaration `CHANNEL_SLASH_SURFACES`
+ * (src/commands/slash/surfaces.ts) shared with the CLI catalog, Cowork and the
+ * slash wiki. Platforms may support additional commands beyond this list.
  */
-export const EXPECTED_SLASH_COMMANDS: Record<string, SlashCommandSpec[]> = {
-  discord: [
-    { name: 'ask', description: 'Ask Code Buddy a question' },
-    { name: 'status', description: 'Show bot and channel status' },
-    { name: 'clear', description: 'Clear conversation history' },
-    { name: 'help', description: 'Show available commands' },
-    { name: 'model', description: 'Switch or show current model' },
-    { name: 'think', description: 'Set reasoning depth', required: false },
-    { name: 'compact', description: 'Compact conversation context', required: false },
-    { name: 'repo', description: 'Show repository info', required: false },
-  ],
-  telegram: [
-    { name: 'ask', description: 'Ask Code Buddy a question' },
-    { name: 'status', description: 'Show bot and channel status' },
-    { name: 'clear', description: 'Clear conversation history' },
-    { name: 'help', description: 'Show available commands' },
-    { name: 'model', description: 'Switch or show current model' },
-    { name: 'yolo', description: 'Toggle YOLO mode', required: false },
-    { name: 'repo', description: 'Show repository info', required: false },
-    { name: 'branch', description: 'Show branch info', required: false },
-  ],
-  slack: [
-    { name: 'ask', description: 'Ask Code Buddy a question' },
-    { name: 'status', description: 'Show bot and channel status' },
-    { name: 'clear', description: 'Clear conversation history' },
-    { name: 'help', description: 'Show available commands' },
-    { name: 'model', description: 'Switch or show current model' },
-    { name: 'compact', description: 'Compact conversation context', required: false },
-    { name: 'think', description: 'Set reasoning depth', required: false },
-  ],
-  matrix: [
-    { name: 'ask', description: 'Ask Code Buddy a question' },
-    { name: 'status', description: 'Show bot and channel status' },
-    { name: 'clear', description: 'Clear conversation history' },
-    { name: 'help', description: 'Show available commands' },
-    { name: 'model', description: 'Switch or show current model', required: false },
-  ],
-};
+export const EXPECTED_SLASH_COMMANDS: Record<string, SlashCommandSpec[]> = Object.fromEntries(
+  Object.entries(CHANNEL_SLASH_SURFACES).map(([platform, specs]) => [
+    platform,
+    specs.map(({ name, description, required }) => ({ name, description, ...(required === false ? { required } : {}) })),
+  ]),
+);
 
 // ============================================================================
 // Command Extraction

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 
 // Import the runChecks function from the CommonJS script using createRequire
@@ -59,6 +60,32 @@ function populateEngineAdapter(root: string): void {
   makeFile(
     path.join(runtime, 'dist', 'agent', 'codebuddy-agent.js'),
     "import chalk from 'chalk'; export class CodeBuddyAgent { color = chalk.blue('ok'); }",
+  );
+  // Slash-command gateway and the two root optional packages Cowork stages for it.
+  makeFile(
+    path.join(runtime, 'dist', 'commands', 'headless-slash.js'),
+    [
+      "import stringWidth from 'string-width';",
+      "import { GoogleGenerativeAI } from '@google/generative-ai';",
+      "if (stringWidth('ok') !== 2 || typeof GoogleGenerativeAI !== 'function') throw new Error('bad slash dependencies');",
+      'export async function executeHeadlessSlashToken() { return { handled: true }; }',
+    ].join('\n'),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', 'string-width', 'package.json'),
+    JSON.stringify({ type: 'module', exports: './index.js' }),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', 'string-width', 'index.js'),
+    'export default (value) => value.length;',
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', '@google', 'generative-ai', 'package.json'),
+    JSON.stringify({ main: 'index.js' }),
+  );
+  makeFile(
+    path.join(runtime, 'node_modules', '@google', 'generative-ai', 'index.js'),
+    'exports.GoogleGenerativeAI = class GoogleGenerativeAI {};',
   );
   makeFile(
     path.join(runtime, 'node_modules', 'chalk', 'package.json'),
@@ -320,6 +347,51 @@ describe('pre-build-check: runChecks', () => {
     expect(result.hasFatal).toBe(true);
   });
 
+  describe('slash-command gateway', () => {
+    const runtimeModules = () => path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules');
+    const gatewayResult = (result: { results: Array<{ relPath: string }> }) =>
+      result.results.find((entry) => entry.relPath.endsWith('core-runtime/dist/commands/headless-slash.js'));
+
+    it('passes when the gateway and its staged optional dependencies load', () => {
+      populateWin32Artifacts(tmpDir);
+
+      const result = runChecks(tmpDir, 'win32', 'x64');
+
+      expect(gatewayResult(result)).toMatchObject({ passed: true, severity: 'fatal' });
+      expect(result.hasFatal).toBe(false);
+    });
+
+    it('blocks packaging when the gateway is missing', () => {
+      populateWin32Artifacts(tmpDir);
+      fs.rmSync(path.join(tmpDir, '.bundle-resources', 'core-runtime', 'dist', 'commands', 'headless-slash.js'));
+
+      const result = runChecks(tmpDir, 'win32', 'x64');
+
+      expect(gatewayResult(result)).toMatchObject({ passed: false, severity: 'fatal' });
+      expect(result.hasFatal).toBe(true);
+    });
+
+    it.each([
+      ['string-width', ['string-width']],
+      ['@google/generative-ai', ['@google', 'generative-ai']],
+    ])(
+      'blocks packaging when %s only exists in the source install, not in the staged runtime',
+      (dependency, segments) => {
+        populateWin32Artifacts(tmpDir);
+        const staged = path.join(runtimeModules(), ...segments);
+        fs.cpSync(staged, path.join(parentDir, 'node_modules', ...segments), { recursive: true });
+        fs.rmSync(staged, { recursive: true });
+
+        const result = runChecks(tmpDir, 'win32', 'x64');
+
+        const gateway = gatewayResult(result);
+        expect(gateway).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((gateway as { detail?: string }).detail).toContain(dependency);
+        expect(result.hasFatal).toBe(true);
+      },
+    );
+  });
+
   it('blocks packaging when the core runtime manifest has no compiled identity proof', () => {
     populateWin32Artifacts(tmpDir);
     const manifestPath = path.join(
@@ -359,6 +431,202 @@ describe('pre-build-check: runChecks', () => {
     expect(adapter).toMatchObject({ passed: false, severity: 'fatal' });
     expect((adapter as { detail?: string }).detail).toContain('chalk');
     expect(result.hasFatal).toBe(true);
+  });
+
+  // The fixture parent stands for the repository root: a real checkout keeps
+  // node_modules above cowork/.bundle-resources/core-runtime, <resources>/dist does not.
+  describe('staged imports ignore ancestor node_modules', () => {
+    const stagedImportResults = (result: { results: Array<{ relPath: string }> }) =>
+      result.results.filter((entry) =>
+        /core-runtime\/dist\/(desktop\/codebuddy-engine-adapter|agent\/codebuddy-agent)\.js$/.test(
+          entry.relPath,
+        ),
+      );
+
+    it('blocks packaging when a staged ESM dependency only resolves from an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeChalk = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules', 'chalk');
+      fs.cpSync(runtimeChalk, path.join(parentDir, 'node_modules', 'chalk'), { recursive: true });
+      fs.rmSync(runtimeChalk, { recursive: true });
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((probe as { detail?: string }).detail).toContain("Cannot find package 'chalk'");
+      }
+    });
+
+    it('blocks packaging when a staged CommonJS require only resolves from an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeChalk = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules', 'chalk');
+      makeFile(path.join(runtimeChalk, 'package.json'), JSON.stringify({ main: 'index.cjs' }));
+      makeFile(
+        path.join(runtimeChalk, 'index.cjs'),
+        "require('ancestor-only-cjs'); module.exports = { blue(value) { return value; } };",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: false, severity: 'fatal' });
+        expect((probe as { detail?: string }).detail).toContain("Cannot find module 'ancestor-only-cjs'");
+      }
+    });
+
+    it('keeps optional fallbacks working when the optional package only exists in an ancestor', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeModules = path.join(tmpDir, '.bundle-resources', 'core-runtime', 'node_modules');
+      makeFile(
+        path.join(runtimeModules, 'chalk', 'index.js'),
+        [
+          "import accelerator from 'optional-accelerator';",
+          "try { await import('ancestor-only-esm'); throw new Error('ancestor ESM leaked'); }",
+          "catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; }",
+          "if (accelerator !== 'MODULE_NOT_FOUND') throw new Error(`ancestor CJS leaked: ${accelerator}`);",
+          'export default { blue(value) { return value; } };',
+        ].join('\n'),
+      );
+      makeFile(path.join(runtimeModules, 'optional-accelerator', 'package.json'), JSON.stringify({ main: 'index.js' }));
+      makeFile(
+        path.join(runtimeModules, 'optional-accelerator', 'index.js'),
+        "try { require('ancestor-only-cjs'); module.exports = 'leaked'; } catch (error) { module.exports = error.code; }",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+      makeFile(
+        path.join(parentDir, 'node_modules', 'ancestor-only-esm', 'package.json'),
+        JSON.stringify({ type: 'module', exports: './index.js' }),
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-esm', 'index.js'), 'export default 1;');
+
+      const probes = stagedImportResults(runChecks(tmpDir, 'win32', 'x64'));
+
+      expect(probes).toHaveLength(2);
+      for (const probe of probes) {
+        expect(probe).toMatchObject({ passed: true, severity: 'fatal' });
+      }
+    });
+  });
+
+  describe('staged import diagnostics', () => {
+    const runtime = () => path.join(tmpDir, '.bundle-resources', 'core-runtime');
+    const adapterPath = () =>
+      fs.realpathSync(path.join(runtime(), 'dist', 'desktop', 'codebuddy-engine-adapter.js'));
+    const adapterResult = (result: { results: Array<{ relPath: string; passed: boolean; detail?: string }> }) =>
+      result.results.find((entry) => entry.relPath.endsWith('dist/desktop/codebuddy-engine-adapter.js'))!;
+
+    it('names a package missing everywhere and its importer without the hook data: URL', () => {
+      populateWin32Artifacts(tmpDir);
+      fs.rmSync(path.join(runtime(), 'node_modules', 'chalk'), { recursive: true });
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline.startsWith('Error [ERR_MODULE_NOT_FOUND]: ')).toBe(true);
+      expect(headline).toContain("Cannot find package 'chalk'");
+      expect(headline).toContain(`imported from ${adapterPath()}`);
+      expect(detail).not.toContain('data:');
+      expect(detail.length).toBeLessThan(2_000);
+    });
+
+    it('names the importer of an ESM import refused outside the staged runtime', () => {
+      populateWin32Artifacts(tmpDir);
+      const stagedChalk = path.join(runtime(), 'node_modules', 'chalk');
+      fs.cpSync(stagedChalk, path.join(parentDir, 'node_modules', 'chalk'), { recursive: true });
+      fs.rmSync(stagedChalk, { recursive: true });
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline).toContain(
+        `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'chalk' imported from ${adapterPath()}`,
+      );
+      expect(headline).toContain('only resolvable outside the staged runtime');
+      expect(detail).not.toContain('data:');
+    });
+
+    it('names the importer of a refused CommonJS require without echoing the probe source', () => {
+      populateWin32Artifacts(tmpDir);
+      const stagedChalk = path.join(runtime(), 'node_modules', 'chalk');
+      makeFile(path.join(stagedChalk, 'package.json'), JSON.stringify({ main: 'index.cjs' }));
+      makeFile(
+        path.join(stagedChalk, 'index.cjs'),
+        "require('ancestor-only-cjs'); module.exports = { blue(value) { return value; } };",
+      );
+      makeFile(path.join(parentDir, 'node_modules', 'ancestor-only-cjs', 'index.js'), 'module.exports = 1;');
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const [headline] = detail.split('\n');
+      expect(headline).toContain(
+        `Error [MODULE_NOT_FOUND]: Cannot find module 'ancestor-only-cjs' required from ${fs.realpathSync(path.join(stagedChalk, 'index.cjs'))}`,
+      );
+      expect(detail).not.toContain('${request}');
+      expect(detail).not.toContain('data:');
+    });
+
+    it('terminates promptly with its diagnostic when failing CommonJS left an active handle', () => {
+      populateWin32Artifacts(tmpDir);
+      const activeHandlePackage = path.join(runtime(), 'node_modules', 'active-handle-cjs');
+      makeFile(
+        path.join(activeHandlePackage, 'package.json'),
+        JSON.stringify({ main: 'index.cjs' }),
+      );
+      makeFile(
+        path.join(activeHandlePackage, 'index.cjs'),
+        "setInterval(() => {}, 60_000); require('absent-after-timer');",
+      );
+      makeFile(
+        path.join(runtime(), 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+        "import 'active-handle-cjs'; export class CodeBuddyEngineAdapter {}",
+      );
+      const startedAt = Date.now();
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      expect(detail).toContain("Error [MODULE_NOT_FOUND]: Cannot find module 'absent-after-timer'");
+      expect(detail).not.toContain('ETIMEDOUT');
+      expect(detail.length).toBeLessThanOrEqual(2_000);
+    }, 35_000);
+
+    it('keeps fallback codes for optional packages missing everywhere', () => {
+      populateWin32Artifacts(tmpDir);
+      const runtimeModules = path.join(runtime(), 'node_modules');
+      makeFile(
+        path.join(runtimeModules, 'chalk', 'index.js'),
+        [
+          "import accelerator from 'optional-accelerator';",
+          "try { await import('absent-everywhere-esm'); throw new Error('absent ESM loaded'); }",
+          "catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; }",
+          "if (accelerator !== 'MODULE_NOT_FOUND') throw new Error(`absent CJS code: ${accelerator}`);",
+          'export default { blue(value) { return value; } };',
+        ].join('\n'),
+      );
+      makeFile(path.join(runtimeModules, 'optional-accelerator', 'package.json'), JSON.stringify({ main: 'index.js' }));
+      makeFile(
+        path.join(runtimeModules, 'optional-accelerator', 'index.js'),
+        "try { require('absent-everywhere-cjs'); module.exports = 'loaded'; } catch (error) { module.exports = error.code; }",
+      );
+
+      expect(adapterResult(runChecks(tmpDir, 'win32', 'x64'))).toMatchObject({ passed: true });
+    });
+
+    it("keeps Node's source frame for a staged module syntax error", () => {
+      populateWin32Artifacts(tmpDir);
+      makeFile(path.join(runtime(), 'node_modules', 'chalk', 'index.js'), 'export default ;');
+
+      const detail = adapterResult(runChecks(tmpDir, 'win32', 'x64')).detail ?? '';
+
+      const stagedChalkUrl = pathToFileURL(
+        fs.realpathSync(path.join(runtime(), 'node_modules', 'chalk', 'index.js')),
+      ).href;
+      expect(detail).toContain(`${stagedChalkUrl}:1`);
+      expect(detail).toContain("SyntaxError: Unexpected token ';'");
+    });
   });
 
   it('reports hasFatal when dist-electron directory is missing', () => {

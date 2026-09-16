@@ -38,15 +38,13 @@ Singleton for destructive operations. Check order:
 
 ### OS Sandbox (Native)
 
-Three tiers for native OS-level isolation:
+Native kernel confinement for `bash` is opt-in through `CODEBUDDY_NATIVE_SANDBOX=true` (or the explicit `bwrap`, `landlock`, or `seatbelt` backend values). When the variable is unset, the host spawn is returned unchanged and no native sandbox is applied. When enabled, backend selection is fail-closed: on Linux, usable Bubblewrap is preferred and Landlock is selected if Bubblewrap is unusable but its ABI and Python helper are available; execution is refused when no backend can be applied. On macOS, `sandbox-exec` is selected when available.
 
 | Mode | Write Access | Use Case |
 |:-----|:------------|:---------|
 | `read-only` | None | Untrusted analysis |
-| `workspace-write` | Git workspace root only | Normal development (default) |
+| `workspace-write` | Git workspace root only | Normal development (native confinement opt-in) |
 | `danger-full-access` | Unrestricted | Deployment scripts |
-
-`.git`, `.codebuddy`, `.ssh`, `.gnupg`, `.aws` are always read-only. Implemented via bubblewrap (Linux), landlock (Linux 5.13+), seatbelt (macOS).
 
 ### Docker Sandbox
 
@@ -148,3 +146,68 @@ Git-based undo via shadow refs (`refs/codebuddy/ghost/`). Auto-commits workspace
 | AST Bash Validation | tree-sitter-based command parsing with dangerous pattern checks |
 | Bash Checkpoints | Pre-snapshot of files targeted by destructive commands |
 | Diff Preview | Shows diffs before approval with magnitude-based re-confirmation |
+
+## Server Authentication & JWT Tokens
+
+When running `buddy server` (or accessing the REST API / Fleet endpoints), authentication is enabled by default (fail-closed in production, or when `JWT_SECRET` is set). Unauthenticated mode (`--no-auth`) is strictly restricted to loopback (`127.0.0.1`).
+
+### Minting JWT Tokens
+
+`buddy token` (alias `buddy fleet token`) mints a signed JWT for the REST API
+and the mobile PWA. The signing secret is **never printed or logged**. If it
+is missing, the command exits 2 with a clear refusal.
+
+Secret resolution, in order: `--env <service.env>` (reads `JWT_SECRET` from a
+systemd/env file) → the process environment → `~/.codebuddy/server.env` if
+that file exists.
+
+```bash
+# Default: user=mobile, role=user, 30 days, role scopes
+JWT_SECRET="<your-secret>" buddy token --url http://127.0.0.1:3000
+
+# Service env file (no need to export JWT_SECRET in the current shell)
+buddy token --env /etc/codebuddy/mobile.env --user demo --days 7
+
+# Scripts: JSON on stdout (jq -r .token). Human output is the JWT, expiry, and
+# the PWA open URL: <base>/__codebuddy__/mobile/#token=<jwt>
+buddy token --json --url http://127.0.0.1:3000
+
+# QR in the terminal (requires `qrencode`; otherwise prints an install hint)
+buddy token --qr --url http://127.0.0.1:3000
+
+# Send the open URL as a private Telegram message (expiry warning included)
+buddy token --telegram --url http://127.0.0.1:3000
+
+# Fleet peer (override scopes). Alias:
+buddy fleet token --user peer-node --scopes peer:invoke,fleet:listen,chat --ttl 30d
+```
+
+The PWA stores `#token=…` in `sessionStorage` like the login form, then
+`history.replaceState`s the hash away and authenticates. Opening that URL on
+the phone is the installer's path (audit B-8): no copy-paste of the JWT.
+
+`--telegram` needs `CODEBUDDY_SENSORY_ALERT_TOKEN` and
+`CODEBUDDY_SENSORY_ALERT_CHAT` (environment or the same `--env` file).
+
+```bash
+TOKEN=$(JWT_SECRET="<your-secret>" buddy token --user test-client --json | jq -r .token)
+curl http://127.0.0.1:3000/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+## Native Modules Installation (`--allow-scripts`)
+
+Code Buddy bundles 18 optional native packages (`better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, `onnxruntime-node`, `usearch`, etc.) that provide native hardware and database acceleration.
+
+In **npm ≥ 11**, lifecycle install scripts are blocked by default during global installation. While Code Buddy functions safely without them via pure JS and JSON file fallbacks, you can compile and enable the native modules using `--allow-scripts`:
+
+```bash
+# Allow compilation of all optional native packages during global install
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+
+# Or selectively allow compilation for SQLite support
+npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
+```
+

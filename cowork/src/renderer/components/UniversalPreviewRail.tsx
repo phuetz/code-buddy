@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Activity, Bot, FileText, FlaskConical, PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
 import { useAppStore } from '../store';
 import { useActiveQueuedIntents, useCurrentSession } from '../store/selectors';
@@ -6,6 +6,8 @@ import { ArtifactPanel } from './ArtifactPanel';
 import { FilePreviewPane } from './FilePreviewPane';
 import type { DiffPreview } from '../types';
 import { summarizeLatencyHistory } from '../../shared/session-latency';
+import { formatHandoffNotice } from '../commands/terminal-handoff';
+import { formatResourceDetail, resourceStateLabel, resourceStateTone, type ResourceRowView } from '../commands/resources-view';
 
 type RailTab = 'activity' | 'app' | 'file' | 'artifact' | 'proofs';
 
@@ -29,6 +31,39 @@ function formatRailLatency(value?: number): string {
 }
 
 /** One session-aware rail for every inspectable output and live task. */
+const RAIL_WIDTH_PX = 460;
+/** Narrowest conversation column kept beside an inline rail. */
+export const MIN_CHAT_COLUMN_WITH_RAIL_PX = 380;
+
+/**
+ * When the chat pane cannot hold the rail plus a usable conversation column, the open rail
+ * overlays the message list instead of squeezing it, and stops above the composer so the
+ * composer stays visible and usable. Wide panes keep the inline rail unchanged.
+ */
+function useRailOverlay(open: boolean) {
+  const railRef = useRef<HTMLElement>(null);
+  const [overlay, setOverlay] = useState<{ active: boolean; bottom: number }>({ active: false, bottom: 0 });
+  useEffect(() => {
+    const rail = railRef.current;
+    const pane = rail?.parentElement;
+    if (!open || !rail || !pane || typeof ResizeObserver === 'undefined') {
+      setOverlay({ active: false, bottom: 0 });
+      return;
+    }
+    const composer = pane.querySelector<HTMLElement>('[data-testid="message-composer"]');
+    const update = () => setOverlay({
+      active: pane.clientWidth - RAIL_WIDTH_PX < MIN_CHAT_COLUMN_WITH_RAIL_PX,
+      bottom: composer?.offsetHeight ?? 0,
+    });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(pane);
+    if (composer) observer.observe(composer);
+    return () => observer.disconnect();
+  }, [open]);
+  return { railRef, overlay };
+}
+
 export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPreviewRailProps) {
   const session = useCurrentSession();
   const sessions = useAppStore((state) => state.sessions);
@@ -38,13 +73,27 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
   const approvals = useAppStore((state) => state.pendingApprovals);
   const setPrimaryView = useAppStore((state) => state.setPrimaryView);
   const queued = useActiveQueuedIntents();
-  const [open, setOpen] = useState(true);
+  // The rail lives inside the dock's Chat panel, which can be much narrower
+  // than the application window when Context is open. Starting expanded at
+  // 460px can reduce the conversation column (and its composer) to zero.
+  // Keep the explicit open button and the file/artifact auto-open effects,
+  // but give every newly mounted chat a usable composer first.
+  const [open, setOpen] = useState(false);
+  const { railRef, overlay } = useRailOverlay(open);
   const [tab, setTab] = useState<RailTab>('activity');
   const [externalSessions, setExternalSessions] = useState<Array<{ id: string; name: string; model: string; messageCount: number; lastAccessedAt: string }>>([]);
+  const [handoff, setHandoff] = useState<{ state: 'idle' | 'working' | 'done' | 'error'; text?: string }>({ state: 'idle' });
+  const [resources, setResources] = useState<{ status: 'ok'; resources: ResourceRowView[] } | { status: 'empty'; hint: string } | { status: 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    setHandoff({ state: 'idle' });
+  }, [session?.id]);
 
   useEffect(() => {
     if (tab !== 'activity') return;
     void window.electronAPI?.session?.externalList?.().then(setExternalSessions).catch(() => setExternalSessions([]));
+    // Read-only: the main process lists the catalog file; it never probes.
+    void window.electronAPI?.tools?.resourceCatalog?.list?.().then(setResources).catch(() => setResources(null));
   }, [tab]);
 
   useEffect(() => {
@@ -79,7 +128,15 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
   }
 
   return (
-    <aside className="flex w-[460px] shrink-0 flex-col border-l border-border bg-surface" data-testid="universal-preview-rail">
+    <aside
+      ref={railRef}
+      className={overlay.active
+        ? 'absolute right-0 top-0 z-30 flex w-[min(460px,100%)] flex-col border-l border-border bg-surface shadow-2xl'
+        : 'flex w-[460px] shrink-0 flex-col border-l border-border bg-surface'}
+      style={overlay.active ? { bottom: overlay.bottom } : undefined}
+      data-testid="universal-preview-rail"
+      data-layout={overlay.active ? 'overlay' : 'inline'}
+    >
       <header className="flex items-center gap-1 border-b border-border px-2 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {TABS.map(({ id, label, icon: Icon }) => (
@@ -117,6 +174,23 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
               ))}
               {running.length === 0 ? <p className="rounded-lg border border-dashed border-border-muted p-4 text-center text-xs text-text-muted">Aucune exécution active.</p> : null}
             </div>
+            {session ? (
+              <div className="space-y-1 rounded-lg border border-border-muted bg-background/60 p-3" data-testid="continue-in-terminal">
+                <button type="button" onClick={async () => {
+                  setHandoff({ state: 'working' });
+                  try {
+                    const result = await window.electronAPI?.session?.exportToCli?.(session.id);
+                    if (!result) throw new Error('API indisponible');
+                    let copied = false;
+                    try { await navigator.clipboard.writeText(result.command); copied = true; } catch { copied = false; }
+                    setHandoff({ state: 'done', text: formatHandoffNotice(result, copied) });
+                  } catch (error) {
+                    setHandoff({ state: 'error', text: error instanceof Error ? error.message : String(error) });
+                  }
+                }} disabled={handoff.state === 'working'} className="rounded border border-border-muted px-2 py-1 text-[10px] text-text-secondary hover:bg-surface-hover disabled:opacity-50">Continuer dans le terminal</button>
+                {handoff.text ? <p className={`break-all text-[10px] ${handoff.state === 'error' ? 'text-danger' : 'text-text-muted'}`}>{handoff.text}</p> : null}
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-border-muted bg-background/60 p-3"><div className="text-lg font-semibold text-text-primary">{queued.length}</div><div className="text-[10px] text-text-muted">messages en attente</div></div>
               <div className="rounded-lg border border-border-muted bg-background/60 p-3"><div className="text-lg font-semibold text-text-primary">{approvals.length}</div><div className="text-[10px] text-text-muted">approbations</div></div>
@@ -138,6 +212,25 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
                     </button>
                   );
                 })}
+              </div>
+            ) : null}
+            {resources ? (
+              <div className="space-y-1.5" data-testid="resource-catalog-view">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Ressources déclarées (lecture seule)</h4>
+                {resources.status === 'ok' ? resources.resources.map((item) => {
+                  const tone = resourceStateTone(item.state);
+                  return (
+                    <div key={item.id} className="rounded-lg border border-border-muted bg-background/60 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-xs text-text-primary">{item.id}</span>
+                        <span className={`text-[10px] font-medium ${tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-text-muted'}`}>{resourceStateLabel(item.state)}</span>
+                      </div>
+                      <div className="truncate text-[10px] text-text-muted" title={formatResourceDetail(item)}>{formatResourceDetail(item)}</div>
+                    </div>
+                  );
+                }) : null}
+                {resources.status === 'empty' ? <p className="rounded-lg border border-dashed border-border-muted p-3 text-[10px] text-text-muted">{resources.hint}</p> : null}
+                {resources.status === 'error' ? <p className="text-[10px] text-danger">{resources.message}</p> : null}
               </div>
             ) : null}
             {externalSessions.length > 0 ? (

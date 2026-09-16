@@ -8,7 +8,7 @@ connecte pas à Google, ne lit ni n'écrit les cookies et ne publie rien.
 
 Fermez d'abord les autres processus qui utilisent le profil choisi, puis
 lancez Chrome avec une interface CDP limitée au loopback et avec le profil où
-Patrice est déjà connecté à Google AI Ultra. Exemple Linux :
+le compte Google Flow est déjà connecté. Exemple Linux :
 
 ```bash
 google-chrome \

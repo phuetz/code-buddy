@@ -59,8 +59,8 @@ export async function runGoogleFlowExport(argv = process.argv): Promise<void> {
     upscale4k: argv.includes('--upscale-4k'),
     remainingFlowCredits: positiveInteger(argv, 'remaining-credits', '25000'),
     maxFlowCreditsPerBatch: positiveInteger(argv, 'max-credits', '100'),
-    darkstarAvailable: !argv.includes('--no-darkstar'),
-    ministarAvailable: !argv.includes('--no-ministar'),
+    gpuNodeAvailable: !argv.includes('--no-gpuNode'),
+    localGpuAvailable: !argv.includes('--no-localGpu'),
     ...(shortId ? { shortId } : {}),
     ...(argv.includes('--all') ? { includeAllShorts: true } : {}),
   };

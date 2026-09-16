@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main.
 
-> **Status: 1.0.0-rc.8** (2026-05-09 → ongoing toward `1.0.0`). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you *can't* derive by reading the source.
+> **Status: 2.1.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v2.1.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you *can't* derive by reading the source. Pour le tableau complet des variables d'environnement, voir [`CLAUDE.md`](CLAUDE.md) §Environment Variables.
 
 ## Build, Test, Lint
 
@@ -24,7 +24,28 @@ npm run build:gui      # Cowork Electron GUI (cd cowork && npm run build)
 npm run dev:gui        # Cowork dev (Vite + Electron)
 ```
 
+---
+
+## Environment Variables (sélection)
+
+| Variable | Purpose |
+| --- | --- |
+| `CODEBUDDY_COMPANION_CORE` | **Opt-in (default off)** : loads `@phuetz/companion-core` for the relational layer. Byte-identical when unset. |
+| `CODEBUDDY_LISA_SELFIE_REFILL` | **Opt-in (default off)** : enables heartbeat refill of Lisa selfie cache from ComfyUI when load < 4. |
+| `CODEBUDDY_MOBILE_PWA` | **Opt-in (default off)** : enables `/__codebuddy__/mobile/` PWA and WebSocket approval bridge. |
+| `CODEBUDDY_COMPANION_RELATIONAL` | **Opt-in (default off)** : injects Lisa's mood/traits/rapport into companion replies via `src/companion/relational-context.ts`. |
+| `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL` | **Opt-in (default true)** : extends deobfuscation to all pattern classes (not just prompt-injection) in skill firewall. |
+| `CODEBUDDY_LISA_SELFIE_CACHE_DIR` | On-disk Lisa selfie cache. Default: `~/.codebuddy/companion/lisa/selfie-cache`. |
+
+Pour le tableau complet, voir [`CLAUDE.md`](CLAUDE.md) §Environment Variables.
+
+---
+
 Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192`. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
+
+## Vérification réelle (demande Patrice, 2026-09-14)
+
+Pour les changements utilisateur CLI/flotte/DGM : lancer l'application réelle avec un profil temporaire, capturer entrées/sorties et appels/résultats d'outils, analyser les échecs puis ajouter les régressions ciblées. `scripts/verify-cli-live.py` capture Ink/ANSI et un vrai modèle (Linux/macOS). Une sortie processus 0, une revue IA ou un appel d'outil proposé ne prouvent pas le résultat utilisateur. Conserver les traces avant/après dans `<QA_ARTIFACTS>` (`Z:\Partage` sous Windows), sans secrets. Distinguer tests Linux, Windows et réseau ; ne pas valider une plateforme non exécutée. AGY/Grok peuvent relire les captures via la flotte ; leurs diagnostics restent à vérifier.
 
 ## Testing Gotchas
 
@@ -105,6 +126,7 @@ Stateful WebSocket mesh letting Code Buddy peers observe each other's events liv
 - **`peer.tool.invoke` + `.stream`** (V1.3, Phase d.23, `peer-tool-bridge.ts`) — remote read-only tool execution. **Three security gates** in order: allowlist (`CODEBUDDY_PEER_TOOL_ALLOWLIST`, default `view_file`/`list_directory`/`search`) → registry `fleetSafe: true` flag (`src/tools/metadata.ts`) → workspace root (`CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` must be set; **fails closed** with `PEER_WORKSPACE_NOT_CONFIGURED` if unset, so a misconfigured peer can't expose `/`). Anti-loop guards: `CODEBUDDY_PEER_MAX_DEPTH`, `CODEBUDDY_PEER_ROLE=leaf`.
 - **`route_peer` tool + `/fleet route`** — `TaskRouter` (`task-router.ts`) classifies a prompt, gathers peer capabilities via `peer.describe`, applies privacy/cost/latency constraints, returns the recommended `peer_delegate` call. Privacy lint (`privacy-lint.ts`) detects SSN/IBAN/phone/credit-card before routing.
 - **Slash UX:** `/fleet listen`, `/fleet send <peer> <method> <json>`, `/fleet history [--type glob] [--json]`, `/fleet status [--with-sessions]`, `/fleet chat start|say|end|list`, `/fleet route`, `/fleet describe`.
+- **Fleet rooms** — `CODEBUDDY_FLEET_ROOMS=true` enables signed room messages on the same `/ws`, with membership policy, a single-writer durable ledger and cursor replay. CLI `buddy fleet rooms`; agent tool `fleet_room` uses a configured destination and the normal confirmation policy. Optional local status observations never turn incoming room messages into sensory events or robot actions. See [`docs/fleet-rooms.md`](docs/fleet-rooms.md).
 
 ## Cowork — Desktop GUI (`cowork/`)
 
@@ -115,7 +137,7 @@ Electron app, separate `package.json`, Node ≥22, Vite + React + better-sqlite3
 - `better-sqlite3` is rebuilt against Electron headers via `npm run rebuild` (called from `postinstall`).
 - **Dual-`mainWindow` regression** (rc.8, commit `751f7eb6`): `cowork/src/main/index.ts` and `cowork/src/main/window-management.ts` each owned a `let mainWindow: BrowserWindow | null = null`. Only the former was set; `getMainWindow()` (used by `ipc-main-bridge.ts:sendToRenderer()`) always returned `null`, silently dropping every main→renderer IPC push. Fixed by exporting `setMainWindow()` and calling it after `BrowserWindow` creation. **If you add another module that needs `mainWindow`, import the setter, don't redeclare the variable.**
 - **`@phuetz/ai-providers` inlined** into `src/providers/_shared/` (commit `5757b197`) — don't reintroduce the workspace symlink.
-- **`JWT_SECRET` runtime fallback**: auth throws at module-load under `NODE_ENV=production` if missing; `ServerBridge` mints a 64-byte hex secret at boot if none persisted. Persistent secrets go through Settings → Embedded server (`SettingsServer.tsx`).
+- **`JWT_SECRET` runtime fallback**: `startServer()` rejects a missing secret under `NODE_ENV=production`; `ServerBridge` mints a 64-byte hex secret at boot if none persisted. Persistent secrets go through Settings → Embedded server (`SettingsServer.tsx`).
 - Visual workflow execution wraps the core `Orchestrator` (`src/orchestration/orchestrator.ts`) with a 4-agent pool (`cowork/src/main/workflows/workflow-bridge.ts`). Two runtime bugs fixed before ship: `processQueue` deadlock after `queueTask` (use `task_created` listener + `queueMicrotask`) and `workflow_started` listener-order issue (use `prependListener` so the run-scoped capture handler populates the instanceId↔workflowId map first).
 - Linux dev loop: see `cowork/DEV-LINUX.md` — skip `npm run build`, use `npx vite build` (~30 s), boot Electron with `--no-sandbox --disable-gpu`.
 
@@ -128,6 +150,8 @@ Electron app, separate `package.json`, Node ≥22, Vite + React + better-sqlite3
 5. Add metadata in `src/tools/metadata.ts` (keywords + priority — used by RAG selection and BM25 `tool_search`). Set `fleetSafe: true` only for read-only tools you want exposed via `peer.tool.invoke`.
 
 Codex-style aliases (`shell_exec`, `file_read`, `browser_search`, …) live in `src/tools/registry/tool-aliases.ts`.
+
+`src/tools/metadata.ts` is also imported by Cowork's browser-side profile previews. Keep its catalogue free of Node runtime imports; effect resolution with logger warnings lives in `src/tools/tool-effect.ts`. A Vite browser-bundle regression test guards this boundary.
 
 ## Edit Tool Matching
 
@@ -151,7 +175,7 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 
 ## Coding Conventions
 
-- TypeScript strict, avoid `any`. `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are **not yet on** — see `tsconfig.json` TODOs.
+- TypeScript strict, avoid `any`. `noUncheckedIndexedAccess` is on; `exactOptionalPropertyTypes` remains off — see `tsconfig.json`.
 - Single quotes, semicolons, 2-space indent
 - Files kebab-case (`text-editor.ts`); React components PascalCase (`ChatInterface.tsx`)
 - Conventional Commits (`feat(scope): description`) — enforced by `commitlint.config.js`
@@ -178,6 +202,23 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `PICOVOICE_ACCESS_KEY` | Porcupine wake word (text-match fallback if absent) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
+| `CODEBUDDY_PROVIDER_FALLBACK` | **Opt-in** (`true`): automatic failover between LLM providers on classified failures (`quota_exhausted`, `overloaded`, `unreachable`); 401/403 auth never fails over. Handoff prunes tools for a smaller window. |
+| `CODEBUDDY_LLM_FAILOVER` | **Deprecated alias** of `CODEBUDDY_PROVIDER_FALLBACK` (same path, one-shot deprecation warning) |
+| `CODEBUDDY_FALLBACK_CHAIN` | Declared failover order `provider[:model]>provider[:model]`; unset → current provider then catalog then local Ollama |
+| `CODEBUDDY_CHANNEL_PROFILE` | `companion` = spokenPrompt + relational context + last 10 turns, no agent system prompt, no tools; auto-on when `CODEBUDDY_COMPANION_PERSONA` is set and message is not a command |
+| `CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS` | Per-conversation channel turn timeout (default 180000 ms) |
+| `CODEBUDDY_CHANNEL_WAIT_NOTICE_MS` | Telegram wait line after this many ms of silence (default 20000 ms; 0 disables) |
+| `CODEBUDDY_COMPANION_PERSONA` | Companion phrase-pool persona (default unset = historical pools); `copine` loads dedicated persona |
+| `CODEBUDDY_COMPANION_AWAY` | Travel-mode Telegram initiatives (`true` or copine persona + 24 h without camera) |
+| `CODEBUDDY_COMPANION_AWAY_MAX_PER_DAY` | Max away messages per day (default 3) |
+| `CODEBUDDY_COMPANION_AWAY_HOURS` | Allowed hours for away messages (default `08:30-22:00`) |
+| `CODEBUDDY_MOBILE_CONFIRM_TIMEOUT_MS` | Mobile PWA confirmation request timeout (default 30000 ms) |
+| `CODEBUDDY_COMFYUI_FALLBACK_URLS` | CSV of ComfyUI fallback endpoints (alias `COMFYUI_FALLBACK_URLS` also honoured) |
+| `CODEBUDDY_MOBILE_HISTORY` | **Opt-out (default ON)**: mobile PWA companion conversation history persistence per identity; `false` keeps in-memory only; files SHA256-named under `~/.codebuddy/companion/mobile-history/` (0600), 0700 directory |
+| `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` | First-token stall budget for local runtime eval only (default 200 ms/token): `max(120s, promptTokens × this)`; cloud keeps plain 120 s |
+| `CODEBUDDY_STALL_MAX_MS` | Ceiling on first-token stall budget (default 1200000 = 20 min) |
+| `CODEBUDDY_PROMPT_COMPACT` | Headless `-p` on local provider uses compact prompt (≤ 1500 tokens, RAG tools ≤ 8); default ON for local, opt-out with `false` |
+| `CODEBUDDY_COMPANION_PHOTO_VISION` | Companion photo vision mode: `local` (default, private) uses moondream, `cloud` sends to vision-capable cloud model |
 
 ## Special Modes
 
@@ -199,9 +240,9 @@ buddy login                 # ChatGPT OAuth (no API key needed, $0 marginal cost
 buddy whoami                # Show current auth + plan
 buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
-buddy server [--port N]     # Start HTTP server (3000) + Gateway WS (3001) — required for fleet
+buddy server [--port N]     # Start the HTTP server (3000) — one port, WebSocket `/ws` on it; required for fleet
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
-buddy run list|show|tail|replay  # Observability
+buddy run list|show|tail|replay|trajectory  # Observability
 buddy research "<topic>"    # Wide research
 buddy flow "<goal>"         # Planning flow (plan → execute → synthesize)
 buddy backup create|verify|list|restore
@@ -227,11 +268,11 @@ In-session slash commands (not exhaustive):
 
 ## HTTP Server (`src/server/`)
 
-Started with `buddy server`. Default ports: **3000** HTTP, **3001** Gateway WS. CORS enabled, rate-limit 100 req/min, JWT required in production.
+Started with `buddy server`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
 
-Gateway WS events: `connect` (pre-auth), `hello_ok`, `auth`, `chat`, `session_create|join|leave|patch`, `presence`, `peer:*`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).
+`/ws` message types (`src/server/websocket/handler.ts`): `authenticate`, `chat`, `stop`, `execute_tool`, `ping`, `status`, `avatar.*`, `peer:*`. The richer `connect` → `hello_ok` → `auth` → `session_*` / `presence` handshake lives in `src/gateway/` as a library; `buddy server` does not instantiate it, so nothing binds its `DEFAULT_GATEWAY_CONFIG.port`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. **The two surfaces differ**: the WebSocket refuses an unlisted `Origin` at the handshake (`403 Forbidden origin`), while HTTP answers a normal 200 and merely omits `Access-Control-Allow-Origin` — the browser blocks the read, the server does not. CORS is not an access control; the JWT and the network are. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).
 
 ## V1.1 Handover Guide (Recent Improvements)
 

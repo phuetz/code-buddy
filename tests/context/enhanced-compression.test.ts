@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
 import { EnhancedContextCompressor } from '../../src/context/enhanced-compression.js';
@@ -63,5 +64,45 @@ describe('EnhancedContextCompressor', () => {
       '<context type="todo">next step</context>',
     ]);
     expect(result.messages.slice(0, 3).every(message => message.role === 'system')).toBe(true);
+  });
+
+  it('keeps the current user request through hard truncation', () => {
+    const compressor = new EnhancedContextCompressor(createTokenCounter('gpt-4'), {
+      enableArchiving: false,
+      slidingWindow: {
+        windowSize: 2,
+        overlapSize: 0,
+        summarizeOldMessages: false,
+      },
+    });
+    const lastUser: CodeBuddyMessage = {
+      role: 'user',
+      content: 'LATEST_REQUEST please keep this exact question',
+    };
+    const messages: CodeBuddyMessage[] = [
+      { role: 'system', content: 'base' },
+    ];
+    for (let index = 0; index < 30; index++) {
+      messages.push({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `turn ${index}: ${'z'.repeat(240)}`,
+      });
+    }
+    messages.push(lastUser);
+
+    const result = compressor.compress(messages, 80);
+    expect(result.messages.some((message) => (
+      message.role === 'user' && message.content === lastUser.content
+    ))).toBe(true);
+  });
+
+  it('hardTruncate always reinserts the last user even when a later assistant fills the budget', () => {
+    const source = readFileSync(new URL('../../src/context/enhanced-compression.ts', import.meta.url), 'utf8');
+    const start = source.indexOf('private hardTruncate(');
+    const end = source.indexOf('private classifyMessages(', start);
+    const hardTruncate = source.slice(start, end);
+    expect(hardTruncate).toContain('lastUser');
+    expect(hardTruncate).toMatch(/result\.push\(lastUser\)|result\.unshift\(msg\)/);
+    expect(hardTruncate).not.toMatch(/else \{\s*break;/);
   });
 });

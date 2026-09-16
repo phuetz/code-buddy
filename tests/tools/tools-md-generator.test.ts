@@ -41,7 +41,7 @@ jest.mock(
 
 jest.mock(
   '../../src/tools/metadata.js',
-  () => ({ TOOL_METADATA: [] }),
+  () => ({ TOOL_METADATA: [], getActiveToolMetadata: () => [] }),
   { virtual: true },
 );
 

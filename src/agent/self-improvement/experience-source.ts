@@ -15,6 +15,18 @@
 import { logger } from '../../utils/logger.js';
 import type { Experience } from './types.js';
 
+export {
+  EvolutionNotesExperienceSource,
+  createDefaultEvolutionNotesExperienceSource,
+  type EvolutionNotesExperienceSourceOptions,
+  DelegationLogsExperienceSource,
+  createDefaultDelegationLogsExperienceSource,
+  type DelegationLogsExperienceSourceOptions,
+  type DelegationFact,
+  NAMED_DELEGATION_FAILURES,
+  PILOT_LESSONS,
+} from './digest-sources.js';
+
 export interface ExperienceSource {
   readonly id: string;
   collect(): Promise<Experience[]>;
@@ -199,7 +211,7 @@ export class SensorExperienceSource implements ExperienceSource {
  *       "predictionError": 0.42, "tsMs": 1760000000000,
  *       "detail": "...", "context": "..." } ] }
  *
- * The DARKSTAR world-model spoke (encoder ONNX + dynamics) serves this; any
+ * The GPU_NODE world-model spoke (encoder ONNX + dynamics) serves this; any
  * error/timeout (3 s) yields [] so a dead spoke never blocks the engine.
  */
 export function createDefaultSensorExperienceSource(

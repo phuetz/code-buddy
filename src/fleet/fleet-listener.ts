@@ -55,7 +55,7 @@ import {
 } from '../channels/reconnection-manager.js';
 
 export interface FleetListenerOptions {
-  /** Peer Gateway WS URL, e.g. ws://100.98.18.76:3000/ws */
+  /** Peer Gateway WS URL, e.g. ws://203.0.113.10:3000/ws */
   url: string;
   /** API key with `fleet:listen` scope on the peer. Either this or jwt. */
   apiKey?: string;
@@ -88,6 +88,21 @@ interface IncomingMessage {
   payload?: Record<string, unknown>;
   error?: { code: string; message: string };
   timestamp?: string;
+}
+
+/** Close a superseded socket without letting ws emit an unhandled error while CONNECTING. */
+function closeReplacedSocket(ws: WebSocket): void {
+  ws.removeAllListeners();
+  ws.on('error', () => {
+    /* ws emits when close() interrupts a CONNECTING handshake */
+  });
+  try {
+    if (ws.readyState === 0 /* CONNECTING */ || ws.readyState === 1 /* OPEN */) {
+      ws.close();
+    }
+  } catch {
+    /* best-effort replacement cleanup */
+  }
 }
 
 /**
@@ -123,6 +138,7 @@ export interface FleetEventRecord {
 
 export class FleetListener extends EventEmitter {
   private ws: WebSocket | null = null;
+  private cancelConnectAttempt: (() => void) | null = null;
   private connected = false;
   private authenticated = false;
   // Set true once we have completed an `authenticated` handshake at least
@@ -240,49 +256,80 @@ export class FleetListener extends EventEmitter {
   }
 
   private async connectInternal(): Promise<void> {
+    const replacingSocket = this.ws !== null;
+    // Reject and clean up an in-flight attempt before replacing its socket.
+    // In particular, ws.close() on CONNECTING emits an error; the replacement
+    // cleanup installs a sink so that cannot become an uncaught exception.
+    this.cancelConnectAttempt?.();
+    this.cancelConnectAttempt = null;
     // Cleanup any leftover ws from a previous attempt. Important for the
     // reconnect path so the new ws's events don't interleave with the
     // old one's. Mirrors the discord adapter's reconnect cleanup.
     if (this.ws) {
-      try {
-        this.ws.removeAllListeners();
-        if (this.ws.readyState === 1 /* OPEN */) {
-          this.ws.close();
-        }
-      } catch {
-        /* ignore */
-      }
+      closeReplacedSocket(this.ws);
       this.ws = null;
+    }
+    if (replacingSocket) {
+      this.connected = false;
+      this.authenticated = false;
+      this.rejectPendingRequests('connection replaced');
     }
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      let cancelAttempt: (() => void) | null = null;
+      let connectTimer: NodeJS.Timeout | null = null;
+      let authTimer: NodeJS.Timeout | null = null;
+      const clearAttemptTimers = () => {
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
+        if (authTimer) {
+          clearTimeout(authTimer);
+          authTimer = null;
+        }
+      };
       const settle = (err?: unknown) => {
         if (settled) return;
         settled = true;
+        clearAttemptTimers();
+        if (cancelAttempt && this.cancelConnectAttempt === cancelAttempt) {
+          this.cancelConnectAttempt = null;
+        }
         if (err) reject(err);
         else resolve();
       };
 
-      const connectTimer = setTimeout(() => {
+      const ws = new WebSocket(this.options.url);
+      this.ws = ws;
+      cancelAttempt = () => {
+        if (this.ws === ws) this.ws = null;
+        settle(new Error('Fleet listener connection attempt replaced'));
+        closeReplacedSocket(ws);
+      };
+      this.cancelConnectAttempt = cancelAttempt;
+
+      connectTimer = setTimeout(() => {
         settle(new Error(`Fleet listener connect timeout (${this.options.connectTimeoutMs ?? 10_000}ms)`));
         try {
-          this.ws?.close();
+          ws.close();
         } catch {
           /* ignore */
         }
       }, this.options.connectTimeoutMs ?? 10_000);
 
-      let authTimer: NodeJS.Timeout | null = null;
-
-      this.ws = new WebSocket(this.options.url);
-
-      this.ws.on('open', () => {
-        clearTimeout(connectTimer);
+      ws.on('open', () => {
+        if (this.ws !== ws) return;
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
         this.connected = true;
         this.emit('connected');
       });
 
-      this.ws.on('message', (data) => {
+      ws.on('message', (data) => {
+        if (this.ws !== ws) return;
         let msg: IncomingMessage;
         try {
           msg = JSON.parse(data.toString());
@@ -295,12 +342,22 @@ export class FleetListener extends EventEmitter {
             clearTimeout(authTimer);
             authTimer = null;
           }
+        }, () => {
+          if (settled || authTimer) return;
+          authTimer = setTimeout(() => {
+            settle(new Error(`Fleet listener auth timeout (${this.options.authTimeoutMs ?? 5_000}ms)`));
+            try {
+              ws.close();
+            } catch {
+              /* ignore */
+            }
+          }, this.options.authTimeoutMs ?? 5_000);
         });
       });
 
-      this.ws.on('close', () => {
-        if (authTimer) clearTimeout(authTimer);
-        clearTimeout(connectTimer);
+      ws.on('close', () => {
+        if (this.ws !== ws) return;
+        clearAttemptTimers();
         this.connected = false;
         this.authenticated = false;
         this.emit('disconnected');
@@ -336,32 +393,10 @@ export class FleetListener extends EventEmitter {
         }
       });
 
-      this.ws.on('error', (err) => {
-        clearTimeout(connectTimer);
-        if (authTimer) clearTimeout(authTimer);
+      ws.on('error', (err) => {
+        if (this.ws !== ws) return;
         this.emit('error', err);
         settle(err instanceof Error ? err : new Error(String(err)));
-      });
-
-      // After 'connected' from the server, send the auth message. Set up
-      // an auth timeout in case the server never responds.
-      this.once('connected', () => {
-        // 'connected' here is OUR emitted event when ws opened; we still
-        // need to wait for the SERVER's 'connected' message. The
-        // handleIncomingMessage path does the auth-send — see below.
-      });
-
-      // Bound auth wait: schedule the timeout after we send authenticate.
-      // We'll trigger this from handleIncomingMessage after sending auth.
-      this.once('__internal:auth-sent', () => {
-        authTimer = setTimeout(() => {
-          settle(new Error(`Fleet listener auth timeout (${this.options.authTimeoutMs ?? 5_000}ms)`));
-          try {
-            this.ws?.close();
-          } catch {
-            /* ignore */
-          }
-        }, this.options.authTimeoutMs ?? 5_000);
       });
     });
   }
@@ -370,6 +405,7 @@ export class FleetListener extends EventEmitter {
     msg: IncomingMessage,
     settle: (err?: unknown) => void,
     clearAuthTimer: () => void,
+    startAuthTimer: () => void,
   ): void {
     // Server's welcome → send authenticate.
     if (msg.type === 'connected') {
@@ -377,7 +413,7 @@ export class FleetListener extends EventEmitter {
       if (this.options.apiKey) auth.apiKey = this.options.apiKey;
       if (this.options.jwt) auth.token = this.options.jwt;
       this.send('authenticate', auth);
-      this.emit('__internal:auth-sent');
+      startAuthTimer();
       return;
     }
     if (msg.type === 'authenticated') {

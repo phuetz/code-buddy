@@ -116,7 +116,7 @@ export function createLessonsCommand(): Command {
     .description('Edit a lesson in place (id, date and source are preserved)')
     .option('--content <text>', 'New content (single line)')
     .option('-c, --category <cat>', `New category: ${VALID_CATEGORIES.join('|')}`)
-    .option('--context <ctx>', 'New domain context (no hyphens)')
+    .option('--context <ctx>', 'New domain context (single token, hyphens allowed)')
     .option('--clear-context', 'Remove the context')
     .option('--json', 'Output JSON')
     .action(async (id, opts) => {

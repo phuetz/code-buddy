@@ -41,6 +41,9 @@ const mockGetAvatarPresets = jest.fn();
 const mockApplyAvatarPreset = jest.fn();
 const mockSetCustomAvatar = jest.fn();
 const mockClearCustomAvatars = jest.fn();
+// Real ThemeManager contract: boolean | null (null = no save attempted yet) and override key lists.
+const mockGetPreferenceSaveStatus = jest.fn<() => boolean | null>();
+const mockGetOverrideKeys = jest.fn<() => { colors: string[]; avatars: string[] }>();
 
 jest.mock('../../src/themes/theme-manager', () => ({
   getThemeManager: jest.fn(function() { return {
@@ -52,6 +55,8 @@ jest.mock('../../src/themes/theme-manager', () => ({
     applyAvatarPreset: mockApplyAvatarPreset,
     setCustomAvatar: mockSetCustomAvatar,
     clearCustomAvatars: mockClearCustomAvatars,
+    getPreferenceSaveStatus: mockGetPreferenceSaveStatus,
+    getOverrideKeys: mockGetOverrideKeys,
   }; }),
 }));
 
@@ -169,6 +174,7 @@ jest.mock('../../src/codebuddy/tools', () => ({
     { function: { name: 'file_viewer' } },
     { function: { name: 'git_status' } },
   ]),
+  initializeMCPServers: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock interactive setup
@@ -185,9 +191,34 @@ describe('Theme Handler', () => {
       { id: 'neon', name: 'Neon', description: 'Neon theme', isBuiltin: true },
     ]);
     mockGetCurrentTheme.mockReturnValue({ id: 'default', name: 'Default' });
+    mockGetPreferenceSaveStatus.mockReturnValue(true);
+    mockGetOverrideKeys.mockReturnValue({ colors: [], avatars: [] });
   });
 
   describe('handleTheme', () => {
+    it('warns when the theme preference could not be saved', () => {
+      mockSetTheme.mockReturnValue(true);
+      mockGetCurrentTheme.mockReturnValue({ id: 'neon', name: 'Neon', description: 'Neon theme' });
+      mockGetPreferenceSaveStatus.mockReturnValue(false);
+
+      const content = handleTheme(['neon']).entry?.content ?? '';
+
+      expect(content).toContain('Theme Changed');
+      expect(content).toContain('Could not save the preference');
+    });
+
+    it('does not warn when no save was attempted yet (null) and notes active color overrides', () => {
+      mockSetTheme.mockReturnValue(true);
+      mockGetCurrentTheme.mockReturnValue({ id: 'neon', name: 'Neon', description: 'Neon theme' });
+      mockGetPreferenceSaveStatus.mockReturnValue(null);
+      mockGetOverrideKeys.mockReturnValue({ colors: ['primary'], avatars: [] });
+
+      const content = handleTheme(['neon']).entry?.content ?? '';
+
+      expect(content).not.toContain('Could not save the preference');
+      expect(content).toContain('Custom color overrides are still applied');
+    });
+
     it('should list themes when no action provided', () => {
       const result = handleTheme([]);
 
@@ -208,8 +239,12 @@ describe('Theme Handler', () => {
       mockGetCurrentTheme.mockReturnValue({ id: 'dark', name: 'Dark' });
 
       const result = handleTheme([]);
+      const content = result.entry?.content ?? '';
 
       expect(mockGetCurrentTheme).toHaveBeenCalled();
+      expect(content).toContain('▶ Dark');
+      expect(content).not.toMatch(/▶ Default/);
+      expect(content).not.toMatch(/▶ Neon/);
     });
 
     it('should set theme when valid theme name provided', () => {
@@ -754,6 +789,17 @@ describe('Compact Handler', () => {
 
 describe('Tools Handler', () => {
   describe('handleTools', () => {
+    const previousDisableMcp = process.env.CODEBUDDY_DISABLE_MCP;
+
+    beforeEach(() => {
+      process.env.CODEBUDDY_DISABLE_MCP = 'true';
+    });
+
+    afterEach(() => {
+      if (previousDisableMcp === undefined) delete process.env.CODEBUDDY_DISABLE_MCP;
+      else process.env.CODEBUDDY_DISABLE_MCP = previousDisableMcp;
+    });
+
     it('should list tools when no action provided', async () => {
       const result = await handleTools([]);
 
@@ -835,7 +881,7 @@ describe('Vim Mode Handler', () => {
     it('should toggle with "toggle" action', async () => {
       process.env.GROK_VIM_MODE = 'false';
 
-      const result = await handleVimMode(['toggle']);
+      await handleVimMode(['toggle']);
 
       expect(process.env.GROK_VIM_MODE).toBe('true');
     });
@@ -879,12 +925,12 @@ describe('Edge Cases and Error Handling', () => {
   });
 
   it('should parse numeric arguments correctly', () => {
-    const result = handleCost(['budget', '10.50']);
+    handleCost(['budget', '10.50']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(10.50);
   });
 
   it('should handle invalid numeric arguments', () => {
-    const result = handleCost(['budget', 'invalid']);
+    handleCost(['budget', 'invalid']);
     expect(mockSetBudgetLimit).toHaveBeenCalledWith(NaN);
   });
 });

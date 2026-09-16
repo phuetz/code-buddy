@@ -13,10 +13,13 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
-import { createTokenCounter, TokenCounter } from './token-counter.js';
+import { getModelToolConfig } from '../config/model-tools.js';
+import { createTokenCounter, estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import { ContextCompressor } from './compression.js';
 import { ContextManagerConfig, ContextStats, ContextWarning } from './types.js';
 import { logger } from '../utils/logger.js';
+import { ContextCompactionError, findLastUserMessage } from './context-manager-v2.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Advanced manager for handling conversation context.
@@ -50,6 +53,15 @@ export class ContextManagerV3 {
    */
   constructor(config: Partial<ContextManagerConfig> = {}) {
     this.config = { ...ContextManagerV3.DEFAULT_CONFIG, ...config };
+    if (config.model && config.maxContextTokens === undefined) {
+      const toolConfig = getModelToolConfig(config.model);
+      if (toolConfig.contextWindow) {
+        this.config.maxContextTokens = toolConfig.contextWindow;
+        if (config.responseReserveTokens === undefined) {
+          this.config.responseReserveTokens = Math.min(4096, Math.floor(toolConfig.contextWindow * 0.125));
+        }
+      }
+    }
     this.tokenCounter = createTokenCounter(this.config.model);
     this.compressor = new ContextCompressor(this.tokenCounter);
   }
@@ -64,6 +76,15 @@ export class ContextManagerV3 {
     this.config = { ...this.config, ...config };
     // Re-init token counter if model changed
     if (config.model) {
+      if (config.maxContextTokens === undefined) {
+        const toolConfig = getModelToolConfig(config.model);
+        if (toolConfig.contextWindow) {
+          this.config.maxContextTokens = toolConfig.contextWindow;
+          if (config.responseReserveTokens === undefined) {
+            this.config.responseReserveTokens = Math.min(4096, Math.floor(toolConfig.contextWindow * 0.125));
+          }
+        }
+      }
       this.tokenCounter.dispose();
       this.tokenCounter = createTokenCounter(config.model);
       this.compressor = new ContextCompressor(this.tokenCounter);
@@ -77,12 +98,7 @@ export class ContextManagerV3 {
    * @returns Detailed statistics including token count and usage percentage.
    */
   getStats(messages: CodeBuddyMessage[]): ContextStats {
-    const tokenMessages = messages.map(msg => ({
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
-      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
-    }));
-    const totalTokens = this.tokenCounter.countMessageTokens(tokenMessages);
+    const totalTokens = this.countMessageTokens(messages);
     const maxTokens = this.config.maxContextTokens;
     const usagePercent = (totalTokens / maxTokens) * 100;
 
@@ -142,9 +158,10 @@ export class ContextManagerV3 {
   prepareMessages(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
     const stats = this.getStats(messages);
     const effectiveLimit = this.config.maxContextTokens - this.config.responseReserveTokens;
+    this.rejectIfCurrentRequestExceedsBudget(messages, effectiveLimit);
 
     if (stats.totalTokens <= effectiveLimit) {
-      return messages;
+      return repairToolCallPairs(messages);
     }
 
     logger.info(`Context limit exceeded (${stats.totalTokens} > ${effectiveLimit}). Compressing...`);
@@ -158,7 +175,65 @@ export class ContextManagerV3 {
       logger.info(`Context compressed: ${result.tokensReduced} tokens removed using ${result.strategy}.`);
     }
 
+    this.assertLastUserPreserved(messages, result.messages, effectiveLimit);
+    this.assertFitsTokenLimit(result.messages, effectiveLimit);
     return result.messages;
+  }
+
+  private countMessageTokens(messages: CodeBuddyMessage[]): number {
+    const tokenMessages = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
+      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
+    }));
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
+  }
+
+  private rejectIfCurrentRequestExceedsBudget(
+    messages: CodeBuddyMessage[],
+    effectiveLimit: number,
+  ): void {
+    const lastUser = findLastUserMessage(messages);
+    if (!lastUser) return;
+    const tokens = this.countMessageTokens([lastUser]);
+    if (tokens > effectiveLimit) {
+      throw new ContextCompactionError(
+        'CURRENT_REQUEST_EXCEEDS_BUDGET',
+        tokens,
+        effectiveLimit,
+      );
+    }
+  }
+
+  private assertLastUserPreserved(
+    original: CodeBuddyMessage[],
+    prepared: CodeBuddyMessage[],
+    effectiveLimit: number,
+  ): void {
+    const lastUser = findLastUserMessage(original);
+    if (!lastUser) return;
+    if (prepared.includes(lastUser)) return;
+    const intact = prepared.some((message) => (
+      message.role === 'user'
+      && message.content === lastUser.content
+    ));
+    if (intact) return;
+    throw new ContextCompactionError(
+      'CURRENT_REQUEST_DROPPED',
+      this.countMessageTokens([lastUser]),
+      effectiveLimit,
+      'Current user request was dropped during context compaction. The request was not sent to the model.',
+    );
+  }
+
+  private assertFitsTokenLimit(prepared: CodeBuddyMessage[], effectiveLimit: number): void {
+    const tokens = this.countMessageTokens(prepared);
+    if (tokens <= effectiveLimit) return;
+    throw new ContextCompactionError('COMPACTION_EXCEEDS_LIMIT', tokens, effectiveLimit);
   }
 
   /**
@@ -177,6 +252,10 @@ export class ContextManagerV3 {
  * @returns A new ContextManagerV3 instance.
  */
 export function createContextManager(model: string, maxTokens?: number): ContextManagerV3 {
-  const config = { model, ...(maxTokens ? { maxContextTokens: maxTokens } : {}) };
+  const declaredWindow = getModelToolConfig(model).contextWindow;
+  const config = {
+    model,
+    maxContextTokens: maxTokens ?? declaredWindow ?? ContextManagerV3.DEFAULT_CONFIG.maxContextTokens,
+  };
   return new ContextManagerV3(config);
 }

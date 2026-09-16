@@ -1,7 +1,8 @@
 import * as readline from 'readline';
 import { spawn } from 'child_process';
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
+import { writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { isAbsolute, join, resolve } from 'path';
 import {
   getValidationConfigForGuide,
   validateProviderKey,
@@ -218,34 +219,42 @@ export const ONBOARDING_PHASES: OnboardingPhase[] = [
   },
 ];
 
-const TTS_PROVIDERS = ['edge-tts', 'espeak', 'audioreader'];
+const TTS_PROVIDERS = ['piper', 'espeak', 'say', 'audioreader'];
+
+class OnboardingCancelled extends Error {}
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    const onClose = () => reject(new OnboardingCancelled('Setup cancelled.'));
+    rl.once('close', onClose);
     const suffix = defaultValue ? ` [${defaultValue}]` : '';
     rl.question(`  ${question}${suffix}: `, (answer) => {
+      rl.removeListener('close', onClose);
       resolve(answer.trim() || defaultValue || '');
     });
   });
 }
 
-function askChoice(rl: readline.Interface, question: string, choices: string[], defaultIdx: number): Promise<string> {
-  return new Promise((resolve) => {
-    console.log(`\n  ${question}`);
-    choices.forEach((c, i) => console.log(`    ${i + 1}. ${c}${i === defaultIdx ? ' (default)' : ''}`));
-    rl.question(`  Choice [${defaultIdx + 1}]: `, (answer) => {
-      const idx = parseInt(answer) - 1;
-      const selectedIdx = idx >= 0 && idx < choices.length ? idx : defaultIdx;
-      resolve(choices[selectedIdx] ?? choices[0] ?? '');
-    });
-  });
+async function askChoice(rl: readline.Interface, question: string, choices: string[], defaultIdx: number): Promise<string> {
+  console.log(`\n  ${question}`);
+  choices.forEach((c, i) => console.log(`    ${i + 1}. ${c}${i === defaultIdx ? ' (default)' : ''}`));
+  while (true) {
+    const answer = await ask(rl, 'Choice', String(defaultIdx + 1));
+    const idx = Number(answer) - 1;
+    if (/^\d+$/.test(answer) && Number.isInteger(idx) && idx >= 0 && idx < choices.length) {
+      return choices[idx]!;
+    }
+    console.log(`  Please enter a number from 1 to ${choices.length}.`);
+  }
 }
 
 /** Read a secret without echoing it (masks keystrokes with '*'). The captured
  *  value is always correct regardless of echo; masking is cosmetic, and falls
  *  back to a visible prompt if the terminal doesn't support muting. */
 function askSecret(rl: readline.Interface, question: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    const onClose = () => reject(new OnboardingCancelled('Setup cancelled.'));
+    rl.once('close', onClose);
     const rlAny = rl as unknown as { _writeToOutput?: (s: string) => void };
     const original = rlAny._writeToOutput?.bind(rl);
     let muted = false;
@@ -256,6 +265,7 @@ function askSecret(rl: readline.Interface, question: string): Promise<string> {
       };
     }
     rl.question(`  ${question}: `, (answer) => {
+      rl.removeListener('close', onClose);
       if (typeof original === 'function') rlAny._writeToOutput = original;
       resolve(answer.trim());
     });
@@ -270,28 +280,29 @@ function askSecret(rl: readline.Interface, question: string): Promise<string> {
  *   - an entered API key → encrypted credential store (never plaintext in settings),
  *     plus `process.env[envVar]` so the current process resolves immediately.
  *   - ollama → default `OLLAMA_HOST` so auto-detection picks it up.
- * All writes are best-effort; the wizard summary still prints on failure.
+ * Persistence errors propagate so the wizard cannot report a false success.
  */
 export async function persistProviderSelection(
   guide: OnboardingProviderGuide,
   model: string,
   apiKey: string
 ): Promise<void> {
-  try {
+  {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
     getSettingsManager().saveUserSettings({
       provider: guide.id,
       defaultModel: model,
       model,
+      models: [model],
       ...(guide.baseURL ? { baseURL: guide.baseURL } : {}),
     });
-  } catch { /* non-fatal */ }
+  }
 
   if (guide.authMode === 'api-key' && apiKey) {
-    try {
+    {
       const { getCredentialManager } = await import('../security/credential-manager.js');
       getCredentialManager().setApiKey(apiKey);
-    } catch { /* non-fatal */ }
+    }
     if (guide.envVar) process.env[guide.envVar] = apiKey;
   }
 
@@ -300,12 +311,29 @@ export async function persistProviderSelection(
   }
 }
 
+export const PROJECT_FOLDER_QUESTION = 'Which project folder should Code Buddy use?';
+
+export function resolveOnboardingProjectDir(answer: string, cwd: string = process.cwd()): string {
+  const raw = answer.trim() || cwd;
+  return isAbsolute(raw) ? resolve(raw) : resolve(cwd, raw);
+}
+
+export function applyOnboardingProjectConfig(projectDir: string, result: OnboardingResult): void {
+  writeConfig(join(projectDir, '.codebuddy'), result);
+}
+
 export function writeConfig(configDir: string, result: OnboardingResult): void {
   mkdirSync(configDir, { recursive: true });
   const authMode = result.authMode ?? getProviderGuide(result.provider).authMode;
   const recommendedNextCommands =
     result.recommendedNextCommands ?? buildRecommendedNextCommands(result);
+  const configPath = join(configDir, 'config.json');
+  const previous: unknown = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+  if (!previous || typeof previous !== 'object' || Array.isArray(previous)) {
+    throw new Error('Existing project config must be a JSON object; it was not overwritten.');
+  }
   const config: Record<string, unknown> = {
+    ...previous,
     provider: result.provider,
     model: result.model,
     authMode,
@@ -319,7 +347,8 @@ export function writeConfig(configDir: string, result: OnboardingResult): void {
   if (result.ttsProvider) {
     config.ttsProvider = result.ttsProvider;
   }
-  writeFileSync(join(configDir, 'config.json'), JSON.stringify(config, null, 2) + '\n');
+  if (!result.ttsEnabled) delete config.ttsProvider;
+  writeJsonAtomicSync(configPath, config);
 }
 
 export function getProviderGuide(provider: string): OnboardingProviderGuide {
@@ -464,13 +493,16 @@ async function selectModel(
  * summary — the Hermes-style reassurance that the agent is ready, derived from
  * env vars actually present. Kept deliberately minimal (getting-started scope).
  */
-function renderCapabilitiesFooter(): string {
+export function renderCapabilitiesFooter(): string {
   const has = (vars: string[]): boolean => vars.some((v) => Boolean(process.env[v]));
   const webSearch = has(['BRAVE_API_KEY', 'EXA_API_KEY', 'PERPLEXITY_API_KEY', 'TAVILY_API_KEY']);
+  const tts = has(['ELEVENLABS_API_KEY'])
+    ? '    ✓ Text-to-speech (ElevenLabs key detected; Pocket TTS / Piper as local fallback)'
+    : '    ○ Text-to-speech — Pocket TTS (`buddy speak --engine pocket`), Piper, or ELEVENLABS_API_KEY';
   return [
     '  Capabilities:',
     '    ✓ Code tools — file edit, shell, search',
-    '    ✓ Text-to-speech (edge-tts, offline fallback)',
+    tts,
     webSearch
       ? '    ✓ Web search'
       : '    ○ Web search — add BRAVE_API_KEY or EXA_API_KEY to enable',
@@ -522,13 +554,14 @@ async function pullOllamaModel(model: string): Promise<string | null> {
  */
 async function runQuickStart(
   rl: readline.Interface,
-  snapshot: EnvironmentSnapshot
+  snapshot: EnvironmentSnapshot,
+  projectDir: string,
 ): Promise<OnboardingResult | null> {
   const free = snapshot.recommendedFree;
   const ollama = snapshot.capabilities.find((c) => c.id === 'ollama');
 
   // Case A: a ready free path exists — offer it directly.
-  if (free) {
+  if (free && PROVIDER_GUIDES.some((guide) => guide.id === free.id)) {
     const answer = (
       await ask(rl, `Start now on ${free.label} — free, no API key needed? (Y/n)`, 'y')
     ).toLowerCase();
@@ -538,13 +571,13 @@ async function runQuickStart(
       if (free.id === 'ollama' || free.id === 'lmstudio') {
         const model = await selectModel(rl, guide, free.models);
         await persistProviderSelection({ ...guide, baseURL: free.baseURL ?? guide.baseURL }, model, '');
-        return finishQuickStart(free.id, model, free.baseURL);
+        return finishQuickStart(free.id, model, free.baseURL, projectDir);
       }
 
       // OAuth path (chatgpt / xai) — already signed in, just persist the choice.
       const model = guide.defaultModel;
       await persistProviderSelection(guide, model, '');
-      return finishQuickStart(free.id, model, guide.baseURL);
+      return finishQuickStart(free.id, model, guide.baseURL, projectDir);
     }
     return null; // user declined the fast path → full menu
   }
@@ -564,7 +597,7 @@ async function runQuickStart(
       if (pulled) {
         const guide = getProviderGuide('ollama');
         await persistProviderSelection({ ...guide, baseURL: ollama.baseURL ?? guide.baseURL }, pulled, '');
-        return finishQuickStart('ollama', pulled, ollama.baseURL);
+        return finishQuickStart('ollama', pulled, ollama.baseURL, projectDir);
       }
       console.log('  ⚠️ Pull did not complete — falling back to the full setup menu.');
     }
@@ -574,7 +607,12 @@ async function runQuickStart(
 }
 
 /** Persist config.json + build the OnboardingResult for a fast-path selection. */
-function finishQuickStart(provider: string, model: string, baseURL?: string): OnboardingResult {
+function finishQuickStart(
+  provider: string,
+  model: string,
+  baseURL: string | undefined,
+  projectDir: string,
+): OnboardingResult {
   const guide = getProviderGuide(provider);
   const result: OnboardingResult = {
     provider,
@@ -584,7 +622,7 @@ function finishQuickStart(provider: string, model: string, baseURL?: string): On
     authMode: guide.authMode,
     recommendedNextCommands: buildRecommendedNextCommands({ provider, apiKey: '', model }),
   };
-  writeConfig(join(process.cwd(), '.codebuddy'), result);
+  applyOnboardingProjectConfig(projectDir, result);
   console.log('');
   console.log('  ✅ You\'re set — no environment variable needed.');
   console.log('');
@@ -596,16 +634,38 @@ function finishQuickStart(provider: string, model: string, baseURL?: string): On
 
 /** Offer to run the isolated 60-second demo right after setup — ending the
  *  wizard on proof (a green test), not prose. */
-async function offerTry(rl: readline.Interface): Promise<void> {
+export async function offerOnboardingDemo(rl: readline.Interface, result: OnboardingResult): Promise<void> {
+  if (!['chatgpt', 'ollama', 'lmstudio'].includes(result.provider)) {
+    console.log('  Verify this provider with the first-chat command below.');
+    return;
+  }
   const answer = (await ask(rl, 'Run the 60-second demo now to confirm it works? (Y/n)', 'y')).toLowerCase();
   if (answer === 'y' || answer === 'yes' || answer === '') {
     try {
       const { runTryDemo } = await import('../commands/try.js');
       rl.pause();
-      await runTryDemo();
-      rl.resume();
+      const { getSettingsManager } = await import('../utils/settings-manager.js');
+      const code = await runTryDemo({
+        verbose: false,
+        resolveProvider: async () => ({
+          kind: result.provider === 'chatgpt' ? 'chatgpt' : 'ollama',
+          label: `${result.provider} (${result.model})`,
+          apiKey: result.provider === 'chatgpt' ? 'oauth-chatgpt' : 'local',
+          baseURL: result.provider === 'chatgpt'
+            ? 'https://chatgpt.com/backend-api/codex'
+            : getSettingsManager().getBaseURL(),
+          model: result.model,
+        }),
+      });
+      if (code !== 0) {
+        process.exitCode = code;
+        console.log('  Setup saved, but the demo failed. First chat is not verified.');
+      }
     } catch {
-      console.log('\n  Run it yourself anytime with:  buddy try\n');
+      process.exitCode = 1;
+      console.log('\n  The demo failed. First chat is not verified.\n');
+    } finally {
+      rl.resume();
     }
   } else {
     console.log('\n  When you\'re ready:  buddy try\n');
@@ -639,11 +699,16 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
     console.log(renderDetectionSummary(snapshot));
     console.log('');
 
-    const quick = await runQuickStart(rl, snapshot);
+    const folderAnswer = await ask(rl, PROJECT_FOLDER_QUESTION, process.cwd());
+    const projectDir = resolveOnboardingProjectDir(folderAnswer);
+    console.log(`  Project folder: ${projectDir}`);
+    console.log('');
+
+    const quick = await runQuickStart(rl, snapshot, projectDir);
     if (quick) {
       console.log(renderCapabilitiesFooter());
       console.log('');
-      await offerTry(rl);
+      await offerOnboardingDemo(rl, quick);
       return quick;
     }
 
@@ -659,8 +724,15 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
       orderedGuides.map((guide) => `${guide.id} — ${guide.label}`),
       0
     ).then((choice) => choice.split(/\s+—\s+/)[0] ?? choice);
-    const guide = getProviderGuide(provider);
-    const validationConfig = getValidationConfigForGuide(provider);
+    const selectedGuide = getProviderGuide(provider);
+    const detected = snapshot.capabilities.find((capability) => capability.id === provider);
+    const guide = selectedGuide.authMode === 'local' && detected?.baseURL
+      ? { ...selectedGuide, baseURL: detected.baseURL }
+      : selectedGuide;
+    const defaultValidation = getValidationConfigForGuide(provider);
+    const validationConfig = guide.authMode === 'local' && guide.baseURL && defaultValidation
+      ? { ...defaultValidation, baseUrl: guide.baseURL.replace(/\/v1\/?$/, '') }
+      : defaultValidation;
 
     // 2. Authentication — captured AND verified inline so you leave the wizard
     //    ready to chat. A rejected key never gets persisted; a successful probe
@@ -736,11 +808,20 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
       ...(ttsProvider ? { ttsProvider } : {}),
     };
 
-    // 6. Write project config
-    writeConfig(join(process.cwd(), '.codebuddy'), result);
+    {
+      const { getTTSManager } = await import('../input/text-to-speech.js');
+      getTTSManager().updateConfig({
+        enabled: ttsEnabled,
+        autoSpeak: ttsEnabled,
+        ...(ttsProvider ? { provider: ttsProvider as 'piper' | 'espeak' | 'say' | 'audioreader' } : {}),
+      });
+    }
+
+    // 6. Write project config into the folder the user chose
+    applyOnboardingProjectConfig(projectDir, result);
 
     // 7. Summary
-    const ready = verified || (guide.authMode === 'api-key' && Boolean(apiKey));
+    const ready = verified;
     console.log('');
     console.log(`  ${ready ? 'Setup complete — you\'re ready to go!' : 'Setup saved.'}`);
     console.log('');
@@ -773,10 +854,14 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
 
     // Close with a real, runnable test so the wizard ends on proof, not prose.
     if (ready) {
-      await offerTry(rl);
+      await offerOnboardingDemo(rl, result);
     }
 
     return result;
+  } catch (error) {
+    if (!(error instanceof OnboardingCancelled)) throw error;
+    console.log('\n  Setup cancelled.');
+    return null;
   } finally {
     rl.close();
   }

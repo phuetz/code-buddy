@@ -18,7 +18,7 @@ describe('summarizeAutonomyQueue', () => {
         tasks: [
           { id: 'a', title: 'done low', status: 'completed', priority: 'low' },
           { id: 'b', title: 'waiting high', status: 'pending', priority: 'high' },
-          { id: 'c', title: 'running', status: 'in_progress', priority: 'medium', claimedBy: 'ministar/fleet' },
+          { id: 'c', title: 'running', status: 'in_progress', priority: 'medium', claimedBy: 'hub/fleet' },
           { id: 'd', title: 'waiting medium', status: 'pending', priority: 'medium' },
         ],
       }),
@@ -33,12 +33,12 @@ describe('summarizeAutonomyQueue', () => {
       snap({
         presence: {
           stale: { host: 'old/agent', lastSeen: '2026-07-06T10:00:00Z' },
-          live: { host: 'ministar/fleet', lastSeen: '2026-07-06T11:55:00Z', currentTask: 'self-improvement' },
+          live: { host: 'hub/fleet', lastSeen: '2026-07-06T11:55:00Z', currentTask: 'self-improvement' },
         },
       }),
       NOW,
     );
-    expect(summary.agents.map((a) => a.name)).toEqual(['ministar/fleet', 'old/agent']);
+    expect(summary.agents.map((a) => a.name)).toEqual(['hub/fleet', 'old/agent']);
     expect(summary.agents[0]).toMatchObject({ fresh: true, currentTask: 'self-improvement', lastSeenLabel: 'il y a 5 min' });
     expect(summary.agents[1]!.fresh).toBe(false);
   });

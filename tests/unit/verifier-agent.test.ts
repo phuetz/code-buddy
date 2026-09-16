@@ -205,6 +205,28 @@ describe('Verifier agent', () => {
       expect(result.metadata?.verdict).toBe('NEEDS REVIEW');
     });
 
+    it('refuses CONFIRMED when the model never ran an oracle (no evidence)', async () => {
+      const agent = getVerifierAgent();
+      await agent.initialize();
+
+      const executeTool = vi.fn(async () => ({ success: true, output: 'should not run' }));
+      const llmCall = vi.fn(async (): Promise<SWELLMResponse> => ({
+        content: 'WHAT WAS VERIFIED: nothing\nEVIDENCE: (none)\nFINAL VERDICT: CONFIRMED',
+        tool_calls: [],
+      }));
+
+      const result = await agent.execute({
+        action: 'verify',
+        params: { instruction: 'claim success without proof', llmCall, executeTool },
+      });
+
+      expect(executeTool).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.metadata?.verdict).toBe('NEEDS REVIEW');
+      expect(result.output).toContain('NEEDS REVIEW');
+      expect(result.output).toMatch(/without (running an oracle|proof|evidence)/i);
+    });
+
     it('fails cleanly when llmCall/executeTool are missing', async () => {
       const agent = getVerifierAgent();
       await agent.initialize();

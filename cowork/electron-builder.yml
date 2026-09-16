@@ -147,7 +147,7 @@ mac:
       to: tray-iconTemplate.png
 
 linux:
-  icon: resources/icon.png
+  icon: public/logo.png
   target:
     - target: AppImage
       arch:

@@ -1,0 +1,37 @@
+{
+  "name": "@phuetz/companion-core",
+  "version": "0.1.0",
+  "description": "Portable relational core for AI companions: persona profiles, non-gamified relationship drift, a « what matters » memory sheet, capped initiative planning, and an output limits contract. Pure TypeScript — no UI, no network, no host dependency.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "zod": "^3.25.0"
+  },
+  "keywords": [
+    "companion",
+    "persona",
+    "relationship",
+    "typescript"
+  ]
+}

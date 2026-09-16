@@ -41,6 +41,12 @@ export {
   createSelfDescribeTools,
 } from './self-describe-tools.js';
 
+// Tool Adapters - Self-evolution release notes (read-only, never fleet-safe)
+export {
+  SelfEvolutionTool,
+  createSelfEvolutionTools,
+} from './self-evolution-tools.js';
+
 // Tool Adapters - Remind (dated reminders — the agent's proper path vs shelling `buddy remind add`)
 export { RemindTool, createRemindTools } from './remind-tools.js';
 

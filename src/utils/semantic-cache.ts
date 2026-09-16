@@ -15,6 +15,7 @@ import * as fs from 'fs/promises';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { readJsonAtomicSync, writeJsonAtomic } from './atomic-write.js';
 
 // ============================================================================
 // Types
@@ -665,11 +666,8 @@ export class SemanticCache<T = unknown> extends EventEmitter {
    */
   private loadFromDiskSync(): void {
     if (!this.config.persistToDisk) return;
-    if (!existsSync(this.config.cachePath)) return;
-
     try {
-      const content = readFileSync(this.config.cachePath, 'utf-8');
-      const data = JSON.parse(content);
+      const data = readJsonAtomicSync<{ entries?: CacheEntry<T>[] }>(this.config.cachePath, { entries: [] });
 
       if (Array.isArray(data.entries)) {
         const now = Date.now();
@@ -700,10 +698,7 @@ export class SemanticCache<T = unknown> extends EventEmitter {
       }
 
       const entries = Array.from(this.cache.values());
-      await fs.writeFile(
-        this.config.cachePath,
-        JSON.stringify({ entries, stats: this.stats }, null, 2)
-      );
+      await writeJsonAtomic(this.config.cachePath, { entries, stats: this.stats });
     } catch {
       // Ignore save errors
     }

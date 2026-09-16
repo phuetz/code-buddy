@@ -36,12 +36,12 @@ import {
   appendFileSync,
   closeSync,
   existsSync,
+  fstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   readSync,
   statSync,
-  writeFileSync,
   type Stats,
 } from 'node:fs';
 import { dirname, join } from 'path';
@@ -54,6 +54,7 @@ import { BM25Index } from '../search/bm25.js';
 import { cosineSimilarityF32, hybridMmrRank, type HybridCandidate } from './hybrid-mmr.js';
 import { DiskEmbeddingCache } from '../research/paper-qa/disk-embedding-cache.js';
 import { withTimeout } from '../utils/errors.js';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 import {
   canonicalObject,
   factMatchKey,
@@ -66,6 +67,7 @@ import {
   type StructuredFact,
 } from './ckg-fact-reconciliation.js';
 import { redactRememberInput } from './ckg-redaction.js';
+import { chooseCkgEngine, isCkgSnapshotLoadable, snapshotPathFor } from './ckg-engine-policy.js';
 
 /** Multilingual embeddings — all-MiniLM (the global default) is English-leaning and misses
  *  French synonyms (measured: it failed paraphrase recall); this model discriminates French
@@ -272,8 +274,9 @@ export class CollectiveKnowledgeGraph {
   private embeddingCacheLoaded = false;
   private readonly embeddingModel: string;
   private embedder: CkgEmbedder | null = null;
-  /** Rust engine client (lazy) — used only when CODEBUDDY_CKG_ENGINE=rust and the binary exists.
-   *  Writes go to the SAME ledger, so the TS path stays consistent and falls back transparently. */
+  /** Rust engine client (lazy) — selected by `chooseCkgEngine` (explicit rust, or auto when the
+   *  binary exists and the snapshot is loadable). Writes go to the SAME ledger, so the TS path
+   *  stays consistent and falls back transparently. */
   private engine: import('./buddy-memory-client.js').BuddyMemoryClient | null = null;
   private engineTried = false;
 
@@ -293,16 +296,30 @@ export class CollectiveKnowledgeGraph {
           });
   }
 
-  /** The Rust engine client when opted-in (CODEBUDDY_CKG_ENGINE=rust) and available, else null.
-   *  Lazy + cached; any failure → null so callers use the in-process TS implementation. */
+  /** The Rust engine client when selected and available, else null.
+   *  Lazy + cached; any failure → null so callers use the in-process TS implementation.
+   *  Default (unset/`auto`): rust only if the binary exists on disk and the snapshot is loadable. */
   private async engineClient(): Promise<import('./buddy-memory-client.js').BuddyMemoryClient | null> {
-    if (process.env.CODEBUDDY_CKG_ENGINE !== 'rust') return null;
     if (this.engineTried) return this.engine;
     this.engineTried = true;
     try {
-      const { BuddyMemoryClient } = await import('./buddy-memory-client.js');
+      const { BuddyMemoryClient, resolveBuddyMemoryBin } = await import('./buddy-memory-client.js');
+      const preference = chooseCkgEngine({
+        env: process.env.CODEBUDDY_CKG_ENGINE,
+        binaryPath: resolveBuddyMemoryBin(),
+        snapshotLoadable: isCkgSnapshotLoadable(snapshotPathFor(this.ledgerPath)),
+      });
+      if (preference !== 'rust') {
+        this.engine = null;
+        return null;
+      }
       const c = new BuddyMemoryClient({ ledgerPath: this.ledgerPath, agentId: this.agentId });
-      this.engine = c.available() ? c : null;
+      if (!c.available()) {
+        this.engine = null;
+        return null;
+      }
+      await c.call('ping');
+      this.engine = c;
     } catch (err) {
       logger.debug(`[ckg] engine unavailable: ${err instanceof Error ? err.message : String(err)}`);
       this.engine = null;
@@ -611,11 +628,14 @@ export class CollectiveKnowledgeGraph {
   }
 
   /** A `<collective_knowledge>` system block for prompt injection (token-budgeted).
-   *  Uses hybrid (semantic+keyword) retrieval; degrades to keyword if embeddings are unavailable. */
-  async formatCollectiveContext(query: string, maxChars = 600, timeoutMs = 3_000): Promise<string> {
-    let hits: CkgRecallResult[];
+   *  Uses the same retrieval as `buddy research recall` (`recallHybrid`) plus
+   *  keyword `recall()` so a title buried in a long prompt is not drowned by a
+   *  recent off-topic node. Bound in size; each line is truncated so one blob
+   *  cannot fill the budget alone. */
+  async formatCollectiveContext(query: string, maxChars = 1_600, timeoutMs = 3_000): Promise<string> {
+    let hybrid: CkgRecallResult[] = [];
     try {
-      hits = await withTimeout(
+      hybrid = await withTimeout(
         this.recallHybrid(query, { limit: 8 }),
         timeoutMs,
         'Collective knowledge recall timed out',
@@ -626,18 +646,9 @@ export class CollectiveKnowledgeGraph {
       );
       return '';
     }
-    if (hits.length === 0) return '';
-    const lines: string[] = [];
-    let used = 0;
-    for (const h of hits) {
-      const who = h.agentId ? ` (par ${h.agentId})` : '';
-      const line = `- [${h.type}] ${h.text}${who}`;
-      if (used + line.length > maxChars) break;
-      lines.push(line);
-      used += line.length;
-    }
-    if (lines.length === 0) return '';
-    return `<collective_knowledge>\n${lines.join('\n')}\n</collective_knowledge>`;
+    const lexical = this.recall(query, { limit: 8 });
+    const hits = selectCollectiveContextHits(query, lexical, hybrid);
+    return packCollectiveContext(hits, maxChars);
   }
 
   /** Invalidated (superseded) versions, for audit / bi-temporal queries. */
@@ -917,7 +928,7 @@ export class CollectiveKnowledgeGraph {
         );
       }
       const file = join(dir, `${category}.md`);
-      writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+      writeFileAtomicSync(file, lines.join('\n') + '\n', { mode: 0o600 });
       files.push(file);
     }
     return { files, factCount: facts.length };
@@ -967,9 +978,33 @@ export class CollectiveKnowledgeGraph {
   private append(event: LedgerEvent): void {
     const dir = dirname(this.ledgerPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // Audit 2026-09-02 : si un crash a laissé une queue de ligne déchirée
+    // (fichier ne finissant pas par '\n'), un append direct s'y souderait —
+    // la ligne déchirée ET ce nouvel événement deviendraient invalides. On
+    // isole en préfixant '\n' dans le MÊME write (l'atomicité O_APPEND par
+    // syscall est préservée). Pire cas en course : une ligne vide, ignorée
+    // par le parseur.
+    let needsLeadingNewline = false;
+    try {
+      if (existsSync(this.ledgerPath)) {
+        const fd = openSync(this.ledgerPath, 'r');
+        try {
+          const size = fstatSync(fd).size;
+          if (size > 0) {
+            const buf = Buffer.alloc(1);
+            readSync(fd, buf, 0, 1, size - 1);
+            needsLeadingNewline = buf[0] !== 0x0a;
+          }
+        } finally {
+          closeSync(fd);
+        }
+      }
+    } catch {
+      // Vérification best-effort : en échec, comportement historique.
+    }
     // One write() of the full JSON line + newline. O_APPEND is atomic per
     // syscall (the companion Rust engine must not split payload and '\n').
-    appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
+    appendFileSync(this.ledgerPath, `${needsLeadingNewline ? '\n' : ''}${JSON.stringify(event)}\n`, 'utf8');
     // `load` is the single event-application path. This avoids double-applying a local
     // append while still picking up writes that another process raced in before ours.
     this.load();
@@ -1299,6 +1334,76 @@ export class CollectiveKnowledgeGraph {
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0.8));
+}
+
+/** Query tokens of length ≥ 6 that also appear in the candidate (topical core). */
+function topicalTokenSet(query: string, text: string): Set<string> {
+  const q = tokenize(query);
+  const cand = tokenize(text);
+  const out = new Set<string>();
+  for (const t of q) {
+    if (t.length >= 6 && cand.has(t)) out.add(t);
+  }
+  return out;
+}
+
+/**
+ * Prefer keyword hits (`research recall` fallback) when the query names a
+ * topic; drop hybrid-only neighbours that only match wrapper words
+ * ("mémoire collective") or recency. Paraphrases with no keyword hit still
+ * use `recallHybrid` alone.
+ */
+export function selectCollectiveContextHits(
+  query: string,
+  lexical: CkgRecallResult[],
+  hybrid: CkgRecallResult[],
+): CkgRecallResult[] {
+  if (lexical.length === 0) return hybrid;
+  const best = lexical[0]!;
+  const bestTokens = topicalTokenSet(query, `${best.name} ${best.text}`);
+  const allowed = lexical.filter((h) => {
+    if (h.id === best.id) return true;
+    if (bestTokens.size === 0) return h.salience >= best.salience * 0.75;
+    const tokens = topicalTokenSet(query, `${h.name} ${h.text}`);
+    for (const t of tokens) {
+      if (bestTokens.has(t)) return true;
+    }
+    return false;
+  });
+  const allowedIds = new Set(allowed.map((h) => h.id));
+  const ordered: CkgRecallResult[] = [];
+  const seen = new Set<string>();
+  for (const h of [...hybrid, ...allowed]) {
+    if (!allowedIds.has(h.id) || seen.has(h.id)) continue;
+    seen.add(h.id);
+    ordered.push(h);
+  }
+  return ordered;
+}
+
+/** Pack recall hits into a bounded prompt block; truncate per line, never skip the first fit. */
+export function packCollectiveContext(hits: CkgRecallResult[], maxChars: number): string {
+  if (hits.length === 0 || maxChars <= 0) return '';
+  const lines: string[] = [];
+  let used = 0;
+  const perLine = Math.min(280, Math.max(120, Math.floor(maxChars / 2)));
+  for (const h of hits) {
+    const who = h.agentId ? ` (par ${h.agentId})` : '';
+    let body = h.text.replace(/\s+/g, ' ').trim();
+    if (body.length > perLine) body = `${body.slice(0, perLine - 1)}…`;
+    const line = `- [${h.type}] ${body}${who}`;
+    if (used + line.length + 1 > maxChars) {
+      if (lines.length === 0) {
+        const room = maxChars - 1;
+        if (room > 48) lines.push(`${line.slice(0, room - 1)}…`);
+      }
+      break;
+    }
+    lines.push(line);
+    used += line.length + 1;
+  }
+  if (lines.length === 0) return '';
+  return `<collective_knowledge>\n${lines.join('\n')}\n</collective_knowledge>`;
 }
 
 function parseEmbeddingCacheEvent(line: string): EmbeddingCacheEvent | null {

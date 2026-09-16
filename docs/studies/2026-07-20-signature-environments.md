@@ -52,7 +52,7 @@ boucles). Plans longs/caméra répétable entre vidéos : Wan2.2-VACE-Fun-A14B
   Unsplash (commercial OK sans garantie). Le décor GÉNÉRÉ s'intègre mieux
   (même distribution d'image → relight plus facile).
 
-## À installer sur darkstar
+## À installer sur gpuNode
 
 | Fichier | Taille | Licence |
 |---|---|---|

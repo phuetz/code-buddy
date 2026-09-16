@@ -24,6 +24,7 @@ import { assembleFilm, type AssembleFilmResult } from '../../tools/video/film-as
 import { synthesizeNarration } from '../../tools/video/narration.js';
 import { renderScene } from '../../tools/video/scene-render.js';
 import { planScenes, type PlannedScene } from './scene-planner.js';
+import { orientMermaidForPortrait } from '../../tools/video/mermaid-render.js';
 
 const LEAD = 0.6;
 const TRAIL = 1.0;
@@ -237,7 +238,8 @@ export async function produceVideoFromPrompt(
     let imagePath: string | undefined;
     if (sc.visual.kind === 'diagram' && sc.visual.mermaid) {
       emit({ phase: 'visual', scene: i + 1, total, message: 'diagramme' });
-      const png = await renderMermaid(sc.visual.mermaid, path.join(workDir, `diag-${i + 1}.png`));
+      const mermaidSrc = h > w ? orientMermaidForPortrait(sc.visual.mermaid) : sc.visual.mermaid;
+      const png = await renderMermaid(mermaidSrc, path.join(workDir, `diag-${i + 1}.png`));
       if (png) imagePath = png;
       else warnings.push(`scène ${i + 1}: diagramme indisponible (mmdc absent) → carte texte`);
     }

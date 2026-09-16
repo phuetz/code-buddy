@@ -5,6 +5,7 @@
  * (ours, theirs, both, ai), and exposes a tool for the agent to use.
  */
 
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
@@ -272,38 +273,65 @@ function indent(text: string, prefix = '    '): string {
 /**
  * Scan the project for files containing merge conflict markers.
  */
-function scanForConflicts(cwd: string): ToolResult {
-  try {
-    const { execSync } = require('child_process');
-    const output = execSync(
-      'git diff --name-only --diff-filter=U',
-      { cwd, encoding: 'utf-8', timeout: 10000 },
-    ).trim();
-
-    if (!output) {
-      return { success: true, output: 'No files with merge conflicts found.' };
-    }
-
-    const files = output.split('\n').filter(Boolean);
-    const summaries: string[] = [];
-
-    for (const file of files) {
-      const fullPath = path.join(cwd, file);
-      try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        const conflicts = parseConflicts(content, fullPath);
-        summaries.push(`  ${file}: ${conflicts.length} conflict(s)`);
-      } catch {
-        summaries.push(`  ${file}: (unable to read)`);
-      }
-    }
-
-    return {
-      success: true,
-      output: `Files with merge conflicts:\n${summaries.join('\n')}`,
-    };
-  } catch {
-    // Fallback: not in a git repo or git not available
-    return { success: true, output: 'Unable to scan for conflicts (git not available or not in a repository).' };
+function runGit(args: string[], cwd: string): { ok: true; stdout: string } | { ok: false; reason: string } {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf-8',
+    timeout: 10000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  if (result.error) {
+    const code = (result.error as NodeJS.ErrnoException).code;
+    return { ok: false, reason: code === 'ENOENT' ? 'git is not installed or not on PATH' : result.error.message };
   }
+  if (result.status !== 0) {
+    return { ok: false, reason: (result.stderr || '').trim() || `git ${args.join(' ')} exited with status ${result.status}` };
+  }
+  return { ok: true, stdout: result.stdout || '' };
+}
+
+function scanForConflicts(cwd: string): ToolResult {
+  // Distinguish "not a repository" and "git unavailable" from "no conflicts":
+  // the former used to be reported for every scan because the ESM module
+  // called an undefined `require` and the catch-all blamed git.
+  const inside = runGit(['rev-parse', '--is-inside-work-tree'], cwd);
+  if (!inside.ok) {
+    return { success: false, error: `Unable to scan for conflicts: ${inside.reason}` };
+  }
+  if (inside.stdout.trim() !== 'true') {
+    return { success: false, error: 'Unable to scan for conflicts: not inside a Git work tree.' };
+  }
+
+  const diff = runGit(['diff', '--name-only', '--diff-filter=U'], cwd);
+  if (!diff.ok) {
+    return { success: false, error: `Unable to scan for conflicts: ${diff.reason}` };
+  }
+
+  const output = diff.stdout.trim();
+  if (!output) {
+    return { success: true, output: 'No files with merge conflicts found.' };
+  }
+
+  // `git diff --name-only` paths are relative to the repository root.
+  const topLevel = runGit(['rev-parse', '--show-toplevel'], cwd);
+  const root = topLevel.ok ? topLevel.stdout.trim() : cwd;
+  const files = output.split('\n').filter(Boolean);
+  const summaries: string[] = [];
+
+  for (const file of files) {
+    const fullPath = path.join(root, file);
+    try {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const conflicts = parseConflicts(content, fullPath);
+      summaries.push(`  ${file}: ${conflicts.length} conflict(s)`);
+    } catch {
+      summaries.push(`  ${file}: (unable to read)`);
+    }
+  }
+
+  return {
+    success: true,
+    output: `Files with merge conflicts:\n${summaries.join('\n')}`,
+  };
 }

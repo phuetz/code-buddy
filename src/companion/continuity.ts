@@ -1,14 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
-  renameSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { resolveUserName } from './user-name.js';
 
 export const COMPANION_CONTINUITY_SCHEMA_VERSION = 1 as const;
@@ -215,14 +213,20 @@ function manifestHash(manifest: CompanionContinuityManifest): string {
 }
 
 function readManifest(filePath: string): CompanionContinuityManifest {
-  return JSON.parse(readFileSync(filePath, 'utf8')) as CompanionContinuityManifest;
+  const manifest = readJsonAtomicSync<CompanionContinuityManifest | null>(filePath, null, {
+    mode: 0o600,
+    isValid: (value): value is CompanionContinuityManifest => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value),
+    ),
+  });
+  if (!manifest) {
+    throw new Error(`Continuity manifest is unavailable: ${filePath}`);
+  }
+  return manifest;
 }
 
 function writeManifest(filePath: string, manifest: CompanionContinuityManifest): void {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tmp, filePath);
+  writeJsonAtomicSync(filePath, manifest, { mode: 0o600 });
 }
 
 export function refreshCompanionContinuity(

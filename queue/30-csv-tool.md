@@ -1,6 +1,6 @@
 # Vague — Tool noyau `csv_analyze` (analyse tabulaire déterministe, sans réseau)
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/csv-tool`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/csv-tool`.
 
 ## But
 Un tool noyau **read-only, déterministe, sans réseau** qui analyse un fichier CSV : dimensions, colonnes (type inféré

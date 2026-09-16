@@ -62,12 +62,8 @@ function parseCases(value: unknown): ToolCase[] | null {
     if (!entry || typeof entry !== 'object') return null;
     const item = entry as Record<string, unknown>;
     if (!item.input || typeof item.input !== 'object' || Array.isArray(item.input)) return null;
-    if (!Array.isArray(item.expect_includes) || item.expect_includes.length === 0) return null;
-    const expected = item.expect_includes.filter((part): part is string =>
-      typeof part === 'string' && part.length > 0
-    );
-    if (expected.length !== item.expect_includes.length) return null;
-    cases.push({ input: item.input as Record<string, unknown>, expectIncludes: expected });
+    if (typeof item.expect_output !== 'string' || item.expect_output.trim().length === 0) return null;
+    cases.push({ input: item.input as Record<string, unknown>, expectedOutput: item.expect_output });
   }
   return cases;
 }
@@ -172,7 +168,7 @@ export class ExtensionForgeTool implements ITool {
     if (!validationCases || !robustnessCases) {
       return failure(
         `extension_forge(tool): provide 1-${MAX_CASES_PER_GROUP} validation_cases and ` +
-        `1-${MAX_CASES_PER_GROUP} robustness_cases with input + expect_includes.`,
+        `1-${MAX_CASES_PER_GROUP} robustness_cases with input + expect_output.`,
       );
     }
     const validationInputs = new Set(validationCases.map((testCase) => stableStringify(testCase.input)));
@@ -275,13 +271,12 @@ export class ExtensionForgeTool implements ITool {
       type: 'object' as const,
       properties: {
         input: { type: 'object' as const, description: 'Arguments passed to the generated tool' },
-        expect_includes: {
-          type: 'array' as const,
-          items: { type: 'string' as const },
-          description: 'Strings that must appear in stdout',
+        expect_output: {
+          type: 'string' as const,
+          description: 'Exact stdout the tool must print for this input (compared after trimming and collapsing whitespace)',
         },
       },
-      required: ['input', 'expect_includes'],
+      required: ['input', 'expect_output'],
     };
     return {
       name: this.name,

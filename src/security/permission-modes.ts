@@ -8,6 +8,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger } from '../utils/logger.js';
 import { TOOL_METADATA } from '../tools/metadata.js';
+import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
 import { SafeBinariesChecker } from './safe-binaries.js';
 
 // ============================================================================
@@ -46,6 +47,8 @@ const READ_ONLY_TOOLS = new Set([
   // deliberately separate from `fleetSafe`: peers must not restore local
   // session transcripts.
   'restore_context',
+  // Exact recovery of archived conversation segments is a read-only operation.
+  'context_expand',
 ]);
 
 // The registry's `fleetSafe: true` flag is the MAINTAINED read-only source of
@@ -62,12 +65,20 @@ function isFleetSafeTool(toolName: string): boolean {
 }
 
 const EDIT_TOOLS = new Set([
+  // File confirmations use this normalized sentinel for the editor path.
+  'edit',
   'str_replace_editor',
   'create_file',
   'write_file',
   'edit_file',
   'apply_patch',
   'multi_edit',
+  // `remind` writes only the bounded private reminders store, like an edit.
+  'remind',
+  // Bounded local stores: same class as a file edit under acceptEdits.
+  'replace_memory',
+  'remember',
+  'memory_propose',
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([
@@ -77,6 +88,11 @@ const DESTRUCTIVE_TOOLS = new Set([
   'git_reset',
   'git_checkout',
 ]);
+
+function normalizeToolName(toolName: string): string {
+  const lower = toolName.toLowerCase();
+  return TOOL_ALIASES[lower] ?? lower;
+}
 
 // ============================================================================
 // Permission Mode Manager
@@ -187,7 +203,7 @@ export class PermissionModeManager {
       return { allowed: true, reason: 'Read-only tool allowed in plan mode', prompted: false };
     }
     if (
-      (toolName.toLowerCase() === 'bash' || toolName.toLowerCase() === 'shell_exec') &&
+      normalizeToolName(toolName) === 'bash' &&
       SafeBinariesChecker.getInstance().isSafeChain(action)
     ) {
       return {
@@ -236,15 +252,16 @@ export class PermissionModeManager {
    * Tool classification
    */
   isReadOnlyTool(toolName: string): boolean {
-    return READ_ONLY_TOOLS.has(toolName) || isFleetSafeTool(toolName);
+    const normalized = normalizeToolName(toolName);
+    return READ_ONLY_TOOLS.has(normalized) || isFleetSafeTool(normalized);
   }
 
   isEditTool(toolName: string): boolean {
-    return EDIT_TOOLS.has(toolName);
+    return EDIT_TOOLS.has(normalizeToolName(toolName));
   }
 
   isDestructiveTool(toolName: string): boolean {
-    return DESTRUCTIVE_TOOLS.has(toolName);
+    return DESTRUCTIVE_TOOLS.has(normalizeToolName(toolName));
   }
 
   /**

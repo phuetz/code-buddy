@@ -1,0 +1,20 @@
+import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerMCPInvocationCommands } from '../../src/commands/mcp-invoke.js';
+const mocks = vi.hoisted(() => ({ addServer: vi.fn(), callTool: vi.fn(), dispose: vi.fn(), getTools: vi.fn() }));
+vi.mock('../../src/mcp/client.js', () => ({ MCPManager: class { addServer=mocks.addServer; callTool=mocks.callTool; dispose=mocks.dispose; getTools=mocks.getTools; } }));
+vi.mock('../../src/mcp/config.js', () => ({ loadMCPConfig: () => ({ servers:[{ name:'workflow', transport:{type:'stdio',command:'fixture'} }] }) }));
+let output: ReturnType<typeof vi.spyOn>;
+const run = async (...args: string[]) => { const c=new Command().exitOverride();registerMCPInvocationCommands(c);await c.parseAsync(['node','mcp',...args]); };
+beforeEach(() => { vi.clearAllMocks();process.exitCode=0;output=vi.spyOn(console,'log').mockImplementation(()=>{});mocks.getTools.mockReturnValue([{name:'mcp__workflow__run_workflow',serverName:'workflow'}]);mocks.callTool.mockResolvedValue({content:[{type:'text',text:'done'}]}); });
+afterEach(() => { output.mockRestore();process.exitCode=0; });
+describe('MCP headless commands', () => {
+ it('prints catalog JSON and closes the connection',async()=>{await run('tools','workflow');expect(JSON.parse(String(output.mock.calls[0][0])).tools).toHaveLength(1);expect(mocks.dispose).toHaveBeenCalledOnce();});
+ it('filters discovery without losing total catalog size',async()=>{await run('tools','workflow','--query','missing');expect(JSON.parse(String(output.mock.calls[0][0]))).toMatchObject({totalTools:1,tools:[]});});
+ it('passes arguments without an LLM',async()=>{await run('call','workflow','run_workflow','--args','{"workflowId":"demo"}');expect(mocks.callTool).toHaveBeenCalledWith('mcp__workflow__run_workflow',{workflowId:'demo'});expect(process.exitCode).toBe(0);});
+ it.each(['[]','null','"text"','invalid'])('rejects invalid arguments %s before connecting',async args=>{await run('call','workflow','run_workflow','--args',args);expect(mocks.addServer).not.toHaveBeenCalled();expect(process.exitCode).toBe(1);expect(mocks.dispose).toHaveBeenCalledOnce();});
+ it('rejects conflicting argument sources before reading a file',async()=>{await run('call','workflow','run_workflow','--args','{}','--args-file','missing.json');expect(mocks.addServer).not.toHaveBeenCalled();expect(process.exitCode).toBe(1);});
+ it('returns a failing exit code for a tool-level error',async()=>{mocks.callTool.mockResolvedValue({isError:true,content:[]});await run('call','workflow','run_workflow');expect(process.exitCode).toBe(1);expect(mocks.dispose).toHaveBeenCalledOnce();});
+ it('cleans up after connection failure',async()=>{mocks.addServer.mockRejectedValueOnce(new Error('offline'));await run('tools','workflow');expect(process.exitCode).toBe(1);expect(mocks.dispose).toHaveBeenCalledOnce();});
+ it('rejects an unknown or disabled server',async()=>{await run('tools','missing');expect(mocks.addServer).not.toHaveBeenCalled();expect(process.exitCode).toBe(1);});
+});

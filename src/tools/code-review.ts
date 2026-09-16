@@ -135,6 +135,10 @@ export class CodeReviewTool extends EventEmitter {
   constructor(config: Partial<ReviewConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+    if (config.model === undefined) {
+      const envModel = process.env.GROK_MODEL?.trim();
+      if (envModel) this.config.model = envModel;
+    }
     this.bash = new BashTool();
   }
 

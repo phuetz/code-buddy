@@ -15,6 +15,15 @@ jest.mock('fs-extra', () => {
   return { ...impl, default: impl };
 });
 
+const { mockReadJsonAtomicSync, mockWriteJsonAtomicSync } = vi.hoisted(() => ({
+  mockReadJsonAtomicSync: vi.fn().mockReturnValue(null),
+  mockWriteJsonAtomicSync: vi.fn(),
+}));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  readJsonAtomicSync: mockReadJsonAtomicSync,
+  writeJsonAtomicSync: mockWriteJsonAtomicSync,
+}));
+
 // Mock the analytics repository
 jest.mock('../../src/database/repositories/analytics-repository.js', () => ({
   getAnalyticsRepository: jest.fn().mockReturnValue({
@@ -32,6 +41,7 @@ jest.mock('os', () => {
 });
 
 import * as fs from 'fs-extra';
+import * as nodePath from 'path';
 import { CostTracker, getCostTracker, TokenUsage, CostConfig, CostReport } from '../../src/utils/cost-tracker.js';
 import { getAnalyticsRepository } from '../../src/database/repositories/analytics-repository.js';
 
@@ -39,12 +49,15 @@ describe('CostTracker', () => {
   let tracker: CostTracker;
   const mockFs = fs as jest.Mocked<typeof fs>;
   const mockGetAnalyticsRepository = getAnalyticsRepository as jest.Mock;
+  const historyPath = nodePath.join('/home/testuser', '.codebuddy', 'cost-history.json');
+  const configPath = nodePath.join('/home/testuser', '.codebuddy', 'cost-config.json');
 
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset mock implementations
     mockFs.existsSync.mockReturnValue(false);
-    mockFs.readJsonSync.mockReturnValue({});
+    mockReadJsonAtomicSync.mockReset().mockReturnValue(null);
+    mockWriteJsonAtomicSync.mockReset();
 
     // Create a fresh tracker for each test with SQLite disabled
     tracker = new CostTracker({ useSQLite: false, trackHistory: true });
@@ -78,18 +91,19 @@ describe('CostTracker', () => {
 
     it('should load config from file if exists', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockReturnValue({ budgetLimit: 50, dailyLimit: 5 });
+      mockReadJsonAtomicSync.mockReturnValue({ budgetLimit: 50, dailyLimit: 5 });
 
       const loadedTracker = new CostTracker({ useSQLite: false });
 
-      expect(mockFs.existsSync).toHaveBeenCalled();
-      expect(mockFs.readJsonSync).toHaveBeenCalled();
+      expect(mockReadJsonAtomicSync).toHaveBeenCalled();
+      expect(loadedTracker.getReport().budgetLimit).toBe(50);
+      expect(loadedTracker.getReport().dailyLimit).toBe(5);
       loadedTracker.dispose();
     });
 
     it('should handle config load errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation(function() {
+      mockReadJsonAtomicSync.mockImplementation(function() {
         throw new Error('Read error');
       });
 
@@ -101,7 +115,7 @@ describe('CostTracker', () => {
 
     it('should load history from file if exists and tracking enabled', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation((path: unknown) => {
+      mockReadJsonAtomicSync.mockImplementation((path: unknown) => {
         if (String(path).includes('history')) {
           return [
             {
@@ -128,7 +142,7 @@ describe('CostTracker', () => {
       oldDate.setDate(oldDate.getDate() - 60); // 60 days ago
 
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation((path: unknown) => {
+      mockReadJsonAtomicSync.mockImplementation((path: unknown) => {
         if (String(path).includes('history')) {
           return [
             {
@@ -268,7 +282,27 @@ describe('CostTracker', () => {
         jsonTracker.recordUsage(100, 50, 'grok-3-latest');
       }
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      // VERIF3 T3 : un `toHaveBeenCalled()` nu laissait passer un historique
+      // tronqué et un chemin dévié. On garde chemin, contenu et mode.
+      const historyCalls = mockWriteJsonAtomicSync.mock.calls.filter(
+        (call) => call[0] === historyPath
+      );
+      expect(historyCalls).toHaveLength(1);
+
+      const [, entries, options] = historyCalls[0]!;
+      expect(options).toEqual({ mode: 0o600 });
+      expect(Array.isArray(entries)).toBe(true);
+      expect(entries).toHaveLength(10);
+      for (const entry of entries as TokenUsage[]) {
+        expect(entry).toMatchObject({
+          inputTokens: 100,
+          outputTokens: 50,
+          model: 'grok-3-latest',
+        });
+        expect(entry.timestamp).toBeInstanceOf(Date);
+        expect(entry.cost).toBeGreaterThan(0);
+      }
+
       jsonTracker.dispose();
     });
 
@@ -406,14 +440,14 @@ describe('CostTracker', () => {
     it('should set budget limit', () => {
       tracker.setBudgetLimit(100);
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
       expect(tracker.getReport().budgetLimit).toBe(100);
     });
 
     it('should set daily limit', () => {
       tracker.setDailyLimit(10);
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalled();
       expect(tracker.getReport().dailyLimit).toBe(10);
     });
 
@@ -509,27 +543,27 @@ describe('CostTracker', () => {
     it('should save config when setting budget limit', () => {
       tracker.setBudgetLimit(50);
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
-        expect.stringContaining('cost-config.json'),
-        expect.any(Object),
-        expect.any(Object)
+      // VERIF3 T3 : `stringContaining` laissait passer un chemin suffixé et
+      // `expect.any(Object)` un contenu vide.
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+        configPath,
+        expect.objectContaining({ budgetLimit: 50 }),
+        { mode: 0o600 }
       );
     });
 
     it('should save config when setting daily limit', () => {
       tracker.setDailyLimit(5);
 
-      expect(mockFs.ensureDirSync).toHaveBeenCalled();
-      expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
-        expect.stringContaining('cost-config.json'),
-        expect.any(Object),
-        expect.any(Object)
+      expect(mockWriteJsonAtomicSync).toHaveBeenCalledWith(
+        configPath,
+        expect.objectContaining({ dailyLimit: 5 }),
+        { mode: 0o600 }
       );
     });
 
     it('should handle save config errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -541,7 +575,13 @@ describe('CostTracker', () => {
       tracker.recordUsage(1000, 500, 'grok-3-latest');
       tracker.clearHistory();
 
-      expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      // VERIF3 T3 : le chemin de l'historique n'était gardé nulle part.
+      const historyCalls = mockWriteJsonAtomicSync.mock.calls.filter(
+        (call) => call[0] === historyPath
+      );
+      expect(historyCalls).toHaveLength(1);
+      expect(historyCalls[0]![1]).toEqual([]);
+      expect(historyCalls[0]![2]).toEqual({ mode: 0o600 });
     });
 
     it('should clear all history entries', () => {
@@ -554,7 +594,7 @@ describe('CostTracker', () => {
     });
 
     it('should handle history save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(function() {
+      mockWriteJsonAtomicSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -568,8 +608,8 @@ describe('CostTracker', () => {
       noHistoryTracker.recordUsage(1000, 500, 'grok-3-latest');
       noHistoryTracker.clearHistory();
 
-      // writeJsonSync should not be called for history
-      const historySaveCalls = mockFs.writeJsonSync.mock.calls.filter(
+      // The atomic writer should not be called for history when tracking is disabled.
+      const historySaveCalls = mockWriteJsonAtomicSync.mock.calls.filter(
         (call) => (call[0] as string).includes('history')
       );
       expect(historySaveCalls.length).toBe(0);
@@ -786,6 +826,108 @@ describe('CostTracker', () => {
 
       expect(dashboard).toContain('Cost Tracking Dashboard');
       expect(dashboard).toContain('$0.0000');
+    });
+  });
+
+  // =============================================================================
+  // COST1 — Tests : coût headless dépend du modèle et des jetons réels
+  // =============================================================================
+  describe('COST1 — Mistral pricing and provider usage', () => {
+    describe('VERT: mistral-medium-latest uses PUBLIC pricing', () => {
+      it('COST1-VERT-1: mistral-medium-latest uses PUBLIC pricing (1.5/7.5 per M) not default', () => {
+        // Tarif public Mistral: 1,5 $/M entrée, 7,5 $/M sortie
+        // = 0,0015 $/1K entrée, 0,0075 $/1K sortie
+        // Pour 21 jetons entrée / 2 jetons sortie:
+        // Coût attendu = (21/1000) * 0.0015 + (2/1000) * 0.0075
+        //               = 0.0000315 + 0.000015 = 0.0000465 $
+        const expectedCost = 0.0000465;
+
+        const actualCost = tracker.calculateCost(21, 2, 'mistral-medium-latest');
+
+        // VERT: maintenant mistral-medium-latest a le bon tarif
+        expect(actualCost).toBeCloseTo(expectedCost, 6);
+      });
+
+      it('COST1-VERT-2: gpt-5.6-sol (ChatGPT subscription) costs 0', () => {
+        // ChatGPT forfait: coût marginal = 0 $
+        const expectedCost = 0;
+
+        const actualCost = tracker.calculateCost(21, 2, 'gpt-5.6-sol');
+
+        // VERT: gpt-5.6-sol est maintenant détecté comme forfait
+        expect(actualCost).toBe(expectedCost);
+      });
+
+      it('COST1-VERT-3: mistral-medium-latest is in MODEL_PRICING with public rates', () => {
+        // Tarif public: 1.5 $/M entrée, 7.5 $/M sortie
+        const cost = tracker.calculateCost(1000000, 0, 'mistral-medium-latest');
+        // Attendu: (1000000/1000) * 0.0015 = 1.5 $
+        expect(cost).toBeCloseTo(1.5, 2);
+      });
+    });
+
+    describe('VERT: provider usage takes precedence over local estimates', () => {
+      it('COST1-VERT-4: calculateCost uses provider usage when available', () => {
+        // Quand l'usage provider est fourni, il doit être utilisé
+        // même si les jetons locaux sont différents
+        const localInput = 100;
+        const localOutput = 50;
+        const providerInput = 21;
+        const providerOutput = 2;
+
+        // Sans usage provider: utilise les jetons locaux
+        const costLocal = tracker.calculateCost(localInput, localOutput, 'mistral-medium-latest');
+        // Avec usage provider: utilise les jetons provider
+        const costProvider = tracker.calculateCost(
+          localInput, localOutput, 'mistral-medium-latest', 0,
+          { promptTokens: providerInput, completionTokens: providerOutput }
+        );
+
+        // Le coût avec provider doit être basé sur 21/2 jetons, pas 100/50
+        const expectedProviderCost = (21 / 1000) * 0.0015 + (2 / 1000) * 0.0075;
+        expect(costProvider).toBeCloseTo(expectedProviderCost, 6);
+
+        // Le coût local doit être différent
+        const expectedLocalCost = (100 / 1000) * 0.0015 + (50 / 1000) * 0.0075;
+        expect(costLocal).toBeCloseTo(expectedLocalCost, 6);
+
+        // Ils doivent être différents
+        expect(costProvider).not.toBeCloseTo(costLocal, 6);
+      });
+
+      it('COST1-VERT-5: calculateCostExtended returns correct metadata', () => {
+        const result = tracker.calculateCostExtended(
+          21, 2, 'mistral-medium-latest', 0,
+          { promptTokens: 21, completionTokens: 2 }
+        );
+
+        expect(result.total).toBeCloseTo(0.0000465, 6);
+        expect(result.estimated).toBe(false); // provider usage disponible
+        expect(result.pricing).toBe('known'); // mistral-medium-latest a un tarif connu
+        expect(result.billing).toBe('pay-per-use'); // pas un forfait
+        expect(result.inputTokens).toBe(21);
+        expect(result.outputTokens).toBe(2);
+      });
+
+      it('COST1-VERT-6: calculateCostExtended with unknown model', () => {
+        const result = tracker.calculateCostExtended(
+          21, 2, 'unknown-model-xyz', 0
+        );
+
+        // Modèle inconnu utilise le tarif par défaut
+        const expectedCost = (21 / 1000) * 0.003 + (2 / 1000) * 0.015;
+        expect(result.total).toBeCloseTo(expectedCost, 6);
+        expect(result.pricing).toBe('unknown'); // modèle non connu
+        expect(result.estimated).toBe(true); // pas d'usage provider
+      });
+
+      it('COST1-VERT-7: ChatGPT subscription models have correct metadata', () => {
+        const result = tracker.calculateCostExtended(100, 50, 'gpt-5.6-sol');
+
+        expect(result.total).toBe(0);
+        expect(result.pricing).toBe('subscription');
+        expect(result.billing).toBe('subscription');
+      });
     });
   });
 });

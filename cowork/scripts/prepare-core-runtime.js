@@ -16,12 +16,46 @@
  * and several dependencies ship native binaries/assets that bundlers cannot
  * safely flatten.
  *
- * Root optionalDependencies are deliberately not seeded. They remain optional
- * capabilities, while every dependency (including optional platform helpers)
- * reachable from a required production package is included. Set
+ * Root optionalDependencies are deliberately not seeded, except the few Cowork
+ * cannot ship without (COWORK_REQUIRED_OPTIONAL_DEPENDENCIES). The others remain
+ * optional capabilities, while every dependency (including optional platform
+ * helpers) reachable from a required production package is included. Set
  * CODEBUDDY_CORE_INCLUDE_OPTIONAL=1 for a full, larger runtime. Native core
  * staging intentionally fails closed for cross-platform/architecture builds:
  * package on the target host so Electron bindings and optional binaries match.
+ */
+
+/**
+ * Platform compatibility helpers adapted from npm-install-checks 8.0.0.
+ * Upstream license retained for these helpers:
+ *
+ * Copyright (c) Robert Kowalski and Isaac Z. Schlueter ("Authors")
+ * All rights reserved.
+ *
+ * The BSD License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 'use strict';
@@ -38,6 +72,20 @@ const CORE_RUNTIME_ENTRYPOINT = 'dist/desktop/codebuddy-engine-adapter.js';
 const CODE_BUDDY_PACKAGE_NAME = /^@phuetz\/code-buddy$/;
 const NPM_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/i;
 const MAX_NPM_PACKAGE_NAME_LENGTH = 214;
+
+/**
+ * Root optionalDependencies that Cowork must ship. The CLI keeps them optional,
+ * but Cowork's slash-command gateway (`dist/commands/headless-slash.js`, loaded
+ * by slash-command-bridge.ts) imports them statically: `string-width` through
+ * commands/handlers/test-handlers and `@google/generative-ai` through
+ * commands/handlers/ultraplan-handler. They are staged like production
+ * dependencies, with their installed closure; an install without them fails
+ * staging by name instead of shipping a gateway that cannot load.
+ */
+const COWORK_REQUIRED_OPTIONAL_DEPENDENCIES = Object.freeze([
+  '@google/generative-ai',
+  'string-width',
+]);
 
 function isWithinRoot(root, candidate) {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
@@ -174,21 +222,89 @@ function packageParent(packagePath) {
   return match ? match[1].replace(/\/$/, '') : '';
 }
 
+/**
+ * npm's `os` / `cpu` / `libc` list check (npm-install-checks `checkList`): a
+ * string is a one-entry list, `['any']` accepts everything, a negated entry that
+ * matches rejects, otherwise one positive entry must match unless all entries are
+ * negated. An empty field is unrestricted; other shapes, which npm cannot
+ * install, stay unrestricted as before.
+ */
 function supportsValue(values, value) {
-  if (!Array.isArray(values) || values.length === 0) return true;
-  if (values.includes(`!${value}`)) return false;
-  const positive = values.filter((entry) => !entry.startsWith('!'));
-  return positive.length === 0 || positive.includes(value);
+  if (!values) return true;
+  const list = typeof values === 'string' ? [values] : values;
+  if (!Array.isArray(list)) return true;
+  if (list.length === 1 && list[0] === 'any') return true;
+  let negated = 0;
+  let match = false;
+  for (const entry of list) {
+    const text = String(entry);
+    if (text.startsWith('!')) {
+      negated += 1;
+      if (text.slice(1) === value) return false;
+    } else if (text === value) {
+      match = true;
+    }
+  }
+  return match || negated === list.length;
 }
 
-function supportsCurrentTarget(entry, platform, arch) {
-  return supportsValue(entry.os, platform) && supportsValue(entry.cpu, arch);
+/**
+ * npm's platform check: a package that declares `libc` needs a known target C
+ * library family that matches it, so it is unsupported on macOS/Windows and on
+ * a Linux target whose family is unknown.
+ */
+function supportsCurrentTarget(entry, platform, arch, libc) {
+  if (!supportsValue(entry.os, platform) || !supportsValue(entry.cpu, arch)) return false;
+  if (!entry.libc) return true;
+  return Boolean(libc) && supportsValue(entry.libc, libc);
 }
 
+function processReport() {
+  const excludeNetwork = process.report.excludeNetwork;
+  process.report.excludeNetwork = true;
+  try {
+    return process.report.getReport();
+  } finally {
+    process.report.excludeNetwork = excludeNetwork;
+  }
+}
+
+/**
+ * C library family of the Linux packaging host, detected the way npm does
+ * (npm-install-checks `lib/current-env.js`): `/usr/bin/ldd` first, the process
+ * report when ldd cannot be read. Returns 'glibc', 'musl' or null.
+ */
+function detectHostLibcFamily({
+  readLdd = () => fs.readFileSync('/usr/bin/ldd', 'utf8'),
+  getReport = processReport,
+} = {}) {
+  try {
+    const content = readLdd();
+    if (content.includes('musl')) return 'musl';
+    if (content.includes('GNU C Library')) return 'glibc';
+    return null;
+  } catch {
+    const report = getReport();
+    if (report?.header?.glibcVersionRuntime) return 'glibc';
+    const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : [];
+    if (sharedObjects.some((file) => file.includes('libc.musl-') || file.includes('ld-musl-'))) {
+      return 'musl';
+    }
+    return null;
+  }
+}
+
+/**
+ * Node's lookup order inside the installed tree: the requiring package's own
+ * node_modules, then each enclosing package, then the root node_modules. The
+ * cursor only moves to a strictly shorter parent, so the walk ends at the root
+ * lookup or as soon as the cursor stops changing.
+ */
 function resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName) {
   assertDependencyName(dependencyName);
   let cursor = fromPackagePath;
-  while (true) {
+  let previous = null;
+  while (cursor !== previous) {
     const candidate = cursor
       ? `${cursor}/node_modules/${dependencyName}`
       : `node_modules/${dependencyName}`;
@@ -196,10 +312,10 @@ function resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyNam
     assertConfinedPath(coreRoot, absoluteCandidate, 'Installed dependency path');
     if (fs.existsSync(path.join(absoluteCandidate, 'package.json'))) return candidate;
     if (!cursor) return null;
-    const parent = packageParent(cursor);
-    if (parent === cursor) return null;
-    cursor = parent;
+    previous = cursor;
+    cursor = packageParent(cursor);
   }
+  return null;
 }
 
 /**
@@ -215,49 +331,121 @@ function collectInstalledRuntimePackagePaths(coreRoot, options = {}) {
     options.arch ??
     process.env.CODEBUDDY_CORE_TARGET_ARCH ??
     configuredTargetArch(platform);
+  // Only a Linux target has a C library family. It is the packaging host's,
+  // since staging runs on the target; a Linux target staged from another OS has
+  // an unknown family, so packages that declare libc are unsupported there.
+  const libc = Object.hasOwn(options, 'libc')
+    ? options.libc
+    : platform === 'linux' && process.platform === 'linux'
+      ? detectHostLibcFamily()
+      : undefined;
   const includeRootOptional = options.includeRootOptional === true;
+  const requiredOptionalDependencies = options.requiredOptionalDependencies ?? [];
   const rootPackagePath = path.join(coreRoot, 'package.json');
   if (!fs.existsSync(rootPackagePath)) {
     throw new Error(`Code Buddy package manifest is missing: ${rootPackagePath}`);
   }
   const rootPackage = JSON.parse(fs.readFileSync(rootPackagePath, 'utf8'));
+  // Queue entries are edges. `obligation` is 'production' (core dependencies),
+  // 'cowork' (COWORK_REQUIRED_OPTIONAL_DEPENDENCIES), 'transitive' (dependencies
+  // of an obligatory package) or 'optional'. As in npm, a name that a package
+  // also lists in optionalDependencies is optional, and so is everything below
+  // an optional package. Optional edges may be absent or filtered out for the
+  // target; an obligatory edge to an unsupported package fails before staging.
   const queue = [];
   const included = new Set();
+  const walkedAsObligatory = new Set();
 
-  const enqueueRootGroup = (group, required) => {
-    for (const dependencyName of Object.keys(group ?? {})) {
-      const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
-      if (resolved) queue.push(resolved);
-      else if (required) {
-        throw new Error(`Installed production dependency is missing: ${dependencyName} (run npm install)`);
+  const enqueueDependencies = (fromPackagePath, packageJson, obligatory) => {
+    const optionalNames = packageJson.optionalDependencies ?? {};
+    for (const dependencyName of Object.keys(packageJson.dependencies ?? {})) {
+      if (Object.hasOwn(optionalNames, dependencyName)) continue;
+      const resolved = resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName);
+      if (!resolved) {
+        throw new Error(
+          `Installed dependency ${dependencyName} required by ${fromPackagePath} is missing (run npm install)`,
+        );
+      }
+      queue.push({
+        packagePath: resolved,
+        dependencyName,
+        obligation: obligatory ? 'transitive' : 'optional',
+        requiredBy: fromPackagePath,
+      });
+    }
+    for (const group of [optionalNames, packageJson.peerDependencies]) {
+      for (const dependencyName of Object.keys(group ?? {})) {
+        const resolved = resolveInstalledDependencyPath(coreRoot, fromPackagePath, dependencyName);
+        if (resolved) queue.push({ packagePath: resolved, dependencyName, obligation: 'optional' });
       }
     }
   };
-  enqueueRootGroup(rootPackage.dependencies, true);
-  if (includeRootOptional) enqueueRootGroup(rootPackage.optionalDependencies, false);
+
+  const rootOptionalNames = rootPackage.optionalDependencies ?? {};
+  for (const dependencyName of Object.keys(rootPackage.dependencies ?? {})) {
+    const optional = Object.hasOwn(rootOptionalNames, dependencyName);
+    const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+    if (resolved) {
+      queue.push({ packagePath: resolved, dependencyName, obligation: optional ? 'optional' : 'production' });
+    } else if (!optional) {
+      throw new Error(`Installed production dependency is missing: ${dependencyName} (run npm install)`);
+    }
+  }
+  for (const dependencyName of requiredOptionalDependencies) {
+    const declared =
+      Object.hasOwn(rootPackage.dependencies ?? {}, dependencyName) ||
+      Object.hasOwn(rootOptionalNames, dependencyName);
+    if (!declared) {
+      throw new Error(
+        `Cowork-required dependency ${dependencyName} is not declared by the core package: ${rootPackagePath}`,
+      );
+    }
+    const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+    if (!resolved) {
+      throw new Error(
+        `Cowork-required optional dependency is not installed: ${dependencyName} ` +
+          '(the packaged slash-command gateway imports it; run npm install without --omit=optional)',
+      );
+    }
+    queue.push({ packagePath: resolved, dependencyName, obligation: 'cowork' });
+  }
+  if (includeRootOptional) {
+    for (const dependencyName of Object.keys(rootOptionalNames)) {
+      const resolved = resolveInstalledDependencyPath(coreRoot, '', dependencyName);
+      if (resolved) queue.push({ packagePath: resolved, dependencyName, obligation: 'optional' });
+    }
+  }
 
   while (queue.length > 0) {
-    const packagePath = queue.pop();
-    if (!packagePath || included.has(packagePath)) continue;
-    const packageJsonPath = path.join(coreRoot, packagePath, 'package.json');
+    const edge = queue.pop();
+    const obligatory = edge.obligation !== 'optional';
+    // A package first reached optionally is walked again once an obligatory
+    // edge reaches it, so queue order can never hide an obligatory dependency.
+    if (obligatory ? walkedAsObligatory.has(edge.packagePath) : included.has(edge.packagePath)) {
+      continue;
+    }
+    const packageJsonPath = path.join(coreRoot, edge.packagePath, 'package.json');
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    if (!supportsCurrentTarget(packageJson, platform, arch)) continue;
-    included.add(packagePath);
-
-    const enqueueGroup = (group, required) => {
-      for (const dependencyName of Object.keys(group ?? {})) {
-        const resolved = resolveInstalledDependencyPath(coreRoot, packagePath, dependencyName);
-        if (resolved) queue.push(resolved);
-        else if (required) {
-          throw new Error(
-            `Installed dependency ${dependencyName} required by ${packagePath} is missing (run npm install)`,
-          );
-        }
+    if (!supportsCurrentTarget(packageJson, platform, arch, libc)) {
+      if (!obligatory) continue;
+      const target = `${platform}/${arch}: ${edge.packagePath} ` +
+        `(os ${JSON.stringify(packageJson.os ?? [])}, cpu ${JSON.stringify(packageJson.cpu ?? [])})` +
+        (packageJson.libc
+          ? ` (libc ${JSON.stringify(packageJson.libc)}, target libc ${libc ?? 'unknown'})`
+          : '');
+      if (edge.obligation === 'cowork') {
+        throw new Error(`Cowork-required optional dependency does not support ${target}`);
       }
-    };
-    enqueueGroup(packageJson.dependencies, true);
-    enqueueGroup(packageJson.optionalDependencies, false);
-    enqueueGroup(packageJson.peerDependencies, false);
+      if (edge.obligation === 'production') {
+        throw new Error(`Installed production dependency ${edge.dependencyName} does not support ${target}`);
+      }
+      throw new Error(
+        `Installed dependency ${edge.dependencyName} required by ${edge.requiredBy} does not support ${target}`,
+      );
+    }
+    included.add(edge.packagePath);
+    if (obligatory) walkedAsObligatory.add(edge.packagePath);
+    enqueueDependencies(edge.packagePath, packageJson, obligatory);
   }
 
   return [...included].sort((left, right) => {
@@ -341,6 +529,9 @@ function prepareCoreRuntime(options = {}) {
     configuredTargetArch(platform);
   const includeRootOptional =
     options.includeRootOptional ?? process.env.CODEBUDDY_CORE_INCLUDE_OPTIONAL === '1';
+  const requiredOptionalDependencies = [
+    ...(options.requiredOptionalDependencies ?? COWORK_REQUIRED_OPTIONAL_DEPENDENCIES),
+  ];
   const coreDist = path.join(coreRoot, 'dist');
 
   if (
@@ -376,6 +567,7 @@ function prepareCoreRuntime(options = {}) {
     platform,
     arch,
     includeRootOptional,
+    requiredOptionalDependencies,
   });
 
   fs.rmSync(runtimeRoot, { recursive: true, force: true });
@@ -433,6 +625,7 @@ function prepareCoreRuntime(options = {}) {
     platform,
     arch,
     includeRootOptional,
+    requiredOptionalDependencies,
     packageCount: packagePaths.length,
     nativeOverrides,
   };
@@ -457,12 +650,15 @@ function main() {
 }
 
 module.exports = {
+  COWORK_REQUIRED_OPTIONAL_DEPENDENCIES,
   CORE_RUNTIME_RELATIVE_PATH,
   CORE_RUNTIME_ENTRYPOINT,
   collectInstalledRuntimePackagePaths,
   copyTreeWithHardlinks,
+  detectHostLibcFamily,
   prepareCoreRuntime,
   readCorePackageIdentity,
+  resolveInstalledDependencyPath,
   resolveSourceRevision,
 };
 

@@ -11,12 +11,14 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { logger } from '../utils/logger.js';
 import type { CartographyResult } from './repo-profiling/cartography.js';
 import { KnowledgeGraph } from '../knowledge/knowledge-graph.js';
 import { populateCodeGraph } from '../knowledge/code-graph-populator.js';
 import { saveCodeGraph, loadCodeGraph, codeGraphExists } from '../knowledge/code-graph-persistence.js';
 import { shouldWriteProjectRuntimeFiles } from '../utils/runtime-flags.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface RepoProfile {
   detectedAt: string;
@@ -81,6 +83,24 @@ interface ComputeProfileOptions {
   readOnly?: boolean;
   /** Keep raw import edges for one-shot consumers such as `buddy explain`. */
   preserveImportEdges?: boolean;
+  /**
+   * Pre-warm the semantic workspace index in the background. Defaults to on.
+   *
+   * One-shot CLI commands turn it off: the chain is a floating promise that
+   * outlives the command and loads native addons (`@xenova/transformers`
+   * pulls `onnxruntime-node` and `sharp`, then `usearch`) the command never
+   * uses. On Windows an unresolved delay-loaded DLL raises the SEH exception
+   * `0xC06D007F`, which no `try/catch` can intercept, so the process dies with
+   * that exit code instead of the command's own. The `semantic_search` tool
+   * still initializes the indexer on demand when it is actually queried.
+   */
+  backgroundIndexing?: boolean;
+}
+
+/** Options accepted by {@link RepoProfiler.getProfile}. */
+export interface GetProfileOptions {
+  /** See {@link ComputeProfileOptions.backgroundIndexing}. Defaults to on. */
+  backgroundIndexing?: boolean;
 }
 
 /**
@@ -99,7 +119,13 @@ export class RepoProfiler {
    * Get or compute the repo profile.
    * Uses cached result if the primary config file hasn't changed.
    */
-  async getProfile(): Promise<RepoProfile> {
+  async getProfile(options: GetProfileOptions = {}): Promise<RepoProfile> {
+    const root = path.resolve(this.cwd);
+    if (root === path.resolve(os.homedir()) || root === path.parse(root).root) {
+      // Old home-wide graphs may themselves be large. Do not reload them, nor
+      // persist a fresh graph, when the user merely opens the terminal at home.
+      return this.computeProfile({ ...options, readOnly: true, backgroundIndexing: false });
+    }
     const cached = this.loadCache();
     if (cached && !this.isCacheStale(cached)) {
       // Lazy-load code graph from disk if not already populated
@@ -110,7 +136,7 @@ export class RepoProfiler {
       return cached;
     }
 
-    const profile = await this.computeProfile();
+    const profile = await this.computeProfile(options);
     if (this.shouldWriteRuntimeCaches()) {
       this.saveCache(profile);
     }
@@ -374,12 +400,19 @@ export class RepoProfiler {
       || this.exists(path.join(this.cwd, '.circleci'));
     const hasClaudeMd = this.exists(path.join(this.cwd, 'CLAUDE.md'));
 
+    // A shell opened in the home/drive root is not a project: never crawl all
+    // user files or initialize an embedding model just to display the prompt.
+    const root = path.resolve(this.cwd);
+    const allowDeepScan = root !== path.resolve(os.homedir()) && root !== path.parse(root).root;
+
     // ── Deep cartography scan ──────────────────────────────────
     let cartography: CartographyResult | undefined;
     try {
-      const { runCartography } = await import('./repo-profiling/cartography.js');
-      // Auto-detects source dirs; falls back to directories.src if set
-      cartography = runCartography(this.cwd, directories.src || undefined);
+      if (allowDeepScan) {
+        const { runCartography } = await import('./repo-profiling/cartography.js');
+        // Auto-detects source dirs; falls back to directories.src if set
+        cartography = runCartography(this.cwd, directories.src || undefined);
+      }
     } catch (err) {
       logger.debug('RepoProfiler: cartography scan failed (non-critical)', { err });
     }
@@ -433,7 +466,7 @@ export class RepoProfiler {
     profile.contextPack = this.buildContextPack(profile);
 
     // Trigger background semantic indexing of the workspace only for persistent runs.
-    if (!options.readOnly && this.shouldWriteRuntimeCaches()) {
+    if (allowDeepScan && options.backgroundIndexing !== false && !options.readOnly && this.shouldWriteRuntimeCaches()) {
       try {
         const { getWorkspaceIndexer } = await import('../knowledge/workspace-indexer.js');
         const indexer = getWorkspaceIndexer({
@@ -484,9 +517,12 @@ export class RepoProfiler {
 
   private loadCache(): RepoProfile | null {
     try {
-      if (!fs.existsSync(this.cachePath)) return null;
-      const raw = fs.readFileSync(this.cachePath, 'utf-8');
-      return JSON.parse(raw) as RepoProfile;
+      return readJsonAtomicSync<RepoProfile | null>(this.cachePath, null, {
+        mode: 0o600,
+        isValid: (value): value is RepoProfile => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
     } catch {
       return null;
     }
@@ -510,11 +546,7 @@ export class RepoProfiler {
 
   private saveCache(profile: RepoProfile): void {
     try {
-      const dir = path.dirname(this.cachePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(this.cachePath, JSON.stringify(profile, null, 2));
+      writeJsonAtomicSync(this.cachePath, profile, { mode: 0o600 });
     } catch (err) {
       logger.debug('RepoProfiler: failed to save cache', { err });
     }

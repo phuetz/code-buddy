@@ -147,6 +147,23 @@ export class ProFeatures {
     if (this.config.enhancedCommands === false) return false;
 
     switch (cmd) {
+      case 'help':
+      case 'start': {
+        const title = cmd === 'start'
+          ? 'Code Buddy is ready. Commands:'
+          : 'Commands:';
+        const lines = [
+          title,
+          '',
+          ...this.formatter.getCommandList().map((entry) => `/${entry.command} — ${entry.description}`),
+        ];
+        await sendFn(chatId, lines.join('\n'));
+        return true;
+      }
+      case 'status': {
+        await sendFn(chatId, 'Bot is online. Use /help for the command list.');
+        return true;
+      }
       case 'repo': {
         const result = this.enhancedCommands.handleRepo(chatId, args[0]);
         if (result.success) {

@@ -28,6 +28,7 @@ import type { CodeBuddyClient } from '../codebuddy/client.js';
 import { isFeatureEnabled } from '../config/feature-flags.js';
 import { redactSecrets } from '../fleet/privacy-lint.js';
 import { logger } from '../utils/logger.js';
+import { writeFileAtomicSync } from '../utils/atomic-write.js';
 import type { ChatEntry } from './types.js';
 
 // ============================================================================
@@ -209,7 +210,7 @@ export function writeHandoffSync(
   const target = path.join(dir, 'HANDOFF.md');
   try {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(target, content, 'utf8');
+    writeFileAtomicSync(target, content, { mode: 0o600 });
     handoffWrittenFor = history;
     return target;
   } catch (err) {

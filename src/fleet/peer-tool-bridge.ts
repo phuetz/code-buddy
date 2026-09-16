@@ -68,12 +68,14 @@ function getWorkspaceRoot(): string | null {
   return raw ? path.resolve(raw) : null;
 }
 
-function assertToolAllowed(name: string, scopes?: string[]): void {
+function assertToolAllowed(name: string, scopes?: string[]): boolean {
+  const fleetSafe = getToolRegistry().isFleetSafe(name);
   assertPeerToolInvokeAllowed({
     toolName: name,
     scopes,
-    fleetSafe: getToolRegistry().isFleetSafe(name),
+    fleetSafe,
   });
+  return fleetSafe;
 }
 
 async function assertPathInsideWorkspace(p: string): Promise<string> {
@@ -83,8 +85,22 @@ async function assertPathInsideWorkspace(p: string): Promise<string> {
       'PEER_WORKSPACE_NOT_CONFIGURED: set CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT before exposing peer.tool.invoke',
     );
   }
+  let rootResolved: string;
+  try {
+    rootResolved = await fs.realpath(root);
+  } catch {
+    throw new Error(`INVALID_WORKSPACE_ROOT: ${root} does not exist or cannot be resolved`);
+  }
+  const rootStat = await fs.stat(rootResolved).catch(() => null);
+  if (!rootStat?.isDirectory()) {
+    throw new Error(`INVALID_WORKSPACE_ROOT: ${rootResolved} is not a directory`);
+  }
+  if (isFilesystemRoot(rootResolved)) {
+    throw new Error(
+      `ROOT_FORBIDDEN: ${rootResolved} cannot be exposed as a peer tool workspace`,
+    );
+  }
   const absolute = path.isAbsolute(p) ? p : path.resolve(root, p);
-  const rootResolved = await fs.realpath(root).catch(() => root);
   const resolved = await realpathFollowingExistingAncestors(absolute);
   if (!isPathInsideOrEqual(resolved, rootResolved)) {
     throw new Error(
@@ -97,6 +113,11 @@ async function assertPathInsideWorkspace(p: string): Promise<string> {
 function normalizePathForContainment(p: string): string {
   const resolved = path.resolve(p);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function isFilesystemRoot(p: string): boolean {
+  const normalized = normalizePathForContainment(p);
+  return normalized === normalizePathForContainment(path.parse(normalized).root);
 }
 
 function isPathInsideOrEqual(candidate: string, root: string): boolean {
@@ -405,27 +426,35 @@ async function runInvocation(
   }
 
   try {
-    assertToolAllowed(tool, ctx.scopes);
+    const fleetSafe = assertToolAllowed(tool, ctx.scopes);
 
     // Evaluate against Policy Engine
     const policyResult = PolicyEngine.getInstance().evaluate({
       capability: 'peer:invoke',
-      risk: 'medium',
-      detail: { tool, args: argsRaw, peerId: ctx.connectionId },
+      risk: 'low',
+      detail: {
+        tool,
+        args: argsRaw,
+        peerId: ctx.connectionId,
+        path: argsRaw.file_path ?? argsRaw.path,
+        fleetSafe,
+        readOnly: EXECUTORS[tool] !== undefined,
+        scopeAuthorized: true,
+        workspaceRestricted: getWorkspaceRoot() !== null,
+      },
     });
 
     if (policyResult.decision === 'deny') {
       throw new Error(`PEER_INVOKE_DENIED: ${policyResult.reason}`);
     }
-
     if (policyResult.decision === 'needs_approval') {
       const confirmResult = await ConfirmationService.getInstance().requestConfirmation({
         operation: `peer.tool.invoke:${tool}`,
-        filename: argsRaw.file_path as string || argsRaw.path as string || '',
+        filename: String(argsRaw.file_path ?? argsRaw.path ?? ''),
         content: `Peer ${ctx.connectionId} requests execution of tool ${tool} with arguments: ${JSON.stringify(argsRaw)}`,
       });
       if (!confirmResult.confirmed) {
-        throw new Error(`PEER_INVOKE_DENIED: Human approval was rejected or timed out`);
+        throw new Error('PEER_INVOKE_DENIED: Human approval was rejected or timed out');
       }
     }
 

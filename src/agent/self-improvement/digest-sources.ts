@@ -21,12 +21,236 @@ import type {
 } from './digest.js';
 import { EvolutionaryArchive } from './evolutionary-archive.js';
 import { createWorkspaceLearningStore } from './index.js';
+import type { Experience } from './types.js';
+import {
+  queryEvolutionNotes,
+  readEvolutionNotes,
+  type EvolutionNote,
+} from '../../self-model/evolution-notes.js';
 
 export interface ReadImprovementDigestSourcesOptions {
   workDir?: string;
   env?: Record<string, string | undefined>;
   homeDir?: string;
 }
+
+export interface EvolutionNotesExperienceSourceOptions {
+  workDir?: string;
+  env?: Record<string, string | undefined>;
+  limit?: number;
+  readNotes?: () => Promise<EvolutionNote[]>;
+  archive?: EvolutionaryArchive;
+}
+
+/**
+ * Turns recent, documented release notes into experience for the lesson
+ * proposer. This source is opt-in and archives its provenance separately from
+ * validated lesson improvements; it never asks the engine to edit `src/`.
+ */
+export class EvolutionNotesExperienceSource {
+  readonly id = 'evolution-notes';
+
+  constructor(private readonly options: EvolutionNotesExperienceSourceOptions = {}) {}
+
+  async collect(): Promise<Experience[]> {
+    const env = this.options.env ?? process.env;
+    if (env.CODEBUDDY_SELF_IMPROVE_EVOLUTION_SOURCE !== 'true') return [];
+
+    const workDir = this.options.workDir ?? process.cwd();
+    let notes: EvolutionNote[];
+    try {
+      notes = queryEvolutionNotes(
+        await (this.options.readNotes ?? (() => readEvolutionNotes({ workDir })))(),
+        { limit: Math.max(1, Math.min(20, this.options.limit ?? 10)) },
+      );
+    } catch (error) {
+      logger.warn('[self-improve] evolution notes unavailable', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+    const archive = this.options.archive ?? new EvolutionaryArchive({ workDir });
+    const existing = new Set(
+      archive.list()
+        .filter((entry) => entry.provenance === 'changelog')
+        .map((entry) => entry.proposalId),
+    );
+    const experiences: Experience[] = [];
+    for (const note of notes) {
+      const experienceId = `changelog:${note.id}`;
+      if (!existing.has(experienceId)) {
+        archive.append({
+          proposalId: experienceId,
+          kind: 'evolution-notes',
+          targetScenarioId: 'evolution-notes',
+          experienceId,
+          delta: 0,
+          scoreAfter: 0,
+          provenance: 'changelog',
+          reviewedBy: 'auto:changelog',
+        });
+        existing.add(experienceId);
+      }
+      experiences.push({
+        id: experienceId,
+        source: 'changelog',
+        kind: 'evolution-notes',
+        detail: `Ce qui a été réparé et pourquoi : ${note.title}.`,
+        context: [
+          `Changement documenté le ${note.date ?? 'à une date inconnue'}.`,
+          ...note.facts.map((fact) => `- ${fact}`),
+          note.activation !== 'unspecified' ? `Activation : ${note.activation}.` : '',
+        ].filter(Boolean).join('\n'),
+        severity: note.activation === 'opt-in' ? 0.4 : 0.6,
+      });
+    }
+    return experiences;
+  }
+}
+
+export function createDefaultEvolutionNotesExperienceSource(
+  options: Omit<EvolutionNotesExperienceSourceOptions, 'readNotes' | 'archive'> = {},
+): EvolutionNotesExperienceSource {
+  return new EvolutionNotesExperienceSource(options);
+}
+
+export {
+  NAMED_DELEGATION_FAILURES,
+  type NamedDelegationFailure,
+  PILOT_LESSONS,
+  type PilotLesson,
+  type DelegationFact,
+  type ParsedHeadlessOutput,
+  extractDelegationFacts,
+  readDelegationLogs,
+  formatRunFactsLine,
+  findHeadlessJson,
+  extractModel,
+  extractRoundLimit,
+  countToolRounds,
+  extractCostUsd,
+  extractCostCap,
+  extractExitCode,
+  extractDurationSec,
+} from './delegation-facts.js';
+
+import {
+  type DelegationFact,
+  readDelegationLogs,
+  formatRunFactsLine,
+} from './delegation-facts.js';
+
+export interface DelegationLogsExperienceSourceOptions {
+  workDir?: string;
+  env?: Record<string, string | undefined>;
+  homeDir?: string;
+  delegationsDir?: string;
+  limit?: number;
+  readLogs?: () => Promise<DelegationFact[]>;
+  archive?: EvolutionaryArchive;
+  enabled?: boolean;
+}
+
+export class DelegationLogsExperienceSource {
+  readonly id = 'delegation-log';
+
+  constructor(private readonly options: DelegationLogsExperienceSourceOptions = {}) {}
+
+  async collect(): Promise<Experience[]> {
+    const env = this.options.env ?? process.env;
+    const enabled =
+      this.options.enabled ?? (env.CODEBUDDY_SELF_IMPROVE_DELEGATION_SOURCE === 'true');
+    if (!enabled) return [];
+
+    const workDir = this.options.workDir ?? process.cwd();
+    const homeDir = this.options.homeDir ?? env.HOME ?? os.homedir();
+    const delegationsDir =
+      this.options.delegationsDir ??
+      env.CODEBUDDY_DELEGATIONS_DIR ??
+      path.join(homeDir, '.codebuddy', 'delegations');
+
+    let facts: DelegationFact[];
+    try {
+      if (this.options.readLogs) {
+        facts = await this.options.readLogs();
+      } else {
+        facts = readDelegationLogs(
+          delegationsDir,
+          Math.max(1, Math.min(50, this.options.limit ?? 20)),
+        );
+      }
+    } catch (error) {
+      logger.warn('[self-improve] delegation logs unavailable', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+
+    const archive = this.options.archive ?? new EvolutionaryArchive({ workDir });
+    const existing = new Set(
+      archive
+        .list()
+        .filter((entry) => entry.provenance === 'delegation-log')
+        .map((entry) => entry.proposalId),
+    );
+
+    const experiences: Experience[] = [];
+    for (const fact of facts) {
+      const experienceId = `delegation:${fact.id}`;
+      if (!existing.has(experienceId)) {
+        archive.append({
+          proposalId: experienceId,
+          kind: 'delegation-log',
+          targetScenarioId: fact.namedFailures[0] ?? 'delegation-log',
+          experienceId,
+          delta: 0,
+          scoreAfter: 0,
+          provenance: 'delegation-log',
+          reviewedBy: `auto:${fact.engine}`,
+        });
+        existing.add(experienceId);
+      }
+      // facts: rounds=… limit=… cost=… outcome=… failure=… (formatRunFactsLine)
+      const factsLine = formatRunFactsLine(fact);
+      experiences.push({
+        id: experienceId,
+        source: 'delegation-log',
+        kind: fact.namedFailures[0] ?? (fact.exitCode === 0 ? 'success' : 'failure'),
+        detail: `Délégation ${fact.engine} (${fact.durationSec ?? 0} s, sortie ${fact.exitCode ?? 0}) : ${
+          fact.namedFailures.length > 0 ? fact.namedFailures.join(', ') : 'succès'
+        }.`,
+        context: [
+          factsLine,
+          `Moteur : ${fact.engine}.`,
+          fact.model ? `Modèle : ${fact.model}${fact.requestedModel && fact.requestedModel !== fact.model ? ` (demandé : ${fact.requestedModel})` : ''}.` : '',
+          fact.durationSec !== undefined ? `Durée : ${fact.durationSec} s.` : '',
+          fact.exitCode !== undefined ? `Sortie : ${fact.exitCode}.` : '',
+          fact.toolRounds !== undefined ? `Tours d'outils : ${fact.toolRounds}.` : '',
+          fact.roundLimit !== undefined ? `Plafond de tours : ${fact.roundLimit}.` : '',
+          fact.costUsd !== undefined ? `Coût : $${fact.costUsd}.` : '',
+          fact.costCap !== undefined ? `Plafond de coût : $${fact.costCap}.` : '',
+          fact.changes.length > 0
+            ? `Ce qui a bougé :\n${fact.changes.map((c) => `  - ${c}`).join('\n')}`
+            : '',
+          fact.namedFailures.length > 0 ? `Échecs nommés : ${fact.namedFailures.join(', ')}.` : '',
+          fact.pilotLessons.length > 0 ? `Leçons du pilote : ${fact.pilotLessons.join(', ')}.` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        severity: fact.namedFailures.length > 0 ? 0.8 : fact.exitCode === 0 ? 0.2 : 0.6,
+      });
+    }
+
+    return experiences;
+  }
+}
+
+export function createDefaultDelegationLogsExperienceSource(
+  options: Omit<DelegationLogsExperienceSourceOptions, 'readLogs' | 'archive'> = {},
+): DelegationLogsExperienceSource {
+  return new DelegationLogsExperienceSource(options);
+}
+
 
 function artifactTimestamp(file: string): string | null {
   try {

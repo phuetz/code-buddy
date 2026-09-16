@@ -19,6 +19,7 @@ import { DEFAULT_MOLTBOT_CONFIG } from "./config.js";
 import { IntroHookManager } from "./intro-hook-manager.js";
 import { SessionPersistenceManager } from "./session-persistence-manager.js";
 import { CommandLogger } from "./command-logger.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 /**
  * Unified manager for all Moltbot-inspired hooks
@@ -151,7 +152,7 @@ export class MoltbotHooksManager extends EventEmitter {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(savePath, JSON.stringify(this.config, null, 2));
+    writeJsonAtomicSync(savePath, this.config, { mode: 0o600 });
   }
 
   /**
@@ -165,8 +166,13 @@ export class MoltbotHooksManager extends EventEmitter {
     }
 
     try {
-      const content = fs.readFileSync(loadPath, "utf-8");
-      const fileConfig = JSON.parse(content) as Partial<MoltbotHooksConfig>;
+      const fileConfig = readJsonAtomicSync<Partial<MoltbotHooksConfig> | null>(loadPath, null, {
+        mode: 0o600,
+        isValid: (value): value is Partial<MoltbotHooksConfig> => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value),
+        ),
+      });
+      if (!fileConfig) return;
 
       if (fileConfig.intro) {
         this.introManager.updateConfig(fileConfig.intro);

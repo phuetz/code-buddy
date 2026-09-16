@@ -34,8 +34,16 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
-import type { CollaborationStrategy, WorkflowResult, WorkflowEvent, AgentTask, AgentExecutionResult } from '../../agent/multi-agent/types.js';
+import type {
+  AgentExecutionResult,
+  AgentTask,
+  CollaborationStrategy,
+  WorkflowEvent,
+  WorkflowResult,
+  WorkflowThreadDelegationOptions,
+} from '../../agent/multi-agent/types.js';
 import type { PersistedWorkflow } from '../../agent/multi-agent/workflow-persistence.js';
+import { resolveProviderFromCatalog } from '../../providers/provider-catalog.js';
 
 const VALID_ACTIONS = new Set([
   'enable', 'disable', 'status', 'run', 'plan', 'stop', 'strategy',
@@ -86,7 +94,9 @@ Configure defaults in TOML under [multi_agent_system]:
 
 Cost note: a workflow runs 4 agents (orchestrator + coder + reviewer + tester)
 with up to N iterations of LLM calls each. Use /agents plan first to preview.
-Requires GROK_API_KEY env var.`;
+Requires GROK_API_KEY, or CODEBUDDY_PROVIDER=ollama (local, $0).
+In headless mode (buddy -p), /agents run and /swarm wait for the workflow
+and print the summary instead of returning immediately.`;
 
 let agentsEnabled = false;
 let activeStrategy: CollaborationStrategy = 'hierarchical';
@@ -102,6 +112,59 @@ export function _peekActiveStrategy(): CollaborationStrategy {
 }
 export function _setActiveStrategy(strategy: CollaborationStrategy): void {
   activeStrategy = strategy;
+}
+
+export interface AgentsInvocationOptions {
+  threadDelegation?: WorkflowThreadDelegationOptions;
+}
+
+export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
+  const grok = process.env.GROK_API_KEY?.trim();
+  const grokBase = process.env.GROK_BASE_URL?.trim();
+  if (grok) {
+    return grokBase ? { apiKey: grok, baseURL: grokBase } : { apiKey: grok };
+  }
+  const provider = (process.env.CODEBUDDY_PROVIDER ?? '').trim().toLowerCase();
+  const ollamaHost = process.env.OLLAMA_HOST?.trim();
+  if (provider === 'ollama' || ollamaHost) {
+    const resolved = resolveProviderFromCatalog({ providerOverride: 'ollama' });
+    return {
+      apiKey: resolved?.apiKey || 'ollama',
+      baseURL: resolved?.baseURL || 'http://localhost:11434/v1',
+    };
+  }
+  return {
+    error:
+      'Error: GROK_API_KEY is not set. Cannot run multi-agent workflow. ' +
+      'For a local model set CODEBUDDY_PROVIDER=ollama and OLLAMA_HOST.',
+  };
+}
+
+function shouldWaitForWorkflow(): boolean {
+  const flag = (process.env.CODEBUDDY_HEADLESS ?? '').trim().toLowerCase();
+  return flag === 'true' || flag === '1';
+}
+
+function formatWorkflowReport(goal: string, result: WorkflowResult): string {
+  const lines: string[] = [
+    `Workflow completed for: ${goal}`,
+    `Success: ${result.success ? 'yes' : 'no'}`,
+    `Duration: ${(result.totalDuration / 1000).toFixed(1)}s`,
+    `Summary: ${result.summary || '(no summary)'}`,
+  ];
+  if (result.artifacts?.length) {
+    lines.push('Artifacts:');
+    for (const artifact of result.artifacts.slice(0, 20)) {
+      lines.push(`  - ${artifact.filePath || artifact.name}`);
+    }
+  }
+  if (result.errors?.length) {
+    lines.push('Errors:');
+    for (const err of result.errors.slice(0, 10)) {
+      lines.push(`  - ${err}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -244,7 +307,10 @@ async function formatStatus(): Promise<string> {
 /**
  * /agents <action> [args]
  */
-export async function handleAgents(args: string[]): Promise<CommandHandlerResult> {
+export async function handleAgents(
+  args: string[],
+  invocation: AgentsInvocationOptions = {},
+): Promise<CommandHandlerResult> {
   const action = (args[0] || 'status').trim().toLowerCase();
   const rest = args.slice(1);
 
@@ -328,10 +394,9 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('No active workflow to stop.');
     }
     const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    const baseURL = process.env.GROK_BASE_URL;
-    if (apiKey) {
-      const system = getMultiAgentSystem(apiKey, baseURL);
+    const stopCreds = _resolveAgentsCredentials();
+    if (!('error' in stopCreds)) {
+      const system = getMultiAgentSystem(stopCreds.apiKey, stopCreds.baseURL);
       system.stop();
     }
     const stoppedGoal = activeWorkflow.goal;
@@ -434,12 +499,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     }
   }
 
-  // From here on (enable/run/plan), apiKey is needed — pattern from think-handlers.ts L210
-  const apiKey = process.env.GROK_API_KEY ?? '';
-  const baseURL = process.env.GROK_BASE_URL;
-  if (!apiKey) {
-    return textResult('Error: GROK_API_KEY is not set. Cannot run multi-agent workflow.');
+  // From here on (enable/run/plan), credentials are needed.
+  const creds = _resolveAgentsCredentials();
+  if ('error' in creds) {
+    return textResult(creds.error);
   }
+  const { apiKey, baseURL } = creds;
 
   const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
 
@@ -510,7 +575,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       const sys = getMultiAgentSystem(apiKey, baseURL);
       await wireCoordinatorIfPresent(sys as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
       agentsEnabled = true;
-      const submission = await orchestrator.submitWorkflow(goal, { strategy: activeStrategy });
+      const submission = await orchestrator.submitWorkflow(goal, {
+        strategy: activeStrategy,
+        ...(invocation.threadDelegation
+          ? { threadDelegation: invocation.threadDelegation }
+          : {}),
+      });
       if (submission.status === 'rejected') {
         return textResult(`Workflow rejected: ${submission.reason}`);
       }
@@ -594,7 +664,12 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     const streamerHandle = attachStreamer(system as unknown as Parameters<typeof attachStreamer>[0]);
 
     const startedAt = new Date();
-    const promise = system.runWorkflow(goal, { strategy: activeStrategy }).then(
+    const promise = system.runWorkflow(goal, {
+      strategy: activeStrategy,
+      ...(invocation.threadDelegation
+        ? { threadDelegation: invocation.threadDelegation }
+        : {}),
+    }).then(
       (result) => {
         streamerHandle.detach();
         lastResult = {
@@ -644,6 +719,16 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     );
     activeWorkflow = { goal, startedAt, promise };
     logger.info(`MultiAgentSystem workflow started`, { goal, strategy: activeStrategy });
+    if (shouldWaitForWorkflow()) {
+      try {
+        const result = await promise;
+        return textResult(formatWorkflowReport(goal, result));
+      } catch (err) {
+        return textResult(
+          `Workflow failed for: ${goal}\n${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     return textResult(
       `Workflow started for: ${goal}\n` +
       `Strategy: ${activeStrategy}\n` +

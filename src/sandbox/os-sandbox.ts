@@ -1503,4 +1503,4 @@ export function resetOSSandbox(): void {
 // Exports
 // ============================================================================
 
-export { OSSandboxConfig as OSConfig };
+export type { OSSandboxConfig as OSConfig };

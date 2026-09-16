@@ -1,6 +1,7 @@
-import { appendFile, mkdir, readFile, stat } from 'fs/promises';
+import { appendFile, mkdir, rename, stat } from 'fs/promises';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { readJsonLinesAtomic } from '../utils/atomic-write.js';
 
 export type CompanionSafetyEventKind = 'sense' | 'tool' | 'mission' | 'permission' | 'data';
 export type CompanionSafetyEventRisk = 'low' | 'medium' | 'high';
@@ -141,17 +142,13 @@ function parseSafetyEvent(line: string): CompanionSafetyEvent | null {
 
 async function readSafetyEvents(options: CompanionSafetyLedgerOptions = {}): Promise<CompanionSafetyEvent[]> {
   const ledgerPath = resolveLedgerPath(options);
-  let content: string;
-  try {
-    content = await readFile(ledgerPath, 'utf8');
-  } catch {
-    return [];
-  }
-
-  return content
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map(parseSafetyEvent)
+  const rawEvents = await readJsonLinesAtomic<unknown>(
+    ledgerPath,
+    [],
+    (value): value is unknown => parseSafetyEvent(JSON.stringify(value) ?? '') !== null,
+  );
+  return rawEvents
+    .map(value => parseSafetyEvent(JSON.stringify(value) ?? ''))
     .filter((event): event is CompanionSafetyEvent => Boolean(event));
 }
 
@@ -179,6 +176,17 @@ export async function recordCompanionSafetyEvent<TPayload extends Record<string,
   };
 
   await mkdir(path.dirname(ledgerPath), { recursive: true });
+  // Audit 2026-09-02 : rotation 1 Mio -> `.1` (même motif que reminder-log).
+  // Alimenté à chaque snapshot caméra sur un robot 24/7, ce ledger croissait
+  // sans borne et readSafetyEvents le reparse intégralement à chaque stats.
+  // Seule l'absence du fichier est ignorée ; un échec de rename remonte
+  // (sinon le journal continuerait de grossir après une rotation impossible).
+  try {
+    const info = await stat(ledgerPath);
+    if (info.size > 1024 * 1024) await rename(ledgerPath, `${ledgerPath}.1`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   await appendFile(ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
   return event;
 }

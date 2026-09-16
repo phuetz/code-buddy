@@ -192,12 +192,20 @@ function heuristicLatencyMs(c: LlmCandidate): number {
 function measuredLatencyMs(
   sb: ModelScoreboard,
   taskType: string,
-  model: string,
-): number | null {
-  const scoped = sb.ranking(taskType).find((s) => s.model === model);
-  if (scoped && scoped.runs > 0) return scoped.avgLatencyMs;
-  const any = sb.ranking().find((s) => s.model === model);
-  if (any && any.runs > 0) return any.avgLatencyMs;
+  candidate: LlmCandidate,
+): { latencyMs: number; source: 'turn-ttfm-p50' | 'council-average' } | null {
+  const turnLatency = sb.measuredTurnLatency(candidate.provider, candidate.model, 3);
+  if (turnLatency) {
+    return { latencyMs: turnLatency.latencyMs, source: 'turn-ttfm-p50' };
+  }
+  const scoped = sb.ranking(taskType).find((s) => s.model === candidate.model);
+  if (scoped && scoped.runs > 0) {
+    return { latencyMs: scoped.avgLatencyMs, source: 'council-average' };
+  }
+  const any = sb.ranking().find((s) => s.model === candidate.model);
+  if (any && any.runs > 0) {
+    return { latencyMs: any.avgLatencyMs, source: 'council-average' };
+  }
   return null;
 }
 
@@ -226,8 +234,13 @@ export async function selectFastestModel(
 
     const ranked = candidates
       .map((c) => {
-        const measured = measuredLatencyMs(sb, taskType, c.model);
-        return { c, estLatencyMs: measured ?? heuristicLatencyMs(c), measured: measured !== null };
+        const measured = measuredLatencyMs(sb, taskType, c);
+        return {
+          c,
+          estLatencyMs: measured?.latencyMs ?? heuristicLatencyMs(c),
+          measured: measured !== null,
+          measuredSource: measured?.source,
+        };
       })
       .sort(
         (a, b) =>
@@ -243,7 +256,11 @@ export async function selectFastestModel(
     const pin = opts.preferModel?.trim().toLowerCase();
     const pinned = pin ? ranked.find((r) => r.c.model.toLowerCase().includes(pin)) : undefined;
     const top = pinned ?? ranked[0]!;
-    const src = top.measured ? 'measured' : 'est';
+    const src = top.measuredSource === 'turn-ttfm-p50'
+      ? 'measured TTFM p50'
+      : top.measured
+        ? 'measured'
+        : 'est';
     return {
       provider: top.c.provider,
       model: top.c.model,

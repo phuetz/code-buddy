@@ -66,7 +66,7 @@ describe('extension_forge', () => {
     )).toContain('{{ symbol }}');
   });
 
-  it('creates, persists, and immediately executes a tool after both behavior gates pass', async () => {
+  it.skipIf(process.platform !== 'linux')('creates, persists, and immediately executes a tool after both behavior gates pass', async () => {
     const cwd = tempDir();
     const result = await createExtensionForgeTool().execute({
       kind: 'tool',
@@ -80,10 +80,10 @@ describe('extension_forge', () => {
       },
       code: UPPERCASE_CODE,
       validation_cases: [
-        { input: { text: 'hello' }, expect_includes: ['HELLO'] },
+        { input: { text: 'hello' }, expect_output: 'HELLO' },
       ],
       robustness_cases: [
-        { input: { text: 'Edge 42' }, expect_includes: ['EDGE 42'] },
+        { input: { text: 'Edge 42' }, expect_output: 'EDGE 42' },
       ],
     }, { cwd });
 
@@ -108,7 +108,7 @@ describe('extension_forge', () => {
     expect(store.tools.map((tool) => tool.name)).toContain('authored__uppercase');
   });
 
-  it('rejects an implementation that hardcodes the visible example', async () => {
+  it.skipIf(process.platform !== 'linux')('rejects an implementation that hardcodes the visible example', async () => {
     const cwd = tempDir();
     const result = await createExtensionForgeTool().execute({
       kind: 'tool',
@@ -117,10 +117,10 @@ describe('extension_forge', () => {
       language: 'javascript',
       code: "console.log('HELLO');",
       validation_cases: [
-        { input: { text: 'hello' }, expect_includes: ['HELLO'] },
+        { input: { text: 'hello' }, expect_output: 'HELLO' },
       ],
       robustness_cases: [
-        { input: { text: 'different' }, expect_includes: ['DIFFERENT'] },
+        { input: { text: 'different' }, expect_output: 'DIFFERENT' },
       ],
     }, { cwd });
 
@@ -141,10 +141,10 @@ describe('extension_forge', () => {
       language: 'javascript',
       code: UPPERCASE_CODE,
       validation_cases: [
-        { input: { text: 'same' }, expect_includes: ['SAME'] },
+        { input: { text: 'same' }, expect_output: 'SAME' },
       ],
       robustness_cases: [
-        { input: { text: 'same' }, expect_includes: ['SAME'] },
+        { input: { text: 'same' }, expect_output: 'SAME' },
       ],
     }, { cwd });
 

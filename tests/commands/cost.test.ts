@@ -87,6 +87,59 @@ describe('buddy cost', () => {
     expect(report.unknownCostSessions).toBe(1);
   });
 
+  it('reports known $0 and real tokens for a persisted Ollama headless session', async () => {
+    const output: string[] = [];
+    await createCostCommand({
+      loadSessions: async () => [
+        {
+          id: 'session_nimbus',
+          model: 'qwen3:4b-instruct',
+          provider: 'ollama',
+          createdAt: '2026-09-03T10:46:42.697Z',
+          lastAccessedAt: '2026-09-03T10:49:13.425Z',
+          inputTokens: 1840,
+          outputTokens: 57,
+          totalCost: 0,
+          turns: [
+            {
+              timestamp: '2026-09-03T10:46:42.697Z',
+              inputTokens: 1840,
+              outputTokens: 57,
+              costUsd: 0,
+              model: 'qwen3:4b-instruct',
+              provider: 'ollama',
+            },
+          ],
+          messages: [
+            { type: 'user', content: 'Read ledger.js', timestamp: '2026-09-03T10:46:42.697Z' },
+            { type: 'assistant', content: 'NIMBUS_LEDGER_MARK=7f3a', timestamp: '2026-09-03T10:49:13.425Z' },
+          ],
+        },
+      ],
+      now: () => now,
+      stdout: (message) => output.push(message),
+    })
+      .exitOverride()
+      .parseAsync(['node', 'cost', '--json']);
+
+    const report = JSON.parse(output[0] ?? '{}') as {
+      totalCost: number;
+      unknownCostTurns: number;
+      tokens: { input: number; output: number };
+      byModel: Record<string, { cost: number; tokens: { input: number; output: number } }>;
+      byProvider: Record<string, { cost: number }>;
+    };
+    expect(report.totalCost).toBe(0);
+    expect(report.unknownCostTurns).toBe(0);
+    expect(report.tokens).toEqual({ input: 1840, output: 57, unattributed: 0 });
+    expect(report.byModel['qwen3:4b-instruct']?.tokens).toEqual({
+      input: 1840,
+      output: 57,
+      unattributed: 0,
+    });
+    expect(report.byProvider.ollama?.cost).toBe(0);
+  });
+
   it('returns a clear no-session result without throwing', async () => {
     const human: string[] = [];
     await createCostCommand({

@@ -78,8 +78,8 @@ function options(root: string) {
     upscale4k: false,
     remainingFlowCredits: 25_000,
     maxFlowCreditsPerBatch: 100,
-    darkstarAvailable: true,
-    ministarAvailable: true,
+    gpuNodeAvailable: true,
+    localGpuAvailable: true,
   };
 }
 

@@ -1,12 +1,18 @@
-import { ToolMetadata, ToolCategory } from "./types.js";
+import type { ToolMetadata, ToolCategory } from './types.js';
 
 /**
  * Default tool metadata for all built-in tools
  */
 export const TOOL_METADATA: ToolMetadata[] = [
+  { name: 'a2a_call', effect: 'emission', category: 'web', keywords: ['a2a', 'peer', 'hermes', 'openclaw', 'delegate'], priority: 6, fleetSafe: false, description: 'Send a task to a configured remote A2A peer; remote execution can have effects and requires permission.' },
+  { name: 'resource_catalog', effect: 'read', category: 'system', keywords: ['resource', 'catalog', 'network', 'fleet', 'ragchat', 'available', 'ressources', 'réseau'], priority: 7, fleetSafe: false, description: 'Read explicit resource declarations and select fresh permitted resources; no probes or dispatch.' },
+  { name: 'ragchat_search', effect: 'read', category: 'web',
+    keywords: ['ragchat', 'pdf', 'corpus', 'citations', 'pages', 'ocr', 'recherche documentaire'],
+    priority: 7, description: 'Search configured authenticated RagChat PDF profiles with exact page citations; read-only.', fleetSafe: false },
   // File reading
   {
     name: 'view_file',
+    effect: 'read',
     category: 'file_read',
     keywords: ['view', 'read', 'show', 'display', 'content', 'file', 'open', 'look', 'see', 'check', 'list', 'directory', 'ls', 'cat'],
     priority: 10,
@@ -15,6 +21,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'read_file',
+    effect: 'read',
     category: 'file_read',
     keywords: ['read', 'view', 'show', 'display', 'content', 'file', 'hermes'],
     priority: 10,
@@ -25,6 +32,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // File writing
   {
     name: 'create_file',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['create', 'new', 'write', 'generate', 'make', 'add', 'initialize', 'init', 'touch'],
     priority: 8,
@@ -32,6 +40,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'write_file',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['write', 'create', 'new', 'file', 'content', 'hermes'],
     priority: 8,
@@ -39,6 +48,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'str_replace_editor',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['edit', 'modify', 'change', 'update', 'replace', 'fix', 'refactor', 'alter', 'patch'],
     priority: 10,
@@ -46,6 +56,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'patch',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['patch', 'edit', 'replace', 'modify', 'file', 'text', 'hermes'],
     priority: 9,
@@ -53,6 +64,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'edit_file',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['edit', 'modify', 'change', 'update', 'fast', 'morph', 'apply', 'bulk'],
     priority: 9,
@@ -60,6 +72,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'multi_edit',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['multi', 'edit', 'replace', 'batch', 'atomic', 'refactor', 'multiple', 'edits', 'rename'],
     priority: 8,
@@ -67,6 +80,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'apply_patch',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['patch', 'diff', 'apply', 'unified', 'edit', 'update', 'add', 'delete', 'file', 'diff-first'],
     priority: 8,
@@ -76,16 +90,26 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Self-model — the robot's own components/bricks
   {
     name: 'self_describe',
+    effect: 'read',
     category: 'file_read',
-    keywords: ['self', 'describe', 'components', 'composants', 'briques', 'bricks', 'architecture', 'de quoi es-tu fait', 'de quoi es-tu compose', 'qui es-tu', 'capabilities', 'capacites', 'capteur', 'capteurs', 'sensors', 'modules', 'buddy-sense', 'buddy-vision', 'buddy-memory', 'introspection', 'auto inspection', 'etudie', 'examine', 'inspecte', 'propre code', 'ton code', 'fonctionne', 'fonctionnes', 'fonctionnement', 'limites', 'version', 'conscient', 'consciente', 'conscience', 'consciousness', 'modele de soi'],
+    keywords: ['self', 'describe', 'components', 'composants', 'briques', 'bricks', 'architecture', 'de quoi es-tu fait', 'de quoi es-tu compose', 'qui es-tu', 'capabilities', 'capacites', 'capteur', 'capteurs', 'sensors', 'modules', 'buddy-sense', 'buddy-vision', 'buddy-memory', 'introspection', 'auto inspection', 'etudie', 'examine', 'inspecte', 'propre code', 'ton code', 'fonctionne', 'fonctionnes', 'fonctionnement', 'limites', 'version', 'conscient', 'consciente', 'conscience', 'consciousness', 'modele de soi', 'theme', 'parametres', 'parametrage', 'settings', 'configuration'],
     priority: 50,
     description: "Inspect the robot's attested core, bounded code structure, turn metadata, configured faculties, and epistemic limits without live probes",
     fleetSafe: true,
+  },
+  {
+    name: 'self_evolution',
+    effect: 'read',
+    category: 'file_read',
+    keywords: ['self', 'evolution', 'evolutions', 'changement', 'changements', 'recent', 'récemment', 'release', 'changelog', 'notes de version', 'version', 'appris', 'learned', 'voice', 'voix', 'memory', 'mémoire', 'companion', 'fiabilité', 'reliability'],
+    priority: 50,
+    description: "Read documented recent changes to Code Buddy's own behavior without modifying files or probing services",
   },
 
   // Directory listing
   {
     name: 'list_directory',
+    effect: 'read',
     category: 'file_read',
     keywords: ['list', 'directory', 'files', 'ls', 'folder', 'contents', 'dir', 'entries'],
     priority: 9,
@@ -96,6 +120,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // File search
   {
     name: 'search',
+    effect: 'read',
     category: 'file_search',
     keywords: ['search', 'find', 'locate', 'grep', 'look for', 'where', 'which', 'query', 'pattern', 'regex'],
     priority: 10,
@@ -104,6 +129,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'search_files',
+    effect: 'read',
     category: 'file_search',
     keywords: ['search', 'files', 'grep', 'find', 'pattern', 'text', 'hermes'],
     priority: 10,
@@ -112,6 +138,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'find_symbols',
+    effect: 'read',
     category: 'file_search',
     keywords: ['symbols', 'functions', 'classes', 'definitions', 'code', 'index', 'semantic'],
     priority: 8,
@@ -120,6 +147,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'find_references',
+    effect: 'read',
     category: 'file_search',
     keywords: ['references', 'usages', 'where used', 'callers', 'semantic'],
     priority: 8,
@@ -128,6 +156,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'find_definition',
+    effect: 'read',
     category: 'file_search',
     keywords: ['definition', 'go to definition', 'declaration', 'symbol'],
     priority: 8,
@@ -136,6 +165,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'search_multi',
+    effect: 'read',
     category: 'file_search',
     keywords: ['multi', 'search', 'batch', 'parallel', 'patterns', 'queries'],
     priority: 7,
@@ -144,6 +174,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'workspace_search',
+    effect: 'read',
     category: 'file_search',
     keywords: ['workspace', 'multi-repo', 'repository', 'ecosystem', 'search', 'grep'],
     priority: 10,
@@ -152,6 +183,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'workspace_read',
+    effect: 'read',
     category: 'file_read',
     keywords: ['workspace', 'multi-repo', 'repository', 'ecosystem', 'read', 'file'],
     priority: 10,
@@ -162,6 +194,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // System operations
   {
     name: 'bash',
+    effect: 'emission',
     category: 'system',
     keywords: ['bash', 'terminal', 'command', 'run', 'execute', 'shell', 'npm', 'yarn', 'pip', 'install', 'build', 'test', 'compile'],
     priority: 9,
@@ -169,20 +202,36 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'terminal',
+    effect: 'emission',
     category: 'system',
     keywords: ['terminal', 'bash', 'shell', 'command', 'execute', 'run', 'hermes'],
     priority: 9,
     description: 'Execute shell commands through the existing bash safety checks',
   },
   {
+    name: 'interactive_shell',
+    effect: 'emission',
+    category: 'system',
+    keywords: [
+      'interactive', 'pty', 'handoff', 'vim', 'rebase', 'prompt', 'manual',
+      'shell', 'terminal', 'user', 'intervention', 'conflict',
+    ],
+    priority: 6,
+    description:
+      'Hand control of an interactive PTY shell to the user until they type exit',
+  },
+  {
     name: 'process',
+    effect: 'emission',
     category: 'system',
     keywords: ['process', 'spawn', 'kill', 'list', 'logs', 'pid', 'monitor'],
     priority: 6,
-    description: 'Manage system processes (spawn, inspect, logs, terminate)'
+    description: 'Manage system processes (spawn, inspect, logs, terminate)',
+    repeatSafe: true,
   },
   {
     name: 'app_server',
+    effect: 'emission',
     category: 'system',
     keywords: ['dev server', 'app server', 'localhost', 'preview', 'test app', 'serve', 'npm run dev', 'vite', 'test ui'],
     priority: 7,
@@ -190,6 +239,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'js_repl',
+    effect: 'emission',
     category: 'system',
     keywords: ['javascript', 'repl', 'eval', 'node', 'snippet', 'runtime'],
     priority: 5,
@@ -197,6 +247,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'execute_code',
+    effect: 'emission',
     category: 'system',
     keywords: ['execute_code', 'hermes', 'code', 'script', 'runtime', 'subprocess', 'artifact', 'run'],
     priority: 8,
@@ -204,6 +255,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'code_exec',
+    effect: 'emission',
     category: 'utility',
     keywords: ['code_exec', 'code mode', 'javascript', 'orchestration', 'tool bridge', 'responses lite', 'exec'],
     priority: 9,
@@ -213,6 +265,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Git operations
   {
     name: 'git',
+    effect: 'emission',
     category: 'git',
     keywords: ['git', 'commit', 'push', 'pull', 'branch', 'merge', 'diff', 'status', 'checkout', 'stash', 'version', 'control'],
     priority: 8,
@@ -222,6 +275,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Docker operations
   {
     name: 'docker',
+    effect: 'emission',
     category: 'system',
     keywords: ['docker', 'container', 'image', 'build', 'run', 'stop', 'logs', 'exec', 'compose', 'pull', 'push', 'prune', 'volume', 'network', 'dockerfile'],
     priority: 7,
@@ -231,6 +285,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Kubernetes operations
   {
     name: 'kubernetes',
+    effect: 'emission',
     category: 'system',
     keywords: ['kubernetes', 'k8s', 'kubectl', 'pod', 'deployment', 'service', 'namespace', 'cluster', 'node', 'scale', 'rollout', 'configmap', 'secret', 'ingress', 'helm'],
     priority: 7,
@@ -240,6 +295,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Web operations
   {
     name: 'web_search',
+    effect: 'emission',
     category: 'web',
     keywords: ['search', 'google', 'web', 'internet', 'online', 'latest', 'news', 'documentation', 'docs', 'how to', 'info', 'find', 'lookup'],
     priority: 8,
@@ -248,6 +304,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'community_search',
+    effect: 'emission',
     category: 'web',
     keywords: ['reddit', 'hacker news', 'community', 'discussion', 'people', 'opinion',
       'what do people think', 'sentiment', 'buzz', 'trending', 'stack overflow',
@@ -258,6 +315,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'weather',
+    effect: 'emission',
     category: 'web',
     keywords: ['weather', 'météo', 'meteo', 'forecast', 'prévisions', 'previsions', 'température', 'temperature', 'pluie', 'neige', 'vent'],
     priority: 8,
@@ -267,6 +325,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'stock_quote',
+    effect: 'emission',
     category: 'web',
     keywords: ['stock', 'bourse', 'cours', 'action', 'quote', 'ticker', 'market', 'index', 'indice', 'nasdaq', 'cac', 'cac 40', 'cotation', 'action en bourse', 'valeur boursière'],
     priority: 8,
@@ -276,6 +335,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'design_system',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['design', 'design system', 'ui', 'brand', 'branding', 'style', 'theme', 'spotify', 'apple', 'brutalism', 'interface', 'landing', 'esthétique', 'charte', 'palette', 'typographie'],
     priority: 7,
@@ -285,6 +345,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'csv_analyze',
+    effect: 'read',
     category: 'utility',
     keywords: ['csv', 'table', 'tabular', 'columns', 'colonnes', 'numeric', 'stats', 'statistiques', 'preview', 'data', 'analyze', 'analyse', 'spreadsheet'],
     priority: 6,
@@ -294,6 +355,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'deep_research',
+    effect: 'emission',
     category: 'web',
     keywords: [
       'research', 'deep research', 'investigate', 'investigation', 'sources', 'cite', 'citation',
@@ -306,6 +368,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'paper_qa',
+    effect: 'read',
     category: 'web',
     keywords: [
       'paper', 'papers', 'pdf', 'scientific', 'science', 'article', 'articles', 'corpus',
@@ -317,6 +380,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'meeting_notes',
+    effect: 'reversible',
     category: 'document',
     keywords: [
       'meeting', 'notes', 'minutes', 'transcript', 'transcription', 'audio', 'video',
@@ -328,6 +392,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'comfy_recipe',
+    effect: 'emission',
     category: 'media',
     keywords: [
       'comfyui', 'comfy', 'recipe', 'workflow', 'local generation', 'image', 'reference image',
@@ -340,6 +405,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'web_fetch',
+    effect: 'emission',
     category: 'web',
     keywords: ['fetch', 'url', 'website', 'page', 'download', 'http', 'https', 'link', 'read'],
     priority: 7,
@@ -348,6 +414,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'web_scrape',
+    effect: 'emission',
     category: 'web',
     keywords: ['scrape', 'crawl', 'extract', 'cloudflare', 'anti-bot', 'stealth', 'html', 'markdown', 'adaptive', 'selector'],
     priority: 8,
@@ -356,6 +423,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'web_extract',
+    effect: 'emission',
     category: 'web',
     keywords: ['extract', 'fetch', 'url', 'website', 'page', 'http', 'https', 'read', 'hermes'],
     priority: 7,
@@ -364,6 +432,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'internet_scout_plan',
+    effect: 'read',
     category: 'web',
     keywords: ['internet scout', 'surf', 'browse', 'navigation', 'osint', 'prospecting', 'lead', 'profile enrichment', 'search', 'fetch', 'observe', 'extract', 'assert', 'stagehand', 'evidence', 'rate limit', 'captcha', 'proof'],
     priority: 8,
@@ -372,6 +441,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'internet_scout_run',
+    effect: 'emission',
     category: 'web',
     keywords: ['internet scout', 'run', 'surf', 'browse', 'playwright', 'browser', 'navigation', 'osint', 'prospecting', 'lead', 'profile enrichment', 'search', 'fetch', 'observe', 'extract', 'assert', 'stagehand', 'evidence', 'rate limit', 'captcha', 'proof'],
     priority: 9,
@@ -380,6 +450,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_navigate',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'navigate', 'goto', 'url', 'playwright', 'hermes'],
     priority: 8,
@@ -387,6 +458,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_click',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'click', 'ref', 'element', 'playwright', 'hermes'],
     priority: 8,
@@ -394,6 +466,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_type',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'type', 'input', 'text', 'ref', 'playwright', 'hermes'],
     priority: 8,
@@ -401,6 +474,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_scroll',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'scroll', 'page', 'viewport', 'ref', 'playwright', 'hermes'],
     priority: 7,
@@ -408,6 +482,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_back',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'back', 'history', 'navigation', 'playwright', 'hermes'],
     priority: 7,
@@ -415,6 +490,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_press',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'press', 'keyboard', 'key', 'playwright', 'hermes'],
     priority: 7,
@@ -422,6 +498,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_vision',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'vision', 'screenshot', 'analyze', 'playwright', 'hermes'],
     priority: 8,
@@ -429,6 +506,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_dialog',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'dialog', 'alert', 'confirm', 'prompt', 'beforeunload', 'modal', 'playwright', 'hermes'],
     priority: 7,
@@ -436,6 +514,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_get_images',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'image', 'images', 'img', 'media', 'alt', 'playwright', 'hermes'],
     priority: 7,
@@ -443,6 +522,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_console',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'console', 'logs', 'javascript', 'pageerror', 'debug', 'playwright', 'hermes'],
     priority: 7,
@@ -450,6 +530,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_snapshot',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'snapshot', 'accessibility', 'refs', 'observe', 'playwright', 'hermes'],
     priority: 8,
@@ -457,6 +538,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lead_scout_plan',
+    effect: 'read',
     category: 'planning',
     keywords: ['lead scout', 'prospecting', 'prospect', 'leads', 'b2b', 'architectes', 'syndics', 'agences immobilieres', 'maitres oeuvre', 'promoteurs', 'bureaux etudes', 'sirene', 'rnc', 'osint', 'public data', 'script recipe', 'scoring', 'human review'],
     priority: 9,
@@ -465,6 +547,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lead_scout_run',
+    effect: 'emission',
     category: 'planning',
     keywords: ['lead scout', 'run', 'prospecting', 'prospect', 'leads', 'b2b', 'architectes', 'syndics', 'agences immobilieres', 'dataset', 'json', 'csv', 'dedupe', 'scoring', 'review queue', 'email draft', 'human review'],
     priority: 10,
@@ -473,6 +556,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lead_scout_enrichment_plan',
+    effect: 'read',
     category: 'planning',
     keywords: ['lead scout', 'enrichment', 'multi-hop', 'script generation', 'sandbox', 'manus', 'architectes', 'website', 'contact page', 'phone', 'telephone', 'email', 'evidence chain', 'public data'],
     priority: 10,
@@ -481,6 +565,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lead_scout_lesson_candidates',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['lead scout', 'lessons', 'learning', 'self improvement', 'script feedback', 'sandbox logs', 'patterns', 'enrichment', 'lessons_add'],
     priority: 9,
@@ -490,6 +575,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Firecrawl (Native Engine v2026.3.14)
   {
     name: 'firecrawl_search',
+    effect: 'emission',
     category: 'web',
     keywords: ['search', 'firecrawl', 'crawl', 'web', 'find', 'query', 'results', 'internet'],
     priority: 8,
@@ -498,6 +584,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'firecrawl_scrape',
+    effect: 'emission',
     category: 'web',
     keywords: ['scrape', 'firecrawl', 'crawl', 'extract', 'web', 'page', 'content', 'markdown', 'fetch'],
     priority: 8,
@@ -507,6 +594,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
 
   {
     name: 'browser',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser', 'automate', 'click', 'fill', 'form', 'screenshot', 'scrape', 'navigate', 'headless', 'puppeteer', 'playwright', 'selenium', 'test', 'ui', 'automation', 'web', 'observe', 'extract', 'assert', 'assertion', 'stagehand', 'page.act', 'page.extract', 'page.observe'],
     priority: 6,
@@ -514,6 +602,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'web_test',
+    effect: 'emission',
     category: 'web',
     keywords: ['web test', 'test ui', 'verify app', 'smoke test', 'e2e', 'console errors', 'check page', 'test app'],
     priority: 7,
@@ -521,6 +610,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'browser_operator',
+    effect: 'emission',
     category: 'web',
     keywords: ['browser operator', 'browser', 'web automation', 'live web', 'navigate', 'login', 'interaction', 'consent', 'stagehand', 'computer use', 'session', 'stop control', 'proof export', 'operator', 'propose'],
     priority: 6,
@@ -528,6 +618,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'computer_control',
+    effect: 'emission',
     category: 'system',
     keywords: ['computer', 'control', 'desktop', 'mouse', 'keyboard', 'window', 'dialog', 'modal', 'prompt', 'click', 'type', 'automation', 'form', 'field', 'dropdown', 'listbox', 'checkbox', 'radio', 'tab', 'menu', 'tree', 'treeitem', 'slider', 'range', 'link', 'button', 'assert', 'application', 'profile', 'excel', 'spreadsheet', 'notepad', 'calculator'],
     priority: 6,
@@ -535,6 +626,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'office_macro_execute',
+    effect: 'emission',
     category: 'system',
     keywords: ['office', 'excel', 'word', 'powerpoint', 'vba', 'macro', 'powershell', 'com', 'windows', 'automation'],
     priority: 4,
@@ -544,6 +636,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Planning
   {
     name: 'create_todo_list',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['todo', 'plan', 'task', 'list', 'organize', 'steps', 'breakdown', 'project'],
     priority: 6,
@@ -551,6 +644,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'get_todo_list',
+    effect: 'read',
     category: 'planning',
     keywords: ['todo', 'task', 'list', 'view', 'show', 'what', 'do', 'faire', 'tâches', 'taches', 'pending', 'status'],
     priority: 7,
@@ -559,6 +653,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'update_todo_list',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['todo', 'update', 'complete', 'done', 'progress', 'status', 'mark'],
     priority: 6,
@@ -566,6 +661,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_show',
+    effect: 'read',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'show', 'card', 'task', 'board', 'coordination'],
     priority: 8,
@@ -573,6 +669,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_list',
+    effect: 'read',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'list', 'cards', 'tasks', 'board', 'coordination'],
     priority: 8,
@@ -580,6 +677,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_complete',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'complete', 'done', 'finish', 'task', 'board'],
     priority: 8,
@@ -587,6 +685,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_block',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'block', 'blocked', 'stuck', 'reason', 'task'],
     priority: 8,
@@ -594,6 +693,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_heartbeat',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'heartbeat', 'progress', 'status', 'task', 'agent'],
     priority: 8,
@@ -601,6 +701,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_comment',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'comment', 'note', 'task', 'board', 'coordination'],
     priority: 8,
@@ -608,6 +709,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_create',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'create', 'card', 'task', 'board', 'coordination'],
     priority: 8,
@@ -615,6 +717,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_link',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'link', 'artifact', 'url', 'commit', 'issue', 'task'],
     priority: 8,
@@ -622,6 +725,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'kanban_unblock',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['kanban', 'hermes', 'unblock', 'resume', 'progress', 'task', 'board'],
     priority: 8,
@@ -629,6 +733,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'send_message',
+    effect: 'emission',
     category: 'web',
     keywords: ['send', 'message', 'channel', 'gateway', 'telegram', 'discord', 'slack', 'email', 'hermes'],
     priority: 8,
@@ -636,6 +741,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'discord',
+    effect: 'emission',
     category: 'web',
     keywords: ['discord', 'server', 'guild', 'channel', 'messages', 'members', 'thread', 'hermes'],
     priority: 8,
@@ -643,6 +749,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'discord_admin',
+    effect: 'emission',
     category: 'web',
     keywords: ['discord', 'admin', 'server', 'guild', 'channels', 'roles', 'pins', 'moderation', 'hermes'],
     priority: 8,
@@ -650,6 +757,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'yb_query_group_info',
+    effect: 'emission',
     category: 'web',
     keywords: ['yuanbao', 'yb', 'group', 'pai', 'owner', 'member count', 'hermes'],
     priority: 8,
@@ -657,6 +765,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'yb_query_group_members',
+    effect: 'emission',
     category: 'web',
     keywords: ['yuanbao', 'yb', 'group', 'members', 'mention', 'bots', 'pai', 'hermes'],
     priority: 8,
@@ -664,6 +773,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'yb_send_dm',
+    effect: 'emission',
     category: 'web',
     keywords: ['yuanbao', 'yb', 'dm', 'direct message', 'private message', 'media', 'hermes'],
     priority: 8,
@@ -671,6 +781,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'yb_search_sticker',
+    effect: 'emission',
     category: 'web',
     keywords: ['yuanbao', 'yb', 'sticker', 'search', 'tim face', 'emoji', 'hermes'],
     priority: 8,
@@ -678,6 +789,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'yb_send_sticker',
+    effect: 'emission',
     category: 'web',
     keywords: ['yuanbao', 'yb', 'sticker', 'send', 'chat', 'tim face', 'hermes'],
     priority: 8,
@@ -685,6 +797,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'ha_list_entities',
+    effect: 'emission',
     category: 'web',
     keywords: ['homeassistant', 'home assistant', 'hass', 'entity', 'entities', 'smart home', 'hermes'],
     priority: 8,
@@ -692,6 +805,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'ha_get_state',
+    effect: 'emission',
     category: 'web',
     keywords: ['homeassistant', 'home assistant', 'hass', 'state', 'entity', 'smart home', 'hermes'],
     priority: 8,
@@ -699,6 +813,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'ha_list_services',
+    effect: 'emission',
     category: 'web',
     keywords: ['homeassistant', 'home assistant', 'hass', 'services', 'actions', 'smart home', 'hermes'],
     priority: 8,
@@ -706,6 +821,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'ha_call_service',
+    effect: 'emission',
     category: 'web',
     keywords: ['homeassistant', 'home assistant', 'hass', 'service', 'control', 'device', 'smart home', 'hermes'],
     priority: 8,
@@ -713,6 +829,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'mixture_of_agents',
+    effect: 'emission',
     category: 'utility',
     keywords: ['mixture of agents', 'moa', 'openrouter', 'frontier', 'aggregation', 'reasoning', 'hermes'],
     priority: 8,
@@ -720,6 +837,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_playback',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'music', 'playback', 'player', 'pause', 'skip', 'volume', 'recently played', 'hermes'],
     priority: 8,
@@ -727,6 +845,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_devices',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'device', 'devices', 'connect', 'transfer playback', 'speaker', 'hermes'],
     priority: 8,
@@ -734,6 +853,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_queue',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'queue', 'music', 'add to queue', 'play next', 'hermes'],
     priority: 8,
@@ -741,6 +861,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_search',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'search', 'music', 'track', 'album', 'artist', 'playlist', 'hermes'],
     priority: 8,
@@ -748,6 +869,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_playlists',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'playlist', 'playlists', 'create playlist', 'add items', 'remove items', 'hermes'],
     priority: 8,
@@ -755,6 +877,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_albums',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'album', 'albums', 'tracks', 'music', 'hermes'],
     priority: 8,
@@ -762,6 +885,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spotify_library',
+    effect: 'emission',
     category: 'web',
     keywords: ['spotify', 'library', 'saved tracks', 'saved albums', 'save music', 'remove saved', 'hermes'],
     priority: 8,
@@ -769,6 +893,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'x_search',
+    effect: 'emission',
     category: 'web',
     keywords: ['x', 'twitter', 'xai', 'grok', 'posts', 'threads', 'citations', 'current discussion', 'hermes'],
     priority: 8,
@@ -776,6 +901,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'feishu_doc_read',
+    effect: 'emission',
     category: 'web',
     keywords: ['feishu', 'lark', 'document', 'docx', 'read', 'raw content', 'hermes'],
     priority: 8,
@@ -783,6 +909,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'feishu_drive_list_comments',
+    effect: 'emission',
     category: 'web',
     keywords: ['feishu', 'lark', 'drive', 'comments', 'list', 'document', 'hermes'],
     priority: 8,
@@ -790,6 +917,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'feishu_drive_list_comment_replies',
+    effect: 'emission',
     category: 'web',
     keywords: ['feishu', 'lark', 'drive', 'comments', 'replies', 'thread', 'hermes'],
     priority: 8,
@@ -797,6 +925,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'feishu_drive_reply_comment',
+    effect: 'emission',
     category: 'web',
     keywords: ['feishu', 'lark', 'drive', 'comment', 'reply', 'document', 'hermes'],
     priority: 8,
@@ -804,6 +933,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'feishu_drive_add_comment',
+    effect: 'emission',
     category: 'web',
     keywords: ['feishu', 'lark', 'drive', 'comment', 'add', 'document', 'hermes'],
     priority: 8,
@@ -811,6 +941,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'cronjob',
+    effect: 'emission',
     category: 'planning',
     keywords: ['cron', 'cronjob', 'schedule', 'scheduled', 'job', 'jobs', 'reminder', 'monitor', 'heartbeat', 'watchdog', 'hermes'],
     priority: 8,
@@ -820,6 +951,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Codebase analysis
   {
     name: 'codebase_map',
+    effect: 'read',
     category: 'codebase',
     keywords: ['codebase', 'structure', 'architecture', 'map', 'overview', 'symbols', 'dependencies', 'analyze', 'graph', 'imports', 'who imports', 'neighbors', 'path', 'layers', 'components', 'modules', 'relationships', 'calls', 'call graph', 'extends', 'inherits', 'methods', 'flowchart', 'organigramme'],
     priority: 6,
@@ -828,6 +960,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'code_graph',
+    effect: 'read',
     category: 'codebase',
     keywords: ['code graph', 'call graph', 'who calls', 'what calls', 'callers', 'callees', 'impact analysis', 'what breaks', 'affected', 'flowchart', 'mermaid', 'diagram', 'organigramme', 'class hierarchy', 'inheritance', 'extends', 'implements', 'file functions', 'methods', 'signatures', 'dependency path', 'module dependencies', 'communities', 'clusters', 'subsystems', 'semantic search', 'embedding', 'similarity', 'pagerank', 'dead code', 'unused', 'uncalled', 'orphan', 'coupling', 'heatmap', 'refactoring', 'god function', 'hub module', 'drift', 'snapshot', 'evolution', 'visualize', 'interactive', 'd3', 'impact preview', 'pr impact', 'diff impact'],
     priority: 7,
@@ -836,6 +969,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spawn_subagent',
+    effect: 'emission',
     category: 'codebase',
     keywords: ['subagent', 'agent', 'review', 'debug', 'test', 'explore', 'document', 'refactor'],
     priority: 5,
@@ -845,6 +979,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Media tools
   {
     name: 'screenshot',
+    effect: 'reversible',
     category: 'media',
     keywords: ['screenshot', 'capture', 'screen', 'image', 'snap', 'window'],
     priority: 5,
@@ -852,6 +987,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'camera_snapshot',
+    effect: 'reversible',
     category: 'media',
     keywords: ['camera', 'webcam', 'snapshot', 'photo', 'vision', 'see', 'look', 'companion', 'eyes'],
     priority: 6,
@@ -859,13 +995,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'camera_analyze',
+    effect: 'read',
     category: 'media',
-    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see'],
+    keywords: ['camera', 'webcam', 'see', 'vision', 'describe', 'look', 'photo', 'companion', 'eyes', 'analyze', 'what do you see', 'image_path'],
     priority: 7,
-    description: 'Capture a local webcam frame and describe it with a local multimodal vision model'
+    description: 'Describe a still image (image_path) or a webcam frame with a local VLM (default moondream); refuses dark frames'
   },
   {
     name: 'audio',
+    effect: 'emission',
     category: 'media',
     keywords: ['audio', 'sound', 'music', 'transcribe', 'speech', 'voice', 'mp3', 'wav'],
     priority: 5,
@@ -873,6 +1011,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'text_to_speech',
+    effect: 'emission',
     category: 'media',
     keywords: ['tts', 'speech', 'audio', 'voice', 'synthesize', 'hermes'],
     priority: 7,
@@ -880,6 +1019,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'tool_search',
+    effect: 'read',
     category: 'system',
     keywords: ['tool', 'search', 'discover', 'find', 'capability', 'mcp', 'schema'],
     priority: 9,
@@ -890,6 +1030,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'image_generate',
+    effect: 'emission',
     category: 'media',
     keywords: ['image', 'generate', 'picture', 'photo', 'openai', 'xai', 'hermes', 'gener', 'cree', 'dessin', 'illustration'],
     priority: 8,
@@ -897,6 +1038,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lisa_selfie',
+    effect: 'emission',
     category: 'media',
     keywords: [
       'lisa',
@@ -915,6 +1057,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'image_edit',
+    effect: 'emission',
     category: 'media',
     keywords: ['image', 'edit', 'inpaint', 'mask', 'mark', 'design', 'retouch', 'modifier', 'zone'],
     priority: 8,
@@ -922,6 +1065,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video',
+    effect: 'emission',
     category: 'media',
     keywords: ['video', 'movie', 'frames', 'thumbnail', 'mp4', 'extract'],
     priority: 5,
@@ -929,6 +1073,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_analyze',
+    effect: 'read',
     category: 'media',
     keywords: ['video', 'analyze', 'vision', 'movie', 'mp4', 'gemini', 'openai', 'hermes'],
     priority: 8,
@@ -936,13 +1081,23 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_generate',
+    effect: 'emission',
     category: 'media',
     keywords: ['video', 'generate', 'text-to-video', 'image-to-video', 'xai', 'fal', 'hermes', 'gener', 'cree', 'clip', 'film', 'animation'],
     priority: 8,
     description: 'Generate a video through the configured video backend and cache returned media when possible'
   },
   {
+    name: 'markdown_convert',
+    effect: 'reversible',
+    category: 'document',
+    keywords: ['markdown', 'convert', 'convertir', 'pdf', 'docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'html', 'csv', 'json', 'xml', 'zip', 'epub', 'ocr', 'transcription', 'table', 'tableau', 'structure', 'extract', 'extraire', 'lire', 'document', 'markitdown'],
+    priority: 8,
+    description: 'Convert any document (Office, PDF, HTML, CSV, ZIP, EPub, image, audio, URL) to structured Markdown for the model — preserves headings, lists and tables. Optional MarkItDown sidecar; falls back cleanly with install instructions when absent'
+  },
+  {
     name: 'video_stitch',
+    effect: 'emission',
     category: 'media',
     keywords: ['video', 'stitch', 'montage', 'film', 'concatenate', 'concat', 'chain', 'transition', 'xfade', 'crossfade', 'enchainer', 'assembler', 'monter', 'clip', 'produire', 'production', 'long', 'music', 'voiceover'],
     priority: 8,
@@ -950,6 +1105,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_quality_gate',
+    effect: 'emission',
     category: 'media',
     keywords: [
       'video', 'quality', 'gate', 'youtube', 'master', 'visual', 'identity', 'anatomy',
@@ -961,6 +1117,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_long_form_plan',
+    effect: 'read',
     category: 'media',
     keywords: [
       'video', 'long-form', 'long form', 'episode', 'plan', 'youtube', 'chapters',
@@ -972,6 +1129,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_trailer_plan',
+    effect: 'read',
     category: 'media',
     keywords: [
       'video', 'trailer', 'bande-annonce', 'cinematic', 'storyboard', 'book',
@@ -983,6 +1141,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_flow_handoff',
+    effect: 'emission',
     category: 'media',
     keywords: [
       'video', 'flow', 'google flow', 'veo', 'handoff', 'export', 'import',
@@ -994,10 +1153,11 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'video_route',
+    effect: 'read',
     category: 'media',
     keywords: [
       'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
-      'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+      'gpuNode', 'localGpu', 'credits', 'engine', 'routage', 'moteur',
     ],
     priority: 8,
     description:
@@ -1005,6 +1165,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'understand_video',
+    effect: 'read',
     category: 'media',
     keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4', 'visual', 'screencast', 'frames', 'on-screen', 'shown', 'cloud', 'gemini', 'research', 'experiment', 'backlog', 'innovation'],
     priority: 8,
@@ -1012,13 +1173,16 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'gpu_media_job',
+    effect: 'emission',
     category: 'media',
-    keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
+    keywords: ['gpuNode', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
     priority: 8,
-    description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker'
+    description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker',
+    repeatSafe: true,
   },
   {
     name: 'ocr',
+    effect: 'read',
     category: 'media',
     keywords: ['ocr', 'text', 'extract', 'image', 'recognize', 'read'],
     priority: 5,
@@ -1026,6 +1190,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'vision_analyze',
+    effect: 'read',
     category: 'media',
     keywords: ['vision', 'image', 'analyze', 'metadata', 'ocr', 'hermes'],
     priority: 8,
@@ -1033,6 +1198,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'object_detect',
+    effect: 'read',
     category: 'media',
     keywords: ['vision', 'image', 'object', 'detect', 'detection', 'yolo', 'yolov8', 'ultralytics', 'person', 'people', 'presence', 'camera'],
     priority: 8,
@@ -1040,6 +1206,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'clipboard',
+    effect: 'emission',
     category: 'media',
     keywords: ['clipboard', 'copy', 'paste', 'cut'],
     priority: 4,
@@ -1049,6 +1216,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Document tools
   {
     name: 'pdf',
+    effect: 'reversible',
     category: 'document',
     keywords: ['pdf', 'document', 'extract', 'read', 'pages'],
     priority: 5,
@@ -1056,6 +1224,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'document',
+    effect: 'reversible',
     category: 'document',
     keywords: ['docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'office', 'spreadsheet', 'embedded images', 'screenshots'],
     priority: 5,
@@ -1063,6 +1232,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'archive',
+    effect: 'reversible',
     category: 'document',
     keywords: ['zip', 'tar', 'archive', 'compress', 'extract', 'unzip', 'rar', '7z'],
     priority: 5,
@@ -1072,6 +1242,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Reasoning
   {
     name: 'reason',
+    effect: 'read',
     category: 'codebase',
     keywords: ['reason', 'think', 'plan', 'analyze', 'architecture', 'design', 'debug', 'complex', 'trade-off', 'compare', 'evaluate', 'strategy', 'decision', 'mcts', 'tree-of-thought'],
     priority: 6,
@@ -1082,6 +1253,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Docs search
   {
     name: 'docs_search',
+    effect: 'read',
     category: 'codebase',
     keywords: ['docs', 'documentation', 'architecture', 'subsystem', 'api', 'security', 'config', 'design', 'how does', 'explain', 'overview'],
     priority: 5,
@@ -1092,6 +1264,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Plan management
   {
     name: 'plan',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['plan', 'goal', 'steps', 'track', 'progress', 'todo', 'organize', 'breakdown', 'checklist', 'PLAN.md'],
     priority: 7,
@@ -1101,6 +1274,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Script execution
   {
     name: 'run_script',
+    effect: 'emission',
     category: 'utility',
     keywords: ['script', 'python', 'typescript', 'javascript', 'shell', 'execute', 'run', 'sandbox', 'docker', 'compute', 'data'],
     priority: 5,
@@ -1110,6 +1284,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Utility tools
   {
     name: 'diagram',
+    effect: 'emission',
     category: 'utility',
     keywords: ['diagram', 'flowchart', 'chart', 'mermaid', 'sequence', 'class', 'uml', 'graph', 'visualize'],
     priority: 5,
@@ -1117,6 +1292,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'export',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['export', 'save', 'convert', 'format', 'json', 'markdown', 'html'],
     priority: 4,
@@ -1124,6 +1300,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'qr',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['qr', 'code', 'barcode', 'scan', 'generate'],
     priority: 4,
@@ -1131,6 +1308,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'a2ui',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['a2ui', 'surface', 'component', 'ui', 'interface', 'canvas', 'render'],
     priority: 4,
@@ -1138,6 +1316,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'canvas',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['canvas', 'visual', 'workspace', 'diagram', 'layout', 'element', 'render', 'export', 'import'],
     priority: 4,
@@ -1145,6 +1324,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'deploy',
+    effect: 'emission',
     category: 'utility',
     keywords: ['deploy', 'cloud', 'fly', 'railway', 'render', 'gcp', 'hosting', 'production', 'hetzner', 'northflank'],
     priority: 6,
@@ -1154,6 +1334,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Agent Tools — attention, knowledge, lessons, discovery, device, verification
   {
     name: 'todo_update',
+    effect: 'reversible',
     category: 'planning',
     keywords: ['todo', 'task', 'plan', 'track', 'progress', 'attention', 'focus'],
     priority: 8,
@@ -1161,6 +1342,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'restore_context',
+    effect: 'read',
     category: 'utility',
     keywords: ['restore', 'context', 'memory', 'compressed', 'retrieve', 'earlier', 'callId', 'raw', 'exact', 'workspace', 'session'],
     priority: 7,
@@ -1168,6 +1350,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'context_expand',
+    effect: 'read',
     category: 'utility',
     keywords: ['context', 'expand', 'segment', 'summary', 'exact', 'archive', 'conversation'],
     priority: 8,
@@ -1175,6 +1358,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'knowledge_search',
+    effect: 'read',
     category: 'utility',
     keywords: ['knowledge', 'search', 'convention', 'docs', 'domain', 'procedure'],
     priority: 5,
@@ -1183,6 +1367,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'knowledge_add',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['knowledge', 'add', 'save', 'persist', 'remember', 'convention'],
     priority: 4,
@@ -1190,6 +1375,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'ask_human',
+    effect: 'read',
     category: 'utility',
     keywords: ['ask', 'human', 'clarify', 'question', 'input', 'pause', 'confirm'],
     priority: 6,
@@ -1197,6 +1383,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'create_skill',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['skill', 'create', 'workflow', 'reusable', 'procedure', 'automate'],
     priority: 3,
@@ -1204,6 +1391,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'extension_forge',
+    effect: 'reversible',
     category: 'system',
     keywords: ['extension', 'forge', 'create', 'widget', 'tool', 'skill', 'self-extension', 'code'],
     priority: 9,
@@ -1211,6 +1399,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'skill_discover',
+    effect: 'emission',
     category: 'utility',
     keywords: ['skill', 'discover', 'search', 'hub', 'install', 'capability', 'plugin'],
     priority: 3,
@@ -1218,22 +1407,25 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'skills_list',
+    effect: 'read',
     category: 'utility',
     keywords: ['skill', 'skills', 'list', 'installed', 'enabled', 'disabled', 'hub', 'hermes'],
     priority: 5,
-    description: 'List installed SKILL.md packages from the local SkillsHub',
+    description: 'List available local skills across bundled, built-in, workspace and hub sources',
     fleetSafe: true,
   },
   {
     name: 'skill_view',
+    effect: 'read',
     category: 'utility',
     keywords: ['skill', 'skills', 'view', 'read', 'content', 'inspect', 'show', 'hub', 'hermes'],
     priority: 6,
-    description: 'Read one installed SKILL.md package and its integrity metadata from the local SkillsHub',
+    description: 'Read one local skill and its source or hub integrity metadata',
     fleetSafe: true,
   },
   {
     name: 'skill_manage',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['skill', 'skills', 'manage', 'list', 'view', 'history', 'create', 'discover', 'candidate', 'review', 'install', 'enable', 'disable', 'deprecate', 'delete', 'patch', 'rollback', 'update', 'lifecycle', 'hub', 'hermes'],
     priority: 6,
@@ -1241,6 +1433,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'device_manage',
+    effect: 'emission',
     category: 'utility',
     keywords: ['device', 'ssh', 'adb', 'android', 'remote', 'screenshot', 'camera', 'pair', 'calendar', 'agenda'],
     priority: 4,
@@ -1248,6 +1441,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'spawn_parallel_agents',
+    effect: 'emission',
     category: 'codebase',
     keywords: ['parallel', 'agents', 'concurrent', 'subtasks', 'batch', 'delegate'],
     priority: 5,
@@ -1255,6 +1449,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'remember',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['memory', 'remember', 'persist', 'context', 'store', 'preference'],
     priority: 5,
@@ -1262,13 +1457,28 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'replace_memory',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['memory', 'replace', 'rewrite', 'update', 'persist', 'preference'],
     priority: 5,
     description: 'Replace an existing persistent memory entry under the memory char budget'
   },
   {
+    name: 'remind',
+    effect: 'reversible',
+    category: 'utility',
+    keywords: [
+      'remind', 'reminder', 'rappel', 'rappelle-moi', 'rappelle moi', 'remind me',
+      'alarm', 'alarme', 'notify me', 'préviens-moi', 'previens moi', 'schedule',
+      'todo', 'tâche', 'one-shot', 'dated',
+    ],
+    priority: 6,
+    description:
+      'Set a dated one-shot or daily recurring reminder without shelling buddy remind add',
+  },
+  {
     name: 'memory_propose',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['memory', 'candidate', 'propose', 'review', 'long-term', 'persist'],
     priority: 5,
@@ -1276,6 +1486,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'recall',
+    effect: 'read',
     category: 'utility',
     keywords: ['memory', 'recall', 'retrieve', 'lookup', 'context'],
     priority: 5,
@@ -1284,6 +1495,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'forget',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['memory', 'forget', 'remove', 'delete', 'cleanup'],
     priority: 4,
@@ -1291,6 +1503,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'relationship_context',
+    effect: 'read',
     category: 'utility',
     keywords: [
       'relationship',
@@ -1312,6 +1525,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lessons_add',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['lesson', 'learn', 'correction', 'pattern', 'rule', 'mistake'],
     priority: 5,
@@ -1319,6 +1533,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lessons_propose',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['lesson', 'propose', 'candidate', 'review', 'learn', 'self improvement', 'pattern'],
     priority: 5,
@@ -1326,6 +1541,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lessons_search',
+    effect: 'read',
     category: 'utility',
     keywords: ['lesson', 'search', 'pattern', 'rule', 'past', 'history', 'mistake'],
     priority: 5,
@@ -1334,6 +1550,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lessons_list',
+    effect: 'read',
     category: 'utility',
     keywords: ['lesson', 'list', 'all', 'show', 'history'],
     priority: 4,
@@ -1342,6 +1559,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lessons_graph',
+    effect: 'read',
     category: 'utility',
     keywords: ['lesson', 'graph', 'obsidian', 'wiki', 'related', 'concepts', 'links', 'notions'],
     priority: 5,
@@ -1350,6 +1568,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'user_model_observe',
+    effect: 'reversible',
     category: 'utility',
     keywords: ['user', 'model', 'preference', 'observe', 'profile', 'personalization', 'working style', 'trait'],
     priority: 4,
@@ -1357,6 +1576,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'user_model_recall',
+    effect: 'read',
     category: 'utility',
     keywords: ['user', 'model', 'preference', 'recall', 'profile', 'personalization', 'who'],
     priority: 4,
@@ -1365,6 +1585,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'task_verify',
+    effect: 'emission',
     category: 'utility',
     keywords: ['verify', 'test', 'typecheck', 'lint', 'check', 'validate', 'ci'],
     priority: 7,
@@ -1372,6 +1593,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'knowledge_graph',
+    effect: 'reversible',
     category: 'codebase',
     keywords: ['knowledge', 'graph', 'relationships', 'imports', 'calls', 'extends', 'dependencies', 'code', 'architecture'],
     priority: 6,
@@ -1382,6 +1604,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // LSP semantic navigation and diagnostics (read-only)
   {
     name: 'lsp_definition',
+    effect: 'read',
     category: 'codebase',
     keywords: ['lsp', 'definition', 'declaration', 'go to definition', 'semantic navigation', 'symbol', 'type'],
     priority: 9,
@@ -1390,6 +1613,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lsp_references',
+    effect: 'read',
     category: 'codebase',
     keywords: ['lsp', 'references', 'usages', 'callers', 'where used', 'semantic navigation', 'symbol'],
     priority: 9,
@@ -1398,6 +1622,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lsp_hover',
+    effect: 'read',
     category: 'codebase',
     keywords: ['lsp', 'hover', 'type', 'signature', 'documentation', 'semantic information', 'symbol'],
     priority: 9,
@@ -1406,6 +1631,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lsp_symbols',
+    effect: 'read',
     category: 'codebase',
     keywords: ['lsp', 'symbols', 'outline', 'classes', 'functions', 'methods', 'document structure', 'semantic navigation'],
     priority: 9,
@@ -1414,6 +1640,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lsp_diagnostics',
+    effect: 'read',
     category: 'codebase',
     keywords: ['lsp', 'diagnostics', 'errors', 'warnings', 'typecheck', 'lint', 'semantic analysis'],
     priority: 9,
@@ -1424,6 +1651,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // LSP rename/refactor
   {
     name: 'lsp_rename',
+    effect: 'reversible',
     category: 'codebase',
     keywords: ['rename', 'refactor', 'symbol', 'lsp', 'language server', 'cross-file', 'identifier'],
     priority: 7,
@@ -1431,6 +1659,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lsp_code_action',
+    effect: 'reversible',
     category: 'codebase',
     keywords: ['code action', 'quickfix', 'refactor', 'lsp', 'language server', 'suggestion'],
     priority: 6,
@@ -1440,6 +1669,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Bug finder (static analysis)
   {
     name: 'find_bugs',
+    effect: 'read',
     category: 'codebase',
     keywords: ['bug', 'find', 'scan', 'analysis', 'static', 'security', 'lint', 'check', 'vulnerability', 'error', 'leak', 'dead code', 'race condition', 'null', 'injection'],
     priority: 7,
@@ -1450,6 +1680,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Merge conflict resolution
   {
     name: 'resolve_conflicts',
+    effect: 'reversible',
     category: 'git',
     keywords: ['merge', 'conflict', 'resolve', 'git', 'ours', 'theirs', 'rebase', 'cherry-pick', 'markers'],
     priority: 7,
@@ -1459,6 +1690,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Vulnerability scanning
   {
     name: 'scan_vulnerabilities',
+    effect: 'emission',
     category: 'system',
     keywords: ['vulnerability', 'security', 'audit', 'dependency', 'npm', 'pip', 'cargo', 'cve', 'scan', 'advisory'],
     priority: 7,
@@ -1468,6 +1700,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Control
   {
     name: 'terminate',
+    effect: 'emission',
     category: 'control' as ToolCategory,
     keywords: ['terminate', 'finish', 'done', 'complete', 'end', 'stop', 'exit', 'signal'],
     priority: 5,
@@ -1478,6 +1711,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Secrets detection
   {
     name: 'scan_secrets',
+    effect: 'read',
     category: 'security' as ToolCategory,
     keywords: ['secrets', 'credentials', 'api key', 'token', 'password', 'leak', 'scan', 'security', 'hardcoded', 'detect', 'aws', 'github', 'stripe', 'jwt'],
     priority: 7,
@@ -1487,6 +1721,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Advisor (second opinion from a stronger reviewer model)
   {
     name: 'advisor',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['advisor', 'review', 'second opinion', 'consult', 'check', 'validate', 'expert', 'critique', 'feedback'],
     priority: 6,
@@ -1496,6 +1731,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Verify (explicit delegation to the independent, fresh-context Verifier agent)
   {
     name: 'verify',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['verify', 'verification', 'evidence', 'confirm', 'validate', 'oracle', 'independent', 'proof', 'check', 'works'],
     priority: 6,
@@ -1506,6 +1742,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Delegate agent (single tool that reaches the built-in specialized agents)
   {
     name: 'delegate_agent',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['delegate', 'agent', 'specialized', 'pdf', 'excel', 'xlsx', 'csv', 'data', 'analysis', 'sql', 'database', 'query', 'archive', 'zip', 'tar', 'swe', 'refactor', 'debug', 'pivot', 'correlate'],
     priority: 6,
@@ -1516,6 +1753,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // Document generator (PPTX/DOCX/XLSX/PDF) — complements the read-only `document` tool
   {
     name: 'generate_document',
+    effect: 'reversible',
     category: 'document' as ToolCategory,
     keywords: ['generate', 'document', 'pptx', 'docx', 'xlsx', 'pdf', 'powerpoint', 'word', 'excel', 'slides', 'deck', 'report', 'create', 'export'],
     priority: 6,
@@ -1524,7 +1762,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
 
   // Fleet — multi-Claude orchestration via peer-RPC (Phase (d).17)
   {
+    name: 'fleet_room',
+    effect: 'emission',
+    fleetSafe: false,
+    category: 'utility' as ToolCategory,
+    keywords: ['fleet', 'room', 'salon', 'message', 'coordination', 'history', 'robot', 'communication', 'flotte'],
+    priority: 7,
+    description: 'Send messages, read history or check access in the configured Fleet room; messages remain external data, not action authorization',
+  },
+  {
     name: 'peer_delegate',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'delegate', 'fleet', 'consult', 'ask', 'collaborate', 'remote', 'claude', 'orchestrate', 'sub-agent', 'multi-ai', 'distributed', 'hermes', 'dispatch', 'dispatchProfile', 'profile', 'toolset', 'toolsets', 'policy'],
     priority: 7,
@@ -1532,6 +1780,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'peer_chain',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'chain', 'fleet', 'delegate', 'multi-agent', 'collaborate', 'orchestrate', 'hermes', 'handoff', 'roles', 'review', 'safe', 'code'],
     priority: 8,
@@ -1539,6 +1788,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'list_peers',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status', 'provider', 'model', 'capabilities', 'route', 'routing', 'hermes', 'dispatch'],
     priority: 5,
@@ -1546,6 +1796,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'route_peer',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['peer', 'route', 'fleet', 'model', 'provider', 'capability', 'delegate', 'multi-ai', 'orchestrate', 'select', 'hermes', 'dispatch', 'chain', 'roles', 'dispatchProfile', 'profile', 'toolset', 'toolsets', 'policy', 'safe', 'review', 'research', 'code'],
     priority: 7,
@@ -1555,6 +1806,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // AskUserQuestion (structured multi-option mid-task questions)
   {
     name: 'ask_user_question',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['ask', 'question', 'user', 'clarify', 'choose', 'option', 'decide', 'multi-choice', 'prompt', 'interactive', 'pick'],
     priority: 7,
@@ -1564,15 +1816,29 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // ExitPlanMode (request approval to leave plan mode)
   {
     name: 'exit_plan_mode',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['plan', 'exit', 'approve', 'approval', 'leave', 'execute', 'proceed', 'unlock', 'sign-off'],
     priority: 7,
     description: 'Request user approval to leave plan mode and start executing'
   },
+  {
+    name: 'submit_plan',
+    effect: 'reversible',
+    category: 'planning' as ToolCategory,
+    keywords: [
+      'plan', 'submit', 'approval', 'approve', 'research', 'execution plan',
+      'current.md', 'plan mode', 'sign-off',
+    ],
+    priority: 7,
+    description:
+      'Write .codebuddy/plans/current.md and request user approval to leave plan mode',
+  },
 
   // Codebase replace
   {
     name: 'codebase_replace',
+    effect: 'reversible',
     category: 'file_write' as ToolCategory,
     keywords: ['replace', 'find', 'rename', 'refactor', 'codebase', 'search', 'substitute', 'sed', 'bulk', 'mass', 'global'],
     priority: 7,
@@ -1584,6 +1850,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   // read their transcript, message them, or spawn isolated sandboxed sub-agents.
   {
     name: 'sessions_list',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['sessions', 'list', 'active', 'agents', 'discover', 'coordination', 'multi-agent'],
     priority: 5,
@@ -1592,6 +1859,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'sessions_history',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['sessions', 'history', 'transcript', 'messages', 'review', 'context', 'multi-agent'],
     priority: 5,
@@ -1600,6 +1868,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'session_search',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['session', 'sessions', 'search', 'history', 'saved', 'recall', 'fts', 'conversation', 'hermes'],
     priority: 6,
@@ -1608,6 +1877,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'sessions_send',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['sessions', 'send', 'message', 'communicate', 'notify', 'multi-agent', 'broadcast'],
     priority: 6,
@@ -1615,6 +1885,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'sessions_spawn',
+    effect: 'emission',
     category: 'utility' as ToolCategory,
     keywords: ['sessions', 'spawn', 'create', 'subagent', 'delegate', 'parallel', 'subtask', 'multi-agent'],
     priority: 7,
@@ -1622,6 +1893,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'code_explorer_ask',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['code-explorer', 'ask', 'query', 'understand', 'explain', 'search', 'related files', 'dependents', 'tests'],
     priority: 6,
@@ -1630,15 +1902,18 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'screen_memory',
+    effect: 'read',
     category: 'utility' as ToolCategory,
     keywords: ['screen', 'memory', 'screenpipe', 'recall', 'what did i see', 'history', 'ocr', 'audio', 'transcript', 'said', 'heard'],
     priority: 5,
     description: 'Recall what was on screen / said / heard via a local screenpipe instance (read-only, redacted)',
+    fleetSafe: true,
   },
 
   // ---- 20 pre-authored tools (wired 2026-07-05) ----
   {
     name: 'scaffold_app',
+    effect: 'reversible',
     category: 'file_write',
     keywords: ['scaffold', 'template', 'app', 'project', 'generate', 'node-cli', 'react', 'express'],
     priority: 85,
@@ -1647,6 +1922,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'project_map',
+    effect: 'read',
     category: 'codebase',
     keywords: ['project', 'map', 'tree', 'structure', 'entrypoint', 'languages'],
     priority: 80,
@@ -1655,6 +1931,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'dep_inspect',
+    effect: 'read',
     category: 'codebase',
     keywords: ['dependencies', 'package.json', 'scripts', 'engines', 'lockfile', 'npm'],
     priority: 78,
@@ -1663,6 +1940,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'code_stats',
+    effect: 'read',
     category: 'codebase',
     keywords: ['code', 'stats', 'lines', 'languages', 'comments', 'largest files'],
     priority: 76,
@@ -1671,6 +1949,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'git_summary',
+    effect: 'emission',
     category: 'git',
     keywords: ['git', 'summary', 'status', 'branch', 'commit', 'ahead', 'behind'],
     priority: 82,
@@ -1679,6 +1958,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'todo_scan',
+    effect: 'read',
     category: 'codebase',
     keywords: ['todo', 'fixme', 'hack', 'xxx', 'scan', 'markers'],
     priority: 72,
@@ -1687,6 +1967,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'json_query',
+    effect: 'read',
     category: 'utility',
     keywords: ['json', 'query', 'path', 'inspect', 'data'],
     priority: 70,
@@ -1695,6 +1976,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'csv_preview',
+    effect: 'read',
     category: 'utility',
     keywords: ['csv', 'preview', 'columns', 'rows', 'types', 'data'],
     priority: 70,
@@ -1703,6 +1985,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'env_doctor',
+    effect: 'emission',
     category: 'system',
     keywords: ['environment', 'doctor', 'node', 'node_modules', 'scripts', 'config', 'git', 'docker'],
     priority: 75,
@@ -1711,6 +1994,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'port_check',
+    effect: 'emission',
     category: 'system',
     keywords: ['port', 'check', 'loopback', 'available', 'listening', 'server'],
     priority: 74,
@@ -1719,6 +2003,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'lint_project',
+    effect: 'emission',
     category: 'system',
     keywords: ['lint', 'eslint', 'quality'],
     priority: 80,
@@ -1727,6 +2012,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'test_runner',
+    effect: 'emission',
     category: 'system',
     keywords: ['test', 'vitest', 'jest'],
     priority: 80,
@@ -1735,6 +2021,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'format_project',
+    effect: 'emission',
     category: 'system',
     keywords: ['format', 'prettier'],
     priority: 70,
@@ -1743,6 +2030,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'bundle_analyze',
+    effect: 'read',
     category: 'codebase',
     keywords: ['bundle', 'dist', 'gzip'],
     priority: 70,
@@ -1751,6 +2039,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'build_project',
+    effect: 'emission',
     category: 'system',
     keywords: ['build', 'compile'],
     priority: 80,
@@ -1759,6 +2048,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'license_check',
+    effect: 'read',
     category: 'codebase',
     keywords: ['license', 'compliance', 'dependencies'],
     priority: 75,
@@ -1767,6 +2057,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'sbom_generate',
+    effect: 'read',
     category: 'codebase',
     keywords: ['sbom', 'dependencies', 'supply-chain'],
     priority: 75,
@@ -1775,6 +2066,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'http_probe',
+    effect: 'emission',
     category: 'web',
     keywords: ['http', 'probe', 'loopback'],
     priority: 65,
@@ -1783,6 +2075,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'file_search',
+    effect: 'read',
     category: 'file_search',
     keywords: ['search', 'regex', 'files'],
     priority: 65,
@@ -1791,6 +2084,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   },
   {
     name: 'diff_files',
+    effect: 'read',
     category: 'file_search',
     keywords: ['diff', 'files', 'lcs'],
     priority: 65,
@@ -1798,6 +2092,12 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
 ];
+
+/** Metadata visible to RAG / BM25. Gated tools stay out of the index when disabled. */
+export function getActiveToolMetadata(): ToolMetadata[] {
+  if (process.env.CODEBUDDY_CONTEXT_ZOOM === 'true') return TOOL_METADATA;
+  return TOOL_METADATA.filter((metadata) => metadata.name !== 'context_expand');
+}
 
 /**
  * Category keyword mappings for query classification

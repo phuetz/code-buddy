@@ -163,7 +163,7 @@ though `ollama list` returns models on the same host.
 curl -s http://127.0.0.1:11434/api/tags | jq .
 
 # 2. Restart Code Buddy with OLLAMA_HOST set if non-default.
-OLLAMA_HOST=http://10.0.0.5:11434 buddy serve
+OLLAMA_HOST=http://203.0.113.15:11434 buddy serve
 
 # 3. Verify peer.chat is wired.
 buddy

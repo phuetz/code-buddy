@@ -1,6 +1,6 @@
 # Vague — App Studio « itérer » (chatter pour modifier + tester), façon bolt.new
 
-Tu es GPT-5.5 (Codex). Respecte `CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/studio-iterate`.
+Tu es GPT-5.5 (Codex). Respecte `docs/briefs/2026-07/CODEX-CONVENTIONS.md` (concaténé au-dessus). Worktree `feat/studio-iterate`.
 
 ## But (inspiration bolt.new)
 Après avoir généré une app dans App Studio, bolt.new permet de : (1) **chatter pour demander des modifications**

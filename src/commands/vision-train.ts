@@ -20,6 +20,7 @@ import { buildCurriculum, type SceneSpec } from '../vision-train/curriculum.js';
 import { runVisionTrain, type VisionTrainDeps } from '../vision-train/engine.js';
 import { renderReport } from '../vision-train/report.js';
 import type { ScenePerception } from '../vision-train/scorer.js';
+import { remapCountsToExpected, yoloClassesFromExpected } from '../vision-train/yolo-labels.js';
 
 interface VisionTrainOpts {
   count?: string;
@@ -69,12 +70,14 @@ export function createVisionTrainCommand(): Command {
       // Perception is the same in both modes: local YOLO via object_detect.
       const { detectObjectsInImage } = await import('../tools/vision/object-detection.js');
       const perceive = async (imagePath: string, spec: SceneSpec): Promise<ScenePerception> => {
-        const classes = Object.keys(spec.expect.counts);
+        const classes = yoloClassesFromExpected(spec.expect.counts);
         const res = await detectObjectsInImage(
           { imagePath, minConfidence, ...(classes.length ? { classes } : {}) },
           { rootDir },
         );
-        return { countsByLabel: res.summary.countsByLabel };
+        return {
+          countsByLabel: remapCountsToExpected(res.summary.countsByLabel, spec.expect.counts),
+        };
       };
 
       let specs: SceneSpec[];

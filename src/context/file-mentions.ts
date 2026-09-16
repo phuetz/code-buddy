@@ -17,7 +17,8 @@ export type FileMentionIssueReason =
   | 'not-file'
   | 'too-large'
   | 'binary'
-  | 'unreadable';
+  | 'unreadable'
+  | 'not-found';
 
 export interface FileMentionResolverOptions {
   projectRoot?: string;
@@ -88,6 +89,12 @@ function isProbablyBinary(buffer: Buffer): boolean {
   }
 
   return sample.length > 0 && controlBytes / sample.length > 0.05;
+}
+
+/** Paths that look like files (extension or separator), not @handles such as @alice. */
+function isExplicitFileMentionPath(requestedPath: string): boolean {
+  if (requestedPath.includes('/') || requestedPath.includes('\\')) return true;
+  return /\.[A-Za-z0-9]{1,16}$/.test(requestedPath);
 }
 
 function extractCandidates(message: string): FileMentionCandidate[] {
@@ -167,6 +174,9 @@ async function resolveCandidate(
     realCandidate = await realpath(absoluteCandidate);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
+    // Missing paths return null so a trailing-punctuation variant can still
+    // resolve (`@src/b.ts.` → `@src/b.ts`). Explicit ENOENT becomes a
+    // not-found issue in the public resolvers after every variant fails.
     if (code === 'ENOENT' || code === 'ENOTDIR') return null;
     return issue(candidate, 'unreadable', 'The mentioned file could not be resolved.');
   }
@@ -234,8 +244,9 @@ async function resolveCandidate(
 }
 
 /**
- * Resolve one project-relative file path. A missing path returns null so
- * handles such as @alice and ordinary email addresses remain untouched.
+ * Resolve one project-relative file path. A missing handle such as @alice
+ * returns null so it stays untouched. An explicit @path that does not exist
+ * becomes a `not-found` issue.
  */
 export async function resolveProjectFileMention(
   requestedPath: string,
@@ -249,7 +260,11 @@ export async function resolveProjectFileMention(
     requestedPath,
   };
 
-  return resolveCandidate(candidate, projectRoot, realProjectRoot, maxFileBytes);
+  const result = await resolveCandidate(candidate, projectRoot, realProjectRoot, maxFileBytes);
+  if (result === null && isExplicitFileMentionPath(requestedPath)) {
+    return issue(candidate, 'not-found', 'The mentioned file was not found.');
+  }
+  return result;
 }
 
 /** Resolve all existing @path tokens in a user message. */
@@ -293,6 +308,11 @@ export async function resolveFileMentions(
       }
     } else if (result?.status === 'ignored') {
       issues.push(result);
+    } else {
+      const explicitCandidate = candidateVariants[candidateVariants.length - 1] ?? rawCandidate;
+      if (isExplicitFileMentionPath(explicitCandidate.requestedPath)) {
+        issues.push(issue(explicitCandidate, 'not-found', 'The mentioned file was not found.'));
+      }
     }
   }
 

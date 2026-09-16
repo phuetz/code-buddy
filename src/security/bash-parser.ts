@@ -17,25 +17,47 @@ import {
   type PowerShellParserOptions,
 } from './powershell-parser.js';
 
-// Cache tree-sitter modules loaded via async import at module init time.
+// Cache tree-sitter modules loaded via async import on first parse.
 // parseBashCommand is sync, so we pre-load and cache these optional deps.
 let _treeSitterParser: unknown = null;
 let _treeSitterBash: unknown = null;
 let _treeSitterLoaded = false;
+let _treeSitterPreload: Promise<void> | null = null;
+let _treeSitterWarned = false;
 
-// Kick off async import immediately; result is cached for sync use.
-(async () => {
-  try {
-    const parserMod = await import('tree-sitter');
-    const bashMod = await import('tree-sitter-bash');
-    _treeSitterParser = parserMod.default ?? parserMod;
-    _treeSitterBash = bashMod.default ?? bashMod;
-    _treeSitterLoaded = true;
-  } catch {
-    // tree-sitter not installed — fallback parser will be used
-    _treeSitterLoaded = false;
-  }
-})();
+/**
+ * Start loading the OPTIONAL tree-sitter grammars, at most once.
+ *
+ * Deliberately NOT started while this module is being evaluated: merely
+ * importing the security layer must never pull a native `.node` addon into a
+ * process that parses no shell command (`buddy dev plan` parses none). Such an
+ * import is a floating promise detached from the running command, and on
+ * Windows a delay-loaded DLL that cannot be resolved raises an SEH exception
+ * (`0xC06D007F`) no `try/catch` can intercept: the whole process dies, and the
+ * exit code replaces that of a command which had otherwise succeeded.
+ */
+export function preloadBashGrammars(): void {
+  if (_treeSitterPreload) return;
+  _treeSitterPreload = (async () => {
+    try {
+      const parserMod = await import('tree-sitter');
+      const bashMod = await import('tree-sitter-bash');
+      _treeSitterParser = parserMod.default ?? parserMod;
+      _treeSitterBash = bashMod.default ?? bashMod;
+      _treeSitterLoaded = true;
+    } catch (error) {
+      // tree-sitter not installed or unloadable — the fallback parser is used.
+      _treeSitterLoaded = false;
+      if (!_treeSitterWarned) {
+        _treeSitterWarned = true;
+        logger.warn(
+          'tree-sitter unavailable; bash parsing falls back to the state-machine parser',
+          { error: error instanceof Error ? error.message : String(error) },
+        );
+      }
+    }
+  })();
+}
 
 export interface ParsedCommand {
   /** The base command name (e.g., 'rm', 'git', 'npm') */
@@ -381,7 +403,8 @@ export function parseBashCommand(input: string): ParseResult {
     return { commands: [], usedTreeSitter: false, warnings: [] };
   }
 
-  // Try tree-sitter first (optional dependency, pre-loaded at module init)
+  // Try tree-sitter first (optional dependency, loaded from the first parse on)
+  preloadBashGrammars();
   if (_treeSitterLoaded && _treeSitterParser && _treeSitterBash) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

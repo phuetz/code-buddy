@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "nimbus-portable": {
+      "command": "nimbus-mcp",
+      "args": ["--mark", "7f3a"]
+    },
+    "existing-keep": {
+      "command": "must-not-win"
+    }
+  }
+}

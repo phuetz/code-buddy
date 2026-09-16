@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type {
   WorkflowStatus,
   WorkflowState,
@@ -42,7 +43,13 @@ export class WorkflowStateManager {
         if (!file.endsWith('.json')) continue;
         try {
           const statePath = path.join(this.statesDir, file);
-          const data = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+          const data = readJsonAtomicSync<Record<string, unknown> | null>(statePath, null, {
+            mode: 0o600,
+            isValid: (value): value is Record<string, unknown> => Boolean(
+              value && typeof value === 'object' && !Array.isArray(value),
+            ),
+          });
+          if (!data) continue;
           const state = this.deserializeState(data);
           this.states.set(state.instanceId, state);
         } catch {
@@ -153,7 +160,7 @@ export class WorkflowStateManager {
    */
   saveState(state: WorkflowState): void {
     const statePath = path.join(this.statesDir, `${state.instanceId}.json`);
-    fs.writeFileSync(statePath, JSON.stringify(this.serializeState(state), null, 2));
+    writeJsonAtomicSync(statePath, this.serializeState(state), { mode: 0o600 });
   }
 
   /**

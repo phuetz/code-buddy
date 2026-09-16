@@ -204,6 +204,12 @@ export interface OutboundMessage {
   buttons?: MessageButton[];
   /** Channel-specific data passthrough (Native Engine v2026.3.12 alignment) */
   channelData?: {
+    telegram?: {
+      /** Full inert widget document to render locally before sendPhoto. */
+      widgetHtml?: string;
+      /** Structured widget payload, rendered through the shared widget registry. */
+      data?: unknown;
+    };
     slack?: {
       blocks?: unknown[];
     };
@@ -237,6 +243,12 @@ export interface DeliveryResult {
   error?: string;
   /** Timestamp */
   timestamp: Date;
+  /** This call did not send; the message remains (or was already) in the queue */
+  queued?: boolean;
+  /** Messages actually handed to a channel during this drain */
+  sent?: number;
+  /** Messages whose channel.send reported failure during this drain */
+  failed?: number;
 }
 
 /**
@@ -251,6 +263,8 @@ export interface ChannelStatus {
   authenticated: boolean;
   /** Last activity time */
   lastActivity?: Date;
+  /** Last successful long-poll request, for polling-based channels */
+  lastSuccessfulPoll?: Date;
   /** Error if any */
   error?: string;
   /** Additional info */
@@ -392,6 +406,44 @@ export function getRouteAgentConfig(message: InboundMessage, accountId?: string)
 }
 
 // ============================================================================
+// Inbound allowlist (fail-closed for Telegram / Discord / Slack)
+// ============================================================================
+
+export function normalizeChannelIdentity(value: string): string {
+  return value.trim().replace(/^@/, '').toLowerCase();
+}
+
+export function isOnStaticAllowlist(
+  allowedUsers: readonly string[] | undefined,
+  identities: Array<string | null | undefined>,
+): boolean {
+  if (!allowedUsers || allowedUsers.length === 0) return false;
+  const allowed = new Set(allowedUsers.map(normalizeChannelIdentity));
+  for (const identity of identities) {
+    if (!identity) continue;
+    if (allowed.has(normalizeChannelIdentity(identity))) return true;
+  }
+  return false;
+}
+
+export type InboundSenderAccess = 'allow' | 'pair' | 'refuse';
+
+/**
+ * Static allowlist members skip pairing. Anyone else must pair when pairing
+ * is on; when pairing is off they are refused (fail-closed).
+ */
+export function resolveInboundSenderAccess(options: {
+  allowedUsers?: string[];
+  identities: Array<string | null | undefined>;
+  pairingRequired: boolean;
+  pairingApproved?: boolean;
+}): InboundSenderAccess {
+  if (isOnStaticAllowlist(options.allowedUsers, options.identities)) return 'allow';
+  if (options.pairingRequired) return options.pairingApproved ? 'allow' : 'pair';
+  return 'refuse';
+}
+
+// ============================================================================
 // Base Channel Class
 // ============================================================================
 
@@ -437,13 +489,23 @@ export abstract class BaseChannel extends EventEmitter {
   }
 
   /**
-   * Check if user is allowed
+   * Static allowlist from config (empty when unset). Public so the inbound
+   * AI handler can skip DM pairing for an already-listed sender.
+   */
+  getAllowedUsers(): string[] {
+    return this.config.allowedUsers ? [...this.config.allowedUsers] : [];
+  }
+
+  /**
+   * Check if user is allowed.
+   * Empty allowlist remains a no-op here (legacy channels); Telegram/Discord/Slack
+   * inbound uses `resolveInboundSenderAccess` which is fail-closed.
    */
   isUserAllowed(userId: string): boolean {
     if (!this.config.allowedUsers || this.config.allowedUsers.length === 0) {
       return true;
     }
-    return this.config.allowedUsers.includes(userId);
+    return isOnStaticAllowlist(this.config.allowedUsers, [userId]);
   }
 
   /**
@@ -760,23 +822,41 @@ export class ChannelManager extends EventEmitter {
    */
   private async processQueue(): Promise<DeliveryResult> {
     if (this.processingQueue || this.outgoingQueue.length === 0) {
-      return { success: true, timestamp: new Date() };
+      logger.debug('Channel outgoing queue not drained in this call', {
+        processing: this.processingQueue,
+        queued: this.outgoingQueue.length,
+      });
+      return { success: false, queued: true, sent: 0, failed: 0, timestamp: new Date() };
     }
 
     this.processingQueue = true;
     let lastResult: DeliveryResult = { success: true, timestamp: new Date() };
+    let sent = 0;
+    let failed = 0;
 
     try {
       while (this.outgoingQueue.length > 0) {
         const item = this.outgoingQueue.shift()!;
         lastResult = await this.send(item.type, item.message);
         this.emit('message:sent', { type: item.type, result: lastResult });
+        if (lastResult.success) {
+          sent++;
+        } else {
+          failed++;
+        }
       }
     } finally {
       this.processingQueue = false;
     }
 
-    return lastResult;
+    return {
+      success: failed === 0,
+      sent,
+      failed,
+      messageId: lastResult.messageId,
+      error: lastResult.error,
+      timestamp: lastResult.timestamp,
+    };
   }
 
   /**
@@ -881,9 +961,9 @@ export function enqueueMessage<T>(
 // DM Pairing Helper
 // ============================================================================
 
-import { DMPairingManager, getDMPairing, resetDMPairing } from './dm-pairing.js';
+import { DMPairingManager, getDMPairing, resetDMPairing, UNPAIRED_SENDER_REPLY } from './dm-pairing.js';
 import type { PairingStatus } from './dm-pairing.js';
-export { DMPairingManager, getDMPairing, resetDMPairing };
+export { DMPairingManager, getDMPairing, resetDMPairing, UNPAIRED_SENDER_REPLY };
 export type { PairingStatus };
 
 /**

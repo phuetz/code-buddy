@@ -1,3 +1,4 @@
+import { getSkillsHub, resetSkillsHub } from '../../src/skills/hub.js';
 import { Command } from 'commander';
 import fs from 'fs/promises';
 import os from 'os';
@@ -12,6 +13,7 @@ import {
 } from '../../src/agent/research-script-skill-candidate.js';
 import { registerToolsCommands } from '../../src/commands/cli/tools-commands.js';
 
+let hubHome: string;
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
 function createProgram(): Command {
@@ -130,12 +132,52 @@ async function materializeLearningSkillCandidate(rootDir: string, candidateDirec
   return path.relative(rootDir, candidateDir).replace(/\\/g, '/');
 }
 describe('Tools CLI commands', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    hubHome = await fs.mkdtemp(path.join(os.tmpdir(), 'tools-cli-hub-'));
+    resetSkillsHub();
+    getSkillsHub({
+      lockfilePath: path.join(hubHome, 'lock.json'),
+      cacheDir: path.join(hubHome, 'cache'),
+      skillsDir: path.join(hubHome, 'managed'),
+      tapsPath: path.join(hubHome, 'taps.json'),
+      trustedKeysPath: path.join(hubHome, 'keys.json'),
+    });
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleLogSpy.mockRestore();
+    resetSkillsHub();
+    await fs.rm(hubHome, { recursive: true, force: true });
+  });
+
+  it('lists the tool catalog with C5 effect classes', async () => {
+    const program = createProgram();
+    registerToolsCommands(program);
+
+    await program.parseAsync(['node', 'test', 'tools', 'catalog', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      count: number;
+      tools: Array<{ name: string; effect: string }>;
+    };
+    expect(output.count).toBeGreaterThan(100);
+    expect(output.tools.find((tool) => tool.name === 'view_file')?.effect).toBe('read');
+    expect(output.tools.find((tool) => tool.name === 'create_file')?.effect).toBe('reversible');
+    expect(output.tools.find((tool) => tool.name === 'bash')?.effect).toBe('emission');
+    expect(output.tools.find((tool) => tool.name === 'stock_quote')?.effect).toBe('emission');
+    expect(output.tools.every((tool) => ['read', 'reversible', 'emission', 'unknown'].includes(tool.effect))).toBe(true);
+  });
+
+  it('lists the default profile when no subcommand is given', async () => {
+    const program = createProgram();
+    registerToolsCommands(program);
+
+    await program.parseAsync(['node', 'test', 'tools']);
+
+    const output = getLogOutput();
+    expect(output).toContain('Tool profile: fleet.hermes.balanced');
+    expect(output).toContain('Inspected tools:');
   });
 
   it('prints JSON for a Hermes-safe profile against selected tools', async () => {

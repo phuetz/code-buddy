@@ -18,6 +18,7 @@ import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
+import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -531,10 +532,7 @@ export class LLMResponseCache extends EventEmitter {
         .filter(e => !this.isExpired(e))
         .slice(0, this.config.maxEntries);
 
-      await fs.writeFile(
-        this.config.cachePath,
-        JSON.stringify({ entries, stats: this.stats }, null, 2)
-      );
+      await writeJsonAtomic(this.config.cachePath, { entries, stats: this.stats });
     } catch (error) {
       logger.debug('Failed to save LLM cache', { error });
     }
@@ -548,8 +546,7 @@ export class LLMResponseCache extends EventEmitter {
 
     (async () => {
       try {
-        const content = await fs.readFile(this.config.cachePath, 'utf-8');
-        const data = JSON.parse(content);
+        const data = await readJsonAtomic<{ entries?: Array<LLMCacheEntry>; }>(this.config.cachePath, { entries: [] });
 
         if (Array.isArray(data.entries)) {
           const now = Date.now();

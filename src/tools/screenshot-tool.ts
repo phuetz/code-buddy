@@ -157,6 +157,9 @@ export class ScreenshotTool {
    * Capture screenshot on Linux using scrot or gnome-screenshot
    */
   private async captureLinux(outputPath: string, options: ScreenshotOptions): Promise<ScreenshotResult> {
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      throw new Error('No DISPLAY/WAYLAND_DISPLAY — refusing to capture the operator screen (honest no-op).');
+    }
     // Try scrot first, then gnome-screenshot, then import (ImageMagick)
     const tools = ['scrot', 'gnome-screenshot', 'import'];
     let availableTool: string | null = null;

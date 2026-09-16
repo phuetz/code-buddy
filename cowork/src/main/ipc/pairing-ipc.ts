@@ -55,9 +55,9 @@ interface DMPairingManagerLike {
   persistAllowlist: () => Promise<void>;
   listApproved: () => ApprovedSenderRaw[];
   listPending: () => PendingRequestRaw[];
-  approve: (channelType: string, code: string, approvedBy?: string) => ApprovedSenderRaw | null;
-  approveDirectly: (channelType: string, senderId: string, approvedBy?: string, displayName?: string) => ApprovedSenderRaw;
-  revoke: (channelType: string, senderId: string) => boolean;
+  approve: (channelType: string, code: string, approvedBy?: string) => Promise<ApprovedSenderRaw | null>;
+  approveDirectly: (channelType: string, senderId: string, approvedBy?: string, displayName?: string) => Promise<ApprovedSenderRaw>;
+  revoke: (channelType: string, senderId: string) => Promise<boolean>;
   getStats: () => PairingStatsRaw;
 }
 interface PairingModule {
@@ -149,11 +149,7 @@ async function loadPairing(): Promise<DMPairingManagerLike | null> {
   const mod = await loadCoreModule<PairingModule>('channels/dm-pairing.js');
   if (!mod?.getDMPairing) return null;
   const mgr = mod.getDMPairing();
-  try {
-    await mgr.loadAllowlist();
-  } catch (error) {
-    logError('[pairing] loadAllowlist failed:', error);
-  }
+  await mgr.loadAllowlist();
   return mgr;
 }
 
@@ -207,7 +203,7 @@ export function registerPairingIpcHandlers(): void {
     try {
       const mgr = await loadPairing();
       if (!mgr) return { ok: false, error: 'pairing core unavailable' };
-      const approved = mgr.approve(channelType, code.trim(), typeof approvedBy === 'string' ? approvedBy : undefined);
+      const approved = await mgr.approve(channelType, code.trim(), typeof approvedBy === 'string' ? approvedBy : undefined);
       if (!approved) return { ok: false, error: 'no matching pending request for that code', approved: null };
       await mgr.persistAllowlist();
       return { ok: true, approved: toApprovedView(approved) };
@@ -225,7 +221,7 @@ export function registerPairingIpcHandlers(): void {
       try {
         const mgr = await loadPairing();
         if (!mgr) return { ok: false, error: 'pairing core unavailable' };
-        const approved = mgr.approveDirectly(
+        const approved = await mgr.approveDirectly(
           channelType,
           senderId.trim(),
           typeof approvedBy === 'string' ? approvedBy : undefined,
@@ -246,7 +242,7 @@ export function registerPairingIpcHandlers(): void {
     try {
       const mgr = await loadPairing();
       if (!mgr) return { ok: false, error: 'pairing core unavailable' };
-      const revoked = mgr.revoke(channelType, senderId.trim());
+      const revoked = await mgr.revoke(channelType, senderId.trim());
       await mgr.persistAllowlist();
       return { ok: true, revoked };
     } catch (error) {

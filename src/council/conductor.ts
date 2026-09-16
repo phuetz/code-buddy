@@ -13,6 +13,11 @@ export const TASK_REQUIRES: Record<string, ModelStrength[]> = {
   code: ['code', 'reasoning'],
   reasoning: ['reasoning', 'thinking'],
   french: ['french', 'reasoning'],
+  'redaction-fr': ['french', 'reasoning'],
+  'arbitrage-litteraire': ['reasoning', 'french'],
+  'jugement-litteraire': ['reasoning', 'french'],
+  'audit-adversarial': ['reasoning', 'code'],
+  'relecture-typo': ['french'],
   vision: ['vision'],
   general: ['reasoning', 'fast'],
 };

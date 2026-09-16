@@ -6,7 +6,6 @@
  * the connected device.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
@@ -17,6 +16,7 @@ import type {
   ExecuteResult,
 } from './transports/base-transport.js';
 import { getPlatformCommands, type DevicePlatform } from './platform-commands.js';
+import { readDeviceStoreFile, updateDeviceStoreFile } from '../utils/device-store-file.js';
 
 // ============================================================================
 // Types
@@ -154,13 +154,11 @@ export class DeviceNodeManager {
 
   private loadDevices(): void {
     try {
-      if (fs.existsSync(DEVICES_FILE)) {
-        const raw = fs.readFileSync(DEVICES_FILE, 'utf-8');
-        const data = JSON.parse(raw) as PersistedDevices;
-        if (data.version === DEVICES_VERSION && Array.isArray(data.devices)) {
-          for (const d of data.devices) {
-            this.devices.set(d.id, d);
-          }
+      // The shared envelope also carries revocations; never restore stale backups.
+      const data = readDeviceStoreFile(DEVICES_FILE);
+      if (data.version === DEVICES_VERSION && Array.isArray(data.devices)) {
+        for (const d of data.devices) {
+          this.devices.set(d.id, d);
         }
       }
     } catch {
@@ -170,15 +168,11 @@ export class DeviceNodeManager {
 
   private saveDevices(): void {
     try {
-      const dir = path.dirname(DEVICES_FILE);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
       const data: PersistedDevices = {
         version: DEVICES_VERSION,
         devices: Array.from(this.devices.values()),
       };
-      fs.writeFileSync(DEVICES_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      updateDeviceStoreFile(DEVICES_FILE, envelope => Object.assign(envelope, data));
     } catch (err) {
       logger.warn('Failed to save devices', {
         error: err instanceof Error ? err.message : String(err),

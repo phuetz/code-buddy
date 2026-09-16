@@ -67,7 +67,7 @@ describe('A2AAgentClient.submitTask — remote routing', () => {
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
     const client = new A2AAgentClient();
-    registerRemote(client, 'spoke', 'http://100.73.222.64:3002');
+    registerRemote(client, 'spoke', 'http://192.0.2.42:3002');
 
     const task = await client.submitTask('spoke', 'ping', { traceId: 'abc' });
 
@@ -78,7 +78,7 @@ describe('A2AAgentClient.submitTask — remote routing', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('http://100.73.222.64:3002/api/a2a/tasks/send');
+    expect(url).toBe('http://192.0.2.42:3002/api/a2a/tasks/send');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body);
     expect(body.message).toEqual({

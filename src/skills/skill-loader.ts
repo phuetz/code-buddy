@@ -71,8 +71,8 @@ export interface SkillLoaderConfig {
  * Default skill loader configuration
  */
 export const DEFAULT_SKILL_LOADER_CONFIG: SkillLoaderConfig = {
-  globalDir: path.join(os.homedir(), '.codebuddy', 'skills'),
-  projectDir: path.join(process.cwd(), '.codebuddy', 'skills'),
+  get globalDir() { return path.join(os.homedir(), '.codebuddy', 'skills'); },
+  get projectDir() { return path.join(process.cwd(), '.codebuddy', 'skills'); },
   loadGlobal: true,
   loadProject: true,
   mergeDuplicates: true,

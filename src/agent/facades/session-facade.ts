@@ -9,10 +9,8 @@
  */
 
 import type { CheckpointManager } from '../../checkpoints/checkpoint-manager.js';
-import type { Session, SessionStore } from '../../persistence/session-store.js';
+import type { Session, SessionStore, SessionUsageSnapshot } from '../../persistence/session-store.js';
 import type { ChatEntry } from '../types.js';
-import { SessionEncryption } from '../../security/session-encryption.js';
-import { logger } from '../../utils/logger.js';
 
 /**
  * Result of a checkpoint rewind operation
@@ -41,34 +39,16 @@ export interface SessionFacadeDeps {
 export class SessionFacade {
   private readonly checkpointManager: CheckpointManager;
   private readonly sessionStore: SessionStore;
-  private encryption: SessionEncryption | null = null;
-  private encryptionInitialized = false;
+
+  private async attachUsageIfSupported(usage?: SessionUsageSnapshot): Promise<void> {
+    if (usage && typeof this.sessionStore.attachUsageToCurrentSession === 'function') {
+      await this.sessionStore.attachUsageToCurrentSession(usage);
+    }
+  }
 
   constructor(deps: SessionFacadeDeps) {
     this.checkpointManager = deps.checkpointManager;
     this.sessionStore = deps.sessionStore;
-  }
-
-  /**
-   * Lazily initialize session encryption if enabled via SESSION_ENCRYPTION env var
-   */
-  private async getEncryption(): Promise<SessionEncryption | null> {
-    if (this.encryptionInitialized) return this.encryption;
-    this.encryptionInitialized = true;
-
-    if (process.env.SESSION_ENCRYPTION === 'true') {
-      try {
-        this.encryption = new SessionEncryption({ enabled: true });
-        await this.encryption.initialize();
-        logger.debug('Session encryption initialized');
-      } catch (err) {
-        logger.warn('Failed to initialize session encryption', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        this.encryption = null;
-      }
-    }
-    return this.encryption;
   }
 
   // ============================================================================
@@ -129,25 +109,12 @@ export class SessionFacade {
   /**
    * Save the current chat history to the session
    */
-  async saveCurrentSession(chatHistory: ChatEntry[]): Promise<void> {
-    const enc = await this.getEncryption();
-    if (enc) {
-      try {
-        const encrypted = enc.encryptObject(chatHistory);
-        const marker: ChatEntry = {
-          type: 'assistant',
-          content: JSON.stringify({ __encrypted: true, data: encrypted }),
-          timestamp: new Date(),
-        };
-        await this.sessionStore.updateCurrentSession([marker]);
-        return;
-      } catch (err) {
-        logger.warn('Session encryption failed, saving unencrypted', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+  async saveCurrentSession(
+    chatHistory: ChatEntry[],
+    usage?: SessionUsageSnapshot
+  ): Promise<void> {
     await this.sessionStore.updateCurrentSession(chatHistory);
+    await this.attachUsageIfSupported(usage);
   }
 
   /**

@@ -135,23 +135,23 @@ describe('resolveCommandProvider', () => {
   it('CODEBUDDY_PROVIDER expresses operator intent: ollama wins even when a paid key exists', () => {
     process.env.GROK_API_KEY = 'xai-test-key';
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    process.env.OLLAMA_HOST = 'http://darkstar:11434';
+    process.env.OLLAMA_HOST = 'http://gpuNode:11434';
 
     const resolved = resolveCommandProvider();
 
     expect(resolved!.apiKey).toBe('ollama');
-    expect(resolved!.baseURL).toBe('http://darkstar:11434/v1');
+    expect(resolved!.baseURL).toBe('http://gpuNode:11434/v1');
   });
 
   it('routes an explicit Ollama model to local Ollama even when a cloud key exists', () => {
     process.env.GROK_API_KEY = 'xai-test-key';
-    process.env.OLLAMA_HOST = 'http://darkstar:11434';
+    process.env.OLLAMA_HOST = 'http://gpuNode:11434';
 
     const resolved = resolveCommandProvider({ explicitModel: 'gemma4:12b' });
 
     expect(resolved).toMatchObject({
       apiKey: 'ollama',
-      baseURL: 'http://darkstar:11434/v1',
+      baseURL: 'http://gpuNode:11434/v1',
       model: 'gemma4:12b',
       providerLabel: 'ollama',
     });

@@ -20,6 +20,7 @@ import * as os from 'os';
 import { WakeWordDetector } from '../voice/wake-word.js';
 import { logger } from '../utils/logger.js';
 import { commandExists } from '../utils/command-exists.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface VoiceControlConfig {
   enabled: boolean;
@@ -241,25 +242,17 @@ export class VoiceControl extends EventEmitter {
   private loadConfig(): void {
     const configPath = path.join(os.homedir(), '.codebuddy', 'voice-control.json');
 
-    if (fs.existsSync(configPath)) {
-      try {
-        const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        this.config = { ...this.config, ...saved };
-      } catch {
-        // Use defaults
-      }
-    }
+    const saved = readJsonAtomicSync<Partial<VoiceControlConfig>>(configPath, {});
+    this.config = { ...this.config, ...saved };
   }
 
   /**
    * Save configuration
    */
   saveConfig(): void {
-    const configDir = path.join(os.homedir(), '.codebuddy');
-    const configPath = path.join(configDir, 'voice-control.json');
+    const configPath = path.join(os.homedir(), '.codebuddy', 'voice-control.json');
 
-    fs.ensureDirSync(configDir);
-    fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
+    writeJsonAtomicSync(configPath, this.config);
   }
 
   /**

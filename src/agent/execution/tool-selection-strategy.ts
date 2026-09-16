@@ -43,6 +43,7 @@ import { logger } from '../../utils/logger.js';
 import type { UnifiedSkill } from '../../skills/types.js';
 import { getSkillsHub } from '../../skills/hub.js';
 import { DESIGN_SYSTEM_TOOL } from '../../codebuddy/tool-definitions/design-tools.js';
+import { resolveCodeExecPolicy } from '../../config/code-exec-policy.js';
 
 // Re-export types for convenience
 export type {
@@ -105,7 +106,7 @@ export interface SelectionResult {
 /**
  * Default configuration for tool selection
  */
-const DEFAULT_CONFIG: ToolSelectionConfig = {
+export const DEFAULT_TOOL_SELECTION_CONFIG: ToolSelectionConfig = {
   useRAG: true,
   maxTools: 15,
   minScore: 0.5,
@@ -143,6 +144,14 @@ function requiredToolsForQuery(query: string): string[] {
   // unverified claims and ASR-damaged names; even lite model profiles must be
   // able to check those against primary sources in the same turn.
   const required = new Set<string>();
+  if (/\bcode_exec\b|\btools\.call\b|\bprogramm?atic[ -]+tool[ -]+calling\b|\b(?:programmation|orchestration) (?:des? )?outils\b/i.test(query)) {
+    required.add('code_exec');
+  }
+  // Inventory and inspection must remain callable on small-model profiles.
+  if (/\b(?:skills?|skills_list|skill_view)\b/i.test(query)) {
+    required.add('skills_list');
+    required.add('skill_view');
+  }
   if (/https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|embed|v)(?:[/?])|youtu\.be\/)[^\s]+/i.test(query)) {
     required.add('understand_video');
     required.add('web_search');
@@ -212,7 +221,7 @@ export class ToolSelectionStrategy {
    * @param config - Optional configuration overrides
    */
   constructor(config: Partial<ToolSelectionConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_TOOL_SELECTION_CONFIG, ...config };
   }
 
   /**
@@ -230,7 +239,11 @@ export class ToolSelectionStrategy {
     options: Partial<ToolSelectionConfig> = {}
   ): Promise<SelectionResult> {
     const mergedConfig = { ...this.config, ...options };
-    const requiredTools = requiredToolsForQuery(query);
+    // P5: per-model programmatic tool calling policy (default `offer` = unchanged).
+    const codeExecPolicy = resolveCodeExecPolicy(mergedConfig.modelName).policy;
+    const requiredTools = requiredToolsForQuery(query)
+      .filter((name) => !(codeExecPolicy === 'off' && name === 'code_exec'));
+    if (codeExecPolicy === 'prefer' && !requiredTools.includes('code_exec')) requiredTools.push('code_exec');
     // Recovery is part of the observation contract, not a relevance hint.
     // Keep it available even when a lite profile supplies a smaller
     // `alwaysInclude` override: once an earlier result was compacted, the
@@ -241,7 +254,7 @@ export class ToolSelectionStrategy {
         ...mergedConfig.alwaysInclude,
         'restore_context',
         ...requiredTools,
-      ])),
+      ])).filter((name) => !(codeExecPolicy === 'off' && name === 'code_exec')),
     };
     const modelName = ToolSelectionStrategy.normalizeModelName(effectiveConfig.modelName);
     this.lastQuery = query;
@@ -338,6 +351,9 @@ export class ToolSelectionStrategy {
     }
 
     tools = this.applyModelFacingSchemaFilter(tools, modelName);
+    if (codeExecPolicy === 'off') {
+      tools = tools.filter((tool) => tool.function.name !== 'code_exec');
+    }
     if (effectiveConfig.allowedToolNames) {
       const allowed = new Set(effectiveConfig.allowedToolNames);
       tools = tools.filter((tool) => allowed.has(tool.function.name));

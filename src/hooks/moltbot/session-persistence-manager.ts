@@ -17,6 +17,7 @@ import type {
   PersistedToolCall,
 } from "./types.js";
 import { DEFAULT_MOLTBOT_CONFIG } from "./config.js";
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 /**
  * Manages session persistence for context continuity
@@ -105,9 +106,13 @@ export class SessionPersistenceManager extends EventEmitter {
     }
 
     try {
-      const content = fs.readFileSync(sessionPath, "utf-8");
-      const session = JSON.parse(content) as PersistedSession;
-      return session;
+      return readJsonAtomicSync<PersistedSession | null>(sessionPath, null, {
+        mode: 0o600,
+        isValid: (value): value is PersistedSession => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value) &&
+          typeof (value as PersistedSession).id === 'string',
+        ),
+      });
     } catch (error) {
       logger.warn(`Failed to load session ${sessionId}: ${error}`);
       return null;
@@ -133,7 +138,7 @@ export class SessionPersistenceManager extends EventEmitter {
     const sessionPath = this.getSessionPath(this.currentSession.id);
 
     try {
-      fs.writeFileSync(sessionPath, JSON.stringify(this.currentSession, null, 2));
+      writeJsonAtomicSync(sessionPath, this.currentSession, { mode: 0o600 });
       this.isDirty = false;
       this.emit("session-saved", this.currentSession);
     } catch (error) {
@@ -246,11 +251,18 @@ export class SessionPersistenceManager extends EventEmitter {
         }
 
         try {
-          const content = fs.readFileSync(
+          const session = readJsonAtomicSync<PersistedSession | null>(
             path.join(this.config.storagePath, file),
-            "utf-8"
+            null,
+            {
+              mode: 0o600,
+              isValid: (value): value is PersistedSession => Boolean(
+                value && typeof value === 'object' && !Array.isArray(value) &&
+                typeof (value as PersistedSession).id === 'string',
+              ),
+            },
           );
-          const session = JSON.parse(content) as PersistedSession;
+          if (!session) continue;
 
           // Filter by project
           if (session.id.startsWith(projectHash) || session.projectPath === this.workingDirectory) {
@@ -337,7 +349,7 @@ export class SessionPersistenceManager extends EventEmitter {
       // Synchronous save on dispose
       try {
         const sessionPath = this.getSessionPath(this.currentSession.id);
-        fs.writeFileSync(sessionPath, JSON.stringify(this.currentSession, null, 2));
+        writeJsonAtomicSync(sessionPath, this.currentSession, { mode: 0o600 });
       } catch {
         // Ignore errors on dispose
       }

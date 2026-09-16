@@ -2,7 +2,7 @@
  * IdentityManager Tests
  *
  * Tests for loading, validating, and hot-reloading identity files
- * (SOUL.md, USER.md, AGENTS.md, TOOLS.md, IDENTITY.md).
+ * (SOUL.md, USER.md, IDENTITY.md and related identity files).
  * Verifies project-over-global priority, singleton pattern,
  * prompt injection formatting, and file change events.
  */
@@ -12,7 +12,6 @@ import {
   getIdentityManager,
   resetIdentityManager,
 } from '../../src/identity/identity-manager.js';
-import type { IdentityFile } from '../../src/identity/identity-manager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { watch } from 'fs';
@@ -25,6 +24,10 @@ jest.mock('fs', () => {
     watch: jest.fn(),
   };
 });
+const mockWriteFileAtomic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+jest.mock('../../src/utils/atomic-write.js', () => ({
+  writeFileAtomic: mockWriteFileAtomic,
+}));
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     warn: jest.fn(),
@@ -65,6 +68,7 @@ describe('IdentityManager', () => {
     mockStat.mockRejectedValue(new Error('ENOENT'));
     mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
+    mockWriteFileAtomic.mockResolvedValue(undefined);
 
     manager = new IdentityManager({
       globalDir: GLOBAL_DIR,
@@ -153,7 +157,7 @@ describe('IdentityManager', () => {
       await manager.load(CWD);
 
       // AGENTS.md / INSTRUCTIONS.md are owned by the unified project-context loader, not identity.
-      const expectedFiles = ['SOUL.md', 'USER.md', 'TOOLS.md', 'IDENTITY.md'];
+      const expectedFiles = ['SOUL.md', 'USER.md', 'IDENTITY.md'];
 
       for (const fileName of expectedFiles) {
         const projectPath = path.join(CWD, '.codebuddy', fileName);
@@ -364,7 +368,11 @@ describe('IdentityManager', () => {
         path.join(CWD, '.codebuddy'),
         { recursive: true }
       );
-      expect(mockWriteFile).toHaveBeenCalledWith(expectedPath, '# New Soul', 'utf-8');
+      expect(mockWriteFileAtomic).toHaveBeenCalledWith(
+        expectedPath,
+        '# New Soul',
+        { mode: 0o600 },
+      );
     });
 
     it('should update the in-memory file map', async () => {

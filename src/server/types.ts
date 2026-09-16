@@ -184,6 +184,12 @@ export interface JwtPayload {
   exp: number;
   /** Token type */
   type?: 'api_key' | 'user';
+  /** Optional operator role stamped by `buddy token --role`. */
+  role?: 'user' | 'admin';
+  /** Android device proof claims; absent on legacy tokens. */
+  amr?: string[];
+  profile?: 'agent' | 'companion';
+  identity?: 'owner';
 }
 
 export interface AuthenticatedRequest {
@@ -241,6 +247,14 @@ export interface ChatResponse {
   };
   /** Tool calls made */
   toolCalls?: ToolCallResult[];
+  /** Structured tool/widget payload when one was produced */
+  data?: unknown;
+  /** Server-rendered widget HTML (opt-in CODEBUDDY_WIDGETS_AUTO) */
+  widgetHtml?: string;
+  /** Canvas snapshot id when the widget was published */
+  canvasId?: string;
+  /** Path of the published canvas document */
+  canvasPath?: string;
   /** Session ID */
   sessionId?: string;
   /** Cost estimate */
@@ -315,6 +329,14 @@ export interface ToolExecutionResponse {
   success: boolean;
   /** Tool output */
   output?: string;
+  /** Structured payload (e.g. stock_quote `data:{type:'stock'}`) */
+  data?: unknown;
+  /** Server-rendered widget HTML when auto widgets are on */
+  widgetHtml?: string;
+  /** Canvas snapshot id when the widget was published */
+  canvasId?: string;
+  /** Path of the published canvas document */
+  canvasPath?: string;
   /** Error message */
   error?: string;
   /** Requires confirmation */
@@ -334,6 +356,8 @@ export interface ToolCallResult {
   success: boolean;
   /** Tool output */
   output?: string;
+  /** Structured tool payload */
+  data?: unknown;
   /** Error message */
   error?: string;
   /** Execution time (ms) */

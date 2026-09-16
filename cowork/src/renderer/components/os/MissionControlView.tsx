@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { usePolling } from './util/use-polling';
 
 import { useAppStore } from '../../store';
+import { useSilentPeerIds } from '../fleet-peer-freshness';
 import {
   AutonomyControlPanel,
   type AutonomyControlState,
@@ -68,7 +69,7 @@ function toOsPeerStatus(status: string, utilization: number): PeerStatus {
   return 'online';
 }
 
-function toOsPeer(peer: FleetStorePeer): Peer {
+function toOsPeer(peer: FleetStorePeer, quiet: boolean): Peer {
   const capability = peer.capability;
   const capacity = Math.max(1, capability?.maxConcurrency ?? 1);
   const running = Math.max(0, Math.min(capacity, capability?.activeRequests ?? 0));
@@ -89,6 +90,7 @@ function toOsPeer(peer: FleetStorePeer): Peer {
     models,
     tools: [],
     capabilities: Array.from(new Set(strengths)),
+    ...(quiet ? { quiet: true } : {}),
   };
 }
 
@@ -463,7 +465,13 @@ export function MissionControlView() {
     [refreshDaemon]
   );
 
-  const peers = useMemo(() => Object.values(fleetPeers).map(toOsPeer), [fleetPeers]);
+  const fleetPeerList = useMemo(() => Object.values(fleetPeers), [fleetPeers]);
+  // Re-renders the cockpit only when a peer falls silent or speaks again.
+  const silentPeerIds = useSilentPeerIds(fleetPeerList);
+  const peers = useMemo(() => {
+    const silent = new Set(silentPeerIds);
+    return fleetPeerList.map((peer) => toOsPeer(peer, silent.has(peer.id)));
+  }, [fleetPeerList, silentPeerIds]);
   const load = useMemo(() => deriveFleetLoad(peers), [peers]);
   const capabilities = useMemo(() => deriveCapabilities(peers), [peers]);
   const autonomyState: AutonomyControlState = {

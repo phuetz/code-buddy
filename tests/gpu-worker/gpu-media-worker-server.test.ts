@@ -30,7 +30,7 @@ async function fixture() {
       panoworld_reconstruct: { command: process.execPath, args: [RUNNER], timeoutMs: 5_000 },
       avatar_video_render: { command: process.execPath, args: [RUNNER], timeoutMs: 5_000 },
     },
-    workerId: 'darkstar-test',
+    workerId: 'gpuNode-test',
   };
   const worker = createGpuMediaWorkerServer(config);
   const address = await worker.listen();
@@ -99,7 +99,7 @@ describe('GPU media worker server', () => {
       const client = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
       await expect(client.capabilities()).resolves.toMatchObject({
         protocolVersion: 1,
-        workerId: 'darkstar-test',
+        workerId: 'gpuNode-test',
         jobs: expect.arrayContaining(['panoworld_reconstruct', 'avatar_video_render']),
       });
 

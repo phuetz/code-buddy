@@ -1,7 +1,7 @@
 /**
  * Tests for src/context/tool-pair-preserver.ts (post-audit fix derived
  * from Claude Code source comparison 2026-05-04, see
- * claude-et-patrice/propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
+ * the handover repo's propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md).
  *
  * These tests exercise the pure function `preserveToolPairs(kept, original)`
  * directly — NOT through SmartCompactionEngine.compact() — so we don't

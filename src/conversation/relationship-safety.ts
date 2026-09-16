@@ -449,6 +449,10 @@ export class RelationshipSafetyStreamGuard {
   private pending = '';
   private readonly issueSet = new Set<RelationshipSafetyIssue>();
 
+  // The legacy argument remains source-compatible, but can no longer disable
+  // the mandatory one-sentence safety look-ahead.
+  constructor(_releaseFirstImmediately: boolean | (() => boolean) = false) {}
+
   push(delta: string): string[] {
     if (!delta) return [];
     this.buffer += delta;

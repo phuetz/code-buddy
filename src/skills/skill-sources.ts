@@ -13,6 +13,7 @@ import path from 'path';
 import os from 'os';
 import { execFileSync } from 'child_process';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface SkillSource {
   name: string;
@@ -51,7 +52,7 @@ function findOpenclawSkillsDir(): string | undefined {
 
 function read(): SourcesFile {
   try {
-    const parsed = JSON.parse(fs.readFileSync(configPath(), 'utf-8')) as Partial<SourcesFile>;
+    const parsed = readJsonAtomicSync<Partial<SourcesFile>>(configPath(), {});
     if (Array.isArray(parsed.sources)) return { schemaVersion: 1, sources: parsed.sources };
   } catch {
     /* no config yet */
@@ -66,8 +67,7 @@ function read(): SourcesFile {
 }
 
 function write(file: SourcesFile): void {
-  fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-  fs.writeFileSync(configPath(), JSON.stringify(file, null, 2), 'utf-8');
+  writeJsonAtomicSync(configPath(), file);
 }
 
 export function listSources(): SkillSource[] {
@@ -114,6 +114,7 @@ export function resolveSourceDir(source: SkillSource): string {
     }
   } catch (err) {
     logger.warn(`skill source "${source.name}": git fetch failed — ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
   }
   return dir;
 }

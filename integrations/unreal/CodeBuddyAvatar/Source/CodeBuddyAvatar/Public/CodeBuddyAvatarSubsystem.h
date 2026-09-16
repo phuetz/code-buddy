@@ -31,10 +31,10 @@ public:
     FString GatewayUrl = TEXT("ws://127.0.0.1:3055/ws");
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Code Buddy|Connection")
-    FString RendererId = TEXT("darkstar-metahuman-lisa");
+    FString RendererId = TEXT("gpuNode-metahuman-lisa");
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Code Buddy|Connection")
-    FString DisplayName = TEXT("Lisa MetaHuman on Darkstar");
+    FString DisplayName = TEXT("Lisa MetaHuman on GPU node");
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Code Buddy|Connection")
     FString RuntimeVersion = TEXT("5.8");
