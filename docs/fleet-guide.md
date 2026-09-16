@@ -771,16 +771,16 @@ Two new tools registered on every Code Buddy:
   (`CODEBUDDY_PEER_TOOL_ALLOWLIST`), `fleetSafe` metadata, and
   `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` still fail closed on B. Args are
   a flat object; paths are forwarded as given and are **not** resolved
-  on A. Workspace-root paths from B are not relayed in error text.
-  `fleetSafe: false` on the outbound tool (same as `peer_delegate`).
-  Example:
+  on A. Unrecognized errors are redacted: no peer workspace path, no
+  absolute path, no secret. `fleetSafe: false` on the outbound tool
+  (same as `peer_delegate`). Example:
 
   ```
   list_peers()
   peer_tool_invoke({
     "peer": "B",
     "tool": "view_file",
-    "args": { "file_path": "oracle.txt" }
+    "args": { "path": "oracle.txt" }
   })
   ```
 
