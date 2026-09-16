@@ -778,7 +778,7 @@ Two new tools registered on every Code Buddy:
   ```
   list_peers()
   peer_tool_invoke({
-    "peer": "darkstar",
+    "peer": "B",
     "tool": "view_file",
     "args": { "file_path": "oracle.txt" }
   })
