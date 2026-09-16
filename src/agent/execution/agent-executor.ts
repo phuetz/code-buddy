@@ -21,7 +21,7 @@ import {
 import { ChatEntry, StreamingChunk } from "../types.js";
 import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
-import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
+import { ToolSelectionStrategy, mergeAlwaysInclude } from "./tool-selection-strategy.js";
 import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
 import { ContextCompactionError, ContextManagerV2 } from "../../context/context-manager-v2.js";
 import { TokenCounter } from "../../utils/token-counter.js";
@@ -1502,16 +1502,16 @@ export class AgentExecutor {
             ...connectedFleetSurfaceTools(),
           ])];
           if (inspectionTools.length) {
-            const existing = selectionOpts.alwaysInclude ?? [];
-            // Fleet tools first: Qwen3.6 GGUF otherwise prefers the compact
-            // `bash` slot and shells `list_peers` (mission 8).
-            selectionOpts = {
-              ...selectionOpts,
-              alwaysInclude: [
-                ...inspectionTools,
-                ...existing.filter((name) => !inspectionTools.includes(name)),
-              ],
-            };
+            // Fleet tools first (Qwen3.6 GGUF otherwise prefers bash and
+            // shells list_peers) but they are ADDED to the guaranteed
+            // default list, never substituted for it.
+            const alwaysInclude = mergeAlwaysInclude(
+              selectionOpts.alwaysInclude,
+              inspectionTools,
+            );
+            if (alwaysInclude) {
+              selectionOpts = { ...selectionOpts, alwaysInclude };
+            }
           }
         }
         if (codeResearch) {

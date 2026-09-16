@@ -925,6 +925,53 @@ describe('AgentExecutor', () => {
       }
     });
 
+    it('keeps create_file and apply_patch when a peer is registered on a standard model', async () => {
+      _resetFleetRegistryForTests();
+      getFleetRegistry().register({
+        id: 'B',
+        url: 'ws://example/B',
+        startedAt: new Date(),
+        eventCount: 0,
+        autoReconnect: false,
+        maxAttempts: 5,
+        listener: {
+          disconnect: async () => undefined,
+          getReconnectAttempts: () => 0,
+          isReconnecting: () => false,
+          request: async () => ({}),
+          getLastSeen: () => ({ at: null, reason: null, ageMs: null }),
+          isStale: () => false,
+          getPeerCompactionState: () => ({
+            active: false,
+            startedAt: null,
+            ageMs: null,
+            lastResult: null,
+          }),
+          getEventHistory: () => [],
+        },
+      } as ActiveListenerEntry);
+      try {
+        (deps.client.getCurrentModel as jest.Mock).mockReturnValue('gpt-5.5');
+        setupLLMFlow(deps, [{ content: 'ok' }]);
+        const query = 'read package.json and summarize it';
+        await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+        const options = (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][1] as {
+          alwaysInclude?: string[];
+        };
+        expect(options.alwaysInclude?.slice(0, 4)).toEqual([
+          'list_peers',
+          'route_peer',
+          'peer_delegate',
+          'peer_tool_invoke',
+        ]);
+        expect(options.alwaysInclude).toEqual(
+          expect.arrayContaining(['create_file', 'apply_patch', 'peer_tool_invoke', 'list_peers']),
+        );
+      } finally {
+        _resetFleetRegistryForTests();
+      }
+    });
+
     it('keeps normal effectful schemas available for an explicit self-improvement request', async () => {
       setupLLMFlow(deps, [{ content: 'Je commence par établir les preuves.' }]);
 
