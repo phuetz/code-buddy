@@ -1,6 +1,6 @@
 # Mission Grok n° 12 — PR #155 : corrections de la revue de fusion
 
-**STATUT : PARTIEL** (corrections revue poussées ; CI d’abord rouge sur un chemin personnel dans ce rapport, corrigé)
+**STATUT : COMPLET** (corrections revue poussées ; PR non fusionnée ; CI verte)
 
 Branche : `fable/peer-tool-invoke-2026-09-16`
 Worktree : `cb-peer-tool-invoke-2026-09-16`
@@ -42,12 +42,18 @@ Un seul `git push origin fable/peer-tool-invoke-2026-09-16` (non forcé). PR non
 
 ## Checks GitHub (`gh pr checks 155`)
 
-Run `35137202818` (HEAD `902fe57d1`), attente ~25 min :
+1. Run `35137202818` (HEAD `902fe57d1`) : Security Audit pass ; 6 legs test **fail** sur `donnees-personnelles` (`LIVRAISON/RAPPORT-12.md` → chemin personnel). 39017 verts / 1 rouge.
+2. Chemin retiré (`697d239ff`). Run `35139903066` : **tous verts**. `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`.
 
-| Check | Résultat |
+| Check | Résultat (run 35139903066) |
 |---|---|
-| Security Audit | pass (2m5s) |
-| Test Node 20/22 × ubuntu/macOS/Windows | **fail** (1 test) : `tests/security/donnees-personnelles.test.ts` — `LIVRAISON/RAPPORT-12.md` contenait un chemin personnel. 39017 verts / 1 rouge. |
-| Build and Package | skipped |
+| Security Audit | pass (2m2s) |
+| Test Node 20.x ubuntu | pass (17m49s) |
+| Test Node 22.x ubuntu | pass (15m31s) |
+| Test Node 20.x macOS | pass (15m1s) |
+| Test Node 22.x macOS | pass (16m22s) |
+| Test Node 20.x Windows | pass (28m17s) |
+| Test Node 22.x Windows | pass (29m23s) |
+| Build and Package | pass (2m23s) |
 
-Le chemin a été retiré de ce rapport. Nouveau push simple ensuite. La PR n’est pas fusionnée.
+La PR n’est pas fusionnée.
