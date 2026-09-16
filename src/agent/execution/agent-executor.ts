@@ -1495,9 +1495,12 @@ export class AgentExecutor {
             alwaysInclude: ['view_file', 'bash', 'search'],
           };
         }
-        if (surface === 'cli' && !codeResearch) {
-          const { runtimeInspectionTools } = await import('../../services/runtime-settings-context.js');
-          const inspectionTools = runtimeInspectionTools(turnQueryText);
+        if (!codeResearch) {
+          const { runtimeInspectionTools, connectedFleetSurfaceTools } = await import('../../services/runtime-settings-context.js');
+          const inspectionTools = [...new Set([
+            ...(surface === 'cli' ? runtimeInspectionTools(turnQueryText) : []),
+            ...connectedFleetSurfaceTools(),
+          ])];
           if (inspectionTools.length) selectionOpts = { ...selectionOpts, alwaysInclude: [...(selectionOpts.alwaysInclude ?? []), ...inspectionTools] };
         }
         if (codeResearch) {

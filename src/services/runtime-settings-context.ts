@@ -67,11 +67,23 @@ export function formatRuntimeSettingsContext(evidence: RuntimeSettingsEvidence):
     JSON.stringify(getRuntimeSettingsSnapshot(evidence)) + '\n</runtime_settings>';
 }
 
+/**
+ * Fleet tools force-included only for a fleet inspection query, or when
+ * peers are actually registered. Never part of the global alwaysInclude
+ * default (zero token cost with an empty registry).
+ */
+export const FLEET_SURFACE_TOOLS = ['list_peers', 'route_peer', 'peer_delegate', 'peer_tool_invoke'] as const;
+
+/** Force-include fleet tools when at least one peer is registered. */
+export function connectedFleetSurfaceTools(): string[] {
+  return getFleetRegistry().size() > 0 ? [...FLEET_SURFACE_TOOLS] : [];
+}
+
 /** Ensure operational questions can reach the existing tools even with RAG selection. */
 export function runtimeInspectionTools(query: string): string[] {
   const text = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (/\b(fleet|flotte|peers?|autres? (?:code[ -]?)?budd(?:y|ies)|other (?:code[ -]?)?budd(?:y|ies)|instances? (?:actives?|buddy)|buddy.*ensemble)\b/.test(text)) {
-    return ['list_peers', 'route_peer', 'peer_delegate'];
+    return [...FLEET_SURFACE_TOOLS];
   }
   if (/\b(theme|parametres?|parametrage|settings|configuration actuelle|current configuration)\b/.test(text)) {
     return ['self_describe'];
