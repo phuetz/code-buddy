@@ -35,6 +35,10 @@ buddy doctor --offline
 
 Use Node.js 20 or newer. A fresh profile may produce diagnostic warnings until a provider and optional services are configured. Existing login credentials are not part of the package. `buddy login` starts the supported ChatGPT sign-in flow when needed.
 
+## Programmatic tool lifecycle
+
+Sandboxed `code_exec` waits for the child process and its streams to close before returning. If closure is not confirmed within the bounded grace period, the tool returns a failure and preserves the original diagnostic. This prevents callers from treating a still-occupied workspace as ready for cleanup.
+
 ## Scope of validation
 
 Release acceptance requires the candidate’s CI checks, package inspection and documented platform recipes. Historical test counts and earlier packages carrying version 2.0.0 do not identify this build. See [the release procedure](RELEASING.md) for the immutable-tag and provenance checks. These changes do not promise universal interoperability, perfect model answers or automatic conversion of every memory into a reusable skill; [learning mechanisms](learning-mechanisms.md) describes those distinct paths.

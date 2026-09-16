@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [2.1.0] (2026-09-15)
+## [2.1.0] (2026-09-16)
 
 ### Added
 
@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Sandboxed programmatic tool execution waits for the child process to close before returning; a bounded closure failure is reported explicitly instead of claiming success while a workspace may remain locked.
 - Pre-execution context compaction preserves pending tool calls so their real results reach the model instead of being replaced by synthetic lost-result messages.
 
 - Persona hot reload failures no longer terminate Windows Node 20 processes when a watched directory disappears; already-loaded personas remain available.

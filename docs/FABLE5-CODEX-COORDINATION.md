@@ -718,3 +718,7 @@ Diagnostic hybrid : WindowsNode20.20.2 + Vitest4.1.9 isolé, mêmepluginjestcomp
 Correctif pending tools relu et intégré : a90ab56ae/ae99e0c12 (sources Opus2037a5404/b430cf4d3, aucune coordination privée importée).13oracles et392tests voisins verts,4mutations tuées, typage/lint verts. Validation assemblée et replay paquetWindows requis avant publication.
 
 Validation assemblée du candidat pending : npm run validate ciblé exit0,85tests/5fichiers,lint/typecheck/pack10. Nouvelle matriceCI et replay réel Windows restent obligatoires ; aucune publication effectuée.
+
+RÉSERVÉ CI c875 Windows22 : intégration du correctif lifecycle code_exec réalisé par Opus dans son worktree séparé. Contrat close confirmé avant succès, timeout borné explicite ; aucune généralisation de permissions ni retry cleanup. Matrice c875 : cinq configurations vertes, seul Windows22 EBUSY DGM. Revue du delta net et oracles requises avant nouveau push.
+
+Validation lifecycle assemblée : npm run validate ciblé exit0,75tests/6fichiers,lint/typecheck/pack10. Sources nettes Opus c875→88fe8def6 relues : close uniquement, délai borné sans fauxsuccès, plus de disconnect anticipé ;18oracles et7mutations détectées,500tests voisins. Preuves natives Windows22 mécanisme cwd3/3 et ordreIPC3/3, timingCI non reproduit isolément. Nouveau paquet/CI requis.
