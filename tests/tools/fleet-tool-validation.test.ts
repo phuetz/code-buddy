@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   PEER_DELEGATE_TOOL_DEF,
   PEER_CHAIN_TOOL_DEF,
+  PEER_TOOL_INVOKE_TOOL_DEF,
   ROUTE_PEER_TOOL_DEF,
 } from '../../src/codebuddy/fleet-tool-defs.js';
 import {
   PeerChainTool,
   PeerDelegateTool,
+  PeerToolInvokeTool,
   RoutePeerTool,
 } from '../../src/tools/registry/fleet-tools.js';
 
@@ -134,6 +136,20 @@ describe('Fleet tool validation', () => {
     expect(
       PEER_CHAIN_TOOL_DEF.function.parameters.properties.chainRoles.description,
     ).toContain('Ordered Fleet dispatch profiles');
+  });
+
+  it('registers peer_tool_invoke as outbound (fleetSafe false) with read-only schema', () => {
+    const tool = new PeerToolInvokeTool();
+    expect(tool.name).toBe('peer_tool_invoke');
+    expect(tool.getMetadata().fleetSafe).toBe(false);
+    expect(tool.getSchema().parameters.required).toEqual(['peer', 'tool']);
+    expect(tool.validate({ peer: 'B', tool: 'view_file', args: { file_path: 'oracle.txt' } })).toEqual({
+      valid: true,
+    });
+    expect(tool.validate({ peer: 'B', tool: 'view_file', args: { nested: { x: 1 } } }).valid).toBe(false);
+    expect(PEER_TOOL_INVOKE_TOOL_DEF.function.name).toBe('peer_tool_invoke');
+    expect(PEER_TOOL_INVOKE_TOOL_DEF.function.description).toContain('read-only');
+    expect(PEER_TOOL_INVOKE_TOOL_DEF.function.description).toContain('allowlist');
   });
 
   it('tags formal fleet tools for Hermes dispatch discovery', () => {
