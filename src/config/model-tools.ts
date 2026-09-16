@@ -436,6 +436,26 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     strengths: ['french'],
   },
+  // Lemonade GGUF ids (`Qwen3.6-35B-A3B-MTP-GGUF`) must win over the hosted
+  // `qwen3.6*` row below. That hosted row is a 262k OpenRouter ceiling with the
+  // default (standard) prompt profile — in the agent loop it drowns the model
+  // in schemas and the model shells `list_peers` via `bash` instead of calling
+  // `peer_tool_invoke` (mission 8: 33.7 tok/s raw tools OK, 9× bash in-loop).
+  // Match is case-insensitive (`matchModel` /i). Keep the same lite surface as
+  // `gemma4*` which completed the fleet recipe.
+  {
+    model: 'Qwen3.6-*-GGUF*',
+    strengths: ['code', 'french'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 32768,
+    maxOutputTokens: 8192,
+    maxToolRounds: 20,
+    disabledTools: ['apply_patch', 'browser', 'computer_control'],
+    patchFormat: 'search_replace',
+    promptProfile: 'lite',
+  },
   // Qwen 3.5 → 3.7 hébergés (262 144 chez tous les fournisseurs OpenRouter). Un runtime local
   // qui en sert moins abaisse la valeur via la découverte Ollama/LM Studio.
   {
