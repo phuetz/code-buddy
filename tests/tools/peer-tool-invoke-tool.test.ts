@@ -211,6 +211,38 @@ describe('peer_tool_invoke tool', () => {
   });
 
   describe('happy path', () => {
+    it('preserves listener this when invokeTool is a class method', async () => {
+      const request = vi.fn().mockResolvedValue({
+        tool: 'view_file',
+        output: 'ORACLE-bound',
+        durationMs: 2,
+      });
+      registerPeer('B', {
+        request,
+        async invokeTool(this: FleetListenerPublicAPI, toolName, toolArgs, options) {
+          return (await this.request('peer.tool.invoke', { tool: toolName, args: toolArgs }, options)) as {
+            tool: string;
+            output: string;
+            durationMs: number;
+          };
+        },
+      });
+
+      const result = await executePeerToolInvoke({
+        peer: 'B',
+        tool: 'view_file',
+        args: { file_path: 'oracle.txt' },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('ORACLE-bound');
+      expect(request).toHaveBeenCalledWith(
+        'peer.tool.invoke',
+        { tool: 'view_file', args: { file_path: 'oracle.txt' } },
+        { timeoutMs: DEFAULT_TIMEOUT_MS },
+      );
+    });
+
     it('calls listener.invokeTool and returns output plus data', async () => {
       const invokeTool = vi.fn().mockResolvedValue({
         tool: 'view_file',

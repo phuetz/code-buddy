@@ -222,8 +222,7 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
     };
   }
 
-  const invokeTool = entry.listener.invokeTool;
-  if (typeof invokeTool !== 'function') {
+  if (typeof entry.listener.invokeTool !== 'function') {
     return {
       success: false,
       error:
@@ -249,7 +248,7 @@ export async function executePeerToolInvoke(params: PeerToolInvokeParams): Promi
 
   const t0 = Date.now();
   try {
-    const payload = await invokeTool(params.tool, args, { timeoutMs });
+    const payload = await entry.listener.invokeTool(params.tool, args, { timeoutMs });
     const elapsedMs = Date.now() - t0;
     const output =
       typeof payload?.output === 'string' ? payload.output : JSON.stringify(payload ?? {});
