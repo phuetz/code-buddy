@@ -313,10 +313,13 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 min-h-0 overflow-hidden bg-surface/20">
+        <div className="flex-1 min-w-0 min-h-0 overflow-auto bg-surface/20">
           <svg
             ref={svgRef}
-            className="w-full h-full"
+            width={Math.max(720, ...nodes.map((node) => node.position.x + NODE_WIDTH + 80))}
+            height={Math.max(480, ...nodes.map((node) => node.position.y + NODE_HEIGHT + 80))}
+            className="min-w-full min-h-full"
+            data-testid="workflow-canvas"
             onMouseMove={handleSvgMouseMove}
             onMouseUp={handleSvgMouseUp}
             onMouseLeave={handleSvgMouseUp}
@@ -395,6 +398,8 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
               return (
                 <g
                   key={node.id}
+                  data-testid={`workflow-node-${node.id}`}
+                  onClick={(event) => event.stopPropagation()}
                   transform={`translate(${node.position.x}, ${node.position.y})`}
                   onMouseDown={handleNodeMouseDown(node)}
                   style={{ cursor: 'move' }}
@@ -443,7 +448,8 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
                   <circle
                     cx={NODE_WIDTH}
                     cy={NODE_HEIGHT / 2}
-                    r={4}
+                    r={8}
+                    data-testid={`workflow-connect-${node.id}`}
                     fill={color}
                     style={{ cursor: 'crosshair' }}
                     onMouseDown={(e) => {
@@ -459,7 +465,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
         {/* Inspector */}
         {selectedNode && (
-          <div className="w-64 border-l border-border-muted p-3 space-y-3 shrink-0 bg-surface/20">
+          <div className="w-64 max-w-[40%] overflow-y-auto border-l border-border-muted p-3 space-y-3 shrink-0 bg-surface/20">
             <div className="flex items-center justify-between">
               <div className="text-[10px] uppercase tracking-wide font-semibold text-text-muted">
                 {t('workflow.nodeProps')}

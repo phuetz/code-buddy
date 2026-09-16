@@ -222,6 +222,7 @@ describe('flattenTools — chat/completions tool format → Codex Responses', ()
       name: 'search',
       description: 'Search the web',
       parameters: { type: 'object' },
+      strict: false,
     });
     expect((out[0] as Record<string, unknown>).function).toBeUndefined();
   });

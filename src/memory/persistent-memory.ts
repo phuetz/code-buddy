@@ -124,6 +124,12 @@ export interface MemoryWriteResult {
   category?: MemoryCategory;
   usage: MemoryUsage;
   message: string;
+  /**
+   * Outcome of the optional LLM fact reconciliation, separate from the primary
+   * write: `failed` means the memory was still written directly and existing
+   * memories were restored unchanged.
+   */
+  reconciliation?: { status: 'applied' | 'skipped' | 'failed'; reason?: string };
 }
 
 export class MemoryWriteRejectedError extends Error {
@@ -586,6 +592,7 @@ export class PersistentMemoryManager extends EventEmitter {
 
     const previousMemories = cloneMemoryMap(memories);
     let resultKey = normalizedKey;
+    let reconciliation: NonNullable<MemoryWriteResult['reconciliation']> = { status: 'skipped', reason: 'no LLM provider available' };
 
     try {
       const { FactsMemoryService } = await import('./facts-memory.js');
@@ -642,12 +649,15 @@ export class PersistentMemoryManager extends EventEmitter {
           }
           resultKey = reconciledKey;
         }
+        reconciliation = { status: 'applied' };
       } else {
         // Fallback to default direct write
         this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      reconciliation = { status: 'failed', reason: message };
+      resultKey = normalizedKey;
       logger.warn(`[FactsMemory] Failed to reconcile remember, falling back to default behavior: ${message}`);
       memories.clear();
       for (const [memoryKey, memory] of previousMemories) {
@@ -694,6 +704,7 @@ export class PersistentMemoryManager extends EventEmitter {
       message: status === 'updated'
         ? `Updated "${resultKey}" in ${scope} memory.`
         : `Stored "${resultKey}" in ${scope} memory.`,
+      reconciliation,
     };
   }
 

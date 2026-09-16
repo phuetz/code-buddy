@@ -1,7 +1,7 @@
 /**
  * Starter Pack Slash Command Handler
  *
- * /starter              - List all starter packs grouped by language
+ * /starter, /starter list - List all starter packs grouped by language
  * /starter <name>       - Activate a specific starter pack (name or alias)
  * /starter search <q>   - Search starters by keyword
  */
@@ -29,7 +29,16 @@ const LANGUAGE_FAMILIES: Record<string, string[]> = {
 function formatStarterList(): string {
   const starters = getStarterPacks();
   if (starters.length === 0) {
-    return 'No starter packs found. Ensure bundled skills are loaded.';
+    // No starter pack ships with the package today: say where packs are found
+    // instead of implying a loading failure.
+    return [
+      'No starter packs are installed.',
+      '',
+      'Starter packs are SKILL.md skills tagged "starter", discovered in:',
+      '  .codebuddy/skills/        (this project)',
+      '  ~/.codebuddy/skills/      (user)',
+      '  the bundled skills directory shipped with Code Buddy',
+    ].join('\n');
   }
 
   const lines: string[] = [
@@ -96,6 +105,29 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
     };
   }
   const action = first.toLowerCase();
+
+  // /starter list — documented alias of the bare command
+  if (action === 'list' && args.length === 1) {
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: formatStarterList(),
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  if (action === 'search' && args.length === 1) {
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: 'Usage: /starter search <query>',
+        timestamp: new Date(),
+      },
+    };
+  }
 
   // /starter search <query>
   if (action === 'search' && args.length > 1) {

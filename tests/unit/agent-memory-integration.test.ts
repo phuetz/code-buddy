@@ -4,6 +4,7 @@
  * Tests the memory system methods integrated into CodeBuddyAgent.
  */
 import { getEnhancedMemory } from '../../src/memory/index.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 
 jest.mock('../../src/memory/index.js', () => {
   const mockMemory = {
@@ -287,11 +288,24 @@ describe('Agent Memory Integration', () => {
   let agent: MemoryAgentLike;
   let mockMemory: MemoryMock;
 
+  // Every CodeBuddyAgent initializes persistent memory, which creates ~/.codebuddy/memory.md.
+  const home = createIsolatedHome('agent-integration-home-');
+
   beforeAll(async () => {
+    home.enter();
     // Import after mocks are set up
     const module = await import('../../src/agent/codebuddy-agent.js');
     CodeBuddyAgent = module.CodeBuddyAgent;
   }, 30_000);
+
+  afterAll(async () => {
+    // CodeBuddyAgent fires initializeMemory() without awaiting: wait for that in-flight
+    // init (bound to the isolated home) before restoring HOME and removing the dir.
+    const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+    await getMemoryManager().initialize().catch(() => undefined);
+    resetMemoryManagerForTests();
+    home.leave();
+  });
 
   beforeEach(() => {
     // Reset mocks

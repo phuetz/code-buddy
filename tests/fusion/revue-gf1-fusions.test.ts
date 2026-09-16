@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+import { beforeAll, afterAll, describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   noteSpokenText,
   classifyRecentVoiceEcho,
@@ -16,6 +17,18 @@ import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const isolatedHome = createIsolatedHome('fusion-gf1-home-');
+beforeAll(() => { isolatedHome.enter(); });
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  try {
+    await getMemoryManager().initialize();
+  } finally {
+    resetMemoryManagerForTests();
+    isolatedHome.leave();
+  }
+});
+
 describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026', () => {
   const savedEnv = { ...process.env };
 
@@ -24,7 +37,7 @@ describe('Mission GF1 — Tests rouges des régressions de fusion du 03/09/2026'
   });
 
   afterEach(() => {
-    process.env = { ...savedEnv };
+    process.env = { ...savedEnv, HOME: isolatedHome.path, USERPROFILE: isolatedHome.path };
     _resetVoiceActivityForTests();
     vi.restoreAllMocks();
   });

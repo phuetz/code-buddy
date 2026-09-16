@@ -71,6 +71,10 @@ export interface CuratorDeps {
   listPendingLessons?: () => Promise<Array<{ id: string; createdAt: string; category?: string }>>;
   /** Ledger de performance modèles (défaut : ~/.codebuddy/fleet-model-performance.jsonl). */
   modelLedgerPath?: string;
+  /** Activité des skills (défaut : readSkillActivity(), journal ~/.codebuddy/skill-usage). */
+  skillActivity?: () => Map<string, { lastActivityAt: string }>;
+  /** Skills référencées par une tâche planifiée (défaut : jobs.json du scheduler cron). */
+  scheduledSkills?: () => Promise<Set<string>>;
 }
 
 const STALE_SKILL_DAYS = 30;
@@ -135,6 +139,21 @@ async function scanAuthoredSkills(deps: CuratorDeps, cwd: string, now: Date): Pr
   const patches: CuratorPatch[] = [];
   let authored = 0;
   let pinned = 0;
+  let scheduled = 0;
+  let activity = new Map<string, { lastActivityAt: string }>();
+  try {
+    activity = deps.skillActivity
+      ? deps.skillActivity()
+      : (await import('../skills/skill-usage-store.js')).readSkillActivity();
+  } catch {
+    // Télémétrie absente : repli sur la date de modification.
+  }
+  let scheduledSkills = new Set<string>();
+  try {
+    scheduledSkills = deps.scheduledSkills ? await deps.scheduledSkills() : await readScheduledSkillNames();
+  } catch {
+    // Pas de scheduler lisible : aucune protection supplémentaire.
+  }
   let entries: string[] = [];
   try {
     entries = await fs.readdir(skillsDir);
@@ -155,12 +174,22 @@ async function scanAuthoredSkills(deps: CuratorDeps, cwd: string, now: Date): Pr
         pinned++;
         continue; // une skill épinglée n'est jamais proposée
       }
-      const ageDays = (now.getTime() - stat.mtime.getTime()) / DAY_MS;
+      if (scheduledSkills.has(entry)) {
+        scheduled++;
+        continue; // utilisée par une tâche planifiée : jamais dormante
+      }
+      // Ancre = dernière activité (vue/usage) ou dernière modification, la plus récente.
+      const lastActivity = Date.parse(activity.get(entry)?.lastActivityAt ?? '');
+      const anchor = Math.max(stat.mtime.getTime(), Number.isFinite(lastActivity) ? lastActivity : 0);
+      const ageDays = (now.getTime() - anchor) / DAY_MS;
       if (ageDays >= STALE_SKILL_DAYS) {
+        const usedBefore = Number.isFinite(lastActivity);
         patches.push({
           kind: 'REVIEW_SKILL',
           target: entry,
-          reason: `non modifiée depuis ${Math.round(ageDays)}j et non épinglée`,
+          reason: usedBefore
+            ? `aucune activité ni modification depuis ${Math.round(ageDays)}j, non épinglée`
+            : `jamais utilisée et non modifiée depuis ${Math.round(ageDays)}j, non épinglée`,
           autoAppliable: false, // juger l'utilité d'une skill = décision humaine
           howToApply: `buddy improve skills-pin ${entry} (garder) ou buddy improve skills-consolidate (fusionner/archiver)`,
         });
@@ -173,10 +202,31 @@ async function scanAuthoredSkills(deps: CuratorDeps, cwd: string, now: Date): Pr
     section: {
       name: 'Skills authored',
       ok: true,
-      summary: `${authored} authored (${pinned} épinglée(s)), ${patches.length} dormante(s) ≥ ${STALE_SKILL_DAYS}j à réviser`,
+      summary: `${authored} authored (${pinned} épinglée(s), ${scheduled} planifiée(s)), ${patches.length} dormante(s) ≥ ${STALE_SKILL_DAYS}j sans activité à réviser`,
     },
     patches,
   };
+}
+
+/** Noms de skills référencées par une tâche cron `skill` (lecture seule de jobs.json). */
+async function readScheduledSkillNames(): Promise<Set<string>> {
+  const root = process.env.CODEBUDDY_CRON_HOME
+    ? path.resolve(process.env.CODEBUDDY_CRON_HOME)
+    : path.join(os.homedir(), '.codebuddy', 'cron');
+  const names = new Set<string>();
+  let raw = '';
+  try {
+    raw = await fs.readFile(path.join(root, 'jobs.json'), 'utf-8');
+  } catch {
+    return names;
+  }
+  const jobs = JSON.parse(raw) as unknown;
+  if (!Array.isArray(jobs)) return names;
+  for (const job of jobs) {
+    const task = (job as { task?: { type?: unknown; skill?: unknown } })?.task;
+    if (task?.type === 'skill' && typeof task.skill === 'string' && task.skill.trim()) names.add(task.skill.trim());
+  }
+  return names;
 }
 
 async function scanCkg(deps: CuratorDeps): Promise<{ section: CuratorSection; patches: CuratorPatch[] }> {

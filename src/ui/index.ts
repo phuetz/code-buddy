@@ -33,7 +33,6 @@ export { ChatInput } from "./components/ChatInput.js";
 // To use: import ChatInterface from './ui/components/ChatInterface.js'
 
 export {
-  MAX_SUGGESTIONS,
   VISIBLE_SUGGESTIONS,
   filterCommandSuggestions,
   CommandSuggestions,

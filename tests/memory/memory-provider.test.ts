@@ -108,10 +108,14 @@ describe('LocalMemoryProvider', () => {
 describe('NetworkMemoryProviders Fallbacks', () => {
   let tmpDir: string;
   let projectMemoryPath: string;
+  let userMemoryPath: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-memory-provider-test-'));
     projectMemoryPath = path.join(tmpDir, 'CODEBUDDY_MEMORY.md');
+    // The user scope must be isolated too: its default is ~/.codebuddy/memory.md,
+    // which these tests created in a clean HOME and failed to read in a real one.
+    userMemoryPath = path.join(tmpDir, 'memory.md');
     resetMemoryManagerForTests();
   });
 
@@ -122,7 +126,7 @@ describe('NetworkMemoryProviders Fallbacks', () => {
 
   describe('Mem0MemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new Mem0MemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
+      const provider = new Mem0MemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath, userMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('mem0');
       // Should write to fallback local provider and retrieve it
@@ -134,7 +138,7 @@ describe('NetworkMemoryProviders Fallbacks', () => {
 
   describe('HonchoMemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new HonchoMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
+      const provider = new HonchoMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath, userMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('honcho');
       await provider.remember('test-key', 'test-value');
@@ -145,7 +149,7 @@ describe('NetworkMemoryProviders Fallbacks', () => {
 
   describe('SupermemoryMemoryProvider', () => {
     it('falls back to LocalMemoryProvider when API key is missing', async () => {
-      const provider = new SupermemoryMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath } });
+      const provider = new SupermemoryMemoryProvider({ apiKey: '', fallbackMemoryConfig: { projectMemoryPath, userMemoryPath } });
       await provider.initialize();
       expect(provider.id).toBe('supermemory');
       await provider.remember('test-key', 'test-value');

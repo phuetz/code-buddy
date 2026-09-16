@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
 const { runUserDialecticInferenceMock, isFeatureEnabledMock, runSessionEndFlushMock } = vi.hoisted(() => ({
   runUserDialecticInferenceMock: vi.fn<any[], Promise<any>>(),
@@ -19,6 +19,20 @@ vi.mock('../../src/config/feature-flags.js', () => ({
 }));
 
 import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+
+// Every CodeBuddyAgent fires initializeMemory() without awaiting, creating ~/.codebuddy/memory.md:
+// run this file with a throwaway HOME and wait for that in-flight init before cleaning up.
+const isolatedHome = createIsolatedHome('dialectic-hook-home-');
+beforeAll(() => {
+  isolatedHome.enter();
+});
+afterAll(async () => {
+  const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+  await getMemoryManager().initialize().catch(() => undefined);
+  resetMemoryManagerForTests();
+  isolatedHome.leave();
+});
 
 describe('User Model Dialectic Hook on Session End (GAP-11)', () => {
   let previousHeadless: string | undefined;

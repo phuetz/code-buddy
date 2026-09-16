@@ -113,7 +113,7 @@ export interface Task {
 }
 
 /** Callback for executing tasks */
-export type TaskExecutor = (task: Task) => Promise<Task>;
+export type TaskExecutor = (task: Task, signal?: AbortSignal) => Promise<Task>;
 
 /* ── Agent Server ── */
 

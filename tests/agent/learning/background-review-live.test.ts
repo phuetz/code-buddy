@@ -11,6 +11,7 @@ import {
   type BackgroundReviewClient,
   type ReviewChatResponse,
 } from '../../../src/agent/learning/background-review-agent.js';
+import { createIsolatedHome } from '../../helpers/isolated-home.js';
 
 // This is an intentional real-registry/headless/filesystem probe, not a unit
 // test: keep its legitimate cold-import and persistence budget local to it.
@@ -21,8 +22,11 @@ describe('background review live headless tool probe', () => {
   let tempDir: string;
   let previousHeadless: string | undefined;
   let previousSentinel: string | undefined;
+  // The real headless registry initializes user memory too (~/.codebuddy/memory.md).
+  const home = createIsolatedHome('background-review-live-home-');
 
   beforeEach(async () => {
+    home.enter();
     previousCwd = process.cwd();
     previousHeadless = process.env.CODEBUDDY_HEADLESS;
     previousSentinel = process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
@@ -41,6 +45,7 @@ describe('background review live headless tool probe', () => {
     if (previousSentinel === undefined) delete process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
     else process.env[BACKGROUND_REVIEW_SENTINEL_ENV] = previousSentinel;
     await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    home.leave();
   });
 
   it('writes project memory through the real headless registry in a virgin workspace', async () => {

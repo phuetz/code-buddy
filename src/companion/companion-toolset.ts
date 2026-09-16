@@ -100,6 +100,7 @@ export const COMPANION_FORBIDDEN_PATTERNS: readonly (string | RegExp)[] = Object
   'extension_forge',
   'scan_vulnerabilities',
   'env_doctor',
+  'resource_catalog',
   'port_check',
   'lint_project',
   'test_runner',
@@ -107,6 +108,7 @@ export const COMPANION_FORBIDDEN_PATTERNS: readonly (string | RegExp)[] = Object
   'build_project',
 
   // A2A / MCP / orchestration / registration
+  /^a2a_/i,
   /^mcp_/i,
   /^fleet_/i,
   /^peer_/i,

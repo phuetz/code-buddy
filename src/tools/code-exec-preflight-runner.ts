@@ -295,14 +295,14 @@ if (typeof process.send === 'function') {
     if (msg.type === 'compile' && msg.payload) {
       try {
         const result = executePreflightCompilation(msg.payload);
-        process.send!({ type: 'result', result });
+        // Full tool catalogues can exceed the IPC pipe buffer. Exit only once
+        // Node has flushed the response, otherwise successful checks disappear.
+        process.send!({ type: 'result', result }, error => process.exit(error ? 1 : 0));
       } catch (error) {
         process.send!({
           type: 'error',
           error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
-        setImmediate(() => process.exit(0));
+        }, error => process.exit(error ? 1 : 0));
       }
     }
   });

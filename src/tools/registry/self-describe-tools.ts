@@ -1,3 +1,4 @@
+import { SELF_DESCRIBE_TOOL } from '../../codebuddy/tool-definitions/self-describe-tools.js';
 /**
  * Self-describe tool adapter.
  *
@@ -46,8 +47,7 @@ function contextString(context: IToolExecutionContext | undefined, key: string):
 
 export class SelfDescribeTool implements ITool {
   readonly name = 'self_describe';
-  readonly description =
-    "Inspect what THIS robot/agent is made of and what is evidenced on the current turn: constituent bricks, source/build revision, relevant curated code areas, model/provider/surface, registered versus exposed tools, configuration-only faculties, and limits. Hardware/service availability is omitted unless the host supplied an attestation; this tool performs no live probes. Use it for technical introspection, capabilities, version, and 'de quoi es-tu composé'. It reports a verifiable operational self-model, never subjective consciousness. Read-only, auto-approved.";
+  readonly description = SELF_DESCRIBE_TOOL.function.description;
 
   async execute(
     input: Record<string, unknown>,
@@ -69,7 +69,14 @@ export class SelfDescribeTool implements ITool {
     const personaRobotName =
       contextString(context, 'robotName') ?? process.env.CODEBUDDY_ROBOT_NAME?.trim();
     const exposedToolNames = stringList(context?.extra?.exposedToolNames);
+    const { getRuntimeSettingsSnapshot } = await import('../../services/runtime-settings-context.js');
+    const settings = getRuntimeSettingsSnapshot({
+      surface: contextString(context, 'surface'), model: contextString(context, 'model'),
+      provider: contextString(context, 'provider'),
+      maxToolRounds: typeof context?.extra?.maxToolRounds === 'number' ? context.extra.maxToolRounds : undefined,
+    });
     const runtime: CompanionRuntimeEvidence = {
+      ...(settings.theme ? { theme: settings.theme.active } : {}),
       ...(contextString(context, 'model') ? { model: contextString(context, 'model') } : {}),
       ...(contextString(context, 'provider') ? { provider: contextString(context, 'provider') } : {}),
       ...(contextString(context, 'surface') ? { surface: contextString(context, 'surface') } : {}),
@@ -89,6 +96,21 @@ export class SelfDescribeTool implements ITool {
       exposedToolNames,
       personaRobotName,
     });
+    if (input.operation) {
+      try {
+        const { inspectCoreCode } = await import('../core-code-inspection.js');
+        const inspection = inspectCoreCode(core, {
+          operation: input.operation as 'list' | 'read' | 'search',
+          path: typeof input.path === 'string' ? input.path : undefined,
+          query: typeof input.query === 'string' ? input.query : undefined,
+          line: typeof input.line === 'number' ? input.line : undefined,
+          offset: typeof input.offset === 'number' ? input.offset : undefined,
+        });
+        return { success: true, output: JSON.stringify({ settings, inspection }), data: { settings, inspection } };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
     const operational = buildOperationalSelfModel({
       coreResolution: core,
       focus,
@@ -98,8 +120,9 @@ export class SelfDescribeTool implements ITool {
     });
     return {
       success: true,
-      output: `${description.text}\n\n${operational.text}`,
+      output: `${description.text}\n\n${operational.text}\n\nCurrent runtime settings: ${JSON.stringify(settings)}`,
       data: {
+        settings,
         description: description as unknown as Record<string, unknown>,
         operational: operational as unknown as Record<string, unknown>,
       },
@@ -110,23 +133,7 @@ export class SelfDescribeTool implements ITool {
     return {
       name: this.name,
       description: this.description,
-      parameters: {
-        type: 'object',
-        properties: {
-          focus: {
-            type: 'string',
-            maxLength: 320,
-            description: 'Aspect of this agent to inspect (voice, memory, routing, architecture, limitation).',
-          },
-          depth: {
-            type: 'string',
-            enum: ['summary', 'deep'],
-            description: 'Depth of the curated code inspection.',
-          },
-        },
-        required: [],
-        additionalProperties: false,
-      },
+      parameters: SELF_DESCRIBE_TOOL.function.parameters as ToolSchema['parameters'],
     };
   }
 
@@ -141,7 +148,21 @@ export class SelfDescribeTool implements ITool {
     if (value.depth !== undefined && value.depth !== 'summary' && value.depth !== 'deep') {
       return { valid: false, errors: ['depth must be summary or deep'] };
     }
-    const unknown = Object.keys(value).filter((key) => key !== 'focus' && key !== 'depth');
+    if (value.operation !== undefined && !['list', 'read', 'search'].includes(String(value.operation))) {
+      return { valid: false, errors: ['operation must be list, read or search'] };
+    }
+    for (const key of ['path', 'query']) {
+      if (value[key] !== undefined && (typeof value[key] !== 'string' || (value[key] as string).length > 160)) {
+        return { valid: false, errors: [`${key} must be a string of at most 160 characters`] };
+      }
+    }
+    if (value.line !== undefined && (!Number.isSafeInteger(value.line) || Number(value.line) < 1)) {
+      return { valid: false, errors: ['line must be a positive integer'] };
+    }
+    if (value.offset !== undefined && (!Number.isSafeInteger(value.offset) || Number(value.offset) < 0)) {
+      return { valid: false, errors: ['offset must be a non-negative integer'] };
+    }
+    const unknown = Object.keys(value).filter((key) => !['focus', 'depth', 'operation', 'path', 'query', 'line', 'offset'].includes(key));
     if (unknown.length > 0) {
       return { valid: false, errors: [`unknown input field(s): ${unknown.join(', ')}`] };
     }

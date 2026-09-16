@@ -39,6 +39,8 @@ function emptyDeps(overrides: Partial<CuratorDeps> = {}): CuratorDeps {
     ckgStats: async () => ({ entities: 0, superseded: 0, relations: 0 }),
     listPendingLessons: async () => [],
     modelLedgerPath: '/nonexistent/ledger.jsonl',
+    skillActivity: () => new Map(),
+    scheduledSkills: async () => new Set(),
     ...overrides,
   };
 }
@@ -83,6 +85,31 @@ describe('runCuratorScan — sections', () => {
     const skillPatches = report.patches.filter((p) => p.kind === 'REVIEW_SKILL');
     expect(skillPatches.map((p) => p.target)).toEqual(['authored-dormante']);
     expect(skillPatches[0]!.autoAppliable).toBe(false);
+  });
+
+  it('ancre la dormance sur la dernière activité et protège les skills planifiées (P2)', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'curator-activity-'));
+    const mkSkill = async (name: string, ageDays: number) => {
+      const d = path.join(dir, name);
+      await fs.mkdir(d, { recursive: true });
+      await fs.writeFile(path.join(d, 'SKILL.md'), `---\nname: ${name}\n---\ncontenu`);
+      const t = daysAgo(ageDays);
+      await fs.utimes(path.join(d, 'SKILL.md'), t, t);
+    };
+    await mkSkill('authored-utilisee', 40);
+    await mkSkill('authored-jamais', 40);
+    await mkSkill('authored-recente', 3);
+    await mkSkill('authored-planifiee', 90);
+
+    const report = await runCuratorScan('/tmp', emptyDeps({
+      skillsDir: dir,
+      skillActivity: () => new Map([['authored-utilisee', { lastActivityAt: daysAgo(2).toISOString() }]]),
+      scheduledSkills: async () => new Set(['authored-planifiee']),
+    }));
+    const review = report.patches.filter((p) => p.kind === 'REVIEW_SKILL');
+    expect(review.map((p) => p.target)).toEqual(['authored-jamais']);
+    expect(review[0]!.reason).toContain('jamais utilisée');
+    expect(report.sections.find((s) => s.name === 'Skills authored')?.summary).toContain('1 planifiée(s)');
   });
 
   it('signale l\'instabilité CKG uniquement au-delà du seuil ET du ratio', async () => {

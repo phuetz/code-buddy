@@ -15,8 +15,17 @@ describe('handleGrillMe', () => {
     const result = await handleGrillMe([]);
 
     expect(result.prompt).toContain('git log -5');
-    expect(result.prompt).toContain('git diff HEAD~1');
     expect(result.prompt).toContain('fichiers modifiés');
+  });
+
+  it('inspects uncommitted work and does not assume a second commit exists', async () => {
+    // Recette 2026-09-14: one-commit fixture with an uncommitted change.
+    const result = await handleGrillMe([]);
+
+    expect(result.prompt).toContain('git status --short');
+    expect(result.prompt).toMatch(/git diff \(modifications non indexées\)/);
+    expect(result.prompt).toContain('git diff --cached');
+    expect(result.prompt).toContain('git diff HEAD~1 seulement si le dépôt compte au moins deux commits');
   });
 
   it('switches to brutal ROAST instructions with --yolo', async () => {

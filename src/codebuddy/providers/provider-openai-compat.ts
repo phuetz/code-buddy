@@ -1154,7 +1154,7 @@ export class OpenAICompatProvider implements Provider {
       const requestPayload = {
         model: opts.model || this.currentModel,
         messages: finalMessages,
-        ...(useTools ? { tools, tool_choice: 'auto' as const } : {}),
+        ...(useTools ? { tools, tool_choice: opts.tool_choice ?? 'auto' } : {}),
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };

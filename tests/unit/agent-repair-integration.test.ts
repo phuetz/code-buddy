@@ -4,6 +4,7 @@
  * Tests the autonomous repair functionality integrated into CodeBuddyAgent.
  */
 import { createRepairEngine } from '../../src/agent/repair/index.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
 import { resetRepairCoordinator } from '../../src/agent/execution/repair-coordinator.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { FormalToolRegistry } from '../../src/tools/registry/tool-registry.js';
@@ -261,11 +262,24 @@ describe('Agent Repair Integration', () => {
   let agent: RepairAgentLike;
   let mockRepairEngine: RepairEngineMock;
 
+  // Every CodeBuddyAgent initializes persistent memory, which creates ~/.codebuddy/memory.md.
+  const home = createIsolatedHome('agent-integration-home-');
+
   beforeAll(async () => {
+    home.enter();
     // Import after mocks are set up
     const module = await import('../../src/agent/codebuddy-agent.js');
     CodeBuddyAgent = module.CodeBuddyAgent;
   }, 30_000);
+
+  afterAll(async () => {
+    // CodeBuddyAgent fires initializeMemory() without awaiting: wait for that in-flight
+    // init (bound to the isolated home) before restoring HOME and removing the dir.
+    const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
+    await getMemoryManager().initialize().catch(() => undefined);
+    resetMemoryManagerForTests();
+    home.leave();
+  });
 
   beforeEach(() => {
     // Reset mocks

@@ -15,7 +15,6 @@ interface CommandSuggestionsProps {
   isVisible: boolean;
 }
 
-export const MAX_SUGGESTIONS = 15;
 export const VISIBLE_SUGGESTIONS = 10;
 
 /**
@@ -77,7 +76,7 @@ export function filterCommandSuggestions<T extends { command: string }>(
       const argSuggestions = getArgumentSuggestions(command, currentArg);
 
       if (argSuggestions.length > 0) {
-        return argSuggestions.slice(0, MAX_SUGGESTIONS) as unknown as T[];
+        return argSuggestions as unknown as T[];
       }
     }
   }
@@ -99,12 +98,11 @@ export function filterCommandSuggestions<T extends { command: string }>(
       return aIndex - bIndex;
     });
 
-    return sorted.slice(0, MAX_SUGGESTIONS);
+    return sorted;
   }
 
   return suggestions
-    .filter((s) => s.command.toLowerCase().startsWith(lowerInput))
-    .slice(0, MAX_SUGGESTIONS);
+    .filter((s) => s.command.toLowerCase().startsWith(lowerInput));
 }
 
 // Memoized individual suggestion item

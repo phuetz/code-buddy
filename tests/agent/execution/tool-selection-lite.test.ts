@@ -79,6 +79,28 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
     ragMock.getAllCodeBuddyToolsMock.mockResolvedValue([]);
   });
 
+  it.each([
+    'Use code_exec and tools.call to read two files',
+    'Use programmatic tool calling to combine results',
+    'Teste le programatic tool calling',
+    'Utilise le programmatic tool calling pour lire deux fichiers',
+    'Utilise la programmation des outils pour calculer un total',
+  ])('keeps explicit programmatic orchestration callable: %s', async query => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    await strategy.selectToolsForQuery(query, { maxTools: 5, alwaysInclude: ['view_file', 'bash', 'search'] });
+    expect(ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude).toContain('code_exec');
+  });
+
+  it('keeps skill inventory and reading available on lite profiles', async () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    await strategy.selectToolsForQuery('Utilise le skill qa-developer', {
+      maxTools: 5, alwaysInclude: ['view_file', 'bash', 'search'],
+    });
+    expect(ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude).toEqual(
+      expect.arrayContaining(['skills_list', 'skill_view']),
+    );
+  });
+
   it('passes the caller-supplied maxTools=5 to RAG when promptProfile=lite', async () => {
     const strategy = new ToolSelectionStrategy({ enableCaching: false });
     await strategy.selectToolsForQuery('hello world', {

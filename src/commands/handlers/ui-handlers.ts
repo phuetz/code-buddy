@@ -13,21 +13,21 @@ export interface CommandHandlerResult {
  */
 export function handleTheme(args: string[]): CommandHandlerResult {
   const themeManager = getThemeManager();
-  const action = args[0]?.toLowerCase();
+  const action = (args[0]?.toLowerCase() === "set" ? args[1] : args[0])?.toLowerCase();
 
   let content: string;
 
-  if (!action || action === "list") {
+  if (!action || action === "list" || action === "status" || action === "current") {
     const themes = themeManager.getAvailableThemes();
     const currentTheme = themeManager.getCurrentTheme();
 
-    content = `🎨 Available Themes\n${"═".repeat(40)}\n\n`;
+    content = `🎨 Current theme: ${currentTheme.name} (${currentTheme.id})\nAvailable Themes\n${"═".repeat(40)}\n\n`;
 
     for (const theme of themes) {
       const isCurrent = theme.id === currentTheme.id;
       const marker = isCurrent ? "▶" : " ";
       const builtinMarker = theme.isBuiltin ? "" : " (custom)";
-      content += `${marker} ${theme.name}${builtinMarker}\n`;
+      content += `${marker} ${theme.name} (${theme.id})${builtinMarker}\n`;
       content += `    ${theme.description}\n\n`;
     }
 
@@ -42,7 +42,13 @@ export function handleTheme(args: string[]): CommandHandlerResult {
       content = `🎨 Theme Changed!\n\n`;
       content += `Now using: ${theme.name}\n`;
       content += `${theme.description}\n\n`;
-      content += `💡 The theme will be applied to new messages.`;
+      content += `The theme is active immediately.`;
+      if (themeManager.getPreferenceSaveStatus() === false) {
+        content += `\nCould not save the preference; this change may be lost after restarting Buddy.`;
+      }
+      if (themeManager.getOverrideKeys().colors.length > 0) {
+        content += `\nCustom color overrides are still applied.`;
+      }
     } else {
       const themes = themeManager.getAvailableThemes();
       content = `❌ Theme "${action}" not found.\n\n`;

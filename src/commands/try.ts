@@ -85,7 +85,7 @@ Exact goal:
 4. If a test fails, fix the code and run it again.
 5. Finish with a very short summary naming the two files you created and the test result.
 
-Write everything in English. Use the file and terminal tools directly. Do not ask for any confirmation, do not install any dependency, and do not change anything outside the working folder.`;
+Write everything in English. Use the file and terminal tools with the configured permissions. Work only inside the temporary folder; no dependency installation is needed.`;
 
 export const NO_TRY_PROVIDER_MESSAGE = [
   'No free provider is ready for the demo.',

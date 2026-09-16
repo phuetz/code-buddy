@@ -32,6 +32,30 @@ export class ThemeManager {
   private customColors: Partial<ThemeColors> = {};
   private themesDir: string;
   private preferencesPath: string;
+  private revision = 0;
+  private listeners = new Set<() => void>();
+  private lastSaveSucceeded: boolean | null = null;
+
+  /** Stable external-store API shared by slash commands and mounted Ink views. */
+  public subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
+
+  public getSnapshot = (): number => this.revision;
+
+  private notifyChange(): void {
+    this.revision += 1;
+    for (const listener of this.listeners) listener();
+  }
+
+  public getPreferenceSaveStatus(): boolean | null {
+    return this.lastSaveSucceeded;
+  }
+
+  public getOverrideKeys(): { colors: string[]; avatars: string[] } {
+    return { colors: Object.keys(this.customColors), avatars: Object.keys(this.customAvatars) };
+  }
 
   private constructor() {
     // Themes directory: ~/.codebuddy/themes/
@@ -174,8 +198,12 @@ export class ThemeManager {
       };
 
       writeJsonAtomicSync(this.preferencesPath, preferences);
+      this.lastSaveSucceeded = true;
     } catch (_error) {
+      this.lastSaveSucceeded = false;
       logger.warn('Failed to save theme preferences', { source: 'ThemeManager' });
+    } finally {
+      this.notifyChange();
     }
   }
 
@@ -339,6 +367,8 @@ export class ThemeManager {
       writeJsonAtomicSync(filePath, theme);
     } catch (_error) {
       logger.warn(`Failed to save custom theme: ${theme.id}`, { source: 'ThemeManager' });
+    } finally {
+      this.notifyChange();
     }
   }
 
@@ -368,6 +398,7 @@ export class ThemeManager {
     } catch (_error) {
       logger.warn(`Failed to delete theme file: ${themeId}`, { source: 'ThemeManager' });
     }
+    this.notifyChange();
 
     return true;
   }

@@ -4,6 +4,11 @@ import type { ToolMetadata, ToolCategory } from './types.js';
  * Default tool metadata for all built-in tools
  */
 export const TOOL_METADATA: ToolMetadata[] = [
+  { name: 'a2a_call', effect: 'emission', category: 'web', keywords: ['a2a', 'peer', 'hermes', 'openclaw', 'delegate'], priority: 6, fleetSafe: false, description: 'Send a task to a configured remote A2A peer; remote execution can have effects and requires permission.' },
+  { name: 'resource_catalog', effect: 'read', category: 'system', keywords: ['resource', 'catalog', 'network', 'fleet', 'ragchat', 'available', 'ressources', 'réseau'], priority: 7, fleetSafe: false, description: 'Read explicit resource declarations and select fresh permitted resources; no probes or dispatch.' },
+  { name: 'ragchat_search', effect: 'read', category: 'web',
+    keywords: ['ragchat', 'pdf', 'corpus', 'citations', 'pages', 'ocr', 'recherche documentaire'],
+    priority: 7, description: 'Search configured authenticated RagChat PDF profiles with exact page citations; read-only.', fleetSafe: false },
   // File reading
   {
     name: 'view_file',
@@ -87,7 +92,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     name: 'self_describe',
     effect: 'read',
     category: 'file_read',
-    keywords: ['self', 'describe', 'components', 'composants', 'briques', 'bricks', 'architecture', 'de quoi es-tu fait', 'de quoi es-tu compose', 'qui es-tu', 'capabilities', 'capacites', 'capteur', 'capteurs', 'sensors', 'modules', 'buddy-sense', 'buddy-vision', 'buddy-memory', 'introspection', 'auto inspection', 'etudie', 'examine', 'inspecte', 'propre code', 'ton code', 'fonctionne', 'fonctionnes', 'fonctionnement', 'limites', 'version', 'conscient', 'consciente', 'conscience', 'consciousness', 'modele de soi'],
+    keywords: ['self', 'describe', 'components', 'composants', 'briques', 'bricks', 'architecture', 'de quoi es-tu fait', 'de quoi es-tu compose', 'qui es-tu', 'capabilities', 'capacites', 'capteur', 'capteurs', 'sensors', 'modules', 'buddy-sense', 'buddy-vision', 'buddy-memory', 'introspection', 'auto inspection', 'etudie', 'examine', 'inspecte', 'propre code', 'ton code', 'fonctionne', 'fonctionnes', 'fonctionnement', 'limites', 'version', 'conscient', 'consciente', 'conscience', 'consciousness', 'modele de soi', 'theme', 'parametres', 'parametrage', 'settings', 'configuration'],
     priority: 50,
     description: "Inspect the robot's attested core, bounded code structure, turn metadata, configured faculties, and epistemic limits without live probes",
     fleetSafe: true,
@@ -221,7 +226,8 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'system',
     keywords: ['process', 'spawn', 'kill', 'list', 'logs', 'pid', 'monitor'],
     priority: 6,
-    description: 'Manage system processes (spawn, inspect, logs, terminate)'
+    description: 'Manage system processes (spawn, inspect, logs, terminate)',
+    repeatSafe: true,
   },
   {
     name: 'app_server',
@@ -1171,7 +1177,8 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'media',
     keywords: ['gpuNode', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
     priority: 8,
-    description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker'
+    description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker',
+    repeatSafe: true,
   },
   {
     name: 'ocr',

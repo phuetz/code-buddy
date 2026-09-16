@@ -1,3 +1,7 @@
+import { vi, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 /**
  * Tests for ThemeManager
  */
@@ -7,12 +11,21 @@ import { Theme } from "../../src/themes/theme";
 
 describe("ThemeManager", () => {
   let themeManager: ThemeManager;
+  let isolatedHome: string;
 
   beforeEach(() => {
+    isolatedHome = mkdtempSync(join(tmpdir(), "cb-theme-tests-"));
+    vi.stubEnv("HOME", isolatedHome);
+    vi.stubEnv("USERPROFILE", isolatedHome);
     // Reset singleton for each test
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ThemeManager as any).instance = undefined;
     themeManager = ThemeManager.getInstance();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(isolatedHome, { recursive: true, force: true });
   });
 
   describe("Singleton Pattern", () => {

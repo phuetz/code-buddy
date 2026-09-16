@@ -24,6 +24,11 @@ export interface SlashCommandArg {
   default?: string;
 }
 
+export type SlashCommandAvailability =
+  | { status: 'available' }
+  | { status: 'hidden' }
+  | { status: 'unavailable'; reason: string };
+
 export interface SlashCommandDef {
   name: string;
   description: string;
@@ -31,6 +36,8 @@ export interface SlashCommandDef {
   category?: string;
   isBuiltin: boolean;
   arguments?: SlashCommandArg[];
+  /** Cowork availability computed by the main process (P4). The renderer never widens it. */
+  availability?: SlashCommandAvailability;
 }
 
 /**
@@ -82,6 +89,12 @@ export interface RemoteSlashCommandResult {
 type CoreSlashModule = {
   builtinCommands: SlashCommandDef[];
   getCommandsByCategory: () => Record<string, SlashCommandDef[]>;
+  /** P4 single declaration (src/commands/slash/surfaces.ts). Absent in older builds → fail closed. */
+  coworkHeadlessAllowlist?: () => ReadonlySet<string>;
+  resolveSlashAvailability?: (
+    command: Pick<SlashCommandDef, 'name' | 'prompt'>,
+    surface: 'cowork'
+  ) => SlashCommandAvailability;
 };
 
 let cachedSlashModule: CoreSlashModule | null = null;
@@ -478,7 +491,11 @@ async function loadHeadlessModule(): Promise<CoreHeadlessModule | null> {
 }
 
 /**
- * Slice S0 allowlist: tokens that are safe to run headlessly from Cowork **today**.
+ * Headless allowlist: tokens that are safe to run headlessly from Cowork **today**.
+ * Since P4 (2026-09-15) the list is DECLARED in core `src/commands/slash/surfaces.ts`
+ * (`COWORK_TOKEN_SURFACES`, mode `headless`) and derived here at runtime through
+ * `coworkHeadlessAllowlist()`; a core build without that export denies every
+ * headless token (fail closed). The rationale below still governs that list.
  *
  * Scope is deliberately limited to info / read-only commands, plus
  * session-scoped goal state (`/goal`, `/subgoal`) that Cowork wires to the same
@@ -500,34 +517,20 @@ async function loadHeadlessModule(): Promise<CoreHeadlessModule | null> {
  *   __CONTEXT__ (stats), __AI_TEST__ — would run against an empty history today.
  * - **orchestration (S1)**: __SWARM__, __TEAM__, __AGENTS__, __PARALLEL__,
  *   __BATCH__, __FLEET__ — spawn real work whose value is the live panel.
+ * - /quota is read-only; /bug + /coverage read process.cwd() (the Electron dir);
+ *   /telemetry mutates; /export-formats and /export-list are home-based reads;
+ *   /goal and /subgoal use a `cowork:<sessionId>` goal key per conversation;
+ *   /resources (P8) reads the home-based resource catalog without probing.
  */
-const COWORK_HEADLESS_ALLOW: ReadonlySet<string> = new Set([
-  '__HELP__',
-  '__STATS__',
-  '__COST__',
-  '__TOOLS__',
-  '__WHOAMI__',
-  '__STATUS__',
-  '__FEATURES__',
-  // C-batch: read-only info commands (registered in EnhancedCommandHandler).
-  '__HISTORY__',
-  '__LOG__',
-  '__WORKSPACE__', // detect/show workspace config (read-only)
-  '__DIFF__', // show git/checkpoint diff (read-only)
-  // `/quota` → handleQuota() formats rate-limit display: pure read, no cwd, no
-  // mutation (verified). NB: /bug + /coverage are NOT allowlisted — they read
-  // process.cwd() (the Electron dir in Cowork, not the project) so they'd scan
-  // the wrong path; /telemetry toggles a setting (mutates).
-  '__QUOTA__',
-  // `/export-formats` → static text; `/export-list` → reads ~/.codebuddy/exports
-  // (home-based, cwd-independent — verified). Both read-only.
-  '__EXPORT_FORMATS__',
-  '__EXPORT_LIST__',
-  // Standing goal loop. Cowork passes a `cowork:<sessionId>` goal key so each
-  // GUI conversation gets isolated `/goal` and `/subgoal` state.
-  '__GOAL__',
-  '__SUBGOAL__',
-]);
+const EMPTY_ALLOW: ReadonlySet<string> = new Set();
+
+function coworkHeadlessAllow(mod: CoreSlashModule | null): ReadonlySet<string> {
+  try {
+    return mod?.coworkHeadlessAllowlist?.() ?? EMPTY_ALLOW;
+  } catch {
+    return EMPTY_ALLOW;
+  }
+}
 
 function buildCoworkGoalSessionKey(sessionId: string | undefined): string | undefined {
   const trimmed = sessionId?.trim();
@@ -554,121 +557,123 @@ type UiEffectResolution =
  * GUI is ambiguous (clear the view vs. start a new session) and deserves its own
  * decision — it falls through to the honest "not yet pilotable" path.
  */
+type UiEffectBuilder = (args: string[]) => { uiEffect: SlashUiEffectKind; args: string[] };
+
+const settingsTab = (tab: string): UiEffectBuilder => () => ({ uiEffect: 'open_settings', args: [tab] });
+const panel = (key: string): UiEffectBuilder => () => ({ uiEffect: 'open_panel', args: [key] });
+// `/swarm <task>` launches immediately (parallel strategy); bare `/swarm` opens the
+// launcher (mirrors the CLI's accidental-trigger guard). `/batch <goal>` and
+// `/parallel` decompose into parallel sub-agents in the same cockpit.
+const orchestrate: UiEffectBuilder = (args) => args.length > 0
+  ? { uiEffect: 'run_orchestrator', args }
+  : { uiEffect: 'open_orchestrator_launcher', args: [] };
+
+/**
+ * Token → Cowork effect table. Enumerable so the P4 invariant test can compare it
+ * with the core declaration (`COWORK_TOKEN_SURFACES` mode `ui_effect`).
+ * NB: scan/review ACTIONS (/vulns, /secrets-scan, /security-review, /guardian) are
+ * deliberately NOT routed to the rules tab (it would not run the scan); /yolo and
+ * /autonomy have no control there, so they stay CLI.
+ */
+const UI_EFFECTS: Readonly<Record<string, UiEffectBuilder>> = {
+  __CHANGE_MODEL__: (args) => ({ uiEffect: 'open_model_picker', args }),
+  __SWITCH__: (args) => ({ uiEffect: 'open_model_picker', args }),
+  // `/plan` → enter read-only plan permission mode (S4).
+  __PLAN_MODE__: () => ({ uiEffect: 'set_plan_mode', args: [] }),
+  __SWARM__: orchestrate,
+  __PARALLEL__: orchestrate,
+  __BATCH__: orchestrate,
+  // C1 cockpits: multi-agent launcher, Fleet Command Center, Team, lessons, companion, spec backlog.
+  __AGENTS__: (args) => ({ uiEffect: 'open_orchestrator_launcher', args }),
+  __FLEET__: (args) => ({ uiEffect: 'open_fleet', args }),
+  __TEAM__: (args) => ({ uiEffect: 'open_team', args }),
+  __LESSONS__: (args) => ({ uiEffect: 'open_lessons', args }),
+  __COMPANION__: (args) => ({ uiEffect: 'open_companion', args }),
+  __TRACK__: (args) => ({ uiEffect: 'open_spec', args }),
+  // C2: settings-backed commands open the relevant Settings tab.
+  __CONFIG__: settingsTab('general'),
+  __WORKFLOW__: settingsTab('workflows'),
+  __PIPELINE__: settingsTab('workflows'),
+  __PERMISSIONS__: settingsTab('rules'),
+  __POLICY__: settingsTab('rules'),
+  __APPROVALS__: settingsTab('rules'),
+  __ELEVATED__: settingsTab('rules'),
+  __BATCH_REVIEW__: settingsTab('rules'),
+  __SECURITY__: settingsTab('rules'),
+  __HOOKS__: settingsTab('hooks'),
+  __PLUGINS__: settingsTab('plugins'),
+  __PLUGIN__: settingsTab('plugins'),
+  __THEME__: settingsTab('general'),
+  __AVATAR__: settingsTab('general'),
+  __VIM_MODE__: settingsTab('general'),
+  __FAST_MODE__: settingsTab('general'),
+  __DRY_RUN__: settingsTab('general'),
+  __CACHE__: settingsTab('general'),
+  __PROMPT_CACHE__: settingsTab('general'),
+  __SELF_HEALING__: settingsTab('general'),
+  // C-batch: generic panel opens (each key maps to a confirmed store setter).
+  __SEARCH__: panel('global_search'),
+  __SHORTCUTS__: panel('shortcuts'),
+  __PERSONA__: panel('persona'),
+  __SESSIONS__: panel('session_insights'),
+  __REMEMBER__: panel('memory'),
+  __IDENTITY__: panel('identity'),
+  __PAIRING__: panel('device'),
+  // `/voice` → voice-chat overlay; `/export` `/save` → ExportDialog of the active session.
+  __VOICE__: panel('voice'),
+  __SPEAK__: panel('voice'),
+  __TTS__: panel('voice'),
+  __EXPORT__: panel('export'),
+  __SAVE_CONVERSATION__: panel('export'),
+  __TEST__: panel('test_runner'),
+  __THINK__: panel('reasoning'),
+  // `/knowledge-graph` → lessons-vault graph in the Fleet Command Center.
+  __KNOWLEDGE_GRAPH__: panel('knowledge_graph'),
+  // Engine actions: real side-effecting ops the renderer triggers via IPC.
+  __UNDO__: () => ({ uiEffect: 'engine_action', args: ['undo'] }),
+  __REDO__: () => ({ uiEffect: 'engine_action', args: ['redo'] }),
+  __SUBAGENT__: (args) => ({ uiEffect: 'open_orchestrator_launcher', args }),
+  __AGENT__: (args) => ({ uiEffect: 'open_orchestrator_launcher', args }),
+};
+
+/** Tokens with a native Cowork effect (exported for the P4 invariant test). */
+export const COWORK_UI_EFFECT_TOKENS: readonly string[] = Object.freeze(Object.keys(UI_EFFECTS));
+
 function resolveUiEffectAction(token: string, args: string[]): UiEffectResolution {
-  switch (token) {
-    case '__CHANGE_MODEL__':
-    case '__SWITCH__':
-      return { uiEffect: 'open_model_picker', args };
-    case '__PLAN_MODE__':
-      // `/plan` → enter read-only plan permission mode (S4).
-      return { uiEffect: 'set_plan_mode', args: [] };
-    case '__SWARM__':
-    case '__PARALLEL__':
-      // fall through: `/batch <goal>` also decomposes into parallel sub-agents (same cockpit).
-    case '__BATCH__':
-      // `/swarm <task>` launches immediately (parallel strategy); bare `/swarm`
-      // opens the launcher (mirrors the CLI's accidental-trigger guard).
-      return args.length > 0
-        ? { uiEffect: 'run_orchestrator', args }
-        : { uiEffect: 'open_orchestrator_launcher', args: [] };
-    case '__AGENTS__':
-      // C1: the multi-agent cockpit. Any subcommand (run/plan/status/stop) is
-      // managed in the launcher — open it (run/inspect agents there).
-      return { uiEffect: 'open_orchestrator_launcher', args };
-    case '__FLEET__':
-      // C1: the Fleet Command Center is the cockpit for listen/status/route.
-      return { uiEffect: 'open_fleet', args };
-    case '__TEAM__':
-      // C1: the Team panel is where start/add/status/task/assign happen.
-      return { uiEffect: 'open_team', args };
-    case '__LESSONS__':
-      return { uiEffect: 'open_lessons', args };
-    case '__COMPANION__':
-      // C1: companion config cockpit.
-      return { uiEffect: 'open_companion', args };
-    case '__TRACK__':
-      // C1: `/track` (spec-driven workflow) → the Spec backlog panel.
-      return { uiEffect: 'open_spec', args };
-    // C2: settings-backed commands open the relevant Settings tab.
-    case '__CONFIG__':
-      return { uiEffect: 'open_settings', args: ['general'] };
-    case '__WORKFLOW__':
-    case '__PIPELINE__':
-      return { uiEffect: 'open_settings', args: ['workflows'] };
-    case '__PERMISSIONS__':
-    case '__POLICY__':
-    case '__APPROVALS__':
-    case '__ELEVATED__':
-    case '__BATCH_REVIEW__':
-    case '__SECURITY__':
-      // Permission/policy/approval CONFIG → the Permission rules tab is the cockpit.
-      // NB: scan/review ACTIONS (/vulns, /secrets-scan, /security-review, /guardian)
-      // are deliberately NOT routed here — opening a config tab that does not run
-      // the scan would be misdirection. They run via the agent in chat
-      // (SecurityReview / CodeGuardian auto-delegate). Likewise /yolo and /autonomy
-      // have no autonomy control on this tab, so they stay CLI.
-      return { uiEffect: 'open_settings', args: ['rules'] };
-    case '__HOOKS__':
-      return { uiEffect: 'open_settings', args: ['hooks'] };
-    case '__PLUGINS__':
-    case '__PLUGIN__':
-      // `/plugins` → the Settings Plugins tab (install + toggle plugin components).
-      return { uiEffect: 'open_settings', args: ['plugins'] };
-    case '__THEME__':
-    case '__AVATAR__':
-    case '__VIM_MODE__':
-    case '__FAST_MODE__':
-    case '__DRY_RUN__':
-    case '__CACHE__':
-    case '__PROMPT_CACHE__':
-    case '__SELF_HEALING__':
-      return { uiEffect: 'open_settings', args: ['general'] };
-    // C-batch: generic panel opens (each key maps to a confirmed store setter).
-    case '__SEARCH__':
-      return { uiEffect: 'open_panel', args: ['global_search'] };
-    case '__SHORTCUTS__':
-      return { uiEffect: 'open_panel', args: ['shortcuts'] };
-    case '__PERSONA__':
-      return { uiEffect: 'open_panel', args: ['persona'] };
-    case '__SESSIONS__':
-      return { uiEffect: 'open_panel', args: ['session_insights'] };
-    case '__REMEMBER__':
-      return { uiEffect: 'open_panel', args: ['memory'] };
-    case '__IDENTITY__':
-      return { uiEffect: 'open_panel', args: ['identity'] };
-    case '__PAIRING__':
-      // `/pairing` → the device pairing/management panel (C3).
-      return { uiEffect: 'open_panel', args: ['device'] };
-    case '__VOICE__':
-    case '__SPEAK__':
-    case '__TTS__':
-      // `/voice` → the voice-chat overlay (Titlebar listens for the intended
-      // `cowork:open-voice-chat` DOM event; the dispatcher fires it).
-      return { uiEffect: 'open_panel', args: ['voice'] };
-    case '__EXPORT__':
-    case '__SAVE_CONVERSATION__':
-      // `/export` / `/save` → open the session ExportDialog for the active session
-      // (the dispatcher fires `cowork:open-export` with the active session id).
-      return { uiEffect: 'open_panel', args: ['export'] };
-    case '__TEST__':
-      return { uiEffect: 'open_panel', args: ['test_runner'] };
-    case '__THINK__':
-      return { uiEffect: 'open_panel', args: ['reasoning'] };
-    case '__KNOWLEDGE_GRAPH__':
-      // `/knowledge-graph` → the lessons-vault graph (rendered in the Fleet
-      // Command Center; the dispatcher opens both).
-      return { uiEffect: 'open_panel', args: ['knowledge_graph'] };
-    // Engine actions: real side-effecting ops the renderer triggers via IPC.
-    case '__UNDO__':
-      return { uiEffect: 'engine_action', args: ['undo'] };
-    case '__REDO__':
-      return { uiEffect: 'engine_action', args: ['redo'] };
-    case '__SUBAGENT__':
-    case '__AGENT__':
-      return { uiEffect: 'open_orchestrator_launcher', args };
-    default:
-      return undefined;
+  const builder = UI_EFFECTS[token];
+  return builder ? builder(args) : undefined;
+}
+
+const COWORK_DENIED_FALLBACK = "n'est pas encore pilotable depuis Cowork (à venir dans une prochaine étape).";
+
+type CoreHintsModule = { takeFirstUseHint?: (id: 'surface_unavailable', lang: 'fr') => string | null };
+
+/** First refusal in this profile gets one persisted tip (P4 first-use hints); fails closed to no tip. */
+async function firstRefusalTip(): Promise<string> {
+  try {
+    const mod = await loadCoreModule<CoreHintsModule>('utils/first-use-hints.js');
+    const tip = mod?.takeFirstUseHint?.('surface_unavailable', 'fr');
+    return tip ? `\n${tip}` : '';
+  } catch {
+    return '';
   }
+}
+
+/** Cowork availability of a catalog entry, computed only in the main process. */
+function coworkAvailability(cmd: SlashCommandDef, mod: CoreSlashModule | null): SlashCommandAvailability {
+  const isToken = cmd.prompt.startsWith('__') && cmd.prompt.endsWith('__');
+  if (!isToken) return { status: 'available' };
+  if (mod?.resolveSlashAvailability) {
+    try {
+      return mod.resolveSlashAvailability(cmd, 'cowork');
+    } catch {
+      // fall through to the conservative local rule
+    }
+  }
+  // Older core build: only native effects are known to be pilotable.
+  return UI_EFFECTS[cmd.prompt]
+    ? { status: 'available' }
+    : { status: 'unavailable', reason: 'moteur sans déclaration de surfaces : commande non pilotable depuis Cowork' };
 }
 
 /** Resolve a natural-language prompt command's text (substitute `{{args}}` or append). */
@@ -712,7 +717,14 @@ export class SlashCommandBridge {
     const synthetic = SYNTHETIC_COMMANDS.filter(
       (item) => !customNames.has(item.name) && !builtins.some((builtin) => builtin.name === item.name)
     );
-    return [...customs, ...synthetic, ...builtins.filter((b) => !customNames.has(b.name))];
+    // P4: availability is decided here (main process), from the core declaration.
+    // Hidden entries are removed; unavailable ones stay listed with their reason.
+    const annotate = (cmd: SlashCommandDef): SlashCommandDef => ({ ...cmd, availability: coworkAvailability(cmd, mod) });
+    return [
+      ...customs.map((c) => ({ ...c, availability: { status: 'available' as const } })),
+      ...synthetic.map(annotate),
+      ...builtins.filter((b) => !customNames.has(b.name)).map(annotate),
+    ].filter((cmd) => cmd.availability?.status !== 'hidden');
   }
 
   /** Autocomplete suggestions for a `/` prefix (e.g. `/mem` → memory, mem-list). */
@@ -801,13 +813,26 @@ export class SlashCommandBridge {
     if (cmd.prompt.startsWith('__') && cmd.prompt.endsWith('__')) {
       const token = cmd.prompt;
 
+      // 0. Availability is re-derived server-side: a forged IPC call or a stale
+      //    renderer list can never run an undeclared token (default-deny).
+      const slashMod = await loadSlashModule();
+      const availability = coworkAvailability(cmd, slashMod);
+      if (availability.status !== 'available') {
+        const reason = availability.status === 'unavailable' ? availability.reason : 'masquée dans Cowork';
+        return {
+          success: true,
+          handled: true,
+          message: `/${name} ${COWORK_DENIED_FALLBACK} (${reason})${await firstRefusalTip()}`,
+        };
+      }
+
       // 1. Renderer-side Cowork effect / honest denial / fall-through to engine.
       const resolution = resolveUiEffectAction(token, args);
       if (resolution === 'deny') {
         return {
           success: true,
           handled: true,
-          message: `/${name} n'est pas encore pilotable depuis Cowork (à venir dans une prochaine étape).`,
+          message: `/${name} ${COWORK_DENIED_FALLBACK}`,
         };
       }
       if (resolution) {
@@ -823,14 +848,14 @@ export class SlashCommandBridge {
       if (!headlessMod) {
         return { success: true, handled: true, message: `/${name} indisponible (moteur non chargé).` };
       }
-      const res = await headlessMod.executeHeadlessSlashToken(token, args, COWORK_HEADLESS_ALLOW, {
+      const res = await headlessMod.executeHeadlessSlashToken(token, args, coworkHeadlessAllow(slashMod), {
         goalSessionKey: buildCoworkGoalSessionKey(sessionId),
       });
       if (res.denied) {
         return {
           success: true,
           handled: true,
-          message: `/${name} n'est pas encore pilotable depuis Cowork (à venir dans une prochaine étape).`,
+          message: `/${name} ${COWORK_DENIED_FALLBACK}`,
         };
       }
       if (res.passToAI && res.prompt) {

@@ -41,6 +41,9 @@ const mockGetAvatarPresets = jest.fn();
 const mockApplyAvatarPreset = jest.fn();
 const mockSetCustomAvatar = jest.fn();
 const mockClearCustomAvatars = jest.fn();
+// Real ThemeManager contract: boolean | null (null = no save attempted yet) and override key lists.
+const mockGetPreferenceSaveStatus = jest.fn<() => boolean | null>();
+const mockGetOverrideKeys = jest.fn<() => { colors: string[]; avatars: string[] }>();
 
 jest.mock('../../src/themes/theme-manager', () => ({
   getThemeManager: jest.fn(function() { return {
@@ -52,6 +55,8 @@ jest.mock('../../src/themes/theme-manager', () => ({
     applyAvatarPreset: mockApplyAvatarPreset,
     setCustomAvatar: mockSetCustomAvatar,
     clearCustomAvatars: mockClearCustomAvatars,
+    getPreferenceSaveStatus: mockGetPreferenceSaveStatus,
+    getOverrideKeys: mockGetOverrideKeys,
   }; }),
 }));
 
@@ -186,9 +191,34 @@ describe('Theme Handler', () => {
       { id: 'neon', name: 'Neon', description: 'Neon theme', isBuiltin: true },
     ]);
     mockGetCurrentTheme.mockReturnValue({ id: 'default', name: 'Default' });
+    mockGetPreferenceSaveStatus.mockReturnValue(true);
+    mockGetOverrideKeys.mockReturnValue({ colors: [], avatars: [] });
   });
 
   describe('handleTheme', () => {
+    it('warns when the theme preference could not be saved', () => {
+      mockSetTheme.mockReturnValue(true);
+      mockGetCurrentTheme.mockReturnValue({ id: 'neon', name: 'Neon', description: 'Neon theme' });
+      mockGetPreferenceSaveStatus.mockReturnValue(false);
+
+      const content = handleTheme(['neon']).entry?.content ?? '';
+
+      expect(content).toContain('Theme Changed');
+      expect(content).toContain('Could not save the preference');
+    });
+
+    it('does not warn when no save was attempted yet (null) and notes active color overrides', () => {
+      mockSetTheme.mockReturnValue(true);
+      mockGetCurrentTheme.mockReturnValue({ id: 'neon', name: 'Neon', description: 'Neon theme' });
+      mockGetPreferenceSaveStatus.mockReturnValue(null);
+      mockGetOverrideKeys.mockReturnValue({ colors: ['primary'], avatars: [] });
+
+      const content = handleTheme(['neon']).entry?.content ?? '';
+
+      expect(content).not.toContain('Could not save the preference');
+      expect(content).toContain('Custom color overrides are still applied');
+    });
+
     it('should list themes when no action provided', () => {
       const result = handleTheme([]);
 

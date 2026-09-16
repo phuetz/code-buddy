@@ -688,7 +688,9 @@ export class PromptBuilder {
           } catch { /* freshness best-effort */ }
           const codeExplorerBlock =
             `<code_explorer_priority>\n` +
-            `Code Explorer is connected. For ANY question about code relationships — ` +
+            `Code Explorer is connected through MCP on the host. Use these MCP tools directly; ` +
+            `do not run the host code-explorer binary through Bash, which may execute inside an isolated container. ` +
+            `For questions about code relationships — ` +
             `callers/callees, blast radius / impact ("what breaks if I change X"), dead code, cycles, ` +
             `coupling, complexity — PREFER its MCP tools (\`${p}impact\`, ` +
             `\`${p}context\`, \`${p}query\`, \`${p}find_cycles\`, …) ` +

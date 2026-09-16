@@ -985,9 +985,10 @@ export function ChatView() {
   }
 
   return (
-    <div className="h-full flex-1 min-h-0 flex overflow-hidden bg-background">
-      {/* Chat column (left) — vertical stack of header, messages and composer. */}
-      <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+    <div className="relative h-full flex-1 min-h-0 flex overflow-hidden bg-background">
+      {/* Chat column (left) — vertical stack of header, messages and composer.
+          `min-w-0` lets it shrink below its content's min width instead of overflowing the pane. */}
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
       <ChatHeader />
       <GoalBanner />
 

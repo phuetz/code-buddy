@@ -15,7 +15,7 @@ import { globalAgent as httpsGlobalAgent } from 'node:https';
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
 import type { CustomAgentConfig } from "./agent/custom/custom-agent-loader.js";
-import type { CodeBuddyAgent } from "./agent/codebuddy-agent.js";
+import type { ChatEntry, CodeBuddyAgent } from "./agent/codebuddy-agent.js";
 import type { RunStore } from "./observability/run-store.js";
 
 import { fileURLToPath } from 'url';
@@ -1593,8 +1593,8 @@ program
     "continue from the most recent saved session (like mistral-vibe)"
   )
   .option(
-    "--resume <sessionId>",
-    "resume a specific session by ID (supports partial matching)"
+    "--resume [sessionId]",
+    "resume a specific session by ID (supports partial matching); without an ID, pick a recent session"
   )
   .option(
     "--search-sessions <query>",
@@ -1903,6 +1903,13 @@ program
     }
 
     // Handle --resume flag (resume specific session by ID, like mistral-vibe)
+    if (options.resume === true) {
+      // P6: `--resume` without an ID opens the recent-session picker.
+      const { pickRecentSession } = await import("./cli/session-commands.js");
+      const picked = await pickRecentSession(20);
+      if (!picked) process.exit(process.exitCode ?? 1);
+      options.resume = picked;
+    }
     if (options.resume) {
       const { getSessionStore } = await import("./persistence/session-store.js");
       const sessionStore = getSessionStore();
@@ -1920,7 +1927,9 @@ program
 
       await sessionStore.resumeSession(session.id);
       cli.info(`📂 Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
-      cli.info(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`);
+      cli.info(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}`);
+      const { buildSessionRecap, formatSessionRecap } = await import("./cli/session-picker.js");
+      cli.info(`${formatSessionRecap(buildSessionRecap(session)).join("\n")}\n`);
     }
 
     // Load environment before changing cwd so root .env values (API keys) remain available
@@ -2347,6 +2356,7 @@ program
       recordStartupPhase('user-settings-done');
 
       // ── Crash recovery: detect unclean shutdown and offer session resume ──
+      let crashResumed = false;
       if (!options.resume && !options.continue) {
         try {
           const { checkCrashRecovery, clearRecoveryFiles } = await import('./errors/crash-recovery.js');
@@ -2368,6 +2378,7 @@ program
                 const session = await sessionStore.getSessionByPartialId(recovery.sessionId);
                 if (session) {
                   await sessionStore.resumeSession(session.id);
+                  crashResumed = true;
                   cli.info(`   Resuming session: ${session.name} (${session.messages.length} messages)`);
                 } else {
                   cli.info('   Session no longer available — starting fresh.');
@@ -2428,7 +2439,26 @@ program
       // trigger a review (recursion + cost safety).
       agent.enableBackgroundReview();
 
-      render(React.createElement(ChatInterface, { agent, initialMessage }), inkOptions);
+      // Memory fact reconciliation (remember tool and /remember) must use the
+      // provider this session runs on, never a provider auto-detected from env.
+      const { setFactsMemorySessionClient } = await import('./memory/facts-memory.js');
+      setFactsMemorySessionClient(agent.getClient());
+
+      // A resumed session (--resume, --continue, crash recovery) must reach both the model
+      // history and the chat view; resumeSession() alone only selects the store's current session.
+      let initialHistory: ChatEntry[] | undefined;
+      if (options.resume || options.continue || crashResumed) {
+        const { getSessionStore } = await import('./persistence/session-store.js');
+        const resumedStore = getSessionStore();
+        const resumedId = resumedStore.getCurrentSessionId();
+        const resumed = resumedId ? await resumedStore.loadSession(resumedId) : null;
+        if (resumed) {
+          agent.hydratePersistedSession(resumed);
+          initialHistory = agent.getChatHistory();
+        }
+      }
+
+      render(React.createElement(ChatInterface, { agent, initialMessage, initialHistory }), inkOptions);
 
       // Initialize plugin system in background (non-blocking)
       setImmediate(async () => {
@@ -3674,6 +3704,11 @@ addLazyCommandGroup(program, 'curator', 'Propose-only maintenance report (memory
   registerCuratorCommand(program);
 });
 
+addLazyCommandGroup(program, 'triage', 'Write a local redacted support bundle and prompt (no network, launches nothing)', async () => {
+  const { registerTriageCommand } = await import('./commands/cli/triage-command.js');
+  registerTriageCommand(program);
+});
+
 addLazyCommandGroup(program, 'gateway-pairing', 'Operator approval for gateway device pairing', async () => {
   const { registerGatewayPairingCommands } = await import('./commands/cli/native-engine-commands.js');
   registerGatewayPairingCommands(program);
@@ -4091,6 +4126,11 @@ addLazyCommand(
     return createLessonsCommand();
   },
 );
+
+addLazyCommand(program, 'resources', 'Explicit network resource inventory and read-only health selection', async () => {
+  const { createResourcesCommand } = await import('./commands/resources.js');
+  return createResourcesCommand();
+});
 
 // Spec — BMAD-inspired spec-driven, review-gated work pipeline
 addLazyCommandGroup(

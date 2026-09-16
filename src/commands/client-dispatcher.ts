@@ -6,6 +6,7 @@ import { getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { isModelCompatibleWithProvider } from "../providers/model-provider-compat.js";
 import { updateCurrentModel } from "../utils/model-config.js";
+import { setSwitchModelProvider, type SwitchModelProvider } from "./handlers/switch-handler.js";
 
 export interface ClientCommandContext {
   agent: CodeBuddyAgent;
@@ -223,6 +224,8 @@ export class ClientCommandDispatcher {
       getContextBudgetBreakdown: () => context.agent.getContextBudgetBreakdown(),
     });
 
+    setSwitchModelProvider(this.createSwitchModelProvider(context));
+
     const args = overrideArgs ?? originalInput.trim().split(" ").slice(1);
     const handlerResult = await enhancedHandler.handleCommand(token, args, originalInput);
 
@@ -250,6 +253,44 @@ export class ClientCommandDispatcher {
     return true;
   }
 
+  /** Session-only /switch overrides, keyed by the live agent. */
+  private static readonly switchState = new WeakMap<object, { baseModel: string; switched: string | null }>();
+
+  /**
+   * Back /switch with the running agent so it changes the model used by the
+   * next turns (session only, unlike /model which also saves the preference).
+   */
+  private static createSwitchModelProvider(context: ClientCommandContext): SwitchModelProvider {
+    const agent = context.agent;
+    const state = () => {
+      let current = this.switchState.get(agent);
+      if (!current) {
+        current = { baseModel: agent.getCurrentModel(), switched: null };
+        this.switchState.set(agent, current);
+      }
+      return current;
+    };
+    return {
+      getAvailableModels: () => context.availableModels.map(option => option.model),
+      getCurrentModel: () => agent.getCurrentModel(),
+      getSwitchedModel: () => this.switchState.get(agent)?.switched ?? null,
+      setSwitchedModel: (model) => {
+        const current = state();
+        if (model === null) {
+          if (current.switched !== null) agent.setModel(current.baseModel);
+          this.switchState.delete(agent);
+          return;
+        }
+        const provider = agent.getClient().getCurrentProvider?.();
+        if (!isModelCompatibleWithProvider(model, provider)) {
+          throw new Error(`Model ${model} is incompatible with the active provider ${provider}. Choose a model for this connection.`);
+        }
+        agent.setModel(model);
+        current.switched = model;
+      },
+    };
+  }
+
   private static async handleEnhancedCommand(
     token: string,
     originalInput: string,
@@ -272,6 +313,8 @@ export class ClientCommandDispatcher {
     }
     // Change the running client and its context/token limits before announcing success.
     context.agent.setModel(model);
+    // An explicit /model choice becomes the new base for later /switch auto.
+    this.switchState.delete(context.agent);
     try {
       updateCurrentModel(model);
     } catch (error) {

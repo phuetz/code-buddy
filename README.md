@@ -1,6 +1,6 @@
 <div align="center">
 
-# Code Buddy 2
+# Code Buddy 2.1
 
 **A local-first AI coding agent that can also run as a fleet, a desktop app, and a companion.**
 It reads your repository, writes code, runs commands, and you can watch it work — on your machine,
@@ -12,7 +12,8 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL_1.1-feca57.svg?style=flat-square" alt="License: Business Source License 1.1"/></a>
 </p>
 
-[What 2.0 is](#what-20-is) ·
+[Français](README.fr.md) ·
+[What Code Buddy is](#what-code-buddy-is) ·
 [Install](#install) ·
 [First run](#first-run) ·
 [Opt-in](#opt-in) ·
@@ -36,7 +37,7 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 
 ---
 
-## What 2.0 is
+## What Code Buddy is
 
 ### One minute with Lisa · French presentation
 
@@ -46,10 +47,14 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 
 Lisa introduces the multi-AI hub, installation and optional perception components. Edited on September 13, 2026 from an existing September 10 master, with a synthetic voice and portrait, illustrative footage and French captions. Illustrations are not execution evidence. Voice and robotics require additional components beyond the npm package.
 
-1.x was a terminal coding agent: 64 providers behind one router — cloud, gateway and local
-runtimes — and 220+ tools selected per query. 2.0 keeps all of that unchanged and adds five
-surfaces around it. Every one of them is **opt-in**: with its environment variable unset, behavior
-is the same as 1.8.0. There is no `BREAKING CHANGE` in the 2.0 range.
+Code Buddy combines a terminal coding agent with cloud, gateway and local model routing,
+query-selected tools, and the following interfaces. Optional services require their documented
+configuration; enabling a feature does not replace its permission checks.
+
+**New in 2.1:** explicit resource discovery and selection, RagChat search with page citations,
+MCP configuration import, a bounded A2A JSON-RPC bridge, and fixes for terminal sessions,
+configuration diagnostics and Cowork workflows. Read the [release notes](docs/RELEASE-NOTES-2.1.0.md)
+for setup and the limits of each integration.
 
 - **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
   other's models: one-shot `peer.chat`, multi-turn `peer.chat-session.*`, and `peer.tool.invoke`
@@ -168,6 +173,14 @@ names it.
 
 ---
 
+## Memory and learning
+
+Code Buddy keeps project/user memory, retrieves relevant lessons and can propose review-gated lesson candidates after substantial sessions. Authored skills can be inspected, improved and consolidated; code evolution evaluates variants in isolated worktrees. These change external state and inference-time behavior, not model weights.
+
+Start with `buddy lessons candidate list`, `buddy lessons list`, `buddy improve status` and `buddy evolve list`. Council's role-based cooperation and the ToT/MCTS engine are separate mechanisms with their own execution paths and budgets. Inspiration from Manus, Sakana DGM/ShinkaEvolve/Fugu and reasoning papers is not a reproduction claim or a measured productivity gain.
+
+Read [activation conditions, source evidence and limitations](docs/learning-mechanisms.md), or the [French overview](README.fr.md). A [two-host fleet recipe](docs/reports/2026-09/fleet-two-hosts-learning-example.md) has combined a Windows RPC review, a Linux code correction and an independent five-case oracle passing on both hosts. The pilot explicitly relayed messages and files; this was not a Council run.
+
 ## Opt-in
 
 Nothing below is needed to chat with a local model. Defaults stay off.
@@ -176,7 +189,7 @@ Nothing below is needed to chat with a local model. Defaults stay off.
 | --- | --- |
 | `CODEBUDDY_PROVIDER=ollama` | Force the local Ollama path (no API key). |
 | `CODEBUDDY_MAX_CONTEXT` | Override the context window for every consumer, including the Ollama server itself. |
-| `CODEBUDDY_SELF_IMPROVE=true` | Let the agent author its own tools and skills behind empirical gates. It never edits `src/`. |
+| `CODEBUDDY_SELF_IMPROVE=true` | Enable the learned-layer proposal path. `true` stays propose-only; keeping validated changes needs explicit application authorization. The separate `buddy evolve` path can edit code in isolated worktrees. See [contracts](docs/learning-mechanisms.md). |
 | `CODEBUDDY_SHADOW_WORKSPACE` | Validate proposed writes in a ghost worktree *before* touching your files. |
 | `CODEBUDDY_TIMELINE` | Per-turn timeline; `buddy replay` inspects, restores or forks a session. |
 | `CODEBUDDY_INTENTS` | Falsifiable versioned specs, so "done" stays re-provable later. |
@@ -204,12 +217,10 @@ their own gates, listed in [`docs/cb2/README.md`](docs/cb2/README.md) and
 
 Honest limits for a first-time visitor:
 
-- **The npm release can lag this tree.** 2.0.0 is on npm with a signed provenance statement
-  (published from GitHub Actions, no long-lived token); commits after the tag reach npm with the
-  next release. Check `buddy --version` after installing.
-- **Only the Linux CI legs are blocking.** macOS and Windows run best-effort — their results are
-  visible but do not gate a green build. Interactive-shell execution on macOS is a known open
-  issue.
+- **The npm release can lag this tree.** Releases use GitHub Actions trusted publication.
+  Check `buddy --version`, the npm dist-tag and the corresponding Git tag when identifying a build.
+- **CI gates all three operating systems.** Linux, macOS and Windows run Node.js 20 and 22
+  jobs. A local pass or an earlier platform recipe does not replace the candidate’s CI results.
 - **Node ≥ 20 is the real floor**, for the CLI and for the test toolchain alike (`engines` says
   so since 2.0.0).
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
@@ -250,7 +261,8 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md)** — what changed since 1.8.0.
+- **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — current changes and integration limits.
+- [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
 - [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.
 - [Commands](docs/commands.md) · [Features](docs/features.md) · [Security](docs/security.md)
 - [Cowork Desktop](docs/cowork.md) · [Fleet](docs/fleet-guide.md) · [Code Buddy 2 features](docs/cb2/README.md)

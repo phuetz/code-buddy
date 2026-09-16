@@ -190,6 +190,50 @@ export function prepareIsolatedTurnMessages(
     : [...messages];
 }
 
+/** Tool calls of the in-flight round that have no result in `messages` yet. */
+function unansweredPendingCalls(
+  messages: readonly CodeBuddyMessage[],
+  pendingToolCallIds: Iterable<string> | undefined,
+): Set<string> {
+  const pending = new Set<string>();
+  for (const id of pendingToolCallIds ?? []) if (id) pending.add(id);
+  if (pending.size === 0) return pending;
+  for (const message of messages) {
+    if (message.role !== 'tool') continue;
+    const callId = (message as { tool_call_id?: string }).tool_call_id;
+    if (callId) pending.delete(callId);
+  }
+  return pending;
+}
+
+/**
+ * Drop the synthetic `[result lost during compaction]` placeholders that
+ * transcript repair injected for calls that are merely still running.
+ *
+ * Returns null when a pending call did not survive compaction at all: the
+ * caller then keeps the transcript untouched rather than leaving a call whose
+ * real result would become an unpairable orphan.
+ */
+function withoutPendingPlaceholders(
+  compacted: readonly CodeBuddyMessage[],
+  pending: ReadonlySet<string>,
+): CodeBuddyMessage[] | null {
+  const survivingCallIds = new Set<string>();
+  for (const message of compacted) {
+    const calls = (message as { tool_calls?: Array<{ id?: string }> }).tool_calls;
+    if (Array.isArray(calls)) for (const call of calls) if (call?.id) survivingCallIds.add(call.id);
+  }
+  for (const id of pending) if (!survivingCallIds.has(id)) return null;
+
+  // `pending` only holds ids with no result in `original`, so every tool
+  // message carrying one of them was invented by repair just now.
+  return compacted.filter((message) => {
+    if (message.role !== 'tool') return true;
+    const callId = (message as { tool_call_id?: string }).tool_call_id;
+    return !(callId && pending.has(callId));
+  });
+}
+
 /**
  * Compact + repair IN PLACE — for mid-loop compaction sites where `messages`
  * is a SHARED reference (the turn loop and its helpers keep pushing into it).
@@ -198,14 +242,29 @@ export function prepareIsolatedTurnMessages(
  * transcript never shrank, the middleware 'compact' action did nothing, and
  * proactive compaction re-fired forever while the provider limit approached.
  * Returns true when the transcript actually changed.
+ *
+ * `pendingToolCallIds` names the calls of the round being executed. Their
+ * results are pushed AFTER this compaction, so repairing them here injected
+ * `[result lost during compaction]`; the real result then lost the first-wins
+ * duplicate arbitration and the model never saw the tool output. Those
+ * placeholders are removed while every other repair — historical orphans,
+ * id-less calls, duplicates, ordering — is kept. The provider frontier stays
+ * `prepareTurnMessages`, which still closes any call left unanswered.
  */
 export function compactTurnMessagesInPlace(
   contextManager: ContextManagerV2,
   messages: CodeBuddyMessage[],
-  options: { isolatedSharedHost?: boolean } = {},
+  options: { isolatedSharedHost?: boolean; pendingToolCallIds?: Iterable<string> } = {},
 ): boolean {
-  const compacted = prepareTurnMessages(contextManager, messages, options);
-  if (compacted === messages) return false;
+  const pending = unansweredPendingCalls(messages, options.pendingToolCallIds);
+  const prepared = prepareTurnMessages(contextManager, messages, options);
+  if (prepared === messages) return false;
+  let compacted: readonly CodeBuddyMessage[] = prepared;
+  if (pending.size > 0) {
+    const protectedMessages = withoutPendingPlaceholders(prepared, pending);
+    if (!protectedMessages) return false; // pending call dropped: never risk its real result
+    compacted = protectedMessages;
+  }
   const changed =
     compacted.length !== messages.length || compacted.some((m, i) => m !== messages[i]);
   if (!changed) return false;

@@ -818,7 +818,10 @@ describe('voice loop — emotional prompt defaults', () => {
   it('enables expressive text by default only with relational context, with an explicit override', async () => {
     delete process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
     process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
-    const relational = await buildSpokenPromptAugmentation('je suis triste ce soir');
+    // The relational gate is what matters here; an injected empty snapshot keeps the real
+    // episode reader from initializing ~/.codebuddy/memory.md in the background.
+    const noRelationalSources = { relationalContext: async () => '' };
+    const relational = await buildSpokenPromptAugmentation('je suis triste ce soir', [], undefined, undefined, noRelationalSources);
     expect(relational).toContain('<expressive_spoken_text>');
     expect(relational).toMatch(/douceur|questions ouvertes/i);
 
@@ -830,7 +833,7 @@ describe('voice loop — emotional prompt defaults', () => {
 
     process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
     process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT = 'false';
-    const disabled = await buildSpokenPromptAugmentation("c'est génial");
+    const disabled = await buildSpokenPromptAugmentation("c'est génial", [], undefined, undefined, noRelationalSources);
     expect(disabled).not.toContain('<expressive_spoken_text>');
   });
 

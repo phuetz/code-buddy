@@ -58,6 +58,13 @@ export interface ModelToolConfig {
    *     full instruction set.
    */
   promptProfile?: 'lite' | 'standard' | 'rich';
+  /**
+   * Programmatic tool calling policy (P5, `src/config/code-exec-policy.ts`).
+   * Absent = `offer` (historical behaviour). `prefer` requires `codeExecEvidence`.
+   */
+  codeExec?: 'off' | 'offer' | 'prefer';
+  /** Path of the Buddy recette report (ADV01–ADV09) that justifies `codeExec: 'prefer'`. */
+  codeExecEvidence?: string;
 }
 
 /**
@@ -1257,6 +1264,11 @@ export function findModelToolConfig(
   customConfigs?: ModelToolConfig[],
 ): ModelToolConfig | null {
   return findConfigMatch(modelName, [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS])?.config ?? null;
+}
+
+/** Read-only view of the built-in table (consistency tests, e.g. P5 `codeExecEvidence`). */
+export function listDefaultModelToolConfigs(): readonly Readonly<ModelToolConfig>[] {
+  return DEFAULT_MODEL_CONFIGS.map((config) => Object.freeze({ ...config }));
 }
 
 export function getModelToolConfig(

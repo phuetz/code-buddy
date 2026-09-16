@@ -484,16 +484,69 @@ function childExecArgs(): string[] {
   return args;
 }
 
+/** Upper bound on waiting for the sandbox process to report `close`. */
+export const CHILD_CLOSE_GRACE_MS = 2_000;
+
+/**
+ * Wait for the OBSERVED `close` of the sandbox process — the event that says
+ * the process ended and its stdio is released. `exit` alone is not enough:
+ * `exitCode` can be set while stdio is still open, and the sandbox runs with
+ * the caller's workspace as its working directory, so the caller must not be
+ * told the workspace is free before the process really let go of it.
+ *
+ * @returns true when `close` was observed (or there is no process to wait for),
+ *          false when the grace elapsed first. The caller decides what an
+ *          unterminated sandbox means; this function never claims success.
+ */
+export function waitForChildClose(child: ChildProcess, graceMs = CHILD_CLOSE_GRACE_MS): Promise<boolean> {
+  // Spawn failed: no process exists, nothing holds the workspace, nothing to wait for.
+  if (child.pid === undefined && child.exitCode === null && child.signalCode === null) {
+    return Promise.resolve(true);
+  }
+  return new Promise<boolean>((resolve) => {
+    // Named handlers so every listener and the timer are removed on both paths.
+    const onClose = (): void => settle(true);
+    const onTimeout = (): void => settle(false);
+    // Deliberately referenced: a killed child can leave nothing else pending,
+    // and an unreferenced timer would let the host exit with this promise
+    // unsettled instead of finishing the run. The wait stays bounded by graceMs.
+    const timer = setTimeout(onTimeout, graceMs);
+    const settle = (closed: boolean): void => {
+      clearTimeout(timer);
+      child.removeListener('close', onClose);
+      resolve(closed);
+    };
+    child.on('close', onClose);
+  });
+}
+
+/**
+ * A sandbox process that did not close within the grace is a cleanup failure:
+ * it may still hold the workspace. Never report success in that case, and keep
+ * the original diagnosis when the run had already failed.
+ */
+export function sandboxNotTerminatedResult(result: ChildRunResult, graceMs = CHILD_CLOSE_GRACE_MS): ChildRunResult {
+  const notice = `Sandbox process did not terminate within ${graceMs}ms; its workspace may still be locked`;
+  return {
+    ...result,
+    success: false,
+    output: result.output ? `${result.output}\n${notice}` : notice,
+  };
+}
+
 function terminateChild(child: ChildProcess): void {
-  try {
-    if (child.connected) child.disconnect();
-  } catch { /* already disconnected */ }
+  // No explicit disconnect(): measured on Node 24, closing the IPC channel by
+  // hand before the kill suppresses the process 'close' event entirely (only
+  // 'disconnect' and 'exit' arrive), and 'close' is the signal that the process
+  // released its stdio — and with it the working directory. The channel is
+  // closed by the kill anyway ('disconnect' still fires), and no message can be
+  // sent after this point: `settled` is already true.
   try {
     if (!child.killed) child.kill('SIGKILL');
   } catch { /* already exited */ }
 }
 
-interface ChildRunResult {
+export interface ChildRunResult {
   success: boolean;
   output: string;
   yielded?: boolean;
@@ -539,7 +592,12 @@ async function runInChild(
       clearTimeout(timer);
       runtime.abortSignal?.removeEventListener('abort', onAbort);
       terminateChild(child);
-      resolve(result);
+      // Report completion only once `close` was observed: callers treat the
+      // resolved promise as "the sandbox no longer touches my workspace". A
+      // process that never closes is reported as a failure, never as success.
+      void waitForChildClose(child).then((closed) => {
+        resolve(closed ? result : sandboxNotTerminatedResult(result));
+      });
     };
 
     const timer = setTimeout(() => {

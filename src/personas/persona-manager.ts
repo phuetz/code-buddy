@@ -22,6 +22,7 @@ import {
 import { interpolatePersonaName, resolveCompanionPersona } from '../companion/personas/index.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { readJsonAtomic, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { logger } from '../utils/logger.js';
 
 export interface Persona {
   id: string;
@@ -630,7 +631,20 @@ export class PersonaManager extends EventEmitter {
           }
         }, 150);
       });
-      this.watcher.unref?.();
+      const watcher = this.watcher;
+      watcher.on('error', (error: NodeJS.ErrnoException) => {
+        // Windows Node 20 emits EPERM when the watched directory disappears.
+        // Hot reload is optional; keep the already-loaded personas usable.
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = null;
+        watcher.close();
+        if (this.watcher === watcher) this.watcher = null;
+        logger.warn('Persona hot reload stopped after a watcher error', {
+          code: error.code,
+          message: error.message,
+        });
+      });
+      watcher.unref?.();
     } catch {
       // Watching is best-effort — not fatal if unsupported
     }

@@ -103,6 +103,8 @@ describe('companion-toolset', () => {
       expect(isForbiddenCompanionTool('delete_file')).toBe(true);
 
       // A2A / MCP / delegation / registration
+      expect(isForbiddenCompanionTool('resource_catalog')).toBe(true);
+      expect(isForbiddenCompanionTool('a2a_call')).toBe(true);
       expect(isForbiddenCompanionTool('mcp_read')).toBe(true);
       expect(isForbiddenCompanionTool('mcp_server')).toBe(true);
       expect(isForbiddenCompanionTool('fleet_ping')).toBe(true);
@@ -184,7 +186,7 @@ describe('companion-toolset', () => {
     it('filters out forbidden tools even if explicitly in surcharge, including str_replace and multi_edit', () => {
       const env = {
         CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true',
-        CODEBUDDY_COMPANION_TOOLS: 'image_generate, bash, create_file, mcp_foo, str_replace, multi_edit, weather',
+        CODEBUDDY_COMPANION_TOOLS: 'image_generate, bash, create_file, mcp_foo, str_replace, multi_edit, resource_catalog, a2a_call, weather',
       };
       const tools = getCompanionToolNames(ownerIdentity, env);
       expect(tools).toEqual(['image_generate', 'weather']);
@@ -193,6 +195,8 @@ describe('companion-toolset', () => {
       expect(tools).not.toContain('mcp_foo');
       expect(tools).not.toContain('str_replace');
       expect(tools).not.toContain('multi_edit');
+      expect(tools).not.toContain('resource_catalog');
+      expect(tools).not.toContain('a2a_call');
     });
 
     it('filters out remind and camera from surcharge for present role via baseline intersection', () => {

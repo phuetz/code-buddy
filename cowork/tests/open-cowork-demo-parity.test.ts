@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const coworkRoot = process.cwd();
@@ -22,6 +22,8 @@ const publicMediaSecretPatterns: Array<{ label: string; pattern: RegExp }> = [
 ];
 
 function readRepoFile(...segments: string[]): string {
+  // Exact on-disk name, so a case-insensitive filesystem (Windows, macOS) cannot hide a wrong casing.
+  expect(readdirSync(path.join(repoRoot, ...segments.slice(0, -1)))).toContain(segments.at(-1));
   return readFileSync(path.join(repoRoot, ...segments), 'utf8');
 }
 
@@ -35,7 +37,7 @@ function readmeDemoSection(readme: string): string {
 
 describe('Open Cowork demo parity', () => {
   it('keeps every public demo asset repo-local under the studio QA folder, with a privacy note', () => {
-    const readme = readRepoFile('cowork', 'readme.md');
+    const readme = readRepoFile('cowork', 'README.md');
     const demoSection = readmeDemoSection(readme);
 
     // Every demo asset is a capture recorded from this build — never an
@@ -59,7 +61,7 @@ describe('Open Cowork demo parity', () => {
   });
 
   it('keeps the public demo media section free of literal secret-like strings', () => {
-    const demoSection = readmeDemoSection(readRepoFile('cowork', 'readme.md'));
+    const demoSection = readmeDemoSection(readRepoFile('cowork', 'README.md'));
     const hits = publicMediaSecretPatterns.flatMap(({ label, pattern }) =>
       Array.from(demoSection.matchAll(pattern), (match) => `${label}: ${match[0]}`)
     );

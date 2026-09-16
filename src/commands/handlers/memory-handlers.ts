@@ -2,6 +2,7 @@ import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getEnhancedMemory, getMemoryManager } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
 import { getErrorMessage } from "../../errors/index.js";
+import type { MemoryWriteResult } from "../../memory/persistent-memory.js";
 
 export interface MemoryCommandContext {
   cwd?: string;
@@ -35,6 +36,30 @@ function formatTimeAgo(date: Date, now: Date = new Date()): string {
   if (mon < 12) return `${mon} month${mon === 1 ? "" : "s"} ago`;
   const yr = Math.floor(day / 365);
   return `${yr} year${yr === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * Report a remember operation honestly: the persistent write is the primary
+ * result; fact reconciliation and the semantic index are secondary and their
+ * failures are shown without hiding (or overstating) the saved memory.
+ */
+async function describeRememberOutcome(
+  write: MemoryWriteResult | undefined,
+  requestedKey: string,
+  scope: "project" | "user",
+  storeSemantic: () => Promise<unknown>,
+): Promise<string> {
+  const lines = [`✅ Remembered: "${write?.key ?? requestedKey}" in persistent ${scope} memory.`];
+  if (write?.reconciliation?.status === "failed") {
+    lines.push(`⚠️ Fact reconciliation failed (${write.reconciliation.reason ?? "unknown error"}); the memory was saved directly and existing memories were kept unchanged.`);
+  }
+  try {
+    await storeSemantic();
+    lines.push("Semantic index updated.");
+  } catch (error) {
+    lines.push(`⚠️ Semantic index not updated: ${getErrorMessage(error)}`);
+  }
+  return lines.join("\n");
 }
 
 function clip(text: string, max = 180): string {
@@ -168,16 +193,13 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
           const value = args.slice(2).join(" ");
 
           // Store in both for redundancy and better retrieval
-          await persistentMemory.initialize();
-    await persistentMemory.remember(key, value, { scope, category: "custom" });
-          await enhancedMemory.store({
+          const write = await persistentMemory.remember(key, value, { scope, category: "custom" });
+          content = await describeRememberOutcome(write, key, scope, () => enhancedMemory.store({
             type: 'fact',
             content: `${key}: ${value}`,
             tags: [key, scope],
             importance: 0.8
-          });
-          
-          content = `✅ Remembered: "${key}" in persistent ${scope} memory and semantic index.`;
+          }));
         } else {
           content = `Usage: /memory remember <key> <content> [project|user]`;
         }
@@ -377,19 +399,20 @@ export async function handleRemember(args: string[], context?: MemoryCommandCont
     const persistentMemory = getMemoryManager(undefined, context?.botId, context?.cwd);
     const enhancedMemory = getEnhancedMemory();
 
-    await persistentMemory.remember(key, value, { scope, category: "custom" });
-    await enhancedMemory.store({
+    await persistentMemory.initialize();
+    const write = await persistentMemory.remember(key, value, { scope, category: "custom" });
+    const content = await describeRememberOutcome(write, key, scope, () => enhancedMemory.store({
       type: 'fact',
       content: `${key}: ${value}`,
       tags: [key, scope],
       importance: 0.8
-    });
+    }));
 
     return {
       handled: true,
       entry: {
         type: "assistant",
-        content: `✅ Remembered: "${key}" in persistent ${scope} memory and semantic index.`,
+        content,
         timestamp: new Date(),
       },
     };

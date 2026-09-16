@@ -7,7 +7,7 @@
  * skipped, never crashes the voice loop), and — through the REAL user-model privacy screen, no mock
  * — that only accepted facts surface and a sensitive fact is refused at write time so it can't leak.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -17,6 +17,15 @@ import {
 } from '../../src/companion/relational-context.js';
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { buildLlmArrivalOpener } from '../../src/sensory/arrival-opener.js';
+import { createIsolatedHome } from '../helpers/isolated-home.js';
+import { resetMemoryManagerForTests } from '../../src/memory/persistent-memory.js';
+
+const isolatedHome = createIsolatedHome('relational-context-home-');
+beforeAll(() => { isolatedHome.enter(); });
+afterAll(() => {
+  resetMemoryManagerForTests();
+  isolatedHome.leave();
+});
 
 describe('buildRelationalContext — composition', () => {
   it('composes facts → recent episode → personality → presence, in order', async () => {

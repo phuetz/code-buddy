@@ -32,7 +32,7 @@ const {
   mockWorkspaceDetector, mockInteractionLogger, mockSecurityManager,
   mockConfirmationService, mockCodeGuardianAgent, mockExportManager,
   mockSessionRepository, mockSettingsManager, mockSlashCommandManager,
-  mockToolFilter,
+  mockToolFilter, mockInitializeDatabase,
 } = vi.hoisted(() => ({
   mockMemoryManager: {
     initialize: vi.fn(),
@@ -121,8 +121,10 @@ const {
   },
   mockExportManager: {
     exportSession: vi.fn(),
+    exportConversationData: vi.fn(),
     listExports: vi.fn(),
   },
+  mockInitializeDatabase: vi.fn(),
   mockSessionRepository: {
     findSessions: vi.fn(),
   },
@@ -219,6 +221,10 @@ jest.mock('../../src/utils/export-manager', () => ({
 
 jest.mock('../../src/database/repositories/session-repository', () => ({
   getSessionRepository: jest.fn(function() { return mockSessionRepository; }),
+}));
+
+jest.mock('../../src/database/database-manager', () => ({
+  initializeDatabase: mockInitializeDatabase,
 }));
 
 jest.mock('../../src/utils/settings-manager', () => ({
@@ -325,7 +331,10 @@ describe('Memory Handlers', () => {
     mockMemoryManager.formatMemories.mockReturnValue('No memories stored');
     mockMemoryManager.recall.mockReturnValue(null);
     mockMemoryManager.initialize.mockResolvedValue(undefined);
-    mockMemoryManager.remember.mockResolvedValue(undefined);
+    mockMemoryManager.remember.mockImplementation(async (key: string) => ({
+      status: 'stored', key, scope: 'project', usage: { used: 1, limit: 100, percent: 1 },
+      message: `Stored "${key}" in project memory.`, reconciliation: { status: 'applied' },
+    }));
     mockMemoryManager.forget.mockResolvedValue(undefined);
   });
 
@@ -443,6 +452,37 @@ describe('Memory Handlers', () => {
       await handleRemember(['key', 'value']);
 
       expect(mockEnhancedMemory.store).toHaveBeenCalled();
+    });
+
+    test('loads existing memories before writing so the save cannot drop them', async () => {
+      await handleRemember(['key', 'value']);
+
+      expect(mockMemoryManager.initialize.mock.invocationCallOrder[0]!)
+        .toBeLessThan(mockMemoryManager.remember.mock.invocationCallOrder[0]!);
+    });
+
+    test('reports a failed fact reconciliation without hiding the saved memory', async () => {
+      mockMemoryManager.remember.mockResolvedValueOnce({
+        status: 'stored', key: 'test_key', scope: 'project', usage: { used: 1, limit: 100, percent: 1 },
+        message: 'Stored "test_key" in project memory.',
+        reconciliation: { status: 'failed', reason: '400 Incorrect API key provided' },
+      });
+
+      const result = await handleRemember(['test_key', 'test_valeur']);
+
+      expect(result.entry?.content).toContain('Remembered: "test_key" in persistent project memory');
+      expect(result.entry?.content).toContain('Fact reconciliation failed (400 Incorrect API key provided)');
+      expect(result.entry?.content).toContain('existing memories were kept unchanged');
+      expect(result.entry?.content).not.toContain('Error storing memory');
+    });
+
+    test('keeps the primary success when only the semantic index fails', async () => {
+      mockEnhancedMemory.store.mockRejectedValueOnce(new Error('vector store offline'));
+
+      const result = await handleRemember(['key', 'value']);
+
+      expect(result.entry?.content).toContain('Remembered: "key" in persistent project memory');
+      expect(result.entry?.content).toContain('Semantic index not updated: vector store offline');
     });
   });
 
@@ -1250,78 +1290,109 @@ describe('Export Handlers', () => {
       success: true,
       filePath: '/home/user/.codebuddy/exports/session-2025-01-15.md',
     });
+    mockExportManager.exportConversationData.mockResolvedValue({
+      success: true,
+      filePath: '/home/user/.codebuddy/exports/conversation-2025-01-15.md',
+    });
     mockExportManager.listExports.mockResolvedValue([]);
-    mockSessionRepository.findSessions.mockReturnValue([{ id: 'session-123' }]);
+    mockInitializeDatabase.mockResolvedValue(undefined);
   });
 
+  const conversation = [
+    { type: 'user' as const, content: 'hello', timestamp: new Date('2025-01-15T10:00:00Z') },
+    { type: 'assistant' as const, content: 'hi there', timestamp: new Date('2025-01-15T10:00:01Z') },
+    {
+      type: 'tool_result' as const,
+      content: 'file contents',
+      timestamp: new Date('2025-01-15T10:00:02Z'),
+      toolCall: { id: 'call-1', type: 'function' as const, function: { name: 'view_file', arguments: '{}' } },
+    },
+    { type: 'reasoning' as const, content: 'internal', timestamp: new Date('2025-01-15T10:00:03Z') },
+  ];
+
   describe('handleExport', () => {
-    test('should export most recent session by default', async () => {
-      const result = await handleExport([]);
+    test('exports the current conversation by default without touching the session database', async () => {
+      const result = await handleExport([], conversation, 'qwen3:4b-instruct');
 
       expect(result.handled).toBe(true);
-      expect(result.entry?.content).toContain('exported successfully');
-      expect(mockExportManager.exportSession).toHaveBeenCalledWith(
-        'session-123',
-        'markdown',
-        expect.any(Object)
-      );
+      expect(result.entry?.content).toContain('Current conversation exported successfully');
+      expect(mockInitializeDatabase).not.toHaveBeenCalled();
+      expect(mockExportManager.exportSession).not.toHaveBeenCalled();
+      const [data, format] = mockExportManager.exportConversationData.mock.calls[0]!;
+      expect(format).toBe('markdown');
+      expect(data.model).toBe('qwen3:4b-instruct');
+      expect(data.messages.map((m: { role: string }) => m.role)).toEqual(['user', 'assistant', 'tool']);
+      expect(data.messages[2]).toMatchObject({ toolName: 'view_file', toolCallId: 'call-1' });
     });
 
     test('should export with specified format', async () => {
-      await handleExport(['json']);
+      await handleExport(['json'], conversation);
 
-      expect(mockExportManager.exportSession).toHaveBeenCalledWith(
-        expect.any(String),
+      expect(mockExportManager.exportConversationData).toHaveBeenCalledWith(
+        expect.any(Object),
         'json',
         expect.any(Object)
       );
     });
 
-    test('should export specific session', async () => {
-      await handleExport(['session:abc123']);
+    test('initializes the session database before exporting a specific session', async () => {
+      const result = await handleExport(['session:abc123']);
 
+      expect(mockInitializeDatabase).toHaveBeenCalledTimes(1);
       expect(mockExportManager.exportSession).toHaveBeenCalledWith(
         'abc123',
         'markdown',
         expect.any(Object)
       );
+      expect(mockInitializeDatabase.mock.invocationCallOrder[0]!)
+        .toBeLessThan(mockExportManager.exportSession.mock.invocationCallOrder[0]!);
+      expect(result.entry?.content).toContain('Session abc123 exported successfully');
+    });
+
+    test('reports an unavailable session database instead of a raw initialization error', async () => {
+      mockInitializeDatabase.mockRejectedValue(new Error('better-sqlite3 missing'));
+
+      const result = await handleExport(['session:abc123']);
+
+      expect(mockExportManager.exportSession).not.toHaveBeenCalled();
+      expect(result.entry?.content).toContain('session database unavailable');
+      expect(result.entry?.content).toContain('better-sqlite3 missing');
     });
 
     test('should respect --include-secrets flag', async () => {
-      await handleExport(['--include-secrets']);
+      await handleExport(['--include-secrets'], conversation);
 
-      expect(mockExportManager.exportSession).toHaveBeenCalledWith(
-        expect.any(String),
+      expect(mockExportManager.exportConversationData).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.any(String),
         expect.objectContaining({ redactSecrets: false })
       );
     });
 
     test('should respect --no-tools flag', async () => {
-      await handleExport(['--no-tools']);
+      await handleExport(['--no-tools'], conversation);
 
-      expect(mockExportManager.exportSession).toHaveBeenCalledWith(
-        expect.any(String),
+      expect(mockExportManager.exportConversationData).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.any(String),
         expect.objectContaining({ includeToolCalls: false })
       );
     });
 
-    test('should handle no sessions found', async () => {
-      mockSessionRepository.findSessions.mockReturnValue([]);
-
+    test('says there is nothing to export when the conversation is empty', async () => {
       const result = await handleExport([]);
 
-      expect(result.entry?.content).toContain('No sessions found');
+      expect(result.entry?.content).toContain('Nothing to export yet');
+      expect(mockExportManager.exportConversationData).not.toHaveBeenCalled();
     });
 
     test('should handle export failure', async () => {
-      mockExportManager.exportSession.mockResolvedValue({
+      mockExportManager.exportConversationData.mockResolvedValue({
         success: false,
         error: 'Disk full',
       });
 
-      const result = await handleExport([]);
+      const result = await handleExport([], conversation);
 
       expect(result.entry?.content).toContain('Failed to export');
       expect(result.entry?.content).toContain('Disk full');
@@ -1686,12 +1757,10 @@ describe('Error Handling', () => {
     expect(result.entry?.content).toContain('Execution failed');
   });
 
-  test('handleExport should handle missing sessions gracefully', async () => {
-    mockSessionRepository.findSessions.mockReturnValue([]);
-
+  test('handleExport should handle an empty conversation gracefully', async () => {
     const result = await handleExport([]);
 
     expect(result.handled).toBe(true);
-    expect(result.entry?.content).toContain('No sessions found');
+    expect(result.entry?.content).toContain('Nothing to export yet');
   });
 });
