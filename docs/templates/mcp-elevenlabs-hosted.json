@@ -1,0 +1,25 @@
+{
+  "description": "Template Code Buddy : serveur MCP hébergé ElevenLabs (OAuth, aucune clé API). Copier l'entrée « elevenlabs » dans ~/.codebuddy/mcp.json → mcpServers. enabled:false : l'agent ne charge pas ce serveur ; buddy mcp test/audit appellent addServer et restent no-op tant que enabled est false. scopes lecture : intention AS, pas une preuve. toolFilter.exclude : commodité, pas une garantie lecture seule (noms d'outils inconnus tant que tools/list authentifié n'a pas été fait). redirectUri localhost : le callback écoute 127.0.0.1 seulement (limitation IPv6). Remplacer clientMetadataUrl ; ne pas inventer d'URL CIMD.",
+  "mcpServers": {
+    "elevenlabs": {
+      "name": "elevenlabs",
+      "description": "ElevenLabs hosted MCP (agents, TTS, music, images/video) — OAuth bearer, révocable depuis le compte ElevenLabs",
+      "enabled": false,
+      "transport": {
+        "type": "streamable_http",
+        "url": "https://api.elevenlabs.io/v1/mcp",
+        "auth": {
+          "type": "oauth",
+          "serverId": "elevenlabs",
+          "clientMetadataUrl": "https://REMPLACER-PAR-UN-DOCUMENT-HTTPS/client-metadata.json",
+          "scopes": ["speech_history_read", "convai_read"],
+          "redirectUri": "http://localhost:19836/callback",
+          "interactive": true
+        }
+      },
+      "toolFilter": {
+        "exclude": ["*generate*", "*create*", "*clone*", "*delete*"]
+      }
+    }
+  }
+}

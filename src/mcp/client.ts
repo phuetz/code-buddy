@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventEmitter } from "events";
 import { createTransport, MCPTransport, TransportType } from "./transports.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { logger } from "../utils/logger.js";
 import type { MCPServerConfig, MCPTool, ServerStatus } from "./types.js";
 
@@ -37,6 +38,13 @@ export class MCPManager extends EventEmitter {
   private serverStatuses: Map<string, ServerStatus> = new Map();
   private retryCounts: Map<string, number> = new Map();
   private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+  /**
+   * Bumped by removeServer. A still-running addServerInternal must not overwrite
+   * 'disconnected' with 'error' nor schedule autoReconnect (which would reopen
+   * the OAuth browser ~1s after an explicit cancel).
+   */
+  private connectEpochs: Map<string, number> = new Map();
   private serverAddPromises: Map<string, Promise<void>> = new Map();
   private initializationPromise: Promise<void> | null = null;
 
@@ -64,9 +72,34 @@ export class MCPManager extends EventEmitter {
     }
   }
 
+  private currentEpoch(serverName: string): number {
+    return this.connectEpochs.get(serverName) ?? 0;
+  }
+
+  private bumpConnectEpoch(serverName: string): number {
+    const next = this.currentEpoch(serverName) + 1;
+    this.connectEpochs.set(serverName, next);
+    return next;
+  }
+
+  private assertConnectCurrent(serverName: string, epoch: number): void {
+    if (this.currentEpoch(serverName) !== epoch) {
+      throw new Error(`MCP server "${serverName}" connection cancelled`);
+    }
+  }
+
+  private clearReconnectTimer(serverName: string): void {
+    const timer = this.reconnectTimers.get(serverName);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(serverName);
+    }
+  }
+
   private async addServerInternal(config: MCPServerConfig): Promise<void> {
     this.serverConfigs.set(config.name, config);
     this.serverStatuses.set(config.name, 'connecting');
+    const epoch = this.currentEpoch(config.name);
     
     try {
       // Handle legacy stdio-only configuration
@@ -102,8 +135,22 @@ export class MCPManager extends EventEmitter {
       this.clients.set(config.name, client);
 
       // Connect
-      const sdkTransport = await transport.connect();
-      await client.connect(sdkTransport);
+      let sdkTransport = await transport.connect();
+      this.assertConnectCurrent(config.name, epoch);
+      try {
+        await client.connect(sdkTransport);
+        this.assertConnectCurrent(config.name, epoch);
+      } catch (error) {
+        // First connection may end in UnauthorizedError once the OAuth code has been
+        // exchanged (SDK contract): reconnect once with the stored token.
+        if (!(error instanceof UnauthorizedError) || transportConfig.auth?.type !== 'oauth') throw error;
+        await transport.disconnect().catch(() => undefined);
+        this.assertConnectCurrent(config.name, epoch);
+        sdkTransport = await transport.connect();
+        this.assertConnectCurrent(config.name, epoch);
+        await client.connect(sdkTransport);
+        this.assertConnectCurrent(config.name, epoch);
+      }
 
       // Drain the captured MCP stderr to the logger. The stream only exists
       // for stdio transports created with stderr:'pipe' (see StdioTransport);
@@ -119,7 +166,8 @@ export class MCPManager extends EventEmitter {
 
       // List available tools
       const toolsResult = await client.listTools();
-      
+      this.assertConnectCurrent(config.name, epoch);
+
       // Register tools
       for (const tool of toolsResult.tools) {
         if (!mcpToolAllowed(tool.name, config.toolFilter)) continue;
@@ -138,6 +186,10 @@ export class MCPManager extends EventEmitter {
 
       this.emit('serverAdded', config.name, toolsResult.tools.length);
     } catch (error) {
+      if (this.currentEpoch(config.name) !== epoch) {
+        // Explicit removeServer raced this connect; keep disconnected.
+        throw error;
+      }
       this.serverStatuses.set(config.name, 'error');
       this.handleServerError(config.name, error);
       throw error;
@@ -190,10 +242,14 @@ export class MCPManager extends EventEmitter {
     if (retryCount < maxRetries) {
       this.retryCounts.set(serverName, retryCount + 1);
       const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-      
+      const epochAtError = this.currentEpoch(serverName);
+
       logger.info(`Attempting to reconnect to ${serverName} in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-      
-      setTimeout(async () => {
+
+      this.clearReconnectTimer(serverName);
+      const timer = setTimeout(async () => {
+        this.reconnectTimers.delete(serverName);
+        if (this.currentEpoch(serverName) !== epochAtError) return;
         try {
           await this.removeServer(serverName);
           await this.addServer(config);
@@ -201,6 +257,7 @@ export class MCPManager extends EventEmitter {
           logger.debug(`Reconnection attempt failed for ${serverName}`, { reconnectError });
         }
       }, delay);
+      this.reconnectTimers.set(serverName, timer);
     } else {
       logger.error(`Max reconnection attempts reached for ${serverName}`);
       this.serverStatuses.set(serverName, 'error');
@@ -212,6 +269,9 @@ export class MCPManager extends EventEmitter {
   }
 
   async removeServer(serverName: string): Promise<void> {
+    this.bumpConnectEpoch(serverName);
+    this.clearReconnectTimer(serverName);
+    this.serverAddPromises.delete(serverName);
     this.stopHealthCheck(serverName);
     this.serverStatuses.set(serverName, 'disconnected');
 

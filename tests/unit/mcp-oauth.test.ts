@@ -242,4 +242,23 @@ describe('MCPOAuthManager', () => {
     const token = await manager.getValidToken('fail-server');
     expect(token).toBeNull();
   });
+
+  it('persists client information in the encrypted store without a token and without plaintext secrets', () => {
+    manager.storeClientInformation('dcr-only', {
+      client_id: 'dcr-client-id',
+      client_secret: 'dcr-client-secret',
+      client_name: 'Code Buddy',
+    });
+    expect(manager.hasToken('dcr-only')).toBe(false);
+    expect(manager.getStoredToken('dcr-only')).toBeNull();
+    expect(manager.getStoredClientInformation('dcr-only')).toMatchObject({
+      client_id: 'dcr-client-id',
+      client_secret: 'dcr-client-secret',
+    });
+    const fileContent = fs.readFileSync(path.join(tempDir, '.codebuddy', 'mcp-tokens.json'), 'utf-8');
+    expect(fileContent).not.toContain('dcr-client-secret');
+    expect(fileContent).not.toContain('dcr-client-id');
+    const reloaded = new MCPOAuthManager();
+    expect(reloaded.getStoredClientInformation('dcr-only')?.client_id).toBe('dcr-client-id');
+  });
 });

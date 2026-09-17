@@ -3,6 +3,7 @@ import { SSEClientTransport as SDKSSEClientTransport } from "@modelcontextprotoc
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { createOAuthProvider, MCPStoredOAuthProvider, type MCPTransportOAuthConfig } from "./mcp-oauth-provider.js";
 
 import { EventEmitter } from "events";
 import axios, { AxiosInstance } from "axios";
@@ -20,6 +21,8 @@ export interface TransportConfig {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  /** OAuth bearer for HTTP transports (SDK discovery + PKCE, tokens in .codebuddy/mcp-tokens.json). */
+  auth?: MCPTransportOAuthConfig;
 }
 
 export interface MCPTransport {
@@ -189,6 +192,7 @@ class HttpClientTransport extends EventEmitter implements Transport {
 
 export class StreamableHttpTransport extends EventEmitter implements MCPTransport {
   private transport?: StreamableHTTPClientTransport;
+  private oauthProvider?: MCPStoredOAuthProvider;
 
   constructor(private config: TransportConfig) {
     super();
@@ -200,13 +204,19 @@ export class StreamableHttpTransport extends EventEmitter implements MCPTranspor
     if (!['http:', 'https:'].includes(url.protocol)) {
       throw new Error('Streamable HTTP MCP requires an HTTP(S) URL');
     }
+    const provider = this.config.auth?.type === 'oauth' ? createOAuthProvider(this.config.url!, this.config.auth) : undefined;
+    this.oauthProvider = provider;
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers: this.config.headers, redirect: 'error' },
+      ...(provider ? { authProvider: provider } : {}),
     });
+    provider?.attachTransport(this.transport);
     return this.transport;
   }
 
   async disconnect(): Promise<void> {
+    this.oauthProvider?.abortAuthorization();
+    this.oauthProvider = undefined;
     const transport = this.transport;
     this.transport = undefined;
     await transport?.close();
@@ -232,11 +242,38 @@ export function resolveMCPTransport(config: TransportConfig): TransportConfig {
     try { url = new URL(resolved.url); } catch { throw new Error('Invalid MCP endpoint configuration'); }
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('MCP requires HTTP(S) without embedded credentials, query or fragment');
   }
+  if (config.auth) {
+    const auth = { ...config.auth,
+      serverId: config.auth.serverId && resolve(config.auth.serverId),
+      clientId: config.auth.clientId && resolve(config.auth.clientId),
+      clientMetadataUrl: config.auth.clientMetadataUrl && resolve(config.auth.clientMetadataUrl),
+      redirectUri: config.auth.redirectUri && resolve(config.auth.redirectUri) };
+    if (auth.redirectUri) {
+      // The authorization code must only ever come back to the local callback server.
+      let redirect: URL;
+      try { redirect = new URL(auth.redirectUri); } catch { throw new Error('MCP OAuth redirectUri must be a loopback http URL'); }
+      // Hostname localhost is allowed so a CIMD document's redirect_uris can match.
+      // The callback server still binds 127.0.0.1 only — a browser that resolves
+      // localhost to ::1 will not hit it. Use 127.0.0.1 when the metadata says so.
+      if (redirect.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(redirect.hostname)) throw new Error('MCP OAuth redirectUri must be a loopback http URL');
+    }
+    if (auth.clientMetadataUrl) {
+      let meta: URL;
+      try { meta = new URL(auth.clientMetadataUrl); } catch { throw new Error('MCP OAuth clientMetadataUrl must be an https URL with a document path'); }
+      if (meta.protocol !== 'https:' || meta.pathname === '/') throw new Error('MCP OAuth clientMetadataUrl must be an https URL with a document path');
+    }
+    return { ...resolved, auth };
+  }
   return resolved;
 }
 
 export function createTransport(input: TransportConfig): MCPTransport {
   const config = resolveMCPTransport(input);
+  if (config.auth?.type === 'oauth' && config.type !== 'streamable_http') {
+    throw new Error(
+      `MCP OAuth is only supported on streamable_http (got ${config.type}); refusing to connect without the authProvider.`,
+    );
+  }
   switch (config.type) {
     case 'stdio':
       return new StdioTransport(config);
