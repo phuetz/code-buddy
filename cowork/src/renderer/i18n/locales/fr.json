@@ -3193,5 +3193,244 @@
     "kyutaiSTT": "Kyutai STT",
     "kyutaiTTS": "Kyutai TTS",
     "audioTooling": "Outils audio"
+  },
+  "helpDocs": {
+    "title": "Aide Cowork",
+    "searchPlaceholder": "Rechercher un écran…",
+    "indexTitle": "Tous les écrans",
+    "purposeLabel": "À quoi ça sert",
+    "whenLabel": "Quand s’en servir",
+    "prerequisitesLabel": "Ce qu’il faut avant",
+    "none": "Rien de plus.",
+    "undocumented": "À documenter",
+    "openForScreen": "Aide de cet écran",
+    "keyboardHint": "F1 ouvre cet index. Échap le ferme.",
+    "noResults": "Aucun écran ne correspond.",
+    "groups": {
+      "work": "Travail",
+      "agents": "Agents et flotte",
+      "automation": "Automatisation",
+      "companion": "Compagnon",
+      "insights": "Observations et apprentissage",
+      "system": "Système"
+    },
+    "screens": {
+      "work-home": {
+        "title": "Espace de travail",
+        "purpose": "C’est l’espace principal : vous parlez à l’agent et voyez la conversation.",
+        "when": "Vous voulez que l’agent écrive, modifie ou exécute quelque chose dans votre dossier.",
+        "prerequisites": "Un modèle doit être configuré (clé API, connexion, ou moteur local)."
+      },
+      "new-task": {
+        "title": "Nouvelle tâche",
+        "purpose": "Ouvre une session vide pour que la prochaine demande ne se mélange pas à la conversation précédente.",
+        "when": "La conversation en cours est terminée et vous voulez commencer autre chose.",
+        "prerequisites": ""
+      },
+      "global-search": {
+        "title": "Recherche",
+        "purpose": "Retrouve sessions, messages, mémoire, connaissances et fichiers depuis un seul champ.",
+        "when": "Vous vous souvenez d’une phrase mais plus du chat ou du fichier.",
+        "prerequisites": "Application bureau (la recherche passe par le pont local)."
+      },
+      "focus": {
+        "title": "Vue focus",
+        "purpose": "N’affiche que la session en cours : dernière demande, réponse, minuteur et arrêt.",
+        "when": "Un long travail tourne et le reste de l’interface distrait.",
+        "prerequisites": "Une session ouverte. Sinon l’écran indique qu’il n’y en a pas."
+      },
+      "bookmarks": {
+        "title": "Favoris",
+        "purpose": "Liste les messages que vous avez étoilés pour y revenir.",
+        "when": "Vous avez gardé une réponse et voulez rouvir cette conversation.",
+        "prerequisites": "Application bureau. Étoilez d’abord un message, sinon la liste est vide."
+      },
+      "orchestrator": {
+        "title": "Lancer une équipe multi-agents",
+        "purpose": "Démarre plusieurs agents spécialisés sur un même objectif (codeur, relecteur, testeur…).",
+        "when": "La tâche est assez large pour que des rôles en parallèle aident.",
+        "prerequisites": "Une session active. Le dialogue prévient s’il n’y en a pas."
+      },
+      "team": {
+        "title": "Équipe d’agents",
+        "purpose": "Montre les membres, les rôles, les tâches et la boîte partagée pour répartir le travail.",
+        "when": "Une équipe tourne et vous devez ajouter quelqu’un, une tâche, ou l’arrêter.",
+        "prerequisites": "Application bureau (le pont équipe n’existe pas dans l’aperçu navigateur)."
+      },
+      "fleet-command": {
+        "title": "Centre de commandement Fleet",
+        "purpose": "Envoie un objectif aux pairs Code Buddy connectés et suit l’exécution.",
+        "when": "Plusieurs machines ou modèles doivent travailler ensemble sur la même demande.",
+        "prerequisites": "Au moins un pair Fleet connecté et authentifié."
+      },
+      "fleet-events": {
+        "title": "Événements des pairs",
+        "purpose": "Liste les autres instances Code Buddy et les événements qu’elles envoient en direct.",
+        "when": "Vous voulez savoir si un pair est en ligne et ce qu’il fait.",
+        "prerequisites": "Des pairs enregistrés sur l’écoute Fleet. Une liste vide signifie qu’aucun n’est encore connecté."
+      },
+      "autonomy": {
+        "title": "Autonomie",
+        "purpose": "Pilote le travail sans surveillance : service, modèle utilisé, tableau de tâches partagé.",
+        "when": "Vous voulez que le travail continue sans rester dans le chat.",
+        "prerequisites": "Le service d’autonomie peut s’installer depuis cet écran ; un modèle est nécessaire pour un vrai cycle."
+      },
+      "devices": {
+        "title": "Appareils appariés",
+        "purpose": "Liste en lecture seule les machines appariées en SSH, ADB ou local.",
+        "when": "Vous voulez vérifier quels téléphones ou hôtes l’agent peut joindre.",
+        "prerequisites": "Apparier ou retirer un appareil se fait en CLI (`buddy device pair`). Cet écran ne les apparie pas."
+      },
+      "workflows": {
+        "title": "Workflows",
+        "purpose": "Crée, modifie et lance des workflows réutilisables, y compris avec approbation.",
+        "when": "La même suite d’actions doit se répéter.",
+        "prerequisites": ""
+      },
+      "live-launcher": {
+        "title": "Lanceur recherche / flux",
+        "purpose": "Lance une recherche ou une planification en direct et affiche la sortie ici.",
+        "when": "Vous voulez un rapport documenté ou un plan structuré, pas un simple tour de chat.",
+        "prerequisites": "Un modèle utilisable. Le formulaire peut préremplir un choix Ollama local s’il existe."
+      },
+      "mission-board": {
+        "title": "Tableau des missions",
+        "purpose": "Organise les missions du compagnon (ouvertes, en cours, terminées) sans écrire les fichiers à la main.",
+        "when": "Un radar ou une synchro a créé des éléments et vous voulez les démarrer, terminer ou écarter.",
+        "prerequisites": "Un espace de travail actif. Le pont missions du compagnon doit être disponible dans l’application bureau."
+      },
+      "desktop-snapshot": {
+        "title": "Instantané du bureau",
+        "purpose": "Capture ce qui est à l’écran (accessibilité et/ou OCR) sans cliquer ni taper.",
+        "when": "Vous voulez que l’agent voie la fenêtre actuelle avant d’approuver une action.",
+        "prerequisites": "Application bureau avec le pont d’instantané. La capture n’agit pas sur le bureau."
+      },
+      "schedule": {
+        "title": "Planifications",
+        "purpose": "Définit des tâches à une heure donnée ou selon une règle répétée.",
+        "when": "Quelque chose doit arriver chaque matin ou un jour de semaine, sans ouvrir le chat.",
+        "prerequisites": ""
+      },
+      "hooks": {
+        "title": "Hooks et déclencheurs",
+        "purpose": "Attache une commande, un appel HTTP ou un prompt à un événement (début de session, outil…).",
+        "when": "Vous voulez un contrôle ou une notification après qu’un outil a été utilisé.",
+        "prerequisites": "Un dossier de projet (les hooks sont dans `.codebuddy/hooks.json`)."
+      },
+      "commands": {
+        "title": "Commandes personnalisées",
+        "purpose": "Crée vos propres commandes slash, visibles dans le menu « / » du chat.",
+        "when": "Vous retapez souvent le même prompt et voulez un raccourci.",
+        "prerequisites": ""
+      },
+      "companion": {
+        "title": "Compagnon Buddy",
+        "purpose": "Cockpit du compagnon : capteurs, journal, voix et états associés.",
+        "when": "Vous pilotez le côté compagnon (caméra, écoute, réponses parlées), pas une tâche de code.",
+        "prerequisites": "Les données en direct demandent le réglage compagnon/sensoriel. Le panneau s’ouvre quand même sans cela."
+      },
+      "channels": {
+        "title": "Canaux de livraison",
+        "purpose": "Connecte les canaux de messagerie, enregistre les secrets sans les réafficher, et gère qui peut écrire à l’agent.",
+        "when": "Vous voulez parler à l’agent depuis Telegram ou un autre canal configuré.",
+        "prerequisites": "Un jeton ou un secret de canal. Les secrets sont en écriture seule et ne sont jamais relus."
+      },
+      "mobile-supervision": {
+        "title": "Supervision mobile",
+        "purpose": "Affiche le code d’appariement du téléphone et une file de relecture. Approuver ne lance aucun travail.",
+        "when": "Un téléphone apparié a envoyé une proposition à relire sur le bureau.",
+        "prerequisites": "Démarrer le serveur intégré depuis la barre de titre. Sinon l’écran indique que le serveur n’est pas lancé."
+      },
+      "activity": {
+        "title": "Activité",
+        "purpose": "Frise des événements récents (sessions, notifications, flotte, planifications).",
+        "when": "Vous voulez savoir ce qui s’est passé aujourd’hui sans ouvrir chaque session.",
+        "prerequisites": "Application bureau. La liste est vide tant qu’aucun événement n’a été enregistré."
+      },
+      "session-insights": {
+        "title": "Aperçu des sessions",
+        "purpose": "Résume les sessions : messages, outils, jetons, extrait de transcription.",
+        "when": "Vous voulez relire une session passée, ou en retrouver une par son contenu.",
+        "prerequisites": "Au moins une session enregistrée."
+      },
+      "test-runner": {
+        "title": "Lanceur de tests",
+        "purpose": "Exécute le catalogue de contrôles de l’application et affiche le résultat.",
+        "when": "Vous avez changé du code ou un réglage et voulez vérifier depuis Cowork.",
+        "prerequisites": "Un cadre de tests détecté ou une entrée du catalogue. Les éléments non sûrs restent marqués."
+      },
+      "lessons": {
+        "title": "Leçons proposées",
+        "purpose": "File de relecture des leçons proposées. Rien n’est écrit tant que vous n’approuvez pas avec un nom de relecteur.",
+        "when": "L’agent (ou vous) a proposé une leçon et elle ne doit pas entrer en mémoire toute seule.",
+        "prerequisites": "Un projet actif. Sinon le panneau l’indique."
+      },
+      "user-model": {
+        "title": "Modèle utilisateur",
+        "purpose": "File de relecture des notes sur vos préférences et votre façon de travailler. L’acceptation est explicite.",
+        "when": "Vous voulez garder ou écarter une observation sur votre manière de travailler.",
+        "prerequisites": "Un projet actif. Santé, finance, relation et identifiants sont refusés."
+      },
+      "spec": {
+        "title": "Backlog de specs",
+        "purpose": "Tableau d’histoires avec portes de relecture (brouillon → approuvé → en cours → terminé, ou bloqué).",
+        "when": "Vous voulez un backlog durable avec un relecteur nommé, une preuve, ou une raison de blocage.",
+        "prerequisites": "Un projet Cowork actif. Les fichiers vivent sous `.codebuddy/specs/` de ce projet."
+      },
+      "reasoning": {
+        "title": "Traces de raisonnement",
+        "purpose": "Rejoue les arbres de raisonnement enregistrés (scores, chemin retenu, frise).",
+        "when": "Vous voulez voir comment l’agent a exploré les options sur un problème difficile.",
+        "prerequisites": "Une trace doit déjà avoir été enregistrée pour une session."
+      },
+      "memory": {
+        "title": "Mémoire",
+        "purpose": "Parcourt les notes durables de l’agent pour ce projet et vos préférences.",
+        "when": "Vous voulez inspecter ou corriger ce que l’agent retient d’une session à l’autre.",
+        "prerequisites": "Fichiers mémoire du projet ou du compte. Vide si rien n’a encore été enregistré."
+      },
+      "identity": {
+        "title": "Identité de l’agent",
+        "purpose": "Édite les fichiers d’identité (SOUL.md, USER.md, AGENTS.md, etc.) de ce projet.",
+        "when": "Vous voulez changer la façon dont l’agent se présente ou ce qu’il sait de vous.",
+        "prerequisites": "Les fichiers sont sous `.codebuddy/` du projet (le projet l’emporte sur le global)."
+      },
+      "settings": {
+        "title": "Réglages",
+        "purpose": "Panneau complet : thème, moteur, bac à sable, audio, et les autres onglets.",
+        "when": "Vous devez changer le comportement de Cowork, pas faire une tâche ponctuelle.",
+        "prerequisites": ""
+      },
+      "api": {
+        "title": "Réglages API",
+        "purpose": "Connecte les modèles : clés, connexions, jeux de config, fournisseurs locaux.",
+        "when": "Le chat ne fonctionne pas encore, ou vous voulez changer de fournisseur.",
+        "prerequisites": "C’est ici qu’on ajoute les clés ou qu’on termine une connexion. Rien d’autre n’est exigé avant."
+      },
+      "connectors": {
+        "title": "Connecteurs MCP",
+        "purpose": "Ajoute et démarre des serveurs MCP pour donner des outils supplémentaires à l’agent.",
+        "when": "Vous avez besoin d’un connecteur, par exemple un navigateur ou une API externe.",
+        "prerequisites": ""
+      },
+      "rules": {
+        "title": "Règles d’autorisation",
+        "purpose": "Édite les règles autoriser/refuser des outils et peut tester un appel à blanc.",
+        "when": "Vous en avez assez d’approuver le même outil sûr, ou vous voulez en bloquer un dangereux.",
+        "prerequisites": "Les règles sont dans `.codebuddy/settings.json` du projet."
+      },
+      "skills": {
+        "title": "Skills",
+        "purpose": "Liste les paquets de skills installés et la file de relecture des nouveaux.",
+        "when": "Vous voulez activer, désactiver ou relire un paquet SKILL.md.",
+        "prerequisites": "Les actions de cycle de vie demandent un nom de relecteur. Un dossier de travail est utilisé s’il est ouvert."
+      },
+      "plugins": {
+        "title": "Plugins",
+        "purpose": "Liste les plugins installés, active leurs parties, et parcourt le catalogue.",
+        "when": "Vous voulez ajouter ou couper un plugin (skills, commandes, agents, hooks, MCP).",
+        "prerequisites": ""
+      }
+    }
   }
 }

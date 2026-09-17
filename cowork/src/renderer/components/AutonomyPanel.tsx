@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LiveBudgetMeter } from './LiveBudgetMeter';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   X,
   Cpu,
@@ -281,6 +282,7 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
           {t('autonomy.title', 'Advanced Autonomy Dashboard (YOLO / Daemon)')}
         </h2>
         <div className="ml-auto flex items-center gap-3">
+          <ScreenHelpButton screenId="autonomy" />
           <LiveBudgetMeter />
           <div className="flex items-center gap-1">
             <button

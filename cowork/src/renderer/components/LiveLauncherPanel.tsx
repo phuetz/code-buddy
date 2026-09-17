@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Play, Square, Telescope, X } from 'lucide-react';
 import { MessageMarkdown } from './MessageMarkdown';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import { useAppStore } from '../store';
 import type {
   LiveLauncherEventPayload,
@@ -204,6 +205,7 @@ export function LiveLauncherPanel({ isOpen, onClose }: LiveLauncherPanelProps) {
         <h2 className="text-sm font-semibold text-text-primary">
           {t('liveLauncher.title', 'Research / Flow launcher')}
         </h2>
+        <ScreenHelpButton screenId="live-launcher" />
         {status && (
           <span
             className={`text-[9px] px-1.5 py-0.5 rounded border uppercase ${

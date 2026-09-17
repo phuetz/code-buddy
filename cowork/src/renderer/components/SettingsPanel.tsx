@@ -64,6 +64,8 @@ import { SettingsRemoteBackend } from './settings/SettingsRemoteBackend';
 import { SettingsTunnel } from './settings/SettingsTunnel';
 import { SettingsAudio } from './settings/SettingsAudio';
 import { SkillsBrowser } from './SkillsBrowser';
+import { ScreenHelpButton } from './ScreenHelpButton';
+import { settingsTabToScreenId } from '../help/shell-nav-catalog';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -597,13 +599,16 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            aria-label={t('common.close')}
-            className="p-2 rounded-lg hover:bg-surface-hover transition-colors"
-          >
-            <X className="w-5 h-5 text-text-secondary" />
-          </button>
+          <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId={settingsTabToScreenId(activeTab)} />
+            <button
+              onClick={onClose}
+              aria-label={t('common.close')}
+              className="p-2 rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              <X className="w-5 h-5 text-text-secondary" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 lg:px-8 lg:py-8">
           <div className="max-w-[860px] w-full min-w-0 mx-auto">

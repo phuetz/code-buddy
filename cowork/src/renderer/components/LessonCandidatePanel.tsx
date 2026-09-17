@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, GraduationCap, Check, Trash2, AlertCircle, FolderOpen, RefreshCw, Cpu } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   NO_ACTIVE_PROJECT,
   type LessonCandidate,
@@ -153,6 +154,7 @@ export function LessonCandidatePanel() {
             <h2 className="text-sm font-semibold text-text-primary">Lesson candidates</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="lessons" />
             <button
               onClick={() => void refresh()}
               className="rounded p-1 hover:bg-surface transition-colors"

@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { SHELL_NAV_TREE, helpCopyKey } from '../help/shell-nav-catalog';
 import { GuidedTooltip } from './Tooltip';
 
 interface ShellNavAction {
@@ -49,27 +50,17 @@ interface ShellNavAction {
   testId?: string;
 }
 
+type ShellNavActionDef = Omit<ShellNavAction, 'id' | 'label'> & {
+  label?: string;
+  labelKey?: string;
+  labelFallback?: string;
+};
+
 interface ShellNavGroup {
   id: string;
   label: string;
   actions: ShellNavAction[];
 }
-
-const SHELL_HELP: Record<string, string> = {
-  'work-home': 'Reviens à ton espace de travail principal et à la conversation active.',
-  'new-task': 'Démarre une session propre pour une nouvelle demande.',
-  'global-search': 'Retrouve sessions, messages, mémoire, fichiers et connaissances depuis un seul endroit.',
-  orchestrator: 'Lance une équipe de plusieurs agents pour comparer les approches et paralléliser le travail.',
-  team: 'Coordonne les agents, leurs rôles, leurs décisions et leur contexte partagé.',
-  'fleet-command': 'Supervise les pairs Fleet et les échanges multi-LLM en temps réel.',
-  autonomy: 'Observe et règle le niveau d’autonomie, les limites et les validations humaines.',
-  workflows: 'Compose des workflows réutilisables avec étapes, conditions, boucles et approbations.',
-  'live-launcher': 'Lance une recherche ou une mission structurée avec mesure des résultats.',
-  'mission-board': 'Organise les missions, leur avancement et les prochaines actions.',
-  assistant: 'Configure l’assistant vocal, le TTS local, le volume et les interruptions.',
-  skills: 'Installe, inspecte et autorise les skills qui étendent les capacités de l’agent.',
-  plugins: 'Gère les extensions et les intégrations qui ajoutent de nouveaux outils.',
-};
 
 export function ShellNavigation() {
   const { t } = useTranslation();
@@ -134,319 +125,304 @@ export function ShellNavigation() {
     setShowSettings(true);
   };
 
-  const groups: ShellNavGroup[] = [
-    {
-      id: 'work',
-      label: t('shell.work', 'Work'),
-      actions: [
-        {
-          id: 'work-home',
-          label: t('shell.workHome', 'Work surface'),
-          icon: MessageSquare,
-          active: !showSettings,
-          onClick: () => setShowSettings(false),
-        },
-        {
-          id: 'new-task',
-          label: t('sidebar.newTask', 'New task'),
-          icon: Plus,
-          onClick: () => {
-            setShowSettings(false);
-            setActiveSession(null);
-          },
-        },
-        {
-          id: 'global-search',
-          label: t(
-            'globalSearch.placeholder',
-            'Search sessions, messages, memory, knowledge, files...'
-          ),
-          icon: Search,
-          active: showGlobalSearch,
-          onClick: () => setShowGlobalSearch(true),
-        },
-        {
-          id: 'focus',
-          label: t('focusView.title', 'Focus view'),
-          icon: Focus,
-          active: showFocusView,
-          onClick: () => setShowFocusView(true),
-          testId: 'focus-view-button',
-        },
-        {
-          id: 'bookmarks',
-          label: t('bookmarks.title', 'Bookmarks'),
-          icon: Star,
-          active: showBookmarksPanel,
-          onClick: () => setShowBookmarksPanel(true),
-          testId: 'bookmarks-button',
-        },
-      ],
+  const actionById: Record<string, ShellNavActionDef> = {
+    'work-home': {
+      labelKey: 'shell.workHome',
+      labelFallback: 'Work surface',
+      icon: MessageSquare,
+      active: !showSettings,
+      onClick: () => setShowSettings(false),
     },
-    {
-      id: 'agents',
-      label: t('shell.agentsFleet', 'Agents & Fleet'),
-      actions: [
-        {
-          id: 'orchestrator',
-          label: t('shell.orchestrator', 'Spawn multi-agent team'),
-          icon: Sparkles,
-          active: showOrchestratorLauncher,
-          onClick: () => setShowOrchestratorLauncher(true),
-          testId: 'orchestrator-button',
-        },
-        {
-          id: 'team',
-          label: t('shell.team', 'Agent Team'),
-          icon: Users,
-          active: showTeamPanel,
-          onClick: () => setShowTeamPanel(true),
-          testId: 'team-panel-button',
-        },
-        {
-          id: 'fleet-command',
-          label: t('fleet.title', 'Fleet Command Center'),
-          icon: Cpu,
-          active: showFleetCommandCenter,
-          onClick: () => setShowFleetCommandCenter(true),
-          testId: 'fleet-command-center-button',
-        },
-        {
-          id: 'fleet-events',
-          label: t('shell.fleetEvents', 'Fleet peer events'),
-          icon: Network,
-          active: showFleetPanel,
-          onClick: () => setShowFleetPanel(true),
-          testId: 'fleet-panel-button',
-        },
-        {
-          id: 'autonomy',
-          label: t('autonomy.title', 'Autonomy'),
-          icon: Zap,
-          active: showAutonomyPanel,
-          onClick: () => setShowAutonomyPanel(true),
-          testId: 'autonomy-panel-button',
-        },
-        {
-          id: 'devices',
-          label: t('devices.title', 'Paired devices'),
-          icon: MonitorSmartphone,
-          active: showDevicePanel,
-          onClick: () => setShowDevicePanel(true),
-          testId: 'devices-button',
-        },
-      ],
+    'new-task': {
+      labelKey: 'sidebar.newTask',
+      labelFallback: 'New task',
+      icon: Plus,
+      onClick: () => {
+        setShowSettings(false);
+        setActiveSession(null);
+      },
     },
-    {
-      id: 'automation',
-      label: t('shell.automation', 'Automation'),
-      actions: [
-        {
-          id: 'workflows',
-          label: t('settings.workflows', 'Workflows'),
-          icon: Workflow,
-          onClick: () => openSettingsTab('workflows'),
-          testId: 'workflows-button',
-        },
-        {
-          id: 'live-launcher',
-          label: t('liveLauncher.title', 'Research / Flow launcher'),
-          icon: Telescope,
-          active: showLiveLauncher,
-          onClick: () => setShowLiveLauncher(true),
-          testId: 'live-launcher-button',
-        },
-        {
-          id: 'mission-board',
-          label: t('missionBoard.title', 'Mission Board'),
-          icon: ClipboardList,
-          active: showMissionBoard,
-          onClick: () => setShowMissionBoard(true),
-          testId: 'mission-board-button',
-        },
-        {
-          id: 'desktop-snapshot',
-          label: t('desktopSnapshot.title', 'Desktop Snapshot'),
-          icon: MonitorSmartphone,
-          active: showDesktopSnapshot,
-          onClick: () => setShowDesktopSnapshot(true),
-          testId: 'desktop-snapshot-button',
-        },
-        {
-          id: 'schedule',
-          label: t('settings.schedule', 'Schedules'),
-          icon: Clock3,
-          onClick: () => openSettingsTab('schedule'),
-        },
-        {
-          id: 'hooks',
-          label: t('hooks.title', 'Hooks & triggers'),
-          icon: Webhook,
-          onClick: () => openSettingsTab('hooks'),
-        },
-        {
-          id: 'commands',
-          label: t('customCommands.title', 'Custom commands'),
-          icon: SlashSquare,
-          onClick: () => openSettingsTab('customCommands'),
-        },
-      ],
+    'global-search': {
+      labelKey: 'globalSearch.placeholder',
+      labelFallback: 'Search sessions, messages, memory, knowledge, files...',
+      icon: Search,
+      active: showGlobalSearch,
+      onClick: () => setShowGlobalSearch(true),
     },
-    {
-      id: 'companion',
-      label: t('shell.companionGroup', 'Companion'),
-      actions: [
-        {
-          id: 'companion',
-          label: t('shell.companion', 'Buddy companion'),
-          icon: Bot,
-          active: showCompanionPanel,
-          onClick: () => setShowCompanionPanel(true),
-          testId: 'companion-panel-button',
-        },
-        {
-          id: 'channels',
-          label: t('channels.title', 'Delivery channels'),
-          icon: Radio,
-          active: showChannelsPanel,
-          onClick: () => setShowChannelsPanel(true),
-          testId: 'channels-button',
-        },
-        {
-          id: 'mobile-supervision',
-          label: t('mobileSupervision.title', 'Mobile supervision'),
-          icon: Smartphone,
-          active: showMobileSupervisionPanel,
-          onClick: () => setShowMobileSupervisionPanel(true),
-          testId: 'mobile-supervision-button',
-        },
-      ],
+    focus: {
+      labelKey: 'focusView.title',
+      labelFallback: 'Focus view',
+      icon: Focus,
+      active: showFocusView,
+      onClick: () => setShowFocusView(true),
+      testId: 'focus-view-button',
     },
-    {
-      id: 'insights',
-      label: t('shell.insights', 'Insights & Learning'),
-      actions: [
-        {
-          id: 'activity',
-          label: t('activity.title', 'Activity'),
-          icon: Activity,
-          active: showActivityFeed,
-          onClick: () => setShowActivityFeed(true),
-          testId: 'activity-button',
-        },
-        {
-          id: 'session-insights',
-          label: t('sessionInsights.title', 'Session insights'),
-          icon: BarChart3,
-          active: showSessionInsights,
-          onClick: () => setShowSessionInsights(true),
-          testId: 'session-insights-button',
-        },
-        {
-          id: 'test-runner',
-          label: t('testRunner.title', 'Test runner'),
-          icon: FlaskConical,
-          active: showTestRunner,
-          onClick: () => setShowTestRunner(true),
-          testId: 'test-runner-button',
-        },
-        {
-          id: 'lessons',
-          label: t('lessonCandidate.title', 'Lesson candidates'),
-          icon: GraduationCap,
-          active: showLessonCandidatePanel,
-          onClick: () => setShowLessonCandidatePanel(true),
-          testId: 'lesson-candidate-button',
-        },
-        {
-          id: 'user-model',
-          label: t('userModel.title', 'User model'),
-          icon: Brain,
-          active: showUserModelPanel,
-          onClick: () => setShowUserModelPanel(true),
-          testId: 'user-model-button',
-        },
-        {
-          id: 'spec',
-          label: t('spec.title', 'Spec backlog'),
-          icon: ListChecks,
-          active: showSpecPanel,
-          onClick: () => setShowSpecPanel(true),
-          testId: 'spec-panel-button',
-        },
-        {
-          id: 'reasoning',
-          label: t('reasoningViewer.title', 'Reasoning traces'),
-          icon: Lightbulb,
-          active: showReasoningViewer,
-          onClick: () => setShowReasoningViewer(true),
-          testId: 'reasoning-viewer-button',
-        },
-        {
-          id: 'memory',
-          label: t('memoryBrowser.title', 'Memory'),
-          icon: Database,
-          active: showMemoryEditor,
-          onClick: () => setShowMemoryEditor(true),
-          testId: 'memory-panel-button',
-        },
-      ],
+    bookmarks: {
+      labelKey: 'bookmarks.title',
+      labelFallback: 'Bookmarks',
+      icon: Star,
+      active: showBookmarksPanel,
+      onClick: () => setShowBookmarksPanel(true),
+      testId: 'bookmarks-button',
     },
-    {
-      id: 'system',
-      label: t('shell.system', 'System'),
-      actions: [
-        {
-          id: 'identity',
-          label: t('identity.title', 'Agent identity'),
-          icon: Fingerprint,
-          active: showIdentityPanel,
-          onClick: () => setShowIdentityPanel(true),
-          testId: 'identity-button',
-        },
-        {
-          id: 'settings',
-          label: t('settings.title', 'Settings'),
-          icon: Settings,
-          active: showSettings,
-          onClick: () => openSettingsTab(null),
-          testId: 'shell-settings-button',
-        },
-        {
-          id: 'api',
-          label: t('settings.apiSettings', 'API Settings'),
-          icon: FileText,
-          onClick: () => openSettingsTab('api'),
-        },
-        {
-          id: 'connectors',
-          label: t('settings.connectors', 'MCP Connectors'),
-          icon: Plug,
-          onClick: () => openSettingsTab('connectors'),
-        },
-        {
-          id: 'rules',
-          label: t('settings.rules', 'Permission rules'),
-          icon: Shield,
-          onClick: () => openSettingsTab('rules'),
-        },
-        {
-          id: 'skills',
-          label: t('skills.title', 'Skills'),
-          icon: Blocks,
-          active: showSkillsManager,
-          onClick: () => setShowSkillsManager(true),
-          testId: 'skills-manager-button',
-        },
-        {
-          id: 'plugins',
-          label: t('plugins.title', 'Plugins'),
-          icon: Package,
-          onClick: () => openSettingsTab('plugins'),
-        },
-      ],
+    orchestrator: {
+      labelKey: 'shell.orchestrator',
+      labelFallback: 'Spawn multi-agent team',
+      icon: Sparkles,
+      active: showOrchestratorLauncher,
+      onClick: () => setShowOrchestratorLauncher(true),
+      testId: 'orchestrator-button',
     },
-  ];
+    team: {
+      labelKey: 'shell.team',
+      labelFallback: 'Agent Team',
+      icon: Users,
+      active: showTeamPanel,
+      onClick: () => setShowTeamPanel(true),
+      testId: 'team-panel-button',
+    },
+    'fleet-command': {
+      labelKey: 'fleet.title',
+      labelFallback: 'Fleet Command Center',
+      icon: Cpu,
+      active: showFleetCommandCenter,
+      onClick: () => setShowFleetCommandCenter(true),
+      testId: 'fleet-command-center-button',
+    },
+    'fleet-events': {
+      labelKey: 'shell.fleetEvents',
+      labelFallback: 'Fleet peer events',
+      icon: Network,
+      active: showFleetPanel,
+      onClick: () => setShowFleetPanel(true),
+      testId: 'fleet-panel-button',
+    },
+    autonomy: {
+      labelKey: 'autonomy.title',
+      labelFallback: 'Autonomy',
+      icon: Zap,
+      active: showAutonomyPanel,
+      onClick: () => setShowAutonomyPanel(true),
+      testId: 'autonomy-panel-button',
+    },
+    devices: {
+      labelKey: 'devices.title',
+      labelFallback: 'Paired devices',
+      icon: MonitorSmartphone,
+      active: showDevicePanel,
+      onClick: () => setShowDevicePanel(true),
+      testId: 'devices-button',
+    },
+    workflows: {
+      labelKey: 'settings.workflows',
+      labelFallback: 'Workflows',
+      icon: Workflow,
+      onClick: () => openSettingsTab('workflows'),
+      testId: 'workflows-button',
+    },
+    'live-launcher': {
+      labelKey: 'liveLauncher.title',
+      labelFallback: 'Research / Flow launcher',
+      icon: Telescope,
+      active: showLiveLauncher,
+      onClick: () => setShowLiveLauncher(true),
+      testId: 'live-launcher-button',
+    },
+    'mission-board': {
+      label: t('missionBoard.title', 'Mission Board'),
+      icon: ClipboardList,
+      active: showMissionBoard,
+      onClick: () => setShowMissionBoard(true),
+      testId: 'mission-board-button',
+    },
+    'desktop-snapshot': {
+      label: t('desktopSnapshot.title', 'Desktop Snapshot'),
+      icon: MonitorSmartphone,
+      active: showDesktopSnapshot,
+      onClick: () => setShowDesktopSnapshot(true),
+      testId: 'desktop-snapshot-button',
+    },
+    schedule: {
+      labelKey: 'settings.schedule',
+      labelFallback: 'Schedules',
+      icon: Clock3,
+      onClick: () => openSettingsTab('schedule'),
+    },
+    hooks: {
+      labelKey: 'hooks.title',
+      labelFallback: 'Hooks & triggers',
+      icon: Webhook,
+      onClick: () => openSettingsTab('hooks'),
+    },
+    commands: {
+      labelKey: 'customCommands.title',
+      labelFallback: 'Custom commands',
+      icon: SlashSquare,
+      onClick: () => openSettingsTab('customCommands'),
+    },
+    companion: {
+      labelKey: 'shell.companion',
+      labelFallback: 'Buddy companion',
+      icon: Bot,
+      active: showCompanionPanel,
+      onClick: () => setShowCompanionPanel(true),
+      testId: 'companion-panel-button',
+    },
+    channels: {
+      labelKey: 'channels.title',
+      labelFallback: 'Delivery channels',
+      icon: Radio,
+      active: showChannelsPanel,
+      onClick: () => setShowChannelsPanel(true),
+      testId: 'channels-button',
+    },
+    'mobile-supervision': {
+      labelKey: 'mobileSupervision.title',
+      labelFallback: 'Mobile supervision',
+      icon: Smartphone,
+      active: showMobileSupervisionPanel,
+      onClick: () => setShowMobileSupervisionPanel(true),
+      testId: 'mobile-supervision-button',
+    },
+    activity: {
+      labelKey: 'activity.title',
+      labelFallback: 'Activity',
+      icon: Activity,
+      active: showActivityFeed,
+      onClick: () => setShowActivityFeed(true),
+      testId: 'activity-button',
+    },
+    'session-insights': {
+      labelKey: 'sessionInsights.title',
+      labelFallback: 'Session insights',
+      icon: BarChart3,
+      active: showSessionInsights,
+      onClick: () => setShowSessionInsights(true),
+      testId: 'session-insights-button',
+    },
+    'test-runner': {
+      labelKey: 'testRunner.title',
+      labelFallback: 'Test runner',
+      icon: FlaskConical,
+      active: showTestRunner,
+      onClick: () => setShowTestRunner(true),
+      testId: 'test-runner-button',
+    },
+    lessons: {
+      labelKey: 'lessonCandidate.title',
+      labelFallback: 'Lesson candidates',
+      icon: GraduationCap,
+      active: showLessonCandidatePanel,
+      onClick: () => setShowLessonCandidatePanel(true),
+      testId: 'lesson-candidate-button',
+    },
+    'user-model': {
+      labelKey: 'userModel.title',
+      labelFallback: 'User model',
+      icon: Brain,
+      active: showUserModelPanel,
+      onClick: () => setShowUserModelPanel(true),
+      testId: 'user-model-button',
+    },
+    spec: {
+      labelKey: 'spec.title',
+      labelFallback: 'Spec backlog',
+      icon: ListChecks,
+      active: showSpecPanel,
+      onClick: () => setShowSpecPanel(true),
+      testId: 'spec-panel-button',
+    },
+    reasoning: {
+      labelKey: 'reasoningViewer.title',
+      labelFallback: 'Reasoning traces',
+      icon: Lightbulb,
+      active: showReasoningViewer,
+      onClick: () => setShowReasoningViewer(true),
+      testId: 'reasoning-viewer-button',
+    },
+    memory: {
+      labelKey: 'memoryBrowser.title',
+      labelFallback: 'Memory',
+      icon: Database,
+      active: showMemoryEditor,
+      onClick: () => setShowMemoryEditor(true),
+      testId: 'memory-panel-button',
+    },
+    identity: {
+      labelKey: 'identity.title',
+      labelFallback: 'Agent identity',
+      icon: Fingerprint,
+      active: showIdentityPanel,
+      onClick: () => setShowIdentityPanel(true),
+      testId: 'identity-button',
+    },
+    settings: {
+      labelKey: 'settings.title',
+      labelFallback: 'Settings',
+      icon: Settings,
+      active: showSettings,
+      onClick: () => openSettingsTab(null),
+      testId: 'shell-settings-button',
+    },
+    api: {
+      labelKey: 'settings.apiSettings',
+      labelFallback: 'API Settings',
+      icon: FileText,
+      onClick: () => openSettingsTab('api'),
+    },
+    connectors: {
+      labelKey: 'settings.connectors',
+      labelFallback: 'MCP Connectors',
+      icon: Plug,
+      onClick: () => openSettingsTab('connectors'),
+    },
+    rules: {
+      labelKey: 'settings.rules',
+      labelFallback: 'Permission rules',
+      icon: Shield,
+      onClick: () => openSettingsTab('rules'),
+    },
+    skills: {
+      labelKey: 'skills.title',
+      labelFallback: 'Skills',
+      icon: Blocks,
+      active: showSkillsManager,
+      onClick: () => setShowSkillsManager(true),
+      testId: 'skills-manager-button',
+    },
+    plugins: {
+      labelKey: 'plugins.title',
+      labelFallback: 'Plugins',
+      icon: Package,
+      onClick: () => openSettingsTab('plugins'),
+    },
+  };
+
+  const groupLabels: Record<string, { key: string; fallback: string }> = {
+    work: { key: 'shell.work', fallback: 'Work' },
+    agents: { key: 'shell.agentsFleet', fallback: 'Agents & Fleet' },
+    automation: { key: 'shell.automation', fallback: 'Automation' },
+    companion: { key: 'shell.companionGroup', fallback: 'Companion' },
+    insights: { key: 'shell.insights', fallback: 'Insights & Learning' },
+    system: { key: 'shell.system', fallback: 'System' },
+  };
+
+  const groups: ShellNavGroup[] = SHELL_NAV_TREE.map((group) => ({
+    id: group.id,
+    label: t(groupLabels[group.id]?.key ?? group.id, groupLabels[group.id]?.fallback ?? group.id),
+    actions: group.actions.map((id) => {
+      const def = actionById[id];
+      if (!def) {
+        throw new Error(`Shell navigation is missing action "${id}"`);
+      }
+      const { label, labelKey, labelFallback, ...rest } = def;
+      return {
+        id,
+        label: label ?? t(labelKey ?? id, labelFallback ?? id),
+        ...rest,
+      };
+    }),
+  }));
 
   return (
     // Always-expanded sidebar: labels + group headers visible by default.
@@ -476,8 +452,12 @@ export function ShellNavigation() {
 }
 
 function ShellNavButton({ action }: { action: ShellNavAction }) {
+  const { t } = useTranslation();
   const Icon = action.icon;
-  const description = SHELL_HELP[action.id] ?? `Ouvre ${action.label} et affiche ses outils disponibles.`;
+  const description = t(
+    helpCopyKey(action.id, 'purpose'),
+    `Ouvre ${action.label} et affiche ses outils disponibles.`
+  );
   return (
     <GuidedTooltip title={action.label} description={description} kicker="Cowork" side="right">
       <button
@@ -485,6 +465,7 @@ function ShellNavButton({ action }: { action: ShellNavAction }) {
         onClick={action.onClick}
         aria-label={action.label}
         data-testid={action.testId}
+        data-help-screen={action.id}
         className={`relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors ${
           action.active
             ? 'bg-accent/10 text-accent'

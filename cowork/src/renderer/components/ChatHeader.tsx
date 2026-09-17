@@ -15,6 +15,7 @@ import { TaskModeToggle } from './TaskModeToggle';
 import { BranchSwitcher } from './BranchSwitcher';
 import { VoiceOutputToggle } from './VoiceOutputToggle';
 import { CompanionThreadToggle } from './CompanionThreadToggle';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 import { useIPC } from '../hooks/useIPC';
 
@@ -125,6 +126,7 @@ export function ChatHeader() {
 
       {/* Model switcher and permission mode */}
       <div className="flex items-center gap-1.5 justify-self-end">
+        <ScreenHelpButton screenId="work-home" />
         <ContextWindowGauge />
         <LiveBudgetMeter />
         <SessionIntelligenceBar />

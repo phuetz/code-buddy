@@ -31,6 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   analyzeCompanionMediaPipeFrame,
   type CompanionMediaPipeVisionAnalysis,
@@ -2902,6 +2903,7 @@ export function CompanionPanel() {
             <h2 className="text-sm font-semibold text-text-primary">{t('companion.buddyCompanion', `Buddy companion`)}</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="companion" />
             <button
               onClick={() => void refresh()}
               className="rounded p-1 hover:bg-surface transition-colors"

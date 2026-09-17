@@ -22,6 +22,7 @@ import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { useAutoBargeIn } from './hooks/useAutoBargeIn';
 import { useBargeInTurnCancel } from './hooks/useBargeInTurnCancel';
 import { matchesShortcut, SHORTCUTS_CHANGED_EVENT } from './utils/shortcut-registry';
+import { handleHelpKeyDown } from './help/open-screen-help';
 import { TopMenuBar } from './components/TopMenuBar';
 import { PermissionDialog } from './components/PermissionDialog';
 import { SudoPasswordDialog } from './components/SudoPasswordDialog';
@@ -346,6 +347,9 @@ function App() {
     const handleShortcutRegistryChange = () => setShortcutRevision((value) => value + 1);
     window.addEventListener(SHORTCUTS_CHANGED_EVENT, handleShortcutRegistryChange);
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (handleHelpKeyDown(e)) {
+        return;
+      }
       if (matchesShortcut('globalSearch', e)) {
         e.preventDefault();
         setShowGlobalSearch(!showGlobalSearch);

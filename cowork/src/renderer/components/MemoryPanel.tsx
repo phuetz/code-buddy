@@ -8,6 +8,7 @@
 import { X, Brain } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { MemoryInspector } from './MemoryInspector';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface MemoryPanelProps {
   isOpen: boolean;
@@ -27,15 +28,18 @@ export function MemoryPanel({ isOpen, onClose }: MemoryPanelProps) {
         <h2 className="text-sm font-semibold text-text-primary">
           {t('memoryBrowser.title', 'Memory')}
         </h2>
+        <div className="ml-auto flex items-center gap-1">
+        <ScreenHelpButton screenId="memory" />
         <button
           onClick={onClose}
-          className="ml-auto p-1 text-text-muted hover:text-text-primary"
+          className="p-1 text-text-muted hover:text-text-primary"
           aria-label={t('common.close', 'Close')}
           title={t('common.close', 'Close')}
           data-testid="memory-panel-close"
         >
           <X size={16} />
         </button>
+        </div>
       </div>
       <div className="flex-1 overflow-hidden">
         <MemoryInspector />

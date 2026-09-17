@@ -176,7 +176,7 @@ export function TopMenuBar() {
         </button>
         {renderDropdown('Aide', [
           { label: 'Raccourcis clavier', icon: <Keyboard strokeWidth={1.5} />, onClick: () => setShowShortcutsDialog(true) },
-          { label: 'Documentation', icon: <Keyboard strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowHelpDocs(true) },
+          { label: 'Documentation', icon: <Keyboard strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowHelpDocs(true, null) },
         ])}
       </div>
     </div>

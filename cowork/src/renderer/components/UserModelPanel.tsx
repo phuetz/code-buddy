@@ -16,6 +16,7 @@ import { useAppStore } from '../store';
 import { useActiveSessionMessages } from '../store/selectors';
 import { toInferenceHistory } from './user-model-inference';
 import { EmptyState } from './LessonCandidatePanel';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   NO_ACTIVE_PROJECT,
   type UserObservation,
@@ -139,6 +140,7 @@ export function UserModelPanel() {
             <h2 className="text-sm font-semibold text-text-primary">User model</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="user-model" />
             <button
               onClick={() => void runInference()}
               disabled={inferring}

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X, Smartphone, Check, Trash2, AlertCircle, RefreshCw, KeyRound } from 'lucide-react';
 import { useAppStore } from '../store';
 import { EmptyState } from './LessonCandidatePanel';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 type Snapshot = Awaited<ReturnType<NonNullable<Window['electronAPI']>['mobileSupervision']['status']>>;
 type Draft = NonNullable<Snapshot['drafts']>[number];
@@ -83,6 +84,7 @@ export function MobileSupervisionPanel() {
             <h2 className="text-sm font-semibold text-text-primary">Mobile supervision</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="mobile-supervision" />
             <button onClick={() => void refresh()} className="rounded p-1 hover:bg-surface" title="Refresh">
               <RefreshCw className={`w-4 h-4 text-text-muted ${loading ? 'animate-spin' : ''}`} />
             </button>

@@ -18,6 +18,7 @@ import { AGENT_RECIPES } from './agent-recipes';
 import type { Session } from '../types';
 import { LivingBriefing } from './LivingBriefing';
 import { MaisonHomeCard } from './home/MaisonHomeCard';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface QuickAction {
   label: string;
@@ -158,9 +159,12 @@ export function HomeView() {
 
   return (
     <div
-      className="h-full min-h-0 overflow-auto flex flex-col items-center gap-6 p-5 sm:p-8"
+      className="relative h-full min-h-0 overflow-auto flex flex-col items-center gap-6 p-5 sm:p-8"
       data-testid="home-view"
     >
+      <div className="absolute right-4 top-4 z-10">
+        <ScreenHelpButton screenId="work-home" />
+      </div>
       <LivingBriefing sessions={sessions} onOpenMissionControl={() => setPrimaryView('os')} />
 
       <div className="text-center">

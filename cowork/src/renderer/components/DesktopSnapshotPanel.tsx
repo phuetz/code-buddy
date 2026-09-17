@@ -21,6 +21,7 @@ import {
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type { DesktopSnapshotCaptureResult, DesktopSnapshotElement, DesktopSnapshotMethod } from '../types';
 import { dispatchChatComposerInsert } from '../utils/chat-composer-events';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface DesktopSnapshotPanelProps {
   onClose: () => void;
@@ -185,6 +186,8 @@ export function DesktopSnapshotPanel({ onClose }: DesktopSnapshotPanelProps) {
               </p>
             </div>
           </div>
+          <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="desktop-snapshot" />
           <button
             aria-label={t('common.close', 'Close')}
             className="rounded p-1 text-text-muted hover:bg-surface hover:text-text-primary"
@@ -193,6 +196,7 @@ export function DesktopSnapshotPanel({ onClose }: DesktopSnapshotPanelProps) {
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">

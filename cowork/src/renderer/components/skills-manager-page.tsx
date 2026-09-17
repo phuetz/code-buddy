@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, PackageOpen, RefreshCw, X } from 'lucide-react';
 
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   SkillPackageManagerStrip,
   type SkillPackageManagerSummary,
@@ -144,6 +145,7 @@ export function SkillsManagerPage({ onClose, cwd, onUseAsGoal }: SkillsManagerPa
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <ScreenHelpButton screenId="skills" />
           <button
             type="button"
             data-testid="skills-manager-refresh"
