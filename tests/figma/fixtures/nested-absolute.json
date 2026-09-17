@@ -1,0 +1,60 @@
+{
+  "name": "Offset canvas",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "10:1",
+            "name": "Offset",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 500, "y": 300, "width": 375, "height": 400 },
+            "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "10:2",
+                "name": "Panel",
+                "type": "FRAME",
+                "absoluteBoundingBox": { "x": 520, "y": 340, "width": 200, "height": 80 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0.94, "g": 0.94, "b": 0.94 }, "opacity": 1 }],
+                "children": [
+                  {
+                    "id": "10:3",
+                    "name": "Label",
+                    "type": "TEXT",
+                    "characters": "Nested label",
+                    "style": { "fontSize": 14, "fontWeight": 400 },
+                    "absoluteBoundingBox": { "x": 530, "y": 350, "width": 120, "height": 20 },
+                    "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+                  }
+                ]
+              },
+              {
+                "id": "10:4",
+                "name": "Pill",
+                "type": "RECTANGLE",
+                "cornerRadius": 9999,
+                "absoluteBoundingBox": { "x": 520, "y": 500, "width": 120, "height": 32 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+              },
+              {
+                "id": "10:5",
+                "name": "Chip",
+                "type": "RECTANGLE",
+                "cornerRadius": 40,
+                "absoluteBoundingBox": { "x": 650, "y": 500, "width": 40, "height": 40 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0.2, "g": 0.2, "b": 0.2 }, "opacity": 1 }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

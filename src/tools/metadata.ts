@@ -344,6 +344,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'figma_import',
+    effect: 'reversible',
+    category: 'file_write',
+    keywords: ['figma', 'import', 'design', 'screen', 'frame', 'ui', 'react', 'maquette', 'composant'],
+    priority: 7,
+    description: 'Import a Figma REST JSON export (or file key + token at call time) into React screens; unsupported nodes are listed, not faked',
+    fleetSafe: false,
+  },
+  {
     name: 'csv_analyze',
     effect: 'read',
     category: 'utility',

@@ -1,0 +1,139 @@
+{
+  "name": "Nested components",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "7:1",
+            "name": "Button",
+            "type": "COMPONENT",
+            "layoutMode": "HORIZONTAL",
+            "itemSpacing": 0,
+            "paddingTop": 8,
+            "paddingBottom": 8,
+            "paddingLeft": 16,
+            "paddingRight": 16,
+            "cornerRadius": 9999,
+            "absoluteBoundingBox": { "x": -240, "y": 0, "width": 80, "height": 32 },
+            "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "7:2",
+                "name": "Label",
+                "type": "TEXT",
+                "characters": "OK",
+                "style": { "fontSize": 14, "fontWeight": 600 },
+                "absoluteBoundingBox": { "x": -224, "y": 8, "width": 48, "height": 16 },
+                "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }]
+              }
+            ]
+          },
+          {
+            "id": "8:1",
+            "name": "Banner",
+            "type": "COMPONENT",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 8,
+            "paddingTop": 12,
+            "paddingBottom": 12,
+            "paddingLeft": 12,
+            "paddingRight": 12,
+            "absoluteBoundingBox": { "x": -400, "y": 80, "width": 220, "height": 88 },
+            "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "8:2",
+                "name": "Title",
+                "type": "TEXT",
+                "characters": "Banner title",
+                "style": { "fontSize": 16, "fontWeight": 600 },
+                "absoluteBoundingBox": { "x": -388, "y": 92, "width": 196, "height": 22 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+              },
+              {
+                "id": "8:3",
+                "name": "Button",
+                "type": "INSTANCE",
+                "componentId": "7:1",
+                "absoluteBoundingBox": { "x": -388, "y": 122, "width": 80, "height": 32 },
+                "children": [
+                  {
+                    "id": "8:4",
+                    "name": "Label",
+                    "type": "TEXT",
+                    "characters": "Open",
+                    "style": { "fontSize": 14, "fontWeight": 600 },
+                    "absoluteBoundingBox": { "x": -372, "y": 130, "width": 48, "height": 16 },
+                    "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "9:1",
+            "name": "Gallery",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 12,
+            "paddingTop": 16,
+            "paddingBottom": 16,
+            "paddingLeft": 16,
+            "paddingRight": 16,
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 200 },
+            "fills": [{ "type": "SOLID", "color": { "r": 0.96, "g": 0.96, "b": 0.96 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "9:2",
+                "name": "Banner",
+                "type": "INSTANCE",
+                "componentId": "8:1",
+                "absoluteBoundingBox": { "x": 16, "y": 16, "width": 220, "height": 88 },
+                "children": [
+                  {
+                    "id": "9:3",
+                    "name": "Title",
+                    "type": "TEXT",
+                    "characters": "Welcome",
+                    "style": { "fontSize": 16, "fontWeight": 600 },
+                    "absoluteBoundingBox": { "x": 28, "y": 28, "width": 196, "height": 22 },
+                    "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+                  },
+                  {
+                    "id": "9:4",
+                    "name": "Button",
+                    "type": "INSTANCE",
+                    "componentId": "7:1",
+                    "absoluteBoundingBox": { "x": 28, "y": 58, "width": 80, "height": 32 },
+                    "children": [
+                      {
+                        "id": "9:5",
+                        "name": "Label",
+                        "type": "TEXT",
+                        "characters": "Open",
+                        "style": { "fontSize": 14, "fontWeight": 600 },
+                        "absoluteBoundingBox": { "x": 44, "y": 66, "width": 48, "height": 16 },
+                        "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "7:1": { "name": "Button", "key": "buttonkey" },
+    "8:1": { "name": "Banner", "key": "bannerkey" }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "Simple Login",
+  "lastModified": "2026-09-17T00:00:00Z",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "2:1",
+            "name": "Login",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 16,
+            "paddingLeft": 24,
+            "paddingRight": 24,
+            "paddingTop": 32,
+            "paddingBottom": 32,
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 812 },
+            "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "2:2",
+                "name": "Title",
+                "type": "TEXT",
+                "characters": "Sign in",
+                "style": { "fontSize": 26, "fontWeight": 700 },
+                "absoluteBoundingBox": { "x": 24, "y": 32, "width": 327, "height": 36 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+              },
+              {
+                "id": "2:3",
+                "name": "Hero",
+                "type": "RECTANGLE",
+                "cornerRadius": 8,
+                "absoluteBoundingBox": { "x": 24, "y": 84, "width": 327, "height": 160 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0.1, "g": 0.1, "b": 0.1 }, "opacity": 1 }]
+              },
+              {
+                "id": "2:4",
+                "name": "Photo",
+                "type": "RECTANGLE",
+                "absoluteBoundingBox": { "x": 24, "y": 260, "width": 327, "height": 120 },
+                "fills": [{ "type": "IMAGE", "imageRef": "img_simple_photo", "scaleMode": "FILL" }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

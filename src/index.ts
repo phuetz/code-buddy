@@ -3982,6 +3982,16 @@ addLazyCommand(
   },
 );
 
+addLazyCommand(
+  program,
+  'figma',
+  'Import a Figma REST JSON export (or file key + token at call time) into React screens',
+  async () => {
+    const { createFigmaCommand } = await import('./commands/figma.js');
+    return createFigmaCommand();
+  },
+);
+
 // Goal Ralph loop — headless judge-gated auto-continue (Hermes Agent parity)
 addLazyCommand(
   program,

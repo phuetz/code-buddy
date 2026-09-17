@@ -93,6 +93,7 @@ export { createResearchTools } from './research-tools.js';
 
 // Catalogue de design local (App Studio et génération d'interfaces)
 export { DesignSystemExecuteTool, createDesignTools } from './design-tools.js';
+export { FigmaImportExecuteTool, createFigmaTools } from './figma-tools.js';
 
 // Tool Adapters - Todo
 export {
@@ -709,6 +710,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createExtensionForgeTools(),
     ...createAuthoredExtraTools(),
     ...createDesignTools(),
+    ...createFigmaTools(),
     ...createCsvTools(),
     ...createMcpTools(),
   ];
@@ -803,6 +805,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createExtensionForgeTools(),
     ...createAuthoredExtraTools(),
     ...createDesignTools(),
+    ...createFigmaTools(),
     ...createCsvTools(),
   ];
   // Append canonical-prefix aliases (shell_exec → bash_run, etc.).
@@ -822,6 +825,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
 import { FormalToolRegistry } from './tool-registry.js';
 import { createAuthoredExtraTools } from './authored-extra-tools.js';
 import { createDesignTools } from './design-tools.js';
+import { createFigmaTools } from './figma-tools.js';
 import { createCsvTools } from './csv-tools.js';
 import { createTextEditorTools } from './text-editor-tools.js';
 import { createBashTools } from './bash-tools.js';

@@ -400,6 +400,11 @@ export {
   CODE_EXPLORER_TOOLS,
 } from './code-explorer-tools.js';
 
+export {
+  FIGMA_IMPORT_TOOL,
+  FIGMA_TOOLS,
+} from './figma-tools.js';
+
 // Re-export CodeBuddyTool from client for convenience
 export type { CodeBuddyTool as Tool } from './types.js';
 export * from "./windows-tools.js";

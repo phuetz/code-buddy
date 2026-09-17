@@ -81,6 +81,7 @@ import {
   SESSION_TOOLS,
   CODE_EXPLORER_TOOLS,
   WINDOWS_TOOLS,
+  FIGMA_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
 import { isContextZoomEnabled } from '../context/segment-archive.js';
@@ -390,6 +391,9 @@ export function initializeToolRegistry(): void {
 
   // CodeExplorer tools
   registerGroup(CODE_EXPLORER_TOOLS);
+
+  // Figma → React screens (local JSON export, or file key + token at call time)
+  registerGroup(FIGMA_TOOLS);
 
   // 20 pre-authored tools (scaffold_app, project_map, git_summary, file_search, …).
   // Dispatch adapters registered in ToolHandler.initializeRegistry() via
