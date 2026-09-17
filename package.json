@@ -1,6 +1,6 @@
 {
   "name": "@phuetz/code-buddy",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "AI coding agent with terminal and HTTP interfaces, optional Cowork desktop integration, multi-provider routing, tools, fleet collaboration and inspectable memory. See release notes for supported integrations and limits.",
   "author": "Patrice Huetz <patrice.huetz@gmail.com>",
   "repository": {

@@ -53,7 +53,7 @@ configuration; enabling a feature does not replace its permission checks.
 
 **New in 2.1:** explicit resource discovery and selection, RagChat search with page citations,
 MCP configuration import, a bounded A2A JSON-RPC bridge, and fixes for terminal sessions,
-configuration diagnostics and Cowork workflows. Read the [release notes](docs/RELEASE-NOTES-2.1.0.md)
+configuration diagnostics and Cowork workflows. Read the [release notes](docs/RELEASE-NOTES-2.2.0.md)
 for setup and the limits of each integration.
 
 - **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
@@ -261,7 +261,8 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — current changes and integration limits.
+- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — current changes and validation limits.
+- **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
 - [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
 - [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.
 - [Commands](docs/commands.md) · [Features](docs/features.md) · [Security](docs/security.md)

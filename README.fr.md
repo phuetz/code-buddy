@@ -6,10 +6,10 @@ Pour l’installation et les autres usages, consulter le [README principal](READ
 
 ## Nouveautés 2.1
 
-La version 2.1 ajoute un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
+La version 2.2 ajoute la connexion OAuth à ElevenLabs hébergé via MCP, fiabilise les commandes en script (interruption headless en code 130, `mcp add-json --yes`) et affiche le thème effectif dans `/status` ([notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)). La version 2.1 ajoutait un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
 
 ```sh
-npm install -g @phuetz/code-buddy@2.1.0
+npm install -g @phuetz/code-buddy@2.2.0
 buddy --version
 buddy doctor --offline
 ```
