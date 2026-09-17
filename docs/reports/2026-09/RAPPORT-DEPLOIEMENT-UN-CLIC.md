@@ -3,7 +3,7 @@
 **STATUT : COMPLET LOCAL** (pas de commit, aucun envoi réel)
 
 Branche : `feat/deploy-2026-09-17`
-Worktree : `/home/patrice/DEV/cb-deploy-2026-09-17`
+Worktree : `worktree cb-deploy-2026-09-17`
 Base : `origin/main` `b5c50c189`
 
 ## Garde-fous respectés
