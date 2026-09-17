@@ -324,3 +324,33 @@ describe('in-memory fs isolation', () => {
     expect(report.ok).toBe(true);
   });
 });
+
+it('refuse un dossier de sortie qui sort du projet par un lien symbolique', async () => {
+  const { mkdtemp, mkdir, writeFile, symlink, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const pathMod = await import('node:path');
+  const racine = await mkdtemp(pathMod.join(tmpdir(), 'deploy-symlink-'));
+  const projet = pathMod.join(racine, 'projet');
+  const dehors = pathMod.join(racine, 'dehors');
+  await mkdir(projet);
+  await mkdir(dehors);
+  await writeFile(pathMod.join(dehors, 'secret.txt'), 'contenu confidentiel');
+  await mkdir(pathMod.join(projet, '.codebuddy'));
+  await writeFile(pathMod.join(projet, '.codebuddy', 'deploy.json'), JSON.stringify({ target: 'netlify', outputDir: 'dist' }));
+  // `dist` pointe hors du projet : envoyer ce dossier publierait le secret.
+  await symlink(dehors, pathMod.join(projet, 'dist'));
+  try {
+    const report = await runOneClickDeploy(
+      { projectRoot: projet, dryRun: true },
+      {
+        which: memWhich({ netlify: '/usr/bin/netlify' }),
+        resolveToken: async () => ({ name: 'NETLIFY_AUTH_TOKEN', value: SECRET, source: 'env' as const }),
+        execFile: async () => ({ stdout: '', stderr: '', code: 0 }),
+      },
+    );
+    expect(report.ok).toBe(false);
+    expect(JSON.stringify(report)).toMatch(/escapes project root/i);
+  } finally {
+    await rm(racine, { recursive: true, force: true });
+  }
+});

@@ -15,7 +15,6 @@ import { redactSecrets, resolveFirstSecret } from './one-click-tokens.js';
 import {
   CLOUDFLARE_TOKEN_VARS,
   NETLIFY_TOKEN_VARS,
-  type ExecFileResult,
   type OneClickDeps,
   type OneClickDeployConfig,
   type OneClickExecFile,
@@ -40,6 +39,7 @@ function defaultFs(): OneClickFs {
     stat: (filePath) => nodeFs.stat(filePath),
     mkdir: (dirPath, options) => nodeFs.mkdir(dirPath, options).then(() => undefined),
     appendFile: (filePath, data) => nodeFs.appendFile(filePath, data),
+    realpath: (filePath) => nodeFs.realpath(filePath),
   };
 }
 
@@ -387,6 +387,31 @@ export async function runOneClickDeploy(
     });
   }
 
+  /*
+   * Le confinement se vérifie AVANT la simulation, pas après. Un `dist` qui est
+   * un lien symbolique vers un dossier extérieur — un répertoire personnel, un
+   * fichier de configuration système — serait envoyé tel quel par l'outil de
+   * déploiement. Si le contrôle n'a lieu qu'au moment de l'envoi réel, la
+   * simulation annonce « tout va bien » sur un cas qui n'ira jamais bien : elle
+   * rassure exactement là où elle devrait alerter.
+   */
+  try {
+    const realRoot = await (fsImpl.realpath ? fsImpl.realpath(projectRoot) : nodeFs.realpath(projectRoot));
+    const realOutput = await (fsImpl.realpath ? fsImpl.realpath(outputAbs) : nodeFs.realpath(outputAbs));
+    const rel = path.relative(realRoot, realOutput);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      base.durationMs = duration();
+      return fail(base, `Output directory "${config.outputDir}" escapes project root (symlink).`, {
+        id: 'output',
+        status: 'error',
+        detail: 'output directory symlink escapes project root',
+      });
+    }
+  } catch {
+    // Le dossier n'existe pas encore : la construction le créera, et l'étape
+    // qui suit l'envoi vérifie sa présence. Rien à confiner ici.
+  }
+
   const uploadPlan = buildUploadArgs(config.target, config, config.outputDir);
   const uploadCommand = `${path.basename(cliPath)} ${uploadPlan.args.join(' ')}`;
   const secretsToRedact = [token.value];
@@ -464,7 +489,8 @@ export async function runOneClickDeploy(
         detail: config.outputDir,
       });
     }
-  } catch {
+  } catch (error) {
+    if ((error as { id?: string })?.id === 'output') throw error;
     base.durationMs = duration();
     return fail(base, `Output directory "${config.outputDir}" does not exist after build.`, {
       id: 'output',
