@@ -1,11 +1,18 @@
 ## [Unreleased]
 
+## [2.2.0] (2026-09-17)
+
 ### Added
 
+- **mcp:** OAuth for hosted ElevenLabs over `streamable_http`: loopback PKCE sign-in, cancellation releases the local port, bounded retry of token exchange and `tools/list`, invalid tokens are dropped without losing the configured client. OAuth is refused on transports that do not support it. The ElevenLabs template stays disabled until configured.
+- **mcp:** `buddy mcp add-json -y/--yes` adds a server without the interactive confirmation; without a TTY and without `--yes` the command exits with an explicit error instead of waiting.
+- **status:** the effective theme is shown in `/status` and exposed as `theme` in `buddy doctor --json`.
 - **fleet:** add `peer_tool_invoke` agent tool wrapping `peer.tool.invoke` so a local agent can read/search on a connected peer (`view_file`, `list_directory`, `search`). Outbound only (`fleetSafe: false`); the three remote gates (allowlist, fleetSafe, workspace root) stay on the peer. Paths are forwarded, not resolved on the caller. Unrecognized peer errors are redacted (no absolute paths or secrets). The tool is force-included only when fleet peers are connected or the query is a fleet inspection.
 
 ### Fixed
 
+- **cli:** interrupting a headless run (`-p`, loop, try) with SIGINT now exits with 130 and keeps stdout clean (shutdown progress goes to stderr, no terminal escape sequences outside a TTY), so scripts can tell an interruption from success and JSON output stays parseable. Interactive sessions and supervised servers keep exit 0.
+- **mcp:** `buddy mcp add` and `add-json` close their connection probe after a successful add; the command no longer hangs on a live stdio child.
 - **fleet:** Lemonade id `Qwen3.6-35B-A3B-MTP-GGUF` now hits a dedicated case-insensitive GGUF row (`supportsToolCalls`, lite agent surface) instead of the hosted 262k `qwen3.6*` profile. OpenAI-compat also treats `qwen3*` as tool-capable so `tools`/`tool_choice` are not stripped on local ports. Recommended default: Qwen3.6 via Lemonade, fallback `gemma4:12b`.
 
 ## [2.1.0] (2026-09-16)
