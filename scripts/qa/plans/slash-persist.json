@@ -1,0 +1,11 @@
+[
+  {"command": "theme", "id": "theme-neon", "invocation": "/theme neon", "expected": "Theme Changed Neon"},
+  {"command": "theme", "id": "theme-restart", "invocation": "/theme", "omitCliModel": true, "expected": "current neon after restart without --model"},
+  {"command": "model", "id": "model-set", "invocation": "/model local-custom-tag", "expected": "switch or warn for custom tag"},
+  {"command": "status", "id": "status-restart", "invocation": "/status", "omitCliModel": true, "expected": "Status Dashboard fields, saved model if persisted"},
+  {"command": "help", "id": "help-msg", "invocation": "/help", "expected": "assistant COMMANDS list"},
+  {"command": "save", "id": "save-conv", "invocation": "/save", "expected": "Conversation saved"},
+  {"command": "sessions", "id": "sessions-restart", "invocation": "/sessions", "omitCliModel": true, "expected": "session list after restart"},
+  {"command": "export", "id": "export-md", "invocation": "/export markdown", "omitCliModel": true, "expected": "export contains original help/save content"},
+  {"command": "search", "id": "search-unicode", "invocation": "/search needle-UNICORN-42", "expected": "hit café notes.txt"}
+]
