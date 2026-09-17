@@ -42,6 +42,7 @@ describe('TemplateEngine', () => {
       expect(templates.some(t => t.name === 'node-cli')).toBe(true);
       expect(templates.some(t => t.name === 'react-ts')).toBe(true);
       expect(templates.some(t => t.name === 'express-api')).toBe(true);
+      expect(templates.some(t => t.name === 'expo-rn')).toBe(true);
     });
 
     it('should get template by name', () => {

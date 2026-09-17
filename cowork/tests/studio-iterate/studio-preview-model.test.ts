@@ -24,6 +24,12 @@ describe('detectDevCommand', () => {
       command: 'npm start',
       url: 'http://localhost:3000',
     });
+    expect(detectDevCommand({
+      scripts: { dev: 'expo start --web', web: 'expo start --web', start: 'expo start' },
+    })).toEqual({
+      command: 'npm run web',
+      url: 'http://localhost:8081',
+    });
   });
 
   it('falls back to Vite defaults for an unknown or empty project', () => {

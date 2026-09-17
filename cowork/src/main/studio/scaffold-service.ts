@@ -11,14 +11,14 @@
 import { basename, dirname } from 'path';
 import { loadCoreModule } from '../utils/core-loader.js';
 
-export type StudioTemplateId = 'react-tailwind' | 'react-ts' | 'express-api' | 'node-cli';
+export type StudioTemplateId = 'react-tailwind' | 'react-ts' | 'express-api' | 'node-cli' | 'expo-rn';
 export type StudioTemplateVars = Record<string, string | boolean>;
 
 export interface TemplateCard {
   id: StudioTemplateId;
   label: string;
   description: string;
-  category: 'web' | 'api' | 'cli';
+  category: 'web' | 'api' | 'cli' | 'mobile';
 }
 
 export interface ScaffoldProjectInput {
@@ -85,6 +85,12 @@ export const STUDIO_TEMPLATES: TemplateCard[] = [
     label: 'Node CLI',
     description: 'Node.js TypeScript CLI ready to compile.',
     category: 'cli',
+  },
+  {
+    id: 'expo-rn',
+    label: 'Expo / React Native',
+    description: 'Mobile app with tabs, list/detail, light/dark theme, and sample network fetch.',
+    category: 'mobile',
   },
 ];
 

@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import { spawn } from 'child_process';
 import { performance } from 'perf_hooks';
 import { applyDesignSystem } from './design-system-apply.js';
+import { EXPO_RN_TEMPLATE } from './expo-rn-template.js';
 
 // ============================================================================
 // Types
@@ -1270,6 +1271,8 @@ dist/
     },
   ],
 });
+
+TEMPLATES.set(EXPO_RN_TEMPLATE.name, EXPO_RN_TEMPLATE);
 
 // ============================================================================
 // Template Engine

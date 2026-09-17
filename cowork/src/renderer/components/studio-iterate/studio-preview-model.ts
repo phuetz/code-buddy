@@ -32,6 +32,11 @@ export function detectDevCommand(pkg: PackageJsonLike | null | undefined): DevCo
   if (/\bnext\b/.test(dev)) return { command: 'npm run dev', url: 'http://localhost:3000' };
   if (/\bnext\b/.test(start)) return { command: 'npm start', url: 'http://localhost:3000' };
   if (/\bastro\b/.test(dev)) return { command: 'npm run dev', url: 'http://localhost:4321' };
+  if (/\bexpo\b/.test(dev) || /\bexpo\b/.test(start) || /\bexpo\b/.test(scripts.web ?? '')) {
+    if (scripts.web) return { command: 'npm run web', url: 'http://localhost:8081' };
+    if (dev.trim()) return { command: 'npm run dev', url: 'http://localhost:8081' };
+    return { command: 'npm start', url: 'http://localhost:8081' };
+  }
   if (/\bvite\b/.test(dev)) return { command: 'npm run dev', url: 'http://localhost:5173' };
   if (/react-scripts\s+start/.test(start)) return { command: 'npm start', url: 'http://localhost:3000' };
   if (dev.trim()) return { command: 'npm run dev', url: 'http://localhost:5173' };

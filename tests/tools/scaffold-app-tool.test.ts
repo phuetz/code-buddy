@@ -48,6 +48,26 @@ describe('ScaffoldAppTool', () => {
     expect(packageJson.bin['demo-cli']).toBe('./dist/index.js');
   });
 
+  it('exposes the Expo React Native template to agent scaffolding', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-app-tool-'));
+    const targetDir = path.join(tmp, 'mobile-app');
+
+    const result = await new ScaffoldAppTool().execute({
+      template: 'expo-rn',
+      targetDir,
+      vars: { description: 'Mobile from the agent' },
+    });
+
+    expect(result.success).toBe(true);
+    const data = result.data as { filesCreated: string[] };
+    expect(data.filesCreated).toEqual(expect.arrayContaining([
+      'eas.json',
+      'app/(tabs)/index.tsx',
+      'app/item/[id].tsx',
+      'tests/catalog.test.ts',
+    ]));
+  });
+
   it('refuses a non-empty target directory', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-app-tool-'));
     await fs.writeFile(path.join(tmp, 'existing.txt'), 'content');

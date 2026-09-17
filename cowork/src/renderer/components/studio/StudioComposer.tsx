@@ -35,13 +35,14 @@ export interface StudioComposerProps {
   seedPrompt?: string;
 }
 
-const SUGGESTIONS = ['a React todo app', 'an Express CRUD API', 'a landing page'];
+const SUGGESTIONS = ['a React todo app', 'an Express CRUD API', 'a landing page', 'an Expo mobile app'];
 
 const VARS_BY_TEMPLATE: Record<StudioTemplateId, string[]> = {
   'react-tailwind': ['projectName', 'description'],
   'react-ts': ['projectName', 'description'],
   'express-api': ['projectName', 'description'],
   'node-cli': ['projectName', 'binName', 'description'],
+  'expo-rn': ['projectName', 'description'],
 };
 
 function slugify(value: string, fallback = 'app-studio-project'): string {

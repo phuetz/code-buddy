@@ -53,6 +53,11 @@ export const DEFAULT_TEMPLATES: StudioTemplateCard[] = [
   { id: 'react-ts', label: 'React + TypeScript (bare)', description: 'Minimal Vite web app with React and TypeScript.' },
   { id: 'express-api', label: 'Express API', description: 'Node/Express API with a TypeScript structure.' },
   { id: 'node-cli', label: 'Node CLI', description: 'Node.js TypeScript CLI ready to compile.' },
+  {
+    id: 'expo-rn',
+    label: 'Expo / React Native',
+    description: 'Mobile app with tabs, list/detail, light/dark theme, and sample network fetch.',
+  },
 ];
 
 const noopResult = async (error = 'App Studio API not connected'): Promise<{ ok: false; error: string }> => ({ ok: false, error });

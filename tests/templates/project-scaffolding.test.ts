@@ -13,7 +13,7 @@ async function makeTmpDir(): Promise<string> {
 }
 
 async function generateProject(options: {
-  template: 'react-ts' | 'react-tailwind' | 'express-api' | 'node-cli';
+  template: 'react-ts' | 'react-tailwind' | 'express-api' | 'node-cli' | 'expo-rn';
   projectName: string;
   variables?: Record<string, string | boolean>;
   designSystem?: string;
