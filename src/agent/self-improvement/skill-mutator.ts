@@ -64,6 +64,34 @@ export function isAuthoredSkillName(name: string): boolean {
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+const TRIGGER_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'this', 'that', 'authored', 'skill',
+  'guidance', 'when', 'then', 'your', 'into', 'over', 'after', 'before',
+]);
+
+/**
+ * Discovery triggers so SkillRegistry.search can find an authored skill on the
+ * original situation query. Imported skills already get this; authored ones
+ * previously stored only name+description and scored below minConfidence.
+ */
+export function deriveAuthoredSkillTriggers(name: string, description: string, body: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw: string): void => {
+    const value = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!value || seen.has(value) || TRIGGER_STOPWORDS.has(value)) return;
+    seen.add(value);
+    out.push(value);
+  };
+  const when = body.match(/when to use:\s*(.+)/i);
+  if (when?.[1]) add(when[1]);
+  for (const word of `${name} ${description} ${body}`.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (word.length >= 4) add(word);
+    if (out.length >= 12) break;
+  }
+  return out.slice(0, 12);
+}
+
 /** Ensure the content begins with YAML frontmatter carrying name + description. */
 export function ensureFrontmatter(name: string, description: string, content: string): string {
   const match = content.match(FRONTMATTER_RE);
@@ -71,7 +99,24 @@ export function ensureFrontmatter(name: string, description: string, content: st
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('Invalid skill metadata');
   if (metadata.name !== undefined && metadata.name !== name) throw new Error('Skill frontmatter identity differs from requested name');
   const body = match ? content.slice(match[0].length) : content;
-  const result = `---\n${yaml.stringify({ ...metadata, name, description: description.trim() || metadata.description })}---\n\n${body.trim()}\n`;
+  const resolvedDescription = description.trim() || String(metadata.description ?? '');
+  const existingEngine =
+    metadata.nativeEngine && typeof metadata.nativeEngine === 'object' && !Array.isArray(metadata.nativeEngine)
+      ? (metadata.nativeEngine as Record<string, unknown>)
+      : {};
+  const existingTriggers = Array.isArray(existingEngine.triggers)
+    ? existingEngine.triggers.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  const triggers =
+    existingTriggers.length > 0
+      ? existingTriggers
+      : deriveAuthoredSkillTriggers(name, resolvedDescription, body);
+  const result = `---\n${yaml.stringify({
+    ...metadata,
+    name,
+    description: resolvedDescription,
+    nativeEngine: { ...existingEngine, ...(triggers.length ? { triggers } : {}) },
+  })}---\n\n${body.trim()}\n`;
   const validation = validateSkill(parseSkillFile(result, 'authored-skill', 'workspace'));
   if (!validation.valid) throw new Error(validation.errors.join('; '));
   return result;
