@@ -83,6 +83,14 @@ export const COMPANION_FORBIDDEN_PATTERNS: readonly (string | RegExp)[] = Object
   // delete_* family
   /^delete_/i,
 
+  /*
+   * Outils d'import qui écrivent des fichiers dans le projet. Leur nom ne
+   * commence pas par `write_` : sans cette entrée, un outil catégorisé
+   * `file_write` franchirait la frontière du compagnon, qui est en lecture
+   * seule par construction. Le test « NO write/exec tool passes » l'a attrapé.
+   */
+  'figma_import',
+
   // system / infra / process / code execution / app server
   'docker',
   'kubernetes',
