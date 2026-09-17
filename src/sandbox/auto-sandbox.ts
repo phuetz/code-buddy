@@ -15,6 +15,7 @@ import { parseBashCommand } from '../security/bash-parser.js';
 import { isDangerousCommand } from '../security/dangerous-patterns.js';
 import { auditLogger } from '../security/audit-logger.js';
 import { logger } from '../utils/logger.js';
+import { ensureSshSandboxRegistered } from './ssh-sandbox.js';
 
 export interface AutoSandboxConfig {
   /** Enable auto-sandboxing (default: from AUTO_SANDBOX env) */
@@ -33,6 +34,13 @@ export interface AutoSandboxConfig {
   networkEnabled: boolean;
   /** Block commands that require sandboxing when Docker is unavailable */
   failClosedOnUnavailable: boolean;
+  /**
+   * Explicit backend request (e.g. `ssh`). Unset keeps the historical Docker
+   * auto-route. SSH is never chosen implicitly.
+   */
+  explicitBackend?: string;
+  /** Logical SSH host when explicitBackend is `ssh`. */
+  explicitHost?: string;
 }
 
 const DEFAULT_CONFIG: AutoSandboxConfig = {
@@ -69,6 +77,11 @@ export class AutoSandboxRouter {
    * Check if a command should be routed to the sandbox.
    */
   shouldSandbox(command: string): { sandbox: boolean; reason?: string } {
+    if (this.config.explicitBackend === 'ssh') {
+      const host = this.config.explicitHost ? ` host '${this.config.explicitHost}'` : '';
+      return { sandbox: true, reason: `Explicit SSH backend${host}` };
+    }
+
     if (!this.config.enabled) {
       return { sandbox: false, reason: 'Auto-sandbox disabled' };
     }
@@ -140,6 +153,18 @@ export class AutoSandboxRouter {
       return { mode: 'direct', reason: check.reason || 'No sandbox needed' };
     }
 
+    if (this.config.explicitBackend === 'ssh') {
+      ensureSshSandboxRegistered();
+      auditLogger.log({
+        action: 'sandbox_execute',
+        decision: 'allow',
+        source: 'auto-sandbox',
+        target: command.slice(0, 200),
+        details: check.reason || 'Explicit SSH backend',
+      });
+      return { mode: 'sandbox', reason: check.reason || 'Explicit SSH backend' };
+    }
+
     const dockerOk = await this.isDockerAvailable();
     if (!dockerOk) {
       if (this.config.failClosedOnUnavailable) {
@@ -197,7 +222,12 @@ let instance: AutoSandboxRouter | null = null;
 
 export function getAutoSandboxRouter(): AutoSandboxRouter {
   if (!instance) {
-    instance = new AutoSandboxRouter();
+    const explicitBackend = process.env.CODEBUDDY_SANDBOX_BACKEND?.trim().toLowerCase();
+    const explicitHost = process.env.CODEBUDDY_SSH_HOST?.trim();
+    instance = new AutoSandboxRouter({
+      ...(explicitBackend ? { explicitBackend } : {}),
+      ...(explicitHost ? { explicitHost } : {}),
+    });
   }
   return instance;
 }

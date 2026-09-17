@@ -22,6 +22,8 @@ export interface SandboxExecOptions {
   memoryLimit?: string;
   /** Abort the running sandbox process/container. */
   signal?: AbortSignal;
+  /** Logical SSH host name (ssh backend only). */
+  host?: string;
 }
 
 export interface SandboxExecResult {

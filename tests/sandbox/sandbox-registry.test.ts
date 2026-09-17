@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   registerSandboxBackend,
   getActiveSandboxBackend,
+  getSandboxBackendByName,
   sandboxExecute,
+  sandboxExecuteOn,
   listSandboxBackends,
   resetSandboxRegistry,
 } from '../../src/sandbox/sandbox-registry.js';
@@ -70,8 +72,8 @@ describe('SandboxRegistry', () => {
 
     const list = await listSandboxBackends();
     expect(list).toHaveLength(2);
-    expect(list[0]).toEqual({ name: 'b', priority: 20, available: false });
-    expect(list[1]).toEqual({ name: 'a', priority: 10, available: true });
+    expect(list[0]).toEqual({ name: 'b', priority: 20, available: false, explicitOnly: false });
+    expect(list[1]).toEqual({ name: 'a', priority: 10, available: true, explicitOnly: false });
   });
 
   it('caches active backend', async () => {
@@ -81,5 +83,25 @@ describe('SandboxRegistry', () => {
     const first = await getActiveSandboxBackend();
     const second = await getActiveSandboxBackend();
     expect(first).toBe(second);
+  });
+
+  it('skips explicit-only backends during auto-selection', async () => {
+    registerSandboxBackend(createMockBackend('ssh', true), 100, { explicitOnly: true });
+    registerSandboxBackend(createMockBackend('docker', true), 10);
+
+    const backend = await getActiveSandboxBackend();
+    expect(backend?.name).toBe('docker');
+    expect(getSandboxBackendByName('ssh')?.name).toBe('ssh');
+  });
+
+  it('does not auto-select an explicit-only backend even when it is the only one', async () => {
+    registerSandboxBackend(createMockBackend('ssh', true), 50, { explicitOnly: true });
+
+    const backend = await getActiveSandboxBackend();
+    expect(backend).toBeNull();
+
+    const named = await sandboxExecuteOn('ssh', 'echo hi');
+    expect(named.success).toBe(true);
+    expect(named.output).toContain('ssh: echo hi');
   });
 });
