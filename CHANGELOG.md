@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Added
+
+- **fleet:** add `peer_tool_invoke` agent tool wrapping `peer.tool.invoke` so a local agent can read/search on a connected peer (`view_file`, `list_directory`, `search`). Outbound only (`fleetSafe: false`); the three remote gates (allowlist, fleetSafe, workspace root) stay on the peer. Paths are forwarded, not resolved on the caller. Unrecognized peer errors are redacted (no absolute paths or secrets). The tool is force-included only when fleet peers are connected or the query is a fleet inspection.
+
+### Fixed
+
+- **fleet:** Lemonade id `Qwen3.6-35B-A3B-MTP-GGUF` now hits a dedicated case-insensitive GGUF row (`supportsToolCalls`, lite agent surface) instead of the hosted 262k `qwen3.6*` profile. OpenAI-compat also treats `qwen3*` as tool-capable so `tools`/`tool_choice` are not stripped on local ports. Recommended default: Qwen3.6 via Lemonade, fallback `gemma4:12b`.
+
 ## [2.1.0] (2026-09-16)
 
 ### Added

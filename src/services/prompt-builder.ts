@@ -780,7 +780,9 @@ export class PromptBuilder {
               `provider status, or list_peers() for a quick status. Then ` +
               `peer_delegate can ask the chosen peer a question; reuse the ` +
               `dispatchProfile returned by route_peer so the peer receives ` +
-              `matching guidance. For ordered specialist collaboration, pass ` +
+              `matching guidance. To read a file on a peer, call ` +
+              `peer_tool_invoke({"peer":"<id>","tool":"view_file","args":{"path":"oracle.txt"}}) ` +
+              `after list_peers — always pass peer and tool. For ordered specialist collaboration, pass ` +
               `chainRoles such as ["code","review","safe"] to route_peer and ` +
               `then run the returned nextCalls in order, or call peer_chain ` +
               `to route and execute the chain with stage handoffs. The peer answers ` +

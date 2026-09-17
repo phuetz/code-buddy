@@ -139,6 +139,7 @@ patch
 pdf
 peer_chain
 peer_delegate
+peer_tool_invoke
 plan
 port_check
 process

@@ -87,6 +87,42 @@ the same recipe with your real hosts.
 
 ---
 
+## Modèle par défaut recommandé : Qwen3.6-35B-A3B (Lemonade)
+
+Décision 2026-09-16 : le pair flotte local parle à **Qwen3.6-35B-A3B** servi par Lemonade
+(OpenAI-compat, tunnel déjà ouvert sur `127.0.0.1:13305`). Banc brut : ~34 tok/s et appel
+d'outil structuré. L'id catalogue Lemonade est `Qwen3.6-35B-A3B-MTP-GGUF` (casse et suffixe
+GGUF). Code Buddy le reconnaît (`Qwen3.6-*-GGUF*`, insensible à la casse) avec
+`supportsToolCalls: true` et le profil `lite` de la boucle agent.
+
+```bash
+export CODEBUDDY_PROVIDER=lemonade
+export CODEBUDDY_PEER_PROVIDER=lemonade
+export LEMONADE_HOST=http://127.0.0.1:13305/api/v1
+export LEMONADE_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+export LEMONADE_API_KEY=lemonade
+export CODEBUDDY_PEER_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+export CODEBUDDY_MODEL=Qwen3.6-35B-A3B-MTP-GGUF
+# JWT_SECRET partagé + CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT comme ci-dessous
+JWT_SECRET=<shared-secret> buddy server --port 3010 --host 0.0.0.0
+```
+
+**Repli** si Lemonade est indisponible ou si la boucle agent doit rester sur Ollama distant :
+
+```bash
+export CODEBUDDY_PROVIDER=ollama
+export CODEBUDDY_PEER_PROVIDER=ollama
+export OLLAMA_HOST=http://127.0.0.1:11435
+export CODEBUDDY_PEER_MODEL=gemma4:12b
+export CODEBUDDY_MODEL=gemma4:12b
+```
+
+`gemma4:12b` est le modèle qui a fini la recette agent `peer_tool_invoke` (oracle exact) quand
+Qwen3.6 n'était pas encore reconnu comme GGUF lite. Ne pas pointer `CODEBUDDY_PEER_MODEL` sur un
+id `qwen2.5*` : la table `model-tools` les marque `supportsToolCalls: false`.
+
+---
+
 ## Architecture
 
 ```
@@ -760,6 +796,34 @@ Two new tools registered on every Code Buddy:
   Add `--profile review` (or another dispatch profile) to select a
   posture, and `--delegate` to route and immediately perform one
   `peer.chat` call on the selected peer/model.
+- `peer_tool_invoke(peer, tool, [args], [timeoutMs])` — wraps
+  `peer.tool.invoke`. Read-only remote file access: `view_file`,
+  `list_directory`, or `search`. Extra names from `peer.describe` are
+  used only when `CODEBUDDY_PEER_TRUST_DESCRIBE=true`; A still denylists
+  `peer_*` / `fleet_*` / `agent_*` / `delegate_*`, and **B still enforces
+  its own allowlist**. Default timeout 15 s (min 1 s, max 120 s). Args
+  capped at 64 KiB; output truncated at 256 KiB. **Limits:** this tool
+  does not grant new capabilities on the peer — the remote allowlist
+  (`CODEBUDDY_PEER_TOOL_ALLOWLIST`), `fleetSafe` metadata, and
+  `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` still fail closed on B. Args are
+  a flat object; paths are forwarded as given and are **not** resolved
+  on A. Unrecognized errors are redacted: no peer workspace path, no
+  absolute path, no secret. `fleetSafe: false` on the outbound tool
+  (same as `peer_delegate`). Example:
+
+  ```
+  list_peers()
+  peer_tool_invoke({
+    "peer": "B",
+    "tool": "view_file",
+    "args": { "path": "oracle.txt" }
+  })
+  ```
+
+  If B refuses (`PATH_OUTSIDE_PEER_WORKSPACE`, allowlist, depth), the
+  tool returns `success: false` with a generic peer-refusal message —
+  never a fake success.
+
 - `peer_delegate(peer, prompt, [systemPrompt], [model], [dispatchProfile],
   [timeoutMs])` — wraps `peer.chat`. Returns the peer's text response,
   usage, traceId, and any peer-side `toolPolicy/toolDecisions` metadata.

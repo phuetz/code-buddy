@@ -9,6 +9,10 @@
 
 import type { CodeBuddyTool } from './client.js';
 import { FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT } from '../fleet/dispatch-profile.js';
+import {
+  PEER_TOOL_INVOKE_DESCRIPTION,
+  PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
+} from '../tools/peer-tool-invoke-tool.js';
 
 const DISPATCH_PROFILE_PARAMETER_DESCRIPTION =
   'Optional Fleet dispatch profile. When set, carries the operating posture through peer.chat ' +
@@ -216,6 +220,36 @@ export const ROUTE_PEER_TOOL_DEF: CodeBuddyTool = {
   },
 };
 
+export const PEER_TOOL_INVOKE_TOOL_DEF: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'peer_tool_invoke',
+    description: PEER_TOOL_INVOKE_DESCRIPTION,
+    parameters: {
+      type: 'object',
+      properties: {
+        peer: {
+          type: 'string',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.peer,
+        },
+        tool: {
+          type: 'string',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
+        },
+        args: {
+          type: 'object',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.args,
+        },
+        timeoutMs: {
+          type: 'number',
+          description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.timeoutMs,
+        },
+      },
+      required: ['peer', 'tool'],
+    },
+  },
+};
+
 export const FLEET_ROOM_TOOL_DEF: CodeBuddyTool = {
   type: 'function',
   function: {
@@ -243,6 +277,7 @@ export const FLEET_ROOM_TOOL_DEF: CodeBuddyTool = {
 export const FLEET_TOOLS: CodeBuddyTool[] = [
   FLEET_ROOM_TOOL_DEF,
   PEER_DELEGATE_TOOL_DEF,
+  PEER_TOOL_INVOKE_TOOL_DEF,
   PEER_CHAIN_TOOL_DEF,
   LIST_PEERS_TOOL_DEF,
   ROUTE_PEER_TOOL_DEF,

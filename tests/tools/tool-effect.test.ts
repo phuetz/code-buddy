@@ -102,6 +102,7 @@ const EMISSION_JUSTIFICATION: Record<string, string> = {
   verify: 'may execute tests',
   delegate_agent: 'spawn agent',
   peer_delegate: 'fleet network',
+  peer_tool_invoke: 'fleet network',
   peer_chain: 'fleet network',
   list_peers: 'fleet network',
   route_peer: 'peer.describe network',

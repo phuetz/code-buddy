@@ -21,7 +21,7 @@ import {
 import { ChatEntry, StreamingChunk } from "../types.js";
 import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
-import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
+import { ToolSelectionStrategy, mergeAlwaysInclude } from "./tool-selection-strategy.js";
 import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
 import { ContextCompactionError, ContextManagerV2 } from "../../context/context-manager-v2.js";
 import { TokenCounter } from "../../utils/token-counter.js";
@@ -1495,10 +1495,24 @@ export class AgentExecutor {
             alwaysInclude: ['view_file', 'bash', 'search'],
           };
         }
-        if (surface === 'cli' && !codeResearch) {
-          const { runtimeInspectionTools } = await import('../../services/runtime-settings-context.js');
-          const inspectionTools = runtimeInspectionTools(turnQueryText);
-          if (inspectionTools.length) selectionOpts = { ...selectionOpts, alwaysInclude: [...(selectionOpts.alwaysInclude ?? []), ...inspectionTools] };
+        if (!codeResearch) {
+          const { runtimeInspectionTools, connectedFleetSurfaceTools } = await import('../../services/runtime-settings-context.js');
+          const inspectionTools = [...new Set([
+            ...(surface === 'cli' ? runtimeInspectionTools(turnQueryText) : []),
+            ...connectedFleetSurfaceTools(),
+          ])];
+          if (inspectionTools.length) {
+            // Fleet tools first (Qwen3.6 GGUF otherwise prefers bash and
+            // shells list_peers) but they are ADDED to the guaranteed
+            // default list, never substituted for it.
+            const alwaysInclude = mergeAlwaysInclude(
+              selectionOpts.alwaysInclude,
+              inspectionTools,
+            );
+            if (alwaysInclude) {
+              selectionOpts = { ...selectionOpts, alwaysInclude };
+            }
+          }
         }
         if (codeResearch) {
           selectionOpts = { ...selectionOpts, alwaysInclude: ['self_describe'] };

@@ -137,6 +137,23 @@ export const DEFAULT_TOOL_SELECTION_CONFIG: ToolSelectionConfig = {
   cacheTTLMs: 5 * 60 * 1000, // 5 minutes
 };
 
+/**
+ * Prepend extras onto the guaranteed alwaysInclude list.
+ * Empty extras leave `existing` unchanged (undefined keeps the strategy
+ * default). Unset `existing` is the default guaranteed list, not an empty
+ * replacement — fleet tools must be added, never substituted.
+ */
+export function mergeAlwaysInclude(
+  existing: string[] | undefined,
+  extras: string[],
+): string[] | undefined {
+  if (extras.length === 0) {
+    return existing;
+  }
+  const base = existing ?? DEFAULT_TOOL_SELECTION_CONFIG.alwaysInclude;
+  return [...extras, ...base.filter((name) => !extras.includes(name))];
+}
+
 function requiredToolsForQuery(query: string): string[] {
   // A bare shared URL has almost no semantic words for TF-IDF/BM25 to match.
   // Route YouTube links deterministically to both the local-first caption/video

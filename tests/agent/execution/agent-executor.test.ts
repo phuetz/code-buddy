@@ -23,6 +23,11 @@ import {
 } from '../../../src/optimization/latency-optimizer.js';
 import { MiddlewarePipeline } from '../../../src/agent/middleware/pipeline.js';
 import { CostLimitMiddleware } from '../../../src/agent/middleware/cost-limit.js';
+import {
+  getFleetRegistry,
+  _resetFleetRegistryForTests,
+  type ActiveListenerEntry,
+} from '../../../src/fleet/fleet-registry.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -855,9 +860,116 @@ describe('AgentExecutor', () => {
       expect(deps.toolSelectionStrategy.selectToolsForQuery).toHaveBeenCalledWith(
         query,
         expect.objectContaining({
-          alwaysInclude: expect.arrayContaining(['list_peers', 'route_peer', 'peer_delegate']),
+          alwaysInclude: expect.arrayContaining(['list_peers', 'route_peer', 'peer_delegate', 'peer_tool_invoke']),
         }),
       );
+    });
+
+    it('does not force-include peer_tool_invoke on a non-fleet query with no peers', async () => {
+      _resetFleetRegistryForTests();
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen3:4b-instruct');
+      setupLLMFlow(deps, [{ content: 'ok' }]);
+      const query = 'read package.json and summarize it';
+      await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+      const options = (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][1];
+      expect(options.alwaysInclude ?? []).not.toContain('peer_tool_invoke');
+    });
+
+    it('force-includes peer_tool_invoke when a fleet peer is registered', async () => {
+      _resetFleetRegistryForTests();
+      getFleetRegistry().register({
+        id: 'B',
+        url: 'ws://example/B',
+        startedAt: new Date(),
+        eventCount: 0,
+        autoReconnect: false,
+        maxAttempts: 5,
+        listener: {
+          disconnect: async () => undefined,
+          getReconnectAttempts: () => 0,
+          isReconnecting: () => false,
+          request: async () => ({}),
+          getLastSeen: () => ({ at: null, reason: null, ageMs: null }),
+          isStale: () => false,
+          getPeerCompactionState: () => ({
+            active: false,
+            startedAt: null,
+            ageMs: null,
+            lastResult: null,
+          }),
+          getEventHistory: () => [],
+        },
+      } as ActiveListenerEntry);
+      try {
+        (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen3:4b-instruct');
+        setupLLMFlow(deps, [{ content: 'ok' }]);
+        const query = 'read package.json and summarize it';
+        await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+        const options = (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][1] as {
+          alwaysInclude?: string[];
+        };
+        expect(options.alwaysInclude?.slice(0, 4)).toEqual([
+          'list_peers',
+          'route_peer',
+          'peer_delegate',
+          'peer_tool_invoke',
+        ]);
+        expect(deps.toolSelectionStrategy.selectToolsForQuery).toHaveBeenCalledWith(
+          query,
+          expect.objectContaining({
+            alwaysInclude: expect.arrayContaining(['peer_tool_invoke', 'list_peers']),
+          }),
+        );
+      } finally {
+        _resetFleetRegistryForTests();
+      }
+    });
+
+    it('keeps create_file and apply_patch when a peer is registered on a standard model', async () => {
+      _resetFleetRegistryForTests();
+      getFleetRegistry().register({
+        id: 'B',
+        url: 'ws://example/B',
+        startedAt: new Date(),
+        eventCount: 0,
+        autoReconnect: false,
+        maxAttempts: 5,
+        listener: {
+          disconnect: async () => undefined,
+          getReconnectAttempts: () => 0,
+          isReconnecting: () => false,
+          request: async () => ({}),
+          getLastSeen: () => ({ at: null, reason: null, ageMs: null }),
+          isStale: () => false,
+          getPeerCompactionState: () => ({
+            active: false,
+            startedAt: null,
+            ageMs: null,
+            lastResult: null,
+          }),
+          getEventHistory: () => [],
+        },
+      } as ActiveListenerEntry);
+      try {
+        (deps.client.getCurrentModel as jest.Mock).mockReturnValue('gpt-5.5');
+        setupLLMFlow(deps, [{ content: 'ok' }]);
+        const query = 'read package.json and summarize it';
+        await executor.processUserMessage(query, [], [], Date.now(), undefined, false, 'cli');
+        const options = (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][1] as {
+          alwaysInclude?: string[];
+        };
+        expect(options.alwaysInclude?.slice(0, 4)).toEqual([
+          'list_peers',
+          'route_peer',
+          'peer_delegate',
+          'peer_tool_invoke',
+        ]);
+        expect(options.alwaysInclude).toEqual(
+          expect.arrayContaining(['create_file', 'apply_patch', 'peer_tool_invoke', 'list_peers']),
+        );
+      } finally {
+        _resetFleetRegistryForTests();
+      }
     });
 
     it('keeps normal effectful schemas available for an explicit self-improvement request', async () => {

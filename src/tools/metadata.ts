@@ -1779,6 +1779,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Delegate a one-shot question to a connected fleet peer Code Buddy and get its answer plus Hermes-style dispatch policy metadata back inline'
   },
   {
+    name: 'peer_tool_invoke',
+    effect: 'emission',
+    category: 'utility' as ToolCategory,
+    keywords: ['peer', 'tool', 'invoke', 'fleet', 'view_file', 'list_directory', 'search', 'read', 'remote', 'workspace', 'allowlist', 'file', 'oracle'],
+    priority: 8,
+    description: 'Read a file on a connected fleet peer. Always pass peer and tool, e.g. {"peer":"B","tool":"view_file","args":{"path":"oracle.txt"}}'
+    // fleetSafe omitted / false: outbound fleet call, not peer-exposable.
+  },
+  {
     name: 'peer_chain',
     effect: 'emission',
     category: 'utility' as ToolCategory,

@@ -1,9 +1,9 @@
 /**
  * Fleet Tool Adapters — Phase (d).17.
  *
- * ITool-compliant wrappers for `peer_delegate` and `list_peers`.
- * Both tools are explicitly NOT fleetSafe — they're outbound from the
- * caller; inbound peers run their own gating via the A2A executor.
+ * ITool-compliant wrappers for `peer_delegate`, `peer_tool_invoke`,
+ * `list_peers`, and `fleet_room`. Fleet tools are explicitly NOT fleetSafe —
+ * they're outbound from the caller; inbound peers run their own gating.
  */
 
 import type { ToolResult } from '../../types/index.js';
@@ -20,6 +20,12 @@ import { executeListPeers } from '../list-peers-tool.js';
 import { executeFleetRoom, fleetRoomInputSchema } from '../fleet-room-tool.js';
 import { FLEET_ROOM_TOOL_DEF } from '../../codebuddy/fleet-tool-defs.js';
 import { executeRoutePeer } from '../route-peer-tool.js';
+import {
+  PEER_TOOL_INVOKE_DESCRIPTION,
+  PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS,
+  executePeerToolInvoke,
+  isFlatToolArgs,
+} from '../peer-tool-invoke-tool.js';
 import {
   FLEET_DISPATCH_PROFILES,
   FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT,
@@ -148,6 +154,116 @@ export class PeerDelegateTool implements ITool {
       priority: 7,
       modifiesFiles: false,
       makesNetworkRequests: true,
+      fleetSafe: false,
+    };
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}
+
+export class PeerToolInvokeTool implements ITool {
+  readonly name = 'peer_tool_invoke';
+  readonly description = PEER_TOOL_INVOKE_DESCRIPTION;
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    return executePeerToolInvoke({
+      peer: typeof input.peer === 'string' ? input.peer : '',
+      tool: typeof input.tool === 'string' ? input.tool : '',
+      args: input.args as Record<string, unknown> | undefined,
+      timeoutMs: typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined,
+    });
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          peer: {
+            type: 'string',
+            minLength: 1,
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.peer,
+          },
+          tool: {
+            type: 'string',
+            minLength: 1,
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.tool,
+          },
+          args: {
+            type: 'object',
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.args,
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Peer-relative path, e.g. "oracle.txt" (accepted by view_file and list_directory).',
+              },
+              file_path: {
+                type: 'string',
+                description: 'Alias of path for view_file.',
+              },
+              query: {
+                type: 'string',
+                description: 'Search query when tool is search.',
+              },
+            },
+          },
+          timeoutMs: {
+            type: 'number',
+            description: PEER_TOOL_INVOKE_PARAM_DESCRIPTIONS.timeoutMs,
+          },
+        },
+        required: ['peer', 'tool'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    const inp = input as Record<string, unknown>;
+    const errors: string[] = [];
+    const keys = Object.keys(inp).join(',') || '(none)';
+    if (typeof inp.peer !== 'string' || !inp.peer) {
+      errors.push(`peer is required (string); received keys: ${keys}`);
+    }
+    if (typeof inp.tool !== 'string' || !inp.tool) {
+      errors.push(`tool is required (string); received keys: ${keys}`);
+    }
+    if (inp.args !== undefined && !isFlatToolArgs(inp.args)) {
+      errors.push('args must be a flat object of string/number/boolean values');
+    }
+    return errors.length === 0 ? { valid: true } : { valid: false, errors };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'utility' as ToolCategoryType,
+      keywords: [
+        'peer',
+        'tool',
+        'invoke',
+        'fleet',
+        'view_file',
+        'list_directory',
+        'search',
+        'read',
+        'remote',
+        'workspace',
+        'allowlist',
+        'file',
+        'oracle',
+      ],
+      priority: 8,
+      modifiesFiles: false,
+      makesNetworkRequests: true,
+      effect: 'emission',
       fleetSafe: false,
     };
   }
@@ -561,7 +677,14 @@ export class FleetRoomTool implements ITool {
 }
 
 export function createFleetTools(): ITool[] {
-  return [new PeerDelegateTool(), new PeerChainTool(), new ListPeersTool(), new RoutePeerTool(), new FleetRoomTool()];
+  return [
+    new PeerDelegateTool(),
+    new PeerToolInvokeTool(),
+    new PeerChainTool(),
+    new ListPeersTool(),
+    new RoutePeerTool(),
+    new FleetRoomTool(),
+  ];
 }
 
 export function resetFleetToolInstances(): void {

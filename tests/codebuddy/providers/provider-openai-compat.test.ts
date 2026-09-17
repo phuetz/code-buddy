@@ -221,6 +221,38 @@ describe('OpenAICompatProvider request payloads', () => {
     expect(payload).not.toHaveProperty('tools');
     expect(payload).not.toHaveProperty('tool_choice');
   });
+
+  it('sends tools and tool_choice=auto to Lemonade for Qwen3.6 GGUF', async () => {
+    providerMocks.getModelInfo.mockReturnValue({ provider: 'unknown', maxTokens: 32768, isSupported: true });
+    providerMocks.create.mockResolvedValueOnce(successResponse());
+    const tools = [{
+      type: 'function' as const,
+      function: { name: 'peer_tool_invoke', description: 'Invoke a peer tool', parameters: { type: 'object', properties: {} } },
+    }];
+    const provider = createProvider('http://127.0.0.1:13305/api/v1', 'Qwen3.6-35B-A3B-MTP-GGUF');
+
+    await provider.chat([{ role: 'user', content: 'Retrieve oracle.txt from peer B' }], tools);
+
+    const payload = providerMocks.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.tools).toEqual(tools);
+    expect(payload.tool_choice).toBe('auto');
+  });
+
+  it('still sends tools for Qwen3.6 GGUF even on an LM Studio local port', async () => {
+    providerMocks.getModelInfo.mockReturnValue({ provider: 'lmstudio', maxTokens: 32768, isSupported: true });
+    providerMocks.create.mockResolvedValueOnce(successResponse());
+    const tools = [{
+      type: 'function' as const,
+      function: { name: 'peer_tool_invoke', description: 'Invoke a peer tool', parameters: { type: 'object', properties: {} } },
+    }];
+    const provider = createProvider('http://127.0.0.1:1234/v1', 'Qwen3.6-35B-A3B-MTP-GGUF');
+
+    await provider.chat([{ role: 'user', content: 'Retrieve oracle.txt from peer B' }], tools);
+
+    const payload = providerMocks.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.tools).toEqual(tools);
+    expect(payload.tool_choice).toBe('auto');
+  });
 });
 
 describe('OpenAICompatProvider tool-support probe', () => {
