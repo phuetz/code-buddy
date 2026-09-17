@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SkillRegistry } from '../../src/skills/registry.js';
+import { requireSkillWatchers } from './watch-health.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const registries: SkillRegistry[] = [];
@@ -72,6 +73,7 @@ describe('SkillRegistry watcher directory races', () => {
     registries.push(registry);
 
     await registry.load();
+    requireSkillWatchers(registry, 2, 'root + first-level skill directory after load');
 
     const watchers = [
       ...(registry as unknown as { watchers: Map<string, FSWatcher> }).watchers.values(),
@@ -109,6 +111,7 @@ describe('SkillRegistry watcher directory races', () => {
 
     try {
       await registry.load();
+      requireSkillWatchers(registry, 1, 'empty skills root after load');
 
       for (let index = 0; index < 50; index += 1) {
         const transientDir = path.join(skillsRoot, `transient-${index}`);
@@ -126,7 +129,7 @@ describe('SkillRegistry watcher directory races', () => {
       await waitForSkill(registry, 'watcher-survivor');
       expect(registry.get('watcher-survivor')).toBeDefined();
       await waitForWatcherCount(registry, 2);
-      expect(watcherCount(registry)).toBe(2);
+      requireSkillWatchers(registry, 2, 'after surviving skill appeared');
       expect(uncaughtExceptions).toEqual([]);
 
       rmSync(survivingSkillDir, { recursive: true });

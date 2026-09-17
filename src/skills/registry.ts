@@ -26,6 +26,7 @@ import {
 } from './adapters/index.js';
 import { scanFile as scanSkillFile } from '../security/skill-scanner.js';
 import { getSkillsHub } from './hub.js';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Skill Registry Class
@@ -36,6 +37,46 @@ const pendingWatcherCloses = new Set<Promise<void>>();
 
 /** A watcher that already errored never emits 'close': never wait forever. */
 const WATCHER_CLOSE_TIMEOUT_MS = 2000;
+
+/** Kernel/user watch quotas. Node maps a full inotify table to these codes. */
+const WATCH_RESOURCE_ERROR_CODES = new Set(['ENOSPC', 'EMFILE', 'ENFILE']);
+
+/** Bound on-demand rescans so a hot get() loop cannot hammer the disk. */
+const ON_DEMAND_RESCAN_MIN_MS = 200;
+
+export interface SkillWatchHealth {
+  watcherCount: number;
+  degraded: boolean;
+  reason: string | null;
+}
+
+function readInotifyLimit(name: 'max_user_watches' | 'max_user_instances'): string | null {
+  try {
+    return fs.readFileSync(`/proc/sys/fs/inotify/${name}`, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+function watchResourceHint(): string {
+  if (process.platform !== 'linux') {
+    return 'the operating system refused a filesystem watcher';
+  }
+  const maxWatches = readInotifyLimit('max_user_watches') ?? '?';
+  const maxInstances = readInotifyLimit('max_user_instances') ?? '?';
+  return (
+    `inotify limit exhausted (fs.inotify.max_user_watches=${maxWatches}, ` +
+    `fs.inotify.max_user_instances=${maxInstances})`
+  );
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
 
 function trackWatcherClose(watcher: fs.FSWatcher): void {
   const closed = new Promise<void>(resolve => {
@@ -55,10 +96,20 @@ export class SkillRegistry extends EventEmitter {
   private loaded: boolean = false;
   private watchingPauses = 0;
   private resumeWatchingAfterPause = false;
+  private watchUnavailableReason: string | null = null;
+  private watchDegradedLogged = false;
+  private watchPassFailed = false;
+  private lastOnDemandRescanAt = 0;
 
-  constructor(config: Partial<SkillRegistryConfig> = {}) {
+  private readonly watchFn: typeof fs.watch;
+
+  constructor(
+    config: Partial<SkillRegistryConfig> & { watchFn?: typeof fs.watch } = {}
+  ) {
     super();
-    this.config = { ...DEFAULT_SKILL_REGISTRY_CONFIG, ...config };
+    const { watchFn, ...rest } = config;
+    this.config = { ...DEFAULT_SKILL_REGISTRY_CONFIG, ...rest };
+    this.watchFn = watchFn ?? fs.watch;
 
     // Initialize tier maps
     this.skillsByTier.set('workspace', new Map());
@@ -135,20 +186,25 @@ export class SkillRegistry extends EventEmitter {
    * Find all SKILL.md files in a directory
    */
   private async findSkillFiles(dirPath: string): Promise<string[]> {
-    const files: string[] = [];
-
     const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    return this.collectSkillFiles(dirPath, entries);
+  }
+
+  private findSkillFilesSync(dirPath: string): string[] {
+    return this.collectSkillFiles(dirPath, fs.readdirSync(dirPath, { withFileTypes: true }));
+  }
+
+  private collectSkillFiles(dirPath: string, entries: fs.Dirent[]): string[] {
+    const files: string[] = [];
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
 
       if (entry.isDirectory()) {
-        // Check for skill.md in subdirectory
         const skillFile = path.join(fullPath, 'skill.md');
         if (fs.existsSync(skillFile)) {
           files.push(skillFile);
         }
-        // Also check for SKILL.md (uppercase)
         const skillFileUpper = path.join(fullPath, 'SKILL.md');
         if (fs.existsSync(skillFileUpper)) {
           files.push(skillFileUpper);
@@ -246,6 +302,7 @@ export class SkillRegistry extends EventEmitter {
    * Get a skill by name
    */
   get(name: string): Skill | undefined {
+    this.maybeOnDemandRescan();
     return this.skills.get(name);
   }
 
@@ -253,6 +310,7 @@ export class SkillRegistry extends EventEmitter {
    * List all skills
    */
   list(options?: { tier?: SkillTier; tags?: string[]; enabled?: boolean }): Skill[] {
+    this.maybeOnDemandRescan();
     let skills = Array.from(this.skills.values());
 
     let disabledSkills = new Set<string>();
@@ -293,6 +351,7 @@ export class SkillRegistry extends EventEmitter {
    * Get skill count
    */
   get count(): number {
+    this.maybeOnDemandRescan();
     return this.skills.size;
   }
 
@@ -319,6 +378,7 @@ export class SkillRegistry extends EventEmitter {
    * Find skills matching a query
    */
   search(options: SkillSearchOptions): SkillMatch[] {
+    this.maybeOnDemandRescan();
     const matches: SkillMatch[] = [];
     const query = options.query.toLowerCase();
     const queryWords = query.split(/\s+/);
@@ -547,6 +607,7 @@ export class SkillRegistry extends EventEmitter {
    * @returns An array of UnifiedSkill objects
    */
   getAllUnified(): UnifiedSkill[] {
+    this.maybeOnDemandRescan();
     const unified: UnifiedSkill[] = [];
 
     let disabledSkills = new Set<string>();
@@ -662,20 +723,28 @@ export class SkillRegistry extends EventEmitter {
       return;
     }
 
+    this.watchPassFailed = false;
     const paths = [
       { tier: 'workspace' as SkillTier, path: this.config.workspacePath },
       { tier: 'managed' as SkillTier, path: this.config.managedPath },
     ];
 
+    let attempted = 0;
     for (const { tier, path: dirPath } of paths) {
       if (!dirPath) continue;
 
       const resolved = this.resolvePath(dirPath);
       if (!fs.existsSync(resolved)) continue;
 
+      attempted += 1;
       if (this.watchDirectory(tier, resolved, resolved, true)) {
         this.refreshChildWatchers(tier, resolved);
       }
+    }
+
+    if (attempted > 0 && this.watchers.size > 0 && !this.watchPassFailed) {
+      this.watchUnavailableReason = null;
+      this.watchDegradedLogged = false;
     }
   }
 
@@ -700,7 +769,7 @@ export class SkillRegistry extends EventEmitter {
     }
 
     try {
-      const watcher = fs.watch(directory, { recursive: false }, (event, filename) => {
+      const watcher = this.watchFn(directory, { recursive: false }, (event, filename) => {
         if (isRoot) {
           this.handleRootWatchEvent(tier, rootPath, event, filename);
         } else {
@@ -818,7 +887,10 @@ export class SkillRegistry extends EventEmitter {
 
     for (const directory of childDirectories) {
       const key = this.watcherKey(tier, directory);
-      if (!this.watchers.has(key) && this.watchDirectory(tier, rootPath, directory, false)) {
+      if (this.watchers.has(key)) continue;
+      const watching = this.watchDirectory(tier, rootPath, directory, false);
+      // A refused observer must still pick up SKILL.md that already exists.
+      if (watching || this.isDirectory(directory)) {
         this.refreshSkillFilesInChild(tier, directory);
       }
     }
@@ -884,16 +956,111 @@ export class SkillRegistry extends EventEmitter {
   }
 
   private isEnoent(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'ENOENT'
-    );
+    return errorCode(error) === 'ENOENT';
+  }
+
+  private isWatchResourceError(error: unknown): boolean {
+    const code = errorCode(error);
+    return code !== undefined && WATCH_RESOURCE_ERROR_CODES.has(code);
+  }
+
+  getWatchHealth(): SkillWatchHealth {
+    return {
+      watcherCount: this.watchers.size,
+      degraded: this.watchUnavailableReason !== null,
+      reason: this.watchUnavailableReason,
+    };
+  }
+
+  private maybeOnDemandRescan(): void {
+    if (!this.loaded || !this.config.watchEnabled || this.watchUnavailableReason === null) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastOnDemandRescanAt < ON_DEMAND_RESCAN_MIN_MS) {
+      return;
+    }
+    this.lastOnDemandRescanAt = now;
+
+    if (this.watchingPauses === 0) {
+      this.startWatching();
+      if (this.watchUnavailableReason === null && this.watchers.size > 0) {
+        return;
+      }
+    }
+
+    this.rescanWatchedTiersSync();
+  }
+
+  private rescanWatchedTiersSync(): void {
+    const seen = new Set<string>();
+    const paths = [
+      { tier: 'workspace' as SkillTier, path: this.config.workspacePath },
+      { tier: 'managed' as SkillTier, path: this.config.managedPath },
+    ];
+
+    for (const { tier, path: dirPath } of paths) {
+      if (!dirPath) continue;
+      const resolved = this.resolvePath(dirPath);
+      if (!fs.existsSync(resolved)) continue;
+
+      let files: string[];
+      try {
+        files = this.findSkillFilesSync(resolved);
+      } catch (error) {
+        if (this.isEnoent(error)) continue;
+        this.reportWatchError(resolved, error);
+        continue;
+      }
+
+      for (const file of files) {
+        try {
+          const skill = this.registerSkillFileSync(file, tier);
+          seen.add(skill.metadata.name);
+        } catch (error) {
+          if (!this.isEnoent(error)) {
+            this.emit(
+              'skill:error',
+              file,
+              error instanceof Error ? error : new Error(String(error))
+            );
+          }
+        }
+      }
+    }
+
+    for (const skill of [...this.skills.values()]) {
+      if (skill.tier === 'bundled') continue;
+      if (!seen.has(skill.metadata.name)) this.unload(skill.metadata.name);
+    }
   }
 
   private reportWatchError(targetPath: string, error: unknown): void {
     if (this.isEnoent(error)) return;
+
+    this.watchPassFailed = true;
+    if (this.isWatchResourceError(error)) {
+      const code = errorCode(error) ?? 'ENOSPC';
+      this.watchUnavailableReason = `${code}: ${watchResourceHint()}`;
+      if (!this.watchDegradedLogged) {
+        this.watchDegradedLogged = true;
+        logger.warn(
+          'Skill directory watching unavailable; falling back to on-demand rescan',
+          { directory: targetPath, code, reason: this.watchUnavailableReason }
+        );
+      }
+    } else if (this.watchUnavailableReason === null) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.watchUnavailableReason = message;
+      if (!this.watchDegradedLogged) {
+        this.watchDegradedLogged = true;
+        logger.warn(
+          'Skill directory watching unavailable; falling back to on-demand rescan',
+          { directory: targetPath, reason: message }
+        );
+      }
+    }
 
     this.emit(
       'skill:error',
