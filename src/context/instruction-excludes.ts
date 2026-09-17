@@ -56,6 +56,13 @@ export const DEFAULT_CONTEXT_FILE_NAMES: readonly string[] = [
   'INSTRUCTIONS.md',
 ];
 
+/**
+ * Filenames the prompt builder injects at startup unless
+ * `CODEBUDDY_INCLUDE_INTEROP_CONTEXT=true`. Keep this the single list:
+ * JIT still uses `DEFAULT_CONTEXT_FILE_NAMES` / config `context.fileNames`.
+ */
+export const STARTUP_PROJECT_CONTEXT_FILES: readonly string[] = ['AGENTS.md', 'CODEBUDDY.md'];
+
 export interface ResolvedContextConfig {
   /** Accepted instruction filenames, in precedence order. */
   fileNames: string[];

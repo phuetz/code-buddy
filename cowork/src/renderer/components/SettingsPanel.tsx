@@ -21,6 +21,7 @@ import {
   Bell,
   Network,
   FolderKanban,
+  BookOpenText,
   Blocks,
   ServerCog,
   Cpu,
@@ -57,6 +58,7 @@ import { SettingsCoreEngine } from './settings/SettingsCoreEngine';
 import { SettingsProfiles } from './settings/SettingsProfiles';
 import { SettingsCustomize } from './settings/SettingsCustomize';
 import { SettingsProjects } from './settings/SettingsProjects';
+import { SettingsFolderInstructions } from './settings/SettingsFolderInstructions';
 import { SettingsPlugins } from './settings/SettingsPlugins';
 import { SettingsTelemetry } from './settings/SettingsTelemetry';
 import { SettingsControlCenter } from './settings/SettingsControlCenter';
@@ -78,6 +80,7 @@ interface SettingsPanelProps {
     | 'skillsBrowser'
     | 'customize'
     | 'projects'
+    | 'instructions'
     | 'schedule'
     | 'remote'
     | 'tunnel'
@@ -110,6 +113,7 @@ type TabId =
   | 'skillsBrowser'
   | 'customize'
   | 'projects'
+  | 'instructions'
   | 'schedule'
   | 'remote'
   | 'tunnel'
@@ -143,6 +147,7 @@ const VALID_TABS = new Set<TabId>([
   'skillsBrowser',
   'customize',
   'projects',
+  'instructions',
   'schedule',
   'remote',
   'tunnel',
@@ -205,6 +210,7 @@ const TAB_GROUP: Record<TabId, string> = {
   sandbox: 'security',
   rules: 'security',
   projects: 'security',
+  instructions: 'security',
   profiles: 'security',
   server: 'ops',
   remote: 'ops',
@@ -328,6 +334,15 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
       label: t('settings.projects', 'Projects'),
       icon: FolderKanban,
       description: t('settings.projectsDesc', 'Workspace profiles with project-scoped memory'),
+    },
+    {
+      id: 'instructions' as TabId,
+      label: t('folderInstructions.title', 'Folder instructions'),
+      icon: BookOpenText,
+      description: t(
+        'folderInstructions.tabHint',
+        'Applied AGENTS.md files for the current folder, with origin and priority',
+      ),
     },
     {
       id: 'schedule' as TabId,
@@ -660,6 +675,9 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
               </div>
               <div className={activeTab === 'projects' ? '' : 'hidden'}>
                 {viewedTabs.has('projects') && <SettingsProjects />}
+              </div>
+              <div className={activeTab === 'instructions' ? '' : 'hidden'}>
+                {viewedTabs.has('instructions') && <SettingsFolderInstructions />}
               </div>
               <div className={activeTab === 'schedule' ? '' : 'hidden'}>
                 {viewedTabs.has('schedule') && (
