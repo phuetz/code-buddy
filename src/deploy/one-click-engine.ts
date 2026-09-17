@@ -39,7 +39,7 @@ function defaultFs(): OneClickFs {
     stat: (filePath) => nodeFs.stat(filePath),
     mkdir: (dirPath, options) => nodeFs.mkdir(dirPath, options).then(() => undefined),
     appendFile: (filePath, data) => nodeFs.appendFile(filePath, data),
-    realpath: (filePath) => nodeFs.realpath(filePath),
+    realpath: (filePath: string) => nodeFs.realpath(filePath),
   };
 }
 

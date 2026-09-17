@@ -77,6 +77,13 @@ export interface OneClickFs {
   stat(filePath: string): Promise<{ isDirectory(): boolean; isFile(): boolean }>;
   mkdir(dirPath: string, options: { recursive: boolean }): Promise<void>;
   appendFile(filePath: string, data: string): Promise<void>;
+  /**
+   * Chemin réel, liens symboliques résolus. Sert à vérifier que le dossier de
+   * sortie reste bien dans le projet : un test qui injecte un système de
+   * fichiers en mémoire doit pouvoir le fournir, sinon le contrôle retomberait
+   * silencieusement sur le disque réel.
+   */
+  realpath?(filePath: string): Promise<string>;
 }
 
 export interface OneClickDeps {
