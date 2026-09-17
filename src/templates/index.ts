@@ -3,3 +3,4 @@
  */
 
 export * from "./project-scaffolding.js";
+export * from "./db-auth/index.js";

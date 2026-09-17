@@ -4236,6 +4236,12 @@ addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations
   registerDeployCommands(program);
 });
 
+// Provision — database + auth overlay for a generated web project (simulation by default)
+addLazyCommandGroup(program, 'provision', 'Provision database and authentication onto a generated web project (simulation by default)', async () => {
+  const { registerProvisionCommands } = await import('./commands/cli/provision-command.js');
+  registerProvisionCommands(program);
+});
+
 // Backup — local backup management (Native Engine v2026.3.8 alignment)
 registerBackupCommand(program, (msg) => cli.stdout(msg));
 registerSensoryCommand(program, (msg) => cli.stdout(msg));
