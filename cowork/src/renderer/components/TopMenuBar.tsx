@@ -163,6 +163,7 @@ export function TopMenuBar() {
           { label: 'Specs', icon: <BrainCircuit strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowSpecPanel(true), testId: 'spec-panel-button' },
           { label: 'Modèle Utilisateur', icon: <BrainCircuit strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowUserModelPanel(true), testId: 'user-model-button' },
           { label: 'Test Runner', icon: <Search strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowTestRunner(true), testId: 'test-runner-button', divider: true },
+          { label: 'Déployer', icon: <Search strokeWidth={1.5} />, onClick: () => useAppStore.getState().setShowOneClickDeploy(true), testId: 'one-click-deploy-button' },
         ])}
       </div>
 

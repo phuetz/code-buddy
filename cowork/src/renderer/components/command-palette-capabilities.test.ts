@@ -37,6 +37,7 @@ describe('CAPABILITY_COMMANDS', () => {
       'cap-channels',
       'cap-devices',
       'cap-global-search',
+      'cap-deploy',
     ];
     for (const id of mustHave) {
       expect(ids.has(id), `missing capability ${id}`).toBe(true);

@@ -44,6 +44,7 @@ export const CAPABILITY_COMMANDS: CapabilityCommand[] = [
   { id: 'cap-insights', label: 'Session insights', description: 'Analysis of this session', run: (s) => s.setShowSessionInsights(true) },
   { id: 'cap-activity', label: 'Activity feed', description: 'Cross-project activity', run: (s) => s.setShowActivityFeed(true) },
   { id: 'cap-tests', label: 'Test runner', description: 'Run the test suite', run: (s) => s.setShowTestRunner(true) },
+  { id: 'cap-deploy', label: 'Déployer', description: 'Publier le site (Cloudflare Pages / Netlify) — simulation par défaut', run: (s) => s.setShowOneClickDeploy(true) },
   { id: 'cap-companion', label: 'Companion', description: 'Voice, presence, persona', run: (s) => s.setShowCompanionPanel(true) },
   { id: 'cap-channels', label: 'Delivery channels', description: 'Telegram, Discord, Slack…', run: (s) => s.setShowChannelsPanel(true) },
   { id: 'cap-mobile', label: 'Mobile supervision', description: 'Supervise from your phone', run: (s) => s.setShowMobileSupervisionPanel(true) },

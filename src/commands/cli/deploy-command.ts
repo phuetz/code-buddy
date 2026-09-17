@@ -1,35 +1,86 @@
 /**
  * Deploy Command
  *
- * Generate deployment configurations for cloud platforms.
- * Advanced enterprise architecture for multi-platform deployment support.
+ * Generate deployment configurations for cloud platforms, plus one-click
+ * static/build publish (Cloudflare Pages, Netlify) in dry-run by default.
  *
  * Usage:
+ *   buddy deploy run [dir]           # Simulate (default) or --apply
  *   buddy deploy init <platform>     # Generate deployment config
- *   buddy deploy platforms            # List supported platforms
- *   buddy deploy nix                  # Generate Nix flake configs
+ *   buddy deploy platforms           # List supported platforms
+ *   buddy deploy nix                 # Generate Nix flake configs
  */
 
 import type { Command } from 'commander';
+import type { OneClickDeps, OneClickReport } from '../../deploy/one-click-types.js';
 
-export function registerDeployCommands(program: Command): void {
+export interface RegisterDeployCommandsOptions {
+  write?: (msg: string) => void;
+  writeErr?: (msg: string) => void;
+  runOneClick?: (
+    request: { projectRoot: string; apply?: boolean; dryRun?: boolean },
+    deps?: OneClickDeps,
+  ) => Promise<OneClickReport>;
+}
+
+export function registerDeployCommands(
+  program: Command,
+  options: RegisterDeployCommandsOptions = {},
+): void {
+  const write = options.write ?? ((msg: string) => {
+    process.stdout.write(`${msg}\n`);
+  });
+  const writeErr = options.writeErr ?? ((msg: string) => {
+    process.stderr.write(`${msg}\n`);
+  });
+
   const deploy = program
     .command('deploy')
-    .description('Generate cloud deployment configurations');
+    .description('One-click web publish (dry-run by default) and cloud config generators');
+
+  deploy
+    .command('run')
+    .description('Build and publish a static/build web project (simulation by default; nothing is sent)')
+    .argument('[dir]', 'Project directory', '.')
+    .option('--dry-run', 'Show the exact plan without uploading (default)')
+    .option('--apply', 'Really upload (requires .codebuddy/deploy.json target + official CLI + token)')
+    .option('--json', 'Print the report as JSON (secrets never included)')
+    .action(async (dir: string, opts: { dryRun?: boolean; apply?: boolean; json?: boolean }) => {
+      const { runOneClickDeploy, formatOneClickReport } = await import('../../deploy/one-click-engine.js');
+      const runner = options.runOneClick ?? runOneClickDeploy;
+      const dryRun = opts.apply !== true || opts.dryRun === true;
+      const report = await runner({
+        projectRoot: dir,
+        apply: !dryRun,
+        dryRun,
+      });
+      if (opts.json) {
+        write(JSON.stringify(report, null, 2));
+      } else {
+        write(formatOneClickReport(report));
+      }
+      if (!report.ok) {
+        writeErr(report.error ?? 'Deploy failed');
+        process.exitCode = 1;
+      }
+    });
 
   deploy
     .command('platforms')
     .description('List supported cloud platforms')
     .action(() => {
-      console.log('\nSupported Deployment Platforms:\n');
-      console.log('  fly         Fly.io — globally distributed apps');
-      console.log('  railway     Railway — instant deployments');
-      console.log('  render      Render — zero-config cloud');
-      console.log('  hetzner     Hetzner Cloud — European VPS');
-      console.log('  northflank  Northflank — Kubernetes PaaS');
-      console.log('  gcp         Google Cloud Platform');
-      console.log('  nix         Nix flake — declarative installation');
-      console.log('\nUsage: buddy deploy init <platform> [--name <app-name>] [--port <port>]');
+      write('\nOne-click web publish (buddy deploy run) — target in .codebuddy/deploy.json:\n');
+      write('  cloudflare-pages   Cloudflare Pages via wrangler (if already installed)');
+      write('  netlify            Netlify via netlify-cli (if already installed)');
+      write('\nConfig generators (buddy deploy init) — not an upload:\n');
+      write('  fly         Fly.io — globally distributed apps');
+      write('  railway     Railway — instant deployments');
+      write('  render      Render — zero-config cloud');
+      write('  hetzner     Hetzner Cloud — European VPS');
+      write('  northflank  Northflank — Kubernetes PaaS');
+      write('  gcp         Google Cloud Platform');
+      write('  nix         Nix flake — declarative installation');
+      write('\nUsage: buddy deploy run [--apply]   |   buddy deploy init <platform>');
     });
 
   deploy

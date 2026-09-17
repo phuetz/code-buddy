@@ -94,6 +94,7 @@ import type {
   DeployResult,
   DeployTarget,
 } from '../main/studio2/deploy-service';
+import type { OneClickReport } from '../../../src/deploy/one-click-types';
 import type {
   ExportProjectRequest,
   ExportProjectResult,
@@ -1395,6 +1396,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ): Promise<Studio2Result<GitLogEntry[]>> =>
         ipcRenderer.invoke('studio2.git.log', projectRoot, limit),
     },
+  },
+
+  oneClickDeploy: {
+    run: (request: {
+      projectRoot: string;
+      apply?: boolean;
+      dryRun?: boolean;
+    }): Promise<OneClickReport> => ipcRenderer.invoke('oneClickDeploy.run', request),
   },
 
   // Checkpoint operations
@@ -6179,6 +6188,13 @@ declare global {
           ) => Promise<Studio2Result<GitCommitResult>>;
           log: (projectRoot: string, limit?: number) => Promise<Studio2Result<GitLogEntry[]>>;
         };
+      };
+      oneClickDeploy: {
+        run: (request: {
+          projectRoot: string;
+          apply?: boolean;
+          dryRun?: boolean;
+        }) => Promise<OneClickReport>;
       };
       checkpoint: {
         list: () => Promise<unknown>;

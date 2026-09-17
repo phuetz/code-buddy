@@ -116,7 +116,28 @@ const KNOWN_SECRETS = [
   'OPENROUTER_API_KEY', 'JWT_SECRET', 'PICOVOICE_ACCESS_KEY', 'SENTRY_DSN',
   'DISCORD_BOT_TOKEN', 'SLACK_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN',
   'WHATSAPP_API_TOKEN', 'SIGNAL_API_TOKEN',
+  'CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'NETLIFY_AUTH_TOKEN',
 ];
+
+/**
+ * Read a named secret from env, then the encrypted vault when
+ * CODEBUDDY_VAULT_KEY is set. Never logs the value.
+ */
+export async function peekSecret(
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  const fromEnv = env[name];
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  const key = env.CODEBUDDY_VAULT_KEY;
+  if (!key) return null;
+  try {
+    const store = await loadStore(key);
+    return store.secrets[name]?.value ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ============================================================================
 // Command Registration
