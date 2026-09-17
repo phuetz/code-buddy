@@ -1,0 +1,33 @@
+{
+  "description": "Template Code Buddy pour ElevenLabs hébergé via OAuth. Désactivé par défaut ; renseigner un client CIMD réel puis suivre docs/mcp-elevenlabs-hosted.md. Les filtres de noms ne garantissent pas la lecture seule.",
+  "mcpServers": {
+    "elevenlabs": {
+      "name": "elevenlabs",
+      "description": "ElevenLabs hosted MCP (agents, TTS, music, images/video) — OAuth bearer, révocable depuis le compte ElevenLabs",
+      "enabled": false,
+      "transport": {
+        "type": "streamable_http",
+        "url": "https://api.elevenlabs.io/v1/mcp",
+        "auth": {
+          "type": "oauth",
+          "serverId": "elevenlabs",
+          "clientMetadataUrl": "https://REMPLACER-PAR-UN-DOCUMENT-HTTPS/client-metadata.json",
+          "scopes": [
+            "speech_history_read",
+            "convai_read"
+          ],
+          "redirectUri": "http://localhost:19836/callback",
+          "interactive": true
+        }
+      },
+      "toolFilter": {
+        "exclude": [
+          "*generate*",
+          "*create*",
+          "*clone*",
+          "*delete*"
+        ]
+      }
+    }
+  }
+}
