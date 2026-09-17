@@ -53,7 +53,7 @@ function sessionLastAccessed(session: CliSessionSummary): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function printSessionSummary(session: CliSessionSummary): void {
+function printSessionSummary(session: CliSessionSummary, origin?: string): void {
   const lastAccessed = sessionLastAccessed(session);
   const date = lastAccessed?.toLocaleDateString() ?? '(no date)';
   const time = lastAccessed?.toLocaleTimeString() ?? '';
@@ -65,9 +65,16 @@ function printSessionSummary(session: CliSessionSummary): void {
   const role = typeof metadata?.searchRole === 'string'
     ? metadata.searchRole
     : undefined;
+  const surface = origin
+    ?? (typeof metadata?.handoffSource === 'string' ? metadata.handoffSource : undefined)
+    ?? (typeof metadata?.origin === 'string' ? metadata.origin : undefined)
+    ?? (typeof metadata?.surface === 'string' ? metadata.surface : undefined);
 
   console.log(`  ${sessionId(session).slice(0, 8)} - ${sessionName(session)}`);
   console.log(`    ${messageCount(session)} messages | ${date} ${time}`.trimEnd());
+  if (surface) {
+    console.log(`    origin: ${surface}`);
+  }
   if (parent) {
     console.log(`    parent: ${parent.slice(0, 8)}`);
   }
@@ -100,6 +107,7 @@ function parsePositiveInteger(value: string): number {
 export function registerSessionCommands(program: Command): void {
   const session = program
     .command('session')
+    .alias('sessions')
     .description('Manage saved sessions');
 
   session
@@ -170,7 +178,15 @@ export async function resumeLastSession(): Promise<void> {
 export async function resumeSessionById(sessionId: string): Promise<void> {
   const { getSessionStore } = await import('../persistence/session-store.js');
   const sessionStore = getSessionStore();
-  const session = await sessionStore.getSessionByPartialId(sessionId);
+  let resolvedId = sessionId;
+  try {
+    const { materializeUnifiedSession } = await import('../persistence/unified-session-index.js');
+    const materialized = await materializeUnifiedSession(sessionId);
+    if (materialized?.id) resolvedId = materialized.id;
+  } catch {
+    // Index is advisory: a missing Cowork DB must not block a SessionStore resume.
+  }
+  const session = await sessionStore.getSessionByPartialId(resolvedId);
 
   if (!session) {
     logger.error(`Session not found: ${sessionId}`);
@@ -228,6 +244,23 @@ export async function pickRecentSession(
  * List recent sessions
  */
 export async function listSessions(count: number = 10): Promise<void> {
+  try {
+    const { listUnifiedSessions } = await import('../persistence/unified-session-index.js');
+    const unified = listUnifiedSessions({ limit: count });
+    if (unified.length > 0) {
+      console.log(`Recent sessions (${unified.length}):\n`);
+      for (const row of unified) {
+        console.log(`  ${row.id.slice(0, 8)} - ${row.title}`);
+        console.log(`    ${row.messageCount} messages | ${new Date(row.updatedAt).toLocaleDateString()} ${new Date(row.updatedAt).toLocaleTimeString()}`.trimEnd());
+        console.log(`    origin: ${row.origin}`);
+      }
+      console.log('\nUse `buddy sessions resume <id>` to resume a session');
+      return;
+    }
+  } catch {
+    // Fall back to SessionStore-only listing.
+  }
+
   const { getSessionStore } = await import('../persistence/session-store.js');
   const sessionStore = getSessionStore();
   const sessions = await sessionStore.getRecentSessions(count);

@@ -25,6 +25,7 @@ vi.mock('../src/main/utils/core-loader', () => ({
       case 'utils/first-use-hints.js': return await import('../../src/utils/first-use-hints');
       case 'fleet/resource-catalog.js': return await import('../../src/fleet/resource-catalog');
       case 'persistence/session-handoff.js': return await import('../../src/persistence/session-handoff');
+      case 'persistence/unified-session-index.js': return await import('../../src/persistence/unified-session-index');
       default: return null;
     }
   }),

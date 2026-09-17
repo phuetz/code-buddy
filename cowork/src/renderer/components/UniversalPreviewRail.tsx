@@ -81,7 +81,14 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
   const [open, setOpen] = useState(false);
   const { railRef, overlay } = useRailOverlay(open);
   const [tab, setTab] = useState<RailTab>('activity');
-  const [externalSessions, setExternalSessions] = useState<Array<{ id: string; name: string; model: string; messageCount: number; lastAccessedAt: string }>>([]);
+  const [externalSessions, setExternalSessions] = useState<Array<{
+    id: string;
+    name: string;
+    model: string;
+    messageCount: number;
+    lastAccessedAt: string;
+    origin?: 'cli' | 'cowork' | 'mobile';
+  }>>([]);
   const [handoff, setHandoff] = useState<{ state: 'idle' | 'working' | 'done' | 'error'; text?: string }>({ state: 'idle' });
   const [resources, setResources] = useState<{ status: 'ok'; resources: ResourceRowView[] } | { status: 'empty'; hint: string } | { status: 'error'; message: string } | null>(null);
 
@@ -115,6 +122,27 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
     () => [...sessions].sort((left, right) => right.updatedAt - left.updatedAt).slice(0, 6),
     [sessions],
   );
+  const unifiedRecents = useMemo(() => {
+    const local = recentSessions.map((item) => ({
+      id: item.id,
+      title: item.title,
+      origin: item.source === 'cli-import' ? 'cli' : 'cowork',
+      kind: 'local' as const,
+      session: item,
+    }));
+    const imported = new Set(sessions.map((item) => item.id));
+    const external = externalSessions
+      .filter((item) => !imported.has(item.id) && !imported.has(`cli-import:${item.id}`))
+      .slice(0, 8)
+      .map((item) => ({
+        id: item.id,
+        title: item.name,
+        origin: item.origin ?? 'cli',
+        kind: 'external' as const,
+        session: item,
+      }));
+    return [...local, ...external].slice(0, 10);
+  }, [recentSessions, sessions, externalSessions]);
 
   if (!open) {
     return (
@@ -195,6 +223,33 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
               <div className="rounded-lg border border-border-muted bg-background/60 p-3"><div className="text-lg font-semibold text-text-primary">{queued.length}</div><div className="text-[10px] text-text-muted">messages en attente</div></div>
               <div className="rounded-lg border border-border-muted bg-background/60 p-3"><div className="text-lg font-semibold text-text-primary">{approvals.length}</div><div className="text-[10px] text-text-muted">approbations</div></div>
             </div>
+            {unifiedRecents.length > 0 ? (
+              <div className="space-y-1.5" data-testid="unified-recents">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Récents</h4>
+                {unifiedRecents.map((item) => (
+                  <div key={`${item.kind}:${item.id}`} className="flex items-center gap-2 rounded-lg border border-border-muted bg-background/60 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (item.kind === 'local') {
+                          useAppStore.getState().setActiveSession(item.id);
+                          return;
+                        }
+                        const imported = await window.electronAPI?.session?.externalImport?.(item.id);
+                        if (!imported) return;
+                        const store = useAppStore.getState();
+                        if (!store.sessions.some((candidate) => candidate.id === imported.id)) store.addSession(imported);
+                        store.setActiveSession(imported.id);
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="truncate text-xs text-text-primary">{item.title}</div>
+                      <div className="text-[10px] text-text-muted">{item.origin}</div>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {recentSessions.length > 0 ? (
               <div className="space-y-1.5" data-testid="runtime-observatory">
                 <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Observatoire des runtimes</h4>
@@ -231,23 +286,6 @@ export function UniversalPreviewRail({ appPreview, appAvailable }: UniversalPrev
                 }) : null}
                 {resources.status === 'empty' ? <p className="rounded-lg border border-dashed border-border-muted p-3 text-[10px] text-text-muted">{resources.hint}</p> : null}
                 {resources.status === 'error' ? <p className="text-[10px] text-danger">{resources.message}</p> : null}
-              </div>
-            ) : null}
-            {externalSessions.length > 0 ? (
-              <div className="space-y-1.5">
-                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Sessions CLI et canaux</h4>
-                {externalSessions.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border-muted bg-background/60 px-3 py-2">
-                    <div className="min-w-0 flex-1"><div className="truncate text-xs text-text-primary">{item.name}</div><div className="text-[10px] text-text-muted">{item.model} · {item.messageCount} messages</div></div>
-                    <button type="button" onClick={async () => {
-                      const imported = await window.electronAPI?.session?.externalImport?.(item.id);
-                      if (!imported) return;
-                      const store = useAppStore.getState();
-                      if (!store.sessions.some((candidate) => candidate.id === imported.id)) store.addSession(imported);
-                      store.setActiveSession(imported.id);
-                    }} className="rounded border border-border-muted px-2 py-1 text-[10px] text-text-secondary hover:bg-surface-hover">Importer</button>
-                  </div>
-                ))}
               </div>
             ) : null}
           </div>

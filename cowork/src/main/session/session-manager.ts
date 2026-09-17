@@ -82,6 +82,7 @@ import { readConversationBranchJournalFence } from './sqlite-session-branches';
 import { buildSessionRecallPrefill, repairSessionTranscript } from './session-insights-bridge';
 import { appendLatencyMeasurement } from '../../shared/session-latency';
 import { getMainWindow } from '../window-management';
+import { syncCoworkSessionToRecentsIndex } from './unified-recents-sync';
 
 export { formatFileAttachmentPromptLine } from './file-attachment-context';
 
@@ -1067,6 +1068,7 @@ export class SessionManager {
       created_at: session.createdAt,
       updated_at: session.updatedAt,
     });
+    void syncCoworkSessionToRecentsIndex(session, this.db);
   }
 
   // Load session from database

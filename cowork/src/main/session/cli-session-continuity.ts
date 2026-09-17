@@ -8,6 +8,8 @@ export interface ExternalSessionSummary {
   model: string;
   messageCount: number;
   lastAccessedAt: string;
+  createdAt?: string;
+  origin: 'cli' | 'cowork' | 'mobile';
   source: 'cli';
 }
 
@@ -28,6 +30,15 @@ function readDocuments(): ExternalSessionDocument[] {
       const parsed = JSON.parse(readFileSync(join(directory, name), 'utf-8')) as Record<string, unknown>;
       if (typeof parsed.id !== 'string' || !Array.isArray(parsed.messages)) continue;
       const messages = parsed.messages.filter((item): item is { type: string; content: string; timestamp?: string } => Boolean(item) && typeof item === 'object' && typeof (item as { type?: unknown }).type === 'string' && typeof (item as { content?: unknown }).content === 'string');
+      const metadata = parsed.metadata && typeof parsed.metadata === 'object'
+        ? parsed.metadata as Record<string, unknown>
+        : {};
+      const origin =
+        metadata.handoffSource === 'cowork' || parsed.id.startsWith('cowork-')
+          ? 'cowork'
+          : metadata.surface === 'mobile' || metadata.origin === 'mobile' || metadata.lastSurface === 'mobile'
+            ? 'mobile'
+            : 'cli';
       documents.push({
         id: parsed.id,
         name: typeof parsed.name === 'string' ? parsed.name : parsed.id,
@@ -37,6 +48,7 @@ function readDocuments(): ExternalSessionDocument[] {
         lastAccessedAt: typeof parsed.lastAccessedAt === 'string' ? parsed.lastAccessedAt : new Date(0).toISOString(),
         messages,
         messageCount: messages.length,
+        origin,
         source: 'cli',
       });
     } catch {
@@ -47,7 +59,7 @@ function readDocuments(): ExternalSessionDocument[] {
 }
 
 export function listExternalSessions(): ExternalSessionSummary[] {
-  return readDocuments().slice(0, 100).map(({ messages: _messages, workingDirectory: _cwd, createdAt: _createdAt, ...summary }) => summary);
+  return readDocuments().slice(0, 100).map(({ messages: _messages, workingDirectory: _cwd, ...summary }) => summary);
 }
 
 export function getExternalSession(id: string): ExternalSessionDocument | null {
