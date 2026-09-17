@@ -23,6 +23,12 @@ import {
   loadOrCreateVapidKeys,
   savePushSubscription,
 } from './push.js';
+import {
+  handleContinueResumeSession,
+  handleGetResumeSession,
+  handleListResumeSessions,
+  requireResumeAccess,
+} from './resume-sessions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -218,6 +224,8 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
       '/__codebuddy__/mobile/forward',
       '/__codebuddy__/mobile/album',
       '/__codebuddy__/mobile/album/{id}',
+      '/__codebuddy__/mobile/sessions',
+      '/__codebuddy__/mobile/sessions/{id}',
       '/__codebuddy__/mobile/assets/{*path}',
     ],
   });
@@ -226,6 +234,23 @@ mobilePwaRouter.get('/health', (_req: Request, res: Response) => {
 mobilePwaRouter.get('/status', async (_req: Request, res: Response) => {
   res.json(await buildMobileStatus());
 });
+
+mobilePwaRouter.get('/sessions', requireResumeAccess, (req: Request, res: Response) => {
+  void handleListResumeSessions(req, res);
+});
+
+mobilePwaRouter.get('/sessions/:id', requireResumeAccess, (req: Request, res: Response) => {
+  void handleGetResumeSession(req, res);
+});
+
+mobilePwaRouter.post(
+  '/sessions/:id/continue',
+  express.json({ limit: '32kb' }),
+  requireResumeAccess,
+  (req: Request, res: Response) => {
+    void handleContinueResumeSession(req, res);
+  },
+);
 
 mobilePwaRouter.get('/history', requireAlbumAccess, (req: Request, res: Response) => {
   const userId = readRequestUserId(req);

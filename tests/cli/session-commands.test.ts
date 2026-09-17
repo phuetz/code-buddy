@@ -5,11 +5,18 @@ const mocks = vi.hoisted(() => ({
   resumeSession: vi.fn(),
   getLastSession: vi.fn(),
   searchSessions: vi.fn(),
+  listUnifiedSessions: vi.fn(() => []),
+  materializeUnifiedSession: vi.fn(async (id: string) => ({ id, origin: 'cli' as const })),
   loggerError: vi.fn(),
 }));
 
 vi.mock('../../src/persistence/session-store.js', () => ({
   getSessionStore: mocks.getSessionStore,
+}));
+
+vi.mock('../../src/persistence/unified-session-index.js', () => ({
+  listUnifiedSessions: mocks.listUnifiedSessions,
+  materializeUnifiedSession: mocks.materializeUnifiedSession,
 }));
 
 vi.mock('../../src/utils/logger.js', () => ({
@@ -34,6 +41,8 @@ describe('CLI session commands', () => {
       getLastSession: mocks.getLastSession,
       searchSessions: mocks.searchSessions,
     });
+    mocks.listUnifiedSessions.mockReturnValue([]);
+    mocks.materializeUnifiedSession.mockImplementation(async (id: string) => ({ id, origin: 'cli' as const }));
   });
 
   afterEach(() => {
@@ -80,12 +89,36 @@ describe('CLI session commands', () => {
 
     const session = program.commands.find((command) => command.name() === 'session');
     expect(session).toBeDefined();
+    expect(session?.aliases()).toContain('sessions');
     expect(session?.commands.map((command) => command.name())).toEqual([
       'list',
       'search',
       'resume',
       'last',
     ]);
+  });
+
+  it('lists unified recents with origin via the sessions alias', async () => {
+    const program = new Command();
+    program.exitOverride();
+    registerSessionCommands(program);
+    mocks.listUnifiedSessions.mockReturnValue([
+      {
+        id: 'session_cli_abcdef',
+        title: 'From CLI',
+        origin: 'cli',
+        messageCount: 2,
+        createdAt: '2026-09-17T08:00:00.000Z',
+        updatedAt: '2026-09-17T08:00:00.000Z',
+        pointer: { kind: 'session-store' },
+      },
+    ]);
+
+    await program.parseAsync(['node', 'buddy', 'sessions', 'list']);
+
+    expect(mocks.listUnifiedSessions).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith('    origin: cli');
+    expect(mocks.getRecentSessions).not.toHaveBeenCalled();
   });
 
   it('routes session list through the session store with a limit', async () => {

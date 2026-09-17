@@ -124,17 +124,27 @@ router.get(
       parsedOffset + parsedLimit
     );
 
-    const sessionInfos: SessionInfo[] = paginatedSessions.map((s: SessionData) => ({
-      id: s.id,
-      name: s.name,
-      description: s.description,
-      createdAt: getSessionTimestamp(s, 'created'),
-      updatedAt: getSessionTimestamp(s, 'updated'),
-      messageCount: s.messages?.length || 0,
-      tokenCount: s.tokenCount || 0,
-      model: s.model,
-      parentSessionId: getParentSessionId(s),
-    }));
+    const sessionInfos: SessionInfo[] = paginatedSessions.map((s: SessionData) => {
+      const metadata = s.metadata || {};
+      const origin =
+        metadata.handoffSource === 'cowork' || metadata.origin === 'cowork' || s.id.startsWith('cowork-')
+          ? 'cowork'
+          : metadata.surface === 'mobile' || metadata.origin === 'mobile' || metadata.lastSurface === 'mobile'
+            ? 'mobile'
+            : 'cli';
+      return {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        createdAt: getSessionTimestamp(s, 'created'),
+        updatedAt: getSessionTimestamp(s, 'updated'),
+        messageCount: s.messages?.length || 0,
+        tokenCount: s.tokenCount || 0,
+        model: s.model,
+        parentSessionId: getParentSessionId(s),
+        origin,
+      };
+    });
 
     const response: SessionListResponse = {
       sessions: sessionInfos,

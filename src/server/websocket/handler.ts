@@ -74,6 +74,11 @@ import {
   type ServerAgent,
 } from '../agent-adapter.js';
 import { isMobilePwaEnabled } from '../mobile/index.js';
+import {
+  loadAccessibleResumeSession,
+  persistMobileResumeTurn,
+  seedHistoryForAgent,
+} from '../mobile/resume-sessions.js';
 import { sniffImageMime } from '../../companion/companion-photo.js';
 import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
@@ -151,6 +156,8 @@ interface ConnectionState {
    * Text only — a served selfie leaves a `kind:'selfie'` marker, never its bytes.
    */
   companionHistory?: CompanionHistoryTurn[];
+  /** Bound CLI/Cowork session id for agent resume; companion chat ignores it. */
+  resumeSessionId?: string;
   /** Opaque extension lifecycle hooks. Never exposed with the socket itself. */
   extensionCloseHandlers?: Set<() => void>;
   extensionsCleaned?: boolean;
@@ -960,7 +967,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     message,
     model,
     stream = true,
-    sessionId: _sessionId,
+    sessionId: sessionIdRaw,
     assistant: assistantRaw,
     peerId: peerIdRaw,
     attachments: attachmentsRaw,
@@ -1125,6 +1132,36 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       return;
     }
 
+    const requestedSessionId = typeof sessionIdRaw === 'string' ? sessionIdRaw.trim() : '';
+    let boundResumeId: string | undefined;
+    let assistantText = '';
+    if (requestedSessionId) {
+      const persisted = await loadAccessibleResumeSession(requestedSessionId, state.userId);
+      if (!persisted) {
+        sendError(ws, 'NOT_FOUND', 'Session not found');
+        return;
+      }
+      if (state.resumeSessionId !== persisted.id) {
+        const seed = seedHistoryForAgent(persisted);
+        if (typeof agent.addToHistory === 'function') {
+          if (typeof agent.exportConversationState === 'function'
+            && typeof agent.importConversationState === 'function') {
+            const snapshot = agent.exportConversationState();
+            if (snapshot) {
+              snapshot.messages = [];
+              snapshot.chatHistory = [];
+              agent.importConversationState(snapshot);
+            }
+          }
+          for (const row of seed) {
+            agent.addToHistory(row);
+          }
+        }
+        state.resumeSessionId = persisted.id;
+      }
+      boundResumeId = persisted.id;
+    }
+
     if (stream) {
       state.streaming = true;
       const messageId = `msg_${Date.now()}`;
@@ -1143,6 +1180,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         if (turn.cancelled || !state.streaming) break;
 
         if (delta) {
+          assistantText += delta;
           send(ws, {
             type: 'stream_chunk',
             id: messageId,
@@ -1177,6 +1215,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         if (turn.cancelled) break;
         content += delta;
       }
+      assistantText = content;
 
       if (!turn.cancelled) {
         sendChatAck(ws, 'read', clientMsgId);
@@ -1189,6 +1228,10 @@ messageHandlers.set('chat', async (ws, state, payload) => {
           timestamp: new Date().toISOString(),
         });
       }
+    }
+
+    if (!turn.cancelled && boundResumeId && state.userId) {
+      await persistMobileResumeTurn(boundResumeId, state.userId, userText, assistantText);
     }
   } catch (error) {
     state.streaming = false;

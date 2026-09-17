@@ -22,7 +22,7 @@ describe('CLI session continuity catalog', () => {
     writeFileSync(join(directory, 'sessions.json'), JSON.stringify([]));
     writeFileSync(join(directory, 'broken.json'), '{');
 
-    expect(listExternalSessions()).toEqual([expect.objectContaining({ id: 'cli-1', messageCount: 1 })]);
+    expect(listExternalSessions()).toEqual([expect.objectContaining({ id: 'cli-1', messageCount: 1, origin: 'cli' })]);
     expect(getExternalSession('cli-1')?.messages[0]?.content).toBe('hello');
   });
 });
