@@ -44,6 +44,9 @@ vi.mock('../../src/security/security-modes.js', () => ({
 vi.mock('../../src/utils/autonomy-manager.js', () => ({
   getAutonomyManager: () => ({ getLevel: () => 'normal' }),
 }));
+vi.mock('../../src/themes/theme-manager.js', () => ({
+  getThemeManager: () => ({ getCurrentTheme: () => ({ id: 'neon', name: 'Neon' }) }),
+}));
 
 import { handleStatus } from '../../src/commands/handlers/missing-handlers.js';
 
@@ -73,6 +76,9 @@ describe('handleStatus — Memory section (rc.2 extension)', () => {
     expect(c).toContain('0 project');
     expect(c).toContain('0 user');
     expect(c).toContain('last update: never');
+    expect(c).toContain('Theme:');
+    expect(c).toContain('Neon');
+    expect(c).toContain('(neon)');
   });
 
   it('renders the relative time of the most recent memory', async () => {

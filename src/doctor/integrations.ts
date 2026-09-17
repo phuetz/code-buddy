@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import type { DoctorCheck, DoctorSummary } from './index.js';
+import { getThemeManager } from '../themes/theme-manager.js';
 
 export type IntegrationCheck = DoctorCheck & { id: string; section: 'integrations' };
 
@@ -208,6 +209,10 @@ export const doctorJsonReportSchema = z.object({
     optional: z.boolean(),
   }).strict()),
   fixes: z.array(z.object({ success: z.boolean(), message: z.string(), action: z.string() }).strict()).optional(),
+  theme: z.object({
+    id: z.string(),
+    name: z.string(),
+  }).strict(),
 }).strict();
 
 export type DoctorJsonReport = z.infer<typeof doctorJsonReportSchema>;
@@ -222,6 +227,13 @@ export function buildDoctorJsonReport(
   options: { offline: boolean; now?: Date; fixes?: Array<{ success: boolean; message: string; action: string }> },
 ): DoctorJsonReport {
   const seen = new Map<string, number>();
+  let theme = { id: 'unknown', name: 'unknown' };
+  try {
+    const current = getThemeManager().getCurrentTheme();
+    theme = { id: current.id, name: current.name };
+  } catch {
+    // Theme manager is optional for doctor JSON consumers.
+  }
   const report: DoctorJsonReport = {
     version: 1,
     generatedAt: (options.now ?? new Date()).toISOString(),
@@ -242,6 +254,7 @@ export function buildDoctorJsonReport(
       };
     }),
     ...(options.fixes ? { fixes: options.fixes } : {}),
+    theme,
   };
   return doctorJsonReportSchema.parse(report);
 }

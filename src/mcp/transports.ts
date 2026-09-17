@@ -81,10 +81,13 @@ export class StdioTransport implements MCPTransport {
 
   async disconnect(): Promise<void> {
     if (this.transport) {
-      await this.transport.close();
-      this.transport = undefined;
+      try {
+        await this.transport.close();
+      } finally {
+        this.transport = undefined;
+      }
     }
-    // The StdioClientTransport from the SDK is expected to terminate the child process.
+    // SDK close() ends stdin, then SIGTERM/SIGKILL the child it spawned.
   }
 
   getType(): TransportType {

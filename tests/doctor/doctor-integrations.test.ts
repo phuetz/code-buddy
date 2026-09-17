@@ -11,6 +11,11 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../src/themes/theme-manager.js', () => ({
+  getThemeManager: () => ({ getCurrentTheme: () => ({ id: 'neon', name: 'Neon' }) }),
+}));
+
 import { runDoctorChecks, summarizeDoctorChecks } from '../../src/doctor/index.js';
 import { buildDoctorJsonReport, doctorJsonReportSchema, runIntegrationChecks } from '../../src/doctor/integrations.js';
 import { ResourceCatalog } from '../../src/fleet/resource-catalog.js';
@@ -58,6 +63,7 @@ describe('doctor --offline and integrations (P3)', () => {
     const checks = [...await runDoctorChecks(repo, { offline: true }), ...await runIntegrationChecks(repo)];
     expect(calls()).toBe(0);
     const report = buildDoctorJsonReport(checks, summarizeDoctorChecks(checks), { offline: true });
+    expect(report.theme).toEqual({ id: 'neon', name: 'Neon' });
     expect(doctorJsonReportSchema.parse(report).checks.filter((c) => c.section === 'integrations').map((c) => c.id))
       .toEqual(['lm-resizer', 'code-explorer', 'mcp', 'resources', 'skills', 'code-exec-policy']);
     expect(JSON.stringify(report)).not.toContain('sk-test-offline-fixture');

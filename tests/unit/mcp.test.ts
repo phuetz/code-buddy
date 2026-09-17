@@ -77,7 +77,7 @@ jest.mock('readline', () => {
   return { ...mod, default: mod };
 });
 
-import { createMCPCommand } from '../../src/commands/mcp';
+import { createMCPCommand, stdioAddConfirmMode } from '../../src/commands/mcp';
 import * as mcpConfig from '../../src/mcp/config';
 import * as tools from '../../src/codebuddy/tools';
 import * as mcpProfiles from '../../src/mcp/profiles';
@@ -482,6 +482,7 @@ describe('MCP Command', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Available tools: 2')
       );
+      expect(mockManager.removeServer).toHaveBeenCalledWith('tool-server');
     });
   });
 
@@ -495,8 +496,9 @@ describe('MCP Command', () => {
 
       const addJsonCmd = command.commands.find(c => c.name() === 'add-json');
 
-      await addJsonCmd?.parseAsync(['node', 'test', 'json-server', jsonConfig]);
+      await addJsonCmd?.parseAsync(['node', 'test', 'json-server', jsonConfig, '--yes']);
 
+      expect(mockManager.removeServer).toHaveBeenCalledWith('json-server');
       expect(mockAddMCPServer).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'json-server',
@@ -518,6 +520,78 @@ describe('MCP Command', () => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid JSON')
       );
+    });
+
+    test('stdioAddConfirmMode skips with --yes, prompts on TTY, aborts without TTY', () => {
+      expect(stdioAddConfirmMode(true, false)).toBe('skip');
+      expect(stdioAddConfirmMode(true, true)).toBe('skip');
+      expect(stdioAddConfirmMode(false, true)).toBe('prompt');
+      expect(stdioAddConfirmMode(false, false)).toBe('abort');
+      expect(stdioAddConfirmMode(false, undefined)).toBe('abort');
+    });
+
+    test('should refuse stdio add-json without --yes when stdin is not a TTY', async () => {
+      const jsonConfig = JSON.stringify({
+        command: 'npx',
+        args: ['-y', '@example/mcp'],
+      });
+      const addJsonCmd = command.commands.find(c => c.name() === 'add-json');
+      const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+      await expect(
+        addJsonCmd?.parseAsync(['node', 'test', 'no-tty-server', jsonConfig]),
+      ).rejects.toThrow(/process\.exit called/);
+
+      expect(mockAddMCPServer).not.toHaveBeenCalled();
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('stdin is not a TTY'),
+      );
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(mockManager.removeServer).not.toHaveBeenCalled();
+      if (tty) Object.defineProperty(process.stdin, 'isTTY', tty);
+      else delete (process.stdin as { isTTY?: boolean }).isTTY;
+    });
+
+    test('should add stdio server with --yes when stdin is not a TTY', async () => {
+      const jsonConfig = JSON.stringify({
+        command: 'npx',
+        args: ['-y', '@example/mcp'],
+      });
+      const addJsonCmd = command.commands.find(c => c.name() === 'add-json');
+      const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+      await addJsonCmd?.parseAsync(['node', 'test', 'yes-server', jsonConfig, '-y']);
+
+      expect(mockManager.removeServer).toHaveBeenCalledWith('yes-server');
+      expect(mockAddMCPServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'yes-server',
+          transport: expect.objectContaining({ command: 'npx' }),
+        }),
+      );
+      if (tty) Object.defineProperty(process.stdin, 'isTTY', tty);
+      else delete (process.stdin as { isTTY?: boolean }).isTTY;
+    });
+
+    test('should prompt on TTY without --yes (interactive path unchanged)', async () => {
+      const jsonConfig = JSON.stringify({
+        command: 'npx',
+        args: ['-y', '@example/mcp'],
+      });
+      const addJsonCmd = command.commands.find(c => c.name() === 'add-json');
+      const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+      Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+
+      await addJsonCmd?.parseAsync(['node', 'test', 'tty-server', jsonConfig]);
+
+      expect(mockAddMCPServer).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'tty-server' }),
+      );
+      expect(mockManager.removeServer).toHaveBeenCalledWith('tty-server');
+      if (tty) Object.defineProperty(process.stdin, 'isTTY', tty);
+      else delete (process.stdin as { isTTY?: boolean }).isTTY;
     });
 
     test('should handle transport type in JSON', async () => {

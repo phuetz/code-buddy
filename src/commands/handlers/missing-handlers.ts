@@ -908,6 +908,14 @@ export async function handleStatus(activeModel?: string): Promise<CommandHandler
   const currentModel = activeModel ?? (await import('../../utils/settings-manager.js')).getSettingsManager().getCurrentModel();
   lines.push(`  Model:           ${currentModel}`);
 
+  try {
+    const { getThemeManager } = await import('../../themes/theme-manager.js');
+    const theme = getThemeManager().getCurrentTheme();
+    lines.push(`  Theme:           ${theme.name} (${theme.id})`);
+  } catch (_err) {
+    lines.push('  Theme:           unknown');
+  }
+
   // Agent mode
   try {
     const { getOperatingModeManager } = await import('../../agent/operating-modes.js');
