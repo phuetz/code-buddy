@@ -532,3 +532,36 @@ describe('provision db-auth', () => {
     }
   });
 });
+
+it('refuse d’écrire à travers un lien symbolique qui sort du projet, et n’expose pas la base au réseau local', async () => {
+  const { mkdtemp, mkdir, writeFile, symlink, rm, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const pathMod = await import('node:path');
+  const { provisionDbAuth } = await import('../../src/templates/db-auth/index.js');
+  const racine = await mkdtemp(pathMod.join(tmpdir(), 'provision-symlink-'));
+  const projet = pathMod.join(racine, 'projet');
+  const dehors = pathMod.join(racine, 'dehors');
+  await mkdir(projet);
+  await mkdir(dehors);
+  await writeFile(pathMod.join(dehors, '.env.local'), 'ANCIEN=1\n');
+  // Le projet contient un `.env.local` qui pointe hors de lui : écrire dedans
+  // déposerait les clés générées dans un dossier que le projet ne maîtrise pas.
+  await symlink(pathMod.join(dehors, '.env.local'), pathMod.join(projet, '.env.local'));
+  try {
+    await expect(
+      provisionDbAuth({ projectDir: projet, projectName: 'essai-symlink', target: 'local', apply: true } as never),
+    ).rejects.toThrow(/symlink|UNSAFE_DIR/i);
+    expect(await readFile(pathMod.join(dehors, '.env.local'), 'utf8')).toBe('ANCIEN=1\n');
+  } finally {
+    await rm(racine, { recursive: true, force: true });
+  }
+});
+
+it('lie les conteneurs à la boucle locale et non à toutes les interfaces', async () => {
+  const { dockerComposeYaml } = await import('../../src/templates/db-auth/artifacts.js');
+  const yaml = typeof dockerComposeYaml === 'function' ? (dockerComposeYaml as () => string)() : String(dockerComposeYaml);
+  // Un port publié sans adresse écoute sur 0.0.0.0 : la base de développement,
+  // avec ses identifiants générés, serait jointe depuis tout le réseau local.
+  expect(yaml).toMatch(/127\.0\.0\.1:\$\{POSTGRES_PORT/);
+  expect(yaml).toMatch(/127\.0\.0\.1:\$\{POSTGREST_PORT/);
+});

@@ -263,6 +263,19 @@ async function writePlan(plan: ProvisionPlan, secretContents: Map<string, string
     if (!abs.startsWith(`${plan.projectDir}${path.sep}`) && abs !== plan.projectDir) {
       throw new ProvisionError('UNSAFE_DIR', `Refusing to write outside projectDir: ${item.path}`);
     }
+    try {
+      const lst = await fs.lstat(abs);
+      if (lst.isSymbolicLink()) {
+        const real = await fs.realpath(abs).catch(() => null);
+        const realRoot = await fs.realpath(plan.projectDir);
+        if (!real || (!real.startsWith(`${realRoot}${path.sep}`) && real !== realRoot)) {
+          throw new ProvisionError('UNSAFE_DIR', `Refusing to write through symlink escaping projectDir: ${item.path}`);
+        }
+      }
+    } catch (err) {
+      if (err instanceof ProvisionError) throw err;
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
     await fs.mkdir(path.dirname(abs), { recursive: true });
     const body = item.secret ? secretContents.get(item.path) ?? '' : item.content ?? '';
     const mode = item.secret ? 0o600 : item.executable ? 0o755 : 0o644;

@@ -228,7 +228,7 @@ export function dockerComposeYaml(): string {
     env_file:
       - .env.local
     ports:
-      - "\${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:\${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
@@ -251,7 +251,7 @@ export function dockerComposeYaml(): string {
       PGRST_DB_ANON_ROLE: \${POSTGRES_USER}
       PGRST_OPENAPI_SERVER_PROXY_URI: http://127.0.0.1:\${POSTGREST_PORT:-3001}
     ports:
-      - "\${POSTGREST_PORT:-3001}:3000"
+      - "127.0.0.1:\${POSTGREST_PORT:-3001}:3000"
 
 volumes:
   postgres-data:
