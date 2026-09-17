@@ -29,6 +29,58 @@ describe('LiveSkillMutator — loading-gap fix', () => {
     expect(content).toContain('git bisect');
   });
 
+  it('writes discovery triggers so the original situation query matches', async () => {
+    const root = tmpRoot();
+    const m = new LiveSkillMutator(root);
+    m.create({
+      name: 'authored-git-bisect',
+      description: 'guidance for bisecting a regression',
+      content:
+        '# Git Bisect\nWhen to use: find which commit introduced a regression.\n' +
+        'Steps: run `git bisect start`, mark a known good commit and a known bad commit.',
+    });
+    const { SkillRegistry } = await import('../../../src/skills/registry.js');
+    const registry = new SkillRegistry({
+      workspacePath: root,
+      managedPath: path.join(root, 'managed-empty'),
+      bundledPath: '',
+      watchEnabled: false,
+      cacheEnabled: false,
+    });
+    await registry.load();
+    const hits = registry.search({
+      query: 'find which commit introduced a regression',
+      minConfidence: 0.1,
+    });
+    expect(hits.some((hit) => hit.skill.metadata.name === 'authored-git-bisect')).toBe(true);
+  });
+
+  it('does not surface an authored skill on an unrelated query', async () => {
+    const root = tmpRoot();
+    const m = new LiveSkillMutator(root);
+    m.create({
+      name: 'authored-git-bisect',
+      description: 'guidance for bisecting a regression',
+      content:
+        '# Git Bisect\nWhen to use: find which commit introduced a regression.\n' +
+        'Steps: run `git bisect start`, mark a known good commit and a known bad commit.',
+    });
+    const { SkillRegistry } = await import('../../../src/skills/registry.js');
+    const registry = new SkillRegistry({
+      workspacePath: root,
+      managedPath: path.join(root, 'managed-empty'),
+      bundledPath: '',
+      watchEnabled: false,
+      cacheEnabled: false,
+    });
+    await registry.load();
+    const hits = registry.search({
+      query: 'resize a batch of photographs for a printed catalogue',
+      minConfidence: 0.1,
+    });
+    expect(hits.some((hit) => hit.skill.metadata.name === 'authored-git-bisect')).toBe(false);
+  });
+
   it('lists installed authored skills by prefix', () => {
     const root = tmpRoot();
     const m = new LiveSkillMutator(root);
