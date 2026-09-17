@@ -1,7 +1,9 @@
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
@@ -16,6 +18,7 @@ import {
 import { clearContextConfigCache, clearExcludesCache } from '@codebuddy/context/instruction-excludes.js';
 import {
   classifyInstructionOrigin,
+  confineFolderInstructionCwd,
   inspectFolderInstructions,
   resolveFolderInstructionFile,
   writeFolderInstructionFile,
@@ -203,5 +206,25 @@ describe('inspectFolderInstructions', () => {
   it('refuses a path escape on save', () => {
     const { project } = makeTree();
     expect(() => writeFolderInstructionFile(project, '../AGENTS.md', 'nope')).toThrow(/Invalid/);
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses to follow a symlink out of the working folder', () => {
+    const { project, root } = makeTree();
+    const outside = join(root, 'outside-secret.md');
+    writeFileSync(outside, 'ORIGINAL', 'utf-8');
+    const agents = join(project, 'AGENTS.md');
+    symlinkSync(outside, agents);
+
+    expect(() => writeFolderInstructionFile(project, 'AGENTS.md', 'PWNED')).toThrow(/symbolic link|symlink/i);
+    expect(readFileSync(outside, 'utf-8')).toBe('ORIGINAL');
+  });
+
+  it('refuses a renderer cwd that leaves the open workspace', () => {
+    const { project, root } = makeTree();
+    const outside = join(root, 'other-user');
+    mkdirSync(outside);
+    expect(confineFolderInstructionCwd(outside, project)).toBeNull();
+    expect(confineFolderInstructionCwd(join(project, '..', 'other-user'), project)).toBeNull();
+    expect(confineFolderInstructionCwd(join(project, 'pkg'), project)).toBe(join(project, 'pkg'));
   });
 });

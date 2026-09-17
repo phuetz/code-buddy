@@ -236,6 +236,15 @@ function resolveEditablePath(cwd: string, fileName: string): string {
 export function readFolderInstructionFile(cwd: string, fileName: string): FolderInstructionFileState {
   const target = resolveEditablePath(cwd, fileName);
   try {
+    const lst = fs.lstatSync(target);
+    if (lst.isSymbolicLink()) {
+      const real = fs.realpathSync(target);
+      const resolvedCwd = path.resolve(cwd);
+      const cwdPrefix = resolvedCwd.endsWith(path.sep) ? resolvedCwd : `${resolvedCwd}${path.sep}`;
+      if (real !== resolvedCwd && !real.startsWith(cwdPrefix)) {
+        return { fileName, path: target, exists: false, variant: variantOf(fileName), content: '' };
+      }
+    }
     if (!fs.statSync(target).isFile()) {
       return { fileName, path: target, exists: false, variant: variantOf(fileName), content: '' };
     }
@@ -251,12 +260,41 @@ export function readFolderInstructionFile(cwd: string, fileName: string): Folder
   };
 }
 
+/**
+ * Bind a renderer-supplied cwd to the open workspace. Absolute paths and
+ * `..` that leave the workspace must not be followed.
+ */
+export function confineFolderInstructionCwd(
+  requested: string | undefined,
+  workspacePath: string | null,
+): string | null {
+  if (!workspacePath) return null;
+  const resolvedWorkspace = path.resolve(workspacePath);
+  if (typeof requested !== 'string' || !requested.trim()) {
+    return resolvedWorkspace;
+  }
+  const resolvedRequested = path.resolve(resolvedWorkspace, requested.trim());
+  const rel = path.relative(resolvedWorkspace, resolvedRequested);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return null;
+  }
+  return resolvedRequested;
+}
+
 export function writeFolderInstructionFile(
   cwd: string,
   fileName: string,
   content: string,
 ): FolderInstructionFileState {
   const target = resolveEditablePath(cwd, fileName);
+  try {
+    const lst = fs.lstatSync(target);
+    if (lst.isSymbolicLink()) {
+      throw new Error('Refusing to write instruction file through symbolic link');
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   fs.writeFileSync(target, content, 'utf-8');
   return {
     fileName,

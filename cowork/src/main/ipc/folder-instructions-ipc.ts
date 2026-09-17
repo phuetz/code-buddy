@@ -10,6 +10,7 @@ import { loadCoreModule } from '../utils/core-loader';
 import { errorMessage, resolveWorkDir, type ProjectManagerSource } from './ipc-workdir';
 import {
   DEFAULT_STARTUP_INSTRUCTION_FILES,
+  confineFolderInstructionCwd,
   inspectFolderInstructions,
   readFolderInstructionFile,
   writeFolderInstructionFile,
@@ -49,8 +50,8 @@ async function loadKernel(): Promise<FolderInstructionKernel> {
 }
 
 function resolveCwd(source: ProjectManagerSource, cwd?: string, projectId?: string): string | null {
-  if (typeof cwd === 'string' && cwd.trim()) return cwd.trim();
-  return resolveWorkDir(source, projectId);
+  const workspacePath = resolveWorkDir(source, projectId);
+  return confineFolderInstructionCwd(cwd, workspacePath);
 }
 
 export function registerFolderInstructionsIpcHandlers(projectManagerSource: ProjectManagerSource): void {
