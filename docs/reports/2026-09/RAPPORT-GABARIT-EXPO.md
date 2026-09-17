@@ -2,7 +2,7 @@
 
 - Date : 2026-09-17
 - Agent : Grok 4.6
-- Worktree : `/home/patrice/DEV/cb-expo-2026-09-17`
+- Worktree : `worktree cb-expo-2026-09-17`
 - Branche : `feat/expo-2026-09-17`
 - Base : `origin/main` `b5c50c189`
 - Consignes : pas de commit, pas de `rm -rf`, aucun appel réseau dans les tests unitaires, ports jetables, HOME QA `_qa/gabarit-expo/home`
@@ -17,7 +17,7 @@ Quatre gabarits intégrés, enregistrés par `TEMPLATES.set` dans `src/templates
 
 ## Livrable utilisateur
 
-`/home/patrice/Videos/Partage/20260917-cowork-comparaison/GABARIT-EXPO.md`
+`<dépôt privé de passation>/20260917-cowork-comparaison/GABARIT-EXPO.md`
 
 ## Résultat
 
