@@ -448,7 +448,18 @@ export async function materializeUnifiedSession(
   options: UnifiedSessionIndexOptions = {},
 ): Promise<{ id: string; origin: UnifiedSurface } | null> {
   const records = listUnifiedSessions({ ...options, limit: 500 });
-  const match = records.find((row) => row.id === sessionId || row.id.startsWith(sessionId) || row.sourceId === sessionId);
+  /*
+   * Un identifiant abrégé reste pratique, mais il ne doit jamais désigner
+   * « la première session qui commence par là » : sur deux sessions au préfixe
+   * commun, l'utilisateur reprendrait silencieusement la mauvaise. Une
+   * correspondance exacte gagne toujours ; un préfixe n'est accepté que s'il
+   * ne désigne qu'une seule session. La liste est déjà restreinte au
+   * propriétaire par listUnifiedSessions, donc l'ambiguïté est un défaut de
+   * justesse, pas une fuite entre comptes.
+   */
+  const exact = records.find((row) => row.id === sessionId || row.sourceId === sessionId);
+  const prefixes = exact ? [] : records.filter((row) => row.id.startsWith(sessionId));
+  const match = exact ?? (prefixes.length === 1 ? prefixes[0] : undefined);
   if (!match) return null;
   if (!canAccessUnifiedRecord(match, options)) return null;
   if (match.pointer.kind === 'session-store') {
