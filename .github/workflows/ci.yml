@@ -34,7 +34,14 @@ jobs:
       matrix:
         # Supported CI toolchain versions; the runtime engine requirement is in package.json.
         node-version: [20.x, 22.x]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macOS runners sont facturés dix fois le tarif Linux, Windows deux fois.
+        # Sur une pull request, la matrice se limite donc à Ubuntu — la cible
+        # bloquante — et à Windows, où vivent de vraies différences de chemins et
+        # d'arrêt de processus. macOS, non bloquant par construction
+        # (continue-on-error ci-dessus), s'exécute à la fusion sur main et
+        # develop, là où sa couverture sert encore à quelque chose.
+        # Coût observé : environ 0,25 $ par pull request au lieu de 1 $.
+        os: ${{ (github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]')) || fromJSON('["ubuntu-latest","windows-latest","macos-latest"]') }}
 
     steps:
     - name: Checkout code
