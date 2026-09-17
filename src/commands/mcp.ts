@@ -59,6 +59,35 @@ export function confirmPrompt(prompt: string): Promise<boolean> {
   });
 }
 
+/**
+ * How to confirm a stdio MCP add. `--yes` skips the prompt.
+ * Without a TTY and without `--yes`, abort instead of hanging on readline.
+ */
+export function stdioAddConfirmMode(
+  yes: boolean,
+  stdinIsTTY: boolean | undefined = process.stdin.isTTY,
+): 'skip' | 'prompt' | 'abort' {
+  if (yes) return 'skip';
+  if (stdinIsTTY) return 'prompt';
+  return 'abort';
+}
+
+/**
+ * `mcp test` / add / add-json only probe the server then persist config.
+ * Tear down the live client so a stdio child cannot keep the CLI event loop open.
+ * Same path as `buddy mcp test` (removeServer → transport.disconnect → reap PID).
+ */
+export async function releaseMcpProbe(
+  manager: { removeServer(name: string): Promise<void> },
+  name: string,
+): Promise<void> {
+  try {
+    await manager.removeServer(name);
+  } catch {
+    // Probe teardown must not mask the add/test result.
+  }
+}
+
 export interface MCPServeOptions {
   allowWrite?: boolean;
   tools?: string;
@@ -263,9 +292,9 @@ export function createMCPCommand(): Command {
           addMCPServer(preset);
           console.log(chalk.green(`✓ Added predefined MCP server: ${name}`));
 
-          // Try to connect immediately
+          // Try to connect immediately, then drop the probe (same as `mcp test`).
+          const manager = getMCPManager();
           try {
-            const manager = getMCPManager();
             await manager.addServer(preset);
             console.log(chalk.green(`✓ Connected to MCP server: ${name}`));
 
@@ -274,6 +303,8 @@ export function createMCPCommand(): Command {
           } catch (connectError) {
             console.log(chalk.yellow(`⚠ Server saved but connection failed: ${getErrorMessage(connectError)}`));
             console.log(chalk.yellow('  Check your API key and try: buddy mcp test ' + name));
+          } finally {
+            await releaseMcpProbe(manager, name);
           }
 
           return;
@@ -339,14 +370,17 @@ export function createMCPCommand(): Command {
 
         addMCPServer(config);
         console.log(chalk.green(`✓ Added MCP server: ${name}`));
-        
-        // Try to connect immediately
+
         const manager = getMCPManager();
-        await manager.addServer(config);
-        console.log(chalk.green(`✓ Connected to MCP server: ${name}`));
-        
-        const tools = manager.getTools().filter(t => t.serverName === name);
-        console.log(chalk.blue(`  Available tools: ${tools.length}`));
+        try {
+          await manager.addServer(config);
+          console.log(chalk.green(`✓ Connected to MCP server: ${name}`));
+
+          const tools = manager.getTools().filter(t => t.serverName === name);
+          console.log(chalk.blue(`  Available tools: ${tools.length}`));
+        } finally {
+          await releaseMcpProbe(manager, name);
+        }
 
       } catch (error: unknown) {
         logger.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
@@ -358,7 +392,8 @@ export function createMCPCommand(): Command {
   mcpCommand
     .command('add-json <name> <json>')
     .description('Add an MCP server from JSON configuration')
-    .action(async (name: string, jsonConfig: string) => {
+    .option('-y, --yes', 'skip confirmation for stdio MCP servers (required when stdin is not a TTY)')
+    .action(async (name: string, jsonConfig: string, options: { yes?: boolean }) => {
       try {
         let config;
         try {
@@ -395,23 +430,35 @@ export function createMCPCommand(): Command {
           console.log(chalk.yellow(`  Command: ${serverConfig.transport.command} ${(serverConfig.transport.args || []).join(' ')}`));
           console.log(chalk.yellow('  Only add MCP servers from trusted sources.\n'));
 
-          const confirmed = await confirmPrompt('Do you want to proceed? (y/N): ');
-          if (!confirmed) {
-            console.log('MCP server addition cancelled.');
-            return;
+          const mode = stdioAddConfirmMode(options.yes === true);
+          if (mode === 'abort') {
+            logger.error(chalk.red(
+              'Error: stdin is not a TTY. Re-run with --yes to confirm adding this stdio MCP server.',
+            ));
+            process.exit(1);
+          }
+          if (mode === 'prompt') {
+            const confirmed = await confirmPrompt('Do you want to proceed? (y/N): ');
+            if (!confirmed) {
+              console.log('MCP server addition cancelled.');
+              return;
+            }
           }
         }
 
         addMCPServer(serverConfig);
         console.log(chalk.green(`✓ Added MCP server: ${name}`));
-        
-        // Try to connect immediately
+
         const manager = getMCPManager();
-        await manager.addServer(serverConfig);
-        console.log(chalk.green(`✓ Connected to MCP server: ${name}`));
-        
-        const tools = manager.getTools().filter(t => t.serverName === name);
-        console.log(chalk.blue(`  Available tools: ${tools.length}`));
+        try {
+          await manager.addServer(serverConfig);
+          console.log(chalk.green(`✓ Connected to MCP server: ${name}`));
+
+          const tools = manager.getTools().filter(t => t.serverName === name);
+          console.log(chalk.blue(`  Available tools: ${tools.length}`));
+        } finally {
+          await releaseMcpProbe(manager, name);
+        }
 
       } catch (error: unknown) {
         logger.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
@@ -595,11 +642,9 @@ export function createMCPCommand(): Command {
         logger.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
         process.exit(1);
       } finally {
-        // `mcp test` is a probe, not a long-lived session. Always tear down the
-        // transport so stdio children and their database/network handles do not
-        // keep the CLI process alive after a successful discovery.
+        // Probe only: drop the client/stdio child so the CLI can exit.
         if (connected) {
-          await manager.removeServer(name);
+          await releaseMcpProbe(manager, name);
         }
       }
     });
