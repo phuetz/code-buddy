@@ -216,6 +216,7 @@ class CrashHandler {
       if (process.stdin.isTTY && process.stdin.setRawMode) {
         process.stdin.setRawMode(false);
       }
+      if (!process.stdout.isTTY) return;
       // Show cursor
       process.stdout.write('\x1B[?25h');
       // Reset colors

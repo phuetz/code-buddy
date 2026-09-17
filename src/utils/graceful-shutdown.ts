@@ -13,6 +13,23 @@
 
 import { logger, getLogger } from './logger.js';
 import { DisposableManager, registerDisposable, type Disposable } from './disposable.js';
+import { EXIT_CODES } from './exit-codes.js';
+
+/**
+ * Exit code after a shutdown signal. Only an explicit headless run (`-p`, loop,
+ * try: CODEBUDDY_HEADLESS=true) reports SIGINT as 130 (USER_CANCELLED), so a
+ * script can tell an interruption from success. Servers and daemons whose stdout
+ * is merely not a TTY (systemd) keep exit 0: a normal SIGTERM stop must not be
+ * reported as a failure and trigger Restart=on-failure.
+ */
+export function signalExitCode(signal: string, env: NodeJS.ProcessEnv = process.env): number {
+  if (env.CODEBUDDY_HEADLESS !== 'true') return 0;
+  return signal === 'SIGINT' ? EXIT_CODES.USER_CANCELLED : 0;
+}
+
+function shutdownProgressStream(): NodeJS.WriteStream {
+  return process.stdout.isTTY ? process.stdout : process.stderr;
+}
 
 export interface ShutdownOptions {
   /** Maximum time to wait for shutdown in milliseconds (default: 30000) */
@@ -102,7 +119,7 @@ export class GracefulShutdownManager implements Disposable {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
 
     try {
-      await this.shutdown({ exitCode: 0 });
+      await this.shutdown({ exitCode: signalExitCode(signal) });
     } catch (error) {
       logger.error('Error during shutdown', error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -293,7 +310,7 @@ export class GracefulShutdownManager implements Disposable {
     for (const handler of this.handlers) {
       try {
         if (showProgress) {
-          process.stdout.write(`  [shutdown] ${handler.name}...`);
+          shutdownProgressStream().write(`  [shutdown] ${handler.name}...`);
         }
         logger.debug(`Running shutdown handler: ${handler.name}`);
 
@@ -305,13 +322,13 @@ export class GracefulShutdownManager implements Disposable {
         this.completedHandlers.add(handler.name);
 
         if (showProgress) {
-          process.stdout.write(' done\n');
+          shutdownProgressStream().write(' done\n');
         }
         logger.debug(`Completed shutdown handler: ${handler.name}`);
       } catch (error) {
         this.completedHandlers.add(handler.name); // Mark as completed even on error
         if (showProgress) {
-          process.stdout.write(' failed\n');
+          shutdownProgressStream().write(' failed\n');
         }
         logger.error(`Error in shutdown handler ${handler.name}:`, error instanceof Error ? error : new Error(String(error)));
         // Continue with other handlers even if one fails
@@ -321,17 +338,17 @@ export class GracefulShutdownManager implements Disposable {
     // Then, dispose all registered disposables
     try {
       if (showProgress) {
-        process.stdout.write('  [shutdown] disposing resources...');
+        shutdownProgressStream().write('  [shutdown] disposing resources...');
       }
       logger.debug('Disposing all registered resources...');
       await DisposableManager.getInstance().disposeAll();
       if (showProgress) {
-        process.stdout.write(' done\n');
+        shutdownProgressStream().write(' done\n');
       }
       logger.debug('All resources disposed');
     } catch (error) {
       if (showProgress) {
-        process.stdout.write(' failed\n');
+        shutdownProgressStream().write(' failed\n');
       }
       logger.error('Error disposing resources:', error instanceof Error ? error : new Error(String(error)));
     }
