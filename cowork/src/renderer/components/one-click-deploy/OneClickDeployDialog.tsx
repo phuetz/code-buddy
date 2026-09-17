@@ -1,7 +1,7 @@
 /**
  * Cowork « Déployer » — simulation by default, live upload only on explicit confirm.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import { Loader2, Rocket, X } from 'lucide-react';
 import type { OneClickReport } from '../../../../../src/deploy/one-click-types';
 
@@ -25,13 +25,22 @@ export function OneClickDeployDialog({
   const [error, setError] = useState<string | null>(null);
   const [root, setRoot] = useState<string | null>(projectRoot ?? null);
 
-  const invoke =
-    run ??
-    ((input) => {
-      const fn = window.electronAPI?.oneClickDeploy?.run;
-      if (!fn) return Promise.reject(new Error('Pont de déploiement indisponible.'));
-      return fn(input);
-    });
+  /*
+   * Mémorisé : recréée à chaque rendu, cette fonction changeait l'identité des
+   * dépendances de runPlan et faisait passer React Hook pour incomplet. Ce
+   * n'est pas qu'un avertissement de style — un appel en vol pourrait viser une
+   * version périmée du pont.
+   */
+  const invoke = useMemo(
+    () =>
+      run ??
+      ((input: { projectRoot: string; apply?: boolean; dryRun?: boolean }) => {
+        const fn = window.electronAPI?.oneClickDeploy?.run;
+        if (!fn) return Promise.reject(new Error('Pont de déploiement indisponible.'));
+        return fn(input);
+      }),
+    [run],
+  );
 
   const runPlan = useCallback(
     async (apply: boolean) => {
