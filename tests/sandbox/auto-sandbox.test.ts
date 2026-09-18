@@ -1,10 +1,17 @@
 import { AutoSandboxRouter } from '../../src/sandbox/auto-sandbox.js';
+import { ensureSshSandboxRegistered } from '../../src/sandbox/ssh-sandbox.js';
+import { getActiveSandboxBackend, resetSandboxRegistry } from '../../src/sandbox/sandbox-registry.js';
 
 describe('AutoSandboxRouter', () => {
   let router: AutoSandboxRouter;
 
   beforeEach(() => {
+    resetSandboxRegistry();
     router = new AutoSandboxRouter({ enabled: true });
+  });
+
+  afterEach(() => {
+    resetSandboxRegistry();
   });
 
   describe('shouldSandbox', () => {
@@ -71,6 +78,36 @@ describe('AutoSandboxRouter', () => {
 
       expect(result.mode).toBe('direct');
       expect(result.reason).toContain('Docker not available');
+    });
+
+    it('routes to sandbox for an explicit SSH backend without requiring Docker', async () => {
+      router = new AutoSandboxRouter({
+        enabled: false,
+        explicitBackend: 'ssh',
+        explicitHost: 'hoteExemple',
+        failClosedOnUnavailable: true,
+      });
+      Object.defineProperty(router, 'dockerAvailable', { value: false, writable: true });
+
+      const result = await router.route('echo hello');
+
+      expect(result.mode).toBe('sandbox');
+      expect(result.reason).toMatch(/Explicit SSH backend/);
+      expect(result.reason).toContain('hoteExemple');
+    });
+
+    it('does not pick SSH when no backend is requested even for dangerous commands requiring sandbox', async () => {
+      ensureSshSandboxRegistered();
+      router = new AutoSandboxRouter({ enabled: true });
+      const dangerousCommand = 'chmod 777 /etc/passwd';
+      const check = router.shouldSandbox(dangerousCommand);
+      expect(check.sandbox).toBe(true);
+      expect(check.reason).toContain('dangerous');
+      expect(check.reason ?? '').not.toMatch(/SSH/i);
+
+      const routed = await router.route(dangerousCommand);
+      expect(routed.reason).not.toMatch(/SSH/i);
+      expect(getActiveSandboxBackend()?.name).not.toBe('ssh');
     });
   });
 

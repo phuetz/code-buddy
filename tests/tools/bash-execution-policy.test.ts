@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { resetExecPolicy } from '../../src/sandbox/execpolicy.js';
 import { clearPermissionsCache } from '../../src/security/declarative-rules.js';
 import {
@@ -9,6 +10,10 @@ import {
   resetPermissionModeManager,
 } from '../../src/security/permission-modes.js';
 import { PolicyEngine } from '../../src/security/policy-engine.js';
+import * as sshSandboxModule from '../../src/sandbox/ssh-sandbox.js';
+import { SshSandbox } from '../../src/sandbox/ssh-sandbox.js';
+import { BashTool } from '../../src/tools/bash/bash-tool.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import {
   evaluateShellExecution,
   executeInWorkspaceSandbox,
@@ -20,6 +25,10 @@ import { sandboxAvailable } from '../helpers/sandbox-availability.js';
 describe('Bash runtime execution policy', () => {
   beforeEach(() => {
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
+    delete process.env.CODEBUDDY_SANDBOX_BACKEND;
+    delete process.env.CODEBUDDY_SSH_HOST;
+    delete process.env.CODEBUDDY_SSH_HOSTS;
+    delete process.env.CODEBUDDY_SSH_HOSTS_FILE;
     resetExecPolicy();
     resetPermissionModeManager();
     clearPermissionsCache();
@@ -29,6 +38,11 @@ describe('Bash runtime execution policy', () => {
 
   afterEach(() => {
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
+    delete process.env.CODEBUDDY_SANDBOX_BACKEND;
+    delete process.env.CODEBUDDY_SSH_HOST;
+    delete process.env.CODEBUDDY_SSH_HOSTS;
+    delete process.env.CODEBUDDY_SSH_HOSTS_FILE;
+    vi.restoreAllMocks();
     PolicyEngine.getInstance().releaseKillSwitch();
     resetExecPolicy();
     resetPermissionModeManager();
@@ -145,5 +159,132 @@ describe('Bash runtime execution policy', () => {
       else process.env.PATH = previousPath;
       fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
+  });
+
+  it.each([
+    'SSH connection failed: Permission denied (publickey).',
+    'SSH connection failed: ssh: Could not resolve hostname hoteExemple.example: Name or service not known',
+    'SSH connection failed: connect to host hoteExemple.example port 22: Connection refused',
+  ])('never treats an SSH transport failure as a sandbox boundary escalation (%s)', (stderr) => {
+    expect(isSandboxBoundaryFailure({
+      exitCode: 255,
+      stdout: '',
+      stderr,
+      duration: 12,
+      timedOut: false,
+      backend: 'ssh',
+      sandboxed: true,
+    })).toBe(false);
+  });
+
+  describe('executeInWorkspaceSandbox with explicit SSH backend', () => {
+    function createMockProcess(): sshSandboxModule.SshChildProcessLike & EventEmitter {
+      const stdout = new EventEmitter();
+      const stderr = new EventEmitter();
+      const stdin = { write: vi.fn(), end: vi.fn() };
+      const proc = new EventEmitter() as EventEmitter & sshSandboxModule.SshChildProcessLike;
+      proc.stdout = stdout;
+      proc.stderr = stderr;
+      proc.stdin = stdin;
+      proc.pid = 4242;
+      proc.kill = vi.fn(() => true);
+      return proc;
+    }
+
+    it('executes command via SshSandbox when CODEBUDDY_SANDBOX_BACKEND=ssh', async () => {
+      process.env.CODEBUDDY_SANDBOX_BACKEND = 'ssh';
+      process.env.CODEBUDDY_SSH_HOST = 'hoteExemple';
+      process.env.CODEBUDDY_SSH_HOSTS = JSON.stringify({
+        hosts: {
+          hoteExemple: {
+            host: 'hoteExemple.example',
+            user: 'buddy',
+          },
+        },
+      });
+
+      const mockSpawn = vi.fn((_cmd: string, _args: string[]) => {
+        const proc = createMockProcess();
+        setImmediate(() => {
+          proc.stdout.emit('data', Buffer.from('remote output\n'));
+          proc.emit('close', 0);
+        });
+        return proc;
+      });
+
+      vi.spyOn(sshSandboxModule, 'createSshSandbox').mockImplementation((config) => {
+        return new SshSandbox({
+          ...config,
+          hasSshClient: () => true,
+          spawn: mockSpawn,
+        });
+      });
+
+      const sandboxed = await executeInWorkspaceSandbox('echo "remote test"', process.cwd(), 5000);
+      expect(sandboxed.available).toBe(true);
+      expect(sandboxed.result).toMatchObject({
+        backend: 'ssh',
+        sandboxed: true,
+        exitCode: 0,
+        stdout: 'remote output\n',
+      });
+    });
+
+    it('returns SSH failure and never proposes nor executes direct local fallback on transport refusal', async () => {
+      process.env.CODEBUDDY_SANDBOX_BACKEND = 'ssh';
+      process.env.CODEBUDDY_SSH_HOST = 'hoteExemple';
+      process.env.CODEBUDDY_SSH_HOSTS = JSON.stringify({
+        hosts: {
+          hoteExemple: {
+            host: 'hoteExemple.example',
+            user: 'buddy',
+          },
+        },
+      });
+
+      const mockSpawn = vi.fn((_cmd: string, _args: string[]) => {
+        const proc = createMockProcess();
+        setImmediate(() => {
+          proc.stderr.emit('data', Buffer.from('Permission denied (publickey).\n'));
+          proc.emit('close', 255);
+        });
+        return proc;
+      });
+
+      vi.spyOn(sshSandboxModule, 'createSshSandbox').mockImplementation((config) => {
+        return new SshSandbox({
+          ...config,
+          hasSshClient: () => true,
+          spawn: mockSpawn,
+        });
+      });
+
+      // 1. Verify executeInWorkspaceSandbox directly
+      const sandboxed = await executeInWorkspaceSandbox('git status', process.cwd(), 5000);
+      expect(sandboxed.available).toBe(true);
+      expect(sandboxed.result).toBeDefined();
+      expect(sandboxed.result?.backend).toBe('ssh');
+      expect(sandboxed.result?.exitCode).toBe(255);
+      expect(sandboxed.result?.stderr).toContain('Permission denied (publickey)');
+
+      // Critical check: isSandboxBoundaryFailure must return false
+      expect(isSandboxBoundaryFailure(sandboxed.result!)).toBe(false);
+
+      // 2. Verify full execution through BashTool: no direct approval asked, no host spawn executed
+      const confirmationSpy = vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation');
+
+      const tool = new BashTool();
+      const executeWithSpawnSpy = vi.spyOn(tool as any, 'executeWithSpawn');
+      const execResult = await tool.execute('git status');
+      tool.dispose();
+
+      // Verify no local escalation was proposed
+      expect(confirmationSpy).not.toHaveBeenCalled();
+      // Verify no local command was spawned on the host machine
+      expect(executeWithSpawnSpy).not.toHaveBeenCalled();
+      // Verify the SSH error is returned to caller with sandbox:ssh
+      expect(execResult.error).toContain('Permission denied (publickey)');
+      expect(execResult.error).toContain('[sandbox:ssh; exit code 255]');
+    });
   });
 });

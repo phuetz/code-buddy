@@ -17,3 +17,5 @@ export * from "./e2b-sandbox.js";
 export * from "./os-sandbox.js";
 export * from "./execpolicy.js";
 export * from "./safe-eval.js";
+export * from "./ssh-hosts.js";
+export * from "./ssh-sandbox.js";

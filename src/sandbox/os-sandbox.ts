@@ -23,7 +23,7 @@ import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } f
 // Types
 // ============================================================================
 
-export type SandboxBackend = 'landlock' | 'bubblewrap' | 'seatbelt' | 'docker' | 'none';
+export type SandboxBackend = 'landlock' | 'bubblewrap' | 'seatbelt' | 'docker' | 'ssh' | 'none';
 
 export interface OSSandboxConfig {
   /** Sandbox backend to use (auto-detected if not specified) */

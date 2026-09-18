@@ -12,22 +12,44 @@ import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } f
 // Registry
 // ============================================================================
 
+interface RegisteredSandboxBackend {
+  priority: number;
+  backend: SandboxBackendInterface;
+  /** When true, skipped by getActiveSandboxBackend() — must be requested by name. */
+  explicitOnly: boolean;
+}
+
 /** Registered backends, ordered by priority (highest first) */
-const backends: Array<{ priority: number; backend: SandboxBackendInterface }> = [];
+const backends: RegisteredSandboxBackend[] = [];
 
 /** Cached active backend (resolved on first use) */
 let activeBackend: SandboxBackendInterface | null = null;
+
+export interface RegisterSandboxBackendOptions {
+  /** Do not auto-select this backend. Used for SSH and other remote runtimes. */
+  explicitOnly?: boolean;
+}
 
 /**
  * Register a sandbox backend with a given priority.
  * Higher priority backends are preferred.
  */
-export function registerSandboxBackend(backend: SandboxBackendInterface, priority: number = 0): void {
-  backends.push({ priority, backend });
+export function registerSandboxBackend(
+  backend: SandboxBackendInterface,
+  priority: number = 0,
+  options: RegisterSandboxBackendOptions = {},
+): void {
+  backends.push({
+    priority,
+    backend,
+    explicitOnly: options.explicitOnly === true,
+  });
   backends.sort((a, b) => b.priority - a.priority);
   // Invalidate cache when a new backend is registered
   activeBackend = null;
-  logger.debug(`Sandbox backend registered: ${backend.name} (priority=${priority})`);
+  logger.debug(
+    `Sandbox backend registered: ${backend.name} (priority=${priority}${options.explicitOnly ? ', explicit-only' : ''})`,
+  );
 }
 
 /**
@@ -37,7 +59,8 @@ export function registerSandboxBackend(backend: SandboxBackendInterface, priorit
 export async function getActiveSandboxBackend(): Promise<SandboxBackendInterface | null> {
   if (activeBackend) return activeBackend;
 
-  for (const { backend } of backends) {
+  for (const { backend, explicitOnly } of backends) {
+    if (explicitOnly) continue;
     try {
       const available = await backend.isAvailable();
       if (available) {
@@ -75,20 +98,51 @@ export async function sandboxExecute(
 }
 
 /**
+ * Look up a registered backend by name, including explicit-only backends.
+ */
+export function getSandboxBackendByName(name: string): SandboxBackendInterface | null {
+  const match = backends.find((entry) => entry.backend.name === name);
+  return match?.backend ?? null;
+}
+
+/**
+ * Execute on a named backend. Explicit-only backends (SSH) are reachable here
+ * and never through getActiveSandboxBackend().
+ */
+export async function sandboxExecuteOn(
+  backendName: string,
+  command: string,
+  opts?: SandboxExecOptions,
+): Promise<SandboxExecResult> {
+  const backend = getSandboxBackendByName(backendName);
+  if (!backend) {
+    return {
+      success: false,
+      output: '',
+      error: `Sandbox backend '${backendName}' is not registered`,
+      exitCode: 1,
+      durationMs: 0,
+    };
+  }
+  return backend.execute(command, opts);
+}
+
+/**
  * Get all registered backends and their availability status.
  */
 export async function listSandboxBackends(): Promise<Array<{
   name: string;
   priority: number;
   available: boolean;
+  explicitOnly: boolean;
 }>> {
   const results = [];
-  for (const { priority, backend } of backends) {
+  for (const { priority, backend, explicitOnly } of backends) {
     let available = false;
     try {
       available = await backend.isAvailable();
     } catch { /* ignore */ }
-    results.push({ name: backend.name, priority, available });
+    results.push({ name: backend.name, priority, available, explicitOnly });
   }
   return results;
 }

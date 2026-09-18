@@ -9,6 +9,10 @@
 import { initializeExecPolicy, type ShellPolicyEvaluation } from '../../sandbox/execpolicy.js';
 import { createSandboxForMode, type OSSandboxResult } from '../../sandbox/os-sandbox.js';
 import { DockerSandbox } from '../../sandbox/docker-sandbox.js';
+import {
+  createSshSandbox,
+  resolveExplicitSshSandboxRequest,
+} from '../../sandbox/ssh-sandbox.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { checkDeclarativePermission } from '../../security/declarative-rules.js';
 import { getPermissionModeManager } from '../../security/permission-modes.js';
@@ -248,6 +252,31 @@ export async function executeInWorkspaceSandbox(
   timeout: number,
   signal?: AbortSignal,
 ): Promise<SandboxedExecution> {
+  const sshRequest = resolveExplicitSshSandboxRequest();
+  if (sshRequest) {
+    const ssh = createSshSandbox({
+      catalog: sshRequest.catalog,
+      defaultHost: sshRequest.host || undefined,
+    });
+    const result = await ssh.execute(command, {
+      timeout,
+      ...(signal ? { signal } : {}),
+    });
+    await ssh.cleanup();
+    return {
+      available: true,
+      result: {
+        exitCode: result.exitCode,
+        stdout: result.output,
+        stderr: result.error || '',
+        duration: result.durationMs,
+        timedOut: result.error?.includes('timed out') ?? false,
+        backend: 'ssh',
+        sandboxed: true,
+      },
+    };
+  }
+
   // Same controlled overrides as the direct spawn path and the Docker path
   // (CI=true, NO_COLOR=1, GIT_TERMINAL_PROMPT=0, …): the native sandbox used
   // to receive only the policy-filtered env, so a sandboxed `printenv NO_COLOR`
@@ -339,6 +368,7 @@ export async function executeInWorkspaceSandbox(
 
 /** Best-effort distinction used to offer a precise escalation after sandbox denial. */
 export function isSandboxBoundaryFailure(result: OSSandboxResult): boolean {
+  if (result.backend === 'ssh') return false;
   if (result.exitCode === 0) return false;
   // Shell/application failures are not proof that the sandbox denied access.
   // In particular, 126/127 used to trigger a host retry for any missing or
