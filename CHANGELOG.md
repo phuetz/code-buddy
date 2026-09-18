@@ -1,5 +1,24 @@
 ## [Unreleased]
 
+## [2.3.0] (unreleased)
+
+### Added
+
+- **deploy:** `buddy deploy run` provides one-click web publishing for static and build projects targeting Cloudflare Pages (`wrangler`) and Netlify (`netlify-cli`). Simulation is active by default; `--apply` uploads with credentials strictly confined to the child environment. `buddy deploy platforms` lists upload targets versus config generators.
+- **provision:** `buddy provision db-auth` overlays versioned SQL migrations, a typed TypeScript client, and authentication views (`SignIn`, `SignUp`, `SignOut`) for local Docker Postgres (`--target local`) or hosted Supabase (`--target supabase`). Simulation by default; requires `--apply` to write files.
+- **sessions:** Unified recents index (`recents-index.json`) bridging CLI sessions, Cowork SQLite threads, and mobile conversations. Supported commands: `buddy session list` (with origin markers), `buddy session resume <id>`, `buddy session search`, and `buddy session last`. Cowork sessions can be resumed from CLI via automatic lazy bridge files.
+- **figma:** `buddy figma import` converts Figma REST API JSON exports or live Figma files into React components and CSS tokens. Supports offline execution via `--json`, token-at-call-time security, and prevents companion tool access.
+- **templates:** `expo-rn` mobile template added to the scaffolding engine and Cowork App Studio, generating an Expo SDK 52 / React Native starter with Expo Router tabs, theming, Vitest tests, and EAS configuration.
+- **cowork:** Folder instructions tab in Settings (`SettingsFolderInstructions`) displaying hierarchical context resolution (`AGENTS.md`, `CODEBUDDY.md`) between root and current directory with in-app editing and preview.
+- **skills:** Authored skill trigger derivation at write time ensures self-improvement skills are discoverable in `SkillRegistry.search`.
+- **perf:** Thin startup entrypoint (`dist/cli-boot.js`) accelerates CLI execution for `--version` (−68%) and `--help` (−29%).
+
+### Fixed
+
+- **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
+- **sessions:** Strict prefix disambiguation in `materializeUnifiedSession` refuses ambiguous abbreviated IDs to prevent resuming incorrect sessions.
+- **deploy:** Filesystem sandboxing prevents `outputDir` from escaping the project root in `buddy deploy run`.
+
 ## [2.2.0] (2026-09-17)
 
 ### Added
