@@ -597,12 +597,24 @@ export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>> & {
   model?: string;
 };
 
-/** Keys a profile may carry. Anything else is a typo or a wrong schema. */
-export const PROFILE_KNOWN_KEYS = new Set<string>([
-  'active_model', 'baseURL', 'model', 'providers', 'models', 'tools',
-  'agent', 'middleware', 'multi_agent_system', 'enterprise_modules',
-  'permissions', 'hooks', 'mcp', 'memory', 'logging', 'ui', 'telemetry',
-]);
+/**
+ * Clés qu'un profil peut porter. Tout le reste est une faute de frappe ou un
+ * schéma imaginaire.
+ *
+ * Liste **dérivée du type**, pas écrite de mémoire. Ma première version l'était
+ * et oubliait `surface` — employée par les profils intégrés `core` et `all` —
+ * ce qui faisait avertir sur des profils parfaitement valides. Une liste tenue
+ * à la main diverge de ce qu'elle décrit ; celle-ci se corrige en même temps
+ * que `CodeBuddyConfig`.
+ */
+export const PROFILE_KNOWN_KEYS = new Set<keyof CodeBuddyConfig | 'baseURL' | 'model'>([
+  'active_model', 'providers', 'models', 'tool_config', 'middleware', 'ui',
+  'agent', 'integrations', 'surface', 'model_pairs', 'llm', 'agent_defaults',
+  'advisor', 'lsp', 'heartbeat', 'autonomous_fleet', 'daily_reset',
+  'team_session', 'multi_agent_system', 'enterprise_modules',
+  // Les deux que ProfileConfig ajoute pour designer un fournisseur directement.
+  'baseURL', 'model',
+]) as ReadonlySet<string>;
 
 /**
  * Full configuration structure
@@ -1316,8 +1328,11 @@ class ConfigManager {
     // ne les connaissait pas — aucun n'a jamais changé de fournisseur, et rien
     // ne l'a signalé. Un outil qui échoue en silence est pire qu'un outil qui
     // échoue bruyamment.
+    // `--help` ne doit rien afficher d'autre que l'aide. Un avertissement de
+    // configuration y est du bruit, et un test du depot le verifie.
+    const afficheAide = process.argv.includes('--help') || process.argv.includes('-h');
     const inconnues = Object.keys(profile).filter((cle) => !PROFILE_KNOWN_KEYS.has(cle));
-    if (inconnues.length > 0) {
+    if (inconnues.length > 0 && !afficheAide) {
       logger.warn(
         `Profil « ${profileName} » : clé(s) ignorée(s) car inconnue(s) — ${inconnues.join(', ')}. ` +
         `Clés reconnues : ${[...PROFILE_KNOWN_KEYS].sort().join(', ')}.`,

@@ -41,9 +41,18 @@ describe('profils : désignation de fournisseur', () => {
     }
   });
 
-  it('couvre les sections structurées, qui restent légitimes dans un profil', () => {
-    for (const cle of ['agent', 'middleware', 'tools', 'models', 'providers']) {
+  it('couvre les sections structurées, avec leurs vrais noms', () => {
+    // Écrites de mémoire, ces clés divergent : j'avais mis « tools » là où le
+    // type déclare « tool_config ». La liste est désormais dérivée du type ;
+    // ce test emploie donc les noms réels et non ceux qu'on croit.
+    for (const cle of ['agent', 'middleware', 'tool_config', 'models', 'providers']) {
       expect(PROFILE_KNOWN_KEYS.has(cle)).toBe(true);
     }
+  });
+
+  it('couvre « surface », que les profils intégrés emploient', () => {
+    // `core` et `all` ne portent QUE cette clé. L'oublier faisait avertir sur
+    // des profils parfaitement valides, et polluait la sortie de --help.
+    expect(PROFILE_KNOWN_KEYS.has('surface')).toBe(true);
   });
 });
