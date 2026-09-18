@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { BtwQuickAsk } from './components/BtwQuickAsk';
 import { useAppStore } from './store';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/globals.css';
@@ -88,8 +89,13 @@ installVitePreloadRecovery({
 (window as unknown as { useAppStore: typeof useAppStore }).useAppStore = useAppStore;
 
 // Note: StrictMode removed to prevent double-rendering issues with IPC
+const isQuickAskWindow = window.location.hash.replace(/^#/, '') === 'quickask';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <App />
+    {isQuickAskWindow ? (
+      <BtwQuickAsk variant="panel" onClose={() => void window.electronAPI?.quickask?.hide()} />
+    ) : (
+      <App />
+    )}
   </ErrorBoundary>
 );

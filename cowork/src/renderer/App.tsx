@@ -77,6 +77,8 @@ import { OnboardingWizard } from './components/OnboardingWizard';
 import { SubAgentDashboard } from './components/SubAgentDashboard';
 import { DiagnosticsPanel } from './components/DiagnosticsPanel';
 import { BtwQuickAsk } from './components/BtwQuickAsk';
+import { listRunningTasks } from './utils/running-tasks';
+import { dispatchChatComposerSubmit } from './utils/chat-composer-events';
 import { PresenceService } from './services/presence/PresenceService';
 import { DockWorkspace } from './components/DockWorkspace';
 import { ShellNavigation } from './components/ShellNavigation';
@@ -218,6 +220,30 @@ function App() {
   // P3.9 — /btw quick ask popup (Cmd+Shift+/)
   const [showBtwQuickAsk, setShowBtwQuickAsk] = useState(false);
   const [shortcutRevision, setShortcutRevision] = useState(0);
+  const sessions = useAppStore((s) => s.sessions);
+  const sessionStates = useAppStore((s) => s.sessionStates);
+
+  useEffect(() => {
+    const tasks = listRunningTasks(sessions, sessionStates);
+    void window.electronAPI?.quickask?.publishTasks?.(tasks);
+  }, [sessions, sessionStates]);
+
+  useEffect(() => {
+    const offSubmit = window.electronAPI?.quickask?.onIncomingSubmit?.(({ text }) => {
+      dispatchChatComposerSubmit({ body: text });
+    });
+    const offAttach = window.electronAPI?.appshot?.onAttach?.((payload) => {
+      const base64 = payload.dataUrl.replace(/^data:image\/png;base64,/, '');
+      dispatchChatComposerSubmit({
+        body: payload.windowName ? `[Appshot: ${payload.windowName}]` : '',
+        images: [{ base64, mediaType: 'image/png' }],
+      });
+    });
+    return () => {
+      offSubmit?.();
+      offAttach?.();
+    };
+  }, []);
   useEffect(() => {
     if (!appConfig) return;
     const config = appConfig as unknown as { onboardingCompleted?: boolean };
