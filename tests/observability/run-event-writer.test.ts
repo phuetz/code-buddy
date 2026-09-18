@@ -8,7 +8,16 @@ import { RunStore } from '../../src/observability/run-store.js';
 async function fixture(action: (file: string) => Promise<void>) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-journal-'));
   try { await action(path.join(dir, 'events.jsonl')); }
-  finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+}
+
+async function closeStream(stream: fs.WriteStream): Promise<void> {
+  if (stream.closed) return;
+  await new Promise<void>((resolve, reject) => {
+    stream.once('close', resolve);
+    stream.once('error', reject);
+    stream.end();
+  });
 }
 
 describe('run journal acknowledgement', () => {
@@ -19,7 +28,7 @@ describe('run journal acknowledgement', () => {
     expect(writer.status()).toMatchObject({ state: 'pending', received: 1, written: 0 });
     expect(await writer.flush()).toEqual({ state: 'flushed', received: 1, written: 1 });
     expect(fs.readFileSync(file, 'utf8')).toBe('{"id":1}\n');
-    await new Promise<void>(resolve => stream.end(resolve));
+    await closeStream(stream);
     expect((await writer.flush()).state).toBe('flushed');
   }));
   it('keeps asynchronous write failures visible and rejects later flushes', async () => fixture(async file => {
@@ -41,7 +50,7 @@ describe('run journal acknowledgement', () => {
     writer.write('x'.repeat(1024 * 1024 + 1));
     expect(writer.status()).toMatchObject({ state: 'failed', written: 0 });
     await expect(writer.flush()).rejects.toThrow('queue exceeded');
-    await new Promise<void>(resolve => stream.end(resolve));
+    await closeStream(stream);
   }));
   it('exposes the acknowledgement on the actual RunStore', async () => fixture(async file => {
     const store = new RunStore(path.dirname(file));
