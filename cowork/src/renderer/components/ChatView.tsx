@@ -47,7 +47,9 @@ import {
 } from '../utils/file-attachment-helpers';
 import {
   CHAT_COMPOSER_INSERT_EVENT,
+  CHAT_COMPOSER_SUBMIT_EVENT,
   type ChatComposerInsertDetail,
+  type ChatComposerSubmitDetail,
 } from '../utils/chat-composer-events';
 import { condenseForSpeech, extractCompleteSpeechChunks } from '../utils/speech-text';
 import { Eye } from 'lucide-react';
@@ -510,6 +512,22 @@ export function ChatView() {
       window.removeEventListener(CHAT_COMPOSER_INSERT_EVENT, composerHandler as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    const onSubmit = (ev: Event) => {
+      const custom = ev as CustomEvent<ChatComposerSubmitDetail>;
+      const body = custom.detail?.body ?? '';
+      const images = custom.detail?.images ?? [];
+      if (!activeSessionId) return;
+      if (!body.trim() && images.length === 0) return;
+      void (async () => {
+        const contentBlocks = buildComposerContentBlocks(body, [], images);
+        await continueSession(activeSessionId, contentBlocks);
+      })();
+    };
+    window.addEventListener(CHAT_COMPOSER_SUBMIT_EVENT, onSubmit as EventListener);
+    return () => window.removeEventListener(CHAT_COMPOSER_SUBMIT_EVENT, onSubmit as EventListener);
+  }, [activeSessionId, continueSession]);
 
   // Handle paste event for images
   const handlePaste = async (e: React.ClipboardEvent) => {

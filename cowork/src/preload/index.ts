@@ -2127,6 +2127,58 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('desktopSnapshot.capture', input),
   },
 
+  quickask: {
+    hide: () => ipcRenderer.invoke('quickask.hide') as Promise<{ ok: boolean }>,
+    submit: (text: string) =>
+      ipcRenderer.invoke('quickask.submit', text) as Promise<{ ok: boolean; error?: string }>,
+    publishTasks: (tasks: Array<{ id: string; label: string }>) =>
+      ipcRenderer.invoke('quickask.publish-tasks', tasks) as Promise<{ ok: boolean }>,
+    getTasks: () =>
+      ipcRenderer.invoke('quickask.get-tasks') as Promise<Array<{ id: string; label: string }>>,
+    onTasks: (callback: (tasks: Array<{ id: string; label: string }>) => void) => {
+      const listener = (_event: unknown, tasks: Array<{ id: string; label: string }>) => callback(tasks);
+      ipcRenderer.on('quickask:tasks', listener);
+      return () => ipcRenderer.removeListener('quickask:tasks', listener);
+    },
+    onIncomingSubmit: (callback: (payload: { text: string }) => void) => {
+      const listener = (_event: unknown, payload: { text: string }) => callback(payload);
+      ipcRenderer.on('quickask:submit', listener);
+      return () => ipcRenderer.removeListener('quickask:submit', listener);
+    },
+  },
+
+  appshot: {
+    capture: () => ipcRenderer.invoke('appshot.capture') as Promise<{ ok: boolean; windowName?: string }>,
+    confirm: () =>
+      ipcRenderer.invoke('appshot.confirm') as Promise<{ ok: boolean; filePath?: string; error?: string }>,
+    cancel: () => ipcRenderer.invoke('appshot.cancel') as Promise<{ ok: boolean }>,
+    onPreview: (
+      callback: (preview: { dataUrl: string; windowName: string; filePath: string } | null) => void,
+    ) => {
+      const listener = (
+        _event: unknown,
+        preview: { dataUrl: string; windowName: string; filePath: string } | null,
+      ) => callback(preview);
+      ipcRenderer.on('appshot:preview', listener);
+      return () => ipcRenderer.removeListener('appshot:preview', listener);
+    },
+    onAttach: (
+      callback: (payload: {
+        filePath: string;
+        dataUrl: string;
+        windowName: string;
+        sessionId: string;
+      }) => void,
+    ) => {
+      const listener = (
+        _event: unknown,
+        payload: { filePath: string; dataUrl: string; windowName: string; sessionId: string },
+      ) => callback(payload);
+      ipcRenderer.on('appshot:attach', listener);
+      return () => ipcRenderer.removeListener('appshot:attach', listener);
+    },
+  },
+
   // Auto-update
   update: {
     check: () => ipcRenderer.invoke('update.check'),
@@ -6817,6 +6869,30 @@ declare global {
           error?: string;
         }>;
         capture: (input?: DesktopSnapshotCaptureOptions) => Promise<DesktopSnapshotCaptureResult>;
+      };
+      quickask: {
+        hide: () => Promise<{ ok: boolean }>;
+        submit: (text: string) => Promise<{ ok: boolean; error?: string }>;
+        publishTasks: (tasks: Array<{ id: string; label: string }>) => Promise<{ ok: boolean }>;
+        getTasks: () => Promise<Array<{ id: string; label: string }>>;
+        onTasks: (callback: (tasks: Array<{ id: string; label: string }>) => void) => () => void;
+        onIncomingSubmit: (callback: (payload: { text: string }) => void) => () => void;
+      };
+      appshot: {
+        capture: () => Promise<{ ok: boolean; windowName?: string }>;
+        confirm: () => Promise<{ ok: boolean; filePath?: string; error?: string }>;
+        cancel: () => Promise<{ ok: boolean }>;
+        onPreview: (
+          callback: (preview: { dataUrl: string; windowName: string; filePath: string } | null) => void,
+        ) => () => void;
+        onAttach: (
+          callback: (payload: {
+            filePath: string;
+            dataUrl: string;
+            windowName: string;
+            sessionId: string;
+          }) => void,
+        ) => () => void;
       };
       update: {
         check: () => Promise<unknown>;

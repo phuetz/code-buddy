@@ -26,6 +26,7 @@ import {
   clipboard,
   desktopCapturer,
   nativeImage,
+  screen,
 } from 'electron';
 import { join, resolve, dirname, isAbsolute, basename, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -43,6 +44,11 @@ import {
 import { wireFleetAggregator } from './fleet/aggregator-wiring';
 import { registerOsIpcHandlers } from './ipc/os-ipc';
 import { setMainWindow, setTray, getMainWindow } from './window-management';
+import {
+  activeSessionIdFromMainWindow,
+  registerQuickAskAppshot,
+  type QuickAskAppshotHandles,
+} from './quickask-appshot-ipc';
 import { registerTeamIpcHandlers } from './ipc/team-ipc';
 import { registerMentionIpcHandlers } from './ipc/mention-ipc';
 import { registerCommandIpcHandlers } from './ipc/command-ipc';
@@ -474,6 +480,7 @@ let taskDispatch: TaskDispatch | null = null;
 const GLOBAL_DICTATION_ACCELERATOR =
   process.env.COWORK_DICTATION_SHORTCUT?.trim() || 'CommandOrControl+Shift+Space';
 let globalDictationRegistered = false;
+let quickAskAppshotHandles: QuickAskAppshotHandles | null = null;
 
 async function resolveScheduledTaskTitle(
   prompt: string,
@@ -1143,6 +1150,8 @@ function createWindow() {
   mainWindow.on('closed', () => {
     meetingDisplayAudioBroker.dispose();
     globalShortcut.unregister('CommandOrControl+Alt+S');
+    quickAskAppshotHandles?.dispose();
+    quickAskAppshotHandles = null;
     mainWindow = null;
     setMainWindow(null);
   });
@@ -1172,6 +1181,21 @@ function createWindow() {
       logWarn(`[Voice Dictation] global shortcut unavailable: ${GLOBAL_DICTATION_ACCELERATOR}`);
     }
   }
+
+  quickAskAppshotHandles?.dispose();
+  quickAskAppshotHandles = registerQuickAskAppshot({
+    BrowserWindow,
+    screen,
+    ipcMain,
+    globalShortcut,
+    desktopCapturer,
+    preloadPath: join(__dirname, '../preload/index.js'),
+    dirname: __dirname,
+    userData: app.getPath('userData'),
+    viteDevServerUrl: process.env.VITE_DEV_SERVER_URL,
+    logWarn,
+    getActiveSessionId: () => activeSessionIdFromMainWindow(getMainWindow()),
+  });
 
   // Notify renderer about config status after window is ready
   mainWindow.webContents.on('did-finish-load', () => {
@@ -2608,6 +2632,8 @@ app.on('before-quit', async (event) => {
     globalShortcut.unregister(GLOBAL_DICTATION_ACCELERATOR);
     globalDictationRegistered = false;
   }
+  quickAskAppshotHandles?.dispose();
+  quickAskAppshotHandles = null;
   if (!isCleaningUp) {
     // In dev mode, exit quickly — no need for async sandbox cleanup
     if (process.env.VITE_DEV_SERVER_URL) {
