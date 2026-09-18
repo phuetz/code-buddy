@@ -1933,9 +1933,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
     name: 'scaffold_app',
     effect: 'reversible',
     category: 'file_write',
-    keywords: ['scaffold', 'template', 'app', 'project', 'generate', 'node-cli', 'react', 'express'],
+    keywords: ['scaffold', 'template', 'app', 'project', 'generate', 'node-cli', 'react', 'express', 'expo', 'mobile'],
     priority: 85,
-    description: 'Scaffold a new project from a template (node-cli, react, express).',
+    description: 'Scaffold a new project from a template (node-cli, react, express, expo-rn).',
     fleetSafe: false,
   },
   {

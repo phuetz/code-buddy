@@ -21,8 +21,9 @@ describe('ScaffoldService', () => {
       'react-ts',
       'express-api',
       'node-cli',
+      'expo-rn',
     ]);
-    expect(service.listTemplates().length).toBeGreaterThanOrEqual(4);
+    expect(service.listTemplates().length).toBeGreaterThanOrEqual(5);
   });
 
   it('delegates generation to the core TemplateEngine', async () => {

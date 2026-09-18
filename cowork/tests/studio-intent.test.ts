@@ -7,6 +7,11 @@ describe('suggestTemplate', () => {
     expect(suggestTemplate('backend avec endpoints webhooks')).toBe('express-api');
   });
 
+  it('selects expo-rn for mobile prompts', () => {
+    expect(suggestTemplate('une app Expo avec des onglets')).toBe('expo-rn');
+    expect(suggestTemplate('React Native mobile Android')).toBe('expo-rn');
+  });
+
   it('selects node-cli for command-line prompts', () => {
     expect(suggestTemplate('un outil CLI pour renommer des fichiers')).toBe('node-cli');
     expect(suggestTemplate('script de terminal')).toBe('node-cli');

@@ -6,7 +6,7 @@ import { getTemplateEngine, resetTemplateEngine } from '../../src/templates/proj
 import { STUDIO_TEMPLATES } from '../src/main/studio/scaffold-service.js';
 import { DEFAULT_TEMPLATES } from '../src/renderer/components/studio/use-app-studio.js';
 
-const EXPECTED_STUDIO_TEMPLATE_IDS = ['express-api', 'node-cli', 'react-tailwind', 'react-ts'];
+const EXPECTED_STUDIO_TEMPLATE_IDS = ['expo-rn', 'express-api', 'node-cli', 'react-tailwind', 'react-ts'];
 
 afterEach(() => resetTemplateEngine());
 
