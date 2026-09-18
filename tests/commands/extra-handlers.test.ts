@@ -178,8 +178,7 @@ describe('handleSearch', () => {
     expect(result.entry).toBeDefined();
     const content = result.entry?.content || '';
     // Should either find results or report no matches
-    const hasResult = content.includes('Search results') || content.includes('No matches');
-    expect(hasResult).toBe(true);
+    expect(content).toMatch(/Search results|No matches/);
   });
 
   it('should report no matches for non-existent pattern', async () => {

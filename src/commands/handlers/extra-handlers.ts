@@ -15,6 +15,7 @@ import { ChatEntry } from '../../agent/codebuddy-agent.js';
 import fs from 'fs';
 import { execFileSync, spawnSync } from 'child_process';
 import path from 'path';
+import { resolveRipgrepPath } from '../../utils/ripgrep-path.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -407,13 +408,14 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     const cwd = process.cwd();
     let output = '';
 
+    const rgBinary = resolveRipgrepPath() ?? 'rg';
     // Explicit `.` path: without one, ripgrep searches stdin whenever stdin is
     // not a TTY (every non-interactive spawn), so real matches were reported as
     // "No matches" (status 1).
     const rgResult = runCommand(
-      'rg',
+      rgBinary,
       ['--line-number', '--no-heading', '--color=never', '--max-count=20', '--', query, '.'],
-      { cwd, timeoutMs: 10000 }
+      { cwd, timeoutMs: 30000 }
     );
 
     if (rgResult.success) {
@@ -431,7 +433,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
       const gitGrepResult = runCommand(
         'git',
         ['grep', '-n', '-I', '-m', '20', '-e', query, '--', '.'],
-        { cwd, timeoutMs: 10000 }
+        { cwd, timeoutMs: 30000 }
       );
 
       if (gitGrepResult.success) {
@@ -462,7 +464,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     }
 
     // Format output - truncate long lines and limit total output
-    const lines = output.trim().split('\n');
+    const lines = output.trim().split(/\r?\n/).filter(Boolean);
     const formattedLines = lines.slice(0, 20).map(line => {
       if (line.length > 200) {
         return line.substring(0, 200) + '...';

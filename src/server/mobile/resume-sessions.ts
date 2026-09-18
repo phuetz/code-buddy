@@ -92,6 +92,11 @@ export function resetSessionTurnQueueForTests(): void {
   sessionTurnTails.clear();
 }
 
+export async function drainSessionTurnQueueForTests(): Promise<void> {
+  const pending = Array.from(sessionTurnTails.values());
+  await Promise.allSettled(pending);
+}
+
 export function isResumeSessionId(value: string): boolean {
   return SESSION_ID_RE.test(value);
 }

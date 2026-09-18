@@ -30,6 +30,7 @@ import {
 } from '../../src/server/http-agent-sessions.js';
 import {
   continueResumeSession,
+  drainSessionTurnQueueForTests,
   persistResumeTurnUnlocked,
   resetSessionTurnQueueForTests,
   setResumeSessionStoreFactoryForTests,
@@ -126,11 +127,12 @@ describe('shared session LLM context', () => {
   afterEach(async () => {
     setResumeTurnRunnerForTests(null);
     setResumeSessionStoreFactoryForTests(null);
+    await drainSessionTurnQueueForTests();
     resetSessionTurnQueueForTests();
     await __resetHttpAgentSessionCacheForTests();
     if (previousDir === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
     else process.env.CODEBUDDY_SESSIONS_DIR = previousDir;
-    rmSync(sessionsDir, { recursive: true, force: true });
+    rmSync(sessionsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function seedOwned(): Promise<string> {

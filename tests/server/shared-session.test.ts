@@ -86,6 +86,7 @@ import { createUserToken } from '../../src/server/auth/jwt.js';
 import { SessionStore } from '../../src/persistence/session-store.js';
 import { mobilePwaRouter } from '../../src/server/mobile/index.js';
 import {
+  drainSessionTurnQueueForTests,
   resetSessionTurnQueueForTests,
   setResumeSessionStoreFactoryForTests,
   setResumeTurnRunnerForTests,
@@ -185,6 +186,7 @@ describe('shared session — HTTP + two WebSocket clients', () => {
     closeAllConnections();
     setResumeTurnRunnerForTests(null);
     setResumeSessionStoreFactoryForTests(null);
+    await drainSessionTurnQueueForTests();
     resetSessionTurnQueueForTests();
     for (const client of wss.clients) client.terminate();
     await new Promise<void>((resolve) => wss.close(() => resolve()));
@@ -200,7 +202,7 @@ describe('shared session — HTTP + two WebSocket clients', () => {
     else process.env.CODEBUDDY_OWNER_USER_ID = previousOwner;
     if (previousHistory === undefined) delete process.env.CODEBUDDY_MOBILE_HISTORY;
     else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
-    rmSync(sessionsDir, { recursive: true, force: true });
+    rmSync(sessionsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function token(userId: string): string {
@@ -478,6 +480,7 @@ describe('shared session — HTTP + two WebSocket clients', () => {
 
     const aliceHistory = wsAgents[0]?.getChatHistory() ?? [];
     expect(aliceHistory.some((row) => row.content === 'depuis bob')).toBe(true);
+    await drainSessionTurnQueueForTests();
     alice.ws.close();
     bob.ws.close();
   });
