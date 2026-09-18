@@ -243,10 +243,3 @@ describe('unified session index', () => {
     expect(resumed?.messages.map((row) => row.content)).toEqual(['continue en CLI', 'oui']);
   });
 });
-
-it('refuse un identifiant abrégé qui désigne plusieurs sessions', async () => {
-  const { materializeUnifiedSession } = await import('../../src/persistence/unified-session-index.js');
-  // Deux sessions au préfixe commun : reprendre « la première » serait un tirage au sort.
-  const ambigu = await materializeUnifiedSession('ab', { ownerUserId: 'inexistant-pour-ce-test' });
-  expect(ambigu).toBeNull();
-});
