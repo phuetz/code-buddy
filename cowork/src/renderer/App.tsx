@@ -47,6 +47,7 @@ import { SessionResumeDialog } from './components/SessionResumeDialog';
 import { BookmarksPanel } from './components/BookmarksPanel';
 import { SnippetsLibrary } from './components/SnippetsLibrary';
 import { PersonaSwitcherDialog } from './components/PersonaSwitcherDialog';
+import { OneClickDeployDialog } from './components/one-click-deploy/OneClickDeployDialog';
 import { MemoryPanel } from './components/MemoryPanel';
 // AutonomyPanel is lazy loaded below
 import { LiveLauncherPanel } from './components/LiveLauncherPanel';
@@ -157,6 +158,9 @@ function App() {
   const setShowPersonaSwitcher = useAppStore((s) => s.setShowPersonaSwitcher);
   const showTestRunner = useAppStore((s) => s.showTestRunner);
   const setShowTestRunner = useAppStore((s) => s.setShowTestRunner);
+  const showOneClickDeploy = useAppStore((s) => s.showOneClickDeploy);
+  const setShowOneClickDeploy = useAppStore((s) => s.setShowOneClickDeploy);
+  const oneClickDeployRoot = useAppStore((s) => s.oneClickDeployRoot);
   const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
   const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
@@ -757,6 +761,11 @@ function App() {
         onClose={() => setShowPersonaSwitcher(false)}
       />
       <TestRunnerWrapper showTestRunner={showTestRunner} onClose={() => setShowTestRunner(false)} />
+      <OneClickDeployDialog
+        isOpen={showOneClickDeploy}
+        onClose={() => setShowOneClickDeploy(false)}
+        projectRoot={oneClickDeployRoot}
+      />
       <MemoryPanel isOpen={showMemoryEditor} onClose={() => setShowMemoryEditor(false)} />
       <LiveLauncherPanel isOpen={showLiveLauncher} onClose={() => setShowLiveLauncher(false)} />
 

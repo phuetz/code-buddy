@@ -4252,8 +4252,8 @@ addLazyCommandGroup(program, 'proxy', 'Start an OpenAI-compatible HTTP proxy in 
   registerProxyCommands(program);
 });
 
-// Deploy — generate cloud deployment configurations
-addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations (Fly, Railway, Render, Nix)', async () => {
+// Deploy — one-click web publish (dry-run by default) + cloud config generators
+addLazyCommandGroup(program, 'deploy', 'One-click web publish (Cloudflare Pages, Netlify; dry-run by default) and cloud config generators', async () => {
   const { registerDeployCommands } = await import('./commands/cli/deploy-command.js');
   registerDeployCommands(program);
 });

@@ -438,6 +438,9 @@ export interface AppState {
 
   // Phase 3 step 12: test runner panel
   showTestRunner: boolean;
+  /** One-click web deploy dialog (Cloudflare Pages / Netlify). */
+  showOneClickDeploy: boolean;
+  oneClickDeployRoot: string | null;
 
   // Phase 3 step 17: reasoning trace viewer
   showReasoningViewer: boolean;
@@ -773,6 +776,8 @@ export interface AppState {
   setShowSnippetsLibrary: (show: boolean) => void;
   setShowPersonaSwitcher: (show: boolean) => void;
   setShowTestRunner: (show: boolean) => void;
+  setShowOneClickDeploy: (show: boolean) => void;
+  setOneClickDeployRoot: (root: string | null) => void;
   setShowReasoningViewer: (show: boolean) => void;
   setShowAutonomyPanel: (show: boolean) => void;
   setShowLiveLauncher: (show: boolean) => void;
@@ -1013,6 +1018,8 @@ export const useAppStore = create<AppState>((set) => ({
   showSnippetsLibrary: false,
   showPersonaSwitcher: false,
   showTestRunner: false,
+  showOneClickDeploy: false,
+  oneClickDeployRoot: null,
   showReasoningViewer: false,
   showAutonomyPanel: false,
   showLiveLauncher: false,
@@ -2043,6 +2050,9 @@ export const useAppStore = create<AppState>((set) => ({
   setShowSnippetsLibrary: (show) => set({ showSnippetsLibrary: show }),
   setShowPersonaSwitcher: (show) => set({ showPersonaSwitcher: show }),
   setShowTestRunner: (show) => set({ showTestRunner: show }),
+  setShowOneClickDeploy: (show) =>
+    set(show ? { showOneClickDeploy: true } : { showOneClickDeploy: false, oneClickDeployRoot: null }),
+  setOneClickDeployRoot: (root) => set({ oneClickDeployRoot: root }),
   setShowReasoningViewer: (show) => set({ showReasoningViewer: show }),
   setShowAutonomyPanel: (show) => set({ showAutonomyPanel: show }),
   setShowLiveLauncher: (show) => set({ showLiveLauncher: show }),

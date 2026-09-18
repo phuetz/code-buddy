@@ -1,5 +1,6 @@
 import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
 import { useState } from 'react';
+import { useAppStore } from '../../store';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
 import { PreviewPane, type PreviewPaneProps } from './PreviewPane.js';
@@ -215,17 +216,17 @@ export function AppStudioView({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setSeedPrompt(
-                  'Deploy this app with the deploy tool (pick the simplest host, generate the config, and give me the public URL).'
-                )
-              }
-              title="Prepare a deployment request (deploy tool)"
+              onClick={() => {
+                const store = useAppStore.getState();
+                store.setOneClickDeployRoot(workingDir ?? null);
+                store.setShowOneClickDeploy(true);
+              }}
+              title="Déployer (simulation Cloudflare Pages / Netlify)"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-deploy"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              Deploy
+              Déployer
             </button>
             <button
               type="button"
