@@ -84,7 +84,7 @@ describe('AutoSandboxRouter', () => {
       router = new AutoSandboxRouter({
         enabled: false,
         explicitBackend: 'ssh',
-        explicitHost: 'darkstar',
+        explicitHost: 'hoteExemple',
         failClosedOnUnavailable: true,
       });
       Object.defineProperty(router, 'dockerAvailable', { value: false, writable: true });
@@ -93,7 +93,7 @@ describe('AutoSandboxRouter', () => {
 
       expect(result.mode).toBe('sandbox');
       expect(result.reason).toMatch(/Explicit SSH backend/);
-      expect(result.reason).toContain('darkstar');
+      expect(result.reason).toContain('hoteExemple');
     });
 
     it('does not pick SSH when no backend is requested even for dangerous commands requiring sandbox', async () => {

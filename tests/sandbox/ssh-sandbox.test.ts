@@ -1,7 +1,7 @@
 /**
  * SSH sandbox backend tests.
  *
- * Uses an injected command launcher — no real SSH server and no Darkstar.
+ * Uses an injected command launcher — no real SSH server and no HoteExemple.
  */
 
 import { EventEmitter } from 'events';
@@ -54,8 +54,8 @@ function createLauncher(): {
   return { spawn, calls };
 }
 
-const darkstar = {
-  host: 'darkstar.example',
+const hoteExemple = {
+  host: 'hoteExemple.example',
   user: 'buddy',
   port: 22,
   workDir: '/tmp/cb-ssh',
@@ -63,8 +63,8 @@ const darkstar = {
 
 function createSandbox(spawn: SshCommandLauncher, extra: Record<string, unknown> = {}): SshSandbox {
   return new SshSandbox({
-    hosts: { darkstar },
-    defaultHost: 'darkstar',
+    hosts: { hoteExemple },
+    defaultHost: 'hoteExemple',
     hasSshClient: () => true,
     evaluatePolicy: () => ({ action: 'allow', reason: 'test allow' }),
     spawn,
@@ -91,20 +91,20 @@ async function waitForSpawn(
 
 describe('SSH host catalog', () => {
   it('rejects passwords and key bodies in host configuration', () => {
-    expect(() => parseSshHostDefinition('darkstar', {
-      host: 'darkstar.example',
+    expect(() => parseSshHostDefinition('hoteExemple', {
+      host: 'hoteExemple.example',
       password: 'hunter2',
     })).toThrow(/secret field/i);
 
-    expect(() => parseSshHostDefinition('darkstar', {
-      host: 'darkstar.example',
+    expect(() => parseSshHostDefinition('hoteExemple', {
+      host: 'hoteExemple.example',
       identityFile: '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n',
     })).toThrow(/identityFile/i);
   });
 
   it('rejects StrictHostKeyChecking=no', () => {
-    expect(() => parseSshHostDefinition('darkstar', {
-      host: 'darkstar.example',
+    expect(() => parseSshHostDefinition('hoteExemple', {
+      host: 'hoteExemple.example',
       strictHostKeyChecking: 'no',
     })).toThrow(/StrictHostKeyChecking/i);
   });
@@ -113,28 +113,28 @@ describe('SSH host catalog', () => {
     const catalog = parseSshHostCatalog({
       hosts: {
         bad: { host: 'evil.example', password: 'x' },
-        darkstar: { host: 'darkstar.example', user: 'buddy' },
+        hoteExemple: { host: 'hoteExemple.example', user: 'buddy' },
       },
     });
     expect(catalog.hosts.bad).toBeUndefined();
-    expect(catalog.hosts.darkstar?.host).toBe('darkstar.example');
+    expect(catalog.hosts.hoteExemple?.host).toBe('hoteExemple.example');
   });
 });
 
 describe('SSH argv and remote scripts', () => {
   it('forces BatchMode and never disables host-key checking', () => {
-    const args = buildSshClientArgs(darkstar);
+    const args = buildSshClientArgs(hoteExemple);
     expect(args).toContain('BatchMode=yes');
     expect(args).toContain('PasswordAuthentication=no');
     expect(args).toContain('StrictHostKeyChecking=yes');
     expect(args.join(' ')).not.toMatch(/StrictHostKeyChecking=no/);
     expect(args.join(' ')).not.toMatch(/PasswordAuthentication=yes/);
     expect(args.join(' ')).not.toMatch(/(?:^|\s)-o\s+Password=/);
-    expect(args[args.indexOf('--') + 1]).toBe(darkstar.host);
+    expect(args[args.indexOf('--') + 1]).toBe(hoteExemple.host);
   });
 
   it('builds the exact OpenSSH argument list with -- before host and remote command after host', () => {
-    const args = buildSshClientArgs(darkstar);
+    const args = buildSshClientArgs(hoteExemple);
     expect(args).toEqual([
       '-T',
       '-o', 'BatchMode=yes',
@@ -148,11 +148,11 @@ describe('SSH argv and remote scripts', () => {
       '-p', '22',
       '-l', 'buddy',
       '--',
-      'darkstar.example',
+      'hoteExemple.example',
       'bash',
       '-s',
     ]);
-    const hostIndex = args.indexOf(darkstar.host);
+    const hostIndex = args.indexOf(hoteExemple.host);
     expect(hostIndex).toBeGreaterThan(0);
     expect(args[hostIndex - 1]).toBe('--');
     expect(args.slice(hostIndex + 1)).toEqual(['bash', '-s']);
@@ -267,8 +267,8 @@ describe('SshSandbox', () => {
     const policy = new ExecPolicy({ defaultAction: 'sandbox', detectDangerous: true });
     await policy.initialize();
     const sandbox = new SshSandbox({
-      hosts: { darkstar },
-      defaultHost: 'darkstar',
+      hosts: { hoteExemple },
+      defaultHost: 'hoteExemple',
       hasSshClient: () => true,
       spawn,
       evaluatePolicy: (command, workDir) => {
@@ -287,8 +287,8 @@ describe('SshSandbox', () => {
     const policy = new ExecPolicy({ defaultAction: 'sandbox', detectDangerous: true });
     await policy.initialize();
     const sandbox = new SshSandbox({
-      hosts: { darkstar },
-      defaultHost: 'darkstar',
+      hosts: { hoteExemple },
+      defaultHost: 'hoteExemple',
       hasSshClient: () => true,
       spawn,
       evaluatePolicy: (command, workDir) => {
@@ -305,7 +305,7 @@ describe('SshSandbox', () => {
   it('is never chosen as the default active backend', async () => {
     resetSandboxRegistry();
     ensureSshSandboxRegistered({
-      hosts: { darkstar },
+      hosts: { hoteExemple },
       hasSshClient: () => true,
     });
     registerSandboxBackend(
@@ -326,9 +326,9 @@ describe('SshSandbox', () => {
     expect(resolveExplicitSshSandboxRequest({})).toBeNull();
     expect(resolveExplicitSshSandboxRequest({
       CODEBUDDY_SANDBOX_BACKEND: 'ssh',
-      CODEBUDDY_SSH_HOST: 'darkstar',
-      CODEBUDDY_SSH_HOSTS: JSON.stringify({ darkstar: { host: 'darkstar.example' } }),
-    })?.host).toBe('darkstar');
+      CODEBUDDY_SSH_HOST: 'hoteExemple',
+      CODEBUDDY_SSH_HOSTS: JSON.stringify({ hoteExemple: { host: 'hoteExemple.example' } }),
+    })?.host).toBe('hoteExemple');
   });
 
   it('passes a declared identity file as -i and never a passphrase flag', async () => {
@@ -337,8 +337,8 @@ describe('SshSandbox', () => {
     writeFileSync(keyPath, 'not-a-real-key\n');
     const { spawn, calls } = createLauncher();
     const sandbox = new SshSandbox({
-      hosts: { darkstar: { ...darkstar, identityFile: keyPath } },
-      defaultHost: 'darkstar',
+      hosts: { hoteExemple: { ...hoteExemple, identityFile: keyPath } },
+      defaultHost: 'hoteExemple',
       hasSshClient: () => true,
       evaluatePolicy: () => ({ action: 'allow', reason: 'test' }),
       spawn,

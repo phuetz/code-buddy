@@ -163,8 +163,8 @@ describe('Bash runtime execution policy', () => {
 
   it.each([
     'SSH connection failed: Permission denied (publickey).',
-    'SSH connection failed: ssh: Could not resolve hostname darkstar.example: Name or service not known',
-    'SSH connection failed: connect to host darkstar.example port 22: Connection refused',
+    'SSH connection failed: ssh: Could not resolve hostname hoteExemple.example: Name or service not known',
+    'SSH connection failed: connect to host hoteExemple.example port 22: Connection refused',
   ])('never treats an SSH transport failure as a sandbox boundary escalation (%s)', (stderr) => {
     expect(isSandboxBoundaryFailure({
       exitCode: 255,
@@ -193,11 +193,11 @@ describe('Bash runtime execution policy', () => {
 
     it('executes command via SshSandbox when CODEBUDDY_SANDBOX_BACKEND=ssh', async () => {
       process.env.CODEBUDDY_SANDBOX_BACKEND = 'ssh';
-      process.env.CODEBUDDY_SSH_HOST = 'darkstar';
+      process.env.CODEBUDDY_SSH_HOST = 'hoteExemple';
       process.env.CODEBUDDY_SSH_HOSTS = JSON.stringify({
         hosts: {
-          darkstar: {
-            host: 'darkstar.example',
+          hoteExemple: {
+            host: 'hoteExemple.example',
             user: 'buddy',
           },
         },
@@ -232,11 +232,11 @@ describe('Bash runtime execution policy', () => {
 
     it('returns SSH failure and never proposes nor executes direct local fallback on transport refusal', async () => {
       process.env.CODEBUDDY_SANDBOX_BACKEND = 'ssh';
-      process.env.CODEBUDDY_SSH_HOST = 'darkstar';
+      process.env.CODEBUDDY_SSH_HOST = 'hoteExemple';
       process.env.CODEBUDDY_SSH_HOSTS = JSON.stringify({
         hosts: {
-          darkstar: {
-            host: 'darkstar.example',
+          hoteExemple: {
+            host: 'hoteExemple.example',
             user: 'buddy',
           },
         },

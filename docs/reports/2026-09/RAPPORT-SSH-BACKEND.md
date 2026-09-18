@@ -14,7 +14,7 @@
 - Pas de `git commit`, pas de `rm -rf`, pas de publication.
 - Backend SSH `explicitOnly` : `getActiveSandboxBackend()` ne le choisit jamais.
 - Aucune clé ni mot de passe dans les fichiers suivis.
-- Darkstar : aucune commande distante exécutée (la session a bloqué SSH distant). `ssh -G darkstar` seulement (config locale).
+- HoteExemple : aucune commande distante exécutée (la session a bloqué SSH distant). `ssh -G hoteExemple` seulement (config locale).
 
 ## Livraison
 
