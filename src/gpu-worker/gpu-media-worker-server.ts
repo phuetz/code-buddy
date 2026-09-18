@@ -270,6 +270,7 @@ export function createGpuMediaWorkerServer(
   const jobs = new Map<string, StoredGpuMediaJob>();
   const running = new Map<string, ChildProcessWithoutNullStreams>();
   const executions = new Set<Promise<void>>();
+  const executionsByJobId = new Map<string, Promise<void>>();
   const maxConcurrency = Math.max(1, Math.min(config.maxConcurrency ?? 1, 2));
   let initialized = false;
   let processing = false;
@@ -369,6 +370,10 @@ export function createGpuMediaWorkerServer(
     );
     await persist(job);
 
+    if (wasCancelled(job)) {
+      return;
+    }
+
     const child = spawn(runner.command, [...(runner.args ?? []), requestPath], {
       cwd: directory,
       env: {
@@ -421,9 +426,8 @@ export function createGpuMediaWorkerServer(
       writeFile(join(directory, 'stdout.log'), stdout, 'utf8'),
       writeFile(join(directory, 'stderr.log'), stderr, 'utf8'),
     ]);
-    // The DELETE handler may mutate this shared job while the child is running.
+    // The DELETE handler awaits this execution and persists the cancelled state once.
     if (wasCancelled(job)) {
-      await persist(job);
       return;
     }
     if (result.timedOut || result.code !== 0) {
@@ -463,19 +467,22 @@ export function createGpuMediaWorkerServer(
         // Reserve synchronously so a concurrency >1 loop cannot select the
         // same queued job twice before its first filesystem await.
         next.status = 'running';
-        const execution = executeJob(next)
+        const currentJob = next;
+        const execution = executeJob(currentJob)
           .catch(async (error) => {
-            next.status = 'failed';
-            next.error = error instanceof Error ? error.message : String(error);
-            next.completedAt = now().toISOString();
-            await persist(next);
+            currentJob.status = 'failed';
+            currentJob.error = error instanceof Error ? error.message : String(error);
+            currentJob.completedAt = now().toISOString();
+            await persist(currentJob);
           })
           .finally(() => {
+            executionsByJobId.delete(currentJob.id);
             executions.delete(execution);
             processing = false;
             void processQueue();
           });
         executions.add(execution);
+        executionsByJobId.set(currentJob.id, execution);
         if (maxConcurrency === 1) break;
       }
     } finally {
@@ -677,6 +684,10 @@ export function createGpuMediaWorkerServer(
             job.status = 'cancelled';
             job.completedAt = now().toISOString();
             running.get(job.id)?.kill();
+            const active = executionsByJobId.get(job.id);
+            if (active) {
+              await active;
+            }
             await persist(job);
           }
           json(response, 200, publicJob(job));

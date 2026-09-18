@@ -1,9 +1,10 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
 import { generateToken } from '../../src/server/auth/jwt.js';
 import { FleetListener } from '../../src/fleet/fleet-listener.js';
@@ -28,8 +29,9 @@ it('authenticates two real Code Buddy processes, combines work, preserves a sess
         CODEBUDDY_PEER_PROVIDER: 'lmstudio', CODEBUDDY_PEER_MODEL: 'local-model',
         CODEBUDDY_FLEET_HOSTNAME: id, CODEBUDDY_SENSORY: 'false', CODEBUDDY_FLEET_ROOMS: 'false',
         CODEBUDDY_HEADLESS: 'true', NO_COLOR: '1' });
+      const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
       const child = fork(fileURLToPath(new URL('../fixtures/fleet/worker.ts', import.meta.url)), [], {
-        cwd: home, env, execArgv: ['--import', import.meta.resolve('tsx')], stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+        cwd: home, env, execArgv: ['--import', loader], stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       });
       children.push(child);
       let logs = '';
@@ -53,7 +55,7 @@ it('authenticates two real Code Buddy processes, combines work, preserves a sess
     const config = parseCollaborationConfig({ version: 1, peers: peers.map(({ id, url, tokenEnv }) => ({ id, url, tokenEnv })) });
     const env = { ALPHA: tokens[0], BETA: tokens[1] };
     const checked = await runCollaboration(config, { env, timeoutMs: 5000 });
-    expect(checked.status).toBe('complete');
+    expect(checked.status, JSON.stringify(checked)).toBe('complete');
     expect(checked.peers.map(peer => peer.pid)).toEqual(peers.map(peer => peer.pid));
     const report = await runCollaboration(config, { env, goal: 'Improve fleet cooperation', timeoutMs: 10000 });
     expect(report.status, JSON.stringify(report)).toBe('complete');
