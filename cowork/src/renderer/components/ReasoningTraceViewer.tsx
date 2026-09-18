@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Brain, Zap, RefreshCw, Trash2, Play, Pause, SkipBack, SkipForward, ChevronDown } from 'lucide-react';
 import { buildReasoningPlaybackState } from '../utils/reasoning-playback';
 import { formatAppNumber, formatAppTime } from '../utils/i18n-format';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface ReasoningNode {
   id: string;
@@ -266,6 +267,7 @@ export function ReasoningTraceViewer({ isOpen, onClose }: ReasoningTraceViewerPr
           </h2>
         </div>
         <div className="flex items-center gap-2">
+          <ScreenHelpButton screenId="reasoning" />
           <button
             onClick={() => void load()}
             disabled={isLoading}

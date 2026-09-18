@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import type { TeamMemberStatus } from '../types';
 
 const VALID_ROLES = [
@@ -201,9 +202,12 @@ export function TeamPanel() {
               <span className="text-xs font-mono text-text-muted ml-2">{team.uptime}</span>
             )}
           </div>
+          <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="team" />
           <button onClick={() => setShow(false)} className="rounded-md p-1.5 hover:bg-surface-hover transition-colors text-text-secondary hover:text-text-primary">
             <X className="w-4 h-4" />
           </button>
+          </div>
         </div>
 
         {/* Action Bar */}

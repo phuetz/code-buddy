@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import { formatAppDate, formatAppTime } from '../utils/i18n-format';
 import {
   buildFleetActivityChips,
@@ -174,6 +175,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="activity" />
           <div className="mr-1 flex overflow-hidden rounded-md border border-border-muted">
             <button
               type="button"

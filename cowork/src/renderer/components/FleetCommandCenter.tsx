@@ -26,6 +26,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import type { FleetPeer, ScheduleTask } from '../types';
 import {
   FLEET_DISPATCH_PROFILES,
@@ -854,6 +855,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <ScreenHelpButton screenId="fleet-command" />
               <button
                 type="button"
                 onClick={() => void handleRefreshPeers()}

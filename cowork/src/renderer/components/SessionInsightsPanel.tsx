@@ -15,6 +15,7 @@ import {
 import { useAppStore } from '../store';
 import type { Message, TraceStep } from '../types';
 import { formatAppDateTime } from '../utils/i18n-format';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface SessionInsightSummary {
   sessionId: string;
@@ -402,6 +403,8 @@ export const SessionInsightsPanel: React.FC<SessionInsightsPanelProps> = ({ open
             {t('sessionInsights.count', { count: items.length })}
           </span>
         </div>
+        <div className="flex items-center gap-1">
+        <ScreenHelpButton screenId="session-insights" />
         <button
           onClick={onClose}
           className="p-1.5 text-text-muted hover:text-text-primary transition-colors"
@@ -409,6 +412,7 @@ export const SessionInsightsPanel: React.FC<SessionInsightsPanelProps> = ({ open
         >
           <X size={14} />
         </button>
+        </div>
       </div>
 
       <div className="px-4 py-3 border-b border-border-muted shrink-0">

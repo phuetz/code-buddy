@@ -865,7 +865,8 @@ export interface AppState {
   setShowLessonsGraph: (show: boolean) => void;
   setShowCompanionPanel: (show: boolean) => void;
   showHelpDocs: boolean;
-  setShowHelpDocs: (show: boolean) => void;
+  helpDocsAnchor: string | null;
+  setShowHelpDocs: (show: boolean, screenId?: string | null) => void;
 
   // Notification actions
   addNotification: (notification: NotificationEntry) => void;
@@ -1110,6 +1111,7 @@ export const useAppStore = create<AppState>((set) => ({
   showLessonsGraph: false,
   showCompanionPanel: false,
   showHelpDocs: false,
+  helpDocsAnchor: null,
   notifications: [],
   showNotificationCenter: false,
 
@@ -2307,7 +2309,11 @@ export const useAppStore = create<AppState>((set) => ({
   setShowChannelsPanel: (show) => set({ showChannelsPanel: show }),
   setShowLessonsGraph: (show) => set({ showLessonsGraph: show }),
   setShowCompanionPanel: (show) => set({ showCompanionPanel: show }),
-  setShowHelpDocs: (show) => set({ showHelpDocs: show }),
+  setShowHelpDocs: (show, screenId) =>
+    set({
+      showHelpDocs: show,
+      helpDocsAnchor: show ? (screenId ?? null) : null,
+    }),
   clearSubAgents: (sessionId) =>
     set((state) => {
       const { [sessionId]: _dropped, ...rest } = state.subAgents;

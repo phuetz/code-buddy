@@ -23,6 +23,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface TestCase {
   name: string;
@@ -808,6 +809,7 @@ export function TestRunnerPanel({ isOpen, onClose }: TestRunnerPanelProps) {
           </p>
         </div>
         <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="test-runner" />
           <button
             type="button"
             onClick={() => {

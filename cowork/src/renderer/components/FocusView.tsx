@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Focus, X } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import type { ContentBlock } from '../types';
 
 interface FocusViewProps {
@@ -113,6 +114,7 @@ export function FocusView({ open, onClose, onStopSession }: FocusViewProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <ScreenHelpButton screenId="focus" />
             <button
               type="button"
               onClick={() => setShowSessionInsights(true)}

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X, MonitorSmartphone, RefreshCw, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { useAppStore } from '../store';
 import { EmptyState } from './LessonCandidatePanel';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface DeviceNode {
   id: string;
@@ -63,6 +64,7 @@ export function DevicePanel() {
             <h2 className="text-sm font-semibold text-text-primary">Paired devices</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="devices" />
             <button onClick={() => void refresh()} className="rounded p-1 hover:bg-surface" title="Refresh">
               <RefreshCw className={`w-4 h-4 text-text-muted ${loading ? 'animate-spin' : ''}`} />
             </button>

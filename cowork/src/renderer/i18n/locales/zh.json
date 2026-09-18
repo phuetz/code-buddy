@@ -3002,5 +3002,244 @@
       "select": "打开",
       "close": "关闭"
     }
+  },
+  "helpDocs": {
+    "title": "Cowork help",
+    "searchPlaceholder": "Search screens…",
+    "indexTitle": "All screens",
+    "purposeLabel": "What it is for",
+    "whenLabel": "When to use it",
+    "prerequisitesLabel": "What you need first",
+    "none": "Nothing extra.",
+    "undocumented": "To be documented",
+    "openForScreen": "Help for this screen",
+    "keyboardHint": "F1 opens this index. Escape closes it.",
+    "noResults": "No screen matches.",
+    "groups": {
+      "work": "Work",
+      "agents": "Agents & Fleet",
+      "automation": "Automation",
+      "companion": "Companion",
+      "insights": "Insights & Learning",
+      "system": "System"
+    },
+    "screens": {
+      "work-home": {
+        "title": "Work surface",
+        "purpose": "This is the main workspace: you talk to the agent and see the conversation.",
+        "when": "You want the agent to write, edit, or run something in your folder.",
+        "prerequisites": "A model must be configured (API key, login, or a local runtime)."
+      },
+      "new-task": {
+        "title": "New task",
+        "purpose": "Starts a clean session so the next request is not mixed with the previous chat.",
+        "when": "The current conversation is finished and you want to begin something else.",
+        "prerequisites": ""
+      },
+      "global-search": {
+        "title": "Search",
+        "purpose": "Finds sessions, messages, memory, knowledge, and files from one search box.",
+        "when": "You remember a phrase but not which chat or file it lived in.",
+        "prerequisites": "Available in the desktop app (search runs through the local bridge)."
+      },
+      "focus": {
+        "title": "Focus view",
+        "purpose": "Shows only the current session: latest prompt, reply, timer, and stop.",
+        "when": "A long run is in progress and the rest of the interface is distracting.",
+        "prerequisites": "An open session. Without one, the view says there is no active session."
+      },
+      "bookmarks": {
+        "title": "Bookmarks",
+        "purpose": "Lists messages you starred so you can jump back to them.",
+        "when": "You saved an answer and want to reopen that conversation.",
+        "prerequisites": "Desktop app. Star a message in a chat first, or the list is empty."
+      },
+      "orchestrator": {
+        "title": "Spawn multi-agent team",
+        "purpose": "Starts several specialised agents on one goal (for example coder, reviewer, tester).",
+        "when": "A task is large enough that parallel roles would help.",
+        "prerequisites": "An active session. The dialog warns you if none is open."
+      },
+      "team": {
+        "title": "Agent Team",
+        "purpose": "Shows team members, roles, tasks, and the shared mailbox so you can assign work.",
+        "when": "A team is running and you need to add a person, a task, or stop the team.",
+        "prerequisites": "Desktop app (the team bridge is not available in a browser preview)."
+      },
+      "fleet-command": {
+        "title": "Fleet Command Center",
+        "purpose": "Sends a goal to connected Code Buddy peers and follows the run on a board.",
+        "when": "Several machines or models should work together on the same request.",
+        "prerequisites": "At least one Fleet peer connected and authenticated."
+      },
+      "fleet-events": {
+        "title": "Fleet peer events",
+        "purpose": "Lists other Code Buddy instances and the live events they broadcast.",
+        "when": "You want to see whether a peer is online and what it is doing.",
+        "prerequisites": "Peers registered on the Fleet listener. An empty list means none are connected yet."
+      },
+      "autonomy": {
+        "title": "Autonomy",
+        "purpose": "Controls the unattended worker: service start/stop, which model it would use, and the shared task board.",
+        "when": "You want work to continue without sitting in the chat.",
+        "prerequisites": "The autonomy service can be installed from this screen; a model is needed for a real tick."
+      },
+      "devices": {
+        "title": "Paired devices",
+        "purpose": "Read-only list of machines paired over SSH, ADB, or local transport.",
+        "when": "You want to check which phones or hosts the agent can reach.",
+        "prerequisites": "Pair or remove devices from the CLI (`buddy device pair`). This screen does not pair them."
+      },
+      "workflows": {
+        "title": "Workflows",
+        "purpose": "Create, edit, and run reusable step-by-step workflows, including approvals.",
+        "when": "The same sequence of actions should run more than once.",
+        "prerequisites": ""
+      },
+      "live-launcher": {
+        "title": "Research / Flow launcher",
+        "purpose": "Runs a live research or planning job and streams the output here.",
+        "when": "You need a researched report or a structured plan, not a normal chat turn.",
+        "prerequisites": "A usable model. The form can prefill a local Ollama choice when one is available."
+      },
+      "mission-board": {
+        "title": "Mission Board",
+        "purpose": "Organises companion missions (open, in progress, done) without writing the files yourself.",
+        "when": "A radar or sync has created work items and you want to start, finish, or dismiss them.",
+        "prerequisites": "An active workspace. The companion mission bridge must be available in the desktop app."
+      },
+      "desktop-snapshot": {
+        "title": "Desktop Snapshot",
+        "purpose": "Captures what is on screen (accessibility and/or OCR) without clicking or typing.",
+        "when": "You want the agent to see the current window before you approve any action.",
+        "prerequisites": "Desktop app with the snapshot bridge. The capture does not act on the desktop."
+      },
+      "schedule": {
+        "title": "Schedules",
+        "purpose": "Defines tasks that run at a given time or on a repeating rule.",
+        "when": "Something should happen every morning or on a weekday, without opening chat.",
+        "prerequisites": ""
+      },
+      "hooks": {
+        "title": "Hooks & triggers",
+        "purpose": "Attaches commands, HTTP calls, or prompts to events such as session start or tool use.",
+        "when": "You want an extra check or notification after the agent uses a tool.",
+        "prerequisites": "A project folder (hooks are stored in `.codebuddy/hooks.json`)."
+      },
+      "commands": {
+        "title": "Custom commands",
+        "purpose": "Creates your own slash commands that appear in the chat “/” menu.",
+        "when": "You keep typing the same prompt and want a short command instead.",
+        "prerequisites": ""
+      },
+      "companion": {
+        "title": "Buddy companion",
+        "purpose": "Shows the companion cockpit: senses, journal, voice, and related status.",
+        "when": "You are operating the companion side (camera, hearing, spoken replies), not a coding task.",
+        "prerequisites": "Live data needs the companion/sensory setup. The panel still opens without it."
+      },
+      "channels": {
+        "title": "Delivery channels",
+        "purpose": "Connects messaging channels, stores secrets without showing them back, and manages who may message the agent.",
+        "when": "You want to talk to the agent from Telegram or another configured channel.",
+        "prerequisites": "A channel token or secret. Secrets are write-only and never read back."
+      },
+      "mobile-supervision": {
+        "title": "Mobile supervision",
+        "purpose": "Shows the phone pairing code and a review queue. Approving a proposal does not run work.",
+        "when": "A paired phone sent something for you to review at the desk.",
+        "prerequisites": "Start the embedded server from the titlebar. Otherwise the screen says the server is not running."
+      },
+      "activity": {
+        "title": "Activity",
+        "purpose": "A timeline of recent events across projects (sessions, notifications, fleet, schedules).",
+        "when": "You want to know what happened today without opening each session.",
+        "prerequisites": "Desktop app. The list is empty until events have been recorded."
+      },
+      "session-insights": {
+        "title": "Session insights",
+        "purpose": "Summarises sessions: messages, tools, tokens, and a transcript preview.",
+        "when": "You want to review how a past session went, or find one by its contents.",
+        "prerequisites": "At least one saved session."
+      },
+      "test-runner": {
+        "title": "Test runner",
+        "purpose": "Runs the catalogue of checks owned by the app and shows pass/fail output.",
+        "when": "You changed code or configuration and want to verify it from Cowork.",
+        "prerequisites": "A detected test framework or catalogue item. Unsafe items stay marked in the list."
+      },
+      "lessons": {
+        "title": "Lesson candidates",
+        "purpose": "Review queue for proposed lessons. Nothing is written until you approve with a reviewer name.",
+        "when": "The agent (or you) proposed a lesson and it must not enter memory silently.",
+        "prerequisites": "An active project. Without one, the panel says so."
+      },
+      "user-model": {
+        "title": "User model",
+        "purpose": "Review queue for notes about your preferences and working style. Accepting is explicit.",
+        "when": "You want to keep or discard an observation the agent made about how you work.",
+        "prerequisites": "An active project. Health, finance, relationship, and credential content is refused."
+      },
+      "spec": {
+        "title": "Spec backlog",
+        "purpose": "A review-gated story board (draft → approved → in progress → done, or blocked).",
+        "when": "You want a durable backlog with a named reviewer, evidence, or a block reason.",
+        "prerequisites": "An active Cowork project. Spec files live under that project’s `.codebuddy/specs/`."
+      },
+      "reasoning": {
+        "title": "Reasoning traces",
+        "purpose": "Plays back captured reasoning trees (scores, selected path, timeline).",
+        "when": "You want to see how the agent explored options on a hard problem.",
+        "prerequisites": "A reasoning trace must already have been recorded for a session."
+      },
+      "memory": {
+        "title": "Memory",
+        "purpose": "Browses the agent’s long-term notes for this project and your preferences.",
+        "when": "You want to inspect or correct what the agent remembers across sessions.",
+        "prerequisites": "Memory files in the project or user store. Empty if nothing has been saved yet."
+      },
+      "identity": {
+        "title": "Agent identity",
+        "purpose": "Edits identity markdown (SOUL.md, USER.md, AGENTS.md, and similar) for this project.",
+        "when": "You want to change how the agent presents itself or what it knows about you.",
+        "prerequisites": "Files live under the project `.codebuddy/` folder (project overrides global)."
+      },
+      "settings": {
+        "title": "Settings",
+        "purpose": "The full settings panel: theme, engine, sandbox, audio, and the other tabs.",
+        "when": "You need to change how Cowork behaves, not do a one-off task.",
+        "prerequisites": ""
+      },
+      "api": {
+        "title": "API Settings",
+        "purpose": "Connects models: API keys, logins, config sets, and local providers.",
+        "when": "Chat does not work yet, or you want to switch provider.",
+        "prerequisites": "This is the place to add keys or complete a login. Nothing else is required first."
+      },
+      "connectors": {
+        "title": "MCP Connectors",
+        "purpose": "Adds and starts MCP servers so the agent gets extra tools.",
+        "when": "You need a connector such as a browser or an external API.",
+        "prerequisites": ""
+      },
+      "rules": {
+        "title": "Permission rules",
+        "purpose": "Edits allow/deny rules for tools and can dry-run a call against them.",
+        "when": "You are tired of approving the same safe tool, or you want to block a dangerous one.",
+        "prerequisites": "Rules are stored in the project `.codebuddy/settings.json`."
+      },
+      "skills": {
+        "title": "Skills",
+        "purpose": "Lists installed skill packages and the review queue for new ones.",
+        "when": "You want to enable, disable, or review a SKILL.md package.",
+        "prerequisites": "Lifecycle actions ask for a reviewer name. A workspace folder is used when one is open."
+      },
+      "plugins": {
+        "title": "Plugins",
+        "purpose": "Lists installed plugins, lets you enable their parts, and browses the catalog.",
+        "when": "You want to add or turn off a plugin (skills, commands, agents, hooks, MCP).",
+        "prerequisites": ""
+      }
+    }
   }
 }

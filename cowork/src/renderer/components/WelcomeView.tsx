@@ -31,6 +31,7 @@ import { ProjectSelector } from './ProjectSelector';
 import { Tooltip } from './Tooltip';
 import { FileAttachmentChip } from './FileAttachmentChip';
 import { APP_NAME } from '../brand';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 import welcomeLogoSrc from '../assets/logo.png';
 
@@ -431,6 +432,9 @@ export function WelcomeView() {
       className="relative flex-1 flex flex-col items-center justify-center overflow-hidden px-5 py-10 md:px-8 md:py-14"
       data-testid="welcome-view"
     >
+      <div className="absolute right-4 top-4 z-10">
+        <ScreenHelpButton screenId="work-home" />
+      </div>
       {/* Soft accent glow (theme-adaptive sparkle) */}
       <div
         aria-hidden

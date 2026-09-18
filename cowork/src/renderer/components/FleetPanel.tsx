@@ -23,6 +23,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import type { FleetPeer, FleetPeerStatus } from '../types';
 import { PeerSeenLabel } from './fleet-peer-freshness';
 
@@ -225,6 +226,8 @@ export function FleetPanel() {
               Fleet · Multi-host Code Buddy
             </h2>
           </div>
+          <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="fleet-events" />
           <button
             onClick={() => setShow(false)}
             className="rounded p-1 hover:bg-surface transition-colors"
@@ -232,6 +235,7 @@ export function FleetPanel() {
           >
             <X className="w-4 h-4 text-text-muted" />
           </button>
+          </div>
         </div>
 
         <div className="border-b border-border">

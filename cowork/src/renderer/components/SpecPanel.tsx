@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X, ListChecks, AlertCircle, FolderOpen, RefreshCw, Plus, Sparkles, ArrowRight } from 'lucide-react';
 import { useAppStore } from '../store';
 import { EmptyState } from './LessonCandidatePanel';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   NO_ACTIVE_PROJECT,
   type SpecProject,
@@ -247,6 +248,7 @@ export function SpecPanel() {
             <h2 className="text-sm font-semibold text-text-primary">Spec backlog</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="spec" />
             <button
               onClick={() => activeId && void loadStories(activeId)}
               className="rounded p-1 hover:bg-surface transition-colors"

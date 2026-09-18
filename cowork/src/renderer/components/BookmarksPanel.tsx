@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Star, X, Search, Trash2, MessageCircle, User2 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { formatAppDateTime } from '../utils/i18n-format';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface Bookmark {
   id: number;
@@ -89,6 +90,8 @@ export function BookmarksPanel() {
           <h2 className="text-sm font-semibold text-text-primary">{t('bookmarks.title')}</h2>
           <span className="text-xs text-text-muted">({filtered.length})</span>
         </div>
+        <div className="flex items-center gap-1">
+        <ScreenHelpButton screenId="bookmarks" />
         <button
           onClick={() => setShowBookmarksPanel(false)}
           className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
@@ -96,6 +99,7 @@ export function BookmarksPanel() {
         >
           <X size={16} />
         </button>
+        </div>
       </div>
 
       {/* Filters */}

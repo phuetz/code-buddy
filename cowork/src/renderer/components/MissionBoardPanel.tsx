@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, ListChecks, Loader2, Play, Plus, RefreshCw, X } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type {
   CompanionMission,
@@ -292,6 +293,8 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
               </p>
             </div>
           </div>
+          <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="mission-board" />
           <button
             aria-label={t('common.close', 'Close')}
             className="rounded p-1 text-text-muted hover:bg-surface hover:text-text-primary"
@@ -300,6 +303,7 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">

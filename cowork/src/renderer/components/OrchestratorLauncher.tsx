@@ -29,6 +29,7 @@ import {
   useActiveSessionMessages,
 } from '../store/selectors';
 import type { Message } from '../types';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 type LaunchStatus = 'idle' | 'launching' | 'error';
 
@@ -159,6 +160,8 @@ export function OrchestratorLauncher() {
               </p>
             </div>
           </div>
+          <div className="flex items-center gap-1">
+          <ScreenHelpButton screenId="orchestrator" />
           <button
             onClick={close}
             className="p-1 rounded hover:bg-surface text-text-secondary"
@@ -167,6 +170,7 @@ export function OrchestratorLauncher() {
           >
             <X className="w-4 h-4" />
           </button>
+          </div>
         </div>
 
         {!activeSessionId && (

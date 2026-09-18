@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { ScreenHelpButton } from './ScreenHelpButton';
 import {
   SOURCE_ORDER,
   buildGlobalSearchFocusedMessageTarget,
@@ -183,6 +184,7 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({ open, on
             className="flex-1 bg-transparent border-none outline-none text-sm text-text-primary placeholder:text-text-muted"
           />
           {loading && <Loader2 size={14} className="animate-spin text-text-muted" />}
+          <ScreenHelpButton screenId="global-search" />
           <button
             onClick={onClose}
             className="p-1 text-text-muted hover:text-text-primary transition-colors"

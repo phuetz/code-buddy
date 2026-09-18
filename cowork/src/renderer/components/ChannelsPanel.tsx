@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { EmptyState } from './LessonCandidatePanel';
+import { ScreenHelpButton } from './ScreenHelpButton';
 
 interface ChannelStatus {
   type: string;
@@ -114,6 +115,7 @@ export function ChannelsPanel() {
             <h2 className="text-sm font-semibold text-text-primary">Delivery channels</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ScreenHelpButton screenId="channels" />
             {loading && <RefreshCw className="w-4 h-4 text-text-muted animate-spin" />}
             <button onClick={() => setShow(false)} className="rounded p-1 hover:bg-surface" aria-label="Close">
               <X className="w-4 h-4 text-text-muted" />

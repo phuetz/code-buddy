@@ -97,7 +97,7 @@ export function Titlebar() {
       {/* Documentation */}
       <Tooltip label={t('helpDocs.title', 'Documentation')} side="bottom" className="hidden h-full md:block">
         <button
-          onClick={() => useAppStore.getState().setShowHelpDocs(true)}
+          onClick={() => useAppStore.getState().setShowHelpDocs(true, null)}
           className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
           aria-label="Show documentation"
           data-testid="documentation-button"
