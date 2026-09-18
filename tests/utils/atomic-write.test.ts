@@ -322,3 +322,21 @@ setInterval(() => {}, 1000);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });
+
+it('ne laisse aucune entrée derrière lui après des écritures concurrentes', async () => {
+  const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const pathMod = await import('node:path');
+  const mod = await import('../../src/utils/atomic-write.js');
+  const dir = await mkdtemp(pathMod.join(tmpdir(), 'atomic-serialise-'));
+  try {
+    const cible = pathMod.join(dir, 'fichier.txt');
+    // Vingt écritures concurrentes sur le même chemin : la dernière gagne, et
+    // aucune ne doit voir un contenu partiel.
+    await Promise.all(Array.from({ length: 20 }, (_, i) => mod.writeFileAtomic(cible, `valeur-${i}\n`)));
+    const contenu = await readFile(cible, 'utf8');
+    expect(contenu).toMatch(/^valeur-\d+\n$/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

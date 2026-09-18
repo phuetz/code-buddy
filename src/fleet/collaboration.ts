@@ -113,7 +113,7 @@ export async function runCollaboration(config: CollaborationConfig, options: Col
     for (let i = 0; i < config.peers.length; i++) {
       connections.push((options.createListener ?? (opts => new FleetListener(opts)))({
         url: config.peers[i]!.url, jwt: tokens[i], autoReconnect: false, historyCapacity: 0,
-        connectTimeoutMs: Math.min(timeoutMs, 10000), authTimeoutMs: Math.min(timeoutMs, 5000),
+        connectTimeoutMs: 10000, authTimeoutMs: 5000,
       }));
     }
     report.peers = await Promise.all(config.peers.map(async (peer, index): Promise<PeerResult> => {

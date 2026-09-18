@@ -99,8 +99,9 @@ async function syncDirectory(filePath: string, fileSystem: AtomicWriteFileSystem
   }
 }
 
-/** Write a file through a same-directory temporary file and durable rename. */
-export async function writeFileAtomic(
+const activeWrites = new Map<string, Promise<void>>();
+
+async function writeFileAtomicDirect(
   filePath: string,
   data: AtomicData,
   options: AtomicWriteOptions = {},
@@ -119,6 +120,7 @@ export async function writeFileAtomic(
     await fileHandle.sync();
     await fileHandle.close();
     closed = true;
+    await fileSystem.chmod(temporaryPath, mode);
     // Windows readers/antivirus can briefly hold the destination open. Keep the
     // same durable temporary and never delete the existing destination to retry.
     for (let retry = 0; ; retry++) {
@@ -143,6 +145,36 @@ export async function writeFileAtomic(
     }
     await fileSystem.unlink(temporaryPath).catch(() => undefined);
     throw error;
+  }
+}
+
+/** Write a file through a same-directory temporary file and durable rename. */
+export async function writeFileAtomic(
+  filePath: string,
+  data: AtomicData,
+  options: AtomicWriteOptions = {},
+): Promise<void> {
+  const canonical = path.resolve(filePath);
+  const previous = activeWrites.get(canonical) ?? Promise.resolve();
+  // L'échec d'une écriture ne doit pas empêcher la suivante de démarrer : la
+  // chaîne sert à ordonner, pas à propager.
+  const current = previous.then(
+    () => writeFileAtomicDirect(filePath, data, options),
+    () => writeFileAtomicDirect(filePath, data, options),
+  );
+  /*
+   * C'est cette promesse silencieuse qui est rangée dans la table, et c'est
+   * elle que le nettoyage compare : ranger une promesse et en comparer une
+   * autre laisserait une entrée par chemin écrit, pour toujours.
+   */
+  const queued = current.catch(() => {});
+  activeWrites.set(canonical, queued);
+  try {
+    await current;
+  } finally {
+    if (activeWrites.get(canonical) === queued) {
+      activeWrites.delete(canonical);
+    }
   }
 }
 
