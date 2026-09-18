@@ -192,6 +192,18 @@ Les événements `device_register`, `device_verify`, `device_revoke` sont consig
 par `audit-logger` dans le répertoire d'audit voisin, sans codes, signatures,
 jetons, clés ni noms d'appareils.
 
+## Reprendre une session CLI / Cowork
+
+Derrière le JWT (pas de repli loopback), la PWA expose :
+
+- `GET /__codebuddy__/mobile/sessions` — sessions récentes du `SessionStore` (identifiant, titre, origine `cli`/`cowork`/`mobile`, dates, nombre de messages)
+- `GET /__codebuddy__/mobile/sessions/:id` — messages user/assistant, secrets masqués
+- `POST /__codebuddy__/mobile/sessions/:id/continue` — ajoute un tour et réutilise le chemin d'agent HTTP déjà en place
+
+L'onglet **Reprendre** charge cette liste. Ouvrir une session bascule le chat en assistant Agent, affiche le fil, et les messages WebSocket portent le `sessionId` pour continuer le même historique. Une session taguée `ownerUserId` n'est visible que par ce sujet JWT. Les jetons ne sont jamais renvoyés.
+
+La base SQLite Electron de Cowork n'est pas lue en direct : un export handoff (`metadata.handoffSource = cowork`, id `cowork-…`) apparaît comme origine Cowork.
+
 ## Capacités étendues et outillage quand l'utilisateur est identifié
 
 Lorsque l'interlocuteur est identifié et que le coupe-circuit `CODEBUDDY_COMPANION_TOOLS_ENABLED=true` est activé, Lisa dispose d'un jeu d'outils adapté à la conversation naturelle et aux requêtes du quotidien (« dessine-moi un chat roux », « rappelle-moi le train demain à 9h », « quel temps fait-il ? »).
