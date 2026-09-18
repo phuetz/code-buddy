@@ -8,8 +8,6 @@ import * as nodeFs from "fs";
 import * as nodeOs from "os";
 import * as nodePath from "path";
 import { join, dirname } from "path";
-import { globalAgent as httpGlobalAgent } from 'node:http';
-import { globalAgent as httpsGlobalAgent } from 'node:https';
 
 // Types for dynamically imported modules
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
@@ -32,21 +30,8 @@ import {
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
 import { getRequestedProfile } from './cli/requested-profile.js';
-import {
-  findUnexecutedProseToolCall,
-  formatEmptyHeadlessResponseError,
-  isHeadlessFinalResponseEmpty,
-  resolveHeadlessOutputFormat,
-  resolveHeadlessTurnExitCode,
-} from './cli/headless-options.js';
-import { validateOutputText } from './utils/output-schema-validator.js';
-import { resolveCliModelList } from './cli/model-listing.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
-import {
-  NO_PROVIDER_GUIDANCE,
-  recoverFirstRunWithChatGpt,
-} from './cli/first-run.js';
 import { getConfigManager } from './config/toml-config.js';
 import { getHiddenCliCommands } from './config/feature-surface.js';
 
@@ -62,7 +47,6 @@ process.env.CODEBUDDY_CLI_VERSION = packageJson.version;
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
-import { writeFileAtomic } from './utils/atomic-write.js';
 // Import graceful shutdown for clean application termination
 import {
   initializeGracefulShutdown,
@@ -234,7 +218,18 @@ const _shutdownManager = initializeGracefulShutdown({
 // Startup janitor: remove our own stale /tmp scratch dirs left by crashed or
 // SIGKILL'd runs (the durable backstop for the disk-leak class that caused the
 // 2026-06-17 ENOSPC — see src/utils/disk-guard.ts). Age-gated; never throws.
-sweepStaleCodebuddyTemp();
+// Skip for `--help` / `--version`: those processes exit immediately and the
+// next durable command still sweeps.
+const metaOnlyArgv = process.argv.slice(2);
+const isMetaOnlyInvocation =
+  metaOnlyArgv.length === 1 &&
+  (metaOnlyArgv[0] === '--help' ||
+    metaOnlyArgv[0] === '-h' ||
+    metaOnlyArgv[0] === '--version' ||
+    metaOnlyArgv[0] === '-V');
+if (!isMetaOnlyInvocation) {
+  sweepStaleCodebuddyTemp();
+}
 
 // Note: SIGINT, SIGTERM, SIGHUP are now handled by GracefulShutdownManager
 // The manager will:
@@ -326,7 +321,7 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 // Detected provider configuration — moved to `src/utils/provider-detector.ts`
 // (Phase d.25) so it can be unit-tested in isolation. Re-exported here
 // for the rest of this file's call sites.
-import { detectProviderFromEnv, type DetectedProvider } from './utils/provider-detector.js';
+import type { DetectedProvider } from './utils/provider-detector.js';
 
 // Legacy inline implementation kept commented for git-archaeology only.
 function _detectProviderFromEnvLegacy(): DetectedProvider | null {
@@ -438,6 +433,7 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
   if (cachedProvider !== undefined) return cachedProvider;
 
   await ensureEnvLoaded();
+  const { detectProviderFromEnv } = await import('./utils/provider-detector.js');
   cachedProvider = detectProviderFromEnv();
 
   // xAI subscription login (`buddy login xai`). Token load + refresh is async,
@@ -608,12 +604,11 @@ async function saveCommandLineSettings(
 }
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
-import { isModelCompatibleWithProvider } from './providers/model-provider-compat.js';
-export { isModelCompatibleWithProvider };
 
 // Load model from detected provider or user settings
 async function loadModel(): Promise<string | undefined> {
   await ensureEnvLoaded();
+  const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
 
   // 1. Explicit env var takes highest priority
   if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
@@ -938,6 +933,8 @@ async function finalizeHeadlessRun(code: number): Promise<void> {
 
   // Best-effort close of global HTTP agents to reduce socket-close races on Windows.
   try {
+    const { globalAgent: httpGlobalAgent } = await import('node:http');
+    const { globalAgent: httpsGlobalAgent } = await import('node:https');
     httpGlobalAgent.destroy();
     httpsGlobalAgent.destroy();
   } catch (_error) {
@@ -1074,6 +1071,14 @@ async function processPromptHeadless(
   // "with graph" condition). Mirrors the opt-in pattern in goal-cli.ts.
   process.env.CODEBUDDY_DISABLE_MCP = process.env.CODEBUDDY_DISABLE_MCP ?? 'true';
   process.env.CODEBUDDY_HEADLESS = 'true';
+  const {
+    findUnexecutedProseToolCall,
+    formatEmptyHeadlessResponseError,
+    isHeadlessFinalResponseEmpty,
+    resolveHeadlessTurnExitCode,
+  } = await import('./cli/headless-options.js');
+  const { validateOutputText } = await import('./utils/output-schema-validator.js');
+  const { writeFileAtomic } = await import('./utils/atomic-write.js');
 
   try {
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
@@ -1300,6 +1305,7 @@ async function processPromptHeadless(
     const client = agent.getClient();
     const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
     if (isHeadlessFinalResponseEmpty(resultText)) {
+      const { detectProviderFromEnv } = await import('./utils/provider-detector.js');
       const providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
         || detectProviderFromEnv()?.provider
         || 'inconnu';
@@ -1800,6 +1806,7 @@ program
       const detected = options.baseUrl ? null : await getDetectedProvider();
       const baseURL = options.baseUrl || detected?.baseURL || await loadBaseURL();
       try {
+        const { resolveCliModelList } = await import('./cli/model-listing.js');
         const { models } = await resolveCliModelList({
           baseURL,
           provider: detected?.provider,
@@ -1993,6 +2000,7 @@ program
           !options.prompt && !options.print &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
+        const { recoverFirstRunWithChatGpt } = await import('./cli/first-run.js');
         const recoveredProvider = await recoverFirstRunWithChatGpt({
           interactive,
           ask: async (question) => {
@@ -2037,6 +2045,7 @@ program
         }
 
         if (!recoveredProvider) {
+          const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
           logger.error(NO_PROVIDER_GUIDANCE);
           process.exit(1);
         }
@@ -2183,6 +2192,7 @@ program
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
       if (combinedPrompt && (promptArg || pipedInput)) {
+        const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
           combinedPrompt,
           apiKey,
@@ -2199,8 +2209,19 @@ program
         return;
       }
 
-      // Initialize rendering system (lazy load)
-      const { initializeRenderers, configureRenderContext } = await lazyImport.renderers();
+      // First useful interactive line before the heavy agent/UI graph.
+      cli.info("🤖 Starting Code Buddy Conversational Assistant...\n");
+
+      recordStartupPhase('ui-load-start');
+      const [rendererModule, CodeBuddyAgent, React, inkModule, ChatInterface] = await Promise.all([
+        lazyImport.renderers(),
+        lazyImport.CodeBuddyAgent(),
+        lazyImport.React(),
+        lazyImport.ink(),
+        lazyImport.ChatInterface(),
+      ]);
+      const { initializeRenderers, configureRenderContext } = rendererModule;
+      const { render } = inkModule;
       initializeRenderers();
       configureRenderContext({
         plain: options.plain,
@@ -2208,8 +2229,6 @@ program
         noEmoji: options.emoji === false,
       });
 
-      // Interactive mode: launch UI (lazy load heavy modules)
-      const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
       let systemPromptId = options.systemPrompt;  // New: external prompt support
       let customAgentConfig = null;
 
@@ -2349,8 +2368,6 @@ program
         cli.info("🔧 Self-healing: DISABLED");
       }
 
-      cli.info("🤖 Starting Code Buddy Conversational Assistant...\n");
-
       recordStartupPhase('user-settings-start');
       await ensureUserSettingsDirectory();
       recordStartupPhase('user-settings-done');
@@ -2408,12 +2425,6 @@ program
       const initialMessage = Array.isArray(message)
         ? message.join(" ")
         : message;
-
-      // Lazy load React and Ink for UI
-      recordStartupPhase('ui-load-start');
-      const React = await lazyImport.React();
-      const { render } = await lazyImport.ink();
-      const ChatInterface = await lazyImport.ChatInterface();
 
       // Log startup metrics before UI render
       recordStartupPhase('ui-render');
@@ -2631,6 +2642,7 @@ gitCommand
         : undefined;
 
       if (!apiKey) {
+        const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
         logger.error(NO_PROVIDER_GUIDANCE);
         process.exit(1);
       }

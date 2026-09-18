@@ -23,12 +23,11 @@
  * which is form-encoded — this is upstream's contract, mirrored here).
  */
 
-import * as http from 'http';
+import type { RequestListener, Server } from 'node:http';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import open from 'open';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
@@ -382,9 +381,10 @@ async function pingCancelEndpoint(port: number): Promise<void> {
 
 async function tryBindOnce(
   port: number,
-  handler: http.RequestListener
-): Promise<http.Server> {
-  const server = http.createServer(handler);
+  handler: RequestListener
+): Promise<Server> {
+  const { createServer } = await import('node:http');
+  const server = createServer(handler);
   await new Promise<void>((resolve, reject) => {
     const onError = (err: NodeJS.ErrnoException) => {
       server.removeListener('listening', onListening);
@@ -406,8 +406,8 @@ const isAddrInUse = (err: unknown): boolean =>
 
 async function bindCallbackServer(
   ports: number[],
-  handler: http.RequestListener
-): Promise<{ server: http.Server; port: number }> {
+  handler: RequestListener
+): Promise<{ server: Server; port: number }> {
   // First, try to shut down any zombie Codex login server on the
   // primary port. Mirrors openai/codex Rust upstream behavior — the
   // worst that happens here is a no-op on a clean bind.
@@ -462,7 +462,7 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
   const state = randomState();
 
   return new Promise<ChatGptAuth>((resolve, reject) => {
-    let serverInstance: http.Server | null = null;
+    let serverInstance: Server | null = null;
     let timeoutHandle: NodeJS.Timeout | null = null;
     let actualPort = CALLBACK_PORT;
     let finished = false;
@@ -475,7 +475,7 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
       }
     };
 
-    const requestHandler: http.RequestListener = async (req, res) => {
+    const requestHandler: RequestListener = async (req, res) => {
       try {
         const url = new URL(req.url || '', `http://localhost:${actualPort}`);
 
@@ -550,7 +550,7 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
     };
 
     bindCallbackServer([CALLBACK_PORT, FALLBACK_CALLBACK_PORT], requestHandler)
-      .then(({ server, port }) => {
+      .then(async ({ server, port }) => {
         serverInstance = server;
         actualPort = port;
 
@@ -584,6 +584,7 @@ export function loginInteractive(openUrl?: (url: string) => void | Promise<void>
             failOpen(err);
           }
         } else {
+          const { default: open } = await import('open');
           open(authUrl).catch(failOpen);
         }
       })
