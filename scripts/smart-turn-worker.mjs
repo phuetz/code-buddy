@@ -16,15 +16,27 @@ import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { WhisperFeatureExtractor } from '@huggingface/transformers';
+function emit(value) {
+  process.stdout.write(`${JSON.stringify(value)}\n`);
+}
 
-// Resolve ONNX Runtime from the modern Transformers dependency. Code Buddy
-// still carries an older top-level runtime for legacy call sites; it cannot
-// load Smart Turn's ONNX IR v10 model.
-const transformerRequire = createRequire(
-  new URL('../node_modules/@huggingface/transformers/package.json', import.meta.url),
-);
-const ort = transformerRequire('onnxruntime-node');
+let WhisperFeatureExtractor;
+let ort;
+try {
+  const transformers = await import('@huggingface/transformers');
+  WhisperFeatureExtractor = transformers.WhisperFeatureExtractor;
+
+  // Resolve ONNX Runtime from the modern Transformers dependency. Code Buddy
+  // still carries an older top-level runtime for legacy call sites; it cannot
+  // load Smart Turn's ONNX IR v10 model.
+  const transformerRequire = createRequire(
+    new URL('../node_modules/@huggingface/transformers/package.json', import.meta.url),
+  );
+  ort = transformerRequire('onnxruntime-node');
+} catch (error) {
+  emit({ error: `Smart Turn dependencies unavailable: ${error?.message || error}` });
+  process.exit(1);
+}
 
 const SAMPLE_RATE = 16_000;
 const WINDOW_SECONDS = 8;
@@ -36,9 +48,6 @@ const DEFAULT_MODEL = path.join(
   'smart-turn-v3.2-cpu.onnx',
 );
 
-function emit(value) {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
-}
 
 function normalizeAndLeftPad(raw) {
   const source = raw.length > WINDOW_SAMPLES

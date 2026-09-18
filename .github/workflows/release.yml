@@ -10,6 +10,9 @@ permissions:
   packages: write
   id-token: write
 
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   release:
     name: Create Release

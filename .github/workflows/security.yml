@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
 
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   security_scan:
     runs-on: ubuntu-latest

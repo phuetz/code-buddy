@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Prevent onnxruntime-node from downloading unused Linux CUDA 12 binaries
+  # from api.nuget.org during npm ci; bundled CPU binaries are sufficient.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   test:
     name: Test on Node.js ${{ matrix.node-version }} and ${{ matrix.os }}
