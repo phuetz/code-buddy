@@ -91,6 +91,7 @@ import {
   createDelegateAgentTools,
   createContextExpandTools,
   createDesignTools,
+  createFigmaTools,
 } from './index.js';
 import type { ITool } from './types.js';
 import { createAuthoredExtraTools } from './authored-extra-tools.js';
@@ -123,6 +124,7 @@ export function createInteractiveToolAdapters(options: InteractiveAdapterOptions
     new ToolSearchTool(),
     ...(includeContextZoom ? createContextExpandTools() : []),
     ...createDesignTools(),
+    ...createFigmaTools(),
     ...createTextEditorTools(),
     ...createBashTools(),
     ...createLsTools(),

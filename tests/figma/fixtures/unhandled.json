@@ -1,0 +1,56 @@
+{
+  "name": "Unhandled mix",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "5:1",
+            "name": "Dashboard",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 8,
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 200 },
+            "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 } }],
+            "children": [
+              {
+                "id": "5:2",
+                "name": "Label",
+                "type": "TEXT",
+                "characters": "Dashboard",
+                "style": { "fontSize": 20 },
+                "absoluteBoundingBox": { "x": 0, "y": 0, "width": 200, "height": 28 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 } }],
+                "effects": [{ "type": "DROP_SHADOW", "visible": true }]
+              },
+              {
+                "id": "5:3",
+                "name": "Blob",
+                "type": "VECTOR",
+                "absoluteBoundingBox": { "x": 10, "y": 40, "width": 40, "height": 40 }
+              },
+              {
+                "id": "5:4",
+                "name": "Union",
+                "type": "BOOLEAN_OPERATION",
+                "absoluteBoundingBox": { "x": 60, "y": 40, "width": 40, "height": 40 }
+              },
+              {
+                "id": "5:5",
+                "name": "Dot",
+                "type": "ELLIPSE",
+                "absoluteBoundingBox": { "x": 110, "y": 40, "width": 16, "height": 16 }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

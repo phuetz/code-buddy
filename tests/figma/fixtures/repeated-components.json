@@ -1,0 +1,96 @@
+{
+  "name": "Cards",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "3:1",
+            "name": "Card",
+            "type": "COMPONENT",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 8,
+            "paddingTop": 12,
+            "paddingBottom": 12,
+            "paddingLeft": 12,
+            "paddingRight": 12,
+            "absoluteBoundingBox": { "x": -400, "y": 0, "width": 200, "height": 80 },
+            "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "3:2",
+                "name": "Title",
+                "type": "TEXT",
+                "characters": "Card title",
+                "style": { "fontSize": 16, "fontWeight": 600 },
+                "absoluteBoundingBox": { "x": -388, "y": 12, "width": 176, "height": 22 },
+                "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 }, "opacity": 1 }]
+              }
+            ]
+          },
+          {
+            "id": "4:1",
+            "name": "Home",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 12,
+            "paddingTop": 16,
+            "paddingBottom": 16,
+            "paddingLeft": 16,
+            "paddingRight": 16,
+            "layoutGrids": [{ "pattern": "COLUMNS", "count": 2, "visible": true }],
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 400 },
+            "fills": [{ "type": "SOLID", "color": { "r": 0.96, "g": 0.96, "b": 0.96 }, "opacity": 1 }],
+            "children": [
+              {
+                "id": "4:2",
+                "name": "Card",
+                "type": "INSTANCE",
+                "componentId": "3:1",
+                "absoluteBoundingBox": { "x": 16, "y": 16, "width": 200, "height": 80 },
+                "children": [
+                  {
+                    "id": "4:3",
+                    "name": "Title",
+                    "type": "TEXT",
+                    "characters": "First card",
+                    "style": { "fontSize": 16 },
+                    "absoluteBoundingBox": { "x": 28, "y": 28, "width": 176, "height": 22 },
+                    "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 } }]
+                  }
+                ]
+              },
+              {
+                "id": "4:4",
+                "name": "Card",
+                "type": "INSTANCE",
+                "componentId": "3:1",
+                "absoluteBoundingBox": { "x": 16, "y": 108, "width": 200, "height": 80 },
+                "children": [
+                  {
+                    "id": "4:5",
+                    "name": "Title",
+                    "type": "TEXT",
+                    "characters": "Second card",
+                    "style": { "fontSize": 16 },
+                    "absoluteBoundingBox": { "x": 28, "y": 120, "width": 176, "height": 22 },
+                    "fills": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0 } }]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "3:1": { "name": "Card", "key": "cardkey" }
+  }
+}
