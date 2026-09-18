@@ -169,6 +169,29 @@ describe('unified session index', () => {
     expect(rebuilt.sessions.some((row) => row.id === 'stale')).toBe(false);
   });
 
+  it('refuse un identifiant abrégé qui désigne deux sessions, et accepte celui qui n’en désigne qu’une', async () => {
+    const { sessionsDir, indexPath } = isolate();
+    /*
+     * Deux sessions au préfixe commun. Reprendre « la première qui commence par
+     * là » reviendrait à tirer au sort laquelle l’utilisateur retrouve.
+     */
+    for (const id of ['abc111', 'abc222', 'zzz999']) {
+      writeFileSync(path.join(sessionsDir, `session_${id}.json`), JSON.stringify({
+        id,
+        name: `Session ${id}`,
+        createdAt: '2026-09-17T10:00:00.000Z',
+        lastAccessedAt: '2026-09-17T11:00:00.000Z',
+        messages: [{ type: 'user', content: 'bonjour', timestamp: '2026-09-17T10:00:00.000Z' }],
+      }));
+    }
+    const options = { sessionsDir, indexPath, coworkDbPath: null };
+    expect(listUnifiedSessions(options)).toHaveLength(3);
+
+    expect(await materializeUnifiedSession('abc', options)).toBeNull();
+    expect(await materializeUnifiedSession('zzz', options)).toMatchObject({ id: 'zzz999' });
+    expect(await materializeUnifiedSession('abc111', options)).toMatchObject({ id: 'abc111' });
+  });
+
   it('materializes a Cowork DB thread into the existing handoff JSON for CLI resume', async () => {
     const { sessionsDir, indexPath, root } = isolate();
     const dbPath = path.join(root, 'cowork.db');
@@ -219,11 +242,4 @@ describe('unified session index', () => {
     const resumed = await store.loadSession('cowork-live-7');
     expect(resumed?.messages.map((row) => row.content)).toEqual(['continue en CLI', 'oui']);
   });
-});
-
-it('refuse un identifiant abrégé qui désigne plusieurs sessions', async () => {
-  const { materializeUnifiedSession } = await import('../../src/persistence/unified-session-index.js');
-  // Deux sessions au préfixe commun : reprendre « la première » serait un tirage au sort.
-  const ambigu = await materializeUnifiedSession('ab', { ownerUserId: 'inexistant-pour-ce-test' });
-  expect(ambigu).toBeNull();
 });
