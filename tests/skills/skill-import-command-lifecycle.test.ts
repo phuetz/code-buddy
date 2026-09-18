@@ -12,6 +12,7 @@ import {
   getSkillRegistry,
   resetSkillRegistry,
 } from '../../src/skills/registry.js';
+import { requireSkillWatchersAtLeast } from './watch-health.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -224,6 +225,7 @@ describe('skills import CLI lifecycle', () => {
     resetSkillRegistry();
     const registry = getSkillRegistry({ workspacePath: path.dirname(skillDir), managedPath: '', bundledPath: '', watchEnabled: true });
     await registry.load();
+    requireSkillWatchersAtLeast(registry, 1, 'before hub uninstall closes real handles');
     const watchers = (registry as unknown as { watchers: Map<string, fs.FSWatcher> }).watchers;
     const originalHandles = [...watchers.values()];
     const releasedHandles = new Set<fs.FSWatcher>();
