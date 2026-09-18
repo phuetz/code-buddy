@@ -1446,6 +1446,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('model.capabilities', model),
   },
 
+  officeExport: {
+    save: (payload: {
+      markdown: string;
+      title?: string;
+      format: 'docx' | 'pptx';
+      sessionId?: string;
+      suggestedName?: string;
+    }): Promise<{
+      success: boolean;
+      path?: string;
+      canceled?: boolean;
+      error?: string;
+      warnings?: string[];
+    }> => ipcRenderer.invoke('officeExport.save', payload),
+  },
+
   // Session export, background sessions, settings update
   session: {
     export: (sessionId: string, format: 'md' | 'json') =>
@@ -6226,6 +6242,21 @@ declare global {
           supportsToolCalls: boolean;
           contextWindow: number;
           maxOutputTokens: number;
+        }>;
+      };
+      officeExport: {
+        save: (payload: {
+          markdown: string;
+          title?: string;
+          format: 'docx' | 'pptx';
+          sessionId?: string;
+          suggestedName?: string;
+        }) => Promise<{
+          success: boolean;
+          path?: string;
+          canceled?: boolean;
+          error?: string;
+          warnings?: string[];
         }>;
       };
       session: {

@@ -20,6 +20,8 @@ import { buildReactPreviewDoc } from '../utils/react-preview';
 import { ReportArtifact } from './artifacts/ReportArtifact';
 import { TableArtifact } from './artifacts/TableArtifact';
 import { MessageMarkdown } from './MessageMarkdown';
+import { OfficeExportMenu } from './OfficeExportMenu';
+import { artifactToMarkdown } from '../utils/artifact-office-source';
 import type { ReportArtifactData } from '../utils/artifact-detector';
 
 type TabKey = 'preview' | 'source';
@@ -204,6 +206,7 @@ export const ArtifactPanel: React.FC<{ inline?: boolean }> = ({ inline = false }
   const { t } = useTranslation();
   const activeArtifact = useAppStore((s) => s.activeArtifact);
   const setActiveArtifact = useAppStore((s) => s.setActiveArtifact);
+  const activeSessionId = useAppStore((s) => s.activeSessionId);
   const [tab, setTab] = useState<TabKey>('preview');
   const [copied, setCopied] = useState(false);
 
@@ -322,6 +325,11 @@ export const ArtifactPanel: React.FC<{ inline?: boolean }> = ({ inline = false }
               HTML
             </button>
           )}
+          <OfficeExportMenu
+            markdown={artifactToMarkdown(activeArtifact)}
+            title={baseName}
+            sessionId={activeSessionId}
+          />
           <button
             onClick={handleCopy}
             className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-hover rounded transition-colors"

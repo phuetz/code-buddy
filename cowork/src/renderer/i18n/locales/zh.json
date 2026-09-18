@@ -2127,6 +2127,11 @@
     "chars": "字符",
     "openPanel": "打开制品",
     "exportHtml": "导出为独立 HTML",
+    "exportDocx": "导出为 Word 文档 (.docx)",
+    "exportPptx": "导出为演示文稿 (.pptx)",
+    "officeExportSaved": "已导出到 {{path}}",
+    "officeExportFailed": "办公导出失败。",
+    "officeExportUnavailable": "办公导出不可用。",
     "reportChip": "引用报告（{{count}} 个来源）",
     "tableChip": "表格（{{rows}}×{{cols}}）",
     "kind": {
@@ -2345,7 +2350,8 @@
     "includeCheckpoints": "包含检查点元数据",
     "copy": "复制",
     "save": "保存到文件…",
-    "savedTo": "已保存到 {{path}}"
+    "savedTo": "已保存到 {{path}}",
+    "copyBinaryUnavailable": "Word/PowerPoint 无法复制到剪贴板。"
   },
   "workflow": {
     "settingsTitle": "工作流",

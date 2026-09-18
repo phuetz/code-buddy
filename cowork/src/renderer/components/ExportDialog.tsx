@@ -19,9 +19,10 @@ import {
   Globe,
   ShieldOff,
   Loader2,
+  Presentation,
 } from 'lucide-react';
 
-type ExportFormat = 'markdown' | 'json' | 'html';
+type ExportFormat = 'markdown' | 'json' | 'html' | 'docx' | 'pptx';
 
 interface ExportDialogProps {
   sessionId: string;
@@ -52,6 +53,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         setStatusMessage('Export API unavailable');
         return;
       }
+      if (format === 'docx' || format === 'pptx') {
+        setStatusMessage(t('exportDialog.copyBinaryUnavailable', 'Copie indisponible pour Word/PowerPoint.'));
+        return;
+      }
       const result = await api.session.exportFull(sessionId, {
         format,
         redactSecrets,
@@ -70,13 +75,42 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     } finally {
       setCopying(false);
     }
-  }, [sessionId, format, redactSecrets, includeCheckpoints]);
+  }, [sessionId, format, redactSecrets, includeCheckpoints, t]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setStatusMessage(null);
     try {
       const api = window.electronAPI;
+      if (format === 'docx' || format === 'pptx') {
+        if (!api?.session?.exportFull || !api?.officeExport?.save) {
+          setStatusMessage('Export API unavailable');
+          return;
+        }
+        const md = await api.session.exportFull(sessionId, {
+          format: 'markdown',
+          redactSecrets,
+          includeCheckpoints,
+        });
+        if (!md.success) {
+          setStatusMessage(md.error ?? 'Export failed');
+          return;
+        }
+        const result = await api.officeExport.save({
+          markdown: md.content,
+          title: sessionTitle || sessionId,
+          format,
+          sessionId,
+          suggestedName: sessionTitle || sessionId,
+        });
+        if (result.canceled) return;
+        if (result.success) {
+          setStatusMessage(t('exportDialog.savedTo', { path: result.path ?? '' }));
+        } else {
+          setStatusMessage(result.error ?? 'Save failed');
+        }
+        return;
+      }
       if (!api?.session?.exportToFile) {
         setStatusMessage('Export API unavailable');
         return;
@@ -97,7 +131,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [sessionId, format, redactSecrets, includeCheckpoints, t]);
+  }, [sessionId, sessionTitle, format, redactSecrets, includeCheckpoints, t]);
 
   return (
     <div
@@ -143,6 +177,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   { id: 'markdown', label: 'Markdown', icon: FileText },
                   { id: 'json', label: 'JSON', icon: FileJson },
                   { id: 'html', label: 'HTML', icon: Globe },
+                  { id: 'docx', label: 'Word', icon: FileText },
+                  { id: 'pptx', label: 'Slides', icon: Presentation },
                 ] as Array<{ id: ExportFormat; label: string; icon: React.ComponentType<{ size?: number }> }>
               ).map(({ id, label, icon: Icon }) => {
                 const isSelected = format === id;
@@ -208,7 +244,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </button>
           <button
             onClick={handleCopy}
-            disabled={copying}
+            disabled={copying || format === 'docx' || format === 'pptx'}
             className="flex items-center gap-1 px-4 py-2 text-xs bg-surface hover:bg-surface-hover border border-border text-text-primary rounded transition-colors disabled:opacity-50"
           >
             {copying ? (

@@ -91,6 +91,7 @@ import { registerSpecIpcHandlers } from './ipc/spec-ipc';
 import { registerSpecNextIpcHandlers } from './ipc/spec-next-ipc';
 import { registerLiveLauncherIpcHandlers } from './ipc/live-launcher-ipc';
 import { registerGpuMediaIpcHandlers } from './ipc/gpu-media-ipc';
+import { registerOfficeExportIpcHandlers } from './office-export/office-export-ipc';
 import { GpuMediaAdminBridge } from './gpu-media/gpu-media-admin-bridge';
 import { registerBrowserOperatorRuntimeIpcHandlers } from './ipc/browser-operator-runtime-ipc';
 import { registerMeetingLiveIpcHandlers } from './ipc/meeting-live-ipc';
@@ -2812,6 +2813,11 @@ const creativeAssetRegistry = new CreativeAssetRegistry({
   mySoulmateRoot: join(app.getPath('home'), 'DEV', 'MySoulmate', 'companion-image-cache'),
 });
 registerCreativeAssetIpc(ipcMain, creativeAssetRegistry);
+registerOfficeExportIpcHandlers(ipcMain, {
+  getSession: (id) => sessionManager?.listSessions().find((session) => session.id === id) ?? null,
+  getUserDataPath: () => app.getPath('userData'),
+  getMainWindow,
+});
 registerGpuMediaIpcHandlers(new GpuMediaAdminBridge({
   resolveAssetPath: (id) => creativeAssetRegistry.resolveAssetPath(id),
   activeRoot: activeCreativeWorkspace,

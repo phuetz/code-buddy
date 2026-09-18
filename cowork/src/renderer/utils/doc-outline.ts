@@ -62,3 +62,13 @@ export function estimateReadingTime(sections: DocSection[]): number {
   if (words <= 0) return 0;
   return Math.ceil(words / 220);
 }
+
+/** Flatten a DocComposer outline into Markdown for office export. */
+export function docSectionsToMarkdown(title: string, sections: DocSection[]): string {
+  const heading = title.trim() || 'Sans titre';
+  const parts = [`# ${heading}`, ''];
+  for (const section of sections) {
+    parts.push('---', '', `## ${section.title.trim() || 'Sans titre'}`, '', section.summary.trim(), '');
+  }
+  return parts.join('\n').trim() + '\n';
+}
