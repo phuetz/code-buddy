@@ -114,6 +114,10 @@
     theme: 'dark',
     font: '2',
     wallpaper: '0',
+    resumeSessionId: '',
+    resumeTitle: '',
+    resumeList: [],
+    resumeLoading: false,
   };
 
   try {
@@ -406,6 +410,7 @@
   }
 
   function persistHistory() {
+    if (state.resumeSessionId) return;
     var images = 0;
     var slim = state.messages.slice(-MAX_HISTORY).map(function (msg) {
       var copy = {
@@ -1141,6 +1146,7 @@
     if (extras && extras.editOf) payload.editOf = extras.editOf;
     if (extras && typeof extras.durationMs === 'number') payload.durationMs = extras.durationMs;
     if (state.voiceReply) payload.voiceReply = true;
+    if (state.resumeSessionId) payload.sessionId = state.resumeSessionId;
     return payload;
   }
 
@@ -2159,6 +2165,121 @@
     if (id === 'runs-section') loadRuns();
     if (id === 'status-section') loadStatus();
     if (id === 'album-section') loadAlbum();
+    if (id === 'resume-section') loadResumeSessions();
+  }
+
+  function originLabel(origin) {
+    if (origin === 'cowork') return 'Cowork';
+    if (origin === 'mobile') return 'Mobile';
+    return 'CLI';
+  }
+
+  function formatResumeDate(iso) {
+    var ts = Date.parse(iso);
+    if (!ts) return '';
+    return new Date(ts).toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function renderResumeBanner() {
+    var banner = el('resume-banner');
+    var text = el('resume-banner-text');
+    if (!banner) return;
+    if (!state.resumeSessionId) {
+      banner.classList.add('hidden');
+      return;
+    }
+    banner.classList.remove('hidden');
+    if (text) text.textContent = 'Session · ' + (state.resumeTitle || state.resumeSessionId);
+  }
+
+  function leaveResumeSession() {
+    state.resumeSessionId = '';
+    state.resumeTitle = '';
+    state.assistant = 'companion';
+    state.assistantLabel = 'Lisa';
+    var name = el('current-assistant');
+    if (name) name.textContent = 'Lisa';
+    renderResumeBanner();
+    restoreHistory();
+    renderMessages();
+  }
+
+  function renderResumeList() {
+    var list = el('resume-list');
+    var empty = el('resume-empty');
+    if (!list) return;
+    list.innerHTML = '';
+    if (empty) empty.classList.toggle('hidden', state.resumeList.length > 0);
+    state.resumeList.forEach(function (session) {
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'resume-row touch';
+      row.setAttribute('data-session-id', session.id);
+      var title = document.createElement('span');
+      title.className = 'resume-row-title';
+      title.textContent = session.title || session.id;
+      var meta = document.createElement('span');
+      meta.className = 'resume-row-meta';
+      var origin = document.createElement('span');
+      origin.className = 'resume-origin';
+      origin.textContent = originLabel(session.origin);
+      meta.appendChild(origin);
+      meta.appendChild(document.createTextNode(
+        ' · ' + (session.messageCount || 0) + ' messages · ' + formatResumeDate(session.updatedAt)
+      ));
+      row.appendChild(title);
+      row.appendChild(meta);
+      row.addEventListener('click', function () { openResumeSession(session.id); });
+      list.appendChild(row);
+    });
+  }
+
+  function loadResumeSessions() {
+    if (state.resumeLoading) return Promise.resolve(state.resumeList);
+    state.resumeLoading = true;
+    return fetchJson(BASE + '/sessions').then(function (data) {
+      state.resumeList = (data && data.sessions) ? data.sessions : [];
+      state.resumeLoading = false;
+      renderResumeList();
+      return state.resumeList;
+    }).catch(function () {
+      state.resumeLoading = false;
+      state.resumeList = [];
+      renderResumeList();
+      return state.resumeList;
+    });
+  }
+
+  function openResumeSession(id) {
+    if (!id) return Promise.resolve(false);
+    return fetchJson(BASE + '/sessions/' + encodeURIComponent(id)).then(function (session) {
+      if (!session || !session.id) return false;
+      state.resumeSessionId = session.id;
+      state.resumeTitle = session.title || session.id;
+      state.assistant = 'agent';
+      state.assistantLabel = 'Agent';
+      var name = el('current-assistant');
+      if (name) name.textContent = 'Agent';
+      state.messages = (session.messages || []).map(function (row, index) {
+        return {
+          id: 'resume-' + session.id + '-' + index,
+          role: row.role === 'assistant' ? 'assistant' : 'user',
+          text: row.content || '',
+          ts: Date.parse(row.timestamp) || Date.now(),
+        };
+      });
+      renderResumeBanner();
+      renderMessages();
+      switchSection('chat-section');
+      return true;
+    }).catch(function () {
+      return false;
+    });
   }
 
   // --- Album: the photos of the two of them, in one grid ---------------------
@@ -2660,6 +2781,8 @@
       });
     }
     if (el('refresh-runs')) el('refresh-runs').addEventListener('click', loadRuns);
+    if (el('refresh-resume')) el('refresh-resume').addEventListener('click', loadResumeSessions);
+    if (el('resume-banner-close')) el('resume-banner-close').addEventListener('click', leaveResumeSession);
     document.querySelectorAll('.nav-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         switchSection(btn.getAttribute('data-section'));
@@ -2996,6 +3119,10 @@
     renderAttachPreview: renderAttachPreview,
     currentChatPayload: currentChatPayload,
     loadAlbum: loadAlbum,
+    loadResumeSessions: loadResumeSessions,
+    openResumeSession: openResumeSession,
+    leaveResumeSession: leaveResumeSession,
+    renderResumeList: renderResumeList,
     renderAlbum: renderAlbum,
     openAlbumEntry: openAlbumEntry,
     toggleAlbumFavorite: toggleAlbumFavorite,

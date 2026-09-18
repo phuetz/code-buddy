@@ -312,9 +312,9 @@ describe('Mobile PWA Assets Validation', () => {
 
   it('bumps the service worker cache whenever the shipped assets change', () => {
     // A stale cache serves the OLD app.js to an installed PWA, so the cache
-    // name must move with the assets. v11 = chat v3 + #token= auto-login.
+    // name must move with the assets. v12 = écran Reprendre (sessions CLI/Cowork).
     const sw = readFileSync(path.join(assetsDir, 'sw.js'), 'utf-8');
-    expect(sw).toContain('codebuddy-mobile-v11');
+    expect(sw).toContain('codebuddy-mobile-v12');
     expect(sw).toContain('/__codebuddy__/mobile/assets/emoji-data.js');
     expect(sw).toContain('/__codebuddy__/mobile/assets/app.js');
   });
