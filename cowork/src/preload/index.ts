@@ -1528,6 +1528,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         model: string;
         messageCount: number;
         lastAccessedAt: string;
+        origin?: 'cli' | 'cowork' | 'mobile';
         source: 'cli';
       }>
     > => ipcRenderer.invoke('session.externalList'),
@@ -6378,6 +6379,7 @@ declare global {
             model: string;
             messageCount: number;
             lastAccessedAt: string;
+            origin?: 'cli' | 'cowork' | 'mobile';
             source: 'cli';
           }>
         >;

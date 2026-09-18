@@ -410,6 +410,8 @@ export interface SessionInfo {
   description?: string;
   /** Parent session when this session was cloned, branched or forked */
   parentSessionId?: string;
+  /** Surface that created or last owned the thread (cli, cowork, mobile). */
+  origin?: 'cli' | 'cowork' | 'mobile';
 }
 
 export interface SessionDetailResponse extends SessionInfo {

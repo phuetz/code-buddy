@@ -3820,7 +3820,7 @@ addLazyCommandGroup(program, 'autonomous-code', 'Run a guarded Agentic Coding Ce
 addLazyCommandGroup(program, 'session', 'Manage saved sessions', async () => {
   const { registerSessionCommands } = await import('./cli/session-commands.js');
   registerSessionCommands(program);
-});
+}, ['sessions']);
 
 addLazyCommandGroup(program, 'config', 'Show environment variable configuration and validation', async () => {
   const { registerConfigCommand } = await import('./commands/cli/config-command.js');
