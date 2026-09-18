@@ -48,6 +48,10 @@
 
       <main class="main-content">
         <section id="chat-section" class="panel active">
+          <div id="resume-banner" class="resume-banner hidden">
+            <span id="resume-banner-text" class="resume-banner-text"></span>
+            <button type="button" id="resume-banner-close" class="btn icon touch" aria-label="Quitter la session">✕</button>
+          </div>
           <div id="search-bar" class="search-bar hidden" role="search">
             <input id="search-input" type="search" placeholder="Rechercher…" aria-label="Rechercher dans la conversation" autocomplete="off">
             <span id="search-count" class="search-count" aria-live="polite"></span>
@@ -112,6 +116,15 @@
           </div>
         </section>
 
+        <section id="resume-section" class="panel hidden">
+          <div class="section-header">
+            <h2>Reprendre</h2>
+            <button type="button" id="refresh-resume" class="btn icon touch" aria-label="Actualiser">↻</button>
+          </div>
+          <p id="resume-empty" class="album-empty hidden">Aucune session récente. Les sessions CLI et les exports Cowork apparaissent ici.</p>
+          <div id="resume-list" class="list"></div>
+        </section>
+
         <section id="album-section" class="panel hidden">
           <div class="section-header">
             <h2>Album</h2>
@@ -143,6 +156,7 @@
 
       <nav class="bottom-nav">
         <button type="button" class="nav-item active" data-section="chat-section">Chat</button>
+        <button type="button" class="nav-item" data-section="resume-section">Reprendre</button>
         <button type="button" class="nav-item" data-section="album-section">Album</button>
         <button type="button" class="nav-item" data-section="runs-section">Runs</button>
         <button type="button" class="nav-item" data-section="confirmations-section">

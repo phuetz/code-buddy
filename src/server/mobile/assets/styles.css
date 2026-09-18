@@ -532,7 +532,7 @@ mark.search-hit {
   height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
@@ -543,8 +543,47 @@ mark.search-hit {
   font: inherit;
   position: relative;
   min-height: var(--nav-h);
+  font-size: 12px;
 }
 .nav-item.active { color: var(--accent); }
+
+.resume-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+.resume-row-title { font-weight: 600; }
+.resume-row-meta { color: var(--muted); font-size: 12px; }
+.resume-origin {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--cyan);
+}
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 0 8px 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.resume-banner.hidden { display: none !important; }
+.resume-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge {
   position: absolute;
   top: 6px;
