@@ -2164,6 +2164,11 @@
     "chars": "chars",
     "openPanel": "Open artifact",
     "exportHtml": "Export as standalone HTML",
+    "exportDocx": "Export as Word document (.docx)",
+    "exportPptx": "Export as presentation (.pptx)",
+    "officeExportSaved": "Exported to {{path}}",
+    "officeExportFailed": "Office export failed.",
+    "officeExportUnavailable": "Office export is unavailable.",
     "reportChip": "Cited report ({{count}} sources)",
     "tableChip": "Table ({{rows}}×{{cols}})",
     "kind": {
@@ -2384,7 +2389,8 @@
     "includeCheckpoints": "Include checkpoint metadata",
     "copy": "Copy",
     "save": "Save to file…",
-    "savedTo": "Saved to {{path}}"
+    "savedTo": "Saved to {{path}}",
+    "copyBinaryUnavailable": "Copy is unavailable for Word/PowerPoint."
   },
   "workflow": {
     "settingsTitle": "Workflows",

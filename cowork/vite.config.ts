@@ -73,6 +73,8 @@ export const mainProcessExternals = [
   'ws',
   'glob',
   'dotenv',
+  'docx',
+  'pptxgenjs',
 ];
 
 const ignoredWatchPaths = [

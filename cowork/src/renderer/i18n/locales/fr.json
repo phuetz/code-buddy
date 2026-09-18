@@ -2164,6 +2164,11 @@
     "chars": "chars",
     "openPanel": "Ouvrir l'artefact",
     "exportHtml": "Exporter en HTML autonome",
+    "exportDocx": "Exporter en document Word (.docx)",
+    "exportPptx": "Exporter en présentation (.pptx)",
+    "officeExportSaved": "Exporté vers {{path}}",
+    "officeExportFailed": "L'export bureautique a échoué.",
+    "officeExportUnavailable": "Export bureautique indisponible.",
     "reportChip": "Rapport cité ({{count}} sources)",
     "tableChip": "Tableau ({{rows}}×{{cols}})",
     "kind": {
@@ -2384,7 +2389,8 @@
     "includeCheckpoints": "Inclure les métadonnées du point de contrôle",
     "copy": "Copier",
     "save": "Enregistrer dans un fichier…",
-    "savedTo": "Enregistré dans {{path}}"
+    "savedTo": "Enregistré dans {{path}}",
+    "copyBinaryUnavailable": "Copie indisponible pour Word/PowerPoint."
   },
   "workflow": {
     "settingsTitle": "Workflows",

@@ -9,8 +9,10 @@
 
 import { useTranslation } from 'react-i18next';
 import { BookOpenText, FilePlus2, Sparkles } from 'lucide-react';
-import { estimateReadingTime, type DocSection } from '../utils/doc-outline';
+import { docSectionsToMarkdown, estimateReadingTime, type DocSection } from '../utils/doc-outline';
+import { useAppStore } from '../store';
 import { MessageMarkdown } from './MessageMarkdown';
+import { OfficeExportMenu } from './OfficeExportMenu';
 
 export interface DocComposerProps {
   sections: DocSection[];
@@ -20,6 +22,11 @@ export interface DocComposerProps {
 export function DocComposer({ sections, onGenerate }: DocComposerProps) {
   const { t } = useTranslation();
   const readingMinutes = estimateReadingTime(sections);
+  const activeSessionId = useAppStore((s) => s.activeSessionId);
+  const sessions = useAppStore((s) => s.sessions);
+  const sessionTitle = sessions.find((session) => session.id === activeSessionId)?.title;
+  const exportTitle = sessionTitle?.trim() || t('genspark.docs.title', 'Compositeur de document');
+  const exportMarkdown = docSectionsToMarkdown(exportTitle, sections);
 
   return (
     <section className="rounded-lg border border-border bg-surface p-4" data-testid="doc-composer">
@@ -37,17 +44,25 @@ export function DocComposer({ sections, onGenerate }: DocComposerProps) {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          aria-label={t('genspark.docs.generate', 'Générer le document')}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-          data-testid="doc-generate"
-          disabled={sections.length === 0}
-          onClick={() => onGenerate(sections)}
-        >
-          <Sparkles aria-hidden="true" className="h-4 w-4" />
-          {t('genspark.docs.generate', 'Générer')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <OfficeExportMenu
+            markdown={exportMarkdown}
+            title={exportTitle}
+            sessionId={activeSessionId}
+            disabled={sections.length === 0}
+          />
+          <button
+            type="button"
+            aria-label={t('genspark.docs.generate', 'Générer le document')}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="doc-generate"
+            disabled={sections.length === 0}
+            onClick={() => onGenerate(sections)}
+          >
+            <Sparkles aria-hidden="true" className="h-4 w-4" />
+            {t('genspark.docs.generate', 'Générer')}
+          </button>
+        </div>
       </div>
 
       {sections.length === 0 ? (
