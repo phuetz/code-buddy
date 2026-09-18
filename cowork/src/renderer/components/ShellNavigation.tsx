@@ -35,6 +35,7 @@ import {
   Workflow,
   Zap,
   type LucideIcon,
+  BookOpenText,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
@@ -347,6 +348,14 @@ export function ShellNavigation() {
       active: showMemoryEditor,
       onClick: () => setShowMemoryEditor(true),
       testId: 'memory-panel-button',
+    },
+    instructions: {
+      labelKey: 'folderInstructions.title',
+      labelFallback: 'Folder instructions',
+      icon: BookOpenText,
+      active: false,
+      onClick: () => openSettingsTab('instructions'),
+      testId: 'folder-instructions-button',
     },
     identity: {
       labelKey: 'identity.title',

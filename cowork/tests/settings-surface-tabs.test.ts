@@ -13,8 +13,10 @@ describe('Settings surface tabs', () => {
     const source = fs.readFileSync(settingsPanelPath, 'utf8');
     expect(source).toContain("id: 'customize' as TabId");
     expect(source).toContain("id: 'projects' as TabId");
+    expect(source).toContain("id: 'instructions' as TabId");
     expect(source).toContain('<SettingsCustomize');
     expect(source).toContain('<SettingsProjects');
+    expect(source).toContain('<SettingsFolderInstructions');
   });
 
   it('hydrates the schedule form from a pending schedule draft', () => {

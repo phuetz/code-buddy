@@ -51,6 +51,7 @@ import { registerKnowledgeIpcHandlers } from './ipc/knowledge-ipc';
 import { registerLessonCandidateIpcHandlers } from './ipc/lessons-candidate-ipc';
 import { registerMobileSupervisionIpcHandlers } from './ipc/mobile-supervision-ipc';
 import { registerIdentityIpcHandlers } from './ipc/identity-ipc';
+import { registerFolderInstructionsIpcHandlers } from './ipc/folder-instructions-ipc';
 import { registerDeviceIpcHandlers } from './ipc/device-ipc';
 import { registerChannelsIpcHandlers } from './ipc/channels-ipc';
 // App Studio (bolt.diy-style) main-process IPC + services.
@@ -2748,6 +2749,7 @@ registerKnowledgeIpcHandlers(() => knowledgeService, () => projectManager);
 registerLessonCandidateIpcHandlers(() => projectManager);
 registerUserModelIpcHandlers(() => projectManager);
 registerIdentityIpcHandlers(() => projectManager);
+registerFolderInstructionsIpcHandlers(() => projectManager);
 registerDeviceIpcHandlers();
 registerChannelsIpcHandlers();
 registerPairingIpcHandlers();

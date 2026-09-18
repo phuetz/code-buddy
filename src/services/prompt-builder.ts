@@ -23,7 +23,7 @@ import { EnhancedMemory, PersistentMemoryManager } from "../memory/index.js";
 import { PromptCacheManager } from "../optimization/prompt-cache.js";
 import { MoltbotHooksManager } from "../hooks/moltbot-hooks.js";
 import { getModelToolConfig } from "../config/model-tools.js";
-import { resolveProjectContext, createContextRegistry, setActiveContextRegistry, type ContextRegistry } from "../context/project-context.js";
+import { resolveProjectContext, createContextRegistry, setActiveContextRegistry, STARTUP_PROJECT_CONTEXT_FILES, type ContextRegistry } from "../context/project-context.js";
 import { classifyQuery, type QueryComplexity } from "../agent/execution/query-classifier.js";
 import {
   filterToolNames,
@@ -170,8 +170,6 @@ const EXTERNAL_PROMPT_MANAGER_TOOLS = [
   'todo',
   'reason',
 ] as const;
-
-const STARTUP_PROJECT_CONTEXT_FILES = ['AGENTS.md', 'CODEBUDDY.md'] as const;
 
 function hasActiveToolFilter(config: ToolFilterConfig): boolean {
   return config.enabledPatterns.length > 0 || config.disabledPatterns.length > 0;

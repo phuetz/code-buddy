@@ -4,7 +4,7 @@
  * Render smoke test for every Settings panel. Each panel is mounted with mocked
  * i18n, store and window.electronAPI; the test asserts it renders without a
  * synchronous throw. This guards against gross runtime breakage (a throwing
- * component, a bad hook, a missing import) across all 32 panels.
+ * component, a bad hook, a missing import) across all 31 panels.
  */
 import React from 'react';
 import { act } from 'react-dom/test-utils';
@@ -99,6 +99,7 @@ import { SettingsConnectors } from '../src/renderer/components/settings/Settings
 import { SettingsSkills } from '../src/renderer/components/settings/SettingsSkills';
 import { SettingsCustomize } from '../src/renderer/components/settings/SettingsCustomize';
 import { SettingsProjects } from '../src/renderer/components/settings/SettingsProjects';
+import { SettingsFolderInstructions } from '../src/renderer/components/settings/SettingsFolderInstructions';
 import { SettingsSchedule } from '../src/renderer/components/settings/SettingsSchedule';
 import { SettingsLogs } from '../src/renderer/components/settings/SettingsLogs';
 import { SettingsWorkflows } from '../src/renderer/components/settings/SettingsWorkflows';
@@ -144,6 +145,7 @@ const PANELS: Array<[string, React.ComponentType<Record<string, unknown>>]> = [
   ['SettingsSkills', SettingsSkills as never],
   ['SettingsCustomize', SettingsCustomize as never],
   ['SettingsProjects', SettingsProjects as never],
+  ['SettingsFolderInstructions', SettingsFolderInstructions as never],
   ['SettingsSchedule', SettingsSchedule as never],
   ['SettingsLogs', SettingsLogs as never],
   ['SettingsWorkflows', SettingsWorkflows as never],
@@ -212,6 +214,7 @@ describe('Settings panels render smoke test', () => {
   });
 
   it('covers the full set of documented panels', () => {
-    expect(PANELS).toHaveLength(30);
+    expect(PANELS).toHaveLength(31);
+    expect(PANELS.map(([name]) => name)).toContain('SettingsFolderInstructions');
   });
 });

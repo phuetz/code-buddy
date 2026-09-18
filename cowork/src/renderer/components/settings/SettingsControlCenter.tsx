@@ -1,4 +1,5 @@
 import {
+  BookOpenText,
   Bot,
   Clock3,
   Cpu,
@@ -41,7 +42,8 @@ export type ControlCenterSettingsTab =
   | 'logs'
   | 'cost'
   | 'telemetry'
-  | 'projects';
+  | 'projects'
+  | 'instructions';
 
 interface SettingsControlCenterProps {
   onNavigate: (tab: ControlCenterSettingsTab) => void;
@@ -195,6 +197,17 @@ export function SettingsControlCenter({
           icon: Plug,
           actionLabel: configureLabel,
           onClick: () => onNavigate('connectors'),
+        },
+        {
+          id: 'instructions',
+          title: t('folderInstructions.title', 'Folder instructions'),
+          description: t(
+            'folderInstructions.tabHint',
+            'Applied AGENTS.md files for the current folder, with origin and priority',
+          ),
+          icon: BookOpenText,
+          actionLabel: configureLabel,
+          onClick: () => onNavigate('instructions'),
         },
       ],
     },

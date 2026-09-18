@@ -34,8 +34,11 @@ import { resolveImportDirectives } from './import-directive-parser.js';
 import {
   loadContextConfig,
   shouldExcludeInstructionFile,
+  STARTUP_PROJECT_CONTEXT_FILES,
   type ResolvedContextConfig,
 } from './instruction-excludes.js';
+
+export { STARTUP_PROJECT_CONTEXT_FILES };
 
 // ============================================================================
 // Constants

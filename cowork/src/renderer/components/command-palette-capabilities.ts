@@ -50,6 +50,15 @@ export const CAPABILITY_COMMANDS: CapabilityCommand[] = [
   { id: 'cap-devices', label: 'Paired devices', description: 'Manage device nodes', run: (s) => s.setShowDevicePanel(true) },
   { id: 'cap-personas', label: 'Personas', description: 'Switch the active persona', run: (s) => s.setShowPersonaSwitcher(true) },
   { id: 'cap-identity', label: 'Agent identity', description: 'SOUL.md / USER.md', run: (s) => s.setShowIdentityPanel(true) },
+  {
+    id: 'cap-folder-instructions',
+    label: 'Folder instructions',
+    description: 'Applied AGENTS.md for the current folder',
+    run: (s) => {
+      s.setSettingsTab('instructions');
+      s.setShowSettings(true);
+    },
+  },
   { id: 'cap-spec', label: 'Spec backlog', description: 'Spec-driven review pipeline', run: (s) => s.setShowSpecPanel(true) },
   { id: 'cap-snippets', label: 'Snippets library', description: 'Saved prompt snippets', run: (s) => s.setShowSnippetsLibrary(true) },
   { id: 'cap-bookmarks', label: 'Bookmarks', description: 'Bookmarked messages', run: (s) => s.setShowBookmarksPanel(true) },

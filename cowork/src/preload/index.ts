@@ -5372,6 +5372,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('identityFiles.set', name, content, projectId),
   },
 
+  folderInstructions: {
+    inspect: (input?: { cwd?: string; projectId?: string }) =>
+      ipcRenderer.invoke('folderInstructions.inspect', input),
+    read: (input: { cwd?: string; projectId?: string; fileName: string }) =>
+      ipcRenderer.invoke('folderInstructions.read', input),
+    save: (input: { cwd?: string; projectId?: string; fileName: string; content: string }) =>
+      ipcRenderer.invoke('folderInstructions.save', input),
+  },
+
   // C3: read-only view of paired device nodes (pairing stays on the CLI)
   deviceNodes: {
     list: () => ipcRenderer.invoke('deviceNodes.list'),
@@ -9830,6 +9839,33 @@ declare global {
           content: string,
           projectId?: string
         ) => Promise<{ ok: boolean; error?: string }>;
+      };
+      folderInstructions: {
+        inspect: (input?: { cwd?: string; projectId?: string }) => Promise<{
+          ok: boolean;
+          error?: string;
+          snapshot?: import('../shared/folder-instructions').FolderInstructionsSnapshot;
+        }>;
+        read: (input: {
+          cwd?: string;
+          projectId?: string;
+          fileName: string;
+        }) => Promise<{
+          ok: boolean;
+          error?: string;
+          file?: import('../shared/folder-instructions').FolderInstructionFileState;
+        }>;
+        save: (input: {
+          cwd?: string;
+          projectId?: string;
+          fileName: string;
+          content: string;
+        }) => Promise<{
+          ok: boolean;
+          error?: string;
+          file?: import('../shared/folder-instructions').FolderInstructionFileState;
+          snapshot?: import('../shared/folder-instructions').FolderInstructionsSnapshot;
+        }>;
       };
       mobileSupervision: {
         status: () => Promise<{
