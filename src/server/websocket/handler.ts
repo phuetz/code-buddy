@@ -74,6 +74,23 @@ import {
   type ServerAgent,
 } from '../agent-adapter.js';
 import { isMobilePwaEnabled } from '../mobile/index.js';
+import type { Session } from '../../persistence/session-store.js';
+import {
+  enqueueSessionTurn,
+  loadAccessibleResumeSession,
+  persistResumeTurnUnlocked,
+  seedHistoryForAgent,
+} from '../mobile/resume-sessions.js';
+import {
+  attachSharedParticipant,
+  bindSharedSessionBroadcaster,
+  broadcastSharedPresence,
+  detachSharedParticipant,
+  listSharedParticipants,
+  normalizeSharedSurface,
+  resetSharedPresenceForTests,
+  type SharedSurface,
+} from '../sessions/shared-presence.js';
 import { sniffImageMime } from '../../companion/companion-photo.js';
 import { unwireMobileConfirmationBridge, wireMobileConfirmationBridge } from './confirmation-bridge.js';
 import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
@@ -151,6 +168,13 @@ interface ConnectionState {
    * Text only — a served selfie leaves a `kind:'selfie'` marker, never its bytes.
    */
   companionHistory?: CompanionHistoryTurn[];
+  /** Shared SessionStore thread this socket is attached to. */
+  boundSessionId?: string;
+  clientSurface?: SharedSurface;
+  /** Seeded resume id so history is hydrated when the bind changes. */
+  resumeSessionId?: string;
+  /** Last persisted messageSeq applied to this socket's agent. */
+  resumeHistorySeq?: number;
   /** Opaque extension lifecycle hooks. Never exposed with the socket itself. */
   extensionCloseHandlers?: Set<() => void>;
   extensionsCleaned?: boolean;
@@ -418,6 +442,8 @@ interface ChatPayload {
   voiceReply?: unknown;
   /** Client-declared duration of an attached voice note (milliseconds). */
   durationMs?: unknown;
+  /** Client surface when attaching to a shared session (`cli` / `cowork` / `mobile`). */
+  surface?: unknown;
 }
 
 /** Most photos accepted on one mobile message. */
@@ -637,6 +663,60 @@ function sendError(ws: WebSocket, code: string, message: string, id?: string): v
     error: { code, message },
     timestamp: new Date().toISOString(),
   });
+}
+
+function bindConnectionToSharedSession(
+  state: ConnectionState,
+  sessionId: string,
+  userId: string,
+  surface: unknown,
+): void {
+  const previous = state.boundSessionId;
+  state.boundSessionId = sessionId;
+  state.clientSurface = normalizeSharedSurface(surface);
+  attachSharedParticipant({
+    connectionId: state.id,
+    userId,
+    sessionId,
+    surface,
+  });
+  if (previous && previous !== sessionId) {
+    state.resumeSessionId = undefined;
+    state.resumeHistorySeq = undefined;
+    broadcastSharedPresence(previous);
+  }
+  broadcastSharedPresence(sessionId);
+}
+
+function releaseConnectionSharedSession(state: ConnectionState): void {
+  const sessionId = state.boundSessionId;
+  detachSharedParticipant(state.id);
+  state.boundSessionId = undefined;
+  state.resumeSessionId = undefined;
+  state.resumeHistorySeq = undefined;
+  if (sessionId) broadcastSharedPresence(sessionId);
+}
+
+function resumePersistedSeq(session: Session): number {
+  const raw = session.metadata?.messageSeq;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  return session.messages.length;
+}
+
+function hydrateAgentFromSharedSession(agent: ServerAgent, persisted: Session): void {
+  if (typeof agent.addToHistory !== 'function') return;
+  if (
+    typeof agent.exportConversationState === 'function'
+    && typeof agent.importConversationState === 'function'
+  ) {
+    const snapshot = agent.exportConversationState();
+    snapshot.messages = [];
+    snapshot.chatHistory = [];
+    agent.importConversationState(snapshot);
+  }
+  for (const row of seedHistoryForAgent(persisted)) {
+    agent.addToHistory(row);
+  }
 }
 
 function startPeerHandler(state: ConnectionState, task: PeerHandlerTask): void {
@@ -933,6 +1013,48 @@ async function runPlainChatTurn(
   }
 }
 
+messageHandlers.set('session.attach', async (ws, state, payload) => {
+  if (state.anonymousRemote) {
+    sendError(ws, 'REMOTE_AUTH_REQUIRED', 'Remote agent chat requires authentication');
+    return;
+  }
+  if (!state.authenticated || !state.userId) {
+    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  const sessionIdRaw = payload && typeof payload === 'object'
+    ? (payload as { sessionId?: unknown }).sessionId
+    : undefined;
+  const sessionId = typeof sessionIdRaw === 'string' ? sessionIdRaw.trim() : '';
+  const persisted = await loadAccessibleResumeSession(sessionId, state.userId);
+  if (!persisted) {
+    sendError(ws, 'NOT_FOUND', 'Session not found');
+    return;
+  }
+  const surface = payload && typeof payload === 'object'
+    ? (payload as { surface?: unknown }).surface
+    : undefined;
+  bindConnectionToSharedSession(state, persisted.id, state.userId, surface);
+  send(ws, {
+    type: 'session_attached',
+    payload: {
+      sessionId: persisted.id,
+      participants: listSharedParticipants(persisted.id),
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+messageHandlers.set('session.detach', async (ws, state) => {
+  const sessionId = state.boundSessionId ?? null;
+  releaseConnectionSharedSession(state);
+  send(ws, {
+    type: 'session_detached',
+    payload: { sessionId },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 /**
  * Handle chat message
  */
@@ -960,7 +1082,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     message,
     model,
     stream = true,
-    sessionId: _sessionId,
+    sessionId: sessionIdRaw,
     assistant: assistantRaw,
     peerId: peerIdRaw,
     attachments: attachmentsRaw,
@@ -968,6 +1090,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     clientMsgId: clientMsgIdRaw,
     voiceReply: voiceReplyRaw,
     durationMs: durationMsRaw,
+    surface: surfaceRaw,
   } = payload as ChatPayload;
 
   if (message !== undefined && message !== null && typeof message !== 'string') {
@@ -1095,100 +1218,144 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       return;
     }
 
-    // Lazy load agent (with mutex to prevent duplicate creation)
-    if (!state.agent) {
-      if (!state.agentInitializing) {
-        state.agentInitializing = (async () => {
-          try {
-            state.agent = await createServerAgent();
-            state.agent.setRecoverySessionId?.(state.id);
-          } catch (err) {
-            state.agentInitializing = undefined;
-            throw err;
+    const requestedSessionId = typeof sessionIdRaw === 'string' ? sessionIdRaw.trim() : '';
+    const candidateSessionId = requestedSessionId || state.boundSessionId || '';
+    let boundResumeId: string | undefined;
+    if (candidateSessionId) {
+      const persisted = await loadAccessibleResumeSession(candidateSessionId, state.userId);
+      if (!persisted) {
+        sendError(ws, 'NOT_FOUND', 'Session not found');
+        return;
+      }
+      if (state.userId) {
+        bindConnectionToSharedSession(state, persisted.id, state.userId, surfaceRaw);
+      }
+      boundResumeId = persisted.id;
+    }
+
+    const runBoundAgentTurn = async (): Promise<void> => {
+      // Lazy load agent (with mutex to prevent duplicate creation)
+      if (!state.agent) {
+        if (!state.agentInitializing) {
+          state.agentInitializing = (async () => {
+            try {
+              state.agent = await createServerAgent();
+              state.agent.setRecoverySessionId?.(state.id);
+            } catch (err) {
+              state.agentInitializing = undefined;
+              throw err;
+            }
+          })();
+        }
+        await state.agentInitializing;
+      }
+      const agent = state.agent;
+      if (!agent) {
+        throw new Error('Agent initialization failed');
+      }
+      // A stop/close can arrive while the lazy agent is being constructed. In
+      // that case deliver the abort as soon as the agent exists and never start
+      // a provider turn.
+      if (turn.cancelled) {
+        if (!turn.abortDelivered) {
+          turn.abortDelivered = true;
+          agent.abortCurrentOperation();
+        }
+        return;
+      }
+
+      if (boundResumeId) {
+        const persisted = await loadAccessibleResumeSession(boundResumeId, state.userId);
+        if (persisted) {
+          const persistedSeq = resumePersistedSeq(persisted);
+          const needsHydrate = state.resumeSessionId !== boundResumeId
+            || (state.resumeHistorySeq ?? -1) < persistedSeq;
+          if (needsHydrate) {
+            hydrateAgentFromSharedSession(agent, persisted);
+            state.resumeSessionId = boundResumeId;
+            state.resumeHistorySeq = persistedSeq;
           }
-        })();
+        }
       }
-      await state.agentInitializing;
-    }
-    const agent = state.agent;
-    if (!agent) {
-      throw new Error('Agent initialization failed');
-    }
-    // A stop/close can arrive while the lazy agent is being constructed. In
-    // that case deliver the abort as soon as the agent exists and never start
-    // a provider turn.
-    if (turn.cancelled) {
-      if (!turn.abortDelivered) {
-        turn.abortDelivered = true;
-        agent.abortCurrentOperation();
-      }
-      return;
-    }
 
-    if (stream) {
-      state.streaming = true;
-      const messageId = `msg_${Date.now()}`;
+      let assistantText = '';
+      if (stream) {
+        state.streaming = true;
+        const messageId = `msg_${Date.now()}`;
 
-      // Send stream start
-      send(ws, {
-        type: 'stream_start',
-        id: messageId,
-        timestamp: new Date().toISOString(),
-      });
-      sendChatAck(ws, 'read', clientMsgId);
+        // Send stream start
+        send(ws, {
+          type: 'stream_start',
+          id: messageId,
+          timestamp: new Date().toISOString(),
+        });
+        sendChatAck(ws, 'read', clientMsgId);
 
-      const streamGen = streamAgentDeltas(agent, userText, { model, surface: 'websocket' });
+        const streamGen = streamAgentDeltas(agent, userText, { model, surface: 'websocket' });
 
-      for await (const delta of streamGen) {
-        if (turn.cancelled || !state.streaming) break;
+        for await (const delta of streamGen) {
+          if (turn.cancelled || !state.streaming) break;
 
-        if (delta) {
+          if (delta) {
+            assistantText += delta;
+            send(ws, {
+              type: 'stream_chunk',
+              id: messageId,
+              payload: { delta },
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (!turn.cancelled) {
+          // Only a naturally-completed stream receives stream_end. An explicit
+          // cancellation is represented by stream_stopped from the stop handler.
           send(ws, {
-            type: 'stream_chunk',
+            type: 'stream_end',
             id: messageId,
-            payload: { delta },
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        state.streaming = false;
+      } else {
+        // Use the streaming agent path internally even when the wire response is
+        // non-streaming. CodeBuddyAgent's sequential collector has no abort
+        // controller, while processUserMessageStream does; buffering its deltas
+        // preserves the single chat_response protocol and makes stop/close/error
+        // capable of releasing a blocked provider and the per-connection lane.
+        for await (const delta of streamAgentDeltas(agent, userText, {
+          model,
+          surface: 'websocket',
+        })) {
+          if (turn.cancelled) break;
+          assistantText += delta;
+        }
+
+        if (!turn.cancelled) {
+          sendChatAck(ws, 'read', clientMsgId);
+          send(ws, {
+            type: 'chat_response',
+            payload: {
+              content: assistantText,
+              finishReason: 'stop',
+            },
             timestamp: new Date().toISOString(),
           });
         }
       }
 
-      if (!turn.cancelled) {
-        // Only a naturally-completed stream receives stream_end. An explicit
-        // cancellation is represented by stream_stopped from the stop handler.
-        send(ws, {
-          type: 'stream_end',
-          id: messageId,
-          timestamp: new Date().toISOString(),
-        });
+      if (!turn.cancelled && boundResumeId && state.userId) {
+        await persistResumeTurnUnlocked(boundResumeId, state.userId, userText, assistantText);
+        const after = await loadAccessibleResumeSession(boundResumeId, state.userId);
+        if (after) state.resumeHistorySeq = resumePersistedSeq(after);
       }
+    };
 
-      state.streaming = false;
+    if (boundResumeId) {
+      await enqueueSessionTurn(boundResumeId, runBoundAgentTurn);
     } else {
-      // Use the streaming agent path internally even when the wire response is
-      // non-streaming. CodeBuddyAgent's sequential collector has no abort
-      // controller, while processUserMessageStream does; buffering its deltas
-      // preserves the single chat_response protocol and makes stop/close/error
-      // capable of releasing a blocked provider and the per-connection lane.
-      let content = '';
-      for await (const delta of streamAgentDeltas(agent, userText, {
-        model,
-        surface: 'websocket',
-      })) {
-        if (turn.cancelled) break;
-        content += delta;
-      }
-
-      if (!turn.cancelled) {
-        sendChatAck(ws, 'read', clientMsgId);
-        send(ws, {
-          type: 'chat_response',
-          payload: {
-            content,
-            finishReason: 'stop',
-          },
-          timestamp: new Date().toISOString(),
-        });
-      }
+      await runBoundAgentTurn();
     }
   } catch (error) {
     state.streaming = false;
@@ -1694,6 +1861,7 @@ export async function setupWebSocket(
   } else {
     unwireMobileConfirmationBridge();
   }
+  bindSharedSessionBroadcaster(broadcast);
 
   const wss = new WebSocketServer({
     server,
@@ -1798,6 +1966,7 @@ export async function setupWebSocket(
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
       connections.delete(ws);
+      releaseConnectionSharedSession(state);
       getAvatarRendererRegistry().disconnectConnection(state.id);
     });
 
@@ -1808,6 +1977,7 @@ export async function setupWebSocket(
       abortActiveTurn(state);
       cleanupWebSocketExtensions(state);
       connections.delete(ws);
+      releaseConnectionSharedSession(state);
       getAvatarRendererRegistry().disconnectConnection(state.id);
     });
   });
@@ -1823,8 +1993,9 @@ export async function setupWebSocket(
         state.approvalCapable = false;
         abortActiveTurn(state);
         cleanupWebSocketExtensions(state);
-        ws.terminate();
         connections.delete(ws);
+        releaseConnectionSharedSession(state);
+        ws.terminate();
       } else {
         if (ws.readyState === 1) {
           ws.ping();
@@ -1903,6 +2074,8 @@ export interface WsBroadcastTarget {
   readonly scopes: readonly string[];
   readonly anonymousRemote: boolean;
   readonly approvalCapable: boolean;
+  readonly userId?: string;
+  readonly boundSessionId?: string;
 }
 
 function toBroadcastTarget(state: ConnectionState): WsBroadcastTarget {
@@ -1912,6 +2085,8 @@ function toBroadcastTarget(state: ConnectionState): WsBroadcastTarget {
     scopes: state.scopes,
     anonymousRemote: state.anonymousRemote === true,
     approvalCapable: state.approvalCapable === true,
+    ...(state.userId ? { userId: state.userId } : {}),
+    ...(state.boundSessionId ? { boundSessionId: state.boundSessionId } : {}),
   };
 }
 
@@ -1969,9 +2144,12 @@ export function closeAllConnections(): void {
     state.approvalCapable = false;
     abortActiveTurn(state);
     cleanupWebSocketExtensions(state);
+    state.boundSessionId = undefined;
+    detachSharedParticipant(state.id);
     ws.close(1001, 'Server shutting down');
   }
   connections.clear();
+  resetSharedPresenceForTests();
 }
 
 /**
@@ -1991,4 +2169,5 @@ export function _registerConnectionForTests(ws: WebSocket, state: ConnectionStat
 export function _resetConnectionsForTests(): void {
   for (const state of connections.values()) cleanupWebSocketExtensions(state);
   connections.clear();
+  resetSharedPresenceForTests();
 }

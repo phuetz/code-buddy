@@ -215,6 +215,31 @@ describe('HTTP agent session isolation', () => {
     expect(agents[0]?.state).toEqual(emptyState());
   });
 
+  it('replaceHistory reseeds from disk even when a cache entry exists', async () => {
+    const key = buildHttpAgentSessionKey('shared', 'thread');
+
+    await withHttpSessionAgent(key, async (agent) => {
+      const fake = agent as FakeStatefulAgent;
+      expect(fake.state.messages).toEqual([{ role: 'user', content: 'alice-1' }]);
+      fake.state.messages.push({ role: 'assistant', content: 'ack-alice-1' });
+    }, [{ role: 'user', content: 'alice-1' }]);
+
+    await withHttpSessionAgent(key, async (agent) => {
+      const fake = agent as FakeStatefulAgent;
+      expect(fake.state.messages.map((row) => row.content)).toEqual([
+        'alice-1',
+        'ack-alice-1',
+        'bob-1',
+        'ack-bob-1',
+      ]);
+    }, [
+      { role: 'user', content: 'alice-1' },
+      { role: 'assistant', content: 'ack-alice-1' },
+      { role: 'user', content: 'bob-1' },
+      { role: 'assistant', content: 'ack-bob-1' },
+    ], { replaceHistory: true });
+  });
+
   it('holds a global mutex for the complete asynchronous operation', async () => {
     const order: string[] = [];
     let releaseFirst!: () => void;

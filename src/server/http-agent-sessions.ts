@@ -171,6 +171,15 @@ export interface HttpConversationSeedMessage {
   content?: unknown;
 }
 
+export interface WithHttpSessionAgentOptions {
+  /**
+   * Drop cached chat history and re-apply seedMessages. Shared sessions
+   * persist on disk; another participant may have appended turns since
+   * this cache entry was written.
+   */
+  replaceHistory?: boolean;
+}
+
 function invalidateServerAgent(agent: StatefulServerAgent): void {
   serverAgentPromise = null;
   neutralConversationState = null;
@@ -191,6 +200,7 @@ export async function withHttpSessionAgent<T>(
   sessionKey: string,
   operation: (agent: ServerAgent) => Promise<T>,
   seedMessages: ReadonlyArray<HttpConversationSeedMessage> = [],
+  options: WithHttpSessionAgentOptions = {},
 ): Promise<T> {
   const run = globalTurnTail.then(async () => {
     const agent = await getServerAgent();
@@ -202,6 +212,11 @@ export async function withHttpSessionAgent<T>(
     const persistent = isPersistentSessionKey(sessionKey);
     const stored = persistent ? conversationStates.get(sessionKey) : undefined;
     const state = cloneConversationState(stored?.state ?? neutralState);
+    const replaceHistory = options.replaceHistory === true;
+    if (replaceHistory) {
+      state.messages = [];
+      state.chatHistory = [];
+    }
     if (!stored) {
       // The manager's archive/snapshot namespace is conversation-owned too.
       // Never let two cold sessions inherit the neutral agent's constructor ID.
@@ -216,7 +231,8 @@ export async function withHttpSessionAgent<T>(
       agent.importConversationState(state);
       agent.setRecoverySessionId(sessionKey);
 
-      if (!stored && seedMessages.length > 0) {
+      const shouldSeed = seedMessages.length > 0 && (replaceHistory || !stored);
+      if (shouldSeed) {
         if (typeof agent.addToHistory !== 'function') {
           throw ApiServerError.internal(
             'HTTP agent does not support conversation seeding',

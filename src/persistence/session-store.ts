@@ -74,6 +74,10 @@ export interface SessionMessage {
   type: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'reasoning' | 'plan_progress' | 'steer' | 'diff_preview';
   content: string;
   timestamp: string;
+  /** JWT subject of the human author. Assistant turns use `assistant`. */
+  authorUserId?: string;
+  /** Monotonic per-session order for shared-session fan-out. */
+  seq?: number;
   toolCallName?: string;
   toolCallSuccess?: boolean;
   toolCall?: ChatEntry['toolCall'];
