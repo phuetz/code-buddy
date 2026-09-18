@@ -33,7 +33,7 @@ import {
 } from "../utils/tool-filter.js";
 import {
   HEADLESS_LOCAL_COMPACT_MAX_TOKENS,
-  isHeadlessLocalPromptCompact,
+  isHeadlessPromptCompact,
 } from "../config/headless-local-prompt.js";
 
 export interface PromptBuilderConfig {
@@ -294,7 +294,7 @@ export class PromptBuilder {
     query?: string,
   ): Promise<string> {
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
-    if (isHeadlessLocalPromptCompact()) {
+    if (isHeadlessPromptCompact()) {
       Object.assign(gates, gatesForComplexity('trivial'));
     }
     this.lastPromptBlocks = [];
@@ -1055,7 +1055,7 @@ Output formatting discipline:
       let budgetTokens = leftover > 0
         ? Math.min(rawBudget, 32_000)
         : Math.max(256, Math.min(rawBudget, 32_000));
-      if (isHeadlessLocalPromptCompact()) {
+      if (isHeadlessPromptCompact()) {
         budgetTokens = Math.min(budgetTokens, HEADLESS_LOCAL_COMPACT_MAX_TOKENS);
       }
       const budgetChars = budgetTokens * 4; // ~4 chars per token
@@ -1063,9 +1063,20 @@ Output formatting discipline:
         const originalChars = systemPrompt.length;
         const truncated = truncatePromptBlocksByPriority(this.lastPromptParts, budgetChars);
         const removed = truncated.removed.length > 0 ? truncated.removed.join(', ') : 'aucun';
+        // Dire quand le budget n'est PAS tenu.
+        //
+        // La troncature retire des blocs entiers par priorité et s'arrête quand
+        // il ne reste que des blocs non retirables — c'est le bon comportement,
+        // on ne mutile pas le prompt. Mais le message annonçait le budget visé
+        // sans jamais signaler qu'il restait au-dessus : mesuré à 8 893
+        // caractères pour un budget de 1 500 jetons, soit 6 000 caractères.
+        // Un chiffre affiché qu'on ne tient pas est pire qu'un chiffre absent.
+        const depassement = truncated.prompt.length > budgetChars
+          ? ` — budget NON tenu, ${truncated.prompt.length - budgetChars} caractères de blocs non retirables au-delà`
+          : '';
         logger.warn(
           `System prompt truncated for ${modelName}: ${originalChars} chars → ${truncated.prompt.length} ` +
-          `(budget: ${budgetTokens} tokens, 32K hard cap); blocs retirés : ${removed}`,
+          `(budget: ${budgetTokens} tokens, 32K hard cap); blocs retirés : ${removed}${depassement}`,
         );
         systemPrompt = truncated.prompt;
       }
@@ -1145,7 +1156,7 @@ Output formatting discipline:
     const toolCfg = getModelToolConfig(modelName);
     const profile = toolCfg.promptProfile ?? 'standard';
     const complexity: QueryComplexity =
-      isHeadlessLocalPromptCompact() ? 'trivial'
+      isHeadlessPromptCompact() ? 'trivial'
       : profile === 'lite' ? 'trivial'
       : profile === 'rich' ? 'complex'
       : classifyQuery(message).complexity;

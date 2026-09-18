@@ -1571,6 +1571,10 @@ program
     "disable self-healing auto-correction"
   )
   .option(
+    "--compact",
+    "headless: smallest possible prompt and tool set (any provider, not just local runtimes)"
+  )
+  .option(
     "--force-tools",
     "enable tools/function calling for local models (LM Studio)"
   )
@@ -2192,6 +2196,15 @@ program
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
       if (combinedPrompt && (promptArg || pipedInput)) {
+        // `--compact` asks for the shortest possible prompt, whatever the
+        // provider. The mode already existed but was only reachable against a
+        // local runtime. Measured on a one-sentence question against a remote
+        // provider: 5 991 input tokens by default, and still 4 660 after
+        // replacing the entire system prompt and disabling every tool — the
+        // agent surface is what costs, not the wording.
+        if (options.compact) {
+          process.env.CODEBUDDY_PROMPT_COMPACT = 'true';
+        }
         const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
           combinedPrompt,
