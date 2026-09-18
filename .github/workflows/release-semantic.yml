@@ -22,6 +22,9 @@ permissions:
   pull-requests: write
   id-token: write
 
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   release:
     name: semantic-release
