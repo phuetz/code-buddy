@@ -46,6 +46,7 @@ export {
 export {
   handleCompanion,
 } from './companion-handler.js';
+export { handleCompanionLoops } from './companion-loops-handler.js';
 
 // UI handlers
 export {
