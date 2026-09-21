@@ -30,6 +30,18 @@ export function persistToolResult(
   if (toolCallId) {
     getRestorableCompressor().writeToolResult(toolCallId, rawContent, workDir, sessionId);
   }
+
+  // Feed the session-metrics tracker so complex sessions can be distilled
+  // into reusable authored skills. Best-effort: never throws.
+  if (sessionId) {
+    import('../../memory/session-metrics-tracker.js')
+      .then(({ recordFileTouched }) => {
+        // tool outputs rarely name a single file; record the call id as a
+        // lightweight touch marker so the session is not counted as empty.
+        recordFileTouched(`tool:${toolCallId}`);
+      })
+      .catch(() => { /* tracker optional */ });
+  }
 }
 
 /**

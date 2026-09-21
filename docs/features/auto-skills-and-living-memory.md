@@ -2,7 +2,7 @@
 
 Two small additions that make Code Buddy feel like a companion that grows.
 
-## 1. Session Skill Generator (`src/agent/self-improvement/session-skill-generator.ts`)
+## 1. Session Skill Generator (`src/skills/session-skill-generator.ts`)
 
 After a complex session — lots of tool calls, recovered errors, several files
 touched — Code Buddy can automatically draft a reusable `SKILL.md` from the
@@ -10,14 +10,16 @@ transcript. The skill is safety-gated and installed as an `authored-*` skill, so
 the next similar situation reuses the guide instead of re-learning from scratch.
 
 ```ts
-import { generateSkillFromSession } from './session-skill-generator.js';
+import { generateSessionSkill, maybeGenerateFromSessionEnd } from './session-skill-generator.js';
 
-const result = await generateSkillFromSession(sessionTranscript);
-// result.installed === true → .codebuddy/skills/authored-session-*/SKILL.md
+const result = generateSessionSkill({ metrics });
+// result -> .codebuddy/skills/authored-<slug>/SKILL.md
 ```
 
-Complexity is scored heuristically (tool calls, errors recovered, files touched,
-decisions). Trivial sessions are ignored.
+Complexity is scored heuristically (tool calls, errors recovered, files touched).
+Trivial sessions are ignored. The generator is now wired into the session-end
+lifecycle hook and the cron job, so it fires automatically when metrics cross
+the thresholds.
 
 ## 2. Memory Reviver (`src/memory/memory-reviver.ts`)
 
@@ -33,5 +35,18 @@ import { reviveMemory } from './memory-reviver.js';
 reviveMemory();
 ```
 
-Both are opt-in in spirit: nothing runs unless you call them or wire them to a
-session-end hook / cron job.
+## 3. Session Metrics Tracker (`src/memory/session-metrics-tracker.ts`)
+
+Fills the `SESSION_METRICS` env var that the session-end cron hook reads.
+Without it, the skill generator always saw zeros and never fired.
+
+- `beginSession()` — called by the lifecycle `beforeExecute` hook.
+- `recordToolCall()` / `recordRecoveredError()` — called by `recordToolMetric`
+  in the tool-hooks after every tool execution.
+- `recordFileTouched()` — called when a tool result is persisted.
+- `endSession()` + `setSessionSummary()` — called by the lifecycle
+  `sessionEnd` hook, which also runs `reviveMemory()` and
+  `maybeGenerateFromSessionEnd()` directly.
+
+Both the lifecycle hook and the cron step are safe to re-run. Nothing runs
+unless a session actually starts.

@@ -1,5 +1,5 @@
 {
-  "description": "Branch session-end maintenance: revive memory + maybe generate an authored skill.",
+  "description": "Branch session-end maintenance: revive memory + maybe generate an authored skill from real metrics.",
   "enabled": true,
   "triggers": ["session:end", "cron:daily"],
   "steps": [
@@ -13,12 +13,9 @@
       "id": "generate-session-skill",
       "command": "node -e \"import('./dist/memory/session-metrics-tracker.js').then(m => { const env = m.currentSessionMetricsEnv(); process.env.SESSION_METRICS = env; return import('./dist/skills/session-skill-generator.js'); }).then(sg => sg.maybeGenerateFromSessionEnd(JSON.parse(process.env.SESSION_METRICS || '{}')))\"",
       "continueOnError": true,
-      "description": "Load real SESSION_METRICS from the tracker, then distill a complex session into an authored- skill",
-      "env": {
-        "SESSION_METRICS": "{\"toolCalls\":0,\"errorsRecovered\":0,\"filesTouched\":[]}"
-      }
+      "description": "Load real SESSION_METRICS from the tracker (filled by tool-hooks + lifecycle), then distill a complex session into an authored- skill"
     }
   ],
   "notify": ["telegram", "discord"],
-  "notes": "SESSION_METRICS is now filled by session-metrics-tracker at session end. Both steps are safe to re-run."
+  "notes": "SESSION_METRICS is now filled live by session-metrics-tracker via tool-hooks and memory-lifecycle-hooks. Both steps are safe to re-run."
 }
