@@ -16,6 +16,7 @@ import { getSessionStore } from '../persistence/session-store.js';
 import { logger } from '../utils/logger.js';
 import { GoalJudgeFn } from './goal-judge.js';
 import type { GoalPlan } from './goal-decomposer.js';
+import { recordGoalProof } from './record-goal-proof.js';
 import {
   DEFAULT_JUDGE_MAX_TOKENS,
   DEFAULT_JUDGE_TIMEOUT_MS,
@@ -59,11 +60,8 @@ export class GoalManager {
     private defaultMaxTurns: number = DEFAULT_MAX_TURNS
   ) {
     const loaded = this.store.load(sessionKey);
-    // A cleared tombstone reads as "no goal" (kept on disk for audit).
     this._state = loaded && loaded.status !== 'cleared' ? loaded : null;
   }
-
-  // --- introspection ------------------------------------------------
 
   get state(): GoalState | null {
     return this._state;
@@ -80,8 +78,6 @@ export class GoalManager {
   statusLine(): string {
     return formatGoalStatusLine(this._state);
   }
-
-  // --- mutation -----------------------------------------------------
 
   set(
     goal: string,
@@ -160,8 +156,6 @@ export class GoalManager {
     this.store.save(this.sessionKey, this._state);
   }
 
-  // --- /subgoal user controls ---------------------------------------
-
   addSubgoal(text: string): string {
     if (!this.hasGoal() || !this._state) {
       throw new Error('no active goal');
@@ -209,12 +203,6 @@ export class GoalManager {
     return renderSubgoalsBlock(this._state.subgoals);
   }
 
-  // --- the main entry point called after every turn -----------------
-
-  /**
-   * Run the judge and update state. Both real user prompts and continuation
-   * prompts we fed ourselves increment `turnsUsed` — both consume budget.
-   */
   async evaluateAfterTurn(lastResponse: string, deps: { judge: GoalJudgeFn }): Promise<GoalTurnDecision> {
     const state = this._state;
     if (!state || state.status !== 'active') {
@@ -233,8 +221,14 @@ export class GoalManager {
       goal: state.goal,
       lastResponse,
       ...(criteria.length ? { subgoals: criteria } : {}),
+      ...(state.verifyGated ? { verifyGated: true } : {}),
     });
     const decision = applyJudgeOutcome(state, outcome);
+    recordGoalProof({
+      sessionKey: this.sessionKey,
+      state,
+      outcome,
+    });
     this.store.save(this.sessionKey, state);
     return decision;
   }
@@ -244,10 +238,6 @@ export class GoalManager {
     return buildContinuationPrompt(this._state);
   }
 }
-
-// ============================================================================
-// Config
-// ============================================================================
 
 export function resolveGoalsConfig(): GoalsConfig {
   let raw: Record<string, unknown> = {};
@@ -302,19 +292,9 @@ function parsePositiveSafeInteger(value: unknown): number {
   return Number(trimmed);
 }
 
-// ============================================================================
-// Singleton registry (one manager per session key)
-// ============================================================================
-
 const registry = new Map<string, GoalManager>();
 let storeOverride: GoalStore | null = null;
 
-/**
- * Resolve the key goals are persisted under. Prefers the live session id
- * (so `--resume`/`--continue` reattach, Hermes `goal:<session_id>`
- * semantics); falls back to a cwd-derived key so sessionless interactive
- * runs are still durable.
- */
 export function resolveGoalSessionKey(): string {
   try {
     const sessionId = getSessionStore().getCurrentSessionId();
@@ -341,7 +321,6 @@ export function getGoalManager(sessionKey?: string): GoalManager {
   return manager;
 }
 
-/** Test seam: clear cached managers and optionally redirect persistence. */
 export function resetGoalManagers(store: GoalStore | null = null): void {
   registry.clear();
   storeOverride = store;
