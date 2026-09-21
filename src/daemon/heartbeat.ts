@@ -57,6 +57,24 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
   enabled: true,
 };
 
+function armCompanionLoops(): void {
+  void import('../companion/companion-loops.js')
+    .then(({ startCompanionAlwaysOnLoops }) => {
+      startCompanionAlwaysOnLoops();
+    })
+    .catch((error) => {
+      logger.debug('Companion loops not armed', { error: String(error) });
+    });
+}
+
+function disarmCompanionLoops(): void {
+  void import('../companion/companion-loops.js')
+    .then(({ stopCompanionAlwaysOnLoops }) => {
+      stopCompanionAlwaysOnLoops();
+    })
+    .catch(() => undefined);
+}
+
 export class HeartbeatEngine extends EventEmitter {
   private config: HeartbeatConfig;
   private timer: NodeJS.Timeout | null = null;
@@ -76,6 +94,7 @@ export class HeartbeatEngine extends EventEmitter {
   start(): void {
     if (this.running) {
       logger.warn('Heartbeat engine already running');
+      armCompanionLoops();
       return;
     }
     if (!this.config.enabled) {
@@ -84,6 +103,7 @@ export class HeartbeatEngine extends EventEmitter {
     }
     this.running = true;
     this.scheduleNext();
+    armCompanionLoops();
     logger.info('Heartbeat engine started', {
       intervalMs: this.config.intervalMs,
       activeHours: `${this.config.activeHoursStart}-${this.config.activeHoursEnd}`,
@@ -99,6 +119,7 @@ export class HeartbeatEngine extends EventEmitter {
     }
     this.running = false;
     this.nextRunTime = null;
+    disarmCompanionLoops();
     logger.info('Heartbeat engine stopped');
     this.emit('stopped');
   }
