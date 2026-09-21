@@ -13,6 +13,10 @@ import { CodeBuddyClient, type CodeBuddyMessage, type CodeBuddyResponse, type Co
 import { logger } from '../utils/logger.js';
 import type { CompanionIdentity } from '../companion/companion-identity.js';
 import {
+  companionHistorySessionKey,
+  rememberCompanionChannelTurn,
+} from '../companion/channel-history.js';
+import {
   isCompanionToolsEnabled,
   getCompanionToolDefinitions,
   getCompanionToolWaitingWord,
@@ -47,7 +51,6 @@ export interface CompanionChannelTurnInput {
   messages: CodeBuddyMessage[];
   signal?: AbortSignal;
   maxTokens?: number;
-  /** Injectable chat for tests. Production uses CodeBuddyClient. */
   chat?: (
     messages: CodeBuddyMessage[],
     tools: CodeBuddyTool[],
@@ -58,30 +61,21 @@ export interface CompanionChannelTurnInput {
       tool_choice: 'none' | 'auto' | 'required';
     },
   ) => Promise<CodeBuddyResponse>;
-  /** Authenticated identity of the interlocutor */
   identity?: CompanionIdentity;
-  /** Surface: 'telegram' | 'mobile' | 'pwa' | 'voice' | 'channel' */
   surface?: string;
-  /** Environment override */
   env?: NodeJS.ProcessEnv;
-  /** Callback fired immediately when a long-running tool starts */
   onWaitingWord?: (word: string) => Promise<void> | void;
-  /** Optional media delivery callback */
   deliverMedia?: (media: CompanionChannelMedia) => Promise<void>;
-  /** Optional custom tool executor (injectable for tests) */
   executeTool?: (
     toolName: string,
     args: Record<string, unknown>,
     context: CompanionToolExecutionContext,
   ) => Promise<ToolResult>;
-  /** Optional tool registry */
   registry?: FormalToolRegistry;
-  /** Optional confirmation service */
   confirmationService?: ConfirmationService;
-  /** Timeout in milliseconds (defaults to CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS or 120_000) */
   timeoutMs?: number;
-  /** Working directory */
   cwd?: string;
+  sessionKey?: string;
 }
 
 export interface CompanionChannelTurnResult {
@@ -93,12 +87,33 @@ export interface CompanionChannelTurnResult {
   historySuffix?: string;
 }
 
-/**
- * Executes a companion turn.
- * If interlocutor is guest or tools circuit-breaker is OFF, runs the historical
- * single chat(messages, [], tool_choice: 'none') call.
- * If authorized, runs up to 3 tool turns and delivers media automatically.
- */
+function lastUserText(messages: CodeBuddyMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === 'user' && typeof message.content === 'string' && message.content.trim()) {
+      return message.content;
+    }
+  }
+  return '';
+}
+
+function persistCompanionTurn(input: CompanionChannelTurnInput, assistantText: string): void {
+  const userText = lastUserText(input.messages);
+  if (!userText || !assistantText.trim()) return;
+  const env = input.env ?? process.env;
+  rememberCompanionChannelTurn(
+    companionHistorySessionKey({
+      sessionKey: input.sessionKey,
+      userId: input.identity?.userId,
+      chatId: input.identity?.chatId,
+      env,
+    }),
+    userText,
+    assistantText,
+    env,
+  );
+}
+
 export async function runCompanionChannelTurn(
   input: CompanionChannelTurnInput,
 ): Promise<CompanionChannelTurnResult> {
@@ -113,7 +128,6 @@ export async function runCompanionChannelTurn(
       return client.chat(messages, tools, opts);
     });
 
-  // Resolve tool definitions if tools are allowed
   let toolDefs: CodeBuddyTool[] = [];
   if (toolsEnabled && identity) {
     try {
@@ -129,7 +143,6 @@ export async function runCompanionChannelTurn(
     }
   }
 
-  // 1. FAST / HISTORICAL PATH: No tools allowed or no tools registered
   if (!toolsEnabled || toolDefs.length === 0) {
     const response = await chat(input.messages, [], {
       model: input.model,
@@ -144,6 +157,7 @@ export async function runCompanionChannelTurn(
         seam: COMPANION_CHANNEL_FAILOVER_SEAM,
       });
     }
+    persistCompanionTurn(input, text);
     return {
       text,
       model: response.model ?? input.model,
@@ -153,13 +167,11 @@ export async function runCompanionChannelTurn(
     };
   }
 
-  // 2. TOOL-ENABLED BOUNDED LOOP (<= 3 rounds)
   const defaultTimeout = env.CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS
     ? parseInt(env.CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS, 10)
     : 120_000;
   const effectiveTimeout = input.timeoutMs ?? defaultTimeout;
 
-  // Signal management: propagate caller abort or timeout
   let combinedSignal = input.signal;
   let timeoutId: NodeJS.Timeout | undefined;
   if (!combinedSignal && effectiveTimeout > 0) {
@@ -199,16 +211,13 @@ export async function runCompanionChannelTurn(
       const content = assistantMsg.content?.trim() ?? '';
       const toolCalls = assistantMsg.tool_calls;
 
-      // If no tool calls, this is the final conversational reply
       if (!toolCalls || toolCalls.length === 0) {
         finalText = content;
         break;
       }
 
-      // Add assistant response with tool_calls to conversation history
       activeMessages.push(assistantMsg as CodeBuddyMessage);
 
-      // Execute each tool call
       for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
         let args: Record<string, unknown> = {};
@@ -218,7 +227,6 @@ export async function runCompanionChannelTurn(
           args = {};
         }
 
-        // Notify waiting word immediately before running long tools
         const waitingWord = getCompanionToolWaitingWord(toolName);
         if (waitingWord && input.onWaitingWord) {
           try {
@@ -228,7 +236,6 @@ export async function runCompanionChannelTurn(
           }
         }
 
-        // Execute tool safely
         const execFn = input.executeTool ?? executeCompanionTool;
         let toolRes: ToolResult;
         try {
@@ -247,14 +254,12 @@ export async function runCompanionChannelTurn(
           };
         }
 
-        // Check if an image was produced
         const imagePath = extractImagePathFromToolResult(toolRes, input.cwd);
         if (imagePath) {
           mediaProduced.push({ type: 'image', imagePath });
           historyNotes.push(`[Image générée : ${imagePath}]`);
         }
 
-        // Record reminder in history notes
         if (toolName === 'remind' && toolRes.success) {
           const label = typeof args.label === 'string' ? args.label.trim() : 'rappel';
           const time = typeof args.time === 'string' ? args.time.trim() : '';
@@ -268,7 +273,6 @@ export async function runCompanionChannelTurn(
           ...(imagePath ? { imagePath } : {}),
         });
 
-        // Add tool response message for LLM
         activeMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -284,7 +288,6 @@ export async function runCompanionChannelTurn(
     }
   }
 
-  // Fallback text if model left content blank after tool calls
   if (!finalText && executedTools.length > 0) {
     const hasImage = mediaProduced.length > 0;
     if (hasImage) {
@@ -294,7 +297,6 @@ export async function runCompanionChannelTurn(
     }
   }
 
-  // Deliver media (Telegram / PWA / Voice)
   if (mediaProduced.length > 0) {
     const surface = (input.surface ?? '').toLowerCase();
     for (const media of mediaProduced) {
@@ -309,7 +311,6 @@ export async function runCompanionChannelTurn(
           });
         }
       } else if (surface === 'voice') {
-        // Voice surface: alert owner on Telegram with the photo and announce it
         try {
           const { sendTelegramAlert } = await import('../sensory/alert.js');
           await sendTelegramAlert(finalText, media.imagePath);
@@ -326,6 +327,7 @@ export async function runCompanionChannelTurn(
   }
 
   const historySuffix = historyNotes.length > 0 ? `\n${historyNotes.join('\n')}` : undefined;
+  persistCompanionTurn(input, historySuffix ? `${finalText}${historySuffix}` : finalText);
 
   return {
     text: finalText,
