@@ -21,34 +21,32 @@ export function startCompanionAlwaysOnLoops(env: NodeJS.ProcessEnv = process.env
   if (teardown) return teardown;
   const stops: Array<() => void> = [];
 
-  const arm = (label: string, fn: () => () => void): void => {
-    try {
-      stops.push(fn());
-    } catch (err) {
-      logger.warn(`[companion-loops] ${label} not armed`, {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  };
-
-  arm('impulse-delivery', () => wireImpulseDelivery({ env }));
-
-  if (flagOn(env, 'CODEBUDDY_COMPANION_PRESENCE')) {
-    arm('presence', () => {
-      const { wirePresenceLoop } = require('./presence-loop.js') as {
-        wirePresenceLoop: () => () => void;
-      };
-      return wirePresenceLoop();
+  try {
+    stops.push(wireImpulseDelivery({ env }));
+  } catch (err) {
+    logger.warn('[companion-loops] impulse delivery not armed', {
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 
+  if (flagOn(env, 'CODEBUDDY_COMPANION_PRESENCE')) {
+    void import('./presence-loop.js')
+      .then(({ wirePresenceLoop }) => {
+        stops.push(wirePresenceLoop());
+      })
+      .catch((err) => {
+        logger.warn('[companion-loops] presence not armed', { error: String(err) });
+      });
+  }
+
   if (flagOn(env, 'CODEBUDDY_COMPANION_PROACTIVE')) {
-    arm('proactive', () => {
-      const { wireProactiveLoop } = require('./proactive-engine.js') as {
-        wireProactiveLoop: () => () => void;
-      };
-      return wireProactiveLoop();
-    });
+    void import('./proactive-engine.js')
+      .then(({ wireProactiveLoop }) => {
+        stops.push(wireProactiveLoop());
+      })
+      .catch((err) => {
+        logger.warn('[companion-loops] proactive not armed', { error: String(err) });
+      });
   }
 
   teardown = () => {
