@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe('companion always-on loops', () => {
-  it('starts and stops without throwing when delivery is off', () => {
+  it('starts and stops without throwing when extra loops are off', () => {
     const stop = startCompanionAlwaysOnLoops({ NODE_ENV: 'test' });
     expect(isCompanionAlwaysOnLoopsRunning()).toBe(true);
     stop();
@@ -20,8 +20,8 @@ describe('companion always-on loops', () => {
 
   it('exposes a slash handler', async () => {
     const started = await handleCompanionLoops(['start']);
-    expect(started.entry.content).toMatch(/armed/i);
+    expect(started.entry?.content).toMatch(/armed/i);
     const status = await handleCompanionLoops(['status']);
-    expect(status.entry.content).toMatch(/running/i);
+    expect(status.entry?.content).toMatch(/running/i);
   });
 });
