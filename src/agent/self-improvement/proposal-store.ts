@@ -11,6 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
 
 import type { SkillGateOutcome, SkillProposal } from './skill-types.js';
@@ -49,6 +50,10 @@ function safeSegment(id: string): string {
   return cleaned || 'proposal';
 }
 
+function scenarioHash(id: string): string {
+  return createHash('sha256').update(id).digest('hex').slice(0, 16);
+}
+
 export class PendingProposalStore {
   readonly dir: string;
 
@@ -58,6 +63,10 @@ export class PendingProposalStore {
   }
 
   pathFor(kind: PendingProposalKind, scenarioId: string): string {
+    return path.join(this.dir, `${kind}-${safeSegment(scenarioId)}-${scenarioHash(scenarioId)}.json`);
+  }
+
+  legacyPathFor(kind: PendingProposalKind, scenarioId: string): string {
     return path.join(this.dir, `${kind}-${safeSegment(scenarioId)}.json`);
   }
 
@@ -86,22 +95,46 @@ export class PendingProposalStore {
   }
 
   loadTool(scenarioId: string): PendingToolProposalRecord | null {
-    const parsed = this.read(this.pathFor('tool', scenarioId));
-    if (!parsed || parsed.kind !== 'tool') return null;
-    return parsed;
+    const parsed = this.read(this.pathFor('tool', scenarioId), 'tool', scenarioId);
+    if (parsed && parsed.kind === 'tool') return parsed as PendingToolProposalRecord;
+
+    const legacyParsed = this.read(this.legacyPathFor('tool', scenarioId), 'tool', scenarioId);
+    if (legacyParsed && legacyParsed.kind === 'tool') return legacyParsed as PendingToolProposalRecord;
+
+    return null;
   }
 
   loadSkill(scenarioId: string): PendingSkillProposalRecord | null {
-    const parsed = this.read(this.pathFor('skill', scenarioId));
-    if (!parsed || parsed.kind !== 'skill') return null;
-    return parsed;
+    const parsed = this.read(this.pathFor('skill', scenarioId), 'skill', scenarioId);
+    if (parsed && parsed.kind === 'skill') return parsed as PendingSkillProposalRecord;
+
+    const legacyParsed = this.read(this.legacyPathFor('skill', scenarioId), 'skill', scenarioId);
+    if (legacyParsed && legacyParsed.kind === 'skill') return legacyParsed as PendingSkillProposalRecord;
+
+    return null;
   }
 
   remove(kind: PendingProposalKind, scenarioId: string): boolean {
-    const filePath = this.pathFor(kind, scenarioId);
-    if (!fs.existsSync(filePath)) return false;
-    fs.unlinkSync(filePath);
-    return true;
+    let removed = false;
+    const canonicalPath = this.pathFor(kind, scenarioId);
+    if (fs.existsSync(canonicalPath)) {
+      const parsed = this.read(canonicalPath, kind, scenarioId);
+      if (parsed) {
+        fs.unlinkSync(canonicalPath);
+        removed = true;
+      }
+    }
+
+    const legacyPath = this.legacyPathFor(kind, scenarioId);
+    if (fs.existsSync(legacyPath)) {
+      const parsed = this.read(legacyPath, kind, scenarioId);
+      if (parsed && parsed.scenarioId === scenarioId) {
+        fs.unlinkSync(legacyPath);
+        removed = true;
+      }
+    }
+
+    return removed;
   }
 
   private write(filePath: string, record: PendingProposalRecord): void {
@@ -109,13 +142,18 @@ export class PendingProposalStore {
     writeJsonAtomicSync(filePath, record, { mode: 0o600 });
   }
 
-  private read(filePath: string): PendingProposalRecord | null {
+  private read(filePath: string, expectedKind?: PendingProposalKind, expectedScenarioId?: string): PendingProposalRecord | null {
     try {
+      if (!fs.existsSync(filePath)) return null;
       const parsed = readJsonAtomicSync<Partial<PendingProposalRecord> | null>(filePath, null, { mode: 0o600 });
-      if (!parsed) return null;
+      if (!parsed || typeof parsed !== 'object') return null;
       if (parsed.schemaVersion !== PENDING_PROPOSAL_SCHEMA_VERSION) return null;
       if (parsed.kind !== 'tool' && parsed.kind !== 'skill') return null;
-      if (typeof parsed.scenarioId !== 'string' || !parsed.proposal || !parsed.gate) return null;
+      if (expectedKind && parsed.kind !== expectedKind) return null;
+      if (typeof parsed.scenarioId !== 'string' || !parsed.scenarioId) return null;
+      if (expectedScenarioId !== undefined && parsed.scenarioId !== expectedScenarioId) return null;
+      if (!parsed.proposal || typeof parsed.proposal !== 'object') return null;
+      if (!parsed.gate || typeof parsed.gate !== 'object') return null;
       return parsed as PendingProposalRecord;
     } catch {
       return null;

@@ -14,8 +14,9 @@ import { ToolImprovementEngine } from '../../../src/agent/self-improvement/tool-
 import { SkillImprovementEngine } from '../../../src/agent/self-improvement/skill-engine.js';
 import { StaticToolProposer } from '../../../src/agent/self-improvement/tool-proposer.js';
 import { StaticSkillProposer } from '../../../src/agent/self-improvement/skill-proposer.js';
+import { PendingProposalStore, PENDING_PROPOSAL_SCHEMA_VERSION } from '../../../src/agent/self-improvement/proposal-store.js';
 import type { AuthoredToolSpec } from '../../../src/agent/self-improvement/authored-tool-runtime.js';
-import type { ToolBenchmarkScenario } from '../../../src/agent/self-improvement/tool-types.js';
+import type { ToolBenchmarkScenario, ToolProposal } from '../../../src/agent/self-improvement/tool-types.js';
 import type { SkillBenchmarkScenario, SkillSpec } from '../../../src/agent/self-improvement/skill-types.js';
 import type { ToolProposer } from '../../../src/agent/self-improvement/tool-proposer.js';
 import type { SkillProposer } from '../../../src/agent/self-improvement/skill-proposer.js';
@@ -107,7 +108,8 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     expect(result.applied).toBe(false);
     expect(mutator.has('authored__reverse')).toBe(false);
 
-    const pendingPath = path.join(dir, '.codebuddy', 'self-improvement', 'proposals', 'tool-reverse-string.json');
+    const store = new PendingProposalStore({ workDir: dir });
+    const pendingPath = store.pathFor('tool', REVERSE.id);
     expect(fs.existsSync(pendingPath)).toBe(true);
     const stored = JSON.parse(fs.readFileSync(pendingPath, 'utf-8')) as {
       kind: string;
@@ -137,6 +139,10 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     await propose.runCycle();
     expect(mutator.has('authored__reverse')).toBe(false);
 
+    const store = new PendingProposalStore({ workDir: dir });
+    const pendingPath = store.pathFor('tool', REVERSE.id);
+    expect(fs.existsSync(pendingPath)).toBe(true);
+
     const apply = new ToolImprovementEngine({
       scenarios: [REVERSE],
       proposer: throwingToolProposer('must not re-author a pending tool'),
@@ -149,9 +155,7 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     expect(result.applied).toBe(true);
     expect(result.gate?.appliedRef).toBe('authored__reverse');
     expect(mutator.has('authored__reverse')).toBe(true);
-    expect(
-      fs.existsSync(path.join(dir, '.codebuddy', 'self-improvement', 'proposals', 'tool-reverse-string.json')),
-    ).toBe(false);
+    expect(fs.existsSync(pendingPath)).toBe(false);
   });
 
   it('propose-only writes an accepted skill candidate + gate evidence under proposals/', async () => {
@@ -170,7 +174,8 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     expect(result.applied).toBe(false);
     expect(mutator.has('authored-git-bisect')).toBe(false);
 
-    const pendingPath = path.join(dir, '.codebuddy', 'self-improvement', 'proposals', 'skill-git-bisect.json');
+    const store = new PendingProposalStore({ workDir: dir });
+    const pendingPath = store.pathFor('skill', BISECT.id);
     expect(fs.existsSync(pendingPath)).toBe(true);
     const stored = JSON.parse(fs.readFileSync(pendingPath, 'utf-8')) as {
       kind: string;
@@ -197,6 +202,10 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     await propose.runCycle();
     expect(mutator.has('authored-git-bisect')).toBe(false);
 
+    const store = new PendingProposalStore({ workDir: dir });
+    const pendingPath = store.pathFor('skill', BISECT.id);
+    expect(fs.existsSync(pendingPath)).toBe(true);
+
     const apply = new SkillImprovementEngine({
       scenarios: [BISECT],
       proposer: throwingSkillProposer('must not re-author a pending skill'),
@@ -209,8 +218,113 @@ describe('pending proposals — propose-only persists, --apply reuses', () => {
     expect(result.applied).toBe(true);
     expect(result.gate?.appliedRef).toBe('authored-git-bisect');
     expect(mutator.has('authored-git-bisect')).toBe(true);
-    expect(
-      fs.existsSync(path.join(dir, '.codebuddy', 'self-improvement', 'proposals', 'skill-git-bisect.json')),
-    ).toBe(false);
+    expect(fs.existsSync(pendingPath)).toBe(false);
+  });
+
+  it('avoids collision between scenarios like audit/a and audit:a', () => {
+    const store = new PendingProposalStore({ workDir: dir });
+    const dummyProposalA: ToolProposal = {
+      id: 'prop-a',
+      rationale: 'for audit/a',
+      spec: LEGIT_TOOL,
+    };
+    const dummyProposalB: ToolProposal = {
+      id: 'prop-b',
+      rationale: 'for audit:a',
+      spec: { ...LEGIT_TOOL, name: 'authored__reverse_b' },
+    };
+
+    const recordA = store.saveTool({
+      scenarioId: 'audit/a',
+      acceptedAt: new Date().toISOString(),
+      proposal: dummyProposalA,
+      gate: { accepted: true, appliedRef: 'authored__reverse' },
+    });
+
+    const recordB = store.saveTool({
+      scenarioId: 'audit:a',
+      acceptedAt: new Date().toISOString(),
+      proposal: dummyProposalB,
+      gate: { accepted: true, appliedRef: 'authored__reverse_b' },
+    });
+
+    expect(store.pathFor('tool', 'audit/a')).not.toBe(store.pathFor('tool', 'audit:a'));
+
+    const loadedA = store.loadTool('audit/a');
+    const loadedB = store.loadTool('audit:a');
+    expect(loadedA?.proposal.id).toBe('prop-a');
+    expect(loadedB?.proposal.id).toBe('prop-b');
+
+    // Removing audit/a does not remove audit:a
+    expect(store.remove('tool', 'audit/a')).toBe(true);
+    expect(store.loadTool('audit/a')).toBeNull();
+    expect(store.loadTool('audit:a')?.proposal.id).toBe('prop-b');
+  });
+
+  it('reads legacy unhashed proposals only if exact scenarioId matches and does not delete on collision', () => {
+    const store = new PendingProposalStore({ workDir: dir });
+    fs.mkdirSync(store.dir, { recursive: true });
+
+    const legacyPath = store.legacyPathFor('tool', 'audit/a'); // tool-audit-a.json
+    fs.writeFileSync(
+      legacyPath,
+      JSON.stringify({
+        schemaVersion: PENDING_PROPOSAL_SCHEMA_VERSION,
+        kind: 'tool',
+        scenarioId: 'audit:a', // scenarioId is audit:a inside the legacy file
+        acceptedAt: new Date().toISOString(),
+        proposal: { id: 'legacy-b', rationale: 'legacy', spec: LEGIT_TOOL },
+        gate: { accepted: true },
+      }),
+    );
+
+    // Querying audit/a should NOT load the legacy file of audit:a
+    expect(store.loadTool('audit/a')).toBeNull();
+
+    // Querying audit:a SHOULD load it via legacy path
+    expect(store.loadTool('audit:a')?.proposal.id).toBe('legacy-b');
+
+    // Removing audit/a must NOT delete the legacy file of audit:a
+    expect(store.remove('tool', 'audit/a')).toBe(false);
+    expect(fs.existsSync(legacyPath)).toBe(true);
+
+    // Removing audit:a SHOULD delete the legacy file
+    expect(store.remove('tool', 'audit:a')).toBe(true);
+    expect(fs.existsSync(legacyPath)).toBe(false);
+  });
+
+  it('validates structure and ignores corrupted or malformed files', () => {
+    const store = new PendingProposalStore({ workDir: dir });
+    fs.mkdirSync(store.dir, { recursive: true });
+
+    const pathCorrupt = store.pathFor('tool', 'corrupt-test');
+    fs.writeFileSync(pathCorrupt, '{ broken json');
+    expect(store.loadTool('corrupt-test')).toBeNull();
+
+    const pathBadSchema = store.pathFor('tool', 'bad-schema');
+    fs.writeFileSync(
+      pathBadSchema,
+      JSON.stringify({
+        schemaVersion: 999,
+        kind: 'tool',
+        scenarioId: 'bad-schema',
+        proposal: {},
+        gate: {},
+      }),
+    );
+    expect(store.loadTool('bad-schema')).toBeNull();
+
+    const pathBadKind = store.pathFor('tool', 'bad-kind');
+    fs.writeFileSync(
+      pathBadKind,
+      JSON.stringify({
+        schemaVersion: PENDING_PROPOSAL_SCHEMA_VERSION,
+        kind: 'skill',
+        scenarioId: 'bad-kind',
+        proposal: {},
+        gate: {},
+      }),
+    );
+    expect(store.loadTool('bad-kind')).toBeNull();
   });
 });
