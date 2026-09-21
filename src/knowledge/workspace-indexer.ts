@@ -17,54 +17,6 @@ import type { VectorSearchResult } from '../search/usearch-index.js';
 import { readJsonAtomicSync, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // Fallback brute-force index if USearch is not available
-class BruteForceIndex {
-  private vectors: Map<number, number[]> = new Map();
-
-  constructor(private dim: number) {}
-
-  add(id: number, vector: number[] | Float32Array): void {
-    this.vectors.set(id, Array.from(vector));
-  }
-
-  search(query: number[] | Float32Array, k: number): Array<{ id: number; score: number }> {
-    const scores: Array<{ id: number; score: number }> = [];
-    const queryArr = Array.from(query);
-
-    for (const [id, vec] of this.vectors) {
-      let dot = 0;
-      let normA = 0;
-      let normB = 0;
-      for (let i = 0; i < this.dim; i++) {
-        const q = queryArr[i] ?? 0;
-        const v = vec[i] ?? 0;
-        dot += q * v;
-        normA += q * q;
-        normB += v * v;
-      }
-      const denom = Math.sqrt(normA) * Math.sqrt(normB);
-      const similarity = denom > 0 ? dot / denom : 0;
-      scores.push({ id, score: similarity });
-    }
-
-    scores.sort((a, b) => b.score - a.score);
-    return scores.slice(0, k);
-  }
-  
-  save(filePath: string): void {
-      writeJsonAtomicSync(filePath, Array.from(this.vectors.entries()));
-  }
-  
-  load(filePath: string): void {
-      if (fs.existsSync(filePath)) {
-          const data = readJsonAtomicSync<unknown>(filePath, []);
-          if (Array.isArray(data)) this.vectors = new Map(data as Array<[number, number[]]>);
-      }
-  }
-
-  remove(id: number): void {
-      this.vectors.delete(id);
-  }
-}
 
 export interface WorkspaceIndexerConfig {
   workspaceRoot: string;
@@ -111,13 +63,14 @@ export class WorkspaceIndexer extends EventEmitter {
       
       const dim = 384; // MiniLM-L6-v2 dimension
       
-      try {
-        const { USearchVectorIndex } = await import('../search/usearch-index.js');
-        this.vectorIndex = new USearchVectorIndex({ dimensions: dim });
-      } catch {
-        logger.debug('USearch not found, falling back to BruteForceIndex for Workspace');
-        this.vectorIndex = new BruteForceIndex(dim);
-      }
+      // Le try/catch d'origine n'attrapait rien : il enveloppait l'import d'un
+      // fichier du dépôt, qui réussit toujours, et le chargement du paquet natif
+      // est paresseux. La fabrique, elle, charge vraiment `usearch` avant de
+      // choisir, et retombe sur le sidecar Rust — pas sur une boucle O(n).
+      const { createVectorIndex } = await import('../search/vector-index-factory.js');
+      const choix = await createVectorIndex({ name: 'workspace', dimensions: dim });
+      this.vectorIndex = choix.index;
+      logger.debug(`[workspace-indexer] moteur vectoriel : ${choix.engine}`);
       
       await fs.ensureDir(path.dirname(this.config.indexPath));
       await this.loadIndexMetadata();
@@ -215,9 +168,7 @@ export class WorkspaceIndexer extends EventEmitter {
           for (const [id, entry] of this.entries.entries()) {
               if (filesToRemove.has(entry.filePath)) {
                   this.entries.delete(id);
-                  if (this.vectorIndex instanceof BruteForceIndex) {
-                      this.vectorIndex.remove(id);
-                  } else if (this.vectorIndex && this.vectorIndex.remove) {
+                  if (this.vectorIndex && this.vectorIndex.remove) {
                       this.vectorIndex.remove(String(id));
                   }
               }
@@ -320,11 +271,6 @@ export class WorkspaceIndexer extends EventEmitter {
       return false;
     }
 
-    if (this.vectorIndex instanceof BruteForceIndex) {
-      this.vectorIndex.add(id, embedding);
-      return true;
-    }
-
     await this.vectorIndex.add({
       id: String(id),
       embedding,
@@ -337,10 +283,6 @@ export class WorkspaceIndexer extends EventEmitter {
     queryEmbedding: Float32Array,
     k: number
   ): Promise<Array<{ id: number; score: number }>> {
-    if (this.vectorIndex instanceof BruteForceIndex) {
-      return this.vectorIndex.search(queryEmbedding, k);
-    }
-
     const results = await this.vectorIndex.search(queryEmbedding, k) as VectorSearchResult[];
     return results
       .map((result) => ({
