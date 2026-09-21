@@ -344,3 +344,8 @@ _qa/pf/
 _qa/inj/
 _qa/tok/
 src/server/mobile/assets/icon-*.png
+
+# Skills tierces installees localement par `npx skills add` (outillage, pas produit)
+/.agents/
+/skills-lock.json
+/.claude/skills/typesafe-ai
