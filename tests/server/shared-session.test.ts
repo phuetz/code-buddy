@@ -200,7 +200,9 @@ describe('shared session — HTTP + two WebSocket clients', () => {
     else process.env.CODEBUDDY_OWNER_USER_ID = previousOwner;
     if (previousHistory === undefined) delete process.env.CODEBUDDY_MOBILE_HISTORY;
     else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
-    rmSync(sessionsDir, { recursive: true, force: true });
+    // Windows refuse de supprimer un dossier dont un descripteur vient
+    // juste d'être fermé (ENOTEMPTY) : Node réessaie si on le lui demande.
+    rmSync(sessionsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function token(userId: string): string {
