@@ -131,3 +131,73 @@ dimension erronee : refusee — vecteur de dimension 2 alors que l'index en atte
    mais il faut le constater, pas le supposer.
 4. Brancher dans `workspace-indexer`, `graph-embeddings`, `hybrid-search`, avec repli.
 5. Retirer `usearch` des `optionalDependencies` — ce qui rendra la PR #189 sans objet.
+
+---
+
+# Étape 3 : la mesure, et le renversement qu'elle impose
+
+## Elle a d'abord accusé le portage. À tort.
+
+Premier banc, vecteurs aléatoires uniformes en dimension 384 : l'accord entre les
+deux moteurs s'effondrait — 93 %, puis 66 %, puis **8 %** au top-1 à 20 000 vecteurs.
+Conclusion tentante : le portage Rust est mauvais.
+
+**Le geste qui tranche a été de calculer la vérité terrain en force brute**, au lieu
+de comparer les deux moteurs entre eux. Résultat :
+
+| N | rappel usearch | rappel rust | top-1 usearch | top-1 rust |
+|---|---|---|---|---|
+| 1 000 | 94 % | 92 % | 90 % | 92 % |
+| 5 000 | 59 % | 60 % | 68 % | 64 % |
+| 20 000 | **23 %** | **22 %** | **0 %** | 6 % |
+
+**Les deux s'effondrent ensemble.** Un moteur mûr ne tombe pas à 0 % de top-1 sans
+raison : c'était **le banc**, pas les moteurs. Des vecteurs aléatoires uniformes en
+dimension 384 sont le pire cas de la recherche approchée — tout y est équidistant,
+le classement devient arbitraire. Suspecter l'outil de mesure avant le produit, une
+fois de plus.
+
+## Avec des embeddings réalistes (en grappes), tout rentre dans l'ordre
+
+| N | rappel usearch | rappel rust | top-1 usearch | top-1 rust | latence us | latence rust |
+|---|---|---|---|---|---|---|
+| 5 000 | 67 % | 70 % | 74 % | 72 % | 0,26 ms | 1,32 ms |
+| 20 000 | 86 % | 83 % | **100 %** | 96 % | 0,39 ms | 2,09 ms |
+
+**Le portage est fidèle** : à qualité égale, l'écart tient dans le bruit. La seule
+différence est la latence — **environ 5×**, soit le coût de l'aller-retour stdio.
+
+## Ce qui renverse la conclusion du chantier
+
+Le vrai point de comparaison n'est pas `usearch` : c'est **ce que Windows exécute
+aujourd'hui**, la boucle cosinus O(n) de `BruteForceIndex`. Reprise à l'identique
+dans le banc :
+
+| N | brute-force JS (Windows aujourd'hui) | sidecar Rust | rapport |
+|---|---|---|---|
+| 5 000 | 6,40 ms | 1,52 ms | 4,2× |
+| 20 000 | 26,03 ms | 2,02 ms | 12,9× |
+| 50 000 | **69,16 ms** | **1,85 ms** | **37,3×** |
+
+Le rapport importe moins que la **forme** : le Rust reste plat pendant que le
+JavaScript croît linéairement. L'écart grandit avec la taille du dépôt.
+
+## Décision (Patrice, 21/09) : usearch là où il s'installe, Rust ailleurs
+
+Le chantier ne remplace donc pas `usearch` — il remplace le **repli**.
+
+| Situation | Moteur | Latence mesurée |
+|---|---|---|
+| Linux / macOS, `usearch` installé | `usearch`, en processus | **0,39 ms** |
+| Windows, ou `usearch` absent | **sidecar Rust** | ~2 ms, **plat** |
+| *(aujourd'hui)* Windows | ~~brute-force JS~~ | 26 ms à 20 k, 69 ms à 50 k |
+
+`usearch` **reste** dans les `optionalDependencies` : il est meilleur là où il
+s'installe, et rien ne justifie de s'en priver. L'étape 5 du plan initial — le
+retirer — est donc **abandonnée**, et la PR #189 garde son objet.
+
+## Reste à faire
+
+4. Brancher le choix à trois niveaux dans `workspace-indexer`, `graph-embeddings` et
+   `hybrid-search` : `usearch` → sidecar Rust → brute-force JS (ce dernier ne servant
+   plus que si le binaire Rust est absent lui aussi).
