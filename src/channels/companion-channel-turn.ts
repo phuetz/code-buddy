@@ -16,6 +16,7 @@ import {
   companionHistorySessionKey,
   rememberCompanionChannelTurn,
 } from '../companion/channel-history.js';
+import { channelCompanionSessionKey } from './channel-companion-session.js';
 import {
   isCompanionToolsEnabled,
   getCompanionToolDefinitions,
@@ -97,13 +98,23 @@ function lastUserText(messages: CodeBuddyMessage[]): string {
   return '';
 }
 
+function resolveTurnSessionKey(input: CompanionChannelTurnInput): string {
+  return channelCompanionSessionKey({
+    channelType: input.surface,
+    chatId: input.identity?.chatId,
+    senderId: input.identity?.userId,
+    sessionKey: input.sessionKey,
+    env: input.env ?? process.env,
+  });
+}
+
 function persistCompanionTurn(input: CompanionChannelTurnInput, assistantText: string): void {
   const userText = lastUserText(input.messages);
   if (!userText || !assistantText.trim()) return;
   const env = input.env ?? process.env;
   rememberCompanionChannelTurn(
     companionHistorySessionKey({
-      sessionKey: input.sessionKey,
+      sessionKey: resolveTurnSessionKey(input),
       userId: input.identity?.userId,
       chatId: input.identity?.chatId,
       env,
@@ -118,6 +129,9 @@ export async function runCompanionChannelTurn(
   input: CompanionChannelTurnInput,
 ): Promise<CompanionChannelTurnResult> {
   const env = input.env ?? process.env;
+  if (!input.sessionKey) {
+    input.sessionKey = resolveTurnSessionKey(input);
+  }
   const identity = input.identity;
   const toolsEnabled = isCompanionToolsEnabled(env) && Boolean(identity && identity.role !== 'guest');
 
