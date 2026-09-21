@@ -80,8 +80,20 @@ declare module 'xlsx' {
 }
 
 // tar / sharp (optional) — typed-`any` fallback so
-// `tsc --noEmit` passes when CI's `npm ci` omits optional deps. When the real
-// package is installed its own types take precedence (verified both ways).
+// `tsc --noEmit` passes when CI's `npm ci` omits optional deps.
+//
+// ATTENTION — ne PAS étendre cette forme abrégée à un paquet qui porte ses
+// propres types. Une déclaration `declare module 'x';` sans corps ÉCRASE les
+// types réels, elle ne s'efface pas devant eux. Mesuré le 21/09/2026 : ajouter
+// `declare module 'playwright';` à ce fichier fait passer le typecheck de 0 à
+// 6 erreurs TS2709 (« Cannot use namespace 'Browser' as a type ») dans
+// hermes-browser-backends.ts. Le commentaire précédent affirmait ici que « les
+// types réels prennent le dessus (vérifié dans les deux sens) » : c'est faux,
+// et la vérification n'avait pas eu lieu.
+//
+// `tar` et `sharp` restent sûrs car ni l'un ni l'autre n'expose de namespace
+// utilisé comme type dans ce dépôt. Pour tout autre paquet, écrire un corps de
+// module explicite (voir `node-llama-cpp` ou `xlsx` plus haut).
 declare module 'tar';
 declare module 'sharp';
 
