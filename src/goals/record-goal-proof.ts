@@ -10,7 +10,8 @@ export function recordGoalProof(input: {
   workspaceRoot?: string;
 }): void {
   try {
-    const goalId = input.state.id?.trim() || input.sessionKey.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+    const rawId = input.state.goalId || input.sessionKey;
+    const goalId = rawId.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) || 'goal';
     const ledger = new ProofLedger(goalId, {
       artifactRoot: input.workspaceRoot ?? process.cwd(),
     });
