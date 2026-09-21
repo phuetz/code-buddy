@@ -17,6 +17,7 @@ export type {
 
 // Built-in commands
 export { builtinCommands, getCommandsByCategory } from './builtin-commands.js';
+export { extraBuiltinCommands } from './extra-builtins.js';
 
 // Per-surface availability (single declaration for CLI, Cowork and the wiki)
 export {
