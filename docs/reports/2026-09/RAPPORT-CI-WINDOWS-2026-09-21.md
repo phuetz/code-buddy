@@ -77,3 +77,44 @@ portables ».
 La CI ne se déclenche par ailleurs **que sur `main` et `develop`**, ou par une
 demande de tirage vers elles (`on: push: branches: [main, develop]`). Une branche de
 correction ne déclenche rien tant qu'aucune PR n'est ouverte.
+
+---
+
+# Verdict après correction — PR #187, run `35615398145`, lu le 21/09
+
+| Job | Avant | Après |
+|---|---|---|
+| ubuntu 20.x / 22.x | ✅ | ✅ |
+| **windows 20.x** | ❌ 3 tests | **✅ entièrement vert** |
+| windows 22.x | ❌ 3 tests | ❌ **mais pas sur les tests** |
+| Security Audit | ✅ | ✅ |
+
+**Les trois corrections sont prouvées** : Windows Node 20 exécute la suite complète
+et ne signale plus aucun test en échec. Zéro annotation d'échec de test sur tout le
+run.
+
+## Windows 22.x : un défaut distinct, et il n'est pas de ce lot
+
+L'étape qui tombe est **`Run type check`** (étape 7), pas les tests. Conséquence :
+les étapes 10 à 14 — `Run tests` et les six shards — sont toutes **`skipped`**. Les
+tests Windows Node 22 n'ont donc **pas tourné** ; on ne peut rien en conclure, ni en
+bien ni en mal.
+
+Le message : `Cannot find module '@xenova/transformers' or its corresponding type
+declarations.`
+
+- C'est une **`optionalDependency`** (`^2.17.2`). Son installation peut échouer sans
+  faire échouer `npm ci` — c'est le principe d'une dépendance optionnelle.
+- Le code fait ce qu'il faut : l'import est **dynamique**
+  (`await import('@xenova/transformers')`, `embedding-provider.ts:137`), avec un
+  message de repli explicite. C'est `tsc` qui exige les déclarations de types même
+  derrière un `import()`.
+- **Le défaut est intermittent** : au run précédent (`35602220872`), ce même job
+  passait le typecheck et atteignait les tests. Ce n'est donc ni une régression ni
+  un effet de ce lot, mais une installation d'optionnelles qui échoue par
+  intermittence sur les runners Windows.
+- Typecheck **local : `exit=0`**, aucune erreur — le paquet est présent ici.
+
+**À arbitrer, hors de ce lot** : installer les optionnelles de façon déterministe
+dans la CI, ou rendre le typecheck tolérant à leur absence. Les deux se défendent ;
+c'est une décision, pas une évidence.
