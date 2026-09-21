@@ -2,7 +2,7 @@
 
 [Accueil](Home.md) · [Wiki interactif](index.html#heartbeat)
 
-Gérer la revue périodique de HEARTBEAT.md.
+Gérer la revue périodique de HEARTBEAT.md et armer les boucles compagnon.
 
 ## Syntaxe du catalogue
 
@@ -14,15 +14,19 @@ Gérer la revue périodique de HEARTBEAT.md.
 | --- | --- | --- |
 | action | Non | enable \| disable \| status (default: status) |
 
-## Recette : TESTE\_LOCAL
+`enable` démarre le moteur **et** `startCompanionAlwaysOnLoops()`.
+`disable` arrête les deux.
+
+Guide : [docs/heartbeat.md](../../docs/heartbeat.md).
+Exemple : [docs/examples/HEARTBEAT.md](../../docs/examples/HEARTBEAT.md).
+
+## Recette : TESTE_LOCAL
 
 ```text
 /heartbeat status
 ```
 
-/heartbeat status (consultation de l'état du moteur de heartbeat).
-
-Attendu : Statut du moteur de heartbeat
+Attendu : Statut du moteur de heartbeat.
 
 [Capture locale](../../../../Videos/Partage/20260914-commandes-wiki/cases/heartbeat/terminal.txt)
 
@@ -32,12 +36,8 @@ Attendu : Statut du moteur de heartbeat
 /heartbeat status
 ```
 
-Cette invocation vient du plan ; sa présence ne prouve pas son exécution.
-
 ## Limites
 
-Le verdict porte sur l’invocation capturée, pas sur toutes les sous-commandes. Une aide affichée ne valide pas une connexion, une modification, ni un appel IA. Les résultats Linux ne prouvent pas le fonctionnement Windows. Sans preuve, la commande reste NON_TESTE.
-
-
+Le verdict porte sur l’invocation capturée, pas sur toutes les sous-commandes.
 
 Description d’origine du catalogue : Manage the heartbeat engine (enable/disable/status) — periodic HEARTBEAT.md review
