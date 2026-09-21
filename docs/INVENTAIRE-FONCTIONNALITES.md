@@ -55,7 +55,7 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 | Verifier indépendant | Un agent à contexte neuf juge le travail : CONFIRMÉ / À REVOIR | 🧪 |
 | Porte de preuves sur les buts | Un « c'est fait » sans preuve est rétrogradé en « continue » | ✅ **réparé le 21/09** |
 | `buddy loop` | plan → exécute → **vérifie** → juge, jusqu'à preuve ou budget épuisé | ✅ **prouvé le 21/09 sur un cas réel, $0,0000.** Le juge a refusé DEUX fois un travail que le Verifier confirmait, faute de preuve d'exécution. Et l'agent a refusé de fabriquer une réparation inutile en constatant que le test passait déjà — honnêteté acceptée comme aboutissement |
-| Porte de revue de diff | Toute écriture passe par une revue ; un diff non revu est **refusé**, jamais appliqué en silence | 🧪 💤 |
+| Porte de revue de diff | Toute écriture passe par une revue ; un diff non revu est **refusé**, jamais appliqué en silence | ✅ |
 | Espace de travail fantôme | Les écritures sont validées dans un clone avant de toucher les fichiers | ✅ **falsifié dans les deux sens le 21/09 : erreur de type refusée en 16 s avec le message exact, changement sain accepté** |
 | Registre d'intentions | Des spécifications falsifiables, avec détection de dérive | ✅ **vérification et génération prouvées le 21/09.** Le critère est réellement exécuté (`exit 4 ≠ 0` → FAIL motivé, code de sortie 1). La génération partait dans le décor — un `pytest` sur un fichier inexistant — jusqu'à ce que le contexte du dépôt lui soit injecté : même demande, elle produit désormais `npx vitest run` sur un fichier réel |
 
@@ -131,8 +131,10 @@ Par ordre de valeur pour la communication :
    il reste l'épisodique, la procédurale et la compaction réversible.
 2. ~~`buddy loop`~~ — **prouvé le 21/09**. Le garde-fou fonctionne : deux « done »
    du Verifier rétrogradés par le juge pour absence de preuve d'exécution.
-3. **La porte de revue de diff** — « un diff non revu est refusé » est une promesse
-   forte ; elle mérite une démonstration.
+3. ~~La porte de revue de diff~~ — **prouvée le 21/09**, falsifiée dans les deux
+   sens : un fichier introduisant une clé AWS est refusé et rien n'est écrit, un
+   fichier anodin passe, et le journal `.codebuddy/diff-reviews.jsonl` porte les deux
+   verdicts. Mode `static`, donc $0.
 4. ~~L'espace de travail fantôme~~ — **prouvé le 21/09**, dans les deux sens.
 5. ~~Les surfaces d'auto-amélioration~~ — **prouvées le 21/09** : 189 améliorations
    validées empiriquement, archive et store git à l'appui.

@@ -61,3 +61,19 @@ le silence n'était pas une erreur). La donnée qui tranche est venue de
 `gh api repos/:owner/:repo/check-runs/<job>/annotations`, qui porte le **message
 d'assertion** et non le seul nom du test — la distinction qui m'a manqué deux fois
 en septembre.
+
+## Nuance capitale : Windows ne bloque pas
+
+`.github/workflows/ci.yml`, ligne 24 : `continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}`.
+**Seul Ubuntu est bloquant.** macOS et Windows tournent en « best-effort » : leurs
+résultats sont publiés mais n'empêchent pas une CI verte, choix délibéré et commenté
+dans le fichier (« deliberately visible, not a silent removal of coverage »).
+
+Donc le rouge Windows du run `35602220872` **n'interdisait pas de publier**. Il
+restait à corriger — c'est fait — mais la phrase juste est : « Ubuntu, la cible
+bloquante, était au vert ; Windows, non bloquant, signalait trois bancs d'essai non
+portables ».
+
+La CI ne se déclenche par ailleurs **que sur `main` et `develop`**, ou par une
+demande de tirage vers elles (`on: push: branches: [main, develop]`). Une branche de
+correction ne déclenche rien tant qu'aucune PR n'est ouverte.
