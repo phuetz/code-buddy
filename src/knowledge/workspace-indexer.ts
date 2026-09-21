@@ -67,6 +67,12 @@ export class WorkspaceIndexer extends EventEmitter {
       // fichier du dépôt, qui réussit toujours, et le chargement du paquet natif
       // est paresseux. La fabrique, elle, charge vraiment `usearch` avant de
       // choisir, et retombe sur le sidecar Rust — pas sur une boucle O(n).
+      //
+      // Ce que ceci ne répare PAS, pour ne pas laisser croire le contraire :
+      // - `graph-embeddings.ts` porte le même motif inopérant, non migré ;
+      // - l'index vectoriel est VIDE après chaque redémarrage (voir
+      //   `loadIndexMetadata` plus bas) — c'est le vrai défaut de ce fichier,
+      //   antérieur à ce changement et toujours ouvert.
       const { createVectorIndex } = await import('../search/vector-index-factory.js');
       const choix = await createVectorIndex({ name: 'workspace', dimensions: dim });
       this.vectorIndex = choix.index;

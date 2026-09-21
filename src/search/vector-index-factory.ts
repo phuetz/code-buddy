@@ -87,15 +87,17 @@ export async function createVectorIndex(
 
   if (prefer !== 'javascript') {
     try {
-      const [{ RustVectorIndex }, { BuddyMemoryClient }, { resolveBuddyMemoryBin }] =
+      const [{ RustVectorIndex }, { BuddyMemoryClient, resolveBuddyMemoryBin }] =
         await Promise.all([
           import('./rust-vector-index.js'),
-          import('../memory/buddy-memory-client.js'),
           import('../memory/buddy-memory-client.js'),
         ]);
       if (resolveBuddyMemoryBin()) {
         const client = new BuddyMemoryClient({ ledgerPath: ledgerParDefaut() });
-        if (client.available()) {
+        // Un binaire présent et vivant ne suffit pas : un exemplaire antérieur à
+        // `vindex.*` répond `unknown method` à la première insertion, une fois le
+        // moteur choisi et sans repli possible. On le lui demande donc d'abord.
+        if (client.available() && (await parleVindex(client))) {
           const opts = { name, dimensions, client } as ConstructorParameters<typeof RustVectorIndex>[0];
           if (capacity !== undefined) opts.capacity = capacity;
           return { index: new RustVectorIndex(opts) as unknown as VectorIndexLike, engine: 'rust' };
@@ -113,6 +115,18 @@ export async function createVectorIndex(
     index: new USearchVectorIndex({ dimensions, metric: 'cos' }) as unknown as VectorIndexLike,
     engine: 'javascript',
   };
+}
+
+/** Le sidecar connaît-il les méthodes `vindex.*` ? Un `unknown method` ici coûte
+ *  moins cher qu'un abandon d'indexation après que le moteur a été retenu. */
+async function parleVindex(client: { call(m: string, p?: Record<string, unknown>): Promise<unknown> }): Promise<boolean> {
+  try {
+    await client.call('vindex.list', {});
+    return true;
+  } catch (err) {
+    logger.debug(`[vector-index] le binaire ne parle pas vindex.* : ${String(err)}`);
+    return false;
+  }
 }
 
 function ledgerParDefaut(): string {
