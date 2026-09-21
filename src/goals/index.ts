@@ -7,6 +7,8 @@ export * from './intent-graph.js';
 export * from './proof-ledger.js';
 export * from './criterion-progress.js';
 export * from './evidence-artifact.js';
+export * from './goal-evidence-gate.js';
+export * from './record-goal-proof.js';
 export * from './counterfactual-forge.js';
 export * from './proven-outcome-memory.js';
 export * from './proven-outcome-lessons.js';
