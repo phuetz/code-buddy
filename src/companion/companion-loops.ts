@@ -1,12 +1,15 @@
 /**
  * Always-on companion loops that do not need the sensory daemon.
- * Start from `/companion setup` or `buddy heartbeat start`.
  */
 
 import { logger } from '../utils/logger.js';
 import { wireImpulseDelivery } from './impulse-delivery.js';
 
 let teardown: (() => void) | null = null;
+
+export function isCompanionAlwaysOnLoopsRunning(): boolean {
+  return teardown !== null;
+}
 
 export function startCompanionAlwaysOnLoops(env: NodeJS.ProcessEnv = process.env): () => void {
   if (teardown) return teardown;
