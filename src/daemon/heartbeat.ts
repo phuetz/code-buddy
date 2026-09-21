@@ -3,12 +3,14 @@
  *
  * Periodic wake that reads HEARTBEAT.md and surfaces items via agent review.
  * Local `.codebuddy/HEARTBEAT.md` is merged with an OpenClaw workspace file
- * when `CODEBUDDY_OPENCLAW_WORKSPACE_IMPORT=true`.
+ * when `CODEBUDDY_OPENCLAW_WORKSPACE_IMPORT=true`. Scheduled headings that
+ * are not due yet are dropped before the agent runs.
  */
 
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { filterDueHeartbeatChecklist } from './heartbeat-schedule.js';
 import { mergeHeartbeatChecklists, readHeartbeatSources } from './heartbeat-sources.js';
 
 export interface HeartbeatConfig {
@@ -37,7 +39,7 @@ export interface HeartbeatStatus {
 export interface HeartbeatTickResult {
   timestamp: Date;
   skipped: boolean;
-  skipReason?: 'outside_active_hours' | 'disabled' | 'file_not_found';
+  skipReason?: 'outside_active_hours' | 'disabled' | 'file_not_found' | 'nothing_due';
   suppressed: boolean;
   agentResponse?: string;
   checklistContent?: string;
@@ -145,8 +147,9 @@ export class HeartbeatEngine extends EventEmitter {
     const sources = await readHeartbeatSources({
       localPath: this.config.heartbeatFilePath,
     });
-    const checklistContent = mergeHeartbeatChecklists(sources);
-    if (!checklistContent.trim()) {
+    const merged = mergeHeartbeatChecklists(sources);
+    const checklistContent = filterDueHeartbeatChecklist(merged);
+    if (!merged.trim()) {
       const result: HeartbeatTickResult = {
         timestamp: new Date(),
         skipped: true,
@@ -155,6 +158,17 @@ export class HeartbeatEngine extends EventEmitter {
         duration: Date.now() - startTime,
       };
       logger.warn('Heartbeat file not found', { path: this.config.heartbeatFilePath });
+      this.emit('heartbeat:skipped', result);
+      return result;
+    }
+    if (!checklistContent.trim()) {
+      const result: HeartbeatTickResult = {
+        timestamp: new Date(),
+        skipped: true,
+        skipReason: 'nothing_due',
+        suppressed: false,
+        duration: Date.now() - startTime,
+      };
       this.emit('heartbeat:skipped', result);
       return result;
     }
