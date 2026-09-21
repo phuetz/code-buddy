@@ -13,6 +13,16 @@ function flagOn(env: NodeJS.ProcessEnv, name: string): boolean {
   return value === 'true' || value === '1' || value === 'on';
 }
 
+function armLater(label: string, loader: () => Promise<() => void>, stops: Array<() => void>): void {
+  void loader()
+    .then((stop) => {
+      stops.push(stop);
+    })
+    .catch((err) => {
+      logger.warn(`[companion-loops] ${label} not armed`, { error: String(err) });
+    });
+}
+
 export function isCompanionAlwaysOnLoopsRunning(): boolean {
   return teardown !== null;
 }
@@ -30,23 +40,13 @@ export function startCompanionAlwaysOnLoops(env: NodeJS.ProcessEnv = process.env
   }
 
   if (flagOn(env, 'CODEBUDDY_COMPANION_PRESENCE')) {
-    void import('./presence-loop.js')
-      .then(({ wirePresenceLoop }) => {
-        stops.push(wirePresenceLoop());
-      })
-      .catch((err) => {
-        logger.warn('[companion-loops] presence not armed', { error: String(err) });
-      });
+    armLater('presence', async () => (await import('./presence-loop.js')).wirePresenceLoop(), stops);
   }
-
   if (flagOn(env, 'CODEBUDDY_COMPANION_PROACTIVE')) {
-    void import('./proactive-engine.js')
-      .then(({ wireProactiveLoop }) => {
-        stops.push(wireProactiveLoop());
-      })
-      .catch((err) => {
-        logger.warn('[companion-loops] proactive not armed', { error: String(err) });
-      });
+    armLater('proactive', async () => (await import('./proactive-engine.js')).wireProactiveLoop(), stops);
+  }
+  if (flagOn(env, 'CODEBUDDY_COMPANION_IDLE')) {
+    armLater('idle', async () => (await import('./idle-loop.js')).wireIdleLoop(), stops);
   }
 
   teardown = () => {
