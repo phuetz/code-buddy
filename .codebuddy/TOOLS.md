@@ -1,21 +1,21 @@
 # Available Tools
 
 > Auto-generated tool reference for CodeBuddy. Do not edit manually.
-> Generated: 2026-08-09
+> Generated: 2026-09-13
 
 ## Table of Contents
 
-- [File Reading](#file-reading) (4)
-- [File Writing](#file-writing) (7)
+- [File Reading](#file-reading) (5)
+- [File Writing](#file-writing) (8)
 - [File Search](#file-search) (8)
-- [System Operations](#system-operations) (18)
+- [System Operations](#system-operations) (19)
 - [Git Operations](#git-operations) (3)
-- [Web Operations](#web-operations) (50)
-- [Planning & Tasks](#planning-tasks) (19)
-- [Codebase Analysis](#codebase-analysis) (15)
-- [Media](#media) (19)
-- [Documents](#documents) (5)
-- [Utility](#utility) (50)
+- [Web Operations](#web-operations) (51)
+- [Planning & Tasks](#planning-tasks) (20)
+- [Codebase Analysis](#codebase-analysis) (22)
+- [Media](#media) (24)
+- [Documents](#documents) (6)
+- [Utility](#utility) (60)
 
 ## File Reading
 
@@ -28,6 +28,19 @@ Inspect the robot's attested core, bounded code structure, turn metadata, config
 - `depth` (string) - summary returns a compact snapshot; deep inspects more curated source areas.   Values: `summary`, `deep`
 
 **Keywords:** self, describe, components, composants, briques, bricks, architecture, de quoi es-tu fait, de quoi es-tu compose, qui es-tu, capabilities, capacites, capteur, capteurs, sensors, modules, buddy-sense, buddy-vision, buddy-memory, introspection, auto inspection, etudie, examine, inspecte, propre code, ton code, fonctionne, fonctionnes, fonctionnement, limites, version, conscient, consciente, conscience, consciousness, modele de soi
+
+---
+
+### self_evolution
+
+Read documented recent changes to Code Buddy's own behavior without modifying files or probing services
+
+**Parameters:**
+- `since` (string) - Optional inclusive start date in YYYY-MM-DD format.
+- `subject` (string) - Optional subject such as voice, memory, companion, context, or reliability.
+- `limit` (number) - Maximum number of notes to return (1–20, default 5).
+
+**Keywords:** self, evolution, evolutions, changement, changements, recent, récemment, release, changelog, notes de version, version, appris, learned, voice, voix, memory, mémoire, companion, fiabilité, reliability
 
 ---
 
@@ -79,7 +92,7 @@ List files and directories with type, size, and modification time
 Scaffold a new project from a template (node-cli, react, express).
 
 **Parameters:**
-- `template` (string, required) - Built-in template to generate   Values: `react-ts`, `express-api`, `node-cli`
+- `template` (string, required) - Built-in template to generate   Values: `react-tailwind`, `react-ts`, `express-api`, `node-cli`
 - `targetDir` (string, required) - Absolute empty directory path to create or fill
 - `vars` (object) - Template variables such as binName, description, author, port
 
@@ -132,6 +145,18 @@ Replace text in an existing file
 - `replace_all` (boolean) - Replace all occurrences (default: false, only replaces first occurrence)
 
 **Keywords:** patch, edit, replace, modify, file, text, hermes
+
+---
+
+### apply_patch
+
+Apply a diff-first patch to add/update/delete files (required by WritePolicy strict mode)
+
+**Parameters:**
+- `patch` (string, required) - The patch content. Format: '*** Begin Patch' then one or more '*** Update File: path' / '*** Add File: path' / '*** Delete File: path' sections with context lines and -/+ change lines, then '*** End Patch'.
+- `intent` (string) - What this change is trying to achieve (used by the diff-review gate when enabled).
+
+**Keywords:** patch, diff, apply, unified, edit, update, add, delete, file, diff-first
 
 ---
 
@@ -211,7 +236,7 @@ Compute an LCS-based diff between two files.
 Regex search in text files under a bounded root (ignores node_modules/.git/binaries).
 
 **Parameters:**
-- `root` (string, required)
+- `root` (string) - Directory to search. Optional; defaults to the current working directory (the folder the process was launched from). Relative paths resolve against that folder.
 - `pattern` (string, required)
 - `flags` (string)
 - `maxResults` (number)
@@ -582,6 +607,18 @@ Control desktop applications with app profiles, Excel automation, mouse, keyboar
 
 ---
 
+### interactive_shell
+
+Hand control of an interactive PTY shell to the user until they type exit
+
+**Parameters:**
+- `initial_command` (string) - Optional command to pre-fill or execute immediately when the interactive shell opens (e.g. "npm init" or "git rebase -i HEAD~3").
+- `reason` (string, required) - Explain to the user why you are handing over control.
+
+**Keywords:** interactive, pty, handoff, vim, rebase, prompt, manual, shell, terminal, user, intervention, conflict
+
+---
+
 ### process
 
 Manage system processes (spawn, inspect, logs, terminate)
@@ -752,6 +789,20 @@ Capture and analyze the active browser page with local vision evidence
 - `interactive_only` (boolean) - Limit the optional snapshot to interactive elements only. Default false.
 
 **Keywords:** browser, vision, screenshot, analyze, playwright, hermes
+
+---
+
+### community_search
+
+Search what people actually say — discussions, votes and engagement — rather than what publishers write
+
+**Parameters:**
+- `query` (string, required) - What to look for. Plain words work best — this searches discussions, not pages.
+- `days` (number) - How far back to look, in days (1-365, default 30). Beyond ~30 it stops being current.
+- `limit` (number) - How many results to return (1-60, default 25)
+- `sources` (array) - Restrict to specific sources. All by default.
+
+**Keywords:** reddit, hacker news, community, discussion, people, opinion, what do people think, sentiment, buzz, trending, stack overflow, github, arxiv, avis, retours, communauté
 
 ---
 
@@ -1704,6 +1755,17 @@ Manage a persistent execution plan (PLAN.md) with step tracking
 
 ---
 
+### submit_plan
+
+Write .codebuddy/plans/current.md and request user approval to leave plan mode
+
+**Parameters:**
+- `plan_content` (string, required) - The detailed markdown content of your plan: what will change, which files will be modified, and which commands will run.
+
+**Keywords:** plan, submit, approval, approve, research, execution plan, current.md, plan mode, sign-off
+
+---
+
 ### create_todo_list
 
 Create todo list for task planning
@@ -1810,6 +1872,73 @@ Analyze build output size (dist, gzip) for the project.
 
 ---
 
+### lsp_definition
+
+Resolve a semantic symbol definition through the configured language server
+
+**Parameters:**
+- `file` (string, required) - Path to the source file, relative to the active workspace or absolute
+- `symbol` (string) - Symbol name to locate in the file; use line and column for ambiguous occurrences
+- `line` (number) - 1-based line number; must be paired with column
+- `column` (number) - 1-based column number; must be paired with line
+- `col` (number) - Alias for column (1-based)
+
+**Keywords:** lsp, definition, declaration, go to definition, semantic navigation, symbol, type
+
+---
+
+### lsp_diagnostics
+
+Get diagnostics published by the configured language server
+
+**Parameters:**
+- `file` (string, required) - Path to the source file, relative to the active workspace or absolute
+
+**Keywords:** lsp, diagnostics, errors, warnings, typecheck, lint, semantic analysis
+
+---
+
+### lsp_hover
+
+Get semantic hover and type information from the configured language server
+
+**Parameters:**
+- `file` (string, required) - Path to the source file, relative to the active workspace or absolute
+- `symbol` (string) - Symbol name to locate in the file; use line and column for ambiguous occurrences
+- `line` (number) - 1-based line number; must be paired with column
+- `column` (number) - 1-based column number; must be paired with line
+- `col` (number) - Alias for column (1-based)
+
+**Keywords:** lsp, hover, type, signature, documentation, semantic information, symbol
+
+---
+
+### lsp_references
+
+Find semantic symbol references through the configured language server
+
+**Parameters:**
+- `file` (string, required) - Path to the source file, relative to the active workspace or absolute
+- `symbol` (string) - Symbol name to locate in the file; use line and column for ambiguous occurrences
+- `line` (number) - 1-based line number; must be paired with column
+- `column` (number) - 1-based column number; must be paired with line
+- `col` (number) - Alias for column (1-based)
+
+**Keywords:** lsp, references, usages, callers, where used, semantic navigation, symbol
+
+---
+
+### lsp_symbols
+
+Get a semantic document outline from the configured language server
+
+**Parameters:**
+- `file` (string, required) - Path to the source file, relative to the active workspace or absolute
+
+**Keywords:** lsp, symbols, outline, classes, functions, methods, document structure, semantic navigation
+
+---
+
 ### code_graph
 
 Query code dependency graph: callers, callees, impact analysis, Mermaid flowcharts, class hierarchies
@@ -1867,6 +1996,26 @@ Analyze codebase structure and query code graph
 
 ---
 
+### knowledge_graph
+
+Query code entity relationships and dependencies
+
+**Parameters:**
+- `action` (string, required) - Action to perform on the knowledge graph   Values: `query`, `add`, `subgraph`, `path`, `stats`
+- `subject` (string) - Triple subject (entity name, e.g. "src/index.ts", "MyClass"). Used by query and add.
+- `predicate` (string) - Triple predicate (relationship type: imports, exports, calls, extends, implements, dependsOn, contains, definedIn, usedBy, typeof). Used by query and add.
+- `object` (string) - Triple object (target entity). Used by query and add.
+- `metadata` (object) - Optional metadata key-value pairs for add action.
+- `entity` (string) - Entity name for subgraph exploration.
+- `depth` (number) - Max traversal depth for subgraph (default: 2).
+- `from` (string) - Starting entity for path finding.
+- `to` (string) - Target entity for path finding.
+- `maxDepth` (number) - Max path length for path finding (default: 5).
+
+**Keywords:** knowledge, graph, relationships, imports, calls, extends, dependencies, code, architecture
+
+---
+
 ### lsp_code_action
 
 Get available code actions (quick fixes, refactorings) from LSP
@@ -1893,6 +2042,18 @@ Solve complex problems using Tree-of-Thought reasoning with MCTS
 - `constraints` (array) - Constraints that the solution must satisfy
 
 **Keywords:** reason, think, plan, analyze, architecture, design, debug, complex, trade-off, compare, evaluate, strategy, decision, mcts, tree-of-thought
+
+---
+
+### docs_search
+
+Search project documentation for architecture, API, security, and configuration information
+
+**Parameters:**
+- `query` (string, required) - Search query (e.g. "security model", "authentication flow")
+- `scope` (string) - Limit to a category (default: all)   Values: `all`, `architecture`, `api`, `security`, `config`, `testing`
+
+**Keywords:** docs, documentation, architecture, subsystem, api, security, config, design, how does, explain, overview
 
 ---
 
@@ -2046,6 +2207,40 @@ Analyze a local or remote video with a configured video-capable model
 
 ---
 
+### video_flow_handoff
+
+Build, verify, export or human-review Google Flow work packets; never bills via API, never publishes
+
+**Parameters:**
+- `operation` (string, required) - create: signed Flow handoff from shots. verify: check handoffSha256. export: QA-approved Short plan (reads approved assets, writes nothing). review_import: digest-bound human review of an import receipt.   Values: `create`, `verify`, `export`, `review_import`
+- `shots` (array) - Source shots for create (absolute source_path, SHA-256, adult identity, consumers).
+- `handoff` (object) - GoogleFlowHandoff document for verify.
+- `plan` (object) - QA-approved Short plan (schemaVersion 3) for export.
+- `receipt` (object) - GoogleFlowImportReceipt for review_import.
+- `capacity` (object) - Engine availability and Flow credits (create).
+- `source_plan_sha256` (string) - Canonical SHA-256 of the V3 source plan (create).
+- `batch_id` (string) - Safe batch id (lowercase kebab).
+- `model` (string) - Flow model family.   Values: `lite`, `fast`, `quality`
+- `locale` (string) - BCP 47 locale (create).
+- `duration_seconds` (number) - Clip duration in seconds: 4, 6 or 8. Quality requires 8.
+- `aspect_ratio` (string) - Output aspect ratio.   Values: `9:16`, `16:9`
+- `upscale_4k` (boolean) - 4K upscale surcharge.
+- `approved_asset_root` (string) - Absolute approved-asset root (export).
+- `short_id` (string) - Export a single Short id (mutually exclusive with include_all_shorts).
+- `include_all_shorts` (boolean) - Export every Short in the plan.
+- `remaining_flow_credits` (number) - Remaining Flow credits (export).
+- `max_flow_credits_per_batch` (number) - Batch credit ceiling (export).
+- `gpu_node_available` (boolean) - GPU node available (export).
+- `local_gpu_available` (boolean) - Local GPU available (export). Generic compatibility aliases localGpuAvailable and local_gpu are accepted; machine-specific legacy keys are not read.
+- `expected_receipt_sha256` (string) - Expected import receipt digest (review_import).
+- `reviewer` (string) - Reviewer name (review_import).
+- `reason` (string) - Review reason (review_import).
+- `checks` (object) - Flow human-review checks (review_import).
+
+**Keywords:** video, flow, google flow, veo, handoff, export, import, credits, browser, packet, transfert, veo3
+
+---
+
 ### video_generate
 
 Generate a video through the configured video backend and cache returned media when possible
@@ -2063,6 +2258,51 @@ Generate a video through the configured video backend and cache returned media w
 - `model` (string) - Optional configured model/family override for the active backend
 
 **Keywords:** video, generate, text-to-video, image-to-video, xai, fal, hermes, gener, cree, clip, film, animation
+
+---
+
+### video_long_form_plan
+
+Assess or compile an original long-form episode plan; never writes files or auto-publishes
+
+**Parameters:**
+- `operation` (string, required) - assess: readiness report. compile: render packet if production-ready. Neither writes files nor publishes.   Values: `assess`, `compile`
+- `plan` (object, required) - LongFormEpisodePlan (schemaVersion 1): episodeId, locale, title, description, chapters[], publication gate (private, autoPublish false, humanReviewRequired).
+
+**Keywords:** video, long-form, long form, episode, plan, youtube, chapters, narration, ad break, mid-roll, épisode, plan long, compile
+
+---
+
+### video_quality_gate
+
+Fail-closed visual quality gate plus digest-bound YouTube master human review; never publishes
+
+**Parameters:**
+- `operation` (string, required) - evaluate_visual: score a schema-V1 visual gate report. review_youtube / request_youtube_changes: digest-bound human review of a technical YouTube master report.   Values: `evaluate_visual`, `review_youtube`, `request_youtube_changes`
+- `report` (object, required) - VisualGateReport (evaluate_visual) or YouTubeTechnicalReport (review_youtube / request_youtube_changes).
+- `profile` (string) - Threshold profile. Defaults to report.profile for evaluate_visual.   Values: `native-fashion-v1`, `legacy-localized-v1`
+- `clip_sha256` (string) - Optional lowercase SHA-256; when set, the visual report must match this clip digest.
+- `confirm_outfit` (boolean) - Human confirmation that outfit matches the approved look (evaluate_visual).
+- `confirm_decor_framing` (boolean) - Human confirmation that decor/framing is approved (evaluate_visual).
+- `expected_video_sha256` (string) - Expected master digest for YouTube review operations.
+- `reviewer` (string) - Reviewer name (YouTube review operations).
+- `reason` (string) - Review reason (YouTube review operations).
+- `checks` (object) - YouTube human-review checks (all booleans).
+
+**Keywords:** video, quality, gate, youtube, master, visual, identity, anatomy, fashion, review, qa, qualité, contrôle, gate visuel, flicker
+
+---
+
+### video_route
+
+Route hybrid video requests to local engines or browser-assisted Google Flow; estimates credits, never spends
+
+**Parameters:**
+- `request` (object) - Single hybrid video request to route.
+- `requests` (array) - Batch of requests (credit ceiling decrements between items).
+- `capacity` (object, required) - Available engines and Flow credit budget.
+
+**Keywords:** video, route, router, hybrid, flow, veo, comfyui, longcat, gpuNode, localGpu, credits, engine, routage, moteur
 
 ---
 
@@ -2090,6 +2330,19 @@ Chain multiple local video clips into one longer film with transitions (xfade/gl
 
 ---
 
+### video_trailer_plan
+
+Validate a cinematic book-trailer plan or compile a preview routing estimate; never generates media
+
+**Parameters:**
+- `operation` (string, required) - validate: fail-closed editorial/status validation. preview: map shots to hybrid-video requests and estimate routing.   Values: `validate`, `preview`
+- `plan` (object, required) - CinematicTrailerPlan (schemaVersion 1). Accepts unknown/partial values; malformed plans collapse to INCOMPLETE with blockers.
+- `capacity` (object) - Required for preview: available engines and Flow credit budget.
+
+**Keywords:** video, trailer, bande-annonce, cinematic, storyboard, book, preview, plan, narrative, hook, cta
+
+---
+
 ### vision_analyze
 
 Analyze a local image with metadata, colors, labels, and optional OCR evidence
@@ -2105,18 +2358,19 @@ Analyze a local image with metadata, colors, labels, and optional OCR evidence
 
 ### camera_analyze
 
-Capture a local webcam frame and describe it with a local multimodal vision model
+Describe a still image (image_path) or a webcam frame with a local VLM (default moondream); refuses dark frames
 
 **Parameters:**
+- `image_path` (string) - Existing still image to describe (no webcam). JPEG/PNG/WebP.
 - `prompt` (string) - What to ask the vision model about the frame. Default "Describe what you see."
-- `device` (string) - Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0.
-- `model` (string) - Local multimodal model id served by Ollama. Default gemma4:12b.
+- `device` (string) - Optional ffmpeg camera device. Linux example: /dev/video0; Windows: video=Integrated Camera; macOS: 0. Ignored when image_path is set.
+- `model` (string) - Local multimodal model id served by Ollama. Default moondream (or CODEBUDDY_VISION_MODEL). gemma* is text-only and will invent.
 - `include_ocr` (boolean) - Also attach local OCR text evidence from the captured frame (default: false).
 - `ocr_language` (string) - OCR language code when include_ocr is true (default: eng).
 - `output_path` (string) - Optional output image path. Defaults to .codebuddy/camera/camera-<timestamp>.png in the active workspace.
 - `timeout_ms` (number) - Capture timeout in milliseconds (default: 10000).
 
-**Keywords:** camera, webcam, see, vision, describe, look, photo, companion, eyes, analyze, what do you see
+**Keywords:** camera, webcam, see, vision, describe, look, photo, companion, eyes, analyze, what do you see, image_path
 
 ---
 
@@ -2229,6 +2483,19 @@ Clipboard operations
 ---
 
 ## Documents
+
+### markdown_convert
+
+Convert any document (Office, PDF, HTML, CSV, ZIP, EPub, image, audio, URL) to structured Markdown for the model — preserves headings, lists and tables. Optional MarkItDown sidecar; falls back cleanly with install instructions when absent
+
+**Parameters:**
+- `source` (string, required) - Local file path, or an http(s)/YouTube URL. Handles PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPub, images (OCR) and audio (transcription).
+- `output_path` (string) - Write the Markdown to this file instead of returning it inline. Use it for long documents.
+- `max_chars` (number) - Inline truncation budget (default 60000 characters).
+
+**Keywords:** markdown, convert, convertir, pdf, docx, xlsx, pptx, word, excel, powerpoint, html, csv, json, xml, zip, epub, ocr, transcription, table, tableau, structure, extract, extraire, lire, document, markitdown
+
+---
 
 ### meeting_notes
 
@@ -2502,6 +2769,7 @@ Consult CodeExplorer for a query or code understanding request (read-only)
 
 **Parameters:**
 - `query` (string, required) - The query or task description to ask CodeExplorer about.
+- `repo` (string) - Indexed repository path or id. Defaults to the graph that contains the current working directory.
 
 **Keywords:** code-explorer, ask, query, understand, explain, search, related files, dependents, tests
 
@@ -2522,6 +2790,26 @@ Delegate a bounded multi-step task to a built-in specialized agent (pdf/excel/da
 
 ---
 
+### deploy
+
+Deploy applications to cloud platforms
+
+**Parameters:**
+- `action` (string, required) - Deployment action: generate_config, deploy, status, or logs   Values: `generate_config`, `deploy`, `status`, `logs`
+- `platform` (string, required) - Target cloud platform   Values: `fly`, `railway`, `render`, `hetzner`, `northflank`, `gcp`
+- `appName` (string) - Application name (used in config generation)
+- `region` (string) - Deployment region (e.g. iad, us-central1)
+- `port` (number) - Application port (default: 3000)
+- `env` (object) - Environment variables as key-value pairs
+- `memory` (string) - Memory allocation (e.g. 512mb, 1gb)
+- `cpus` (number) - Number of CPU cores
+- `outputDir` (string) - Directory to write generated config files (for generate_config action)
+- `tailLines` (number) - Number of log lines to retrieve (default: 50, for logs action)
+
+**Keywords:** deploy, cloud, fly, railway, render, gcp, hosting, production, hetzner, northflank
+
+---
+
 ### relationship_context
 
 Build a safe relationship/world-memory context card with permissions and evidence
@@ -2539,6 +2827,21 @@ Build a safe relationship/world-memory context card with permissions and evidenc
 - `permissions` (object) - Explicit permissions controlling what context may be used.
 
 **Keywords:** relationship, identity, person, people, public figure, world memory, people memory, robot, recognition, permission, evidence, context
+
+---
+
+### remind
+
+Set a dated one-shot or daily recurring reminder without shelling buddy remind add
+
+**Parameters:**
+- `label` (string, required) - What to be reminded of, e.g. "prendre le train"
+- `time` (string, required) - Local time of day HH:MM (24h), e.g. "10:38"
+- `date` (string) - One-shot date YYYY-MM-DD — fires once then retires. OMIT for a daily recurring reminder.
+- `leadMinutes` (number) - Fire this many minutes BEFORE `time` (for "remind me N before the event"). `time` is the EVENT time; the reminder fires at time − leadMinutes.
+- `message` (string) - Optional custom spoken/sent text
+
+**Keywords:** remind, reminder, rappel, rappelle-moi, rappelle moi, remind me, alarm, alarme, notify me, préviens-moi, previens moi, schedule, todo, tâche, one-shot, dated
 
 ---
 
@@ -2635,6 +2938,44 @@ Delegate to an independent fresh-context Verifier that runs real oracles and ret
 
 ---
 
+### authored__audit_ffmpeg_argv
+
+Audits an ffmpeg command line for looping without a duration, duplicate outputs, and format options placed after an output.
+
+**Parameters:**
+- `argv` (string, required) - The ffmpeg command line to audit.
+
+---
+
+### authored__count_words
+
+Count whitespace-separated words in the provided text.
+
+**Parameters:**
+- `text` (string, required) - The text whose whitespace-separated words will be counted.
+
+---
+
+### authored__extract_url_statuses
+
+Extract unique URLs from XML loc tags and HTML href attributes in appearance order and print their status codes.
+
+**Parameters:**
+- `content` (string, required) - Content containing XML loc tags and/or HTML href attributes.
+- `statuses` (object) - Mapping of URLs to HTTP status codes.   Default: `[object Object]`
+
+---
+
+### authored__find_orphan_temp_files
+
+Lists alphabetically sorted temporary files older than the specified maximum age.
+
+**Parameters:**
+- `entries` (array, required)
+- `maxAgeMinutes` (number, required)
+
+---
+
 ### authored__greet
 
 Greet someone
@@ -2656,6 +2997,15 @@ slugify text
 
 **Parameters:**
 - `text` (string)
+
+---
+
+### authored__slugify_text
+
+Lowercase text and replace each run of spaces with a single hyphen.
+
+**Parameters:**
+- `text` (string, required) - The text to slugify.
 
 ---
 
@@ -2763,6 +3113,22 @@ List connected fleet peers with status, last-seen, peer chat availability, and o
 
 ---
 
+### memory_propose
+
+Propose a review-gated long-term memory candidate without silently writing prompt-injected memory
+
+**Parameters:**
+- `key` (string, required) - Short unique key for this memory candidate
+- `value` (string, required) - The information to be remembered if approved
+- `scope` (string) - Scope for this memory (default: project)   Values: `project`, `user`
+- `category` (string) - Type of information being stored (default: context)   Values: `project`, `preferences`, `decisions`, `patterns`, `context`, `custom`
+- `confidence` (number) - Confidence 0-1 that this inferred fact is correct
+- `rationale` (string) - Why this fact was inferred and is worth keeping
+
+**Keywords:** memory, candidate, propose, review, long-term, persist
+
+---
+
 ### recall
 
 Retrieve persistent memory by key
@@ -2789,6 +3155,20 @@ Store persistent memory entries
 
 ---
 
+### replace_memory
+
+Replace an existing persistent memory entry under the memory char budget
+
+**Parameters:**
+- `key` (string, required) - Existing memory key to replace
+- `value` (string, required) - New concise memory value
+- `scope` (string) - Memory scope to replace in (default: project)   Values: `project`, `user`
+- `category` (string) - Optional replacement category   Values: `project`, `preferences`, `decisions`, `patterns`, `context`, `custom`
+
+**Keywords:** memory, replace, rewrite, update, persist, preference
+
+---
+
 ### run_script
 
 Execute scripts in a secure sandboxed Docker environment
@@ -2800,6 +3180,23 @@ Execute scripts in a secure sandboxed Docker environment
 - `env` (object) - Environment variables to set for the script
 
 **Keywords:** script, python, typescript, javascript, shell, execute, run, sandbox, docker, compute, data
+
+---
+
+### screen_memory
+
+Recall what was on screen / said / heard via a local screenpipe instance (read-only, redacted)
+
+**Parameters:**
+- `query` (string) - Natural-language search over screen+audio history (omit for most recent).
+- `content_type` (string) - all (default), ocr (screen text), audio (transcripts), or ui.   Values: `all`, `ocr`, `audio`, `ui`
+- `limit` (number) - Max results, 1–50 (default 10).
+- `app_name` (string) - Filter by application name.
+- `window_name` (string) - Filter by window title.
+- `start_time` (string) - ISO-8601 start of time range.
+- `end_time` (string) - ISO-8601 end of time range.
+
+**Keywords:** screen, memory, screenpipe, recall, what did i see, history, ocr, audio, transcript, said, heard
 
 ---
 
@@ -3052,5 +3449,5 @@ Scan source files for hardcoded secrets, credentials, and API keys
 
 ---
 
-_Total tools: 199_
-<!-- hash:89f1151c86b4bc77 -->
+_Total tools: 227_
+<!-- hash:bc70c2d0657c8b72 -->
