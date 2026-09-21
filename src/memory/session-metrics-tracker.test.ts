@@ -10,58 +10,67 @@ import {
   setSessionSummary,
   endSession,
   loadSessionMetrics,
+  loadSessionMetricsFromDisk,
   currentSessionMetricsEnv,
+  resetSessionMetricsForTests,
 } from './session-metrics-tracker.js';
 
-describe('session-metrics-tracker', () => {
-  let root: string;
-  beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-metrics-'));
-  });
-  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+let tmp: string;
 
-  it('starts empty', () => {
-    const m = beginSession('s1', root);
+beforeEach(() => {
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-metrics-'));
+  beginSession('s1', tmp);
+});
+
+afterEach(() => {
+  fs.rmSync(tmp, { recursive: true, force: true });
+  resetSessionMetricsForTests();
+});
+
+describe('session-metrics-tracker', () => {
+  it('starts at zero', () => {
+    const m = loadSessionMetrics(tmp);
     expect(m.toolCalls).toBe(0);
     expect(m.errorsRecovered).toBe(0);
     expect(m.filesTouched).toEqual([]);
   });
 
-  it('counts tool calls and recovered errors', () => {
-    beginSession('s1', root);
-    recordToolCall(root);
-    recordToolCall(root);
-    recordRecoveredError(root);
-    const m = loadSessionMetrics(root);
+  it('increments tool calls and recovered errors', () => {
+    recordToolCall(tmp);
+    recordToolCall(tmp);
+    recordRecoveredError(tmp);
+    const m = loadSessionMetrics(tmp);
     expect(m.toolCalls).toBe(2);
     expect(m.errorsRecovered).toBe(1);
   });
 
   it('dedupes touched files', () => {
-    beginSession('s1', root);
-    recordFileTouched('src/a.ts', root);
-    recordFileTouched('src/a.ts', root);
-    recordFileTouched('src/b.ts', root);
-    expect(loadSessionMetrics(root).filesTouched).toEqual(['src/a.ts', 'src/b.ts']);
+    recordFileTouched('a.ts', tmp);
+    recordFileTouched('a.ts', tmp);
+    recordFileTouched('b.ts', tmp);
+    expect(loadSessionMetrics(tmp).filesTouched).toEqual(['a.ts', 'b.ts']);
   });
 
-  it('exposes env-ready JSON', () => {
-    beginSession('s1', root);
-    recordToolCall(root);
-    recordFileTouched('x.ts', root);
-    setSessionSummary('Fixed the flaky suite.', root);
-    const env = JSON.parse(currentSessionMetricsEnv(root));
+  it('persists summary and exposes env', () => {
+    setSessionSummary('did the thing', tmp);
+    recordToolCall(tmp);
+    const env = JSON.parse(currentSessionMetricsEnv(tmp));
     expect(env.toolCalls).toBe(1);
-    expect(env.filesTouched).toEqual(['x.ts']);
-    expect(env.summary).toBe('Fixed the flaky suite.');
+    expect(env.summary).toBe('did the thing');
   });
 
-  it('endSession returns the snapshot', () => {
-    beginSession('s1', root);
-    recordToolCall(root);
-    recordRecoveredError(root);
-    const snap = endSession(root);
+  it('loadSessionMetricsFromDisk reads the same file the cron sees', () => {
+    recordToolCall(tmp);
+    recordFileTouched('x.ts', tmp);
+    const fromDisk = loadSessionMetricsFromDisk(tmp);
+    expect(fromDisk.toolCalls).toBe(1);
+    expect(fromDisk.filesTouched).toEqual(['x.ts']);
+  });
+
+  it('endSession returns the snapshot without wiping the file', () => {
+    recordToolCall(tmp);
+    const snap = endSession(tmp);
     expect(snap.toolCalls).toBe(1);
-    expect(snap.errorsRecovered).toBe(1);
+    expect(loadSessionMetrics(tmp).toolCalls).toBe(1);
   });
 });

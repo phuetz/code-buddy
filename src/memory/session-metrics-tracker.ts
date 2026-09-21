@@ -8,6 +8,10 @@
  * then writes a JSON snapshot to .codebuddy/session-metrics.json so the
  * cron step can load real numbers instead of the hardcoded placeholder.
  *
+ * The cron runs in a *separate* Node process, so it cannot see the in-memory
+ * env of the agent. It therefore falls back to reading the snapshot file
+ * from disk via `loadSessionMetricsFromDisk`.
+ *
  * @module memory/session-metrics-tracker
  */
 
@@ -59,12 +63,20 @@ export function loadSessionMetrics(workDir: string = process.cwd()): SessionMetr
   }
 }
 
+/**
+ * Disk-only read for the cron hook running in a separate process.
+ * Same as loadSessionMetrics but never touches process.env.
+ */
+export function loadSessionMetricsFromDisk(workDir: string = process.cwd()): SessionMetrics {
+  return loadSessionMetrics(workDir);
+}
+
 function persist(metrics: SessionMetrics, cwd: string) {
   const dir = path.join(cwd, CODEBUDDY_DIR);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const out: SessionMetrics = { ...metrics, updatedAt: new Date().toISOString() };
   fs.writeFileSync(metricsPath(cwd), JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
-  // Also expose to the process env so the cron hook's node -e sees it.
+  // Also expose to the process env so in-process consumers see it.
   process.env.SESSION_METRICS = JSON.stringify({
     toolCalls: out.toolCalls,
     errorsRecovered: out.errorsRecovered,
