@@ -16,17 +16,12 @@ import {
   companionHistorySessionKey,
   readCompanionChannelHistory,
 } from '../companion/channel-history.js';
+import { formatOpenClawWorkspaceContext } from '../openclaw/workspace-files.js';
 
 export const COMPANION_CHANNEL_HISTORY_LIMIT = 10;
 export const COMPANION_CHANNEL_TURN_CHAR_CAP = 400;
 export const DEFAULT_CHANNEL_WAIT_NOTICE_MS = 20_000;
-/** Fallback robot name when `CODEBUDDY_ROBOT_NAME` is unset. */
 export const DEFAULT_COMPANION_ROBOT_NAME = 'Lisa';
-/**
- * How the companion refers to her human when no `CODEBUDDY_USER_NAME` is set.
- * Neutral on purpose: the code must stay correct without a configured name,
- * and must never let the model invent or guess one.
- */
 export const NEUTRAL_COMPANION_ADDRESSEE = 'la personne que tu aimes';
 
 export const DEFAULT_COMPANION_SPOKEN_PROMPT =
@@ -49,7 +44,6 @@ export function isChannelAgentIntent(text: string, isCommand = false): boolean {
   return AGENT_INTENT_RE.test(trimmed);
 }
 
-/** Same gate as the companion channel turn: profile=companion or a persona. */
 export function isCompanionSurfaceEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const profile = (env.CODEBUDDY_CHANNEL_PROFILE ?? '').trim().toLowerCase();
   if (profile === 'agent' || profile === 'full') return false;
@@ -173,12 +167,14 @@ export async function assembleCompanionChannelPrompt(options: {
   const history = liveHistory.length
     ? liveHistory
     : readCompanionChannelHistory(companionHistorySessionKey({ sessionKey: options.sessionKey, env }), env);
+  const openclaw = formatOpenClawWorkspaceContext(env);
+  const extraSystem = [options.extraSystem, openclaw].filter(Boolean).join('\n\n');
   return buildCompanionChannelPrompt({
     spokenPrompt,
     relationalContext: relational,
     history,
     userText: options.userText,
     env,
-    ...(options.extraSystem ? { extraSystem: options.extraSystem } : {}),
+    ...(extraSystem ? { extraSystem } : {}),
   });
 }
