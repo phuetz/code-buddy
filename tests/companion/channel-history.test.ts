@@ -69,7 +69,10 @@ describe('companion channel history', () => {
     }
     const turns = readCompanionChannelHistory('cli:patrice', testEnv, now);
     expect(turns).toHaveLength(CHANNEL_HISTORY_MAX_TURNS);
-    expect(turns[0]?.content).toBe('u4');
+    // Chaque appel enregistre DEUX tours (utilisateur puis assistant) : garder
+      // CHANNEL_HISTORY_MAX_TURNS tours revient a garder la moitie des appels.
+      // La valeur attendue se derive de la constante au lieu d'etre ecrite en dur.
+      expect(turns[0]?.content).toBe(`u${CHANNEL_HISTORY_MAX_TURNS + 4 - CHANNEL_HISTORY_MAX_TURNS / 2}`);
   });
 
   it('can be disabled without writing a file', () => {

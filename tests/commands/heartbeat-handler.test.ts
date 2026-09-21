@@ -69,7 +69,7 @@ describe('handleHeartbeat', () => {
   it('disable stops the engine after enable', async () => {
     await handleHeartbeat(['enable']);
     const r = await handleHeartbeat(['disable']);
-    expect(r.entry?.content).toContain('Heartbeat engine stopped');
+    expect(r.entry?.content).toContain('Heartbeat engine and companion always-on loops stopped');
 
     const status = await handleHeartbeat(['status']);
     expect(status.entry?.content).toMatch(/Running:\s+no/);

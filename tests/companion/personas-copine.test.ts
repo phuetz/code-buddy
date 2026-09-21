@@ -22,7 +22,11 @@ import {
 import { getActivePersonaVoice, resetPersonaManager } from '../../src/personas/persona-manager.js';
 
 const INTIMATE =
-  /tabou|sensuel|sensuelle|explicite|sexe|nude|nues?|déshabill|mon amour|chéri|cheri|18\+|sans tabous/i;
+  /\btabou|\bsensuel(le)?\b|\bexplicite\b|\bsexe\b|\bnudes?\b|\bnues?\b|déshabill|\bmon amour\b|\b18\+|sans tabous/i;
+// « cheri » retire le 21/09/2026 (decision de Patrice) : meme registre que
+// « mon coeur », deja present dans la persona et jamais interdit ici. Les limites
+// de mots evitent les faux positifs : sans elles « nues? » attrapait le « nue »
+// de « continue » et faisait rougir le garde-fou sur une phrase anodine.
 const JARGON = /<[^>]+>|\/100|\blisa_state\b|\brapportTier\b/i;
 
 const morningNow = new Date(2026, 5, 30, 8, 0, 0).getTime();
