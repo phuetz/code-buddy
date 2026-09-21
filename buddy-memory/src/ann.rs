@@ -127,7 +127,7 @@ impl AnnIndex {
 
 /// hnsw_rs prints progress on stdout. The sidecar protocol is one JSON object per line.
 #[cfg(unix)]
-fn silence_stdout<T>(f: impl FnOnce() -> T) -> T {
+pub(crate) fn silence_stdout<T>(f: impl FnOnce() -> T) -> T {
     extern "C" {
         fn dup(fd: i32) -> i32;
         fn dup2(oldfd: i32, newfd: i32) -> i32;
@@ -159,7 +159,7 @@ fn silence_stdout<T>(f: impl FnOnce() -> T) -> T {
 }
 
 #[cfg(not(unix))]
-fn silence_stdout<T>(f: impl FnOnce() -> T) -> T {
+pub(crate) fn silence_stdout<T>(f: impl FnOnce() -> T) -> T {
     f()
 }
 
